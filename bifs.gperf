@@ -1,0 +1,12 @@
+%{
+#include "bif.h"
+#include <string.h>
+typedef struct BifNameAndPtr BifNameAndPtr;
+%}
+struct BifNameAndPtr
+{
+  const char *name;
+  BifImpl function;
+};
+%%
+erlang:+\2, bif_erlang_add_2

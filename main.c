@@ -28,9 +28,12 @@
 #include <string.h>
 #include <byteswap.h>
 
+#include "atom.h"
 #include "Context.h"
 #include "Module.h"
 #include "Term.h"
+
+#include "bif.h"
 
 #define AT8U 0
 #define CODE 1
@@ -51,8 +54,6 @@ typedef struct
     uint8_t code[1];
 } __attribute__((packed)) CodeChunk;
 
-typedef const void * AtomString;
-
 struct IFFRecord
 {
     const char name[4];
@@ -65,28 +66,6 @@ struct IFFRecord
 uint32_t iff_align(uint32_t size)
 {
     return ((size + 4 - 1) >> 2) << 2;
-}
-
-void add(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg)
-{
-    if (term_is_integer(arg1) && term_is_integer(arg2)) {
-        //NEED CHECK OVERFLOW AND BIG INTEGER
-        //NEED TO CONVERT BACK TO TERM
-        ctx->x[reg] = term_to_int32(arg1) + term_to_int32(arg2);
-        printf("add: %li\n", ctx->x[reg]);
-    } else {
-        printf("add: operands are not integers\n");
-
-        printf("op1: %lx\n", arg1);
-        printf("op2: %lx\n", arg2);
-
-        abort();
-    }
-}
-
-BifImpl bif_registry_get_handler(AtomString module, AtomString function, int arity)
-{
-    return add;
 }
 
 AtomString local_atom_string(uint8_t *table_data, int atom_index)
