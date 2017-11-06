@@ -20,27 +20,30 @@
 #ifndef _TERM_H_
 #define _TERM_H_
 
+#include <stdint.h>
+#include <stdio.h>
+
 typedef unsigned long term;
 
-inline int term_is_atom(term t)
+static inline int term_is_atom(term t)
 {
     /* atom: | atom index | 00 10 11 */
     return ((t & 0x3F) == 0xB);
 }
 
-inline int term_is_nil(term t)
+static inline int term_is_nil(term t)
 {
     /* nil: 11 10 11 */
     return ((t & 0x3F) == 0x3B);
 }
 
-int term_is_integer(term t)
+static inline int term_is_integer(term t)
 {
     /* integer: 11 11 */
     return ((t & 0xF) == 0xF);
 }
 
-int32_t term_to_int32(term t)
+static inline int32_t term_to_int32(term t)
 {
     switch (t & 0xF) {
         case 0xF:
@@ -52,7 +55,7 @@ int32_t term_to_int32(term t)
     }
 }
 
-term term_from_int4(int8_t value)
+static inline term term_from_int4(int8_t value)
 {
     return (value << 4) | 0xF;
 }
