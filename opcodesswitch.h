@@ -169,6 +169,26 @@
                 #endif
             }
 
+            case 6: {
+                int a_type = chunk->code[i + 1] & 0xF;
+                int b_type = chunk->code[i + 2] & 0xF;
+                int arity = chunk->code[i + 1] >> 4;
+                int label = chunk->code[i + 2] >> 4;
+
+                TRACE("call_only/2, arity=%i (%x), label=%i (%x)\n", arity, a_type, label, b_type);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    i += 1 + 2;
+                    i = (uint8_t *) mod->labels[label] - chunk->code;
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    i += 1 + 2;
+                #endif
+
+                break;
+            }
+
             case 12: {
                 int a_type = chunk->code[i + 1] & 0xF;
                 int b_type = chunk->code[i + 2] & 0xF;
