@@ -17,10 +17,6 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#ifndef UNUSED
-#define UNUSED(x) (void) (x);
-#endif
-
 #ifndef TRACE
     #ifdef ENABLE_TRACE
         #define TRACE printf

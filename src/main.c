@@ -73,22 +73,17 @@ void scan_iff(uint8_t *data, int file_size, unsigned long *offsets)
         struct IFFRecord *current_record = (struct IFFRecord *) (data + current_pos);
 
         if (!memcmp(current_record->name, "AtU8", 4)) {
-            printf("Utf8 atoms\n");
             offsets[AT8U] = current_pos;
 
         } else if (!memcmp(current_record->name, "Code", 4)) {
-            printf("Code\n");
             offsets[CODE] = current_pos;
 
         } else if (!memcmp(current_record->name, "LocT", 4)) {
-            printf("LocT\n");
             offsets[LOCT] = current_pos;
 
         } else if (!memcmp(current_record->name, "ImpT", 4)) {
-            printf("ImpT\n");
             offsets[IMPT] = current_pos;
         }
-
 
         current_pos += iff_align(bswap_32(current_record->size) + 8);
     } while (current_pos < file_size);
@@ -109,24 +104,6 @@ char reg_type_c(int reg_type)
         default:
             return '?';
     }
-}
-
-void print_local_functions(uint8_t *table_data)
-{
-    int functions_count = READ_32_ALIGNED(table_data + 8);
-
-    printf("Found %i local functions\n", functions_count);
-
-    for (int i = 0; i < functions_count; i++) {
-        printf("atom: %i\n", READ_32_ALIGNED(table_data + 12 + i * sizeof(uint32_t)));
-        printf("arity: %i\n", READ_32_ALIGNED(table_data + 12 + i * sizeof(uint32_t) + 4));
-        printf("label: %i\n", READ_32_ALIGNED(table_data + 12 + i * sizeof(uint32_t) + 8));
-    }
-}
-
-int bif_registry_is_bif(AtomString module_atom, AtomString function_atom, uint32_t arity)
-{
-    return 1;
 }
 
 void module_build_imported_functions_table(Module *this_module, uint8_t *table_data, uint8_t *atom_tab)
@@ -196,8 +173,6 @@ int main(int argc, char **argv)
 
     Module *mod = malloc(sizeof(Module));
 
-
-    print_local_functions(beam_file + offsets[LOCT]);
     module_build_imported_functions_table(mod, beam_file + offsets[IMPT], beam_file + offsets[AT8U]);
 
     CodeChunk *chunk = (CodeChunk *) (beam_file + offsets[CODE]);
@@ -213,10 +188,6 @@ int main(int argc, char **argv)
     ctx->stack_size = DEFAULT_STACK_SIZE;
     ctx->stack_frame = ctx->stack;
     ctx->e = ctx->stack;
-
-    ctx->x[0] = term_from_int4(1);
-    ctx->x[1] = term_from_int4(3);
-    ctx->stack_frame[0] = term_from_int4(2);
 
     execute_loop(chunk, ctx, mod, beam_file, offsets);
 

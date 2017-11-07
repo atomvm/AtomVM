@@ -25,4 +25,6 @@
 #define READ_32_ALIGNED(ptr) \
     bswap_32(*((uint32_t *) (ptr)))
 
+#define UNUSED(x) (void) (x);
+
 #endif

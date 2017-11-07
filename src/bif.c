@@ -51,6 +51,11 @@ BifImpl bif_registry_get_handler(AtomString module, AtomString function, int ari
     return nameAndPtr->function;
 }
 
+int bif_registry_is_bif(AtomString module_atom, AtomString function_atom, uint32_t arity)
+{
+    return 1;
+}
+
 void bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg)
 {
     if (term_is_integer(arg1) && term_is_integer(arg2)) {
