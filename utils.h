@@ -17,24 +17,12 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#ifndef _ATOM_H_
-#define _ATOM_H_
+#ifndef _UTILS_H_
+#define _UTILS_H_
 
-#include <stdint.h>
+#include <byteswap.h>
 
-typedef const void * AtomString;
-
-extern AtomString local_atom_string(uint8_t *table_data, int atom_index);
-extern void atom_string_to_c(AtomString atom_string, char *buf, int bufsize);
-
-static inline int atom_string_len(AtomString atom_str)
-{
-    return *((uint8_t *) atom_str);
-}
-
-static inline const void *atom_string_data(AtomString atom_str)
-{
-    return atom_str + 1;
-}
+#define READ_32_ALIGNED(ptr) \
+    bswap_32(*((uint32_t *) (ptr)))
 
 #endif

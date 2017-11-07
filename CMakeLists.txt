@@ -15,6 +15,6 @@ gperf_generate(${CMAKE_CURRENT_SOURCE_DIR}/bifs.gperf bifs_hash.h)
 
 add_custom_target(generated DEPENDS bifs_hash.h)
 
-add_executable(AtomVM main.c bif.c)
+add_executable(AtomVM main.c atom.c bif.c)
 add_dependencies(AtomVM generated)
 set_property(TARGET AtomVM PROPERTY C_STANDARD 99)

@@ -17,24 +17,42 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#ifndef _ATOM_H_
-#define _ATOM_H_
+#include "atom.h"
 
-#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
-typedef const void * AtomString;
+#include "utils.h"
 
-extern AtomString local_atom_string(uint8_t *table_data, int atom_index);
-extern void atom_string_to_c(AtomString atom_string, char *buf, int bufsize);
-
-static inline int atom_string_len(AtomString atom_str)
+AtomString local_atom_string(uint8_t *table_data, int atom_index)
 {
-    return *((uint8_t *) atom_str);
+    int atoms_count = READ_32_ALIGNED(table_data + 8);
+    const char *current_atom = (const char *) table_data + 12;
+
+    if (atom_index > atoms_count) {
+        abort();
+    }
+
+    const char *atom = NULL;
+    for (int i = 1; i <= atom_index; i++) {
+        int atom_len = *current_atom;
+        atom = current_atom;
+
+        current_atom += atom_len + 1;
+    }
+
+    return (AtomString) atom;
 }
 
-static inline const void *atom_string_data(AtomString atom_str)
+void atom_string_to_c(AtomString atom_string, char *buf, int bufsize)
 {
-    return atom_str + 1;
+    int atom_len = *((uint8_t *) atom_string);
+
+    if (bufsize < atom_len) {
+        atom_len = bufsize - 1;
+    }
+    memcpy(buf, ((uint8_t *) atom_string) + 1, atom_len);
+    buf[atom_len] = '\0';
 }
 
-#endif
+
