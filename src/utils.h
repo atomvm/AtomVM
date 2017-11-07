@@ -22,8 +22,13 @@
 
 #include <byteswap.h>
 
-#define READ_32_ALIGNED(ptr) \
-    bswap_32(*((uint32_t *) (ptr)))
+#ifdef __ORDER_LITTLE_ENDIAN__
+    #define READ_32_ALIGNED(ptr) \
+        bswap_32(*((uint32_t *) (ptr)))
+#else
+    #define READ_32_ALIGNED(ptr) \
+        (*((uint32_t *) (ptr)))
+#endif
 
 #define UNUSED(x) (void) (x);
 
