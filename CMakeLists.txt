@@ -10,11 +10,11 @@ function(gperf_generate input output)
     )
 endfunction()
 
-include_directories(${CMAKE_CURRENT_BINARY_DIR})
-gperf_generate(${CMAKE_CURRENT_SOURCE_DIR}/bifs.gperf bifs_hash.h)
+include_directories(${CMAKE_CURRENT_BINARY_DIR} src/)
+gperf_generate(${CMAKE_CURRENT_SOURCE_DIR}/src/bifs.gperf bifs_hash.h)
 
 add_custom_target(generated DEPENDS bifs_hash.h)
 
-add_executable(AtomVM main.c atom.c bif.c)
+add_executable(AtomVM src/main.c src/atom.c src/bif.c)
 add_dependencies(AtomVM generated)
 set_property(TARGET AtomVM PROPERTY C_STANDARD 99)
