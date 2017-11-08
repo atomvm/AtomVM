@@ -60,15 +60,34 @@ void bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1,
 {
     if (term_is_integer(arg1) && term_is_integer(arg2)) {
         //NEED CHECK OVERFLOW AND BIG INTEGER
-        //NEED TO CONVERT BACK TO TERM
-        ctx->x[reg] = term_to_int32(arg1) + term_to_int32(arg2);
-        printf("add: %li\n", ctx->x[reg]);
+        ctx->x[reg] = term_from_int32(term_to_int32(arg1) + term_to_int32(arg2));
+
     } else {
-        printf("add: operands are not integers\n");
+        printf("add: operands are not integers: arg1=%lx, arg2=%lx\n", arg1, arg2);
+        abort();
+    }
+}
 
-        printf("op1: %lx\n", arg1);
-        printf("op2: %lx\n", arg2);
+void bif_erlang_sub_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg)
+{
+    if (term_is_integer(arg1) && term_is_integer(arg2)) {
+        //NEED CHECK OVERFLOW AND BIG INTEGER
+        ctx->x[reg] = term_from_int32(term_to_int32(arg1) - term_to_int32(arg2));
 
+    } else {
+        printf("sub: operands are not integers: arg1=%lx, arg2=%lx\n", arg1, arg2);
+        abort();
+    }
+}
+
+void bif_erlang_mul_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg)
+{
+    if (term_is_integer(arg1) && term_is_integer(arg2)) {
+        //NEED CHECK OVERFLOW AND BIG INTEGER
+        ctx->x[reg] = term_from_int32(term_to_int32(arg1) * term_to_int32(arg2));
+
+    } else {
+        printf("mul: operands are not integers: arg1=%lx, arg2=%lx\n", arg1, arg2);
         abort();
     }
 }

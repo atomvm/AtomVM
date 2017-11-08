@@ -10,3 +10,5 @@ struct BifNameAndPtr
 };
 %%
 erlang:+\2, bif_erlang_add_2
+erlang:-\2, bif_erlang_sub_2
+erlang:*\2, bif_erlang_mul_2

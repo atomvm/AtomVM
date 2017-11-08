@@ -21,6 +21,7 @@
 #define _TERM_H_
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <stdio.h>
 
 typedef unsigned long term;
@@ -58,6 +59,20 @@ static inline int32_t term_to_int32(term t)
 static inline term term_from_int4(int8_t value)
 {
     return (value << 4) | 0xF;
+}
+
+static inline term term_from_int32(int32_t value)
+{
+    //134217728 is 2^27
+    //TODO: we don't have that "small" value on 64 bits CPUs
+    if ((value > 134217728) || (value < -134217728)) {
+        //TODO: unimplemented on heap integer value
+        printf("unimplemented: term should be moved to heap.");
+        abort();
+
+    } else {
+        return (value << 4) | 0xF;
+    }
 }
 
 #endif
