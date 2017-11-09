@@ -20,6 +20,10 @@
 #ifndef _MODULE_H_
 #define _MODULE_H_
 
+#include <stdint.h>
+
+#include "Context.h"
+
 typedef void (*BifImpl)();
 typedef void (*BifImpl2)(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg);
 
@@ -31,5 +35,8 @@ typedef struct
 
     void **labels;
 } Module;
+
+extern void module_build_imported_functions_table(Module *this_module, uint8_t *table_data, uint8_t *atom_tab);
+extern void module_add_label(Module *mod, int index, void *ptr);
 
 #endif
