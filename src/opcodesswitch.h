@@ -17,6 +17,8 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+#include "debug.h"
+
 #ifndef TRACE
     #ifdef ENABLE_TRACE
         #define TRACE printf
@@ -219,6 +221,8 @@
                     ctx->cp = *(ctx->e);
                     ctx->e = ctx->stack_frame - (n_words + 1);
                     ctx->stack_frame = ctx->e + 1;
+
+                    DEBUG_DUMP_STACK(ctx);
                 #endif
 
                 i += 1 + 1;
