@@ -17,28 +17,15 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#ifndef _CONTEXT_H_
-#define _CONTEXT_H_
+#include "Context.h"
 
-#include "Term.h"
-
-#define DEFAULT_STACK_SIZE 32
-
-typedef struct
+Context *context_new()
 {
-    term x[16];
+    Context *ctx = malloc(sizeof(Context));
+    ctx->cp = (unsigned long) -1;
 
-    term *stack;
-    unsigned long stack_size;
-
-    term *stack_frame;
-    unsigned long stack_frame_size;
-
-    term *e;
-
-    unsigned long cp;
-} Context;
-
-extern Context *context_new();
-
-#endif
+    ctx->stack = (term *) calloc(DEFAULT_STACK_SIZE, sizeof(term));
+    ctx->stack_size = DEFAULT_STACK_SIZE;
+    ctx->stack_frame = ctx->stack;
+    ctx->e = ctx->stack;
+}

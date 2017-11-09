@@ -106,13 +106,7 @@ int main(int argc, char **argv)
     printf("STARTING\n");
     read_core_chunk(chunk, mod);
 
-    Context *ctx = malloc(sizeof(Context));
-    ctx->cp = (unsigned long) -1;
-
-    ctx->stack = (term *) calloc(DEFAULT_STACK_SIZE, sizeof(term));
-    ctx->stack_size = DEFAULT_STACK_SIZE;
-    ctx->stack_frame = ctx->stack;
-    ctx->e = ctx->stack;
+    Context *ctx = context_new();
 
     execute_loop(chunk, ctx, mod, beam_file, offsets);
 
