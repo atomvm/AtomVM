@@ -213,6 +213,34 @@
                 break;
             }
 
+            case 14: {
+                int a_type = chunk->code[i + 1] & 0xF;
+                int b_type = chunk->code[i + 2] & 0xF;
+                int stack_need = chunk->code[i + 1] >> 4;
+                int live = chunk->code[i + 2] >> 4;
+                TRACE("allocate_zero/2 stack_need=%i (%x), live=%i (%x)\n" , stack_need, a_type, live, b_type);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    if (live > 16) {
+                        fprintf(stderr, "Cannot use more than 16 registers.");
+                        abort();
+                    }
+
+                    if ((ctx->e + (stack_need + 1)) - ctx->stack > ctx->stack_size) {
+                        fprintf(stderr, "Need to allocate more stack space.");
+                        abort();
+                    }
+                    ctx->stack_frame = ctx->e + 1;
+                    ctx->e = ctx->stack_frame + stack_need;
+                    *(ctx->e) = ctx->cp;
+                #endif
+
+                //TODO: bzero/memset
+
+                i += 1 + 2;
+                break;
+            }
+
             case 18: {
                 int n_words = chunk->code[i + 1] >> 4;
 
