@@ -245,6 +245,33 @@
                 #endif
                 break;
 
+            case 43: {
+                int label = chunk->code[i + 1] >> 4;
+                int next_off;
+                term arg1;
+                term arg2;
+                DECODE_COMPACT_TERM(arg1, chunk->code, i + 2, next_off)
+                DECODE_COMPACT_TERM(arg2, chunk->code, i + 2 + next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_eq_exact/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
+
+                    if (arg1 == arg2) {
+                        i += 1 + 3;
+                    } else {
+                        i = (uint8_t *) mod->labels[label] - chunk->code;
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    UNUSED(arg1)
+                    UNUSED(arg2)
+                    i += 1 + 3;
+                #endif
+
+                break;
+            }
+
             case 64: {
                 int reg_b_type = reg_type_c(chunk->code[i + 2] & 0xF);
                 int dest = chunk->code[i + 2] >> 4;
