@@ -17,23 +17,46 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#ifndef _UTILS_H_
-#define _UTILS_H_
+#include "iff.h"
 
-#include <byteswap.h>
+#include <stdlib.h>
+#include <string.h>
 
-#ifdef __ORDER_LITTLE_ENDIAN__
-    #define READ_32_ALIGNED(ptr) \
-        bswap_32(*((uint32_t *) (ptr)))
+#include "utils.h"
 
-    #define ENDIAN_SWAP_32(value) bswap_32(value)
-#else
-    #define READ_32_ALIGNED(ptr) \
-        (*((uint32_t *) (ptr)))
+struct IFFRecord
+{
+    const char name[4];
+    uint32_t size;
+};
 
-    #define ENDIAN_SWAP_32(value) (value)
-#endif
+static uint32_t iff_align(uint32_t size)
+{
+    return ((size + 4 - 1) >> 2) << 2;
+}
 
-#define UNUSED(x) (void) (x);
+void scan_iff(uint8_t *data, int file_size, unsigned long *offsets)
+{
+    int current_pos = 12;
 
-#endif
+    do {
+        struct IFFRecord *current_record = (struct IFFRecord *) (data + current_pos);
+
+        if (!memcmp(current_record->name, "AtU8", 4)) {
+            offsets[AT8U] = current_pos;
+
+        } else if (!memcmp(current_record->name, "Code", 4)) {
+            offsets[CODE] = current_pos;
+
+        } else if (!memcmp(current_record->name, "LocT", 4)) {
+            offsets[LOCT] = current_pos;
+
+        } else if (!memcmp(current_record->name, "ImpT", 4)) {
+            offsets[IMPT] = current_pos;
+        }
+
+        current_pos += iff_align(bswap_32(current_record->size) + 8);
+    } while (current_pos < file_size);
+}
+
+

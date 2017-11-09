@@ -33,13 +33,8 @@
 #include "Term.h"
 
 #include "bif.h"
+#include "iff.h"
 #include "utils.h"
-
-#define AT8U 0
-#define CODE 1
-#define LOCT 2
-#define IMPT 3
-#define MAX_OFFS 4
 
 typedef struct
 {
@@ -53,41 +48,6 @@ typedef struct
 
     uint8_t code[1];
 } __attribute__((packed)) CodeChunk;
-
-struct IFFRecord
-{
-    const char name[4];
-    uint32_t size;
-};
-
-uint32_t iff_align(uint32_t size)
-{
-    return ((size + 4 - 1) >> 2) << 2;
-}
-
-void scan_iff(uint8_t *data, int file_size, unsigned long *offsets)
-{
-    int current_pos = 12;
-
-    do {
-        struct IFFRecord *current_record = (struct IFFRecord *) (data + current_pos);
-
-        if (!memcmp(current_record->name, "AtU8", 4)) {
-            offsets[AT8U] = current_pos;
-
-        } else if (!memcmp(current_record->name, "Code", 4)) {
-            offsets[CODE] = current_pos;
-
-        } else if (!memcmp(current_record->name, "LocT", 4)) {
-            offsets[LOCT] = current_pos;
-
-        } else if (!memcmp(current_record->name, "ImpT", 4)) {
-            offsets[IMPT] = current_pos;
-        }
-
-        current_pos += iff_align(bswap_32(current_record->size) + 8);
-    } while (current_pos < file_size);
-}
 
 char reg_type_c(int reg_type)
 {

@@ -17,23 +17,17 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#ifndef _UTILS_H_
-#define _UTILS_H_
+#ifndef _IFF_H_
+#define _IFF_H_
 
-#include <byteswap.h>
+#include <stdint.h>
 
-#ifdef __ORDER_LITTLE_ENDIAN__
-    #define READ_32_ALIGNED(ptr) \
-        bswap_32(*((uint32_t *) (ptr)))
+#define AT8U 0
+#define CODE 1
+#define LOCT 2
+#define IMPT 3
+#define MAX_OFFS 4
 
-    #define ENDIAN_SWAP_32(value) bswap_32(value)
-#else
-    #define READ_32_ALIGNED(ptr) \
-        (*((uint32_t *) (ptr)))
-
-    #define ENDIAN_SWAP_32(value) (value)
-#endif
-
-#define UNUSED(x) (void) (x);
+extern void scan_iff(uint8_t *data, int file_size, unsigned long *offsets);
 
 #endif
