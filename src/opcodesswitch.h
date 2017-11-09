@@ -215,12 +215,13 @@
 
             case 18: {
                 int n_words = chunk->code[i + 1] >> 4;
+
                 TRACE("deallocate/1 n_words=%i\n", n_words);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     ctx->cp = *(ctx->e);
-                    ctx->e = ctx->stack_frame - (n_words + 1);
-                    ctx->stack_frame = ctx->e + 1;
+                    ctx->e = ctx->stack_frame - n_words;
+                    ctx->stack_frame = ctx->e - 1;
 
                     DEBUG_DUMP_STACK(ctx);
                 #endif
