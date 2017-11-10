@@ -28,4 +28,6 @@ Context *context_new()
     ctx->stack_size = DEFAULT_STACK_SIZE;
     ctx->stack_frame = ctx->stack;
     ctx->e = ctx->stack;
+
+    return ctx;
 }
