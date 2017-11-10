@@ -21,10 +21,8 @@
 
 #include <stdlib.h>
 
+#include "atom.h"
 #include "bifs_hash.h"
-
-
-typedef const void * AtomString;
 
 BifImpl bif_registry_get_handler(AtomString module, AtomString function, int arity)
 {

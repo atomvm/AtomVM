@@ -29,12 +29,12 @@ extern void atom_string_to_c(AtomString atom_string, char *buf, int bufsize);
 
 static inline int atom_string_len(AtomString atom_str)
 {
-    return *((uint8_t *) atom_str);
+    return *((const uint8_t *) atom_str);
 }
 
 static inline const void *atom_string_data(AtomString atom_str)
 {
-    return atom_str + 1;
+    return ((const uint8_t *) atom_str) + 1;
 }
 
 #endif

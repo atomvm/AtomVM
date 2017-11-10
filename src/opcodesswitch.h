@@ -258,6 +258,7 @@
                 #endif
 
                 i += 1 + 1;
+                break;
             }
 
             case 19:
