@@ -94,15 +94,17 @@
 #endif
 
 #ifdef IMPL_CODE_LOADER
-    int read_core_chunk(CodeChunk *chunk, Module *mod)
+    int read_core_chunk(Module *mod)
 #else
     #ifdef IMPL_EXECUTE_LOOP
-        int execute_loop(CodeChunk *chunk, Context *ctx, Module *mod, uint8_t *beam_file, unsigned long *offsets)
+        int execute_loop(Context *ctx, Module *mod, uint8_t *beam_file)
     #else
         #error Need implementation type
     #endif
 #endif
 {
+    CodeChunk *chunk = mod->code;
+
     unsigned int i = 0;
 
     while(1) {

@@ -36,19 +36,6 @@
 #include "iff.h"
 #include "utils.h"
 
-typedef struct
-{
-    char magic[4];
-    uint32_t size;
-    uint32_t info_size;
-    uint32_t version;
-    uint32_t opcode_max;
-    uint32_t labels;
-    uint32_t functions_count;
-
-    uint8_t code[1];
-} __attribute__((packed)) CodeChunk;
-
 char reg_type_c(int reg_type)
 {
     switch (reg_type) {
@@ -65,13 +52,6 @@ char reg_type_c(int reg_type)
             return '?';
     }
 }
-
-#define IMPL_CODE_LOADER 1
-#define ENABLE_TRACE
-#include "opcodesswitch.h"
-//#undef ENABLE_TRACE
-//#undef TRACE
-#undef IMPL_CODE_LOADER
 
 #define IMPL_EXECUTE_LOOP
 #include "opcodesswitch.h"
@@ -93,22 +73,12 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    unsigned long offsets[MAX_OFFS];
-    scan_iff(beam_file, file_stats.st_size, offsets);
-
-    Module *mod = malloc(sizeof(Module));
-
-    module_build_imported_functions_table(mod, beam_file + offsets[IMPT], beam_file + offsets[AT8U]);
-
-    CodeChunk *chunk = (CodeChunk *) (beam_file + offsets[CODE]);
-    mod->labels = calloc(READ_32_ALIGNED(&chunk->labels), sizeof(void *));
-
-    printf("STARTING\n");
-    read_core_chunk(chunk, mod);
-
+    Module *mod = module_new_from_iff_binary(beam_file, file_stats.st_size);
     Context *ctx = context_new();
 
-    execute_loop(chunk, ctx, mod, beam_file, offsets);
+    execute_loop(ctx, mod, beam_file);
+
+    printf("Return value: %lx\n", ctx->x[0]);
 
     return EXIT_SUCCESS;
 }

@@ -29,6 +29,20 @@ typedef void (*BifImpl2)(Context *ctx, uint32_t failure_label, int live, term ar
 
 typedef struct
 {
+    char magic[4];
+    uint32_t size;
+    uint32_t info_size;
+    uint32_t version;
+    uint32_t opcode_max;
+    uint32_t labels;
+    uint32_t functions_count;
+
+    uint8_t code[1];
+} __attribute__((packed)) CodeChunk;
+
+typedef struct
+{
+    CodeChunk *code;
     BifImpl *imported_bifs;
     void *local_labels;
     void *local_functions;
@@ -38,5 +52,6 @@ typedef struct
 
 extern void module_build_imported_functions_table(Module *this_module, uint8_t *table_data, uint8_t *atom_tab);
 extern void module_add_label(Module *mod, int index, void *ptr);
+extern Module *module_new_from_iff_binary(void *iff_binary, unsigned long size);
 
 #endif

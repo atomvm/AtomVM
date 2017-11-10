@@ -22,10 +22,16 @@
 #include "Context.h"
 #include "atom.h"
 #include "bif.h"
+#include "iff.h"
 #include "utils.h"
 
 #include <stdio.h>
 #include <stdlib.h>
+
+#define IMPL_CODE_LOADER 1
+#include "opcodesswitch.h"
+#undef TRACE
+#undef IMPL_CODE_LOADER
 
 void module_build_imported_functions_table(Module *this_module, uint8_t *table_data, uint8_t *atom_tab)
 {
@@ -60,4 +66,23 @@ void module_build_imported_functions_table(Module *this_module, uint8_t *table_d
 void module_add_label(Module *mod, int index, void *ptr)
 {
     mod->labels[index] = ptr;
+}
+
+Module *module_new_from_iff_binary(void *iff_binary, unsigned long size)
+{
+    uint8_t *beam_file = (void *) iff_binary;
+
+    unsigned long offsets[MAX_OFFS];
+    scan_iff(beam_file, size, offsets);
+
+    Module *mod = malloc(sizeof(Module));
+
+    module_build_imported_functions_table(mod, beam_file + offsets[IMPT], beam_file + offsets[AT8U]);
+
+    mod->code = (CodeChunk *) (beam_file + offsets[CODE]);
+    mod->labels = calloc(ENDIAN_SWAP_32(mod->code->labels), sizeof(void *));
+
+    read_core_chunk(mod);
+
+    return mod;
 }
