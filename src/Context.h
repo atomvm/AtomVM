@@ -24,6 +24,13 @@
 
 #define DEFAULT_STACK_SIZE 32
 
+struct Module;
+
+#ifndef TYPEDEF_MODULE
+#define TYPEDEF_MODULE
+typedef struct Module Module;
+#endif
+
 typedef struct
 {
     term x[16];
@@ -40,5 +47,6 @@ typedef struct
 } Context;
 
 extern Context *context_new();
+extern int context_execute_loop(Context *ctx, Module *mod, uint8_t *beam_file);
 
 #endif

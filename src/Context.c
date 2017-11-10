@@ -19,6 +19,10 @@
 
 #include "Context.h"
 
+#define IMPL_EXECUTE_LOOP
+#include "opcodesswitch.h"
+#undef IMPL_EXECUTE_LOOP
+
 Context *context_new()
 {
     Context *ctx = malloc(sizeof(Context));

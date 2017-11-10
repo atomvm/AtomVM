@@ -32,10 +32,6 @@
 #include "iff.h"
 #include "utils.h"
 
-#define IMPL_EXECUTE_LOOP
-#include "opcodesswitch.h"
-#undef IMPL_EXECUTE_LOOP
-
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -50,7 +46,7 @@ int main(int argc, char **argv)
     Module *mod = module_new_from_iff_binary(beam_file->mapped, beam_file->size);
     Context *ctx = context_new();
 
-    execute_loop(ctx, mod, beam_file->mapped);
+    context_execute_loop(ctx, mod, beam_file->mapped);
 
     printf("Return value: %lx\n", ctx->x[0]);
 

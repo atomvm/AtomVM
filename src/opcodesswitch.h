@@ -19,6 +19,7 @@
 
 #include "Module.h"
 #include "debug.h"
+#include "utils.h"
 
 #ifndef TRACE
     #ifdef ENABLE_TRACE
@@ -97,7 +98,7 @@
     int read_core_chunk(Module *mod)
 #else
     #ifdef IMPL_EXECUTE_LOOP
-        int execute_loop(Context *ctx, Module *mod, uint8_t *beam_file)
+        int context_execute_loop(Context *ctx, Module *mod, uint8_t *beam_file)
     #else
         #error Need implementation type
     #endif

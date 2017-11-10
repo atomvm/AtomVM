@@ -40,7 +40,7 @@ typedef struct
     uint8_t code[1];
 } __attribute__((packed)) CodeChunk;
 
-typedef struct
+struct Module
 {
     CodeChunk *code;
     BifImpl *imported_bifs;
@@ -48,7 +48,12 @@ typedef struct
     void *local_functions;
 
     void **labels;
-} Module;
+};
+
+#ifndef TYPEDEF_MODULE
+#define TYPEDEF_MODULE
+typedef struct Module Module;
+#endif
 
 extern void module_build_imported_functions_table(Module *this_module, uint8_t *table_data, uint8_t *atom_tab);
 extern void module_add_label(Module *mod, int index, void *ptr);
