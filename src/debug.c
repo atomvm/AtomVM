@@ -29,3 +29,20 @@ void debug_dump_stack(Context *ctx)
     fprintf(stderr, "DEBUG: stack frame: %li\n", ctx->stack_frame - ctx->stack);
     fprintf(stderr, "DEBUG: e: %li\n", ctx->e - ctx->stack);
 }
+
+char reg_type_c(int reg_type)
+{
+    switch (reg_type) {
+        case 2:
+            return 'a';
+
+        case 3:
+            return 'x';
+
+        case 4:
+            return 'y';
+
+        default:
+            return '?';
+    }
+}

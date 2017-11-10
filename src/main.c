@@ -32,23 +32,6 @@
 #include "iff.h"
 #include "utils.h"
 
-char reg_type_c(int reg_type)
-{
-    switch (reg_type) {
-        case 2:
-            return 'a';
-
-        case 3:
-            return 'x';
-
-        case 4:
-            return 'y';
-
-        default:
-            return '?';
-    }
-}
-
 #define IMPL_EXECUTE_LOOP
 #include "opcodesswitch.h"
 #undef IMPL_EXECUTE_LOOP

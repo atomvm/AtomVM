@@ -23,6 +23,7 @@
 #include "Context.h"
 
 extern void debug_dump_stack(Context *ctx);
+extern char reg_type_c(int reg_type);
 
 #ifdef ENABLE_STACK_TRACE
     #define DEBUG_DUMP_STACK debug_dump_stack
