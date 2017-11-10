@@ -17,59 +17,17 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
+#ifndef _MAPPED_FILE_H_
+#define _MAPPED_FILE_H_
 
-#include "atom.h"
-#include "mapped_file.h"
-#include "Context.h"
-#include "Module.h"
-#include "Term.h"
-
-#include "bif.h"
-#include "iff.h"
-#include "utils.h"
-
-char reg_type_c(int reg_type)
+typedef struct
 {
-    switch (reg_type) {
-        case 2:
-            return 'a';
+    int fd;
+    void *mapped;
+    unsigned long size;
+} MappedFile;
 
-        case 3:
-            return 'x';
+extern MappedFile *mapped_file_open_beam(const char *file_name);
+extern void mapped_file_close(MappedFile *mf);
 
-        case 4:
-            return 'y';
-
-        default:
-            return '?';
-    }
-}
-
-#define IMPL_EXECUTE_LOOP
-#include "opcodesswitch.h"
-#undef IMPL_EXECUTE_LOOP
-
-int main(int argc, char **argv)
-{
-    if (argc < 2) {
-        printf("Need .beam file\n");
-        return EXIT_FAILURE;
-    }
-    MappedFile *beam_file = mapped_file_open_beam(argv[1]);
-    if (!beam_file) {
-        return EXIT_FAILURE;
-    }
-
-    Module *mod = module_new_from_iff_binary(beam_file->mapped, beam_file->size);
-    Context *ctx = context_new();
-
-    execute_loop(ctx, mod, beam_file->mapped);
-
-    printf("Return value: %lx\n", ctx->x[0]);
-
-    return EXIT_SUCCESS;
-}
+#endif

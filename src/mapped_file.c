@@ -17,59 +17,55 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+#include "mapped_file.h"
+
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <stdio.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "atom.h"
-#include "mapped_file.h"
-#include "Context.h"
-#include "Module.h"
-#include "Term.h"
-
-#include "bif.h"
-#include "iff.h"
-#include "utils.h"
-
-char reg_type_c(int reg_type)
+MappedFile *mapped_file_open_beam(const char *file_name)
 {
-    switch (reg_type) {
-        case 2:
-            return 'a';
-
-        case 3:
-            return 'x';
-
-        case 4:
-            return 'y';
-
-        default:
-            return '?';
+    MappedFile *mf = malloc(sizeof(MappedFile));
+    if (!mf) {
+        return NULL;
     }
+
+    mf->fd = open(file_name, O_RDONLY);
+    if (mf->fd < 0) {
+        fprintf(stderr, "Cannot open %s\n", file_name);
+        free(mf);
+        return NULL;
+    }
+
+    struct stat file_stats;
+    fstat(mf->fd, &file_stats);
+    mf->size = file_stats.st_size;
+
+    mf->mapped = mmap(NULL, mf->size, PROT_READ, MAP_SHARED, mf->fd, 0);
+    if (!mf->mapped) {
+        fprintf(stderr, "Cannot mmap %s\n", file_name);
+        close(mf->fd);
+        free(mf);
+        return NULL;
+    }
+
+    if (memcmp(mf->mapped, "FOR1", 4)) {
+        fprintf(stderr, "%s is not a BEAM file.\n", file_name);
+        mapped_file_close(mf);
+        return NULL;
+    }
+
+    return mf;
 }
 
-#define IMPL_EXECUTE_LOOP
-#include "opcodesswitch.h"
-#undef IMPL_EXECUTE_LOOP
-
-int main(int argc, char **argv)
+void mapped_file_close(MappedFile *mf)
 {
-    if (argc < 2) {
-        printf("Need .beam file\n");
-        return EXIT_FAILURE;
-    }
-    MappedFile *beam_file = mapped_file_open_beam(argv[1]);
-    if (!beam_file) {
-        return EXIT_FAILURE;
-    }
-
-    Module *mod = module_new_from_iff_binary(beam_file->mapped, beam_file->size);
-    Context *ctx = context_new();
-
-    execute_loop(ctx, mod, beam_file->mapped);
-
-    printf("Return value: %lx\n", ctx->x[0]);
-
-    return EXIT_SUCCESS;
+    munmap(mf->mapped, mf->size);
+    close(mf->fd);
+    free(mf);
 }
