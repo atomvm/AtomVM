@@ -60,7 +60,10 @@ void test_modules_execution()
 
         context_execute_loop(ctx, mod, beam_file->mapped);
 
-        assert(term_to_int32(ctx->x[0]) == test->expected_value);
+        int32_t value = term_to_int32(ctx->x[0]);
+        if (value != test->expected_value) {
+            fprintf(stderr, "\x1b[1;31mFailed test module %s, got value: %i\x1b[0m\n", test->test_file, value);
+        }
 
         mapped_file_close(beam_file);
 
