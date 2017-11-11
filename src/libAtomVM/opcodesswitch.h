@@ -116,6 +116,15 @@
     }                                                                                               \
 }
 
+#define NEXT_INSTRUCTION(operands_size) \
+    i += 1 + operands_size
+
+#define JUMP_TO_ADDRESS(address) \
+    i = ((uint8_t *) (address)) - chunk->code
+
+#define INSTRUCTION_POINTER() \
+    ((unsigned long) &chunk->code[i])
+
 #ifdef IMPL_CODE_LOADER
     int read_core_chunk(Module *mod)
 #else
@@ -149,7 +158,7 @@
                     UNUSED(label)
                 #endif
 
-                i += 1 + next_offset;
+                NEXT_INSTRUCTION(next_offset);
                 break;
             }
 
@@ -163,7 +172,7 @@
 
                 TRACE("func_info/3 name=%i (%x), arity=%i (%x), func_id=%i (%x)\n", func_name, a, arity, b, func_id, c);
 
-                i += 1 + 3;
+                NEXT_INSTRUCTION(3);
                 break;
             }
             case 3: {
@@ -180,15 +189,15 @@
                 TRACE("call/2, arity=%i (%x), label=%i (%x)\n", arity, a_type, label, b_type);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    i += 1 + 2;
-                    ctx->cp = (unsigned long) &chunk->code[i];
+                    NEXT_INSTRUCTION(2);
+                    ctx->cp = INSTRUCTION_POINTER();
 
-                    i = (uint8_t *) mod->labels[label] - chunk->code;
+                    JUMP_TO_ADDRESS(mod->labels[label]);
                     break;
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    i += 1 + 2;
+                    NEXT_INSTRUCTION(2);
                     break;
                 #endif
             }
@@ -202,12 +211,12 @@
                 TRACE("call_only/2, arity=%i (%x), label=%i (%x)\n", arity, a_type, label, b_type);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    i += 1 + 2;
-                    i = (uint8_t *) mod->labels[label] - chunk->code;
+                    NEXT_INSTRUCTION(2);
+                    JUMP_TO_ADDRESS(mod->labels[label]);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    i += 1 + 2;
+                    NEXT_INSTRUCTION(2);
                 #endif
 
                 break;
@@ -235,7 +244,7 @@
                     *(ctx->e) = ctx->cp;
                 #endif
 
-                i += 1 + 2;
+                NEXT_INSTRUCTION(2);
                 break;
             }
 
@@ -263,7 +272,7 @@
 
                 //TODO: bzero/memset
 
-                i += 1 + 2;
+                NEXT_INSTRUCTION(2);
                 break;
             }
 
@@ -280,7 +289,7 @@
                     DEBUG_DUMP_STACK(ctx);
                 #endif
 
-                i += 1 + 1;
+                NEXT_INSTRUCTION(1);
                 break;
             }
 
@@ -292,11 +301,11 @@
                         return 0;
                     }
 
-                    i = ctx->cp - (unsigned long) chunk->code;
+                    JUMP_TO_ADDRESS(ctx->cp);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    i++;
+                    NEXT_INSTRUCTION(0);
                 #endif
                 break;
 
@@ -312,7 +321,7 @@
                     TRACE("is_eq_exact/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
                     if (arg1 == arg2) {
-                        i += 1 + 3;
+                        NEXT_INSTRUCTION(3);
                     } else {
                         i = (uint8_t *) mod->labels[label] - chunk->code;
                     }
@@ -321,7 +330,7 @@
                 #ifdef IMPL_CODE_LOADER
                     UNUSED(arg1)
                     UNUSED(arg2)
-                    i += 1 + 3;
+                    NEXT_INSTRUCTION(3);
                 #endif
 
                 break;
@@ -358,7 +367,7 @@
                     UNUSED(dest)
                 #endif
 
-                i += 1 + 2;
+                NEXT_INSTRUCTION(2);
                 break;
             }
             case 78: {
@@ -370,15 +379,15 @@
                 TRACE("call_ext_only/2, arity=%i (%x), label=%i (%x)\n", arity, a_type, label, b_type);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    i += 1 + 2;
-                    ctx->cp = (unsigned long) &chunk->code[i];
+                    NEXT_INSTRUCTION(2);
+                    ctx->cp = INSTRUCTION_POINTER();
 
-                    i = (uint8_t *) mod->labels[label] - chunk->code;
+                    JUMP_TO_ADDRESS(mod->labels[label]);
                     break;
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    i += 1 + 2;
+                    NEXT_INSTRUCTION(2);
                     break;
                 #endif
             }
@@ -411,14 +420,14 @@
                     UNUSED(dreg)
                 #endif
 
-                i += 1 + 6;
+                NEXT_INSTRUCTION(6);
                 break;
             }
 
             case 153:
                 TRACE("line/1\n");
 
-                i += 1 + 1;
+                NEXT_INSTRUCTION(1);
                 break;
 
             default:
