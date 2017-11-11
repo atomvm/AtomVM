@@ -94,6 +94,28 @@
 }
 #endif
 
+#define DECODE_LABEL(code_chunk, index, next_operand_offset, label) \
+{                                                                                                   \
+    uint8_t first_byte = (code_chunk[(index)]);                                                     \
+    switch (((first_byte) >> 3) & 0x3) {                                                            \
+        case 0:                                                                                     \
+        case 2:                                                                                     \
+            next_operand_offset = 1;                                                                \
+            label = first_byte >> 4;                                                                \
+            break;                                                                                  \
+                                                                                                    \
+        case 1:                                                                                     \
+            next_operand_offset = 2;                                                                \
+            label = ((first_byte & 0xE0) << 8) | code_chunk[(index + 1)];                           \
+            break;                                                                                  \
+                                                                                                    \
+        default:                                                                                    \
+            fprintf(stderr, "Operand not a label: %x, or unsupported encoding\n", (first_byte));    \
+            abort();                                                                                \
+            break;                                                                                  \
+    }                                                                                               \
+}
+
 #ifdef IMPL_CODE_LOADER
     int read_core_chunk(Module *mod)
 #else
@@ -112,10 +134,11 @@
 
         switch (chunk->code[i]) {
             case 1: {
-                int a_type = chunk->code[i + 1] & 0xF;
-                int label = chunk->code[i + 1] >> 4;
+                int label;
+                int next_offset;
+                DECODE_LABEL(chunk->code, i + 1, next_offset, label)
 
-                TRACE("label/1 label=%i (%x)\n", label, a_type);
+                TRACE("label/1 label=%i\n", label);
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("Mark label %i here at %i\n", label, i);
@@ -123,11 +146,10 @@
                 #endif
 
                 #ifdef EXECUTE_LOOP
-                    UNUSED(a_type)
                     UNUSED(label)
                 #endif
 
-                i += 1 + 1;
+                i += 1 + next_offset;
                 break;
             }
 
