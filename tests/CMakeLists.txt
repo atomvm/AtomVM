@@ -1,6 +1,8 @@
 cmake_minimum_required (VERSION 2.6)
 project (tests)
 
+add_subdirectory(erlang_tests)
+
 if(CMAKE_COMPILER_IS_GNUCC)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -pedantic -Wextra -ggdb")
 endif()
