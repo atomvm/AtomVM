@@ -13,5 +13,6 @@ endfunction()
 compile_erlang(add)
 compile_erlang(fact)
 compile_erlang(mutrec)
+compile_erlang(morelabels)
 
-add_custom_target(erlang_test_modules DEPENDS add.beam fact.beam mutrec.beam)
+add_custom_target(erlang_test_modules DEPENDS add.beam fact.beam mutrec.beam morelabels.beam)
