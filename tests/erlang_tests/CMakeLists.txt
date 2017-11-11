@@ -12,5 +12,6 @@ endfunction()
 
 compile_erlang(add)
 compile_erlang(fact)
+compile_erlang(mutrec)
 
-add_custom_target(erlang_test_modules DEPENDS add.beam fact.beam)
+add_custom_target(erlang_test_modules DEPENDS add.beam fact.beam mutrec.beam)
