@@ -175,6 +175,7 @@
                 NEXT_INSTRUCTION(3);
                 break;
             }
+
             case 3: {
                 TRACE("int_call_end!\n");
                 return 1;
@@ -193,13 +194,13 @@
                     ctx->cp = INSTRUCTION_POINTER();
 
                     JUMP_TO_ADDRESS(mod->labels[label]);
-                    break;
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
                     NEXT_INSTRUCTION(2);
-                    break;
                 #endif
+
+                break;
             }
 
             case 6: {
@@ -293,7 +294,7 @@
                 break;
             }
 
-            case 19:
+            case 19: {
                 TRACE("return/0\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
@@ -308,6 +309,7 @@
                     NEXT_INSTRUCTION(0);
                 #endif
                 break;
+            }
 
             case 43: {
                 int label = chunk->code[i + 1] >> 4;
@@ -370,6 +372,7 @@
                 NEXT_INSTRUCTION(2);
                 break;
             }
+
             case 78: {
                 int a_type = chunk->code[i + 1] & 0xF;
                 int b_type = chunk->code[i + 2] & 0xF;
@@ -424,11 +427,12 @@
                 break;
             }
 
-            case 153:
+            case 153: {
                 TRACE("line/1\n");
 
                 NEXT_INSTRUCTION(1);
                 break;
+            }
 
             default:
                 printf("Undecoded opcode: %i\n", chunk->code[i]);
