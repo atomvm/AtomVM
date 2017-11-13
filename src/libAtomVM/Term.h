@@ -61,6 +61,11 @@ static inline term term_from_int4(int8_t value)
     return (value << 4) | 0xF;
 }
 
+static inline term term_from_int11(int16_t value)
+{
+    return (value << 4) | 0xF;
+}
+
 static inline term term_from_int32(int32_t value)
 {
     //134217728 is 2^27

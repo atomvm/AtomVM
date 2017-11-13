@@ -18,6 +18,9 @@
  ***************************************************************************/
 
 #include "Module.h"
+
+#include <assert.h>
+
 #include "debug.h"
 #include "utils.h"
 
@@ -33,12 +36,17 @@
 #define COMPACT_ATOM 2
 #define COMPACT_XREG 3
 #define COMPACT_YREG 4
+#define COMPACT_LARGE_INTEGER 9
+
+#define COMPACT_LARGE_IMM_MASK 0x18
+#define COMPACT_11BITS_VALUE 0x8
+#define COMPACT_NBITS_VALUE 0x18
 
 #ifdef IMPL_CODE_LOADER
 #define DECODE_COMPACT_TERM(dest_term, code_chunk, index, next_operand_offset) \
 {                                                                                       \
     uint8_t first_byte = (code_chunk[(index)]);                                         \
-    switch ((first_byte) & 0xF) {                                                       \
+    switch (first_byte & 0xF) {                                                         \
         case COMPACT_SMALLINT4:                                                         \
             next_operand_offset = 1;                                                    \
             break;                                                                      \
@@ -55,6 +63,18 @@
             next_operand_offset = 1;                                                    \
             break;                                                                      \
                                                                                         \
+        case COMPACT_LARGE_INTEGER:                                                     \
+            switch (first_byte & COMPACT_LARGE_IMM_MASK) {                              \
+                case COMPACT_11BITS_VALUE:                                              \
+                    next_operand_offset = 2;                                            \
+                    break;                                                              \
+                                                                                        \
+                default:                                                                \
+                    assert((first_byte & 0x30) != COMPACT_LARGE_INTEGER);               \
+                    break;                                                              \
+            }                                                                           \
+            break;                                                                      \
+                                                                                        \
         default:                                                                        \
             fprintf(stderr, "unknown compect term type: %i\n", ((first_byte) & 0xF));   \
             abort();                                                                    \
@@ -65,32 +85,45 @@
 
 #ifdef IMPL_EXECUTE_LOOP
 #define DECODE_COMPACT_TERM(dest_term, code_chunk, index, next_operand_offset) \
-{                                                                                   \
-    uint8_t first_byte = (code_chunk[(index)]);                                     \
-    switch ((first_byte) & 0xF) {                                                   \
-        case COMPACT_SMALLINT4:                                                     \
-            dest_term = term_from_int4(first_byte >> 4);                            \
-            next_operand_offset = 1;                                                \
-            break;                                                                  \
-                                                                                    \
-        case COMPACT_ATOM:                                                          \
-            dest_term = 0;                                                          \
-            next_operand_offset = 1;                                                \
-            break;                                                                  \
-                                                                                    \
-        case COMPACT_XREG:                                                          \
-            dest_term = ctx->x[first_byte >> 4];                                    \
-            next_operand_offset = 1;                                                \
-            break;                                                                  \
-                                                                                    \
-        case COMPACT_YREG:                                                          \
-            dest_term = ctx->stack_frame[first_byte >> 4];                          \
-            next_operand_offset = 1;                                                \
-            break;                                                                  \
-                                                                                    \
-        default:                                                                    \
-            abort();                                                                \
-    }                                                                               \
+{                                                                                                                       \
+    uint8_t first_byte = (code_chunk[(index)]);                                                                         \
+    switch (first_byte & 0xF) {                                                                                         \
+        case COMPACT_SMALLINT4:                                                                                         \
+            dest_term = term_from_int4(first_byte >> 4);                                                                \
+            next_operand_offset = 1;                                                                                    \
+            break;                                                                                                      \
+                                                                                                                        \
+        case COMPACT_ATOM:                                                                                              \
+            dest_term = 0;                                                                                              \
+            next_operand_offset = 1;                                                                                    \
+            break;                                                                                                      \
+                                                                                                                        \
+        case COMPACT_XREG:                                                                                              \
+            dest_term = ctx->x[first_byte >> 4];                                                                        \
+            next_operand_offset = 1;                                                                                    \
+            break;                                                                                                      \
+                                                                                                                        \
+        case COMPACT_YREG:                                                                                              \
+            dest_term = ctx->stack_frame[first_byte >> 4];                                                              \
+            next_operand_offset = 1;                                                                                    \
+            break;                                                                                                      \
+                                                                                                                        \
+        case COMPACT_LARGE_INTEGER:                                                                                     \
+            switch (first_byte & COMPACT_LARGE_IMM_MASK) {                                                              \
+                case COMPACT_11BITS_VALUE:                                                                              \
+                    next_operand_offset = 2;                                                                            \
+                    dest_term = term_from_int11(((first_byte & 0xE0) << 3) | code_chunk[(index + 1)]);                  \
+                    break;                                                                                              \
+                                                                                                                        \
+                default:                                                                                                \
+                    abort();                                                                                            \
+                    break;                                                                                              \
+            }                                                                                                           \
+            break;                                                                                                      \
+                                                                                                                        \
+        default:                                                                                                        \
+            abort();                                                                                                    \
+    }                                                                                                                   \
 }
 #endif
 
@@ -106,7 +139,7 @@
                                                                                                     \
         case 1:                                                                                     \
             next_operand_offset = 2;                                                                \
-            label = ((first_byte & 0xE0) << 8) | code_chunk[(index + 1)];                           \
+            label = ((first_byte & 0xE0) << 3) | code_chunk[(index + 1)];                           \
             break;                                                                                  \
                                                                                                     \
         default:                                                                                    \
@@ -339,15 +372,15 @@
             }
 
             case 64: {
-                int reg_b_type = reg_type_c(chunk->code[i + 2] & 0xF);
-                int dest = chunk->code[i + 2] >> 4;
-
                 int next_off;
                 term src_value;
                 DECODE_COMPACT_TERM(src_value, chunk->code, i + 1, next_off)
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("move/2 %lx, %c%i\n", src_value, reg_type_c(reg_b_type), dest);
+                    int reg_b_type = reg_type_c(chunk->code[i + 1 + next_off] & 0xF);
+                    int dest = chunk->code[i + 1 + next_off] >> 4;
+
+                    TRACE("move/2 %lx, %c%i\n", src_value, reg_b_type, dest);
 
                     UNUSED(next_off)
 
@@ -364,12 +397,10 @@
                     TRACE("move/2\n");
 
                     UNUSED(next_off)
-                    UNUSED(reg_b_type)
                     UNUSED(src_value)
-                    UNUSED(dest)
                 #endif
 
-                NEXT_INSTRUCTION(2);
+                NEXT_INSTRUCTION(1 + next_off);
                 break;
             }
 
