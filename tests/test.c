@@ -46,6 +46,7 @@ struct Test tests[] =
     {"erlang_tests/fact.beam", 120},
     {"erlang_tests/mutrec.beam", 6},
     {"erlang_tests/morelabels.beam", 6},
+    {"erlang_tests/biggerintegers.beam", 550},
     {NULL, 0}
 };
 

@@ -14,5 +14,6 @@ compile_erlang(add)
 compile_erlang(fact)
 compile_erlang(mutrec)
 compile_erlang(morelabels)
+compile_erlang(biggerintegers)
 
-add_custom_target(erlang_test_modules DEPENDS add.beam fact.beam mutrec.beam morelabels.beam)
+add_custom_target(erlang_test_modules DEPENDS add.beam fact.beam mutrec.beam morelabels.beam biggerintegers.beam)
