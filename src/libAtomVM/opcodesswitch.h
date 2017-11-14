@@ -43,30 +43,30 @@
 #define COMPACT_NBITS_VALUE 0x18
 
 #ifdef IMPL_CODE_LOADER
-#define DECODE_COMPACT_TERM(dest_term, code_chunk, index, next_operand_offset) \
+#define DECODE_COMPACT_TERM(dest_term, code_chunk, base_index, off, next_operand_offset)\
 {                                                                                       \
-    uint8_t first_byte = (code_chunk[(index)]);                                         \
+    uint8_t first_byte = (code_chunk[(base_index) + (off)]);                            \
     switch (first_byte & 0xF) {                                                         \
         case COMPACT_SMALLINT4:                                                         \
-            next_operand_offset = 1;                                                    \
+            next_operand_offset += 1;                                                   \
             break;                                                                      \
                                                                                         \
         case COMPACT_ATOM:                                                              \
-            next_operand_offset = 1;                                                    \
+            next_operand_offset += 1;                                                   \
             break;                                                                      \
                                                                                         \
         case COMPACT_XREG:                                                              \
-            next_operand_offset = 1;                                                    \
+            next_operand_offset += 1;                                                   \
             break;                                                                      \
                                                                                         \
         case COMPACT_YREG:                                                              \
-            next_operand_offset = 1;                                                    \
+            next_operand_offset += 1;                                                   \
             break;                                                                      \
                                                                                         \
         case COMPACT_LARGE_INTEGER:                                                     \
             switch (first_byte & COMPACT_LARGE_IMM_MASK) {                              \
                 case COMPACT_11BITS_VALUE:                                              \
-                    next_operand_offset = 2;                                            \
+                    next_operand_offset += 2;                                           \
                     break;                                                              \
                                                                                         \
                 default:                                                                \
@@ -84,35 +84,35 @@
 #endif
 
 #ifdef IMPL_EXECUTE_LOOP
-#define DECODE_COMPACT_TERM(dest_term, code_chunk, index, next_operand_offset) \
+#define DECODE_COMPACT_TERM(dest_term, code_chunk, base_index, off, next_operand_offset)                                \
 {                                                                                                                       \
-    uint8_t first_byte = (code_chunk[(index)]);                                                                         \
+    uint8_t first_byte = (code_chunk[(base_index) + (off)]);                                                            \
     switch (first_byte & 0xF) {                                                                                         \
         case COMPACT_SMALLINT4:                                                                                         \
             dest_term = term_from_int4(first_byte >> 4);                                                                \
-            next_operand_offset = 1;                                                                                    \
+            next_operand_offset += 1;                                                                                   \
             break;                                                                                                      \
                                                                                                                         \
         case COMPACT_ATOM:                                                                                              \
             dest_term = 0;                                                                                              \
-            next_operand_offset = 1;                                                                                    \
+            next_operand_offset += 1;                                                                                   \
             break;                                                                                                      \
                                                                                                                         \
         case COMPACT_XREG:                                                                                              \
             dest_term = ctx->x[first_byte >> 4];                                                                        \
-            next_operand_offset = 1;                                                                                    \
+            next_operand_offset += 1;                                                                                   \
             break;                                                                                                      \
                                                                                                                         \
         case COMPACT_YREG:                                                                                              \
             dest_term = ctx->stack_frame[first_byte >> 4];                                                              \
-            next_operand_offset = 1;                                                                                    \
+            next_operand_offset += 1;                                                                                   \
             break;                                                                                                      \
                                                                                                                         \
         case COMPACT_LARGE_INTEGER:                                                                                     \
             switch (first_byte & COMPACT_LARGE_IMM_MASK) {                                                              \
                 case COMPACT_11BITS_VALUE:                                                                              \
-                    next_operand_offset = 2;                                                                            \
-                    dest_term = term_from_int11(((first_byte & 0xE0) << 3) | code_chunk[(index + 1)]);                  \
+                    dest_term = term_from_int11(((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]);     \
+                    next_operand_offset += 2;                                                                           \
                     break;                                                                                              \
                                                                                                                         \
                 default:                                                                                                \
@@ -346,11 +346,11 @@
 
             case 43: {
                 int label = chunk->code[i + 1] >> 4;
-                int next_off;
+                int next_off = 2;
                 term arg1;
                 term arg2;
-                DECODE_COMPACT_TERM(arg1, chunk->code, i + 2, next_off)
-                DECODE_COMPACT_TERM(arg2, chunk->code, i + 2 + next_off, next_off)
+                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg2, chunk->code, i, next_off, next_off)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_eq_exact/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
@@ -363,6 +363,7 @@
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
+                    TRACE("is_eq_exact/2");
                     UNUSED(arg1)
                     UNUSED(arg2)
                     NEXT_INSTRUCTION(3);
@@ -372,17 +373,15 @@
             }
 
             case 64: {
-                int next_off;
+                int next_off = 1;
                 term src_value;
-                DECODE_COMPACT_TERM(src_value, chunk->code, i + 1, next_off)
+                DECODE_COMPACT_TERM(src_value, chunk->code, i, next_off, next_off)
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    int reg_b_type = reg_type_c(chunk->code[i + 1 + next_off] & 0xF);
-                    int dest = chunk->code[i + 1 + next_off] >> 4;
+                    int reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);
+                    int dest = chunk->code[i + next_off] >> 4;
 
                     TRACE("move/2 %lx, %c%i\n", src_value, reg_b_type, dest);
-
-                    UNUSED(next_off)
 
                     if (reg_b_type == 'x') {
                         ctx->x[dest] = src_value;
@@ -395,12 +394,10 @@
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("move/2\n");
-
-                    UNUSED(next_off)
                     UNUSED(src_value)
                 #endif
 
-                NEXT_INSTRUCTION(1 + next_off);
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 
@@ -430,13 +427,13 @@
                 int f_label = chunk->code[i + 1] >> 4;
                 int live = chunk->code[i + 2] >> 4;
                 int bif = chunk->code[i + 3] >> 4;
-                int dreg = chunk->code[i + 6] >> 4;
 
-                int next_off;
+                int next_off = 4;
                 term arg1;
                 term arg2;
-                DECODE_COMPACT_TERM(arg1, chunk->code, i + 4, next_off)
-                DECODE_COMPACT_TERM(arg2, chunk->code, i + 4 + next_off, next_off)
+                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg2, chunk->code, i, next_off, next_off)
+                int dreg = chunk->code[i + next_off] >> 4;
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("gc_bif2/6 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, arg2=0x%lx, dest=r%i\n", f_label, live, bif, arg1, arg2, dreg);
@@ -446,6 +443,8 @@
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
+                    TRACE("gc_bif2/6\n");
+
                     UNUSED(f_label)
                     UNUSED(live)
                     UNUSED(bif)
@@ -454,7 +453,7 @@
                     UNUSED(dreg)
                 #endif
 
-                NEXT_INSTRUCTION(6);
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 
