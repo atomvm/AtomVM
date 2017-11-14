@@ -152,8 +152,14 @@
 #define NEXT_INSTRUCTION(operands_size) \
     i += 1 + operands_size
 
-#define JUMP_TO_ADDRESS(address) \
-    i = ((uint8_t *) (address)) - chunk->code
+#ifndef TRACE_JUMP
+    #define JUMP_TO_ADDRESS(address) \
+        i = ((uint8_t *) (address)) - chunk->code
+#else
+    #define JUMP_TO_ADDRESS(address) \
+        i = ((uint8_t *) (address)) - chunk->code; \
+        fprintf(stderr, "going to jump to %i\n", i)
+#endif
 
 #define INSTRUCTION_POINTER() \
     ((unsigned long) &chunk->code[i])
