@@ -351,10 +351,12 @@
             }
 
             case 43: {
-                int label = chunk->code[i + 1] >> 4;
-                int next_off = 2;
+                int next_off = 0;
+                int label;
                 term arg1;
                 term arg2;
+                DECODE_LABEL(chunk->code, i + 1, next_off, label)
+                next_off += 1;
                 DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
                 DECODE_COMPACT_TERM(arg2, chunk->code, i, next_off, next_off)
 
@@ -362,7 +364,7 @@
                     TRACE("is_eq_exact/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
                     if (arg1 == arg2) {
-                        NEXT_INSTRUCTION(3);
+                        NEXT_INSTRUCTION(next_off - 1);
                     } else {
                         i = (uint8_t *) mod->labels[label] - chunk->code;
                     }
@@ -372,7 +374,7 @@
                     TRACE("is_eq_exact/2");
                     UNUSED(arg1)
                     UNUSED(arg2)
-                    NEXT_INSTRUCTION(3);
+                    NEXT_INSTRUCTION(next_off - 1);
                 #endif
 
                 break;
