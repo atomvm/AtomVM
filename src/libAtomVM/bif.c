@@ -93,8 +93,14 @@ void bif_erlang_mul_2(Context *ctx, uint32_t failure_label, int live, term arg1,
 void bif_erlang_div_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg)
 {
     if (term_is_integer(arg1) && term_is_integer(arg2)) {
-        //NEED CHECK DIVISION BY 0
-        ctx->x[reg] = term_from_int32(term_to_int32(arg1) / term_to_int32(arg2));
+        int32_t operand_b = term_to_int32(arg2);
+        if (operand_b != 0) {
+            ctx->x[reg] = term_from_int32(term_to_int32(arg1) / operand_b);
+
+        } else {
+            fprintf(stderr, "error: division by 0");
+            abort();
+        }
 
     } else {
         printf("div: operands are not integers: arg1=%lx, arg2=%lx\n", arg1, arg2);
