@@ -564,6 +564,7 @@
                     fprintf(stderr, "failed: %li\n", &chunk->code[i] - beam_file);
                 #endif
 
+                abort();
                 return 1;
         }
     }
