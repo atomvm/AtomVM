@@ -104,7 +104,7 @@
             break;                                                                                                      \
                                                                                                                         \
         case COMPACT_YREG:                                                                                              \
-            dest_term = ctx->stack_frame[first_byte >> 4];                                                              \
+            dest_term = ctx->e[first_byte >> 4];                                                                        \
             next_operand_offset += 1;                                                                                   \
             break;                                                                                                      \
                                                                                                                         \
@@ -160,6 +160,8 @@
         i = ((uint8_t *) (address)) - chunk->code; \
         fprintf(stderr, "going to jump to %i\n", i)
 #endif
+
+#define OP_TRIM 136
 
 #define INSTRUCTION_POINTER() \
     ((unsigned long) &chunk->code[i])
@@ -275,13 +277,12 @@
                         abort();
                     }
 
-                    if ((ctx->e + (stack_need + 1)) - ctx->stack > ctx->stack_size) {
+                    if ((ctx->e - (stack_need + 1)) < ctx->stack) {
                         fprintf(stderr, "Need to allocate more stack space.");
                         abort();
                     }
-                    ctx->stack_frame = ctx->e + 1;
-                    ctx->e = ctx->stack_frame + stack_need;
-                    *(ctx->e) = ctx->cp;
+                    ctx->e -= stack_need + 1;
+                    ctx->e[stack_need] = ctx->cp;
                 #endif
 
                 NEXT_INSTRUCTION(2);
@@ -301,13 +302,13 @@
                         abort();
                     }
 
-                    if ((ctx->e + (stack_need + 1)) - ctx->stack > ctx->stack_size) {
+                    if ((ctx->e - (stack_need + 1)) < ctx->stack) {
                         fprintf(stderr, "Need to allocate more stack space.");
                         abort();
                     }
-                    ctx->stack_frame = ctx->e + 1;
-                    ctx->e = ctx->stack_frame + stack_need;
-                    *(ctx->e) = ctx->cp;
+
+                    ctx->e -= stack_need + 1;
+                    ctx->e[stack_need] = ctx->cp;
                 #endif
 
                 //TODO: bzero/memset
@@ -322,10 +323,10 @@
                 TRACE("deallocate/1 n_words=%i\n", n_words);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    ctx->cp = *(ctx->e);
-                    ctx->e = ctx->stack_frame - n_words;
-                    ctx->stack_frame = ctx->e - 1;
+                    DEBUG_DUMP_STACK(ctx);
 
+                    ctx->cp = ctx->e[n_words];
+                    ctx->e += n_words + 1;
                     DEBUG_DUMP_STACK(ctx);
                 #endif
 
@@ -394,7 +395,7 @@
                     if (reg_b_type == 'x') {
                         ctx->x[dest] = src_value;
                     } else if (reg_b_type == 'y') {
-                        ctx->stack_frame[dest] = src_value;
+                        ctx->e[dest] = src_value;
                     } else {
                         abort();
                     }
@@ -462,6 +463,22 @@
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_TRIM: {
+                TRACE("trim/2\n");
+
+                int n_words = chunk->code[i + 1] >> 4;
+                int n_remaining = chunk->code[i + 2] >> 4;
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    DEBUG_DUMP_STACK(ctx);
+                    ctx->e += n_words;
+                    DEBUG_DUMP_STACK(ctx);
+                #endif
+
+                NEXT_INSTRUCTION(2);
                 break;
             }
 

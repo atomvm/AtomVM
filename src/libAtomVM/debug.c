@@ -26,7 +26,6 @@ void debug_dump_stack(Context *ctx)
         fprintf(stderr, "DEBUG: stack: (%i) %lx\n", i, ctx->stack[i]);
     }
     fprintf(stderr, "DEBUG: \n");
-    fprintf(stderr, "DEBUG: stack frame: %li\n", ctx->stack_frame - ctx->stack);
     fprintf(stderr, "DEBUG: e: %li\n", ctx->e - ctx->stack);
 }
 

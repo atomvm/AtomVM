@@ -30,8 +30,7 @@ Context *context_new()
 
     ctx->stack = (term *) calloc(DEFAULT_STACK_SIZE, sizeof(term));
     ctx->stack_size = DEFAULT_STACK_SIZE;
-    ctx->stack_frame = ctx->stack;
-    ctx->e = ctx->stack;
+    ctx->e = ctx->stack + ctx->stack_size;
 
     return ctx;
 }

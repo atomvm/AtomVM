@@ -37,10 +37,6 @@ typedef struct
 
     term *stack;
     unsigned long stack_size;
-
-    term *stack_frame;
-    unsigned long stack_frame_size;
-
     term *e;
 
     unsigned long cp;
