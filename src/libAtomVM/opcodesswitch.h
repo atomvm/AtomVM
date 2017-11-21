@@ -228,16 +228,16 @@
             }
 
             case 2: {
-                int func_name = chunk->code[i + 1] & 0xF;
-                int arity = chunk->code[i + 2] & 0xF;
-                int func_id = chunk->code[i + 3] & 0xF;
-                int a = chunk->code[i + 1] >> 4;
-                int b = chunk->code[i + 2] >> 4;
-                int c = chunk->code[i + 3] >> 4;
+                int next_offset = 1;
+                int module_atom;
+                DECODE_ATOM(module_atom, chunk->code, i, next_offset, next_offset)
+                int function_name_atom;
+                DECODE_ATOM(function_name_atom, chunk->code, i, next_offset, next_offset)
+                int arity = chunk->code[i + next_offset] & 0xF;
 
-                TRACE("func_info/3 name=%i (%x), arity=%i (%x), func_id=%i (%x)\n", func_name, a, arity, b, func_id, c);
+                TRACE("func_info/3 module_name_a=%i, function_name_a=%i, arity=%i\n", module_atom, function_name_atom, arity);
 
-                NEXT_INSTRUCTION(3);
+                NEXT_INSTRUCTION(next_offset);
                 break;
             }
 
