@@ -544,9 +544,17 @@
             }
 
             case 153: {
-                TRACE("line/1\n");
+                int next_offset = 1;
 
-                NEXT_INSTRUCTION(1);
+                int line_number = chunk->code[i + 1];
+                if (line_number == 8) {
+                    //TODO: line/1 doesn't look well documented, try to understand what it really means
+                    next_offset++;
+                }
+
+                TRACE("line/1: %i\n", line_number);
+
+                NEXT_INSTRUCTION(next_offset);
                 break;
             }
 
