@@ -248,21 +248,51 @@
 
             case 4: {
                 int a_type = chunk->code[i + 1] & 0xF;
-                int b_type = chunk->code[i + 2] & 0xF;
                 int arity = chunk->code[i + 1] >> 4;
-                int label = chunk->code[i + 2] >> 4;
 
-                TRACE("call/2, arity=%i (%x), label=%i (%x)\n", arity, a_type, label, b_type);
+                int next_offset = 2;
+                int label = 0;
+                DECODE_LABEL(label, chunk->code, i, next_offset, next_offset)
+
+                TRACE("call/2, arity=%i (%x), label=%i (%x)\n", arity, a_type, label);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    NEXT_INSTRUCTION(2);
+                    NEXT_INSTRUCTION(next_offset - 1);
                     ctx->cp = INSTRUCTION_POINTER();
 
                     JUMP_TO_ADDRESS(mod->labels[label]);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(2);
+                    NEXT_INSTRUCTION(next_offset - 1);
+                #endif
+
+                break;
+            }
+
+            case 5: {
+                int a_type = chunk->code[i + 1] & 0xF;
+                int arity = chunk->code[i + 1] >> 4;
+
+                int next_offset = 2;
+                int label = 0;
+                DECODE_LABEL(label, chunk->code, i, next_offset, next_offset)
+                int n_words = chunk->code[i + next_offset] >> 4;
+
+                TRACE("call_last/3, arity=%i (%x), label=%i (%x) dellocate=%i\n", arity, a_type, label, n_words);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    n_words = 0;
+                    ctx->cp = ctx->e[n_words];
+                    ctx->e += (n_words + 1);
+
+                    DEBUG_DUMP_STACK(ctx);
+
+                    JUMP_TO_ADDRESS(mod->labels[label]);
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    NEXT_INSTRUCTION(next_offset + 1 - 1);
                 #endif
 
                 break;
