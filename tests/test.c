@@ -47,7 +47,7 @@ struct Test tests[] =
     {"erlang_tests/mutrec.beam", 6},
     {"erlang_tests/morelabels.beam", 6},
     {"erlang_tests/biggerintegers.beam", 550},
-    {"erlang_tests/biggerdifference.beam", 500},
+    {"erlang_tests/biggerdifference.beam", 250},
     {NULL, 0}
 };
 
