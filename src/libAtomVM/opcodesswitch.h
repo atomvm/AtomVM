@@ -127,19 +127,42 @@
 }
 #endif
 
-#define DECODE_LABEL(code_chunk, index, next_operand_offset, label) \
+
+#define DECODE_LABEL(label, code_chunk, base_index, off, next_operand_offset)                       \
 {                                                                                                   \
-    uint8_t first_byte = (code_chunk[(index)]);                                                     \
+    uint8_t first_byte = (code_chunk[(base_index) + (off)]);                                        \
     switch (((first_byte) >> 3) & 0x3) {                                                            \
         case 0:                                                                                     \
         case 2:                                                                                     \
-            next_operand_offset = 1;                                                                \
             label = first_byte >> 4;                                                                \
+            next_operand_offset += 1;                                                               \
             break;                                                                                  \
                                                                                                     \
         case 1:                                                                                     \
-            next_operand_offset = 2;                                                                \
-            label = ((first_byte & 0xE0) << 3) | code_chunk[(index + 1)];                           \
+            label = ((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1];              \
+            next_operand_offset += 2;                                                               \
+            break;                                                                                  \
+                                                                                                    \
+        default:                                                                                    \
+            fprintf(stderr, "Operand not a label: %x, or unsupported encoding\n", (first_byte));    \
+            abort();                                                                                \
+            break;                                                                                  \
+    }                                                                                               \
+}
+
+#define DECODE_ATOM(atom, code_chunk, base_index, off, next_operand_offset)                         \
+{                                                                                                   \
+    uint8_t first_byte = (code_chunk[(base_index) + (off)]);                                        \
+    switch (((first_byte) >> 3) & 0x3) {                                                            \
+        case 0:                                                                                     \
+        case 2:                                                                                     \
+            atom = first_byte >> 4;                                                                 \
+            next_operand_offset += 1;                                                               \
+            break;                                                                                  \
+                                                                                                    \
+        case 1:                                                                                     \
+            atom = ((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1];               \
+            next_operand_offset += 2;                                                               \
             break;                                                                                  \
                                                                                                     \
         default:                                                                                    \
