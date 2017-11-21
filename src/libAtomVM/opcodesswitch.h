@@ -184,6 +184,7 @@
         fprintf(stderr, "going to jump to %i\n", i)
 #endif
 
+#define OP_KILL 17
 #define OP_TRIM 136
 
 #define INSTRUCTION_POINTER() \
@@ -337,6 +338,14 @@
                 //TODO: bzero/memset
 
                 NEXT_INSTRUCTION(2);
+                break;
+            }
+
+            case OP_KILL: {
+                TRACE("kill/1");
+
+                NEXT_INSTRUCTION(1);
+
                 break;
             }
 
