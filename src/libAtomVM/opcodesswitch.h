@@ -32,6 +32,9 @@
     #endif
 #endif
 
+#define USED_BY_TRACE(x) \
+    (void) (x)
+
 #define COMPACT_SMALLINT4 1
 #define COMPACT_ATOM 2
 #define COMPACT_XREG 3
@@ -236,6 +239,9 @@
                 int arity = chunk->code[i + next_offset] & 0xF;
 
                 TRACE("func_info/3 module_name_a=%i, function_name_a=%i, arity=%i\n", module_atom, function_name_atom, arity);
+                USED_BY_TRACE(function_name_atom);
+                USED_BY_TRACE(module_atom);
+                USED_BY_TRACE(arity);
 
                 NEXT_INSTRUCTION(next_offset);
                 break;
@@ -247,14 +253,13 @@
             }
 
             case 4: {
-                int a_type = chunk->code[i + 1] & 0xF;
                 int arity = chunk->code[i + 1] >> 4;
-
                 int next_offset = 2;
                 int label = 0;
                 DECODE_LABEL(label, chunk->code, i, next_offset, next_offset)
 
-                TRACE("call/2, arity=%i (%x), label=%i (%x)\n", arity, a_type, label);
+                TRACE("call/2, arity=%i, label=%i\n", arity, label);
+                USED_BY_TRACE(arity);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     NEXT_INSTRUCTION(next_offset - 1);
@@ -271,15 +276,14 @@
             }
 
             case 5: {
-                int a_type = chunk->code[i + 1] & 0xF;
                 int arity = chunk->code[i + 1] >> 4;
-
                 int next_offset = 2;
                 int label = 0;
                 DECODE_LABEL(label, chunk->code, i, next_offset, next_offset)
                 int n_words = chunk->code[i + next_offset] >> 4;
 
-                TRACE("call_last/3, arity=%i (%x), label=%i (%x) dellocate=%i\n", arity, a_type, label, n_words);
+                TRACE("call_last/3, arity=%i, label=%i, dellocate=%i\n", arity, label, n_words);
+                USED_BY_TRACE(arity);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     n_words = 0;
@@ -299,12 +303,11 @@
             }
 
             case 6: {
-                int a_type = chunk->code[i + 1] & 0xF;
-                int b_type = chunk->code[i + 2] & 0xF;
                 int arity = chunk->code[i + 1] >> 4;
                 int label = chunk->code[i + 2] >> 4;
 
-                TRACE("call_only/2, arity=%i (%x), label=%i (%x)\n", arity, a_type, label, b_type);
+                TRACE("call_only/2, arity=%i, label=%i\n", arity, label);
+                USED_BY_TRACE(arity);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     NEXT_INSTRUCTION(2);
@@ -312,6 +315,7 @@
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
+                    UNUSED(label);
                     NEXT_INSTRUCTION(2);
                 #endif
 
@@ -319,11 +323,9 @@
             }
 
             case 12: {
-                int a_type = chunk->code[i + 1] & 0xF;
-                int b_type = chunk->code[i + 2] & 0xF;
                 int stack_need = chunk->code[i + 1] >> 4;
                 int live = chunk->code[i + 2] >> 4;
-                TRACE("allocate/2 stack_need=%i (%x), live=%i (%x)\n" , stack_need, a_type, live, b_type);
+                TRACE("allocate/2 stack_need=%i, live=%i\n" , stack_need, live);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     if (live > 16) {
@@ -344,11 +346,9 @@
             }
 
             case 14: {
-                int a_type = chunk->code[i + 1] & 0xF;
-                int b_type = chunk->code[i + 2] & 0xF;
                 int stack_need = chunk->code[i + 1] >> 4;
                 int live = chunk->code[i + 2] >> 4;
-                TRACE("allocate_zero/2 stack_need=%i (%x), live=%i (%x)\n" , stack_need, a_type, live, b_type);
+                TRACE("allocate_zero/2 stack_need=%i, live=%i\n", stack_need, live);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     if (live > 16) {
@@ -472,12 +472,11 @@
             }
 
             case 78: {
-                int a_type = chunk->code[i + 1] & 0xF;
-                int b_type = chunk->code[i + 2] & 0xF;
                 int arity = chunk->code[i + 1] >> 4;
                 int label = chunk->code[i + 2] >> 4;
 
-                TRACE("call_ext_only/2, arity=%i (%x), label=%i (%x)\n", arity, a_type, label, b_type);
+                TRACE("call_ext_only/2, arity=%i, label=%i\n", arity, label);
+                USED_BY_TRACE(arity);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     NEXT_INSTRUCTION(2);
@@ -494,7 +493,7 @@
             }
 
             case 125: {
-                int f_label = chunk->code[i + 1] >> 4;
+                int f_label = chunk->code[i + 1] >> 4; //TODO: use DECODE_LABEL here
                 int live = chunk->code[i + 2] >> 4;
                 int bif = chunk->code[i + 3] >> 4;
 
@@ -523,6 +522,8 @@
                     UNUSED(dreg)
                 #endif
 
+                UNUSED(f_label)
+
                 NEXT_INSTRUCTION(next_off);
                 break;
             }
@@ -538,6 +539,8 @@
                     ctx->e += n_words;
                     DEBUG_DUMP_STACK(ctx);
                 #endif
+
+                UNUSED(n_remaining)
 
                 NEXT_INSTRUCTION(2);
                 break;
