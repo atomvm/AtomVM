@@ -42,7 +42,7 @@ BifImpl bif_registry_get_handler(AtomString module, AtomString function, int ari
 
     BifNameAndPtr *nameAndPtr = in_word_set(bifname, strlen(bifname));
     if (!nameAndPtr) {
-        fprintf(stderr, "bif not found\n");
+        fprintf(stderr, "warning: bif not found: %s\n", bifname);
         return 0;
     }
 

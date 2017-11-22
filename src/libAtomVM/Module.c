@@ -37,8 +37,6 @@ void module_build_imported_functions_table(Module *this_module, uint8_t *table_d
 {
     int functions_count = READ_32_ALIGNED(table_data + 8);
 
-    fprintf(stderr, "Looking for bifs, found %i imported functions.\n", functions_count);
-
     this_module->imported_bifs = calloc(functions_count, sizeof(void *));
 
     for (int i = 0; i < functions_count; i++) {
@@ -46,17 +44,8 @@ void module_build_imported_functions_table(Module *this_module, uint8_t *table_d
         AtomString function_atom = local_atom_string(atom_tab, READ_32_ALIGNED(table_data + i * 12 + 4 + 12));
         uint32_t arity = READ_32_ALIGNED(table_data + i * 12 + 8 + 12);
 
-        char module_string[16];
-        char function_string[16];
-        atom_string_to_c(module_atom, module_string, sizeof(module_string));
-        atom_string_to_c(function_atom, function_string, sizeof(function_string));
-
-
-        printf("%s:%s\\%i\n", module_string, function_string, arity);
-
         if (bif_registry_is_bif(module_atom, function_atom, arity)) {
             this_module->imported_bifs[i] = bif_registry_get_handler(module_atom, function_atom, arity);
-            printf("installed bif: %i\n", i);
         } else {
             this_module->imported_bifs[i] = NULL;
         }
