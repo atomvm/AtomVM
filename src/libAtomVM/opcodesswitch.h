@@ -209,8 +209,8 @@
         switch (chunk->code[i]) {
             case 1: {
                 int label;
-                int next_offset;
-                DECODE_LABEL(chunk->code, i + 1, next_offset, label)
+                int next_offset = 1;
+                DECODE_LABEL(label, chunk->code, i, next_offset, next_offset)
 
                 TRACE("label/1 label=%i\n", label);
 
@@ -223,7 +223,7 @@
                     UNUSED(label)
                 #endif
 
-                NEXT_INSTRUCTION(next_offset);
+                NEXT_INSTRUCTION(next_offset - 1);
                 break;
             }
 
@@ -384,12 +384,11 @@
             }
 
             case 43: {
-                int next_off = 0;
                 int label;
                 term arg1;
                 term arg2;
-                DECODE_LABEL(chunk->code, i + 1, next_off, label)
-                next_off += 1;
+                int next_off = 1;
+                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
                 DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
                 DECODE_COMPACT_TERM(arg2, chunk->code, i, next_off, next_off)
 
