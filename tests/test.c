@@ -57,6 +57,7 @@ void test_modules_execution()
     struct Test *test = tests;
 
     do {
+        printf("-- EXECUTING TEST: %s\n", test->test_file);
         MappedFile *beam_file = mapped_file_open_beam(test->test_file);
         assert(beam_file != NULL);
 
