@@ -35,6 +35,8 @@ typedef struct Module Module;
 
 typedef struct
 {
+    struct ListHead processes_list_head;
+
     term x[16];
 
     term *stack;
@@ -42,6 +44,8 @@ typedef struct
     term *e;
 
     unsigned long cp;
+
+    unsigned long saved_ip;
 
     GlobalContext *global;
 } Context;

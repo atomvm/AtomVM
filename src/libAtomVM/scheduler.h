@@ -17,26 +17,22 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+#ifndef _SCHEDULER_H_
+#define _SCHEDULER_H_
+
 #include "Context.h"
-
 #include "globalcontext.h"
+#include "linkedlist.h"
 
-#define IMPL_EXECUTE_LOOP
-#include "opcodesswitch.h"
-#undef IMPL_EXECUTE_LOOP
+/**
+ * @brief move a process to waiting queue and wait a ready one
+ */
+extern Context *scheduler_wait(GlobalContext *global, Context *c, int timeout);
 
-Context *context_new(GlobalContext *glb)
-{
-    Context *ctx = malloc(sizeof(Context));
-    ctx->cp = (unsigned long) -1;
 
-    ctx->stack = (term *) calloc(DEFAULT_STACK_SIZE, sizeof(term));
-    ctx->stack_size = DEFAULT_STACK_SIZE;
-    ctx->e = ctx->stack + ctx->stack_size;
+/**
+ * @brief make sure a process is on the ready queue
+ */
+extern void scheduler_make_ready(GlobalContext *global, Context *c);
 
-    linkedlist_append(&glb->ready_processes, &ctx->processes_list_head);
-
-    ctx->global = glb;
-
-    return ctx;
-}
+#endif
