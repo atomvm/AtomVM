@@ -188,6 +188,11 @@
 #endif
 
 #define OP_KILL 17
+#define OP_REMOVE_MESSAGE 21
+#define OP_TIMEOUT 22
+#define OP_LOOP_REC 23
+#define OP_WAIT 25
+#define OP_WAIT_TIMEOUT 26
 #define OP_TRIM 136
 
 #define INSTRUCTION_POINTER() \
@@ -410,6 +415,90 @@
                 #ifdef IMPL_CODE_LOADER
                     NEXT_INSTRUCTION(0);
                 #endif
+                break;
+            }
+
+            //TODO: implement remove_message/0
+            case OP_REMOVE_MESSAGE: {
+                TRACE("remove_message/0\n");
+
+                NEXT_INSTRUCTION(0);
+                break;
+            }
+
+            //TODO: implement timeout/0
+            case OP_TIMEOUT: {
+                TRACE("timeout/0\n");
+
+                NEXT_INSTRUCTION(0);
+                break;
+            }
+
+            //TODO: implemente loop_rec/2
+            case OP_LOOP_REC: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
+                next_off++;
+
+                TRACE("loop_rec/2\n");
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    JUMP_TO_ADDRESS(mod->labels[label]);
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                break;
+            }
+
+            //TODO: implement wait/1
+            case OP_WAIT: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
+
+                TRACE("wait/1\n");
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    ctx->saved_ip = mod->labels[label];
+                    Context *scheduled_context = scheduler_wait(ctx->global, ctx, -1);
+
+                    JUMP_TO_ADDRESS(ctx->saved_ip);
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    NEXT_INSTRUCTION(next_off - 1);
+                #endif
+
+                break;
+            }
+
+            //TODO: implement wait_timeout/2
+            case OP_WAIT_TIMEOUT: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
+                int timeout;
+                DECODE_COMPACT_TERM(timeout, chunk->code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("wait_timeout/2, label: %i, timeout: %x\n", label, term_to_int32(timeout));
+
+                    ctx->saved_ip = mod->labels[label];
+                    Context *scheduled_context = scheduler_wait(ctx->global, ctx, term_to_int32(timeout));
+
+                    JUMP_TO_ADDRESS(ctx->saved_ip);
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("wait_timeout/2, label: %i\n", label);
+
+                    NEXT_INSTRUCTION(next_off - 1);
+                #endif
+
                 break;
             }
 
