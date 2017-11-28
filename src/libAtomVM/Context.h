@@ -20,6 +20,8 @@
 #ifndef _CONTEXT_H_
 #define _CONTEXT_H_
 
+#include "linkedlist.h"
+#include "globalcontext.h"
 #include "Term.h"
 
 #define DEFAULT_STACK_SIZE 32
@@ -40,9 +42,11 @@ typedef struct
     term *e;
 
     unsigned long cp;
+
+    GlobalContext *global;
 } Context;
 
-extern Context *context_new();
+extern Context *context_new(GlobalContext *glb);
 extern int context_execute_loop(Context *ctx, Module *mod, uint8_t *beam_file);
 
 #endif

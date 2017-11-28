@@ -19,11 +19,13 @@
 
 #include "Context.h"
 
+#include "globalcontext.h"
+
 #define IMPL_EXECUTE_LOOP
 #include "opcodesswitch.h"
 #undef IMPL_EXECUTE_LOOP
 
-Context *context_new()
+Context *context_new(GlobalContext *glb)
 {
     Context *ctx = malloc(sizeof(Context));
     ctx->cp = (unsigned long) -1;
@@ -31,6 +33,8 @@ Context *context_new()
     ctx->stack = (term *) calloc(DEFAULT_STACK_SIZE, sizeof(term));
     ctx->stack_size = DEFAULT_STACK_SIZE;
     ctx->e = ctx->stack + ctx->stack_size;
+
+    ctx->global = glb;
 
     return ctx;
 }
