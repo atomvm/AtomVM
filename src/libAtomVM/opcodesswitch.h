@@ -23,6 +23,13 @@
 
 #include "debug.h"
 #include "utils.h"
+#include "scheduler.h"
+
+#ifdef IMPL_EXECUTE_LOOP
+    #include "mailbox.h"
+#endif
+
+#define ENABLE_TRACE
 
 #ifndef TRACE
     #ifdef ENABLE_TRACE
@@ -190,6 +197,7 @@
 #define OP_BIF0 9
 #define OP_KILL 17
 #define OP_REMOVE_MESSAGE 21
+#define OP_SEND 20
 #define OP_TIMEOUT 22
 #define OP_LOOP_REC 23
 #define OP_WAIT 25
@@ -431,6 +439,21 @@
                 #ifdef IMPL_CODE_LOADER
                     NEXT_INSTRUCTION(0);
                 #endif
+                break;
+            }
+
+            //TODO: implement send/0
+            case OP_SEND: {
+                TRACE("send/0\n");
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    int local_process_id = term_to_local_process_id(ctx->x[0]);
+                    Context *target = globalcontext_get_process(ctx->global, local_process_id);
+
+                    mailbox_send(target, ctx->x[1]);
+                #endif
+
+                NEXT_INSTRUCTION(0);
                 break;
             }
 
