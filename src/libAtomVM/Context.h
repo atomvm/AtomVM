@@ -33,9 +33,12 @@ struct Module;
 typedef struct Module Module;
 #endif
 
-typedef struct
+struct Context
 {
     struct ListHead processes_list_head;
+
+    struct ListHead processes_table_head;
+    int32_t process_id;
 
     term x[16];
 
@@ -47,8 +50,15 @@ typedef struct
 
     unsigned long saved_ip;
 
+    struct ListHead *mailbox;
+
     GlobalContext *global;
-} Context;
+};
+
+#ifndef TYPEDEF_CONTEXT
+#define TYPEDEF_CONTEXT
+typedef struct Context Context;
+#endif
 
 extern Context *context_new(GlobalContext *glb);
 extern int context_execute_loop(Context *ctx, Module *mod, uint8_t *beam_file);

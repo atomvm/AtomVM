@@ -19,12 +19,40 @@
 
 #include "globalcontext.h"
 
+#include "Context.h"
+
 GlobalContext *globalcontext_new()
 {
     GlobalContext *glb = malloc(sizeof(GlobalContext));
     glb->ready_processes = NULL;
     glb->waiting_processes = NULL;
     glb->listeners = NULL;
+    glb->processes_table = NULL;
+
+    glb->last_process_id = 0;
 
     return glb;
+}
+
+Context *globalcontext_get_process(GlobalContext *glb, int32_t process_id)
+{
+    Context *processes = LIST_ENTRY(glb->processes_table, Context, processes_table_head);
+
+    Context *p = processes;
+    do {
+        if (p->process_id == process_id) {
+            return p;
+        }
+
+        p = LIST_ENTRY(p->processes_table_head.next, Context, processes_table_head);
+    } while (processes != p);
+
+    return NULL;
+}
+
+int32_t globalcontext_get_new_process_id(GlobalContext *glb)
+{
+    glb->last_process_id++;
+
+    return glb->last_process_id;
 }

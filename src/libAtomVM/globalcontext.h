@@ -22,6 +22,13 @@
 
 #include "linkedlist.h"
 
+struct Context;
+
+#ifndef TYPEDEF_CONTEXT
+#define TYPEDEF_CONTEXT
+typedef struct Context Context;
+#endif
+
 struct GlobalContext;
 
 typedef struct
@@ -29,8 +36,14 @@ typedef struct
     struct ListHead *ready_processes;
     struct ListHead *waiting_processes;
     struct ListHead *listeners;
+    struct ListHead *processes_table;
+
+    int32_t last_process_id;
 } GlobalContext;
 
 extern GlobalContext *globalcontext_new();
+
+Context *globalcontext_get_process(GlobalContext *glb, int32_t process_id);
+int32_t globalcontext_get_new_process_id(GlobalContext *glb);
 
 #endif

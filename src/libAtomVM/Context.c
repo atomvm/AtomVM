@@ -36,7 +36,12 @@ Context *context_new(GlobalContext *glb)
 
     linkedlist_append(&glb->ready_processes, &ctx->processes_list_head);
 
+    ctx->mailbox = NULL;
+
     ctx->global = glb;
+
+    ctx->process_id = globalcontext_get_new_process_id(glb);
+    linkedlist_append(&glb->processes_table, &ctx->processes_table_head);
 
     return ctx;
 }
