@@ -9,6 +9,7 @@ struct BifNameAndPtr
   BifImpl function;
 };
 %%
+erlang:self\0, bif_erlang_self_0
 erlang:+\2, bif_erlang_add_2
 erlang:-\2, bif_erlang_sub_2
 erlang:*\2, bif_erlang_mul_2
