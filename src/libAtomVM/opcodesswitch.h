@@ -187,6 +187,7 @@
         fprintf(stderr, "going to jump to %i\n", i)
 #endif
 
+#define OP_BIF0 9
 #define OP_KILL 17
 #define OP_REMOVE_MESSAGE 21
 #define OP_TIMEOUT 22
@@ -324,6 +325,21 @@
                     NEXT_INSTRUCTION(2);
                 #endif
 
+                break;
+            }
+
+            case OP_BIF0: {
+                TRACE("bif0/2\n");
+
+                int bif = chunk->code[i + 1] >> 4;
+                int dreg = chunk->code[i + 2] >> 4;
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    BifImpl0 func = (BifImpl0) mod->imported_bifs[bif];
+                    func(ctx, dreg);
+                #endif
+
+                NEXT_INSTRUCTION(2);
                 break;
             }
 
