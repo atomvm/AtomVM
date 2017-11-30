@@ -44,6 +44,12 @@ static inline int term_is_integer(term t)
     return ((t & 0xF) == 0xF);
 }
 
+static inline int term_is_pid(term t)
+{
+    /* integer: 00 11 */
+    return ((t & 0xF) == 0x3);
+}
+
 static inline int32_t term_to_int32(term t)
 {
     switch (t & 0xF) {
@@ -52,6 +58,18 @@ static inline int32_t term_to_int32(term t)
 
         default:
             printf("term is not an integer: %lx\n", t);
+            return 0;
+    }
+}
+
+static inline int32_t term_to_local_process_id(term t)
+{
+    switch (t & 0xF) {
+        case 0x3:
+            return t >> 4;
+
+        default:
+            printf("term is not a pid: %lx\n", t);
             return 0;
     }
 }
@@ -78,6 +96,11 @@ static inline term term_from_int32(int32_t value)
     } else {
         return (value << 4) | 0xF;
     }
+}
+
+static inline term term_from_local_process_id(uint32_t local_process_id)
+{
+    return (local_process_id << 4) | 0x3;
 }
 
 #endif
