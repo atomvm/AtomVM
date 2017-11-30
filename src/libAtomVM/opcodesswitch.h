@@ -461,6 +461,10 @@
             case OP_REMOVE_MESSAGE: {
                 TRACE("remove_message/0\n");
 
+                #ifdef IMPL_EXECUTE_LOOP
+                    ctx->x[0] = mailbox_receive(ctx);
+                #endif
+
                 NEXT_INSTRUCTION(0);
                 break;
             }
@@ -483,11 +487,15 @@
                 TRACE("loop_rec/2\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    JUMP_TO_ADDRESS(mod->labels[label]);
+                    if (ctx->mailbox == NULL) {
+                        JUMP_TO_ADDRESS(mod->labels[label]);
+                    } else {
+                        NEXT_INSTRUCTION(next_off - 1);
+                    }
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(next_off);
+                    NEXT_INSTRUCTION(next_off - 1);
                 #endif
 
                 break;
