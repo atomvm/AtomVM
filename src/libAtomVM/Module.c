@@ -75,3 +75,10 @@ Module *module_new_from_iff_binary(void *iff_binary, unsigned long size)
 
     return mod;
 }
+
+void module_destroy(Module *module)
+{
+    free(module->labels);
+    free(module->imported_bifs);
+    free(module);
+}

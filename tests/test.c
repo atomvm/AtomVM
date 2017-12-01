@@ -73,6 +73,9 @@ void test_modules_execution()
             fprintf(stderr, "\x1b[1;31mFailed test module %s, got value: %i\x1b[0m\n", test->test_file, value);
         }
 
+        context_destroy(ctx);
+        globalcontext_destroy(glb);
+        module_destroy(mod);
         mapped_file_close(beam_file);
 
         test++;

@@ -34,6 +34,11 @@ GlobalContext *globalcontext_new()
     return glb;
 }
 
+void globalcontext_destroy(GlobalContext *glb)
+{
+    free(glb);
+}
+
 Context *globalcontext_get_process(GlobalContext *glb, int32_t process_id)
 {
     Context *processes = LIST_ENTRY(glb->processes_table, Context, processes_table_head);

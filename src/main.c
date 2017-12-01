@@ -52,5 +52,10 @@ int main(int argc, char **argv)
 
     printf("Return value: %lx\n", ctx->x[0]);
 
+    context_destroy(ctx);
+    globalcontext_destroy(glb);
+    module_destroy(mod);
+    mapped_file_close(beam_file);
+
     return EXIT_SUCCESS;
 }

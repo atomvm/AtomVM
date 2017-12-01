@@ -42,6 +42,7 @@ typedef struct
 } GlobalContext;
 
 extern GlobalContext *globalcontext_new();
+extern void globalcontext_destroy(GlobalContext *glb);
 
 Context *globalcontext_get_process(GlobalContext *glb, int32_t process_id);
 int32_t globalcontext_get_new_process_id(GlobalContext *glb);

@@ -45,3 +45,11 @@ Context *context_new(GlobalContext *glb)
 
     return ctx;
 }
+
+void context_destroy(Context *ctx)
+{
+    linkedlist_remove(&ctx->global->processes_table, &ctx->processes_table_head);
+
+    free(ctx->stack);
+    free(ctx);
+}

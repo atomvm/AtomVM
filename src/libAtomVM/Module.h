@@ -57,6 +57,7 @@ typedef struct Module Module;
 #endif
 
 extern void module_build_imported_functions_table(Module *this_module, uint8_t *table_data, uint8_t *atom_tab);
+extern void module_destroy(Module *module);
 extern void module_add_label(Module *mod, int index, void *ptr);
 extern Module *module_new_from_iff_binary(void *iff_binary, unsigned long size);
 

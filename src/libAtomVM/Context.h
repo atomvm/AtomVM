@@ -61,6 +61,7 @@ typedef struct Context Context;
 #endif
 
 extern Context *context_new(GlobalContext *glb);
+extern void context_destroy(Context *c);
 extern int context_execute_loop(Context *ctx, Module *mod, uint8_t *beam_file);
 
 #endif
