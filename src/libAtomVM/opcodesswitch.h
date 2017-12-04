@@ -20,6 +20,7 @@
 #include "Module.h"
 
 #include <assert.h>
+#include <string.h>
 
 #include "debug.h"
 #include "utils.h"

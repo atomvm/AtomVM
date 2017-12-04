@@ -65,6 +65,8 @@ uint32_t module_search_exported_function(Module *this_module, AtomString func_na
             return label;
         }
     }
+
+    return 0;
 }
 
 void module_add_label(Module *mod, int index, void *ptr)

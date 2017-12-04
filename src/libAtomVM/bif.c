@@ -22,7 +22,13 @@
 #include <stdlib.h>
 
 #include "atom.h"
+#include "utils.h"
+
+//Ignore warning caused by gperf generated code
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #include "bifs_hash.h"
+#pragma GCC diagnostic pop
 
 BifImpl bif_registry_get_handler(AtomString module, AtomString function, int arity)
 {
@@ -61,6 +67,9 @@ void bif_erlang_self_0(Context *ctx, int reg)
 
 void bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg)
 {
+    UNUSED(failure_label);
+    UNUSED(live);
+
     if (term_is_integer(arg1) && term_is_integer(arg2)) {
         //NEED CHECK OVERFLOW AND BIG INTEGER
         ctx->x[reg] = term_from_int32(term_to_int32(arg1) + term_to_int32(arg2));
@@ -73,6 +82,9 @@ void bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1,
 
 void bif_erlang_sub_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg)
 {
+    UNUSED(failure_label);
+    UNUSED(live);
+
     if (term_is_integer(arg1) && term_is_integer(arg2)) {
         //NEED CHECK OVERFLOW AND BIG INTEGER
         ctx->x[reg] = term_from_int32(term_to_int32(arg1) - term_to_int32(arg2));
@@ -85,6 +97,9 @@ void bif_erlang_sub_2(Context *ctx, uint32_t failure_label, int live, term arg1,
 
 void bif_erlang_mul_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg)
 {
+    UNUSED(failure_label);
+    UNUSED(live);
+
     if (term_is_integer(arg1) && term_is_integer(arg2)) {
         //NEED CHECK OVERFLOW AND BIG INTEGER
         ctx->x[reg] = term_from_int32(term_to_int32(arg1) * term_to_int32(arg2));
@@ -97,6 +112,9 @@ void bif_erlang_mul_2(Context *ctx, uint32_t failure_label, int live, term arg1,
 
 void bif_erlang_div_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg)
 {
+    UNUSED(failure_label);
+    UNUSED(live);
+
     if (term_is_integer(arg1) && term_is_integer(arg2)) {
         int32_t operand_b = term_to_int32(arg2);
         if (operand_b != 0) {
