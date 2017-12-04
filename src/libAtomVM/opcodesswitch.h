@@ -202,6 +202,7 @@
 #define OP_LOOP_REC 23
 #define OP_WAIT 25
 #define OP_WAIT_TIMEOUT 26
+#define OP_IS_ATOM 48
 #define OP_TRIM 136
 
 #define INSTRUCTION_POINTER() \
@@ -590,6 +591,32 @@
                     TRACE("is_eq_exact/2");
                     UNUSED(arg1)
                     UNUSED(arg2)
+                    NEXT_INSTRUCTION(next_off - 1);
+                #endif
+
+                break;
+            }
+
+            case OP_IS_ATOM: {
+                int label;
+                term arg1;
+                int next_off = 1;
+                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_atom/2, label=%i, arg1=%lx\n", label, arg1);
+
+                    if (term_is_atom(arg1)) {
+                        NEXT_INSTRUCTION(next_off - 1);
+                    } else {
+                        i = (uint8_t *) mod->labels[label] - chunk->code;
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_atom/2\n");
+                    UNUSED(arg1)
                     NEXT_INSTRUCTION(next_off - 1);
                 #endif
 
