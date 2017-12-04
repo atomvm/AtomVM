@@ -211,7 +211,7 @@
     int read_core_chunk(Module *mod)
 #else
     #ifdef IMPL_EXECUTE_LOOP
-        int context_execute_loop(Context *ctx, Module *mod, uint8_t *beam_file)
+        int context_execute_loop(Context *ctx, Module *mod, uint8_t *beam_file, const char *function_name, int arity)
     #else
         #error Need implementation type
     #endif
@@ -220,6 +220,24 @@
     CodeChunk *chunk = mod->code;
 
     unsigned int i = 0;
+
+    #ifdef IMPL_CODE_LOADER
+        TRACE("-- Loading code\n");
+    #endif
+
+    #ifdef IMPL_EXECUTE_LOOP
+        TRACE("-- Executing code\n");
+
+        int function_len = strlen(function_name);
+        uint8_t *tmp_atom_name = malloc(function_len + 1);
+        tmp_atom_name[0] = function_len;
+        memcpy(tmp_atom_name + 1, function_name, function_len);
+
+        int label = module_search_exported_function(mod, tmp_atom_name, 0);
+        free(tmp_atom_name);
+
+        JUMP_TO_ADDRESS(mod->labels[label]);
+    #endif
 
     while(1) {
 

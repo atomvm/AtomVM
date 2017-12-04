@@ -66,7 +66,7 @@ void test_modules_execution()
         GlobalContext *glb = globalcontext_new();
         Context *ctx = context_new(glb);
 
-        context_execute_loop(ctx, mod, beam_file->mapped);
+        context_execute_loop(ctx, mod, beam_file->mapped, "start", 0);
 
         int32_t value = term_to_int32(ctx->x[0]);
         if (value != test->expected_value) {

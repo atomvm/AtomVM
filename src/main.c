@@ -48,7 +48,7 @@ int main(int argc, char **argv)
     GlobalContext *glb = globalcontext_new();
     Context *ctx = context_new(glb);
 
-    context_execute_loop(ctx, mod, beam_file->mapped);
+    context_execute_loop(ctx, mod, beam_file->mapped, "start", 0);
 
     printf("Return value: %lx\n", ctx->x[0]);
 
