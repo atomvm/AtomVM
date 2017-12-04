@@ -52,6 +52,21 @@ void module_build_imported_functions_table(Module *this_module, uint8_t *table_d
     }
 }
 
+uint32_t module_search_exported_function(Module *this_module, AtomString func_name, int func_arity)
+{
+    const uint8_t *table_data = (const uint8_t *) this_module->export_table;
+    int functions_count = READ_32_ALIGNED(table_data + 8);
+
+    for (int i = 0; i < functions_count; i++) {
+        AtomString function_atom = local_atom_string(this_module->atom_table, READ_32_ALIGNED(table_data + i * 12 + 12));
+        uint32_t arity = READ_32_ALIGNED(table_data + i * 12 + 4 + 12);
+        if ((func_arity == arity) && atom_are_equals(func_name, function_atom)) {
+            uint32_t label = READ_32_ALIGNED(table_data + i * 12 + 8 + 12);
+            return label;
+        }
+    }
+}
+
 void module_add_label(Module *mod, int index, void *ptr)
 {
     mod->labels[index] = ptr;
