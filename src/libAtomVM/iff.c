@@ -48,6 +48,9 @@ void scan_iff(uint8_t *data, int file_size, unsigned long *offsets)
         } else if (!memcmp(current_record->name, "Code", 4)) {
             offsets[CODE] = current_pos;
 
+        } else if (!memcmp(current_record->name, "ExpT", 4)) {
+            offsets[EXPT] = current_pos;
+
         } else if (!memcmp(current_record->name, "LocT", 4)) {
             offsets[LOCT] = current_pos;
 

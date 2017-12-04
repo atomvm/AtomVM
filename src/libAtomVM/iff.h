@@ -24,9 +24,10 @@
 
 #define AT8U 0
 #define CODE 1
-#define LOCT 2
-#define IMPT 3
-#define MAX_OFFS 4
+#define EXPT 2
+#define LOCT 3
+#define IMPT 4
+#define MAX_OFFS 5
 
 extern void scan_iff(uint8_t *data, int file_size, unsigned long *offsets);
 
