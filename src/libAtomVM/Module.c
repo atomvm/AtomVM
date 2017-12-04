@@ -69,6 +69,8 @@ Module *module_new_from_iff_binary(void *iff_binary, unsigned long size)
     module_build_imported_functions_table(mod, beam_file + offsets[IMPT], beam_file + offsets[AT8U]);
 
     mod->code = (CodeChunk *) (beam_file + offsets[CODE]);
+    mod->export_table = beam_file + offsets[EXPT];
+    mod->atom_table = beam_file + offsets[AT8U];
     mod->labels = calloc(ENDIAN_SWAP_32(mod->code->labels), sizeof(void *));
 
     read_core_chunk(mod);

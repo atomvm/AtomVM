@@ -44,9 +44,11 @@ typedef struct
 struct Module
 {
     CodeChunk *code;
+    void *export_table;
+    void *atom_table;
+
     BifImpl *imported_bifs;
     void *local_labels;
-    void *local_functions;
 
     void **labels;
 };
