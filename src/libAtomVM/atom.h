@@ -26,6 +26,7 @@ typedef const void * AtomString;
 
 extern AtomString local_atom_string(uint8_t *table_data, int atom_index);
 extern void atom_string_to_c(AtomString atom_string, char *buf, int bufsize);
+extern int atom_are_equals(AtomString a, AtomString b);
 
 static inline int atom_string_len(AtomString atom_str)
 {

@@ -55,4 +55,19 @@ void atom_string_to_c(AtomString atom_string, char *buf, int bufsize)
     buf[atom_len] = '\0';
 }
 
+int atom_are_equals(AtomString a, AtomString b)
+{
+    int atom_len_a = *((const uint8_t *) a);
+    int atom_len_b = *((const uint8_t *) b);
 
+    if (atom_len_a != atom_len_b) {
+        return 0;
+    }
+
+    if (!memcmp((uint8_t *) a + 1, (uint8_t *) b + 1, atom_len_a)) {
+        return 1;
+
+    } else {
+        return 0;
+    }
+}
