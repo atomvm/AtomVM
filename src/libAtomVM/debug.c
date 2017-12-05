@@ -22,7 +22,7 @@
 void debug_dump_stack(Context *ctx)
 {
     fprintf(stderr, "\n");
-    for (int i = 0; i < ctx->stack_size; i++) {
+    for (unsigned int i = 0; i < ctx->stack_size; i++) {
         fprintf(stderr, "DEBUG: stack: (%i) %lx\n", i, ctx->stack[i]);
     }
     fprintf(stderr, "DEBUG: \n");

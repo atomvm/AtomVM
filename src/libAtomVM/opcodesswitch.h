@@ -209,6 +209,9 @@
 #define INSTRUCTION_POINTER() \
     ((unsigned long) &chunk->code[i])
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+
 #ifdef IMPL_CODE_LOADER
     int read_core_chunk(Module *mod)
 #else
@@ -754,5 +757,7 @@
         }
     }
 }
+
+#pragma GCC diagnostic pop
 
 #undef DECODE_COMPACT_TERM

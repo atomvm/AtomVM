@@ -48,7 +48,7 @@ struct Context
 
     unsigned long cp;
 
-    unsigned long saved_ip;
+    const void *saved_ip;
 
     struct ListHead *mailbox;
 
