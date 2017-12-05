@@ -235,7 +235,7 @@
         tmp_atom_name[0] = function_len;
         memcpy(tmp_atom_name + 1, function_name, function_len);
 
-        int label = module_search_exported_function(mod, tmp_atom_name, 0);
+        int label = module_search_exported_function(mod, tmp_atom_name, arity);
         free(tmp_atom_name);
 
         JUMP_TO_ADDRESS(mod->labels[label]);
@@ -256,7 +256,7 @@
                     module_add_label(mod, label, &chunk->code[i]);
                 #endif
 
-                #ifdef EXECUTE_LOOP
+                #ifdef IMPL_EXECUTE_LOOP
                     UNUSED(label)
                 #endif
 
