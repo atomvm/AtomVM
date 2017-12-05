@@ -533,7 +533,7 @@
                     ctx->saved_ip = mod->labels[label];
                     Context *scheduled_context = scheduler_wait(ctx->global, ctx, -1);
 
-                    JUMP_TO_ADDRESS(ctx->saved_ip);
+                    JUMP_TO_ADDRESS(scheduled_context->saved_ip);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -557,7 +557,7 @@
                     ctx->saved_ip = mod->labels[label];
                     Context *scheduled_context = scheduler_wait(ctx->global, ctx, term_to_int32(timeout));
 
-                    JUMP_TO_ADDRESS(ctx->saved_ip);
+                    JUMP_TO_ADDRESS(scheduled_context->saved_ip);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
