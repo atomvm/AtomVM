@@ -55,8 +55,13 @@ BifImpl bif_registry_get_handler(AtomString module, AtomString function, int ari
     return nameAndPtr->function;
 }
 
+//TODO: implement function
 int bif_registry_is_bif(AtomString module_atom, AtomString function_atom, uint32_t arity)
 {
+    UNUSED(module_atom)
+    UNUSED(function_atom)
+    UNUSED(arity)
+
     return 1;
 }
 

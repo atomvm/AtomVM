@@ -318,6 +318,7 @@
                 int label = 0;
                 DECODE_LABEL(label, chunk->code, i, next_offset, next_offset)
                 int n_words = chunk->code[i + next_offset] >> 4;
+                UNUSED(n_words)
 
                 TRACE("call_last/3, arity=%i, label=%i, dellocate=%i\n", arity, label, n_words);
                 USED_BY_TRACE(arity);
@@ -360,10 +361,12 @@
             }
 
             case OP_BIF0: {
-                TRACE("bif0/2\n");
-
                 int bif = chunk->code[i + 1] >> 4;
                 int dreg = chunk->code[i + 2] >> 4;
+
+                TRACE("bif0/2 bif=%i, dreg=%i\n", bif, dreg);
+                USED_BY_TRACE(bif);
+                USED_BY_TRACE(dreg);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     BifImpl0 func = (BifImpl0) mod->imported_bifs[bif];
@@ -378,6 +381,8 @@
                 int stack_need = chunk->code[i + 1] >> 4;
                 int live = chunk->code[i + 2] >> 4;
                 TRACE("allocate/2 stack_need=%i, live=%i\n" , stack_need, live);
+                USED_BY_TRACE(stack_need);
+                USED_BY_TRACE(live);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     if (live > 16) {
@@ -401,6 +406,8 @@
                 int stack_need = chunk->code[i + 1] >> 4;
                 int live = chunk->code[i + 2] >> 4;
                 TRACE("allocate_zero/2 stack_need=%i, live=%i\n", stack_need, live);
+                USED_BY_TRACE(stack_need);
+                USED_BY_TRACE(live);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     if (live > 16) {
@@ -435,6 +442,7 @@
                 int n_words = chunk->code[i + 1] >> 4;
 
                 TRACE("deallocate/1 n_words=%i\n", n_words);
+                USED_BY_TRACE(n_words);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     DEBUG_DUMP_STACK(ctx);
@@ -566,6 +574,8 @@
                 #ifdef IMPL_CODE_LOADER
                     TRACE("wait_timeout/2, label: %i\n", label);
 
+                    UNUSED(timeout)
+
                     NEXT_INSTRUCTION(next_off - 1);
                 #endif
 
@@ -662,6 +672,7 @@
 
                 TRACE("call_ext_only/2, arity=%i, label=%i\n", arity, label);
                 USED_BY_TRACE(arity);
+                USED_BY_TRACE(label);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     NEXT_INSTRUCTION(2);
@@ -714,10 +725,12 @@
             }
 
             case OP_TRIM: {
-                TRACE("trim/2\n");
-
                 int n_words = chunk->code[i + 1] >> 4;
                 int n_remaining = chunk->code[i + 2] >> 4;
+
+                TRACE("trim/2 words=%i, remaining=%i\n", n_words, n_remaining);
+                USED_BY_TRACE(n_words);
+                USED_BY_TRACE(n_remaining);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     DEBUG_DUMP_STACK(ctx);
