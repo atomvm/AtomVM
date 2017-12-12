@@ -37,6 +37,12 @@
 #undef TRACE
 #undef IMPL_CODE_LOADER
 
+#define LITT_UNCOMPRESSED_SIZE_OFFSET 8
+#define LITT_HEADER_SIZE 12
+
+static void *module_uncompress_literals(const uint8_t *litT, int size);
+static void const* *module_build_literals_table(const void *literalsBuf);
+
 void module_build_imported_functions_table(Module *this_module, uint8_t *table_data, uint8_t *atom_tab)
 {
     int functions_count = READ_32_ALIGNED(table_data + 8);
@@ -83,7 +89,8 @@ Module *module_new_from_iff_binary(void *iff_binary, unsigned long size)
     uint8_t *beam_file = (void *) iff_binary;
 
     unsigned long offsets[MAX_OFFS];
-    scan_iff(beam_file, size, offsets);
+    unsigned long sizes[MAX_SIZES];
+    scan_iff(beam_file, size, offsets, sizes);
 
     Module *mod = malloc(sizeof(Module));
 
@@ -94,6 +101,20 @@ Module *module_new_from_iff_binary(void *iff_binary, unsigned long size)
     mod->atom_table = beam_file + offsets[AT8U];
     mod->labels = calloc(ENDIAN_SWAP_32(mod->code->labels), sizeof(void *));
 
+    if (offsets[LITT]) {
+        #ifdef WITH_ZLIB
+            mod->literals_data = module_uncompress_literals(beam_file + offsets[LITT], sizes[LITT]);
+        #else
+            fprintf(stderr, "zlib required to uncompress literals.\n");
+            abort();
+        #endif
+
+        mod->literals_table = module_build_literals_table(mod->literals_data);
+    } else {
+        mod->literals_data = NULL;
+        mod->literals_table = NULL;
+    }
+
     read_core_chunk(mod);
 
     return mod;
@@ -103,6 +124,8 @@ void module_destroy(Module *module)
 {
     free(module->labels);
     free(module->imported_bifs);
+    free(module->literals_table);
+    free(module->literals_data);
     free(module);
 }
 
@@ -137,3 +160,20 @@ static void *module_uncompress_literals(const uint8_t *litT, int size)
     return outBuf;
 }
 #endif
+
+static void const* *module_build_literals_table(const void *literalsBuf)
+{
+    uint32_t terms_count = READ_32_ALIGNED(literalsBuf);
+
+    const uint8_t *pos = (const uint8_t *) literalsBuf + sizeof(uint32_t);
+
+    void const* *literals_table = calloc(terms_count, sizeof(void *const));
+    for (uint32_t i = 0; i < terms_count; i++) {
+        uint32_t term_size = READ_32_ALIGNED(pos);
+        literals_table[i] = pos + sizeof(uint32_t);
+
+        pos += term_size;
+    }
+
+    return literals_table;
+}

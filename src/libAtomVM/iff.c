@@ -35,8 +35,11 @@ static uint32_t iff_align(uint32_t size)
     return ((size + 4 - 1) >> 2) << 2;
 }
 
-void scan_iff(uint8_t *data, int file_size, unsigned long *offsets)
+void scan_iff(uint8_t *data, int file_size, unsigned long *offsets, unsigned long *sizes)
 {
+    memset(offsets, 0, sizeof(unsigned long) * MAX_OFFS);
+    memset(sizes, 0, sizeof(unsigned long) * MAX_SIZES);
+
     int current_pos = 12;
 
     do {
@@ -44,22 +47,29 @@ void scan_iff(uint8_t *data, int file_size, unsigned long *offsets)
 
         if (!memcmp(current_record->name, "AtU8", 4)) {
             offsets[AT8U] = current_pos;
+            sizes[AT8U] = current_pos;
 
         } else if (!memcmp(current_record->name, "Code", 4)) {
             offsets[CODE] = current_pos;
+            sizes[CODE] = current_pos;
 
         } else if (!memcmp(current_record->name, "ExpT", 4)) {
             offsets[EXPT] = current_pos;
+            sizes[EXPT] = current_pos;
 
         } else if (!memcmp(current_record->name, "LocT", 4)) {
             offsets[LOCT] = current_pos;
+            sizes[LOCT] = bswap_32(current_record->size);
+
+        } else if (!memcmp(current_record->name, "LitT", 4)) {
+            offsets[LITT] = current_pos;
+            sizes[LITT] = bswap_32(current_record->size);
 
         } else if (!memcmp(current_record->name, "ImpT", 4)) {
             offsets[IMPT] = current_pos;
+            sizes[IMPT] = bswap_32(current_record->size);
         }
 
         current_pos += iff_align(bswap_32(current_record->size) + 8);
     } while (current_pos < file_size);
 }
-
-

@@ -52,6 +52,9 @@ struct Module
     void *local_labels;
 
     void **labels;
+
+    void *literals_data;
+    void const* *literals_table;
 };
 
 #ifndef TYPEDEF_MODULE

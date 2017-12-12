@@ -27,8 +27,12 @@
 #define EXPT 2
 #define LOCT 3
 #define IMPT 4
-#define MAX_OFFS 5
+#define LITT 5
+#define MAX_OFFS 6
+#define MAX_SIZES 6
 
-extern void scan_iff(uint8_t *data, int file_size, unsigned long *offsets);
+#define IFF_SECTION_HEADER_SIZE 8
+
+extern void scan_iff(uint8_t *data, int file_size, unsigned long *offsets, unsigned long *sizes);
 
 #endif
