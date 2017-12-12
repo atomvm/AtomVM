@@ -28,6 +28,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef WITH_ZLIB
+#include <zlib.h>
+#endif
+
 #define IMPL_CODE_LOADER 1
 #include "opcodesswitch.h"
 #undef TRACE
@@ -101,3 +105,35 @@ void module_destroy(Module *module)
     free(module->imported_bifs);
     free(module);
 }
+
+#ifdef WITH_ZLIB
+static void *module_uncompress_literals(const uint8_t *litT, int size)
+{
+    unsigned int required_buf_size = READ_32_ALIGNED(litT + LITT_UNCOMPRESSED_SIZE_OFFSET);
+
+    uint8_t *outBuf = malloc(required_buf_size);
+
+    z_stream infstream;
+    infstream.zalloc = Z_NULL;
+    infstream.zfree = Z_NULL;
+    infstream.opaque = Z_NULL;
+    infstream.avail_in = (uInt) (size - IFF_SECTION_HEADER_SIZE);
+    infstream.next_in = (Bytef *) (litT + LITT_HEADER_SIZE);
+    infstream.avail_out = (uInt) required_buf_size;
+    infstream.next_out = (Bytef *) outBuf;
+
+    int ret = inflateInit(&infstream);
+    if (ret != Z_OK) {
+        fprintf(stderr, "Failed inflateInit\n");
+        abort();
+    }
+    ret = inflate(&infstream, Z_NO_FLUSH);
+    if (ret != Z_OK) {
+        fprintf(stderr, "Failed inflate\n");
+        abort();
+    }
+    inflateEnd(&infstream);
+
+    return outBuf;
+}
+#endif
