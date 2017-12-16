@@ -55,8 +55,10 @@ void module_build_imported_functions_table(Module *this_module, uint8_t *table_d
         AtomString function_atom = local_atom_string(atom_tab, READ_32_ALIGNED(table_data + i * 12 + 4 + 12));
         uint32_t arity = READ_32_ALIGNED(table_data + i * 12 + 8 + 12);
 
-        if (bif_registry_is_bif(module_atom, function_atom, arity)) {
-            this_module->imported_bifs[i] = bif_registry_get_handler(module_atom, function_atom, arity);
+        BifImpl bif_handler = bif_registry_get_handler(module_atom, function_atom, arity);
+
+        if (bif_handler) {
+            this_module->imported_bifs[i] = bif_handler;
         } else {
             this_module->imported_bifs[i] = NULL;
         }

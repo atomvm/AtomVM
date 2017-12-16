@@ -224,6 +224,7 @@
 #define OP_WAIT 25
 #define OP_WAIT_TIMEOUT 26
 #define OP_IS_ATOM 48
+#define OP_GC_BIF1 124
 #define OP_TRIM 136
 
 #define INSTRUCTION_POINTER() \
@@ -390,7 +391,16 @@
 
                 #ifdef IMPL_EXECUTE_LOOP
                     BifImpl0 func = (BifImpl0) mod->imported_bifs[bif];
-                    func(ctx, dreg);
+                    term ret = func(ctx);
+
+                    int reg_b_type = reg_type_c(chunk->code[i + 2] & 0xF);
+                    if (reg_b_type == 'x') {
+                        ctx->x[dreg] = ret;
+                    } else if (reg_b_type == 'y') {
+                        ctx->e[dreg] = ret;
+                    } else {
+                        abort();
+                    }
                 #endif
 
                 NEXT_INSTRUCTION(2);
@@ -708,6 +718,48 @@
                 #endif
             }
 
+            case OP_GC_BIF1: {
+                int f_label = chunk->code[i + 1] >> 4; //TODO: use DECODE_LABEL here
+                int live = chunk->code[i + 2] >> 4;
+                int bif = chunk->code[i + 3] >> 4;
+
+                int next_off = 4;
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
+                int dreg = chunk->code[i + next_off] >> 4;
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("gc_bif1/5 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, dest=r%i\n", f_label, live, bif, arg1, dreg);
+
+                    BifImpl1 func = (BifImpl1) mod->imported_bifs[bif];
+                    term ret = func(ctx, f_label, live, arg1);
+
+                    int reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);
+                    if (reg_b_type == 'x') {
+                        ctx->x[dreg] = ret;
+                    } else if (reg_b_type == 'y') {
+                        ctx->e[dreg] = ret;
+                    } else {
+                        abort();
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("gc_bif1/5\n");
+
+                    UNUSED(f_label)
+                    UNUSED(live)
+                    UNUSED(bif)
+                    UNUSED(arg1)
+                    UNUSED(dreg)
+                #endif
+
+                UNUSED(f_label)
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
             case 125: {
                 int f_label = chunk->code[i + 1] >> 4; //TODO: use DECODE_LABEL here
                 int live = chunk->code[i + 2] >> 4;
@@ -724,7 +776,17 @@
                     TRACE("gc_bif2/6 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, arg2=0x%lx, dest=r%i\n", f_label, live, bif, arg1, arg2, dreg);
 
                     BifImpl2 func = (BifImpl2) mod->imported_bifs[bif];
-                    func(ctx, f_label, live, arg1, arg2, dreg);
+                    term ret = func(ctx, f_label, live, arg1, arg2);
+
+                    int reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);
+                    if (reg_b_type == 'x') {
+                        ctx->x[dreg] = ret;
+                    } else if (reg_b_type == 'y') {
+                        ctx->e[dreg] = ret;
+                    } else {
+                        printf("reg_b_type: %i\n", reg_b_type);
+                        abort();
+                    }
                 #endif
 
                 #ifdef IMPL_CODE_LOADER

@@ -25,9 +25,10 @@
 #include "atom.h"
 #include "Context.h"
 
-typedef void (*BifImpl)();
-typedef void (*BifImpl0)(Context *ctx, int reg);
-typedef void (*BifImpl2)(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg);
+typedef term (*BifImpl)();
+typedef term (*BifImpl0)(Context *ctx);
+typedef term (*BifImpl1)(Context *ctx, uint32_t failure_label, int live, term arg1);
+typedef term (*BifImpl2)(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
 
 typedef struct
 {

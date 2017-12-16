@@ -27,11 +27,11 @@
 #define MAX_BIF_NAME_LEN 32
 
 extern BifImpl bif_registry_get_handler(AtomString module, AtomString function, int arity);
-extern int bif_registry_is_bif(AtomString module_atom, AtomString function_atom, uint32_t arity);
-extern void bif_erlang_self_0(Context *ctx, int reg);
-extern void bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg);
-extern void bif_erlang_sub_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg);
-extern void bif_erlang_mul_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg);
-extern void bif_erlang_div_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg);
+extern term bif_erlang_self_0(Context *ctx);
+extern term bif_erlang_byte_size_1(Context *ctx, uint32_t failure_label, int live, term arg1);
+extern term bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
+extern term bif_erlang_sub_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
+extern term bif_erlang_mul_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
+extern term bif_erlang_div_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
 
 #endif

@@ -55,29 +55,30 @@ BifImpl bif_registry_get_handler(AtomString module, AtomString function, int ari
     return nameAndPtr->function;
 }
 
-//TODO: implement function
-int bif_registry_is_bif(AtomString module_atom, AtomString function_atom, uint32_t arity)
-{
-    UNUSED(module_atom)
-    UNUSED(function_atom)
-    UNUSED(arity)
 
-    return 1;
+term bif_erlang_self_0(Context *ctx)
+{
+    return term_from_local_process_id(ctx->process_id);
 }
 
-void bif_erlang_self_0(Context *ctx, int reg)
+term bif_erlang_byte_size_1(Context *ctx, uint32_t failure_label, int live, term arg1)
 {
-    ctx->x[reg] = term_from_local_process_id(ctx->process_id);
+    UNUSED(ctx);
+    UNUSED(failure_label);
+    UNUSED(live);
+
+    return term_from_int32(term_binary_size(arg1));
 }
 
-void bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg)
+term bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
 {
+    UNUSED(ctx);
     UNUSED(failure_label);
     UNUSED(live);
 
     if (term_is_integer(arg1) && term_is_integer(arg2)) {
         //NEED CHECK OVERFLOW AND BIG INTEGER
-        ctx->x[reg] = term_from_int32(term_to_int32(arg1) + term_to_int32(arg2));
+        return term_from_int32(term_to_int32(arg1) + term_to_int32(arg2));
 
     } else {
         printf("add: operands are not integers: arg1=%lx, arg2=%lx\n", arg1, arg2);
@@ -85,14 +86,15 @@ void bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1,
     }
 }
 
-void bif_erlang_sub_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg)
+term bif_erlang_sub_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
 {
+    UNUSED(ctx);
     UNUSED(failure_label);
     UNUSED(live);
 
     if (term_is_integer(arg1) && term_is_integer(arg2)) {
         //NEED CHECK OVERFLOW AND BIG INTEGER
-        ctx->x[reg] = term_from_int32(term_to_int32(arg1) - term_to_int32(arg2));
+        return term_from_int32(term_to_int32(arg1) - term_to_int32(arg2));
 
     } else {
         printf("sub: operands are not integers: arg1=%lx, arg2=%lx\n", arg1, arg2);
@@ -100,14 +102,15 @@ void bif_erlang_sub_2(Context *ctx, uint32_t failure_label, int live, term arg1,
     }
 }
 
-void bif_erlang_mul_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg)
+term bif_erlang_mul_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
 {
+    UNUSED(ctx);
     UNUSED(failure_label);
     UNUSED(live);
 
     if (term_is_integer(arg1) && term_is_integer(arg2)) {
         //NEED CHECK OVERFLOW AND BIG INTEGER
-        ctx->x[reg] = term_from_int32(term_to_int32(arg1) * term_to_int32(arg2));
+        return term_from_int32(term_to_int32(arg1) * term_to_int32(arg2));
 
     } else {
         printf("mul: operands are not integers: arg1=%lx, arg2=%lx\n", arg1, arg2);
@@ -115,15 +118,16 @@ void bif_erlang_mul_2(Context *ctx, uint32_t failure_label, int live, term arg1,
     }
 }
 
-void bif_erlang_div_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2, int reg)
+term bif_erlang_div_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
 {
+    UNUSED(ctx);
     UNUSED(failure_label);
     UNUSED(live);
 
     if (term_is_integer(arg1) && term_is_integer(arg2)) {
         int32_t operand_b = term_to_int32(arg2);
         if (operand_b != 0) {
-            ctx->x[reg] = term_from_int32(term_to_int32(arg1) / operand_b);
+            return term_from_int32(term_to_int32(arg1) / operand_b);
 
         } else {
             fprintf(stderr, "error: division by 0");
