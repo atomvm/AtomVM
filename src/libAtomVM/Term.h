@@ -103,4 +103,25 @@ static inline term term_from_local_process_id(uint32_t local_process_id)
     return (local_process_id << 4) | 0x3;
 }
 
+static inline term term_from_literal_binary(void *data, uint32_t size)
+{
+    //TODO: write a real implementation
+    //align constraints here
+    term *boxed_value = calloc(2, sizeof(term));
+    boxed_value[0] = (size << 6) | 0x20; //refcounted binary
+    boxed_value[1] = (term) data;
+
+    return ((term) boxed_value) | 0x2;
+}
+
+static inline term term_binary_size(term t)
+{
+    term *boxed_value = (term *) (t & ~0x3);
+    if (boxed_value[0] & 0x3F) {
+        return boxed_value[0] >> 6;
+    } else {
+        abort();
+    }
+}
+
 #endif

@@ -23,7 +23,7 @@ gperf_generate(${CMAKE_CURRENT_SOURCE_DIR}/bifs.gperf bifs_hash.h)
 
 add_custom_target(generated DEPENDS bifs_hash.h)
 
-add_library(libAtomVM atom.c bif.c debug.c globalcontext.c iff.c mailbox.c mapped_file.c scheduler.c sys.c Context.c Module.c)
+add_library(libAtomVM atom.c bif.c debug.c externalterm.c globalcontext.c iff.c mailbox.c mapped_file.c scheduler.c sys.c Context.c Module.c)
 add_dependencies(libAtomVM generated)
 target_link_libraries(libAtomVM ${ZLIB_LIBRARIES})
 set_property(TARGET libAtomVM PROPERTY C_STANDARD 99)
