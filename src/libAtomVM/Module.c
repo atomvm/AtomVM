@@ -22,6 +22,7 @@
 #include "Context.h"
 #include "atom.h"
 #include "bif.h"
+#include "externalterm.h"
 #include "iff.h"
 #include "utils.h"
 
@@ -169,11 +170,16 @@ static void const* *module_build_literals_table(const void *literalsBuf)
 
     void const* *literals_table = calloc(terms_count, sizeof(void *const));
     for (uint32_t i = 0; i < terms_count; i++) {
-        uint32_t term_size = READ_32_ALIGNED(pos);
+        uint32_t term_size = READ_32_UNALIGNED(pos);
         literals_table[i] = pos + sizeof(uint32_t);
 
-        pos += term_size;
+        pos += term_size + sizeof(uint32_t);
     }
 
     return literals_table;
+}
+
+term module_load_literal(Module *mod, int index)
+{
+    return externalterm_to_term(mod->literals_table[index]);
 }

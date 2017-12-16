@@ -67,5 +67,6 @@ extern uint32_t module_search_exported_function(Module *this_module, AtomString 
 extern void module_destroy(Module *module);
 extern void module_add_label(Module *mod, int index, void *ptr);
 extern Module *module_new_from_iff_binary(void *iff_binary, unsigned long size);
+extern term module_load_literal(Module *mod, int index);
 
 #endif

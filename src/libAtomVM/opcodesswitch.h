@@ -47,7 +47,10 @@
 #define COMPACT_ATOM 2
 #define COMPACT_XREG 3
 #define COMPACT_YREG 4
+#define COMPACT_EXTENDED 7
 #define COMPACT_LARGE_INTEGER 9
+
+#define COMPACT_EXTENDED_LITERAL 0x47
 
 #define COMPACT_LARGE_IMM_MASK 0x18
 #define COMPACT_11BITS_VALUE 0x8
@@ -72,6 +75,14 @@
                                                                                         \
         case COMPACT_YREG:                                                              \
             next_operand_offset += 1;                                                   \
+            break;                                                                      \
+                                                                                        \
+        case COMPACT_EXTENDED:                                                          \
+            switch (first_byte) {                                                       \
+                case COMPACT_EXTENDED_LITERAL:                                          \
+                    next_operand_offset += 2;                                           \
+                    break;                                                              \
+            }                                                                           \
             break;                                                                      \
                                                                                         \
         case COMPACT_LARGE_INTEGER:                                                     \
@@ -117,6 +128,15 @@
         case COMPACT_YREG:                                                                                              \
             dest_term = ctx->e[first_byte >> 4];                                                                        \
             next_operand_offset += 1;                                                                                   \
+            break;                                                                                                      \
+                                                                                                                        \
+        case COMPACT_EXTENDED:                                                                                          \
+            switch (first_byte) {                                                                                       \
+                case COMPACT_EXTENDED_LITERAL:                                                                          \
+                    dest_term = module_load_literal(mod, code_chunk[(base_index) + (off) + 1] >> 4);                    \
+                    next_operand_offset += 2;                                                                           \
+                    break;                                                                                              \
+            }                                                                                                           \
             break;                                                                                                      \
                                                                                                                         \
         case COMPACT_LARGE_INTEGER:                                                                                     \
