@@ -18,6 +18,7 @@ compile_erlang(biggerintegers)
 compile_erlang(biggerdifference)
 compile_erlang(moreintegertests)
 compile_erlang(send_receive)
+compile_erlang(selval)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -28,4 +29,5 @@ add_custom_target(erlang_test_modules DEPENDS
     biggerdifference.beam
     moreintegertests.beam
     send_receive.beam
+    selval.beam
 )
