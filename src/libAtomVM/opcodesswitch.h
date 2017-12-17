@@ -203,6 +203,29 @@
     }                                                                                               \
 }
 
+#define DECODE_INTEGER(label, code_chunk, base_index, off, next_operand_offset)                     \
+{                                                                                                   \
+    uint8_t first_byte = (code_chunk[(base_index) + (off)]);                                        \
+    switch (((first_byte) >> 3) & 0x3) {                                                            \
+        case 0:                                                                                     \
+        case 2:                                                                                     \
+            label = first_byte >> 4;                                                                \
+            next_operand_offset += 1;                                                               \
+            break;                                                                                  \
+                                                                                                    \
+        case 1:                                                                                     \
+            label = ((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1];              \
+            next_operand_offset += 2;                                                               \
+            break;                                                                                  \
+                                                                                                    \
+        default:                                                                                    \
+            fprintf(stderr, "Operand not an integer: %x, or unsupported encoding\n", (first_byte)); \
+            abort();                                                                                \
+            break;                                                                                  \
+    }                                                                                               \
+}
+
+
 #define NEXT_INSTRUCTION(operands_size) \
     i += 1 + operands_size
 
@@ -224,6 +247,7 @@
 #define OP_WAIT 25
 #define OP_WAIT_TIMEOUT 26
 #define OP_IS_ATOM 48
+#define OP_SELECT_VAL 59
 #define OP_GC_BIF1 124
 #define OP_TRIM 136
 
@@ -661,6 +685,59 @@
                 #ifdef IMPL_CODE_LOADER
                     TRACE("is_atom/2\n");
                     UNUSED(arg1)
+                    NEXT_INSTRUCTION(next_off - 1);
+                #endif
+
+                break;
+            }
+
+            case OP_SELECT_VAL: {
+                int next_off = 1;
+                term src_value;
+                DECODE_COMPACT_TERM(src_value, chunk->code, i, next_off, next_off)
+                int default_label;
+                DECODE_LABEL(default_label, chunk->code, i, next_off, next_off)
+                next_off++; //skip extended list tag
+                int size;
+                DECODE_INTEGER(size, chunk->code, i, next_off, next_off)
+
+                TRACE("select_val/3, default_label=%i, vals=%i\n", default_label, size);
+                USED_BY_TRACE(default_label);
+                USED_BY_TRACE(size);
+
+                #ifdef IMPL_CODE_LOADER
+                    UNUSED(src_value);
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    int jmp_to_default = 1;
+                #endif
+
+                for (int j = 0; j < size / 2; j++) {
+                    term cmp_value;
+                    DECODE_COMPACT_TERM(cmp_value, chunk->code, i, next_off, next_off)
+                    int jmp_label;
+                    DECODE_LABEL(jmp_label, chunk->code, i, next_off, next_off)
+
+                    #ifdef IMPL_CODE_LOADER
+                        UNUSED(cmp_value);
+                    #endif
+
+                    #ifdef IMPL_EXECUTE_LOOP
+                        if (jmp_to_default && (src_value == cmp_value)) {
+                            JUMP_TO_ADDRESS(mod->labels[jmp_label]);
+                            jmp_to_default = 0;
+                        }
+                    #endif
+                }
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    if (jmp_to_default) {
+                        JUMP_TO_ADDRESS(mod->labels[default_label]);
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
                     NEXT_INSTRUCTION(next_off - 1);
                 #endif
 
