@@ -246,6 +246,7 @@
 #define OP_LOOP_REC 23
 #define OP_WAIT 25
 #define OP_WAIT_TIMEOUT 26
+#define OP_IS_INTEGER 45
 #define OP_IS_ATOM 48
 #define OP_SELECT_VAL 59
 #define OP_GC_BIF1 124
@@ -659,6 +660,33 @@
                     TRACE("is_eq_exact/2");
                     UNUSED(arg1)
                     UNUSED(arg2)
+                    NEXT_INSTRUCTION(next_off - 1);
+                #endif
+
+                break;
+            }
+
+           case OP_IS_INTEGER: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_integer/2, label=%i, arg1=%lx\n", label, arg1);
+
+                    if (term_is_integer(arg1)) {
+                        NEXT_INSTRUCTION(next_off - 1);
+                    } else {
+                        i = (uint8_t *) mod->labels[label] - chunk->code;
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_integer/2\n");
+                    UNUSED(label)
+                    UNUSED(arg1)
                     NEXT_INSTRUCTION(next_off - 1);
                 #endif
 
