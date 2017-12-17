@@ -657,7 +657,7 @@
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    TRACE("is_eq_exact/2");
+                    TRACE("is_eq_exact/2\n");
                     UNUSED(arg1)
                     UNUSED(arg2)
                     NEXT_INSTRUCTION(next_off - 1);
