@@ -239,6 +239,7 @@
 #endif
 
 #define OP_BIF0 9
+#define OP_TEST_HEAP 16
 #define OP_KILL 17
 #define OP_REMOVE_MESSAGE 21
 #define OP_SEND 20
@@ -485,6 +486,15 @@
                 #endif
 
                 //TODO: bzero/memset
+
+                NEXT_INSTRUCTION(2);
+                break;
+            }
+
+            case OP_TEST_HEAP: {
+                TRACE("test_heap/2\n");
+
+                //TODO: implement test_heap
 
                 NEXT_INSTRUCTION(2);
                 break;
