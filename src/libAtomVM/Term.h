@@ -32,6 +32,12 @@ static inline int term_is_atom(term t)
     return ((t & 0x3F) == 0xB);
 }
 
+static inline int term_is_boxed(term t)
+{
+    /* boxed: 10 */
+    return ((t & 0x3) == 0x2);
+}
+
 static inline int term_is_nil(term t)
 {
     /* nil: 11 10 11 */
@@ -48,6 +54,18 @@ static inline int term_is_pid(term t)
 {
     /* integer: 00 11 */
     return ((t & 0xF) == 0x3);
+}
+
+static inline int term_is_tuple(term t)
+{
+    if (term_is_boxed(t)) {
+        term *boxed_value = (term *) (t & ~0x3);
+        if ((boxed_value[0] & 0x3F) == 0) {
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 static inline int32_t term_to_int32(term t)
@@ -118,6 +136,58 @@ static inline term term_binary_size(term t)
 {
     term *boxed_value = (term *) (t & ~0x3);
     if (boxed_value[0] & 0x3F) {
+        return boxed_value[0] >> 6;
+    } else {
+        abort();
+    }
+}
+
+static inline term term_alloc_tuple(uint32_t size)
+{
+    //TODO: write a real implementation
+    //align constraints here
+    term *boxed_value = calloc(1 + size, sizeof(term));
+    boxed_value[0] = (size << 6); //tuple
+
+    return ((term) boxed_value) | 0x2;
+}
+
+static inline void term_put_tuple_element(term t, uint32_t elem_index, term put_value)
+{
+    if (!term_is_boxed(t)) {
+        abort();
+    }
+
+    term *boxed_value = (term *) (t & ~0x3);
+    if ( ((boxed_value[0] & 0x3F) == 0) && (elem_index < (boxed_value[0] >> 6)) )  {
+        boxed_value[elem_index + 1] = put_value;
+    } else {
+        abort();
+    }
+}
+
+static inline term term_get_tuple_element(term t, int elem_index)
+{
+    if (!term_is_boxed(t)) {
+        abort();
+    }
+
+    term *boxed_value = (term *) (t & ~0x3);
+    if ((boxed_value[0] & 0x3F) == 0) {
+        return boxed_value[elem_index + 1];
+    } else {
+        abort();
+    }
+}
+
+static inline int term_get_tuple_arity(term t)
+{
+    if (!term_is_boxed(t)) {
+        abort();
+    }
+
+    term *boxed_value = (term *) (t & ~0x3);
+    if ((boxed_value[0] & 0x3F) == 0) {
         return boxed_value[0] >> 6;
     } else {
         abort();
