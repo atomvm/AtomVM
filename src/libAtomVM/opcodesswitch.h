@@ -248,7 +248,12 @@
 #define OP_WAIT_TIMEOUT 26
 #define OP_IS_INTEGER 45
 #define OP_IS_ATOM 48
+#define OP_IS_TUPLE 57
+#define OP_TEST_ARITY 58
 #define OP_SELECT_VAL 59
+#define OP_GET_TUPLE_ELEMENT 66
+#define OP_PUT_TUPLE 70
+#define OP_PUT 71
 #define OP_GC_BIF1 124
 #define OP_TRIM 136
 
@@ -719,6 +724,62 @@
                 break;
             }
 
+           case OP_IS_TUPLE: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_tuple/2, label=%i, arg1=%lx\n", label, arg1);
+
+                    if (term_is_tuple(arg1)) {
+                        NEXT_INSTRUCTION(next_off - 1);
+                    } else {
+                        i = (uint8_t *) mod->labels[label] - chunk->code;
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_tuple/2\n");
+                    UNUSED(label)
+                    UNUSED(arg1)
+                    NEXT_INSTRUCTION(next_off - 1);
+                #endif
+
+                break;
+            }
+
+           case OP_TEST_ARITY: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, chunk->code, i, next_off, next_off);
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off);
+                int arity;
+                DECODE_INTEGER(arity, chunk->code, i, next_off, next_off);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("test_arity/2, label=%i, arg1=%lx\n", label, arg1);
+
+                    if (term_get_tuple_arity(arg1) == arity) {
+                        NEXT_INSTRUCTION(next_off - 1);
+                    } else {
+                        i = (uint8_t *) mod->labels[label] - chunk->code;
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("test_arity/2\n");
+                    UNUSED(label)
+                    UNUSED(arg1)
+                    NEXT_INSTRUCTION(next_off - 1);
+                #endif
+
+                break;
+            }
+
             case OP_SELECT_VAL: {
                 int next_off = 1;
                 term src_value;
@@ -798,6 +859,83 @@
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_GET_TUPLE_ELEMENT: {
+                int next_off = 1;
+                term src_value;
+                DECODE_COMPACT_TERM(src_value, chunk->code, i, next_off, next_off);
+                int element;
+                DECODE_INTEGER(element, chunk->code, i, next_off, next_off);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    int reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);
+                    int dest = chunk->code[i + next_off] >> 4;
+
+                    TRACE("get_tuple_element/2");
+
+                    term t = term_get_tuple_element(src_value, element);
+                    if (reg_b_type == 'x') {
+                        ctx->x[dest] = t;
+                    } else if (reg_b_type == 'y') {
+                        ctx->e[dest] = t;
+                    } else {
+                        abort();
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("get_tuple_element/2\n");
+                    UNUSED(src_value)
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_PUT_TUPLE: {
+                int next_off = 1;
+                int size;
+                DECODE_INTEGER(size, chunk->code, i, next_off, next_off);
+                int reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);
+                int dest = chunk->code[i + next_off] >> 4;
+                next_off++;
+                TRACE("put_tuple/2 size=%i, dest=%c%i\n", size, reg_b_type, dest);
+                USED_BY_TRACE(reg_b_type);
+                USED_BY_TRACE(dest);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    term t = term_alloc_tuple(size);
+                    if (reg_b_type == 'x') {
+                        ctx->x[dest] = t;
+                    } else if (reg_b_type == 'y') {
+                        ctx->e[dest] = t;
+                    } else {
+                        abort();
+                    }
+                #endif
+
+                for (int j = 0; j < size; j++) {
+                    if (chunk->code[i + next_off] != OP_PUT) {
+                        fprintf(stderr, "Expected put, got opcode: %i\n", chunk->code[i + next_off]);
+                        abort();
+                    }
+                    next_off++;
+                    term put_value;
+                    DECODE_COMPACT_TERM(put_value, chunk->code, i, next_off, next_off);
+                    #ifdef IMPL_CODE_LOADER
+                        TRACE("put/2\n");
+                        UNUSED(put_value);
+                    #endif
+
+                    #ifdef IMPL_EXECUTE_LOOP
+                        TRACE("put/2 elem=%i, value=0x%lx\n", j, put_value);
+                        term_put_tuple_element(t, j, put_value);
+                    #endif
+                }
+
+                NEXT_INSTRUCTION(next_off - 1);
                 break;
             }
 
