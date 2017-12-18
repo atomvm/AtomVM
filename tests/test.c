@@ -50,6 +50,7 @@ struct Test tests[] =
     {"erlang_tests/biggerdifference.beam", 250},
     {"erlang_tests/moreintegertests.beam", 32},
     {"erlang_tests/send_receive.beam", 18},
+    {"erlang_tests/byte_size_test.beam", 10},
     {NULL, 0}
 };
 
