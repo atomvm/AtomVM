@@ -17,39 +17,57 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#include "Context.h"
+#ifndef _MODULE_H_
+#define _MODULE_H_
 
-#include "globalcontext.h"
+#include <stdint.h>
 
-#define IMPL_EXECUTE_LOOP
-#include "opcodesswitch.h"
-#undef IMPL_EXECUTE_LOOP
+#include "atom.h"
+#include "context.h"
 
-Context *context_new(GlobalContext *glb)
+typedef term (*BifImpl)();
+typedef term (*BifImpl0)(Context *ctx);
+typedef term (*BifImpl1)(Context *ctx, uint32_t failure_label, int live, term arg1);
+typedef term (*BifImpl2)(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
+
+typedef struct
 {
-    Context *ctx = malloc(sizeof(Context));
-    ctx->cp = (unsigned long) -1;
+    char magic[4];
+    uint32_t size;
+    uint32_t info_size;
+    uint32_t version;
+    uint32_t opcode_max;
+    uint32_t labels;
+    uint32_t functions_count;
 
-    ctx->stack = (term *) calloc(DEFAULT_STACK_SIZE, sizeof(term));
-    ctx->stack_size = DEFAULT_STACK_SIZE;
-    ctx->e = ctx->stack + ctx->stack_size;
+    uint8_t code[1];
+} __attribute__((packed)) CodeChunk;
 
-    linkedlist_append(&glb->ready_processes, &ctx->processes_list_head);
-
-    ctx->mailbox = NULL;
-
-    ctx->global = glb;
-
-    ctx->process_id = globalcontext_get_new_process_id(glb);
-    linkedlist_append(&glb->processes_table, &ctx->processes_table_head);
-
-    return ctx;
-}
-
-void context_destroy(Context *ctx)
+struct Module
 {
-    linkedlist_remove(&ctx->global->processes_table, &ctx->processes_table_head);
+    CodeChunk *code;
+    void *export_table;
+    void *atom_table;
 
-    free(ctx->stack);
-    free(ctx);
-}
+    BifImpl *imported_bifs;
+    void *local_labels;
+
+    void **labels;
+
+    void *literals_data;
+    void const* *literals_table;
+};
+
+#ifndef TYPEDEF_MODULE
+#define TYPEDEF_MODULE
+typedef struct Module Module;
+#endif
+
+extern void module_build_imported_functions_table(Module *this_module, uint8_t *table_data, uint8_t *atom_tab);
+extern uint32_t module_search_exported_function(Module *this_module, AtomString func_name, int func_arity);
+extern void module_destroy(Module *module);
+extern void module_add_label(Module *mod, int index, void *ptr);
+extern Module *module_new_from_iff_binary(void *iff_binary, unsigned long size);
+extern term module_load_literal(Module *mod, int index);
+
+#endif

@@ -17,11 +17,11 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#include "Module.h"
+#include "module.h"
 
-#include "Context.h"
 #include "atom.h"
 #include "bif.h"
+#include "context.h"
 #include "externalterm.h"
 #include "iff.h"
 #include "utils.h"

@@ -20,7 +20,7 @@
 #ifndef _SCHEDULER_H_
 #define _SCHEDULER_H_
 
-#include "Context.h"
+#include "context.h"
 #include "globalcontext.h"
 #include "linkedlist.h"
 

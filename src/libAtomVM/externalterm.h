@@ -20,7 +20,7 @@
 #ifndef _EXTERNALTERM_H_
 #define _EXTERNALTERM_H_
 
-#include "Term.h"
+#include "term.h"
 
 term externalterm_to_term(const void *external_term);
 

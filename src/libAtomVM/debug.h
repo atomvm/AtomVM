@@ -20,7 +20,7 @@
 #ifndef _DEBUG_H_
 #define _DEBUG_H_
 
-#include "Context.h"
+#include "context.h"
 
 extern void debug_dump_stack(Context *ctx);
 extern char reg_type_c(int reg_type);

@@ -17,51 +17,39 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#ifndef _CONTEXT_H_
-#define _CONTEXT_H_
+#include "context.h"
 
-#include "linkedlist.h"
 #include "globalcontext.h"
-#include "Term.h"
 
-#define DEFAULT_STACK_SIZE 32
+#define IMPL_EXECUTE_LOOP
+#include "opcodesswitch.h"
+#undef IMPL_EXECUTE_LOOP
 
-struct Module;
-
-#ifndef TYPEDEF_MODULE
-#define TYPEDEF_MODULE
-typedef struct Module Module;
-#endif
-
-struct Context
+Context *context_new(GlobalContext *glb)
 {
-    struct ListHead processes_list_head;
+    Context *ctx = malloc(sizeof(Context));
+    ctx->cp = (unsigned long) -1;
 
-    struct ListHead processes_table_head;
-    int32_t process_id;
+    ctx->stack = (term *) calloc(DEFAULT_STACK_SIZE, sizeof(term));
+    ctx->stack_size = DEFAULT_STACK_SIZE;
+    ctx->e = ctx->stack + ctx->stack_size;
 
-    term x[16];
+    linkedlist_append(&glb->ready_processes, &ctx->processes_list_head);
 
-    term *stack;
-    unsigned long stack_size;
-    term *e;
+    ctx->mailbox = NULL;
 
-    unsigned long cp;
+    ctx->global = glb;
 
-    const void *saved_ip;
+    ctx->process_id = globalcontext_get_new_process_id(glb);
+    linkedlist_append(&glb->processes_table, &ctx->processes_table_head);
 
-    struct ListHead *mailbox;
+    return ctx;
+}
 
-    GlobalContext *global;
-};
+void context_destroy(Context *ctx)
+{
+    linkedlist_remove(&ctx->global->processes_table, &ctx->processes_table_head);
 
-#ifndef TYPEDEF_CONTEXT
-#define TYPEDEF_CONTEXT
-typedef struct Context Context;
-#endif
-
-extern Context *context_new(GlobalContext *glb);
-extern void context_destroy(Context *c);
-extern int context_execute_loop(Context *ctx, Module *mod, uint8_t *beam_file, const char *function_name, int arity);
-
-#endif
+    free(ctx->stack);
+    free(ctx);
+}

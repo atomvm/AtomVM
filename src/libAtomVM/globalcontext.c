@@ -19,7 +19,7 @@
 
 #include "globalcontext.h"
 
-#include "Context.h"
+#include "context.h"
 
 GlobalContext *globalcontext_new()
 {

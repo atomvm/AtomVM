@@ -17,7 +17,7 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#include "Module.h"
+#include "module.h"
 
 #include <assert.h>
 #include <string.h>

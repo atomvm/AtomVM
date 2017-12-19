@@ -21,8 +21,8 @@
 #define _BIF_H_
 
 #include "atom.h"
-#include "Context.h"
-#include "Module.h"
+#include "context.h"
+#include "module.h"
 
 #define MAX_BIF_NAME_LEN 32
 

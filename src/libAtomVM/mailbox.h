@@ -21,8 +21,8 @@
 #define _MAILBOX_H_
 
 #include "linkedlist.h"
-#include "Term.h"
-#include "Context.h"
+#include "term.h"
+#include "context.h"
 
 typedef struct
 {

@@ -17,57 +17,51 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#ifndef _MODULE_H_
-#define _MODULE_H_
+#ifndef _CONTEXT_H_
+#define _CONTEXT_H_
 
-#include <stdint.h>
+#include "linkedlist.h"
+#include "globalcontext.h"
+#include "term.h"
 
-#include "atom.h"
-#include "Context.h"
+#define DEFAULT_STACK_SIZE 32
 
-typedef term (*BifImpl)();
-typedef term (*BifImpl0)(Context *ctx);
-typedef term (*BifImpl1)(Context *ctx, uint32_t failure_label, int live, term arg1);
-typedef term (*BifImpl2)(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
-
-typedef struct
-{
-    char magic[4];
-    uint32_t size;
-    uint32_t info_size;
-    uint32_t version;
-    uint32_t opcode_max;
-    uint32_t labels;
-    uint32_t functions_count;
-
-    uint8_t code[1];
-} __attribute__((packed)) CodeChunk;
-
-struct Module
-{
-    CodeChunk *code;
-    void *export_table;
-    void *atom_table;
-
-    BifImpl *imported_bifs;
-    void *local_labels;
-
-    void **labels;
-
-    void *literals_data;
-    void const* *literals_table;
-};
+struct Module;
 
 #ifndef TYPEDEF_MODULE
 #define TYPEDEF_MODULE
 typedef struct Module Module;
 #endif
 
-extern void module_build_imported_functions_table(Module *this_module, uint8_t *table_data, uint8_t *atom_tab);
-extern uint32_t module_search_exported_function(Module *this_module, AtomString func_name, int func_arity);
-extern void module_destroy(Module *module);
-extern void module_add_label(Module *mod, int index, void *ptr);
-extern Module *module_new_from_iff_binary(void *iff_binary, unsigned long size);
-extern term module_load_literal(Module *mod, int index);
+struct Context
+{
+    struct ListHead processes_list_head;
+
+    struct ListHead processes_table_head;
+    int32_t process_id;
+
+    term x[16];
+
+    term *stack;
+    unsigned long stack_size;
+    term *e;
+
+    unsigned long cp;
+
+    const void *saved_ip;
+
+    struct ListHead *mailbox;
+
+    GlobalContext *global;
+};
+
+#ifndef TYPEDEF_CONTEXT
+#define TYPEDEF_CONTEXT
+typedef struct Context Context;
+#endif
+
+extern Context *context_new(GlobalContext *glb);
+extern void context_destroy(Context *c);
+extern int context_execute_loop(Context *ctx, Module *mod, uint8_t *beam_file, const char *function_name, int arity);
 
 #endif
