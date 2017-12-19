@@ -238,25 +238,40 @@
         fprintf(stderr, "going to jump to %i\n", i)
 #endif
 
+#define OP_LABEL 1
+#define OP_FUNC_INFO 2
+#define OP_INT_CALL_END 3
+#define OP_CALL 4
+#define OP_CALL_LAST 5
+#define OP_CALL_ONLY 6
 #define OP_BIF0 9
+#define OP_ALLOCATE 12
+#define OP_ALLOCATE_ZERO 14
 #define OP_TEST_HEAP 16
 #define OP_KILL 17
-#define OP_REMOVE_MESSAGE 21
+#define OP_DEALLOCATE 18
+#define OP_RETURN 19
 #define OP_SEND 20
+#define OP_REMOVE_MESSAGE 21
 #define OP_TIMEOUT 22
 #define OP_LOOP_REC 23
 #define OP_WAIT 25
 #define OP_WAIT_TIMEOUT 26
+#define OP_IS_EQ_EXACT 43
 #define OP_IS_INTEGER 45
 #define OP_IS_ATOM 48
 #define OP_IS_TUPLE 57
 #define OP_TEST_ARITY 58
 #define OP_SELECT_VAL 59
+#define OP_MOVE 64
 #define OP_GET_TUPLE_ELEMENT 66
 #define OP_PUT_TUPLE 70
 #define OP_PUT 71
+#define OP_CALL_EXT_ONLY 78
 #define OP_GC_BIF1 124
+#define OP_GC_BIF2 125
 #define OP_TRIM 136
+#define OP_LINE 153
 
 #define INSTRUCTION_POINTER() \
     ((unsigned long) &chunk->code[i])
@@ -299,7 +314,7 @@
     while(1) {
 
         switch (chunk->code[i]) {
-            case 1: {
+            case OP_LABEL: {
                 int label;
                 int next_offset = 1;
                 DECODE_LABEL(label, chunk->code, i, next_offset, next_offset)
@@ -319,7 +334,7 @@
                 break;
             }
 
-            case 2: {
+            case OP_FUNC_INFO: {
                 int next_offset = 1;
                 int module_atom;
                 DECODE_ATOM(module_atom, chunk->code, i, next_offset, next_offset)
@@ -336,12 +351,12 @@
                 break;
             }
 
-            case 3: {
+            case OP_INT_CALL_END: {
                 TRACE("int_call_end!\n");
                 return 1;
             }
 
-            case 4: {
+            case OP_CALL: {
                 int arity = chunk->code[i + 1] >> 4;
                 int next_offset = 2;
                 int label = 0;
@@ -364,7 +379,7 @@
                 break;
             }
 
-            case 5: {
+            case OP_CALL_LAST: {
                 int arity = chunk->code[i + 1] >> 4;
                 int next_offset = 2;
                 int label = 0;
@@ -392,7 +407,7 @@
                 break;
             }
 
-            case 6: {
+            case OP_CALL_ONLY: {
                 int arity = chunk->code[i + 1] >> 4;
                 int label = chunk->code[i + 2] >> 4;
 
@@ -438,7 +453,7 @@
                 break;
             }
 
-            case 12: {
+            case OP_ALLOCATE: {
                 int stack_need = chunk->code[i + 1] >> 4;
                 int live = chunk->code[i + 2] >> 4;
                 TRACE("allocate/2 stack_need=%i, live=%i\n" , stack_need, live);
@@ -463,7 +478,7 @@
                 break;
             }
 
-            case 14: {
+            case OP_ALLOCATE_ZERO: {
                 int stack_need = chunk->code[i + 1] >> 4;
                 int live = chunk->code[i + 2] >> 4;
                 TRACE("allocate_zero/2 stack_need=%i, live=%i\n", stack_need, live);
@@ -508,7 +523,7 @@
                 break;
             }
 
-            case 18: {
+            case OP_DEALLOCATE: {
                 int n_words = chunk->code[i + 1] >> 4;
 
                 TRACE("deallocate/1 n_words=%i\n", n_words);
@@ -526,7 +541,7 @@
                 break;
             }
 
-            case 19: {
+            case OP_RETURN: {
                 TRACE("return/0\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
@@ -652,7 +667,7 @@
                 break;
             }
 
-            case 43: {
+            case OP_IS_EQ_EXACT: {
                 int label;
                 term arg1;
                 term arg2;
@@ -843,7 +858,7 @@
                 break;
             }
 
-            case 64: {
+            case OP_MOVE: {
                 int next_off = 1;
                 term src_value;
                 DECODE_COMPACT_TERM(src_value, chunk->code, i, next_off, next_off)
@@ -949,7 +964,7 @@
                 break;
             }
 
-            case 78: {
+            case OP_CALL_EXT_ONLY: {
                 int arity = chunk->code[i + 1] >> 4;
                 int label = chunk->code[i + 2] >> 4;
 
@@ -1013,7 +1028,7 @@
                 break;
             }
 
-            case 125: {
+            case OP_GC_BIF2: {
                 int f_label = chunk->code[i + 1] >> 4; //TODO: use DECODE_LABEL here
                 int live = chunk->code[i + 2] >> 4;
                 int bif = chunk->code[i + 3] >> 4;
@@ -1079,7 +1094,7 @@
                 break;
             }
 
-            case 153: {
+            case OP_LINE: {
                 int next_offset = 1;
 
                 int line_number = chunk->code[i + 1];
