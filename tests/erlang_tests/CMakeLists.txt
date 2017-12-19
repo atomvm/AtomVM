@@ -20,6 +20,7 @@ compile_erlang(moreintegertests)
 compile_erlang(send_receive)
 compile_erlang(selval)
 compile_erlang(byte_size_test)
+compile_erlang(tuple)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -32,4 +33,5 @@ add_custom_target(erlang_test_modules DEPENDS
     send_receive.beam
     selval.beam
     byte_size_test.beam
+    tuple.beam
 )
