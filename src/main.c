@@ -23,15 +23,14 @@
 #include <string.h>
 
 #include "atom.h"
-#include "mapped_file.h"
-#include "Context.h"
-#include "Module.h"
-#include "Term.h"
-
 #include "bif.h"
+#include "context.h"
 #include "globalcontext.h"
 #include "iff.h"
+#include "mapped_file.h"
+#include "module.h"
 #include "utils.h"
+#include "term.h"
 
 int main(int argc, char **argv)
 {

@@ -26,13 +26,12 @@
 #include <unistd.h>
 
 #include "atom.h"
-#include "mapped_file.h"
-#include "Context.h"
-#include "Module.h"
-#include "Term.h"
-
 #include "bif.h"
+#include "context.h"
+#include "mapped_file.h"
+#include "module.h"
 #include "iff.h"
+#include "term.h"
 #include "utils.h"
 
 struct Test{
