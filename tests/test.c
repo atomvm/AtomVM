@@ -51,6 +51,8 @@ struct Test tests[] =
     {"erlang_tests/send_receive.beam", 18},
     {"erlang_tests/byte_size_test.beam", 10},
     {"erlang_tests/tuple.beam", 6},
+    {"erlang_tests/len_test.beam", 5},
+    {"erlang_tests/count_char.beam", 2},
     {NULL, 0}
 };
 
