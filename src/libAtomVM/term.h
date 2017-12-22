@@ -32,6 +32,12 @@ static inline int term_is_atom(term t)
     return ((t & 0x3F) == 0xB);
 }
 
+static inline int term_is_list(term t)
+{
+    /* list: 01 */
+    return ((t & 0x3) == 0x1);
+}
+
 static inline int term_is_boxed(term t)
 {
     /* boxed: 10 */
@@ -192,6 +198,37 @@ static inline int term_get_tuple_arity(term t)
     } else {
         abort();
     }
+}
+
+static inline term term_from_string(const uint8_t *data, uint16_t size)
+{
+    //TODO: write a real implementation
+    //align constraints here
+    term *list_cells = calloc(size * 2, sizeof(term));
+    for (int i = 0; i < size * 2; i += 2) {
+        list_cells[i] = (term) &list_cells[i + 2] | 0x1;
+        list_cells[i + 1] = term_from_int11(data[i / 2]);
+    }
+    list_cells[size * 2 - 2] = 0x3B;
+
+    return ((term) list_cells) | 0x1;
+}
+
+static inline term *term_get_list_ptr(term t)
+{
+    return (term *) (t & ~0x1);
+}
+
+static inline term term_get_list_head(term t)
+{
+    term *list_ptr = term_get_list_ptr(t);
+    return list_ptr[1];
+}
+
+static inline term term_get_list_tail(term t)
+{
+    term *list_ptr = term_get_list_ptr(t);
+    return *list_ptr;
 }
 
 #endif
