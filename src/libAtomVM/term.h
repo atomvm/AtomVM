@@ -74,6 +74,11 @@ static inline int term_is_tuple(term t)
     return 0;
 }
 
+static inline int32_t term_nil()
+{
+    return 0x3B;
+}
+
 static inline int32_t term_to_int32(term t)
 {
     switch (t & 0xF) {

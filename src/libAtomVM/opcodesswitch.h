@@ -116,7 +116,11 @@
             break;                                                                                                      \
                                                                                                                         \
         case COMPACT_ATOM:                                                                                              \
-            dest_term = 0;                                                                                              \
+            if (first_byte == COMPACT_ATOM) {                                                                           \
+                dest_term = term_nil();                                                                                 \
+            } else {                                                                                                    \
+                abort();                                                                                                \
+            }                                                                                                           \
             next_operand_offset += 1;                                                                                   \
             break;                                                                                                      \
                                                                                                                         \
