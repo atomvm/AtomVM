@@ -257,6 +257,7 @@
 #define OP_LOOP_REC 23
 #define OP_WAIT 25
 #define OP_WAIT_TIMEOUT 26
+#define OP_IS_EQUAL 41
 #define OP_IS_EQ_EXACT 43
 #define OP_IS_INTEGER 45
 #define OP_IS_ATOM 48
@@ -664,6 +665,35 @@
 
                     UNUSED(timeout)
 
+                    NEXT_INSTRUCTION(next_off - 1);
+                #endif
+
+                break;
+            }
+
+            case OP_IS_EQUAL: {
+                int label;
+                term arg1;
+                term arg2;
+                int next_off = 1;
+                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg2, chunk->code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_equal/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
+
+                    if (arg1 == arg2) {
+                        NEXT_INSTRUCTION(next_off - 1);
+                    } else {
+                        i = (uint8_t *) mod->labels[label] - chunk->code;
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_equal/2\n");
+                    UNUSED(arg1)
+                    UNUSED(arg2)
                     NEXT_INSTRUCTION(next_off - 1);
                 #endif
 
