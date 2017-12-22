@@ -70,6 +70,24 @@ term bif_erlang_byte_size_1(Context *ctx, uint32_t failure_label, int live, term
     return term_from_int32(term_binary_size(arg1));
 }
 
+term bif_erlang_length_1(Context *ctx, uint32_t failure_label, int live, term arg1)
+{
+    UNUSED(ctx);
+    UNUSED(failure_label);
+    UNUSED(live);
+
+    term t = arg1;
+    int len = 0;
+
+    while (!term_is_nil(t)) {
+        len++;
+        term *t_ptr = term_get_list_ptr(t);
+        t = *t_ptr;
+    }
+
+    return term_from_int32(len);
+}
+
 term bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
 {
     UNUSED(ctx);

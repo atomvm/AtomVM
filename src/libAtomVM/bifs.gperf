@@ -10,6 +10,7 @@ struct BifNameAndPtr
 };
 %%
 erlang:self\0, bif_erlang_self_0
+erlang:length\1, bif_erlang_length_1
 erlang:byte_size\1, bif_erlang_byte_size_1
 erlang:+\2, bif_erlang_add_2
 erlang:-\2, bif_erlang_sub_2

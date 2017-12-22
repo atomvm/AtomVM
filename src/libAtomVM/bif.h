@@ -29,6 +29,7 @@
 extern BifImpl bif_registry_get_handler(AtomString module, AtomString function, int arity);
 extern term bif_erlang_self_0(Context *ctx);
 extern term bif_erlang_byte_size_1(Context *ctx, uint32_t failure_label, int live, term arg1);
+extern term bif_erlang_length_1(Context *ctx, uint32_t failure_label, int live, term arg1);
 extern term bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
 extern term bif_erlang_sub_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
 extern term bif_erlang_mul_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
