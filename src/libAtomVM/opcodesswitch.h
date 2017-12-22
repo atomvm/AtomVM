@@ -264,6 +264,7 @@
 #define OP_TEST_ARITY 58
 #define OP_SELECT_VAL 59
 #define OP_MOVE 64
+#define OP_GET_LIST 65
 #define OP_GET_TUPLE_ELEMENT 66
 #define OP_PUT_TUPLE 70
 #define OP_PUT 71
@@ -884,6 +885,47 @@
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_GET_LIST: {
+                int next_off = 1;
+                term src_value;
+                DECODE_COMPACT_TERM(src_value, chunk->code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    int head_reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);
+                    int head_dest = chunk->code[i + next_off] >> 4;
+                    int tail_reg_b_type = reg_type_c(chunk->code[i + next_off + 1] & 0xF);
+                    int tail_dest = chunk->code[i + next_off + 1] >> 4;
+
+                    TRACE("get_list/3 %lx, %c%i, %c%i\n", src_value, head_reg_b_type, head_dest, tail_reg_b_type, tail_dest);
+
+                    term head = term_get_list_head(src_value);
+                    term tail = term_get_list_tail(src_value);
+                    if (head_reg_b_type == 'x') {
+                        ctx->x[head_dest] = head;
+                    } else if (head_reg_b_type == 'y') {
+                        ctx->e[head_dest] = head;
+                    } else {
+                        abort();
+                    }
+
+                    if (tail_reg_b_type == 'x') {
+                        ctx->x[tail_dest] = tail;
+                    } else if (tail_reg_b_type == 'y') {
+                        ctx->e[tail_dest] = tail;
+                    } else {
+                        abort();
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("get_list/2\n");
+                    UNUSED(src_value)
+                #endif
+
+                NEXT_INSTRUCTION(next_off + 1);
                 break;
             }
 
