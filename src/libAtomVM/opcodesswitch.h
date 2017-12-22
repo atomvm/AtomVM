@@ -260,6 +260,8 @@
 #define OP_IS_EQ_EXACT 43
 #define OP_IS_INTEGER 45
 #define OP_IS_ATOM 48
+#define OP_IS_NIL 52
+#define OP_IS_NONEMPTY_LIST 56
 #define OP_IS_TUPLE 57
 #define OP_TEST_ARITY 58
 #define OP_SELECT_VAL 59
@@ -717,6 +719,58 @@
                 #ifdef IMPL_CODE_LOADER
                     TRACE("is_integer/2\n");
                     UNUSED(label)
+                    UNUSED(arg1)
+                    NEXT_INSTRUCTION(next_off - 1);
+                #endif
+
+                break;
+            }
+
+            case OP_IS_NONEMPTY_LIST: {
+                int label;
+                term arg1;
+                int next_off = 1;
+                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_nonempty_list/2, label=%i, arg1=%lx\n", label, arg1);
+
+                    if (term_is_list(arg1)) {
+                        NEXT_INSTRUCTION(next_off - 1);
+                    } else {
+                        i = (uint8_t *) mod->labels[label] - chunk->code;
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_nonempty_list/2\n");
+                    UNUSED(arg1)
+                    NEXT_INSTRUCTION(next_off - 1);
+                #endif
+
+                break;
+            }
+
+            case OP_IS_NIL: {
+                int label;
+                term arg1;
+                int next_off = 1;
+                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_nil/2, label=%i, arg1=%lx\n", label, arg1);
+
+                    if (term_is_nil(arg1)) {
+                        NEXT_INSTRUCTION(next_off - 1);
+                    } else {
+                        i = (uint8_t *) mod->labels[label] - chunk->code;
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_nil/2\n");
                     UNUSED(arg1)
                     NEXT_INSTRUCTION(next_off - 1);
                 #endif
