@@ -39,9 +39,10 @@ term externalterm_to_term(const void *external_term)
     }
 
     switch (external_term_buf[1]) {
-        case STRING_EXT:
-            fprintf(stderr, "Not implemented string decoding\n");
-            abort();
+        case STRING_EXT: {
+            uint16_t string_size = READ_16_UNALIGNED(external_term_buf + 2);
+            return term_from_string(external_term_buf + 4, string_size);
+        }
 
         case BINARY_EXT: {
             uint32_t binary_size = READ_32_UNALIGNED(external_term_buf + 2);
