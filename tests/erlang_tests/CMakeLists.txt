@@ -23,6 +23,7 @@ compile_erlang(byte_size_test)
 compile_erlang(tuple)
 compile_erlang(count_char)
 compile_erlang(len_test)
+compile_erlang(makelist_test)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -38,4 +39,5 @@ add_custom_target(erlang_test_modules DEPENDS
     tuple.beam
     count_char.beam
     len_test.beam
+    makelist_test.beam
 )

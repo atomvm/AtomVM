@@ -53,6 +53,7 @@ struct Test tests[] =
     {"erlang_tests/tuple.beam", 6},
     {"erlang_tests/len_test.beam", 5},
     {"erlang_tests/count_char.beam", 2},
+    {"erlang_tests/makelist_test.beam", 532},
     {NULL, 0}
 };
 
