@@ -273,6 +273,7 @@
 #define OP_MOVE 64
 #define OP_GET_LIST 65
 #define OP_GET_TUPLE_ELEMENT 66
+#define OP_PUT_LIST 69
 #define OP_PUT_TUPLE 70
 #define OP_PUT 71
 #define OP_CALL_EXT_ONLY 78
@@ -1043,6 +1044,33 @@
                 #ifdef IMPL_CODE_LOADER
                     TRACE("get_tuple_element/2\n");
                     UNUSED(src_value)
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_PUT_LIST: {
+                int next_off = 1;
+                term head;
+                DECODE_COMPACT_TERM(head, chunk->code, i, next_off, next_off);
+                term tail;
+                DECODE_COMPACT_TERM(tail, chunk->code, i, next_off, next_off);
+
+                TRACE("op_put_list/3\n");
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    int reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);
+                    int dest = chunk->code[i + next_off] >> 4;
+
+                    term t = term_list_prepend(head, tail);
+                    if (reg_b_type == 'x') {
+                        ctx->x[dest] = t;
+                    } else if (reg_b_type == 'y') {
+                        ctx->e[dest] = t;
+                    } else {
+                        abort();
+                    }
                 #endif
 
                 NEXT_INSTRUCTION(next_off);

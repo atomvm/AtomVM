@@ -236,4 +236,13 @@ static inline term term_get_list_tail(term t)
     return *list_ptr;
 }
 
+static inline term term_list_prepend(term head, term tail)
+{
+    term *list_elem = calloc(2, sizeof(term));
+    list_elem[0] = tail;
+    list_elem[1] = head;
+
+    return ((term) list_elem) | 0x1;
+}
+
 #endif
