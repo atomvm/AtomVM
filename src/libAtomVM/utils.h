@@ -23,15 +23,20 @@
 #include <byteswap.h>
 
 #ifdef __ORDER_LITTLE_ENDIAN__
-    #define READ_32_ALIGNED(ptr) \
-        bswap_32(*((uint32_t *) (ptr)))
+    #ifdef __GNUC__
+        #define READ_32_ALIGNED(ptr) \
+            __builtin_bswap32(*((uint32_t *) (ptr)))
+    #else
+        #define READ_32_ALIGNED(ptr) \
+            ( (((uint8_t *)(ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) | (((uint8_t *)(ptr))[2] << 8) | ((uint8_t *)(ptr))[3] )
+    #endif
 
     #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
         #define READ_32_UNALIGNED(ptr) \
-            bswap_32(*((uint32_t *) (ptr)))
+            __builtin_bswap32(*((uint32_t *) (ptr)))
 
         #define READ_16_UNALIGNED(ptr) \
-            bswap_16(*((uint16_t *) (ptr)))
+            __builtin_bswap16(*((uint16_t *) (ptr)))
     #else
         #define READ_32_UNALIGNED(ptr) \
             ( (((uint8_t *)(ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) | (((uint8_t *)(ptr))[2] << 8) | ((uint8_t *)(ptr))[3] )
@@ -40,7 +45,12 @@
             ( (((uint8_t *)(ptr))[2] << 8) | ((uint8_t *)(ptr))[3] )
     #endif
 
-    #define ENDIAN_SWAP_32(value) bswap_32(value)
+    #ifdef __GNUC__
+        #define ENDIAN_SWAP_32(value) __builtin_bswap32(value)
+    #else
+        #define ENDIAN_SWAP_32(value) ((((value) & 0xFF) << 24) | (((value) & 0xFF00) << 8) | (((value) & 0xFF0000) >> 8) | (((value) & 0xFF000000) >> 24))
+    #endif
+
 #else
     #define READ_32_ALIGNED(ptr) \
         (*((uint32_t *) (ptr)))
