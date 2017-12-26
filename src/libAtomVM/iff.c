@@ -18,11 +18,10 @@
  ***************************************************************************/
 
 #include "iff.h"
+#include "utils.h"
 
 #include <stdlib.h>
 #include <string.h>
-
-#include "utils.h"
 
 struct IFFRecord
 {
@@ -47,29 +46,29 @@ void scan_iff(uint8_t *data, int file_size, unsigned long *offsets, unsigned lon
 
         if (!memcmp(current_record->name, "AtU8", 4)) {
             offsets[AT8U] = current_pos;
-            sizes[AT8U] = current_pos;
+            sizes[AT8U] = ENDIAN_SWAP_32(current_record->size);
 
         } else if (!memcmp(current_record->name, "Code", 4)) {
             offsets[CODE] = current_pos;
-            sizes[CODE] = current_pos;
+            sizes[CODE] = ENDIAN_SWAP_32(current_record->size);
 
         } else if (!memcmp(current_record->name, "ExpT", 4)) {
             offsets[EXPT] = current_pos;
-            sizes[EXPT] = current_pos;
+            sizes[EXPT] = ENDIAN_SWAP_32(current_record->size);
 
         } else if (!memcmp(current_record->name, "LocT", 4)) {
             offsets[LOCT] = current_pos;
-            sizes[LOCT] = bswap_32(current_record->size);
+            sizes[LOCT] = ENDIAN_SWAP_32(current_record->size);
 
         } else if (!memcmp(current_record->name, "LitT", 4)) {
             offsets[LITT] = current_pos;
-            sizes[LITT] = bswap_32(current_record->size);
+            sizes[LITT] = ENDIAN_SWAP_32(current_record->size);
 
         } else if (!memcmp(current_record->name, "ImpT", 4)) {
             offsets[IMPT] = current_pos;
-            sizes[IMPT] = bswap_32(current_record->size);
+            sizes[IMPT] = ENDIAN_SWAP_32(current_record->size);
         }
 
-        current_pos += iff_align(bswap_32(current_record->size) + 8);
+        current_pos += iff_align(ENDIAN_SWAP_32(current_record->size) + 8);
     } while (current_pos < file_size);
 }

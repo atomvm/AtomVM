@@ -20,8 +20,6 @@
 #ifndef _UTILS_H_
 #define _UTILS_H_
 
-#include <byteswap.h>
-
 #ifdef __ORDER_LITTLE_ENDIAN__
     #ifdef __GNUC__
         #define READ_32_ALIGNED(ptr) \
