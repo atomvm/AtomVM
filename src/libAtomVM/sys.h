@@ -21,6 +21,8 @@
 #define _SYS_H_
 
 #include "linkedlist.h"
+#include <stdint.h>
+#include <time.h>
 
 typedef void (*event_handler_t)(void *data);
 

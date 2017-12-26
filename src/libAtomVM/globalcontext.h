@@ -20,6 +20,8 @@
 #ifndef _GLOBALCONTEXT_H_
 #define _GLOBALCONTEXT_H_
 
+#include <stdint.h>
+
 #include "linkedlist.h"
 
 struct Context;
