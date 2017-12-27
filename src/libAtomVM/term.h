@@ -26,6 +26,16 @@
 
 typedef unsigned long term;
 
+static inline term *term_to_term_ptr(term t)
+{
+    return (term *) (t & ~0x3UL);
+}
+
+static inline const term *term_to_const_term_ptr(term t)
+{
+    return (const term *) (t & ~0x3UL);
+}
+
 static inline int term_is_atom(term t)
 {
     /* atom: | atom index | 00 10 11 */
@@ -65,7 +75,7 @@ static inline int term_is_pid(term t)
 static inline int term_is_tuple(term t)
 {
     if (term_is_boxed(t)) {
-        term *boxed_value = (term *) (t & ~0x3);
+        const term *boxed_value = term_to_const_term_ptr(t);
         if ((boxed_value[0] & 0x3F) == 0) {
             return 1;
         }
@@ -145,7 +155,7 @@ static inline term term_from_literal_binary(void *data, uint32_t size)
 
 static inline term term_binary_size(term t)
 {
-    term *boxed_value = (term *) (t & ~0x3);
+    const term *boxed_value = term_to_const_term_ptr(t);
     if (boxed_value[0] & 0x3F) {
         return boxed_value[0] >> 6;
     } else {
@@ -169,7 +179,7 @@ static inline void term_put_tuple_element(term t, uint32_t elem_index, term put_
         abort();
     }
 
-    term *boxed_value = (term *) (t & ~0x3);
+    term *boxed_value = term_to_term_ptr(t);
     if ( ((boxed_value[0] & 0x3F) == 0) && (elem_index < (boxed_value[0] >> 6)) )  {
         boxed_value[elem_index + 1] = put_value;
     } else {
@@ -183,7 +193,7 @@ static inline term term_get_tuple_element(term t, int elem_index)
         abort();
     }
 
-    term *boxed_value = (term *) (t & ~0x3);
+    const term *boxed_value = term_to_const_term_ptr(t);
     if ((boxed_value[0] & 0x3F) == 0) {
         return boxed_value[elem_index + 1];
     } else {
@@ -197,7 +207,7 @@ static inline int term_get_tuple_arity(term t)
         abort();
     }
 
-    term *boxed_value = (term *) (t & ~0x3);
+    const term *boxed_value = term_to_const_term_ptr(t);
     if ((boxed_value[0] & 0x3F) == 0) {
         return boxed_value[0] >> 6;
     } else {
