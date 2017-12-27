@@ -34,7 +34,7 @@ extern void sys_waitevents(struct ListHead *listeners_list)
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
 
-    EventListener *listeners = LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
+    EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
 
     int min_timeout = INT_MAX;
     int count = 0;
@@ -54,7 +54,7 @@ extern void sys_waitevents(struct ListHead *listeners_list)
             count++;
         }
 
-        listener = LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
+        listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
     } while (listener != listeners);
 
     //second: use either poll or nanosleep
@@ -73,7 +73,7 @@ extern void sys_waitevents(struct ListHead *listeners_list)
 
             poll_fd_index++;
 
-            listener = LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
+            listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
         } while (listener != listeners);
 
         poll(fds, poll_fd_index, min_timeout);
@@ -81,7 +81,7 @@ extern void sys_waitevents(struct ListHead *listeners_list)
         //check which event happened
         listener = listeners;
         do {
-            EventListener *next_listener = LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
+            EventListener *next_listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
             for (int i = 0; i < poll_fd_index; i++) {
                 if ((fds[i].fd == listener->fd) && (fds[i].revents & fds[i].events)) {
                     //it is completely safe to free a listener in the callback, we are going to not use it after this call
@@ -112,7 +112,7 @@ extern void sys_waitevents(struct ListHead *listeners_list)
         listener = listeners;
         clock_gettime(CLOCK_MONOTONIC, &now);
         do {
-            EventListener *next_listener = LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
+            EventListener *next_listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
             if (listener->expires) {
                 int wait_ms = timespec_diff_to_ms(&listener->expiral_timestamp, &now);
                 if (wait_ms <= 0) {

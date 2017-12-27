@@ -54,7 +54,7 @@ Context *scheduler_wait(GlobalContext *global, Context *c, int timeout)
     linkedlist_remove(&global->ready_processes, next_ready);
     linkedlist_append(&global->ready_processes, next_ready);
 
-    return LIST_ENTRY(next_ready, Context, processes_list_head);
+    return GET_LIST_ENTRY(next_ready, Context, processes_list_head);
 }
 
 void scheduler_make_ready(GlobalContext *global, Context *c)

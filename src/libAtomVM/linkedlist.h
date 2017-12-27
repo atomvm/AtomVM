@@ -46,7 +46,7 @@ struct ListHead
  *
  * @details This macro should be used to retrieve a pointer to the struct that is containing the given ListHead.
  */
-#define LIST_ENTRY(list_item, type, list_head_member) \
+#define GET_LIST_ENTRY(list_item, type, list_head_member) \
     ((type *) (((char *) (list_item)) - ((unsigned long) &((type *) 0)->list_head_member)))
 
 /**

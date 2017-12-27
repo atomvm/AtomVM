@@ -28,7 +28,7 @@ void mailbox_send(Context *c, term t)
 
 term mailbox_receive(Context *c)
 {
-    Message *m = LIST_ENTRY(c->mailbox, Message, mailbox_list_head);
+    Message *m = GET_LIST_ENTRY(c->mailbox, Message, mailbox_list_head);
     linkedlist_remove(&c->mailbox, &m->mailbox_list_head);
 
     term rt = m->message;

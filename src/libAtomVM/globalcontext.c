@@ -41,7 +41,7 @@ void globalcontext_destroy(GlobalContext *glb)
 
 Context *globalcontext_get_process(GlobalContext *glb, int32_t process_id)
 {
-    Context *processes = LIST_ENTRY(glb->processes_table, Context, processes_table_head);
+    Context *processes = GET_LIST_ENTRY(glb->processes_table, Context, processes_table_head);
 
     Context *p = processes;
     do {
@@ -49,7 +49,7 @@ Context *globalcontext_get_process(GlobalContext *glb, int32_t process_id)
             return p;
         }
 
-        p = LIST_ENTRY(p->processes_table_head.next, Context, processes_table_head);
+        p = GET_LIST_ENTRY(p->processes_table_head.next, Context, processes_table_head);
     } while (processes != p);
 
     return NULL;
