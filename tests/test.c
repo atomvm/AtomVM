@@ -28,7 +28,7 @@
 #include "atom.h"
 #include "bif.h"
 #include "context.h"
-#include "mapped_file.h"
+#include "../platforms/Linux/mapped_file.h"
 #include "module.h"
 #include "iff.h"
 #include "term.h"
