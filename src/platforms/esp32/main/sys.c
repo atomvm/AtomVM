@@ -17,41 +17,18 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#include "freertos/FreeRTOS.h"
-#include "esp_system.h"
-#include "esp_event.h"
-#include "esp_event_loop.h"
-#include "nvs_flash.h"
+#include "sys.h"
 
-#include "atom.h"
-#include "bif.h"
-#include "context.h"
-#include "globalcontext.h"
-#include "iff.h"
-#include "module.h"
-#include "utils.h"
-#include "term.h"
+#include "scheduler.h"
 
-esp_err_t event_handler(void *ctx, system_event_t *event)
+#include <stdint.h>
+
+extern void sys_waitevents(struct ListHead *listeners_list)
 {
-    return ESP_OK;
+    //TODO: implement this
 }
 
-extern const unsigned char beam_file[624];
-
-void app_main()
+extern void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis)
 {
-    nvs_flash_init();
-    tcpip_adapter_init();
-    ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL));
-
-    Module *mod = module_new_from_iff_binary(beam_file, 624);
-    GlobalContext *glb = globalcontext_new();
-    Context *ctx = context_new(glb);
-
-    printf("Execute\n");
-    context_execute_loop(ctx, mod, beam_file, "start", 0);
-    printf("Return value: %lx\n", (long) term_to_int32(ctx->x[0]));
-
-    while(1);
+    //TODO: implement this
 }
