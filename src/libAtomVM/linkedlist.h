@@ -74,7 +74,7 @@ static inline void linkedlist_insert(struct ListHead *new_item, struct ListHead 
  */
 static inline void linkedlist_remove(struct ListHead **list, struct ListHead *remove_item)
 {
-    if (remove_item->next == remove_item->prev) {
+    if (remove_item->next == remove_item) {
         *list = NULL;
         return;
     }
