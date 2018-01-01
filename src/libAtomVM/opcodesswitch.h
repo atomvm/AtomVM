@@ -1125,24 +1125,37 @@
 
             case OP_CALL_EXT_ONLY: {
                 int arity = chunk->code[i + 1] >> 4;
-                int label = chunk->code[i + 2] >> 4;
+                int index = chunk->code[i + 2] >> 4;
 
-                TRACE("call_ext_only/2, arity=%i, label=%i\n", arity, label);
+                TRACE("call_ext_only/2, arity=%i, index=%i\n", arity, index);
                 USED_BY_TRACE(arity);
-                USED_BY_TRACE(label);
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    NEXT_INSTRUCTION(2);
-                    ctx->cp = INSTRUCTION_POINTER();
-
-                    JUMP_TO_ADDRESS(mod->labels[label]);
-                    break;
-                #endif
+                USED_BY_TRACE(index);
 
                 #ifdef IMPL_CODE_LOADER
                     NEXT_INSTRUCTION(2);
-                    break;
                 #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    const struct ExportedFunction *func = mod->imported_funcs[index].func;
+                    switch (func->type) {
+                        case NIFFunctionType: {
+                            const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
+                            ctx->x[0] = nif->nif_ptr(ctx, arity, ctx->x);
+                            if ((long) ctx->cp == -1) {
+                                return 0;
+                            }
+
+                            JUMP_TO_ADDRESS(ctx->cp);
+
+                            break;
+                        }
+                        default: {
+                            abort();
+                        }
+                    }
+                #endif
+
+                break;
             }
 
             case OP_GC_BIF1: {
