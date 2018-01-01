@@ -18,12 +18,15 @@
  ***************************************************************************/
 
 #include "mailbox.h"
+#include "scheduler.h"
 
 void mailbox_send(Context *c, term t)
 {
     Message *m = malloc(sizeof(Message));
     m->message = t;
     linkedlist_append(&c->mailbox, &m->mailbox_list_head);
+
+    scheduler_make_ready(c->global, c);
 }
 
 term mailbox_receive(Context *c)

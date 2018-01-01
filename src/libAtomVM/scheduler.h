@@ -35,4 +35,7 @@ extern Context *scheduler_wait(GlobalContext *global, Context *c, int timeout);
  */
 extern void scheduler_make_ready(GlobalContext *global, Context *c);
 
+
+extern void scheduler_make_waiting(GlobalContext *global, Context *c);
+
 #endif

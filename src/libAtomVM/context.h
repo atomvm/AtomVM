@@ -33,6 +33,8 @@ struct Module;
 typedef struct Module Module;
 #endif
 
+typedef void (*native_handler)(Context *ctx);
+
 struct Context
 {
     struct ListHead processes_list_head;
@@ -53,6 +55,9 @@ struct Context
     struct ListHead *mailbox;
 
     GlobalContext *global;
+
+    //Ports support
+    native_handler native_handler;
 };
 
 #ifndef TYPEDEF_CONTEXT

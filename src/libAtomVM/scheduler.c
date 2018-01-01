@@ -23,6 +23,7 @@
 #include "time.h"
 
 static void scheduler_timeout_callback(void *data);
+static void scheduler_execute_native_handlers(GlobalContext *global);
 
 Context *scheduler_wait(GlobalContext *global, Context *c, int timeout)
 {
@@ -39,13 +40,15 @@ Context *scheduler_wait(GlobalContext *global, Context *c, int timeout)
         listener->handler = scheduler_timeout_callback;
     }
 
-    if (!global->listeners) {
-        fprintf(stderr, "Application hang detected. Aborting.");
-        abort();
-    }
+    scheduler_execute_native_handlers(global);
 
     //TODO: it would be better to check also events here
     if (!global->ready_processes) {
+        if (!global->listeners) {
+            fprintf(stderr, "Application hang detected. Aborting.");
+            abort();
+        }
+
         sys_waitevents(global->listeners);
     }
 
@@ -76,4 +79,22 @@ static void scheduler_timeout_callback(void *data)
     scheduler_make_ready(c->global, c);
 
     free(listener);
+}
+
+static void scheduler_execute_native_handlers(GlobalContext *global)
+{
+    Context *contexts = GET_LIST_ENTRY(global->ready_processes, Context, processes_list_head);
+
+    Context *context = contexts;
+    Context *next_context;
+    do {
+        next_context = GET_LIST_ENTRY(context->processes_list_head.next, Context, processes_list_head);
+
+        if (context->native_handler) {
+            context->native_handler(context);
+            scheduler_make_waiting(global, context);
+        }
+
+        context = next_context;
+    } while (context != contexts);
 }
