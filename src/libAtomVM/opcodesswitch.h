@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include "debug.h"
+#include "exportedfunction.h"
 #include "utils.h"
 #include "scheduler.h"
 
@@ -445,7 +446,7 @@
                 USED_BY_TRACE(dreg);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    BifImpl0 func = (BifImpl0) mod->imported_bifs[bif];
+                    BifImpl0 func = (BifImpl0) mod->imported_funcs[bif].bif;
                     term ret = func(ctx);
 
                     int reg_b_type = reg_type_c(chunk->code[i + 2] & 0xF);
@@ -1157,7 +1158,7 @@
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("gc_bif1/5 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, dest=r%i\n", f_label, live, bif, arg1, dreg);
 
-                    BifImpl1 func = (BifImpl1) mod->imported_bifs[bif];
+                    BifImpl1 func = (BifImpl1) mod->imported_funcs[bif].bif;
                     term ret = func(ctx, f_label, live, arg1);
 
                     int reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);
@@ -1201,7 +1202,7 @@
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("gc_bif2/6 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, arg2=0x%lx, dest=r%i\n", f_label, live, bif, arg1, arg2, dreg);
 
-                    BifImpl2 func = (BifImpl2) mod->imported_bifs[bif];
+                    BifImpl2 func = (BifImpl2) mod->imported_funcs[bif].bif;
                     term ret = func(ctx, f_label, live, arg1, arg2);
 
                     int reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);

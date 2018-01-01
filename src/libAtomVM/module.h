@@ -43,13 +43,21 @@ typedef struct
     uint8_t code[1];
 } __attribute__((packed)) CodeChunk;
 
+struct ExportedFunction;
+
+union imported_func
+{
+    const struct ExportedFunction *func;
+    BifImpl bif;
+};
+
 struct Module
 {
     CodeChunk *code;
     void *export_table;
     void *atom_table;
 
-    BifImpl *imported_bifs;
+    union imported_func *imported_funcs;
     void *local_labels;
 
     void **labels;

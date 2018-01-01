@@ -48,7 +48,7 @@ void module_build_imported_functions_table(Module *this_module, uint8_t *table_d
 {
     int functions_count = READ_32_ALIGNED(table_data + 8);
 
-    this_module->imported_bifs = calloc(functions_count, sizeof(void *));
+    this_module->imported_funcs = calloc(functions_count, sizeof(void *));
 
     for (int i = 0; i < functions_count; i++) {
         AtomString module_atom = local_atom_string(atom_tab, READ_32_ALIGNED(table_data + i * 12 + 12));
@@ -58,9 +58,9 @@ void module_build_imported_functions_table(Module *this_module, uint8_t *table_d
         BifImpl bif_handler = bif_registry_get_handler(module_atom, function_atom, arity);
 
         if (bif_handler) {
-            this_module->imported_bifs[i] = bif_handler;
+            this_module->imported_funcs[i].bif = bif_handler;
         } else {
-            this_module->imported_bifs[i] = NULL;
+            this_module->imported_funcs[i].func = NULL;
         }
     }
 }
@@ -126,7 +126,7 @@ Module *module_new_from_iff_binary(void *iff_binary, unsigned long size)
 void module_destroy(Module *module)
 {
     free(module->labels);
-    free(module->imported_bifs);
+    free(module->imported_funcs);
     free(module->literals_table);
     free(module->literals_data);
     free(module);
