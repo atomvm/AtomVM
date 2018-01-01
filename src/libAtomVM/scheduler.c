@@ -26,8 +26,7 @@ static void scheduler_timeout_callback(void *data);
 
 Context *scheduler_wait(GlobalContext *global, Context *c, int timeout)
 {
-    linkedlist_remove(&global->ready_processes, &c->processes_list_head);
-    linkedlist_append(&global->waiting_processes, &c->processes_list_head);
+    scheduler_make_waiting(global, c);
 
     if (timeout != -1) {
         EventListener *listener = malloc(sizeof(EventListener));
@@ -61,6 +60,12 @@ void scheduler_make_ready(GlobalContext *global, Context *c)
 {
     linkedlist_remove(&global->waiting_processes, &c->processes_list_head);
     linkedlist_append(&global->ready_processes, &c->processes_list_head);
+}
+
+void scheduler_make_waiting(GlobalContext *global, Context *c)
+{
+    linkedlist_remove(&global->ready_processes, &c->processes_list_head);
+    linkedlist_append(&global->waiting_processes, &c->processes_list_head);
 }
 
 static void scheduler_timeout_callback(void *data)
