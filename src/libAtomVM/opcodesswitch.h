@@ -120,7 +120,7 @@
             if (first_byte == COMPACT_ATOM) {                                                                           \
                 dest_term = term_nil();                                                                                 \
             } else {                                                                                                    \
-                abort();                                                                                                \
+                fprintf(stderr, "TODO: warning: unimplemented atom support\n");                                         \
             }                                                                                                           \
             next_operand_offset += 1;                                                                                   \
             break;                                                                                                      \
