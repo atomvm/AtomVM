@@ -19,12 +19,25 @@
 
 #include "nifs.h"
 
+#include "context.h"
+#include "mailbox.h"
+#include "scheduler.h"
+#include "term.h"
 #include "utils.h"
 
 #include <stdio.h>
 #include <string.h>
 
 #define MAX_NIF_NAME_LEN 32
+
+static char *list_to_string(term list);
+static void process_echo_mailbox(Context *ctx);
+
+static const struct Nif open_port_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_open_port_2
+};
 
 const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
 {
@@ -42,5 +55,68 @@ const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
     nifname[module_name_len + function_name_len + 2] = '0' + arity;
     nifname[module_name_len + function_name_len + 3] = 0;
 
+    if (!strcmp("erlang:open_port\\2", nifname)) {
+        return &open_port_nif;
+    }
+
     return NULL;
+}
+
+term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
+{
+    if (argc != 2) {
+        fprintf(stderr, "wrong arity\n");
+        abort();
+    }
+
+    Context *new_ctx = context_new(ctx->global);
+
+    term t = term_get_tuple_element(argv[0], 1);
+    char *driver_name = list_to_string(t);
+
+    if (!strcmp("echo", driver_name)) {
+        new_ctx->native_handler = process_echo_mailbox;
+    }
+
+    free(driver_name);
+
+    scheduler_make_waiting(ctx->global, new_ctx);
+
+    return term_from_local_process_id(new_ctx->process_id);
+}
+
+static char *list_to_string(term list)
+{
+    int len = 0;
+
+    term t = list;
+
+    while (!term_is_nil(t)) {
+        len++;
+        term *t_ptr = term_get_list_ptr(t);
+        t = *t_ptr;
+    }
+
+    t = list;
+    char *str = malloc(len + 1);
+
+    for (int i = 0; i < len; i++) {
+        term *t_ptr = term_get_list_ptr(t);
+        str[i] = (char) term_to_int32(t_ptr[1]);
+        t = *t_ptr;
+    }
+    str[len] = 0;
+
+    return str;
+}
+
+static void process_echo_mailbox(Context *ctx)
+{
+    term msg = mailbox_receive(ctx);
+    term pid = term_get_tuple_element(msg, 0);
+    term val = term_get_tuple_element(msg, 1);
+
+    int local_process_id = term_to_local_process_id(pid);
+    Context *target = globalcontext_get_process(ctx->global, local_process_id);
+    mailbox_send(target, val);
 }
