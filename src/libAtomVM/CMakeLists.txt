@@ -11,6 +11,7 @@ set(LIBATOMVM_SOURCES
     iff.c
     mailbox.c
     module.c
+    nifs.c
     scheduler.c
 )
 

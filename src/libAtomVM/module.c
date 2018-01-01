@@ -24,6 +24,7 @@
 #include "context.h"
 #include "externalterm.h"
 #include "iff.h"
+#include "nifs.h"
 #include "utils.h"
 
 #include <stdio.h>
@@ -60,7 +61,7 @@ void module_build_imported_functions_table(Module *this_module, uint8_t *table_d
         if (bif_handler) {
             this_module->imported_funcs[i].bif = bif_handler;
         } else {
-            this_module->imported_funcs[i].func = NULL;
+            this_module->imported_funcs[i].func = &nifs_get(module_atom, function_atom, arity)->base;
         }
     }
 }
