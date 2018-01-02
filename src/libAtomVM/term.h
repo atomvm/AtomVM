@@ -89,6 +89,11 @@ static inline int32_t term_nil()
     return 0x3B;
 }
 
+static inline int term_to_atom_index(term t)
+{
+    return t >> 6;
+}
+
 static inline int32_t term_to_int32(term t)
 {
     switch (t & 0xF) {
