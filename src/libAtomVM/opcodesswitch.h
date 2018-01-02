@@ -250,6 +250,7 @@
 #define OP_CALL 4
 #define OP_CALL_LAST 5
 #define OP_CALL_ONLY 6
+#define OP_CALL_EXT 7
 #define OP_BIF0 9
 #define OP_ALLOCATE 12
 #define OP_ALLOCATE_HEAP 13
@@ -435,6 +436,34 @@
                     UNUSED(label);
                     NEXT_INSTRUCTION(2);
                 #endif
+
+                break;
+            }
+
+            case OP_CALL_EXT: {
+                int arity = chunk->code[i + 1] >> 4;
+                int index = chunk->code[i + 2] >> 4;
+
+                TRACE("call_ext/2, arity=%i, index=%i\n", arity, index);
+                USED_BY_TRACE(arity);
+                USED_BY_TRACE(index);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    const struct ExportedFunction *func = mod->imported_funcs[index].func;
+                    switch (func->type) {
+                        case NIFFunctionType: {
+                            const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
+                            ctx->x[0] = nif->nif_ptr(ctx, arity, ctx->x);
+                            break;
+                        }
+                        default: {
+                            fprintf(stderr, "Unsupported function type.\n");
+                            abort();
+                        }
+                    }
+                #endif
+
+                NEXT_INSTRUCTION(2);
 
                 break;
             }
