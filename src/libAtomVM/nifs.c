@@ -32,6 +32,7 @@
 
 static char *list_to_string(term list);
 static void process_echo_mailbox(Context *ctx);
+static void process_console_mailbox(Context *ctx);
 
 static const struct Nif open_port_nif =
 {
@@ -76,6 +77,8 @@ term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
 
     if (!strcmp("echo", driver_name)) {
         new_ctx->native_handler = process_echo_mailbox;
+    } else if (!strcmp("console", driver_name)) {
+        new_ctx->native_handler = process_console_mailbox;
     }
 
     free(driver_name);
@@ -119,4 +122,20 @@ static void process_echo_mailbox(Context *ctx)
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
     mailbox_send(target, val);
+}
+
+static void process_console_mailbox(Context *ctx)
+{
+    term msg = mailbox_receive(ctx);
+    term pid = term_get_tuple_element(msg, 0);
+    term val = term_get_tuple_element(msg, 1);
+
+    char *str = list_to_string(val);
+    int len = strlen(str);
+    printf("%s", str);
+    free(str);
+
+    int local_process_id = term_to_local_process_id(pid);
+    Context *target = globalcontext_get_process(ctx->global, local_process_id);
+    mailbox_send(target, term_from_int32(len));
 }
