@@ -55,6 +55,7 @@ struct Test tests[] =
     {"erlang_tests/count_char.beam", 2},
     {"erlang_tests/makelist_test.beam", 532},
     {"erlang_tests/test_echo_driver.beam", 84},
+    {"erlang_tests/test_regecho_driver.beam", 11},
     {NULL, 0}
 };
 
