@@ -251,6 +251,7 @@
 #define OP_CALL_ONLY 6
 #define OP_BIF0 9
 #define OP_ALLOCATE 12
+#define OP_ALLOCATE_HEAP 13
 #define OP_ALLOCATE_ZERO 14
 #define OP_TEST_HEAP 16
 #define OP_KILL 17
@@ -485,6 +486,33 @@
                 #endif
 
                 NEXT_INSTRUCTION(2);
+                break;
+            }
+
+            case OP_ALLOCATE_HEAP: {
+                int stack_need = chunk->code[i + 1] >> 4;
+                int heap_need = chunk->code[i + 2] >> 4;
+                int live = chunk->code[i + 3] >> 4;
+                TRACE("allocate_heap/2 stack_need=%i, heap_need=%i, live=%i\n", stack_need, heap_need, live);
+                USED_BY_TRACE(stack_need);
+                USED_BY_TRACE(heap_need);
+                USED_BY_TRACE(live);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    if (live > 16) {
+                        fprintf(stderr, "Cannot use more than 16 registers.");
+                        abort();
+                    }
+
+                    if ((ctx->e - (stack_need + 1)) < ctx->stack) {
+                        fprintf(stderr, "Need to allocate more stack space.");
+                        abort();
+                    }
+                    ctx->e -= stack_need + 1;
+                    ctx->e[stack_need] = ctx->cp;
+                #endif
+
+                NEXT_INSTRUCTION(3);
                 break;
             }
 
