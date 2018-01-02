@@ -40,6 +40,18 @@ static const struct Nif open_port_nif =
     .nif_ptr = nif_erlang_open_port_2
 };
 
+static const struct Nif register_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_register_2
+};
+
+static const struct Nif whereis_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_whereis_1
+};
+
 const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
 {
     char nifname[MAX_NIF_NAME_LEN];
@@ -58,6 +70,10 @@ const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
 
     if (!strcmp("erlang:open_port\\2", nifname)) {
         return &open_port_nif;
+    } else if (!strcmp("erlang:register\\2", nifname)) {
+        return &register_nif;
+    } else if (!strcmp("erlang:whereis\\1", nifname)) {
+        return &whereis_nif;
     }
 
     return NULL;
@@ -86,6 +102,39 @@ term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
     scheduler_make_waiting(ctx->global, new_ctx);
 
     return term_from_local_process_id(new_ctx->process_id);
+}
+
+
+term nif_erlang_register_2(Context *ctx, int argc, term argv[])
+{
+    if ((argc != 2) || !term_is_atom(argv[0]) || !term_is_pid(argv[1])) {
+        fprintf(stderr, "bad match\n");
+        abort();
+    }
+
+    int atom_index = term_to_atom_index(argv[0]);
+    int pid = term_to_local_process_id(argv[1]);
+
+    globalcontext_register_process(ctx->global, atom_index, pid);
+
+    return term_nil();
+}
+
+term nif_erlang_whereis_1(Context *ctx, int argc, term argv[])
+{
+    if ((argc != 1) || !term_is_atom(argv[0])) {
+        fprintf(stderr, "bad match\n");
+        abort();
+    }
+
+    int atom_index = term_to_atom_index(argv[0]);
+
+    int local_process_id = globalcontext_get_registered_process(ctx->global, atom_index);
+    if (local_process_id) {
+        return term_from_local_process_id(local_process_id);
+    } else {
+        return term_nil();
+    }
 }
 
 static char *list_to_string(term list)

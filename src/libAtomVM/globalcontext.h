@@ -39,6 +39,7 @@ typedef struct
     struct ListHead *waiting_processes;
     struct ListHead *listeners;
     struct ListHead *processes_table;
+    struct ListHead *registered_processes;
 
     int32_t last_process_id;
 } GlobalContext;
@@ -48,5 +49,8 @@ extern void globalcontext_destroy(GlobalContext *glb);
 
 Context *globalcontext_get_process(GlobalContext *glb, int32_t process_id);
 int32_t globalcontext_get_new_process_id(GlobalContext *glb);
+
+void globalcontext_register_process(GlobalContext *glb, int atom_index, int local_process_id);
+int globalcontext_get_registered_process(GlobalContext *glb, int atom_index);
 
 #endif

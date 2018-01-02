@@ -21,6 +21,14 @@
 
 #include "context.h"
 
+struct RegisteredProcess
+{
+    struct ListHead registered_processes_list_head;
+
+    int atom_index;
+    int local_process_id;
+};
+
 GlobalContext *globalcontext_new()
 {
     GlobalContext *glb = malloc(sizeof(GlobalContext));
@@ -28,6 +36,7 @@ GlobalContext *globalcontext_new()
     glb->waiting_processes = NULL;
     glb->listeners = NULL;
     glb->processes_table = NULL;
+    glb->registered_processes = NULL;
 
     glb->last_process_id = 0;
 
@@ -60,4 +69,29 @@ int32_t globalcontext_get_new_process_id(GlobalContext *glb)
     glb->last_process_id++;
 
     return glb->last_process_id;
+}
+
+void globalcontext_register_process(GlobalContext *glb, int atom_index, int local_process_id)
+{
+    struct RegisteredProcess *registered_process = malloc(sizeof(struct RegisteredProcess));
+    registered_process->atom_index = atom_index;
+    registered_process->local_process_id = local_process_id;
+
+    linkedlist_append(&glb->registered_processes, &registered_process->registered_processes_list_head);
+}
+
+int globalcontext_get_registered_process(GlobalContext *glb, int atom_index)
+{
+    const struct RegisteredProcess *registered_processes = GET_LIST_ENTRY(glb->registered_processes, struct RegisteredProcess, registered_processes_list_head);
+
+    const struct RegisteredProcess *p = registered_processes;
+    do {
+        if (p->atom_index == atom_index) {
+            return p->local_process_id;
+        }
+
+        p = GET_LIST_ENTRY(p->registered_processes_list_head.next, struct RegisteredProcess, registered_processes_list_head);
+    } while (p != registered_processes);
+
+    return 0;
 }

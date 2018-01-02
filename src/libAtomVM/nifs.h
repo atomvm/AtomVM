@@ -26,5 +26,7 @@
 
 extern const struct Nif *nifs_get(AtomString module, AtomString function, int arity);
 extern term nif_erlang_open_port_2(Context *ctx, int argc, term argv[]);
+extern term nif_erlang_register_2(Context *ctx, int argc, term argv[]);
+extern term nif_erlang_whereis_1(Context *ctx, int argc, term argv[]);
 
 #endif
