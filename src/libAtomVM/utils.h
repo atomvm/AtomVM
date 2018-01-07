@@ -40,7 +40,7 @@
             ( (((uint8_t *)(ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) | (((uint8_t *)(ptr))[2] << 8) | ((uint8_t *)(ptr))[3] )
 
         #define READ_16_UNALIGNED(ptr) \
-            ( (((uint8_t *)(ptr))[2] << 8) | ((uint8_t *)(ptr))[3] )
+            ( (((uint8_t *)(ptr))[0] << 8) | ((uint8_t *)(ptr))[1] )
     #endif
 
     #ifdef __GNUC__
@@ -57,7 +57,7 @@
         ( (((uint8_t *)(ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) | (((uint8_t *)(ptr))[2] << 8) | ((uint8_t *)(ptr))[3] )
 
     #define READ_16_UNALIGNED(ptr) \
-        ( (((uint8_t *)(ptr))[2] << 8) | ((uint8_t *)(ptr))[3] )
+        ( (((uint8_t *)(ptr))[0] << 8) | ((uint8_t *)(ptr))[1] )
 
     #define ENDIAN_SWAP_32(value) (value)
 #endif
