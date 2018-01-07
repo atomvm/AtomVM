@@ -404,7 +404,6 @@
                 USED_BY_TRACE(arity);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    n_words = 0;
                     ctx->cp = ctx->e[n_words];
                     ctx->e += (n_words + 1);
 
