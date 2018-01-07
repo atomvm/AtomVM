@@ -20,6 +20,7 @@
 #include "sys.h"
 
 #include "scheduler.h"
+#include "utils.h"
 
 #include <limits.h>
 #include <poll.h>
@@ -136,4 +137,10 @@ extern void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t m
 static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *timespec2)
 {
     return (timespec1->tv_sec - timespec2->tv_sec) * 1000 + (timespec1->tv_nsec - timespec2->tv_nsec) / 1000000;
+}
+
+native_handler platform_open_port(const char *driver_name)
+{
+    UNUSED(driver_name);
+    return NULL;
 }

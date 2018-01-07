@@ -97,6 +97,10 @@ term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
         new_ctx->native_handler = process_console_mailbox;
     }
 
+    if (!new_ctx->native_handler) {
+        new_ctx->native_handler = platform_open_port(driver_name);
+    }
+
     free(driver_name);
 
     scheduler_make_waiting(ctx->global, new_ctx);
