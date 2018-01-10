@@ -28,8 +28,9 @@
 #define LOCT 3
 #define IMPT 4
 #define LITT 5
-#define MAX_OFFS 6
-#define MAX_SIZES 6
+#define LITU 6
+#define MAX_OFFS 7
+#define MAX_SIZES 7
 
 #define IFF_SECTION_HEADER_SIZE 8
 

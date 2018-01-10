@@ -64,6 +64,8 @@ struct Module
 
     void *literals_data;
     void const* *literals_table;
+
+    int free_literals_data : 1;
 };
 
 #ifndef TYPEDEF_MODULE

@@ -64,6 +64,10 @@ void scan_iff(uint8_t *data, int file_size, unsigned long *offsets, unsigned lon
             offsets[LITT] = current_pos;
             sizes[LITT] = ENDIAN_SWAP_32(current_record->size);
 
+        } else if (!memcmp(current_record->name, "LitU", 4)) {
+            offsets[LITU] = current_pos;
+            sizes[LITU] = ENDIAN_SWAP_32(current_record->size);
+
         } else if (!memcmp(current_record->name, "ImpT", 4)) {
             offsets[IMPT] = current_pos;
             sizes[IMPT] = ENDIAN_SWAP_32(current_record->size);

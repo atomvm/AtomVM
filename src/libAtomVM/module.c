@@ -114,9 +114,17 @@ Module *module_new_from_iff_binary(void *iff_binary, unsigned long size)
         #endif
 
         mod->literals_table = module_build_literals_table(mod->literals_data);
+        mod->free_literals_data = 1;
+
+    } else if (offsets[LITU]) {
+        mod->literals_data = beam_file + offsets[LITU] + IFF_SECTION_HEADER_SIZE;
+        mod->literals_table = module_build_literals_table(mod->literals_data);
+        mod->free_literals_data = 0;
+
     } else {
         mod->literals_data = NULL;
         mod->literals_table = NULL;
+        mod->free_literals_data = 0;
     }
 
     read_core_chunk(mod);
@@ -129,7 +137,9 @@ void module_destroy(Module *module)
     free(module->labels);
     free(module->imported_funcs);
     free(module->literals_table);
-    free(module->literals_data);
+    if (module->free_literals_data) {
+        free(module->literals_data);
+    }
     free(module);
 }
 
