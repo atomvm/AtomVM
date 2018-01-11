@@ -99,6 +99,12 @@ int main(int argc, char **argv)
         }
     }
 
+    fseek(pack, 0, SEEK_END);
+    size_t size = ftell(pack);
+    uint32_t size_field = ENDIAN_SWAP_32(size);
+    fseek(pack, 4, SEEK_SET);
+    assert(fwrite(&size_field, sizeof(uint32_t), 1, pack) == 1);
+
     return EXIT_SUCCESS;
 }
 
