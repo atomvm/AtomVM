@@ -18,6 +18,7 @@
  ***************************************************************************/
 
 #include "freertos/FreeRTOS.h"
+#include "esp_partition.h"
 #include "esp_system.h"
 #include "esp_event.h"
 #include "esp_event_loop.h"
@@ -32,12 +33,12 @@
 #include "utils.h"
 #include "term.h"
 
+const void *beam_partition(int *size);
+
 esp_err_t event_handler(void *ctx, system_event_t *event)
 {
     return ESP_OK;
 }
-
-extern const unsigned char beam_file[624];
 
 void app_main()
 {
@@ -45,13 +46,44 @@ void app_main()
     tcpip_adapter_init();
     ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL));
 
-    Module *mod = module_new_from_iff_binary(beam_file, 624);
+    int size;
+    const void *flashed_beam = beam_partition(&size);
+
+    printf("Booting BEAM file mapped at: %p, size: %i\n", flashed_beam, size);
+
+    Module *mod = module_new_from_iff_binary(flashed_beam, size);
     GlobalContext *glb = globalcontext_new();
     Context *ctx = context_new(glb);
 
     printf("Execute\n");
-    context_execute_loop(ctx, mod, beam_file, "start", 0);
+    context_execute_loop(ctx, mod, flashed_beam, "start", 0);
     printf("Return value: %lx\n", (long) term_to_int32(ctx->x[0]));
 
     while(1);
+}
+
+const void *beam_partition(int *size)
+{
+    const esp_partition_t *partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "main.beam");
+    if (!partition) {
+        printf("BEAM partition not found.\n");
+        *size = 0;
+        return NULL;
+
+    } else {
+        printf("Found BEAM partition: size: %i, address: 0x%x\n", partition->size, partition->address);
+        *size = partition->size;
+    }
+
+    const void *mapped_memory;
+    spi_flash_mmap_handle_t unmap_handle;
+    if (esp_partition_mmap(partition, 0, partition->size, SPI_FLASH_MMAP_DATA, &mapped_memory, &unmap_handle) != ESP_OK) {
+        printf("Failed to map BEAM partition\n");
+        abort();
+        return NULL;
+    }
+
+    UNUSED(unmap_handle);
+
+    return mapped_memory;
 }

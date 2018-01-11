@@ -34,12 +34,15 @@ static uint32_t iff_align(uint32_t size)
     return ((size + 4 - 1) >> 2) << 2;
 }
 
-void scan_iff(uint8_t *data, int file_size, unsigned long *offsets, unsigned long *sizes)
+void scan_iff(uint8_t *data, int buf_size, unsigned long *offsets, unsigned long *sizes)
 {
     memset(offsets, 0, sizeof(unsigned long) * MAX_OFFS);
     memset(sizes, 0, sizeof(unsigned long) * MAX_SIZES);
 
     int current_pos = 12;
+
+    uint32_t iff_size = READ_32_ALIGNED(data + 4);
+    int file_size = iff_size;
 
     do {
         struct IFFRecord *current_record = (struct IFFRecord *) (data + current_pos);
