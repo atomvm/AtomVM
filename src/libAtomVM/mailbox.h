@@ -17,6 +17,13 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+/**
+ * @file mailbox.h
+ * @brief Mailbox management functions such as send and receive functions.
+ *
+ * @details Mailbox management functions should be used to send messages to a certain process or port and to receive them.
+ */
+
 #ifndef _MAILBOX_H_
 #define _MAILBOX_H_
 
@@ -30,7 +37,22 @@ typedef struct
     term message;
 } Message;
 
+/**
+ * @brief Sends a message to a certain mailbox.
+ *
+ * @details Sends a term to a certain process or port mailbox.
+ * @param c the process context.
+ * @param t the term that will be sent.
+ */
 extern void mailbox_send(Context *c, term t);
+
+/**
+ * @brief Gets next message from a mailbox.
+ *
+ * @details Dequeue a term that has been previously queued on a certain process or driver mailbox.
+ * @param c the process or driver context.
+ * @returns next queued term.
+ */
 extern term mailbox_receive(Context *c);
 
 #endif
