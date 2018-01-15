@@ -17,6 +17,13 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+/**
+ * @file utils.h
+ * @brief Misc functions and macros.
+ *
+ * @details Miscellaneous functions and macros useful for different tasks, like endian byteswap, unaligned reads, marking unused vars, etc...
+ */
+
 #ifndef _UTILS_H_
 #define _UTILS_H_
 
