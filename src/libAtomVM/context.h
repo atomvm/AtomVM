@@ -17,6 +17,13 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+/**
+ * @file context.h
+ * @brief Context struct and releated management functions
+ *
+ * @details A context represent the state of a running erlang process or port.
+ */
+
 #ifndef _CONTEXT_H_
 #define _CONTEXT_H_
 
@@ -65,8 +72,32 @@ struct Context
 typedef struct Context Context;
 #endif
 
+/**
+ * @brief Creates a new context
+ *
+ * @details Allocates a new Context struct and initialize it, the newly created context is also inserted into the processes table.
+ * @param glb The global context of this virtual machine instance.
+ * @returns created context.
+ */
 extern Context *context_new(GlobalContext *glb);
+
+/**
+ * @brief Destorys a context
+ *
+ * @details Frees context resources and memory and removes it from the processes table.
+ * @param c the context that will be destroyed.
+ */
 extern void context_destroy(Context *c);
+
+/**
+ * @brief Starts executing a function
+ *
+ * @details Start executing bytecode for the specified function, this function will block until it terminates. The outcome is saved to x[0] register.
+ * @param ctx the context that will be used to run the specificed functions, x registers must be set to function arguments.
+ * @param function_name the function name C string.
+ * @param the function arity (number of arguments that are required).
+ * @returns 1 if an error occoured, otherwise 0 is always returned.
+ */
 extern int context_execute_loop(Context *ctx, Module *mod, uint8_t *beam_file, const char *function_name, int arity);
 
 #endif
