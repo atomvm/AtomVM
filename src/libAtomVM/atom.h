@@ -17,6 +17,13 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+/**
+ * @file atom.h
+ * @brief Atoms manipulation functions
+ *
+ * @details This header provides atom manipulation functions, such as atom_string_len, atom_string_data, etc...
+ */
+
 #ifndef _ATOM_H_
 #define _ATOM_H_
 
@@ -24,15 +31,54 @@
 
 typedef const void * AtomString;
 
+/**
+ * @brief Retrieves an AtomString from the atoms table
+ *
+ * @details Returns the AtomString at specified index in the atom table.
+ * @param table_data the atoms table.
+ * @param atom_index atoms table atom index.
+ */
 extern AtomString local_atom_string(uint8_t *table_data, int atom_index);
+
+/**
+ * @brief Gets a C string from an AtomString
+ *
+ * @details Copies the atom string data to a bufffer and makes it null terminated.
+ * @param atom_string that will be converted to a C string.
+ * @param buf the buffer where the C string will be written.
+ * @param bufsize available buf size.
+ */
 extern void atom_string_to_c(AtomString atom_string, char *buf, int bufsize);
+
+/**
+ * @brief Check for equality two AtomStrings
+ *
+ * @details Returns 1 if two atom strings are equal, 0 otherwise. This function doesn't behave like strcmp.
+ * @param a first atom string to be compared.
+ * @param b second atom string to be compared.
+ * @returns 1 if they are equals, 0 otherwise.
+ */
 extern int atom_are_equals(AtomString a, AtomString b);
 
+/**
+ * @brief Returns the length of an atom string in bytes.
+ *
+ * @details Returns the length stored in the AtomString (which means that length is not computed).
+ * @param atom_str the atom string.
+ * @returns the specified atom string length.
+ */
 static inline int atom_string_len(AtomString atom_str)
 {
     return *((const uint8_t *) atom_str);
 }
 
+/**
+ * @brief Gets actual atom string data.
+ *
+ * @details Returns actual atom string data, which is not a \0 terminated C string.
+ * @param atom_str an AtomString pointer.
+ * @returns const pointer to string data (chars array).
+ */
 static inline const void *atom_string_data(AtomString atom_str)
 {
     return ((const uint8_t *) atom_str) + 1;
