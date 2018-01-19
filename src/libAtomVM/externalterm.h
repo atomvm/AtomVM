@@ -17,11 +17,25 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+/**
+ * @file externalterm.h
+ * @brief External term deserialization functions
+ *
+ * @details This header provides external term deserialization functions.
+ */
+
 #ifndef _EXTERNALTERM_H_
 #define _EXTERNALTERM_H_
 
 #include "term.h"
 
+/**
+ * @brief Gets a term from external term data.
+ *
+ * @details Deserialize an external term from external format and returns a term.
+ * @param external_term the external term that will be deserialized.
+ * @returns a term.
+ */
 term externalterm_to_term(const void *external_term);
 
 #endif
