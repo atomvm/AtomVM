@@ -17,6 +17,11 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+/**
+ * @file nifs.h
+ * @brief Private NIFs
+ */
+
 #ifndef _NIFS_H_
 #define _NIFS_H_
 

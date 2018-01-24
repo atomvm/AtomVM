@@ -17,6 +17,11 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+/**
+ * @file bif.h
+ * @brief BIF private functions.
+ */
+
 #ifndef _BIF_H_
 #define _BIF_H_
 
