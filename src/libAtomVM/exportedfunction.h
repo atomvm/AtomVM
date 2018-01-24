@@ -17,6 +17,13 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+/**
+ * @file exportedfunction.h
+ * @brief Module exported functions structs and macros.
+ *
+ * @details Structs required to handle both exported/imported NIFs and functions.
+ */
+
 #ifndef _EXPORTEDFUNCTION_H_
 #define _EXPORTEDFUNCTION_H_
 
