@@ -34,18 +34,21 @@
 #include <zlib.h>
 #endif
 
-#define IMPL_CODE_LOADER 1
-#include "opcodesswitch.h"
-#undef TRACE
-#undef IMPL_CODE_LOADER
-
 #define LITT_UNCOMPRESSED_SIZE_OFFSET 8
 #define LITT_HEADER_SIZE 12
 
 static void *module_uncompress_literals(const uint8_t *litT, int size);
 static void const* *module_build_literals_table(const void *literalsBuf);
+static void module_add_label(Module *mod, int index, void *ptr);
+static void module_build_imported_functions_table(Module *this_module, uint8_t *table_data, uint8_t *atom_tab);
+static void module_add_label(Module *mod, int index, void *ptr);
 
-void module_build_imported_functions_table(Module *this_module, uint8_t *table_data, uint8_t *atom_tab)
+#define IMPL_CODE_LOADER 1
+#include "opcodesswitch.h"
+#undef TRACE
+#undef IMPL_CODE_LOADER
+
+static void module_build_imported_functions_table(Module *this_module, uint8_t *table_data, uint8_t *atom_tab)
 {
     int functions_count = READ_32_ALIGNED(table_data + 8);
 
@@ -83,7 +86,7 @@ uint32_t module_search_exported_function(Module *this_module, AtomString func_na
     return 0;
 }
 
-void module_add_label(Module *mod, int index, void *ptr)
+static void module_add_label(Module *mod, int index, void *ptr)
 {
     mod->labels[index] = ptr;
 }
