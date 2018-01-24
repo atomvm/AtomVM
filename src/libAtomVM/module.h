@@ -17,6 +17,13 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+/**
+ * @file module.h
+ * @brief Module loading functions
+ *
+ * @details This header defines all the module loading functions and the Module struct.
+ */
+
 #ifndef _MODULE_H_
 #define _MODULE_H_
 
@@ -73,11 +80,40 @@ struct Module
 typedef struct Module Module;
 #endif
 
-extern void module_build_imported_functions_table(Module *this_module, uint8_t *table_data, uint8_t *atom_tab);
+/**
+ * @briefs Gets exported function index by searching it by function name and arity
+ *
+ * @details Gets exported function index by searching it by function name and arity
+ * @param this_module the module on which the function will be searched.
+ * @param func_name function name atom string.
+ * @param func_arity function arity.
+ */
 extern uint32_t module_search_exported_function(Module *this_module, AtomString func_name, int func_arity);
+
+/***
+ * @brief Destoys an existing Module
+ *
+ * @details Destorys a module and free Module resources.
+ * @param module the module that will be freed.
+ */
 extern void module_destroy(Module *module);
-extern void module_add_label(Module *mod, int index, void *ptr);
+
+/**
+ * @brief Parse a BEAM file and returns a Module
+ *
+ * @details Parse a BEAM file a returns a newly allocated and initialized Module struct.
+ * @param iff_binary the IFF file data.
+ * @param size the size of the buffer containing the IFF data.
+ */
 extern Module *module_new_from_iff_binary(void *iff_binary, unsigned long size);
+
+/**
+ * @brief Gets a literal stored on the literal table of the specified module
+ *
+ * @details Loads and deserialize a term stored in the literal table and returns a term.
+ * @param mod The module that owns that is going to be loaded.
+ * @param index a valid literal index.
+ */
 extern term module_load_literal(Module *mod, int index);
 
 #endif
