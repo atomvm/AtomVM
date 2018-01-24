@@ -17,6 +17,13 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+/**
+ * @file sys.h
+ * @brief Platform specific functions.
+ *
+ * @details This header defines platform dependent functions, that mostly deals with events.
+ */
+
 #ifndef _SYS_H_
 #define _SYS_H_
 
@@ -37,7 +44,21 @@ typedef struct EventListener {
     int fd;
 } EventListener;
 
+/**
+ * @brief waits platform events
+ *
+ * @details wait any of the specified events using a platform specific implementation, that might be poll on unix-like systems.
+ * @param listeners_list a list of listeners that are waiting for some events, each listener waits an event and has a callback.
+ */
 extern void sys_waitevents(struct ListHead *listeners_list);
+
+/**
+ * @brief sets the timestamp for a future event
+ *
+ * @details sets the timestamp to a timestamp n milliseconds in the future using platform monotonic timer source.
+ * @param t the timespec that will be updated.
+ * @param millis ammount of milliseconds relative to current timestamp.
+ */
 extern void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis);
 
 #endif
