@@ -274,6 +274,7 @@
 #define OP_IS_TUPLE 57
 #define OP_TEST_ARITY 58
 #define OP_SELECT_VAL 59
+#define OP_JUMP 61
 #define OP_MOVE 64
 #define OP_GET_LIST 65
 #define OP_GET_TUPLE_ELEMENT 66
@@ -1001,6 +1002,25 @@
 
                 #ifdef IMPL_CODE_LOADER
                     NEXT_INSTRUCTION(next_off - 1);
+                #endif
+
+                break;
+            }
+
+            case OP_JUMP: {
+                int label;
+                int next_offset = 1;
+                DECODE_LABEL(label, chunk->code, i, next_offset, next_offset)
+
+                TRACE("jump/1 label=%i\n", label);
+                USED_BY_TRACE(label);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    JUMP_TO_ADDRESS(mod->labels[label]);
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    NEXT_INSTRUCTION(next_offset - 1);
                 #endif
 
                 break;
