@@ -34,6 +34,7 @@
 static char *list_to_string(term list);
 static void process_echo_mailbox(Context *ctx);
 static void process_console_mailbox(Context *ctx);
+static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[]);
 
 static const struct Nif open_port_nif =
 {
@@ -45,6 +46,12 @@ static const struct Nif register_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_register_2
+};
+
+static const struct Nif spawn_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_spawn_3
 };
 
 static const struct Nif whereis_nif =
@@ -75,6 +82,8 @@ const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
         return &register_nif;
     } else if (!strcmp("erlang:whereis\\1", nifname)) {
         return &whereis_nif;
+    } else if (!strcmp("erlang:spawn\\3", nifname)) {
+        return &spawn_nif;
     }
 
     return NULL;
@@ -192,4 +201,25 @@ static void process_console_mailbox(Context *ctx)
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
     mailbox_send(target, term_from_int32(len));
+}
+
+term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
+{
+    if (argc != 3) {
+        fprintf(stderr, "spawn: wrong args count\n");
+        abort();
+    }
+
+    if (!term_is_atom(argv[0]) || !term_is_atom(argv[1]) || !term_is_list(argv[2])) {
+        fprintf(stderr, "spawn: invalid arguments\n");
+        abort();
+    }
+
+    Context *new_ctx = context_new(ctx->global);
+    new_ctx->mod = ctx->mod;
+
+    int label = module_search_exported_function(ctx->mod, local_atom_string(ctx->mod->atom_table, term_to_atom_index(argv[1])), term_list_length(argv[2]));
+    new_ctx->saved_ip = ctx->mod->labels[label];
+
+    return term_from_local_process_id(new_ctx->process_id);
 }
