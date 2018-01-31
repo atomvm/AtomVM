@@ -46,6 +46,14 @@ extern void debug_dump_stack(Context *ctx);
  */
 extern char reg_type_c(int reg_type);
 
+/**
+ * @brief Prints a list of processes.
+ *
+ * @details Prints to stderr a list of processes.
+ * @param processes the list of processes that will be printed.
+ */
+void debug_print_processes_list(struct ListHead *processes);
+
 #ifdef ENABLE_STACK_TRACE
     #define DEBUG_DUMP_STACK debug_dump_stack
 #else

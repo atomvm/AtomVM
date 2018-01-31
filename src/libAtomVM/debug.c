@@ -29,6 +29,24 @@ void debug_dump_stack(Context *ctx)
     fprintf(stderr, "DEBUG: e: %li\n", ctx->e - ctx->stack);
 }
 
+void debug_print_processes_list(struct ListHead *processes)
+{
+    Context *contexts = GET_LIST_ENTRY(processes, Context, processes_list_head);
+    if (!contexts) {
+        printf("No processes\n");
+        return;
+    }
+
+    Context *context = contexts;
+    Context *next_context;
+    printf("Processes list:\n");
+    do {
+        printf("%i: %p\n", context->process_id, context);
+        context = GET_LIST_ENTRY(context->processes_list_head.next, Context, processes_list_head);
+    } while (context != contexts);
+    printf("\n");
+}
+
 char reg_type_c(int reg_type)
 {
     switch (reg_type) {

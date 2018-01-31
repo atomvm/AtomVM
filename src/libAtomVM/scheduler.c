@@ -17,6 +17,7 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+#include "debug.h"
 #include "scheduler.h"
 #include "sys.h"
 
@@ -27,6 +28,9 @@ static void scheduler_execute_native_handlers(GlobalContext *global);
 
 Context *scheduler_wait(GlobalContext *global, Context *c, int timeout)
 {
+    #ifdef DEBUG_PRINT_READY_PROCESSES
+        debug_print_processes_list(global->ready_processes);
+    #endif
     scheduler_make_waiting(global, c);
 
     if (timeout != -1) {
