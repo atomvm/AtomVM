@@ -275,6 +275,7 @@
 #define OP_IS_TUPLE 57
 #define OP_TEST_ARITY 58
 #define OP_SELECT_VAL 59
+#define OP_SELECT_TUPLE_ARITY 60
 #define OP_JUMP 61
 #define OP_MOVE 64
 #define OP_GET_LIST 65
@@ -1022,6 +1023,59 @@
 
                     #ifdef IMPL_EXECUTE_LOOP
                         if (jmp_to_default && (src_value == cmp_value)) {
+                            JUMP_TO_ADDRESS(mod->labels[jmp_label]);
+                            jmp_to_default = 0;
+                        }
+                    #endif
+                }
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    if (jmp_to_default) {
+                        JUMP_TO_ADDRESS(mod->labels[default_label]);
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    NEXT_INSTRUCTION(next_off - 1);
+                #endif
+
+                break;
+            }
+
+            case OP_SELECT_TUPLE_ARITY: {
+                int next_off = 1;
+                term src_value;
+                DECODE_INTEGER(src_value, chunk->code, i, next_off, next_off)
+                int default_label;
+                DECODE_LABEL(default_label, chunk->code, i, next_off, next_off)
+                next_off++; //skip extended list tag
+                int size;
+                DECODE_INTEGER(size, chunk->code, i, next_off, next_off)
+
+                TRACE("select_tuple_arity/3, default_label=%i, vals=%i\n", default_label, size);
+                USED_BY_TRACE(default_label);
+                USED_BY_TRACE(size);
+
+                #ifdef IMPL_CODE_LOADER
+                    UNUSED(src_value);
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    int jmp_to_default = 1;
+                #endif
+
+                for (int j = 0; j < size / 2; j++) {
+                    int cmp_value;
+                    DECODE_INTEGER(cmp_value, chunk->code, i, next_off, next_off)
+                    int jmp_label;
+                    DECODE_LABEL(jmp_label, chunk->code, i, next_off, next_off)
+
+                    #ifdef IMPL_CODE_LOADER
+                        UNUSED(cmp_value);
+                    #endif
+
+                    #ifdef IMPL_EXECUTE_LOOP
+                        if (jmp_to_default && (term_get_tuple_arity(src_value) == cmp_value)) {
                             JUMP_TO_ADDRESS(mod->labels[jmp_label]);
                             jmp_to_default = 0;
                         }
