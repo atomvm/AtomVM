@@ -21,6 +21,7 @@
 
 #include "context.h"
 #include "mailbox.h"
+#include "module.h"
 #include "scheduler.h"
 #include "term.h"
 #include "utils.h"
