@@ -731,6 +731,7 @@
                 #ifdef IMPL_EXECUTE_LOOP
                     ctx->saved_ip = mod->labels[label];
                     Context *scheduled_context = scheduler_wait(ctx->global, ctx, -1);
+                    ctx = scheduled_context;
 
                     JUMP_TO_ADDRESS(scheduled_context->saved_ip);
                 #endif
@@ -755,6 +756,7 @@
 
                     ctx->saved_ip = mod->labels[label];
                     Context *scheduled_context = scheduler_wait(ctx->global, ctx, term_to_int32(timeout));
+                    ctx = scheduled_context;
 
                     JUMP_TO_ADDRESS(scheduled_context->saved_ip);
                 #endif
