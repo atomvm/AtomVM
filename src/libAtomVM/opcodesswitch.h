@@ -663,10 +663,13 @@
 
             //TODO: implement send/0
             case OP_SEND: {
-                TRACE("send/0\n");
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("send/0\n");
+                #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
                     int local_process_id = term_to_local_process_id(ctx->x[0]);
+                    TRACE("send/0 target_pid=%i\n", local_process_id);
                     Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
                     mailbox_send(target, ctx->x[1]);
