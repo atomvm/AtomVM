@@ -84,6 +84,9 @@ static void scheduler_timeout_callback(void *data)
 static void scheduler_execute_native_handlers(GlobalContext *global)
 {
     Context *contexts = GET_LIST_ENTRY(global->ready_processes, Context, processes_list_head);
+    if (!contexts) {
+        return;
+    }
 
     Context *context = contexts;
     Context *next_context;
