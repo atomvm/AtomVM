@@ -704,7 +704,7 @@
                 int next_off = 1;
                 int label;
                 DECODE_LABEL(label, chunk->code, i, next_off, next_off)
-                next_off++;
+                int dreg = chunk->code[i + next_off] >> 4;
 
                 TRACE("loop_rec/2\n");
 
@@ -712,12 +712,23 @@
                     if (ctx->mailbox == NULL) {
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
-                        NEXT_INSTRUCTION(next_off - 1);
+                        term ret = mailbox_peek(ctx);
+
+                        int reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);
+                        if (reg_b_type == 'x') {
+                            ctx->x[dreg] = ret;
+                        } else if (reg_b_type == 'y') {
+                            ctx->e[dreg] = ret;
+                        } else {
+                            abort();
+                        }
+
+                        NEXT_INSTRUCTION(next_off);
                     }
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 break;
