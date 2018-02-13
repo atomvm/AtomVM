@@ -252,6 +252,7 @@
 #define OP_CALL_ONLY 6
 #define OP_CALL_EXT 7
 #define OP_BIF0 9
+#define OP_BIF1 10
 #define OP_ALLOCATE 12
 #define OP_ALLOCATE_HEAP 13
 #define OP_ALLOCATE_ZERO 14
@@ -491,6 +492,39 @@
                 #endif
 
                 NEXT_INSTRUCTION(2);
+                break;
+            }
+
+            //TODO: implement me
+            case OP_BIF1: {
+                int next_off = 1;
+                int fail_label;
+                DECODE_LABEL(fail_label, chunk->code, i, next_off, next_off)
+                int bif = chunk->code[i + next_off] >> 4;
+                next_off++;
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
+                int dreg = chunk->code[i + next_off];
+
+                TRACE("bif1/2 bif=%i, dreg=%i\n", bif, dreg);
+                USED_BY_TRACE(bif);
+                USED_BY_TRACE(dreg);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    BifImpl1 func = (BifImpl1) mod->imported_funcs[bif].bif;
+                    term ret = func(ctx, 0, 0, arg1);
+
+                    int reg_b_type = reg_type_c(dreg & 0xF);
+                    if (reg_b_type == 'x') {
+                        ctx->x[dreg >> 4] = ret;
+                    } else if (reg_b_type == 'y') {
+                        ctx->e[dreg >> 4] = ret;
+                    } else {
+                        abort();
+                    }
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 
