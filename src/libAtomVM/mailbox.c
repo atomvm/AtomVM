@@ -40,3 +40,10 @@ term mailbox_receive(Context *c)
 
     return rt;
 }
+
+term mailbox_peek(Context *c)
+{
+    Message *m = GET_LIST_ENTRY(c->mailbox, Message, mailbox_list_head);
+
+    return m->message;
+}

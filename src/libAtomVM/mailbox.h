@@ -55,4 +55,13 @@ extern void mailbox_send(Context *c, term t);
  */
 extern term mailbox_receive(Context *c);
 
+/**
+ * @brief Gets next message from a mailbox (without removing it).
+ *
+ * @details Peek the mailbox and retrieve a term that has been previously queued on a certain process or driver mailbox.
+ * @param c the process or driver context.
+ * @returns peek queued term.
+ */
+extern term mailbox_peek(Context *c);
+
 #endif
