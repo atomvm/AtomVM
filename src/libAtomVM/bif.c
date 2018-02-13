@@ -87,6 +87,16 @@ term bif_erlang_length_1(Context *ctx, uint32_t failure_label, int live, term ar
     return term_from_int32(len);
 }
 
+//TODO: fail if not a list
+term bif_erlang_hd_1(Context *ctx, uint32_t failure_label, int live, term arg1)
+{
+    UNUSED(ctx);
+    UNUSED(failure_label);
+    UNUSED(live);
+
+    return term_get_list_head(arg1);
+}
+
 term bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
 {
     UNUSED(ctx);
