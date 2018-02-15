@@ -75,16 +75,7 @@ term bif_erlang_length_1(Context *ctx, uint32_t failure_label, int live, term ar
     UNUSED(failure_label);
     UNUSED(live);
 
-    term t = arg1;
-    int len = 0;
-
-    while (!term_is_nil(t)) {
-        len++;
-        term *t_ptr = term_get_list_ptr(t);
-        t = *t_ptr;
-    }
-
-    return term_from_int32(len);
+    return term_from_int32(term_list_length(arg1));
 }
 
 //TODO: fail if not a list

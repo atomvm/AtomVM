@@ -470,4 +470,23 @@ static inline term term_list_prepend(term head, term tail)
     return ((term) list_elem) | 0x1;
 }
 
+/**
+ * @brief Returns list length
+ *
+ * @details Counts the number of list items
+ * @return number of list items
+ */
+static inline int term_list_length(term t)
+{
+    int len = 0;
+
+    while (!term_is_nil(t)) {
+        len++;
+        term *t_ptr = term_get_list_ptr(t);
+        t = *t_ptr;
+    }
+
+    return len;
+}
+
 #endif
