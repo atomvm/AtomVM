@@ -3,6 +3,7 @@ project (libAtomVM)
 
 set(LIBATOMVM_SOURCES
     atom.c
+    atomshashtable.c
     bif.c
     context.c
     debug.c
