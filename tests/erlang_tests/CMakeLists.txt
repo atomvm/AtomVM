@@ -26,6 +26,7 @@ compile_erlang(len_test)
 compile_erlang(makelist_test)
 compile_erlang(test_echo_driver)
 compile_erlang(test_regecho_driver)
+compile_erlang(state_test)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -44,4 +45,5 @@ add_custom_target(erlang_test_modules DEPENDS
     makelist_test.beam
     test_echo_driver.beam
     test_regecho_driver.beam
+    state_test.beam
 )

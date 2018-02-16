@@ -56,6 +56,7 @@ struct Test tests[] =
     {"erlang_tests/makelist_test.beam", 532},
     {"erlang_tests/test_echo_driver.beam", 84},
     {"erlang_tests/test_regecho_driver.beam", 11},
+    {"erlang_tests/state_test.beam", 3},
     {NULL, 0}
 };
 
@@ -71,6 +72,7 @@ void test_modules_execution()
         Module *mod = module_new_from_iff_binary(beam_file->mapped, beam_file->size);
         GlobalContext *glb = globalcontext_new();
         Context *ctx = context_new(glb);
+        ctx->mod = mod;
 
         context_execute_loop(ctx, mod, beam_file->mapped, "start", 0);
 
