@@ -115,7 +115,7 @@ int globalcontext_get_registered_process(GlobalContext *glb, int atom_index);
  *
  * @details Inserts an atom into the global atoms table and returns its id.
  * @param glb the global context.
- * @param atom_string the atom string that will be added to the global atoms table.
+ * @param atom_string the atom string that will be added to the global atoms table, it will not be copied so it must stay allocated and valid.
  * @returns newly added atom id or -1 in case of failure.
  */
 int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string);

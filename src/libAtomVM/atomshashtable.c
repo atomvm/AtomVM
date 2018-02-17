@@ -85,19 +85,12 @@ int atomshashtable_insert(struct AtomsHashTable *hash_table, AtomString string, 
         }
     }
 
-    AtomString *astring = malloc(alen + 1);
-    if (!astring) {
-        return 0;
-    }
-
     struct HNode *new_node = malloc(sizeof(struct HNode *));
     if (!new_node) {
-        free(astring);
         return 0;
     }
-    memcpy(astring, string, alen + 1);
     new_node->next = NULL;
-    new_node->key = astring;
+    new_node->key = string;
     new_node->value = value;
 
     if (node) {
