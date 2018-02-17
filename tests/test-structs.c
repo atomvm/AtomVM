@@ -21,13 +21,11 @@
 #include <stdlib.h>
 
 #include "atomshashtable.h"
+#include "valueshashtable.h"
 #include "utils.h"
 
-int main(int argc, char **argv)
+void test_atomshashtable()
 {
-    UNUSED(argc);
-    UNUSED(argv);
-
     char atom_hello[] = {5, 'h', 'e', 'l', 'l', 'o'};
     char atom_ciao[] = {4, 'c', 'i', 'a', 'o'};
     char atom_a[] = {1, 'a'};
@@ -117,6 +115,36 @@ int main(int argc, char **argv)
     assert(atomshashtable_has_key(htable, atom_7) == 1);
     assert(atomshashtable_has_key(htable, atom_8) == 1);
     assert(atomshashtable_has_key(htable, atom_9) == 1);
+}
+
+void test_valueshashtable()
+{
+    struct ValuesHashTable *htable = valueshashtable_new();
+    assert(valueshashtable_insert(htable, 0xABCDEF01, 0x12345678) == 1);
+    assert(valueshashtable_get_value(htable, 0xBBCDEF01, 0xCAFEBABE) == 0xCAFEBABE);
+    assert(valueshashtable_get_value(htable, 0xABCDEF01, 0xCAFEBABE) == 0x12345678);
+
+    assert(valueshashtable_insert(htable, 0xBBCDEF01, 0x11223344) == 1);
+    assert(valueshashtable_get_value(htable, 0xBBCDEF01, 0xCAFEBABE) == 0x11223344);
+    assert(valueshashtable_get_value(htable, 0xABCDEF01, 0xCAFEBABE) == 0x12345678);
+
+    for (unsigned long i = 0; i < 2000; i++) {
+        assert(valueshashtable_insert(htable, 0xBBDDBBDD + i, 0xEEFFEEFF + i) == 1);
+    }
+
+    for (unsigned long i = 0; i < 2000; i++) {
+        assert(valueshashtable_get_value(htable, 0xBBDDBBDD + i, 0xCAFEBABE) == 0xEEFFEEFFL + i);
+        assert(valueshashtable_get_value(htable, 0xABDDBBDD + i, 0xCAFEBABE) == 0xCAFEBABE);
+    }
+}
+
+int main(int argc, char **argv)
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    test_atomshashtable();
+    test_valueshashtable();
 
     return EXIT_SUCCESS;
 }
