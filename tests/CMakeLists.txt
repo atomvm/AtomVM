@@ -12,3 +12,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR} ../src/libAtomVM/)
 add_executable(test-erlang test.c ../src/platforms/${CMAKE_SYSTEM_NAME}/sys.c ../src/platforms/${CMAKE_SYSTEM_NAME}/mapped_file.c)
 target_link_libraries(test-erlang libAtomVM)
 set_property(TARGET test-erlang PROPERTY C_STANDARD 99)
+
+add_executable(test-structs test-structs.c ../src/platforms/${CMAKE_SYSTEM_NAME}/sys.c ../src/platforms/${CMAKE_SYSTEM_NAME}/mapped_file.c)
+target_link_libraries(test-structs libAtomVM)
+set_property(TARGET test-structs PROPERTY C_STANDARD 99)
