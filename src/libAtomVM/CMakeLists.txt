@@ -14,6 +14,7 @@ set(LIBATOMVM_SOURCES
     module.c
     nifs.c
     scheduler.c
+    valueshashtable.c
 )
 
 find_package(ZLIB)
