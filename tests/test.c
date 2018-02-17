@@ -69,8 +69,8 @@ void test_modules_execution()
         MappedFile *beam_file = mapped_file_open_beam(test->test_file);
         assert(beam_file != NULL);
 
-        Module *mod = module_new_from_iff_binary(beam_file->mapped, beam_file->size);
         GlobalContext *glb = globalcontext_new();
+        Module *mod = module_new_from_iff_binary(glb, beam_file->mapped, beam_file->size);
         Context *ctx = context_new(glb);
         ctx->mod = mod;
 

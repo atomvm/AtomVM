@@ -48,6 +48,25 @@ static void module_add_label(Module *mod, int index, void *ptr);
 #undef TRACE
 #undef IMPL_CODE_LOADER
 
+static void module_populate_atoms_table(Module *this_module, uint8_t *table_data)
+{
+    int atoms_count = READ_32_ALIGNED(table_data + 8);
+    const char *current_atom = (const char *) table_data + 12;
+
+    const char *atom = NULL;
+    for (int i = 1; i <= atoms_count; i++) {
+        int atom_len = *current_atom;
+        atom = current_atom;
+
+        if (globalcontext_insert_atom(this_module->global, (AtomString) atom) < 0) {
+            fprintf(stderr, "Cannot allocate memory while loading module\n");
+            abort();
+        }
+
+        current_atom += atom_len + 1;
+    }
+}
+
 static void module_build_imported_functions_table(Module *this_module, uint8_t *table_data, uint8_t *atom_tab)
 {
     int functions_count = READ_32_ALIGNED(table_data + 8);
@@ -91,7 +110,7 @@ static void module_add_label(Module *mod, int index, void *ptr)
     mod->labels[index] = ptr;
 }
 
-Module *module_new_from_iff_binary(void *iff_binary, unsigned long size)
+Module *module_new_from_iff_binary(GlobalContext *global, void *iff_binary, unsigned long size)
 {
     uint8_t *beam_file = (void *) iff_binary;
 
@@ -100,6 +119,9 @@ Module *module_new_from_iff_binary(void *iff_binary, unsigned long size)
     scan_iff(beam_file, size, offsets, sizes);
 
     Module *mod = malloc(sizeof(Module));
+    mod->global = global;
+
+    module_populate_atoms_table(mod, beam_file + offsets[AT8U]);
 
     module_build_imported_functions_table(mod, beam_file + offsets[IMPT], beam_file + offsets[AT8U]);
 

@@ -51,8 +51,8 @@ void app_main()
 
     printf("Booting BEAM file mapped at: %p, size: %i\n", flashed_beam, size);
 
-    Module *mod = module_new_from_iff_binary(flashed_beam, size);
     GlobalContext *glb = globalcontext_new();
+    Module *mod = module_new_from_iff_binary(glb, flashed_beam, size);
     Context *ctx = context_new(glb);
 
     printf("Execute\n");

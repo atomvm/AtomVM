@@ -31,6 +31,7 @@
 
 #include "atom.h"
 #include "context.h"
+#include "globalcontext.h"
 
 typedef term (*BifImpl)();
 typedef term (*BifImpl0)(Context *ctx);
@@ -60,6 +61,8 @@ union imported_func
 
 struct Module
 {
+    GlobalContext *global;
+
     CodeChunk *code;
     void *export_table;
     void *atom_table;
@@ -105,7 +108,7 @@ extern void module_destroy(Module *module);
  * @param iff_binary the IFF file data.
  * @param size the size of the buffer containing the IFF data.
  */
-extern Module *module_new_from_iff_binary(void *iff_binary, unsigned long size);
+extern Module *module_new_from_iff_binary(GlobalContext *global, void *iff_binary, unsigned long size);
 
 /**
  * @brief Gets a literal stored on the literal table of the specified module

@@ -17,8 +17,11 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+#include <limits.h>
+
 #include "globalcontext.h"
 
+#include "atomshashtable.h"
 #include "context.h"
 
 struct RegisteredProcess
@@ -39,6 +42,12 @@ GlobalContext *globalcontext_new()
     glb->registered_processes = NULL;
 
     glb->last_process_id = 0;
+
+    glb->atoms_table = atomshashtable_new();
+    if (!glb->atoms_table) {
+        free(glb);
+        return NULL;
+    }
 
     return glb;
 }
@@ -94,4 +103,19 @@ int globalcontext_get_registered_process(GlobalContext *glb, int atom_index)
     } while (p != registered_processes);
 
     return 0;
+}
+
+int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string)
+{
+    struct AtomsHashTable *htable = glb->atoms_table;
+
+    unsigned long atom_index = atomshashtable_get_value(htable, atom_string, ULONG_MAX);
+    if (atom_index == ULONG_MAX) {
+        atom_index = htable->count;
+        if (!atomshashtable_insert(htable, atom_string, atom_index)) {
+            return -1;
+        }
+    }
+
+    return (int) atom_index;
 }
