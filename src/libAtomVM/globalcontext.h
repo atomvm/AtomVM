@@ -52,6 +52,7 @@ typedef struct
     int32_t last_process_id;
 
     struct AtomsHashTable *atoms_table;
+    struct ValuesHashTable *atoms_ids_table;
 
 } GlobalContext;
 

@@ -22,6 +22,7 @@
 #include "globalcontext.h"
 
 #include "atomshashtable.h"
+#include "valueshashtable.h"
 #include "context.h"
 
 struct RegisteredProcess
@@ -45,6 +46,12 @@ GlobalContext *globalcontext_new()
 
     glb->atoms_table = atomshashtable_new();
     if (!glb->atoms_table) {
+        free(glb);
+        return NULL;
+    }
+    glb->atoms_ids_table = valueshashtable_new();
+    if (!glb->atoms_ids_table) {
+        free(glb->atoms_table);
         free(glb);
         return NULL;
     }
@@ -113,6 +120,9 @@ int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string)
     if (atom_index == ULONG_MAX) {
         atom_index = htable->count;
         if (!atomshashtable_insert(htable, atom_string, atom_index)) {
+            return -1;
+        }
+        if (!valueshashtable_insert(glb->atoms_ids_table, atom_index, (unsigned long) atom_string)) {
             return -1;
         }
     }
