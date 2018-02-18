@@ -68,7 +68,7 @@ int valueshashtable_insert(struct ValuesHashTable *hash_table, unsigned long key
         }
     }
 
-    struct HNode *new_node = malloc(sizeof(struct HNode *));
+    struct HNode *new_node = malloc(sizeof(struct HNode));
     if (!new_node) {
         return 0;
     }

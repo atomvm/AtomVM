@@ -27,7 +27,7 @@
 struct HNode
 {
     struct HNode *next;
-    AtomString *key;
+    AtomString key;
     unsigned long value;
 };
 
@@ -85,7 +85,7 @@ int atomshashtable_insert(struct AtomsHashTable *hash_table, AtomString string, 
         }
     }
 
-    struct HNode *new_node = malloc(sizeof(struct HNode *));
+    struct HNode *new_node = malloc(sizeof(struct HNode));
     if (!new_node) {
         return 0;
     }
