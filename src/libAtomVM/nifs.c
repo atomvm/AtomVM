@@ -218,7 +218,10 @@ term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
     Context *new_ctx = context_new(ctx->global);
     new_ctx->mod = ctx->mod;
 
-    int label = module_search_exported_function(ctx->mod, local_atom_string(ctx->mod->atom_table, term_to_atom_index(argv[1])), term_list_length(argv[2]));
+    int atom_index = term_to_atom_index(argv[1]);
+    AtomString function_string = (AtomString) valueshashtable_get_value(ctx->mod->global->atoms_ids_table, atom_index, (unsigned long) NULL);
+
+    int label = module_search_exported_function(ctx->mod, function_string, term_list_length(argv[2]));
     new_ctx->saved_ip = ctx->mod->labels[label];
 
     return term_from_local_process_id(new_ctx->process_id);
