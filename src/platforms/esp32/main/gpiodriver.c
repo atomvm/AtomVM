@@ -41,6 +41,13 @@
 
 static void consume_gpio_mailbox(Context *ctx);
 
+static const char *const ok_a = "\x2ok";
+static const char *const error_a = "\x5error";
+static const char *const set_level_a = "\x9set_level";
+static const char *const input_a = "\x5input";
+static const char *const output_a = "\x6output";
+static const char *const set_direction_a ="\xDset_direction";
+
 native_handler platform_open_port(const char *driver_name)
 {
     if (!strcmp(driver_name, "gpio")) {
@@ -50,67 +57,52 @@ native_handler platform_open_port(const char *driver_name)
     }
 }
 
-static char *list_to_string(term list)
+static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
 {
-    int len = 0;
-
-    term t = list;
-
-    while (!term_is_nil(t)) {
-        len++;
-        term *t_ptr = term_get_list_ptr(t);
-        t = *t_ptr;
-    }
-
-    t = list;
-    char *str = malloc(len + 1);
-
-    for (int i = 0; i < len; i++) {
-        term *t_ptr = term_get_list_ptr(t);
-        str[i] = (char) term_to_int32(t_ptr[1]);
-        t = *t_ptr;
-    }
-    str[len] = 0;
-
-    return str;
+    int global_atom_index = globalcontext_insert_atom(glb, string);
+    return term_from_atom_index(global_atom_index);
 }
 
 static void consume_gpio_mailbox(Context *ctx)
 {
+    GlobalContext *glb = ctx->global;
+
     term ret;
 
     term msg = mailbox_receive(ctx);
     term pid = term_get_tuple_element(msg, 0);
     term cmd = term_get_tuple_element(msg, 1);
 
-    char *str = list_to_string(cmd);
-    if (!strcmp(str, "set_level")) {
+    if (cmd == term_from_atom_string(glb, set_level_a)) {
         int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
         int32_t level = term_to_int32(term_get_tuple_element(msg, 3));
         gpio_set_level(gpio_num, level != 0);
         TRACE("gpio: set_level: %i %i\n", gpio_num, level != 0);
-        ret = term_nil(); //TODO ok here
-    } else if (!strcmp(str, "set_direction")) {
+        ret = term_from_atom_string(glb, ok_a);
+
+    } else if (cmd == term_from_atom_string(glb, set_direction_a)) {
         int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
-        char *direction = list_to_string(term_get_tuple_element(msg, 3));
-        if (!strcmp("input", direction)) {
+        term direction = term_get_tuple_element(msg, 3);
+
+        if (direction == term_from_atom_string(glb, input_a)) {
             gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
             TRACE("gpio: set_direction: %i INPUT\n", gpio_num);
-            ret = term_nil(); //TODO ok here
-        } else if (!strcmp("output", direction))  {
+            ret = term_from_atom_string(glb, ok_a);
+
+        } else if (direction == term_from_atom_string(glb, output_a)) {
             gpio_set_direction(gpio_num, GPIO_MODE_OUTPUT);
             TRACE("gpio: set_direction: %i OUTPUT\n", gpio_num);
-            ret = term_nil(); //TODO ok here
+            ret = term_from_atom_string(glb, ok_a);
+
         } else {
-            TRACE("gpio: %s is not a direction\n", direction);
-            ret = term_nil(); //TODO error here
+            TRACE("gpio: unrecognized direction\n");
+            ret = term_from_atom_string(glb, error_a);
         }
-        free(direction);
+
     } else {
-        TRACE("gpio: %s is not a call\n", str);
-        ret = term_nil(); //TODO error here
+        TRACE("gpio: unrecognized command\n");
+        ret = term_from_atom_string(glb, error_a);
     }
-    free(str);
 
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
