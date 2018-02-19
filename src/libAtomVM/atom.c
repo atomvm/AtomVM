@@ -24,26 +24,6 @@
 
 #include "utils.h"
 
-AtomString local_atom_string(uint8_t *table_data, int atom_index)
-{
-    int atoms_count = READ_32_ALIGNED(table_data + 8);
-    const char *current_atom = (const char *) table_data + 12;
-
-    if (atom_index > atoms_count) {
-        abort();
-    }
-
-    const char *atom = NULL;
-    for (int i = 1; i <= atom_index; i++) {
-        int atom_len = *current_atom;
-        atom = current_atom;
-
-        current_atom += atom_len + 1;
-    }
-
-    return (AtomString) atom;
-}
-
 void atom_string_to_c(AtomString atom_string, char *buf, int bufsize)
 {
     int atom_len = *((uint8_t *) atom_string);

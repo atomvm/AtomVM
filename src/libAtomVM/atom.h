@@ -32,15 +32,6 @@
 typedef const void * AtomString;
 
 /**
- * @brief Retrieves an AtomString from the atoms table
- *
- * @details Returns the AtomString at specified index in the atom table.
- * @param table_data the atoms table.
- * @param atom_index atoms table atom index.
- */
-extern AtomString local_atom_string(uint8_t *table_data, int atom_index);
-
-/**
  * @brief Gets a C string from an AtomString
  *
  * @details Copies the atom string data to a bufffer and makes it null terminated.
