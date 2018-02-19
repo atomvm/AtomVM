@@ -169,16 +169,27 @@ static inline int32_t term_nil()
 }
 
 /**
- * @brief Gets atom table index
+ * @brief Gets global atom table index
  *
  * @details Returns atom table index for given atom term.
  * @param t the term that will be converted to atom table index. t must be a valid atom term.
- * @return an atom table index.
+ * @return a global atom table index.
  */
-
 static inline int term_to_atom_index(term t)
 {
     return t >> 6;
+}
+
+/**
+ * @brief Term from global atom table index
+ *
+ * @details Returns a term from the given global atom table index.
+ * @param atom_index global atoms table index.
+ * @return a term that encapsulates the atom.
+ */
+static inline int term_from_atom_index(int atom_index)
+{
+    return (atom_index << 6) | 0xB;
 }
 
 /**

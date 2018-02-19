@@ -53,15 +53,24 @@ static void module_populate_atoms_table(Module *this_module, uint8_t *table_data
     int atoms_count = READ_32_ALIGNED(table_data + 8);
     const char *current_atom = (const char *) table_data + 12;
 
+    this_module->local_atoms_to_global_table = calloc(atoms_count + 1, sizeof(int));
+    if (!this_module->local_atoms_to_global_table) {
+        fprintf(stderr, "Cannot allocate memory while loading module\n");
+        abort();
+    }
+
     const char *atom = NULL;
     for (int i = 1; i <= atoms_count; i++) {
         int atom_len = *current_atom;
         atom = current_atom;
 
-        if (globalcontext_insert_atom(this_module->global, (AtomString) atom) < 0) {
+        int global_atom_id = globalcontext_insert_atom(this_module->global, (AtomString) atom);
+        if (global_atom_id < 0) {
             fprintf(stderr, "Cannot allocate memory while loading module\n");
             abort();
         }
+
+        this_module->local_atoms_to_global_table[i] = global_atom_id;
 
         current_atom += atom_len + 1;
     }
@@ -74,8 +83,8 @@ static void module_build_imported_functions_table(Module *this_module, uint8_t *
     this_module->imported_funcs = calloc(functions_count, sizeof(void *));
 
     for (int i = 0; i < functions_count; i++) {
-        AtomString module_atom = local_atom_string(atom_tab, READ_32_ALIGNED(table_data + i * 12 + 12));
-        AtomString function_atom = local_atom_string(atom_tab, READ_32_ALIGNED(table_data + i * 12 + 4 + 12));
+        AtomString module_atom = module_get_atom_string_by_id(this_module, READ_32_ALIGNED(table_data + i * 12 + 12));
+        AtomString function_atom = module_get_atom_string_by_id(this_module, READ_32_ALIGNED(table_data + i * 12 + 4 + 12));
         uint32_t arity = READ_32_ALIGNED(table_data + i * 12 + 8 + 12);
 
         BifImpl bif_handler = bif_registry_get_handler(module_atom, function_atom, arity);
@@ -94,7 +103,7 @@ uint32_t module_search_exported_function(Module *this_module, AtomString func_na
     int functions_count = READ_32_ALIGNED(table_data + 8);
 
     for (int i = 0; i < functions_count; i++) {
-        AtomString function_atom = local_atom_string(this_module->atom_table, READ_32_ALIGNED(table_data + i * 12 + 12));
+        AtomString function_atom = module_get_atom_string_by_id(this_module, READ_32_ALIGNED(table_data + i * 12 + 12));
         int32_t arity = READ_32_ALIGNED(table_data + i * 12 + 4 + 12);
         if ((func_arity == arity) && atom_are_equals(func_name, function_atom)) {
             uint32_t label = READ_32_ALIGNED(table_data + i * 12 + 8 + 12);

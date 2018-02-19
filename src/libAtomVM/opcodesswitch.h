@@ -120,8 +120,7 @@
             if (first_byte == COMPACT_ATOM) {                                                                           \
                 dest_term = term_nil();                                                                                 \
             } else {                                                                                                    \
-                dest_term = ((first_byte >> 4) << 6) | 0xB;                                                             \
-                fprintf(stderr, "TODO: warning: unimplemented atom support\n");                                         \
+                dest_term = module_get_atom_term_by_id(mod, first_byte >> 4);                                           \
             }                                                                                                           \
             next_operand_offset += 1;                                                                                   \
             break;                                                                                                      \

@@ -30,6 +30,7 @@
 #include <stdint.h>
 
 #include "atom.h"
+#include "valueshashtable.h"
 #include "context.h"
 #include "globalcontext.h"
 
@@ -75,6 +76,8 @@ struct Module
     void *literals_data;
     void const* *literals_table;
 
+    int *local_atoms_to_global_table;
+
     int free_literals_data : 1;
 };
 
@@ -118,5 +121,33 @@ extern Module *module_new_from_iff_binary(GlobalContext *global, void *iff_binar
  * @param index a valid literal index.
  */
 extern term module_load_literal(Module *mod, int index);
+
+/**
+ * @brief Gets the AtomString for the given local atom id
+ *
+ * @details Gets an AtomString for the given local atom id from the global table.
+ * @param mod the module that owns the atom.
+ * @param local_atom_id module atom table index.
+ * @return the AtomString for the given module atom index.
+ */
+static inline AtomString module_get_atom_string_by_id(const Module *mod, int local_atom_id)
+{
+    int global_id = mod->local_atoms_to_global_table[local_atom_id];
+    return (AtomString) valueshashtable_get_value(mod->global->atoms_ids_table, global_id, (unsigned long) NULL);
+}
+
+/**
+ * @brief Gets a term for the given local atom id
+ *
+ * @details Gets the global atom id for the the given local atom id and casts it to a term.
+ * @param mod the module that owns the atom.
+ * @param local_atom_id module atom table index.
+ * @return a term for the given module atom index.
+ */
+static inline term module_get_atom_term_by_id(const Module *mod, int local_atom_id)
+{
+    int global_id = mod->local_atoms_to_global_table[local_atom_id];
+    return term_from_atom_index(global_id);
+}
 
 #endif
