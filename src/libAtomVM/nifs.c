@@ -31,6 +31,8 @@
 
 #define MAX_NIF_NAME_LEN 32
 
+static const char *const ok_atom = "\x2ok";
+
 static char *list_to_string(term list);
 static void process_echo_mailbox(Context *ctx);
 static void process_console_mailbox(Context *ctx);
@@ -194,13 +196,15 @@ static void process_console_mailbox(Context *ctx)
     term val = term_get_tuple_element(msg, 1);
 
     char *str = list_to_string(val);
-    int len = strlen(str);
     printf("%s", str);
     free(str);
 
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
-    mailbox_send(target, term_from_int32(len));
+
+    //TODO: use globalcontext_get_atom_id(ctx->global, ok_atom);
+    int ok_index = globalcontext_insert_atom(ctx->global, ok_atom);
+    mailbox_send(target, term_from_atom_index(ok_index));
 }
 
 term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
