@@ -743,10 +743,15 @@
 
                 #ifdef IMPL_EXECUTE_LOOP
                     ctx->saved_ip = mod->labels[label];
+                    ctx->jump_to_on_restore = NULL;
                     Context *scheduled_context = scheduler_wait(ctx->global, ctx, -1);
                     ctx = scheduled_context;
 
-                    JUMP_TO_ADDRESS(scheduled_context->saved_ip);
+                    if (scheduled_context->jump_to_on_restore && ctx->mailbox) {
+                        JUMP_TO_ADDRESS(scheduled_context->jump_to_on_restore);
+                    } else {
+                        JUMP_TO_ADDRESS(scheduled_context->saved_ip);
+                    }
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -767,11 +772,18 @@
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("wait_timeout/2, label: %i, timeout: %x\n", label, term_to_int32(timeout));
 
-                    ctx->saved_ip = mod->labels[label];
+                    NEXT_INSTRUCTION(next_off - 1);
+                    //TODO: it looks like x[0] might be used instead of jump_to_on_restore
+                    ctx->saved_ip = INSTRUCTION_POINTER();
+                    ctx->jump_to_on_restore = mod->labels[label];
                     Context *scheduled_context = scheduler_wait(ctx->global, ctx, term_to_int32(timeout));
                     ctx = scheduled_context;
 
-                    JUMP_TO_ADDRESS(scheduled_context->saved_ip);
+                    if (scheduled_context->jump_to_on_restore && ctx->mailbox) {
+                        JUMP_TO_ADDRESS(scheduled_context->jump_to_on_restore);
+                    } else {
+                        JUMP_TO_ADDRESS(scheduled_context->saved_ip);
+                    }
                 #endif
 
                 #ifdef IMPL_CODE_LOADER

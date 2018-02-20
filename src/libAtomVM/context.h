@@ -57,7 +57,9 @@ struct Context
 
     unsigned long cp;
 
+    //needed for wait and wait_timeout
     const void *saved_ip;
+    const void *jump_to_on_restore;
 
     struct ListHead *mailbox;
 

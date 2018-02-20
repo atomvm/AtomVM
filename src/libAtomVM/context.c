@@ -45,6 +45,9 @@ Context *context_new(GlobalContext *glb)
 
     ctx->native_handler = NULL;
 
+    ctx->saved_ip = NULL;
+    ctx->jump_to_on_restore = NULL;
+
     return ctx;
 }
 
