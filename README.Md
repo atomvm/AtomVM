@@ -29,5 +29,5 @@ $ cmake .
 
 $ make
 
-$ ./src/AtomVM add.beam
+$ ./src/AtomVM hello_world.beam
 ```
