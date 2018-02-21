@@ -34,6 +34,7 @@
 static const char *const ok_atom = "\x2ok";
 
 static char *list_to_string(term list);
+static char *binary_to_string(term binary);
 static void process_echo_mailbox(Context *ctx);
 static void process_console_mailbox(Context *ctx);
 static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[]);
@@ -110,7 +111,13 @@ term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
     Context *new_ctx = context_new(ctx->global);
 
     term t = term_get_tuple_element(argv[0], 1);
-    char *driver_name = list_to_string(t);
+    char *driver_name;
+    if (term_is_list(t)) {
+        driver_name = list_to_string(t);
+    } else {
+        //TODO: check if it is a binary
+        driver_name = binary_to_string(t);
+    }
 
     if (!strcmp("echo", driver_name)) {
         new_ctx->native_handler = process_echo_mailbox;
@@ -182,6 +189,18 @@ static char *list_to_string(term list)
         str[i] = (char) term_to_int32(t_ptr[1]);
         t = *t_ptr;
     }
+    str[len] = 0;
+
+    return str;
+}
+
+static char *binary_to_string(term binary)
+{
+    int len = term_binary_size(binary);
+
+    char *str = malloc(len + 1);
+    memcpy(str, term_binary_data(binary), len);
+
     str[len] = 0;
 
     return str;
