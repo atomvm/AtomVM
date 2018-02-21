@@ -223,7 +223,14 @@ static void process_console_mailbox(Context *ctx)
     term pid = term_get_tuple_element(msg, 0);
     term val = term_get_tuple_element(msg, 1);
 
-    char *str = list_to_string(val);
+    char *str;
+    if (term_is_list(val)) {
+        str = list_to_string(val);
+    } else {
+        //TODO: check if it is a binary
+        str = binary_to_string(val);
+    }
+
     printf("%s", str);
     free(str);
 
