@@ -324,6 +324,23 @@ static inline term term_binary_size(term t)
 }
 
 /**
+ * @brief Gets binary data
+ *
+ * @details Returns a pointer to stored binary data.
+ * @param t a term pointing to binary data. Fails if t is not a binary term.
+ * @return a const char * pointing to binary internal data.
+ */
+static inline const char *term_binary_data(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    if (boxed_value[0] & 0x3F) {
+        return (const char *) boxed_value[1];
+    } else {
+        abort();
+    }
+}
+
+/**
  * @brief Allocates a tuple on the heap
  *
  * @details Allocates an unitialized tuple on the heap with given arity.
