@@ -1,8 +1,8 @@
 defmodule HelloWorld do
 
   def start() do
-    console = do_open_port('console', [])
-    write(console, 'Hello World\n')
+    console = do_open_port("console", [])
+    write(console, "Hello World\n")
   end
 
   defp do_open_port(port_name, param) do
