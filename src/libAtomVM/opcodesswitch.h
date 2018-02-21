@@ -50,6 +50,7 @@
 #define COMPACT_YREG 4
 #define COMPACT_EXTENDED 7
 #define COMPACT_LARGE_INTEGER 9
+#define COMPACT_LARGE_ATOM 10
 
 #define COMPACT_EXTENDED_LITERAL 0x47
 
@@ -87,6 +88,7 @@
             break;                                                                      \
                                                                                         \
         case COMPACT_LARGE_INTEGER:                                                     \
+        case COMPACT_LARGE_ATOM:                                                        \
             switch (first_byte & COMPACT_LARGE_IMM_MASK) {                              \
                 case COMPACT_11BITS_VALUE:                                              \
                     next_operand_offset += 2;                                           \
@@ -140,6 +142,19 @@
                 case COMPACT_EXTENDED_LITERAL:                                                                          \
                     dest_term = module_load_literal(mod, code_chunk[(base_index) + (off) + 1] >> 4);                    \
                     next_operand_offset += 2;                                                                           \
+                    break;                                                                                              \
+            }                                                                                                           \
+            break;                                                                                                      \
+                                                                                                                        \
+        case COMPACT_LARGE_ATOM:                                                                                        \
+            switch (first_byte & COMPACT_LARGE_IMM_MASK) {                                                              \
+                case COMPACT_11BITS_VALUE:                                                                              \
+                    dest_term = module_get_atom_term_by_id(mod, ((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]); \
+                    next_operand_offset += 2;                                                                           \
+                    break;                                                                                              \
+                                                                                                                        \
+                default:                                                                                                \
+                    abort();                                                                                            \
                     break;                                                                                              \
             }                                                                                                           \
             break;                                                                                                      \
