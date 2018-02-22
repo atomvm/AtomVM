@@ -163,7 +163,7 @@ static inline int term_is_tuple(term t)
  * @details Returns always the nil value.
  * @return nil value term.
  */
-static inline int32_t term_nil()
+static inline term term_nil()
 {
     return 0x3B;
 }
@@ -187,7 +187,7 @@ static inline int term_to_atom_index(term t)
  * @param atom_index global atoms table index.
  * @return a term that encapsulates the atom.
  */
-static inline int term_from_atom_index(int atom_index)
+static inline term term_from_atom_index(int atom_index)
 {
     return (atom_index << 6) | 0xB;
 }
