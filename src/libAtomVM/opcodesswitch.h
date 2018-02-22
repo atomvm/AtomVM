@@ -64,17 +64,8 @@
     uint8_t first_byte = (code_chunk[(base_index) + (off)]);                            \
     switch (first_byte & 0xF) {                                                         \
         case COMPACT_SMALLINT4:                                                         \
-            next_operand_offset += 1;                                                   \
-            break;                                                                      \
-                                                                                        \
         case COMPACT_ATOM:                                                              \
-            next_operand_offset += 1;                                                   \
-            break;                                                                      \
-                                                                                        \
         case COMPACT_XREG:                                                              \
-            next_operand_offset += 1;                                                   \
-            break;                                                                      \
-                                                                                        \
         case COMPACT_YREG:                                                              \
             next_operand_offset += 1;                                                   \
             break;                                                                      \
