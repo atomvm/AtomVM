@@ -30,6 +30,15 @@
 #include "bifs_hash.h"
 #pragma GCC diagnostic pop
 
+static const char *const true_atom = "\x04" "true";
+static const char *const false_atom = "\x05" "false";
+
+static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
+{
+    int global_atom_index = globalcontext_insert_atom(glb, string);
+    return term_from_atom_index(global_atom_index);
+}
+
 BifImpl bif_registry_get_handler(AtomString module, AtomString function, int arity)
 {
     char bifname[MAX_BIF_NAME_LEN];
@@ -154,6 +163,92 @@ term bif_erlang_div_2(Context *ctx, uint32_t failure_label, int live, term arg1,
 
     } else {
         printf("div: operands are not integers: arg1=%lx, arg2=%lx\n", arg1, arg2);
+        abort();
+    }
+}
+
+term bif_erlang_not_1(Context *ctx, uint32_t failure_label, int live, term arg1)
+{
+    term true_term = term_from_atom_string(ctx->global, true_atom);
+    term false_term = term_from_atom_string(ctx->global, false_atom);
+
+    if (arg1 == true_term) {
+        return false_term;
+
+    } else if (arg1 == false_term) {
+        return true_term;
+
+    } else {
+        fprintf(stderr, "invalid argument\n");
+        abort();
+    }
+}
+
+term bif_erlang_and_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
+{
+    term true_term = term_from_atom_string(ctx->global, true_atom);
+    term false_term = term_from_atom_string(ctx->global, false_atom);
+
+    if ((arg1 == false_term) && (arg2 == false_term)) {
+        return false_term;
+
+    } else if ((arg1 == false_term) && (arg2 == true_term)) {
+        return false_term;
+
+    } else if ((arg1 == true_term) && (arg2 == false_term)) {
+        return false_term;
+
+    } else if ((arg1 == true_term) && (arg2 == true_term)) {
+        return true_term;
+
+    } else {
+        fprintf(stderr, "invalid argument\n");
+        abort();
+    }
+}
+
+term bif_erlang_or_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
+{
+    term true_term = term_from_atom_string(ctx->global, true_atom);
+    term false_term = term_from_atom_string(ctx->global, false_atom);
+
+    if ((arg1 == false_term) && (arg2 == false_term)) {
+        return false_term;
+
+    } else if ((arg1 == false_term) && (arg2 == true_term)) {
+        return true_term;
+
+    } else if ((arg1 == true_term) && (arg2 == false_term)) {
+        return true_term;
+
+    } else if ((arg1 == true_term) && (arg2 == true_term)) {
+        return true_term;
+
+    } else {
+        fprintf(stderr, "invalid argument\n");
+        abort();
+    }
+}
+
+term bif_erlang_xor_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
+{
+    term true_term = term_from_atom_string(ctx->global, true_atom);
+    term false_term = term_from_atom_string(ctx->global, false_atom);
+
+    if ((arg1 == false_term) && (arg2 == false_term)) {
+        return false_term;
+
+    } else if ((arg1 == false_term) && (arg2 == true_term)) {
+        return true_term;
+
+    } else if ((arg1 == true_term) && (arg2 == false_term)) {
+        return true_term;
+
+    } else if ((arg1 == true_term) && (arg2 == true_term)) {
+        return false_term;
+
+    } else {
+        fprintf(stderr, "invalid argument\n");
         abort();
     }
 }
