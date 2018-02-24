@@ -47,4 +47,7 @@ term bif_erlang_and_2(Context *ctx, uint32_t failure_label, int live, term arg1,
 term bif_erlang_or_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
 term bif_erlang_xor_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
 
+term bif_erlang_equal_to_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
+term bif_erlang_not_equal_to_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
+
 #endif

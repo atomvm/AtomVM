@@ -16,6 +16,8 @@ erlang:not\1, bif_erlang_not_1
 erlang:and\2, bif_erlang_and_2
 erlang:or\2, bif_erlang_or_2
 erlang:xor\2, bif_erlang_xor_2
+erlang:==\2, bif_erlang_equal_to_2
+erlang:/=\2, bif_erlang_not_equal_to_2
 erlang:+\2, bif_erlang_add_2
 erlang:-\2, bif_erlang_sub_2
 erlang:*\2, bif_erlang_mul_2

@@ -252,3 +252,25 @@ term bif_erlang_xor_2(Context *ctx, uint32_t failure_label, int live, term arg1,
         abort();
     }
 }
+
+term bif_erlang_equal_to_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
+{
+    //TODO: fix this implementation
+    //it should compare any kind of type, and 5.0 == 5
+    if (arg1 == arg2) {
+        term_from_atom_string(ctx->global, true_atom);
+    } else {
+        term_from_atom_string(ctx->global, false_atom);
+    }
+}
+
+term bif_erlang_not_equal_to_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
+{
+    //TODO: fix this implementation
+    //it should compare any kind of type, and 5.0 != 5 is false
+    if (arg1 != arg2) {
+        term_from_atom_string(ctx->global, true_atom);
+    } else {
+        term_from_atom_string(ctx->global, false_atom);
+    }
+}
