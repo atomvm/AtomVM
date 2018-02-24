@@ -58,6 +58,7 @@ struct Test tests[] =
     {"erlang_tests/test_regecho_driver.beam", 11},
     {"erlang_tests/state_test.beam", 3},
     {"erlang_tests/booleans_test.beam", 4},
+    {"erlang_tests/booleans2_test.beam", 2},
     {NULL, 0}
 };
 
