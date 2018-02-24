@@ -1077,7 +1077,7 @@
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    int jmp_to_default = 1;
+                    void *jump_to_address = NULL;
                 #endif
 
                 for (int j = 0; j < size / 2; j++) {
@@ -1091,16 +1091,17 @@
                     #endif
 
                     #ifdef IMPL_EXECUTE_LOOP
-                        if (jmp_to_default && (src_value == cmp_value)) {
-                            JUMP_TO_ADDRESS(mod->labels[jmp_label]);
-                            jmp_to_default = 0;
+                        if (!jump_to_address && (src_value == cmp_value)) {
+                            jump_to_address = mod->labels[jmp_label];
                         }
                     #endif
                 }
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (jmp_to_default) {
+                    if (!jump_to_address) {
                         JUMP_TO_ADDRESS(mod->labels[default_label]);
+                    } else {
+                        JUMP_TO_ADDRESS(jump_to_address);
                     }
                 #endif
 
@@ -1130,7 +1131,7 @@
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    int jmp_to_default = 1;
+                    void *jump_to_address = NULL;
                 #endif
 
                 for (int j = 0; j < size / 2; j++) {
@@ -1144,16 +1145,17 @@
                     #endif
 
                     #ifdef IMPL_EXECUTE_LOOP
-                        if (jmp_to_default && (term_get_tuple_arity(src_value) == cmp_value)) {
-                            JUMP_TO_ADDRESS(mod->labels[jmp_label]);
-                            jmp_to_default = 0;
+                        if (!jump_to_address && (term_get_tuple_arity(src_value) == cmp_value)) {
+                            jump_to_address = mod->labels[jmp_label];
                         }
                     #endif
                 }
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (jmp_to_default) {
+                    if (!jump_to_address) {
                         JUMP_TO_ADDRESS(mod->labels[default_label]);
+                    } else {
+                        JUMP_TO_ADDRESS(jump_to_address);
                     }
                 #endif
 
