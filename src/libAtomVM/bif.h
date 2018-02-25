@@ -40,6 +40,7 @@ extern term bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, ter
 extern term bif_erlang_sub_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
 extern term bif_erlang_mul_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
 extern term bif_erlang_div_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
+term bif_erlang_rem_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
 
 //TODO: they are not gc bifs
 term bif_erlang_not_1(Context *ctx, uint32_t failure_label, int live, term arg1);

@@ -22,4 +22,5 @@ erlang:+\2, bif_erlang_add_2
 erlang:-\2, bif_erlang_sub_2
 erlang:*\2, bif_erlang_mul_2
 erlang:div\2, bif_erlang_div_2
+erlang:rem\2, bif_erlang_rem_2
 erlang:hd\1, bif_erlang_hd_1

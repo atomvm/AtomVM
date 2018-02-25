@@ -167,6 +167,29 @@ term bif_erlang_div_2(Context *ctx, uint32_t failure_label, int live, term arg1,
     }
 }
 
+term bif_erlang_rem_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
+{
+    UNUSED(ctx);
+    UNUSED(failure_label);
+    UNUSED(live);
+
+    if (term_is_integer(arg1) && term_is_integer(arg2)) {
+        int32_t operand_b = term_to_int32(arg2);
+        if (operand_b != 0) {
+            return term_from_int32(term_to_int32(arg1) % operand_b);
+
+        } else {
+            fprintf(stderr, "error: division by 0");
+            abort();
+        }
+
+    } else {
+        printf("rem: operands are not integers: arg1=%lx, arg2=%lx\n", arg1, arg2);
+        abort();
+    }
+
+}
+
 term bif_erlang_not_1(Context *ctx, uint32_t failure_label, int live, term arg1)
 {
     term true_term = term_from_atom_string(ctx->global, true_atom);
