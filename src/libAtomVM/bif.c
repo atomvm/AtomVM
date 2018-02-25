@@ -297,3 +297,23 @@ term bif_erlang_not_equal_to_2(Context *ctx, uint32_t failure_label, int live, t
         term_from_atom_string(ctx->global, false_atom);
     }
 }
+
+term bif_erlang_exactly_equal_to_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
+{
+    //TODO: fix this implementation, it needs to cover more types
+    if (arg1 == arg2) {
+        term_from_atom_string(ctx->global, true_atom);
+    } else {
+        term_from_atom_string(ctx->global, false_atom);
+    }
+}
+
+term bif_erlang_exactly_not_equal_to_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
+{
+    //TODO: fix this implementation, it needs to cover more types
+    if (arg1 != arg2) {
+        term_from_atom_string(ctx->global, true_atom);
+    } else {
+        term_from_atom_string(ctx->global, false_atom);
+    }
+}
