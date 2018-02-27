@@ -73,7 +73,11 @@
         case COMPACT_EXTENDED:                                                          \
             switch (first_byte) {                                                       \
                 case COMPACT_EXTENDED_LITERAL:                                          \
-                    next_operand_offset += 2;                                           \
+                    if (code_chunk[(base_index) + (off) + 1] == 0x8) {                  \
+                        next_operand_offset += 3;                                       \
+                    } else {                                                            \
+                        next_operand_offset += 2;                                       \
+                    }                                                                   \
                     break;                                                              \
             }                                                                           \
             break;                                                                      \
@@ -130,10 +134,17 @@
                                                                                                                         \
         case COMPACT_EXTENDED:                                                                                          \
             switch (first_byte) {                                                                                       \
-                case COMPACT_EXTENDED_LITERAL:                                                                          \
-                    dest_term = module_load_literal(mod, code_chunk[(base_index) + (off) + 1] >> 4);                    \
-                    next_operand_offset += 2;                                                                           \
+                case COMPACT_EXTENDED_LITERAL: {                                                                        \
+                    uint8_t first_extended_byte = code_chunk[(base_index) + (off) + 1];                                 \
+                    if (first_extended_byte == 8) {                                                                     \
+                        dest_term = module_load_literal(mod, code_chunk[(base_index) + (off) + 2]);                     \
+                        next_operand_offset += 3;                                                                       \
+                    } else {                                                                                            \
+                        dest_term = module_load_literal(mod, first_extended_byte >> 4);                                 \
+                        next_operand_offset += 2;                                                                       \
+                    }                                                                                                   \
                     break;                                                                                              \
+                }                                                                                                       \
             }                                                                                                           \
             break;                                                                                                      \
                                                                                                                         \
