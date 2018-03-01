@@ -72,17 +72,17 @@
                                                                                         \
         case COMPACT_EXTENDED:                                                          \
             switch (first_byte) {                                                       \
-                case COMPACT_EXTENDED_LITERAL:                                          \
-                    if (!(code_chunk[(base_index) + (off) + 1] & 0xF)) {                \
+                case COMPACT_EXTENDED_LITERAL: {                                        \
+                    uint8_t ext = (code_chunk[(base_index) + (off) + 1] & 0xF);         \
+                    if (ext == 0) {                                                     \
                         next_operand_offset += 2;                                       \
-                    }else if (code_chunk[(base_index) + (off) + 1] == 0x8) {            \
+                    }else if (ext == 0x8) {                                             \
                         next_operand_offset += 3;                                       \
-                    } else if (code_chunk[(base_index) + (off) + 1] == 0x28) {          \
-                        next_operand_offset += 4;                                       \
                     } else {                                                            \
                         abort();                                                        \
                     }                                                                   \
                     break;                                                              \
+                }                                                                       \
             }                                                                           \
             break;                                                                      \
                                                                                         \
@@ -140,18 +140,14 @@
             switch (first_byte) {                                                                                       \
                 case COMPACT_EXTENDED_LITERAL: {                                                                        \
                     uint8_t first_extended_byte = code_chunk[(base_index) + (off) + 1];                                 \
-                    if (!(first_extended_byte & 0xF)) {                                                                \
+                    if (!(first_extended_byte & 0xF)) {                                                                 \
                         dest_term = module_load_literal(mod, first_extended_byte >> 4);                                 \
                         next_operand_offset += 2;                                                                       \
-                    }else if (first_extended_byte == 0x8) {                                                             \
-                        dest_term = module_load_literal(mod, code_chunk[(base_index) + (off) + 2]);                     \
-                        next_operand_offset += 3;                                                                       \
-                    } else if (code_chunk[(base_index) + (off) + 1] == 0x28) {                                          \
+                    } else if ((first_extended_byte & 0xF) == 0x8) {                                                    \
                         uint8_t byte_1 = code_chunk[(base_index) + (off) + 2];                                          \
-                        uint8_t byte_2 = code_chunk[(base_index) + (off) + 3];                                          \
-                        uint16_t index = (uint16_t) (byte_1) | ((uint16_t) (byte_2 & 0x7F)) << 7;                       \
+                        uint16_t index = (((uint16_t) first_extended_byte & 0xE0) << 3) | byte_1;                       \
                         dest_term = module_load_literal(mod, index);                                                    \
-                        next_operand_offset += 4;                                                                       \
+                        next_operand_offset += 3;                                                                       \
                     } else {                                                                                            \
                         abort();                                                                                        \
                     }                                                                                                   \
