@@ -30,6 +30,8 @@ compile_erlang(state_test)
 compile_erlang(booleans_test)
 compile_erlang(booleans2_test)
 compile_erlang(rem_and_comp_test)
+compile_erlang(lowercase)
+compile_erlang(huge)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -52,4 +54,6 @@ add_custom_target(erlang_test_modules DEPENDS
     booleans_test.beam
     booleans2_test.beam
     rem_and_comp_test.beam
+    lowercase.beam
+    huge.beam
 )

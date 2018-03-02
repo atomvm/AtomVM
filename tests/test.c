@@ -61,6 +61,7 @@ struct Test tests[] =
     {"erlang_tests/booleans2_test.beam", 2},
     {"erlang_tests/rem_and_comp_test.beam", 4},
     {"erlang_tests/lowercase.beam", 15},
+    {"erlang_tests/huge.beam", 31},
     {NULL, 0}
 };
 
