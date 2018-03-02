@@ -62,6 +62,7 @@ struct Test tests[] =
     {"erlang_tests/rem_and_comp_test.beam", 4},
     {"erlang_tests/lowercase.beam", 15},
     {"erlang_tests/huge.beam", 31},
+    {"erlang_tests/patternmatchfunc.beam", 102},
     {NULL, 0}
 };
 

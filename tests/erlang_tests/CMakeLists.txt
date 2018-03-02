@@ -32,6 +32,7 @@ compile_erlang(booleans2_test)
 compile_erlang(rem_and_comp_test)
 compile_erlang(lowercase)
 compile_erlang(huge)
+compile_erlang(patternmatchfunc)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -56,4 +57,5 @@ add_custom_target(erlang_test_modules DEPENDS
     rem_and_comp_test.beam
     lowercase.beam
     huge.beam
+    patternmatchfunc.beam
 )
