@@ -4,6 +4,7 @@ project (libAtomVM)
 set(LIBATOMVM_SOURCES
     atom.c
     atomshashtable.c
+    avmpack.c
     bif.c
     context.c
     debug.c
