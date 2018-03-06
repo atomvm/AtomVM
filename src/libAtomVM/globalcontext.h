@@ -54,6 +54,9 @@ typedef struct
     struct AtomsHashTable *atoms_table;
     struct ValuesHashTable *atoms_ids_table;
 
+    void *avmpack_data;
+    void *avmpack_platform_data;
+
 } GlobalContext;
 
 /**

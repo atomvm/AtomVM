@@ -54,12 +54,6 @@ MappedFile *mapped_file_open_beam(const char *file_name)
         return NULL;
     }
 
-    if (memcmp(mf->mapped, "FOR1", 4)) {
-        fprintf(stderr, "%s is not a BEAM file.\n", file_name);
-        mapped_file_close(mf);
-        return NULL;
-    }
-
     return mf;
 }
 

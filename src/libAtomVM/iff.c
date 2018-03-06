@@ -34,6 +34,11 @@ static uint32_t iff_align(uint32_t size)
     return ((size + 4 - 1) >> 2) << 2;
 }
 
+int iff_is_valid_beam(const void *beam_data)
+{
+    return memcmp(beam_data, "FOR1", 4) == 0;
+}
+
 void scan_iff(uint8_t *data, int buf_size, unsigned long *offsets, unsigned long *sizes)
 {
     memset(offsets, 0, sizeof(unsigned long) * MAX_OFFS);

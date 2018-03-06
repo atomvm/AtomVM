@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include "atom.h"
+#include "avmpack.h"
 #include "bif.h"
 #include "context.h"
 #include "globalcontext.h"
@@ -38,24 +39,49 @@ int main(int argc, char **argv)
         printf("Need .beam file\n");
         return EXIT_FAILURE;
     }
-    MappedFile *beam_file = mapped_file_open_beam(argv[1]);
-    if (!beam_file) {
+    MappedFile *mapped_file = mapped_file_open_beam(argv[1]);
+    if (!mapped_file) {
         return EXIT_FAILURE;
     }
 
     GlobalContext *glb = globalcontext_new();
-    Module *mod = module_new_from_iff_binary(glb, beam_file->mapped, beam_file->size);
+
+    const void *startup_beam;
+    uint32_t startup_beam_size;
+
+    if (avmpack_is_valid(mapped_file->mapped, mapped_file->size)) {
+        glb->avmpack_data = mapped_file->mapped;
+        glb->avmpack_platform_data = mapped_file;
+
+        if (!avmpack_find_section_by_flag(mapped_file->mapped, 1, &startup_beam, &startup_beam_size)) {
+            fprintf(stderr, "%s cannot be started.\n", argv[1]);
+            mapped_file_close(mapped_file);
+            return EXIT_FAILURE;
+        }
+    } else if (iff_is_valid_beam(mapped_file->mapped)) {
+        glb->avmpack_data = NULL;
+        glb->avmpack_platform_data = NULL;
+        startup_beam = mapped_file->mapped;
+        startup_beam_size = mapped_file->size;
+
+    } else {
+        fprintf(stderr, "%s is not a BEAM file.\n", argv[1]);
+        mapped_file_close(mapped_file);
+        return EXIT_FAILURE;
+    }
+
+    Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
     Context *ctx = context_new(glb);
     ctx->mod = mod;
 
-    context_execute_loop(ctx, mod, beam_file->mapped, "start", 0);
+    context_execute_loop(ctx, mod, mapped_file->mapped, "start", 0);
 
     printf("Return value: %lx\n", ctx->x[0]);
 
     context_destroy(ctx);
     globalcontext_destroy(glb);
     module_destroy(mod);
-    mapped_file_close(beam_file);
+    mapped_file_close(mapped_file);
 
     return EXIT_SUCCESS;
 }
