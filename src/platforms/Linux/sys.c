@@ -19,6 +19,8 @@
 
 #include "sys.h"
 
+#include "avmpack.h"
+#include "mapped_file.h"
 #include "scheduler.h"
 #include "utils.h"
 
@@ -27,6 +29,16 @@
 #include <stdint.h>
 #include <time.h>
 #include <unistd.h>
+
+//#define ENABLE_TRACE
+
+#ifndef TRACE
+    #ifdef ENABLE_TRACE
+        #define TRACE printf
+    #else
+        #define TRACE(...)
+    #endif
+#endif
 
 static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *timespec2);
 
@@ -132,6 +144,29 @@ extern void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t m
     clock_gettime(CLOCK_MONOTONIC, t);
     t->tv_sec += millis / 1000;
     t->tv_nsec += (millis % 1000) * 1000000;
+}
+
+Module *sys_load_module(GlobalContext *global, const char *module_name)
+{
+    TRACE("sys_load_module: Going to load: %s\n", module_name);
+
+    const void *beam_module = NULL;
+    uint32_t beam_module_size = 0;
+
+    MappedFile *beam_file = NULL;
+    if (!(global->avmpack_data && avmpack_find_section_by_name(global->avmpack_data, module_name, &beam_module, &beam_module_size))) {
+        beam_file = mapped_file_open_beam(module_name);
+        if (!iff_is_valid_beam(beam_file->mapped)) {
+            fprintf(stderr, "%s is not a valid BEAM file.\n", module_name);
+        }
+        beam_module = beam_file->mapped;
+        beam_module_size = beam_file->size;
+    }
+
+    Module *new_module = module_new_from_iff_binary(global, beam_module, beam_module_size);
+    new_module->module_platform_data = beam_file;
+
+    return new_module;
 }
 
 static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *timespec2)

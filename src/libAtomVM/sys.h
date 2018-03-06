@@ -27,7 +27,10 @@
 #ifndef _SYS_H_
 #define _SYS_H_
 
+#include "globalcontext.h"
 #include "linkedlist.h"
+#include "module.h"
+
 #include <stdint.h>
 #include <time.h>
 
@@ -60,5 +63,14 @@ extern void sys_waitevents(struct ListHead *listeners_list);
  * @param millis ammount of milliseconds relative to current timestamp.
  */
 extern void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis);
+
+/**
+ * @brief Loads a BEAM module using platform dependent methods.
+ *
+ * @details Loads a BEAM module into memory using platform dependent methods and returns a pointer to a Module struct.
+ * @param global the global context.
+ * @param module_name the name of the BEAM file (e.g. "mymodule.beam").
+ */
+Module *sys_load_module(GlobalContext *global, const char *module_name);
 
 #endif

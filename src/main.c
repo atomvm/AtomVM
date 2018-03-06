@@ -71,6 +71,7 @@ int main(int argc, char **argv)
     }
 
     Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
+    mod->module_platform_data = NULL;
     Context *ctx = context_new(glb);
     ctx->mod = mod;
 

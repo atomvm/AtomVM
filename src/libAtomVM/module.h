@@ -78,6 +78,8 @@ struct Module
 
     int *local_atoms_to_global_table;
 
+    void *module_platform_data;
+
     int free_literals_data : 1;
 };
 

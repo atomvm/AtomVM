@@ -19,6 +19,7 @@
 
 #include "sys.h"
 
+#include "avmpack.h"
 #include "scheduler.h"
 
 #include "freertos/FreeRTOS.h"
@@ -94,4 +95,20 @@ extern void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t m
     clock_gettime(t);
     t->tv_sec += millis / 1000;
     t->tv_nsec += (millis % 1000) * 1000000;
+}
+
+Module *sys_load_module(GlobalContext *global, const char *module_name)
+{
+    const void *beam_module = NULL;
+    uint32_t beam_module_size = 0;
+
+    if (!(global->avmpack_data && avmpack_find_section_by_name(global->avmpack_data, module_name, &beam_module, &beam_module_size))) {
+        fprintf(stderr, "Failed to open module: %s\n", module_name);
+        return NULL;
+    }
+
+    Module *new_module = module_new_from_iff_binary(global, beam_module, beam_module_size);
+    new_module->module_platform_data = NULL;
+
+    return new_module;
 }
