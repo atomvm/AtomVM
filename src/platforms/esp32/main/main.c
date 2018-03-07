@@ -25,6 +25,7 @@
 #include "nvs_flash.h"
 
 #include "atom.h"
+#include "avmpack.h"
 #include "bif.h"
 #include "context.h"
 #include "globalcontext.h"
@@ -33,7 +34,7 @@
 #include "utils.h"
 #include "term.h"
 
-const void *beam_partition(int *size);
+const void *avm_partition(int *size);
 
 esp_err_t event_handler(void *ctx, system_event_t *event)
 {
@@ -47,31 +48,43 @@ void app_main()
     ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL));
 
     int size;
-    const void *flashed_beam = beam_partition(&size);
+    const void *flashed_avm = avm_partition(&size);
 
-    printf("Booting BEAM file mapped at: %p, size: %i\n", flashed_beam, size);
+    uint32_t startup_beam_size;
+    const void *startup_beam;
+
+    printf("Booting file mapped at: %p, size: %i\n", flashed_avm, size);
 
     GlobalContext *glb = globalcontext_new();
-    Module *mod = module_new_from_iff_binary(glb, flashed_beam, size);
+
+    if (!avmpack_is_valid(flashed_avm, size) || !avmpack_find_section_by_flag(flashed_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size)) {
+        fprintf(stderr, "error: invalid AVM Pack\n");
+        abort();
+    }
+
+    glb->avmpack_data = flashed_avm;
+    glb->avmpack_platform_data = NULL;
+
+    Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
     Context *ctx = context_new(glb);
 
     printf("Execute\n");
-    context_execute_loop(ctx, mod, flashed_beam, "start", 0);
+    context_execute_loop(ctx, mod, startup_beam, "start", 0);
     printf("Return value: %lx\n", (long) term_to_int32(ctx->x[0]));
 
     while(1);
 }
 
-const void *beam_partition(int *size)
+const void *avm_partition(int *size)
 {
-    const esp_partition_t *partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "main.beam");
+    const esp_partition_t *partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "main.avm");
     if (!partition) {
-        printf("BEAM partition not found.\n");
+        printf("AVM partition not found.\n");
         *size = 0;
         return NULL;
 
     } else {
-        printf("Found BEAM partition: size: %i, address: 0x%x\n", partition->size, partition->address);
+        printf("Found AVM partition: size: %i, address: 0x%x\n", partition->size, partition->address);
         *size = partition->size;
     }
 
