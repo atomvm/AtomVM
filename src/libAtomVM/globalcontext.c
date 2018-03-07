@@ -18,11 +18,13 @@
  ***************************************************************************/
 
 #include <limits.h>
+#include <string.h>
 
 #include "globalcontext.h"
 
 #include "atomshashtable.h"
 #include "valueshashtable.h"
+#include "sys.h"
 #include "context.h"
 
 struct RegisteredProcess
@@ -51,6 +53,16 @@ GlobalContext *globalcontext_new()
     }
     glb->atoms_ids_table = valueshashtable_new();
     if (!glb->atoms_ids_table) {
+        free(glb->atoms_table);
+        free(glb);
+        return NULL;
+    }
+
+
+    glb->loaded_modules_count = 0;
+    glb->modules_table = atomshashtable_new();
+    if (!glb->modules_table) {
+        free(glb->atoms_ids_table);
         free(glb->atoms_table);
         free(glb);
         return NULL;
@@ -128,4 +140,31 @@ int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string)
     }
 
     return (int) atom_index;
+}
+
+Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_atom)
+{
+    Module *found_module = (Module *) atomshashtable_get_value(global->modules_table, module_name_atom, (unsigned long) NULL);
+
+    if (!found_module) {
+        char *module_name = malloc(256 + 5);
+        if (!module_name) {
+            return NULL;
+        }
+
+        atom_string_to_c(module_name_atom, module_name, 256);
+        strcat(module_name, ".beam");
+        Module *loaded_module = sys_load_module(global, module_name);
+        free(module_name);
+
+        if (!loaded_module || !atomshashtable_insert(global->modules_table, module_name_atom, global->loaded_modules_count)) {
+            return NULL;
+        }
+
+        global->loaded_modules_count++;
+
+        return loaded_module;
+    }
+
+    return found_module;
 }

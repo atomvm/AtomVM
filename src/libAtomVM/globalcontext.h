@@ -41,6 +41,13 @@ typedef struct Context Context;
 
 struct GlobalContext;
 
+#ifndef TYPEDEF_MODULE
+#define TYPEDEF_MODULE
+typedef struct Module Module;
+#endif
+
+struct Module;
+
 typedef struct
 {
     struct ListHead *ready_processes;
@@ -53,6 +60,8 @@ typedef struct
 
     struct AtomsHashTable *atoms_table;
     struct ValuesHashTable *atoms_ids_table;
+    struct AtomsHashTable *modules_table;
+    int loaded_modules_count;
 
     void *avmpack_data;
     void *avmpack_platform_data;
@@ -123,5 +132,15 @@ int globalcontext_get_registered_process(GlobalContext *glb, int atom_index);
  * @returns newly added atom id or -1 in case of failure.
  */
 int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string);
+
+/**
+ * @brief Returns the module with the given name
+ *
+ * @details Tries to get the module with the given name from the modules table and eventually loads it.
+ * @param global the global context.
+ * @param module_name_atom the module name.
+ * @returns a pointer to a Module struct.
+ */
+Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_atom);
 
 #endif
