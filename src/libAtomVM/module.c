@@ -83,8 +83,10 @@ static void module_build_imported_functions_table(Module *this_module, uint8_t *
     this_module->imported_funcs = calloc(functions_count, sizeof(void *));
 
     for (int i = 0; i < functions_count; i++) {
-        AtomString module_atom = module_get_atom_string_by_id(this_module, READ_32_ALIGNED(table_data + i * 12 + 12));
-        AtomString function_atom = module_get_atom_string_by_id(this_module, READ_32_ALIGNED(table_data + i * 12 + 4 + 12));
+        int local_module_atom_index = READ_32_ALIGNED(table_data + i * 12 + 12);
+        int local_function_atom_index = READ_32_ALIGNED(table_data + i * 12 + 4 + 12);
+        AtomString module_atom = module_get_atom_string_by_id(this_module, local_module_atom_index);
+        AtomString function_atom = module_get_atom_string_by_id(this_module, local_function_atom_index);
         uint32_t arity = READ_32_ALIGNED(table_data + i * 12 + 8 + 12);
 
         BifImpl bif_handler = bif_registry_get_handler(module_atom, function_atom, arity);
@@ -93,6 +95,20 @@ static void module_build_imported_functions_table(Module *this_module, uint8_t *
             this_module->imported_funcs[i].bif = bif_handler;
         } else {
             this_module->imported_funcs[i].func = &nifs_get(module_atom, function_atom, arity)->base;
+        }
+
+        if (!this_module->imported_funcs[i].func) {
+            struct UnresolvedFunctionCall *unresolved = malloc(sizeof(struct UnresolvedFunctionCall));
+            if (!unresolved) {
+                fprintf(stderr, "Cannot allocate memory while loading module\n");
+                abort();
+            }
+            unresolved->base.type = UnresolvedFunctionCall;
+            unresolved->module_atom_index = this_module->local_atoms_to_global_table[local_module_atom_index];
+            unresolved->function_atom_index = this_module->local_atoms_to_global_table[local_function_atom_index];
+            unresolved->arity = arity;
+
+            this_module->imported_funcs[i].func = &unresolved->base;
         }
     }
 }

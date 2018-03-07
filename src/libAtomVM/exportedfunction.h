@@ -34,7 +34,8 @@ typedef term (*NifImpl)(Context *ctx, int argc, term argv[]);
 enum FunctionType
 {
     InvalidFunctionType = 0,
-    NIFFunctionType = 2
+    NIFFunctionType = 2,
+    UnresolvedFunctionCall = 3
 };
 
 struct ExportedFunction
@@ -48,7 +49,18 @@ struct Nif
     NifImpl nif_ptr;
 };
 
+struct UnresolvedFunctionCall
+{
+    struct ExportedFunction base;
+    int module_atom_index;
+    int function_atom_index;
+    int arity;
+};
+
 #define EXPORTED_FUNCTION_TO_NIF(func) \
     ((const struct Nif *) (((char *) (func)) - ((unsigned long) &((const struct Nif *) 0)->base)))
+
+#define EXPORTED_FUNCTION_TO_UNRESOLVED_FUNCTION_CALL(func) \
+    ((const struct UnresolvedFunctionCall *) (((char *) (func)) - ((unsigned long) &((const struct UnresolvedFunctionCall *) 0)->base)))
 
 #endif
