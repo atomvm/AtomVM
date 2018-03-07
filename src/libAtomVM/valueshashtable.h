@@ -17,7 +17,7 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#ifndef _VALUESSHASHTABLE_H_
+#ifndef _VALUESHASHTABLE_H_
 #define _VALUESHASHTABLE_H_
 
 struct ValuesHashTable
