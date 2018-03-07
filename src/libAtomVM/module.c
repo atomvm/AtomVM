@@ -246,3 +246,30 @@ term module_load_literal(Module *mod, int index)
 {
     return externalterm_to_term(mod->literals_table[index]);
 }
+
+const struct ExportedFunction *module_resolve_function(Module *mod, int import_table_index, struct ExportedFunction *func)
+{
+    struct UnresolvedFunctionCall *unresolved = EXPORTED_FUNCTION_TO_UNRESOLVED_FUNCTION_CALL(func);
+
+    AtomString module_name_atom = (AtomString) valueshashtable_get_value(mod->global->atoms_ids_table, unresolved->module_atom_index, (unsigned long) NULL);
+    AtomString function_name_atom = (AtomString) valueshashtable_get_value(mod->global->atoms_ids_table, unresolved->function_atom_index, (unsigned long) NULL);
+    int arity = unresolved->arity;
+
+    Module *found_module = globalcontext_get_module(mod->global, module_name_atom);
+
+    if (found_module) {
+        int exported_label = module_search_exported_function(found_module, function_name_atom, arity);
+        struct ModuleFunction *mfunc = malloc(sizeof(struct ModuleFunction));
+        if (!mfunc) {
+            fprintf(stderr, "Cannot allocate memory.");
+            return NULL;
+        }
+        mfunc->base.type = ModuleFunction;
+        mfunc->target = found_module;
+        mfunc->label = exported_label;
+
+        free(unresolved);
+        mod->imported_funcs[import_table_index].func = &mfunc->base;
+        return &mfunc->base;
+    }
+}

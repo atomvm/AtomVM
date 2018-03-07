@@ -152,4 +152,14 @@ static inline term module_get_atom_term_by_id(const Module *mod, int local_atom_
     return term_from_atom_index(global_id);
 }
 
+/**
+ * @brief Resolves an unresolved function reference
+ *
+ * @details Resolves an unresolved function reference and it replaces the unresolved reference with a ModuleFunction struct,
+ * also it loads the referenced module if it hasn't been loaded yet.
+ * @param import_table_index the unresolved function index.
+ * @param func the unresolved function placeholder struct.
+ */
+const struct ExportedFunction *module_resolve_function(Module *mod, int import_table_index, struct ExportedFunction *func);
+
 #endif

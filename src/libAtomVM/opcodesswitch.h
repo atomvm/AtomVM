@@ -1393,6 +1393,11 @@
 
                 #ifdef IMPL_EXECUTE_LOOP
                     const struct ExportedFunction *func = mod->imported_funcs[index].func;
+
+                    if (func->type == UnresolvedFunctionCall) {
+                        func = module_resolve_function(mod, index, func);
+                    }
+
                     switch (func->type) {
                         case NIFFunctionType: {
                             const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
@@ -1402,6 +1407,16 @@
                             }
 
                             JUMP_TO_ADDRESS(ctx->cp);
+
+                            break;
+                        }
+                        case ModuleFunction: {
+                            const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
+
+                            mod = jump->target;
+                            chunk = mod->code;
+
+                            JUMP_TO_ADDRESS(mod->labels[jump->label]);
 
                             break;
                         }

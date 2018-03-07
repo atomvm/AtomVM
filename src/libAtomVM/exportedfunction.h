@@ -35,7 +35,8 @@ enum FunctionType
 {
     InvalidFunctionType = 0,
     NIFFunctionType = 2,
-    UnresolvedFunctionCall = 3
+    UnresolvedFunctionCall = 3,
+    ModuleFunction = 4
 };
 
 struct ExportedFunction
@@ -57,10 +58,20 @@ struct UnresolvedFunctionCall
     int arity;
 };
 
+struct ModuleFunction
+{
+    struct ExportedFunction base;
+    Module *target;
+    int label;
+};
+
 #define EXPORTED_FUNCTION_TO_NIF(func) \
     ((const struct Nif *) (((char *) (func)) - ((unsigned long) &((const struct Nif *) 0)->base)))
 
 #define EXPORTED_FUNCTION_TO_UNRESOLVED_FUNCTION_CALL(func) \
     ((const struct UnresolvedFunctionCall *) (((char *) (func)) - ((unsigned long) &((const struct UnresolvedFunctionCall *) 0)->base)))
+
+#define EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func) \
+    ((const struct ModuleFunction *) (((char *) (func)) - ((unsigned long) &((const struct ModuleFunction *) 0)->base)))
 
 #endif
