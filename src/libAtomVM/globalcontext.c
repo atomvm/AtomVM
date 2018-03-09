@@ -58,7 +58,7 @@ GlobalContext *globalcontext_new()
         return NULL;
     }
 
-
+    glb->modules_by_index = NULL;
     glb->loaded_modules_count = 0;
     glb->modules_table = atomshashtable_new();
     if (!glb->modules_table) {
@@ -142,6 +142,34 @@ int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string)
     return (int) atom_index;
 }
 
+int globalcontext_insert_module(GlobalContext *global, Module *module, AtomString module_name_atom)
+{
+    if (!atomshashtable_insert(global->modules_table, module_name_atom, module)) {
+        return -1;
+    }
+
+    int module_index = global->loaded_modules_count;
+
+    Module **new_modules_by_index = calloc(module_index + 1, sizeof(Module *));
+    if (!new_modules_by_index) {
+        abort();
+    }
+    if (global->modules_by_index) {
+        for (int i = 0; i < module_index; i++) {
+            new_modules_by_index[i] = global->modules_by_index[i];
+        }
+        free(global->modules_by_index);
+    }
+
+    module->module_index = module_index;
+
+    global->modules_by_index = new_modules_by_index;
+    global->modules_by_index[module_index] = module;
+    global->loaded_modules_count++;
+
+    return module_index;
+}
+
 Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_atom)
 {
     Module *found_module = (Module *) atomshashtable_get_value(global->modules_table, module_name_atom, (unsigned long) NULL);
@@ -157,11 +185,9 @@ Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_a
         Module *loaded_module = sys_load_module(global, module_name);
         free(module_name);
 
-        if (!loaded_module || !atomshashtable_insert(global->modules_table, module_name_atom, global->loaded_modules_count)) {
+        if (!loaded_module || (globalcontext_insert_module(global, loaded_module, module_name_atom) < 0)) {
             return NULL;
         }
-
-        global->loaded_modules_count++;
 
         return loaded_module;
     }

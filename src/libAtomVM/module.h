@@ -80,6 +80,8 @@ struct Module
 
     void *module_platform_data;
 
+    int module_index;
+
     int free_literals_data : 1;
 };
 

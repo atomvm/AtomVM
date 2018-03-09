@@ -144,6 +144,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, void *iff_binary, unsi
     scan_iff(beam_file, size, offsets, sizes);
 
     Module *mod = malloc(sizeof(Module));
+    mod->module_index = -1;
     mod->global = global;
 
     module_populate_atoms_table(mod, beam_file + offsets[AT8U]);

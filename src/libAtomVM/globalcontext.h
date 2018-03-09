@@ -61,6 +61,7 @@ typedef struct
     struct AtomsHashTable *atoms_table;
     struct ValuesHashTable *atoms_ids_table;
     struct AtomsHashTable *modules_table;
+    Module **modules_by_index;
     int loaded_modules_count;
 
     void *avmpack_data;
@@ -132,6 +133,17 @@ int globalcontext_get_registered_process(GlobalContext *glb, int atom_index);
  * @returns newly added atom id or -1 in case of failure.
  */
 int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string);
+
+/**
+ * @brief Inserts a module to the modules table.
+ *
+ * @details Inserts an already loaded module to the modules table and assigns and index to it so it can be retrieved later by name or index.
+ * @param global the global context.
+ * @param module the module that will be added to the modules table.
+ * @param module_name_atom the module name (as AtomString).
+ * @returns the module index if successful, otherwise -1.
+ */
+int globalcontext_insert_module(GlobalContext *global, Module *module, AtomString module_name_atom);
 
 /**
  * @brief Returns the module with the given name
