@@ -134,6 +134,16 @@ int globalcontext_get_registered_process(GlobalContext *glb, int atom_index);
  */
 int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string);
 
+/*
+ * @brief Insert an already loaded module with a certain filename to the modules table.
+ *
+ * @details Insert an already loaded module to the modules table using the filename without ".beam" as the module name.
+ * @param glb the global context.
+ * @param module the module that will be added to the modules table.
+ * @param filename module filename (without the path).
+ */
+void globalcontext_insert_module_with_filename(GlobalContext *glb, Module *module, char *filename);
+
 /**
  * @brief Inserts a module to the modules table.
  *

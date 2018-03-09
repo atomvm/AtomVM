@@ -170,6 +170,25 @@ int globalcontext_insert_module(GlobalContext *global, Module *module, AtomStrin
     return module_index;
 }
 
+void globalcontext_insert_module_with_filename(GlobalContext *glb, Module *module, char *filename)
+{
+    int len = strnlen(filename, 260);
+    int len_without_ext = len - strlen(".beam");
+
+    if (strcmp(filename + len_without_ext, ".beam") != 0) {
+        printf("File isn't a .beam file\n");
+        abort();
+    }
+
+    char *atom_string = malloc(len_without_ext + 1);
+    memcpy(atom_string + 1, filename, len_without_ext);
+    atom_string[0] = len_without_ext;
+
+    if (globalcontext_insert_module(glb, module, atom_string) < 0) {
+        abort();
+    }
+}
+
 Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_atom)
 {
     Module *found_module = (Module *) atomshashtable_get_value(global->modules_table, module_name_atom, (unsigned long) NULL);

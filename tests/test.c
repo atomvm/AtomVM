@@ -41,28 +41,28 @@ struct Test{
 
 struct Test tests[] =
 {
-    {"erlang_tests/add.beam", 17},
-    {"erlang_tests/fact.beam", 120},
-    {"erlang_tests/mutrec.beam", 6},
-    {"erlang_tests/morelabels.beam", 6},
-    {"erlang_tests/biggerintegers.beam", 550},
-    {"erlang_tests/biggerdifference.beam", 250},
-    {"erlang_tests/moreintegertests.beam", 32},
-    {"erlang_tests/send_receive.beam", 18},
-    {"erlang_tests/byte_size_test.beam", 10},
-    {"erlang_tests/tuple.beam", 6},
-    {"erlang_tests/len_test.beam", 5},
-    {"erlang_tests/count_char.beam", 2},
-    {"erlang_tests/makelist_test.beam", 532},
-    {"erlang_tests/test_echo_driver.beam", 84},
-    {"erlang_tests/test_regecho_driver.beam", 11},
-    {"erlang_tests/state_test.beam", 3},
-    {"erlang_tests/booleans_test.beam", 4},
-    {"erlang_tests/booleans2_test.beam", 2},
-    {"erlang_tests/rem_and_comp_test.beam", 4},
-    {"erlang_tests/lowercase.beam", 15},
-    {"erlang_tests/huge.beam", 31},
-    {"erlang_tests/patternmatchfunc.beam", 102},
+    {"add.beam", 17},
+    {"fact.beam", 120},
+    {"mutrec.beam", 6},
+    {"morelabels.beam", 6},
+    {"biggerintegers.beam", 550},
+    {"biggerdifference.beam", 250},
+    {"moreintegertests.beam", 32},
+    {"send_receive.beam", 18},
+    {"byte_size_test.beam", 10},
+    {"tuple.beam", 6},
+    {"len_test.beam", 5},
+    {"count_char.beam", 2},
+    {"makelist_test.beam", 532},
+    {"test_echo_driver.beam", 84},
+    {"test_regecho_driver.beam", 11},
+    {"state_test.beam", 3},
+    {"booleans_test.beam", 4},
+    {"booleans2_test.beam", 2},
+    {"rem_and_comp_test.beam", 4},
+    {"lowercase.beam", 15},
+    {"huge.beam", 31},
+    {"patternmatchfunc.beam", 102},
     {NULL, 0}
 };
 
@@ -70,13 +70,20 @@ void test_modules_execution()
 {
     struct Test *test = tests;
 
+    if (chdir("erlang_tests")) {
+        return EXIT_FAILURE;
+    }
+
     do {
         printf("-- EXECUTING TEST: %s\n", test->test_file);
         MappedFile *beam_file = mapped_file_open_beam(test->test_file);
         assert(beam_file != NULL);
 
         GlobalContext *glb = globalcontext_new();
+        glb->avmpack_data = NULL;
+        glb->avmpack_platform_data = NULL;
         Module *mod = module_new_from_iff_binary(glb, beam_file->mapped, beam_file->size);
+        globalcontext_insert_module_with_filename(glb, mod, test->test_file);
         Context *ctx = context_new(glb);
         ctx->mod = mod;
 
