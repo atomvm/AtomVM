@@ -318,8 +318,19 @@
 #define INSTRUCTION_POINTER() \
     ((unsigned long) &chunk->code[i])
 
+#define DO_RETURN() \
+    mod = mod->global->modules_by_index[ctx->cp >> 24]; \
+    chunk = mod->code; \
+    i = ctx->cp & 0xFFFFFF;
+
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+
+static inline term module_address(unsigned int module_index, unsigned int instruction_index)
+{
+    return (term) ((module_index << 24) | instruction_index);
+}
 
 #ifdef IMPL_CODE_LOADER
     int read_core_chunk(Module *mod)
@@ -409,7 +420,7 @@
 
                 #ifdef IMPL_EXECUTE_LOOP
                     NEXT_INSTRUCTION(next_offset - 1);
-                    ctx->cp = INSTRUCTION_POINTER();
+                    ctx->cp = module_address(mod->module_index, i);
 
                     JUMP_TO_ADDRESS(mod->labels[label]);
                 #endif
@@ -476,22 +487,33 @@
                 USED_BY_TRACE(arity);
                 USED_BY_TRACE(index);
 
+                NEXT_INSTRUCTION(2);
+
                 #ifdef IMPL_EXECUTE_LOOP
                     const struct ExportedFunction *func = mod->imported_funcs[index].func;
+
+                    if (func->type == UnresolvedFunctionCall) {
+                        func = module_resolve_function(mod, index, func);
+                    }
+
                     switch (func->type) {
                         case NIFFunctionType: {
                             const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
                             ctx->x[0] = nif->nif_ptr(ctx, arity, ctx->x);
                             break;
                         }
-                        default: {
-                            fprintf(stderr, "Unsupported function type.\n");
-                            abort();
+                        case ModuleFunction: {
+                            const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
+
+                            ctx->cp = module_address(mod->module_index, i);
+                            mod = jump->target;
+                            chunk = mod->code;
+                            JUMP_TO_ADDRESS(mod->labels[jump->label]);
+
+                            break;
                         }
                     }
                 #endif
-
-                NEXT_INSTRUCTION(2);
 
                 break;
             }
@@ -713,7 +735,7 @@
                         return 0;
                     }
 
-                    JUMP_TO_ADDRESS(ctx->cp);
+                    DO_RETURN();
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -1406,7 +1428,7 @@
                                 return 0;
                             }
 
-                            JUMP_TO_ADDRESS(ctx->cp);
+                            DO_RETURN();
 
                             break;
                         }
