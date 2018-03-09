@@ -273,4 +273,8 @@ const struct ExportedFunction *module_resolve_function(Module *mod, int import_t
         mod->imported_funcs[import_table_index].func = &mfunc->base;
         return &mfunc->base;
     }
+
+    fprintf(stderr, "warning: module has not been loaded.\n");
+
+    return NULL;
 }
