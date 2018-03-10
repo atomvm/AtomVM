@@ -63,6 +63,7 @@ struct Test tests[] =
     {"lowercase.beam", 15},
     {"huge.beam", 31},
     {"patternmatchfunc.beam", 102},
+    {"moda.beam", 44},
     {NULL, 0}
 };
 

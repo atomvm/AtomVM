@@ -33,6 +33,9 @@ compile_erlang(rem_and_comp_test)
 compile_erlang(lowercase)
 compile_erlang(huge)
 compile_erlang(patternmatchfunc)
+compile_erlang(moda)
+compile_erlang(modb)
+compile_erlang(modc)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -58,4 +61,7 @@ add_custom_target(erlang_test_modules DEPENDS
     lowercase.beam
     huge.beam
     patternmatchfunc.beam
+    moda.beam
+    modb.beam
+    modc.beam
 )
