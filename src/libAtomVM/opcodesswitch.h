@@ -407,7 +407,16 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
             case OP_INT_CALL_END: {
                 TRACE("int_call_end!\n");
+
+            #ifdef IMPL_CODE_LOADER
+                TRACE("-- Code loading finished --\n");
                 return 1;
+            #endif
+
+            #ifdef IMPL_EXECUTE_LOOP
+                TRACE("-- Code execution finished --\n");
+                abort();
+            #endif
             }
 
             case OP_CALL: {
