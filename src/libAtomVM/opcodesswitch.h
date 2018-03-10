@@ -276,6 +276,7 @@
 #define OP_CALL_LAST 5
 #define OP_CALL_ONLY 6
 #define OP_CALL_EXT 7
+#define OP_CALL_EXT_LAST 8
 #define OP_BIF0 9
 #define OP_BIF1 10
 #define OP_BIF2 11
@@ -513,6 +514,54 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                             break;
                         }
                     }
+                #endif
+
+                break;
+            }
+
+            case OP_CALL_EXT_LAST: {
+                int arity = chunk->code[i + 1] >> 4;
+                int next_offset = 2;
+                int index = 0;
+                DECODE_LABEL(index, chunk->code, i, next_offset, next_offset)
+                int n_words = chunk->code[i + next_offset] >> 4;
+                UNUSED(n_words)
+
+                TRACE("call_ext_last/3, arity=%i, index=%i, n_words=%i\n", arity, index, n_words);
+                USED_BY_TRACE(arity);
+                USED_BY_TRACE(index);
+                USED_BY_TRACE(n_words);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    ctx->cp = ctx->e[n_words];
+                    ctx->e += (n_words + 1);
+
+                    const struct ExportedFunction *func = mod->imported_funcs[index].func;
+
+                    if (func->type == UnresolvedFunctionCall) {
+                        func = module_resolve_function(mod, index, func);
+                    }
+
+                    switch (func->type) {
+                        case NIFFunctionType: {
+                            const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
+                            ctx->x[0] = nif->nif_ptr(ctx, arity, ctx->x);
+                            break;
+                        }
+                        case ModuleFunction: {
+                            const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
+
+                            mod = jump->target;
+                            chunk = mod->code;
+                            JUMP_TO_ADDRESS(mod->labels[jump->label]);
+
+                            break;
+                        }
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    NEXT_INSTRUCTION(next_offset + 1 - 1);
                 #endif
 
                 break;
