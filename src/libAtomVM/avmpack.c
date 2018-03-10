@@ -51,7 +51,7 @@ int avmpack_is_valid(const void *avmpack_binary, uint32_t size)
     return memcmp(avmpack_binary, pack_header, AVMPACK_SIZE) == 0;
 }
 
-int avmpack_find_section_by_flag(const void *avmpack_binary, int flags_mask, const void **ptr, uint32_t *size)
+int avmpack_find_section_by_flag(const void *avmpack_binary, int flags_mask, const void **ptr, uint32_t *size, const char **name)
 {
     int offset = AVMPACK_SIZE;
     const uint32_t *flags;
@@ -66,6 +66,7 @@ int avmpack_find_section_by_flag(const void *avmpack_binary, int flags_mask, con
 
             *ptr = sizes + 3 + section_name_len/sizeof(uint32_t);
             *size = ENDIAN_SWAP_32(*sizes);
+            *name = (const char *) (sizes + 3);
             return 1;
         }
 

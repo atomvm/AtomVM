@@ -52,12 +52,13 @@ void app_main()
 
     uint32_t startup_beam_size;
     const void *startup_beam;
+    const char *startup_module_name;
 
     printf("Booting file mapped at: %p, size: %i\n", flashed_avm, size);
 
     GlobalContext *glb = globalcontext_new();
 
-    if (!avmpack_is_valid(flashed_avm, size) || !avmpack_find_section_by_flag(flashed_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size)) {
+    if (!avmpack_is_valid(flashed_avm, size) || !avmpack_find_section_by_flag(flashed_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
         fprintf(stderr, "error: invalid AVM Pack\n");
         abort();
     }
@@ -66,9 +67,11 @@ void app_main()
     glb->avmpack_platform_data = NULL;
 
     Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
+    globalcontext_insert_module_with_filename(glb, mod, startup_module_name);
     Context *ctx = context_new(glb);
 
-    printf("Execute\n");
+    printf("Starting: %s...\n", startup_module_name);
+    printf("---\n");
     context_execute_loop(ctx, mod, startup_beam, "start", 0);
     printf("Return value: %lx\n", (long) term_to_int32(ctx->x[0]));
 

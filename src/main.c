@@ -48,12 +48,13 @@ int main(int argc, char **argv)
 
     const void *startup_beam;
     uint32_t startup_beam_size;
+    const char *startup_module_name = argv[1];
 
     if (avmpack_is_valid(mapped_file->mapped, mapped_file->size)) {
         glb->avmpack_data = mapped_file->mapped;
         glb->avmpack_platform_data = mapped_file;
 
-        if (!avmpack_find_section_by_flag(mapped_file->mapped, 1, &startup_beam, &startup_beam_size)) {
+        if (!avmpack_find_section_by_flag(mapped_file->mapped, 1, &startup_beam, &startup_beam_size, &startup_module_name)) {
             fprintf(stderr, "%s cannot be started.\n", argv[1]);
             mapped_file_close(mapped_file);
             return EXIT_FAILURE;
@@ -71,9 +72,7 @@ int main(int argc, char **argv)
     }
 
     Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
-    if (!glb->avmpack_data) {
-        globalcontext_insert_module_with_filename(glb, mod, argv[1]);
-    }
+    globalcontext_insert_module_with_filename(glb, mod, startup_module_name);
     mod->module_platform_data = NULL;
     Context *ctx = context_new(glb);
     ctx->mod = mod;
