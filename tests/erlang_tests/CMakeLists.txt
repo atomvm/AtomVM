@@ -36,6 +36,11 @@ compile_erlang(patternmatchfunc)
 compile_erlang(moda)
 compile_erlang(modb)
 compile_erlang(modc)
+compile_erlang(state_test2)
+compile_erlang(state_test2_sender)
+compile_erlang(state_test3)
+compile_erlang(state_test3_server)
+
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -64,4 +69,8 @@ add_custom_target(erlang_test_modules DEPENDS
     moda.beam
     modb.beam
     modc.beam
+    state_test2.beam
+    state_test2_sender.beam
+    state_test3.beam
+    state_test3_server.beam
 )
