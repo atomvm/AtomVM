@@ -126,6 +126,8 @@ int main(int argc, char **argv)
             free(deflated);
         }
 
+        pad_and_align(pack);
+
         size_t end_of_module_pos = ftell(pack);
 
         size_t size = end_of_module_pos - zero_pos;
