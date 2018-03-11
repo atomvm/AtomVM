@@ -68,9 +68,6 @@ struct Context
 
     //Ports support
     native_handler native_handler;
-
-    //FIXME: this is a workaround to get spawn working
-    Module *mod;
 };
 
 #ifndef TYPEDEF_CONTEXT

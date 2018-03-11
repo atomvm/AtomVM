@@ -86,7 +86,6 @@ void test_modules_execution()
         Module *mod = module_new_from_iff_binary(glb, beam_file->mapped, beam_file->size);
         globalcontext_insert_module_with_filename(glb, mod, test->test_file);
         Context *ctx = context_new(glb);
-        ctx->mod = mod;
 
         context_execute_loop(ctx, mod, beam_file->mapped, "start", 0);
 
