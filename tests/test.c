@@ -64,6 +64,8 @@ struct Test tests[] =
     {"huge.beam", 31},
     {"patternmatchfunc.beam", 102},
     {"moda.beam", 44},
+    {"state_test2.beam", 3},
+    {"state_test3.beam", 3},
     {NULL, 0}
 };
 
