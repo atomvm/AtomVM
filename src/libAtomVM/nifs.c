@@ -279,12 +279,12 @@ term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
 term nif_erlang_send_2(Context *ctx, int argc, term argv[])
 {
     if (argc != 2) {
-        fprintf(stderr, "spawn: wrong args count\n");
+        fprintf(stderr, "send: wrong args count\n");
         abort();
     }
 
     if (!term_is_pid(argv[0])) {
-        fprintf(stderr, "spawn: invalid arguments\n");
+        fprintf(stderr, "send: invalid arguments\n");
         abort();
     }
 
