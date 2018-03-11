@@ -257,11 +257,21 @@ term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
     Context *new_ctx = context_new(ctx->global);
     new_ctx->mod = ctx->mod;
 
-    int atom_index = term_to_atom_index(argv[1]);
-    AtomString function_string = (AtomString) valueshashtable_get_value(ctx->mod->global->atoms_ids_table, atom_index, (unsigned long) NULL);
+    int mod_atom_index = term_to_atom_index(argv[0]);
+    AtomString module_string = (AtomString) valueshashtable_get_value(ctx->mod->global->atoms_ids_table, mod_atom_index, (unsigned long) NULL);
+    int func_atom_index = term_to_atom_index(argv[1]);
+    AtomString function_string = (AtomString) valueshashtable_get_value(ctx->mod->global->atoms_ids_table, func_atom_index, (unsigned long) NULL);
 
-    int label = module_search_exported_function(ctx->mod, function_string, term_list_length(argv[2]));
-    new_ctx->saved_ip = ctx->mod->labels[label];
+    Module *found_module = globalcontext_get_module(ctx->global, module_string);
+    if (!found_module) {
+        //TODO: return undef here
+        abort();
+    }
+
+    int label = module_search_exported_function(found_module, function_string, term_list_length(argv[2]));
+    //TODO: fail here if no function has been found
+    new_ctx->saved_module = found_module;
+    new_ctx->saved_ip = found_module->labels[label];
 
     return term_from_local_process_id(new_ctx->process_id);
 }

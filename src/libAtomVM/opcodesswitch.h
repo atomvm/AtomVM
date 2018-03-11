@@ -886,9 +886,12 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #ifdef IMPL_EXECUTE_LOOP
                     ctx->saved_ip = mod->labels[label];
                     ctx->jump_to_on_restore = NULL;
+                    ctx->saved_module = mod;
                     Context *scheduled_context = scheduler_wait(ctx->global, ctx, -1);
                     ctx = scheduled_context;
 
+                    mod = ctx->saved_module;
+                    chunk = mod->code;
                     if (scheduled_context->jump_to_on_restore && ctx->mailbox) {
                         JUMP_TO_ADDRESS(scheduled_context->jump_to_on_restore);
                     } else {
@@ -918,9 +921,12 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     //TODO: it looks like x[0] might be used instead of jump_to_on_restore
                     ctx->saved_ip = INSTRUCTION_POINTER();
                     ctx->jump_to_on_restore = mod->labels[label];
+                    ctx->saved_module = mod;
                     Context *scheduled_context = scheduler_wait(ctx->global, ctx, term_to_int32(timeout));
                     ctx = scheduled_context;
 
+                    mod = ctx->saved_module;
+                    chunk = mod->code;
                     if (scheduled_context->jump_to_on_restore && ctx->mailbox) {
                         JUMP_TO_ADDRESS(scheduled_context->jump_to_on_restore);
                     } else {

@@ -58,6 +58,7 @@ struct Context
     unsigned long cp;
 
     //needed for wait and wait_timeout
+    Module *saved_module;
     const void *saved_ip;
     const void *jump_to_on_restore;
 
