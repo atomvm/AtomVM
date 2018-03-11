@@ -31,7 +31,8 @@
 
 #define MAX_NIF_NAME_LEN 32
 
-static const char *const ok_atom = "\x2ok";
+static const char *const ok_atom = "\x2" "ok";
+static const char *const undefined_atom = "\x9" "undefined";
 
 static char *list_to_string(term list);
 static char *binary_to_string(term binary);
@@ -165,7 +166,8 @@ term nif_erlang_whereis_1(Context *ctx, int argc, term argv[])
     if (local_process_id) {
         return term_from_local_process_id(local_process_id);
     } else {
-        return term_nil();
+        int undefined_index = globalcontext_insert_atom(ctx->global, undefined_atom);
+        return term_from_atom_index(undefined_index);
     }
 }
 

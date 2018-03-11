@@ -110,6 +110,10 @@ void globalcontext_register_process(GlobalContext *glb, int atom_index, int loca
 
 int globalcontext_get_registered_process(GlobalContext *glb, int atom_index)
 {
+    if (!glb->registered_processes) {
+        return 0;
+    }
+
     const struct RegisteredProcess *registered_processes = GET_LIST_ENTRY(glb->registered_processes, struct RegisteredProcess, registered_processes_list_head);
 
     const struct RegisteredProcess *p = registered_processes;
