@@ -192,6 +192,9 @@ term bif_erlang_rem_2(Context *ctx, uint32_t failure_label, int live, term arg1,
 
 term bif_erlang_not_1(Context *ctx, uint32_t failure_label, int live, term arg1)
 {
+    UNUSED(failure_label);
+    UNUSED(live);
+
     term true_term = term_from_atom_string(ctx->global, true_atom);
     term false_term = term_from_atom_string(ctx->global, false_atom);
 
@@ -209,6 +212,9 @@ term bif_erlang_not_1(Context *ctx, uint32_t failure_label, int live, term arg1)
 
 term bif_erlang_and_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
 {
+    UNUSED(failure_label);
+    UNUSED(live);
+
     term true_term = term_from_atom_string(ctx->global, true_atom);
     term false_term = term_from_atom_string(ctx->global, false_atom);
 
@@ -232,6 +238,9 @@ term bif_erlang_and_2(Context *ctx, uint32_t failure_label, int live, term arg1,
 
 term bif_erlang_or_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
 {
+    UNUSED(failure_label);
+    UNUSED(live);
+
     term true_term = term_from_atom_string(ctx->global, true_atom);
     term false_term = term_from_atom_string(ctx->global, false_atom);
 
@@ -255,6 +264,9 @@ term bif_erlang_or_2(Context *ctx, uint32_t failure_label, int live, term arg1, 
 
 term bif_erlang_xor_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
 {
+    UNUSED(failure_label);
+    UNUSED(live);
+
     term true_term = term_from_atom_string(ctx->global, true_atom);
     term false_term = term_from_atom_string(ctx->global, false_atom);
 
@@ -278,6 +290,9 @@ term bif_erlang_xor_2(Context *ctx, uint32_t failure_label, int live, term arg1,
 
 term bif_erlang_equal_to_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
 {
+    UNUSED(failure_label);
+    UNUSED(live);
+
     //TODO: fix this implementation
     //it should compare any kind of type, and 5.0 == 5
     if (arg1 == arg2) {
@@ -289,6 +304,9 @@ term bif_erlang_equal_to_2(Context *ctx, uint32_t failure_label, int live, term 
 
 term bif_erlang_not_equal_to_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
 {
+    UNUSED(failure_label);
+    UNUSED(live);
+
     //TODO: fix this implementation
     //it should compare any kind of type, and 5.0 != 5 is false
     if (arg1 != arg2) {
@@ -300,6 +318,9 @@ term bif_erlang_not_equal_to_2(Context *ctx, uint32_t failure_label, int live, t
 
 term bif_erlang_exactly_equal_to_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
 {
+    UNUSED(failure_label);
+    UNUSED(live);
+
     //TODO: fix this implementation, it needs to cover more types
     if (arg1 == arg2) {
         term_from_atom_string(ctx->global, true_atom);
@@ -310,6 +331,9 @@ term bif_erlang_exactly_equal_to_2(Context *ctx, uint32_t failure_label, int liv
 
 term bif_erlang_exactly_not_equal_to_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
 {
+    UNUSED(failure_label);
+    UNUSED(live);
+
     //TODO: fix this implementation, it needs to cover more types
     if (arg1 != arg2) {
         term_from_atom_string(ctx->global, true_atom);
