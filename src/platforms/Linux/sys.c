@@ -20,6 +20,7 @@
 #include "sys.h"
 
 #include "avmpack.h"
+#include "iff.h"
 #include "mapped_file.h"
 #include "scheduler.h"
 #include "utils.h"
