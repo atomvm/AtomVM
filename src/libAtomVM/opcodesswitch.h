@@ -522,6 +522,10 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                             break;
                         }
+                        default: {
+                            fprintf(stderr, "Invalid function type %i at index: %i\n", func->type, index);
+                            abort();
+                        }
                     }
                 #endif
 
@@ -565,6 +569,10 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                             JUMP_TO_ADDRESS(mod->labels[jump->label]);
 
                             break;
+                        }
+                        default: {
+                            fprintf(stderr, "Invalid function type %i at index: %i\n", func->type, index);
+                            abort();
                         }
                     }
                 #endif
