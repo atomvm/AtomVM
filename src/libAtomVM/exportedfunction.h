@@ -69,7 +69,7 @@ struct ModuleFunction
     ((const struct Nif *) (((char *) (func)) - ((unsigned long) &((const struct Nif *) 0)->base)))
 
 #define EXPORTED_FUNCTION_TO_UNRESOLVED_FUNCTION_CALL(func) \
-    ((const struct UnresolvedFunctionCall *) (((char *) (func)) - ((unsigned long) &((const struct UnresolvedFunctionCall *) 0)->base)))
+    ((struct UnresolvedFunctionCall *) (((char *) (func)) - ((unsigned long) &((struct UnresolvedFunctionCall *) 0)->base)))
 
 #define EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func) \
     ((const struct ModuleFunction *) (((char *) (func)) - ((unsigned long) &((const struct ModuleFunction *) 0)->base)))
