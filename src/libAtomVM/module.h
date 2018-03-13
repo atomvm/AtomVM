@@ -162,6 +162,6 @@ static inline term module_get_atom_term_by_id(const Module *mod, int local_atom_
  * @param import_table_index the unresolved function index.
  * @param func the unresolved function placeholder struct.
  */
-const struct ExportedFunction *module_resolve_function(Module *mod, int import_table_index, struct ExportedFunction *func);
+const struct ExportedFunction *module_resolve_function(Module *mod, int import_table_index);
 
 #endif

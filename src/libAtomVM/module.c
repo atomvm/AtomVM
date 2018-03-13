@@ -248,8 +248,9 @@ term module_load_literal(Module *mod, int index)
     return externalterm_to_term(mod->literals_table[index]);
 }
 
-const struct ExportedFunction *module_resolve_function(Module *mod, int import_table_index, struct ExportedFunction *func)
+const struct ExportedFunction *module_resolve_function(Module *mod, int import_table_index)
 {
+    struct ExportedFunction *func = (struct ExportedFunction *) mod->imported_funcs[import_table_index].func;
     struct UnresolvedFunctionCall *unresolved = EXPORTED_FUNCTION_TO_UNRESOLVED_FUNCTION_CALL(func);
 
     AtomString module_name_atom = (AtomString) valueshashtable_get_value(mod->global->atoms_ids_table, unresolved->module_atom_index, (unsigned long) NULL);

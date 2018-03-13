@@ -503,7 +503,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     const struct ExportedFunction *func = mod->imported_funcs[index].func;
 
                     if (func->type == UnresolvedFunctionCall) {
-                        func = module_resolve_function(mod, index, func);
+                        func = module_resolve_function(mod, index);
                     }
 
                     switch (func->type) {
@@ -552,7 +552,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     const struct ExportedFunction *func = mod->imported_funcs[index].func;
 
                     if (func->type == UnresolvedFunctionCall) {
-                        func = module_resolve_function(mod, index, func);
+                        func = module_resolve_function(mod, index);
                     }
 
                     switch (func->type) {
@@ -1489,7 +1489,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     const struct ExportedFunction *func = mod->imported_funcs[index].func;
 
                     if (func->type == UnresolvedFunctionCall) {
-                        func = module_resolve_function(mod, index, func);
+                        func = module_resolve_function(mod, index);
                     }
 
                     switch (func->type) {
