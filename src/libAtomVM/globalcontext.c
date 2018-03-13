@@ -174,7 +174,7 @@ int globalcontext_insert_module(GlobalContext *global, Module *module, AtomStrin
     return module_index;
 }
 
-void globalcontext_insert_module_with_filename(GlobalContext *glb, Module *module, char *filename)
+void globalcontext_insert_module_with_filename(GlobalContext *glb, Module *module, const char *filename)
 {
     int len = strnlen(filename, 260);
     int len_without_ext = len - strlen(".beam");

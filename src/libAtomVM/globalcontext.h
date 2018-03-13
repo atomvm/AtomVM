@@ -142,7 +142,7 @@ int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string);
  * @param module the module that will be added to the modules table.
  * @param filename module filename (without the path).
  */
-void globalcontext_insert_module_with_filename(GlobalContext *glb, Module *module, char *filename);
+void globalcontext_insert_module_with_filename(GlobalContext *glb, Module *module, const char *filename);
 
 /**
  * @brief Inserts a module to the modules table.
