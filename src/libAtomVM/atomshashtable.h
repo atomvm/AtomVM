@@ -34,4 +34,6 @@ int atomshashtable_insert(struct AtomsHashTable *hash_table, AtomString string, 
 unsigned long atomshashtable_get_value(const struct AtomsHashTable *hash_table, AtomString string, unsigned long default_value);
 int atomshashtable_has_key(const struct AtomsHashTable *hash_table, AtomString string);
 
+#define TO_ATOMSHASHTABLE_VALUE(value) ((unsigned long) (value))
+
 #endif

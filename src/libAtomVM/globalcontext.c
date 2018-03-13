@@ -148,7 +148,7 @@ int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string)
 
 int globalcontext_insert_module(GlobalContext *global, Module *module, AtomString module_name_atom)
 {
-    if (!atomshashtable_insert(global->modules_table, module_name_atom, module)) {
+    if (!atomshashtable_insert(global->modules_table, module_name_atom, TO_ATOMSHASHTABLE_VALUE(module))) {
         return -1;
     }
 
