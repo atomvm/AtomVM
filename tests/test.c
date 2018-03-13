@@ -69,7 +69,7 @@ struct Test tests[] =
     {NULL, 0}
 };
 
-void test_modules_execution()
+int test_modules_execution()
 {
     struct Test *test = tests;
 
@@ -103,6 +103,8 @@ void test_modules_execution()
 
         test++;
     } while (test->test_file);
+
+    return EXIT_SUCCESS;
 }
 
 int main(int argc, char **argv)
@@ -111,7 +113,5 @@ int main(int argc, char **argv)
 
     chdir(dirname(argv[0]));
 
-    test_modules_execution();
-
-    return EXIT_SUCCESS;
+    return test_modules_execution();
 }
