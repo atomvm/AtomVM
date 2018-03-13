@@ -41,7 +41,7 @@
  * @param size will be set to the file section size that has been found, if the section has not been found it will not be updated.
  * @returns 1 if the file section has been found, 0 otherwise.
  */
-int avmpack_find_section_by_flag(const void *avmpack_binary, int flags_mask, const void **ptr, uint32_t *size, const char **name);
+int avmpack_find_section_by_flag(const void *avmpack_binary, uint32_t flags_mask, const void **ptr, uint32_t *size, const char **name);
 
 /**
  * @brief Finds an AVM Pack section that has certain name.
