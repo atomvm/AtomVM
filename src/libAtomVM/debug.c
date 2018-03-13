@@ -38,7 +38,6 @@ void debug_print_processes_list(struct ListHead *processes)
     }
 
     Context *context = contexts;
-    Context *next_context;
     printf("Processes list:\n");
     do {
         printf("%i: %p\n", context->process_id, context);
