@@ -135,7 +135,7 @@ static void module_add_label(Module *mod, int index, void *ptr)
     mod->labels[index] = ptr;
 }
 
-Module *module_new_from_iff_binary(GlobalContext *global, void *iff_binary, unsigned long size)
+Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary, unsigned long size)
 {
     uint8_t *beam_file = (void *) iff_binary;
 

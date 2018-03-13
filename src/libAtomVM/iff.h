@@ -62,7 +62,7 @@
  * @param offsets all the relative offsets, each entry will be set to the offset of a different IFF section.
  * @param sizes the computed sections sizes.
  */
-extern void scan_iff(uint8_t *data, int file_size, unsigned long *offsets, unsigned long *sizes);
+extern void scan_iff(const void *iff_binary, int file_size, unsigned long *offsets, unsigned long *sizes);
 
 /**
  * @brief Returns 1 if pointed binary is valid BEAM IFF.

@@ -39,8 +39,10 @@ int iff_is_valid_beam(const void *beam_data)
     return memcmp(beam_data, "FOR1", 4) == 0;
 }
 
-void scan_iff(uint8_t *data, int buf_size, unsigned long *offsets, unsigned long *sizes)
+void scan_iff(const void *iff_binary, int buf_size, unsigned long *offsets, unsigned long *sizes)
 {
+    const uint8_t *data = iff_binary;
+
     memset(offsets, 0, sizeof(unsigned long) * MAX_OFFS);
     memset(sizes, 0, sizeof(unsigned long) * MAX_SIZES);
 
