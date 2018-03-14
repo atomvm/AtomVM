@@ -40,7 +40,7 @@
 static void *module_uncompress_literals(const uint8_t *litT, int size);
 static void const* *module_build_literals_table(const void *literalsBuf);
 static void module_add_label(Module *mod, int index, void *ptr);
-static void module_build_imported_functions_table(Module *this_module, uint8_t *table_data, uint8_t *atom_tab);
+static void module_build_imported_functions_table(Module *this_module, uint8_t *table_data);
 static void module_add_label(Module *mod, int index, void *ptr);
 
 #define IMPL_CODE_LOADER 1
@@ -76,7 +76,7 @@ static void module_populate_atoms_table(Module *this_module, uint8_t *table_data
     }
 }
 
-static void module_build_imported_functions_table(Module *this_module, uint8_t *table_data, uint8_t *atom_tab)
+static void module_build_imported_functions_table(Module *this_module, uint8_t *table_data)
 {
     int functions_count = READ_32_ALIGNED(table_data + 8);
 
@@ -149,7 +149,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
 
     module_populate_atoms_table(mod, beam_file + offsets[AT8U]);
 
-    module_build_imported_functions_table(mod, beam_file + offsets[IMPT], beam_file + offsets[AT8U]);
+    module_build_imported_functions_table(mod, beam_file + offsets[IMPT]);
 
     mod->code = (CodeChunk *) (beam_file + offsets[CODE]);
     mod->export_table = beam_file + offsets[EXPT];
