@@ -625,6 +625,10 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 USED_BY_TRACE(bif);
                 USED_BY_TRACE(dreg);
 
+                #ifdef IMPL_CODE_LOADER
+                    UNUSED(arg1);
+                #endif
+
                 #ifdef IMPL_EXECUTE_LOOP
                     BifImpl1 func = (BifImpl1) mod->imported_funcs[bif].bif;
                     term ret = func(ctx, 0, 0, arg1);
@@ -659,6 +663,11 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 TRACE("bif2/2 bif=%i, dreg=%i\n", bif, dreg);
                 USED_BY_TRACE(bif);
                 USED_BY_TRACE(dreg);
+
+                #ifdef IMPL_CODE_LOADER
+                    UNUSED(arg1);
+                    UNUSED(arg2);
+                #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
                     BifImpl2 func = (BifImpl2) mod->imported_funcs[bif].bif;
@@ -855,7 +864,8 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 DECODE_LABEL(label, chunk->code, i, next_off, next_off)
                 int dreg = chunk->code[i + next_off] >> 4;
 
-                TRACE("loop_rec/2\n");
+                TRACE("loop_rec/2, dreg=%i\n", dreg);
+                USED_BY_TRACE(dreg);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     if (ctx->mailbox == NULL) {
@@ -1409,6 +1419,11 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 DECODE_COMPACT_TERM(tail, chunk->code, i, next_off, next_off);
 
                 TRACE("op_put_list/3\n");
+
+                #ifdef IMPL_CODE_LOADER
+                    UNUSED(head);
+                    UNUSED(tail);
+                #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
                     int reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);
