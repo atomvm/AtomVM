@@ -317,7 +317,7 @@
 #define OP_LINE 153
 
 #define INSTRUCTION_POINTER() \
-    ((unsigned long) &chunk->code[i])
+    ((const void *) &chunk->code[i])
 
 #define DO_RETURN() \
     mod = mod->global->modules_by_index[ctx->cp >> 24]; \
