@@ -64,8 +64,8 @@ typedef struct
     Module **modules_by_index;
     int loaded_modules_count;
 
-    void *avmpack_data;
-    void *avmpack_platform_data;
+    const void *avmpack_data;
+    const void *avmpack_platform_data;
 
 } GlobalContext;
 
