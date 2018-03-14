@@ -82,7 +82,7 @@ struct Module
 
     int module_index;
 
-    int free_literals_data : 1;
+    unsigned int free_literals_data : 1;
 };
 
 #ifndef TYPEDEF_MODULE
