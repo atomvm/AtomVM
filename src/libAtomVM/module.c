@@ -37,7 +37,9 @@
 #define LITT_UNCOMPRESSED_SIZE_OFFSET 8
 #define LITT_HEADER_SIZE 12
 
-static void *module_uncompress_literals(const uint8_t *litT, int size);
+#ifdef WITH_ZLIB
+    static void *module_uncompress_literals(const uint8_t *litT, int size);
+#endif
 static void const* *module_build_literals_table(const void *literalsBuf);
 static void module_add_label(Module *mod, int index, void *ptr);
 static void module_build_imported_functions_table(Module *this_module, uint8_t *table_data);
