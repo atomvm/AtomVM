@@ -83,6 +83,10 @@
                     }                                                                   \
                     break;                                                              \
                 }                                                                       \
+                default:                                                                \
+                    printf("Unexpected %i\n", (int) first_byte);                        \
+                    abort();                                                            \
+                    break;                                                              \
             }                                                                           \
             break;                                                                      \
                                                                                         \
@@ -154,6 +158,9 @@
                                                                                                                         \
                     break;                                                                                              \
                 }                                                                                                       \
+                default:                                                                                                \
+                    abort();                                                                                            \
+                    break;                                                                                              \
             }                                                                                                           \
             break;                                                                                                      \
                                                                                                                         \
