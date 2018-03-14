@@ -76,7 +76,7 @@ int main(int argc, char **argv)
     mod->module_platform_data = NULL;
     Context *ctx = context_new(glb);
 
-    context_execute_loop(ctx, mod, mapped_file->mapped, "start", 0);
+    context_execute_loop(ctx, mod, "start", 0);
 
     printf("Return value: %lx\n", ctx->x[0]);
 

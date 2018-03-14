@@ -89,7 +89,7 @@ int test_modules_execution()
         globalcontext_insert_module_with_filename(glb, mod, test->test_file);
         Context *ctx = context_new(glb);
 
-        context_execute_loop(ctx, mod, beam_file->mapped, "start", 0);
+        context_execute_loop(ctx, mod, "start", 0);
 
         int32_t value = term_to_int32(ctx->x[0]);
         if (value != test->expected_value) {

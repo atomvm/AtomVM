@@ -101,6 +101,6 @@ extern void context_destroy(Context *c);
  * @param the function arity (number of arguments that are required).
  * @returns 1 if an error occoured, otherwise 0 is always returned.
  */
-extern int context_execute_loop(Context *ctx, Module *mod, uint8_t *beam_file, const char *function_name, int arity);
+extern int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity);
 
 #endif

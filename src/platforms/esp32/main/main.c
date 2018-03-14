@@ -72,7 +72,7 @@ void app_main()
 
     printf("Starting: %s...\n", startup_module_name);
     printf("---\n");
-    context_execute_loop(ctx, mod, startup_beam, "start", 0);
+    context_execute_loop(ctx, mod, "start", 0);
     printf("Return value: %lx\n", (long) term_to_int32(ctx->x[0]));
 
     while(1);

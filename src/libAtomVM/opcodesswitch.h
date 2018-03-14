@@ -337,7 +337,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
     int read_core_chunk(Module *mod)
 #else
     #ifdef IMPL_EXECUTE_LOOP
-        int context_execute_loop(Context *ctx, Module *mod, uint8_t *beam_file, const char *function_name, int arity)
+        int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity)
     #else
         #error Need implementation type
     #endif
@@ -1664,7 +1664,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             default:
                 printf("Undecoded opcode: %i\n", chunk->code[i]);
                 #ifdef IMPL_EXECUTE_LOOP
-                    fprintf(stderr, "failed: %li\n", &chunk->code[i] - beam_file);
+                    fprintf(stderr, "failed at %i\n", i);
                 #endif
 
                 abort();
