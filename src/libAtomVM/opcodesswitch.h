@@ -263,6 +263,27 @@
     }                                                                                               \
 }
 
+#define DECODE_DEST_REGISTER(dreg, dreg_type, code_chunk, base_index, off, next_operand_offset)     \
+{                                                                                                   \
+    dreg_type = code_chunk[(base_index) + (off)] & 0xF;                                             \
+    dreg = code_chunk[(base_index) + (off)] >> 4;                                                   \
+    next_operand_offset++;                                                                          \
+}
+
+#define WRITE_REGISTER(dreg_type, dreg, value)                                                      \
+{                                                                                                   \
+    switch (dreg_type) {                                                                            \
+        case 3:                                                                                     \
+            ctx->x[dreg] = value;                                                                   \
+            break;                                                                                  \
+        case 4:                                                                                     \
+            ctx->e[dreg] = value;                                                                   \
+            break;                                                                                  \
+        default:                                                                                    \
+            abort();                                                                                \
+    }                                                                                               \
+}
+
 
 #define NEXT_INSTRUCTION(operands_size) \
     i += 1 + operands_size
@@ -593,7 +614,10 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
             case OP_BIF0: {
                 int bif = chunk->code[i + 1] >> 4;
-                int dreg = chunk->code[i + 2] >> 4;
+                int next_off = 2;
+                int dreg;
+                uint8_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
 
                 TRACE("bif0/2 bif=%i, dreg=%i\n", bif, dreg);
                 USED_BY_TRACE(bif);
@@ -603,17 +627,10 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     BifImpl0 func = (BifImpl0) mod->imported_funcs[bif].bif;
                     term ret = func(ctx);
 
-                    int reg_b_type = reg_type_c(chunk->code[i + 2] & 0xF);
-                    if (reg_b_type == 'x') {
-                        ctx->x[dreg] = ret;
-                    } else if (reg_b_type == 'y') {
-                        ctx->e[dreg] = ret;
-                    } else {
-                        abort();
-                    }
+                    WRITE_REGISTER(dreg_type, dreg, ret);
                 #endif
 
-                NEXT_INSTRUCTION(2);
+                NEXT_INSTRUCTION(next_off - 1);
                 break;
             }
 
@@ -626,7 +643,9 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 next_off++;
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
-                int dreg = chunk->code[i + next_off];
+                int dreg;
+                uint8_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
 
                 TRACE("bif1/2 bif=%i, dreg=%i\n", bif, dreg);
                 USED_BY_TRACE(bif);
@@ -640,17 +659,10 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     BifImpl1 func = (BifImpl1) mod->imported_funcs[bif].bif;
                     term ret = func(ctx, 0, 0, arg1);
 
-                    int reg_b_type = reg_type_c(dreg & 0xF);
-                    if (reg_b_type == 'x') {
-                        ctx->x[dreg >> 4] = ret;
-                    } else if (reg_b_type == 'y') {
-                        ctx->e[dreg >> 4] = ret;
-                    } else {
-                        abort();
-                    }
+                    WRITE_REGISTER(dreg_type, dreg, ret);
                 #endif
 
-                NEXT_INSTRUCTION(next_off);
+                NEXT_INSTRUCTION(next_off - 1);
                 break;
             }
 
@@ -665,7 +677,9 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, chunk->code, i, next_off, next_off)
-                int dreg = chunk->code[i + next_off];
+                int dreg;
+                uint8_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
 
                 TRACE("bif2/2 bif=%i, dreg=%i\n", bif, dreg);
                 USED_BY_TRACE(bif);
@@ -680,17 +694,10 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     BifImpl2 func = (BifImpl2) mod->imported_funcs[bif].bif;
                     term ret = func(ctx, 0, 0, arg1, arg2);
 
-                    int reg_b_type = reg_type_c(dreg & 0xF);
-                    if (reg_b_type == 'x') {
-                        ctx->x[dreg >> 4] = ret;
-                    } else if (reg_b_type == 'y') {
-                        ctx->e[dreg >> 4] = ret;
-                    } else {
-                        abort();
-                    }
+                    WRITE_REGISTER(dreg_type, dreg, ret);
                 #endif
 
-                NEXT_INSTRUCTION(next_off);
+                NEXT_INSTRUCTION(next_off - 1);
                 break;
             }
 
@@ -869,7 +876,9 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 int next_off = 1;
                 int label;
                 DECODE_LABEL(label, chunk->code, i, next_off, next_off)
-                int dreg = chunk->code[i + next_off] >> 4;
+                int dreg;
+                uint8_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
 
                 TRACE("loop_rec/2, dreg=%i\n", dreg);
                 USED_BY_TRACE(dreg);
@@ -880,21 +889,13 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     } else {
                         term ret = mailbox_peek(ctx);
 
-                        int reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);
-                        if (reg_b_type == 'x') {
-                            ctx->x[dreg] = ret;
-                        } else if (reg_b_type == 'y') {
-                            ctx->e[dreg] = ret;
-                        } else {
-                            abort();
-                        }
-
-                        NEXT_INSTRUCTION(next_off);
+                        WRITE_REGISTER(dreg_type, dreg, ret);
+                        NEXT_INSTRUCTION(next_off - 1);
                     }
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(next_off);
+                    NEXT_INSTRUCTION(next_off - 1);
                 #endif
 
                 break;
@@ -1319,21 +1320,15 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_MOVE: {
                 int next_off = 1;
                 term src_value;
-                DECODE_COMPACT_TERM(src_value, chunk->code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(src_value, chunk->code, i, next_off, next_off);
+                int dreg;
+                uint8_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    int reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);
-                    int dest = chunk->code[i + next_off] >> 4;
+                    TRACE("move/2 %lx, %c%i\n", src_value, reg_type_c(dreg_type), dreg);
 
-                    TRACE("move/2 %lx, %c%i\n", src_value, reg_b_type, dest);
-
-                    if (reg_b_type == 'x') {
-                        ctx->x[dest] = src_value;
-                    } else if (reg_b_type == 'y') {
-                        ctx->e[dest] = src_value;
-                    } else {
-                        abort();
-                    }
+                    WRITE_REGISTER(dreg_type, dreg, src_value);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -1341,7 +1336,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     UNUSED(src_value)
                 #endif
 
-                NEXT_INSTRUCTION(next_off);
+                NEXT_INSTRUCTION(next_off - 1);
                 break;
             }
 
@@ -1349,32 +1344,21 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 int next_off = 1;
                 term src_value;
                 DECODE_COMPACT_TERM(src_value, chunk->code, i, next_off, next_off)
+                int head_dreg;
+                uint8_t head_dreg_type;
+                DECODE_DEST_REGISTER(head_dreg, head_dreg_type, chunk->code, i, next_off, next_off);
+                int tail_dreg;
+                uint8_t tail_dreg_type;
+                DECODE_DEST_REGISTER(tail_dreg, tail_dreg_type, chunk->code, i, next_off, next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    int head_reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);
-                    int head_dest = chunk->code[i + next_off] >> 4;
-                    int tail_reg_b_type = reg_type_c(chunk->code[i + next_off + 1] & 0xF);
-                    int tail_dest = chunk->code[i + next_off + 1] >> 4;
-
-                    TRACE("get_list/3 %lx, %c%i, %c%i\n", src_value, head_reg_b_type, head_dest, tail_reg_b_type, tail_dest);
+                    TRACE("get_list/3 %lx, %c%i, %c%i\n", src_value, reg_type_c(head_dreg_type), head_dreg, reg_type_c(tail_dreg_type), tail_dreg);
 
                     term head = term_get_list_head(src_value);
                     term tail = term_get_list_tail(src_value);
-                    if (head_reg_b_type == 'x') {
-                        ctx->x[head_dest] = head;
-                    } else if (head_reg_b_type == 'y') {
-                        ctx->e[head_dest] = head;
-                    } else {
-                        abort();
-                    }
 
-                    if (tail_reg_b_type == 'x') {
-                        ctx->x[tail_dest] = tail;
-                    } else if (tail_reg_b_type == 'y') {
-                        ctx->e[tail_dest] = tail;
-                    } else {
-                        abort();
-                    }
+                    WRITE_REGISTER(head_dreg_type, head_dreg, head);
+                    WRITE_REGISTER(tail_dreg_type, tail_dreg, tail);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -1382,7 +1366,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     UNUSED(src_value)
                 #endif
 
-                NEXT_INSTRUCTION(next_off + 1);
+                NEXT_INSTRUCTION(next_off - 1);
                 break;
             }
 
@@ -1392,21 +1376,15 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 DECODE_COMPACT_TERM(src_value, chunk->code, i, next_off, next_off);
                 int element;
                 DECODE_INTEGER(element, chunk->code, i, next_off, next_off);
+                int dreg;
+                uint8_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    int reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);
-                    int dest = chunk->code[i + next_off] >> 4;
-
                     TRACE("get_tuple_element/2");
 
                     term t = term_get_tuple_element(src_value, element);
-                    if (reg_b_type == 'x') {
-                        ctx->x[dest] = t;
-                    } else if (reg_b_type == 'y') {
-                        ctx->e[dest] = t;
-                    } else {
-                        abort();
-                    }
+                    WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -1414,7 +1392,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     UNUSED(src_value)
                 #endif
 
-                NEXT_INSTRUCTION(next_off);
+                NEXT_INSTRUCTION(next_off - 1);
                 break;
             }
 
@@ -1424,6 +1402,9 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 DECODE_COMPACT_TERM(head, chunk->code, i, next_off, next_off);
                 term tail;
                 DECODE_COMPACT_TERM(tail, chunk->code, i, next_off, next_off);
+                int dreg;
+                uint8_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
 
                 TRACE("op_put_list/3\n");
 
@@ -1433,20 +1414,11 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    int reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);
-                    int dest = chunk->code[i + next_off] >> 4;
-
                     term t = term_list_prepend(head, tail);
-                    if (reg_b_type == 'x') {
-                        ctx->x[dest] = t;
-                    } else if (reg_b_type == 'y') {
-                        ctx->e[dest] = t;
-                    } else {
-                        abort();
-                    }
+                    WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
 
-                NEXT_INSTRUCTION(next_off);
+                NEXT_INSTRUCTION(next_off - 1);
                 break;
             }
 
@@ -1454,22 +1426,16 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 int next_off = 1;
                 int size;
                 DECODE_INTEGER(size, chunk->code, i, next_off, next_off);
-                int reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);
-                int dest = chunk->code[i + next_off] >> 4;
-                next_off++;
-                TRACE("put_tuple/2 size=%i, dest=%c%i\n", size, reg_b_type, dest);
-                USED_BY_TRACE(reg_b_type);
-                USED_BY_TRACE(dest);
+                int dreg;
+                uint8_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
+
+                TRACE("put_tuple/2 size=%i, dest=%c%i\n", size, reg_type_c(dreg_type), dreg);
+                USED_BY_TRACE(dreg);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     term t = term_alloc_tuple(size);
-                    if (reg_b_type == 'x') {
-                        ctx->x[dest] = t;
-                    } else if (reg_b_type == 'y') {
-                        ctx->e[dest] = t;
-                    } else {
-                        abort();
-                    }
+                    WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
 
                 for (int j = 0; j < size; j++) {
@@ -1553,7 +1519,9 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 int next_off = 4;
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
-                int dreg = chunk->code[i + next_off] >> 4;
+                int dreg;
+                uint8_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("gc_bif1/5 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, dest=r%i\n", f_label, live, bif, arg1, dreg);
@@ -1561,14 +1529,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     BifImpl1 func = (BifImpl1) mod->imported_funcs[bif].bif;
                     term ret = func(ctx, f_label, live, arg1);
 
-                    int reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);
-                    if (reg_b_type == 'x') {
-                        ctx->x[dreg] = ret;
-                    } else if (reg_b_type == 'y') {
-                        ctx->e[dreg] = ret;
-                    } else {
-                        abort();
-                    }
+                    WRITE_REGISTER(dreg_type, dreg, ret);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -1583,7 +1544,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                 UNUSED(f_label)
 
-                NEXT_INSTRUCTION(next_off);
+                NEXT_INSTRUCTION(next_off - 1);
                 break;
             }
 
@@ -1594,10 +1555,12 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                 int next_off = 4;
                 term arg1;
+                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off);
                 term arg2;
-                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
-                DECODE_COMPACT_TERM(arg2, chunk->code, i, next_off, next_off)
-                int dreg = chunk->code[i + next_off] >> 4;
+                DECODE_COMPACT_TERM(arg2, chunk->code, i, next_off, next_off);
+                int dreg;
+                uint8_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("gc_bif2/6 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, arg2=0x%lx, dest=r%i\n", f_label, live, bif, arg1, arg2, dreg);
@@ -1605,15 +1568,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     BifImpl2 func = (BifImpl2) mod->imported_funcs[bif].bif;
                     term ret = func(ctx, f_label, live, arg1, arg2);
 
-                    int reg_b_type = reg_type_c(chunk->code[i + next_off] & 0xF);
-                    if (reg_b_type == 'x') {
-                        ctx->x[dreg] = ret;
-                    } else if (reg_b_type == 'y') {
-                        ctx->e[dreg] = ret;
-                    } else {
-                        printf("reg_b_type: %i\n", reg_b_type);
-                        abort();
-                    }
+                    WRITE_REGISTER(dreg_type, dreg, ret);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -1629,7 +1584,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                 UNUSED(f_label)
 
-                NEXT_INSTRUCTION(next_off);
+                NEXT_INSTRUCTION(next_off - 1);
                 break;
             }
 
