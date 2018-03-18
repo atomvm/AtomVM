@@ -402,14 +402,11 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 DECODE_LABEL(label, chunk->code, i, next_offset, next_offset)
 
                 TRACE("label/1 label=%i\n", label);
+                USED_BY_TRACE(label);
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("Mark label %i here at %i\n", label, i);
                     module_add_label(mod, label, &chunk->code[i]);
-                #endif
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    UNUSED(label)
                 #endif
 
                 NEXT_INSTRUCTION(next_offset - 1);
@@ -503,6 +500,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                 TRACE("call_only/2, arity=%i, label=%i\n", arity, label);
                 USED_BY_TRACE(arity);
+                USED_BY_TRACE(label);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     NEXT_INSTRUCTION(2);
@@ -510,7 +508,6 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    UNUSED(label);
                     NEXT_INSTRUCTION(2);
                 #endif
 
@@ -1380,15 +1377,15 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 uint8_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
 
-                #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("get_tuple_element/2");
+                TRACE("get_tuple_element/2, element=%i, dest=%c%i\n", element, reg_type_c(dreg_type), dreg);
+                USED_BY_TRACE(element);
 
+                #ifdef IMPL_EXECUTE_LOOP
                     term t = term_get_tuple_element(src_value, element);
                     WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    TRACE("get_tuple_element/2\n");
                     UNUSED(src_value)
                 #endif
 
