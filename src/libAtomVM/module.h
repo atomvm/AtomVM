@@ -34,11 +34,6 @@
 #include "context.h"
 #include "globalcontext.h"
 
-typedef term (*BifImpl)();
-typedef term (*BifImpl0)(Context *ctx);
-typedef term (*BifImpl1)(Context *ctx, uint32_t failure_label, int live, term arg1);
-typedef term (*BifImpl2)(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
-
 typedef struct
 {
     char magic[4];
@@ -53,12 +48,6 @@ typedef struct
 } __attribute__((packed)) CodeChunk;
 
 struct ExportedFunction;
-
-union imported_func
-{
-    const struct ExportedFunction *func;
-    BifImpl bif;
-};
 
 struct Module
 {

@@ -27,6 +27,7 @@
 
 #include "atom.h"
 #include "context.h"
+#include "exportedfunction.h"
 #include "module.h"
 
 #define MAX_BIF_NAME_LEN 32
@@ -35,23 +36,22 @@ extern BifImpl bif_registry_get_handler(AtomString module, AtomString function, 
 extern term bif_erlang_self_0(Context *ctx);
 extern term bif_erlang_byte_size_1(Context *ctx, uint32_t failure_label, int live, term arg1);
 extern term bif_erlang_length_1(Context *ctx, uint32_t failure_label, int live, term arg1);
-extern term bif_erlang_hd_1(Context *ctx, uint32_t failure_label, int live, term arg1);
+extern term bif_erlang_hd_1(Context *ctx, uint32_t failure_label, term arg1);
 extern term bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
 extern term bif_erlang_sub_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
 extern term bif_erlang_mul_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
 extern term bif_erlang_div_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
 term bif_erlang_rem_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
 
-//TODO: they are not gc bifs
-term bif_erlang_not_1(Context *ctx, uint32_t failure_label, int live, term arg1);
-term bif_erlang_and_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
-term bif_erlang_or_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
-term bif_erlang_xor_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
+term bif_erlang_not_1(Context *ctx, uint32_t failure_label, term arg1);
+term bif_erlang_and_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
+term bif_erlang_or_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
+term bif_erlang_xor_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
 
-term bif_erlang_equal_to_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
-term bif_erlang_not_equal_to_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
+term bif_erlang_equal_to_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
+term bif_erlang_not_equal_to_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
 
-term bif_erlang_exactly_equal_to_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
-term bif_erlang_exactly_not_equal_to_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
+term bif_erlang_exactly_equal_to_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
+term bif_erlang_exactly_not_equal_to_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
 
 #endif

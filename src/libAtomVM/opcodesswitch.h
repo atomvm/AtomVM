@@ -644,7 +644,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 uint8_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
 
-                TRACE("bif1/2 bif=%i, dreg=%i\n", bif, dreg);
+                TRACE("bif1/2 bif=%i, fail=%i, dreg=%i\n", bif, fail_label, dreg);
                 USED_BY_TRACE(bif);
                 USED_BY_TRACE(dreg);
 
@@ -654,7 +654,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                 #ifdef IMPL_EXECUTE_LOOP
                     BifImpl1 func = (BifImpl1) mod->imported_funcs[bif].bif;
-                    term ret = func(ctx, 0, 0, arg1);
+                    term ret = func(ctx, fail_label, arg1);
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
                 #endif
@@ -678,7 +678,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 uint8_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
 
-                TRACE("bif2/2 bif=%i, dreg=%i\n", bif, dreg);
+                TRACE("bif2/2 bif=%i, fail=%i, dreg=%i\n", bif, fail_label, dreg);
                 USED_BY_TRACE(bif);
                 USED_BY_TRACE(dreg);
 
@@ -689,7 +689,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                 #ifdef IMPL_EXECUTE_LOOP
                     BifImpl2 func = (BifImpl2) mod->imported_funcs[bif].bif;
-                    term ret = func(ctx, 0, 0, arg1, arg2);
+                    term ret = func(ctx, fail_label, arg1, arg2);
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
                 #endif
@@ -1523,7 +1523,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("gc_bif1/5 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, dest=r%i\n", f_label, live, bif, arg1, dreg);
 
-                    BifImpl1 func = (BifImpl1) mod->imported_funcs[bif].bif;
+                    GCBifImpl1 func = (GCBifImpl1) mod->imported_funcs[bif].bif;
                     term ret = func(ctx, f_label, live, arg1);
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
@@ -1562,7 +1562,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("gc_bif2/6 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, arg2=0x%lx, dest=r%i\n", f_label, live, bif, arg1, arg2, dreg);
 
-                    BifImpl2 func = (BifImpl2) mod->imported_funcs[bif].bif;
+                    GCBifImpl2 func = (GCBifImpl2) mod->imported_funcs[bif].bif;
                     term ret = func(ctx, f_label, live, arg1, arg2);
 
                     WRITE_REGISTER(dreg_type, dreg, ret);

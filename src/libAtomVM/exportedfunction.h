@@ -29,6 +29,14 @@
 
 #include "term.h"
 
+typedef term (*BifImpl)();
+typedef term (*BifImpl0)(Context *ctx);
+typedef term (*BifImpl1)(Context *ctx, uint32_t failure_label, term arg1);
+typedef term (*BifImpl2)(Context *ctx, uint32_t failure_label, term arg1, term arg2);
+
+typedef term (*GCBifImpl1)(Context *ctx, uint32_t failure_label, int live, term arg1);
+typedef term (*GCBifImpl2)(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
+
 typedef term (*NifImpl)(Context *ctx, int argc, term argv[]);
 
 enum FunctionType
@@ -73,5 +81,11 @@ struct ModuleFunction
 
 #define EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func) \
     ((const struct ModuleFunction *) (((char *) (func)) - ((unsigned long) &((const struct ModuleFunction *) 0)->base)))
+
+union imported_func
+{
+    const struct ExportedFunction *func;
+    BifImpl bif;
+};
 
 #endif
