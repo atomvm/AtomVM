@@ -700,8 +700,11 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_ALLOCATE: {
-                int stack_need = code[i + 1] >> 4;
-                int live = code[i + 2] >> 4;
+                int next_off = 1;
+                int stack_need;
+                DECODE_INTEGER(stack_need, code, i, next_off, next_off);
+                int live;
+                DECODE_INTEGER(live, code, i, next_off, next_off);
                 TRACE("allocate/2 stack_need=%i, live=%i\n" , stack_need, live);
                 USED_BY_TRACE(stack_need);
                 USED_BY_TRACE(live);
@@ -720,14 +723,18 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     ctx->e[stack_need] = ctx->cp;
                 #endif
 
-                NEXT_INSTRUCTION(2);
+                NEXT_INSTRUCTION(next_off - 1);
                 break;
             }
 
             case OP_ALLOCATE_HEAP: {
-                int stack_need = code[i + 1] >> 4;
-                int heap_need = code[i + 2] >> 4;
-                int live = code[i + 3] >> 4;
+                int next_off = 1;
+                int stack_need;
+                DECODE_INTEGER(stack_need, code, i, next_off, next_off);
+                int heap_need;
+                DECODE_INTEGER(heap_need, code, i, next_off, next_off);
+                int live;
+                DECODE_INTEGER(live, code, i, next_off, next_off);
                 TRACE("allocate_heap/2 stack_need=%i, heap_need=%i, live=%i\n", stack_need, heap_need, live);
                 USED_BY_TRACE(stack_need);
                 USED_BY_TRACE(heap_need);
@@ -747,13 +754,16 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     ctx->e[stack_need] = ctx->cp;
                 #endif
 
-                NEXT_INSTRUCTION(3);
+                NEXT_INSTRUCTION(next_off - 1);
                 break;
             }
 
             case OP_ALLOCATE_ZERO: {
-                int stack_need = code[i + 1] >> 4;
-                int live = code[i + 2] >> 4;
+                int next_off = 1;
+                int stack_need;
+                DECODE_INTEGER(stack_need, code, i, next_off, next_off);
+                int live;
+                DECODE_INTEGER(live, code, i, next_off, next_off);
                 TRACE("allocate_zero/2 stack_need=%i, live=%i\n", stack_need, live);
                 USED_BY_TRACE(stack_need);
                 USED_BY_TRACE(live);
@@ -775,7 +785,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                 //TODO: bzero/memset
 
-                NEXT_INSTRUCTION(2);
+                NEXT_INSTRUCTION(next_off - 1);
                 break;
             }
 
@@ -797,7 +807,9 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_DEALLOCATE: {
-                int n_words = code[i + 1] >> 4;
+                int next_off = 1;
+                int n_words;
+                DECODE_INTEGER(n_words, code, i, next_off, next_off);
 
                 TRACE("deallocate/1 n_words=%i\n", n_words);
                 USED_BY_TRACE(n_words);
@@ -810,7 +822,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     DEBUG_DUMP_STACK(ctx);
                 #endif
 
-                NEXT_INSTRUCTION(1);
+                NEXT_INSTRUCTION(next_off - 1);
                 break;
             }
 
