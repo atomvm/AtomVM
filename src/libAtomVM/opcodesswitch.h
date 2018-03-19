@@ -290,10 +290,10 @@
 
 #ifndef TRACE_JUMP
     #define JUMP_TO_ADDRESS(address) \
-        i = ((uint8_t *) (address)) - chunk->code
+        i = ((uint8_t *) (address)) - code
 #else
     #define JUMP_TO_ADDRESS(address) \
-        i = ((uint8_t *) (address)) - chunk->code; \
+        i = ((uint8_t *) (address)) - code; \
         fprintf(stderr, "going to jump to %i\n", i)
 #endif
 
@@ -345,11 +345,11 @@
 #define OP_LINE 153
 
 #define INSTRUCTION_POINTER() \
-    ((const void *) &chunk->code[i])
+    ((const void *) &code[i])
 
 #define DO_RETURN() \
     mod = mod->global->modules_by_index[ctx->cp >> 24]; \
-    chunk = mod->code; \
+    code = mod->code->code; \
     i = ctx->cp & 0xFFFFFF;
 
 
@@ -371,7 +371,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
     #endif
 #endif
 {
-    CodeChunk *chunk = mod->code;
+    uint8_t *code = mod->code->code;
 
     unsigned int i = 0;
 
@@ -395,18 +395,18 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
     while(1) {
 
-        switch (chunk->code[i]) {
+        switch (code[i]) {
             case OP_LABEL: {
                 int label;
                 int next_offset = 1;
-                DECODE_LABEL(label, chunk->code, i, next_offset, next_offset)
+                DECODE_LABEL(label, code, i, next_offset, next_offset)
 
                 TRACE("label/1 label=%i\n", label);
                 USED_BY_TRACE(label);
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("Mark label %i here at %i\n", label, i);
-                    module_add_label(mod, label, &chunk->code[i]);
+                    module_add_label(mod, label, &code[i]);
                 #endif
 
                 NEXT_INSTRUCTION(next_offset - 1);
@@ -416,10 +416,10 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_FUNC_INFO: {
                 int next_offset = 1;
                 int module_atom;
-                DECODE_ATOM(module_atom, chunk->code, i, next_offset, next_offset)
+                DECODE_ATOM(module_atom, code, i, next_offset, next_offset)
                 int function_name_atom;
-                DECODE_ATOM(function_name_atom, chunk->code, i, next_offset, next_offset)
-                int arity = chunk->code[i + next_offset] & 0xF;
+                DECODE_ATOM(function_name_atom, code, i, next_offset, next_offset)
+                int arity = code[i + next_offset] & 0xF;
 
                 TRACE("func_info/3 module_name_a=%i, function_name_a=%i, arity=%i\n", module_atom, function_name_atom, arity);
                 USED_BY_TRACE(function_name_atom);
@@ -445,10 +445,10 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_CALL: {
-                int arity = chunk->code[i + 1] >> 4;
+                int arity = code[i + 1] >> 4;
                 int next_offset = 2;
                 int label = 0;
-                DECODE_LABEL(label, chunk->code, i, next_offset, next_offset)
+                DECODE_LABEL(label, code, i, next_offset, next_offset)
 
                 TRACE("call/2, arity=%i, label=%i\n", arity, label);
                 USED_BY_TRACE(arity);
@@ -468,11 +468,11 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_CALL_LAST: {
-                int arity = chunk->code[i + 1] >> 4;
+                int arity = code[i + 1] >> 4;
                 int next_offset = 2;
                 int label = 0;
-                DECODE_LABEL(label, chunk->code, i, next_offset, next_offset)
-                int n_words = chunk->code[i + next_offset] >> 4;
+                DECODE_LABEL(label, code, i, next_offset, next_offset)
+                int n_words = code[i + next_offset] >> 4;
                 UNUSED(n_words)
 
                 TRACE("call_last/3, arity=%i, label=%i, dellocate=%i\n", arity, label, n_words);
@@ -495,8 +495,8 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_CALL_ONLY: {
-                int arity = chunk->code[i + 1] >> 4;
-                int label = chunk->code[i + 2] >> 4;
+                int arity = code[i + 1] >> 4;
+                int label = code[i + 2] >> 4;
 
                 TRACE("call_only/2, arity=%i, label=%i\n", arity, label);
                 USED_BY_TRACE(arity);
@@ -515,8 +515,8 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_CALL_EXT: {
-                int arity = chunk->code[i + 1] >> 4;
-                int index = chunk->code[i + 2] >> 4;
+                int arity = code[i + 1] >> 4;
+                int index = code[i + 2] >> 4;
 
                 TRACE("call_ext/2, arity=%i, index=%i\n", arity, index);
                 USED_BY_TRACE(arity);
@@ -542,7 +542,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                             ctx->cp = module_address(mod->module_index, i);
                             mod = jump->target;
-                            chunk = mod->code;
+                            code = mod->code->code;
                             JUMP_TO_ADDRESS(mod->labels[jump->label]);
 
                             break;
@@ -558,11 +558,11 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_CALL_EXT_LAST: {
-                int arity = chunk->code[i + 1] >> 4;
+                int arity = code[i + 1] >> 4;
                 int next_offset = 2;
                 int index = 0;
-                DECODE_LABEL(index, chunk->code, i, next_offset, next_offset)
-                int n_words = chunk->code[i + next_offset] >> 4;
+                DECODE_LABEL(index, code, i, next_offset, next_offset)
+                int n_words = code[i + next_offset] >> 4;
                 UNUSED(n_words)
 
                 TRACE("call_ext_last/3, arity=%i, index=%i, n_words=%i\n", arity, index, n_words);
@@ -590,7 +590,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                             const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
 
                             mod = jump->target;
-                            chunk = mod->code;
+                            code = mod->code->code;
                             JUMP_TO_ADDRESS(mod->labels[jump->label]);
 
                             break;
@@ -610,11 +610,11 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_BIF0: {
-                int bif = chunk->code[i + 1] >> 4;
+                int bif = code[i + 1] >> 4;
                 int next_off = 2;
                 int dreg;
                 uint8_t dreg_type;
-                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 TRACE("bif0/2 bif=%i, dreg=%i\n", bif, dreg);
                 USED_BY_TRACE(bif);
@@ -635,14 +635,14 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_BIF1: {
                 int next_off = 1;
                 int fail_label;
-                DECODE_LABEL(fail_label, chunk->code, i, next_off, next_off)
-                int bif = chunk->code[i + next_off] >> 4;
+                DECODE_LABEL(fail_label, code, i, next_off, next_off)
+                int bif = code[i + next_off] >> 4;
                 next_off++;
                 term arg1;
-                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
                 int dreg;
                 uint8_t dreg_type;
-                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 TRACE("bif1/2 bif=%i, fail=%i, dreg=%i\n", bif, fail_label, dreg);
                 USED_BY_TRACE(bif);
@@ -667,16 +667,16 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_BIF2: {
                 int next_off = 1;
                 int fail_label;
-                DECODE_LABEL(fail_label, chunk->code, i, next_off, next_off)
-                int bif = chunk->code[i + next_off] >> 4;
+                DECODE_LABEL(fail_label, code, i, next_off, next_off)
+                int bif = code[i + next_off] >> 4;
                 next_off++;
                 term arg1;
-                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
                 term arg2;
-                DECODE_COMPACT_TERM(arg2, chunk->code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg2, code, i, next_off, next_off)
                 int dreg;
                 uint8_t dreg_type;
-                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 TRACE("bif2/2 bif=%i, fail=%i, dreg=%i\n", bif, fail_label, dreg);
                 USED_BY_TRACE(bif);
@@ -699,8 +699,8 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_ALLOCATE: {
-                int stack_need = chunk->code[i + 1] >> 4;
-                int live = chunk->code[i + 2] >> 4;
+                int stack_need = code[i + 1] >> 4;
+                int live = code[i + 2] >> 4;
                 TRACE("allocate/2 stack_need=%i, live=%i\n" , stack_need, live);
                 USED_BY_TRACE(stack_need);
                 USED_BY_TRACE(live);
@@ -724,9 +724,9 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_ALLOCATE_HEAP: {
-                int stack_need = chunk->code[i + 1] >> 4;
-                int heap_need = chunk->code[i + 2] >> 4;
-                int live = chunk->code[i + 3] >> 4;
+                int stack_need = code[i + 1] >> 4;
+                int heap_need = code[i + 2] >> 4;
+                int live = code[i + 3] >> 4;
                 TRACE("allocate_heap/2 stack_need=%i, heap_need=%i, live=%i\n", stack_need, heap_need, live);
                 USED_BY_TRACE(stack_need);
                 USED_BY_TRACE(heap_need);
@@ -751,8 +751,8 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_ALLOCATE_ZERO: {
-                int stack_need = chunk->code[i + 1] >> 4;
-                int live = chunk->code[i + 2] >> 4;
+                int stack_need = code[i + 1] >> 4;
+                int live = code[i + 2] >> 4;
                 TRACE("allocate_zero/2 stack_need=%i, live=%i\n", stack_need, live);
                 USED_BY_TRACE(stack_need);
                 USED_BY_TRACE(live);
@@ -796,7 +796,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_DEALLOCATE: {
-                int n_words = chunk->code[i + 1] >> 4;
+                int n_words = code[i + 1] >> 4;
 
                 TRACE("deallocate/1 n_words=%i\n", n_words);
                 USED_BY_TRACE(n_words);
@@ -872,10 +872,10 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_LOOP_REC: {
                 int next_off = 1;
                 int label;
-                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
+                DECODE_LABEL(label, code, i, next_off, next_off)
                 int dreg;
                 uint8_t dreg_type;
-                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 TRACE("loop_rec/2, dreg=%i\n", dreg);
                 USED_BY_TRACE(dreg);
@@ -902,7 +902,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_WAIT: {
                 int next_off = 1;
                 int label;
-                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
+                DECODE_LABEL(label, code, i, next_off, next_off)
 
                 TRACE("wait/1\n");
 
@@ -914,7 +914,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     ctx = scheduled_context;
 
                     mod = ctx->saved_module;
-                    chunk = mod->code;
+                    code = mod->code->code;
                     if (scheduled_context->jump_to_on_restore && ctx->mailbox) {
                         JUMP_TO_ADDRESS(scheduled_context->jump_to_on_restore);
                     } else {
@@ -933,9 +933,9 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_WAIT_TIMEOUT: {
                 int next_off = 1;
                 int label;
-                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
+                DECODE_LABEL(label, code, i, next_off, next_off)
                 int timeout;
-                DECODE_COMPACT_TERM(timeout, chunk->code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(timeout, code, i, next_off, next_off)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("wait_timeout/2, label: %i, timeout: %x\n", label, term_to_int32(timeout));
@@ -949,7 +949,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     ctx = scheduled_context;
 
                     mod = ctx->saved_module;
-                    chunk = mod->code;
+                    code = mod->code->code;
                     if (scheduled_context->jump_to_on_restore && ctx->mailbox) {
                         JUMP_TO_ADDRESS(scheduled_context->jump_to_on_restore);
                     } else {
@@ -973,9 +973,9 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 term arg1;
                 term arg2;
                 int next_off = 1;
-                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
-                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
-                DECODE_COMPACT_TERM(arg2, chunk->code, i, next_off, next_off)
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg2, code, i, next_off, next_off)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_equal/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
@@ -983,7 +983,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     if (arg1 == arg2) {
                         NEXT_INSTRUCTION(next_off - 1);
                     } else {
-                        i = (uint8_t *) mod->labels[label] - chunk->code;
+                        i = (uint8_t *) mod->labels[label] - code;
                     }
                 #endif
 
@@ -1002,9 +1002,9 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 term arg1;
                 term arg2;
                 int next_off = 1;
-                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
-                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
-                DECODE_COMPACT_TERM(arg2, chunk->code, i, next_off, next_off)
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg2, code, i, next_off, next_off)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_eq_exact/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
@@ -1012,7 +1012,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     if (arg1 == arg2) {
                         NEXT_INSTRUCTION(next_off - 1);
                     } else {
-                        i = (uint8_t *) mod->labels[label] - chunk->code;
+                        i = (uint8_t *) mod->labels[label] - code;
                     }
                 #endif
 
@@ -1029,9 +1029,9 @@ static inline term module_address(unsigned int module_index, unsigned int instru
            case OP_IS_INTEGER: {
                 int next_off = 1;
                 int label;
-                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
+                DECODE_LABEL(label, code, i, next_off, next_off)
                 term arg1;
-                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_integer/2, label=%i, arg1=%lx\n", label, arg1);
@@ -1039,7 +1039,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     if (term_is_integer(arg1)) {
                         NEXT_INSTRUCTION(next_off - 1);
                     } else {
-                        i = (uint8_t *) mod->labels[label] - chunk->code;
+                        i = (uint8_t *) mod->labels[label] - code;
                     }
                 #endif
 
@@ -1057,8 +1057,8 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 int label;
                 term arg1;
                 int next_off = 1;
-                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
-                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_nonempty_list/2, label=%i, arg1=%lx\n", label, arg1);
@@ -1066,7 +1066,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     if (term_is_list(arg1)) {
                         NEXT_INSTRUCTION(next_off - 1);
                     } else {
-                        i = (uint8_t *) mod->labels[label] - chunk->code;
+                        i = (uint8_t *) mod->labels[label] - code;
                     }
                 #endif
 
@@ -1083,8 +1083,8 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 int label;
                 term arg1;
                 int next_off = 1;
-                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
-                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_nil/2, label=%i, arg1=%lx\n", label, arg1);
@@ -1092,7 +1092,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     if (term_is_nil(arg1)) {
                         NEXT_INSTRUCTION(next_off - 1);
                     } else {
-                        i = (uint8_t *) mod->labels[label] - chunk->code;
+                        i = (uint8_t *) mod->labels[label] - code;
                     }
                 #endif
 
@@ -1109,8 +1109,8 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 int label;
                 term arg1;
                 int next_off = 1;
-                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
-                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_atom/2, label=%i, arg1=%lx\n", label, arg1);
@@ -1118,7 +1118,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     if (term_is_atom(arg1)) {
                         NEXT_INSTRUCTION(next_off - 1);
                     } else {
-                        i = (uint8_t *) mod->labels[label] - chunk->code;
+                        i = (uint8_t *) mod->labels[label] - code;
                     }
                 #endif
 
@@ -1134,9 +1134,9 @@ static inline term module_address(unsigned int module_index, unsigned int instru
            case OP_IS_TUPLE: {
                 int next_off = 1;
                 int label;
-                DECODE_LABEL(label, chunk->code, i, next_off, next_off)
+                DECODE_LABEL(label, code, i, next_off, next_off)
                 term arg1;
-                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_tuple/2, label=%i, arg1=%lx\n", label, arg1);
@@ -1144,7 +1144,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     if (term_is_tuple(arg1)) {
                         NEXT_INSTRUCTION(next_off - 1);
                     } else {
-                        i = (uint8_t *) mod->labels[label] - chunk->code;
+                        i = (uint8_t *) mod->labels[label] - code;
                     }
                 #endif
 
@@ -1161,11 +1161,11 @@ static inline term module_address(unsigned int module_index, unsigned int instru
            case OP_TEST_ARITY: {
                 int next_off = 1;
                 int label;
-                DECODE_LABEL(label, chunk->code, i, next_off, next_off);
+                DECODE_LABEL(label, code, i, next_off, next_off);
                 term arg1;
-                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off);
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off);
                 int arity;
-                DECODE_INTEGER(arity, chunk->code, i, next_off, next_off);
+                DECODE_INTEGER(arity, code, i, next_off, next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("test_arity/2, label=%i, arg1=%lx\n", label, arg1);
@@ -1173,7 +1173,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     if (term_get_tuple_arity(arg1) == arity) {
                         NEXT_INSTRUCTION(next_off - 1);
                     } else {
-                        i = (uint8_t *) mod->labels[label] - chunk->code;
+                        i = (uint8_t *) mod->labels[label] - code;
                     }
                 #endif
 
@@ -1190,12 +1190,12 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_SELECT_VAL: {
                 int next_off = 1;
                 term src_value;
-                DECODE_COMPACT_TERM(src_value, chunk->code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(src_value, code, i, next_off, next_off)
                 int default_label;
-                DECODE_LABEL(default_label, chunk->code, i, next_off, next_off)
+                DECODE_LABEL(default_label, code, i, next_off, next_off)
                 next_off++; //skip extended list tag
                 int size;
-                DECODE_INTEGER(size, chunk->code, i, next_off, next_off)
+                DECODE_INTEGER(size, code, i, next_off, next_off)
 
                 TRACE("select_val/3, default_label=%i, vals=%i\n", default_label, size);
                 USED_BY_TRACE(default_label);
@@ -1211,9 +1211,9 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                 for (int j = 0; j < size / 2; j++) {
                     term cmp_value;
-                    DECODE_COMPACT_TERM(cmp_value, chunk->code, i, next_off, next_off)
+                    DECODE_COMPACT_TERM(cmp_value, code, i, next_off, next_off)
                     int jmp_label;
-                    DECODE_LABEL(jmp_label, chunk->code, i, next_off, next_off)
+                    DECODE_LABEL(jmp_label, code, i, next_off, next_off)
 
                     #ifdef IMPL_CODE_LOADER
                         UNUSED(cmp_value);
@@ -1244,12 +1244,12 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_SELECT_TUPLE_ARITY: {
                 int next_off = 1;
                 term src_value;
-                DECODE_INTEGER(src_value, chunk->code, i, next_off, next_off)
+                DECODE_INTEGER(src_value, code, i, next_off, next_off)
                 int default_label;
-                DECODE_LABEL(default_label, chunk->code, i, next_off, next_off)
+                DECODE_LABEL(default_label, code, i, next_off, next_off)
                 next_off++; //skip extended list tag
                 int size;
-                DECODE_INTEGER(size, chunk->code, i, next_off, next_off)
+                DECODE_INTEGER(size, code, i, next_off, next_off)
 
                 TRACE("select_tuple_arity/3, default_label=%i, vals=%i\n", default_label, size);
                 USED_BY_TRACE(default_label);
@@ -1265,9 +1265,9 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                 for (int j = 0; j < size / 2; j++) {
                     int cmp_value;
-                    DECODE_INTEGER(cmp_value, chunk->code, i, next_off, next_off)
+                    DECODE_INTEGER(cmp_value, code, i, next_off, next_off)
                     int jmp_label;
-                    DECODE_LABEL(jmp_label, chunk->code, i, next_off, next_off)
+                    DECODE_LABEL(jmp_label, code, i, next_off, next_off)
 
                     #ifdef IMPL_CODE_LOADER
                         UNUSED(cmp_value);
@@ -1298,7 +1298,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_JUMP: {
                 int label;
                 int next_offset = 1;
-                DECODE_LABEL(label, chunk->code, i, next_offset, next_offset)
+                DECODE_LABEL(label, code, i, next_offset, next_offset)
 
                 TRACE("jump/1 label=%i\n", label);
                 USED_BY_TRACE(label);
@@ -1317,10 +1317,10 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_MOVE: {
                 int next_off = 1;
                 term src_value;
-                DECODE_COMPACT_TERM(src_value, chunk->code, i, next_off, next_off);
+                DECODE_COMPACT_TERM(src_value, code, i, next_off, next_off);
                 int dreg;
                 uint8_t dreg_type;
-                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("move/2 %lx, %c%i\n", src_value, reg_type_c(dreg_type), dreg);
@@ -1340,13 +1340,13 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_GET_LIST: {
                 int next_off = 1;
                 term src_value;
-                DECODE_COMPACT_TERM(src_value, chunk->code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(src_value, code, i, next_off, next_off)
                 int head_dreg;
                 uint8_t head_dreg_type;
-                DECODE_DEST_REGISTER(head_dreg, head_dreg_type, chunk->code, i, next_off, next_off);
+                DECODE_DEST_REGISTER(head_dreg, head_dreg_type, code, i, next_off, next_off);
                 int tail_dreg;
                 uint8_t tail_dreg_type;
-                DECODE_DEST_REGISTER(tail_dreg, tail_dreg_type, chunk->code, i, next_off, next_off);
+                DECODE_DEST_REGISTER(tail_dreg, tail_dreg_type, code, i, next_off, next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("get_list/3 %lx, %c%i, %c%i\n", src_value, reg_type_c(head_dreg_type), head_dreg, reg_type_c(tail_dreg_type), tail_dreg);
@@ -1370,12 +1370,12 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_GET_TUPLE_ELEMENT: {
                 int next_off = 1;
                 term src_value;
-                DECODE_COMPACT_TERM(src_value, chunk->code, i, next_off, next_off);
+                DECODE_COMPACT_TERM(src_value, code, i, next_off, next_off);
                 int element;
-                DECODE_INTEGER(element, chunk->code, i, next_off, next_off);
+                DECODE_INTEGER(element, code, i, next_off, next_off);
                 int dreg;
                 uint8_t dreg_type;
-                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 TRACE("get_tuple_element/2, element=%i, dest=%c%i\n", element, reg_type_c(dreg_type), dreg);
                 USED_BY_TRACE(element);
@@ -1396,12 +1396,12 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_PUT_LIST: {
                 int next_off = 1;
                 term head;
-                DECODE_COMPACT_TERM(head, chunk->code, i, next_off, next_off);
+                DECODE_COMPACT_TERM(head, code, i, next_off, next_off);
                 term tail;
-                DECODE_COMPACT_TERM(tail, chunk->code, i, next_off, next_off);
+                DECODE_COMPACT_TERM(tail, code, i, next_off, next_off);
                 int dreg;
                 uint8_t dreg_type;
-                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 TRACE("op_put_list/3\n");
 
@@ -1422,10 +1422,10 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_PUT_TUPLE: {
                 int next_off = 1;
                 int size;
-                DECODE_INTEGER(size, chunk->code, i, next_off, next_off);
+                DECODE_INTEGER(size, code, i, next_off, next_off);
                 int dreg;
                 uint8_t dreg_type;
-                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 TRACE("put_tuple/2 size=%i, dest=%c%i\n", size, reg_type_c(dreg_type), dreg);
                 USED_BY_TRACE(dreg);
@@ -1436,13 +1436,13 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #endif
 
                 for (int j = 0; j < size; j++) {
-                    if (chunk->code[i + next_off] != OP_PUT) {
-                        fprintf(stderr, "Expected put, got opcode: %i\n", chunk->code[i + next_off]);
+                    if (code[i + next_off] != OP_PUT) {
+                        fprintf(stderr, "Expected put, got opcode: %i\n", code[i + next_off]);
                         abort();
                     }
                     next_off++;
                     term put_value;
-                    DECODE_COMPACT_TERM(put_value, chunk->code, i, next_off, next_off);
+                    DECODE_COMPACT_TERM(put_value, code, i, next_off, next_off);
                     #ifdef IMPL_CODE_LOADER
                         TRACE("put/2\n");
                         UNUSED(put_value);
@@ -1459,8 +1459,8 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_CALL_EXT_ONLY: {
-                int arity = chunk->code[i + 1] >> 4;
-                int index = chunk->code[i + 2] >> 4;
+                int arity = code[i + 1] >> 4;
+                int index = code[i + 2] >> 4;
 
                 TRACE("call_ext_only/2, arity=%i, index=%i\n", arity, index);
                 USED_BY_TRACE(arity);
@@ -1493,7 +1493,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                             const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
 
                             mod = jump->target;
-                            chunk = mod->code;
+                            code = mod->code->code;
 
                             JUMP_TO_ADDRESS(mod->labels[jump->label]);
 
@@ -1509,16 +1509,16 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_GC_BIF1: {
-                int f_label = chunk->code[i + 1] >> 4; //TODO: use DECODE_LABEL here
-                int live = chunk->code[i + 2] >> 4;
-                int bif = chunk->code[i + 3] >> 4;
+                int f_label = code[i + 1] >> 4; //TODO: use DECODE_LABEL here
+                int live = code[i + 2] >> 4;
+                int bif = code[i + 3] >> 4;
 
                 int next_off = 4;
                 term arg1;
-                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
                 int dreg;
                 uint8_t dreg_type;
-                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("gc_bif1/5 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, dest=r%i\n", f_label, live, bif, arg1, dreg);
@@ -1546,18 +1546,18 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_GC_BIF2: {
-                int f_label = chunk->code[i + 1] >> 4; //TODO: use DECODE_LABEL here
-                int live = chunk->code[i + 2] >> 4;
-                int bif = chunk->code[i + 3] >> 4;
+                int f_label = code[i + 1] >> 4; //TODO: use DECODE_LABEL here
+                int live = code[i + 2] >> 4;
+                int bif = code[i + 3] >> 4;
 
                 int next_off = 4;
                 term arg1;
-                DECODE_COMPACT_TERM(arg1, chunk->code, i, next_off, next_off);
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off);
                 term arg2;
-                DECODE_COMPACT_TERM(arg2, chunk->code, i, next_off, next_off);
+                DECODE_COMPACT_TERM(arg2, code, i, next_off, next_off);
                 int dreg;
                 uint8_t dreg_type;
-                DECODE_DEST_REGISTER(dreg, dreg_type, chunk->code, i, next_off, next_off);
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("gc_bif2/6 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, arg2=0x%lx, dest=r%i\n", f_label, live, bif, arg1, arg2, dreg);
@@ -1586,8 +1586,8 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_TRIM: {
-                int n_words = chunk->code[i + 1] >> 4;
-                int n_remaining = chunk->code[i + 2] >> 4;
+                int n_words = code[i + 1] >> 4;
+                int n_remaining = code[i + 2] >> 4;
 
                 TRACE("trim/2 words=%i, remaining=%i\n", n_words, n_remaining);
                 USED_BY_TRACE(n_words);
@@ -1608,7 +1608,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_LINE: {
                 int next_offset = 1;
 
-                int line_number = chunk->code[i + 1];
+                int line_number = code[i + 1];
                 if (line_number == 8) {
                     //TODO: line/1 doesn't look well documented, try to understand what it really means
                     next_offset++;
@@ -1621,7 +1621,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             default:
-                printf("Undecoded opcode: %i\n", chunk->code[i]);
+                printf("Undecoded opcode: %i\n", code[i]);
                 #ifdef IMPL_EXECUTE_LOOP
                     fprintf(stderr, "failed at %i\n", i);
                 #endif
