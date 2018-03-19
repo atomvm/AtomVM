@@ -610,8 +610,9 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_BIF0: {
-                int bif = code[i + 1] >> 4;
-                int next_off = 2;
+                int next_off = 1;
+                int bif;
+                DECODE_INTEGER(bif, code, i, next_off, next_off);
                 int dreg;
                 uint8_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
@@ -635,9 +636,9 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_BIF1: {
                 int next_off = 1;
                 int fail_label;
-                DECODE_LABEL(fail_label, code, i, next_off, next_off)
-                int bif = code[i + next_off] >> 4;
-                next_off++;
+                DECODE_LABEL(fail_label, code, i, next_off, next_off);
+                int bif;
+                DECODE_INTEGER(bif, code, i, next_off, next_off);
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
                 int dreg;
@@ -667,9 +668,9 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_BIF2: {
                 int next_off = 1;
                 int fail_label;
-                DECODE_LABEL(fail_label, code, i, next_off, next_off)
-                int bif = code[i + next_off] >> 4;
-                next_off++;
+                DECODE_LABEL(fail_label, code, i, next_off, next_off);
+                int bif;
+                DECODE_INTEGER(bif, code, i, next_off, next_off);
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
                 term arg2;
@@ -1509,11 +1510,13 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_GC_BIF1: {
-                int f_label = code[i + 1] >> 4; //TODO: use DECODE_LABEL here
-                int live = code[i + 2] >> 4;
-                int bif = code[i + 3] >> 4;
-
-                int next_off = 4;
+                int next_off = 1;
+                int f_label;
+                DECODE_LABEL(f_label, code, i, next_off, next_off);
+                int live;
+                DECODE_INTEGER(live, code, i, next_off, next_off);
+                int bif;
+                DECODE_INTEGER(bif, code, i, next_off, next_off); //s?
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
                 int dreg;
@@ -1546,11 +1549,13 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_GC_BIF2: {
-                int f_label = code[i + 1] >> 4; //TODO: use DECODE_LABEL here
-                int live = code[i + 2] >> 4;
-                int bif = code[i + 3] >> 4;
-
-                int next_off = 4;
+                int next_off = 1;
+                int f_label;
+                DECODE_LABEL(f_label, code, i, next_off, next_off);
+                int live;
+                DECODE_INTEGER(live, code, i, next_off, next_off);
+                int bif;
+                DECODE_INTEGER(bif, code, i, next_off, next_off); //s?
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off);
                 term arg2;
