@@ -1612,16 +1612,12 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
             case OP_LINE: {
                 int next_offset = 1;
-
-                int line_number = code[i + 1];
-                if (line_number == 8) {
-                    //TODO: line/1 doesn't look well documented, try to understand what it really means
-                    next_offset++;
-                }
+                int line_number;
+                DECODE_INTEGER(line_number, code, i, next_offset, next_offset);
 
                 TRACE("line/1: %i\n", line_number);
 
-                NEXT_INSTRUCTION(next_offset);
+                NEXT_INSTRUCTION(next_offset - 1);
                 break;
             }
 
