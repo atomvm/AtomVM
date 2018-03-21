@@ -445,10 +445,11 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_CALL: {
-                int arity = code[i + 1] >> 4;
-                int next_offset = 2;
-                int label = 0;
-                DECODE_LABEL(label, code, i, next_offset, next_offset)
+                int next_offset = 1;
+                int arity;
+                DECODE_INTEGER(arity, code, i, next_offset, next_offset);
+                int label;
+                DECODE_LABEL(label, code, i, next_offset, next_offset);
 
                 TRACE("call/2, arity=%i, label=%i\n", arity, label);
                 USED_BY_TRACE(arity);
@@ -468,15 +469,18 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_CALL_LAST: {
-                int arity = code[i + 1] >> 4;
-                int next_offset = 2;
-                int label = 0;
-                DECODE_LABEL(label, code, i, next_offset, next_offset)
-                int n_words = code[i + next_offset] >> 4;
-                UNUSED(n_words)
+                int next_offset = 1;
+                int arity;
+                DECODE_INTEGER(arity, code, i, next_offset, next_offset);
+                int label;
+                DECODE_LABEL(label, code, i, next_offset, next_offset);
+                int n_words;
+                DECODE_INTEGER(n_words, code, i, next_offset, next_offset);
 
                 TRACE("call_last/3, arity=%i, label=%i, dellocate=%i\n", arity, label, n_words);
                 USED_BY_TRACE(arity);
+                USED_BY_TRACE(label);
+                USED_BY_TRACE(n_words);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     ctx->cp = ctx->e[n_words];
@@ -488,41 +492,47 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(next_offset + 1 - 1);
+                    NEXT_INSTRUCTION(next_offset - 1);
                 #endif
 
                 break;
             }
 
             case OP_CALL_ONLY: {
-                int arity = code[i + 1] >> 4;
-                int label = code[i + 2] >> 4;
+                int next_off = 1;
+                int arity;
+                DECODE_INTEGER(arity, code, i, next_off, next_off);
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
 
                 TRACE("call_only/2, arity=%i, label=%i\n", arity, label);
                 USED_BY_TRACE(arity);
                 USED_BY_TRACE(label);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    NEXT_INSTRUCTION(2);
+                    NEXT_INSTRUCTION(next_off - 1);
                     JUMP_TO_ADDRESS(mod->labels[label]);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(2);
+                    NEXT_INSTRUCTION(next_off - 1);
                 #endif
 
                 break;
             }
 
             case OP_CALL_EXT: {
-                int arity = code[i + 1] >> 4;
-                int index = code[i + 2] >> 4;
+                int next_off = 1;
+                int arity;
+                DECODE_INTEGER(arity, code, i, next_off, next_off);
+                int index;
+                DECODE_INTEGER(index, code, i, next_off, next_off);
 
                 TRACE("call_ext/2, arity=%i, index=%i\n", arity, index);
                 USED_BY_TRACE(arity);
                 USED_BY_TRACE(index);
 
-                NEXT_INSTRUCTION(2);
+                NEXT_INSTRUCTION(next_off - 1);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     const struct ExportedFunction *func = mod->imported_funcs[index].func;
@@ -558,12 +568,13 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_CALL_EXT_LAST: {
-                int arity = code[i + 1] >> 4;
-                int next_offset = 2;
-                int index = 0;
-                DECODE_LABEL(index, code, i, next_offset, next_offset)
-                int n_words = code[i + next_offset] >> 4;
-                UNUSED(n_words)
+                int next_off = 1;
+                int arity;
+                DECODE_INTEGER(arity, code, i, next_off, next_off);
+                int index;
+                DECODE_INTEGER(index, code, i, next_off, next_off);
+                int n_words;
+                DECODE_INTEGER(n_words, code, i, next_off, next_off);
 
                 TRACE("call_ext_last/3, arity=%i, index=%i, n_words=%i\n", arity, index, n_words);
                 USED_BY_TRACE(arity);
@@ -603,7 +614,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(next_offset + 1 - 1);
+                    NEXT_INSTRUCTION(next_off - 1);
                 #endif
 
                 break;
@@ -1472,15 +1483,18 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             }
 
             case OP_CALL_EXT_ONLY: {
-                int arity = code[i + 1] >> 4;
-                int index = code[i + 2] >> 4;
+                int next_off = 1;
+                int arity;
+                DECODE_INTEGER(arity, code, i, next_off, next_off);
+                int index;
+                DECODE_INTEGER(index, code, i, next_off, next_off);
 
                 TRACE("call_ext_only/2, arity=%i, index=%i\n", arity, index);
                 USED_BY_TRACE(arity);
                 USED_BY_TRACE(index);
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(2);
+                    NEXT_INSTRUCTION(next_off - 1);
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
