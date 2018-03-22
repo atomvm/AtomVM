@@ -1613,13 +1613,16 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                 UNUSED(f_label)
 
-                NEXT_INSTRUCTION(next_off - 1);
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 
             case OP_TRIM: {
-                int n_words = code[i + 1] >> 4;
-                int n_remaining = code[i + 2] >> 4;
+                int next_offset = 1;
+                int n_words;
+                DECODE_INTEGER(n_words, code, i, next_offset, next_offset);
+                int n_remaining;
+                DECODE_INTEGER(n_remaining, code, i, next_offset, next_offset);
 
                 TRACE("trim/2 words=%i, remaining=%i\n", n_words, n_remaining);
                 USED_BY_TRACE(n_words);
@@ -1633,7 +1636,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                 UNUSED(n_remaining)
 
-                NEXT_INSTRUCTION(2);
+                NEXT_INSTRUCTION(next_offset - 1);
                 break;
             }
 
