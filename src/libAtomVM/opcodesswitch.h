@@ -286,7 +286,7 @@
 
 
 #define NEXT_INSTRUCTION(operands_size) \
-    i += 1 + operands_size
+    i += operands_size
 
 #ifndef TRACE_JUMP
     #define JUMP_TO_ADDRESS(address) \
@@ -409,7 +409,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     module_add_label(mod, label, &code[i]);
                 #endif
 
-                NEXT_INSTRUCTION(next_offset - 1);
+                NEXT_INSTRUCTION(next_offset);
                 break;
             }
 
@@ -427,7 +427,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 USED_BY_TRACE(module_atom);
                 USED_BY_TRACE(arity);
 
-                NEXT_INSTRUCTION(next_offset - 1);
+                NEXT_INSTRUCTION(next_offset);
                 break;
             }
 
@@ -456,14 +456,14 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 USED_BY_TRACE(arity);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    NEXT_INSTRUCTION(next_offset - 1);
+                    NEXT_INSTRUCTION(next_offset);
                     ctx->cp = module_address(mod->module_index, i);
 
                     JUMP_TO_ADDRESS(mod->labels[label]);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(next_offset - 1);
+                    NEXT_INSTRUCTION(next_offset);
                 #endif
 
                 break;
@@ -493,7 +493,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(next_offset - 1);
+                    NEXT_INSTRUCTION(next_offset);
                 #endif
 
                 break;
@@ -511,12 +511,12 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 USED_BY_TRACE(label);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                     JUMP_TO_ADDRESS(mod->labels[label]);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 break;
@@ -533,7 +533,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 USED_BY_TRACE(arity);
                 USED_BY_TRACE(index);
 
-                NEXT_INSTRUCTION(next_off - 1);
+                NEXT_INSTRUCTION(next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     const struct ExportedFunction *func = mod->imported_funcs[index].func;
@@ -615,7 +615,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 break;
@@ -640,7 +640,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     WRITE_REGISTER(dreg_type, dreg, ret);
                 #endif
 
-                NEXT_INSTRUCTION(next_off - 1);
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 
@@ -672,7 +672,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     WRITE_REGISTER(dreg_type, dreg, ret);
                 #endif
 
-                NEXT_INSTRUCTION(next_off - 1);
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 
@@ -707,7 +707,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     WRITE_REGISTER(dreg_type, dreg, ret);
                 #endif
 
-                NEXT_INSTRUCTION(next_off - 1);
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 
@@ -735,7 +735,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     ctx->e[stack_need] = ctx->cp;
                 #endif
 
-                NEXT_INSTRUCTION(next_off - 1);
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 
@@ -766,7 +766,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     ctx->e[stack_need] = ctx->cp;
                 #endif
 
-                NEXT_INSTRUCTION(next_off - 1);
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 
@@ -797,7 +797,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                 //TODO: bzero/memset
 
-                NEXT_INSTRUCTION(next_off - 1);
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 
@@ -806,14 +806,14 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                 //TODO: implement test_heap
 
-                NEXT_INSTRUCTION(2);
+                NEXT_INSTRUCTION(3);
                 break;
             }
 
             case OP_KILL: {
                 TRACE("kill/1");
 
-                NEXT_INSTRUCTION(1);
+                NEXT_INSTRUCTION(2);
 
                 break;
             }
@@ -834,7 +834,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     DEBUG_DUMP_STACK(ctx);
                 #endif
 
-                NEXT_INSTRUCTION(next_off - 1);
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 
@@ -850,7 +850,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(0);
+                    NEXT_INSTRUCTION(1);
                 #endif
                 break;
             }
@@ -869,7 +869,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     mailbox_send(target, ctx->x[1]);
                 #endif
 
-                NEXT_INSTRUCTION(0);
+                NEXT_INSTRUCTION(1);
                 break;
             }
 
@@ -881,7 +881,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     ctx->x[0] = mailbox_receive(ctx);
                 #endif
 
-                NEXT_INSTRUCTION(0);
+                NEXT_INSTRUCTION(1);
                 break;
             }
 
@@ -889,7 +889,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
             case OP_TIMEOUT: {
                 TRACE("timeout/0\n");
 
-                NEXT_INSTRUCTION(0);
+                NEXT_INSTRUCTION(1);
                 break;
             }
 
@@ -912,12 +912,12 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                         term ret = mailbox_peek(ctx);
 
                         WRITE_REGISTER(dreg_type, dreg, ret);
-                        NEXT_INSTRUCTION(next_off - 1);
+                        NEXT_INSTRUCTION(next_off);
                     }
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 break;
@@ -948,7 +948,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 break;
@@ -965,7 +965,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("wait_timeout/2, label: %i, timeout: %x\n", label, term_to_int32(timeout));
 
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                     //TODO: it looks like x[0] might be used instead of jump_to_on_restore
                     ctx->saved_ip = INSTRUCTION_POINTER();
                     ctx->jump_to_on_restore = mod->labels[label];
@@ -987,7 +987,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                     UNUSED(timeout)
 
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 break;
@@ -1006,7 +1006,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     TRACE("is_equal/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
                     if (arg1 == arg2) {
-                        NEXT_INSTRUCTION(next_off - 1);
+                        NEXT_INSTRUCTION(next_off);
                     } else {
                         i = (uint8_t *) mod->labels[label] - code;
                     }
@@ -1016,7 +1016,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     TRACE("is_equal/2\n");
                     UNUSED(arg1)
                     UNUSED(arg2)
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 break;
@@ -1035,7 +1035,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     TRACE("is_eq_exact/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
                     if (arg1 == arg2) {
-                        NEXT_INSTRUCTION(next_off - 1);
+                        NEXT_INSTRUCTION(next_off);
                     } else {
                         i = (uint8_t *) mod->labels[label] - code;
                     }
@@ -1045,7 +1045,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     TRACE("is_eq_exact/2\n");
                     UNUSED(arg1)
                     UNUSED(arg2)
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 break;
@@ -1062,7 +1062,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     TRACE("is_integer/2, label=%i, arg1=%lx\n", label, arg1);
 
                     if (term_is_integer(arg1)) {
-                        NEXT_INSTRUCTION(next_off - 1);
+                        NEXT_INSTRUCTION(next_off);
                     } else {
                         i = (uint8_t *) mod->labels[label] - code;
                     }
@@ -1072,7 +1072,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     TRACE("is_integer/2\n");
                     UNUSED(label)
                     UNUSED(arg1)
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 break;
@@ -1089,7 +1089,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     TRACE("is_nonempty_list/2, label=%i, arg1=%lx\n", label, arg1);
 
                     if (term_is_list(arg1)) {
-                        NEXT_INSTRUCTION(next_off - 1);
+                        NEXT_INSTRUCTION(next_off);
                     } else {
                         i = (uint8_t *) mod->labels[label] - code;
                     }
@@ -1098,7 +1098,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #ifdef IMPL_CODE_LOADER
                     TRACE("is_nonempty_list/2\n");
                     UNUSED(arg1)
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 break;
@@ -1115,7 +1115,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     TRACE("is_nil/2, label=%i, arg1=%lx\n", label, arg1);
 
                     if (term_is_nil(arg1)) {
-                        NEXT_INSTRUCTION(next_off - 1);
+                        NEXT_INSTRUCTION(next_off);
                     } else {
                         i = (uint8_t *) mod->labels[label] - code;
                     }
@@ -1124,7 +1124,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #ifdef IMPL_CODE_LOADER
                     TRACE("is_nil/2\n");
                     UNUSED(arg1)
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 break;
@@ -1141,7 +1141,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     TRACE("is_atom/2, label=%i, arg1=%lx\n", label, arg1);
 
                     if (term_is_atom(arg1)) {
-                        NEXT_INSTRUCTION(next_off - 1);
+                        NEXT_INSTRUCTION(next_off);
                     } else {
                         i = (uint8_t *) mod->labels[label] - code;
                     }
@@ -1150,7 +1150,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #ifdef IMPL_CODE_LOADER
                     TRACE("is_atom/2\n");
                     UNUSED(arg1)
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 break;
@@ -1167,7 +1167,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     TRACE("is_tuple/2, label=%i, arg1=%lx\n", label, arg1);
 
                     if (term_is_tuple(arg1)) {
-                        NEXT_INSTRUCTION(next_off - 1);
+                        NEXT_INSTRUCTION(next_off);
                     } else {
                         i = (uint8_t *) mod->labels[label] - code;
                     }
@@ -1177,7 +1177,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     TRACE("is_tuple/2\n");
                     UNUSED(label)
                     UNUSED(arg1)
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 break;
@@ -1196,7 +1196,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     TRACE("test_arity/2, label=%i, arg1=%lx\n", label, arg1);
 
                     if (term_get_tuple_arity(arg1) == arity) {
-                        NEXT_INSTRUCTION(next_off - 1);
+                        NEXT_INSTRUCTION(next_off);
                     } else {
                         i = (uint8_t *) mod->labels[label] - code;
                     }
@@ -1206,7 +1206,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     TRACE("test_arity/2\n");
                     UNUSED(label)
                     UNUSED(arg1)
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 break;
@@ -1260,7 +1260,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 break;
@@ -1314,7 +1314,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 break;
@@ -1333,7 +1333,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(next_offset - 1);
+                    NEXT_INSTRUCTION(next_offset);
                 #endif
 
                 break;
@@ -1358,7 +1358,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     UNUSED(src_value)
                 #endif
 
-                NEXT_INSTRUCTION(next_off - 1);
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 
@@ -1388,7 +1388,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     UNUSED(src_value)
                 #endif
 
-                NEXT_INSTRUCTION(next_off - 1);
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 
@@ -1414,7 +1414,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     UNUSED(src_value)
                 #endif
 
-                NEXT_INSTRUCTION(next_off - 1);
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 
@@ -1440,7 +1440,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
 
-                NEXT_INSTRUCTION(next_off - 1);
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 
@@ -1479,7 +1479,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     #endif
                 }
 
-                NEXT_INSTRUCTION(next_off - 1);
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 
@@ -1495,7 +1495,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 USED_BY_TRACE(index);
 
                 #ifdef IMPL_CODE_LOADER
-                    NEXT_INSTRUCTION(next_off - 1);
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
@@ -1571,7 +1571,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                 UNUSED(f_label)
 
-                NEXT_INSTRUCTION(next_off - 1);
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 
@@ -1636,7 +1636,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                 UNUSED(n_remaining)
 
-                NEXT_INSTRUCTION(next_offset - 1);
+                NEXT_INSTRUCTION(next_offset);
                 break;
             }
 
@@ -1647,7 +1647,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
                 TRACE("line/1: %i\n", line_number);
 
-                NEXT_INSTRUCTION(next_offset - 1);
+                NEXT_INSTRUCTION(next_offset);
                 break;
             }
 
