@@ -419,14 +419,15 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                 DECODE_ATOM(module_atom, code, i, next_offset, next_offset)
                 int function_name_atom;
                 DECODE_ATOM(function_name_atom, code, i, next_offset, next_offset)
-                int arity = code[i + next_offset] & 0xF;
+                int arity;
+                DECODE_INTEGER(arity, code, i, next_offset, next_offset);
 
                 TRACE("func_info/3 module_name_a=%i, function_name_a=%i, arity=%i\n", module_atom, function_name_atom, arity);
                 USED_BY_TRACE(function_name_atom);
                 USED_BY_TRACE(module_atom);
                 USED_BY_TRACE(arity);
 
-                NEXT_INSTRUCTION(next_offset);
+                NEXT_INSTRUCTION(next_offset - 1);
                 break;
             }
 
