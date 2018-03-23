@@ -352,6 +352,8 @@
     code = mod->code->code; \
     i = ctx->cp & 0xFFFFFF;
 
+#define POINTER_TO_II(instruction_pointer) \
+    (((uint8_t *) (instruction_pointer)) - code)
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
@@ -1008,7 +1010,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     if (arg1 == arg2) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
-                        i = (uint8_t *) mod->labels[label] - code;
+                        i = POINTER_TO_II(mod->labels[label]);
                     }
                 #endif
 
@@ -1037,7 +1039,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     if (arg1 == arg2) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
-                        i = (uint8_t *) mod->labels[label] - code;
+                        i = POINTER_TO_II(mod->labels[label]);
                     }
                 #endif
 
@@ -1064,7 +1066,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     if (term_is_integer(arg1)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
-                        i = (uint8_t *) mod->labels[label] - code;
+                        i = POINTER_TO_II(mod->labels[label]);
                     }
                 #endif
 
@@ -1091,7 +1093,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     if (term_is_list(arg1)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
-                        i = (uint8_t *) mod->labels[label] - code;
+                        i = POINTER_TO_II(mod->labels[label]);
                     }
                 #endif
 
@@ -1117,7 +1119,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     if (term_is_nil(arg1)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
-                        i = (uint8_t *) mod->labels[label] - code;
+                        i = POINTER_TO_II(mod->labels[label]);
                     }
                 #endif
 
@@ -1143,7 +1145,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     if (term_is_atom(arg1)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
-                        i = (uint8_t *) mod->labels[label] - code;
+                        i = POINTER_TO_II(mod->labels[label]);
                     }
                 #endif
 
@@ -1169,7 +1171,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
                     if (term_is_tuple(arg1)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
-                        i = (uint8_t *) mod->labels[label] - code;
+                        i = POINTER_TO_II(mod->labels[label]);
                     }
                 #endif
 
