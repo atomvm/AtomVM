@@ -71,6 +71,8 @@ struct Module
 
     int module_index;
 
+    int end_instruction_ii;
+
     unsigned int free_literals_data : 1;
 };
 
@@ -152,5 +154,18 @@ static inline term module_get_atom_term_by_id(const Module *mod, int local_atom_
  * @param func the unresolved function placeholder struct.
  */
 const struct ExportedFunction *module_resolve_function(Module *mod, int import_table_index);
+
+/*
+ * @brief Casts an instruction index and module index to a return address
+ *
+ * @details Casts an instruction index and module index to a value that return instruction can restore later.
+ * @param module_index the module index
+ * @param the instruction index (0 is the first module instruction)
+ * @return casted return address
+ */
+static inline term module_address(unsigned int module_index, unsigned int instruction_index)
+{
+    return (term) ((module_index << 24) | instruction_index);
+}
 
 #endif

@@ -180,7 +180,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
         mod->free_literals_data = 0;
     }
 
-    read_core_chunk(mod);
+    mod->end_instruction_ii = read_core_chunk(mod);
 
     return mod;
 }

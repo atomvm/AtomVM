@@ -273,6 +273,7 @@ term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
     //TODO: fail here if no function has been found
     new_ctx->saved_module = found_module;
     new_ctx->saved_ip = found_module->labels[label];
+    new_ctx->cp = module_address(found_module->module_index, found_module->end_instruction_ii);
 
     return term_from_local_process_id(new_ctx->process_id);
 }

@@ -358,11 +358,6 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 
-static inline term module_address(unsigned int module_index, unsigned int instruction_index)
-{
-    return (term) ((module_index << 24) | instruction_index);
-}
-
 #ifdef IMPL_CODE_LOADER
     int read_core_chunk(Module *mod)
 #else
@@ -392,6 +387,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
         int label = module_search_exported_function(mod, tmp_atom_name, arity);
         free(tmp_atom_name);
 
+        ctx->cp = module_address(mod->module_index, mod->end_instruction_ii);
         JUMP_TO_ADDRESS(mod->labels[label]);
     #endif
 
@@ -438,12 +434,12 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 
             #ifdef IMPL_CODE_LOADER
                 TRACE("-- Code loading finished --\n");
-                return 1;
+                return i;
             #endif
 
             #ifdef IMPL_EXECUTE_LOOP
-                TRACE("-- Code execution finished --\n");
-                abort();
+                TRACE("-- Code execution finished for %i--\n", ctx->pid);
+                return 0;
             #endif
             }
 

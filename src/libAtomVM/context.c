@@ -28,7 +28,7 @@
 Context *context_new(GlobalContext *glb)
 {
     Context *ctx = malloc(sizeof(Context));
-    ctx->cp = (unsigned long) -1;
+    ctx->cp = 0;
 
     ctx->stack = (term *) calloc(DEFAULT_STACK_SIZE, sizeof(term));
     ctx->stack_size = DEFAULT_STACK_SIZE;
