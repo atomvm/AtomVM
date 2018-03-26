@@ -439,6 +439,11 @@
 
             #ifdef IMPL_EXECUTE_LOOP
                 TRACE("-- Code execution finished for %i--\n", ctx->pid);
+                if (schudule_processes_count(ctx->global) == 1) {
+                    return 0;
+                }
+
+                TRACE("WARNING: some processes are still running.\n");
                 return 0;
             #endif
             }

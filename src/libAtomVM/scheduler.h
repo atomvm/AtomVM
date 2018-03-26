@@ -59,4 +59,6 @@ extern void scheduler_make_ready(GlobalContext *global, Context *c);
  */
 extern void scheduler_make_waiting(GlobalContext *global, Context *c);
 
+int schudule_processes_count(GlobalContext *global);
+
 #endif
