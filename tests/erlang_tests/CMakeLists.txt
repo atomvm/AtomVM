@@ -40,7 +40,7 @@ compile_erlang(state_test2)
 compile_erlang(state_test2_sender)
 compile_erlang(state_test3)
 compile_erlang(state_test3_server)
-
+compile_erlang(guards1)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -73,4 +73,5 @@ add_custom_target(erlang_test_modules DEPENDS
     state_test2_sender.beam
     state_test3.beam
     state_test3_server.beam
+    guards1.beam
 )
