@@ -321,6 +321,8 @@
 #define OP_LOOP_REC 23
 #define OP_WAIT 25
 #define OP_WAIT_TIMEOUT 26
+#define OP_IS_LT 39
+#define OP_IS_GE 40
 #define OP_IS_EQUAL 41
 #define OP_IS_EQ_EXACT 43
 #define OP_IS_INTEGER 45
@@ -990,6 +992,65 @@
 
                     UNUSED(timeout)
 
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                break;
+            }
+
+
+            case OP_IS_LT: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off);
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off);
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, code, i, next_off, next_off);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_lt/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
+
+                    if (arg1 < arg2) {
+                        NEXT_INSTRUCTION(next_off);
+                    } else {
+                        i = POINTER_TO_II(mod->labels[label]);
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_lt/2\n");
+                    UNUSED(arg1)
+                    UNUSED(arg2)
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                break;
+            }
+
+            case OP_IS_GE: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off);
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off);
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, code, i, next_off, next_off);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_ge/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
+
+                    if (arg1 >= arg2) {
+                        NEXT_INSTRUCTION(next_off);
+                    } else {
+                        i = POINTER_TO_II(mod->labels[label]);
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_ge/2\n");
+                    UNUSED(arg1)
+                    UNUSED(arg2)
                     NEXT_INSTRUCTION(next_off);
                 #endif
 
