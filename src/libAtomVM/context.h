@@ -103,4 +103,16 @@ extern void context_destroy(Context *c);
  */
 extern int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity);
 
+/**
+ * @brief Retuns 1 if the context is a port driver
+ *
+ * @details Checks if the given context has a native_handler or not.
+ * @param ctx a valid context
+ * @returns 1 if ctx is a port driver, otherwise 0 is returned.
+ */
+static inline int context_is_port_driver(const Context *ctx)
+{
+    return ctx->native_handler != NULL;
+}
+
 #endif

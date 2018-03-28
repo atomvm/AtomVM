@@ -327,6 +327,8 @@
 #define OP_IS_EQ_EXACT 43
 #define OP_IS_INTEGER 45
 #define OP_IS_ATOM 48
+#define OP_IS_PID 49
+#define OP_IS_PORT 51
 #define OP_IS_NIL 52
 #define OP_IS_NONEMPTY_LIST 56
 #define OP_IS_TUPLE 57
@@ -1219,6 +1221,65 @@
 
                 break;
             }
+
+            case OP_IS_PID: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_pid/2, label=%i, arg1=%lx\n", label, arg1);
+
+                    if (term_is_pid(arg1)) {
+                        NEXT_INSTRUCTION(next_off);
+                    } else {
+                        i = POINTER_TO_II(mod->labels[label]);
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_pid/2\n");
+                    UNUSED(arg1)
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                break;
+           }
+
+            case OP_IS_PORT: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_port/2, label=%i, arg1=%lx\n", label, arg1);
+
+                    if (term_is_pid(arg1)) {
+                        int local_process_id = term_to_local_process_id(ctx->x[0]);
+                        Context *target = globalcontext_get_process(ctx->global, local_process_id);
+
+                        if (context_is_port_driver(target)) {
+                            NEXT_INSTRUCTION(next_off);
+                        } else {
+                            i = POINTER_TO_II(mod->labels[label]);
+                        }
+                    } else {
+                        i = POINTER_TO_II(mod->labels[label]);
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_port/2\n");
+                    UNUSED(arg1)
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                break;
+           }
 
            case OP_IS_TUPLE: {
                 int next_off = 1;
