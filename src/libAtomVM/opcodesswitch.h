@@ -326,6 +326,7 @@
 #define OP_IS_EQUAL 41
 #define OP_IS_EQ_EXACT 43
 #define OP_IS_INTEGER 45
+#define OP_IS_NUMBER 47
 #define OP_IS_ATOM 48
 #define OP_IS_PID 49
 #define OP_IS_PORT 51
@@ -1136,6 +1137,34 @@
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("is_integer/2\n");
+                    UNUSED(label)
+                    UNUSED(arg1)
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                break;
+            }
+
+           case OP_IS_NUMBER: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_number/2, label=%i, arg1=%lx\n", label, arg1);
+
+                    //TODO: check for floats too
+                    if (term_is_integer(arg1)) {
+                        NEXT_INSTRUCTION(next_off);
+                    } else {
+                        i = POINTER_TO_II(mod->labels[label]);
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_number/2\n");
                     UNUSED(label)
                     UNUSED(arg1)
                     NEXT_INSTRUCTION(next_off);
