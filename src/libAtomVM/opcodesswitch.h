@@ -331,6 +331,7 @@
 #define OP_IS_PID 49
 #define OP_IS_PORT 51
 #define OP_IS_NIL 52
+#define OP_IS_LIST 55
 #define OP_IS_NONEMPTY_LIST 56
 #define OP_IS_TUPLE 57
 #define OP_TEST_ARITY 58
@@ -1166,6 +1167,32 @@
                 #ifdef IMPL_CODE_LOADER
                     TRACE("is_number/2\n");
                     UNUSED(label)
+                    UNUSED(arg1)
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                break;
+            }
+
+            case OP_IS_LIST: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_list/2, label=%i, arg1=%lx\n", label, arg1);
+
+                    if (term_is_list(arg1) || term_is_nil(arg1)) {
+                        NEXT_INSTRUCTION(next_off);
+                    } else {
+                        i = POINTER_TO_II(mod->labels[label]);
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_list/2\n");
                     UNUSED(arg1)
                     NEXT_INSTRUCTION(next_off);
                 #endif
