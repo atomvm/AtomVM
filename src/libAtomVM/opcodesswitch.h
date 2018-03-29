@@ -1342,7 +1342,7 @@
                     TRACE("is_port/2, label=%i, arg1=%lx\n", label, arg1);
 
                     if (term_is_pid(arg1)) {
-                        int local_process_id = term_to_local_process_id(ctx->x[0]);
+                        int local_process_id = term_to_local_process_id(arg1);
                         Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
                         if (context_is_port_driver(target)) {
