@@ -92,11 +92,30 @@ static inline int term_is_list(term t)
  * @param t the term that will be checked.
  * @return 1 if check succedes, 0 otherwise.
  */
-
 static inline int term_is_boxed(term t)
 {
     /* boxed: 10 */
     return ((t & 0x3) == 0x2);
+}
+
+/**
+ * @brief Checks if a term is a binary
+ *
+ * @details Returns 1 if a term is a binary stored on the heap, otherwise 0.
+ * @param t the term that will be checked.
+ * @return 1 if check succedes, 0 otherwise.
+ */
+static inline int term_is_binary(term t)
+{
+    /* boxed: 10 */
+    if ((t & 0x3) == 0x2) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        if (boxed_value[0] & 0x3F) {
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 /**
