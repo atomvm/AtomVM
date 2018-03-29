@@ -67,6 +67,8 @@ struct Test tests[] =
     {"state_test2.beam", 3},
     {"state_test3.beam", 3},
     {"guards1.beam", 261},
+    {"guards2.beam", 36},
+    {"guards3.beam", 405},
     {NULL, 0}
 };
 
