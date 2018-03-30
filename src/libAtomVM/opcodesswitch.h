@@ -348,6 +348,7 @@
 #define OP_PUT_TUPLE 70
 #define OP_PUT 71
 #define OP_CALL_EXT_ONLY 78
+#define OP_IS_BOOLEAN 114
 #define OP_GC_BIF1 124
 #define OP_GC_BIF2 125
 #define OP_TRIM 136
@@ -363,6 +364,15 @@
 
 #define POINTER_TO_II(instruction_pointer) \
     (((uint8_t *) (instruction_pointer)) - code)
+
+static const char *const true_atom = "\x04" "true";
+static const char *const false_atom = "\x05" "false";
+
+static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
+{
+    int global_atom_index = globalcontext_insert_atom(glb, string);
+    return term_from_atom_index(global_atom_index);
+}
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
@@ -1802,6 +1812,39 @@
                             abort();
                         }
                     }
+                #endif
+
+                break;
+            }
+
+           case OP_IS_BOOLEAN: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_boolean/2, label=%i, arg1=%lx\n", label, arg1);
+
+                    static const char *const true_atom = "\x04" "true";
+                    static const char *const false_atom = "\x05" "false";
+
+                    term true_term = term_from_atom_string(ctx->global, true_atom);
+                    term false_term = term_from_atom_string(ctx->global, false_atom);
+
+                    if ((arg1 == true_term) || (arg1 == false_term)) {
+                        NEXT_INSTRUCTION(next_off);
+                    } else {
+                        i = POINTER_TO_II(mod->labels[label]);
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_boolean/2\n");
+                    UNUSED(label)
+                    UNUSED(arg1)
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 break;
