@@ -324,7 +324,9 @@
 #define OP_IS_LT 39
 #define OP_IS_GE 40
 #define OP_IS_EQUAL 41
+#define OP_IS_NOT_EQUAL 42
 #define OP_IS_EQ_EXACT 43
+#define OP_IS_NOT_EQ_EXACT 44
 #define OP_IS_INTEGER 45
 #define OP_IS_NUMBER 47
 #define OP_IS_ATOM 48
@@ -1074,6 +1076,7 @@
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_equal/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
+                    //TODO: implement this
                     if (arg1 == arg2) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
@@ -1083,6 +1086,35 @@
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("is_equal/2\n");
+                    UNUSED(arg1)
+                    UNUSED(arg2)
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                break;
+            }
+
+            case OP_IS_NOT_EQUAL: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_not_equall/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
+
+                    if (arg1 != arg2) {
+                        NEXT_INSTRUCTION(next_off);
+                    } else {
+                        i = POINTER_TO_II(mod->labels[label]);
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_not_equal/2\n");
                     UNUSED(arg1)
                     UNUSED(arg2)
                     NEXT_INSTRUCTION(next_off);
@@ -1103,6 +1135,7 @@
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_eq_exact/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
+                    //TODO: implement this
                     if (arg1 == arg2) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
@@ -1119,6 +1152,36 @@
 
                 break;
             }
+
+            case OP_IS_NOT_EQ_EXACT: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_not_eq_exact/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
+
+                    //TODO: implement this
+                    if (arg1 != arg2) {
+                        NEXT_INSTRUCTION(next_off);
+                    } else {
+                        i = POINTER_TO_II(mod->labels[label]);
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_not_eq_exact/2\n");
+                    UNUSED(arg1)
+                    UNUSED(arg2)
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                break;
+           }
 
            case OP_IS_INTEGER: {
                 int next_off = 1;
