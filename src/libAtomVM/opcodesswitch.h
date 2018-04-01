@@ -145,12 +145,12 @@
                 case COMPACT_EXTENDED_LITERAL: {                                                                        \
                     uint8_t first_extended_byte = code_chunk[(base_index) + (off) + 1];                                 \
                     if (!(first_extended_byte & 0xF)) {                                                                 \
-                        dest_term = module_load_literal(mod, first_extended_byte >> 4);                                 \
+                        dest_term = module_load_literal(mod, first_extended_byte >> 4, ctx);                            \
                         next_operand_offset += 2;                                                                       \
                     } else if ((first_extended_byte & 0xF) == 0x8) {                                                    \
                         uint8_t byte_1 = code_chunk[(base_index) + (off) + 2];                                          \
                         uint16_t index = (((uint16_t) first_extended_byte & 0xE0) << 3) | byte_1;                       \
-                        dest_term = module_load_literal(mod, index);                                                    \
+                        dest_term = module_load_literal(mod, index, ctx);                                               \
                         next_operand_offset += 3;                                                                       \
                     } else {                                                                                            \
                         abort();                                                                                        \
@@ -1717,7 +1717,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    term t = term_list_prepend(head, tail);
+                    term t = term_list_prepend(head, tail, ctx);
                     WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
 
@@ -1737,7 +1737,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 USED_BY_TRACE(dreg);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    term t = term_alloc_tuple(size);
+                    term t = term_alloc_tuple(size, ctx);
                     WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
 

@@ -31,10 +31,18 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "memory.h"
+
+
+#ifndef TYPEDEF_TERM
+#define TYPEDEF_TERM
+
 /**
  * A value of any data type, types bigger than a machine word will require some additional space on heap.
  */
 typedef unsigned long term;
+
+#endif
 
 /**
  * @brief Gets a pointer to a term stored on the heap
@@ -324,13 +332,14 @@ static inline term term_from_local_process_id(uint32_t local_process_id)
  * @details Allocates a binary on the heap, and returns a term pointing to it.
  * @param data binary data.
  * @param size size of binary data buffer.
+ * @param ctx the context that owns the memory that will be allocated.
  * @return a term pointing to the boxed binary pointer.
  */
-static inline term term_from_literal_binary(void *data, uint32_t size)
+static inline term term_from_literal_binary(void *data, uint32_t size, Context *ctx)
 {
     //TODO: write a real implementation
     //align constraints here
-    term *boxed_value = calloc(2, sizeof(term));
+    term *boxed_value = memory_heap_alloc(ctx, 2);
     boxed_value[0] = (size << 6) | 0x20; //refcounted binary
     boxed_value[1] = (term) data;
 
@@ -376,13 +385,14 @@ static inline const char *term_binary_data(term t)
  *
  * @details Allocates an unitialized tuple on the heap with given arity.
  * @param size tuple arity (count of tuple elements).
+ * @param ctx the context that owns the memory that will be allocated.
  * @return a term pointing on an empty tuple allocated on the heap.
  */
-static inline term term_alloc_tuple(uint32_t size)
+static inline term term_alloc_tuple(uint32_t size, Context *ctx)
 {
     //TODO: write a real implementation
     //align constraints here
-    term *boxed_value = calloc(1 + size, sizeof(term));
+    term *boxed_value = memory_heap_alloc(ctx, 1 + size);
     boxed_value[0] = (size << 6); //tuple
 
     return ((term) boxed_value) | 0x2;
@@ -459,13 +469,14 @@ static inline int term_get_tuple_arity(term t)
  * @details Returns a term that points to a list (cons) that will be created using a string.
  * @param data a pointer to a string, it doesn't need to be NULL terminated.
  * @param size of the string/list that will be read and allocated.
+ * @param ctx the context that owns the memory that will be allocated.
  * @return a term pointing to a list.
  */
-static inline term term_from_string(const uint8_t *data, uint16_t size)
+static inline term term_from_string(const uint8_t *data, uint16_t size, Context *ctx)
 {
     //TODO: write a real implementation
     //align constraints here
-    term *list_cells = calloc(size * 2, sizeof(term));
+    term *list_cells = memory_heap_alloc(ctx, size * 2);
     for (int i = 0; i < size * 2; i += 2) {
         list_cells[i] = (term) &list_cells[i + 2] | 0x1;
         list_cells[i + 1] = term_from_int11(data[i / 2]);
@@ -518,11 +529,12 @@ static inline term term_get_list_tail(term t)
  * @details Allocates a new list item, set head to the given term and points tail to the given next item (that might be nil).
  * @param head term, the encapsulated list item value.
  * @param tail either nil or next list item.
+ * @param ctx the context that owns the memory that will be allocated.
  * @return a term pointing to the newly created list item.
  */
-static inline term term_list_prepend(term head, term tail)
+static inline term term_list_prepend(term head, term tail, Context *ctx)
 {
-    term *list_elem = calloc(2, sizeof(term));
+    term *list_elem = memory_heap_alloc(ctx, 2);
     list_elem[0] = tail;
     list_elem[1] = head;
 

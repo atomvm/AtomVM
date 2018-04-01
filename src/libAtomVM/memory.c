@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright 2017 by Davide Bettio <davide@uninstall.it>                 *
+ *   Copyright 2018 by Davide Bettio <davide@uninstall.it>                 *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU Lesser General Public License as        *
@@ -17,26 +17,11 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-/**
- * @file externalterm.h
- * @brief External term deserialization functions
- *
- * @details This header provides external term deserialization functions.
- */
+#include <stdlib.h>
 
-#ifndef _EXTERNALTERM_H_
-#define _EXTERNALTERM_H_
+#include "memory.h"
 
-#include "term.h"
-
-/**
- * @brief Gets a term from external term data.
- *
- * @details Deserialize an external term from external format and returns a term.
- * @param external_term the external term that will be deserialized.
- * @param ctx the context that owns the memory that will be allocated.
- * @returns a term.
- */
-term externalterm_to_term(const void *external_term, Context *ctx);
-
-#endif
+term *memory_heap_alloc(Context *c, uint32_t size)
+{
+    return calloc(size, sizeof(term));
+}

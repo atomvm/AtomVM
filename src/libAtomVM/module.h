@@ -115,7 +115,7 @@ extern Module *module_new_from_iff_binary(GlobalContext *global, const void *iff
  * @param mod The module that owns that is going to be loaded.
  * @param index a valid literal index.
  */
-extern term module_load_literal(Module *mod, int index);
+extern term module_load_literal(Module *mod, int index, Context *ctx);
 
 /**
  * @brief Gets the AtomString for the given local atom id

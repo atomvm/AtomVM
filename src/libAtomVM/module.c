@@ -245,9 +245,9 @@ static void const* *module_build_literals_table(const void *literalsBuf)
     return literals_table;
 }
 
-term module_load_literal(Module *mod, int index)
+term module_load_literal(Module *mod, int index, Context *ctx)
 {
-    return externalterm_to_term(mod->literals_table[index]);
+    return externalterm_to_term(mod->literals_table[index], ctx);
 }
 
 const struct ExportedFunction *module_resolve_function(Module *mod, int import_table_index)

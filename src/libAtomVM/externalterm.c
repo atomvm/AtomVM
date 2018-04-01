@@ -29,7 +29,7 @@
 #define STRING_EXT 107
 #define BINARY_EXT 109
 
-term externalterm_to_term(const void *external_term)
+term externalterm_to_term(const void *external_term, Context *ctx)
 {
     uint8_t *external_term_buf = (uint8_t *) external_term;
 
@@ -41,12 +41,12 @@ term externalterm_to_term(const void *external_term)
     switch (external_term_buf[1]) {
         case STRING_EXT: {
             uint16_t string_size = READ_16_UNALIGNED(external_term_buf + 2);
-            return term_from_string(external_term_buf + 4, string_size);
+            return term_from_string(external_term_buf + 4, string_size, ctx);
         }
 
         case BINARY_EXT: {
             uint32_t binary_size = READ_32_UNALIGNED(external_term_buf + 2);
-            return term_from_literal_binary(external_term_buf + 6, binary_size);
+            return term_from_literal_binary(external_term_buf + 6, binary_size, ctx);
         }
 
         default:

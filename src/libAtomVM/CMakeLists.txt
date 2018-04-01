@@ -12,6 +12,7 @@ set(LIBATOMVM_SOURCES
     globalcontext.c
     iff.c
     mailbox.c
+    memory.c
     module.c
     nifs.c
     scheduler.c
