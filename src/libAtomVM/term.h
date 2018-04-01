@@ -177,6 +177,18 @@ static inline int term_is_tuple(term t)
 }
 
 /**
+ * @brief Checks if a term is a saved CP
+ *
+ * @details Returns 1 if a term is a saved continuation pointer, otherwise 0.
+ * @param t the term that will be checked.
+ * @return 1 if check succedes, 0 otherwise.
+ */
+static inline int term_is_cp(term t)
+{
+    return ((t & 0x3) == 0);
+}
+
+/**
  * @brief Gets nil value
  *
  * @details Returns always the nil value.

@@ -360,7 +360,7 @@
 #define DO_RETURN() \
     mod = mod->global->modules_by_index[ctx->cp >> 24]; \
     code = mod->code->code; \
-    i = ctx->cp & 0xFFFFFF;
+    i = (ctx->cp & 0xFFFFFF) >> 2;
 
 #define POINTER_TO_II(instruction_pointer) \
     (((uint8_t *) (instruction_pointer)) - code)

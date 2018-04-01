@@ -165,7 +165,7 @@ const struct ExportedFunction *module_resolve_function(Module *mod, int import_t
  */
 static inline term module_address(unsigned int module_index, unsigned int instruction_index)
 {
-    return (term) ((module_index << 24) | instruction_index);
+    return (term) ((module_index << 24) | (instruction_index << 2));
 }
 
 #endif
