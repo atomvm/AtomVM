@@ -19,9 +19,17 @@
 
 #include <stdlib.h>
 
+#include "context.h"
 #include "memory.h"
 
 term *memory_heap_alloc(Context *c, uint32_t size)
 {
-    return calloc(size, sizeof(term));
+    term *allocated = c->heap_ptr;
+    if (c->heap_ptr + size >= c->e) {
+        fprintf(stderr, "Need gc\n");
+        abort();
+    }
+    c->heap_ptr += size;
+
+    return allocated;
 }

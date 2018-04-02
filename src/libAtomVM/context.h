@@ -31,7 +31,7 @@
 #include "globalcontext.h"
 #include "term.h"
 
-#define DEFAULT_STACK_SIZE 32
+#define DEFAULT_STACK_SIZE 1024
 
 struct Module;
 
@@ -68,6 +68,8 @@ struct Context
 
     //Ports support
     native_handler native_handler;
+
+    term *heap_ptr;
 };
 
 #ifndef TYPEDEF_CONTEXT

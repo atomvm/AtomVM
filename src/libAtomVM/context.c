@@ -33,6 +33,7 @@ Context *context_new(GlobalContext *glb)
     ctx->stack = (term *) calloc(DEFAULT_STACK_SIZE, sizeof(term));
     ctx->stack_size = DEFAULT_STACK_SIZE;
     ctx->e = ctx->stack + ctx->stack_size;
+    ctx->heap_ptr = ctx->stack;
 
     linkedlist_append(&glb->ready_processes, &ctx->processes_list_head);
 

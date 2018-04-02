@@ -749,8 +749,8 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                         abort();
                     }
 
-                    if ((ctx->e - (stack_need + 1)) < ctx->stack) {
-                        fprintf(stderr, "Need to allocate more stack space.");
+                    if (ctx->heap_ptr > ctx->e - stack_need + 1) {
+                        fprintf(stderr, "need gc");
                         abort();
                     }
                     ctx->e -= stack_need + 1;
@@ -780,8 +780,8 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                         abort();
                     }
 
-                    if ((ctx->e - (stack_need + 1)) < ctx->stack) {
-                        fprintf(stderr, "Need to allocate more stack space.");
+                    if (ctx->heap_ptr > ctx->e - stack_need + 1) {
+                        fprintf(stderr, "need gc");
                         abort();
                     }
                     ctx->e -= stack_need + 1;
@@ -808,8 +808,8 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                         abort();
                     }
 
-                    if ((ctx->e - (stack_need + 1)) < ctx->stack) {
-                        fprintf(stderr, "Need to allocate more stack space.");
+                    if (ctx->heap_ptr > ctx->e - stack_need + 1) {
+                        fprintf(stderr, "need gc");
                         abort();
                     }
 
