@@ -33,5 +33,6 @@ typedef struct Context Context;
 #endif
 
 term *memory_heap_alloc(Context *c, uint32_t size);
+void memory_gc(Context *ctx, int new_size);
 
 #endif
