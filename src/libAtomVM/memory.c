@@ -263,8 +263,11 @@ term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move)
                 if (previous) {
                     TRACE("- Reached leaf value %lx, going back to root.\n", t);
 
-                    going_back = 1;
                     previous_term = t;
+                    t = get_placeholder_term(previous);
+                    going_back = 1;
+
+                    continue;
                 } else {
                     TRACE("Found root leaf value, returning %lx\n", t);
 
