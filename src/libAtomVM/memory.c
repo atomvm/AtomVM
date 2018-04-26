@@ -36,8 +36,6 @@
 #define USED_BY_TRACE(x) \
     (void) (x)
 
-term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move);
-
 term *memory_heap_alloc(Context *c, uint32_t size)
 {
     term *allocated = c->heap_ptr;

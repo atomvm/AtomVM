@@ -18,12 +18,20 @@
  ***************************************************************************/
 
 #include "mailbox.h"
+#include "memory.h"
 #include "scheduler.h"
 
 void mailbox_send(Context *c, term t)
 {
     Message *m = malloc(sizeof(Message));
-    m->message = t;
+
+    //TODO: do not use fixed memory size
+    term *msg_heap = calloc(256, sizeof(term));
+    term *heap_pos = msg_heap;
+    term *stack_pos = msg_heap + 256;
+    m->message = memory_copy_term_tree(&heap_pos, &stack_pos, t, 0);
+    m->msg_memory = msg_heap;
+
     linkedlist_append(&c->mailbox, &m->mailbox_list_head);
 
     scheduler_make_ready(c->global, c);
@@ -34,8 +42,9 @@ term mailbox_receive(Context *c)
     Message *m = GET_LIST_ENTRY(c->mailbox, Message, mailbox_list_head);
     linkedlist_remove(&c->mailbox, &m->mailbox_list_head);
 
-    term rt = m->message;
+    term rt = memory_copy_term_tree(&c->heap_ptr, &c->e, m->message, 0);
 
+    free(m->msg_memory);
     free(m);
 
     return rt;
