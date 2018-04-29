@@ -275,6 +275,16 @@ term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
     new_ctx->saved_ip = found_module->labels[label];
     new_ctx->cp = module_address(found_module->module_index, found_module->end_instruction_ii);
 
+    //TODO: check available registers count
+    int reg_index = 0;
+    term t = argv[2];
+    while (!term_is_nil(t)) {
+        term *t_ptr = term_get_list_ptr(t);
+        new_ctx->x[0] = memory_copy_term_tree(&ctx->heap_ptr, &ctx->e, t_ptr[1], 0);
+        t = *t_ptr;
+        reg_index++;
+    }
+
     return term_from_local_process_id(new_ctx->process_id);
 }
 term nif_erlang_send_2(Context *ctx, int argc, term argv[])
