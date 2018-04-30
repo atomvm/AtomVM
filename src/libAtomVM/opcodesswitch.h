@@ -744,12 +744,14 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 USED_BY_TRACE(live);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (live > 16) {
+                    if (live > ctx->avail_registers) {
                         fprintf(stderr, "Cannot use more than 16 registers.");
                         abort();
                     }
 
-                    if (ctx->heap_ptr > ctx->e - stack_need + 1) {
+                    context_clean_registers(ctx, live);
+
+                    if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
                         fprintf(stderr, "need gc");
                         abort();
                     }
@@ -775,12 +777,14 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 USED_BY_TRACE(live);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (live > 16) {
+                    if (live > ctx->avail_registers) {
                         fprintf(stderr, "Cannot use more than 16 registers.");
                         abort();
                     }
 
-                    if (ctx->heap_ptr > ctx->e - stack_need + 1) {
+                    context_clean_registers(ctx, live);
+
+                    if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
                         fprintf(stderr, "need gc");
                         abort();
                     }
@@ -803,10 +807,12 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 USED_BY_TRACE(live);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (live > 16) {
+                    if (live > ctx->avail_registers) {
                         fprintf(stderr, "Cannot use more than 16 registers.");
                         abort();
                     }
+
+                    context_clean_registers(ctx, live);
 
                     if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
                         memory_gc(ctx, 1024);
@@ -832,9 +838,17 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
             }
 
             case OP_KILL: {
-                TRACE("kill/1");
+                int next_offset = 1;
+                int target;
+                DECODE_INTEGER(target, code, i, next_offset, next_offset);
 
-                NEXT_INSTRUCTION(2);
+                TRACE("kill/1 target=%i\n", target);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    ctx->e[target] = term_nil();
+                #endif
+
+                NEXT_INSTRUCTION(next_offset);
 
                 break;
             }
