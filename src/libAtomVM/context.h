@@ -50,6 +50,7 @@ struct Context
     int32_t process_id;
 
     term x[16];
+    int avail_registers;
 
     term *stack;
     unsigned long stack_size;
@@ -115,6 +116,20 @@ extern int context_execute_loop(Context *ctx, Module *mod, const char *function_
 static inline int context_is_port_driver(const Context *ctx)
 {
     return ctx->native_handler != NULL;
+}
+
+/**
+ * @brief Cleans up unused registers
+ *
+ * @details Sets to NIL unused registers, x[0] - x[live - 1] will not be overwritten.
+ * @param ctx a valid context
+ * @param live number of used registers
+ */
+static inline void context_clean_registers(Context *ctx, int live)
+{
+    for (int i = live; i < ctx->avail_registers; i++) {
+        ctx->x[i] = term_nil();
+    }
 }
 
 #endif

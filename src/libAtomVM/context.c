@@ -35,6 +35,9 @@ Context *context_new(GlobalContext *glb)
     ctx->e = ctx->stack + ctx->stack_size;
     ctx->heap_ptr = ctx->stack;
 
+    ctx->avail_registers = 16;
+    context_clean_registers(ctx, 0);
+
     linkedlist_append(&glb->ready_processes, &ctx->processes_list_head);
 
     ctx->mailbox = NULL;
