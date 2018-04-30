@@ -42,6 +42,7 @@ term *memory_heap_alloc(Context *c, uint32_t size)
     if (c->heap_ptr + size >= c->e) {
         TRACE("GC is needed.\n");
         memory_gc(c, 1024);
+        allocated = c->heap_ptr;
     }
     c->heap_ptr += size;
 
@@ -71,9 +72,8 @@ void memory_gc(Context *ctx, int new_size)
     term *heap_ptr = new_heap;
     term *stack_ptr = new_stack;
 
-    term *stack = ctx->e;
-    int stack_size = (ctx->stack + DEFAULT_STACK_SIZE) - ctx->e;
-    for (int i = 0; i < 16; i++) {
+    TRACE("- Running copy GC on registers\n");
+    for (int i = 0; i < ctx->avail_registers; i++) {
         term *old_stack_ptr = stack_ptr;
         term new_root = memory_copy_term_tree(&heap_ptr, &stack_ptr, ctx->x[i], 1);
         if (old_stack_ptr != stack_ptr) {
@@ -81,6 +81,10 @@ void memory_gc(Context *ctx, int new_size)
         }
         ctx->x[i] = new_root;
     }
+
+    term *stack = ctx->e;
+    int stack_size = ctx->stack_base - ctx->e;
+    TRACE("- Running copy GC on stack (stack size: %i)\n", stack_size);
     for (int i = stack_size - 1; i >= 0; i--) {
         term *old_stack_ptr = stack_ptr;
         term new_root = memory_copy_term_tree(&heap_ptr, &stack_ptr, stack[i], 1);
@@ -93,6 +97,7 @@ void memory_gc(Context *ctx, int new_size)
     free(ctx->stack);
 
     ctx->stack = new_heap;
+    ctx->stack_base = ctx->stack + new_size;
     ctx->heap_ptr = heap_ptr;
     ctx->e = stack_ptr;
 }

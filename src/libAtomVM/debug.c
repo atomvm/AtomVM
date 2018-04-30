@@ -21,9 +21,11 @@
 
 void debug_dump_stack(Context *ctx)
 {
+    unsigned int stack_size = ctx->stack_base - ctx->e;
+
     fprintf(stderr, "\n");
-    for (unsigned int i = 0; i < ctx->stack_size; i++) {
-        fprintf(stderr, "DEBUG: stack: (%i) %lx\n", i, ctx->stack[i]);
+    for (unsigned int i = 0; i < stack_size; i++) {
+        fprintf(stderr, "DEBUG: stack: (%i) %lx\n", i, ctx->e[i]);
     }
     fprintf(stderr, "DEBUG: \n");
     fprintf(stderr, "DEBUG: e: %li\n", (long) (ctx->e - ctx->stack));

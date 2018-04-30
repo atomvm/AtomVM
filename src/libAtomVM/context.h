@@ -31,8 +31,6 @@
 #include "globalcontext.h"
 #include "term.h"
 
-#define DEFAULT_STACK_SIZE 1024
-
 struct Module;
 
 #ifndef TYPEDEF_MODULE
@@ -53,7 +51,7 @@ struct Context
     int avail_registers;
 
     term *stack;
-    unsigned long stack_size;
+    term *stack_base;
     term *e;
 
     unsigned long cp;

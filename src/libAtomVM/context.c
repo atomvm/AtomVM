@@ -25,14 +25,16 @@
 #include "opcodesswitch.h"
 #undef IMPL_EXECUTE_LOOP
 
+#define DEFAULT_STACK_SIZE 8
+
 Context *context_new(GlobalContext *glb)
 {
     Context *ctx = malloc(sizeof(Context));
     ctx->cp = 0;
 
     ctx->stack = (term *) calloc(DEFAULT_STACK_SIZE, sizeof(term));
-    ctx->stack_size = DEFAULT_STACK_SIZE;
-    ctx->e = ctx->stack + ctx->stack_size;
+    ctx->stack_base = ctx->stack + DEFAULT_STACK_SIZE;
+    ctx->e = ctx->stack_base;
     ctx->heap_ptr = ctx->stack;
 
     ctx->avail_registers = 16;
