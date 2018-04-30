@@ -457,7 +457,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
             #endif
 
             #ifdef IMPL_EXECUTE_LOOP
-                TRACE("-- Code execution finished for %i--\n", ctx->pid);
+                TRACE("-- Code execution finished for %i--\n", ctx->process_id);
                 if (schudule_processes_count(ctx->global) == 1) {
                     return 0;
                 }
