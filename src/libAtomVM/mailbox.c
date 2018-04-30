@@ -21,6 +21,8 @@
 #include "memory.h"
 #include "scheduler.h"
 
+#define ADDITIONAL_PROCESSING_MEMORY_SIZE 4
+
 void mailbox_send(Context *c, term t)
 {
     Message *m = malloc(sizeof(Message));
@@ -31,6 +33,7 @@ void mailbox_send(Context *c, term t)
     term *stack_pos = msg_heap + 256;
     m->message = memory_copy_term_tree(&heap_pos, &stack_pos, t, 0);
     m->msg_memory = msg_heap;
+    m->msg_memory_size = heap_pos - msg_heap;
 
     linkedlist_append(&c->mailbox, &m->mailbox_list_head);
 
@@ -41,6 +44,12 @@ term mailbox_receive(Context *c)
 {
     Message *m = GET_LIST_ENTRY(c->mailbox, Message, mailbox_list_head);
     linkedlist_remove(&c->mailbox, &m->mailbox_list_head);
+
+    if (c->e - c->heap_ptr < m->msg_memory_size) {
+        //ADDITIONAL_PROCESSING_MEMORY_SIZE: ensure some additional memory fo message processing, so there is
+        //no need to run GC again.
+        memory_gc(c, (c->stack_base - c->stack) + m->msg_memory_size + ADDITIONAL_PROCESSING_MEMORY_SIZE);
+    }
 
     term rt = memory_copy_term_tree(&c->heap_ptr, &c->e, m->message, 0);
 

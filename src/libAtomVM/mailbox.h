@@ -36,6 +36,7 @@ typedef struct
     struct ListHead mailbox_list_head;
     term message;
     void *msg_memory;
+    int msg_memory_size;
 } Message;
 
 /**
