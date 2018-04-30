@@ -210,18 +210,24 @@ static char *binary_to_string(term binary)
 
 static void process_echo_mailbox(Context *ctx)
 {
-    term msg = mailbox_receive(ctx);
+    void *term_mem;
+
+    term msg = mailbox_0copy_receive(ctx, &term_mem);
     term pid = term_get_tuple_element(msg, 0);
     term val = term_get_tuple_element(msg, 1);
 
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
     mailbox_send(target, val);
+
+    free(term_mem);
 }
 
 static void process_console_mailbox(Context *ctx)
 {
-    term msg = mailbox_receive(ctx);
+    void *term_mem;
+
+    term msg = mailbox_0copy_receive(ctx, &term_mem);
     term pid = term_get_tuple_element(msg, 0);
     term val = term_get_tuple_element(msg, 1);
 
@@ -242,6 +248,8 @@ static void process_console_mailbox(Context *ctx)
     //TODO: use globalcontext_get_atom_id(ctx->global, ok_atom);
     int ok_index = globalcontext_insert_atom(ctx->global, ok_atom);
     mailbox_send(target, term_from_atom_index(ok_index));
+
+    free(term_mem);
 }
 
 term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])

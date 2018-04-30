@@ -50,6 +50,19 @@ term mailbox_receive(Context *c)
     return rt;
 }
 
+term mailbox_0copy_receive(Context *c, void **msg_term_mem)
+{
+    Message *m = GET_LIST_ENTRY(c->mailbox, Message, mailbox_list_head);
+    linkedlist_remove(&c->mailbox, &m->mailbox_list_head);
+
+    term message_term = m->message;
+
+    *msg_term_mem = m->msg_memory;
+    free(m);
+
+    return message_term;
+}
+
 term mailbox_peek(Context *c)
 {
     Message *m = GET_LIST_ENTRY(c->mailbox, Message, mailbox_list_head);

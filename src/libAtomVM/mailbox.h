@@ -57,6 +57,16 @@ extern void mailbox_send(Context *c, term t);
 extern term mailbox_receive(Context *c);
 
 /**
+ * @brief Gets next message from a mailbox without copying to heap.
+ *
+ * @details Dequeue a term that has been previously queued on a certain process or driver mailbox without performing a copy to the heap.
+ * @param c the process or driver context.
+ * @param msg_term_mem a pointer to the block of memory that stores term data that must be manually freed.
+ * @returns next queued term.
+ */
+term mailbox_0copy_receive(Context *c, void **msg_term_mem);
+
+/**
  * @brief Gets next message from a mailbox (without removing it).
  *
  * @details Peek the mailbox and retrieve a term that has been previously queued on a certain process or driver mailbox.
