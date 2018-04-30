@@ -808,9 +808,8 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                         abort();
                     }
 
-                    if (ctx->heap_ptr > ctx->e - stack_need + 1) {
-                        fprintf(stderr, "need gc");
-                        abort();
+                    if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
+                        memory_gc(ctx, 1024);
                     }
 
                     ctx->e -= stack_need + 1;
