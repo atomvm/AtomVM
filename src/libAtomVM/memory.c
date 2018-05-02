@@ -64,6 +64,13 @@ void memory_ensure_free(Context *c, uint32_t size)
     }
 }
 
+void memory_gc_and_shrink(Context *c)
+{
+    if (context_avail_free_memory(c) >= MIN_FREE_SPACE_SIZE * 2) {
+        memory_gc(c, context_memory_size(c) - context_avail_free_memory(c) / 2);
+    }
+}
+
 static inline void push_to_stack(term **stack, term value)
 {
     *stack = (*stack) - 1;

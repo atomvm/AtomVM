@@ -25,6 +25,7 @@
 
 static void scheduler_timeout_callback(void *data);
 static void scheduler_execute_native_handlers(GlobalContext *global);
+static void scheduler_waiting_hook(void *data);
 
 Context *scheduler_wait(GlobalContext *global, Context *c, int timeout)
 {
@@ -42,6 +43,7 @@ Context *scheduler_wait(GlobalContext *global, Context *c, int timeout)
         sys_set_timestamp_from_relative_to_abs(&listener->expiral_timestamp, timeout);
         listener->data = c;
         listener->handler = scheduler_timeout_callback;
+        listener->waiting_hook = scheduler_waiting_hook;
     }
 
     scheduler_execute_native_handlers(global);
@@ -122,4 +124,9 @@ int schudule_processes_count(GlobalContext *global)
     } while (context != contexts);
 
     return count;
+}
+
+static void scheduler_waiting_hook(void *data)
+{
+    memory_gc_and_shrink((Context *) data);
 }

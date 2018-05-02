@@ -36,5 +36,6 @@ term *memory_heap_alloc(Context *c, uint32_t size);
 void memory_gc(Context *ctx, int new_size);
 term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move);
 void memory_ensure_free(Context *c, uint32_t size);
+void memory_gc_and_shrink(Context *c);
 
 #endif

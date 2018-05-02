@@ -35,12 +35,15 @@
 #include <time.h>
 
 typedef void (*event_handler_t)(void *data);
+typedef void (*waiting_hook_t)(void *data);
 
 typedef struct EventListener {
     struct ListHead listeners_list_head;
 
     int expires;
     struct timespec expiral_timestamp;
+
+    waiting_hook_t waiting_hook;
 
     event_handler_t handler;
     void *data;
