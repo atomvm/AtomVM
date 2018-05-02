@@ -752,8 +752,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                     context_clean_registers(ctx, live);
 
                     if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
-                        fprintf(stderr, "need gc");
-                        abort();
+                        memory_ensure_free(ctx, stack_need + 1);
                     }
                     ctx->e -= stack_need + 1;
                     ctx->e[stack_need] = ctx->cp;
@@ -784,9 +783,8 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
 
                     context_clean_registers(ctx, live);
 
-                    if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
-                        fprintf(stderr, "need gc");
-                        abort();
+                    if ((ctx->heap_ptr + heap_need) > ctx->e - (stack_need + 1)) {
+                        memory_ensure_free(ctx, heap_need + stack_need + 1);
                     }
                     ctx->e -= stack_need + 1;
                     ctx->e[stack_need] = ctx->cp;
@@ -815,7 +813,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                     context_clean_registers(ctx, live);
 
                     if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
-                        memory_gc(ctx, 1024);
+                        memory_ensure_free(ctx, stack_need + 1);
                     }
 
                     ctx->e -= stack_need + 1;
@@ -829,11 +827,24 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
             }
 
             case OP_TEST_HEAP: {
-                TRACE("test_heap/2\n");
+                int next_offset = 1;
+                unsigned int heap_need;
+                DECODE_INTEGER(heap_need, code, i, next_offset, next_offset);
+                int live_registers;
+                DECODE_INTEGER(live_registers, code, i, next_offset, next_offset);
 
-                //TODO: implement test_heap
+                TRACE("test_heap/2 heap_need=%i, live_registers=%i\n", heap_need, live_registers);
+                USED_BY_TRACE(heap_need);
+                USED_BY_TRACE(live_registers);
 
-                NEXT_INSTRUCTION(3);
+                #ifdef IMPL_EXECUTE_LOOP
+                    if (context_avail_free_memory(ctx) < heap_need) {
+                        context_clean_registers(ctx, live_registers);
+                        memory_ensure_free(ctx, heap_need);
+                    }
+                #endif
+
+                NEXT_INSTRUCTION(next_offset);
                 break;
             }
 
@@ -1730,6 +1741,8 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
+                    //WARNING: if gc is executed here, older references will appear
+                    //gc should be executed before any DECODE.
                     term t = term_list_prepend(head, tail, ctx);
                     WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
@@ -1750,6 +1763,8 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 USED_BY_TRACE(dreg);
 
                 #ifdef IMPL_EXECUTE_LOOP
+                    //WARNING: if gc is executed here, older references will appear
+                    //gc should be executed before any DECODE.
                     term t = term_alloc_tuple(size, ctx);
                     WRITE_REGISTER(dreg_type, dreg, t);
                 #endif

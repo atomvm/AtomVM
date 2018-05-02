@@ -36,17 +36,32 @@
 #define USED_BY_TRACE(x) \
     (void) (x)
 
+#define MIN_FREE_SPACE_SIZE 8
+
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
 term *memory_heap_alloc(Context *c, uint32_t size)
 {
     term *allocated = c->heap_ptr;
-    if (c->heap_ptr + size >= c->e) {
+    if (c->heap_ptr + size > c->e) {
         TRACE("GC is needed.\n");
-        memory_gc(c, 1024);
+        memory_ensure_free(c, size);
         allocated = c->heap_ptr;
     }
     c->heap_ptr += size;
 
     return allocated;
+}
+
+void memory_ensure_free(Context *c, uint32_t size)
+{
+    if (context_memory_size(c) > size) {
+        memory_gc(c, context_memory_size(c));
+    }
+
+    if (context_avail_free_memory(c) < size + MIN_FREE_SPACE_SIZE) {
+        memory_gc(c, MAX(context_memory_size(c) * 2, context_memory_size(c) + size));
+    }
 }
 
 static inline void push_to_stack(term **stack, term value)

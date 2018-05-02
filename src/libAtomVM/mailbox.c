@@ -48,7 +48,7 @@ term mailbox_receive(Context *c)
     if (c->e - c->heap_ptr < m->msg_memory_size) {
         //ADDITIONAL_PROCESSING_MEMORY_SIZE: ensure some additional memory fo message processing, so there is
         //no need to run GC again.
-        memory_gc(c, (c->stack_base - c->stack) + m->msg_memory_size + ADDITIONAL_PROCESSING_MEMORY_SIZE);
+        memory_gc(c, context_memory_size(c) + m->msg_memory_size + ADDITIONAL_PROCESSING_MEMORY_SIZE);
     }
 
     term rt = memory_copy_term_tree(&c->heap_ptr, &c->e, m->message, 0);

@@ -130,4 +130,28 @@ static inline void context_clean_registers(Context *ctx, int live)
     }
 }
 
+/**
+ * @brief Returns available free memory in term units
+ *
+ * @details Returns the number of terms that can fit either on the stack or on the heap.
+ * @param ctx a valid context.
+ * @returns available free memory that is avail_size_in_bytes / sizeof(term).
+ */
+static inline unsigned long context_avail_free_memory(const Context *ctx)
+{
+    return ctx->e - ctx->heap_ptr;
+}
+
+/**
+ * @brief Returns context total memory in term units
+ *
+ * @details Returns the total memory reserved for stack and heap in term units.
+ * @param ctx a valid context.
+ * @returns total memory that is total_size_in_bytes / sizeof(term).
+ */
+static inline unsigned long context_memory_size(const Context *ctx)
+{
+    return ctx->stack_base - ctx->stack;
+}
+
 #endif
