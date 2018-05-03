@@ -817,10 +817,11 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                     }
 
                     ctx->e -= stack_need + 1;
+                    for (int s = 0; s < stack_need; s++) {
+                        ctx->e[s] = term_nil();
+                    }
                     ctx->e[stack_need] = ctx->cp;
                 #endif
-
-                //TODO: bzero/memset
 
                 NEXT_INSTRUCTION(next_off);
                 break;
