@@ -524,6 +524,35 @@ static inline term term_get_list_tail(term t)
 }
 
 /**
+ * @brief Allocate unitialized memory for a list item
+ *
+ * @details Allocates a memory area that will be used to store a list item.
+ * @param ctx the context that owns the memory that will be allocated.
+ * @return a pointer to a newly allocated memory area.
+ */
+static inline term *term_list_alloc(Context *ctx)
+{
+    return memory_heap_alloc(ctx, 2);
+}
+
+/**
+ * @brief Prepends a term to an existing list
+ *
+ * @details Initializes a list item, set head to the given term and points tail to the given next item (that might be nil).
+ * @param head term, the encapsulated list item value.
+ * @param tail either nil or next list item.
+ * @param list_elem the memory area that will be initialized.
+ * @return a term pointing to the newly initialized list item.
+ */
+static inline term term_list_init_prepend(term *list_elem, term head, term tail)
+{
+    list_elem[0] = tail;
+    list_elem[1] = head;
+
+    return ((term) list_elem) | 0x1;
+}
+
+/**
  * @brief Prepends a term to an existing list
  *
  * @details Allocates a new list item, set head to the given term and points tail to the given next item (that might be nil).
@@ -534,11 +563,8 @@ static inline term term_get_list_tail(term t)
  */
 static inline term term_list_prepend(term head, term tail, Context *ctx)
 {
-    term *list_elem = memory_heap_alloc(ctx, 2);
-    list_elem[0] = tail;
-    list_elem[1] = head;
-
-    return ((term) list_elem) | 0x1;
+    term *l = term_list_alloc(ctx);
+    return term_list_init_prepend(l, head, tail);
 }
 
 /**

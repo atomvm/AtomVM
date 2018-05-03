@@ -1728,6 +1728,10 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
             }
 
             case OP_PUT_LIST: {
+                #ifdef IMPL_EXECUTE_LOOP
+                    term *list_elem = term_list_alloc(ctx);
+                #endif
+
                 int next_off = 1;
                 term head;
                 DECODE_COMPACT_TERM(head, code, i, next_off, next_off);
@@ -1745,9 +1749,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    //WARNING: if gc is executed here, older references will appear
-                    //gc should be executed before any DECODE.
-                    term t = term_list_prepend(head, tail, ctx);
+                    term t = term_list_init_prepend(list_elem, head, tail);
                     WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
 
@@ -1767,8 +1769,6 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 USED_BY_TRACE(dreg);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    //WARNING: if gc is executed here, older references will appear
-                    //gc should be executed before any DECODE.
                     term t = term_alloc_tuple(size, ctx);
                     WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
