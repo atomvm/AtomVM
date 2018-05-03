@@ -22,6 +22,8 @@
 
 #include <stdint.h>
 
+#define HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF 64
+
 #ifndef TYPEDEF_TERM
 #define TYPEDEF_TERM
 typedef unsigned long term;

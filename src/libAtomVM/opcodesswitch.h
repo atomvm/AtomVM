@@ -841,6 +841,10 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                     if (context_avail_free_memory(ctx) < heap_need) {
                         context_clean_registers(ctx, live_registers);
                         memory_ensure_free(ctx, heap_need);
+                    } else if (context_avail_free_memory(ctx) > heap_need * HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF) {
+                        context_clean_registers(ctx, live_registers);
+                        int used_size = context_memory_size(ctx) - context_avail_free_memory(ctx);
+                        memory_ensure_free(ctx, used_size + heap_need * (HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF / 2));
                     }
                 #endif
 
