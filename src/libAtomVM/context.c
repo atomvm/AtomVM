@@ -32,10 +32,10 @@ Context *context_new(GlobalContext *glb)
     Context *ctx = malloc(sizeof(Context));
     ctx->cp = 0;
 
-    ctx->stack = (term *) calloc(DEFAULT_STACK_SIZE, sizeof(term));
-    ctx->stack_base = ctx->stack + DEFAULT_STACK_SIZE;
+    ctx->heap_start = (term *) calloc(DEFAULT_STACK_SIZE, sizeof(term));
+    ctx->stack_base = ctx->heap_start + DEFAULT_STACK_SIZE;
     ctx->e = ctx->stack_base;
-    ctx->heap_ptr = ctx->stack;
+    ctx->heap_ptr = ctx->heap_start;
 
     ctx->avail_registers = 16;
     context_clean_registers(ctx, 0);
@@ -61,6 +61,6 @@ void context_destroy(Context *ctx)
 {
     linkedlist_remove(&ctx->global->processes_table, &ctx->processes_table_head);
 
-    free(ctx->stack);
+    free(ctx->heap_start);
     free(ctx);
 }

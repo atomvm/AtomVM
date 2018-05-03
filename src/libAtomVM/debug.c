@@ -28,7 +28,7 @@ void debug_dump_stack(Context *ctx)
         fprintf(stderr, "DEBUG: stack: (%i) %lx\n", i, ctx->e[i]);
     }
     fprintf(stderr, "DEBUG: \n");
-    fprintf(stderr, "DEBUG: e: %li\n", (long) (ctx->e - ctx->stack));
+    fprintf(stderr, "DEBUG: e: %li\n", (long) (ctx->stack_base - ctx->e));
 }
 
 void debug_print_processes_list(struct ListHead *processes)

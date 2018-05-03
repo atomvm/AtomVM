@@ -116,10 +116,10 @@ void memory_gc(Context *ctx, int new_size)
         push_to_stack(&stack_ptr, new_root);
     }
 
-    free(ctx->stack);
+    free(ctx->heap_start);
 
-    ctx->stack = new_heap;
-    ctx->stack_base = ctx->stack + new_size;
+    ctx->heap_start = new_heap;
+    ctx->stack_base = ctx->heap_start + new_size;
     ctx->heap_ptr = heap_ptr;
     ctx->e = stack_ptr;
 }

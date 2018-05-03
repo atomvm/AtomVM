@@ -50,7 +50,7 @@ struct Context
     term x[16];
     int avail_registers;
 
-    term *stack;
+    term *heap_start;
     term *stack_base;
     term *e;
 
@@ -151,7 +151,7 @@ static inline unsigned long context_avail_free_memory(const Context *ctx)
  */
 static inline unsigned long context_memory_size(const Context *ctx)
 {
-    return ctx->stack_base - ctx->stack;
+    return ctx->stack_base - ctx->heap_start;
 }
 
 #endif
