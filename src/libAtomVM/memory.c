@@ -18,6 +18,7 @@
  ***************************************************************************/
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "context.h"
 #include "debug.h"
@@ -69,6 +70,12 @@ void memory_gc_and_shrink(Context *c)
     if (context_avail_free_memory(c) >= MIN_FREE_SPACE_SIZE * 2) {
         memory_gc(c, context_memory_size(c) - context_avail_free_memory(c) / 2);
     }
+}
+
+static inline term peek_stack(term **stack)
+{
+    term value = **stack;
+    return value;
 }
 
 static inline void push_to_stack(term **stack, term value)
@@ -421,4 +428,95 @@ term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move)
     } while (previous != NULL);
 
     return previous_term;
+}
+
+unsigned long memory_estimate_term_memory_usage(term t, int *max_stack_slots)
+{
+    int temp_stack_size = 3;
+    term *base_stack = ((term *) calloc(temp_stack_size, sizeof(term))) + temp_stack_size;
+    term *stack = base_stack;
+    term **new_stack = &stack;
+
+    unsigned long used_memory = 0;
+    *max_stack_slots = 0;
+
+    TRACE("Going to calculate memory usage for %lx\n", t);
+
+    push_to_stack(new_stack, 0);
+
+    do {
+        if (!t) {
+            return used_memory;
+
+        } else if (term_is_nil(t)) {
+            t = peek_stack(new_stack);
+
+        } else if (term_is_list(t)) {
+
+            term tail = term_get_list_tail(t);
+            term head = term_get_list_head(t);
+
+            if (peek_stack(new_stack) == t) {
+                pop_from_stack(new_stack);
+                t = term_get_list_head(t);
+            } else {
+                used_memory += 2;
+
+                if (!is_leaf_term(head)) {
+                    push_to_stack(new_stack, t);
+                }
+            }
+
+            t = tail;
+
+        } else if (term_is_tuple(t)) {
+            int arity = term_get_tuple_arity(t);
+
+            if (peek_stack(new_stack) == t) {
+                pop_from_stack(new_stack);
+                int elem = pop_from_stack(new_stack) + 1;
+
+                if (elem < arity) {
+                    push_to_stack(new_stack, elem);
+                    push_to_stack(new_stack, t);
+                    t = term_get_tuple_element(t, elem);
+
+                } else {
+                    used_memory += arity + 1;
+                    t = peek_stack(new_stack);
+                }
+
+            } else {
+                push_to_stack(new_stack, 0);
+                push_to_stack(new_stack, t);
+                t = term_get_tuple_element(t, 0);
+            }
+
+        } else if (term_is_binary(t)) {
+            used_memory += 2;
+            t = peek_stack(new_stack);
+
+        } else {
+            t = peek_stack(new_stack);
+        }
+
+        int used_stack_size = base_stack - stack;
+        if (*max_stack_slots < used_stack_size) {
+            *max_stack_slots = used_stack_size;
+        }
+
+        if (temp_stack_size <= used_stack_size) {
+            term *old_stack_ptr = base_stack - temp_stack_size;
+            term *old_stack_pos_ptr = stack;
+
+            int new_stack_size = temp_stack_size * 2;
+            term *new_stack_ptr = malloc(new_stack_size * sizeof(term));
+            base_stack = new_stack_ptr + new_stack_size;
+
+            memcpy(base_stack - used_stack_size, old_stack_pos_ptr, used_stack_size * sizeof(term));
+            free(old_stack_ptr);
+            stack = base_stack - used_stack_size;
+            temp_stack_size = new_stack_size;
+        }
+    } while (1);
 }
