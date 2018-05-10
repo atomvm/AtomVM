@@ -52,6 +52,7 @@ struct Context
 
     term *heap_start;
     term *stack_base;
+    term *heap_ptr;
     term *e;
 
     unsigned long cp;
@@ -67,8 +68,6 @@ struct Context
 
     //Ports support
     native_handler native_handler;
-
-    term *heap_ptr;
 };
 
 #ifndef TYPEDEF_CONTEXT
