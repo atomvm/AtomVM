@@ -27,10 +27,12 @@ void mailbox_send(Context *c, term t)
 {
     Message *m = malloc(sizeof(Message));
 
-    //TODO: do not use fixed memory size
-    term *msg_heap = calloc(256, sizeof(term));
+    int stack_slots;
+    unsigned long estimated_size = memory_estimate_term_memory_usage(t, &stack_slots) + stack_slots;
+
+    term *msg_heap = calloc(estimated_size, sizeof(term));
     term *heap_pos = msg_heap;
-    term *stack_pos = msg_heap + 256;
+    term *stack_pos = msg_heap + estimated_size;
     m->message = memory_copy_term_tree(&heap_pos, &stack_pos, t, 0);
     m->msg_memory = msg_heap;
     m->msg_memory_size = heap_pos - msg_heap;
