@@ -48,7 +48,7 @@ term mailbox_receive(Context *c)
     linkedlist_remove(&c->mailbox, &m->mailbox_list_head);
 
     if (c->e - c->heap_ptr < m->msg_memory_size) {
-        //ADDITIONAL_PROCESSING_MEMORY_SIZE: ensure some additional memory fo message processing, so there is
+        //ADDITIONAL_PROCESSING_MEMORY_SIZE: ensure some additional memory for message processing, so there is
         //no need to run GC again.
         memory_gc(c, context_memory_size(c) + m->msg_memory_size + ADDITIONAL_PROCESSING_MEMORY_SIZE);
     }
