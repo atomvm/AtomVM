@@ -446,7 +446,7 @@ unsigned long memory_estimate_term_memory_usage(term t, int *max_stack_slots)
 
     do {
         if (!t) {
-            return used_memory;
+            break;
 
         } else if (term_is_nil(t)) {
             t = peek_stack(new_stack);
@@ -510,7 +510,7 @@ unsigned long memory_estimate_term_memory_usage(term t, int *max_stack_slots)
             term *old_stack_pos_ptr = stack;
 
             int new_stack_size = temp_stack_size * 2;
-            term *new_stack_ptr = malloc(new_stack_size * sizeof(term));
+            term *new_stack_ptr = calloc(new_stack_size, sizeof(term));
             base_stack = new_stack_ptr + new_stack_size;
 
             memcpy(base_stack - used_stack_size, old_stack_pos_ptr, used_stack_size * sizeof(term));
@@ -519,4 +519,7 @@ unsigned long memory_estimate_term_memory_usage(term t, int *max_stack_slots)
             temp_stack_size = new_stack_size;
         }
     } while (1);
+
+    free(base_stack - temp_stack_size);
+    return used_memory;
 }
