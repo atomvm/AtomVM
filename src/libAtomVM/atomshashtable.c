@@ -19,6 +19,8 @@
 
 #include "atomshashtable.h"
 
+#include "utils.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -47,11 +49,11 @@ static unsigned long sdbm_hash(const unsigned char *str, int len)
 struct AtomsHashTable *atomshashtable_new()
 {
     struct AtomsHashTable *htable = malloc(sizeof(struct AtomsHashTable));
-    if (!htable) {
+    if (IS_NULL_PTR(htable)) {
         return NULL;
     }
     htable->buckets = calloc(DEFAULT_SIZE, sizeof(struct HNode *));
-    if (!htable->buckets) {
+    if (IS_NULL_PTR(htable->buckets)) {
         free(htable);
         return NULL;
     }
@@ -86,7 +88,7 @@ int atomshashtable_insert(struct AtomsHashTable *hash_table, AtomString string, 
     }
 
     struct HNode *new_node = malloc(sizeof(struct HNode));
-    if (!new_node) {
+    if (IS_NULL_PTR(new_node)) {
         return 0;
     }
     new_node->next = NULL;

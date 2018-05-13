@@ -40,7 +40,7 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
     MappedFile *mapped_file = mapped_file_open_beam(argv[1]);
-    if (!mapped_file) {
+    if (IS_NULL_PTR(mapped_file)) {
         return EXIT_FAILURE;
     }
 

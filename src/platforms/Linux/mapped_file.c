@@ -19,6 +19,8 @@
 
 #include "mapped_file.h"
 
+#include "utils.h"
+
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -31,7 +33,7 @@
 MappedFile *mapped_file_open_beam(const char *file_name)
 {
     MappedFile *mf = malloc(sizeof(MappedFile));
-    if (!mf) {
+    if (IS_NULL_PTR(mf)) {
         return NULL;
     }
 
@@ -47,7 +49,7 @@ MappedFile *mapped_file_open_beam(const char *file_name)
     mf->size = file_stats.st_size;
 
     mf->mapped = mmap(NULL, mf->size, PROT_READ, MAP_SHARED, mf->fd, 0);
-    if (!mf->mapped) {
+    if (IS_NULL_PTR(mf->mapped)) {
         fprintf(stderr, "Cannot mmap %s\n", file_name);
         close(mf->fd);
         free(mf);

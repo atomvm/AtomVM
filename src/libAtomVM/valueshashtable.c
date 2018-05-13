@@ -19,6 +19,8 @@
 
 #include "valueshashtable.h"
 
+#include "utils.h"
+
 #include <stdlib.h>
 
 #define DEFAULT_SIZE 8
@@ -37,7 +39,7 @@ struct ValuesHashTable *valueshashtable_new()
         return NULL;
     }
     htable->buckets = calloc(DEFAULT_SIZE, sizeof(struct HNode *));
-    if (!htable->buckets) {
+    if (IS_NULL_PTR(htable->buckets)) {
         free(htable);
         return NULL;
     }
@@ -69,7 +71,7 @@ int valueshashtable_insert(struct ValuesHashTable *hash_table, unsigned long key
     }
 
     struct HNode *new_node = malloc(sizeof(struct HNode));
-    if (!new_node) {
+    if (IS_NULL_PTR(new_node)) {
         return 0;
     }
     new_node->next = NULL;

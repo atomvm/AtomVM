@@ -23,6 +23,7 @@
 #include "globalcontext.h"
 
 #include "atomshashtable.h"
+#include "utils.h"
 #include "valueshashtable.h"
 #include "sys.h"
 #include "context.h"
@@ -47,12 +48,12 @@ GlobalContext *globalcontext_new()
     glb->last_process_id = 0;
 
     glb->atoms_table = atomshashtable_new();
-    if (!glb->atoms_table) {
+    if (IS_NULL_PTR(glb->atoms_table)) {
         free(glb);
         return NULL;
     }
     glb->atoms_ids_table = valueshashtable_new();
-    if (!glb->atoms_ids_table) {
+    if (IS_NULL_PTR(glb->atoms_ids_table)) {
         free(glb->atoms_table);
         free(glb);
         return NULL;
@@ -61,7 +62,7 @@ GlobalContext *globalcontext_new()
     glb->modules_by_index = NULL;
     glb->loaded_modules_count = 0;
     glb->modules_table = atomshashtable_new();
-    if (!glb->modules_table) {
+    if (IS_NULL_PTR(glb->modules_table)) {
         free(glb->atoms_ids_table);
         free(glb->atoms_table);
         free(glb);
@@ -199,7 +200,7 @@ Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_a
 
     if (!found_module) {
         char *module_name = malloc(256 + 5);
-        if (!module_name) {
+        if (IS_NULL_PTR(module_name)) {
             return NULL;
         }
 

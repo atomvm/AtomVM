@@ -71,4 +71,11 @@
 
 #define UNUSED(x) (void) (x);
 
+
+#ifdef __GNUC__
+    #define IS_NULL_PTR(x) __builtin_expect((x) == NULL, 0)
+#else
+    #define IS_NULL_PTR(x) ((x) == NULL)
+#endif
+
 #endif

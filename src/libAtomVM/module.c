@@ -56,7 +56,7 @@ static void module_populate_atoms_table(Module *this_module, uint8_t *table_data
     const char *current_atom = (const char *) table_data + 12;
 
     this_module->local_atoms_to_global_table = calloc(atoms_count + 1, sizeof(int));
-    if (!this_module->local_atoms_to_global_table) {
+    if (IS_NULL_PTR(this_module->local_atoms_to_global_table)) {
         fprintf(stderr, "Cannot allocate memory while loading module\n");
         abort();
     }
@@ -101,7 +101,7 @@ static void module_build_imported_functions_table(Module *this_module, uint8_t *
 
         if (!this_module->imported_funcs[i].func) {
             struct UnresolvedFunctionCall *unresolved = malloc(sizeof(struct UnresolvedFunctionCall));
-            if (!unresolved) {
+            if (IS_NULL_PTR(unresolved)) {
                 fprintf(stderr, "Cannot allocate memory while loading module\n");
                 abort();
             }
@@ -264,7 +264,7 @@ const struct ExportedFunction *module_resolve_function(Module *mod, int import_t
     if (found_module) {
         int exported_label = module_search_exported_function(found_module, function_name_atom, arity);
         struct ModuleFunction *mfunc = malloc(sizeof(struct ModuleFunction));
-        if (!mfunc) {
+        if (IS_NULL_PTR(mfunc)) {
             fprintf(stderr, "Cannot allocate memory.");
             return NULL;
         }
