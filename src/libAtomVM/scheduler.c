@@ -20,6 +20,7 @@
 #include "debug.h"
 #include "scheduler.h"
 #include "sys.h"
+#include "utils.h"
 
 #include "time.h"
 
@@ -50,7 +51,7 @@ Context *scheduler_wait(GlobalContext *global, Context *c, int timeout)
 
     //TODO: it would be better to check also events here
     if (!global->ready_processes) {
-        if (!global->listeners) {
+        if (UNLIKELY(!global->listeners)) {
             fprintf(stderr, "Application hang detected. Aborting.");
             abort();
         }

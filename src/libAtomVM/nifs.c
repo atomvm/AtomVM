@@ -104,7 +104,7 @@ const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
 
 term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
 {
-    if (argc != 2) {
+    if (UNLIKELY(argc != 2)) {
         fprintf(stderr, "wrong arity\n");
         abort();
     }
@@ -140,7 +140,7 @@ term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
 
 term nif_erlang_register_2(Context *ctx, int argc, term argv[])
 {
-    if ((argc != 2) || !term_is_atom(argv[0]) || !term_is_pid(argv[1])) {
+    if (UNLIKELY((argc != 2) || !term_is_atom(argv[0]) || !term_is_pid(argv[1]))) {
         fprintf(stderr, "bad match\n");
         abort();
     }
@@ -155,7 +155,7 @@ term nif_erlang_register_2(Context *ctx, int argc, term argv[])
 
 term nif_erlang_whereis_1(Context *ctx, int argc, term argv[])
 {
-    if ((argc != 1) || !term_is_atom(argv[0])) {
+    if (UNLIKELY((argc != 1) || !term_is_atom(argv[0]))) {
         fprintf(stderr, "bad match\n");
         abort();
     }
@@ -254,12 +254,12 @@ static void process_console_mailbox(Context *ctx)
 
 term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
 {
-    if (argc != 3) {
+    if (UNLIKELY(argc != 3)) {
         fprintf(stderr, "spawn: wrong args count\n");
         abort();
     }
 
-    if (!term_is_atom(argv[0]) || !term_is_atom(argv[1]) || !term_is_list(argv[2])) {
+    if (UNLIKELY(!term_is_atom(argv[0]) || !term_is_atom(argv[1]) || !term_is_list(argv[2]))) {
         fprintf(stderr, "spawn: invalid arguments\n");
         abort();
     }
@@ -272,7 +272,7 @@ term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
     AtomString function_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table, func_atom_index, (unsigned long) NULL);
 
     Module *found_module = globalcontext_get_module(ctx->global, module_string);
-    if (!found_module) {
+    if (UNLIKELY(!found_module)) {
         //TODO: return undef here
         abort();
     }
@@ -297,12 +297,12 @@ term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
 }
 term nif_erlang_send_2(Context *ctx, int argc, term argv[])
 {
-    if (argc != 2) {
+    if (UNLIKELY(argc != 2)) {
         fprintf(stderr, "send: wrong args count\n");
         abort();
     }
 
-    if (!term_is_pid(argv[0])) {
+    if (UNLIKELY(!term_is_pid(argv[0]))) {
         fprintf(stderr, "send: invalid arguments\n");
         abort();
     }

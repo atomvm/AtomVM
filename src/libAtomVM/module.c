@@ -67,7 +67,7 @@ static void module_populate_atoms_table(Module *this_module, uint8_t *table_data
         atom = current_atom;
 
         int global_atom_id = globalcontext_insert_atom(this_module->global, (AtomString) atom);
-        if (global_atom_id < 0) {
+        if (UNLIKELY(global_atom_id < 0)) {
             fprintf(stderr, "Cannot allocate memory while loading module\n");
             abort();
         }
@@ -261,7 +261,7 @@ const struct ExportedFunction *module_resolve_function(Module *mod, int import_t
 
     Module *found_module = globalcontext_get_module(mod->global, module_name_atom);
 
-    if (found_module) {
+    if (LIKELY(found_module != NULL)) {
         int exported_label = module_search_exported_function(found_module, function_name_atom, arity);
         struct ModuleFunction *mfunc = malloc(sizeof(struct ModuleFunction));
         if (IS_NULL_PTR(mfunc)) {

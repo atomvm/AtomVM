@@ -33,7 +33,7 @@ term externalterm_to_term(const void *external_term, Context *ctx)
 {
     uint8_t *external_term_buf = (uint8_t *) external_term;
 
-    if (external_term_buf[0] != EXTERNAL_TERM_TAG) {
+    if (UNLIKELY(external_term_buf[0] != EXTERNAL_TERM_TAG)) {
         fprintf(stderr, "External term format not supported\n");
         abort();
     }

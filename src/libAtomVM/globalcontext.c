@@ -189,7 +189,7 @@ void globalcontext_insert_module_with_filename(GlobalContext *glb, Module *modul
     memcpy(atom_string + 1, filename, len_without_ext);
     atom_string[0] = len_without_ext;
 
-    if (globalcontext_insert_module(glb, module, atom_string) < 0) {
+    if (UNLIKELY(globalcontext_insert_module(glb, module, atom_string) < 0)) {
         abort();
     }
 }
@@ -209,7 +209,7 @@ Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_a
         Module *loaded_module = sys_load_module(global, module_name);
         free(module_name);
 
-        if (!loaded_module || (globalcontext_insert_module(global, loaded_module, module_name_atom) < 0)) {
+        if (UNLIKELY(!loaded_module || (globalcontext_insert_module(global, loaded_module, module_name_atom) < 0))) {
             return NULL;
         }
 

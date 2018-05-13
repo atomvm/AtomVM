@@ -74,8 +74,12 @@
 
 #ifdef __GNUC__
     #define IS_NULL_PTR(x) __builtin_expect((x) == NULL, 0)
+    #define LIKELY(x) __builtin_expect(!!(x), 1)
+    #define UNLIKELY(x) __builtin_expect(!!(x), 0)
 #else
     #define IS_NULL_PTR(x) ((x) == NULL)
+    #define LIKELY(x) (x)
+    #define UNLIKELY(x) (x)
 #endif
 
 #endif

@@ -32,6 +32,7 @@
 #include <stdio.h>
 
 #include "memory.h"
+#include "utils.h"
 
 
 #ifndef TYPEDEF_TERM
@@ -408,7 +409,7 @@ static inline term term_alloc_tuple(uint32_t size, Context *ctx)
  */
 static inline void term_put_tuple_element(term t, uint32_t elem_index, term put_value)
 {
-    if (!term_is_boxed(t)) {
+    if (UNLIKELY(!term_is_boxed(t))) {
         abort();
     }
 
@@ -430,7 +431,7 @@ static inline void term_put_tuple_element(term t, uint32_t elem_index, term put_
  */
 static inline term term_get_tuple_element(term t, int elem_index)
 {
-    if (!term_is_boxed(t)) {
+    if (UNLIKELY(!term_is_boxed(t))) {
         abort();
     }
 
@@ -451,7 +452,7 @@ static inline term term_get_tuple_element(term t, int elem_index)
  */
 static inline int term_get_tuple_arity(term t)
 {
-    if (!term_is_boxed(t)) {
+    if (UNLIKELY(!term_is_boxed(t))) {
         abort();
     }
 

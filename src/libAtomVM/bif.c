@@ -102,7 +102,7 @@ term bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1,
     UNUSED(failure_label);
     UNUSED(live);
 
-    if (term_is_integer(arg1) && term_is_integer(arg2)) {
+    if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         //NEED CHECK OVERFLOW AND BIG INTEGER
         return term_from_int32(term_to_int32(arg1) + term_to_int32(arg2));
 
@@ -118,7 +118,7 @@ term bif_erlang_sub_2(Context *ctx, uint32_t failure_label, int live, term arg1,
     UNUSED(failure_label);
     UNUSED(live);
 
-    if (term_is_integer(arg1) && term_is_integer(arg2)) {
+    if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         //NEED CHECK OVERFLOW AND BIG INTEGER
         return term_from_int32(term_to_int32(arg1) - term_to_int32(arg2));
 
@@ -134,7 +134,7 @@ term bif_erlang_mul_2(Context *ctx, uint32_t failure_label, int live, term arg1,
     UNUSED(failure_label);
     UNUSED(live);
 
-    if (term_is_integer(arg1) && term_is_integer(arg2)) {
+    if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         //NEED CHECK OVERFLOW AND BIG INTEGER
         return term_from_int32(term_to_int32(arg1) * term_to_int32(arg2));
 
@@ -150,7 +150,7 @@ term bif_erlang_div_2(Context *ctx, uint32_t failure_label, int live, term arg1,
     UNUSED(failure_label);
     UNUSED(live);
 
-    if (term_is_integer(arg1) && term_is_integer(arg2)) {
+    if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         int32_t operand_b = term_to_int32(arg2);
         if (operand_b != 0) {
             return term_from_int32(term_to_int32(arg1) / operand_b);
@@ -172,9 +172,9 @@ term bif_erlang_rem_2(Context *ctx, uint32_t failure_label, int live, term arg1,
     UNUSED(failure_label);
     UNUSED(live);
 
-    if (term_is_integer(arg1) && term_is_integer(arg2)) {
+    if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         int32_t operand_b = term_to_int32(arg2);
-        if (operand_b != 0) {
+        if (LIKELY(operand_b != 0)) {
             return term_from_int32(term_to_int32(arg1) % operand_b);
 
         } else {

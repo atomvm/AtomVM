@@ -44,7 +44,7 @@ int avmpack_is_valid(const void *avmpack_binary, uint32_t size)
         0x4d, 0x0a, 0x00, 0x00
     };
 
-    if (size < 24) {
+    if (UNLIKELY(size < 24)) {
         return 0;
     }
 
