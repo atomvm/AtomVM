@@ -169,14 +169,15 @@ term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move)
 {
     TRACE("Going to populate using %lx as root, with move = %i\n", t, move);
 
-    if (t == 0) {
-        return 0;
+    if (UNLIKELY(t == 0)) {
+        fprintf(stderr, "Unexpected 0 term.\n");
+        abort();
     }
 
     int going_back = 0;
 
     term *previous = NULL;
-    term previous_term;
+    term previous_term = 0;
 
     do {
         if (!going_back) {
