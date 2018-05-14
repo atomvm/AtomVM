@@ -386,6 +386,10 @@ term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move)
                         TRACE("- List cons %lx head is not a leaf, going to visit head.\n", t);
                         the_head = previous_term;
                         previous_term = pop_from_stack(new_stack);
+
+                    } else {
+                        fprintf(stderr, "Bug in memory_copy_term_tree found\n");
+                        abort();
                     }
 
                 } else {
