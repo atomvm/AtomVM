@@ -23,27 +23,26 @@
 
 #define ADDITIONAL_PROCESSING_MEMORY_SIZE 4
 
+static inline term *mailbox_message_memory(Message *msg)
+{
+    return &msg->message + 1;
+}
+
 void mailbox_send(Context *c, term t)
 {
-    Message *m = malloc(sizeof(Message));
-    if (IS_NULL_PTR(m)) {
-        fprintf(stderr, "Failed to allocate message memory\n");
-        return;
-    }
-
     int stack_slots;
     unsigned long estimated_size = memory_estimate_term_memory_usage(t, &stack_slots) + stack_slots;
 
-    term *msg_heap = calloc(estimated_size, sizeof(term));
+    Message *m = malloc(sizeof(Message) + estimated_size * sizeof(term));
     if (IS_NULL_PTR(m)) {
         fprintf(stderr, "Failed to allocate message memory\n");
         return;
     }
-    term *heap_pos = msg_heap;
-    term *stack_pos = msg_heap + estimated_size;
+
+    term *heap_pos = mailbox_message_memory(m);
+    term *stack_pos = heap_pos + estimated_size;
     m->message = memory_copy_term_tree(&heap_pos, &stack_pos, t, 0);
-    m->msg_memory = msg_heap;
-    m->msg_memory_size = heap_pos - msg_heap;
+    m->msg_memory_size = estimated_size;
 
     linkedlist_append(&c->mailbox, &m->mailbox_list_head);
 
@@ -63,23 +62,17 @@ term mailbox_receive(Context *c)
 
     term rt = memory_copy_term_tree(&c->heap_ptr, &c->e, m->message, 0);
 
-    free(m->msg_memory);
     free(m);
 
     return rt;
 }
 
-term mailbox_0copy_receive(Context *c, void **msg_term_mem)
+Message *mailbox_dequeue(Context *c)
 {
     Message *m = GET_LIST_ENTRY(c->mailbox, Message, mailbox_list_head);
     linkedlist_remove(&c->mailbox, &m->mailbox_list_head);
 
-    term message_term = m->message;
-
-    *msg_term_mem = m->msg_memory;
-    free(m);
-
-    return message_term;
+    return m;
 }
 
 term mailbox_peek(Context *c)

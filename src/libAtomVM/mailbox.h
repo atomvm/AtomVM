@@ -34,9 +34,8 @@
 typedef struct
 {
     struct ListHead mailbox_list_head;
-    term message;
-    void *msg_memory;
     int msg_memory_size;
+    term message;
 } Message;
 
 /**
@@ -58,14 +57,13 @@ extern void mailbox_send(Context *c, term t);
 extern term mailbox_receive(Context *c);
 
 /**
- * @brief Gets next message from a mailbox without copying to heap.
+ * @brief Dequeue next message struct from mailbox.
  *
- * @details Dequeue a term that has been previously queued on a certain process or driver mailbox without performing a copy to the heap.
+ * @details Dequeue a message that has been previously queued on a certain process or driver mailbox.
  * @param c the process or driver context.
- * @param msg_term_mem a pointer to the block of memory that stores term data that must be manually freed.
- * @returns next queued term.
+ * @returns dequeued message, the caller must free() the message.
  */
-term mailbox_0copy_receive(Context *c, void **msg_term_mem);
+Message *mailbox_dequeue(Context *c);
 
 /**
  * @brief Gets next message from a mailbox (without removing it).
