@@ -26,11 +26,19 @@
 void mailbox_send(Context *c, term t)
 {
     Message *m = malloc(sizeof(Message));
+    if (IS_NULL_PTR(m)) {
+        fprintf(stderr, "Failed to allocate message memory\n");
+        return;
+    }
 
     int stack_slots;
     unsigned long estimated_size = memory_estimate_term_memory_usage(t, &stack_slots) + stack_slots;
 
     term *msg_heap = calloc(estimated_size, sizeof(term));
+    if (IS_NULL_PTR(m)) {
+        fprintf(stderr, "Failed to allocate message memory\n");
+        return;
+    }
     term *heap_pos = msg_heap;
     term *stack_pos = msg_heap + estimated_size;
     m->message = memory_copy_term_tree(&heap_pos, &stack_pos, t, 0);
