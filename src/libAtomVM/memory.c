@@ -57,18 +57,28 @@ term *memory_heap_alloc(Context *c, uint32_t size)
 void memory_ensure_free(Context *c, uint32_t size)
 {
     if (context_memory_size(c) > size) {
-        memory_gc(c, context_memory_size(c));
+        if (UNLIKELY(memory_gc(c, context_memory_size(c)) != MEMORY_GC_OK)) {
+            //TODO: handle this more gracefully
+            fprintf(stderr, "Unable to allocate memory for GC\n");
+            abort();
+        }
     }
 
     if (context_avail_free_memory(c) < size + MIN_FREE_SPACE_SIZE) {
-        memory_gc(c, MAX(context_memory_size(c) * 2, context_memory_size(c) + size));
+        if (UNLIKELY(memory_gc(c, MAX(context_memory_size(c) * 2, context_memory_size(c) + size)) != MEMORY_GC_OK)) {
+            //TODO: handle this more gracefully
+            fprintf(stderr, "Unable to allocate memory for GC\n");
+            abort();
+        }
     }
 }
 
 void memory_gc_and_shrink(Context *c)
 {
     if (context_avail_free_memory(c) >= MIN_FREE_SPACE_SIZE * 2) {
-        memory_gc(c, context_memory_size(c) - context_avail_free_memory(c) / 2);
+        if (UNLIKELY(memory_gc(c, context_memory_size(c) - context_avail_free_memory(c) / 2) != MEMORY_GC_OK)) {
+            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        }
     }
 }
 
@@ -92,10 +102,13 @@ static inline term pop_from_stack(term **stack)
     return value;
 }
 
-void memory_gc(Context *ctx, int new_size)
+enum MemoryGCResult memory_gc(Context *ctx, int new_size)
 {
     TRACE("Going to perform gc\n");
     term *new_heap = calloc(new_size, sizeof(term));
+    if (IS_NULL_PTR(new_heap)) {
+        return MEMORY_GC_ERROR_FAILED_ALLOCATION;
+    }
     term *new_stack = new_heap + new_size;
 
     term *heap_ptr = new_heap;
@@ -129,6 +142,8 @@ void memory_gc(Context *ctx, int new_size)
     ctx->stack_base = ctx->heap_start + new_size;
     ctx->heap_ptr = heap_ptr;
     ctx->e = stack_ptr;
+
+    return MEMORY_GC_OK;
 }
 
 
@@ -435,10 +450,15 @@ term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move)
     return previous_term;
 }
 
-unsigned long memory_estimate_term_memory_usage(term t, int *max_stack_slots)
+enum MemoryEstimateResult memory_estimate_term_memory_usage(term t, unsigned long *estimated_terms, int *max_stack_slots)
 {
     int temp_stack_size = 3;
     term *base_stack = ((term *) calloc(temp_stack_size, sizeof(term))) + temp_stack_size;
+    if (IS_NULL_PTR(base_stack)) {
+        *estimated_terms = 0;
+        *max_stack_slots = 0;
+        return MEMORY_ESTIMATE_FAILED_ALLOCATION;
+    }
     term *stack = base_stack;
     term **new_stack = &stack;
 
@@ -516,6 +536,11 @@ unsigned long memory_estimate_term_memory_usage(term t, int *max_stack_slots)
 
             int new_stack_size = temp_stack_size * 2;
             term *new_stack_ptr = calloc(new_stack_size, sizeof(term));
+            if (IS_NULL_PTR(new_stack_ptr)) {
+                *estimated_terms = 0;
+                *max_stack_slots = 0;
+                return MEMORY_ESTIMATE_FAILED_ALLOCATION;
+            }
             base_stack = new_stack_ptr + new_stack_size;
 
             memcpy(base_stack - used_stack_size, old_stack_pos_ptr, used_stack_size * sizeof(term));
@@ -526,5 +551,7 @@ unsigned long memory_estimate_term_memory_usage(term t, int *max_stack_slots)
     } while (1);
 
     free(base_stack - temp_stack_size);
-    return used_memory;
+    *estimated_terms = used_memory;
+
+    return MEMORY_ESTIMATE_OK;
 }

@@ -31,11 +31,16 @@ static inline term *mailbox_message_memory(Message *msg)
 void mailbox_send(Context *c, term t)
 {
     int stack_slots;
-    unsigned long estimated_size = memory_estimate_term_memory_usage(t, &stack_slots) + stack_slots;
+    unsigned long estimated_mem_usage;
+    if (UNLIKELY(memory_estimate_term_memory_usage(t, &estimated_mem_usage, &stack_slots) != MEMORY_ESTIMATE_OK)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        return;
+    }
+    unsigned long estimated_size = estimated_mem_usage + stack_slots;
 
     Message *m = malloc(sizeof(Message) + estimated_size * sizeof(term));
     if (IS_NULL_PTR(m)) {
-        fprintf(stderr, "Failed to allocate message memory\n");
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         return;
     }
 
@@ -57,7 +62,9 @@ term mailbox_receive(Context *c)
     if (c->e - c->heap_ptr < m->msg_memory_size) {
         //ADDITIONAL_PROCESSING_MEMORY_SIZE: ensure some additional memory for message processing, so there is
         //no need to run GC again.
-        memory_gc(c, context_memory_size(c) + m->msg_memory_size + ADDITIONAL_PROCESSING_MEMORY_SIZE);
+        if (UNLIKELY(memory_gc(c, context_memory_size(c) + m->msg_memory_size + ADDITIONAL_PROCESSING_MEMORY_SIZE) != MEMORY_GC_OK)) {
+            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        }
     }
 
     term rt = memory_copy_term_tree(&c->heap_ptr, &c->e, m->message, 0);

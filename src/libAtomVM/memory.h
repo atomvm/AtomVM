@@ -34,6 +34,18 @@ typedef unsigned long term;
 typedef struct Context Context;
 #endif
 
+enum MemoryGCResult
+{
+    MEMORY_GC_OK = 0,
+    MEMORY_GC_ERROR_FAILED_ALLOCATION = 1
+};
+
+enum MemoryEstimateResult
+{
+    MEMORY_ESTIMATE_OK = 0,
+    MEMORY_ESTIMATE_FAILED_ALLOCATION = 1
+};
+
 /**
  * @brief allocates space for a certain ammount of terms on the heap
  *
@@ -50,8 +62,9 @@ term *memory_heap_alloc(Context *ctx, uint32_t size);
  * @details allocates a new memory block (that can have new size) and executes garbage collection, any existing term might be invalid after this call.
  * @param ctx the context that owns the memory block.
  * @param new_size the size of the new memory block in term units.
+ * @returns MEMORY_GC_OK when successful.
  */
-void memory_gc(Context *ctx, int new_size);
+enum MemoryGCResult memory_gc(Context *ctx, int new_size);
 
 /**
  * @brief copies a term to a destination heap
@@ -87,9 +100,10 @@ void memory_gc_and_shrink(Context *ctx);
  *
  * @details perform an used memory calculation using given term as root, shared memory (that is not part of the memory block) is not accounted.
  * @param t root term on which used memory calculation will be performed.
- * @param max_stack_slots maximum number of stack items needed to process a term tree.
- * @returns used memory count in term units.
+ * @param max_stack_slots maximum number of stack items needed to process a term tree output parameter.
+ * @param estimated_terms used memory count in term units output parameter.
+ * @returns MEMORY_ESTIMATE_OK when successful.
  */
-unsigned long memory_estimate_term_memory_usage(term t, int *max_stack_slots);
+enum MemoryEstimateResult memory_estimate_term_memory_usage(term t, unsigned long *estimated_terms, int *max_stack_slots);
 
 #endif
