@@ -32,6 +32,7 @@
 #define MAX_NIF_NAME_LEN 32
 
 static const char *const ok_atom = "\x2" "ok";
+static const char *const error_atom = "\x5" "error";
 static const char *const undefined_atom = "\x9" "undefined";
 
 static char *list_to_string(term list);
@@ -119,6 +120,13 @@ term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
         //TODO: check if it is a binary
         driver_name = binary_to_string(t);
     }
+    if (IS_NULL_PTR(driver_name)) {
+        int error_index = globalcontext_insert_atom(ctx->global, error_atom);
+        if (error_index < 0) {
+            abort();
+        }
+        return term_from_atom_index(error_index);
+    }
 
     if (!strcmp("echo", driver_name)) {
         new_ctx->native_handler = process_echo_mailbox;
@@ -185,6 +193,9 @@ static char *list_to_string(term list)
 
     t = list;
     char *str = malloc(len + 1);
+    if (IS_NULL_PTR(str)) {
+        return NULL;
+    }
 
     for (int i = 0; i < len; i++) {
         term *t_ptr = term_get_list_ptr(t);
@@ -201,6 +212,9 @@ static char *binary_to_string(term binary)
     int len = term_binary_size(binary);
 
     char *str = malloc(len + 1);
+    if (IS_NULL_PTR(str)) {
+        return NULL;
+    }
     memcpy(str, term_binary_data(binary), len);
 
     str[len] = 0;
@@ -238,6 +252,10 @@ static void process_console_mailbox(Context *ctx)
         //TODO: check if it is a binary
         str = binary_to_string(val);
     }
+    if (IS_NULL_PTR(msg)) {
+        free(msg);
+        return;
+    }
 
     printf("%s", str);
     free(str);
@@ -270,8 +288,11 @@ term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
 
     Module *found_module = globalcontext_get_module(ctx->global, module_string);
     if (UNLIKELY(!found_module)) {
-        //TODO: return undef here
-        abort();
+        int undefined_index = globalcontext_insert_atom(ctx->global, undefined_atom);
+        if (undefined_index < 0) {
+            abort();
+        }
+        return term_from_atom_index(undefined_index);
     }
 
     int label = module_search_exported_function(found_module, function_string, term_list_length(argv[2]));
