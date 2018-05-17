@@ -42,7 +42,7 @@
 #endif
 static void const* *module_build_literals_table(const void *literalsBuf);
 static void module_add_label(Module *mod, int index, void *ptr);
-static void module_build_imported_functions_table(Module *this_module, uint8_t *table_data);
+static enum ModuleLoadResult module_build_imported_functions_table(Module *this_module, uint8_t *table_data);
 static void module_add_label(Module *mod, int index, void *ptr);
 
 #define IMPL_CODE_LOADER 1
@@ -50,15 +50,15 @@ static void module_add_label(Module *mod, int index, void *ptr);
 #undef TRACE
 #undef IMPL_CODE_LOADER
 
-static void module_populate_atoms_table(Module *this_module, uint8_t *table_data)
+static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, uint8_t *table_data)
 {
     int atoms_count = READ_32_ALIGNED(table_data + 8);
     const char *current_atom = (const char *) table_data + 12;
 
     this_module->local_atoms_to_global_table = calloc(atoms_count + 1, sizeof(int));
     if (IS_NULL_PTR(this_module->local_atoms_to_global_table)) {
-        fprintf(stderr, "Cannot allocate memory while loading module\n");
-        abort();
+        fprintf(stderr, "Cannot allocate memory while loading module (line: %i).\n", __LINE__);
+        return MODULE_ERROR_FAILED_ALLOCATION;
     }
 
     const char *atom = NULL;
@@ -68,21 +68,27 @@ static void module_populate_atoms_table(Module *this_module, uint8_t *table_data
 
         int global_atom_id = globalcontext_insert_atom(this_module->global, (AtomString) atom);
         if (UNLIKELY(global_atom_id < 0)) {
-            fprintf(stderr, "Cannot allocate memory while loading module\n");
-            abort();
+            fprintf(stderr, "Cannot allocate memory while loading module (line: %i).\n", __LINE__);
+            return MODULE_ERROR_FAILED_ALLOCATION;
         }
 
         this_module->local_atoms_to_global_table[i] = global_atom_id;
 
         current_atom += atom_len + 1;
     }
+
+    return MODULE_LOAD_OK;
 }
 
-static void module_build_imported_functions_table(Module *this_module, uint8_t *table_data)
+static enum ModuleLoadResult module_build_imported_functions_table(Module *this_module, uint8_t *table_data)
 {
     int functions_count = READ_32_ALIGNED(table_data + 8);
 
     this_module->imported_funcs = calloc(functions_count, sizeof(void *));
+    if (IS_NULL_PTR(this_module->imported_funcs)) {
+        fprintf(stderr, "Cannot allocate memory while loading module (line: %i).\n", __LINE__);
+        return MODULE_ERROR_FAILED_ALLOCATION;
+    }
 
     for (int i = 0; i < functions_count; i++) {
         int local_module_atom_index = READ_32_ALIGNED(table_data + i * 12 + 12);
@@ -102,8 +108,8 @@ static void module_build_imported_functions_table(Module *this_module, uint8_t *
         if (!this_module->imported_funcs[i].func) {
             struct UnresolvedFunctionCall *unresolved = malloc(sizeof(struct UnresolvedFunctionCall));
             if (IS_NULL_PTR(unresolved)) {
-                fprintf(stderr, "Cannot allocate memory while loading module\n");
-                abort();
+                fprintf(stderr, "Cannot allocate memory while loading module (line: %i).\n", __LINE__);
+                return MODULE_ERROR_FAILED_ALLOCATION;
             }
             unresolved->base.type = UnresolvedFunctionCall;
             unresolved->module_atom_index = this_module->local_atoms_to_global_table[local_module_atom_index];
@@ -113,6 +119,8 @@ static void module_build_imported_functions_table(Module *this_module, uint8_t *
             this_module->imported_funcs[i].func = &unresolved->base;
         }
     }
+
+    return MODULE_LOAD_OK;
 }
 
 uint32_t module_search_exported_function(Module *this_module, AtomString func_name, int func_arity)
@@ -146,24 +154,45 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     scan_iff(beam_file, size, offsets, sizes);
 
     Module *mod = malloc(sizeof(Module));
+    if (IS_NULL_PTR(mod)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        return NULL;
+    }
+    memset(mod, 0, sizeof(Module));
+
     mod->module_index = -1;
     mod->global = global;
 
-    module_populate_atoms_table(mod, beam_file + offsets[AT8U]);
+    if (UNLIKELY(module_populate_atoms_table(mod, beam_file + offsets[AT8U]) != MODULE_LOAD_OK)) {
+        module_destroy(mod);
+        return NULL;
+    }
 
-    module_build_imported_functions_table(mod, beam_file + offsets[IMPT]);
+    if (UNLIKELY(module_build_imported_functions_table(mod, beam_file + offsets[IMPT]) != MODULE_LOAD_OK)) {
+        module_destroy(mod);
+        return NULL;
+    }
 
     mod->code = (CodeChunk *) (beam_file + offsets[CODE]);
     mod->export_table = beam_file + offsets[EXPT];
     mod->atom_table = beam_file + offsets[AT8U];
     mod->labels = calloc(ENDIAN_SWAP_32(mod->code->labels), sizeof(void *));
+    if (IS_NULL_PTR(mod->labels)) {
+        module_destroy(mod);
+        return NULL;
+    }
 
     if (offsets[LITT]) {
         #ifdef WITH_ZLIB
             mod->literals_data = module_uncompress_literals(beam_file + offsets[LITT], sizes[LITT]);
+            if (IS_NULL_PTR(mod->literals_data)) {
+                module_destroy(mod);
+                return NULL;
+            }
         #else
             fprintf(stderr, "zlib required to uncompress literals.\n");
-            abort();
+            module_destroy(mod);
+            return NULL;
         #endif
 
         mod->literals_table = module_build_literals_table(mod->literals_data);
@@ -202,6 +231,10 @@ static void *module_uncompress_literals(const uint8_t *litT, int size)
     unsigned int required_buf_size = READ_32_ALIGNED(litT + LITT_UNCOMPRESSED_SIZE_OFFSET);
 
     uint8_t *outBuf = malloc(required_buf_size);
+    if (IS_NULL_PTR(outBuf)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        return NULL;
+    }
 
     z_stream infstream;
     infstream.zalloc = Z_NULL;
@@ -215,12 +248,12 @@ static void *module_uncompress_literals(const uint8_t *litT, int size)
     int ret = inflateInit(&infstream);
     if (ret != Z_OK) {
         fprintf(stderr, "Failed inflateInit\n");
-        abort();
+        return NULL;
     }
     ret = inflate(&infstream, Z_NO_FLUSH);
     if (ret != Z_OK) {
         fprintf(stderr, "Failed inflate\n");
-        abort();
+        return NULL;
     }
     inflateEnd(&infstream);
 
@@ -235,6 +268,10 @@ static void const* *module_build_literals_table(const void *literalsBuf)
     const uint8_t *pos = (const uint8_t *) literalsBuf + sizeof(uint32_t);
 
     void const* *literals_table = calloc(terms_count, sizeof(void *const));
+    if (IS_NULL_PTR(literals_table)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        return NULL;
+    }
     for (uint32_t i = 0; i < terms_count; i++) {
         uint32_t term_size = READ_32_UNALIGNED(pos);
         literals_table[i] = pos + sizeof(uint32_t);
@@ -265,7 +302,7 @@ const struct ExportedFunction *module_resolve_function(Module *mod, int import_t
         int exported_label = module_search_exported_function(found_module, function_name_atom, arity);
         struct ModuleFunction *mfunc = malloc(sizeof(struct ModuleFunction));
         if (IS_NULL_PTR(mfunc)) {
-            fprintf(stderr, "Cannot allocate memory.");
+            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
             return NULL;
         }
         mfunc->base.type = ModuleFunction;

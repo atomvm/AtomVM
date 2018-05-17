@@ -81,6 +81,12 @@ struct Module
 typedef struct Module Module;
 #endif
 
+enum ModuleLoadResult
+{
+    MODULE_LOAD_OK = 0,
+    MODULE_ERROR_FAILED_ALLOCATION = 1
+};
+
 /**
  * @briefs Gets exported function index by searching it by function name and arity
  *

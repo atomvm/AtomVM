@@ -91,6 +91,11 @@ int test_modules_execution()
         glb->avmpack_data = NULL;
         glb->avmpack_platform_data = NULL;
         Module *mod = module_new_from_iff_binary(glb, beam_file->mapped, beam_file->size);
+        if (IS_NULL_PTR(mod)) {
+            fprintf(stderr, "Cannot load startup module: %s\n", test->test_file);
+            test++;
+            continue;
+        }
         globalcontext_insert_module_with_filename(glb, mod, test->test_file);
         Context *ctx = context_new(glb);
 
