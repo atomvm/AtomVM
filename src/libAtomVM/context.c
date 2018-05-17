@@ -30,9 +30,18 @@
 Context *context_new(GlobalContext *glb)
 {
     Context *ctx = malloc(sizeof(Context));
+    if (IS_NULL_PTR(ctx)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        return NULL;
+    }
     ctx->cp = 0;
 
     ctx->heap_start = (term *) calloc(DEFAULT_STACK_SIZE, sizeof(term));
+    if (IS_NULL_PTR(ctx->heap_start)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        free(ctx);
+        return NULL;
+    }
     ctx->stack_base = ctx->heap_start + DEFAULT_STACK_SIZE;
     ctx->e = ctx->stack_base;
     ctx->heap_ptr = ctx->heap_start;
