@@ -88,6 +88,10 @@ extern void sys_waitevents(struct ListHead *listeners_list)
     //second: use either poll or nanosleep
     if (count > 0) {
         struct pollfd *fds = calloc(count, sizeof(struct pollfd));
+        if (IS_NULL_PTR(fds)) {
+            fprintf(stderr, "Cannot allocate memory for pollfd, aborting.\n");
+            abort();
+        }
         int poll_fd_index = 0;
 
         //build pollfd array
