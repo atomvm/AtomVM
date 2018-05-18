@@ -179,6 +179,9 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
     }
 
     Module *new_module = module_new_from_iff_binary(global, beam_module, beam_module_size);
+    if (IS_NULL_PTR(new_module)) {
+        return NULL;
+    }
     new_module->module_platform_data = beam_file;
 
     return new_module;
