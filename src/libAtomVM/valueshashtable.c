@@ -35,7 +35,7 @@ struct HNode
 struct ValuesHashTable *valueshashtable_new()
 {
     struct ValuesHashTable *htable = malloc(sizeof(struct ValuesHashTable));
-    if (!htable) {
+    if (IS_NULL_PTR(htable)) {
         return NULL;
     }
     htable->buckets = calloc(DEFAULT_SIZE, sizeof(struct HNode *));
