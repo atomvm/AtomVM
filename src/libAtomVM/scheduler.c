@@ -37,6 +37,10 @@ Context *scheduler_wait(GlobalContext *global, Context *c, int timeout)
 
     if (timeout != -1) {
         EventListener *listener = malloc(sizeof(EventListener));
+        if (IS_NULL_PTR(listener)) {
+            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            abort();
+        }
         linkedlist_append(&global->listeners, &listener->listeners_list_head);
         listener->fd = -1;
 
