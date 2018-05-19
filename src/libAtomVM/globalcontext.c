@@ -39,6 +39,9 @@ struct RegisteredProcess
 GlobalContext *globalcontext_new()
 {
     GlobalContext *glb = malloc(sizeof(GlobalContext));
+    if (IS_NULL_PTR(glb)) {
+        return NULL;
+    }
     glb->ready_processes = NULL;
     glb->waiting_processes = NULL;
     glb->listeners = NULL;
@@ -103,6 +106,10 @@ int32_t globalcontext_get_new_process_id(GlobalContext *glb)
 void globalcontext_register_process(GlobalContext *glb, int atom_index, int local_process_id)
 {
     struct RegisteredProcess *registered_process = malloc(sizeof(struct RegisteredProcess));
+    if (IS_NULL_PTR(registered_process)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        abort();
+    }
     registered_process->atom_index = atom_index;
     registered_process->local_process_id = local_process_id;
 
@@ -156,7 +163,8 @@ int globalcontext_insert_module(GlobalContext *global, Module *module, AtomStrin
     int module_index = global->loaded_modules_count;
 
     Module **new_modules_by_index = calloc(module_index + 1, sizeof(Module *));
-    if (!new_modules_by_index) {
+    if (IS_NULL_PTR(new_modules_by_index)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         abort();
     }
     if (global->modules_by_index) {
@@ -186,6 +194,10 @@ void globalcontext_insert_module_with_filename(GlobalContext *glb, Module *modul
     }
 
     char *atom_string = malloc(len_without_ext + 1);
+    if (IS_NULL_PTR(atom_string)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        abort();
+    }
     memcpy(atom_string + 1, filename, len_without_ext);
     atom_string[0] = len_without_ext;
 
