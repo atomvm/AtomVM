@@ -41,7 +41,7 @@
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
-term *memory_heap_alloc(Context *c, uint32_t size)
+HOT_FUNC term *memory_heap_alloc(Context *c, uint32_t size)
 {
     term *allocated = c->heap_ptr;
     if (c->heap_ptr + size > c->e) {
