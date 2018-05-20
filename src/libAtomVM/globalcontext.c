@@ -75,7 +75,7 @@ GlobalContext *globalcontext_new()
     return glb;
 }
 
-void globalcontext_destroy(GlobalContext *glb)
+COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
 {
     free(glb);
 }

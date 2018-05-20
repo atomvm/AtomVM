@@ -214,7 +214,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     return mod;
 }
 
-void module_destroy(Module *module)
+COLD_FUNC void module_destroy(Module *module)
 {
     free(module->labels);
     free(module->imported_funcs);

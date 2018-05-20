@@ -19,7 +19,7 @@
 
 #include "debug.h"
 
-void debug_dump_stack(Context *ctx)
+COLD_FUNC void debug_dump_stack(Context *ctx)
 {
     unsigned int stack_size = ctx->stack_base - ctx->e;
 
@@ -31,7 +31,7 @@ void debug_dump_stack(Context *ctx)
     fprintf(stderr, "DEBUG: e: %li\n", (long) (ctx->stack_base - ctx->e));
 }
 
-void debug_print_processes_list(struct ListHead *processes)
+COLD_FUNC void debug_print_processes_list(struct ListHead *processes)
 {
     Context *contexts = GET_LIST_ENTRY(processes, Context, processes_list_head);
     if (!contexts) {
@@ -48,7 +48,7 @@ void debug_print_processes_list(struct ListHead *processes)
     printf("\n");
 }
 
-char reg_type_c(int reg_type)
+COLD_FUNC char reg_type_c(int reg_type)
 {
     switch (reg_type) {
         case 2:

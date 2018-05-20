@@ -82,4 +82,12 @@
     #define UNLIKELY(x) (x)
 #endif
 
+#ifdef __GNUC__
+    #define HOT_FUNC __attribute__ ((hot))
+    #define COLD_FUNC __attribute__ ((cold))
+#else
+    #define HOT_FUNC
+    #define COLD_FUNC
+#endif
+
 #endif
