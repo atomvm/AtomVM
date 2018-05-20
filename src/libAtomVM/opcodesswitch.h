@@ -381,7 +381,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
     int read_core_chunk(Module *mod)
 #else
     #ifdef IMPL_EXECUTE_LOOP
-        int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity)
+        HOT_FUNC int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity)
     #else
         #error Need implementation type
     #endif
