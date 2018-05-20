@@ -20,6 +20,8 @@
 #ifndef _MEMORY_H_
 #define _MEMORY_H_
 
+#include "utils.h"
+
 #include <stdint.h>
 
 #define HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF 64
@@ -54,7 +56,7 @@ enum MemoryEstimateResult
  * @param size the ammount of terms that will be allocated.
  * @returns a pointer to the newly allocated memory block.
  */
-term *memory_heap_alloc(Context *ctx, uint32_t size);
+MALLOC_LIKE term *memory_heap_alloc(Context *ctx, uint32_t size);
 
 /**
  * @brief allocates a new memory block and executes garbage collection

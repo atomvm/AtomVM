@@ -90,4 +90,10 @@
     #define COLD_FUNC
 #endif
 
+#ifdef __GNUC__
+    #define MALLOC_LIKE __attribute__((malloc))
+#else
+    #define MALLOC_LIKE
+#endif
+
 #endif

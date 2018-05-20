@@ -531,7 +531,7 @@ static inline term term_get_list_tail(term t)
  * @param ctx the context that owns the memory that will be allocated.
  * @return a pointer to a newly allocated memory area.
  */
-static inline term *term_list_alloc(Context *ctx)
+MALLOC_LIKE static inline term *term_list_alloc(Context *ctx)
 {
     return memory_heap_alloc(ctx, 2);
 }
