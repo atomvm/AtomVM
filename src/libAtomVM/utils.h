@@ -96,4 +96,26 @@
     #define MALLOC_LIKE
 #endif
 
+#ifdef ALLOC_RANDOM_FAILURE
+
+#ifndef RAND_MODULO
+#define RAND_MODULO 31
+#endif
+
+#include <stdlib.h>
+static inline void *rand_fail_malloc(unsigned long malloc_size)
+{
+    return ((rand() % RAND_MODULO) == 0) ? 0L : malloc(malloc_size);
+}
+
+static inline void *rand_fail_calloc(int n, unsigned long alloc_size)
+{
+    return ((rand() % RAND_MODULO) == 0) ? 0L : calloc(n, alloc_size);
+}
+
+#define malloc(x) rand_fail_malloc(x)
+#define calloc(x, y) rand_fail_calloc(x, y)
+
+#endif
+
 #endif

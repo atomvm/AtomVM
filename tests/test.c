@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "atom.h"
@@ -120,6 +121,10 @@ int test_modules_execution()
 int main(int argc, char **argv)
 {
     UNUSED(argc)
+
+    time_t seed = time(NULL);
+    printf("Seed is %li\n", seed);
+    srand(seed);
 
     chdir(dirname(argv[0]));
 
