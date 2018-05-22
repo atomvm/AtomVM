@@ -297,6 +297,23 @@
         fprintf(stderr, "going to jump to %i\n", i)
 #endif
 
+#define SCHEDULE_NEXT(restore_mod, restore_to) \
+    {                                                                                             \
+        ctx->saved_ip = restore_to;                                                               \
+        ctx->jump_to_on_restore = NULL;                                                           \
+        ctx->saved_module = restore_mod;                                                          \
+        Context *scheduled_context = scheduler_next(ctx->global, ctx);                            \
+        ctx = scheduled_context;                                                                  \
+        mod = ctx->saved_module;                                                                  \
+        code = mod->code->code;                                                                   \
+        remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;                                         \
+        if (scheduled_context->jump_to_on_restore && ctx->mailbox) {                              \
+            JUMP_TO_ADDRESS(scheduled_context->jump_to_on_restore);                               \
+        } else {                                                                                  \
+            JUMP_TO_ADDRESS(scheduled_context->saved_ip);                                         \
+        }                                                                                         \
+    }
+
 #define OP_LABEL 1
 #define OP_FUNC_INFO 2
 #define OP_INT_CALL_END 3
@@ -408,6 +425,8 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
 
         ctx->cp = module_address(mod->module_index, mod->end_instruction_ii);
         JUMP_TO_ADDRESS(mod->labels[label]);
+
+        int remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;
     #endif
 
     while(1) {
@@ -481,7 +500,12 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                     NEXT_INSTRUCTION(next_offset);
                     ctx->cp = module_address(mod->module_index, i);
 
-                    JUMP_TO_ADDRESS(mod->labels[label]);
+                    remaining_reductions--;
+                    if (remaining_reductions) {
+                        JUMP_TO_ADDRESS(mod->labels[label]);
+                    } else {
+                        SCHEDULE_NEXT(mod, mod->labels[label]);
+                    }
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -511,7 +535,12 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
 
                     DEBUG_DUMP_STACK(ctx);
 
-                    JUMP_TO_ADDRESS(mod->labels[label]);
+                    remaining_reductions--;
+                    if (remaining_reductions) {
+                        JUMP_TO_ADDRESS(mod->labels[label]);
+                    } else {
+                        SCHEDULE_NEXT(mod, mod->labels[label]);
+                    }
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -533,8 +562,14 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 USED_BY_TRACE(label);
 
                 #ifdef IMPL_EXECUTE_LOOP
+
                     NEXT_INSTRUCTION(next_off);
-                    JUMP_TO_ADDRESS(mod->labels[label]);
+                    remaining_reductions--;
+                    if (remaining_reductions) {
+                        JUMP_TO_ADDRESS(mod->labels[label]);
+                    } else {
+                        SCHEDULE_NEXT(mod, mod->labels[label]);
+                    }
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -558,6 +593,12 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 NEXT_INSTRUCTION(next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
+                    remaining_reductions--;
+                    if (!remaining_reductions) {
+                        SCHEDULE_NEXT(mod, INSTRUCTION_POINTER());
+                        continue;
+                    }
+
                     const struct ExportedFunction *func = mod->imported_funcs[index].func;
 
                     if (func->type == UnresolvedFunctionCall) {
@@ -605,6 +646,12 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 USED_BY_TRACE(n_words);
 
                 #ifdef IMPL_EXECUTE_LOOP
+                    remaining_reductions--;
+                    if (!remaining_reductions) {
+                        SCHEDULE_NEXT(mod, INSTRUCTION_POINTER());
+                        continue;
+                    }
+
                     ctx->cp = ctx->e[n_words];
                     ctx->e += (n_words + 1);
 
@@ -1639,7 +1686,12 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 USED_BY_TRACE(label);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    JUMP_TO_ADDRESS(mod->labels[label]);
+                    remaining_reductions--;
+                    if (remaining_reductions) {
+                        JUMP_TO_ADDRESS(mod->labels[label]);
+                    } else {
+                        SCHEDULE_NEXT(mod, mod->labels[label]);
+                    }
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -1813,6 +1865,12 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
+                    remaining_reductions--;
+                    if (!remaining_reductions) {
+                        SCHEDULE_NEXT(mod, INSTRUCTION_POINTER());
+                        continue;
+                    }
+
                     const struct ExportedFunction *func = mod->imported_funcs[index].func;
 
                     if (func->type == UnresolvedFunctionCall) {
