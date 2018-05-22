@@ -56,7 +56,7 @@ typedef struct EventListener {
  * @details wait any of the specified events using a platform specific implementation, that might be poll on unix-like systems.
  * @param listeners_list a list of listeners that are waiting for some events, each listener waits an event and has a callback.
  */
-extern void sys_waitevents(struct ListHead *listeners_list);
+void sys_waitevents(struct ListHead *listeners_list);
 
 /**
  * @brief sets the timestamp for a future event
@@ -65,7 +65,7 @@ extern void sys_waitevents(struct ListHead *listeners_list);
  * @param t the timespec that will be updated.
  * @param millis ammount of milliseconds relative to current timestamp.
  */
-extern void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis);
+void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis);
 
 /**
  * @brief Loads a BEAM module using platform dependent methods.

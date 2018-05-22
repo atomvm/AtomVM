@@ -82,7 +82,7 @@ typedef struct Context Context;
  * @param glb The global context of this virtual machine instance.
  * @returns created context.
  */
-extern Context *context_new(GlobalContext *glb);
+Context *context_new(GlobalContext *glb);
 
 /**
  * @brief Destorys a context
@@ -90,7 +90,7 @@ extern Context *context_new(GlobalContext *glb);
  * @details Frees context resources and memory and removes it from the processes table.
  * @param c the context that will be destroyed.
  */
-extern void context_destroy(Context *c);
+void context_destroy(Context *c);
 
 /**
  * @brief Starts executing a function
@@ -101,7 +101,7 @@ extern void context_destroy(Context *c);
  * @param the function arity (number of arguments that are required).
  * @returns 1 if an error occoured, otherwise 0 is always returned.
  */
-extern int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity);
+int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity);
 
 /**
  * @brief Retuns 1 if the context is a port driver

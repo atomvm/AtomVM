@@ -39,7 +39,7 @@
  * @param c the process context.
  * @param timeout in milliseconds.
  */
-extern Context *scheduler_wait(GlobalContext *global, Context *c, int timeout);
+Context *scheduler_wait(GlobalContext *global, Context *c, int timeout);
 
 /**
  * @brief make sure a process is on the ready queue
@@ -48,7 +48,7 @@ extern Context *scheduler_wait(GlobalContext *global, Context *c, int timeout);
  * @param global the global context.
  * @param c the process context.
  */
-extern void scheduler_make_ready(GlobalContext *global, Context *c);
+void scheduler_make_ready(GlobalContext *global, Context *c);
 
 /**
  * @brief just move a process to the wait queue
@@ -57,7 +57,7 @@ extern void scheduler_make_ready(GlobalContext *global, Context *c);
  * @param global the global context.
  * @param c the process context.
  */
-extern void scheduler_make_waiting(GlobalContext *global, Context *c);
+void scheduler_make_waiting(GlobalContext *global, Context *c);
 
 int schudule_processes_count(GlobalContext *global);
 

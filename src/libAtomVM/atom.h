@@ -39,7 +39,7 @@ typedef const void * AtomString;
  * @param buf the buffer where the C string will be written.
  * @param bufsize available buf size.
  */
-extern void atom_string_to_c(AtomString atom_string, char *buf, int bufsize);
+void atom_string_to_c(AtomString atom_string, char *buf, int bufsize);
 
 /**
  * @brief Check for equality two AtomStrings
@@ -49,7 +49,7 @@ extern void atom_string_to_c(AtomString atom_string, char *buf, int bufsize);
  * @param b second atom string to be compared.
  * @returns 1 if they are equals, 0 otherwise.
  */
-extern int atom_are_equals(AtomString a, AtomString b);
+int atom_are_equals(AtomString a, AtomString b);
 
 /**
  * @brief Returns the length of an atom string in bytes.

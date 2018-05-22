@@ -75,7 +75,7 @@ typedef struct
  * @details Allocates a new GlobalContext struct and initialize it, the newly created global context is a new AtomVM instance.
  * @returns A newly created GlobalContext.
  */
-extern GlobalContext *globalcontext_new();
+GlobalContext *globalcontext_new();
 
 /**
  * @brief Destoys an existing GlobalContext
@@ -83,7 +83,7 @@ extern GlobalContext *globalcontext_new();
  * @details Frees global context resources and memory and removes it from the processes table.
  * @param c the global context that will be destroyed.
  */
-extern void globalcontext_destroy(GlobalContext *glb);
+void globalcontext_destroy(GlobalContext *glb);
 
 /**
  * @brief Gets a Context from the process table

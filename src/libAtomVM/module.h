@@ -95,7 +95,7 @@ enum ModuleLoadResult
  * @param func_name function name atom string.
  * @param func_arity function arity.
  */
-extern uint32_t module_search_exported_function(Module *this_module, AtomString func_name, int func_arity);
+uint32_t module_search_exported_function(Module *this_module, AtomString func_name, int func_arity);
 
 /***
  * @brief Destoys an existing Module
@@ -103,7 +103,7 @@ extern uint32_t module_search_exported_function(Module *this_module, AtomString 
  * @details Destorys a module and free Module resources.
  * @param module the module that will be freed.
  */
-extern void module_destroy(Module *module);
+void module_destroy(Module *module);
 
 /**
  * @brief Parse a BEAM file and returns a Module
@@ -112,7 +112,7 @@ extern void module_destroy(Module *module);
  * @param iff_binary the IFF file data.
  * @param size the size of the buffer containing the IFF data.
  */
-extern Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary, unsigned long size);
+Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary, unsigned long size);
 
 /**
  * @brief Gets a literal stored on the literal table of the specified module
@@ -121,7 +121,7 @@ extern Module *module_new_from_iff_binary(GlobalContext *global, const void *iff
  * @param mod The module that owns that is going to be loaded.
  * @param index a valid literal index.
  */
-extern term module_load_literal(Module *mod, int index, Context *ctx);
+term module_load_literal(Module *mod, int index, Context *ctx);
 
 /**
  * @brief Gets the AtomString for the given local atom id

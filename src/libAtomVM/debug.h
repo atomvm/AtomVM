@@ -35,7 +35,7 @@
  * @details Print the dump of the stack of the given context to stderr.
  * @param ctx the process context.
  */
-extern void debug_dump_stack(Context *ctx);
+void debug_dump_stack(Context *ctx);
 
 /**
  * @brief Gets a printable char for a given register type.
@@ -44,7 +44,7 @@ extern void debug_dump_stack(Context *ctx);
  * @param reg_type register type.
  * @return printable register type.
  */
-extern char reg_type_c(int reg_type);
+char reg_type_c(int reg_type);
 
 /**
  * @brief Prints a list of processes.

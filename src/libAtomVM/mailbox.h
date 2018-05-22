@@ -45,7 +45,7 @@ typedef struct
  * @param c the process context.
  * @param t the term that will be sent.
  */
-extern void mailbox_send(Context *c, term t);
+void mailbox_send(Context *c, term t);
 
 /**
  * @brief Gets next message from a mailbox.
@@ -54,7 +54,7 @@ extern void mailbox_send(Context *c, term t);
  * @param c the process or driver context.
  * @returns next queued term.
  */
-extern term mailbox_receive(Context *c);
+term mailbox_receive(Context *c);
 
 /**
  * @brief Dequeue next message struct from mailbox.
@@ -72,6 +72,6 @@ Message *mailbox_dequeue(Context *c);
  * @param c the process or driver context.
  * @returns peek queued term.
  */
-extern term mailbox_peek(Context *c);
+term mailbox_peek(Context *c);
 
 #endif
