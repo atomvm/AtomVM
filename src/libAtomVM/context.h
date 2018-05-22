@@ -68,6 +68,8 @@ struct Context
 
     //Ports support
     native_handler native_handler;
+
+    uint64_t reductions;
 };
 
 #ifndef TYPEDEF_CONTEXT

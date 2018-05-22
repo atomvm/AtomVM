@@ -70,6 +70,13 @@ Context *scheduler_wait(GlobalContext *global, Context *c, int timeout)
     return GET_LIST_ENTRY(next_ready, Context, processes_list_head);
 }
 
+Context *scheduler_next(GlobalContext *global, Context *c)
+{
+    UNUSED(global);
+    c->reductions += DEFAULT_REDUCTIONS_AMOUNT;
+    return GET_LIST_ENTRY(c->processes_list_head.next, Context, processes_list_head);
+}
+
 void scheduler_make_ready(GlobalContext *global, Context *c)
 {
     linkedlist_remove(&global->waiting_processes, &c->processes_list_head);
