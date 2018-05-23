@@ -501,7 +501,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                     ctx->cp = module_address(mod->module_index, i);
 
                     remaining_reductions--;
-                    if (remaining_reductions) {
+                    if (LIKELY(remaining_reductions)) {
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
                         SCHEDULE_NEXT(mod, mod->labels[label]);
@@ -536,7 +536,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                     DEBUG_DUMP_STACK(ctx);
 
                     remaining_reductions--;
-                    if (remaining_reductions) {
+                    if (LIKELY(remaining_reductions)) {
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
                         SCHEDULE_NEXT(mod, mod->labels[label]);
@@ -565,7 +565,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
 
                     NEXT_INSTRUCTION(next_off);
                     remaining_reductions--;
-                    if (remaining_reductions) {
+                    if (LIKELY(remaining_reductions)) {
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
                         SCHEDULE_NEXT(mod, mod->labels[label]);
@@ -594,7 +594,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     remaining_reductions--;
-                    if (!remaining_reductions) {
+                    if (UNLIKELY(!remaining_reductions)) {
                         SCHEDULE_NEXT(mod, INSTRUCTION_POINTER());
                         continue;
                     }
@@ -647,7 +647,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     remaining_reductions--;
-                    if (!remaining_reductions) {
+                    if (UNLIKELY(!remaining_reductions)) {
                         SCHEDULE_NEXT(mod, INSTRUCTION_POINTER());
                         continue;
                     }
@@ -1687,7 +1687,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     remaining_reductions--;
-                    if (remaining_reductions) {
+                    if (LIKELY(remaining_reductions)) {
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
                         SCHEDULE_NEXT(mod, mod->labels[label]);
@@ -1866,7 +1866,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     remaining_reductions--;
-                    if (!remaining_reductions) {
+                    if (UNLIKELY(!remaining_reductions)) {
                         SCHEDULE_NEXT(mod, INSTRUCTION_POINTER());
                         continue;
                     }
