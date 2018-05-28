@@ -665,6 +665,8 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                         case NIFFunctionType: {
                             const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
                             ctx->x[0] = nif->nif_ptr(ctx, arity, ctx->x);
+                            DO_RETURN();
+
                             break;
                         }
                         case ModuleFunction: {
