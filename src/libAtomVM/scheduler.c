@@ -74,7 +74,13 @@ Context *scheduler_next(GlobalContext *global, Context *c)
 {
     UNUSED(global);
     c->reductions += DEFAULT_REDUCTIONS_AMOUNT;
-    return GET_LIST_ENTRY(c->processes_list_head.next, Context, processes_list_head);
+
+    Context *next_context;
+    do {
+        next_context = GET_LIST_ENTRY(c->processes_list_head.next, Context, processes_list_head);
+    } while (next_context->native_handler);
+
+    return next_context;
 }
 
 void scheduler_make_ready(GlobalContext *global, Context *c)
@@ -87,6 +93,15 @@ void scheduler_make_waiting(GlobalContext *global, Context *c)
 {
     linkedlist_remove(&global->ready_processes, &c->processes_list_head);
     linkedlist_append(&global->waiting_processes, &c->processes_list_head);
+}
+
+void scheduler_terminate(GlobalContext *global, Context *c)
+{
+    linkedlist_remove(&global->ready_processes, &c->processes_list_head);
+    linkedlist_remove(&global->processes_table, &c->processes_table_head);
+    if (!c->leader) {
+        context_destroy(c);
+    }
 }
 
 static void scheduler_timeout_callback(void *data)

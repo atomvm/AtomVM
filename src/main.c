@@ -79,6 +79,7 @@ int main(int argc, char **argv)
     globalcontext_insert_module_with_filename(glb, mod, startup_module_name);
     mod->module_platform_data = NULL;
     Context *ctx = context_new(glb);
+    ctx->leader = 1;
 
     context_execute_loop(ctx, mod, "start", 0);
 

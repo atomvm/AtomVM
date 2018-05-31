@@ -70,6 +70,8 @@ struct Context
     native_handler native_handler;
 
     uint64_t reductions;
+
+    unsigned int leader : 1;
 };
 
 #ifndef TYPEDEF_CONTEXT

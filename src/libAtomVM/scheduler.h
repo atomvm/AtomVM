@@ -61,6 +61,9 @@ void scheduler_make_ready(GlobalContext *global, Context *c);
  */
 void scheduler_make_waiting(GlobalContext *global, Context *c);
 
+
+void scheduler_terminate(GlobalContext *global, Context *c);
+
 int schudule_processes_count(GlobalContext *global);
 
 Context *scheduler_next(GlobalContext *global, Context *c);

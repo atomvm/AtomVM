@@ -63,6 +63,8 @@ Context *context_new(GlobalContext *glb)
     ctx->saved_ip = NULL;
     ctx->jump_to_on_restore = NULL;
 
+    ctx->leader = 0;
+
     return ctx;
 }
 

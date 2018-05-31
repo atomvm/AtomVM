@@ -99,6 +99,7 @@ int test_modules_execution()
         }
         globalcontext_insert_module_with_filename(glb, mod, test->test_file);
         Context *ctx = context_new(glb);
+        ctx->leader = 1;
 
         context_execute_loop(ctx, mod, "start", 0);
 
