@@ -478,11 +478,31 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
             #ifdef IMPL_EXECUTE_LOOP
                 TRACE("-- Code execution finished for %i--\n", ctx->process_id);
                 if (schudule_processes_count(ctx->global) == 1) {
+                    scheduler_terminate(ctx->global, ctx);
                     return 0;
                 }
 
                 TRACE("WARNING: some processes are still running.\n");
-                return 0;
+
+                Context *scheduled_context = scheduler_next(ctx->global, ctx);
+                if (scheduled_context == ctx) {
+                    TRACE(stderr, "There are no more runnable processes\n");
+                    return 0;
+                }
+
+                scheduler_terminate(ctx->global, ctx);
+
+                ctx = scheduled_context;
+                mod = ctx->saved_module;
+                code = mod->code->code;
+                remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;
+                if (scheduled_context->jump_to_on_restore && ctx->mailbox) {
+                    JUMP_TO_ADDRESS(scheduled_context->jump_to_on_restore);
+                } else {
+                    JUMP_TO_ADDRESS(scheduled_context->saved_ip);
+                }
+
+                break;
             #endif
             }
 

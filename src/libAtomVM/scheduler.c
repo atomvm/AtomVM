@@ -98,7 +98,6 @@ void scheduler_make_waiting(GlobalContext *global, Context *c)
 void scheduler_terminate(GlobalContext *global, Context *c)
 {
     linkedlist_remove(&global->ready_processes, &c->processes_list_head);
-    linkedlist_remove(&global->processes_table, &c->processes_table_head);
     if (!c->leader) {
         context_destroy(c);
     }
