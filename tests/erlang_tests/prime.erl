@@ -39,9 +39,7 @@ do_all_primes_test(N, UpTo, Last) ->
             do_all_primes_test(N + 1, UpTo, N);
 
         false ->
-            do_all_primes_test(N + 1, UpTo, Last);
-        _Any ->
-            error
+            do_all_primes_test(N + 1, UpTo, Last)
     end.
 
 calculate_list(First, Last) when First < 2 ->
@@ -51,16 +49,12 @@ calculate_list(First, Last) when First == Last ->
         true ->
             Last;
         false ->
-            [];
-        _Any ->
-            error
+            []
     end;
 calculate_list(First, Last) ->
     case is_prime(First) of
         true ->
             [First | calculate_list(First + 1, Last)];
         false ->
-            calculate_list(First + 1, Last);
-        _Any ->
-            error
+            calculate_list(First + 1, Last)
     end.
