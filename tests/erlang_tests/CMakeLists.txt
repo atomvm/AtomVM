@@ -46,6 +46,7 @@ compile_erlang(guards3)
 compile_erlang(guards4)
 compile_erlang(guards5)
 compile_erlang(prime)
+compile_erlang(match)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -84,4 +85,5 @@ add_custom_target(erlang_test_modules DEPENDS
     guards4.beam
     guards5.beam
     prime.beam
+    match.beam
 )

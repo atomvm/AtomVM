@@ -73,6 +73,7 @@ struct Test tests[] =
     {"guards4.beam", 16},
     {"guards5.beam", 3},
     {"prime.beam", 1999},
+    {"match.beam", 5},
     {NULL, 0}
 };
 
