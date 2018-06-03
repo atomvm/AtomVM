@@ -364,6 +364,7 @@
 #define OP_PUT_LIST 69
 #define OP_PUT_TUPLE 70
 #define OP_PUT 71
+#define OP_BADMATCH 72
 #define OP_CASE_END 74
 #define OP_CALL_EXT_ONLY 78
 #define OP_IS_BOOLEAN 114
@@ -1872,6 +1873,27 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 break;
             }
 
+            //TODO: implement
+            case OP_BADMATCH: {
+                int next_off = 1;
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("badmatch/1\n");
+                    USED_BY_TRACE(arg1);
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("badmatch/1, v=0x%lx\n", arg1);
+                    abort();
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            //TODO: implement
             case OP_CASE_END: {
                 int next_off = 1;
                 term arg1;
