@@ -365,6 +365,7 @@
 #define OP_PUT_TUPLE 70
 #define OP_PUT 71
 #define OP_BADMATCH 72
+#define OP_IF_END 73
 #define OP_CASE_END 74
 #define OP_CALL_EXT_ONLY 78
 #define OP_IS_BOOLEAN 114
@@ -1890,6 +1891,18 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            //TODO: implement
+            case OP_IF_END: {
+                TRACE("if_end/0\n");
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    abort();
+                #endif
+
+                NEXT_INSTRUCTION(1);
                 break;
             }
 
