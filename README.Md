@@ -12,6 +12,8 @@ Dependencies
 * gperf ([GNU Perfect Hash Function Generator](https://www.gnu.org/software/gperf/manual/gperf.html)) is required to build AtomVM.
 * zlib ([zlib compression and decompression library](https://zlib.net/)) is optionally needed to run standard BEAM files (without uncompressed literals extension).
 
+* gcov and lcov are optionally required to generate coverage report (make coverage).
+
 This software has been mainly tested with GCC (7.2.0 on Linux), but it also works with clang (tested with clang 4.0.1).
 
 Supported Platforms
