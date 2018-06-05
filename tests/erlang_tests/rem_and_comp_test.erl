@@ -5,6 +5,7 @@ start() ->
     one_if_true(rem_func(5, 3) =:= 2) +
     one_if_true(rem_func(0, 1) =:= 0) +
     one_if_true(rem_func(0, 1) =:= 0) +
+    one_if_true(rem_func(5, 5) =:= 7) +
     one_if_true(rem_func(0, 1) =/= 1) +
     one_if_true(rem_func(0, 1) =/= 0) +
     one_if_true(rem_func(0, 2) =/= 0).
