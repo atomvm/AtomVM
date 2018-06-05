@@ -47,3 +47,7 @@ add_library(libAtomVM ${LIBATOMVM_SOURCES})
 add_dependencies(libAtomVM generated)
 target_link_libraries(libAtomVM ${ZLIB_LIBRARIES})
 set_property(TARGET libAtomVM PROPERTY C_STANDARD 99)
+
+if (CMAKE_BUILD_TYPE STREQUAL "Coverage")
+    set_target_properties(libAtomVM PROPERTIES COMPILE_FLAGS "-O0 -fprofile-arcs -ftest-coverage")
+endif()
