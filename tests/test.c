@@ -57,6 +57,7 @@ struct Test tests[] =
     {"makelist_test.beam", 532},
     {"test_echo_driver.beam", 84},
     {"test_regecho_driver.beam", 11},
+    {"test_send_nif_and_echo.beam", 11},
     {"state_test.beam", 3},
     {"booleans_test.beam", 4},
     {"booleans2_test.beam", 2},
