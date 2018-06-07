@@ -297,6 +297,7 @@ term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move)
 
                 if (previous) {
                     TRACE("- Found leaf binary, going back.\n");
+                    previous_term = t;
                     t = get_placeholder_term(previous);
                     going_back = 1;
 
