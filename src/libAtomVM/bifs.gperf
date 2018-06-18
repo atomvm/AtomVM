@@ -1,5 +1,4 @@
 %{
-#include "bif.h"
 #include <string.h>
 typedef struct BifNameAndPtr BifNameAndPtr;
 %}

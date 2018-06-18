@@ -1,6 +1,8 @@
 cmake_minimum_required (VERSION 2.6)
 project (libAtomVM)
 
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
 set(LIBATOMVM_SOURCES
     atom.c
     atomshashtable.c
