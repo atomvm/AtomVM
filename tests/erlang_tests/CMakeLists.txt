@@ -4,8 +4,8 @@ project (erlang_tests)
 function(compile_erlang module_name)
     add_custom_command(
         OUTPUT ${module_name}.beam
-        COMMAND erlc ${module_name}.erl
-        DEPENDS ${module_name}.erl
+        COMMAND erlc ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
         COMMENT "Compiling ${module_name}.erl"
     )
 endfunction()
