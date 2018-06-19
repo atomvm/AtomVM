@@ -328,6 +328,7 @@
 #define OP_ALLOCATE 12
 #define OP_ALLOCATE_HEAP 13
 #define OP_ALLOCATE_ZERO 14
+#define OP_ALLOCATE_HEAP_ZERO 15
 #define OP_TEST_HEAP 16
 #define OP_KILL 17
 #define OP_DEALLOCATE 18
@@ -888,6 +889,41 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                         memory_ensure_free(ctx, stack_need + 1);
                     }
 
+                    ctx->e -= stack_need + 1;
+                    for (int s = 0; s < stack_need; s++) {
+                        ctx->e[s] = term_nil();
+                    }
+                    ctx->e[stack_need] = ctx->cp;
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_ALLOCATE_HEAP_ZERO: {
+                int next_off = 1;
+                int stack_need;
+                DECODE_INTEGER(stack_need, code, i, next_off, next_off);
+                int heap_need;
+                DECODE_INTEGER(heap_need, code, i, next_off, next_off);
+                int live;
+                DECODE_INTEGER(live, code, i, next_off, next_off);
+                TRACE("allocate_heap_zero/3 stack_need=%i, heap_need=%i, live=%i\n", stack_need, heap_need, live);
+                USED_BY_TRACE(stack_need);
+                USED_BY_TRACE(heap_need);
+                USED_BY_TRACE(live);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    if (live > ctx->avail_registers) {
+                        fprintf(stderr, "Cannot use more than 16 registers.");
+                        abort();
+                    }
+
+                    context_clean_registers(ctx, live);
+
+                    if ((ctx->heap_ptr + heap_need) > ctx->e - (stack_need + 1)) {
+                        memory_ensure_free(ctx, heap_need + stack_need + 1);
+                    }
                     ctx->e -= stack_need + 1;
                     for (int s = 0; s < stack_need; s++) {
                         ctx->e[s] = term_nil();
