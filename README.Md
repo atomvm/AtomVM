@@ -22,6 +22,8 @@ Supported Platforms
 * Linux
 * ESP32 SoC (with IDF and FreeRTOS software platforms, see [README.ESP32.Md](README.ESP32.Md))
 
+AtomVM aims to be easily portable to a new platform with a minimum effort, so more platforms might be supported in a near future.
+
 Getting Started (on Linux)
 ==========================
 
@@ -37,5 +39,21 @@ $ ./src/AtomVM hello_world.beam
 Project Status
 ==============
 
-AtomVM is far from being complete, but it can run simple applications similar to those available in examples and tests.
-Known limitations: there is no standard library right now, so every application needs to have some copy&paste boilerplate.
+AtomVM is still in its early stages, but it can run simple applications similar to those available in examples and tests.
+AtomVM might crash with a similar message:
+```
+Undecoded opcode: 15
+Aborted (core dumped)
+```
+This basically means that an instruction has not been implemented yet, or that an outdated version has been used. Please, make sure to always run AtomVM using latest version.
+
+Known limitations
+-----------------
+This project is a work in progress, so there are several known limitations, that will prevent to run unmodified software, some of them are:
+* There is no standard library right now, so every application needs to have some copy&paste boilerplate.
+* Several instructions are not yet implemented.
+* Maps are not yet supported.
+* Binaries are still poorly supported.
+* External term format is poorly supported.
+
+All of these limitations are going to be fixed in a reasonable amount of time.
