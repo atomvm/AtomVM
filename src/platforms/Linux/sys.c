@@ -52,6 +52,7 @@ extern void sys_waitevents(struct ListHead *listeners_list)
     clock_gettime(CLOCK_MONOTONIC, &now);
 
     EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
+    EventListener *last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
 
     int min_timeout = INT_MAX;
     int count = 0;
@@ -154,7 +155,7 @@ extern void sys_waitevents(struct ListHead *listeners_list)
             }
 
             listener = next_listener;
-        } while (listener != listeners);
+        } while (listener != last_listener);
     }
 }
 
