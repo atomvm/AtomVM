@@ -28,6 +28,7 @@
 #define _GLOBALCONTEXT_H_
 
 #include <stdint.h>
+#include <time.h>
 
 #include "atom.h"
 #include "linkedlist.h"
@@ -66,6 +67,8 @@ typedef struct
 
     const void *avmpack_data;
     const void *avmpack_platform_data;
+
+    struct timespec next_timeout_at;
 
 } GlobalContext;
 

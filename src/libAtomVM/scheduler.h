@@ -39,9 +39,8 @@
  * @details move current process to the waiting queue, and schedule the next one or sleep until an event is received.
  * @param global the global context.
  * @param c the process context.
- * @param timeout in milliseconds.
  */
-Context *scheduler_wait(GlobalContext *global, Context *c, int timeout);
+Context *scheduler_wait(GlobalContext *global, Context *c);
 
 /**
  * @brief make sure a process is on the ready queue
@@ -88,5 +87,23 @@ int schudule_processes_count(GlobalContext *global);
  * @returns runnable process.
  */
 Context *scheduler_next(GlobalContext *global, Context *c);
+
+/**
+ * @brief checks if a context timeout has exired.
+ *
+ * @details compare context timeout timestamp against current timestamp.
+ * @param ctx the context that will be checked for an expired timeout.
+ * @returns 1 if the timeout has expired, otherwise 0.
+ */
+int scheduler_is_timeout_expired(const Context *ctx);
+
+/**
+ * @brief sets context timeout
+ *
+ * @details set context timeout timestamp, move context to wait queue and update global next timeout timestamp.
+ * @param ctx the context that will be put on sleep
+ * @param timeout ammount of time to be waited in milliseconds.
+ */
+void scheduler_set_timeout(Context *ctx, uint32_t timeout);
 
 #endif

@@ -1048,6 +1048,12 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
             case OP_TIMEOUT: {
                 TRACE("timeout/0\n");
 
+                #ifdef IMPL_EXECUTE_LOOP
+                    ctx->waiting_timeout = 0;
+                    ctx->timeout_at.tv_sec = 0;
+                    ctx->timeout_at.tv_nsec = 0;
+                #endif
+
                 NEXT_INSTRUCTION(1);
                 break;
             }
@@ -1094,7 +1100,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                     ctx->saved_ip = mod->labels[label];
                     ctx->jump_to_on_restore = NULL;
                     ctx->saved_module = mod;
-                    Context *scheduled_context = scheduler_wait(ctx->global, ctx, -1);
+                    Context *scheduled_context = scheduler_wait(ctx->global, ctx);
                     ctx = scheduled_context;
 
                     mod = ctx->saved_module;
@@ -1122,21 +1128,28 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 DECODE_COMPACT_TERM(timeout, code, i, next_off, next_off)
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("wait_timeout/2, label: %i, timeout: %x\n", label, term_to_int32(timeout));
+                    TRACE("wait_timeout/2, label: %i, timeout: %li\n", label, term_to_int32(timeout));
 
                     NEXT_INSTRUCTION(next_off);
                     //TODO: it looks like x[0] might be used instead of jump_to_on_restore
                     ctx->saved_ip = INSTRUCTION_POINTER();
                     ctx->jump_to_on_restore = mod->labels[label];
                     ctx->saved_module = mod;
-                    Context *scheduled_context = scheduler_wait(ctx->global, ctx, term_to_int32(timeout));
-                    ctx = scheduled_context;
 
-                    mod = ctx->saved_module;
-                    code = mod->code->code;
-                    if (scheduled_context->jump_to_on_restore && ctx->mailbox) {
-                        JUMP_TO_ADDRESS(scheduled_context->jump_to_on_restore);
-                    } else {
+                    int needs_to_wait = 0;
+                    if (!ctx->waiting_timeout) {
+                        scheduler_set_timeout(ctx, term_to_int32(timeout));
+                        needs_to_wait = 1;
+                    } else if (!scheduler_is_timeout_expired(ctx)){
+                        needs_to_wait = 1;
+                    }
+                    ctx->waiting_timeout = 1;
+
+                    if (needs_to_wait) {
+                        Context *scheduled_context = scheduler_wait(ctx->global, ctx);
+                        ctx = scheduled_context;
+                        mod = ctx->saved_module;
+                        code = mod->code->code;
                         JUMP_TO_ADDRESS(scheduled_context->saved_ip);
                     }
                 #endif

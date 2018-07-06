@@ -72,6 +72,9 @@ GlobalContext *globalcontext_new()
         return NULL;
     }
 
+    glb->next_timeout_at.tv_sec = 0;
+    glb->next_timeout_at.tv_nsec = 0;
+
     return glb;
 }
 

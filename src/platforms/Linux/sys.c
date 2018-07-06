@@ -151,6 +151,7 @@ extern void sys_waitevents(struct ListHead *listeners_list)
                 if (wait_ms <= 0) {
                     //it is completely safe to free a listener in the callback, we are going to not use it after this call
                     listener->handler(listener);
+                    //TODO check if one shot
                 }
             }
 
@@ -161,7 +162,10 @@ extern void sys_waitevents(struct ListHead *listeners_list)
 
 extern void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis)
 {
-    clock_gettime(CLOCK_MONOTONIC, t);
+    if (UNLIKELY(clock_gettime(CLOCK_MONOTONIC, t))) {
+        fprintf(stderr, "Failed clock_gettime.\n");
+        abort();
+    }
     t->tv_sec += millis / 1000;
     t->tv_nsec += (millis % 1000) * 1000000;
 }

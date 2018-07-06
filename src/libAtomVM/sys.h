@@ -48,6 +48,8 @@ typedef struct EventListener {
     event_handler_t handler;
     void *data;
     int fd;
+
+    unsigned int one_shot : 1;
 } EventListener;
 
 /**

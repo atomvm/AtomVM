@@ -26,42 +26,72 @@
 
 static void scheduler_timeout_callback(void *data);
 static void scheduler_execute_native_handlers(GlobalContext *global);
+static Context *scheduler_get_expired_before(const GlobalContext *global, const struct timespec *before_timestamp);
+static int scheduler_find_min_timeout(const GlobalContext *global, struct timespec *found_timeout);
+static inline int before_than(const struct timespec *a, const struct timespec *b);
 static void scheduler_waiting_hook(void *data);
+static int make_ready_expired_contexts(GlobalContext *global);
 
-Context *scheduler_wait(GlobalContext *global, Context *c, int timeout)
+Context *scheduler_wait(GlobalContext *global, Context *c)
 {
     #ifdef DEBUG_PRINT_READY_PROCESSES
         debug_print_processes_list(global->ready_processes);
     #endif
     scheduler_make_waiting(global, c);
 
-    if (timeout != -1) {
-        EventListener *listener = malloc(sizeof(EventListener));
-        if (IS_NULL_PTR(listener)) {
-            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-            abort();
+    do {
+        struct timespec next_timeout;
+        next_timeout.tv_sec = global->next_timeout_at.tv_sec;
+        next_timeout.tv_nsec = global->next_timeout_at.tv_nsec;
+
+        if  (next_timeout.tv_sec | next_timeout.tv_nsec) {
+            struct timespec now_timestamp;
+            sys_set_timestamp_from_relative_to_abs(&now_timestamp, 0);
+
+            if (before_than(&next_timeout, &now_timestamp)) {
+
+                Context *expired_ctx = scheduler_get_expired_before(global, &now_timestamp);
+                if (UNLIKELY(!expired_ctx)) {
+                    fprintf(stderr, "Timeout without any expired context, aborting.\n");
+                    abort();
+                }
+                scheduler_make_ready(global, expired_ctx);
+                if (!scheduler_find_min_timeout(global, &global->next_timeout_at)) {
+                    global->next_timeout_at.tv_sec = 0;
+                    global->next_timeout_at.tv_nsec = 0;
+                }
+
+            } else if (!global->ready_processes) {
+
+                EventListener *listener = malloc(sizeof(EventListener));
+                if (IS_NULL_PTR(listener)) {
+                    fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+                    abort();
+                }
+                linkedlist_append(&global->listeners, &listener->listeners_list_head);
+                listener->fd = -1;
+
+                listener->expires = 1;
+                listener->expiral_timestamp.tv_sec = next_timeout.tv_sec;
+                listener->expiral_timestamp.tv_nsec = next_timeout.tv_nsec;
+                listener->one_shot = 1;
+                listener->data = global;
+                listener->handler = scheduler_timeout_callback;
+                listener->waiting_hook = scheduler_waiting_hook;
+
+                sys_waitevents(global->listeners);
+            }
+        } else if (!global->ready_processes) {
+            if (LIKELY(global->listeners)) {
+                sys_waitevents(global->listeners);
+            } else {
+                fprintf(stderr, "Hang detected\n");
+                abort();
+            }
         }
-        linkedlist_append(&global->listeners, &listener->listeners_list_head);
-        listener->fd = -1;
 
-        listener->expires = 1;
-        sys_set_timestamp_from_relative_to_abs(&listener->expiral_timestamp, timeout);
-        listener->data = c;
-        listener->handler = scheduler_timeout_callback;
-        listener->waiting_hook = scheduler_waiting_hook;
-    }
-
-    scheduler_execute_native_handlers(global);
-
-    //TODO: it would be better to check also events here
-    if (!global->ready_processes) {
-        if (UNLIKELY(!global->listeners)) {
-            fprintf(stderr, "Application hang detected. Aborting.");
-            abort();
-        }
-
-        sys_waitevents(global->listeners);
-    }
+        scheduler_execute_native_handlers(global);
+    } while (!global->ready_processes);
 
     struct ListHead *next_ready = global->ready_processes;
     linkedlist_remove(&global->ready_processes, next_ready);
@@ -74,6 +104,10 @@ Context *scheduler_next(GlobalContext *global, Context *c)
 {
     UNUSED(global);
     c->reductions += DEFAULT_REDUCTIONS_AMOUNT;
+
+    if (global->next_timeout_at.tv_sec | global->next_timeout_at.tv_nsec) {
+        make_ready_expired_contexts(global);
+    }
 
     Context *next_context;
     do {
@@ -103,14 +137,136 @@ void scheduler_terminate(GlobalContext *global, Context *c)
     }
 }
 
+static int make_ready_expired_contexts(GlobalContext *global)
+{
+    struct timespec now_timestamp;
+    sys_set_timestamp_from_relative_to_abs(&now_timestamp, 2);
+
+    Context *expired_ctx = scheduler_get_expired_before(global, &now_timestamp);
+    if (!expired_ctx) {
+        return 0;
+    }
+
+    scheduler_make_ready(global, expired_ctx);
+
+    if (!scheduler_find_min_timeout(global, &global->next_timeout_at)) {
+        global->next_timeout_at.tv_sec = 0;
+        global->next_timeout_at.tv_nsec = 0;
+    }
+
+    return 1;
+}
+
+void scheduler_set_timeout(Context *ctx, uint32_t timeout)
+{
+    GlobalContext *glb = ctx->global;
+
+    struct timespec new_timeout;
+    sys_set_timestamp_from_relative_to_abs(&new_timeout, timeout);
+    ctx->timeout_at.tv_sec = new_timeout.tv_sec;
+    ctx->timeout_at.tv_nsec = new_timeout.tv_nsec;
+
+    struct timespec next_timeout;
+    next_timeout.tv_sec = glb->next_timeout_at.tv_sec;
+    next_timeout.tv_nsec = glb->next_timeout_at.tv_nsec;
+
+    if ((next_timeout.tv_sec == 0) && (next_timeout.tv_nsec == 0)) {
+        glb->next_timeout_at.tv_nsec = new_timeout.tv_nsec;
+        glb->next_timeout_at.tv_sec = new_timeout.tv_sec;
+
+    } else if (before_than(&new_timeout, &next_timeout)) {
+        glb->next_timeout_at.tv_sec = new_timeout.tv_sec;
+        glb->next_timeout_at.tv_nsec = new_timeout.tv_nsec;
+    }
+}
+
+int scheduler_is_timeout_expired(const Context *ctx)
+{
+    struct timespec now_timestamp;
+    sys_set_timestamp_from_relative_to_abs(&now_timestamp, 0);
+    return before_than(&ctx->timeout_at, &now_timestamp);
+}
+
 static void scheduler_timeout_callback(void *data)
 {
     EventListener *listener = (EventListener *) data;
-    Context *c = (Context *) listener->data;
-    linkedlist_remove(&c->global->listeners, &listener->listeners_list_head);
-    scheduler_make_ready(c->global, c);
+    GlobalContext *global = (GlobalContext *) listener->data;
+    linkedlist_remove(&global->listeners, &listener->listeners_list_head);
 
-    free(listener);
+    make_ready_expired_contexts(global);
+}
+
+static inline int before_than(const struct timespec *a, const struct timespec *b)
+{
+    return (a->tv_sec < b->tv_sec) ||
+        ((a->tv_sec == b->tv_sec) && (a->tv_nsec < b->tv_nsec));
+}
+
+static Context *scheduler_get_expired_before(const GlobalContext *global, const struct timespec *before_timestamp)
+{
+    struct timespec min;
+    Context *min_context = NULL;
+
+    Context *contexts = GET_LIST_ENTRY(global->waiting_processes, Context, processes_list_head);
+    if (!contexts) {
+        return NULL;
+    }
+
+    Context *context = contexts;
+    Context *next_context;
+    do {
+        next_context = GET_LIST_ENTRY(context->processes_list_head.next, Context, processes_list_head);
+
+        if (context->timeout_at.tv_sec | context->timeout_at.tv_nsec) {
+            if (!min_context || before_than(&context->timeout_at, &min)) {
+                min.tv_sec = context->timeout_at.tv_sec;
+                min.tv_nsec = context->timeout_at.tv_nsec;
+                min_context = context;
+            }
+        }
+
+        context = next_context;
+    } while (context != contexts);
+
+    if (before_than(&min_context->timeout_at, before_timestamp)) {
+        return min_context;
+    } else {
+        return NULL;
+    }
+}
+
+static int scheduler_find_min_timeout(const GlobalContext *global, struct timespec *found_timeout)
+{
+    struct timespec min;
+    int found_first = 0;
+
+    Context *contexts = GET_LIST_ENTRY(global->waiting_processes, Context, processes_list_head);
+    if (!contexts) {
+        return 0;
+    }
+
+    Context *context = contexts;
+    Context *next_context;
+    do {
+        next_context = GET_LIST_ENTRY(context->processes_list_head.next, Context, processes_list_head);
+
+        if (context->timeout_at.tv_sec | context->timeout_at.tv_nsec) {
+            if (!found_first || before_than(&context->timeout_at, &min)) {
+                min.tv_sec = context->timeout_at.tv_sec;
+                min.tv_nsec = context->timeout_at.tv_nsec;
+                found_first = 1;
+            }
+        }
+
+        context = next_context;
+    } while (context != contexts);
+
+    if (found_first) {
+        found_timeout->tv_sec = min.tv_sec;
+        found_timeout->tv_nsec = min.tv_nsec;
+    }
+
+    return found_first;
 }
 
 static void scheduler_execute_native_handlers(GlobalContext *global)

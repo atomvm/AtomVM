@@ -65,6 +65,10 @@ Context *context_new(GlobalContext *glb)
 
     ctx->leader = 0;
 
+    ctx->timeout_at.tv_sec = 0;
+    ctx->timeout_at.tv_nsec = 0;
+    ctx->waiting_timeout = 0;
+
     return ctx;
 }
 

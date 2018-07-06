@@ -27,6 +27,8 @@
 #ifndef _CONTEXT_H_
 #define _CONTEXT_H_
 
+#include <time.h>
+
 #include "linkedlist.h"
 #include "globalcontext.h"
 #include "term.h"
@@ -70,8 +72,10 @@ struct Context
     native_handler native_handler;
 
     uint64_t reductions;
+    struct timespec timeout_at;
 
     unsigned int leader : 1;
+    unsigned int waiting_timeout : 1;
 };
 
 #ifndef TYPEDEF_CONTEXT
