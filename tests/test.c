@@ -76,6 +76,17 @@ struct Test tests[] =
     {"prime.beam", 1999},
     {"match.beam", 5},
     {"if_test.beam", 5},
+    // sleep test will be repated 10 times
+    {"sleep.beam", 392},
+    {"sleep.beam", 392},
+    {"sleep.beam", 392},
+    {"sleep.beam", 392},
+    {"sleep.beam", 392},
+    {"sleep.beam", 392},
+    {"sleep.beam", 392},
+    {"sleep.beam", 392},
+    {"sleep.beam", 392},
+    {"sleep.beam", 392},
     {NULL, 0}
 };
 
