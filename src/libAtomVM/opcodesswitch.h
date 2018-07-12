@@ -307,11 +307,7 @@
         mod = ctx->saved_module;                                                                  \
         code = mod->code->code;                                                                   \
         remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;                                         \
-        if (scheduled_context->jump_to_on_restore && ctx->mailbox) {                              \
-            JUMP_TO_ADDRESS(scheduled_context->jump_to_on_restore);                               \
-        } else {                                                                                  \
-            JUMP_TO_ADDRESS(scheduled_context->saved_ip);                                         \
-        }                                                                                         \
+        JUMP_TO_ADDRESS(scheduled_context->saved_ip);                                             \
     }
 
 #define OP_LABEL 1
@@ -500,11 +496,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 mod = ctx->saved_module;
                 code = mod->code->code;
                 remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;
-                if (scheduled_context->jump_to_on_restore && ctx->mailbox) {
-                    JUMP_TO_ADDRESS(scheduled_context->jump_to_on_restore);
-                } else {
-                    JUMP_TO_ADDRESS(scheduled_context->saved_ip);
-                }
+                JUMP_TO_ADDRESS(scheduled_context->saved_ip);
 
                 break;
             #endif
@@ -1105,11 +1097,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
 
                     mod = ctx->saved_module;
                     code = mod->code->code;
-                    if (scheduled_context->jump_to_on_restore && ctx->mailbox) {
-                        JUMP_TO_ADDRESS(scheduled_context->jump_to_on_restore);
-                    } else {
-                        JUMP_TO_ADDRESS(scheduled_context->saved_ip);
-                    }
+                    JUMP_TO_ADDRESS(scheduled_context->saved_ip);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
