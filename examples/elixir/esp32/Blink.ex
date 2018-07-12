@@ -2,21 +2,21 @@ defmodule Blink do
 
   def start() do
     gpio = do_open_port("gpio", [])
-    set_direction(gpio, 17, :output)
+    set_direction(gpio, 2, :output)
 
     loop(gpio, 0)
   end
 
   defp loop(gpio, 0) do
-    set_level(gpio, 17, 0)
-    sleep(1000)
+    set_level(gpio, 2, 0)
+    sleep(200)
 
     loop(gpio, 1)
   end
 
   defp loop(gpio, 1) do
-    set_level(gpio, 17, 1)
-    sleep(1000)
+    set_level(gpio, 2, 1)
+    sleep(200)
 
     loop(gpio, 0)
   end

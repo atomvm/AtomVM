@@ -3,15 +3,15 @@
 
 start() ->
     GPIO = do_open_port("gpio", []),
-    set_direction(GPIO, 17, output),
+    set_direction(GPIO, 2, output),
     loop(GPIO, 0).
 
 loop(GPIO, 0) ->
-    set_level(GPIO, 17, 0),
+    set_level(GPIO, 2, 0),
     sleep(1000),
     loop(GPIO, 1);
 loop(GPIO, 1) ->
-    set_level(GPIO, 17, 1),
+    set_level(GPIO, 2, 1),
     sleep(1000),
     loop(GPIO, 0).
 
