@@ -29,7 +29,6 @@ static void scheduler_execute_native_handlers(GlobalContext *global);
 static Context *scheduler_get_expired_before(const GlobalContext *global, const struct timespec *before_timestamp);
 static int scheduler_find_min_timeout(const GlobalContext *global, struct timespec *found_timeout);
 static inline int before_than(const struct timespec *a, const struct timespec *b);
-static void scheduler_waiting_hook(void *data);
 static int make_ready_expired_contexts(GlobalContext *global);
 
 Context *scheduler_wait(GlobalContext *global, Context *c)
@@ -77,7 +76,6 @@ Context *scheduler_wait(GlobalContext *global, Context *c)
                 listener->one_shot = 1;
                 listener->data = global;
                 listener->handler = scheduler_timeout_callback;
-                listener->waiting_hook = scheduler_waiting_hook;
 
                 sys_waitevents(global->listeners);
             }
@@ -306,9 +304,4 @@ int schudule_processes_count(GlobalContext *global)
     } while (context != contexts);
 
     return count;
-}
-
-static void scheduler_waiting_hook(void *data)
-{
-    memory_gc_and_shrink((Context *) data);
 }

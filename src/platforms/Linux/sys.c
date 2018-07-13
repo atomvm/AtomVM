@@ -22,7 +22,6 @@
 #include "avmpack.h"
 #include "iff.h"
 #include "mapped_file.h"
-#include "memory.h"
 #include "scheduler.h"
 #include "utils.h"
 
@@ -41,8 +40,6 @@
         #define TRACE(...)
     #endif
 #endif
-
-#define HOUSEKEEPING_MIN_SLEEP 10
 
 static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *timespec2);
 
@@ -74,17 +71,6 @@ extern void sys_waitevents(struct ListHead *listeners_list)
 
         listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
     } while (listener != listeners);
-
-    if (min_timeout > HOUSEKEEPING_MIN_SLEEP) {
-        EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
-        EventListener *listener = listeners;
-        do {
-            if (listener->waiting_hook) {
-                listener->waiting_hook(listener->data);
-                break;
-            }
-        } while (listener != listeners);
-    }
 
     //second: use either poll or nanosleep
     if (count > 0) {
