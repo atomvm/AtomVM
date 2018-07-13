@@ -1041,7 +1041,6 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 TRACE("timeout/0\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    ctx->waiting_timeout = 0;
                     ctx->timeout_at.tv_sec = 0;
                     ctx->timeout_at.tv_nsec = 0;
                 #endif
@@ -1125,13 +1124,12 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                     ctx->saved_module = mod;
 
                     int needs_to_wait = 0;
-                    if (!ctx->waiting_timeout) {
+                    if (!context_is_waiting_timeout(ctx)) {
                         scheduler_set_timeout(ctx, term_to_int32(timeout));
                         needs_to_wait = 1;
                     } else if (!scheduler_is_timeout_expired(ctx)){
                         needs_to_wait = 1;
                     }
-                    ctx->waiting_timeout = 1;
 
                     if (needs_to_wait) {
                         Context *scheduled_context = scheduler_wait(ctx->global, ctx);

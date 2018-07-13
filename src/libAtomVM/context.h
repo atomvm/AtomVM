@@ -75,7 +75,6 @@ struct Context
     struct timespec timeout_at;
 
     unsigned int leader : 1;
-    unsigned int waiting_timeout : 1;
 };
 
 #ifndef TYPEDEF_CONTEXT
@@ -159,6 +158,18 @@ static inline unsigned long context_avail_free_memory(const Context *ctx)
 static inline unsigned long context_memory_size(const Context *ctx)
 {
     return ctx->stack_base - ctx->heap_start;
+}
+
+/**
+ * @brief Checks if a contex is waiting a timeout.
+ *
+ * @details Check if given context has a timeout timestamp set, regardless current timestamp.
+ * @param ctx a valid context.
+ * @returns 1 if context has a timeout, otherwise 0.
+ */
+static inline int context_is_waiting_timeout(const Context *ctx)
+{
+    return ctx->timeout_at.tv_sec || ctx->timeout_at.tv_nsec;
 }
 
 #endif
