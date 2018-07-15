@@ -365,6 +365,9 @@
 #define OP_IF_END 73
 #define OP_CASE_END 74
 #define OP_CALL_EXT_ONLY 78
+#define OP_TRY 104
+#define OP_TRY_END 105
+#define OP_TRY_CASE 106
 #define OP_IS_BOOLEAN 114
 #define OP_GC_BIF1 124
 #define OP_GC_BIF2 125
@@ -2020,7 +2023,48 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 break;
             }
 
-           case OP_IS_BOOLEAN: {
+            //TODO: implement
+            case OP_TRY: {
+                int next_off = 1;
+                int dreg;
+                uint8_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
+
+                TRACE("try/2, label=%i, reg=%c%i\n", label, reg_type_c(dreg_type), dreg);
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            //TODO:implement
+            case OP_TRY_END: {
+                int next_off = 1;
+                int dreg;
+                uint8_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
+
+                TRACE("try_end/1, reg=%c%i\n", reg_type_c(dreg_type), dreg);
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            //TODO: implement
+            case OP_TRY_CASE: {
+                int next_off = 1;
+                int dreg;
+                uint8_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
+
+                TRACE("try_case/1, reg=%c%i\n", reg_type_c(dreg_type), dreg);
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_IS_BOOLEAN: {
                 int next_off = 1;
                 int label;
                 DECODE_LABEL(label, code, i, next_off, next_off)
