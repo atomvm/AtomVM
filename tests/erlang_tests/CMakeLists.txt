@@ -50,6 +50,7 @@ compile_erlang(prime)
 compile_erlang(match)
 compile_erlang(if_test)
 compile_erlang(sleep)
+compile_erlang(try_noerror)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -92,4 +93,5 @@ add_custom_target(erlang_test_modules DEPENDS
     match.beam
     if_test.beam
     sleep.beam
+    try_noerror.beam
 )
