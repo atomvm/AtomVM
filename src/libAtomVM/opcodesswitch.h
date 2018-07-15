@@ -486,7 +486,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
 
                 Context *scheduled_context = scheduler_next(ctx->global, ctx);
                 if (scheduled_context == ctx) {
-                    TRACE(stderr, "There are no more runnable processes\n");
+                    TRACE("There are no more runnable processes\n");
                     return 0;
                 }
 
@@ -1115,7 +1115,7 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 DECODE_COMPACT_TERM(timeout, code, i, next_off, next_off)
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("wait_timeout/2, label: %i, timeout: %li\n", label, term_to_int32(timeout));
+                    TRACE("wait_timeout/2, label: %i, timeout: %li\n", label, (long int) term_to_int32(timeout));
 
                     NEXT_INSTRUCTION(next_off);
                     //TODO: it looks like x[0] might be used instead of jump_to_on_restore
