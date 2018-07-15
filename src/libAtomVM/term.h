@@ -34,6 +34,7 @@
 #include "memory.h"
 #include "utils.h"
 
+#define TERM_CATCH_TAG 0x1B
 
 #ifndef TYPEDEF_TERM
 #define TYPEDEF_TERM
@@ -313,6 +314,11 @@ static inline term term_from_int32(int32_t value)
     } else {
         return (value << 4) | 0xF;
     }
+}
+
+static inline term term_from_catch_label(unsigned int module_index, unsigned int label)
+{
+    return (term) ((module_index << 24) | (label << 6) | TERM_CATCH_TAG);
 }
 
 /**

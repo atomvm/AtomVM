@@ -2023,7 +2023,6 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 break;
             }
 
-            //TODO: implement
             case OP_TRY: {
                 int next_off = 1;
                 int dreg;
@@ -2034,11 +2033,16 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
 
                 TRACE("try/2, label=%i, reg=%c%i\n", label, reg_type_c(dreg_type), dreg);
 
+                #ifdef IMPL_EXECUTE_LOOP
+                    term catch_term = term_from_catch_label(mod->module_index, label);
+                    //TODO: here just write to y registers is enough
+                    WRITE_REGISTER(dreg_type, dreg, catch_term);
+                #endif
+
                 NEXT_INSTRUCTION(next_off);
                 break;
             }
 
-            //TODO:implement
             case OP_TRY_END: {
                 int next_off = 1;
                 int dreg;
@@ -2046,6 +2050,11 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 TRACE("try_end/1, reg=%c%i\n", reg_type_c(dreg_type), dreg);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    //TODO: here just write to y registers is enough
+                    WRITE_REGISTER(dreg_type, dreg, term_nil());
+                #endif
 
                 NEXT_INSTRUCTION(next_off);
                 break;
