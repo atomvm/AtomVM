@@ -87,6 +87,7 @@ struct Test tests[] =
     {"sleep.beam", 392},
     {"sleep.beam", 392},
     {"sleep.beam", 392},
+    {"try_noerror.beam", 1},
     {NULL, 0}
 };
 
