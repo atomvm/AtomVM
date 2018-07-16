@@ -54,7 +54,7 @@ $ make monitor
 Running Blink Example
 =====================
 
-This example will switch on and off a led connected to GPIO17 every second.
+This example will switch on and off a led connected to GPIO 2 every second.
 
 Compile and flash blink example using following commands:
 
