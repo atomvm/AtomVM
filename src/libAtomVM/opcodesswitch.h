@@ -394,6 +394,26 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
     return term_from_atom_index(global_atom_index);
 }
 
+
+#ifdef IMPL_EXECUTE_LOOP
+static int get_catch_label_and_change_module(Context *ctx, Module **mod)
+{
+    const term *ct = ctx->e;
+    while (ct != ctx->stack_base) {
+        if (term_is_catch_label(*ct)) {
+            int target_module;
+            int target_label = term_to_catch_label_and_module(*ct, &target_module);
+            TRACE("- found catch: label: %i, module: %i\n", target_label, target_module);
+            *mod = ctx->global->modules_by_index[target_module];
+            return target_label;
+        }
+        ct++;
+    }
+
+    return 0;
+}
+#endif
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 
