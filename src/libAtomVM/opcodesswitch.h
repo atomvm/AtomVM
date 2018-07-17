@@ -1932,7 +1932,6 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
                 break;
             }
 
-            //TODO: implement
             case OP_BADMATCH: {
                 int next_off = 1;
                 term arg1;
@@ -1945,26 +1944,43 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("badmatch/1, v=0x%lx\n", arg1);
-                    abort();
+
+                    int target_label = get_catch_label_and_change_module(ctx, &mod);
+
+                    if (target_label) {
+                        JUMP_TO_ADDRESS(mod->labels[target_label]);
+                    } else {
+                        abort();
+                    }
                 #endif
 
-                NEXT_INSTRUCTION(next_off);
+                #ifdef IMPL_CODE_LOADER
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
                 break;
             }
 
-            //TODO: implement
             case OP_IF_END: {
                 TRACE("if_end/0\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    abort();
+                    int target_label = get_catch_label_and_change_module(ctx, &mod);
+
+                    if (target_label) {
+                        JUMP_TO_ADDRESS(mod->labels[target_label]);
+                    } else {
+                        abort();
+                    }
                 #endif
 
-                NEXT_INSTRUCTION(1);
+                #ifdef IMPL_CODE_LOADER
+                    NEXT_INSTRUCTION(1);
+                #endif
+
                 break;
             }
 
-            //TODO: implement
             case OP_CASE_END: {
                 int next_off = 1;
                 term arg1;
@@ -1977,10 +1993,20 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("case_end/1, v=0x%lx\n", arg1);
-                    abort();
+
+                    int target_label = get_catch_label_and_change_module(ctx, &mod);
+
+                    if (target_label) {
+                        JUMP_TO_ADDRESS(mod->labels[target_label]);
+                    } else {
+                        abort();
+                    }
                 #endif
 
-                NEXT_INSTRUCTION(next_off);
+                #ifdef IMPL_CODE_LOADER
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
                 break;
             }
 
