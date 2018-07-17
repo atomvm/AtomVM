@@ -154,6 +154,11 @@ static inline int term_is_integer(term t)
     return ((t & 0xF) == 0xF);
 }
 
+static inline int term_is_catch_label(term t)
+{
+    return (t & 0x3F) == TERM_CATCH_TAG;
+}
+
 /**
  * @brief Checks if a term is a pid
  *
@@ -250,6 +255,12 @@ static inline int32_t term_to_int32(term t)
             printf("term is not an integer: %lx\n", t);
             return 0;
     }
+}
+
+static inline int term_to_catch_label_and_module(term t, int *module_index)
+{
+    *module_index = t >> 24;
+    return (t >> 6) & 0xFFFFF;
 }
 
 /**
