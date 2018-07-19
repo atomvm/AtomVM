@@ -50,11 +50,12 @@ compile_erlang(prime)
 compile_erlang(match)
 compile_erlang(if_test)
 compile_erlang(sleep)
+compile_erlang(hello_world)
+compile_erlang(whereis_fail)
 compile_erlang(try_noerror)
 compile_erlang(catch_badmatch)
 compile_erlang(catch_nocasematch)
 compile_erlang(catch_noifmatch)
-compile_erlang(hello_world)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -97,9 +98,10 @@ add_custom_target(erlang_test_modules DEPENDS
     match.beam
     if_test.beam
     sleep.beam
+    hello_world.beam
+    whereis_fail.beam
     try_noerror.beam
     catch_badmatch.beam
     catch_nocasematch.beam
     catch_noifmatch.beam
-    hello_world.beam
 )
