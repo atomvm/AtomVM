@@ -87,6 +87,7 @@ struct Test tests[] =
     {"sleep.beam", 392},
     {"sleep.beam", 392},
     {"sleep.beam", 392},
+    {"hello_world.beam", 10},
     {"try_noerror.beam", 1},
     {"catch_badmatch.beam", 1},
     {"catch_nocasematch.beam", 1},
