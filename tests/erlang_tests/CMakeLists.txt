@@ -54,6 +54,7 @@ compile_erlang(try_noerror)
 compile_erlang(catch_badmatch)
 compile_erlang(catch_nocasematch)
 compile_erlang(catch_noifmatch)
+compile_erlang(hello_world)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -100,4 +101,5 @@ add_custom_target(erlang_test_modules DEPENDS
     catch_badmatch.beam
     catch_nocasematch.beam
     catch_noifmatch.beam
+    hello_world.beam
 )
