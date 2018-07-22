@@ -41,6 +41,7 @@ static void process_echo_mailbox(Context *ctx);
 static void process_console_mailbox(Context *ctx);
 static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_send_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
 
 static const struct Nif open_port_nif =
 {
@@ -72,6 +73,12 @@ static const struct Nif whereis_nif =
     .nif_ptr = nif_erlang_whereis_1
 };
 
+static const struct Nif concat_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_concat_2
+};
+
 const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
 {
     char nifname[MAX_NIF_NAME_LEN];
@@ -98,9 +105,24 @@ const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
         return &spawn_nif;
     } else if (!strcmp("erlang:send\\2", nifname)) {
         return &send_nif;
+    } else if (!strcmp("erlang:++\\2", nifname)) {
+        return &concat_nif;
     }
 
     return NULL;
+}
+
+static int list_length(term list)
+{
+    int len = 0;
+    term t = list;
+    // TODO: handle improper lists
+    while (!term_is_nil(t)) {
+        len++;
+        t = term_get_list_tail(t);
+    }
+
+    return len;
 }
 
 term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
@@ -331,4 +353,54 @@ term nif_erlang_send_2(Context *ctx, int argc, term argv[])
     mailbox_send(target, argv[1]);
 
     return argv[1];
+}
+
+term nif_erlang_concat_2(Context *ctx, int argc, term argv[])
+{
+    if (UNLIKELY(argc != 2)) {
+        fprintf(stderr, "++: wrong args count\n");
+        abort();
+    }
+
+    term prepend_list = argv[0];
+
+    if (UNLIKELY(!term_is_list(argv[0]))) {
+        fprintf(stderr, "Argument error\n");
+        abort();
+    }
+
+    int len = list_length(prepend_list);
+    memory_ensure_free(ctx, len * 2);
+
+    // GC might have changed all pointers
+    prepend_list = argv[0];
+    term append_list = argv[1];
+
+    term t = prepend_list;
+    term list_begin = term_nil();
+    term *prev_term = NULL;
+
+    // TODO: handle impropers list
+    while (!term_is_nil(t)) {
+        term head = term_get_list_head(t);
+
+        term *new_list_item = term_list_alloc(ctx);
+
+        if (prev_term) {
+            prev_term[0] = term_list_from_list_ptr(new_list_item);
+        } else {
+            list_begin = term_list_from_list_ptr(new_list_item);
+        }
+
+        prev_term = new_list_item;
+        new_list_item[1] = head;
+
+        t = term_get_list_tail(t);
+    }
+
+    if (prev_term) {
+        prev_term[0] = append_list;
+    }
+
+    return list_begin;
 }

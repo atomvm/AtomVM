@@ -517,6 +517,18 @@ static inline term *term_get_list_ptr(term t)
 }
 
 /**
+ * @brief Gets list term from pointer
+ *
+ * @details Return given list term from a list element pointer.
+ * @param list_element a pointer to a list elment.
+ * @return a list term
+ */
+static inline term term_list_from_list_ptr(term *list_elem)
+{
+    return ((term) list_elem) | 0x1;
+}
+
+/**
  * @brief Gets list head
  *
  * @details Returns given list head term
