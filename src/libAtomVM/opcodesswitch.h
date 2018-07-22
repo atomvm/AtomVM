@@ -446,6 +446,11 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
         int label = module_search_exported_function(mod, tmp_atom_name, arity);
         free(tmp_atom_name);
 
+        if (UNLIKELY(!label)) {
+            fprintf(stderr, "No %s/%i function found.\n", function_name, arity);
+            return 0;
+        }
+
         ctx->cp = module_address(mod->module_index, mod->end_instruction_ii);
         JUMP_TO_ADDRESS(mod->labels[label]);
 
