@@ -70,6 +70,8 @@ typedef struct
 
     struct timespec next_timeout_at;
 
+    uint64_t ref_ticks;
+
 } GlobalContext;
 
 /**
@@ -167,5 +169,10 @@ int globalcontext_insert_module(GlobalContext *global, Module *module, AtomStrin
  * @returns a pointer to a Module struct.
  */
 Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_atom);
+
+static inline uint64_t globalcontext_get_ref_ticks(GlobalContext *global)
+{
+    return ++global->ref_ticks;
+}
 
 #endif
