@@ -1,3 +1,5 @@
+%readonly-tables
+
 %{
 #include <string.h>
 typedef struct BifNameAndPtr BifNameAndPtr;

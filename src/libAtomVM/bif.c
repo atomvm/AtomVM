@@ -55,7 +55,7 @@ BifImpl bif_registry_get_handler(AtomString module, AtomString function, int ari
     bifname[module_name_len + function_name_len + 2] = '0' + arity;
     bifname[module_name_len + function_name_len + 3] = 0;
 
-    BifNameAndPtr *nameAndPtr = in_word_set(bifname, strlen(bifname));
+    const BifNameAndPtr *nameAndPtr = in_word_set(bifname, strlen(bifname));
     if (!nameAndPtr) {
         return NULL;
     }
