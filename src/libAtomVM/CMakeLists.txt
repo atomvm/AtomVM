@@ -42,11 +42,13 @@ if(CMAKE_COMPILER_IS_GNUCC)
 endif()
 
 gperf_generate(${CMAKE_CURRENT_SOURCE_DIR}/bifs.gperf bifs_hash.h)
+gperf_generate(${CMAKE_CURRENT_SOURCE_DIR}/nifs.gperf nifs_hash.h)
 
 add_custom_target(generated DEPENDS bifs_hash.h)
+add_custom_target(generated-nifs-hash DEPENDS nifs_hash.h)
 
 add_library(libAtomVM ${LIBATOMVM_SOURCES})
-add_dependencies(libAtomVM generated)
+add_dependencies(libAtomVM generated generated-nifs-hash)
 target_link_libraries(libAtomVM ${ZLIB_LIBRARIES})
 set_property(TARGET libAtomVM PROPERTY C_STANDARD 99)
 

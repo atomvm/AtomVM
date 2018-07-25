@@ -39,9 +39,13 @@ static char *list_to_string(term list);
 static char *binary_to_string(term binary);
 static void process_echo_mailbox(Context *ctx);
 static void process_console_mailbox(Context *ctx);
-static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[]);
-static term nif_erlang_send_2(Context *ctx, int argc, term argv[]);
+
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_register_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_send_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[]);
+static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[]);
 
 static const struct Nif open_port_nif =
 {
@@ -79,6 +83,13 @@ static const struct Nif concat_nif =
     .nif_ptr = nif_erlang_concat_2
 };
 
+//Ignore warning caused by gperf generated code
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#include "nifs_hash.h"
+#pragma GCC diagnostic pop
+
 const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
 {
     char nifname[MAX_NIF_NAME_LEN];
@@ -95,21 +106,12 @@ const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
     nifname[module_name_len + function_name_len + 2] = '0' + arity;
     nifname[module_name_len + function_name_len + 3] = 0;
 
-    if (!strcmp("erlang:open_port\\2", nifname)) {
-        return &open_port_nif;
-    } else if (!strcmp("erlang:register\\2", nifname)) {
-        return &register_nif;
-    } else if (!strcmp("erlang:whereis\\1", nifname)) {
-        return &whereis_nif;
-    } else if (!strcmp("erlang:spawn\\3", nifname)) {
-        return &spawn_nif;
-    } else if (!strcmp("erlang:send\\2", nifname)) {
-        return &send_nif;
-    } else if (!strcmp("erlang:++\\2", nifname)) {
-        return &concat_nif;
+    const NifNameAndNifPtr *nameAndPtr = nif_in_word_set(nifname, strlen(nifname));
+    if (!nameAndPtr) {
+        return NULL;
     }
 
-    return NULL;
+    return nameAndPtr->nif;
 }
 
 static int list_length(term list)
@@ -125,7 +127,7 @@ static int list_length(term list)
     return len;
 }
 
-term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
+static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
 {
     if (UNLIKELY(argc != 2)) {
         fprintf(stderr, "wrong arity\n");
@@ -168,7 +170,7 @@ term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
 }
 
 
-term nif_erlang_register_2(Context *ctx, int argc, term argv[])
+static term nif_erlang_register_2(Context *ctx, int argc, term argv[])
 {
     if (UNLIKELY((argc != 2) || !term_is_atom(argv[0]) || !term_is_pid(argv[1]))) {
         fprintf(stderr, "bad match\n");
@@ -183,7 +185,7 @@ term nif_erlang_register_2(Context *ctx, int argc, term argv[])
     return term_nil();
 }
 
-term nif_erlang_whereis_1(Context *ctx, int argc, term argv[])
+static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[])
 {
     if (UNLIKELY((argc != 1) || !term_is_atom(argv[0]))) {
         fprintf(stderr, "bad match\n");
@@ -289,7 +291,7 @@ static void process_console_mailbox(Context *ctx)
     free(msg);
 }
 
-term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
+static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
 {
     if (UNLIKELY(argc != 3)) {
         fprintf(stderr, "spawn: wrong args count\n");
@@ -335,7 +337,7 @@ term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
 
     return term_from_local_process_id(new_ctx->process_id);
 }
-term nif_erlang_send_2(Context *ctx, int argc, term argv[])
+static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
 {
     if (UNLIKELY(argc != 2)) {
         fprintf(stderr, "send: wrong args count\n");
@@ -355,7 +357,7 @@ term nif_erlang_send_2(Context *ctx, int argc, term argv[])
     return argv[1];
 }
 
-term nif_erlang_concat_2(Context *ctx, int argc, term argv[])
+static term nif_erlang_concat_2(Context *ctx, int argc, term argv[])
 {
     if (UNLIKELY(argc != 2)) {
         fprintf(stderr, "++: wrong args count\n");

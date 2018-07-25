@@ -1,0 +1,19 @@
+%readonly-tables
+%define lookup-function-name nif_in_word_set
+
+%{
+#include <string.h>
+typedef struct NifNameAndNifPtr NifNameAndNifPtr;
+%}
+struct NifNameAndNifPtr
+{
+  const char *name;
+  const struct Nif *nif;
+};
+%%
+erlang:open_port\2, &open_port_nif
+erlang:register\2, &register_nif
+erlang:send\2, &send_nif
+erlang:spawn\3, &spawn_nif
+erlang:whereis\1, &whereis_nif
+erlang:++\2, &concat_nif

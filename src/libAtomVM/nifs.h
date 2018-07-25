@@ -30,9 +30,6 @@
 #include "exportedfunction.h"
 
 const struct Nif *nifs_get(AtomString module, AtomString function, int arity);
-term nif_erlang_open_port_2(Context *ctx, int argc, term argv[]);
-term nif_erlang_register_2(Context *ctx, int argc, term argv[]);
-term nif_erlang_whereis_1(Context *ctx, int argc, term argv[]);
 
 native_handler platform_open_port(const char *driver_name);
 
