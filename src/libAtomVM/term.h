@@ -120,7 +120,7 @@ static inline int term_is_binary(term t)
     /* boxed: 10 */
     if ((t & 0x3) == 0x2) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if (boxed_value[0] & 0x3F) {
+        if ((boxed_value[0] & 0x3F) == 0x20) {
             return 1;
         }
     }
