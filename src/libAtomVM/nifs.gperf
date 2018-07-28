@@ -12,6 +12,7 @@ struct NifNameAndNifPtr
 };
 %%
 erlang:open_port\2, &open_port_nif
+erlang:make_ref\0, &make_ref_nif
 erlang:register\2, &register_nif
 erlang:send\2, &send_nif
 erlang:spawn\3, &spawn_nif

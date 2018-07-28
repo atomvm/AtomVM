@@ -41,11 +41,18 @@ static void process_echo_mailbox(Context *ctx);
 static void process_console_mailbox(Context *ctx);
 
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_register_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_send_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[]);
+
+static const struct Nif make_ref_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_make_ref_0
+};
 
 static const struct Nif open_port_nif =
 {
@@ -405,4 +412,18 @@ static term nif_erlang_concat_2(Context *ctx, int argc, term argv[])
     }
 
     return list_begin;
+}
+
+term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argv);
+
+    if (UNLIKELY(argc != 0)) {
+        fprintf(stderr, "erlang:make_ref: wrong args count\n");
+        abort();
+    }
+
+    uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+
+    return term_from_ref_ticks(ref_ticks, ctx);
 }
