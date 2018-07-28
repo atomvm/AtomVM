@@ -34,7 +34,10 @@
 #include "memory.h"
 #include "utils.h"
 
+#define TERM_BOXED_VALUE_TAG 0x2
 #define TERM_CATCH_TAG 0x1B
+
+#define TERM_BOXED_REF 0x10
 
 #ifndef TYPEDEF_TERM
 #define TYPEDEF_TERM
@@ -420,6 +423,34 @@ static inline const char *term_binary_data(term t)
     } else {
         abort();
     }
+}
+
+/**
+ * @brief Get a ref term from ref ticks
+ *
+ * @param ref_ticks an unique uint64 value that will be used to create ref term.
+ * @param ctx the context that owns the memory that will be allocated.
+ * @return a ref term created using given ref ticks.
+ */
+static inline term term_from_ref_ticks(uint64_t ref_ticks, Context *ctx)
+{
+    int ref_size = (sizeof(uint64_t) / sizeof(term));
+
+    term *boxed_value = memory_heap_alloc(ctx, ref_size + 1);
+    boxed_value[0] = (ref_size << 6) | TERM_BOXED_REF;
+
+    if (ref_size == 1) {
+        boxed_value[1] = (term) ref_ticks;
+
+    } else if (ref_size == 2) {
+        boxed_value[1] = (ref_ticks >> 4);
+        boxed_value[2] = (ref_ticks & 0xFFFFFFFF);
+
+    } else {
+        abort();
+    }
+
+    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
 }
 
 /**
