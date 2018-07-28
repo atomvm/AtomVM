@@ -308,6 +308,35 @@ term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move)
                     return ((term) tmp_previous) | 0x2;
                 }
 
+            }else if (term_is_movable_boxed(t)) {
+                TRACE("- Found movable boxed term (%lx).\n", t);
+
+                term *boxed_value = term_to_term_ptr(t);
+                int boxed_size = (*boxed_value) >> 6;
+
+                term *tmp_previous = *new_heap;
+                *new_heap += (boxed_size + 1);
+
+                memcpy(tmp_previous, boxed_value, (boxed_size + 1) * sizeof(term));
+
+                // leave a moved marker
+                if (move) {
+                    replace_with_moved_marker(boxed_value, ((term) tmp_previous) | 0x2);
+                }
+
+                if (previous) {
+                    TRACE("- Found leaf movable boxed, going back.\n");
+                    previous_term = t;
+                    t = get_placeholder_term(previous);
+                    going_back = 1;
+
+                    continue;
+
+                } else {
+                    TRACE("- Root is a movable boxed, just returning.\n");
+                    return ((term) tmp_previous) | 0x2;
+                }
+
             } else {
                 if (previous) {
                     TRACE("- Reached leaf value %lx, going back to root.\n", t);
@@ -419,6 +448,22 @@ term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move)
                     (*new_heap)[0] = (term_binary_size(the_head) << 6) | 0x20; //refcounted binary
                     (*new_heap)[1] = (term) term_binary_data(the_head);
                     *new_heap += 2;
+                    the_head = new_head;
+
+                } else if (term_is_movable_boxed(the_head)) {
+                    TRACE("- List head (%lx) is a boxed value.\n", the_head);
+                    term new_head = ((term) (*new_heap)) | 0x2;
+
+                    term *boxed_value = term_to_term_ptr(the_head);
+                    int boxed_size = (*boxed_value) >> 6;
+                    memcpy(*new_heap, boxed_value, (boxed_size + 1) * sizeof(term));
+
+                    // leave a moved marker
+                    if (move) {
+                        replace_with_moved_marker(boxed_value, ((term) the_head) | 0x2);
+                    }
+
+                    *new_heap += (boxed_size + 1);
                     the_head = new_head;
                 }
 
