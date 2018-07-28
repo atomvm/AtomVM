@@ -109,6 +109,30 @@ static inline int term_is_boxed(term t)
 }
 
 /**
+ * @brief Checks if a term is a movable boxed value
+ *
+ * @details Returns 1 if a term is a boxed value that can be safely copied with memcpy.
+ * @param t the term that will checked.
+ * @return 1 if check succedes, 0 otherwise.
+ */
+static inline int term_is_movable_boxed(term t)
+{
+    /* boxed: 10 */
+    if ((t & 0x3) == 0x2) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        switch (boxed_value[0] & 0x3F) {
+            case 0x10:
+                return 1;
+
+            default:
+                return 0;
+        }
+    } else {
+        return 0;
+    }
+}
+
+/**
  * @brief Checks if a term is a binary
  *
  * @details Returns 1 if a term is a binary stored on the heap, otherwise 0.
