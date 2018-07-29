@@ -57,6 +57,7 @@ compile_erlang(catch_badmatch)
 compile_erlang(catch_nocasematch)
 compile_erlang(catch_noifmatch)
 compile_erlang(list_concat)
+compile_erlang(make_ref_test)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -106,4 +107,5 @@ add_custom_target(erlang_test_modules DEPENDS
     catch_nocasematch.beam
     catch_noifmatch.beam
     list_concat.beam
+    make_ref_test.beam
 )
