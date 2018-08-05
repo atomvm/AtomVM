@@ -95,6 +95,7 @@ struct Test tests[] =
     {"catch_noifmatch.beam", 1},
     {"list_concat.beam", 2270},
     {"make_ref_test.beam", 5},
+    {"is_ref_test.beam", 3},
     {NULL, 0}
 };
 
