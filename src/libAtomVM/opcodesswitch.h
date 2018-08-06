@@ -1253,7 +1253,7 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
                     TRACE("is_equal/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
                     //TODO: implement this
-                    if (arg1 == arg2) {
+                    if (term_equals(arg1, arg2)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
