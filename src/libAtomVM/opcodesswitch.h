@@ -1741,7 +1741,7 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
             case OP_SELECT_TUPLE_ARITY: {
                 int next_off = 1;
                 term src_value;
-                DECODE_INTEGER(src_value, code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(src_value, code, i, next_off, next_off)
                 int default_label;
                 DECODE_LABEL(default_label, code, i, next_off, next_off)
                 next_off++; //skip extended list tag
