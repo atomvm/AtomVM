@@ -96,6 +96,7 @@ struct Test tests[] =
     {"list_concat.beam", 2270},
     {"make_ref_test.beam", 5},
     {"is_ref_test.beam", 3},
+    {"tagged_tuple_test.beam", 48},
     {NULL, 0}
 };
 
