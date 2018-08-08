@@ -374,6 +374,7 @@
 #define OP_GC_BIF2 125
 #define OP_TRIM 136
 #define OP_LINE 153
+#define OP_IS_TAGGED_TUPLE 159
 
 #define INSTRUCTION_POINTER() \
     ((const void *) &code[i])
@@ -2296,6 +2297,39 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
                 TRACE("line/1: %i\n", line_number);
 
                 NEXT_INSTRUCTION(next_offset);
+                break;
+            }
+
+            case OP_IS_TAGGED_TUPLE: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
+                int arity;
+                DECODE_INTEGER(arity, code, i, next_off, next_off)
+                int tag_atom_id;
+                DECODE_ATOM(tag_atom_id, code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_tagged_tuple/2, label=%i, arg1=%lx, arity=%i, atom_id=%i\n", label, arg1, arity, tag_atom_id);
+
+                    term tag_atom = module_get_atom_term_by_id(mod, tag_atom_id);
+
+                    if (term_is_tuple(arg1) && (term_get_tuple_arity(arg1) == arity) && (term_get_tuple_element(arg1, 0) == tag_atom)) {
+                        NEXT_INSTRUCTION(next_off);
+                    } else {
+                        i = POINTER_TO_II(mod->labels[label]);
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_tagged_tuple/2\n");
+                    UNUSED(label)
+                    UNUSED(arg1)
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
                 break;
             }
 
