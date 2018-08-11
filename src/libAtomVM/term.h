@@ -153,7 +153,7 @@ static inline int term_boxed_size(term t)
 
     } else {
         //TODO: error here
-        return 0;
+        abort();
     }
 }
 
