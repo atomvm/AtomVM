@@ -333,6 +333,7 @@
 #define OP_REMOVE_MESSAGE 21
 #define OP_TIMEOUT 22
 #define OP_LOOP_REC 23
+#define OP_LOOP_REC_END 24
 #define OP_WAIT 25
 #define OP_WAIT_TIMEOUT 26
 #define OP_IS_LT 39
@@ -373,6 +374,8 @@
 #define OP_GC_BIF1 124
 #define OP_GC_BIF2 125
 #define OP_TRIM 136
+#define OP_RECV_MARK 150
+#define OP_RECV_SET 151
 #define OP_LINE 153
 #define OP_IS_TAGGED_TUPLE 159
 
@@ -1106,6 +1109,19 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
                     NEXT_INSTRUCTION(next_off);
                 #endif
 
+                break;
+            }
+
+            //TODO: stub, implement loop_rec_end/1
+            case OP_LOOP_REC_END: {
+                int next_offset = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_offset, next_offset);
+
+                TRACE("loop_rec_end/1 label=%i\n", label);
+                USED_BY_TRACE(label);
+
+                NEXT_INSTRUCTION(next_offset);
                 break;
             }
 
@@ -2284,6 +2300,34 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
                 #endif
 
                 UNUSED(n_remaining)
+
+                NEXT_INSTRUCTION(next_offset);
+                break;
+            }
+
+            //TODO: stub, implement recv_mark/1
+            //it looks like it can be safely left unimplemented
+            case OP_RECV_MARK: {
+                int next_offset = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_offset, next_offset);
+
+                TRACE("recv_mark/1 label=%i\n", label);
+                USED_BY_TRACE(label);
+
+                NEXT_INSTRUCTION(next_offset);
+                break;
+            }
+
+            //TODO: stub, implement recv_set/1
+            //it looks like it can be safely left unimplemented
+            case OP_RECV_SET: {
+                int next_offset = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_offset, next_offset);
+
+                TRACE("recv_set/1 label=%i\n", label);
+                USED_BY_TRACE(label);
 
                 NEXT_INSTRUCTION(next_offset);
                 break;
