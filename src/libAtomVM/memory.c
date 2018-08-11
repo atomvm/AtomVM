@@ -298,6 +298,8 @@ term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move)
                 if (previous) {
                     TRACE("- Found leaf binary, going back.\n");
                     previous_term = t;
+                    //TODO: I think ```previous_term = ((term) tmp_previous) | 0x2;``` should be used here
+                    //but somehow this code works anyway.
                     t = get_placeholder_term(previous);
                     going_back = 1;
 
@@ -326,7 +328,7 @@ term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move)
 
                 if (previous) {
                     TRACE("- Found leaf movable boxed, going back.\n");
-                    previous_term = t;
+                    previous_term = ((term) tmp_previous) | 0x2;
                     t = get_placeholder_term(previous);
                     going_back = 1;
 
@@ -565,6 +567,10 @@ enum MemoryEstimateResult memory_estimate_term_memory_usage(term t, unsigned lon
 
         } else if (term_is_binary(t)) {
             used_memory += 2;
+            t = peek_stack(new_stack);
+
+        } else if (term_is_movable_boxed(t)) {
+            used_memory += 1 + term_boxed_size(t);
             t = peek_stack(new_stack);
 
         } else {
