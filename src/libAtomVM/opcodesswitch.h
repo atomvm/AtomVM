@@ -1296,7 +1296,7 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
                 DECODE_COMPACT_TERM(arg2, code, i, next_off, next_off)
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("is_not_equall/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
+                    TRACE("is_not_equal/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
                     if (arg1 != arg2) {
                         NEXT_INSTRUCTION(next_off);
