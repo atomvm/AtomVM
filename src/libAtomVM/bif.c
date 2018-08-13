@@ -78,6 +78,17 @@ term bif_erlang_byte_size_1(Context *ctx, uint32_t failure_label, int live, term
     return term_from_int32(term_binary_size(arg1));
 }
 
+term bif_erlang_is_pid_1(Context *ctx, uint32_t fail_label, term arg1)
+{
+    UNUSED(fail_label);
+
+    if (term_is_pid(arg1)) {
+        return term_from_atom_string(ctx->global, true_atom);
+    } else {
+        return term_from_atom_string(ctx->global, false_atom);
+    }
+}
+
 term bif_erlang_length_1(Context *ctx, uint32_t failure_label, int live, term arg1)
 {
     UNUSED(ctx);

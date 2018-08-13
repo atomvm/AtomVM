@@ -36,6 +36,7 @@ BifImpl bif_registry_get_handler(AtomString module, AtomString function, int ari
 term bif_erlang_self_0(Context *ctx);
 term bif_erlang_byte_size_1(Context *ctx, uint32_t failure_label, int live, term arg1);
 term bif_erlang_length_1(Context *ctx, uint32_t failure_label, int live, term arg1);
+term bif_erlang_is_pid_1(Context *ctx, uint32_t failure_label, term arg1);
 term bif_erlang_hd_1(Context *ctx, uint32_t failure_label, term arg1);
 term bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
 term bif_erlang_sub_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
