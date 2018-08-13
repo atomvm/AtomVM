@@ -496,6 +496,10 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
                 USED_BY_TRACE(module_atom);
                 USED_BY_TRACE(arity);
 
+                #ifdef IMPL_EXECUTE_LOOP
+                abort();
+                #endif
+
                 NEXT_INSTRUCTION(next_offset);
                 break;
             }
@@ -1062,7 +1066,7 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
                 TRACE("remove_message/0\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    ctx->x[0] = mailbox_receive(ctx);
+                    mailbox_remove(ctx);
                 #endif
 
                 NEXT_INSTRUCTION(1);

@@ -118,3 +118,18 @@ term mailbox_peek(Context *c)
 
     return rt;
 }
+
+void mailbox_remove(Context *c)
+{
+    if (!c->mailbox) {
+        TRACE("Pid %i tried to remove a message from an empty mailbox.\n", c->process_id);
+        return;
+    }
+
+    Message *m = GET_LIST_ENTRY(c->mailbox, Message, mailbox_list_head);
+    linkedlist_remove(&c->mailbox, &m->mailbox_list_head);
+
+    TRACE("Pid %i is removing a message.\n", c->process_id);
+
+    free(m);
+}

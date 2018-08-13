@@ -74,4 +74,12 @@ Message *mailbox_dequeue(Context *c);
  */
 term mailbox_peek(Context *c);
 
+/**
+ * @brief Remove next message from mailbox.
+ *
+ * @details Discard a term that has been previously queued on a certain process or driver mailbox.
+ * @param c the process or driver context.
+ */
+void mailbox_remove(Context *c);
+
 #endif
