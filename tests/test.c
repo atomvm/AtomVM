@@ -98,6 +98,7 @@ struct Test tests[] =
     {"is_ref_test.beam", 3},
     {"tagged_tuple_test.beam", 48},
     {"call_with_ref_test.beam", 3},
+    {"just_receive_test.beam", 11},
     {NULL, 0}
 };
 
