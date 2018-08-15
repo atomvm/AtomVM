@@ -99,6 +99,7 @@ struct Test tests[] =
     {"tagged_tuple_test.beam", 48},
     {"call_with_ref_test.beam", 3},
     {"just_receive_test.beam", 11},
+    {"gen_server_like_test.beam", 3},
     {NULL, 0}
 };
 
