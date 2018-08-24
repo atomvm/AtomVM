@@ -63,6 +63,7 @@ compile_erlang(tagged_tuple_test)
 compile_erlang(call_with_ref_test)
 compile_erlang(just_receive_test)
 compile_erlang(gen_server_like_test)
+compile_erlang(external_proplist_test)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -118,4 +119,5 @@ add_custom_target(erlang_test_modules DEPENDS
     call_with_ref_test.beam
     just_receive_test.beam
     gen_server_like_test.beam
+    external_proplist_test.beam
 )

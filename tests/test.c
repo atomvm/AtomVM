@@ -100,6 +100,7 @@ struct Test tests[] =
     {"call_with_ref_test.beam", 3},
     {"just_receive_test.beam", 11},
     {"gen_server_like_test.beam", 3},
+    {"external_proplist_test.beam", 3},
     {NULL, 0}
 };
 
