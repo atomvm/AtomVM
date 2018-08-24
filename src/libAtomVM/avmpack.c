@@ -62,7 +62,7 @@ int avmpack_find_section_by_flag(const void *avmpack_binary, uint32_t flags_mask
 
         if ((ENDIAN_SWAP_32(*flags) & flags_mask) == flags_mask) {
             const char *found_section_name = (const char *) (sizes + 3);
-            int section_name_len = pad(strlen(found_section_name));
+            int section_name_len = pad(strlen(found_section_name) + 1);
 
             *ptr = sizes + 3 + section_name_len/sizeof(uint32_t);
             *size = ENDIAN_SWAP_32(*sizes);
@@ -88,7 +88,7 @@ int avmpack_find_section_by_name(const void *avmpack_binary, const char *name, c
 
         const char *found_section_name = (const char *) (sizes + 3);
         if (!strcmp(name, found_section_name)) {
-            int section_name_len = pad(strlen(found_section_name));
+            int section_name_len = pad(strlen(found_section_name) + 1);
 
             *ptr = sizes + 3 + section_name_len/sizeof(uint32_t);
             *size = ENDIAN_SWAP_32(*sizes);
