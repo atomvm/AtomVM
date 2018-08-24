@@ -36,8 +36,10 @@
 #ifndef TRACE
     #ifdef ENABLE_TRACE
         #define TRACE printf
+        #define DEBUG_FAIL_NULL(expr) assert((expr) != NULL)
     #else
         #define TRACE(...)
+        #define DEBUG_FAIL_NULL(expr)
     #endif
 #endif
 
@@ -759,6 +761,7 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     BifImpl0 func = (BifImpl0) mod->imported_funcs[bif].bif;
+                    DEBUG_FAIL_NULL(func);
                     term ret = func(ctx);
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
@@ -791,6 +794,7 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     BifImpl1 func = (BifImpl1) mod->imported_funcs[bif].bif;
+                    DEBUG_FAIL_NULL(func);
                     term ret = func(ctx, fail_label, arg1);
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
@@ -826,6 +830,7 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     BifImpl2 func = (BifImpl2) mod->imported_funcs[bif].bif;
+                    DEBUG_FAIL_NULL(func);
                     term ret = func(ctx, fail_label, arg1, arg2);
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
