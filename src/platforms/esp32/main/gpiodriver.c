@@ -69,7 +69,8 @@ static void consume_gpio_mailbox(Context *ctx)
 
     term ret;
 
-    term msg = mailbox_receive(ctx);
+    Message *message = mailbox_dequeue(ctx);
+    term msg = message->message;
     term pid = term_get_tuple_element(msg, 0);
     term cmd = term_get_tuple_element(msg, 1);
 
@@ -103,6 +104,8 @@ static void consume_gpio_mailbox(Context *ctx)
         TRACE("gpio: unrecognized command\n");
         ret = term_from_atom_string(glb, error_a);
     }
+
+    free(message);
 
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
