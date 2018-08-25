@@ -36,16 +36,10 @@
 
 const void *avm_partition(int *size);
 
-esp_err_t event_handler(void *ctx, system_event_t *event)
-{
-    return ESP_OK;
-}
-
 void app_main()
 {
     nvs_flash_init();
     tcpip_adapter_init();
-    ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL));
 
     int size;
     const void *flashed_avm = avm_partition(&size);
