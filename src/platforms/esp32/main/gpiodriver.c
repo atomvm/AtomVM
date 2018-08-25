@@ -41,6 +41,7 @@
 
 static void consume_gpio_mailbox(Context *ctx);
 void consume_network_mailbox(Context *ctx);
+void consume_udpdriver_mailbox(Context *ctx);
 
 static const char *const ok_a = "\x2ok";
 static const char *const error_a = "\x5error";
@@ -55,6 +56,8 @@ native_handler platform_open_port(const char *driver_name)
         return consume_gpio_mailbox;
     }else if (!strcmp(driver_name, "network")) {
         return consume_network_mailbox;
+    }else if (!strcmp(driver_name, "udp")) {
+        return consume_udpdriver_mailbox;
     } else {
         return NULL;
     }
