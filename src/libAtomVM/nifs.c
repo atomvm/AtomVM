@@ -141,9 +141,15 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
         abort();
     }
 
-    Context *new_ctx = context_new(ctx->global);
+    term port_name = argv[0];
+    term opts = argv[1];
 
-    term t = term_get_tuple_element(argv[0], 1);
+    if (!(term_is_tuple(port_name) && term_get_tuple_arity(port_name) == 2) && !term_is_list(opts)) {
+        fprintf(stderr, "bad args\n");
+        abort();
+    }
+
+    term t = term_get_tuple_element(port_name, 1);
     char *driver_name;
     if (term_is_list(t)) {
         driver_name = list_to_string(t);
@@ -159,14 +165,19 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
         return term_from_atom_index(error_index);
     }
 
+    Context *new_ctx = NULL;
+
     if (!strcmp("echo", driver_name)) {
+        new_ctx = context_new(ctx->global);
         new_ctx->native_handler = process_echo_mailbox;
+
     } else if (!strcmp("console", driver_name)) {
+        new_ctx = context_new(ctx->global);
         new_ctx->native_handler = process_console_mailbox;
     }
 
-    if (!new_ctx->native_handler) {
-        new_ctx->native_handler = platform_open_port(driver_name);
+    if (!new_ctx) {
+        new_ctx = platform_open_port(ctx->global, driver_name, opts);
     }
 
     free(driver_name);

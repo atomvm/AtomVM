@@ -23,15 +23,20 @@ void consume_gpio_mailbox(Context *ctx);
 void consume_network_mailbox(Context *ctx);
 void consume_udpdriver_mailbox(Context *ctx);
 
-native_handler platform_open_port(const char *driver_name)
+Context *platform_open_port(GlobalContext *glb, const char *driver_name, term opts)
 {
+    Context *new_ctx = context_new(glb);
+
     if (!strcmp(driver_name, "gpio")) {
-        return consume_gpio_mailbox;
+        new_ctx->native_handler = consume_gpio_mailbox;
     }else if (!strcmp(driver_name, "network")) {
-        return consume_network_mailbox;
+        new_ctx->native_handler = consume_network_mailbox;
     }else if (!strcmp(driver_name, "udp")) {
-        return consume_udpdriver_mailbox;
+        new_ctx->native_handler = consume_udpdriver_mailbox;
     } else {
+        context_destroy(new_ctx);
         return NULL;
     }
+
+    return new_ctx;
 }

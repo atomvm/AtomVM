@@ -31,6 +31,6 @@
 
 const struct Nif *nifs_get(AtomString module, AtomString function, int arity);
 
-native_handler platform_open_port(const char *driver_name);
+Context *platform_open_port(GlobalContext *glb, const char *driver_name, term opts);
 
 #endif

@@ -187,8 +187,10 @@ static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *
     return (timespec1->tv_sec - timespec2->tv_sec) * 1000 + (timespec1->tv_nsec - timespec2->tv_nsec) / 1000000;
 }
 
-native_handler platform_open_port(const char *driver_name)
+Context *platform_open_port(GlobalContext *glb, const char *driver_name, term opts)
 {
+    UNUSED(glb);
     UNUSED(driver_name);
+    UNUSED(opts);
     return NULL;
 }
