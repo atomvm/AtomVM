@@ -39,10 +39,6 @@
     #endif
 #endif
 
-static void consume_gpio_mailbox(Context *ctx);
-void consume_network_mailbox(Context *ctx);
-void consume_udpdriver_mailbox(Context *ctx);
-
 static const char *const ok_a = "\x2ok";
 static const char *const error_a = "\x5error";
 static const char *const set_level_a = "\x9set_level";
@@ -50,26 +46,13 @@ static const char *const input_a = "\x5input";
 static const char *const output_a = "\x6output";
 static const char *const set_direction_a ="\xDset_direction";
 
-native_handler platform_open_port(const char *driver_name)
-{
-    if (!strcmp(driver_name, "gpio")) {
-        return consume_gpio_mailbox;
-    }else if (!strcmp(driver_name, "network")) {
-        return consume_network_mailbox;
-    }else if (!strcmp(driver_name, "udp")) {
-        return consume_udpdriver_mailbox;
-    } else {
-        return NULL;
-    }
-}
-
 static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
 {
     int global_atom_index = globalcontext_insert_atom(glb, string);
     return term_from_atom_index(global_atom_index);
 }
 
-static void consume_gpio_mailbox(Context *ctx)
+void consume_gpio_mailbox(Context *ctx)
 {
     GlobalContext *glb = ctx->global;
 
