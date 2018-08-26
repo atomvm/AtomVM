@@ -17,6 +17,8 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+#include "gpiodriver.h"
+
 #include <string.h>
 
 #include "driver/gpio.h"
@@ -39,6 +41,8 @@
     #endif
 #endif
 
+static void consume_gpio_mailbox(Context *ctx);
+
 static const char *const ok_a = "\x2ok";
 static const char *const error_a = "\x5error";
 static const char *const set_level_a = "\x9set_level";
@@ -52,7 +56,13 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
     return term_from_atom_index(global_atom_index);
 }
 
-void consume_gpio_mailbox(Context *ctx)
+void gpiodriver_init(Context *ctx)
+{
+    ctx->native_handler = consume_gpio_mailbox;
+    ctx->platform_data = NULL;
+}
+
+static void consume_gpio_mailbox(Context *ctx)
 {
     GlobalContext *glb = ctx->global;
 

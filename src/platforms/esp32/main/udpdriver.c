@@ -17,6 +17,8 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+#include "udpdriver.h"
+
 #include <string.h>
 
 #include "atom.h"
@@ -42,7 +44,12 @@
     #endif
 #endif
 
-void consume_udpdriver_mailbox(Context *ctx);
+struct UDPDriverData
+{
+    int sockfd;
+};
+
+static void consume_udpdriver_mailbox(Context *ctx);
 static uint32_t tuple_to_addr(term addr_tuple);
 
 static const char *const ok_a = "\x2" "ok";
@@ -56,8 +63,24 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
     return term_from_atom_index(global_atom_index);
 }
 
-void consume_udpdriver_mailbox(Context *ctx)
+void udpdriver_init(Context *ctx)
 {
+    struct UDPDriverData *udp_driver_context = calloc(1, sizeof(struct UDPDriverData));
+
+    ctx->native_handler = consume_udpdriver_mailbox;
+    ctx->platform_data = udp_driver_context;
+
+    udp_driver_context->sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+}
+
+static void consume_udpdriver_mailbox(Context *ctx)
+{
+    if (UNLIKELY(ctx->native_handler != consume_udpdriver_mailbox)) {
+        abort();
+    }
+
+    struct UDPDriverData *udp_driver_context = (struct UDPDriverData *) ctx->platform_data;
+
     GlobalContext *glb = ctx->global;
 
     Message *message = mailbox_dequeue(ctx);
@@ -74,8 +97,6 @@ void consume_udpdriver_mailbox(Context *ctx)
         term dest_port_term = term_get_tuple_element(msg, 4);
         term buffer_term = term_get_tuple_element(msg, 5);
 
-        int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-
         struct sockaddr_in addr;
         memset(&addr, 0, sizeof(struct sockaddr_in));
         addr.sin_family = AF_INET;
@@ -87,7 +108,7 @@ void consume_udpdriver_mailbox(Context *ctx)
 
         TRACE("send: data with len: %i, to: %s, port: %i\n", buf_len, inet_ntoa(addr.sin_addr.s_addr), term_to_int32(dest_port_term));
 
-        int sent_data = sendto(sockfd, buffer, buf_len, 0, (struct sockaddr *) &addr, sizeof(addr));
+        int sent_data = sendto(udp_driver_context->sockfd, buffer, buf_len, 0, (struct sockaddr *) &addr, sizeof(addr));
 
         ret = term_from_atom_string(glb, ok_a);
 

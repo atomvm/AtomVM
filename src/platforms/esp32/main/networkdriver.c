@@ -17,6 +17,8 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+#include "networkdriver.h"
+
 #include <string.h>
 
 #include "atom.h"
@@ -47,7 +49,7 @@
 
 #define CONNECTED_BIT BIT0
 
-void consume_network_mailbox(Context *ctx);
+static void consume_network_mailbox(Context *ctx);
 static term setup_network(GlobalContext *glb, term config);
 static esp_err_t wifi_event_handler(void *ctx, system_event_t *event);
 
@@ -66,7 +68,13 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
     return term_from_atom_index(global_atom_index);
 }
 
-void consume_network_mailbox(Context *ctx)
+void networkdriver_init(Context *ctx)
+{
+    ctx->native_handler = consume_network_mailbox;
+    ctx->platform_data = NULL;
+}
+
+static void consume_network_mailbox(Context *ctx)
 {
     GlobalContext *glb = ctx->global;
 

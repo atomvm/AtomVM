@@ -75,6 +75,8 @@ struct Context
     struct timespec timeout_at;
 
     unsigned int leader : 1;
+
+    void *platform_data;
 };
 
 #ifndef TYPEDEF_CONTEXT

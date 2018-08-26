@@ -68,6 +68,8 @@ Context *context_new(GlobalContext *glb)
     ctx->timeout_at.tv_sec = 0;
     ctx->timeout_at.tv_nsec = 0;
 
+    ctx->platform_data = NULL;
+
     return ctx;
 }
 
