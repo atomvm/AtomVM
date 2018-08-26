@@ -23,6 +23,7 @@
 #include "context.h"
 #include "debug.h"
 #include "globalcontext.h"
+#include "interop.h"
 #include "mailbox.h"
 #include "utils.h"
 #include "term.h"
@@ -55,34 +56,6 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
     return term_from_atom_index(global_atom_index);
 }
 
-static char *list_to_string(term list)
-{
-    int len = 0;
-
-    term t = list;
-
-    while (!term_is_nil(t)) {
-        len++;
-        term *t_ptr = term_get_list_ptr(t);
-        t = *t_ptr;
-    }
-
-    t = list;
-    char *str = malloc(len + 1);
-    if (IS_NULL_PTR(str)) {
-        return NULL;
-    }
-
-    for (int i = 0; i < len; i++) {
-        term *t_ptr = term_get_list_ptr(t);
-        str[i] = (char) term_to_int32(t_ptr[1]);
-        t = *t_ptr;
-    }
-    str[len] = 0;
-
-    return str;
-}
-
 void consume_udpdriver_mailbox(Context *ctx)
 {
     GlobalContext *glb = ctx->global;
@@ -109,7 +82,7 @@ void consume_udpdriver_mailbox(Context *ctx)
         addr.sin_addr.s_addr = htonl(tuple_to_addr(ipaddr_term));
         addr.sin_port = htons(term_to_int32(dest_port_term));
 
-        char *buffer = list_to_string(buffer_term);
+        char *buffer = interop_list_to_string(buffer_term);
         int buf_len = strlen(buffer);
 
         TRACE("send: data with len: %i, to: %s, port: %i\n", buf_len, inet_ntoa(addr.sin_addr.s_addr), term_to_int32(dest_port_term));

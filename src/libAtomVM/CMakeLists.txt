@@ -13,6 +13,7 @@ set(LIBATOMVM_SOURCES
     externalterm.c
     globalcontext.c
     iff.c
+    interop.c
     mailbox.c
     memory.c
     module.c

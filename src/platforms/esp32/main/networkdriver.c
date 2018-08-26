@@ -23,6 +23,7 @@
 #include "context.h"
 #include "debug.h"
 #include "globalcontext.h"
+#include "interop.h"
 #include "mailbox.h"
 #include "utils.h"
 #include "term.h"
@@ -50,9 +51,6 @@ void consume_network_mailbox(Context *ctx);
 static term setup_network(GlobalContext *glb, term config);
 static esp_err_t wifi_event_handler(void *ctx, system_event_t *event);
 
-static char *list_to_string(term list);
-static term get_value(term list, term key);
-
 static const char *const ok_a = "\x2ok";
 static const char *const error_a = "\x5error";
 static const char *const network_a = "\x7" "network";
@@ -66,52 +64,6 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
 {
     int global_atom_index = globalcontext_insert_atom(glb, string);
     return term_from_atom_index(global_atom_index);
-}
-
-static char *list_to_string(term list)
-{
-    int len = 0;
-
-    term t = list;
-
-    while (!term_is_nil(t)) {
-        len++;
-        term *t_ptr = term_get_list_ptr(t);
-        t = *t_ptr;
-    }
-
-    t = list;
-    char *str = malloc(len + 1);
-    if (IS_NULL_PTR(str)) {
-        return NULL;
-    }
-
-    for (int i = 0; i < len; i++) {
-        term *t_ptr = term_get_list_ptr(t);
-        str[i] = (char) term_to_int32(t_ptr[1]);
-        t = *t_ptr;
-    }
-    str[len] = 0;
-
-    return str;
-}
-
-static term get_value(term list, term key)
-{
-    term t = list;
-
-    while (!term_is_nil(t)) {
-        term *t_ptr = term_get_list_ptr(t);
-
-        term head = t_ptr[1];
-        if (term_get_tuple_element(head, 0) == key) {
-            return term_get_tuple_element(head, 1);
-        }
-
-        t = *t_ptr;
-    }
-
-    return term_nil();
 }
 
 void consume_network_mailbox(Context *ctx)
@@ -144,11 +96,11 @@ void consume_network_mailbox(Context *ctx)
 
 static term setup_network(GlobalContext *glb, term config)
 {
-    term ssid_value = get_value(config, term_from_atom_string(glb, ssid_a));
-    term pass_value = get_value(config, term_from_atom_string(glb, psk_a));
+    term ssid_value = interop_proplist_get_value(config, term_from_atom_string(glb, ssid_a));
+    term pass_value = interop_proplist_get_value(config, term_from_atom_string(glb, psk_a));
 
-    char *ssid = list_to_string(ssid_value);
-    char *psk = list_to_string(pass_value);
+    char *ssid = interop_list_to_string(ssid_value);
+    char *psk = interop_list_to_string(pass_value);
 
     if (UNLIKELY(!ssid || !psk)) {
         TRACE("cannot allocate memory.\n");
