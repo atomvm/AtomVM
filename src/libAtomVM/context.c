@@ -20,6 +20,7 @@
 #include "context.h"
 
 #include "globalcontext.h"
+#include "list.h"
 
 #define IMPL_EXECUTE_LOOP
 #include "opcodesswitch.h"
@@ -49,7 +50,7 @@ Context *context_new(GlobalContext *glb)
     ctx->avail_registers = 16;
     context_clean_registers(ctx, 0);
 
-    linkedlist_append(&glb->ready_processes, &ctx->processes_list_head);
+    list_append(&glb->ready_processes, &ctx->processes_list_head);
 
     ctx->mailbox = NULL;
 

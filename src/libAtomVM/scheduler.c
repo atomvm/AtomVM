@@ -18,6 +18,7 @@
  ***************************************************************************/
 
 #include "debug.h"
+#include "list.h"
 #include "scheduler.h"
 #include "sys.h"
 #include "utils.h"
@@ -60,7 +61,7 @@ Context *scheduler_wait(GlobalContext *global, Context *c)
                     global->next_timeout_at.tv_nsec = 0;
                 }
 
-            } else if (!global->ready_processes) {
+            } else if (list_is_empty(&global->ready_processes)) {
 
                 EventListener *listener = malloc(sizeof(EventListener));
                 if (IS_NULL_PTR(listener)) {
@@ -79,7 +80,7 @@ Context *scheduler_wait(GlobalContext *global, Context *c)
 
                 sys_waitevents(global->listeners);
             }
-        } else if (!global->ready_processes) {
+        } else if (list_is_empty(&global->ready_processes)) {
             if (LIKELY(global->listeners)) {
                 sys_waitevents(global->listeners);
             } else {
@@ -89,11 +90,11 @@ Context *scheduler_wait(GlobalContext *global, Context *c)
         }
 
         scheduler_execute_native_handlers(global);
-    } while (!global->ready_processes);
+    } while (list_is_empty(&global->ready_processes));
 
-    struct ListHead *next_ready = global->ready_processes;
-    linkedlist_remove(&global->ready_processes, next_ready);
-    linkedlist_append(&global->ready_processes, next_ready);
+    struct ListHead *next_ready = list_first(&global->ready_processes);
+    list_remove(next_ready);
+    list_append(&global->ready_processes, next_ready);
 
     return GET_LIST_ENTRY(next_ready, Context, processes_list_head);
 }
@@ -107,29 +108,34 @@ Context *scheduler_next(GlobalContext *global, Context *c)
         make_ready_expired_contexts(global);
     }
 
-    Context *next_context;
-    do {
-        next_context = GET_LIST_ENTRY(c->processes_list_head.next, Context, processes_list_head);
-    } while (next_context->native_handler);
+    //TODO: improve scheduling here
+    struct ListHead *item;
+    struct ListHead *tmp;
+    MUTABLE_LIST_FOR_EACH(item, tmp, &global->ready_processes) {
+        Context *next_context = GET_LIST_ENTRY(item, Context, processes_list_head);
+        if (!next_context->native_handler && (next_context != c)) {
+            return next_context;
+        }
+    }
 
-    return next_context;
+    return c;
 }
 
 void scheduler_make_ready(GlobalContext *global, Context *c)
 {
-    linkedlist_remove(&global->waiting_processes, &c->processes_list_head);
-    linkedlist_append(&global->ready_processes, &c->processes_list_head);
+    list_remove(&c->processes_list_head);
+    list_append(&global->ready_processes, &c->processes_list_head);
 }
 
 void scheduler_make_waiting(GlobalContext *global, Context *c)
 {
-    linkedlist_remove(&global->ready_processes, &c->processes_list_head);
-    linkedlist_append(&global->waiting_processes, &c->processes_list_head);
+    list_remove(&c->processes_list_head);
+    list_append(&global->waiting_processes, &c->processes_list_head);
 }
 
-void scheduler_terminate(GlobalContext *global, Context *c)
+void scheduler_terminate(Context *c)
 {
-    linkedlist_remove(&global->ready_processes, &c->processes_list_head);
+    list_remove(&c->processes_list_head);
     if (!c->leader) {
         context_destroy(c);
     }
@@ -205,15 +211,10 @@ static Context *scheduler_get_expired_before(const GlobalContext *global, const 
     struct timespec min;
     Context *min_context = NULL;
 
-    Context *contexts = GET_LIST_ENTRY(global->waiting_processes, Context, processes_list_head);
-    if (!contexts) {
-        return NULL;
-    }
-
-    Context *context = contexts;
-    Context *next_context;
-    do {
-        next_context = GET_LIST_ENTRY(context->processes_list_head.next, Context, processes_list_head);
+    struct ListHead *item;
+    struct ListHead *tmp;
+    MUTABLE_LIST_FOR_EACH(item, tmp, &global->waiting_processes) {
+        Context *context = GET_LIST_ENTRY(item, Context, processes_list_head);
 
         if (context->timeout_at.tv_sec | context->timeout_at.tv_nsec) {
             if (!min_context || before_than(&context->timeout_at, &min)) {
@@ -222,11 +223,9 @@ static Context *scheduler_get_expired_before(const GlobalContext *global, const 
                 min_context = context;
             }
         }
+    }
 
-        context = next_context;
-    } while (context != contexts);
-
-    if (before_than(&min_context->timeout_at, before_timestamp)) {
+    if (min_context && before_than(&min_context->timeout_at, before_timestamp)) {
         return min_context;
     } else {
         return NULL;
@@ -238,15 +237,10 @@ static int scheduler_find_min_timeout(const GlobalContext *global, struct timesp
     struct timespec min;
     int found_first = 0;
 
-    Context *contexts = GET_LIST_ENTRY(global->waiting_processes, Context, processes_list_head);
-    if (!contexts) {
-        return 0;
-    }
-
-    Context *context = contexts;
-    Context *next_context;
-    do {
-        next_context = GET_LIST_ENTRY(context->processes_list_head.next, Context, processes_list_head);
+    struct ListHead *item;
+    struct ListHead *tmp;
+    MUTABLE_LIST_FOR_EACH(item, tmp, &global->waiting_processes) {
+        Context *context = GET_LIST_ENTRY(item, Context, processes_list_head);
 
         if (context->timeout_at.tv_sec | context->timeout_at.tv_nsec) {
             if (!found_first || before_than(&context->timeout_at, &min)) {
@@ -256,8 +250,7 @@ static int scheduler_find_min_timeout(const GlobalContext *global, struct timesp
             }
         }
 
-        context = next_context;
-    } while (context != contexts);
+    }
 
     if (found_first) {
         found_timeout->tv_sec = min.tv_sec;
@@ -269,23 +262,16 @@ static int scheduler_find_min_timeout(const GlobalContext *global, struct timesp
 
 static void scheduler_execute_native_handlers(GlobalContext *global)
 {
-    Context *contexts = GET_LIST_ENTRY(global->ready_processes, Context, processes_list_head);
-    if (!contexts) {
-        return;
-    }
-
-    Context *context = contexts;
-    Context *next_context;
-    do {
-        next_context = GET_LIST_ENTRY(context->processes_list_head.next, Context, processes_list_head);
+    struct ListHead *item;
+    struct ListHead *tmp;
+    MUTABLE_LIST_FOR_EACH(item, tmp, &global->ready_processes) {
+        Context *context = GET_LIST_ENTRY(item, Context, processes_list_head);
 
         if (context->native_handler) {
             context->native_handler(context);
             scheduler_make_waiting(global, context);
         }
-
-        context = next_context;
-    } while (context != contexts);
+    }
 }
 
 int schudule_processes_count(GlobalContext *global)

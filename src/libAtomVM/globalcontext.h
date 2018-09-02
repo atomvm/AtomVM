@@ -51,8 +51,8 @@ struct Module;
 
 typedef struct
 {
-    struct ListHead *ready_processes;
-    struct ListHead *waiting_processes;
+    struct ListHead ready_processes;
+    struct ListHead waiting_processes;
     struct ListHead *listeners;
     struct ListHead *processes_table;
     struct ListHead *registered_processes;

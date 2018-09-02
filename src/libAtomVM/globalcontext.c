@@ -23,6 +23,7 @@
 #include "globalcontext.h"
 
 #include "atomshashtable.h"
+#include "list.h"
 #include "utils.h"
 #include "valueshashtable.h"
 #include "sys.h"
@@ -42,8 +43,8 @@ GlobalContext *globalcontext_new()
     if (IS_NULL_PTR(glb)) {
         return NULL;
     }
-    glb->ready_processes = NULL;
-    glb->waiting_processes = NULL;
+    list_init(&glb->ready_processes);
+    list_init(&glb->waiting_processes);
     glb->listeners = NULL;
     glb->processes_table = NULL;
     glb->registered_processes = NULL;

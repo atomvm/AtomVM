@@ -67,7 +67,7 @@ void scheduler_make_waiting(GlobalContext *global, Context *c);
  * @param global the global context.
  * @param c the process that is going to be terminated.
  */
-void scheduler_terminate(GlobalContext *global, Context *c);
+void scheduler_terminate(Context *c);
 
 /**
  * @brief the number of processes

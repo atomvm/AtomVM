@@ -517,7 +517,7 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
             #ifdef IMPL_EXECUTE_LOOP
                 TRACE("-- Code execution finished for %i--\n", ctx->process_id);
                 if (schudule_processes_count(ctx->global) == 1) {
-                    scheduler_terminate(ctx->global, ctx);
+                    scheduler_terminate(ctx);
                     return 0;
                 }
 
@@ -529,7 +529,7 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
                     return 0;
                 }
 
-                scheduler_terminate(ctx->global, ctx);
+                scheduler_terminate(ctx);
 
                 ctx = scheduled_context;
                 mod = ctx->saved_module;
