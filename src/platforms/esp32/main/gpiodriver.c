@@ -21,7 +21,11 @@
 
 #include <string.h>
 
-#include "driver/gpio.h"
+#include <driver/gpio.h>
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/task.h>
 
 #include "atom.h"
 #include "bif.h"
@@ -41,7 +45,12 @@
     #endif
 #endif
 
+static xQueueHandle gpio_evt_queue = NULL;
+static Context *listening_ctx;
+static Context *gpio_ctx;
+
 static void consume_gpio_mailbox(Context *ctx);
+static void IRAM_ATTR gpio_isr_handler(void *arg);
 
 static const char *const ok_a = "\x2ok";
 static const char *const error_a = "\x5error";
@@ -49,6 +58,8 @@ static const char *const set_level_a = "\x9set_level";
 static const char *const input_a = "\x5input";
 static const char *const output_a = "\x6output";
 static const char *const set_direction_a ="\xDset_direction";
+static const char *const set_int_a = "\x7" "set_int";
+static const char *const gpio_interrupt_a = "\xE" "gpio_interrupt";
 
 static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
 {
@@ -72,6 +83,9 @@ static void consume_gpio_mailbox(Context *ctx)
     term msg = message->message;
     term pid = term_get_tuple_element(msg, 0);
     term cmd = term_get_tuple_element(msg, 1);
+
+    int local_process_id = term_to_local_process_id(pid);
+    Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
     if (cmd == term_from_atom_string(glb, set_level_a)) {
         int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
@@ -99,6 +113,26 @@ static void consume_gpio_mailbox(Context *ctx)
             ret = term_from_atom_string(glb, error_a);
         }
 
+    } else if (cmd == term_from_atom_string(glb, set_int_a)) {
+        int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
+        TRACE("going to install interrupt for %i.\n", gpio_num);
+
+        if (!gpio_evt_queue) {
+            //TODO: ugly workaround here, write a real implementation
+            listening_ctx = target;
+            gpio_ctx = ctx;
+            gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
+            gpio_install_isr_service(0);
+            TRACE("created queue.\n");
+        }
+        gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
+        //TODO: both posedge and negedge must be supproted
+        gpio_set_intr_type(gpio_num, GPIO_PIN_INTR_POSEDGE);
+
+        gpio_isr_handler_add(gpio_num, gpio_isr_handler, (void *) gpio_num);
+
+        ret = term_from_atom_string(glb, ok_a);
+
     } else {
         TRACE("gpio: unrecognized command\n");
         ret = term_from_atom_string(glb, error_a);
@@ -106,7 +140,25 @@ static void consume_gpio_mailbox(Context *ctx)
 
     free(message);
 
-    int local_process_id = term_to_local_process_id(pid);
-    Context *target = globalcontext_get_process(ctx->global, local_process_id);
     mailbox_send(target, ret);
+}
+
+static void IRAM_ATTR gpio_isr_handler(void *arg)
+{
+    uint32_t gpio_num = (uint32_t) arg;
+    xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
+}
+
+void sys_platform_periodic_tasks()
+{
+    uint32_t gpio_num;
+    if (listening_ctx && xQueueReceive(gpio_evt_queue, &gpio_num, 0)) {
+        GlobalContext *glb = gpio_ctx->global;
+
+        term int_msg = term_alloc_tuple(2, gpio_ctx);
+        term_put_tuple_element(int_msg, 0, term_from_atom_string(glb, gpio_interrupt_a));
+        term_put_tuple_element(int_msg, 1, term_from_int32(gpio_num));
+
+        mailbox_send(listening_ctx, int_msg);
+    }
 }
