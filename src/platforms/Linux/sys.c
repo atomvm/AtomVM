@@ -194,3 +194,7 @@ Context *platform_open_port(GlobalContext *glb, const char *driver_name, term op
     UNUSED(opts);
     return NULL;
 }
+
+void sys_platform_periodic_tasks()
+{
+}

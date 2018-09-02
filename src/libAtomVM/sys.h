@@ -75,4 +75,6 @@ void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis);
  */
 Module *sys_load_module(GlobalContext *global, const char *module_name);
 
+void sys_platform_periodic_tasks();
+
 #endif
