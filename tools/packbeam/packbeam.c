@@ -203,7 +203,5 @@ static void add_module_header(FILE *f, const char *module_name, uint32_t flags)
     assert(fwrite(&flags_field, sizeof(uint32_t), 1, f) == 1);
     assert(fwrite(&reserved, sizeof(uint32_t), 1, f) == 1);
     assert(fwrite(module_name, sizeof(char), strlen(module_name) + 1, f) == strlen(module_name) + 1);
-    for (int i = 0; i < padded_module_name_size - module_name_size; i++) {
-        fputc(0, f);
-    }
+    pad_and_align(f);
 }
