@@ -33,18 +33,7 @@
 
 //#define ENABLE_TRACE
 
-#ifndef TRACE
-    #ifdef ENABLE_TRACE
-        #define TRACE printf
-        #define DEBUG_FAIL_NULL(expr) assert((expr) != NULL)
-    #else
-        #define TRACE(...)
-        #define DEBUG_FAIL_NULL(expr)
-    #endif
-#endif
-
-#define USED_BY_TRACE(x) \
-    (void) (x)
+#include "trace.h"
 
 #define COMPACT_SMALLINT4 1
 #define COMPACT_ATOM 2

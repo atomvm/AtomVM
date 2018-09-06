@@ -20,14 +20,7 @@
 #include "mailbox.h"
 #include "memory.h"
 #include "scheduler.h"
-
-#ifndef TRACE
-    #ifdef ENABLE_TRACE
-        #define TRACE printf
-    #else
-        #define TRACE(...)
-    #endif
-#endif
+#include "trace.h"
 
 #define ADDITIONAL_PROCESSING_MEMORY_SIZE 4
 

@@ -37,13 +37,7 @@
 #include "utils.h"
 #include "term.h"
 
-#ifndef TRACE
-    #ifdef ENABLE_TRACE
-        #define TRACE printf
-    #else
-        #define TRACE(...)
-    #endif
-#endif
+#include "trace.h"
 
 static xQueueHandle gpio_evt_queue = NULL;
 static Context *listening_ctx;

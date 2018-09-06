@@ -26,16 +26,7 @@
 
 //#define ENABLE_TRACE
 
-#ifndef TRACE
-    #ifdef ENABLE_TRACE
-        #define TRACE printf
-    #else
-        #define TRACE(...)
-    #endif
-#endif
-
-#define USED_BY_TRACE(x) \
-    (void) (x)
+#include "trace.h"
 
 #define MIN_FREE_SPACE_SIZE 8
 
