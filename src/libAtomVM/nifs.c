@@ -120,19 +120,6 @@ const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
     return nameAndPtr->nif;
 }
 
-static int list_length(term list)
-{
-    int len = 0;
-    term t = list;
-    // TODO: handle improper lists
-    while (!term_is_nil(t)) {
-        len++;
-        t = term_get_list_tail(t);
-    }
-
-    return len;
-}
-
 static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
 {
     if (UNLIKELY(argc != 2)) {
@@ -333,7 +320,7 @@ static term nif_erlang_concat_2(Context *ctx, int argc, term argv[])
         abort();
     }
 
-    int len = list_length(prepend_list);
+    int len = term_list_length(prepend_list);
     memory_ensure_free(ctx, len * 2);
 
     // GC might have changed all pointers
