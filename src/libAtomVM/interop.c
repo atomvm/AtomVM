@@ -19,6 +19,22 @@
 
 #include "interop.h"
 
+char *interop_binary_to_string(term binary)
+{
+    int len = term_binary_size(binary);
+
+    char *str = malloc(len + 1);
+    if (IS_NULL_PTR(str)) {
+        return NULL;
+    }
+    memcpy(str, term_binary_data(binary), len);
+
+    str[len] = 0;
+
+    return str;
+}
+
+
 char *interop_list_to_string(term list)
 {
     int len = 0;

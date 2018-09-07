@@ -20,6 +20,7 @@
 #include "nifs.h"
 
 #include "context.h"
+#include "interop.h"
 #include "mailbox.h"
 #include "module.h"
 #include "scheduler.h"
@@ -35,8 +36,6 @@ static const char *const ok_atom = "\x2" "ok";
 static const char *const error_atom = "\x5" "error";
 static const char *const undefined_atom = "\x9" "undefined";
 
-static char *list_to_string(term list);
-static char *binary_to_string(term binary);
 static void process_echo_mailbox(Context *ctx);
 static void process_console_mailbox(Context *ctx);
 
@@ -152,10 +151,10 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
     term t = term_get_tuple_element(port_name, 1);
     char *driver_name;
     if (term_is_list(t)) {
-        driver_name = list_to_string(t);
+        driver_name = interop_list_to_string(t);
     } else {
         //TODO: check if it is a binary
-        driver_name = binary_to_string(t);
+        driver_name = interop_binary_to_string(t);
     }
     if (IS_NULL_PTR(driver_name)) {
         int error_index = globalcontext_insert_atom(ctx->global, error_atom);
@@ -221,49 +220,6 @@ static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[])
     }
 }
 
-static char *list_to_string(term list)
-{
-    int len = 0;
-
-    term t = list;
-
-    while (!term_is_nil(t)) {
-        len++;
-        term *t_ptr = term_get_list_ptr(t);
-        t = *t_ptr;
-    }
-
-    t = list;
-    char *str = malloc(len + 1);
-    if (IS_NULL_PTR(str)) {
-        return NULL;
-    }
-
-    for (int i = 0; i < len; i++) {
-        term *t_ptr = term_get_list_ptr(t);
-        str[i] = (char) term_to_int32(t_ptr[1]);
-        t = *t_ptr;
-    }
-    str[len] = 0;
-
-    return str;
-}
-
-static char *binary_to_string(term binary)
-{
-    int len = term_binary_size(binary);
-
-    char *str = malloc(len + 1);
-    if (IS_NULL_PTR(str)) {
-        return NULL;
-    }
-    memcpy(str, term_binary_data(binary), len);
-
-    str[len] = 0;
-
-    return str;
-}
-
 static void process_echo_mailbox(Context *ctx)
 {
     Message *msg = mailbox_dequeue(ctx);
@@ -289,10 +245,10 @@ static void process_console_mailbox(Context *ctx)
 
     char *str;
     if (term_is_list(val)) {
-        str = list_to_string(val);
+        str = interop_list_to_string(val);
     } else {
         //TODO: check if it is a binary
-        str = binary_to_string(val);
+        str = interop_binary_to_string(val);
     }
     if (IS_NULL_PTR(msg)) {
         free(msg);
