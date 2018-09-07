@@ -19,6 +19,20 @@
 
 #include "interop.h"
 
+char *interop_term_to_string(term t)
+{
+    if (term_is_list(t)) {
+        return interop_list_to_string(t);
+
+    } else if (term_is_binary(t)) {
+        return interop_binary_to_string(t);
+
+    } else {
+        //TODO: implement also for other types?
+        return NULL;
+    }
+}
+
 char *interop_binary_to_string(term binary)
 {
     int len = term_binary_size(binary);

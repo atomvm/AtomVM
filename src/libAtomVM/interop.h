@@ -22,6 +22,7 @@
 
 #include "term.h"
 
+char *interop_term_to_string(term t);
 char *interop_binary_to_string(term binary);
 char *interop_list_to_string(term list);
 term interop_proplist_get_value(term list, term key);

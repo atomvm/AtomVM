@@ -149,13 +149,7 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
     }
 
     term t = term_get_tuple_element(port_name, 1);
-    char *driver_name;
-    if (term_is_list(t)) {
-        driver_name = interop_list_to_string(t);
-    } else {
-        //TODO: check if it is a binary
-        driver_name = interop_binary_to_string(t);
-    }
+    char *driver_name = interop_term_to_string(t);
     if (IS_NULL_PTR(driver_name)) {
         int error_index = globalcontext_insert_atom(ctx->global, error_atom);
         if (error_index < 0) {
@@ -243,14 +237,8 @@ static void process_console_mailbox(Context *ctx)
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
-    char *str;
-    if (term_is_list(val)) {
-        str = interop_list_to_string(val);
-    } else {
-        //TODO: check if it is a binary
-        str = interop_binary_to_string(val);
-    }
-    if (IS_NULL_PTR(msg)) {
+    char *str = interop_term_to_string(val);
+    if (IS_NULL_PTR(str)) {
         free(msg);
         return;
     }
