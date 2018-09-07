@@ -705,8 +705,7 @@ static inline int term_list_length(term t)
 
     while (!term_is_nil(t)) {
         len++;
-        term *t_ptr = term_get_list_ptr(t);
-        t = *t_ptr;
+        t = term_get_list_tail(t);
     }
 
     return len;
