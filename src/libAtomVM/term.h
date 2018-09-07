@@ -395,6 +395,12 @@ static inline term term_from_int32(int32_t value)
     }
 }
 
+static inline term term_from_int64(int64_t value)
+{
+    //TODO: implement, ugly quick & dirty code here
+    return term_from_int32(value);
+}
+
 static inline term term_from_catch_label(unsigned int module_index, unsigned int label)
 {
     return (term) ((module_index << 24) | (label << 6) | TERM_CATCH_TAG);

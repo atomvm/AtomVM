@@ -88,6 +88,11 @@
                     next_operand_offset += 2;                                           \
                     break;                                                              \
                                                                                         \
+                case COMPACT_NBITS_VALUE:                                               \
+                    /* TODO: when first_byte >> 5 is 7, a different encoding is used */ \
+                    next_operand_offset += (first_byte >> 5) + 3;                       \
+                    break;                                                              \
+                                                                                        \
                 default:                                                                \
                     assert((first_byte & 0x30) != COMPACT_LARGE_INTEGER);               \
                     break;                                                              \
@@ -173,6 +178,12 @@
                 case COMPACT_11BITS_VALUE:                                                                              \
                     dest_term = term_from_int11(((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]);     \
                     next_operand_offset += 2;                                                                           \
+                    break;                                                                                              \
+                                                                                                                        \
+                case COMPACT_NBITS_VALUE:                                                                               \
+                    dest_term = term_from_int64(                                                                        \
+                            large_integer_to_int64((code_chunk) + (base_index) + (off), &(next_operand_offset))         \
+                        );                                                                                              \
                     break;                                                                                              \
                                                                                                                         \
                 default:                                                                                                \
@@ -408,6 +419,22 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
 
     return 0;
 }
+
+static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_offset)
+{
+    int num_bytes = (*compact_term >> 5) + 2;
+
+    switch (num_bytes) {
+        case 2:
+            *next_operand_offset += 3;
+            int16_t ret_val16 = ((int64_t) compact_term[1]) << 8 | compact_term[2];
+            return ret_val16;
+
+        default:
+            abort();
+    }
+}
+
 #endif
 
 #pragma GCC diagnostic push
