@@ -192,9 +192,6 @@ static void pad_and_align(FILE *f)
 
 static void add_module_header(FILE *f, const char *module_name, uint32_t flags)
 {
-    int module_name_size = strlen(module_name) + 1;
-    int padded_module_name_size = ((module_name_size + 4 - 1) >> 2) << 2;
-
     uint32_t size_field = 0;
     uint32_t flags_field = ENDIAN_SWAP_32(flags);
     uint32_t reserved = 0;
