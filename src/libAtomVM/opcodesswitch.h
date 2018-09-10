@@ -403,6 +403,11 @@ static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
 
 
 #ifdef IMPL_EXECUTE_LOOP
+struct Int24
+{
+    int32_t val24 : 24;
+};
+
 static int get_catch_label_and_change_module(Context *ctx, Module **mod)
 {
     const term *ct = ctx->e;
@@ -425,10 +430,26 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
     int num_bytes = (*compact_term >> 5) + 2;
 
     switch (num_bytes) {
-        case 2:
+        case 2: {
             *next_operand_offset += 3;
             int16_t ret_val16 = ((int64_t) compact_term[1]) << 8 | compact_term[2];
             return ret_val16;
+        }
+
+        case 3: {
+            *next_operand_offset += 4;
+            struct Int24 ret_val24;
+            ret_val24.val24 = ((int32_t) compact_term[1]) << 16 | ((int32_t) compact_term[2] << 8) | compact_term[3];
+            return ret_val24.val24;
+        }
+
+        case 4: {
+            *next_operand_offset += 5;
+            int32_t ret_val32;
+            ret_val32 = ((int32_t) compact_term[1]) << 24 | ((int32_t) compact_term[2] << 16)
+                | ((int32_t) compact_term[3] << 8) | compact_term[4];
+            return ret_val32;
+        }
 
         default:
             abort();
