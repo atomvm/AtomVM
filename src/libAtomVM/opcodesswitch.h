@@ -432,7 +432,7 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
     switch (num_bytes) {
         case 2: {
             *next_operand_offset += 3;
-            int16_t ret_val16 = ((int64_t) compact_term[1]) << 8 | compact_term[2];
+            int16_t ret_val16 = ((int16_t) compact_term[1]) << 8 | compact_term[2];
             return ret_val16;
         }
 

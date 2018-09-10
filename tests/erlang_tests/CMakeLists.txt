@@ -66,6 +66,8 @@ compile_erlang(gen_server_like_test)
 compile_erlang(external_proplist_test)
 compile_erlang(compact15bitsinteger)
 compile_erlang(negatives)
+compile_erlang(compact23bitsinteger)
+compile_erlang(compact27bitsinteger)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -124,4 +126,6 @@ add_custom_target(erlang_test_modules DEPENDS
     external_proplist_test.beam
     compact15bitsinteger.beam
     negatives.beam
+    compact23bitsinteger.beam
+    compact27bitsinteger.beam
 )

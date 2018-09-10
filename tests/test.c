@@ -103,6 +103,8 @@ struct Test tests[] =
     {"external_proplist_test.beam", 3},
     {"compact15bitsinteger.beam", 1567888},
     {"negatives.beam", -55996},
+    {"compact23bitsinteger.beam",  47769328},
+    {"compact27bitsinteger.beam",  61837935},
     {NULL, 0}
 };
 
