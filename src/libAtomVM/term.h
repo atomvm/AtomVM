@@ -35,20 +35,12 @@
 #include "memory.h"
 #include "utils.h"
 
+#include "term_typedef.h"
+
 #define TERM_BOXED_VALUE_TAG 0x2
 #define TERM_CATCH_TAG 0x1B
 
 #define TERM_BOXED_REF 0x10
-
-#ifndef TYPEDEF_TERM
-#define TYPEDEF_TERM
-
-/**
- * A value of any data type, types bigger than a machine word will require some additional space on heap.
- */
-typedef unsigned long term;
-
-#endif
 
 /**
  * @brief Gets a pointer to a term stored on the heap

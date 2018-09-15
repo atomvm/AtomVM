@@ -20,16 +20,12 @@
 #ifndef _MEMORY_H_
 #define _MEMORY_H_
 
+#include "term_typedef.h"
 #include "utils.h"
 
 #include <stdint.h>
 
 #define HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF 64
-
-#ifndef TYPEDEF_TERM
-#define TYPEDEF_TERM
-typedef unsigned long term;
-#endif
 
 #ifndef TYPEDEF_CONTEXT
 #define TYPEDEF_CONTEXT
