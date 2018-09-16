@@ -181,6 +181,35 @@ matrix:
         - valgrind ./tests/test-erlang
         - ./tests/test-erlang
 
+    - name: "GCC 4.8 (with -O2, 32 bit) on Trusty with OTP 20"
+      os: linux
+      dist: trusty
+      sudo: true
+      addons:
+        apt:
+          sources:
+            - sourceline: deb https://packages.erlang-solutions.com/ubuntu trusty contrib
+              key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
+          packages:
+            - g++
+            - gcc-multilib
+            - g++-multilib
+            - libc6-dev-i386
+            - libc6-dbg:i386
+            - zlib1g-dev:i386
+            - gperf
+            - valgrind
+            - esl-erlang=1:20.2.2
+      script:
+        - mkdir -p build
+        - cd build
+        - export CFLAGS="-m32 -O2"
+        - export CXXFLAGS="-m32 -O2"
+        - cmake ..
+        - make
+        - valgrind ./tests/test-erlang
+        - ./tests/test-erlang
+
     - name: "clang 5 (with -O2) on Trusty with OTP 20"
       os: linux
       dist: trusty
