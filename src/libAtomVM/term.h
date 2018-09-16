@@ -375,9 +375,9 @@ static inline term term_from_int11(int16_t value)
  */
 static inline term term_from_int32(int32_t value)
 {
-    //134217728 is 2^27
-    //TODO: we don't have that "small" value on 64 bits CPUs
-    if ((value > 134217728) || (value < -134217728)) {
+#if TERM_BITS == 32
+    // 268435455 == 0x0FFFFFFF
+    if (UNLIKELY((value > 268435455) || (value < -268435455))) {
         //TODO: unimplemented on heap integer value
         printf("unimplemented: term should be moved to heap.");
         abort();
@@ -385,12 +385,42 @@ static inline term term_from_int32(int32_t value)
     } else {
         return (value << 4) | 0xF;
     }
+
+#elif TERM_BITS == 64
+    return (value << 4) | 0xF;
+
+#else
+    #error "Wrong TERM_BITS define"
+#endif
 }
 
 static inline term term_from_int64(int64_t value)
 {
-    //TODO: implement, ugly quick & dirty code here
-    return term_from_int32(value);
+#if TERM_BITS == 32
+    // 268435455 == 0x0FFFFFFF
+    if (UNLIKELY((value > 268435455) || (value < -268435455))) {
+        //TODO: unimplemented on heap integer value
+        fprintf(stderr, "unimplemented: term should be moved to heap.");
+        abort();
+
+    } else {
+        return (value << 4) | 0xF;
+    }
+
+#elif TERM_BITS == 64
+    // 1152921504606846975 = 0x0FFFFFFFFFFFFFFF
+    if (UNLIKELY((value > 1152921504606846975) || (value < -1152921504606846975))) {
+        //TODO: unimplemented on heap integer value
+        fprintf(stderr, "unimplemented: term should be moved to heap.");
+        abort();
+
+    } else {
+        return (value << 4) | 0xF;
+    }
+
+#else
+    #error "Wrong TERM_BITS define"
+#endif
 }
 
 static inline term term_from_catch_label(unsigned int module_index, unsigned int label)
