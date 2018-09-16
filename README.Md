@@ -14,8 +14,6 @@ Dependencies
 
 * gcov and lcov are optionally required to generate coverage report (make coverage).
 
-This software has been mainly tested with GCC (7.2.0 on Linux), but it also works with clang (tested with clang 4.0.1).
-
 Supported Platforms
 ===================
 
@@ -38,6 +36,10 @@ $ ./src/AtomVM hello_world.beam
 
 Project Status
 ==============
+
+[![Build Status](https://travis-ci.com/bettio/AtomVM.svg?branch=master)](https://travis-ci.com/bettio/AtomVM)
+
+Right now only binaries compiled with OTP 20 are supported, support for newer versions will be added soon.
 
 AtomVM is still in its early stages, but it can run simple applications similar to those available in examples and tests.
 AtomVM might crash with a similar message:
