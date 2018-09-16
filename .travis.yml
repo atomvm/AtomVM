@@ -1,0 +1,131 @@
+language: c
+
+matrix:
+  include:
+    - name: "GCC 7 on Trusty with OTP 20"
+      os: linux
+      dist: trusty
+      sudo: true
+      addons:
+        apt:
+          sources:
+            - sourceline: deb https://packages.erlang-solutions.com/ubuntu trusty contrib
+              key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+            - gperf
+            - esl-erlang=1:20.2.2
+      env:
+        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
+      script:
+        - export CC=gcc-7
+        - export CXX=g++-7
+        - mkdir -p build
+        - cd build
+        - cmake ..
+        - make
+        - ./tests/test-erlang
+      before_install:
+        - eval "${MATRIX_EVAL}"
+
+    - name: "GCC 6 on Trusty with OTP 20"
+      os: linux
+      dist: trusty
+      sudo: true
+      addons:
+        apt:
+          sources:
+            - sourceline: deb https://packages.erlang-solutions.com/ubuntu trusty contrib
+              key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-6
+            - gperf
+            - esl-erlang=1:20.2.2
+      env:
+        - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
+      script:
+        - export CC=gcc-6
+        - export CXX=g++-6
+        - mkdir -p build
+        - cd build
+        - cmake ..
+        - make
+        - ./tests/test-erlang
+      before_install:
+        - eval "${MATRIX_EVAL}"
+
+    - name: "GCC 5 on Trusty with OTP 20"
+      os: linux
+      dist: trusty
+      sudo: true
+      addons:
+        apt:
+          sources:
+            - sourceline: deb https://packages.erlang-solutions.com/ubuntu trusty contrib
+              key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-5
+            - gperf
+            - esl-erlang=1:20.2.2
+      env:
+        - MATRIX_EVAL="CC=gcc-5 && CXX=g++-5"
+      script:
+        - export CC=gcc-5
+        - export CXX=g++-5
+        - mkdir -p build
+        - cd build
+        - cmake ..
+        - make
+        - ./tests/test-erlang
+      before_install:
+        - eval "${MATRIX_EVAL}"
+
+    - name: "GCC 4.8 on Trusty with OTP 20"
+      os: linux
+      dist: trusty
+      sudo: true
+      addons:
+        apt:
+          sources:
+            - sourceline: deb https://packages.erlang-solutions.com/ubuntu trusty contrib
+              key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
+          packages:
+            - g++
+            - gperf
+            - esl-erlang=1:20.2.2
+      script:
+        - mkdir -p build
+        - cd build
+        - cmake ..
+        - make
+        - ./tests/test-erlang
+
+    - name: "GCC 7 on Trusty with OTP 21"
+      os: linux
+      dist: trusty
+      sudo: true
+      addons:
+        apt:
+          sources:
+            - sourceline: deb https://packages.erlang-solutions.com/ubuntu trusty contrib
+              key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+            - gperf
+            - esl-erlang=1:21.0
+      env:
+        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
+      script:
+        - export CC=gcc-7
+        - export CXX=g++-7
+        - mkdir -p build
+        - cd build
+        - cmake ..
+        - make
+        - ./tests/test-erlang
+      before_install:
+        - eval "${MATRIX_EVAL}"
