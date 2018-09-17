@@ -309,7 +309,7 @@ static inline int32_t term_to_int32(term t)
 {
     switch (t & 0xF) {
         case 0xF:
-            return t >> 4;
+            return ((int32_t) t) >> 4;
 
         default:
             printf("term is not an integer: %lx\n", t);
