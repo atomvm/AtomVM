@@ -23,6 +23,7 @@
 #include "iff.h"
 #include "mapped_file.h"
 #include "scheduler.h"
+#include "udpdriver.h"
 #include "utils.h"
 
 #include <limits.h>
@@ -189,10 +190,18 @@ static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *
 
 Context *platform_open_port(GlobalContext *glb, const char *driver_name, term opts)
 {
-    UNUSED(glb);
-    UNUSED(driver_name);
     UNUSED(opts);
-    return NULL;
+
+    Context *new_ctx = context_new(glb);
+
+    if (!strcmp(driver_name, "udp")) {
+        udpdriver_init(new_ctx);
+    } else {
+        context_destroy(new_ctx);
+        return NULL;
+    }
+
+    return new_ctx;
 }
 
 void sys_platform_periodic_tasks()

@@ -9,7 +9,7 @@ endif()
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR} libAtomVM/)
 
-add_executable(AtomVM main.c platforms/${CMAKE_SYSTEM_NAME}/sys.c platforms/${CMAKE_SYSTEM_NAME}/mapped_file.c)
+add_executable(AtomVM main.c platforms/${CMAKE_SYSTEM_NAME}/sys.c platforms/${CMAKE_SYSTEM_NAME}/mapped_file.c platforms/${CMAKE_SYSTEM_NAME}/udpdriver.c)
 target_link_libraries(AtomVM libAtomVM)
 set_property(TARGET AtomVM PROPERTY C_STANDARD 99)
 
