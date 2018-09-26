@@ -46,6 +46,7 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_send_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[]);
+static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[]);
 
 static const struct Nif make_ref_nif =
 {
@@ -87,6 +88,12 @@ static const struct Nif concat_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_concat_2
+};
+
+static const struct Nif flat_size_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erts_debug_flat_size
 };
 
 //Ignore warning caused by gperf generated code
@@ -368,4 +375,21 @@ term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[])
     uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
 
     return term_from_ref_ticks(ref_ticks, ctx);
+}
+
+static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+
+    if (UNLIKELY(argc != 1)) {
+        fprintf(stderr, "erts_debug:flat_size: wrong args count\n");
+        abort();
+    }
+
+    unsigned long terms_count;
+    int stack_slots;
+
+    memory_estimate_term_memory_usage(argv[0], &terms_count, &stack_slots);
+
+    return term_from_int32(terms_count);
 }

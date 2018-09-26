@@ -18,3 +18,4 @@ erlang:send\2, &send_nif
 erlang:spawn\3, &spawn_nif
 erlang:whereis\1, &whereis_nif
 erlang:++\2, &concat_nif
+erts_debug:flat_size\1, &flat_size_nif
