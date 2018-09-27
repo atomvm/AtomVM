@@ -107,6 +107,38 @@ struct Test tests[] =
     {"compact27bitsinteger.beam",  61837935},
     {"compact23bitsneginteger.beam", -47376112},
     {"negatives2.beam", -500},
+
+    {"nested_list_size0.beam", 0},
+    {"nested_list_size1.beam", 2},
+    {"nested_list_size2.beam", 8},
+    {"nested_list_size3.beam", 68},
+
+    {"simple_list_size0.beam", 2},
+    {"simple_list_size1.beam", 10},
+
+    {"tuple_size0.beam", 1},
+    {"tuple_size1.beam", 2},
+    {"tuple_size2.beam", 3},
+    {"tuple_size3.beam", 4},
+    {"tuple_size4.beam", 13},
+    //{"tuple_size5.beam", 7},
+    {"tuple_size6.beam", 17},
+
+    {"tuples_and_list_size0.beam", 3},
+    {"tuples_and_list_size1.beam", 5},
+    {"tuples_and_list_size2.beam", 10},
+
+    {"nested_tuple_size0.beam", 12},
+    //{"nested_tuple_size1.beam", 44},
+    //{"nested_tuple_size2.beam", 76},
+    {"nested_tuple_size3.beam", 80},
+    //{"nested_tuple_size4.beam", 80},
+
+    {"complex_struct_size0.beam", 43},
+    //{"complex_struct_size1.beam", 37},
+    //{"complex_struct_size2.beam", 105},
+    //{"complex_struct_size3.beam", 23},
+
     {NULL, 0}
 };
 

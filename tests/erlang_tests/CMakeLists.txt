@@ -71,6 +71,36 @@ compile_erlang(compact27bitsinteger)
 compile_erlang(compact23bitsneginteger)
 compile_erlang(negatives2)
 
+compile_erlang(complex_struct_size0)
+compile_erlang(complex_struct_size1)
+compile_erlang(complex_struct_size2)
+compile_erlang(complex_struct_size3)
+
+compile_erlang(nested_list_size0)
+compile_erlang(nested_list_size1)
+compile_erlang(nested_list_size2)
+compile_erlang(nested_list_size3)
+compile_erlang(nested_tuple_size0)
+compile_erlang(nested_tuple_size1)
+compile_erlang(nested_tuple_size2)
+compile_erlang(nested_tuple_size3)
+compile_erlang(nested_tuple_size4)
+
+compile_erlang(simple_list_size0)
+compile_erlang(simple_list_size1)
+
+compile_erlang(tuple_size0)
+compile_erlang(tuple_size1)
+compile_erlang(tuple_size2)
+compile_erlang(tuple_size3)
+compile_erlang(tuple_size4)
+compile_erlang(tuple_size5)
+compile_erlang(tuple_size6)
+
+compile_erlang(tuples_and_list_size0)
+compile_erlang(tuples_and_list_size1)
+compile_erlang(tuples_and_list_size2)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -132,4 +162,35 @@ add_custom_target(erlang_test_modules DEPENDS
     compact27bitsinteger.beam
     compact23bitsneginteger.beam
     negatives2.beam
+
+    complex_struct_size0.beam
+    complex_struct_size1.beam
+    complex_struct_size2.beam
+    complex_struct_size3.beam
+
+    nested_list_size0.beam
+    nested_list_size1.beam
+    nested_list_size2.beam
+    nested_list_size3.beam
+
+    nested_tuple_size0.beam
+    nested_tuple_size1.beam
+    nested_tuple_size2.beam
+    nested_tuple_size3.beam
+    nested_tuple_size4.beam
+
+    simple_list_size0.beam
+    simple_list_size1.beam
+
+    tuple_size0.beam
+    tuple_size1.beam
+    tuple_size2.beam
+    tuple_size3.beam
+    tuple_size4.beam
+    tuple_size5.beam
+    tuple_size6.beam
+
+    tuples_and_list_size0.beam
+    tuples_and_list_size1.beam
+    tuples_and_list_size2.beam
 )
