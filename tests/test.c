@@ -106,6 +106,7 @@ struct Test tests[] =
     {"compact23bitsinteger.beam",  47769328},
     {"compact27bitsinteger.beam",  61837935},
     {"compact23bitsneginteger.beam", -47376112},
+    {"negatives2.beam", -500},
     {NULL, 0}
 };
 

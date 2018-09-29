@@ -69,6 +69,7 @@ compile_erlang(negatives)
 compile_erlang(compact23bitsinteger)
 compile_erlang(compact27bitsinteger)
 compile_erlang(compact23bitsneginteger)
+compile_erlang(negatives2)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -130,4 +131,5 @@ add_custom_target(erlang_test_modules DEPENDS
     compact23bitsinteger.beam
     compact27bitsinteger.beam
     compact23bitsneginteger.beam
+    negatives2.beam
 )
