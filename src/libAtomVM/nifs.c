@@ -115,7 +115,7 @@ const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
     int function_name_len = atom_string_len(function);
     memcpy(nifname + module_name_len + 1, atom_string_data(function), function_name_len);
 
-    nifname[module_name_len + function_name_len + 1] = '\\';
+    nifname[module_name_len + function_name_len + 1] = '/';
     nifname[module_name_len + function_name_len + 2] = '0' + arity;
     nifname[module_name_len + function_name_len + 3] = 0;
 

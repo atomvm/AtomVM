@@ -11,11 +11,11 @@ struct NifNameAndNifPtr
   const struct Nif *nif;
 };
 %%
-erlang:open_port\2, &open_port_nif
-erlang:make_ref\0, &make_ref_nif
-erlang:register\2, &register_nif
-erlang:send\2, &send_nif
-erlang:spawn\3, &spawn_nif
-erlang:whereis\1, &whereis_nif
-erlang:++\2, &concat_nif
-erts_debug:flat_size\1, &flat_size_nif
+erlang:open_port/2, &open_port_nif
+erlang:make_ref/0, &make_ref_nif
+erlang:register/2, &register_nif
+erlang:send/2, &send_nif
+erlang:spawn/3, &spawn_nif
+erlang:whereis/1, &whereis_nif
+erlang:++/2, &concat_nif
+erts_debug:flat_size/1, &flat_size_nif

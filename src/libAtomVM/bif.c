@@ -51,7 +51,7 @@ BifImpl bif_registry_get_handler(AtomString module, AtomString function, int ari
     int function_name_len = atom_string_len(function);
     memcpy(bifname + module_name_len + 1, atom_string_data(function), function_name_len);
 
-    bifname[module_name_len + function_name_len + 1] = '\\';
+    bifname[module_name_len + function_name_len + 1] = '/';
     bifname[module_name_len + function_name_len + 2] = '0' + arity;
     bifname[module_name_len + function_name_len + 3] = 0;
 
