@@ -322,9 +322,14 @@ static term nif_erlang_concat_2(Context *ctx, int argc, term argv[])
 
     term prepend_list = argv[0];
 
-    if (UNLIKELY(!term_is_list(argv[0]))) {
-        fprintf(stderr, "Argument error\n");
-        abort();
+    if (UNLIKELY(!term_is_list(prepend_list))) {
+        if (term_is_nil(prepend_list)) {
+            return argv[1];
+
+        } else {
+            fprintf(stderr, "Argument error\n");
+            abort();
+        }
     }
 
     int len = term_list_length(prepend_list);
