@@ -177,6 +177,21 @@ term bif_erlang_div_2(Context *ctx, uint32_t failure_label, int live, term arg1,
     }
 }
 
+term bif_erlang_neg_1(Context *ctx, uint32_t failure_label, int live, term arg1)
+{
+    UNUSED(ctx);
+    UNUSED(failure_label);
+    UNUSED(live);
+
+    if (LIKELY(term_is_integer(arg1))) {
+        return term_from_int32(-term_to_int32(arg1));
+
+    } else {
+        printf("neg: operand is not an integer: arg1=%lx\n", arg1);
+        abort();
+    }
+}
+
 term bif_erlang_rem_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
 {
     UNUSED(ctx);
