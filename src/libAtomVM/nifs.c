@@ -254,7 +254,7 @@ static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
         abort();
     }
 
-    if (UNLIKELY(!term_is_atom(argv[0]) || !term_is_atom(argv[1]) || !term_is_nonempty_list(argv[2]))) {
+    if (UNLIKELY(!term_is_atom(argv[0]) || !term_is_atom(argv[1]) || !term_is_list(argv[2]))) {
         fprintf(stderr, "spawn: invalid arguments\n");
         abort();
     }
