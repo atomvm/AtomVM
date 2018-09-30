@@ -80,9 +80,22 @@ static inline int term_is_atom(term t)
 }
 
 /**
- * @brief Checks if a term is a list
+ * @brief Checks if a term is nil
  *
- * @details Returns 1 if a term is a list (cons), otherwise 0.
+ * @details Returns 1 if a term is nil, otherwise 0.
+ * @param t the term that will be checked.
+ * @return 1 if check succedes, 0 otherwise.
+ */
+static inline int term_is_nil(term t)
+{
+    /* nil: 11 10 11 */
+    return ((t & 0x3F) == 0x3B);
+}
+
+/**
+ * @brief Checks if a term is a non empty list
+ *
+ * @details Returns 1 if a term is a non empty list (cons), otherwise 0.
  * @param t the term that will be checked.
  * @return 1 if check succedes, 0 otherwise.
  */
@@ -91,6 +104,20 @@ static inline int term_is_nonempty_list(term t)
     /* list: 01 */
     return ((t & 0x3) == 0x1);
 }
+
+/**
+ * @brief Checks if a term is a list
+ *
+ * @details Returns 1 if a term is a list (cons) or an empty list (nil term), otherwise 0.
+ * @param t the term that will be checked.
+ * @return 1 if check succedes, 0 otherwise.
+ */
+static inline int term_is_list(term t)
+{
+    /* list: 01 */
+    return term_is_nonempty_list(t) || term_is_nil(t);
+}
+
 /**
  * @brief Checks if a term is a boxed value
  *
@@ -167,19 +194,6 @@ static inline int term_is_binary(term t)
     }
 
     return 0;
-}
-
-/**
- * @brief Checks if a term is nil
- *
- * @details Returns 1 if a term is nil, otherwise 0.
- * @param t the term that will be checked.
- * @return 1 if check succedes, 0 otherwise.
- */
-static inline int term_is_nil(term t)
-{
-    /* nil: 11 10 11 */
-    return ((t & 0x3F) == 0x3B);
 }
 
 /**
