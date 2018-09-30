@@ -21,7 +21,7 @@
 
 char *interop_term_to_string(term t)
 {
-    if (term_is_list(t)) {
+    if (term_is_nonempty_list(t)) {
         return interop_list_to_string(t);
 
     } else if (term_is_binary(t)) {

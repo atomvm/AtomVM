@@ -86,7 +86,7 @@ static inline int term_is_atom(term t)
  * @param t the term that will be checked.
  * @return 1 if check succedes, 0 otherwise.
  */
-static inline int term_is_list(term t)
+static inline int term_is_nonempty_list(term t)
 {
     /* list: 01 */
     return ((t & 0x3) == 0x1);

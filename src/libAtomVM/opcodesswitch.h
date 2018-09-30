@@ -1512,7 +1512,7 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_list/2, label=%i, arg1=%lx\n", label, arg1);
 
-                    if (term_is_list(arg1) || term_is_nil(arg1)) {
+                    if (term_is_nonempty_list(arg1) || term_is_nil(arg1)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
@@ -1538,7 +1538,7 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_nonempty_list/2, label=%i, arg1=%lx\n", label, arg1);
 
-                    if (term_is_list(arg1)) {
+                    if (term_is_nonempty_list(arg1)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);

@@ -137,7 +137,7 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
     term port_name = argv[0];
     term opts = argv[1];
 
-    if (!(term_is_tuple(port_name) && term_get_tuple_arity(port_name) == 2) && !term_is_list(opts)) {
+    if (!(term_is_tuple(port_name) && term_get_tuple_arity(port_name) == 2) && !term_is_nonempty_list(opts)) {
         fprintf(stderr, "bad args\n");
         abort();
     }
@@ -254,7 +254,7 @@ static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
         abort();
     }
 
-    if (UNLIKELY(!term_is_atom(argv[0]) || !term_is_atom(argv[1]) || !term_is_list(argv[2]))) {
+    if (UNLIKELY(!term_is_atom(argv[0]) || !term_is_atom(argv[1]) || !term_is_nonempty_list(argv[2]))) {
         fprintf(stderr, "spawn: invalid arguments\n");
         abort();
     }
@@ -322,7 +322,7 @@ static term nif_erlang_concat_2(Context *ctx, int argc, term argv[])
 
     term prepend_list = argv[0];
 
-    if (UNLIKELY(!term_is_list(prepend_list))) {
+    if (UNLIKELY(!term_is_nonempty_list(prepend_list))) {
         if (term_is_nil(prepend_list)) {
             return argv[1];
 

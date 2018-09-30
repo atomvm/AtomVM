@@ -167,7 +167,7 @@ static inline term get_placeholder_term(term *placeholder)
 
 static inline int is_leaf_term(term t)
 {
-    return (!(term_is_list(t) || term_is_tuple(t)));
+    return (!(term_is_nonempty_list(t) || term_is_tuple(t)));
 }
 
 
@@ -235,7 +235,7 @@ term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move)
                     return t;
                 }
 
-            } else if (term_is_list(t) && !is_moved_marker(*term_get_list_ptr(t))) {
+            } else if (term_is_nonempty_list(t) && !is_moved_marker(*term_get_list_ptr(t))) {
                 term tail = term_get_list_tail(t);
                 term head = term_get_list_head(t);
 
@@ -253,7 +253,7 @@ term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move)
 
                 t = tail;
 
-            } else if (term_is_list(t) && is_moved_marker(*term_get_list_ptr(t))) {
+            } else if (term_is_nonempty_list(t) && is_moved_marker(*term_get_list_ptr(t))) {
                 TRACE("List moved marker found.\n");
                 going_back = 1;
                 previous_term = term_get_list_ptr(t)[1];
@@ -399,7 +399,7 @@ term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move)
                     previous_term = new_term;
                 }
 
-            } else if (term_is_list(t)) {
+            } else if (term_is_nonempty_list(t)) {
                 term *dest_heap = previous;
                 term source_term = t;
 
@@ -515,7 +515,7 @@ enum MemoryEstimateResult memory_estimate_term_memory_usage(term t, unsigned lon
         } else if (term_is_nil(t)) {
             t = peek_stack(new_stack);
 
-        } else if (term_is_list(t)) {
+        } else if (term_is_nonempty_list(t)) {
 
             term tail = term_get_list_tail(t);
             term head = term_get_list_head(t);
