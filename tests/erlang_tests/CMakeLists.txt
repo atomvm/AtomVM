@@ -101,6 +101,16 @@ compile_erlang(tuples_and_list_size0)
 compile_erlang(tuples_and_list_size1)
 compile_erlang(tuples_and_list_size2)
 
+compile_erlang(make_garbage0)
+compile_erlang(make_garbage1)
+compile_erlang(make_garbage2)
+compile_erlang(make_garbage3)
+compile_erlang(make_garbage4)
+compile_erlang(make_garbage5)
+compile_erlang(make_garbage6)
+compile_erlang(make_garbage7)
+
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -193,4 +203,13 @@ add_custom_target(erlang_test_modules DEPENDS
     tuples_and_list_size0.beam
     tuples_and_list_size1.beam
     tuples_and_list_size2.beam
+
+    make_garbage0.beam
+    make_garbage1.beam
+    make_garbage2.beam
+    make_garbage3.beam
+    make_garbage4.beam
+    make_garbage5.beam
+    make_garbage6.beam
+    make_garbage7.beam
 )

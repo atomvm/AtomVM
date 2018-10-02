@@ -139,6 +139,15 @@ struct Test tests[] =
     //{"complex_struct_size2.beam", 105},
     //{"complex_struct_size3.beam", 23},
 
+    {"make_garbage0.beam", -19},
+    //{"make_garbage1.beam", -18},
+    //{"make_garbage2.beam", -56},
+    {"make_garbage3.beam", -7},
+    {"make_garbage4.beam", -438},
+    {"make_garbage5.beam", 6},
+    {"make_garbage6.beam", -210},
+    {"make_garbage7.beam", -210},
+
     {NULL, 0}
 };
 
