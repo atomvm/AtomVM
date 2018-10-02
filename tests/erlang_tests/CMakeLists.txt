@@ -110,6 +110,25 @@ compile_erlang(make_garbage5)
 compile_erlang(make_garbage6)
 compile_erlang(make_garbage7)
 
+compile_erlang(copy_terms0)
+compile_erlang(copy_terms1)
+compile_erlang(copy_terms2)
+compile_erlang(copy_terms3)
+compile_erlang(copy_terms5)
+compile_erlang(copy_terms6)
+compile_erlang(copy_terms7)
+compile_erlang(copy_terms8)
+compile_erlang(copy_terms9)
+compile_erlang(copy_terms10)
+compile_erlang(copy_terms11)
+compile_erlang(copy_terms12)
+compile_erlang(copy_terms13)
+compile_erlang(copy_terms14)
+compile_erlang(copy_terms15)
+compile_erlang(copy_terms16)
+compile_erlang(copy_terms17)
+compile_erlang(copy_terms18)
+
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -212,4 +231,23 @@ add_custom_target(erlang_test_modules DEPENDS
     make_garbage5.beam
     make_garbage6.beam
     make_garbage7.beam
+
+    copy_terms0.beam
+    copy_terms1.beam
+    copy_terms2.beam
+    copy_terms3.beam
+    copy_terms5.beam
+    copy_terms6.beam
+    copy_terms7.beam
+    copy_terms8.beam
+    copy_terms9.beam
+    copy_terms10.beam
+    copy_terms11.beam
+    copy_terms12.beam
+    copy_terms13.beam
+    copy_terms14.beam
+    copy_terms15.beam
+    copy_terms16.beam
+    copy_terms17.beam
+    copy_terms18.beam
 )

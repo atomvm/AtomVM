@@ -148,6 +148,27 @@ struct Test tests[] =
     {"make_garbage6.beam", -210},
     {"make_garbage7.beam", -210},
 
+
+    //{"copy_terms0.beam", 0},
+    //{"copy_terms1.beam", 1},
+    //{"copy_terms2.beam", 2},
+    //{"copy_terms3.beam", 5},
+    //{"copy_terms4.beam", 2465},
+    //{"copy_terms5.beam", 32},
+    //{"copy_terms6.beam", 2},
+    {"copy_terms7.beam", 10},
+    {"copy_terms8.beam", 4},
+    //{"copy_terms9.beam", -19},
+    //{"copy_terms10.beam", -18},
+    //{"copy_terms11.beam", 36757},
+    //{"copy_terms12.beam", 36757},
+    //{"copy_terms13.beam", 37037},
+    //{"copy_terms14.beam", -210},
+    //{"copy_terms15.beam", -438},
+    //{"copy_terms16.beam", 16},
+    //{"copy_terms17.beam", 11},
+    //{"copy_terms18.beam", -19},
+
     {NULL, 0}
 };
 
