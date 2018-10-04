@@ -169,6 +169,8 @@ struct Test tests[] =
     //{"copy_terms17.beam", 11},
     //{"copy_terms18.beam", -19},
 
+    //{"memlimit.beam", 0},
+
     {NULL, 0}
 };
 

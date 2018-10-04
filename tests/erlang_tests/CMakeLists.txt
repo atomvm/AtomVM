@@ -129,6 +129,8 @@ compile_erlang(copy_terms16)
 compile_erlang(copy_terms17)
 compile_erlang(copy_terms18)
 
+compile_erlang(memlimit)
+
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -250,4 +252,6 @@ add_custom_target(erlang_test_modules DEPENDS
     copy_terms16.beam
     copy_terms17.beam
     copy_terms18.beam
+
+    memlimit.beam
 )
