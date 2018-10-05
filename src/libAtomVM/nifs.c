@@ -26,6 +26,7 @@
 #include "scheduler.h"
 #include "term.h"
 #include "utils.h"
+#include "sys.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -46,6 +47,7 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_send_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_system_time_1(Context *ctx, int argc, term argv[]);
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[]);
 
 static const struct Nif make_ref_nif =
@@ -90,6 +92,12 @@ static const struct Nif concat_nif =
     .nif_ptr = nif_erlang_concat_2
 };
 
+static const struct Nif system_time_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_system_time_1
+};
+
 static const struct Nif flat_size_nif =
 {
     .base.type = NIFFunctionType,
@@ -102,6 +110,12 @@ static const struct Nif flat_size_nif =
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include "nifs_hash.h"
 #pragma GCC diagnostic pop
+
+static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
+{
+    int global_atom_index = globalcontext_insert_atom(glb, string);
+    return term_from_atom_index(global_atom_index);
+}
 
 const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
 {
@@ -380,6 +394,29 @@ term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[])
     uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
 
     return term_from_ref_ticks(ref_ticks, ctx);
+}
+
+term nif_erlang_system_time_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+
+    if (argc != 1) {
+        fprintf(stderr, "erlang:system_time: wrong args count\n");
+        abort();
+    }
+
+    struct timespec ts;
+    sys_time(&ts);
+
+    term minute_atom = term_from_atom_string(ctx->global, "\x6" "minute");
+    if (argv[0] == minute_atom) {
+        // FIXME: This is not standard, however we cannot hold seconds since 1970 in just 27 bits.
+        return term_from_int32(ts.tv_sec / 60);
+
+    } else {
+        fprintf(stderr, "nif_erlang_system_time: error, got: %lx\n", argv[0]);
+        abort();
+    }
 }
 
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])

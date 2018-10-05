@@ -97,6 +97,19 @@ extern void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t m
     t->tv_nsec += (millis % 1000) * 1000000;
 }
 
+void sys_time(struct timespec *t)
+{
+    struct timeval tv;
+    struct timezone tz;
+    if (UNLIKELY(gettimeofday(&tv, NULL))) {
+        fprintf(stderr, "Failed gettimeofday.\n");
+        abort();
+    }
+
+    t->tv_sec = tv.tv_sec;
+    t->tv_usec = tv.tv_nsec / 1000;
+}
+
 Module *sys_load_module(GlobalContext *global, const char *module_name)
 {
     const void *beam_module = NULL;

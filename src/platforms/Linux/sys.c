@@ -157,6 +157,14 @@ extern void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t m
     t->tv_nsec += (millis % 1000) * 1000000;
 }
 
+void sys_time(struct timespec *t)
+{
+    if (UNLIKELY(clock_gettime(CLOCK_REALTIME, t))) {
+        fprintf(stderr, "Failed clock_gettime.\n");
+        abort();
+    }
+}
+
 Module *sys_load_module(GlobalContext *global, const char *module_name)
 {
     TRACE("sys_load_module: Going to load: %s\n", module_name);

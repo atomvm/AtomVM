@@ -67,6 +67,14 @@ void sys_waitevents(struct ListHead *listeners_list);
 void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis);
 
 /**
+ * @brief gets wall clock time
+ *
+ * @details gets system wall clock time.
+ * @param t the timespec that will be updated.
+ */
+void sys_time(struct timespec *t);
+
+/**
  * @brief Loads a BEAM module using platform dependent methods.
  *
  * @details Loads a BEAM module into memory using platform dependent methods and returns a pointer to a Module struct.
