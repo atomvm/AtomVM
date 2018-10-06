@@ -19,4 +19,5 @@ erlang:spawn/3, &spawn_nif
 erlang:whereis/1, &whereis_nif
 erlang:++/2, &concat_nif
 erlang:system_time/1, &system_time_nif
+erlang:universaltime/0, &universaltime_nif
 erts_debug:flat_size/1, &flat_size_nif

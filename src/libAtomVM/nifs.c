@@ -30,6 +30,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #define MAX_NIF_NAME_LEN 32
 
@@ -48,6 +49,7 @@ static term nif_erlang_send_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_time_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[]);
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[]);
 
 static const struct Nif make_ref_nif =
@@ -96,6 +98,12 @@ static const struct Nif system_time_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_system_time_1
+};
+
+static const struct Nif universaltime_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_universaltime_0
 };
 
 static const struct Nif flat_size_nif =
@@ -417,6 +425,42 @@ term nif_erlang_system_time_1(Context *ctx, int argc, term argv[])
         fprintf(stderr, "nif_erlang_system_time: error, got: %lx\n", argv[0]);
         abort();
     }
+}
+
+term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argv);
+
+    if (argc != 0) {
+        fprintf(stderr, "system_time_to_universal_time(): wrong args count\n");
+        abort();
+    }
+
+    // 4 = size of date/time tuple, 3 size of date time tuple
+    memory_ensure_free(ctx, 3 + 4 + 4);
+    term date_tuple = term_alloc_tuple(3, ctx);
+    term time_tuple = term_alloc_tuple(3, ctx);
+    term date_time_tuple = term_alloc_tuple(2, ctx);
+
+    struct timespec ts;
+    sys_time(&ts);
+
+    struct tm broken_down_time;
+    gmtime_r(&ts.tv_sec, &broken_down_time);
+
+    term_put_tuple_element(date_tuple, 0, term_from_int32(1900 + broken_down_time.tm_year));
+    term_put_tuple_element(date_tuple, 1, term_from_int32(broken_down_time.tm_mon + 1));
+    term_put_tuple_element(date_tuple, 2, term_from_int32(broken_down_time.tm_mday));
+
+    term_put_tuple_element(time_tuple, 0, term_from_int32(broken_down_time.tm_hour));
+    term_put_tuple_element(time_tuple, 1, term_from_int32(broken_down_time.tm_min));
+    term_put_tuple_element(time_tuple, 2, term_from_int32(broken_down_time.tm_sec));
+
+    term_put_tuple_element(date_time_tuple, 0, date_tuple);
+    term_put_tuple_element(date_time_tuple, 1, time_tuple);
+
+    return date_time_tuple;
 }
 
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])
