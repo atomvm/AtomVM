@@ -107,6 +107,8 @@ struct Test tests[] =
     {"compact27bitsinteger.beam",  61837935},
     {"compact23bitsneginteger.beam", -47376112},
     {"negatives2.beam", -500},
+    {"datetime.beam", 3},
+    {"timestamp.beam", 1},
 
     {"nested_list_size0.beam", 0},
     {"nested_list_size1.beam", 2},
