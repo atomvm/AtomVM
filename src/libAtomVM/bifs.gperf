@@ -35,4 +35,10 @@ erlang:*/2, bif_erlang_mul_2
 erlang:div/2, bif_erlang_div_2
 erlang:rem/2, bif_erlang_rem_2
 erlang:-/1, bif_erlang_neg_1
+erlang:bor/2, bif_erlang_bor_2
+erlang:band/2, bif_erlang_band_2
+erlang:bxor/2, bif_erlang_bxor_2
+erlang:bsl/2, bif_erlang_bsl_2
+erlang:bsr/2, bif_erlang_bsr_2
+erlang:bnot/1, bif_erlang_bnot_1
 erlang:hd/1, bif_erlang_hd_1
