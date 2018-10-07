@@ -78,11 +78,89 @@ term bif_erlang_byte_size_1(Context *ctx, uint32_t failure_label, int live, term
     return term_from_int32(term_binary_size(arg1));
 }
 
+term bif_erlang_is_atom_1(Context *ctx, uint32_t fail_label, term arg1)
+{
+    UNUSED(fail_label);
+
+    if (term_is_atom(arg1)) {
+        return term_from_atom_string(ctx->global, true_atom);
+    } else {
+        return term_from_atom_string(ctx->global, false_atom);
+    }
+}
+
+term bif_erlang_is_binary_1(Context *ctx, uint32_t fail_label, term arg1)
+{
+    UNUSED(fail_label);
+
+    if (term_is_binary(arg1)) {
+        return term_from_atom_string(ctx->global, true_atom);
+    } else {
+        return term_from_atom_string(ctx->global, false_atom);
+    }
+}
+
+term bif_erlang_is_integer_1(Context *ctx, uint32_t fail_label, term arg1)
+{
+    UNUSED(fail_label);
+
+    if (term_is_integer(arg1)) {
+        return term_from_atom_string(ctx->global, true_atom);
+    } else {
+        return term_from_atom_string(ctx->global, false_atom);
+    }
+}
+
+term bif_erlang_is_list_1(Context *ctx, uint32_t fail_label, term arg1)
+{
+    UNUSED(fail_label);
+
+    if (term_is_list(arg1)) {
+        return term_from_atom_string(ctx->global, true_atom);
+    } else {
+        return term_from_atom_string(ctx->global, false_atom);
+    }
+}
+
+term bif_erlang_is_number_1(Context *ctx, uint32_t fail_label, term arg1)
+{
+    UNUSED(fail_label);
+
+    //TODO: change to term_is_number
+    if (term_is_integer(arg1)) {
+        return term_from_atom_string(ctx->global, true_atom);
+    } else {
+        return term_from_atom_string(ctx->global, false_atom);
+    }
+}
+
 term bif_erlang_is_pid_1(Context *ctx, uint32_t fail_label, term arg1)
 {
     UNUSED(fail_label);
 
     if (term_is_pid(arg1)) {
+        return term_from_atom_string(ctx->global, true_atom);
+    } else {
+        return term_from_atom_string(ctx->global, false_atom);
+    }
+}
+
+term bif_erlang_is_reference_1(Context *ctx, uint32_t fail_label, term arg1)
+{
+    UNUSED(fail_label);
+
+    if (term_is_reference(arg1)) {
+        return term_from_atom_string(ctx->global, true_atom);
+    } else {
+        return term_from_atom_string(ctx->global, false_atom);
+    }
+}
+
+term bif_erlang_is_tuple_1(Context *ctx, uint32_t fail_label, term arg1)
+{
+    UNUSED(fail_label);
+
+    if (term_is_tuple(arg1)) {
         return term_from_atom_string(ctx->global, true_atom);
     } else {
         return term_from_atom_string(ctx->global, false_atom);
