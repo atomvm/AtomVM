@@ -109,6 +109,7 @@ struct Test tests[] =
     {"negatives2.beam", -500},
     {"datetime.beam", 3},
     {"timestamp.beam", 1},
+    {"is_type.beam", 255},
 
     {"nested_list_size0.beam", 0},
     {"nested_list_size1.beam", 2},

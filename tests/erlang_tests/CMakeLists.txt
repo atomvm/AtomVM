@@ -72,6 +72,8 @@ compile_erlang(compact23bitsneginteger)
 compile_erlang(negatives2)
 compile_erlang(datetime)
 compile_erlang(timestamp)
+compile_erlang(is_type)
+
 
 compile_erlang(complex_struct_size0)
 compile_erlang(complex_struct_size1)
@@ -197,6 +199,7 @@ add_custom_target(erlang_test_modules DEPENDS
     negatives2.beam
     datetime.beam
     timestamp.beam
+    is_type.beam
 
     complex_struct_size0.beam
     complex_struct_size1.beam
