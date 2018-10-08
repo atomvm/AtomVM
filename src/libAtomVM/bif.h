@@ -72,4 +72,9 @@ term bif_erlang_not_equal_to_2(Context *ctx, uint32_t failure_label, term arg1, 
 term bif_erlang_exactly_equal_to_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
 term bif_erlang_exactly_not_equal_to_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
 
+term bif_erlang_greater_than_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
+term bif_erlang_less_than_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
+term bif_erlang_less_than_or_equal_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
+term bif_erlang_greater_than_or_equal_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
+
 #endif

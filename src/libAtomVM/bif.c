@@ -526,3 +526,52 @@ term bif_erlang_exactly_not_equal_to_2(Context *ctx, uint32_t failure_label, ter
         return term_from_atom_string(ctx->global, false_atom);
     }
 }
+
+
+term bif_erlang_greater_than_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
+{
+    UNUSED(failure_label);
+
+    //TODO: fix this implementation, it needs to cover more types
+    if (term_to_int32(arg1) > term_to_int32(arg2)) {
+        return term_from_atom_string(ctx->global, true_atom);
+    } else {
+        return term_from_atom_string(ctx->global, false_atom);
+    }
+}
+
+term bif_erlang_less_than_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
+{
+    UNUSED(failure_label);
+
+    //TODO: fix this implementation, it needs to cover more types
+    if (term_to_int32(arg1) < term_to_int32(arg2)) {
+        return term_from_atom_string(ctx->global, true_atom);
+    } else {
+        return term_from_atom_string(ctx->global, false_atom);
+    }
+}
+
+term bif_erlang_less_than_or_equal_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
+{
+    UNUSED(failure_label);
+
+    //TODO: fix this implementation, it needs to cover more types
+    if (term_to_int32(arg1) <= term_to_int32(arg2)) {
+        return term_from_atom_string(ctx->global, true_atom);
+    } else {
+        return term_from_atom_string(ctx->global, false_atom);
+    }
+}
+
+term bif_erlang_greater_than_or_equal_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
+{
+    UNUSED(failure_label);
+
+    //TODO: fix this implementation, it needs to cover more types
+    if (term_to_int32(arg1) >= term_to_int32(arg2)) {
+        return term_from_atom_string(ctx->global, true_atom);
+    } else {
+        return term_from_atom_string(ctx->global, false_atom);
+    }
+}
