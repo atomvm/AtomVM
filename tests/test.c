@@ -110,6 +110,8 @@ struct Test tests[] =
     {"datetime.beam", 3},
     {"timestamp.beam", 1},
     {"is_type.beam", 255},
+    {"test_bitwise.beam", -4},
+    {"test_bitwise2.beam", 0},
 
     {"nested_list_size0.beam", 0},
     {"nested_list_size1.beam", 2},

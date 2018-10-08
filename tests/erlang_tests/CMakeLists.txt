@@ -73,6 +73,8 @@ compile_erlang(negatives2)
 compile_erlang(datetime)
 compile_erlang(timestamp)
 compile_erlang(is_type)
+compile_erlang(test_bitwise)
+compile_erlang(test_bitwise2)
 
 
 compile_erlang(complex_struct_size0)
@@ -200,6 +202,8 @@ add_custom_target(erlang_test_modules DEPENDS
     datetime.beam
     timestamp.beam
     is_type.beam
+    test_bitwise.beam
+    test_bitwise2.beam
 
     complex_struct_size0.beam
     complex_struct_size1.beam
