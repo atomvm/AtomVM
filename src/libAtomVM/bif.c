@@ -185,6 +185,14 @@ term bif_erlang_hd_1(Context *ctx, uint32_t failure_label, term arg1)
     return term_get_list_head(arg1);
 }
 
+term bif_erlang_tuple_size_1(Context *ctx, uint32_t failure_label, term arg1)
+{
+    UNUSED(ctx);
+    UNUSED(failure_label);
+
+    return term_from_int32(term_get_tuple_arity(arg1));
+}
+
 term bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
 {
     UNUSED(ctx);
