@@ -76,6 +76,7 @@ compile_erlang(is_type)
 compile_erlang(test_bitwise)
 compile_erlang(test_bitwise2)
 compile_erlang(test_gt_and_le)
+compile_erlang(test_tuple_size)
 
 
 compile_erlang(complex_struct_size0)
@@ -206,6 +207,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_bitwise.beam
     test_bitwise2.beam
     test_gt_and_le.beam
+    test_tuple_size.beam
 
     complex_struct_size0.beam
     complex_struct_size1.beam
