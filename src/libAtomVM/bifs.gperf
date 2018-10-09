@@ -46,4 +46,5 @@ erlang:bsl/2, bif_erlang_bsl_2
 erlang:bsr/2, bif_erlang_bsr_2
 erlang:bnot/1, bif_erlang_bnot_1
 erlang:hd/1, bif_erlang_hd_1
+erlang:element/2, bif_erlang_element_2
 erlang:tuple_size/1, bif_erlang_tuple_size_1

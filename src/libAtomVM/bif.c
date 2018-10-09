@@ -185,6 +185,27 @@ term bif_erlang_hd_1(Context *ctx, uint32_t failure_label, term arg1)
     return term_get_list_head(arg1);
 }
 
+term bif_erlang_element_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
+{
+    UNUSED(ctx);
+    UNUSED(failure_label);
+
+    if (UNLIKELY(!term_is_integer(arg1))) {
+        printf("element: bad argument: %lx %lx.\n", arg1, arg2);
+        abort();
+    }
+
+    // indexes are 1 based
+    int elem_index = term_to_int32(arg1) - 1;
+    if ((elem_index >= 0) && (elem_index < term_get_tuple_arity(arg2))) {
+        return term_get_tuple_element(arg2, elem_index);
+
+    } else {
+        printf("element: bad argument: %lx %lx.\n", arg1, arg2);
+        abort();
+    }
+}
+
 term bif_erlang_tuple_size_1(Context *ctx, uint32_t failure_label, term arg1)
 {
     UNUSED(ctx);
