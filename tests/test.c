@@ -114,6 +114,7 @@ struct Test tests[] =
     {"test_bitwise2.beam", 0},
     {"test_gt_and_le.beam", 255},
     {"test_tuple_size.beam", 6},
+    {"test_element.beam", 7},
 
     {"nested_list_size0.beam", 0},
     {"nested_list_size1.beam", 2},
