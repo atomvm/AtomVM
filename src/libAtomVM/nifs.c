@@ -46,6 +46,7 @@ static term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_register_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_send_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_setelement_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_time_1(Context *ctx, int argc, term argv[]);
@@ -80,6 +81,12 @@ static const struct Nif send_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_send_2
+};
+
+static const struct Nif setelement_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_setelement_3
 };
 
 static const struct Nif whereis_nif =
@@ -461,6 +468,37 @@ term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[])
     term_put_tuple_element(date_time_tuple, 1, time_tuple);
 
     return date_time_tuple;
+}
+
+static term nif_erlang_setelement_3(Context *ctx, int argc, term argv[])
+{
+    if (argc != 3) {
+        fprintf(stderr, "setelement: wrong args count\n");
+        abort();
+    }
+
+    // indexes are 1 based
+    int replace_index = term_to_int32(argv[0]) - 1;
+
+    int tuple_size = term_get_tuple_arity(argv[1]);
+
+    if (UNLIKELY(replace_index >= tuple_size)) {
+        fprintf(stderr, "setelement: bad argument: %i\n", replace_index);
+        abort();
+    }
+
+    memory_ensure_free(ctx, tuple_size + 1);
+    term new_tuple = term_alloc_tuple(tuple_size, ctx);
+
+    term old_tuple = argv[1];
+    for (int i = 0; i < tuple_size; i++) {
+        term_put_tuple_element(new_tuple, i, term_get_tuple_element(old_tuple, i));
+    }
+
+    term value = argv[2];
+    term_put_tuple_element(new_tuple, replace_index, value);
+
+    return new_tuple;
 }
 
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])
