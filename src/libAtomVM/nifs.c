@@ -482,7 +482,7 @@ static term nif_erlang_setelement_3(Context *ctx, int argc, term argv[])
 
     int tuple_size = term_get_tuple_arity(argv[1]);
 
-    if (UNLIKELY(replace_index >= tuple_size)) {
+    if (UNLIKELY((replace_index >= tuple_size) || (replace_index < 0))) {
         fprintf(stderr, "setelement: bad argument: %i\n", replace_index);
         abort();
     }
