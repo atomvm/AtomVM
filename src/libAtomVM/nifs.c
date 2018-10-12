@@ -43,6 +43,7 @@ static void process_console_mailbox(Context *ctx);
 
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[]);
+static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_register_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_send_2(Context *ctx, int argc, term argv[]);
@@ -57,6 +58,12 @@ static const struct Nif make_ref_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_make_ref_0
+};
+
+static const struct Nif insert_element_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_insert_element_3
 };
 
 static const struct Nif open_port_nif =
@@ -468,6 +475,43 @@ term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[])
     term_put_tuple_element(date_time_tuple, 1, time_tuple);
 
     return date_time_tuple;
+}
+
+static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[])
+{
+    if (argc != 3) {
+        fprintf(stderr, "insert_element: wrong args count\n");
+        abort();
+    }
+
+    // indexes are 1 based
+    int insert_index = term_to_int32(argv[0]) - 1;
+
+    int old_tuple_size = term_get_tuple_arity(argv[1]);
+
+    if (UNLIKELY((insert_index > old_tuple_size) || (insert_index < 0))) {
+        fprintf(stderr, "insert_element: bad argument: %i\n", insert_index);
+        abort();
+    }
+
+    int new_tuple_size = old_tuple_size + 1;
+    memory_ensure_free(ctx, new_tuple_size + 1);
+    term new_tuple = term_alloc_tuple(new_tuple_size, ctx);
+
+    term old_tuple = argv[1];
+    term new_element = argv[2];
+
+    int src_elements_shift = 0;
+    for (int i = 0; i < new_tuple_size; i++) {
+        if (i == insert_index) {
+            src_elements_shift = 1;
+            term_put_tuple_element(new_tuple, i, new_element);
+        } else {
+            term_put_tuple_element(new_tuple, i, term_get_tuple_element(old_tuple, i - src_elements_shift));
+        }
+    }
+
+    return new_tuple;
 }
 
 static term nif_erlang_setelement_3(Context *ctx, int argc, term argv[])
