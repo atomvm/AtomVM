@@ -116,6 +116,7 @@ struct Test tests[] =
     {"test_tuple_size.beam", 6},
     {"test_element.beam", 7},
     {"test_setelement.beam", 121},
+    {"test_insert_element.beam", 121},
 
     {"nested_list_size0.beam", 0},
     {"nested_list_size1.beam", 2},
