@@ -44,6 +44,7 @@ static void process_console_mailbox(Context *ctx);
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[]);
+static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_register_2(Context *ctx, int argc, term argv[]);
@@ -78,6 +79,12 @@ static const struct Nif open_port_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_open_port_2
+};
+
+static const struct Nif make_tuple_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_make_tuple_2
 };
 
 static const struct Nif register_nif =
@@ -489,6 +496,32 @@ term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[])
     term_put_tuple_element(date_time_tuple, 1, time_tuple);
 
     return date_time_tuple;
+}
+
+static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[])
+{
+    if (argc != 2) {
+        fprintf(stderr, "make_tuple: wrong args count\n");
+        abort();
+    }
+
+    int count_elem = term_to_int32(argv[0]);
+
+    if (UNLIKELY(count_elem < 0)) {
+        fprintf(stderr, "make_tuple: bad argument: %i\n", count_elem);
+        abort();
+    }
+
+    memory_ensure_free(ctx, count_elem + 1);
+    term new_tuple = term_alloc_tuple(count_elem, ctx);
+
+    term element = argv[1];
+
+    for (int i = 0; i < count_elem; i++) {
+        term_put_tuple_element(new_tuple, i, element);
+    }
+
+    return new_tuple;
 }
 
 static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[])
