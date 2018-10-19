@@ -1,3 +1,8 @@
+Requirements
+============
+
+AtomVM has been tested with esp-idf v3.1.
+
 Building AtomVM for ESP32
 =========================
 
