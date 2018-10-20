@@ -185,6 +185,19 @@ term bif_erlang_hd_1(Context *ctx, uint32_t failure_label, term arg1)
     return term_get_list_head(arg1);
 }
 
+term bif_erlang_tl_1(Context *ctx, uint32_t failure_label, term arg1)
+{
+    UNUSED(ctx);
+    UNUSED(failure_label);
+
+    if (UNLIKELY(!term_is_nonempty_list(arg1))) {
+        fprintf(stderr, "tl: bad argument\n");
+        abort();
+    }
+
+    return term_get_list_tail(arg1);
+}
+
 term bif_erlang_element_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
 {
     UNUSED(ctx);
