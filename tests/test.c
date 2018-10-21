@@ -120,6 +120,7 @@ struct Test tests[] =
     {"test_delete_element.beam", 421},
     {"test_tuple_to_list.beam", 300},
     {"test_make_tuple.beam", 4},
+    {"test_tl.beam", 5},
 
     {"nested_list_size0.beam", 0},
     {"nested_list_size1.beam", 2},
