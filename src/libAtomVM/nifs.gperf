@@ -13,6 +13,7 @@ struct NifNameAndNifPtr
 %%
 erlang:delete_element/2, &delete_element_nif
 erlang:insert_element/3, &insert_element_nif
+erlang:list_to_atom/1, &list_to_atom_nif
 erlang:open_port/2, &open_port_nif
 erlang:make_ref/0, &make_ref_nif
 erlang:make_tuple/2, &make_tuple_nif
