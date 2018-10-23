@@ -84,6 +84,7 @@ compile_erlang(test_delete_element)
 compile_erlang(test_tuple_to_list)
 compile_erlang(test_make_tuple)
 compile_erlang(test_tl)
+compile_erlang(test_list_to_atom)
 
 
 compile_erlang(complex_struct_size0)
@@ -222,6 +223,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_tuple_to_list.beam
     test_make_tuple.beam
     test_tl.beam
+    test_list_to_atom.beam
 
     complex_struct_size0.beam
     complex_struct_size1.beam

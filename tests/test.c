@@ -121,6 +121,7 @@ struct Test tests[] =
     {"test_tuple_to_list.beam", 300},
     {"test_make_tuple.beam", 4},
     {"test_tl.beam", 5},
+    {"test_list_to_atom.beam", 9},
 
     {"nested_list_size0.beam", 0},
     {"nested_list_size1.beam", 2},
