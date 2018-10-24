@@ -34,6 +34,7 @@
 
 #define MAX_NIF_NAME_LEN 32
 
+static const char *const latin1_atom = "\x6" "latin1";
 static const char *const ok_atom = "\x2" "ok";
 static const char *const error_atom = "\x5" "error";
 static const char *const undefined_atom = "\x9" "undefined";
@@ -42,6 +43,7 @@ static void process_echo_mailbox(Context *ctx);
 static void process_console_mailbox(Context *ctx);
 
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_binary_to_atom_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[]);
@@ -62,6 +64,12 @@ static const struct Nif make_ref_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_make_ref_0
+};
+
+static const struct Nif binary_to_atom_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_binary_to_atom_2
 };
 
 static const struct Nif delete_element_nif =
@@ -653,6 +661,38 @@ static term nif_erlang_tuple_to_list_1(Context *ctx, int argc, term argv[])
     }
 
     return prev;
+}
+
+static term nif_erlang_binary_to_atom_2(Context *ctx, int argc, term argv[])
+{
+    if (argc != 2) {
+        fprintf(stderr, "binary_to_atom: wrong args count\n");
+        abort();
+    }
+
+    if (UNLIKELY(argv[1] != term_from_atom_string(ctx->global, latin1_atom))) {
+        fprintf(stderr, "binary_to_atom: only latin1 is supported.\n");
+        abort();
+    }
+
+    char *atom_string = interop_binary_to_string(argv[0]);
+    if (IS_NULL_PTR(atom_string)) {
+        fprintf(stderr, "Failed to alloc temporary string\n");
+        abort();
+    }
+    int atom_string_len = strlen(atom_string);
+    if (UNLIKELY(atom_string_len > 255)) {
+        fprintf(stderr, "Too long atom.\n");
+        free(atom_string);
+        abort();
+    }
+
+    AtomString *atom = malloc(atom_string_len + 1);
+    ((uint8_t *) atom)[0] = atom_string_len;
+    memcpy(((char *) atom) + 1, atom_string, atom_string_len);
+
+    int global_atom_index = globalcontext_insert_atom(ctx->global, atom);
+    return term_from_atom_index(global_atom_index);
 }
 
 term nif_erlang_list_to_atom_1(Context *ctx, int argc, term argv[])
