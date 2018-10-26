@@ -43,6 +43,7 @@ static void process_echo_mailbox(Context *ctx);
 static void process_console_mailbox(Context *ctx);
 
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_atom_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[]);
@@ -64,6 +65,12 @@ static const struct Nif make_ref_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_make_ref_0
+};
+
+static const struct Nif atom_to_list_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_atom_to_list_1
 };
 
 static const struct Nif binary_to_atom_nif =
@@ -720,6 +727,29 @@ term nif_erlang_list_to_atom_1(Context *ctx, int argc, term argv[])
 
     int global_atom_index = globalcontext_insert_atom(ctx->global, atom);
     return term_from_atom_index(global_atom_index);
+}
+
+static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
+{
+    if (argc != 1) {
+        fprintf(stderr, "list_to_atom: wrong args count\n");
+        abort();
+    }
+
+    int atom_index = term_to_atom_index(argv[0]);
+    AtomString atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table, atom_index, (unsigned long) NULL);
+
+    int atom_len = atom_string_len(atom_string);
+
+    memory_ensure_free(ctx, atom_len * 2);
+
+    term prev = term_nil();
+    for (int i = atom_len - 1; i >= 0; i--) {
+        char c = ((const char *) atom_string_data(atom_string))[i];
+        prev = term_list_prepend(term_from_int11(c), prev, ctx);
+    }
+
+    return prev;
 }
 
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])

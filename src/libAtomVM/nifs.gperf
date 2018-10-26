@@ -11,6 +11,7 @@ struct NifNameAndNifPtr
   const struct Nif *nif;
 };
 %%
+erlang:atom_to_list/1, &atom_to_list_nif
 erlang:binary_to_atom/2, &binary_to_atom_nif
 erlang:delete_element/2, &delete_element_nif
 erlang:insert_element/3, &insert_element_nif
