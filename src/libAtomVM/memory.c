@@ -489,6 +489,45 @@ term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move)
     return previous_term;
 }
 
+unsigned long memory_estimate_usage(term t, unsigned long acc)
+{
+    if (term_is_atom(t)) {
+        return acc;
+
+    } else if (term_is_integer(t)) {
+        return acc;
+
+    } else if (term_is_nil(t)) {
+        return acc;
+
+    } else if (term_is_pid(t)) {
+        return acc;
+
+    } else if (term_is_reference(t)) {
+        return acc + term_boxed_size(t) + 1;
+
+    } else if (term_is_binary(t)) {
+        //TODO: binaries might be shared outside process heap.
+        return acc + term_boxed_size(t) + 1;
+
+    } else if (term_is_nonempty_list(t)) {
+        acc = memory_estimate_usage(term_get_list_head(t), acc);
+        return memory_estimate_usage(term_get_list_tail(t), acc + 2);
+
+    } else if (term_is_tuple(t)) {
+        int tuple_size = term_get_tuple_arity(t);
+
+        for (int i = 0; i < tuple_size; i++) {
+            acc = memory_estimate_usage(term_get_tuple_element(t, i), acc);
+        }
+
+        return acc + tuple_size + 1;
+
+    } else {
+        abort();
+    }
+}
+
 enum MemoryEstimateResult memory_estimate_term_memory_usage(term t, unsigned long *estimated_terms, int *max_stack_slots)
 {
     int temp_stack_size = 3;

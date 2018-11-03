@@ -103,5 +103,6 @@ void memory_gc_and_shrink(Context *ctx);
  * @returns MEMORY_ESTIMATE_OK when successful.
  */
 enum MemoryEstimateResult memory_estimate_term_memory_usage(term t, unsigned long *estimated_terms, int *max_stack_slots);
+unsigned long memory_estimate_usage(term t, unsigned long acc);
 
 #endif

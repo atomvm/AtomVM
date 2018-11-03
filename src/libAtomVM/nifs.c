@@ -880,9 +880,8 @@ static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])
     }
 
     unsigned long terms_count;
-    int stack_slots;
 
-    memory_estimate_term_memory_usage(argv[0], &terms_count, &stack_slots);
+    terms_count = memory_estimate_usage(argv[0], 0);
 
     return term_from_int32(terms_count);
 }
