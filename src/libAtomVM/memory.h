@@ -94,6 +94,6 @@ void memory_gc_and_shrink(Context *ctx);
  * @param t root term on which used memory calculation will be performed.
  * @returns used memory terms count in term units output parameter.
  */
-unsigned long memory_estimate_usage(term t, unsigned long acc);
+unsigned long memory_estimate_usage(term t);
 
 #endif

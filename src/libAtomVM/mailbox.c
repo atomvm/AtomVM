@@ -33,7 +33,7 @@ void mailbox_send(Context *c, term t)
 {
     TRACE("Sending 0x%lx to pid %i\n", t, c->process_id);
 
-    unsigned long estimated_mem_usage = memory_estimate_usage(t, 0);
+    unsigned long estimated_mem_usage = memory_estimate_usage(t);
     //TODO: * 2 is a temporary workaround. New memory allocator shouldn't need this.
     unsigned long estimated_size = estimated_mem_usage * 2;
 
