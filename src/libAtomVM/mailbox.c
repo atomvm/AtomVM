@@ -33,13 +33,9 @@ void mailbox_send(Context *c, term t)
 {
     TRACE("Sending 0x%lx to pid %i\n", t, c->process_id);
 
-    int stack_slots;
-    unsigned long estimated_mem_usage;
-    if (UNLIKELY(memory_estimate_term_memory_usage(t, &estimated_mem_usage, &stack_slots) != MEMORY_ESTIMATE_OK)) {
-        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        return;
-    }
-    unsigned long estimated_size = estimated_mem_usage + stack_slots;
+    unsigned long estimated_mem_usage = memory_estimate_usage(t, 0);
+    //TODO: * 2 is a temporary workaround. New memory allocator shouldn't need this.
+    unsigned long estimated_size = estimated_mem_usage * 2;
 
     Message *m = malloc(sizeof(Message) + estimated_size * sizeof(term));
     if (IS_NULL_PTR(m)) {

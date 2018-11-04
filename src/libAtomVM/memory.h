@@ -38,12 +38,6 @@ enum MemoryGCResult
     MEMORY_GC_ERROR_FAILED_ALLOCATION = 1
 };
 
-enum MemoryEstimateResult
-{
-    MEMORY_ESTIMATE_OK = 0,
-    MEMORY_ESTIMATE_FAILED_ALLOCATION = 1
-};
-
 /**
  * @brief allocates space for a certain ammount of terms on the heap
  *
@@ -98,11 +92,8 @@ void memory_gc_and_shrink(Context *ctx);
  *
  * @details perform an used memory calculation using given term as root, shared memory (that is not part of the memory block) is not accounted.
  * @param t root term on which used memory calculation will be performed.
- * @param max_stack_slots maximum number of stack items needed to process a term tree output parameter.
- * @param estimated_terms used memory count in term units output parameter.
- * @returns MEMORY_ESTIMATE_OK when successful.
+ * @returns used memory terms count in term units output parameter.
  */
-enum MemoryEstimateResult memory_estimate_term_memory_usage(term t, unsigned long *estimated_terms, int *max_stack_slots);
 unsigned long memory_estimate_usage(term t, unsigned long acc);
 
 #endif
