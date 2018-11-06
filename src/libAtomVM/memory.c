@@ -489,41 +489,96 @@ term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move)
     return previous_term;
 }
 
+struct TempStack
+{
+    term *stack_end;
+    term *stack_pos;
+    int size;
+};
+
+static inline void temp_stack_init(struct TempStack *temp_stack)
+{
+    temp_stack->size = 8;
+    temp_stack->stack_end = ((term *) malloc(temp_stack->size * sizeof(term))) + temp_stack->size;
+    temp_stack->stack_pos = temp_stack->stack_end;
+}
+
+static inline void temp_stack_destory(struct TempStack *temp_stack)
+{
+    free(temp_stack->stack_end - temp_stack->size);
+}
+
+static void temp_stack_grow(struct TempStack *temp_stack)
+{
+    int old_used_size = temp_stack->stack_end - temp_stack->stack_pos;
+    int new_size = temp_stack->size * 2;
+    term *new_stack_end = ((term *) malloc(new_size * sizeof(term))) + new_size;
+    term *new_stack_pos = new_stack_end - old_used_size;
+    memcpy(new_stack_pos, temp_stack->stack_pos, old_used_size * sizeof(term));
+
+    free(temp_stack->stack_end - temp_stack->size);
+    temp_stack->stack_end = new_stack_end;
+    temp_stack->stack_pos = new_stack_pos;
+    temp_stack->size = new_size;
+}
+
+static inline int temp_stack_is_empty(const struct TempStack *temp_stack)
+{
+    return temp_stack->stack_end == temp_stack->stack_pos;
+}
+
+static inline void temp_stack_push(struct TempStack *temp_stack, term value)
+{
+    if (temp_stack->stack_end - temp_stack->stack_pos == temp_stack->size - 1) {
+        temp_stack_grow(temp_stack);
+    }
+
+    temp_stack->stack_pos--;
+    *temp_stack->stack_pos = value;
+}
+
+static inline term temp_stack_pop(struct TempStack *temp_stack)
+{
+    term value = *temp_stack->stack_pos;
+    temp_stack->stack_pos++;
+
+    return value;
+}
+
 unsigned long memory_estimate_usage(term t)
 {
     unsigned long acc = 0;
 
-    int temp_stack_size = 32;
-    term *base_stack = ((term *) malloc(temp_stack_size * sizeof(term))) + temp_stack_size;
-    term *stack_pos = base_stack;
+    struct TempStack temp_stack;
+    temp_stack_init(&temp_stack);
 
-    push_to_stack(&stack_pos, t);
+    temp_stack_push(&temp_stack, t);
 
-    while (base_stack != stack_pos) {
+    while (!temp_stack_is_empty(&temp_stack)) {
         if (term_is_atom(t)) {
-            t = pop_from_stack(&stack_pos);
+            t = temp_stack_pop(&temp_stack);
 
         } else if (term_is_integer(t)) {
-            t = pop_from_stack(&stack_pos);
+            t = temp_stack_pop(&temp_stack);
 
         } else if (term_is_nil(t)) {
-            t = pop_from_stack(&stack_pos);
+            t = temp_stack_pop(&temp_stack);
 
         } else if (term_is_pid(t)) {
-            t = pop_from_stack(&stack_pos);
+            t = temp_stack_pop(&temp_stack);
 
         } else if (term_is_reference(t)) {
             acc += term_boxed_size(t) + 1;
-            t = pop_from_stack(&stack_pos);
+            t = temp_stack_pop(&temp_stack);
 
         } else if (term_is_binary(t)) {
             //TODO: binaries might be shared outside process heap.
             acc += term_boxed_size(t) + 1;
-            t = pop_from_stack(&stack_pos);
+            t = temp_stack_pop(&temp_stack);
 
         } else if (term_is_nonempty_list(t)) {
             acc += 2;
-            push_to_stack(&stack_pos, term_get_list_tail(t));
+            temp_stack_push(&temp_stack, term_get_list_tail(t));
             t = term_get_list_head(t);
 
         } else if (term_is_tuple(t)) {
@@ -532,7 +587,7 @@ unsigned long memory_estimate_usage(term t)
 
             if (tuple_size > 0) {
                 for (int i = 1; i < tuple_size; i++) {
-                    push_to_stack(&stack_pos, term_get_tuple_element(t, i));
+                    temp_stack_push(&temp_stack, term_get_tuple_element(t, i));
                 }
                 t = term_get_tuple_element(t, 0);
 
@@ -544,6 +599,8 @@ unsigned long memory_estimate_usage(term t)
             abort();
         }
     }
+
+    temp_stack_destory(&temp_stack);
 
     return acc;
 }
