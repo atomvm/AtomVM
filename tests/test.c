@@ -130,6 +130,7 @@ struct Test tests[] =
     {"nested_list_size1.beam", 2},
     {"nested_list_size2.beam", 8},
     {"nested_list_size3.beam", 68},
+    {"nested_list_size4.beam", 408},
 
     {"simple_list_size0.beam", 2},
     {"simple_list_size1.beam", 10},
@@ -156,6 +157,7 @@ struct Test tests[] =
     //TEST CRASHES HERE: {"complex_struct_size1.beam", 37},
     //TEST CRASHES HERE: {"complex_struct_size2.beam", 105},
     //TEST CRASHES HERE: {"complex_struct_size3.beam", 23},
+    {"complex_struct_size4.beam", 126},
 
     {"make_garbage0.beam", -19},
     //TEST CRASHES HERE: {"make_garbage1.beam", -18},

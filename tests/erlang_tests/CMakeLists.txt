@@ -94,11 +94,13 @@ compile_erlang(complex_struct_size0)
 compile_erlang(complex_struct_size1)
 compile_erlang(complex_struct_size2)
 compile_erlang(complex_struct_size3)
+compile_erlang(complex_struct_size4)
 
 compile_erlang(nested_list_size0)
 compile_erlang(nested_list_size1)
 compile_erlang(nested_list_size2)
 compile_erlang(nested_list_size3)
+compile_erlang(nested_list_size4)
 compile_erlang(nested_tuple_size0)
 compile_erlang(nested_tuple_size1)
 compile_erlang(nested_tuple_size2)
@@ -235,11 +237,13 @@ add_custom_target(erlang_test_modules DEPENDS
     complex_struct_size1.beam
     complex_struct_size2.beam
     complex_struct_size3.beam
+    complex_struct_size4.beam
 
     nested_list_size0.beam
     nested_list_size1.beam
     nested_list_size2.beam
     nested_list_size3.beam
+    nested_list_size4.beam
 
     nested_tuple_size0.beam
     nested_tuple_size1.beam
