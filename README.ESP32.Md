@@ -13,6 +13,8 @@ cd src/platforms/esp32/
 make
 ```
 
+> Note: GNU Make required
+
 * flash:
 ```
 make flash

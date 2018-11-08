@@ -28,7 +28,7 @@
 #include "context.h"
 #include "globalcontext.h"
 #include "iff.h"
-#include "platforms/Linux/mapped_file.h"
+#include "platforms/generic_unix/mapped_file.h"
 #include "module.h"
 #include "utils.h"
 #include "term.h"
