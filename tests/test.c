@@ -29,7 +29,7 @@
 #include "atom.h"
 #include "bif.h"
 #include "context.h"
-#include "../platforms/Linux/mapped_file.h"
+#include "../platforms/generic_unix/mapped_file.h"
 #include "module.h"
 #include "iff.h"
 #include "term.h"

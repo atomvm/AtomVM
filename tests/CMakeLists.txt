@@ -9,12 +9,20 @@ endif()
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR} ../src/libAtomVM/)
 
-add_executable(test-erlang test.c ../src/platforms/${CMAKE_SYSTEM_NAME}/sys.c ../src/platforms/${CMAKE_SYSTEM_NAME}/mapped_file.c ../src/platforms/${CMAKE_SYSTEM_NAME}/udpdriver.c)
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+    set(PLATFORM_DIR "generic_unix")
+elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+    set(PLATFORM_DIR "generic_unix")
+else()
+    message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_NAME}")
+endif()
+
+add_executable(test-erlang test.c ../src/platforms/${PLATFORM_DIR}/sys.c ../src/platforms/${PLATFORM_DIR}/mapped_file.c ../src/platforms/${PLATFORM_DIR}/udpdriver.c)
 target_link_libraries(test-erlang libAtomVM)
 set_property(TARGET test-erlang PROPERTY C_STANDARD 99)
 add_dependencies(test-erlang erlang_test_modules)
 
-add_executable(test-structs test-structs.c ../src/platforms/${CMAKE_SYSTEM_NAME}/sys.c ../src/platforms/${CMAKE_SYSTEM_NAME}/mapped_file.c ../src/platforms/${CMAKE_SYSTEM_NAME}/udpdriver.c)
+add_executable(test-structs test-structs.c ../src/platforms/${PLATFORM_DIR}/sys.c ../src/platforms/${PLATFORM_DIR}/mapped_file.c ../src/platforms/${PLATFORM_DIR}/udpdriver.c)
 target_link_libraries(test-structs libAtomVM)
 set_property(TARGET test-structs PROPERTY C_STANDARD 99)
 
