@@ -45,10 +45,12 @@ static void process_echo_mailbox(Context *ctx);
 static void process_console_mailbox(Context *ctx);
 
 static void display_term(term t, Context *ctx);
+static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new);
 
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_atom_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_binary_to_existing_atom_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_display_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[]);
@@ -83,6 +85,12 @@ static const struct Nif binary_to_atom_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_binary_to_atom_2
+};
+
+static const struct Nif binary_to_existing_atom_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_binary_to_existing_atom_2
 };
 
 static const struct Nif delete_element_nif =
@@ -690,6 +698,16 @@ static term nif_erlang_tuple_to_list_1(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_binary_to_atom_2(Context *ctx, int argc, term argv[])
 {
+    return binary_to_atom(ctx, argc, argv, 1);
+}
+
+static term nif_erlang_binary_to_existing_atom_2(Context *ctx, int argc, term argv[])
+{
+    return binary_to_atom(ctx, argc, argv, 0);
+}
+
+static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
+{
     if (argc != 2) {
         fprintf(stderr, "binary_to_atom: wrong args count\n");
         abort();
@@ -716,8 +734,15 @@ static term nif_erlang_binary_to_atom_2(Context *ctx, int argc, term argv[])
     ((uint8_t *) atom)[0] = atom_string_len;
     memcpy(((char *) atom) + 1, atom_string, atom_string_len);
 
-    int global_atom_index = globalcontext_insert_atom(ctx->global, atom);
-    return term_from_atom_index(global_atom_index);
+
+    if (create_new || atomshashtable_has_key(ctx->global->atoms_table, atom)) {
+        int global_atom_index = globalcontext_insert_atom(ctx->global, atom);
+        return term_from_atom_index(global_atom_index);
+
+    } else {
+        //TODO: throw error here
+        return term_nil();
+    }
 }
 
 term nif_erlang_list_to_atom_1(Context *ctx, int argc, term argv[])
