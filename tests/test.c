@@ -124,6 +124,7 @@ struct Test tests[] =
     {"test_list_to_atom.beam", 9},
     {"test_list_to_existing_atom.beam", 9},
     {"test_binary_to_atom.beam", 9},
+    {"test_binary_to_existing_atom.beam", 9},
     {"test_atom_to_list.beam", 1},
     {"test_display.beam", 0},
 
