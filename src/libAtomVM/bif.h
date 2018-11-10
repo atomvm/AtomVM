@@ -30,7 +30,7 @@
 #include "exportedfunction.h"
 #include "module.h"
 
-#define MAX_BIF_NAME_LEN 32
+#define MAX_BIF_NAME_LEN 260
 
 BifImpl bif_registry_get_handler(AtomString module, AtomString function, int arity);
 term bif_erlang_self_0(Context *ctx);

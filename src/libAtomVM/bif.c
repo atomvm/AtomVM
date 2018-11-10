@@ -49,8 +49,12 @@ BifImpl bif_registry_get_handler(AtomString module, AtomString function, int ari
     bifname[module_name_len] = ':';
 
     int function_name_len = atom_string_len(function);
+    if (UNLIKELY((arity > 9) || (module_name_len + function_name_len + 4 > MAX_BIF_NAME_LEN))) {
+        abort();
+    }
     memcpy(bifname + module_name_len + 1, atom_string_data(function), function_name_len);
 
+    //TODO: handle BIFs with more than 9 parameters
     bifname[module_name_len + function_name_len + 1] = '/';
     bifname[module_name_len + function_name_len + 2] = '0' + arity;
     bifname[module_name_len + function_name_len + 3] = 0;

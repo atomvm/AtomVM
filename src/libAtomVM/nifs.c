@@ -34,7 +34,7 @@
 #include <string.h>
 #include <time.h>
 
-#define MAX_NIF_NAME_LEN 32
+#define MAX_NIF_NAME_LEN 260
 
 static const char *const latin1_atom = "\x6" "latin1";
 static const char *const ok_atom = "\x2" "ok";
@@ -219,8 +219,12 @@ const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
     nifname[module_name_len] = ':';
 
     int function_name_len = atom_string_len(function);
+    if (UNLIKELY((arity > 9) || (module_name_len + function_name_len + 4 > MAX_NIF_NAME_LEN))) {
+        abort();
+    }
     memcpy(nifname + module_name_len + 1, atom_string_data(function), function_name_len);
 
+    //TODO: handle NIFs with more than 9 parameters
     nifname[module_name_len + function_name_len + 1] = '/';
     nifname[module_name_len + function_name_len + 2] = '0' + arity;
     nifname[module_name_len + function_name_len + 3] = 0;
