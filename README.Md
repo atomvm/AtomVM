@@ -19,6 +19,7 @@ Supported Platforms
 
 * Linux
 * Darwin (MacOS)
+* FreeBSD
 * ESP32 SoC (with IDF and FreeRTOS software platforms, see [README.ESP32.Md](README.ESP32.Md))
 
 AtomVM aims to be easily portable to a new platform with a minimum effort, so more platforms might be supported in a near future.
