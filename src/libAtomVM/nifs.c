@@ -735,17 +735,24 @@ static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
         abort();
     }
 
-    AtomString *atom = malloc(atom_string_len + 1);
+    AtomString atom = malloc(atom_string_len + 1);
     ((uint8_t *) atom)[0] = atom_string_len;
     memcpy(((char *) atom) + 1, atom_string, atom_string_len);
 
+    unsigned long global_atom_index = atomshashtable_get_value(ctx->global->atoms_table, atom, ULONG_MAX);
+    int has_atom = (global_atom_index != ULONG_MAX);
 
-    if (create_new || atomshashtable_has_key(ctx->global->atoms_table, atom)) {
-        int global_atom_index = globalcontext_insert_atom(ctx->global, atom);
+    if (create_new || has_atom) {
+        if (!has_atom) {
+            global_atom_index = globalcontext_insert_atom(ctx->global, atom);
+        } else {
+            free((void *) atom);
+        }
         return term_from_atom_index(global_atom_index);
 
     } else {
-        //TODO: throw error here
+        free((void *) atom);
+        //TODO: error here
         return term_nil();
     }
 }
@@ -779,16 +786,23 @@ term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
         abort();
     }
 
-    AtomString *atom = malloc(atom_string_len + 1);
+    AtomString atom = malloc(atom_string_len + 1);
     ((uint8_t *) atom)[0] = atom_string_len;
     memcpy(((char *) atom) + 1, atom_string, atom_string_len);
 
-    if (create_new || atomshashtable_has_key(ctx->global->atoms_table, atom)) {
-        int global_atom_index = globalcontext_insert_atom(ctx->global, atom);
+    unsigned long global_atom_index = atomshashtable_get_value(ctx->global->atoms_table, atom, ULONG_MAX);
+    int has_atom = (global_atom_index != ULONG_MAX);
+
+    if (create_new || has_atom) {
+        if (!has_atom) {
+            global_atom_index = globalcontext_insert_atom(ctx->global, atom);
+        } else {
+            free((void *) atom);
+        }
         return term_from_atom_index(global_atom_index);
 
     } else {
-        free(atom);
+        free((void *) atom);
         //TODO: error here
         return term_nil();
     }
