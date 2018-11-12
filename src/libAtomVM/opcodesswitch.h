@@ -31,6 +31,8 @@
     #include "mailbox.h"
 #endif
 
+#define ENABLE_OTP21
+
 //#define ENABLE_TRACE
 
 #include "trace.h"
@@ -380,6 +382,8 @@
 #define OP_RECV_SET 151
 #define OP_LINE 153
 #define OP_IS_TAGGED_TUPLE 159
+#define OP_GET_HD 162
+#define OP_GET_TL 163
 
 #define INSTRUCTION_POINTER() \
     ((const void *) &code[i])
@@ -2422,6 +2426,58 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
 
                 break;
             }
+
+#ifdef ENABLE_OTP21
+            case OP_GET_HD: {
+                int next_off = 1;
+                term src_value;
+                DECODE_COMPACT_TERM(src_value, code, i, next_off, next_off)
+                int head_dreg;
+                uint8_t head_dreg_type;
+                DECODE_DEST_REGISTER(head_dreg, head_dreg_type, code, i, next_off, next_off);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("get_hd/2 %lx, %c%i\n", src_value, reg_type_c(head_dreg_type), head_dreg);
+
+                    term head = term_get_list_head(src_value);
+
+                    WRITE_REGISTER(head_dreg_type, head_dreg, head);
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("get_hd/2\n");
+                    UNUSED(src_value)
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_GET_TL: {
+                int next_off = 1;
+                term src_value;
+                DECODE_COMPACT_TERM(src_value, code, i, next_off, next_off)
+                int tail_dreg;
+                uint8_t tail_dreg_type;
+                DECODE_DEST_REGISTER(tail_dreg, tail_dreg_type, code, i, next_off, next_off);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("get_tl/2 %lx, %c%i\n", src_value, reg_type_c(tail_dreg_type), tail_dreg);
+
+                    term tail = term_get_list_tail(src_value);
+
+                    WRITE_REGISTER(tail_dreg_type, tail_dreg, tail);
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("get_tl/2\n");
+                    UNUSED(src_value)
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+#endif
 
             default:
                 printf("Undecoded opcode: %i\n", code[i]);
