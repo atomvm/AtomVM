@@ -57,6 +57,7 @@ static term nif_erlang_display_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[]);
+static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_existing_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[]);
@@ -110,6 +111,12 @@ static const struct Nif insert_element_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_insert_element_3
+};
+
+static const struct Nif integer_to_list_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_integer_to_list_1
 };
 
 static const struct Nif list_to_atom_nif =
@@ -826,6 +833,29 @@ static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
     for (int i = atom_len - 1; i >= 0; i--) {
         char c = ((const char *) atom_string_data(atom_string))[i];
         prev = term_list_prepend(term_from_int11(c), prev, ctx);
+    }
+
+    return prev;
+}
+
+static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[])
+{
+    if (argc != 1) {
+        fprintf(stderr, "integer_to_list: wrong args count\n");
+        abort();
+    }
+
+    int32_t int_value = term_to_int32(argv[0]);
+    char integer_string[24];
+
+    snprintf(integer_string, 24, "%i", int_value);
+    int integer_string_len = strlen(integer_string);
+
+    memory_ensure_free(ctx, integer_string_len * 2);
+
+    term prev = term_nil();
+    for (int i = integer_string_len - 1; i >= 0; i--) {
+        prev = term_list_prepend(term_from_int11(integer_string[i]), prev, ctx);
     }
 
     return prev;
