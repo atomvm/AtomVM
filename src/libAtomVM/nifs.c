@@ -58,6 +58,7 @@ static term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_existing_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[]);
@@ -129,6 +130,12 @@ static const struct Nif list_to_existing_atom_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_list_to_existing_atom_1
+};
+
+static const struct Nif list_to_integer_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_list_to_integer_1
 };
 
 static const struct Nif open_port_nif =
@@ -859,6 +866,65 @@ static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[])
     }
 
     return prev;
+}
+
+static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+
+    if (argc != 1) {
+        fprintf(stderr, "list_to_integer: wrong args count\n");
+        abort();
+    }
+
+    term t = argv[0];
+    int32_t acc = 0;
+    int digits = 0;
+
+    int negative = 0;
+    term first_digit = term_get_list_head(t);
+    if (first_digit == term_from_int11('-')) {
+        negative = 1;
+        t = term_get_list_tail(t);
+    } else if (first_digit == term_from_int11('+')) {
+        t = term_get_list_tail(t);
+    }
+
+    while (!term_is_nil(t)) {
+        term head = term_get_list_head(t);
+
+        if (UNLIKELY(!term_is_integer(head))) {
+            fprintf(stderr, "list_to_integer: bad argument.");
+            abort();
+        }
+
+        int32_t c = term_to_int32(head);
+
+        if (UNLIKELY((c < '0') || (c > '9'))) {
+            fprintf(stderr, "list_to_integer: bad argument.");
+            abort();
+        }
+
+        if (acc > INT32_MAX / 10) {
+            fprintf(stderr, "list_to_integer: overflow.");
+            abort();
+        }
+
+        acc = (acc * 10) + (c - '0');
+        digits++;
+        t = term_get_list_tail(t);
+    }
+
+    if (negative) {
+        acc = -acc;
+    }
+
+    if (UNLIKELY(digits == 0)) {
+        fprintf(stderr, "list_to_integer: bad argument.");
+        abort();
+    }
+
+    return term_from_int32(acc);
 }
 
 static term nif_erlang_display_1(Context *ctx, int argc, term argv[])

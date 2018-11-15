@@ -20,6 +20,7 @@ erlang:insert_element/3, &insert_element_nif
 erlang:list_to_atom/1, &list_to_atom_nif
 erlang:list_to_existing_atom/1, &list_to_existing_atom_nif
 erlang:integer_to_list/1, &integer_to_list_nif
+erlang:list_to_integer/1, &list_to_integer_nif
 erlang:open_port/2, &open_port_nif
 erlang:make_ref/0, &make_ref_nif
 erlang:make_tuple/2, &make_tuple_nif
