@@ -58,6 +58,7 @@ term bif_erlang_mul_2(Context *ctx, uint32_t failure_label, int live, term arg1,
 term bif_erlang_div_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
 term bif_erlang_rem_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
 term bif_erlang_neg_1(Context *ctx, uint32_t failure_label, int live, term arg1);
+term bif_erlang_abs_1(Context *ctx, uint32_t failure_label, int live, term arg1);
 
 term bif_erlang_bor_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
 term bif_erlang_band_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
