@@ -92,6 +92,7 @@ compile_erlang(test_atom_to_list)
 compile_erlang(test_display)
 compile_erlang(test_integer_to_list)
 compile_erlang(test_list_to_integer)
+compile_erlang(test_abs)
 
 compile_erlang(complex_struct_size0)
 compile_erlang(complex_struct_size1)
@@ -239,6 +240,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_display.beam
     test_integer_to_list.beam
     test_list_to_integer.beam
+    test_abs.beam
 
     complex_struct_size0.beam
     complex_struct_size1.beam

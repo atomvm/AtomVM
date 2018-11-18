@@ -129,6 +129,7 @@ struct Test tests[] =
     {"test_display.beam", 0},
     {"test_integer_to_list.beam", 1},
     {"test_list_to_integer.beam", 99},
+    {"test_abs.beam", 5},
 
     {"nested_list_size0.beam", 0},
     {"nested_list_size1.beam", 2},
