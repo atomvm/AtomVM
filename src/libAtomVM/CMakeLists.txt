@@ -3,7 +3,35 @@ project (libAtomVM)
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-set(LIBATOMVM_SOURCES
+if(${CMAKE_GENERATOR} STREQUAL "Xcode")
+    set(HEADER_FILES
+        atom.h
+        atomshashtable.h
+        avmpack.h
+        bif.h
+        context.h
+        debug.h
+        exportedfunction.h
+        externalterm.h
+        globalcontext.h
+        iff.h
+        interop.h
+        list.h
+        linkedlist.h
+        mailbox.h
+        memory.h
+        module.h
+        nifs.h
+        scheduler.h
+        sys.h
+        term_typedef.h
+        term.h
+        trace.h
+        utils.h
+        valueshashtable.h
+    )
+endif()
+set(SOURCE_FILES
     atom.c
     atomshashtable.c
     avmpack.c
@@ -48,7 +76,7 @@ gperf_generate(${CMAKE_CURRENT_SOURCE_DIR}/nifs.gperf nifs_hash.h)
 add_custom_target(generated DEPENDS bifs_hash.h)
 add_custom_target(generated-nifs-hash DEPENDS nifs_hash.h)
 
-add_library(libAtomVM ${LIBATOMVM_SOURCES})
+add_library(libAtomVM ${SOURCE_FILES} ${HEADER_FILES})
 add_dependencies(libAtomVM generated generated-nifs-hash)
 target_link_libraries(libAtomVM ${ZLIB_LIBRARIES})
 set_property(TARGET libAtomVM PROPERTY C_STANDARD 99)
