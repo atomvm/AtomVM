@@ -24,6 +24,7 @@ erlang:list_to_integer/1, &list_to_integer_nif
 erlang:open_port/2, &open_port_nif
 erlang:make_ref/0, &make_ref_nif
 erlang:make_tuple/2, &make_tuple_nif
+erlang:is_process_alive/1, &is_process_alive_nif
 erlang:register/2, &register_nif
 erlang:send/2, &send_nif
 erlang:setelement/3, &setelement_nif

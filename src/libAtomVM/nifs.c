@@ -40,6 +40,8 @@ static const char *const latin1_atom = "\x6" "latin1";
 static const char *const ok_atom = "\x2" "ok";
 static const char *const error_atom = "\x5" "error";
 static const char *const undefined_atom = "\x9" "undefined";
+static const char *const true_atom = "\x4" "true";
+static const char *const false_atom = "\x5" "false";
 
 static void process_echo_mailbox(Context *ctx);
 static void process_console_mailbox(Context *ctx);
@@ -58,6 +60,7 @@ static term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_is_process_alive_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_existing_atom_1(Context *ctx, int argc, term argv[]);
@@ -118,6 +121,12 @@ static const struct Nif integer_to_list_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_integer_to_list_1
+};
+
+static const struct Nif is_process_alive_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_is_process_alive_1
 };
 
 static const struct Nif list_to_atom_nif =
@@ -435,6 +444,24 @@ static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
     mailbox_send(target, argv[1]);
 
     return argv[1];
+}
+
+static term nif_erlang_is_process_alive_1(Context *ctx, int argc, term argv[])
+{
+    if (UNLIKELY(argc != 1)) {
+        fprintf(stderr, "is_process_alive: wrong args count\n");
+        abort();
+    }
+
+    int local_process_id = term_to_local_process_id(argv[0]);
+    Context *target = globalcontext_get_process(ctx->global, local_process_id);
+    if (target) {
+        int true_i = globalcontext_insert_atom(ctx->global, true_atom);
+        return term_from_atom_index(true_i);
+    } else {
+        int false_i = globalcontext_insert_atom(ctx->global, false_atom);
+        return term_from_atom_index(false_i);
+    }
 }
 
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[])
