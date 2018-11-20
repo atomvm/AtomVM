@@ -130,6 +130,7 @@ struct Test tests[] =
     {"test_integer_to_list.beam", 1},
     {"test_list_to_integer.beam", 99},
     {"test_abs.beam", 5},
+    {"test_is_process_alive.beam", 121},
 
     {"nested_list_size0.beam", 0},
     {"nested_list_size1.beam", 2},
