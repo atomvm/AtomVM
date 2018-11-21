@@ -39,6 +39,8 @@
 
 #include <lwip/inet.h>
 
+#include <apps/sntp/sntp.h>
+
 #ifndef TRACE
     #ifdef ENABLE_TRACE
         #define TRACE printf
@@ -59,6 +61,7 @@ static const char *const network_a = "\x7" "network";
 static const char *const setup_a = "\x5" "setup";
 static const char *const ssid_a = "\x4" "ssid";
 static const char *const psk_a = "\x3" "psk";
+static const char *const sntp_a = "\x4" "sntp";
 
 static EventGroupHandle_t wifi_event_group;
 
@@ -106,6 +109,7 @@ static term setup_network(GlobalContext *glb, term config)
 {
     term ssid_value = interop_proplist_get_value(config, term_from_atom_string(glb, ssid_a));
     term pass_value = interop_proplist_get_value(config, term_from_atom_string(glb, psk_a));
+    term sntp_value = interop_proplist_get_value(config, term_from_atom_string(glb, sntp_a));
 
     char *ssid = interop_list_to_string(ssid_value);
     char *psk = interop_list_to_string(pass_value);
@@ -140,6 +144,15 @@ static term setup_network(GlobalContext *glb, term config)
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
     ESP_LOGI("NETWORK", "starting wifi: SSID: [%s], password: [%s].", wifi_config.sta.ssid, wifi_config.sta.password);
     ESP_ERROR_CHECK(esp_wifi_start());
+
+    if (sntp_value != term_nil()) {
+        char *sntp = interop_list_to_string(sntp_value);
+        if (sntp) {
+            sntp_setoperatingmode(SNTP_OPMODE_POLL);
+            sntp_setservername(0, sntp);
+            sntp_init();
+        }
+    }
 
     return term_from_atom_string(glb, ok_a);
 }
