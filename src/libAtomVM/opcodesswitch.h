@@ -467,7 +467,11 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
 #endif
 
 #pragma GCC diagnostic push
+#ifdef __GNUC__
+#ifndef __clang__
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#endif
+#endif
 
 #ifdef IMPL_CODE_LOADER
     int read_core_chunk(Module *mod)
