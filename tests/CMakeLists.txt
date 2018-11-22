@@ -9,23 +9,31 @@ endif()
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR} ../src/libAtomVM/)
 
-if(${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
-    set(PLATFORM_DIR "generic_unix")
-elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
-    set(PLATFORM_DIR "generic_unix")
-elseif(${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
-    set(PLATFORM_DIR "generic_unix")
-else()
-    message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_NAME}")
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+    include(CheckFunctionExists)
+    include(CheckLibraryExists)
+    check_library_exists(rt clock_gettime "time.h" HAVE_CLOCK_GETTIME)
+    if (HAVE_CLOCK_GETTIME)
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lrt")
+        set(CMAKE_C_STANDARD_LIBRARIES "${CMAKE_C_STANDARD_LIBRARIES} -lrt")
+    else()
+        # might also be in libc
+        check_library_exists(c clock_gettime "" HAVE_CLOCK_GETTIME)
+    endif()
 endif()
 
-add_executable(test-erlang test.c ../src/platforms/${PLATFORM_DIR}/sys.c ../src/platforms/${PLATFORM_DIR}/mapped_file.c ../src/platforms/${PLATFORM_DIR}/udpdriver.c)
-target_link_libraries(test-erlang libAtomVM)
+set(
+    PLATFORM_LIB_SUFFIX
+    ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
+)
+
+add_executable(test-erlang test.c)
+target_link_libraries(test-erlang libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX} libAtomVM)
 set_property(TARGET test-erlang PROPERTY C_STANDARD 99)
 add_dependencies(test-erlang erlang_test_modules)
 
-add_executable(test-structs test-structs.c ../src/platforms/${PLATFORM_DIR}/sys.c ../src/platforms/${PLATFORM_DIR}/mapped_file.c ../src/platforms/${PLATFORM_DIR}/udpdriver.c)
-target_link_libraries(test-structs libAtomVM)
+add_executable(test-structs test-structs.c)
+target_link_libraries(test-structs libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
 set_property(TARGET test-structs PROPERTY C_STANDARD 99)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Coverage")

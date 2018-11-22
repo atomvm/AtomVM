@@ -1,0 +1,5 @@
+build/**
+xcode/**
+src/platforms/esp32/build/**
+src/platforms/esp32/build/**/*.o
+src/platforms/esp32/build/**/*.d
