@@ -10,8 +10,8 @@ if(${CMAKE_GENERATOR} STREQUAL "Xcode")
     )
 endif()
 set(SOURCE_FILES
-    sys.c 
-    mapped_file.c 
+    sys.c
+    mapped_file.c
     udpdriver.c
 )
 
