@@ -29,7 +29,7 @@
 #include <limits.h>
 #include <stdint.h>
 
-static inline void clock_gettime(struct timespec *t)
+static inline void sys_clock_gettime(struct timespec *t)
 {
     TickType_t ticks = xTaskGetTickCount();
     t->tv_sec = (ticks * portTICK_PERIOD_MS) / 1000;
@@ -44,7 +44,7 @@ static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *
 extern void sys_waitevents(struct ListHead *listeners_list)
 {
     struct timespec now;
-    clock_gettime(&now);
+    sys_clock_gettime(&now);
 
     EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
 
@@ -74,7 +74,7 @@ extern void sys_waitevents(struct ListHead *listeners_list)
     //second: execute handlers for expiered timers
     if (min_timeout != INT_MAX) {
         listener = listeners;
-        clock_gettime(&now);
+        sys_clock_gettime(&now);
         do {
             EventListener *next_listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
             if (listener->expires) {
@@ -92,7 +92,7 @@ extern void sys_waitevents(struct ListHead *listeners_list)
 
 extern void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis)
 {
-    clock_gettime(t);
+    sys_clock_gettime(t);
     t->tv_sec += millis / 1000;
     t->tv_nsec += (millis % 1000) * 1000000;
 }
