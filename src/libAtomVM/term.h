@@ -80,6 +80,18 @@ static inline int term_is_atom(term t)
 }
 
 /**
+ * @brief Check if a term is an invalid term
+ *
+ * @details Returns 1 if a term is an invalid term, otherwise 0 is returned.
+ * @param t the term that will be checked.
+ * @return 1 if check succedes, 0 otherwise.
+ */
+static inline int term_is_invalid_term(term t)
+{
+    return (t == 0);
+}
+
+/**
  * @brief Checks if a term is nil
  *
  * @details Returns 1 if a term is nil, otherwise 0.
@@ -275,6 +287,17 @@ static inline int term_is_reference(term t)
 static inline int term_is_cp(term t)
 {
     return ((t & 0x3) == 0);
+}
+
+/**
+ * @brief Gets invalid term
+ *
+ * @details Returns always an invalid term.
+ * @return invalid term.
+ */
+static inline int term_invalid_term()
+{
+    return 0;
 }
 
 /**

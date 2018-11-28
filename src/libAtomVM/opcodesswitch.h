@@ -396,6 +396,16 @@
 #define POINTER_TO_II(instruction_pointer) \
     (((uint8_t *) (instruction_pointer)) - code)
 
+#define RAISE_EXCEPTION() \
+    int target_label = get_catch_label_and_change_module(ctx, &mod); \
+    if (target_label) { \
+        JUMP_TO_ADDRESS(mod->labels[target_label]); \
+        break; \
+    } else { \
+        fprintf(stderr, "exception.\n"); \
+        abort(); \
+    }
+
 static const char *const true_atom = "\x04" "true";
 static const char *const false_atom = "\x05" "false";
 
@@ -704,7 +714,11 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
                     switch (func->type) {
                         case NIFFunctionType: {
                             const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
-                            ctx->x[0] = nif->nif_ptr(ctx, arity, ctx->x);
+                            term return_value = nif->nif_ptr(ctx, arity, ctx->x);
+                            if (UNLIKELY(term_is_invalid_term(return_value))) {
+                                RAISE_EXCEPTION();
+                            }
+                            ctx->x[0] = return_value;
                             break;
                         }
                         case ModuleFunction: {
@@ -760,7 +774,12 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
                     switch (func->type) {
                         case NIFFunctionType: {
                             const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
-                            ctx->x[0] = nif->nif_ptr(ctx, arity, ctx->x);
+                            term return_value = nif->nif_ptr(ctx, arity, ctx->x);
+                            if (UNLIKELY(term_is_invalid_term(return_value))) {
+                                RAISE_EXCEPTION();
+                            }
+                            ctx->x[0] = return_value;
+
                             DO_RETURN();
 
                             break;
@@ -2140,7 +2159,11 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
                     switch (func->type) {
                         case NIFFunctionType: {
                             const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
-                            ctx->x[0] = nif->nif_ptr(ctx, arity, ctx->x);
+                            term return_value = nif->nif_ptr(ctx, arity, ctx->x);
+                            if (UNLIKELY(term_is_invalid_term(return_value))) {
+                                RAISE_EXCEPTION();
+                            }
+                            ctx->x[0] = return_value;
                             if ((long) ctx->cp == -1) {
                                 return 0;
                             }
