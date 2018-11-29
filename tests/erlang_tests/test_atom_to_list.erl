@@ -1,10 +1,13 @@
 -module(test_atom_to_list).
--export([start/0, f/1, g/1, compare_list/2]).
+-export([start/0, f/1, g/1, h/1, compare_list/2]).
 
 start() ->
-    compare_list(f(hello_world), "hello" ++ g(world)).
+    compare_list(f(hello_world), "hello" ++ g(world)) - h(15).
 
-f(A) when is_atom(A) ->
+f(A) when is_binary(A) ->
+    binaries_not_ok;
+
+f(A) ->
     atom_to_list(A).
 
 compare_list([], []) ->
@@ -21,3 +24,10 @@ g(world) ->
 
 g(A) when is_atom(A) ->
     "?".
+
+h(A) ->
+    try f(A) of
+        AnyVal -> 1
+    catch
+        _:_ -> 0
+    end.

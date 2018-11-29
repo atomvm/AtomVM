@@ -2,7 +2,7 @@
 -export([start/0, f/1, g/1, h/1, i/1]).
 
 start() ->
-    f(i(h(g(2)))) + f(i(h(g(10)))).
+    f(i(h(g(2)))) + f(i(h(g(10)))) + i(10).
 
 f(hello) ->
     1;
@@ -31,8 +31,12 @@ h(4) ->
 h(_) ->
     [].
 
-i(A) when not is_list(A) ->
+i(A) when is_binary(A) ->
     error;
 
 i(A) ->
-    list_to_atom(A).
+    try list_to_atom(A) of
+        Value -> Value
+    catch
+        _:_ -> 0
+    end.
