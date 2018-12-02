@@ -73,19 +73,16 @@ term bif_erlang_self_0(Context *ctx)
     return term_from_local_process_id(ctx->process_id);
 }
 
-term bif_erlang_byte_size_1(Context *ctx, uint32_t failure_label, int live, term arg1)
+term bif_erlang_byte_size_1(Context *ctx, int live, term arg1)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
     UNUSED(live);
 
     return term_from_int32(term_binary_size(arg1));
 }
 
-term bif_erlang_is_atom_1(Context *ctx, uint32_t fail_label, term arg1)
+term bif_erlang_is_atom_1(Context *ctx, term arg1)
 {
-    UNUSED(fail_label);
-
     if (term_is_atom(arg1)) {
         return term_from_atom_string(ctx->global, true_atom);
     } else {
@@ -93,10 +90,8 @@ term bif_erlang_is_atom_1(Context *ctx, uint32_t fail_label, term arg1)
     }
 }
 
-term bif_erlang_is_binary_1(Context *ctx, uint32_t fail_label, term arg1)
+term bif_erlang_is_binary_1(Context *ctx, term arg1)
 {
-    UNUSED(fail_label);
-
     if (term_is_binary(arg1)) {
         return term_from_atom_string(ctx->global, true_atom);
     } else {
@@ -104,10 +99,8 @@ term bif_erlang_is_binary_1(Context *ctx, uint32_t fail_label, term arg1)
     }
 }
 
-term bif_erlang_is_integer_1(Context *ctx, uint32_t fail_label, term arg1)
+term bif_erlang_is_integer_1(Context *ctx, term arg1)
 {
-    UNUSED(fail_label);
-
     if (term_is_integer(arg1)) {
         return term_from_atom_string(ctx->global, true_atom);
     } else {
@@ -115,10 +108,8 @@ term bif_erlang_is_integer_1(Context *ctx, uint32_t fail_label, term arg1)
     }
 }
 
-term bif_erlang_is_list_1(Context *ctx, uint32_t fail_label, term arg1)
+term bif_erlang_is_list_1(Context *ctx, term arg1)
 {
-    UNUSED(fail_label);
-
     if (term_is_list(arg1)) {
         return term_from_atom_string(ctx->global, true_atom);
     } else {
@@ -126,10 +117,8 @@ term bif_erlang_is_list_1(Context *ctx, uint32_t fail_label, term arg1)
     }
 }
 
-term bif_erlang_is_number_1(Context *ctx, uint32_t fail_label, term arg1)
+term bif_erlang_is_number_1(Context *ctx, term arg1)
 {
-    UNUSED(fail_label);
-
     //TODO: change to term_is_number
     if (term_is_integer(arg1)) {
         return term_from_atom_string(ctx->global, true_atom);
@@ -138,10 +127,8 @@ term bif_erlang_is_number_1(Context *ctx, uint32_t fail_label, term arg1)
     }
 }
 
-term bif_erlang_is_pid_1(Context *ctx, uint32_t fail_label, term arg1)
+term bif_erlang_is_pid_1(Context *ctx, term arg1)
 {
-    UNUSED(fail_label);
-
     if (term_is_pid(arg1)) {
         return term_from_atom_string(ctx->global, true_atom);
     } else {
@@ -149,10 +136,8 @@ term bif_erlang_is_pid_1(Context *ctx, uint32_t fail_label, term arg1)
     }
 }
 
-term bif_erlang_is_reference_1(Context *ctx, uint32_t fail_label, term arg1)
+term bif_erlang_is_reference_1(Context *ctx, term arg1)
 {
-    UNUSED(fail_label);
-
     if (term_is_reference(arg1)) {
         return term_from_atom_string(ctx->global, true_atom);
     } else {
@@ -160,10 +145,8 @@ term bif_erlang_is_reference_1(Context *ctx, uint32_t fail_label, term arg1)
     }
 }
 
-term bif_erlang_is_tuple_1(Context *ctx, uint32_t fail_label, term arg1)
+term bif_erlang_is_tuple_1(Context *ctx, term arg1)
 {
-    UNUSED(fail_label);
-
     if (term_is_tuple(arg1)) {
         return term_from_atom_string(ctx->global, true_atom);
     } else {
@@ -171,28 +154,25 @@ term bif_erlang_is_tuple_1(Context *ctx, uint32_t fail_label, term arg1)
     }
 }
 
-term bif_erlang_length_1(Context *ctx, uint32_t failure_label, int live, term arg1)
+term bif_erlang_length_1(Context *ctx, int live, term arg1)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
     UNUSED(live);
 
     return term_from_int32(term_list_length(arg1));
 }
 
 //TODO: fail if not a list
-term bif_erlang_hd_1(Context *ctx, uint32_t failure_label, term arg1)
+term bif_erlang_hd_1(Context *ctx, term arg1)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
 
     return term_get_list_head(arg1);
 }
 
-term bif_erlang_tl_1(Context *ctx, uint32_t failure_label, term arg1)
+term bif_erlang_tl_1(Context *ctx, term arg1)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
 
     if (UNLIKELY(!term_is_nonempty_list(arg1))) {
         fprintf(stderr, "tl: bad argument\n");
@@ -202,10 +182,9 @@ term bif_erlang_tl_1(Context *ctx, uint32_t failure_label, term arg1)
     return term_get_list_tail(arg1);
 }
 
-term bif_erlang_element_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
+term bif_erlang_element_2(Context *ctx, term arg1, term arg2)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
 
     if (UNLIKELY(!term_is_integer(arg1))) {
         printf("element: bad argument: %lx %lx.\n", arg1, arg2);
@@ -223,18 +202,16 @@ term bif_erlang_element_2(Context *ctx, uint32_t failure_label, term arg1, term 
     }
 }
 
-term bif_erlang_tuple_size_1(Context *ctx, uint32_t failure_label, term arg1)
+term bif_erlang_tuple_size_1(Context *ctx, term arg1)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
 
     return term_from_int32(term_get_tuple_arity(arg1));
 }
 
-term bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
+term bif_erlang_add_2(Context *ctx, int live, term arg1, term arg2)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
@@ -247,10 +224,9 @@ term bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1,
     }
 }
 
-term bif_erlang_sub_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
+term bif_erlang_sub_2(Context *ctx, int live, term arg1, term arg2)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
@@ -263,10 +239,9 @@ term bif_erlang_sub_2(Context *ctx, uint32_t failure_label, int live, term arg1,
     }
 }
 
-term bif_erlang_mul_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
+term bif_erlang_mul_2(Context *ctx, int live, term arg1, term arg2)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
@@ -279,10 +254,9 @@ term bif_erlang_mul_2(Context *ctx, uint32_t failure_label, int live, term arg1,
     }
 }
 
-term bif_erlang_div_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
+term bif_erlang_div_2(Context *ctx, int live, term arg1, term arg2)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
@@ -301,10 +275,9 @@ term bif_erlang_div_2(Context *ctx, uint32_t failure_label, int live, term arg1,
     }
 }
 
-term bif_erlang_neg_1(Context *ctx, uint32_t failure_label, int live, term arg1)
+term bif_erlang_neg_1(Context *ctx, int live, term arg1)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1))) {
@@ -316,10 +289,9 @@ term bif_erlang_neg_1(Context *ctx, uint32_t failure_label, int live, term arg1)
     }
 }
 
-term bif_erlang_abs_1(Context *ctx, uint32_t failure_label, int live, term arg1)
+term bif_erlang_abs_1(Context *ctx, int live, term arg1)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1))) {
@@ -336,10 +308,9 @@ term bif_erlang_abs_1(Context *ctx, uint32_t failure_label, int live, term arg1)
     }
 }
 
-term bif_erlang_rem_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
+term bif_erlang_rem_2(Context *ctx, int live, term arg1, term arg2)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
@@ -359,10 +330,9 @@ term bif_erlang_rem_2(Context *ctx, uint32_t failure_label, int live, term arg1,
 
 }
 
-term bif_erlang_bor_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
+term bif_erlang_bor_2(Context *ctx, int live, term arg1, term arg2)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
@@ -374,10 +344,9 @@ term bif_erlang_bor_2(Context *ctx, uint32_t failure_label, int live, term arg1,
     }
 }
 
-term bif_erlang_band_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
+term bif_erlang_band_2(Context *ctx, int live, term arg1, term arg2)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
@@ -389,10 +358,9 @@ term bif_erlang_band_2(Context *ctx, uint32_t failure_label, int live, term arg1
     }
 }
 
-term bif_erlang_bxor_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
+term bif_erlang_bxor_2(Context *ctx, int live, term arg1, term arg2)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
@@ -404,10 +372,9 @@ term bif_erlang_bxor_2(Context *ctx, uint32_t failure_label, int live, term arg1
     }
 }
 
-term bif_erlang_bsl_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
+term bif_erlang_bsl_2(Context *ctx, int live, term arg1, term arg2)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
@@ -419,10 +386,9 @@ term bif_erlang_bsl_2(Context *ctx, uint32_t failure_label, int live, term arg1,
     }
 }
 
-term bif_erlang_bsr_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2)
+term bif_erlang_bsr_2(Context *ctx, int live, term arg1, term arg2)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
@@ -434,10 +400,9 @@ term bif_erlang_bsr_2(Context *ctx, uint32_t failure_label, int live, term arg1,
     }
 }
 
-term bif_erlang_bnot_1(Context *ctx, uint32_t failure_label, int live, term arg1)
+term bif_erlang_bnot_1(Context *ctx, int live, term arg1)
 {
     UNUSED(ctx);
-    UNUSED(failure_label);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1))) {
@@ -449,10 +414,8 @@ term bif_erlang_bnot_1(Context *ctx, uint32_t failure_label, int live, term arg1
     }
 }
 
-term bif_erlang_not_1(Context *ctx, uint32_t failure_label, term arg1)
+term bif_erlang_not_1(Context *ctx, term arg1)
 {
-    UNUSED(failure_label);
-
     term true_term = term_from_atom_string(ctx->global, true_atom);
     term false_term = term_from_atom_string(ctx->global, false_atom);
 
@@ -468,10 +431,8 @@ term bif_erlang_not_1(Context *ctx, uint32_t failure_label, term arg1)
     }
 }
 
-term bif_erlang_and_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
+term bif_erlang_and_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(failure_label);
-
     term true_term = term_from_atom_string(ctx->global, true_atom);
     term false_term = term_from_atom_string(ctx->global, false_atom);
 
@@ -493,10 +454,8 @@ term bif_erlang_and_2(Context *ctx, uint32_t failure_label, term arg1, term arg2
     }
 }
 
-term bif_erlang_or_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
+term bif_erlang_or_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(failure_label);
-
     term true_term = term_from_atom_string(ctx->global, true_atom);
     term false_term = term_from_atom_string(ctx->global, false_atom);
 
@@ -518,10 +477,8 @@ term bif_erlang_or_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
     }
 }
 
-term bif_erlang_xor_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
+term bif_erlang_xor_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(failure_label);
-
     term true_term = term_from_atom_string(ctx->global, true_atom);
     term false_term = term_from_atom_string(ctx->global, false_atom);
 
@@ -543,10 +500,8 @@ term bif_erlang_xor_2(Context *ctx, uint32_t failure_label, term arg1, term arg2
     }
 }
 
-term bif_erlang_equal_to_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
+term bif_erlang_equal_to_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(failure_label);
-
     //TODO: fix this implementation
     //it should compare any kind of type, and 5.0 == 5
     if (arg1 == arg2) {
@@ -556,10 +511,8 @@ term bif_erlang_equal_to_2(Context *ctx, uint32_t failure_label, term arg1, term
     }
 }
 
-term bif_erlang_not_equal_to_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
+term bif_erlang_not_equal_to_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(failure_label);
-
     //TODO: fix this implementation
     //it should compare any kind of type, and 5.0 != 5 is false
     if (arg1 != arg2) {
@@ -569,10 +522,8 @@ term bif_erlang_not_equal_to_2(Context *ctx, uint32_t failure_label, term arg1, 
     }
 }
 
-term bif_erlang_exactly_equal_to_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
+term bif_erlang_exactly_equal_to_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(failure_label);
-
     //TODO: fix this implementation, it needs to cover more types
     if (arg1 == arg2) {
         return term_from_atom_string(ctx->global, true_atom);
@@ -581,10 +532,8 @@ term bif_erlang_exactly_equal_to_2(Context *ctx, uint32_t failure_label, term ar
     }
 }
 
-term bif_erlang_exactly_not_equal_to_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
+term bif_erlang_exactly_not_equal_to_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(failure_label);
-
     //TODO: fix this implementation, it needs to cover more types
     if (arg1 != arg2) {
         return term_from_atom_string(ctx->global, true_atom);
@@ -594,10 +543,8 @@ term bif_erlang_exactly_not_equal_to_2(Context *ctx, uint32_t failure_label, ter
 }
 
 
-term bif_erlang_greater_than_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
+term bif_erlang_greater_than_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(failure_label);
-
     //TODO: fix this implementation, it needs to cover more types
     if (term_to_int32(arg1) > term_to_int32(arg2)) {
         return term_from_atom_string(ctx->global, true_atom);
@@ -606,10 +553,8 @@ term bif_erlang_greater_than_2(Context *ctx, uint32_t failure_label, term arg1, 
     }
 }
 
-term bif_erlang_less_than_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
+term bif_erlang_less_than_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(failure_label);
-
     //TODO: fix this implementation, it needs to cover more types
     if (term_to_int32(arg1) < term_to_int32(arg2)) {
         return term_from_atom_string(ctx->global, true_atom);
@@ -618,10 +563,8 @@ term bif_erlang_less_than_2(Context *ctx, uint32_t failure_label, term arg1, ter
     }
 }
 
-term bif_erlang_less_than_or_equal_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
+term bif_erlang_less_than_or_equal_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(failure_label);
-
     //TODO: fix this implementation, it needs to cover more types
     if (term_to_int32(arg1) <= term_to_int32(arg2)) {
         return term_from_atom_string(ctx->global, true_atom);
@@ -630,10 +573,8 @@ term bif_erlang_less_than_or_equal_2(Context *ctx, uint32_t failure_label, term 
     }
 }
 
-term bif_erlang_greater_than_or_equal_2(Context *ctx, uint32_t failure_label, term arg1, term arg2)
+term bif_erlang_greater_than_or_equal_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(failure_label);
-
     //TODO: fix this implementation, it needs to cover more types
     if (term_to_int32(arg1) >= term_to_int32(arg2)) {
         return term_from_atom_string(ctx->global, true_atom);

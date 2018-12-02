@@ -34,53 +34,53 @@
 
 BifImpl bif_registry_get_handler(AtomString module, AtomString function, int arity);
 term bif_erlang_self_0(Context *ctx);
-term bif_erlang_byte_size_1(Context *ctx, uint32_t failure_label, int live, term arg1);
-term bif_erlang_length_1(Context *ctx, uint32_t failure_label, int live, term arg1);
+term bif_erlang_byte_size_1(Context *ctx, int live, term arg1);
+term bif_erlang_length_1(Context *ctx, int live, term arg1);
 
-term bif_erlang_is_atom_1(Context *ctx, uint32_t failure_label, term arg1);
-term bif_erlang_is_binary_1(Context *ctx, uint32_t failure_label, term arg1);
-term bif_erlang_is_integer_1(Context *ctx, uint32_t failure_label, term arg1);
-term bif_erlang_is_list_1(Context *ctx, uint32_t failure_label, term arg1);
-term bif_erlang_is_number_1(Context *ctx, uint32_t failure_label, term arg1);
-term bif_erlang_is_pid_1(Context *ctx, uint32_t failure_label, term arg1);
-term bif_erlang_is_reference_1(Context *ctx, uint32_t failure_label, term arg1);
-term bif_erlang_is_tuple_1(Context *ctx, uint32_t failure_label, term arg1);
+term bif_erlang_is_atom_1(Context *ctx, term arg1);
+term bif_erlang_is_binary_1(Context *ctx, term arg1);
+term bif_erlang_is_integer_1(Context *ctx, term arg1);
+term bif_erlang_is_list_1(Context *ctx, term arg1);
+term bif_erlang_is_number_1(Context *ctx, term arg1);
+term bif_erlang_is_pid_1(Context *ctx, term arg1);
+term bif_erlang_is_reference_1(Context *ctx, term arg1);
+term bif_erlang_is_tuple_1(Context *ctx, term arg1);
 
-term bif_erlang_hd_1(Context *ctx, uint32_t failure_label, term arg1);
-term bif_erlang_tl_1(Context *ctx, uint32_t failure_label, term arg1);
+term bif_erlang_hd_1(Context *ctx, term arg1);
+term bif_erlang_tl_1(Context *ctx, term arg1);
 
-term bif_erlang_element_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
-term bif_erlang_tuple_size_1(Context *ctx, uint32_t failure_label, term arg1);
+term bif_erlang_element_2(Context *ctx, term arg1, term arg2);
+term bif_erlang_tuple_size_1(Context *ctx, term arg1);
 
-term bif_erlang_add_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
-term bif_erlang_sub_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
-term bif_erlang_mul_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
-term bif_erlang_div_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
-term bif_erlang_rem_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
-term bif_erlang_neg_1(Context *ctx, uint32_t failure_label, int live, term arg1);
-term bif_erlang_abs_1(Context *ctx, uint32_t failure_label, int live, term arg1);
+term bif_erlang_add_2(Context *ctx, int live, term arg1, term arg2);
+term bif_erlang_sub_2(Context *ctx, int live, term arg1, term arg2);
+term bif_erlang_mul_2(Context *ctx, int live, term arg1, term arg2);
+term bif_erlang_div_2(Context *ctx, int live, term arg1, term arg2);
+term bif_erlang_rem_2(Context *ctx, int live, term arg1, term arg2);
+term bif_erlang_neg_1(Context *ctx, int live, term arg1);
+term bif_erlang_abs_1(Context *ctx, int live, term arg1);
 
-term bif_erlang_bor_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
-term bif_erlang_band_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
-term bif_erlang_bxor_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
-term bif_erlang_bsl_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
-term bif_erlang_bsr_2(Context *ctx, uint32_t failure_label, int live, term arg1, term arg2);
-term bif_erlang_bnot_1(Context *ctx, uint32_t failure_label, int live, term arg1);
+term bif_erlang_bor_2(Context *ctx, int live, term arg1, term arg2);
+term bif_erlang_band_2(Context *ctx, int live, term arg1, term arg2);
+term bif_erlang_bxor_2(Context *ctx, int live, term arg1, term arg2);
+term bif_erlang_bsl_2(Context *ctx, int live, term arg1, term arg2);
+term bif_erlang_bsr_2(Context *ctx, int live, term arg1, term arg2);
+term bif_erlang_bnot_1(Context *ctx, int live, term arg1);
 
-term bif_erlang_not_1(Context *ctx, uint32_t failure_label, term arg1);
-term bif_erlang_and_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
-term bif_erlang_or_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
-term bif_erlang_xor_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
+term bif_erlang_not_1(Context *ctx, term arg1);
+term bif_erlang_and_2(Context *ctx, term arg1, term arg2);
+term bif_erlang_or_2(Context *ctx, term arg1, term arg2);
+term bif_erlang_xor_2(Context *ctx, term arg1, term arg2);
 
-term bif_erlang_equal_to_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
-term bif_erlang_not_equal_to_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
+term bif_erlang_equal_to_2(Context *ctx, term arg1, term arg2);
+term bif_erlang_not_equal_to_2(Context *ctx, term arg1, term arg2);
 
-term bif_erlang_exactly_equal_to_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
-term bif_erlang_exactly_not_equal_to_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
+term bif_erlang_exactly_equal_to_2(Context *ctx, term arg1, term arg2);
+term bif_erlang_exactly_not_equal_to_2(Context *ctx, term arg1, term arg2);
 
-term bif_erlang_greater_than_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
-term bif_erlang_less_than_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
-term bif_erlang_less_than_or_equal_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
-term bif_erlang_greater_than_or_equal_2(Context *ctx, uint32_t failure_label, term arg1, term arg2);
+term bif_erlang_greater_than_2(Context *ctx, term arg1, term arg2);
+term bif_erlang_less_than_2(Context *ctx, term arg1, term arg2);
+term bif_erlang_less_than_or_equal_2(Context *ctx, term arg1, term arg2);
+term bif_erlang_greater_than_or_equal_2(Context *ctx, term arg1, term arg2);
 
 #endif

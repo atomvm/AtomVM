@@ -855,7 +855,7 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
                 #ifdef IMPL_EXECUTE_LOOP
                     BifImpl1 func = (BifImpl1) mod->imported_funcs[bif].bif;
                     DEBUG_FAIL_NULL(func);
-                    term ret = func(ctx, fail_label, arg1);
+                    term ret = func(ctx, arg1);
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
                 #endif
@@ -891,7 +891,7 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
                 #ifdef IMPL_EXECUTE_LOOP
                     BifImpl2 func = (BifImpl2) mod->imported_funcs[bif].bif;
                     DEBUG_FAIL_NULL(func);
-                    term ret = func(ctx, fail_label, arg1, arg2);
+                    term ret = func(ctx, arg1, arg2);
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
                 #endif
@@ -2292,7 +2292,7 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
                     TRACE("gc_bif1/5 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, dest=r%i\n", f_label, live, bif, arg1, dreg);
 
                     GCBifImpl1 func = (GCBifImpl1) mod->imported_funcs[bif].bif;
-                    term ret = func(ctx, f_label, live, arg1);
+                    term ret = func(ctx, live, arg1);
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
                 #endif
@@ -2333,7 +2333,7 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
                     TRACE("gc_bif2/6 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, arg2=0x%lx, dest=r%i\n", f_label, live, bif, arg1, arg2, dreg);
 
                     GCBifImpl2 func = (GCBifImpl2) mod->imported_funcs[bif].bif;
-                    term ret = func(ctx, f_label, live, arg1, arg2);
+                    term ret = func(ctx, live, arg1, arg2);
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
                 #endif
