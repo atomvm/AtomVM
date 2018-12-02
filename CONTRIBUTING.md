@@ -48,3 +48,11 @@ void f(int reverse) {
 * Scalar types are lower case (e.g. term)
 * All other names (e.g. functions and variables) are snake_case (e.g. term_is_integer)
 * Always prefix function names (e.g. term_is_nil, term_is_integer, context_new, context_destroy)
+
+#### Other Coding Conventions
+* Pointer * should be with the variable name rather than with the type (e.g. `char *name`, not `char* name`)
+* Avoid long lines, use intermediate variables with meaningful names.
+
+### Elixir Code
+
+Just use Elixir formatter enforced style.
