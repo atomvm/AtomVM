@@ -22,6 +22,7 @@
 #include <stdlib.h>
 
 #include "atom.h"
+#include "trace.h"
 #include "utils.h"
 
 //Ignore warning caused by gperf generated code
@@ -30,8 +31,21 @@
 #include "bifs_hash.h"
 #pragma GCC diagnostic pop
 
+#define RAISE_ERROR(error_type_atom) \
+    ctx->x[0] = term_from_atom_string(ctx->global, error_atom); \
+    ctx->x[1] = term_from_atom_string(ctx->global, (error_type_atom)); \
+    return term_invalid_term();
+
+#define VERIFY_VALUE(value, verify_function) \
+    if (UNLIKELY(!verify_function((value)))) { \
+        RAISE_ERROR(badarg_atom); \
+    }
+
 static const char *const true_atom = "\x04" "true";
 static const char *const false_atom = "\x05" "false";
+static const char *const error_atom = "\x05" "error";
+static const char *const badarith_atom = "\x08" "badarith";
+static const char *const badarg_atom = "\x6" "badarg";
 
 static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
 {
@@ -75,8 +89,9 @@ term bif_erlang_self_0(Context *ctx)
 
 term bif_erlang_byte_size_1(Context *ctx, int live, term arg1)
 {
-    UNUSED(ctx);
     UNUSED(live);
+
+    VERIFY_VALUE(arg1, term_is_binary);
 
     return term_from_int32(term_binary_size(arg1));
 }
@@ -156,62 +171,51 @@ term bif_erlang_is_tuple_1(Context *ctx, term arg1)
 
 term bif_erlang_length_1(Context *ctx, int live, term arg1)
 {
-    UNUSED(ctx);
     UNUSED(live);
+
+    VERIFY_VALUE(arg1, term_is_list);
 
     return term_from_int32(term_list_length(arg1));
 }
 
-//TODO: fail if not a list
 term bif_erlang_hd_1(Context *ctx, term arg1)
 {
-    UNUSED(ctx);
+    VERIFY_VALUE(arg1, term_is_nonempty_list);
 
     return term_get_list_head(arg1);
 }
 
 term bif_erlang_tl_1(Context *ctx, term arg1)
 {
-    UNUSED(ctx);
-
-    if (UNLIKELY(!term_is_nonempty_list(arg1))) {
-        fprintf(stderr, "tl: bad argument\n");
-        abort();
-    }
+    VERIFY_VALUE(arg1, term_is_nonempty_list);
 
     return term_get_list_tail(arg1);
 }
 
 term bif_erlang_element_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
-    if (UNLIKELY(!term_is_integer(arg1))) {
-        printf("element: bad argument: %lx %lx.\n", arg1, arg2);
-        abort();
-    }
+    VERIFY_VALUE(arg1, term_is_integer);
+    VERIFY_VALUE(arg2, term_is_tuple);
 
     // indexes are 1 based
     int elem_index = term_to_int32(arg1) - 1;
-    if ((elem_index >= 0) && (elem_index < term_get_tuple_arity(arg2))) {
+    if (LIKELY((elem_index >= 0) && (elem_index < term_get_tuple_arity(arg2)))) {
         return term_get_tuple_element(arg2, elem_index);
 
     } else {
-        printf("element: bad argument: %lx %lx.\n", arg1, arg2);
-        abort();
+        RAISE_ERROR(badarg_atom);
     }
 }
 
 term bif_erlang_tuple_size_1(Context *ctx, term arg1)
 {
-    UNUSED(ctx);
+    VERIFY_VALUE(arg1, term_is_tuple);
 
     return term_from_int32(term_get_tuple_arity(arg1));
 }
 
 term bif_erlang_add_2(Context *ctx, int live, term arg1, term arg2)
 {
-    UNUSED(ctx);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
@@ -219,14 +223,13 @@ term bif_erlang_add_2(Context *ctx, int live, term arg1, term arg2)
         return term_from_int32(term_to_int32(arg1) + term_to_int32(arg2));
 
     } else {
-        printf("add: operands are not integers: arg1=%lx, arg2=%lx\n", arg1, arg2);
-        abort();
+        TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
+        RAISE_ERROR(badarith_atom);
     }
 }
 
 term bif_erlang_sub_2(Context *ctx, int live, term arg1, term arg2)
 {
-    UNUSED(ctx);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
@@ -234,14 +237,13 @@ term bif_erlang_sub_2(Context *ctx, int live, term arg1, term arg2)
         return term_from_int32(term_to_int32(arg1) - term_to_int32(arg2));
 
     } else {
-        printf("sub: operands are not integers: arg1=%lx, arg2=%lx\n", arg1, arg2);
-        abort();
+        TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
+        RAISE_ERROR(badarith_atom);
     }
 }
 
 term bif_erlang_mul_2(Context *ctx, int live, term arg1, term arg2)
 {
-    UNUSED(ctx);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
@@ -249,14 +251,13 @@ term bif_erlang_mul_2(Context *ctx, int live, term arg1, term arg2)
         return term_from_int32(term_to_int32(arg1) * term_to_int32(arg2));
 
     } else {
-        printf("mul: operands are not integers: arg1=%lx, arg2=%lx\n", arg1, arg2);
-        abort();
+        TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
+        RAISE_ERROR(badarith_atom);
     }
 }
 
 term bif_erlang_div_2(Context *ctx, int live, term arg1, term arg2)
 {
-    UNUSED(ctx);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
@@ -265,33 +266,30 @@ term bif_erlang_div_2(Context *ctx, int live, term arg1, term arg2)
             return term_from_int32(term_to_int32(arg1) / operand_b);
 
         } else {
-            fprintf(stderr, "error: division by 0");
-            abort();
+            RAISE_ERROR(badarith_atom);
         }
 
     } else {
-        printf("div: operands are not integers: arg1=%lx, arg2=%lx\n", arg1, arg2);
-        abort();
+        TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
+        RAISE_ERROR(badarith_atom);
     }
 }
 
 term bif_erlang_neg_1(Context *ctx, int live, term arg1)
 {
-    UNUSED(ctx);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1))) {
         return term_from_int32(-term_to_int32(arg1));
 
     } else {
-        printf("neg: operand is not an integer: arg1=%lx\n", arg1);
-        abort();
+        TRACE("error: arg1: %lx\n", arg1);
+        RAISE_ERROR(badarith_atom);
     }
 }
 
 term bif_erlang_abs_1(Context *ctx, int live, term arg1)
 {
-    UNUSED(ctx);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1))) {
@@ -303,14 +301,13 @@ term bif_erlang_abs_1(Context *ctx, int live, term arg1)
         }
 
     } else {
-        printf("abs: operand is not an integer: arg1=%lx\n", arg1);
-        abort();
+        TRACE("error: arg1: %lx\n", arg1);
+        RAISE_ERROR(badarg_atom);
     }
 }
 
 term bif_erlang_rem_2(Context *ctx, int live, term arg1, term arg2)
 {
-    UNUSED(ctx);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
@@ -319,15 +316,13 @@ term bif_erlang_rem_2(Context *ctx, int live, term arg1, term arg2)
             return term_from_int32(term_to_int32(arg1) % operand_b);
 
         } else {
-            fprintf(stderr, "error: division by 0");
-            abort();
+            RAISE_ERROR(badarith_atom);
         }
 
     } else {
-        printf("rem: operands are not integers: arg1=%lx, arg2=%lx\n", arg1, arg2);
-        abort();
+        TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
+        RAISE_ERROR(badarith_atom);
     }
-
 }
 
 term bif_erlang_bor_2(Context *ctx, int live, term arg1, term arg2)
