@@ -856,6 +856,9 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
                     BifImpl1 func = (BifImpl1) mod->imported_funcs[bif].bif;
                     DEBUG_FAIL_NULL(func);
                     term ret = func(ctx, arg1);
+                    if (UNLIKELY(term_is_invalid_term(ret))) {
+                        RAISE_EXCEPTION();
+                    }
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
                 #endif
@@ -892,6 +895,9 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
                     BifImpl2 func = (BifImpl2) mod->imported_funcs[bif].bif;
                     DEBUG_FAIL_NULL(func);
                     term ret = func(ctx, arg1, arg2);
+                    if (UNLIKELY(term_is_invalid_term(ret))) {
+                        RAISE_EXCEPTION();
+                    }
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
                 #endif
@@ -2293,6 +2299,9 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
 
                     GCBifImpl1 func = (GCBifImpl1) mod->imported_funcs[bif].bif;
                     term ret = func(ctx, live, arg1);
+                    if (UNLIKELY(term_is_invalid_term(ret))) {
+                        RAISE_EXCEPTION();
+                    }
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
                 #endif
@@ -2334,6 +2343,9 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
 
                     GCBifImpl2 func = (GCBifImpl2) mod->imported_funcs[bif].bif;
                     term ret = func(ctx, live, arg1, arg2);
+                    if (UNLIKELY(term_is_invalid_term(ret))) {
+                        RAISE_EXCEPTION();
+                    }
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
                 #endif
