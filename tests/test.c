@@ -133,6 +133,8 @@ struct Test tests[] =
     {"test_is_process_alive.beam", 121},
     {"test_badarith.beam", -87381},
     {"test_badarith2.beam", -87381},
+    {"test_badarith3.beam", -1365},
+    {"test_badarith4.beam", -1365},
     {"test_bif_badargument.beam", -5592405},
 
     {"nested_list_size0.beam", 0},
