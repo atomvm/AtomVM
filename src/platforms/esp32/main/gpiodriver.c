@@ -55,11 +55,6 @@ static const char *const set_direction_a ="\xDset_direction";
 static const char *const set_int_a = "\x7" "set_int";
 static const char *const gpio_interrupt_a = "\xE" "gpio_interrupt";
 
-static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
-{
-    int global_atom_index = globalcontext_insert_atom(glb, string);
-    return term_from_atom_index(global_atom_index);
-}
 
 void gpiodriver_init(Context *ctx)
 {
@@ -69,8 +64,6 @@ void gpiodriver_init(Context *ctx)
 
 static void consume_gpio_mailbox(Context *ctx)
 {
-    GlobalContext *glb = ctx->global;
-
     term ret;
 
     Message *message = mailbox_dequeue(ctx);
@@ -81,33 +74,33 @@ static void consume_gpio_mailbox(Context *ctx)
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
-    if (cmd == term_from_atom_string(glb, set_level_a)) {
+    if (cmd == context_make_atom(ctx, set_level_a)) {
         int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
         int32_t level = term_to_int32(term_get_tuple_element(msg, 3));
         gpio_set_level(gpio_num, level != 0);
         TRACE("gpio: set_level: %i %i\n", gpio_num, level != 0);
-        ret = term_from_atom_string(glb, ok_a);
+        ret = context_make_atom(ctx, ok_a);
 
-    } else if (cmd == term_from_atom_string(glb, set_direction_a)) {
+    } else if (cmd == context_make_atom(ctx, set_direction_a)) {
         int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
         term direction = term_get_tuple_element(msg, 3);
 
-        if (direction == term_from_atom_string(glb, input_a)) {
+        if (direction == context_make_atom(ctx, input_a)) {
             gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
             TRACE("gpio: set_direction: %i INPUT\n", gpio_num);
-            ret = term_from_atom_string(glb, ok_a);
+            ret = context_make_atom(ctx, ok_a);
 
-        } else if (direction == term_from_atom_string(glb, output_a)) {
+        } else if (direction == context_make_atom(ctx, output_a)) {
             gpio_set_direction(gpio_num, GPIO_MODE_OUTPUT);
             TRACE("gpio: set_direction: %i OUTPUT\n", gpio_num);
-            ret = term_from_atom_string(glb, ok_a);
+            ret = context_make_atom(ctx, ok_a);
 
         } else {
             TRACE("gpio: unrecognized direction\n");
-            ret = term_from_atom_string(glb, error_a);
+            ret = context_make_atom(ctx, error_a);
         }
 
-    } else if (cmd == term_from_atom_string(glb, set_int_a)) {
+    } else if (cmd == context_make_atom(ctx, set_int_a)) {
         int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
         TRACE("going to install interrupt for %i.\n", gpio_num);
 
@@ -125,11 +118,11 @@ static void consume_gpio_mailbox(Context *ctx)
 
         gpio_isr_handler_add(gpio_num, gpio_isr_handler, (void *) gpio_num);
 
-        ret = term_from_atom_string(glb, ok_a);
+        ret = context_make_atom(ctx, ok_a);
 
     } else {
         TRACE("gpio: unrecognized command\n");
-        ret = term_from_atom_string(glb, error_a);
+        ret = context_make_atom(ctx, error_a);
     }
 
     free(message);
@@ -147,10 +140,9 @@ void sys_platform_periodic_tasks()
 {
     uint32_t gpio_num;
     if (listening_ctx && xQueueReceive(gpio_evt_queue, &gpio_num, 0)) {
-        GlobalContext *glb = gpio_ctx->global;
 
         term int_msg = term_alloc_tuple(2, gpio_ctx);
-        term_put_tuple_element(int_msg, 0, term_from_atom_string(glb, gpio_interrupt_a));
+        term_put_tuple_element(int_msg, 0, context_make_atom(gpio_ctx, gpio_interrupt_a));
         term_put_tuple_element(int_msg, 1, term_from_int32(gpio_num));
 
         mailbox_send(listening_ctx, int_msg);

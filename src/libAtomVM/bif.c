@@ -32,8 +32,8 @@
 #pragma GCC diagnostic pop
 
 #define RAISE_ERROR(error_type_atom) \
-    ctx->x[0] = term_from_atom_string(ctx->global, error_atom); \
-    ctx->x[1] = term_from_atom_string(ctx->global, (error_type_atom)); \
+    ctx->x[0] = context_make_atom(ctx, error_atom); \
+    ctx->x[1] = context_make_atom(ctx, (error_type_atom)); \
     return term_invalid_term();
 
 #define VERIFY_VALUE(value, verify_function) \
@@ -47,11 +47,6 @@ static const char *const error_atom = "\x05" "error";
 static const char *const badarith_atom = "\x08" "badarith";
 static const char *const badarg_atom = "\x6" "badarg";
 
-static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
-{
-    int global_atom_index = globalcontext_insert_atom(glb, string);
-    return term_from_atom_index(global_atom_index);
-}
 
 BifImpl bif_registry_get_handler(AtomString module, AtomString function, int arity)
 {
@@ -99,36 +94,36 @@ term bif_erlang_byte_size_1(Context *ctx, int live, term arg1)
 term bif_erlang_is_atom_1(Context *ctx, term arg1)
 {
     if (term_is_atom(arg1)) {
-        return term_from_atom_string(ctx->global, true_atom);
+        return context_make_atom(ctx, true_atom);
     } else {
-        return term_from_atom_string(ctx->global, false_atom);
+        return context_make_atom(ctx, false_atom);
     }
 }
 
 term bif_erlang_is_binary_1(Context *ctx, term arg1)
 {
     if (term_is_binary(arg1)) {
-        return term_from_atom_string(ctx->global, true_atom);
+        return context_make_atom(ctx, true_atom);
     } else {
-        return term_from_atom_string(ctx->global, false_atom);
+        return context_make_atom(ctx, false_atom);
     }
 }
 
 term bif_erlang_is_integer_1(Context *ctx, term arg1)
 {
     if (term_is_integer(arg1)) {
-        return term_from_atom_string(ctx->global, true_atom);
+        return context_make_atom(ctx, true_atom);
     } else {
-        return term_from_atom_string(ctx->global, false_atom);
+        return context_make_atom(ctx, false_atom);
     }
 }
 
 term bif_erlang_is_list_1(Context *ctx, term arg1)
 {
     if (term_is_list(arg1)) {
-        return term_from_atom_string(ctx->global, true_atom);
+        return context_make_atom(ctx, true_atom);
     } else {
-        return term_from_atom_string(ctx->global, false_atom);
+        return context_make_atom(ctx, false_atom);
     }
 }
 
@@ -136,36 +131,36 @@ term bif_erlang_is_number_1(Context *ctx, term arg1)
 {
     //TODO: change to term_is_number
     if (term_is_integer(arg1)) {
-        return term_from_atom_string(ctx->global, true_atom);
+        return context_make_atom(ctx, true_atom);
     } else {
-        return term_from_atom_string(ctx->global, false_atom);
+        return context_make_atom(ctx, false_atom);
     }
 }
 
 term bif_erlang_is_pid_1(Context *ctx, term arg1)
 {
     if (term_is_pid(arg1)) {
-        return term_from_atom_string(ctx->global, true_atom);
+        return context_make_atom(ctx, true_atom);
     } else {
-        return term_from_atom_string(ctx->global, false_atom);
+        return context_make_atom(ctx, false_atom);
     }
 }
 
 term bif_erlang_is_reference_1(Context *ctx, term arg1)
 {
     if (term_is_reference(arg1)) {
-        return term_from_atom_string(ctx->global, true_atom);
+        return context_make_atom(ctx, true_atom);
     } else {
-        return term_from_atom_string(ctx->global, false_atom);
+        return context_make_atom(ctx, false_atom);
     }
 }
 
 term bif_erlang_is_tuple_1(Context *ctx, term arg1)
 {
     if (term_is_tuple(arg1)) {
-        return term_from_atom_string(ctx->global, true_atom);
+        return context_make_atom(ctx, true_atom);
     } else {
-        return term_from_atom_string(ctx->global, false_atom);
+        return context_make_atom(ctx, false_atom);
     }
 }
 
@@ -399,8 +394,8 @@ term bif_erlang_bnot_1(Context *ctx, int live, term arg1)
 
 term bif_erlang_not_1(Context *ctx, term arg1)
 {
-    term true_term = term_from_atom_string(ctx->global, true_atom);
-    term false_term = term_from_atom_string(ctx->global, false_atom);
+    term true_term = context_make_atom(ctx, true_atom);
+    term false_term = context_make_atom(ctx, false_atom);
 
     if (arg1 == true_term) {
         return false_term;
@@ -416,8 +411,8 @@ term bif_erlang_not_1(Context *ctx, term arg1)
 
 term bif_erlang_and_2(Context *ctx, term arg1, term arg2)
 {
-    term true_term = term_from_atom_string(ctx->global, true_atom);
-    term false_term = term_from_atom_string(ctx->global, false_atom);
+    term true_term = context_make_atom(ctx, true_atom);
+    term false_term = context_make_atom(ctx, false_atom);
 
     if ((arg1 == false_term) && (arg2 == false_term)) {
         return false_term;
@@ -439,8 +434,8 @@ term bif_erlang_and_2(Context *ctx, term arg1, term arg2)
 
 term bif_erlang_or_2(Context *ctx, term arg1, term arg2)
 {
-    term true_term = term_from_atom_string(ctx->global, true_atom);
-    term false_term = term_from_atom_string(ctx->global, false_atom);
+    term true_term = context_make_atom(ctx, true_atom);
+    term false_term = context_make_atom(ctx, false_atom);
 
     if ((arg1 == false_term) && (arg2 == false_term)) {
         return false_term;
@@ -462,8 +457,8 @@ term bif_erlang_or_2(Context *ctx, term arg1, term arg2)
 
 term bif_erlang_xor_2(Context *ctx, term arg1, term arg2)
 {
-    term true_term = term_from_atom_string(ctx->global, true_atom);
-    term false_term = term_from_atom_string(ctx->global, false_atom);
+    term true_term = context_make_atom(ctx, true_atom);
+    term false_term = context_make_atom(ctx, false_atom);
 
     if ((arg1 == false_term) && (arg2 == false_term)) {
         return false_term;
@@ -488,9 +483,9 @@ term bif_erlang_equal_to_2(Context *ctx, term arg1, term arg2)
     //TODO: fix this implementation
     //it should compare any kind of type, and 5.0 == 5
     if (arg1 == arg2) {
-        return term_from_atom_string(ctx->global, true_atom);
+        return context_make_atom(ctx, true_atom);
     } else {
-        return term_from_atom_string(ctx->global, false_atom);
+        return context_make_atom(ctx, false_atom);
     }
 }
 
@@ -499,9 +494,9 @@ term bif_erlang_not_equal_to_2(Context *ctx, term arg1, term arg2)
     //TODO: fix this implementation
     //it should compare any kind of type, and 5.0 != 5 is false
     if (arg1 != arg2) {
-        return term_from_atom_string(ctx->global, true_atom);
+        return context_make_atom(ctx, true_atom);
     } else {
-        return term_from_atom_string(ctx->global, false_atom);
+        return context_make_atom(ctx, false_atom);
     }
 }
 
@@ -509,9 +504,9 @@ term bif_erlang_exactly_equal_to_2(Context *ctx, term arg1, term arg2)
 {
     //TODO: fix this implementation, it needs to cover more types
     if (arg1 == arg2) {
-        return term_from_atom_string(ctx->global, true_atom);
+        return context_make_atom(ctx, true_atom);
     } else {
-        return term_from_atom_string(ctx->global, false_atom);
+        return context_make_atom(ctx, false_atom);
     }
 }
 
@@ -519,9 +514,9 @@ term bif_erlang_exactly_not_equal_to_2(Context *ctx, term arg1, term arg2)
 {
     //TODO: fix this implementation, it needs to cover more types
     if (arg1 != arg2) {
-        return term_from_atom_string(ctx->global, true_atom);
+        return context_make_atom(ctx, true_atom);
     } else {
-        return term_from_atom_string(ctx->global, false_atom);
+        return context_make_atom(ctx, false_atom);
     }
 }
 
@@ -530,9 +525,9 @@ term bif_erlang_greater_than_2(Context *ctx, term arg1, term arg2)
 {
     //TODO: fix this implementation, it needs to cover more types
     if (term_to_int32(arg1) > term_to_int32(arg2)) {
-        return term_from_atom_string(ctx->global, true_atom);
+        return context_make_atom(ctx, true_atom);
     } else {
-        return term_from_atom_string(ctx->global, false_atom);
+        return context_make_atom(ctx, false_atom);
     }
 }
 
@@ -540,9 +535,9 @@ term bif_erlang_less_than_2(Context *ctx, term arg1, term arg2)
 {
     //TODO: fix this implementation, it needs to cover more types
     if (term_to_int32(arg1) < term_to_int32(arg2)) {
-        return term_from_atom_string(ctx->global, true_atom);
+        return context_make_atom(ctx, true_atom);
     } else {
-        return term_from_atom_string(ctx->global, false_atom);
+        return context_make_atom(ctx, false_atom);
     }
 }
 
@@ -550,9 +545,9 @@ term bif_erlang_less_than_or_equal_2(Context *ctx, term arg1, term arg2)
 {
     //TODO: fix this implementation, it needs to cover more types
     if (term_to_int32(arg1) <= term_to_int32(arg2)) {
-        return term_from_atom_string(ctx->global, true_atom);
+        return context_make_atom(ctx, true_atom);
     } else {
-        return term_from_atom_string(ctx->global, false_atom);
+        return context_make_atom(ctx, false_atom);
     }
 }
 
@@ -560,8 +555,8 @@ term bif_erlang_greater_than_or_equal_2(Context *ctx, term arg1, term arg2)
 {
     //TODO: fix this implementation, it needs to cover more types
     if (term_to_int32(arg1) >= term_to_int32(arg2)) {
-        return term_from_atom_string(ctx->global, true_atom);
+        return context_make_atom(ctx, true_atom);
     } else {
-        return term_from_atom_string(ctx->global, false_atom);
+        return context_make_atom(ctx, false_atom);
     }
 }

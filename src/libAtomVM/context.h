@@ -174,4 +174,19 @@ static inline int context_is_waiting_timeout(const Context *ctx)
     return ctx->timeout_at.tv_sec || ctx->timeout_at.tv_nsec;
 }
 
+/**
+ * @brief Returns a term representing an atom, from the suppliend string
+ *
+ * @details Converns a string to an atom.  Note that this function may have a side-effect on the
+ *          global context.
+ * @param glb pointer to the global context
+ * @param string an AtomString
+ * @return an atom term formed from the supplied atom string.
+ */
+static inline term context_make_atom(Context *ctx, AtomString string)
+{
+    int global_atom_index = globalcontext_insert_atom(ctx->global, string);
+    return term_from_atom_index(global_atom_index);
+}
+
 #endif

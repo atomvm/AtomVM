@@ -234,11 +234,6 @@ static const struct Nif flat_size_nif =
 #include "nifs_hash.h"
 #pragma GCC diagnostic pop
 
-static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
-{
-    int global_atom_index = globalcontext_insert_atom(glb, string);
-    return term_from_atom_index(global_atom_index);
-}
 
 const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
 {
@@ -553,7 +548,7 @@ term nif_erlang_system_time_1(Context *ctx, int argc, term argv[])
     struct timespec ts;
     sys_time(&ts);
 
-    term minute_atom = term_from_atom_string(ctx->global, "\x6" "minute");
+    term minute_atom = context_make_atom(ctx, "\x6" "minute");
     if (argv[0] == minute_atom) {
         // FIXME: This is not standard, however we cannot hold seconds since 1970 in just 27 bits.
         return term_from_int32(ts.tv_sec / 60);
@@ -769,7 +764,7 @@ static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
     term a_binary = argv[0];
     VERIFY_VALUE(a_binary, term_is_binary);
 
-    if (UNLIKELY(argv[1] != term_from_atom_string(ctx->global, latin1_atom))) {
+    if (UNLIKELY(argv[1] != context_make_atom(ctx, latin1_atom))) {
         fprintf(stderr, "binary_to_atom: only latin1 is supported.\n");
         abort();
     }

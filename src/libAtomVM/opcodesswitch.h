@@ -409,12 +409,6 @@
 static const char *const true_atom = "\x04" "true";
 static const char *const false_atom = "\x05" "false";
 
-static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
-{
-    int global_atom_index = globalcontext_insert_atom(glb, string);
-    return term_from_atom_index(global_atom_index);
-}
-
 
 #ifdef IMPL_EXECUTE_LOOP
 struct Int24
@@ -2260,8 +2254,8 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
                     static const char *const true_atom = "\x04" "true";
                     static const char *const false_atom = "\x05" "false";
 
-                    term true_term = term_from_atom_string(ctx->global, true_atom);
-                    term false_term = term_from_atom_string(ctx->global, false_atom);
+                    term true_term = context_make_atom(ctx, true_atom);
+                    term false_term = context_make_atom(ctx, false_atom);
 
                     if ((arg1 == true_term) || (arg1 == false_term)) {
                         NEXT_INSTRUCTION(next_off);

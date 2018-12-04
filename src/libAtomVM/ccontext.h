@@ -27,6 +27,7 @@
 #ifndef _CCONTEXT_H_
 #define _CCONTEXT_H_
 
+#include "context.h"
 #include "memory.h"
 #include "term.h"
 
@@ -38,11 +39,11 @@ typedef unsigned long term_ref;
 /**
  * Holds information required to handle term references.
  */
-struct CContext
+typedef struct CContext
 {
     Context *ctx;
     unsigned int terms_count;
-};
+} CContext;
 
 /**
  * @brief Initializes a CContext
@@ -78,7 +79,7 @@ static inline void ccontext_release_all_refs(struct CContext *ccontext)
  * @param t the term that will be referenced.
  * @return a new term reference.
  */
-term_ref ccontext_make_term_ref(struct CContext *ccontext, term t)
+static inline term_ref ccontext_make_term_ref(struct CContext *ccontext, term t)
 {
     Context *ctx = ccontext->ctx;
 
@@ -112,7 +113,7 @@ static inline void ccontext_kill_term_ref(struct CContext *ccontext, term_ref tr
  * @param ccontext the current CContext.
  * @param tref a reference to a term.
  */
-term ccontext_get_term(const struct CContext *ccontext, term_ref tref)
+static inline term ccontext_get_term(const struct CContext *ccontext, term_ref tref)
 {
     return *(ccontext->ctx->e + ccontext->terms_count - tref);
 }
