@@ -94,6 +94,9 @@ compile_erlang(test_integer_to_list)
 compile_erlang(test_list_to_integer)
 compile_erlang(test_abs)
 compile_erlang(test_is_process_alive)
+compile_erlang(test_badarith)
+compile_erlang(test_badarith2)
+compile_erlang(test_bif_badargument)
 
 compile_erlang(complex_struct_size0)
 compile_erlang(complex_struct_size1)
@@ -243,6 +246,9 @@ add_custom_target(erlang_test_modules DEPENDS
     test_list_to_integer.beam
     test_abs.beam
     test_is_process_alive.beam
+    test_badarith.beam
+    test_badarith2.beam
+    test_bif_badargument.beam
 
     complex_struct_size0.beam
     complex_struct_size1.beam
