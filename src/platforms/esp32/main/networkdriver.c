@@ -52,7 +52,7 @@
 #define CONNECTED_BIT BIT0
 
 static void consume_network_mailbox(Context *ctx);
-static term setup_network(GlobalContext *glb, term config);
+static term setup_network(Context *ctx, term config);
 static esp_err_t wifi_event_handler(void *ctx, system_event_t *event);
 
 static const char *const ok_a = "\x2ok";
@@ -65,11 +65,6 @@ static const char *const sntp_a = "\x4" "sntp";
 
 static EventGroupHandle_t wifi_event_group;
 
-static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
-{
-    int global_atom_index = globalcontext_insert_atom(glb, string);
-    return term_from_atom_index(global_atom_index);
-}
 
 void networkdriver_init(Context *ctx)
 {
@@ -79,8 +74,6 @@ void networkdriver_init(Context *ctx)
 
 static void consume_network_mailbox(Context *ctx)
 {
-    GlobalContext *glb = ctx->global;
-
     term ret;
 
     Message *message = mailbox_dequeue(ctx);
@@ -90,12 +83,12 @@ static void consume_network_mailbox(Context *ctx)
     term cmd = term_get_tuple_element(msg, 2);
     term config = term_get_tuple_element(msg, 3);
 
-    if (cmd == term_from_atom_string(glb, setup_a)) {
-        ret = setup_network(glb, config);
+    if (cmd == context_make_atom(ctx, setup_a)) {
+        ret = setup_network(ctx, config);
 
     } else {
         TRACE("network: unrecognized command\n");
-        ret = term_from_atom_string(glb, error_a);
+        ret = context_make_atom(ctx, error_a);
     }
 
     free(message);
@@ -105,18 +98,18 @@ static void consume_network_mailbox(Context *ctx)
     mailbox_send(target, ret);
 }
 
-static term setup_network(GlobalContext *glb, term config)
+static term setup_network(Context *ctx, term config)
 {
-    term ssid_value = interop_proplist_get_value(config, term_from_atom_string(glb, ssid_a));
-    term pass_value = interop_proplist_get_value(config, term_from_atom_string(glb, psk_a));
-    term sntp_value = interop_proplist_get_value(config, term_from_atom_string(glb, sntp_a));
+    term ssid_value = interop_proplist_get_value(config, context_make_atom(ctx, ssid_a));
+    term pass_value = interop_proplist_get_value(config, context_make_atom(ctx, psk_a));
+    term sntp_value = interop_proplist_get_value(config, context_make_atom(ctx, sntp_a));
 
     char *ssid = interop_list_to_string(ssid_value);
     char *psk = interop_list_to_string(pass_value);
 
     if (UNLIKELY(!ssid || !psk)) {
         TRACE("cannot allocate memory.\n");
-        return term_from_atom_string(glb, error_a);
+        return context_make_atom(ctx, error_a);
     }
 
     wifi_event_group = xEventGroupCreate();
@@ -130,7 +123,7 @@ static term setup_network(GlobalContext *glb, term config)
         TRACE("ssid or psk is too long\n");
         free(ssid);
         free(psk);
-        return term_from_atom_string(glb, error_a);
+        return context_make_atom(ctx, error_a);
     }
 
     memset(&wifi_config, 0, sizeof(wifi_config_t));
@@ -154,7 +147,7 @@ static term setup_network(GlobalContext *glb, term config)
         }
     }
 
-    return term_from_atom_string(glb, ok_a);
+    return context_make_atom(ctx, ok_a);
 }
 
 static esp_err_t wifi_event_handler(void *ctx, system_event_t *event)

@@ -57,11 +57,6 @@ static const char *const error_a = "\x5" "error";
 
 static const char *const send_a = "\x4" "send";
 
-static inline term term_from_atom_string(GlobalContext *glb, AtomString string)
-{
-    int global_atom_index = globalcontext_insert_atom(glb, string);
-    return term_from_atom_index(global_atom_index);
-}
 
 void udpdriver_init(Context *ctx)
 {
@@ -81,8 +76,6 @@ static void consume_udpdriver_mailbox(Context *ctx)
 
     struct UDPDriverData *udp_driver_context = (struct UDPDriverData *) ctx->platform_data;
 
-    GlobalContext *glb = ctx->global;
-
     Message *message = mailbox_dequeue(ctx);
 
     term ret;
@@ -92,7 +85,7 @@ static void consume_udpdriver_mailbox(Context *ctx)
     term ref = term_get_tuple_element(msg, 1);
     term cmd = term_get_tuple_element(msg, 2);
 
-    if (cmd == term_from_atom_string(glb, send_a)) {
+    if (cmd == context_make_atom(ctx, send_a)) {
         term ipaddr_term = term_get_tuple_element(msg, 3);
         term dest_port_term = term_get_tuple_element(msg, 4);
         term buffer_term = term_get_tuple_element(msg, 5);
@@ -110,11 +103,11 @@ static void consume_udpdriver_mailbox(Context *ctx)
 
         int sent_data = sendto(udp_driver_context->sockfd, buffer, buf_len, 0, (struct sockaddr *) &addr, sizeof(addr));
 
-        ret = term_from_atom_string(glb, ok_a);
+        ret = context_make_atom(ctx, ok_a);
 
     } else {
         TRACE("udpdriver: unrecognized command\n");
-        ret = term_from_atom_string(glb, error_a);
+        ret = context_make_atom(ctx, error_a);
     }
 
     free(message);
