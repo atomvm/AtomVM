@@ -327,85 +327,73 @@ term bif_erlang_rem_2(Context *ctx, int live, term arg1, term arg2)
 
 term bif_erlang_bor_2(Context *ctx, int live, term arg1, term arg2)
 {
-    UNUSED(ctx);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return term_from_int32(term_to_int32(arg1) | term_to_int32(arg2));
 
     } else {
-        printf("bor: operand is not an integer: arg1=%lx, arg2=%lx\n", arg1, arg2);
-        abort();
+        RAISE_ERROR(badarith_atom);
     }
 }
 
 term bif_erlang_band_2(Context *ctx, int live, term arg1, term arg2)
 {
-    UNUSED(ctx);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return term_from_int32(term_to_int32(arg1) & term_to_int32(arg2));
 
     } else {
-        printf("band: operand is not an integer: arg1=%lx, arg2=%lx\n", arg1, arg2);
-        abort();
+        RAISE_ERROR(badarith_atom);
     }
 }
 
 term bif_erlang_bxor_2(Context *ctx, int live, term arg1, term arg2)
 {
-    UNUSED(ctx);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return term_from_int32(term_to_int32(arg1) ^ term_to_int32(arg2));
 
     } else {
-        printf("bxor: operand is not an integer: arg1=%lx, arg2=%lx\n", arg1, arg2);
-        abort();
+        RAISE_ERROR(badarith_atom);
     }
 }
 
 term bif_erlang_bsl_2(Context *ctx, int live, term arg1, term arg2)
 {
-    UNUSED(ctx);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return term_from_int32(term_to_int32(arg1) << term_to_int32(arg2));
 
     } else {
-        printf("bsl: operand is not an integer: arg1=%lx, arg2=%lx\n", arg1, arg2);
-        abort();
+        RAISE_ERROR(badarith_atom);
     }
 }
 
 term bif_erlang_bsr_2(Context *ctx, int live, term arg1, term arg2)
 {
-    UNUSED(ctx);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return term_from_int32(term_to_int32(arg1) >> term_to_int32(arg2));
 
     } else {
-        printf("bsr: operand is not an integer: arg1=%lx, arg2=%lx\n", arg1, arg2);
-        abort();
+        RAISE_ERROR(badarith_atom);
     }
 }
 
 term bif_erlang_bnot_1(Context *ctx, int live, term arg1)
 {
-    UNUSED(ctx);
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1))) {
         return term_from_int32(~term_to_int32(arg1));
 
     } else {
-        printf("bnot: operand is not an integer: arg1=%lx\n", arg1);
-        abort();
+        RAISE_ERROR(badarith_atom);
     }
 }
 
