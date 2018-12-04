@@ -1066,7 +1066,13 @@ static void display_term(term t, Context *ctx)
         }
 
     } else if (term_is_reference(t)) {
-        printf("#Ref<0.0.0.%li>", term_to_ref_ticks(t));
+        const char *format =
+#ifdef __clang__
+        "#Ref<0.0.0.%llu>";
+#else
+        "#Ref<0.0.0.%lu>";
+#endif
+        printf(format, term_to_ref_ticks(t));
     }
 }
 
