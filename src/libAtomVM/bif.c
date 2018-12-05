@@ -404,8 +404,7 @@ term bif_erlang_not_1(Context *ctx, term arg1)
         return true_term;
 
     } else {
-        fprintf(stderr, "invalid argument\n");
-        abort();
+        RAISE_ERROR(badarg_atom);
     }
 }
 
@@ -427,8 +426,7 @@ term bif_erlang_and_2(Context *ctx, term arg1, term arg2)
         return true_term;
 
     } else {
-        fprintf(stderr, "invalid argument\n");
-        abort();
+        RAISE_ERROR(badarg_atom);
     }
 }
 
@@ -450,8 +448,7 @@ term bif_erlang_or_2(Context *ctx, term arg1, term arg2)
         return true_term;
 
     } else {
-        fprintf(stderr, "invalid argument\n");
-        abort();
+        RAISE_ERROR(badarg_atom);
     }
 }
 
@@ -473,8 +470,7 @@ term bif_erlang_xor_2(Context *ctx, term arg1, term arg2)
         return false_term;
 
     } else {
-        fprintf(stderr, "invalid argument\n");
-        abort();
+        RAISE_ERROR(badarg_atom);
     }
 }
 
