@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright 2017 by Davide Bettio <davide@uninstall.it>                 *
+ *   Copyright 2018 by Fred Dushin <fred@dushin.net>                       *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU Lesser General Public License as        *
@@ -17,18 +17,28 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-/**
- * @file nifs.h
- * @brief Private NIFs
- */
+#ifndef _PORT_H_
+#define _PORT_H_
 
-#ifndef _NIFS_H_
-#define _NIFS_H_
+#include "globalcontext.h"
+#include "ccontext.h"
+#include "term.h"
 
-#include "atom.h"
-#include "context.h"
-#include "exportedfunction.h"
+extern const char *const port_ok_a;
+extern const char *const port_error_a;
 
-const struct Nif *nifs_get(AtomString module, AtomString function, int arity);
+static inline term_ref port_make_atom(CContext *cc, AtomString atom)
+{
+    return ccontext_make_term_ref(cc, context_make_atom(cc->ctx, atom));
+}
+
+term_ref port_create_tuple2(CContext *cc, term_ref a, term_ref b);
+term_ref port_create_tuple3(CContext *cc, term_ref a, term_ref b, term_ref c);
+term_ref port_create_tuple_n(CContext *cc, size_t num_terms, term_ref *terms);
+term_ref port_create_error_tuple(CContext *cc, const char *reason);
+term_ref port_create_ok_tuple(CContext *cc, term_ref t);
+void port_send_reply(CContext *cc, term_ref pid, term_ref ref, term_ref reply);
+
+Context *port_create_port(GlobalContext *glb, const char *driver_name, term opts);
 
 #endif

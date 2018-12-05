@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright 2017 by Davide Bettio <davide@uninstall.it>                 *
+ *   Copyright 2018 by Fred Dushin <fred@dushin.net>                       *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU Lesser General Public License as        *
@@ -17,18 +17,11 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-/**
- * @file nifs.h
- * @brief Private NIFs
- */
+#include "network_driver.h"
 
-#ifndef _NIFS_H_
-#define _NIFS_H_
 
-#include "atom.h"
-#include "context.h"
-#include "exportedfunction.h"
-
-const struct Nif *nifs_get(AtomString module, AtomString function, int arity);
-
-#endif
+void networkdriver_init(Context *ctx)
+{
+    fprintf(stderr, "Unsupported driver on this platform: networkdriver\n");
+    abort();
+}

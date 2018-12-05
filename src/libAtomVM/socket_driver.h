@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright 2017 by Davide Bettio <davide@uninstall.it>                 *
+ *   Copyright 2018 by Fred Dushin <fred@dushin.net>                       *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU Lesser General Public License as        *
@@ -17,18 +17,18 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-/**
- * @file nifs.h
- * @brief Private NIFs
- */
+#ifndef _SOCKET_DRIVER_H_
+#define _SOCKET_DRIVER_H_
 
-#ifndef _NIFS_H_
-#define _NIFS_H_
+#include "ccontext.h"
+#include "term.h"
 
-#include "atom.h"
-#include "context.h"
-#include "exportedfunction.h"
+void *socket_driver_create_data();
+void socket_driver_delete_data(void *data);
 
-const struct Nif *nifs_get(AtomString module, AtomString function, int arity);
+term_ref socket_driver_do_init(CContext *cc, term params);
+term_ref socket_driver_do_bind(CContext *cc, term address, term port);
+term_ref socket_driver_do_send(CContext *cc, term dest_address, term dest_port, term buffer);
+void socket_driver_do_recvfrom(CContext *cc, term_ref pid, term_ref ref);
 
 #endif

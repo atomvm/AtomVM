@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright 2018 by Davide Bettio <davide@uninstall.it>                 *
+ *   Copyright 2018 by Fred Dushin <fred@dushin.net>                       *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU Lesser General Public License as        *
@@ -17,26 +17,17 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#include "context.h"
+#ifndef _SOCKET_H_
+#define _SOCKET_H_
 
-#include "gpiodriver.h"
-#include "networkdriver.h"
-#include "udpdriver.h"
+#include "ccontext.h"
+#include "term.h"
 
-Context *platform_open_port(GlobalContext *glb, const char *driver_name, term opts)
-{
-    Context *new_ctx = context_new(glb);
 
-    if (!strcmp(driver_name, "gpio")) {
-        gpiodriver_init(new_ctx);
-    }else if (!strcmp(driver_name, "network")) {
-        networkdriver_init(new_ctx);
-    }else if (!strcmp(driver_name, "udp")) {
-        udpdriver_init(new_ctx);
-    } else {
-        context_destroy(new_ctx);
-        return NULL;
-    }
+void socket_init(Context *ctx, term params);
 
-    return new_ctx;
-}
+uint32_t socket_tuple_to_addr(term addr_tuple);
+term_ref socket_tuple_from_addr(CContext *cc, uint32_t addr);
+term_ref socket_create_packet_term(CContext *cc, const char *buf, ssize_t len);
+
+#endif
