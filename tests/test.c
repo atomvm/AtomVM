@@ -136,6 +136,8 @@ struct Test tests[] =
     {"test_badarith3.beam", -1365},
     {"test_badarith4.beam", -1365},
     {"test_bif_badargument.beam", -5592405},
+    {"test_bif_badargument2.beam", -85},
+    {"test_bif_badargument3.beam", -85},
 
     {"nested_list_size0.beam", 0},
     {"nested_list_size1.beam", 2},

@@ -99,6 +99,8 @@ compile_erlang(test_badarith2)
 compile_erlang(test_badarith3)
 compile_erlang(test_badarith4)
 compile_erlang(test_bif_badargument)
+compile_erlang(test_bif_badargument2)
+compile_erlang(test_bif_badargument3)
 
 compile_erlang(complex_struct_size0)
 compile_erlang(complex_struct_size1)
@@ -253,6 +255,8 @@ add_custom_target(erlang_test_modules DEPENDS
     test_badarith3.beam
     test_badarith4.beam
     test_bif_badargument.beam
+    test_bif_badargument2.beam
+    test_bif_badargument3.beam
 
     complex_struct_size0.beam
     complex_struct_size1.beam
