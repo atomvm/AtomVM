@@ -131,6 +131,7 @@ struct Test tests[] =
     {"test_list_to_integer.beam", 99},
     {"test_abs.beam", 5},
     {"test_is_process_alive.beam", 121},
+    {"test_is_not_type.beam", 255},
     {"test_badarith.beam", -87381},
     {"test_badarith2.beam", -87381},
     {"test_badarith3.beam", -1365},
