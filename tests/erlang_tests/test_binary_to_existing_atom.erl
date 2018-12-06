@@ -44,7 +44,8 @@ i(A) ->
     try binary_to_existing_atom(A, latin1) of
         AnyAtom -> AnyAtom
     catch
-        _:_ -> missing_atom
+        error:badarg -> missing_atom;
+        _:_ -> -1024
     end.
 
 g() ->

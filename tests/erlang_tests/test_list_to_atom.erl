@@ -38,5 +38,6 @@ i(A) ->
     try list_to_atom(A) of
         Value -> Value
     catch
-        _:_ -> 0
+        error:badarg -> 0;
+        _:_ -> -1024
     end.

@@ -27,7 +27,8 @@ g(A) when is_atom(A) ->
 
 h(A) ->
     try f(A) of
-        AnyVal -> 1
+        _AnyVal -> 1
     catch
-        _:_ -> 0
+        error:badarg -> 0;
+        _:_ -> -1024
     end.

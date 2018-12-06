@@ -44,7 +44,8 @@ i(A) ->
     try list_to_existing_atom(A) of
         AnyExisting -> AnyExisting
     catch
-        _:_ -> missing_atom
+        error:badarg -> missing_atom;
+        _:_ -> -1024
     end.
 
 j() ->
