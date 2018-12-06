@@ -55,6 +55,7 @@ static const char *const undefined_atom = "\x9" "undefined";
 static const char *const true_atom = "\x4" "true";
 static const char *const false_atom = "\x5" "false";
 static const char *const badarg_atom = "\x6" "badarg";
+static const char *const overflow_atom = "\x8" "overflow";
 
 static void process_echo_mailbox(Context *ctx);
 static void process_console_mailbox(Context *ctx);
@@ -901,8 +902,10 @@ static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[])
         fprintf(stderr, "integer_to_list: wrong args count\n");
         abort();
     }
+    term value = argv[0];
+    VALIDATE_VALUE(value, term_is_integer);
 
-    int32_t int_value = term_to_int32(argv[0]);
+    int32_t int_value = term_to_int32(value);
     char integer_string[24];
 
     snprintf(integer_string, 24, "%i", int_value);
@@ -920,8 +923,6 @@ static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
 {
-    UNUSED(ctx);
-
     if (argc != 1) {
         fprintf(stderr, "list_to_integer: wrong args count\n");
         abort();
@@ -930,6 +931,8 @@ static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
     term t = argv[0];
     int32_t acc = 0;
     int digits = 0;
+
+    VALIDATE_VALUE(t, term_is_nonempty_list);
 
     int negative = 0;
     term first_digit = term_get_list_head(t);
@@ -943,21 +946,17 @@ static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
     while (!term_is_nil(t)) {
         term head = term_get_list_head(t);
 
-        if (UNLIKELY(!term_is_integer(head))) {
-            fprintf(stderr, "list_to_integer: bad argument.");
-            abort();
-        }
+        VALIDATE_VALUE(head, term_is_integer);
 
         int32_t c = term_to_int32(head);
 
         if (UNLIKELY((c < '0') || (c > '9'))) {
-            fprintf(stderr, "list_to_integer: bad argument.");
-            abort();
+            RAISE_ERROR(badarg_atom);
         }
 
         if (acc > INT32_MAX / 10) {
-            fprintf(stderr, "list_to_integer: overflow.");
-            abort();
+            // overflow error is not standard, but we need it since we are running on an embedded device
+            RAISE_ERROR(overflow_atom);
         }
 
         acc = (acc * 10) + (c - '0');
@@ -970,8 +969,7 @@ static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
     }
 
     if (UNLIKELY(digits == 0)) {
-        fprintf(stderr, "list_to_integer: bad argument.");
-        abort();
+        RAISE_ERROR(badarg_atom);
     }
 
     return term_from_int32(acc);
