@@ -607,6 +607,8 @@ static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[])
         abort();
     }
 
+    VALIDATE_VALUE(argv[0], term_is_integer);
+
     int count_elem = term_to_int32(argv[0]);
 
     if (UNLIKELY(count_elem < 0)) {
@@ -633,14 +635,16 @@ static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[])
         abort();
     }
 
+    VALIDATE_VALUE(argv[0], term_is_integer);
+    VALIDATE_VALUE(argv[1], term_is_tuple);
+
     // indexes are 1 based
     int insert_index = term_to_int32(argv[0]) - 1;
 
     int old_tuple_size = term_get_tuple_arity(argv[1]);
 
     if (UNLIKELY((insert_index > old_tuple_size) || (insert_index < 0))) {
-        fprintf(stderr, "insert_element: bad argument: %i\n", insert_index);
-        abort();
+        RAISE_ERROR(badarg_atom);
     }
 
     int new_tuple_size = old_tuple_size + 1;
@@ -671,14 +675,16 @@ static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[])
         abort();
     }
 
+    VALIDATE_VALUE(argv[0], term_is_integer);
+    VALIDATE_VALUE(argv[1], term_is_tuple);
+
     // indexes are 1 based
     int delete_index = term_to_int32(argv[0]) - 1;
 
     int old_tuple_size = term_get_tuple_arity(argv[1]);
 
     if (UNLIKELY((delete_index > old_tuple_size) || (delete_index < 0))) {
-        fprintf(stderr, "insert_element: bad argument: %i\n", delete_index);
-        abort();
+        RAISE_ERROR(badarg_atom);
     }
 
     int new_tuple_size = old_tuple_size - 1;
@@ -705,14 +711,16 @@ static term nif_erlang_setelement_3(Context *ctx, int argc, term argv[])
         abort();
     }
 
+    VALIDATE_VALUE(argv[0], term_is_integer);
+    VALIDATE_VALUE(argv[1], term_is_tuple);
+
     // indexes are 1 based
     int replace_index = term_to_int32(argv[0]) - 1;
 
     int tuple_size = term_get_tuple_arity(argv[1]);
 
     if (UNLIKELY((replace_index >= tuple_size) || (replace_index < 0))) {
-        fprintf(stderr, "setelement: bad argument: %i\n", replace_index);
-        abort();
+        RAISE_ERROR(badarg_atom);
     }
 
     memory_ensure_free(ctx, tuple_size + 1);
@@ -735,6 +743,8 @@ static term nif_erlang_tuple_to_list_1(Context *ctx, int argc, term argv[])
         fprintf(stderr, "tuple_to_list: wrong args count\n");
         abort();
     }
+
+    VALIDATE_VALUE(argv[0], term_is_tuple);
 
     int tuple_size = term_get_tuple_arity(argv[0]);
 
