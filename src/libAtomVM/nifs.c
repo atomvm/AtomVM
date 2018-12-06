@@ -36,12 +36,16 @@
 
 #define MAX_NIF_NAME_LEN 260
 
-#define VERIFY_VALUE(value, verify_function) \
-    if (UNLIKELY(!verify_function(value))) { \
+#define VALIDATE_VALUE(value, verify_function) \
+    if (UNLIKELY(!verify_function((value)))) { \
+        argv[0] = context_make_atom(ctx, error_atom); \
+        argv[1] = context_make_atom(ctx, badarg_atom); \
         return term_invalid_term(); \
     } \
 
-#define RETURN_EXCEPTION() \
+#define RAISE_ERROR(error_type_atom) \
+    ctx->x[0] = context_make_atom(ctx, error_atom); \
+    ctx->x[1] = context_make_atom(ctx, (error_type_atom)); \
     return term_invalid_term();
 
 static const char *const latin1_atom = "\x6" "latin1";
@@ -50,6 +54,7 @@ static const char *const error_atom = "\x5" "error";
 static const char *const undefined_atom = "\x9" "undefined";
 static const char *const true_atom = "\x4" "true";
 static const char *const false_atom = "\x5" "false";
+static const char *const badarg_atom = "\x6" "badarg";
 
 static void process_echo_mailbox(Context *ctx);
 static void process_console_mailbox(Context *ctx);
@@ -762,7 +767,7 @@ static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
         abort();
     }
     term a_binary = argv[0];
-    VERIFY_VALUE(a_binary, term_is_binary);
+    VALIDATE_VALUE(a_binary, term_is_binary);
 
     if (UNLIKELY(argv[1] != context_make_atom(ctx, latin1_atom))) {
         fprintf(stderr, "binary_to_atom: only latin1 is supported.\n");
@@ -798,7 +803,7 @@ static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
 
     } else {
         free((void *) atom);
-        RETURN_EXCEPTION();
+        RAISE_ERROR(badarg_atom);
     }
 }
 
@@ -819,7 +824,7 @@ term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
         abort();
     }
     term a_list = argv[0];
-    VERIFY_VALUE(a_list, term_is_list);
+    VALIDATE_VALUE(a_list, term_is_list);
 
     char *atom_string = interop_list_to_string(a_list);
     if (IS_NULL_PTR(atom_string)) {
@@ -850,7 +855,7 @@ term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
 
     } else {
         free((void *) atom);
-        RETURN_EXCEPTION();
+        RAISE_ERROR(badarg_atom);
     }
 }
 
@@ -862,7 +867,7 @@ static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
     }
 
     term atom_term = argv[0];
-    VERIFY_VALUE(atom_term, term_is_atom);
+    VALIDATE_VALUE(atom_term, term_is_atom);
 
     int atom_index = term_to_atom_index(atom_term);
     AtomString atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table, atom_index, (unsigned long) NULL);

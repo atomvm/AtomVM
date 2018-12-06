@@ -36,7 +36,7 @@
     ctx->x[1] = context_make_atom(ctx, (error_type_atom)); \
     return term_invalid_term();
 
-#define VERIFY_VALUE(value, verify_function) \
+#define VALIDATE_VALUE(value, verify_function) \
     if (UNLIKELY(!verify_function((value)))) { \
         RAISE_ERROR(badarg_atom); \
     }
@@ -86,7 +86,7 @@ term bif_erlang_byte_size_1(Context *ctx, int live, term arg1)
 {
     UNUSED(live);
 
-    VERIFY_VALUE(arg1, term_is_binary);
+    VALIDATE_VALUE(arg1, term_is_binary);
 
     return term_from_int32(term_binary_size(arg1));
 }
@@ -168,29 +168,29 @@ term bif_erlang_length_1(Context *ctx, int live, term arg1)
 {
     UNUSED(live);
 
-    VERIFY_VALUE(arg1, term_is_list);
+    VALIDATE_VALUE(arg1, term_is_list);
 
     return term_from_int32(term_list_length(arg1));
 }
 
 term bif_erlang_hd_1(Context *ctx, term arg1)
 {
-    VERIFY_VALUE(arg1, term_is_nonempty_list);
+    VALIDATE_VALUE(arg1, term_is_nonempty_list);
 
     return term_get_list_head(arg1);
 }
 
 term bif_erlang_tl_1(Context *ctx, term arg1)
 {
-    VERIFY_VALUE(arg1, term_is_nonempty_list);
+    VALIDATE_VALUE(arg1, term_is_nonempty_list);
 
     return term_get_list_tail(arg1);
 }
 
 term bif_erlang_element_2(Context *ctx, term arg1, term arg2)
 {
-    VERIFY_VALUE(arg1, term_is_integer);
-    VERIFY_VALUE(arg2, term_is_tuple);
+    VALIDATE_VALUE(arg1, term_is_integer);
+    VALIDATE_VALUE(arg2, term_is_tuple);
 
     // indexes are 1 based
     int elem_index = term_to_int32(arg1) - 1;
@@ -204,7 +204,7 @@ term bif_erlang_element_2(Context *ctx, term arg1, term arg2)
 
 term bif_erlang_tuple_size_1(Context *ctx, term arg1)
 {
-    VERIFY_VALUE(arg1, term_is_tuple);
+    VALIDATE_VALUE(arg1, term_is_tuple);
 
     return term_from_int32(term_get_tuple_arity(arg1));
 }
