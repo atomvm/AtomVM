@@ -2,7 +2,8 @@
 -export([start/0, some_calculation/2, concat_integers/2, compare_list/2]).
 
 start() ->
-    NewList = concat_integers(some_calculation(100, 1), some_calculation(100, hello)),
+    NewList = concat_integers(some_calculation(100, 1), some_calculation(100, hello))
+      ++ concat_integers(a, []),
     compare_list(NewList, "6,-1").
 
 some_calculation(N, A) when is_integer(N) and is_integer(A) ->
@@ -12,7 +13,21 @@ some_calculation(_N, _A) ->
     -1.
 
 concat_integers(A, B) ->
-    integer_to_list(A) ++ "," ++ integer_to_list(B).
+    ListA =
+        try integer_to_list(A) of
+            ListValue -> ListValue
+        catch
+            error:badarg -> "";
+            _:_ -> "error"
+        end,
+    ListB =
+        try integer_to_list(B) of
+            AListValue -> "," ++ AListValue
+        catch
+            error:badarg -> "";
+            _:_ -> "error"
+        end,
+    ListA ++ ListB.
 
 compare_list([], []) ->
     1;
