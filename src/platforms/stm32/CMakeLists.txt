@@ -24,8 +24,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/build)
 # Verbose logging
 set(LOG_VERBOSE false)
 
-# Choose target device here
-set(DEVICE stm32f407vgt6)
+if (NOT DEVICE)
+    set(DEVICE stm32f407vgt6)
+endif ()
 
 # Include libopencm3
 include(cmake/libopencm3.cmake)
