@@ -20,11 +20,14 @@
 #include <errno.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <libopencm3/cm3/nvic.h>
+#include <libopencm3/cm3/systick.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/usart.h>
 
 #define USART_CONSOLE USART2
+#define CLOCK_FREQUENCY (168000000)
 
 int _write(int file, char *ptr, int len);
 
@@ -59,6 +62,17 @@ static void usart_setup()
     usart_enable(USART_CONSOLE);
 }
 
+// Set up a timer to create 1ms ticks
+// The handler is in sys.c
+static void systick_setup()
+{
+    // clock rate / 1000 to get 1ms interrupt rate
+    systick_set_reload(CLOCK_FREQUENCY / 1000);
+    systick_set_clocksource(STK_CSR_CLKSOURCE_AHB);
+    systick_counter_enable();
+    systick_interrupt_enable();
+}
+
 // Use USART_CONSOLE as a console.
 // This is a syscall for newlib
 int _write(int file, char *ptr, int len)
@@ -81,6 +95,7 @@ int _write(int file, char *ptr, int len)
 int main()
 {
     clock_setup();
+    systick_setup();
     usart_setup();
     printf("\nBooting AtomVM\n");
 
