@@ -40,6 +40,10 @@ include_directories(src)
 # Specify output executable
 add_executable(${PROJECT_NAME}.elf ${SOURCE_FILES})
 
+add_subdirectory(../../libAtomVM ./libAtomVM)
+target_include_directories(${PROJECT_NAME}.elf PRIVATE ../../libAtomVM)
+target_link_libraries(${PROJECT_NAME}.elf "libAtomVM")
+
 # Output elf file size
 add_custom_command(
     TARGET ${PROJECT_NAME}.elf
