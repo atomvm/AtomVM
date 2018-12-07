@@ -101,3 +101,30 @@ int avmpack_find_section_by_name(const void *avmpack_binary, const char *name, c
 
     return 0;
 }
+
+void *avmpack_fold(void *accum, const void *avmpack_binary, avmpack_fold_fun fold_fun)
+{
+    int offset = AVMPACK_SIZE;
+    uint32_t size = 0;
+
+    do {
+        const uint32_t *size_ptr = ((const uint32_t *) (avmpack_binary)) + offset/sizeof(uint32_t);
+        size = ENDIAN_SWAP_32(*size_ptr);
+        if (size > 0) {
+            const uint32_t *flags_ptr = size_ptr + 1;
+            uint32_t flags = ENDIAN_SWAP_32(*flags_ptr);
+            const char *section_name = (const char *) (size_ptr + 3);
+            int section_name_len = pad(strlen(section_name) + 1);
+            accum = fold_fun(
+                accum,
+                (uint32_t *) (size_ptr + 3 + section_name_len/sizeof(uint32_t)),
+                size,
+                flags,
+                section_name
+            );
+            offset += size;
+        }
+    } while(size > 0);
+    
+    return accum;
+}
