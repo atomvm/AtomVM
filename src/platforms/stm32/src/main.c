@@ -26,7 +26,14 @@
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/usart.h>
 
+#include <avmpack.h>
+#include <context.h>
+#include <globalcontext.h>
+#include <module.h>
+
 #define USART_CONSOLE USART2
+#define AVM_ADDRESS (0x8080000)
+#define AVM_FLASH_MAX_SIZE (0x80000)
 #define CLOCK_FREQUENCY (168000000)
 
 int _write(int file, char *ptr, int len);
@@ -97,7 +104,34 @@ int main()
     clock_setup();
     systick_setup();
     usart_setup();
-    printf("\nBooting AtomVM\n");
+
+    const void *flashed_avm = (void *) AVM_ADDRESS;
+    uint32_t size = AVM_FLASH_MAX_SIZE;
+
+    uint32_t startup_beam_size;
+    const void *startup_beam;
+    const char *startup_module_name;
+
+    printf("Booting file mapped at: %p, size: %li\n", flashed_avm, size);
+
+    GlobalContext *glb = globalcontext_new();
+
+    if (!avmpack_is_valid(flashed_avm, size) || !avmpack_find_section_by_flag(flashed_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
+        fprintf(stderr, "error: invalid AVM Pack\n");
+        return 1;
+    }
+
+    glb->avmpack_data = flashed_avm;
+    glb->avmpack_platform_data = NULL;
+
+    Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
+    globalcontext_insert_module_with_filename(glb, mod, startup_module_name);
+    Context *ctx = context_new(glb);
+
+    printf("Starting: %s...\n", startup_module_name);
+    printf("---\n");
+    context_execute_loop(ctx, mod, "start", 0);
+    printf("Return value: %lx\n", (long) term_to_int32(ctx->x[0]));
 
     while (1);
 
