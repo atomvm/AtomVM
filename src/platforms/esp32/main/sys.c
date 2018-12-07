@@ -33,7 +33,7 @@ static inline void sys_clock_gettime(struct timespec *t)
 {
     TickType_t ticks = xTaskGetTickCount();
     t->tv_sec = (ticks * portTICK_PERIOD_MS) / 1000;
-    t->tv_nsec = (ticks * portTICK_PERIOD_MS) % 1000;
+    t->tv_nsec = ((ticks * portTICK_PERIOD_MS) % 1000) * 1000000;
 }
 
 static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *timespec2)
