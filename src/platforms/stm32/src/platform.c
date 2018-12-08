@@ -18,9 +18,18 @@
  ***************************************************************************/
 
 #include <context.h>
+#include <gpiodriver.h>
 
 Context *platform_open_port(GlobalContext *glb, const char *driver_name, term opts)
 {
-    // TODO: implement
-    return NULL;
+    Context *new_ctx = context_new(glb);
+
+    if (!strcmp(driver_name, "gpio")) {
+        gpiodriver_init(new_ctx);
+    } else {
+        context_destroy(new_ctx);
+        return NULL;
+    }
+
+    return new_ctx;
 }
