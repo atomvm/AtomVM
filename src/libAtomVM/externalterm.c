@@ -29,6 +29,7 @@
 
 #define EXTERNAL_TERM_TAG 131
 #define SMALL_INTEGER_EXT 97
+#define INTEGER_EXT 98
 #define ATOM_EXT 100
 #define SMALL_TUPLE_EXT 104
 #define NIL_EXT 106
@@ -61,6 +62,13 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
         case SMALL_INTEGER_EXT: {
             *eterm_size = 2;
             return term_from_int11(external_term_buf[1]);
+        }
+
+        case INTEGER_EXT: {
+            int32_t value = READ_32_UNALIGNED(external_term_buf + 1);
+
+            *eterm_size = 5;
+            return term_from_int32(value);
         }
 
         case ATOM_EXT: {
@@ -160,6 +168,11 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_siz
     switch (external_term_buf[0]) {
         case SMALL_INTEGER_EXT: {
             *eterm_size = 2;
+            return 0;
+        }
+
+        case INTEGER_EXT: {
+            *eterm_size = 5;
             return 0;
         }
 
