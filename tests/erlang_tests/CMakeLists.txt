@@ -103,6 +103,7 @@ compile_erlang(test_bif_badargument)
 compile_erlang(test_bif_badargument2)
 compile_erlang(test_bif_badargument3)
 compile_erlang(test_tuple_nifs_badargs)
+compile_erlang(long_atoms)
 
 compile_erlang(complex_struct_size0)
 compile_erlang(complex_struct_size1)
@@ -261,6 +262,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_bif_badargument2.beam
     test_bif_badargument3.beam
     test_tuple_nifs_badargs.beam
+    long_atoms.beam
 
     complex_struct_size0.beam
     complex_struct_size1.beam
