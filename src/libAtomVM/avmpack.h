@@ -32,6 +32,11 @@
 #define BEAM_CODE_FLAG 2
 
 /**
+ * @brief callback function for AVMPack section traversal.
+ */
+typedef void *(*avmpack_fold_fun)(void *accum, const void *ptr, uint32_t size, uint32_t flags, const char *name);
+
+/**
  * @brief Finds an AVM Pack section that has certain flags set.
  *
  * @details Finds an AVM Pack section that has certain flags set and returns a pointer to it, its size and its name.
@@ -65,5 +70,14 @@ int avmpack_find_section_by_name(const void *avmpack_binary, const char *name, c
  * @returns 1 if it is a valid AVM Pack binary, 0 otherwise.
  */
 int avmpack_is_valid(const void *avmpack_binary, uint32_t size);
+
+/**
+ * @brief Traverse all the sections in an AVM Pack.
+ *
+ * @details This function will call the callback on each section of the AVM Pack.
+ * @param avmpack_binary a pointer to an AVM Pack binary.
+ * @param callback callback funtion will be called for each section.
+ */
+void *avmpack_fold(void *accum, const void *avmpack_binary, avmpack_fold_fun fold_fun);
 
 #endif

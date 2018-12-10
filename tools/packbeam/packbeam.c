@@ -21,12 +21,15 @@
 #include <libgen.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #ifdef WITH_ZLIB
 #include <zlib.h>
 #endif
 
 #include "../../src/libAtomVM/iff.c"
+#include "../../src/libAtomVM/avmpack.h"
+#include "../../src/platforms/generic_unix/mapped_file.h"
 
 #define LITT_UNCOMPRESSED_SIZE_OFFSET 8
 #define LITT_HEADER_SIZE 12
@@ -39,11 +42,76 @@ static void pad_and_align(FILE *f);
 static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize);
 static void add_module_header(FILE *f, const char *module_name, uint32_t flags);
 
+static int do_pack(int argc, char **argv);
+static int do_list(int argc, char **argv);
+
+void usage3(FILE *out, const char *program, const char *msg) {
+    if (!IS_NULL_PTR(msg)) {
+        fprintf(out, "%s\n", msg);
+    }
+    fprintf(out, "Usage: %s [-h] [-l] <avm-file> [<options>]\n", program);
+    fprintf(out, "    -h    Print this help menu.\n");
+    fprintf(out, "    -l    List modules in an AVM file.\n");
+    fprintf(out, "          Without the -l flag, <options> must be: <beam-file> [<beam-file>]*, where\n");
+    fprintf(out, "          <beam-file> is a compiled ERTS beam file, and\n");
+    fprintf(out, "          the first beam file in the list contains an exported start/0 function.\n");
+}
+
+void usage(const char *program)
+{
+    usage3(stdout, program, NULL);
+}
+
+
 int main(int argc, char **argv)
 {
-    FILE *pack = fopen(argv[1], "w");
+    int opt;
+    
+    const char *action = "pack";
+    while ((opt = getopt(argc, argv, "lh")) != -1) {
+        switch(opt) {
+            case 'h':
+                usage(argv[0]);
+                return EXIT_SUCCESS;
+            case 'l':
+                action = "list";
+                break;
+            case '?': {
+                char buf[20];
+                sprintf(buf, "Unknown option: %c", optopt);
+                usage3(stderr, argv[0], buf);
+                return EXIT_FAILURE;
+            }
+        }
+    }
+
+    int new_argc    = argc - optind;
+    char **new_argv = argv + optind;
+
+    if (new_argc < 1) {
+        usage3(stderr, argv[0], "Missing avm file.\n");
+        return EXIT_FAILURE;
+    }
+
+    if (!strcmp(action, "pack")) {
+        if (new_argc < 2) {
+            usage3(stderr, argv[0], "Missing options for pack\n");
+            return EXIT_FAILURE;
+        }
+        return do_pack(new_argc, new_argv);
+    } else {
+        return do_list(new_argc, new_argv);
+    }
+}
+        
+        
+static int do_pack(int argc, char **argv)
+{
+    FILE *pack = fopen(argv[0], "w");
     if (!pack) {
-        perror("Cannot open output file for writing");
+        char buf[1024];
+        sprintf(buf, "Cannot open output file for writing %s", argv[0]);
+        perror(buf);
         return EXIT_FAILURE;
     }
 
@@ -58,10 +126,12 @@ int main(int argc, char **argv)
     };
     assert(fwrite(pack_header, sizeof(unsigned char), 24, pack) == 24);
 
-    for (int i = 2; i < argc; i++) {
+    for (int i = 1; i < argc; i++) {
         FILE *beam = fopen(argv[i], "r");
         if (!beam) {
-            perror("Cannot open beam file: ");
+            char buf[1024];
+            sprintf(buf, "Cannot open beam file %s", argv[i]);
+            perror(buf);
             return EXIT_FAILURE;
         }
 
@@ -72,7 +142,7 @@ int main(int argc, char **argv)
 
         char *complete_name = strdup(argv[i]);
         char *filename = basename(complete_name);
-        if (i == 2) {
+        if (i == 1) {
             add_module_header(pack, filename, BEAM_CODE_FLAG | BEAM_START_FLAG);
         } else {
             add_module_header(pack, filename, BEAM_CODE_FLAG);
@@ -146,6 +216,37 @@ int main(int argc, char **argv)
     add_module_header(pack, "end", END_OF_FILE);
 
     return EXIT_SUCCESS;
+}
+
+void *print_section(void *accum, const void *ptr, uint32_t size, uint32_t flags, const char *section_name)
+{
+    UNUSED(ptr);
+    UNUSED(size);
+    printf("%s %s\n", section_name, flags & BEAM_START_FLAG ? "*" : "");
+    return accum;
+}
+
+static int do_list(int argc, char **argv)
+{
+    UNUSED(argc);
+    MappedFile *mapped_file = mapped_file_open_beam(argv[0]);
+    if (IS_NULL_PTR(mapped_file)) {
+        char buf[1024];
+        sprintf(buf, "Cannot open AVM file %s", argv[0]);
+        perror(buf);
+        return EXIT_FAILURE;
+    }
+    
+    int ret = EXIT_SUCCESS;
+    if (avmpack_is_valid(mapped_file->mapped, mapped_file->size)) {
+        avmpack_fold(NULL, mapped_file->mapped, print_section);
+    } else {
+        fprintf(stderr, "%s is not an AVM file.\n", argv[1]);
+        ret = EXIT_FAILURE;
+    }
+    mapped_file_close(mapped_file);
+
+    return ret;
 }
 
 static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize)
