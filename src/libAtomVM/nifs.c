@@ -488,8 +488,7 @@ static term nif_erlang_concat_2(Context *ctx, int argc, term argv[])
             return argv[1];
 
         } else {
-            fprintf(stderr, "Argument error\n");
-            abort();
+            RAISE_ERROR(badarg_atom);
         }
     }
 
