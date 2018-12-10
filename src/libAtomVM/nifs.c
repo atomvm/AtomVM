@@ -56,6 +56,7 @@ static const char *const true_atom = "\x4" "true";
 static const char *const false_atom = "\x5" "false";
 static const char *const badarg_atom = "\x6" "badarg";
 static const char *const overflow_atom = "\x8" "overflow";
+static const char *const system_limit_atom = "\xC" "system_limit";
 
 static void process_echo_mailbox(Context *ctx);
 static void process_console_mailbox(Context *ctx);
@@ -792,9 +793,8 @@ static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
     }
     int atom_string_len = strlen(atom_string);
     if (UNLIKELY(atom_string_len > 255)) {
-        fprintf(stderr, "Too long atom.\n");
         free(atom_string);
-        abort();
+        RAISE_ERROR(system_limit_atom);
     }
 
     AtomString atom = malloc(atom_string_len + 1);
@@ -844,9 +844,8 @@ term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
     }
     int atom_string_len = strlen(atom_string);
     if (UNLIKELY(atom_string_len > 255)) {
-        fprintf(stderr, "Too long atom.\n");
         free(atom_string);
-        abort();
+        RAISE_ERROR(system_limit_atom);
     }
 
     AtomString atom = malloc(atom_string_len + 1);
