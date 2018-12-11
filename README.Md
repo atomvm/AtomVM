@@ -55,9 +55,10 @@ This basically means that an instruction has not been implemented yet, or that a
 Known limitations
 -----------------
 This project is a work in progress, so there are several known limitations, that will prevent to run unmodified software, some of them are:
-* There is no standard library right now, so every application needs to have some copy&paste boilerplate.
+* There is a minimal standard library, so several standard functions are missing.
 * Several instructions are not yet implemented.
 * Maps are not yet supported.
 * Binaries are still poorly supported.
+* Funs are not yet supported.
 
 All of these limitations are going to be fixed in a reasonable amount of time.
