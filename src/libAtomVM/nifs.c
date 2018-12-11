@@ -317,16 +317,20 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
     return term_from_local_process_id(new_ctx->process_id);
 }
 
-
 static term nif_erlang_register_2(Context *ctx, int argc, term argv[])
 {
-    if (UNLIKELY((argc != 2) || !term_is_atom(argv[0]) || !term_is_pid(argv[1]))) {
-        fprintf(stderr, "bad match\n");
-        abort();
-    }
+    UNUSED(argc);
 
-    int atom_index = term_to_atom_index(argv[0]);
-    int pid = term_to_local_process_id(argv[1]);
+    term reg_name_term = argv[0];
+    VALIDATE_VALUE(reg_name_term, term_is_atom);
+    term pid_or_port_term = argv[1];
+    VALIDATE_VALUE(pid_or_port_term, term_is_pid);
+
+    int atom_index = term_to_atom_index(reg_name_term);
+    int pid = term_to_local_process_id(pid_or_port_term);
+
+    // TODO: pid must be existing, not already registered.
+    // TODO: reg_name_term must not be the atom undefined and not already registered.
 
     globalcontext_register_process(ctx->global, atom_index, pid);
 
@@ -335,12 +339,15 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[])
 {
-    if (UNLIKELY((argc != 1) || !term_is_atom(argv[0]))) {
+    if (UNLIKELY((argc != 1))) {
         fprintf(stderr, "bad match\n");
         abort();
     }
 
-    int atom_index = term_to_atom_index(argv[0]);
+    term reg_name_term = argv[0];
+    VALIDATE_VALUE(reg_name_term, term_is_atom);
+
+    int atom_index = term_to_atom_index(reg_name_term);
 
     int local_process_id = globalcontext_get_registered_process(ctx->global, atom_index);
     if (local_process_id) {
@@ -397,10 +404,12 @@ static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
         abort();
     }
 
-    if (UNLIKELY(!term_is_atom(argv[0]) || !term_is_atom(argv[1]) || !term_is_list(argv[2]))) {
-        fprintf(stderr, "spawn: invalid arguments\n");
-        abort();
-    }
+    term module_term = argv[0];
+    term function_term = argv[1];
+    term args_term = argv[2];
+    VALIDATE_VALUE(module_term, term_is_atom);
+    VALIDATE_VALUE(function_term, term_is_atom);
+    VALIDATE_VALUE(args_term, term_is_list);
 
     Context *new_ctx = context_new(ctx->global);
 
