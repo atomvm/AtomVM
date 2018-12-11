@@ -622,8 +622,7 @@ static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[])
     int count_elem = term_to_int32(argv[0]);
 
     if (UNLIKELY(count_elem < 0)) {
-        fprintf(stderr, "make_tuple: bad argument: %i\n", count_elem);
-        abort();
+        RAISE_ERROR(badarg_atom);
     }
 
     memory_ensure_free(ctx, count_elem + 1);
