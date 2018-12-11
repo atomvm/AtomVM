@@ -220,6 +220,8 @@ int test_modules_execution()
         return EXIT_FAILURE;
     }
 
+    int failed_tests = 0;
+
     do {
         printf("-- EXECUTING TEST: %s\n", test->test_file);
         MappedFile *beam_file = mapped_file_open_beam(test->test_file);
@@ -243,6 +245,7 @@ int test_modules_execution()
         int32_t value = term_to_int32(ctx->x[0]);
         if (value != test->expected_value) {
             fprintf(stderr, "\x1b[1;31mFailed test module %s, got value: %i\x1b[0m\n", test->test_file, value);
+            failed_tests++;
         }
 
         context_destroy(ctx);
@@ -253,7 +256,13 @@ int test_modules_execution()
         test++;
     } while (test->test_file);
 
-    return EXIT_SUCCESS;
+    if (failed_tests == 0) {
+        fprintf(stderr, "Success.\n");
+        return EXIT_SUCCESS;
+    } else {
+        fprintf(stderr, "Failed: %i tests.\n", failed_tests);
+        return EXIT_FAILURE;
+    }
 }
 
 int main(int argc, char **argv)
