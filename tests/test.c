@@ -142,6 +142,7 @@ struct Test tests[] =
     {"test_tuple_nifs_badargs.beam", -349525},
     {"long_atoms.beam", 4},
     {"test_concat_badarg.beam", 4},
+    {"register_and_whereis_badarg.beam", 333},
 
     {"nested_list_size0.beam", 0},
     {"nested_list_size1.beam", 2},
