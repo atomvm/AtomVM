@@ -139,7 +139,7 @@ struct Test tests[] =
     {"test_bif_badargument.beam", -5592405},
     {"test_bif_badargument2.beam", -85},
     {"test_bif_badargument3.beam", -85},
-    {"test_tuple_nifs_badargs.beam", -349525},
+    {"test_tuple_nifs_badargs.beam", -1398101},
     {"long_atoms.beam", 4},
     {"test_concat_badarg.beam", 4},
     {"register_and_whereis_badarg.beam", 333},
