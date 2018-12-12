@@ -274,22 +274,21 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-    term port_name = argv[0];
+    term port_name_tuple = argv[0];
+    VALIDATE_VALUE(port_name_tuple, term_is_tuple);
     term opts = argv[1];
+    VALIDATE_VALUE(opts, term_is_list);
 
-    if (!(term_is_tuple(port_name) && term_get_tuple_arity(port_name) == 2) && !term_is_nonempty_list(opts)) {
-        fprintf(stderr, "bad args\n");
-        abort();
+    if (UNLIKELY(term_get_tuple_arity(port_name_tuple) != 2)) {
+        RAISE_ERROR(badarg_atom);
     }
 
-    term t = term_get_tuple_element(port_name, 1);
+    term t = term_get_tuple_element(port_name_tuple, 1);
+    //TODO: validate port name
     char *driver_name = interop_term_to_string(t);
     if (IS_NULL_PTR(driver_name)) {
-        int error_index = globalcontext_insert_atom(ctx->global, error_atom);
-        if (error_index < 0) {
-            abort();
-        }
-        return term_from_atom_index(error_index);
+        //TODO: handle atoms here
+        RAISE_ERROR(badarg_atom);
     }
 
     Context *new_ctx = NULL;

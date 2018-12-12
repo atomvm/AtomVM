@@ -2,7 +2,7 @@
 -export([start/0, do_open_port/2, echo/1]).
 
 start() ->
-    register(echo, do_open_port(<<"echo">>, nil)),
+    register(echo, do_open_port(<<"echo">>, [])),
     byte_size(echo(<<"Hello World">>)).
 
 do_open_port(PortName, Param) ->

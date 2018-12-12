@@ -2,7 +2,7 @@
 -export([start/0, do_open_port/2]).
 
 start() ->
-    Port = do_open_port("echo", nil),
+    Port = do_open_port("echo", []),
     Port ! {self(), 42},
     receive
         RecValue ->

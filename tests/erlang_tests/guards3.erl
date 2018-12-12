@@ -3,7 +3,7 @@
 -export([start/0, do_something/1, loop/1]).
 
 start() ->
-    Port = do_open_port("echo", nil),
+    Port = do_open_port("echo", []),
     Pid = spawn(guards3, loop, [initial_state()]),
     do_something(Port) + do_something(Pid)*3 + do_something(2)*100.
 
