@@ -272,10 +272,7 @@ const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
 
 static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
 {
-    if (UNLIKELY(argc != 2)) {
-        fprintf(stderr, "wrong arity\n");
-        abort();
-    }
+    UNUSED(argc);
 
     term port_name = argv[0];
     term opts = argv[1];
@@ -339,10 +336,7 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[])
 {
-    if (UNLIKELY((argc != 1))) {
-        fprintf(stderr, "bad match\n");
-        abort();
-    }
+    UNUSED(argc);
 
     term reg_name_term = argv[0];
     VALIDATE_VALUE(reg_name_term, term_is_atom);
@@ -399,10 +393,7 @@ static void process_console_mailbox(Context *ctx)
 
 static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
 {
-    if (UNLIKELY(argc != 3)) {
-        fprintf(stderr, "spawn: wrong args count\n");
-        abort();
-    }
+    UNUSED(argc);
 
     term module_term = argv[0];
     term function_term = argv[1];
@@ -447,10 +438,7 @@ static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
 }
 static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
 {
-    if (UNLIKELY(argc != 2)) {
-        fprintf(stderr, "send: wrong args count\n");
-        abort();
-    }
+    UNUSED(argc);
 
     if (UNLIKELY(!term_is_pid(argv[0]))) {
         fprintf(stderr, "send: invalid arguments\n");
@@ -467,10 +455,7 @@ static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_is_process_alive_1(Context *ctx, int argc, term argv[])
 {
-    if (UNLIKELY(argc != 1)) {
-        fprintf(stderr, "is_process_alive: wrong args count\n");
-        abort();
-    }
+    UNUSED(argc);
 
     int local_process_id = term_to_local_process_id(argv[0]);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
@@ -485,10 +470,7 @@ static term nif_erlang_is_process_alive_1(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[])
 {
-    if (UNLIKELY(argc != 2)) {
-        fprintf(stderr, "++: wrong args count\n");
-        abort();
-    }
+    UNUSED(argc);
 
     term prepend_list = argv[0];
 
@@ -539,12 +521,8 @@ static term nif_erlang_concat_2(Context *ctx, int argc, term argv[])
 
 term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[])
 {
+    UNUSED(argc);
     UNUSED(argv);
-
-    if (UNLIKELY(argc != 0)) {
-        fprintf(stderr, "erlang:make_ref: wrong args count\n");
-        abort();
-    }
 
     uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
 
@@ -554,11 +532,7 @@ term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[])
 term nif_erlang_system_time_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(ctx);
-
-    if (argc != 1) {
-        fprintf(stderr, "erlang:system_time: wrong args count\n");
-        abort();
-    }
+    UNUSED(argc);
 
     struct timespec ts;
     sys_time(&ts);
@@ -577,12 +551,8 @@ term nif_erlang_system_time_1(Context *ctx, int argc, term argv[])
 term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[])
 {
     UNUSED(ctx);
+    UNUSED(argc);
     UNUSED(argv);
-
-    if (argc != 0) {
-        fprintf(stderr, "system_time_to_universal_time(): wrong args count\n");
-        abort();
-    }
 
     // 4 = size of date/time tuple, 3 size of date time tuple
     memory_ensure_free(ctx, 3 + 4 + 4);
@@ -612,10 +582,7 @@ term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[])
 {
-    if (argc != 2) {
-        fprintf(stderr, "make_tuple: wrong args count\n");
-        abort();
-    }
+    UNUSED(argc);
 
     VALIDATE_VALUE(argv[0], term_is_integer);
 
@@ -639,10 +606,7 @@ static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[])
 {
-    if (argc != 3) {
-        fprintf(stderr, "insert_element: wrong args count\n");
-        abort();
-    }
+    UNUSED(argc);
 
     VALIDATE_VALUE(argv[0], term_is_integer);
     VALIDATE_VALUE(argv[1], term_is_tuple);
@@ -679,10 +643,7 @@ static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[])
 {
-    if (argc != 2) {
-        fprintf(stderr, "delete_element: wrong args count\n");
-        abort();
-    }
+    UNUSED(argc);
 
     VALIDATE_VALUE(argv[0], term_is_integer);
     VALIDATE_VALUE(argv[1], term_is_tuple);
@@ -715,10 +676,7 @@ static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_setelement_3(Context *ctx, int argc, term argv[])
 {
-    if (argc != 3) {
-        fprintf(stderr, "setelement: wrong args count\n");
-        abort();
-    }
+    UNUSED(argc);
 
     VALIDATE_VALUE(argv[0], term_is_integer);
     VALIDATE_VALUE(argv[1], term_is_tuple);
@@ -748,10 +706,7 @@ static term nif_erlang_setelement_3(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_tuple_to_list_1(Context *ctx, int argc, term argv[])
 {
-    if (argc != 1) {
-        fprintf(stderr, "tuple_to_list: wrong args count\n");
-        abort();
-    }
+    UNUSED(argc);
 
     VALIDATE_VALUE(argv[0], term_is_tuple);
 
@@ -781,10 +736,8 @@ static term nif_erlang_binary_to_existing_atom_2(Context *ctx, int argc, term ar
 
 static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
 {
-    if (argc != 2) {
-        fprintf(stderr, "binary_to_atom: wrong args count\n");
-        abort();
-    }
+    UNUSED(argc);
+
     term a_binary = argv[0];
     VALIDATE_VALUE(a_binary, term_is_binary);
 
@@ -837,10 +790,8 @@ term nif_erlang_list_to_existing_atom_1(Context *ctx, int argc, term argv[])
 
 term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
 {
-    if (argc != 1) {
-        fprintf(stderr, "list_to_existing_atom: wrong args count\n");
-        abort();
-    }
+    UNUSED(argc);
+
     term a_list = argv[0];
     VALIDATE_VALUE(a_list, term_is_list);
 
@@ -878,10 +829,7 @@ term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
 
 static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
 {
-    if (argc != 1) {
-        fprintf(stderr, "list_to_atom: wrong args count\n");
-        abort();
-    }
+    UNUSED(argc);
 
     term atom_term = argv[0];
     VALIDATE_VALUE(atom_term, term_is_atom);
@@ -904,10 +852,8 @@ static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[])
 {
-    if (argc != 1) {
-        fprintf(stderr, "integer_to_list: wrong args count\n");
-        abort();
-    }
+    UNUSED(argc);
+
     term value = argv[0];
     VALIDATE_VALUE(value, term_is_integer);
 
@@ -929,10 +875,7 @@ static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
 {
-    if (argc != 1) {
-        fprintf(stderr, "list_to_integer: wrong args count\n");
-        abort();
-    }
+    UNUSED(argc);
 
     term t = argv[0];
     int32_t acc = 0;
@@ -984,11 +927,7 @@ static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
 static term nif_erlang_display_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(ctx);
-
-    if (argc != 1) {
-        fprintf(stderr, "display: wrong args count\n");
-        abort();
-    }
+    UNUSED(argc);
 
     display_term(argv[0], ctx);
     printf("\n");
@@ -1098,11 +1037,7 @@ static void display_term(term t, Context *ctx)
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])
 {
     UNUSED(ctx);
-
-    if (UNLIKELY(argc != 1)) {
-        fprintf(stderr, "erts_debug:flat_size: wrong args count\n");
-        abort();
-    }
+    UNUSED(argc);
 
     unsigned long terms_count;
 
