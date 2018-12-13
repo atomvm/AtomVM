@@ -694,7 +694,10 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
                 USED_BY_TRACE(arity);
                 USED_BY_TRACE(index);
 
-                NEXT_INSTRUCTION(next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    NEXT_INSTRUCTION(next_off);
+                #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
                     remaining_reductions--;
@@ -702,6 +705,8 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
                         SCHEDULE_NEXT(mod, INSTRUCTION_POINTER());
                         continue;
                     }
+
+                    NEXT_INSTRUCTION(next_off);
 
                     const struct ExportedFunction *func = mod->imported_funcs[index].func;
 
