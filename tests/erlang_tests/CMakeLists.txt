@@ -106,6 +106,9 @@ compile_erlang(test_tuple_nifs_badargs)
 compile_erlang(long_atoms)
 compile_erlang(test_concat_badarg)
 compile_erlang(register_and_whereis_badarg)
+compile_erlang(echo)
+compile_erlang(pingpong)
+compile_erlang(prime_ext)
 
 compile_erlang(complex_struct_size0)
 compile_erlang(complex_struct_size1)
@@ -267,6 +270,9 @@ add_custom_target(erlang_test_modules DEPENDS
     long_atoms.beam
     test_concat_badarg.beam
     register_and_whereis_badarg.beam
+    echo.beam
+    pingpong.beam
+    prime_ext.beam
 
     complex_struct_size0.beam
     complex_struct_size1.beam
