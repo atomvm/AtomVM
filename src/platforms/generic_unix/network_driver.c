@@ -22,6 +22,8 @@
 
 void networkdriver_init(Context *ctx)
 {
+    UNUSED(ctx);
+
     fprintf(stderr, "Unsupported driver on this platform: networkdriver\n");
     abort();
 }

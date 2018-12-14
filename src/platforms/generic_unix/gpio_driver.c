@@ -22,6 +22,8 @@
 
 void gpiodriver_init(Context *ctx)
 {
+    UNUSED(ctx);
+
     fprintf(stderr, "Unsupported driver on this platform: gpiodriver\n");
     abort();
 }
