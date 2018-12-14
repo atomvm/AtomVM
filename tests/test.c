@@ -143,6 +143,7 @@ struct Test tests[] =
     {"long_atoms.beam", 4},
     {"test_concat_badarg.beam", 4},
     {"register_and_whereis_badarg.beam", 333},
+    {"test_send.beam", -3},
     {"pingpong.beam", 1},
     {"prime_ext.beam", 1999},
 
