@@ -439,12 +439,10 @@ static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-    if (UNLIKELY(!term_is_pid(argv[0]))) {
-        fprintf(stderr, "send: invalid arguments\n");
-        abort();
-    }
+    term pid_term = argv[0];
+    VALIDATE_VALUE(pid_term, term_is_pid);
 
-    int local_process_id = term_to_local_process_id(argv[0]);
+    int local_process_id = term_to_local_process_id(pid_term);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
     mailbox_send(target, argv[1]);
