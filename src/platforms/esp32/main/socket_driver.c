@@ -71,16 +71,16 @@ term_ref socket_driver_do_init(CContext *cc, term params)
 {
     Context *ctx = cc->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-    
+
     if (!term_is_list(params)) {
         return port_create_error_tuple(cc, "badarg: params is not a list");
     }
     term proto = interop_proplist_get_value(params, context_make_atom(ctx, tag_proto_a));
-    
+
     if (term_is_nil(proto)) {
         return port_create_error_tuple(cc, "badarg: no proto in params");
     }
-    
+
     if (proto == context_make_atom(ctx, proto_udp_a)) {
         int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
         if (sockfd == -1) {
@@ -97,7 +97,7 @@ term_ref socket_driver_do_init(CContext *cc, term params)
         const char *error_string = strerror(errno);
         return port_create_error_tuple(cc, error_string);
     }
-    
+
     return ccontext_make_term_ref(cc, context_make_atom(ctx, port_ok_a));
 }
 
@@ -111,13 +111,13 @@ term_ref socket_driver_do_send(CContext *cc, term dest_address, term dest_port, 
 {
     Context *ctx = cc->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-    
+
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(struct sockaddr_in));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(socket_tuple_to_addr(dest_address));
     addr.sin_port = htons(term_to_int32(dest_port));
-    
+
     const char *buf = NULL;
     size_t len = 0;
     if (term_is_binary(buffer)) {
@@ -129,9 +129,9 @@ term_ref socket_driver_do_send(CContext *cc, term dest_address, term dest_port, 
     } else {
         return port_create_error_tuple(cc, "unsupported type for send");
     }
-    
+
     TRACE("send: data with len: %i, to: %i, port: %i\n", len, ntohl(addr.sin_addr.s_addr), ntohs(addr.sin_port));
-    
+
     int sent_data = sendto(socket_data->sockfd, buf, len, 0, (struct sockaddr *) &addr, sizeof(addr));
     if (sent_data == -1) {
         const char *error_string = strerror(errno);

@@ -38,7 +38,7 @@ get_pid() ->
     case whereis(console) of
         undefined ->
             start();
-        Pid when is_pid(Pid) -> 
+        Pid when is_pid(Pid) ->
             Pid
     end.
 

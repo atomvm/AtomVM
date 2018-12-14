@@ -38,7 +38,7 @@ term_ref port_create_tuple2(CContext *cc, term_ref a, term_ref b)
     term_ref terms[2];
     terms[0] = a;
     terms[1] = b;
-    
+
     return port_create_tuple_n(cc, 2, terms);
 }
 
@@ -55,11 +55,11 @@ term_ref port_create_tuple3(CContext *cc, term_ref a, term_ref b, term_ref c)
 term_ref port_create_tuple_n(CContext *cc, size_t num_terms, term_ref *terms)
 {
     term ret = term_alloc_tuple(num_terms, cc->ctx);
-    
+
     for (size_t i = 0; i < num_terms;  ++i) {
         term_put_tuple_element(ret, i, ccontext_get_term(cc, terms[i]));
     }
-    
+
     return ccontext_make_term_ref(cc, ret);
 }
 
@@ -91,7 +91,7 @@ void port_send_reply(CContext *cc, term_ref pid, term_ref ref, term_ref reply)
 Context *port_create_port(GlobalContext *glb, const char *driver_name, term opts)
 {
     Context *new_ctx = context_new(glb);
-    
+
     if (!strcmp(driver_name, "socket")) {
         socket_init(new_ctx, opts);
     } else if (!strcmp(driver_name, "network")) {
@@ -101,7 +101,6 @@ Context *port_create_port(GlobalContext *glb, const char *driver_name, term opts
     } else {
         context_destroy(new_ctx);
     }
-    
+
     return new_ctx;
 }
-

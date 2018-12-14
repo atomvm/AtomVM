@@ -47,7 +47,7 @@ send(#socket{pid=Pid}, Address, Port, Packet) ->
 
 recv(Socket, Length) ->
     recv(Socket, Length, infinity).
-    
+
 recv(#socket{pid=Pid}, Length, Timeout) ->
     call(Pid, {recvfrom, Length, Timeout}).
 

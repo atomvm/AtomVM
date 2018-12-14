@@ -69,7 +69,7 @@ static void socket_consume_mailbox(Context *ctx)
     if (UNLIKELY(ctx->native_handler != socket_consume_mailbox)) {
         abort();
     }
-    
+
     struct CContext *cc = malloc(sizeof(struct CContext));
     if (!cc) {
         fprintf(stderr, "malloc %s:%d", __FILE__, __LINE__);
@@ -104,7 +104,7 @@ static void socket_consume_mailbox(Context *ctx)
     } else {
         port_send_reply(cc, pid, ref, port_create_error_tuple(cc, "unrecognized command"));
     }
-    
+
     ccontext_release_all_refs(cc);
     free(cc);
 

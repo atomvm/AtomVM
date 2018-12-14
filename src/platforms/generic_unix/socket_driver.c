@@ -141,7 +141,7 @@ term_ref socket_driver_do_send(CContext *cc, term dest_address, term dest_port, 
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(socket_tuple_to_addr(dest_address));
     addr.sin_port = htons(term_to_int32(dest_port));
-    
+
     const char *buf = NULL;
     size_t len = 0;
     if (term_is_binary(buffer)) {
@@ -215,7 +215,7 @@ static void recvfrom_callback(void *data)
 
     ccontext_release_all_refs(cc);
     free(cc);
-    
+
     linkedlist_remove(&ctx->global->listeners, &listener->listeners_list_head);
     free(listener);
     free(recvfrom_data);

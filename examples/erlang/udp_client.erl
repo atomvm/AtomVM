@@ -11,7 +11,7 @@ start() ->
 loop(Console, Socket) ->
     console:puts(Console, "Sending foo...\n"),
     case gen_udp:send(Socket, {127,0,0,1}, 44444, "foo") of
-        ok -> 
+        ok ->
             ok;
         {error, Reason} ->
             console:puts(Console, "An error ocurred: "), erlang:display(Reason)
