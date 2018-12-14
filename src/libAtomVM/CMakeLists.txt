@@ -10,6 +10,7 @@ if(${CMAKE_GENERATOR} STREQUAL "Xcode")
         avmpack.h
         bif.h
         context.h
+        ccontext.h
         debug.h
         exportedfunction.h
         externalterm.h
@@ -21,8 +22,12 @@ if(${CMAKE_GENERATOR} STREQUAL "Xcode")
         mailbox.h
         memory.h
         module.h
+        opcodesswitch.h
         nifs.h
+        port.h
         scheduler.h
+        socket.h
+        socket_driver.h
         sys.h
         term_typedef.h
         term.h
@@ -46,7 +51,9 @@ set(SOURCE_FILES
     memory.c
     module.c
     nifs.c
+    port.c
     scheduler.c
+    socket.c
     valueshashtable.c
 )
 

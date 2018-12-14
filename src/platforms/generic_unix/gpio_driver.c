@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright 2018 by Davide Bettio <davide@uninstall.it>                 *
+ *   Copyright 2018 by Fred Dushin <fred@dushin.net>                       *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU Lesser General Public License as        *
@@ -17,11 +17,11 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#ifndef _UDPDRIVER_H_
-#define _UDPDRIVER_H_
+#include "gpio_driver.h"
 
-#include "context.h"
 
-void udpdriver_init(Context *ctx);
-
-#endif
+void gpiodriver_init(Context *ctx)
+{
+    fprintf(stderr, "Unsupported driver on this platform: gpiodriver\n");
+    abort();
+}

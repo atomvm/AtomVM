@@ -17,7 +17,7 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#include "networkdriver.h"
+#include "network_driver.h"
 
 #include <string.h>
 

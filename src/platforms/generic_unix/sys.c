@@ -196,22 +196,6 @@ static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *
     return (timespec1->tv_sec - timespec2->tv_sec) * 1000 + (timespec1->tv_nsec - timespec2->tv_nsec) / 1000000;
 }
 
-Context *platform_open_port(GlobalContext *glb, const char *driver_name, term opts)
-{
-    UNUSED(opts);
-
-    Context *new_ctx = context_new(glb);
-
-    if (!strcmp(driver_name, "udp")) {
-        udpdriver_init(new_ctx);
-    } else {
-        context_destroy(new_ctx);
-        return NULL;
-    }
-
-    return new_ctx;
-}
-
 void sys_platform_periodic_tasks()
 {
 }

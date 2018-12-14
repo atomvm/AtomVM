@@ -6,13 +6,14 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_SOURCE_DIR}/src/libAtomV
 if(${CMAKE_GENERATOR} STREQUAL "Xcode")
     set(HEADER_FILES
         mapped_file.h
-        udpdriver.h
     )
 endif()
 set(SOURCE_FILES
+    gpio_driver.c
     sys.c
     mapped_file.c
-    udpdriver.c
+    network_driver.c
+    socket_driver.c
 )
 
 set(
