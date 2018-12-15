@@ -30,11 +30,11 @@ Getting Started (on Linux)
 
 
 ```
-$ cmake .
-
+$ mkdir build
+$ cd build
+$ cmake ...
 $ make
-
-$ ./src/AtomVM hello_world.beam
+$ ./src/AtomVM ./examples/erlang/hello_world.avm
 ```
 
 Project Status

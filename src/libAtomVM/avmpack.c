@@ -117,8 +117,8 @@ void *avmpack_fold(void *accum, const void *avmpack_binary, avmpack_fold_fun fol
             int section_name_len = pad(strlen(section_name) + 1);
             accum = fold_fun(
                 accum,
-                (uint32_t *) (size_ptr + 3 + section_name_len/sizeof(uint32_t)),
-                size,
+                size_ptr, size,
+                size_ptr + 3 + section_name_len/sizeof(uint32_t),
                 flags,
                 section_name
             );
