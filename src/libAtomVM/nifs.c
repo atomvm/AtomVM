@@ -541,8 +541,7 @@ term nif_erlang_system_time_1(Context *ctx, int argc, term argv[])
         return term_from_int32(ts.tv_sec / 60);
 
     } else {
-        fprintf(stderr, "nif_erlang_system_time: error, got: %lx\n", argv[0]);
-        abort();
+        RAISE_ERROR(badarg_atom);
     }
 }
 
@@ -740,8 +739,7 @@ static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
     VALIDATE_VALUE(a_binary, term_is_binary);
 
     if (UNLIKELY(argv[1] != context_make_atom(ctx, latin1_atom))) {
-        fprintf(stderr, "binary_to_atom: only latin1 is supported.\n");
-        abort();
+        RAISE_ERROR(badarg_atom);
     }
 
     char *atom_string = interop_binary_to_string(a_binary);
