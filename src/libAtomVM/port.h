@@ -39,6 +39,4 @@ term_ref port_create_error_tuple(CContext *cc, const char *reason);
 term_ref port_create_ok_tuple(CContext *cc, term_ref t);
 void port_send_reply(CContext *cc, term_ref pid, term_ref ref, term_ref reply);
 
-Context *port_create_port(GlobalContext *glb, const char *driver_name, term opts);
-
 #endif
