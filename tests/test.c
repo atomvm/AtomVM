@@ -144,6 +144,7 @@ struct Test tests[] =
     {"test_concat_badarg.beam", 4},
     {"register_and_whereis_badarg.beam", 333},
     {"test_send.beam", -3},
+    {"test_open_port_badargs.beam", -21},
     {"pingpong.beam", 1},
     {"prime_ext.beam", 1999},
 

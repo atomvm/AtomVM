@@ -107,6 +107,7 @@ compile_erlang(long_atoms)
 compile_erlang(test_concat_badarg)
 compile_erlang(register_and_whereis_badarg)
 compile_erlang(test_send)
+compile_erlang(test_open_port_badargs)
 compile_erlang(echo)
 compile_erlang(pingpong)
 compile_erlang(prime_ext)
@@ -272,6 +273,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_concat_badarg.beam
     register_and_whereis_badarg.beam
     test_send.beam
+    test_open_port_badargs.beam
     echo.beam
     pingpong.beam
     prime_ext.beam
