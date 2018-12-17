@@ -1,38 +1,16 @@
 -module (blink).
--export([start/0, do_open_port/2, set_direction/3, set_level/3]).
+-export([start/0]).
 
 start() ->
-    GPIO = do_open_port("gpio", []),
-    set_direction(GPIO, 2, output),
-    loop(GPIO, 0).
+    GPIO = gpio:open(),
+    gpio:set_direction(GPIO, 2, output),
+    loop(GPIO, off).
 
-loop(GPIO, 0) ->
-    set_level(GPIO, 2, 0),
-    sleep(1000),
-    loop(GPIO, 1);
-loop(GPIO, 1) ->
-    set_level(GPIO, 2, 1),
-    sleep(1000),
-    loop(GPIO, 0).
-
-do_open_port(PortName, Param) ->
-    open_port({spawn, PortName}, Param).
-
-set_direction(GPIO, GPIONum, Direction) ->
-    GPIO ! {self(), set_direction, GPIONum, Direction},
-    receive
-        Ret ->
-            Ret
-    end.
-
-set_level(GPIO, GPIONum, Level) ->
-    GPIO ! {self(), set_level, GPIONum, Level},
-    receive
-        Ret ->
-            Ret
-    end.
-
-sleep(T) ->
-    receive
-        after T -> ok
-    end.
+loop(GPIO, off) ->
+    gpio:set_level(GPIO, 2, 0),
+    timer:sleep(1000),
+    loop(GPIO, on);
+loop(GPIO, on) ->
+    gpio:set_level(GPIO, 2, 1),
+    timer:sleep(1000),
+    loop(GPIO, off).

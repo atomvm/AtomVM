@@ -115,10 +115,14 @@ int main(int argc, char **argv)
 }
 
 
-static void *pack_beam_fun(void *accum, const void *data, uint32_t size, uint32_t flags, const char *section_name)
+static void *pack_beam_fun(void *accum, const void *section_ptr, uint32_t section_size, const void *beam_ptr, uint32_t flags, const char *section_name)
 {
+    UNUSED(beam_ptr);
+    UNUSED(flags);
+    UNUSED(section_name);
+    
     FILE *pack = (FILE *)accum;
-    pack_beam_file(pack, data, size, section_name, 0);
+    assert(fwrite(section_ptr, sizeof(unsigned char), section_size, pack) == section_size);
     return accum;
 }
 
@@ -315,10 +319,11 @@ static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const c
 }
 
 
-static void *print_section(void *accum, const void *data, uint32_t size, uint32_t flags, const char *section_name)
+static void *print_section(void *accum, const void *section_ptr, uint32_t section_size, const void *beam_ptr, uint32_t flags, const char *section_name)
 {
-    UNUSED(data);
-    UNUSED(size);
+    UNUSED(section_ptr);
+    UNUSED(section_size);
+    UNUSED(beam_ptr);
     printf("%s %s\n", section_name, flags & BEAM_START_FLAG ? "*" : "");
     return accum;
 }
