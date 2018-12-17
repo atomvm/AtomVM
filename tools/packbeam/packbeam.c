@@ -120,7 +120,7 @@ static void *pack_beam_fun(void *accum, const void *section_ptr, uint32_t sectio
     UNUSED(beam_ptr);
     UNUSED(flags);
     UNUSED(section_name);
-    
+
     FILE *pack = (FILE *)accum;
     assert(fwrite(section_ptr, sizeof(unsigned char), section_size, pack) == section_size);
     return accum;

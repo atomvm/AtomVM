@@ -20,7 +20,7 @@ macro(pack_archive avm_name)
         ${avm_name}
         DEPENDS ${BEAMS}
     )
-    
+
     add_custom_command(
         OUTPUT  ${avm_name}.avm
         COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${avm_name}.avm ${BEAMS}
@@ -28,12 +28,12 @@ macro(pack_archive avm_name)
         COMMENT "Packing archive ${avm_name}.avm"
         VERBATIM
     )
-    
+
     add_custom_target(
         ${avm_name}_avm ALL
         DEPENDS ${avm_name}.avm
     )
-    
+
 endmacro()
 
 
@@ -51,12 +51,12 @@ macro(pack_runnable avm_name main)
         ${avm_name}_main
         DEPENDS ${main}.beam
     )
-    
+
     foreach(archive_name ${ARGN})
         set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/${archive_name}.avm)
         set(ARCHIVE_TARGETS ${ARCHIVE_TARGETS} ${archive_name}_avm)
     endforeach()
-    
+
     add_custom_command(
         OUTPUT  ${avm_name}.avm
         COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${avm_name}.avm ${main}.beam ${ARCHIVES}
@@ -64,10 +64,10 @@ macro(pack_runnable avm_name main)
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
-    
+
     add_custom_target(
         ${avm_name}_avm ALL
         DEPENDS ${avm_name}.avm
     )
-    
+
 endmacro()
