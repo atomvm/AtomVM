@@ -46,12 +46,12 @@ static Context *gpio_ctx;
 static void consume_gpio_mailbox(Context *ctx);
 static void IRAM_ATTR gpio_isr_handler(void *arg);
 
-static const char *const ok_a = "\x2ok";
-static const char *const error_a = "\x5error";
-static const char *const set_level_a = "\x9set_level";
-static const char *const input_a = "\x5input";
-static const char *const output_a = "\x6output";
-static const char *const set_direction_a ="\xDset_direction";
+static const char *const ok_a = "\x2" "ok";
+static const char *const error_a = "\x5" "error";
+static const char *const set_level_a = "\x9" "set_level";
+static const char *const input_a = "\x5" "input";
+static const char *const output_a = "\x6" "output";
+static const char *const set_direction_a ="\xD" "set_direction";
 static const char *const set_int_a = "\x7" "set_int";
 static const char *const gpio_interrupt_a = "\xE" "gpio_interrupt";
 
