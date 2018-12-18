@@ -9,9 +9,10 @@ do_open_port(PortName, Param) ->
     open_port({spawn, PortName}, Param).
 
 write(Console, String) ->
-    Console ! {self(), String},
+    Ref = make_ref(),
+    Console ! {self(), Ref, {puts, String}},
     receive
-        ReturnStatus ->
+        {Ref, ReturnStatus} ->
             ReturnStatus
     end.
 
