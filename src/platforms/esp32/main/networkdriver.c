@@ -55,8 +55,8 @@ static void consume_network_mailbox(Context *ctx);
 static term setup_network(Context *ctx, term config);
 static esp_err_t wifi_event_handler(void *ctx, system_event_t *event);
 
-static const char *const ok_a = "\x2ok";
-static const char *const error_a = "\x5error";
+static const char *const ok_a = "\x2" "ok";
+static const char *const error_a = "\x5" "error";
 static const char *const network_a = "\x7" "network";
 static const char *const setup_a = "\x5" "setup";
 static const char *const ssid_a = "\x4" "ssid";
