@@ -16,13 +16,30 @@
 %   Free Software Foundation, Inc.,                                       %
 %   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%-----------------------------------------------------------------------------
+%% @doc This modules supports output of string data to the console.
+%% @end
+%%-----------------------------------------------------------------------------
 -module(console).
 
 -export([start/0, puts/1, puts/2, flush/0, flush/1]).
 
 -opaque console() :: any().
 
--spec puts(string()) -> ok.
+%%-----------------------------------------------------------------------------
+%% @param   String the string data to write to the console
+%% @returns ok if the data was written, or {error, Reason}, if there was
+%%          an error.
+%% @see     erlang:display/1
+%% @doc     Write a string to the console.
+%%
+%%          <em><b>Note.</b>  This operation will only write string data.
+%%          The output is not suffixed with a newline character or sequence.
+%%          To print an erlang term, use erlang:display/1.</em>
+%% @end
+%%-----------------------------------------------------------------------------
+-spec puts(string()) -> ok | {error, term()}.
 puts(String) ->
     puts(get_pid(), String).
 
@@ -31,6 +48,12 @@ puts(String) ->
 puts(Console, String) ->
     call(Console, {puts, String}).
 
+%%-----------------------------------------------------------------------------
+%% @returns ok if the data was written, or {error, Reason}, if there was
+%%          an error.
+%% @doc     Flush any previously written data to the console.
+%% @end
+%%-----------------------------------------------------------------------------
 -spec flush() -> ok.
 flush() ->
     flush(get_pid()).
