@@ -21,13 +21,6 @@
 #include "ccontext.h"
 #include "globalcontext.h"
 #include "mailbox.h"
-#include "socket.h"
-
-// TODO: factor the gpio and network driver code
-// so that common BEAM interface code is in libAtomVM
-#include "gpio_driver.h"
-#include "network_driver.h"
-
 
 const char *const port_ok_a = "\x2" "ok";
 const char *const port_error_a = "\x5" "error";
@@ -86,21 +79,4 @@ void port_send_reply(CContext *cc, term_ref pid, term_ref ref, term_ref reply)
     Context *target = globalcontext_get_process(cc->ctx->global, local_process_id);
     term_ref msg = port_create_tuple2(cc, ref, reply);
     mailbox_send(target, ccontext_get_term(cc, msg));
-}
-
-Context *port_create_port(GlobalContext *glb, const char *driver_name, term opts)
-{
-    Context *new_ctx = context_new(glb);
-
-    if (!strcmp(driver_name, "socket")) {
-        socket_init(new_ctx, opts);
-    } else if (!strcmp(driver_name, "network")) {
-        networkdriver_init(new_ctx);
-    } else if (!strcmp(driver_name, "gpio")) {
-        gpiodriver_init(new_ctx);
-    } else {
-        context_destroy(new_ctx);
-    }
-
-    return new_ctx;
 }

@@ -49,7 +49,7 @@ uint32_t socket_tuple_to_addr(term addr_tuple)
 
 term_ref socket_tuple_from_addr(CContext *cc, uint32_t addr)
 {
-    term terms[4];
+    term_ref terms[4];
     terms[0] = ccontext_make_term_ref(cc, term_from_int32((addr >> 24) & 0xFF));
     terms[1] = ccontext_make_term_ref(cc, term_from_int32((addr >> 16) & 0xFF));
     terms[2] = ccontext_make_term_ref(cc, term_from_int32((addr >>  8) & 0xFF));

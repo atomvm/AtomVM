@@ -83,9 +83,14 @@ gperf_generate(${CMAKE_CURRENT_SOURCE_DIR}/nifs.gperf nifs_hash.h)
 add_custom_target(generated DEPENDS bifs_hash.h)
 add_custom_target(generated-nifs-hash DEPENDS nifs_hash.h)
 
+set(
+    PLATFORM_LIB_SUFFIX
+    ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
+)
+
 add_library(libAtomVM ${SOURCE_FILES} ${HEADER_FILES})
 add_dependencies(libAtomVM generated generated-nifs-hash)
-target_link_libraries(libAtomVM ${ZLIB_LIBRARIES})
+target_link_libraries(libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX} ${ZLIB_LIBRARIES})
 set_property(TARGET libAtomVM PROPERTY C_STANDARD 99)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Coverage")

@@ -26,7 +26,7 @@ if(CMAKE_COMPILER_IS_GNUCC)
 endif()
 
 add_library(libAtomVM${PLATFORM_LIB_SUFFIX} ${SOURCE_FILES} ${HEADER_FILES})
-target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX})
+target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} libAtomVM)
 set_property(TARGET libAtomVM${PLATFORM_LIB_SUFFIX} PROPERTY C_STANDARD 99)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Coverage")

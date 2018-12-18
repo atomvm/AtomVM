@@ -28,7 +28,6 @@
 #include "term.h"
 #include "utils.h"
 #include "sys.h"
-#include "port.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -304,14 +303,18 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
     }
 
     if (!new_ctx) {
-        new_ctx = port_create_port(ctx->global, driver_name, opts);
+        new_ctx = sys_create_port(ctx->global, driver_name, opts);
     }
 
     free(driver_name);
+    
+    if (!new_ctx) {
+        RAISE_ERROR(badarg_atom);
+    } else {
+        scheduler_make_waiting(ctx->global, new_ctx);
+        return term_from_local_process_id(new_ctx->process_id);
 
-    scheduler_make_waiting(ctx->global, new_ctx);
-
-    return term_from_local_process_id(new_ctx->process_id);
+    }
 }
 
 static term nif_erlang_register_2(Context *ctx, int argc, term argv[])

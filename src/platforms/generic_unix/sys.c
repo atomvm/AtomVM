@@ -23,7 +23,9 @@
 #include "iff.h"
 #include "mapped_file.h"
 #include "scheduler.h"
-#include "udpdriver.h"
+#include "socket.h"
+#include "gpio_driver.h"
+#include "network_driver.h"
 #include "utils.h"
 
 #include <limits.h>
@@ -198,4 +200,22 @@ static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *
 
 void sys_platform_periodic_tasks()
 {
+}
+
+Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
+{
+    Context *new_ctx = context_new(glb);
+    
+    if (!strcmp(driver_name, "socket")) {
+        socket_init(new_ctx, opts);
+    } else if (!strcmp(driver_name, "network")) {
+        networkdriver_init(new_ctx);
+    } else if (!strcmp(driver_name, "gpio")) {
+        gpiodriver_init(new_ctx);
+    } else {
+        context_destroy(new_ctx);
+        return NULL;
+    }
+    
+    return new_ctx;
 }
