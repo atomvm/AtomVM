@@ -196,10 +196,10 @@ static void recvfrom_callback(void *data)
         abort();
     }
     ccontext_init(cc, ctx);
-    
+
     // temporary workaround
     port_ensure_available(cc->ctx, BUFSIZE*2 + 5 + 4 + 3);
-    
+
     term_ref pid = ccontext_make_term_ref(cc, recvfrom_data->pid);
     term_ref ref = ccontext_make_term_ref(cc, term_from_ref_ticks(recvfrom_data->ref_ticks, cc->ctx));
 
