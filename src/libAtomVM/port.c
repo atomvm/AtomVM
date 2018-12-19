@@ -80,3 +80,10 @@ void port_send_reply(CContext *cc, term_ref pid, term_ref ref, term_ref reply)
     term_ref msg = port_create_tuple2(cc, ref, reply);
     mailbox_send(target, ccontext_get_term(cc, msg));
 }
+
+void port_ensure_available(Context *ctx, size_t size)
+{
+    if (context_avail_free_memory(ctx) < size) {
+        memory_ensure_free(ctx, size);
+    }
+}

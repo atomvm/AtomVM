@@ -38,5 +38,6 @@ term_ref port_create_tuple_n(CContext *cc, size_t num_terms, term_ref *terms);
 term_ref port_create_error_tuple(CContext *cc, const char *reason);
 term_ref port_create_ok_tuple(CContext *cc, term_ref t);
 void port_send_reply(CContext *cc, term_ref pid, term_ref ref, term_ref reply);
+void port_ensure_available(Context *ctx, size_t size);
 
 #endif

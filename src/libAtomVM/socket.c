@@ -76,6 +76,8 @@ static void socket_consume_mailbox(Context *ctx)
         abort();
     }
     ccontext_init(cc, ctx);
+    
+    port_ensure_available(ctx, 16);
 
     Message *message = mailbox_dequeue(ctx);
     term     msg = message->message;

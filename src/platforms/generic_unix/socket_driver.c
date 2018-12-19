@@ -43,7 +43,7 @@
 #include "trace.h"
 #include "sys.h"
 
-#define BUFSIZE 1024
+#define BUFSIZE 128
 
 static const char *const tag_proto_a = "\x5" "proto";
 static const char *const proto_udp_a = "\x3" "udp";
@@ -169,7 +169,7 @@ term_ref socket_driver_do_send(CContext *cc, term dest_address, term dest_port, 
 typedef struct RecvFromData {
     Context *ctx;
     term pid;
-    term ref;
+    uint64_t ref_ticks;
 } RecvFromData;
 
 static void recvfrom_callback(void *data)
@@ -196,9 +196,12 @@ static void recvfrom_callback(void *data)
         abort();
     }
     ccontext_init(cc, ctx);
-
+    
+    // temporary workaround
+    port_ensure_available(cc->ctx, BUFSIZE*2 + 5 + 4 + 3);
+    
     term_ref pid = ccontext_make_term_ref(cc, recvfrom_data->pid);
-    term_ref ref = ccontext_make_term_ref(cc, recvfrom_data->ref);
+    term_ref ref = ccontext_make_term_ref(cc, term_from_ref_ticks(recvfrom_data->ref_ticks, cc->ctx));
 
     ssize_t len = recvfrom(socket_data->sockfd, buf, BUFSIZE, 0, (struct sockaddr *) &clientaddr, &clientlen);
     if (len == -1) {
@@ -240,7 +243,7 @@ void socket_driver_do_recvfrom(CContext *cc, term_ref pid, term_ref ref)
     }
     data->ctx = ctx;
     data->pid = ccontext_get_term(cc, pid);
-    data->ref = ccontext_get_term(cc, ref);
+    data->ref_ticks = term_to_ref_ticks(ccontext_get_term(cc, ref));
 
     linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
 
