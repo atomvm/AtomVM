@@ -374,6 +374,7 @@
 #define OP_TRY 104
 #define OP_TRY_END 105
 #define OP_TRY_CASE 106
+#define OP_TRY_CASE_END 107
 #define OP_IS_BOOLEAN 114
 #define OP_GC_BIF1 124
 #define OP_GC_BIF2 125
@@ -464,6 +465,11 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
     }
 }
 
+#endif
+
+#ifdef IMPL_EXECUTE_LOOP
+static const char *const error_atom = "\x5" "error";
+static const char *const try_clause_atom = "\xA" "try_clause";
 #endif
 
 #pragma GCC diagnostic push
@@ -2245,6 +2251,41 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 TRACE("try_case/1, reg=%c%i\n", reg_type_c(dreg_type), dreg);
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_TRY_CASE_END: {
+                #ifdef IMPL_EXECUTE_LOOP
+                    memory_ensure_free(ctx, 3);
+                #endif
+
+                int next_off = 1;
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("try_case_end/1\n");
+                    UNUSED(arg1);
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("try_case_end/1, val=%lx\n", arg1);
+
+                    int target_label = get_catch_label_and_change_module(ctx, &mod);
+
+                    if (target_label) {
+                        term new_error_tuple = term_alloc_tuple(2, ctx);
+                        term_put_tuple_element(new_error_tuple, 0, context_make_atom(ctx, try_clause_atom));
+                        term_put_tuple_element(new_error_tuple, 1, arg1);
+                        ctx->x[0] = context_make_atom(ctx, error_atom);
+                        ctx->x[1] = new_error_tuple;
+                        JUMP_TO_ADDRESS(mod->labels[target_label]);
+                    } else {
+                        abort();
+                    }
+                #endif
 
                 NEXT_INSTRUCTION(next_off);
                 break;
