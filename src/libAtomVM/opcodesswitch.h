@@ -419,15 +419,24 @@ struct Int24
 
 static int get_catch_label_and_change_module(Context *ctx, Module **mod)
 {
-    const term *ct = ctx->e;
+    term *ct = ctx->e;
+    term *last_frame = ctx->e;
+
     while (ct != ctx->stack_base) {
         if (term_is_catch_label(*ct)) {
             int target_module;
             int target_label = term_to_catch_label_and_module(*ct, &target_module);
             TRACE("- found catch: label: %i, module: %i\n", target_label, target_module);
             *mod = ctx->global->modules_by_index[target_module];
+
+            ctx->e = last_frame;
+
             return target_label;
+
+        } else if (term_is_cp(*ct)) {
+            last_frame = ct - 1;
         }
+
         ct++;
     }
 
