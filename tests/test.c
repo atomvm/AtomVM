@@ -147,6 +147,8 @@ struct Test tests[] =
     {"test_open_port_badargs.beam", -21},
     {"pingpong.beam", 1},
     {"prime_ext.beam", 1999},
+    {"test_try_case_end.beam", 256},
+    {"test_recursion_and_try_catch.beam", 3628800},
 
     {"nested_list_size0.beam", 0},
     {"nested_list_size1.beam", 2},
