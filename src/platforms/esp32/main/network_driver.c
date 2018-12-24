@@ -1,5 +1,6 @@
 /***************************************************************************
  *   Copyright 2018 by Davide Bettio <davide@uninstall.it>                 *
+ *   Copyright 2018 by Fred Dushin <fred@dushin.net>                       *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU Lesser General Public License as        *
@@ -18,6 +19,7 @@
  ***************************************************************************/
 
 #include "network_driver.h"
+#include "port.h"
 
 #include <string.h>
 
@@ -51,14 +53,9 @@
 
 #define CONNECTED_BIT BIT0
 
-static void consume_network_mailbox(Context *ctx);
-static term setup_network(Context *ctx, term config);
 static esp_err_t wifi_event_handler(void *ctx, system_event_t *event);
 
-static const char *const ok_a = "\x2" "ok";
-static const char *const error_a = "\x5" "error";
-static const char *const network_a = "\x7" "network";
-static const char *const setup_a = "\x5" "setup";
+static const char *const sta_a = "\x3" "sta";
 static const char *const ssid_a = "\x4" "ssid";
 static const char *const psk_a = "\x3" "psk";
 static const char *const sntp_a = "\x4" "sntp";
@@ -66,88 +63,79 @@ static const char *const sntp_a = "\x4" "sntp";
 static EventGroupHandle_t wifi_event_group;
 
 
-void networkdriver_init(Context *ctx)
+void network_driver_setup(CContext *cc, term_ref pid, term_ref ref, term config)
 {
-    ctx->native_handler = consume_network_mailbox;
-    ctx->platform_data = NULL;
-}
+    Context *ctx = cc->ctx;
 
-static void consume_network_mailbox(Context *ctx)
-{
-    term ret;
+    term sta_config = interop_proplist_get_value(config, context_make_atom(ctx, sta_a));
+    if (!term_is_nil(sta_config)) {
+        term ssid_value = interop_proplist_get_value(sta_config, context_make_atom(ctx, ssid_a));
+        term pass_value = interop_proplist_get_value(sta_config, context_make_atom(ctx, psk_a));
+        term sntp_value = interop_proplist_get_value(sta_config, context_make_atom(ctx, sntp_a));
 
-    Message *message = mailbox_dequeue(ctx);
-    term msg = message->message;
-    term pid = term_get_tuple_element(msg, 0);
-    term ref = term_get_tuple_element(msg, 1);
-    term cmd = term_get_tuple_element(msg, 2);
-    term config = term_get_tuple_element(msg, 3);
+        char *ssid = interop_list_to_string(ssid_value);
+        char *psk = interop_list_to_string(pass_value);
 
-    if (cmd == context_make_atom(ctx, setup_a)) {
-        ret = setup_network(ctx, config);
+        if (UNLIKELY(!ssid || !psk)) {
+            if (ssid != NULL) {
+                free(ssid);
+            }
+            if (psk != NULL) {
+                free(psk);
+            }
+            term_ref reply = port_create_error_tuple(cc, "cannot allocate memory for ssid or psk");
+            port_send_reply(cc, pid, ref, reply);
+            return;
+        }
 
-    } else {
-        TRACE("network: unrecognized command\n");
-        ret = context_make_atom(ctx, error_a);
-    }
+        wifi_event_group = xEventGroupCreate();
+        ESP_ERROR_CHECK(esp_event_loop_init(wifi_event_handler, NULL));
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+        ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+        ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
 
-    free(message);
+        wifi_config_t wifi_config;
+        if (UNLIKELY((strlen(ssid) > sizeof(wifi_config.sta.ssid)) || (strlen(psk) > sizeof(wifi_config.sta.password)))) {
+            TRACE("ssid or psk is too long\n");
+            free(ssid);
+            free(psk);
+            term_ref reply = port_create_error_tuple(cc, "ssid or psk is too long");
+            port_send_reply(cc, pid, ref, reply);
+            return;
+        }
 
-    int local_process_id = term_to_local_process_id(pid);
-    Context *target = globalcontext_get_process(ctx->global, local_process_id);
-    mailbox_send(target, ret);
-}
+        memset(&wifi_config, 0, sizeof(wifi_config_t));
+        strcpy((char *) wifi_config.sta.ssid, ssid);
+        strcpy((char *) wifi_config.sta.password, psk);
 
-static term setup_network(Context *ctx, term config)
-{
-    term ssid_value = interop_proplist_get_value(config, context_make_atom(ctx, ssid_a));
-    term pass_value = interop_proplist_get_value(config, context_make_atom(ctx, psk_a));
-    term sntp_value = interop_proplist_get_value(config, context_make_atom(ctx, sntp_a));
-
-    char *ssid = interop_list_to_string(ssid_value);
-    char *psk = interop_list_to_string(pass_value);
-
-    if (UNLIKELY(!ssid || !psk)) {
-        TRACE("cannot allocate memory.\n");
-        return context_make_atom(ctx, error_a);
-    }
-
-    wifi_event_group = xEventGroupCreate();
-    ESP_ERROR_CHECK(esp_event_loop_init(wifi_event_handler, NULL));
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-
-    wifi_config_t wifi_config;
-    if (UNLIKELY((strlen(ssid) > sizeof(wifi_config.sta.ssid)) || (strlen(psk) > sizeof(wifi_config.sta.password)))) {
-        TRACE("ssid or psk is too long\n");
         free(ssid);
         free(psk);
-        return context_make_atom(ctx, error_a);
-    }
 
-    memset(&wifi_config, 0, sizeof(wifi_config_t));
-    strcpy((char *) wifi_config.sta.ssid, ssid);
-    strcpy((char *) wifi_config.sta.password, psk);
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+        ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
+        ESP_LOGI("NETWORK", "starting wifi: SSID: [%s], password: [XXXXXXXX].", wifi_config.sta.ssid);
+        ESP_ERROR_CHECK(esp_wifi_start());
 
-    free(ssid);
-    free(psk);
-
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
-    ESP_LOGI("NETWORK", "starting wifi: SSID: [%s], password: [%s].", wifi_config.sta.ssid, wifi_config.sta.password);
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    if (sntp_value != term_nil()) {
-        char *sntp = interop_list_to_string(sntp_value);
-        if (sntp) {
-            sntp_setoperatingmode(SNTP_OPMODE_POLL);
-            sntp_setservername(0, sntp);
-            sntp_init();
+        if (sntp_value != term_nil()) {
+            char *sntp = interop_list_to_string(sntp_value);
+            if (sntp) {
+                sntp_setoperatingmode(SNTP_OPMODE_POLL);
+                sntp_setservername(0, sntp);
+                sntp_init();
+            }
         }
+        // TODO make this async
+        term_ref reply = port_make_atom(cc, port_ok_a);
+        port_send_reply(cc, pid, ref, reply);
+    } else {
+        term_ref reply = port_create_error_tuple(cc, "unsupported config");
+        port_send_reply(cc, pid, ref, reply);
     }
+}
 
-    return context_make_atom(ctx, ok_a);
+term_ref network_driver_ifconfig(CContext *cc)
+{
+    return port_create_error_tuple(cc, "unimplemented");
 }
 
 static esp_err_t wifi_event_handler(void *ctx, system_event_t *event)

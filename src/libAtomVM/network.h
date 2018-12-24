@@ -1,6 +1,6 @@
 /***************************************************************************
  *   Copyright 2018 by Davide Bettio <davide@uninstall.it>                 *
- *   Copyright 2018 by Fred Dushin <fred@dushin.net>                       *
+ *   Copyright 2018 by Fred Dushin <fred@dushin.nt>                        *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU Lesser General Public License as        *
@@ -18,16 +18,12 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#include "network_driver.h"
-#include "port.h"
+#ifndef _NETWORK_H_
+#define _NETWORK_H_
 
-void network_driver_setup(CContext *cc, term_ref pid, term_ref ref, term config)
-{
-    UNUSED(config);
-    port_send_reply(cc, pid, ref, port_create_error_tuple(cc, "unimplemented"));
-}
+#include "context.h"
+#include "term.h"
 
-term_ref network_driver_ifconfig(CContext *cc)
-{
-    return port_create_error_tuple(cc, "unimplemented");
-}
+void network_init(Context *ctx, term opts);
+
+#endif
