@@ -149,6 +149,9 @@ struct Test tests[] =
     {"prime_ext.beam", 1999},
     {"test_try_case_end.beam", 256},
     {"test_recursion_and_try_catch.beam", 3628800},
+    {"test_func_info.beam", 89},
+    {"test_func_info2.beam", 1},
+    {"test_func_info3.beam", 120},
 
     {"nested_list_size0.beam", 0},
     {"nested_list_size1.beam", 2},

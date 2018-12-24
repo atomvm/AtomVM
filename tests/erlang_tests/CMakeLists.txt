@@ -113,6 +113,9 @@ compile_erlang(pingpong)
 compile_erlang(prime_ext)
 compile_erlang(test_try_case_end)
 compile_erlang(test_recursion_and_try_catch)
+compile_erlang(test_func_info)
+compile_erlang(test_func_info2)
+compile_erlang(test_func_info3)
 
 compile_erlang(complex_struct_size0)
 compile_erlang(complex_struct_size1)
@@ -281,6 +284,9 @@ add_custom_target(erlang_test_modules DEPENDS
     prime_ext.beam
     test_try_case_end.beam
     test_recursion_and_try_catch.beam
+    test_func_info.beam
+    test_func_info2.beam
+    test_func_info3.beam
 
     complex_struct_size0.beam
     complex_struct_size1.beam
