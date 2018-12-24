@@ -409,7 +409,7 @@
 
 static const char *const true_atom = "\x04" "true";
 static const char *const false_atom = "\x05" "false";
-
+static const char *const function_clause_atom = "\x0F" "function_clause";
 
 #ifdef IMPL_EXECUTE_LOOP
 struct Int24
@@ -563,7 +563,16 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                 USED_BY_TRACE(arity);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                abort();
+                    int target_label = get_catch_label_and_change_module(ctx, &mod);
+
+                    if (target_label) {
+                        ctx->x[0] = context_make_atom(ctx, error_atom);
+                        ctx->x[1] = context_make_atom(ctx, function_clause_atom);
+                        JUMP_TO_ADDRESS(mod->labels[target_label]);
+                    } else {
+                        abort();
+                    }
+
                 #endif
 
                 NEXT_INSTRUCTION(next_offset);
