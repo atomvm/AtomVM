@@ -32,6 +32,8 @@
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
+static term memory_shallow_copy_term(term t, term **new_heap, int move);
+
 HOT_FUNC term *memory_heap_alloc(Context *c, uint32_t size)
 {
     term *allocated = c->heap_ptr;
@@ -601,4 +603,52 @@ unsigned long memory_estimate_usage(term t)
     temp_stack_destory(&temp_stack);
 
     return acc;
+}
+
+static term memory_shallow_copy_term(term t, term **new_heap, int move)
+{
+    UNUSED(move);
+
+    if (term_is_atom(t)) {
+        return t;
+
+    } else if (term_is_integer(t)) {
+        return t;
+
+    } else if (term_is_nil(t)) {
+        return t;
+
+    } else if (term_is_pid(t)) {
+        return t;
+
+    } else if (term_is_cp(t)) {
+        // CP is valid only on stack
+        return t;
+
+    } else if (term_is_catch_label(t)) {
+        // catch label is valid only on stack
+        return t;
+
+    } else if (term_is_boxed(t)) {
+        int boxed_size = term_boxed_size(t) + 1;
+        const term *boxed_value = term_to_const_term_ptr(t);
+        term *dest = *new_heap;
+        for (int i = 0; i < boxed_size; i++) {
+            dest[i] = boxed_value[i];
+        }
+        *new_heap += boxed_size;
+        return ((term) dest) | TERM_BOXED_VALUE_TAG;
+
+    } else if (term_is_nonempty_list(t)) {
+        term *dest = *new_heap;
+        const term *list_ptr = term_get_list_ptr(t);
+        dest[0] = list_ptr[0];
+        dest[1] = list_ptr[1];
+        *new_heap += 2;
+        return ((term) dest) | 0x1;
+
+    } else {
+        fprintf(stderr, "Unexpected term. Term is: %lx\n", t);
+        abort();
+    }
 }
