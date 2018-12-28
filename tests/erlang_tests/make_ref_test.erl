@@ -4,7 +4,7 @@
 start() ->
     ARef = do_make_ref(),
     ARefT = to_tuple(ARef),
-    compare(ARefT, ARef) + compare(to_tuple(make_ref()), ARef).
+    compare(ARefT, ARef) + compare(to_tuple(make_ref()), ARef) * 32.
 
 do_make_ref() ->
     make_ref().
@@ -17,4 +17,4 @@ compare(Something1, {Something2}) when Something1 == Something2 ->
 compare({Something1}, Something2) when Something1 == Something2 ->
     2;
 compare(_Any1, _Any2) ->
-    3.
+    4.
