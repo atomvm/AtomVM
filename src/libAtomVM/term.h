@@ -200,7 +200,7 @@ static inline int term_is_binary(term t)
     /* boxed: 10 */
     if ((t & 0x3) == 0x2) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == 0x20) {
+        if ((boxed_value[0] & 0x3F) == 0x24) {
             return 1;
         }
     }
@@ -488,13 +488,21 @@ static inline term term_from_local_process_id(uint32_t local_process_id)
  */
 static inline term term_from_literal_binary(void *data, uint32_t size, Context *ctx)
 {
-    //TODO: write a real implementation
-    //align constraints here
-    term *boxed_value = memory_heap_alloc(ctx, 2);
-    boxed_value[0] = (size << 6) | 0x20; //refcounted binary
-    boxed_value[1] = (term) data;
+#if TERM_BYTES == 4
+    int size_in_terms = ((size + 4 - 1) >> 2);
+#elif TERM_BYTES == 8
+    int size_in_terms = ((size + 8 - 1) >> 3);
+#else
+    #error
+#endif
 
-    return ((term) boxed_value) | 0x2;
+    term *boxed_value = memory_heap_alloc(ctx, size_in_terms + 2);
+    boxed_value[0] = (size_in_terms << 6) | 0x24; // heap binary
+    boxed_value[1] = size;
+
+    memcpy(boxed_value + 2, data, size);
+
+    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
 }
 
 /**
@@ -508,7 +516,7 @@ static inline term term_binary_size(term t)
 {
     const term *boxed_value = term_to_const_term_ptr(t);
     if (boxed_value[0] & 0x3F) {
-        return boxed_value[0] >> 6;
+        return boxed_value[1];
     } else {
         abort();
     }
@@ -525,7 +533,7 @@ static inline const char *term_binary_data(term t)
 {
     const term *boxed_value = term_to_const_term_ptr(t);
     if (boxed_value[0] & 0x3F) {
-        return (const char *) boxed_value[1];
+        return (const char *) (boxed_value + 2);
     } else {
         abort();
     }

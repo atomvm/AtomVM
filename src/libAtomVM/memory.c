@@ -280,11 +280,9 @@ term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move)
                 TRACE("- Found binary term (%lx).\n", t);
 
                 term *tmp_previous = *new_heap;
-                *new_heap += 2;
-
-                //TODO: handle all types of binaries
-                tmp_previous[0] = (term_binary_size(t) << 6) | 0x20; //refcounted binary
-                tmp_previous[1] = (term) term_binary_data(t);
+                int heap_size = term_boxed_size(t) + 1;
+                memcpy(*new_heap, term_to_const_term_ptr(t), heap_size * sizeof(term));
+                *new_heap += heap_size;
 
                 if (previous) {
                     TRACE("- Found leaf binary, going back.\n");
@@ -438,9 +436,9 @@ term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move)
                 if (term_is_binary(the_head)) {
                     TRACE("- List head (%lx) is a binary.\n", the_head);
                     term new_head = ((term) (*new_heap)) | 0x2;
-                    (*new_heap)[0] = (term_binary_size(the_head) << 6) | 0x20; //refcounted binary
-                    (*new_heap)[1] = (term) term_binary_data(the_head);
-                    *new_heap += 2;
+                    int heap_size = term_boxed_size(the_head) + 1;
+                    memcpy(*new_heap, term_to_const_term_ptr(the_head), heap_size * sizeof(term));
+                    *new_heap += heap_size;
                     the_head = new_head;
 
                 } else if (term_is_movable_boxed(the_head)) {
