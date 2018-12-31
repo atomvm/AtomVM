@@ -2,6 +2,7 @@
 
 -export([nth/2]).
 
+-spec nth(non_neg_integer(), list()) -> term().
 nth(1, [H | _T]) ->
     H;
 

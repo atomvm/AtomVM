@@ -8,6 +8,7 @@ add_subdirectory(tests)
 add_subdirectory(tools/packbeam)
 add_subdirectory(libs)
 add_subdirectory(examples)
+add_subdirectory(doc)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Coverage")
     include(CodeCoverage)

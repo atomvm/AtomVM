@@ -13,6 +13,7 @@ Dependencies
 * zlib ([zlib compression and decompression library](https://zlib.net/)) is optionally needed to run standard BEAM files (without uncompressed literals extension).
 
 * gcov and lcov are optionally required to generate coverage report (make coverage).
+* doxygen is optionally required to generate documentation (make doc).
 
 Supported Platforms
 ===================
@@ -32,7 +33,7 @@ Getting Started (on Linux)
 ```
 $ mkdir build
 $ cd build
-$ cmake ...
+$ cmake ..
 $ make
 $ ./src/AtomVM ./examples/erlang/hello_world.avm
 ```

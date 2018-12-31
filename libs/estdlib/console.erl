@@ -20,20 +20,29 @@
 
 -export([start/0, puts/1, puts/2]).
 
+-opaque console() :: any().
+
+-spec puts(string()) -> ok.
 puts(String) ->
     puts(get_pid(), String).
 
+%% @hidden
+-spec puts(console(), string()) -> ok.
 puts(Console, String) ->
     call(Console, String).
 
 %% Internal operations
 
+%% @private
+-spec call(console(), string()) -> ok.
 call(Console, Msg) ->
     Console ! {self(), Msg},
     receive
         ok -> ok
     end.
 
+%% @private
+-spec get_pid() -> console().
 get_pid() ->
     case whereis(console) of
         undefined ->
@@ -42,6 +51,8 @@ get_pid() ->
             Pid
     end.
 
+%% @private
+-spec start() -> console().
 start() ->
     Pid = erlang:open_port({spawn, "console"}, []),
     erlang:register(console, Pid),
