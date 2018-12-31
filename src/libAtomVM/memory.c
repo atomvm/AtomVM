@@ -32,6 +32,7 @@
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
+static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **new_heap_pos);
 static term memory_shallow_copy_term(term t, term **new_heap, int move);
 
 HOT_FUNC term *memory_heap_alloc(Context *c, uint32_t size)
@@ -603,6 +604,78 @@ unsigned long memory_estimate_usage(term t)
     temp_stack_destory(&temp_stack);
 
     return acc;
+}
+
+static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **new_heap_pos)
+{
+    term *ptr = mem_start;
+    term *new_heap = *new_heap_pos;
+
+    while (ptr < mem_end) {
+        term t = *ptr;
+
+        if (term_is_atom(t)) {
+            TRACE("Found atom (%lx)\n", t);
+            ptr++;
+
+        } else if (term_is_integer(t)) {
+            TRACE("Found integer (%lx)\n", t);
+            ptr++;
+
+        } else if (term_is_nil(t)) {
+            TRACE("Found NIL (%lx)\n", t);
+            ptr++;
+
+        } else if (term_is_pid(t)) {
+            TRACE("Found PID (%lx)\n", t);
+            ptr++;
+
+        } else if ((t & 0x3) == 0x0) {
+            TRACE("Found boxed header (%lx)\n", t);
+
+            switch ((t >> 2) & 0xF) {
+                case 0: {
+                    int arity = t >> 6;
+                    TRACE("- Boxed is tuple (%lx), arity: %i\n", t, arity);
+
+                    for (int i = 1; i <= arity; i++) {
+                        TRACE("-- Elem: %lx\n", ptr[i]);
+                        ptr[i] = memory_shallow_copy_term(ptr[i], &new_heap, 1);
+                    }
+                    break;
+                }
+
+                case 4:
+                    TRACE("- Found ref.\n");
+                    break;
+
+                case 9:
+                    TRACE("- Found binary.\n");
+                    break;
+
+                default:
+                    fprintf(stderr, "- Found unknown boxed type: %lx\n", (t >> 2) & 0xF);
+                    abort();
+            }
+
+            ptr += (t >> 6) + 1;
+
+        } else if (term_is_nonempty_list(t)) {
+            TRACE("Found nonempty list (%lx)\n", t);
+            *ptr = memory_shallow_copy_term(t, &new_heap, 1);
+            ptr++;
+
+        } else if (term_is_boxed(t)) {
+            TRACE("Found boxed (%lx)\n", t);
+            *ptr = memory_shallow_copy_term(t, &new_heap, 1);
+            ptr++;
+
+        } else {
+            TRACE("Found unknown term type: %lx\n", t);
+        }
+    }
+
+    *new_heap_pos = new_heap;
 }
 
 static term memory_shallow_copy_term(term t, term **new_heap, int move)
