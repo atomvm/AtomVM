@@ -110,11 +110,7 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
 
     TRACE("- Running copy GC on registers\n");
     for (int i = 0; i < ctx->avail_registers; i++) {
-        term *old_stack_ptr = stack_ptr;
-        term new_root = memory_copy_term_tree(&heap_ptr, &stack_ptr, ctx->x[i], 1);
-        if (old_stack_ptr != stack_ptr) {
-            abort();
-        }
+        term new_root = memory_shallow_copy_term(ctx->x[i], &heap_ptr, 1);
         ctx->x[i] = new_root;
     }
 
@@ -122,13 +118,20 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
     int stack_size = ctx->stack_base - ctx->e;
     TRACE("- Running copy GC on stack (stack size: %i)\n", stack_size);
     for (int i = stack_size - 1; i >= 0; i--) {
-        term *old_stack_ptr = stack_ptr;
-        term new_root = memory_copy_term_tree(&heap_ptr, &stack_ptr, stack[i], 1);
-        if (old_stack_ptr != stack_ptr) {
-            abort();
-        }
+        term new_root = memory_shallow_copy_term(stack[i], &heap_ptr, 1);
         push_to_stack(&stack_ptr, new_root);
     }
+
+    term *temp_start = new_heap;
+    term *temp_end = heap_ptr;
+    do {
+        term *next_end = temp_end;
+        memory_scan_and_copy(temp_start, temp_end, &next_end);
+        temp_start = temp_end;
+        temp_end = next_end;
+    } while (temp_start != temp_end);
+
+    heap_ptr = temp_end;
 
     free(ctx->heap_start);
 
