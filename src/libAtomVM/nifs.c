@@ -432,7 +432,7 @@ static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
     term t = argv[2];
     while (!term_is_nil(t)) {
         term *t_ptr = term_get_list_ptr(t);
-        new_ctx->x[reg_index] = memory_copy_term_tree(&new_ctx->heap_ptr, &new_ctx->e, t_ptr[1], 0);
+        new_ctx->x[reg_index] = memory_copy_term_tree(&new_ctx->heap_ptr, t_ptr[1]);
         t = *t_ptr;
         reg_index++;
     }

@@ -62,12 +62,10 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size);
  * @brief copies a term to a destination heap
  *
  * @details deep copies a term to a destination heap, once finished old memory can be freed.
- * @param move if set to 1 a destructive copy will be executed, this operation tries to keep shared terms.
  * @param new_heap the destination heap where terms will be copied.
- * @param new_stack the stack that will be used during term copy.
  * @returns a new term that is stored on the new heap.
  */
-term memory_copy_term_tree(term **new_heap, term **new_stack, term t, int move);
+term memory_copy_term_tree(term **new_heap, term t);
 
 /**
  * @brief meakes sure that the given context has given free memory

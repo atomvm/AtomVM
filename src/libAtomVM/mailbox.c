@@ -34,19 +34,16 @@ void mailbox_send(Context *c, term t)
     TRACE("Sending 0x%lx to pid %i\n", t, c->process_id);
 
     unsigned long estimated_mem_usage = memory_estimate_usage(t);
-    //TODO: * 2 is a temporary workaround. New memory allocator shouldn't need this.
-    unsigned long estimated_size = estimated_mem_usage * 2;
 
-    Message *m = malloc(sizeof(Message) + estimated_size * sizeof(term));
+    Message *m = malloc(sizeof(Message) + estimated_mem_usage * sizeof(term));
     if (IS_NULL_PTR(m)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         return;
     }
 
     term *heap_pos = mailbox_message_memory(m);
-    term *stack_pos = heap_pos + estimated_size;
-    m->message = memory_copy_term_tree(&heap_pos, &stack_pos, t, 0);
-    m->msg_memory_size = estimated_size;
+    m->message = memory_copy_term_tree(&heap_pos, t);
+    m->msg_memory_size = estimated_mem_usage;
 
     linkedlist_append(&c->mailbox, &m->mailbox_list_head);
 
@@ -70,7 +67,7 @@ term mailbox_receive(Context *c)
         }
     }
 
-    term rt = memory_copy_term_tree(&c->heap_ptr, &c->e, m->message, 0);
+    term rt = memory_copy_term_tree(&c->heap_ptr, m->message);
 
     free(m);
 
@@ -103,7 +100,7 @@ term mailbox_peek(Context *c)
         }
     }
 
-    term rt = memory_copy_term_tree(&c->heap_ptr, &c->e, m->message, 0);
+    term rt = memory_copy_term_tree(&c->heap_ptr, m->message);
 
     return rt;
 }
