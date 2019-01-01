@@ -32,7 +32,7 @@
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
-static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **new_heap_pos);
+static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **new_heap_pos, int move);
 static term memory_shallow_copy_term(term t, term **new_heap, int move);
 
 HOT_FUNC term *memory_heap_alloc(Context *c, uint32_t size)
@@ -126,7 +126,7 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
     term *temp_end = heap_ptr;
     do {
         term *next_end = temp_end;
-        memory_scan_and_copy(temp_start, temp_end, &next_end);
+        memory_scan_and_copy(temp_start, temp_end, &next_end, 1);
         temp_start = temp_end;
         temp_end = next_end;
     } while (temp_start != temp_end);
@@ -187,7 +187,7 @@ term memory_copy_term_tree(term **new_heap, term t)
 
     do {
         term *next_end = temp_end;
-        memory_scan_and_copy(temp_start, temp_end, &next_end);
+        memory_scan_and_copy(temp_start, temp_end, &next_end, 0);
         temp_start = temp_end;
         temp_end = next_end;
     } while (temp_start != temp_end);
@@ -319,7 +319,7 @@ unsigned long memory_estimate_usage(term t)
     return acc;
 }
 
-static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **new_heap_pos)
+static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **new_heap_pos, int move)
 {
     term *ptr = mem_start;
     term *new_heap = *new_heap_pos;
@@ -353,7 +353,7 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
 
                     for (int i = 1; i <= arity; i++) {
                         TRACE("-- Elem: %lx\n", ptr[i]);
-                        ptr[i] = memory_shallow_copy_term(ptr[i], &new_heap, 1);
+                        ptr[i] = memory_shallow_copy_term(ptr[i], &new_heap, move);
                     }
                     break;
                 }
@@ -375,12 +375,12 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
 
         } else if (term_is_nonempty_list(t)) {
             TRACE("Found nonempty list (%lx)\n", t);
-            *ptr = memory_shallow_copy_term(t, &new_heap, 1);
+            *ptr = memory_shallow_copy_term(t, &new_heap, move);
             ptr++;
 
         } else if (term_is_boxed(t)) {
             TRACE("Found boxed (%lx)\n", t);
-            *ptr = memory_shallow_copy_term(t, &new_heap, 1);
+            *ptr = memory_shallow_copy_term(t, &new_heap, move);
             ptr++;
 
         } else {
@@ -394,8 +394,6 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
 
 static term memory_shallow_copy_term(term t, term **new_heap, int move)
 {
-    UNUSED(move);
-
     if (term_is_atom(t)) {
         return t;
 
@@ -417,22 +415,46 @@ static term memory_shallow_copy_term(term t, term **new_heap, int move)
         return t;
 
     } else if (term_is_boxed(t)) {
+        term *boxed_value = term_to_term_ptr(t);
+
+        if (is_moved_marker(*boxed_value)) {
+            return boxed_value[1];
+        }
+
         int boxed_size = term_boxed_size(t) + 1;
-        const term *boxed_value = term_to_const_term_ptr(t);
         term *dest = *new_heap;
         for (int i = 0; i < boxed_size; i++) {
             dest[i] = boxed_value[i];
         }
         *new_heap += boxed_size;
-        return ((term) dest) | TERM_BOXED_VALUE_TAG;
+
+        term new_term = ((term) dest) | TERM_BOXED_VALUE_TAG;
+
+        if (move) {
+            replace_with_moved_marker(boxed_value, new_term);
+        }
+
+        return new_term;
 
     } else if (term_is_nonempty_list(t)) {
+        term *list_ptr = term_get_list_ptr(t);
+
+        if (is_moved_marker(*list_ptr)) {
+            return list_ptr[1];
+        }
+
         term *dest = *new_heap;
-        const term *list_ptr = term_get_list_ptr(t);
         dest[0] = list_ptr[0];
         dest[1] = list_ptr[1];
         *new_heap += 2;
-        return ((term) dest) | 0x1;
+
+        term new_term = ((term) dest) | 0x1;
+
+        if (move) {
+            replace_with_moved_marker(list_ptr, new_term);
+        }
+
+        return new_term;
 
     } else {
         fprintf(stderr, "Unexpected term. Term is: %lx\n", t);
