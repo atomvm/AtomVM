@@ -357,7 +357,7 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
     *new_heap_pos = new_heap;
 }
 
-static term memory_shallow_copy_term(term t, term **new_heap, int move)
+HOT_FUNC static term memory_shallow_copy_term(term t, term **new_heap, int move)
 {
     if (term_is_atom(t)) {
         return t;
