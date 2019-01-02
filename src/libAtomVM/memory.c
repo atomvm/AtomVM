@@ -130,15 +130,20 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
 }
 
 
-static inline int is_moved_marker(term t)
+static inline int memory_is_moved_marker(term *t)
 {
-    return t == 0x2C;
+    return *t == 0x2C;
 }
 
-static inline void replace_with_moved_marker(term *to_be_replaced, term replace_with)
+static inline void memory_replace_with_moved_marker(term *to_be_replaced, term replace_with)
 {
     to_be_replaced[0] = 0x2C;
     to_be_replaced[1] = replace_with;
+}
+
+static inline term memory_dereference_moved_marker(const term *moved_marker)
+{
+    return moved_marker[1];
 }
 
 term memory_copy_term_tree(term **new_heap, term t)
@@ -376,8 +381,8 @@ static term memory_shallow_copy_term(term t, term **new_heap, int move)
     } else if (term_is_boxed(t)) {
         term *boxed_value = term_to_term_ptr(t);
 
-        if (is_moved_marker(*boxed_value)) {
-            return boxed_value[1];
+        if (memory_is_moved_marker(boxed_value)) {
+            return memory_dereference_moved_marker(boxed_value);
         }
 
         int boxed_size = term_boxed_size(t) + 1;
@@ -390,7 +395,7 @@ static term memory_shallow_copy_term(term t, term **new_heap, int move)
         term new_term = ((term) dest) | TERM_BOXED_VALUE_TAG;
 
         if (move) {
-            replace_with_moved_marker(boxed_value, new_term);
+            memory_replace_with_moved_marker(boxed_value, new_term);
         }
 
         return new_term;
@@ -398,8 +403,8 @@ static term memory_shallow_copy_term(term t, term **new_heap, int move)
     } else if (term_is_nonempty_list(t)) {
         term *list_ptr = term_get_list_ptr(t);
 
-        if (is_moved_marker(*list_ptr)) {
-            return list_ptr[1];
+        if (memory_is_moved_marker(list_ptr)) {
+            return memory_dereference_moved_marker(list_ptr);
         }
 
         term *dest = *new_heap;
@@ -410,7 +415,7 @@ static term memory_shallow_copy_term(term t, term **new_heap, int move)
         term new_term = ((term) dest) | 0x1;
 
         if (move) {
-            replace_with_moved_marker(list_ptr, new_term);
+            memory_replace_with_moved_marker(list_ptr, new_term);
         }
 
         return new_term;
