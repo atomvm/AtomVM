@@ -76,24 +76,10 @@ void memory_gc_and_shrink(Context *c)
     }
 }
 
-static inline term peek_stack(term **stack)
-{
-    term value = **stack;
-    return value;
-}
-
 static inline void push_to_stack(term **stack, term value)
 {
     *stack = (*stack) - 1;
     **stack = value;
-}
-
-static inline term pop_from_stack(term **stack)
-{
-    term value = **stack;
-    *stack = (*stack) + 1;
-
-    return value;
 }
 
 enum MemoryGCResult memory_gc(Context *ctx, int new_size)
@@ -154,28 +140,6 @@ static inline void replace_with_moved_marker(term *to_be_replaced, term replace_
     to_be_replaced[0] = 0x2C;
     to_be_replaced[1] = replace_with;
 }
-
-static inline void set_placeholder(term *placeholder_mem, term *previous_term_mem, term current)
-{
-    placeholder_mem[0] = (term) previous_term_mem;
-    placeholder_mem[1] = current;
-}
-
-static inline term *get_placeholder_previous(term *placeholder)
-{
-    return (term *) placeholder[0];
-}
-
-static inline term get_placeholder_term(term *placeholder)
-{
-    return placeholder[1];
-}
-
-static inline int is_leaf_term(term t)
-{
-    return (!(term_is_nonempty_list(t) || term_is_tuple(t)));
-}
-
 
 term memory_copy_term_tree(term **new_heap, term t)
 {
