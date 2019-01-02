@@ -132,12 +132,13 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
 
 static inline int memory_is_moved_marker(term *t)
 {
-    return *t == 0x2C;
+    // 0x2B is an unused tag
+    return *t == 0x2B;
 }
 
 static inline void memory_replace_with_moved_marker(term *to_be_replaced, term replace_with)
 {
-    to_be_replaced[0] = 0x2C;
+    to_be_replaced[0] = 0x2B;
     to_be_replaced[1] = replace_with;
 }
 
