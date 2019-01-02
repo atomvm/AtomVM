@@ -185,7 +185,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_siz
         case SMALL_TUPLE_EXT: {
             uint8_t arity = external_term_buf[1];
 
-            int heap_usage = 0;
+            int heap_usage = 1;
             int buf_pos = 2;
 
             for (int i = 0; i < arity; i++) {
@@ -234,7 +234,16 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_siz
         case BINARY_EXT: {
             uint32_t binary_size = READ_32_UNALIGNED(external_term_buf + 1);
             *eterm_size = 5 + binary_size;
-            return 2;
+
+            #if TERM_BYTES == 4
+                int size_in_terms = ((binary_size + 4 - 1) >> 2);
+            #elif TERM_BYTES == 8
+                int size_in_terms = ((binary_size + 8 - 1) >> 3);
+            #else
+                #error
+            #endif
+
+            return 2 + size_in_terms;
         }
 
         default:
