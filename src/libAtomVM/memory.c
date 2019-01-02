@@ -310,8 +310,8 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
         } else if ((t & 0x3) == 0x0) {
             TRACE("Found boxed header (%lx)\n", t);
 
-            switch ((t >> 2) & 0xF) {
-                case 0: {
+            switch (t & TERM_BOXED_TAG_MASK) {
+                case TERM_BOXED_TUPLE: {
                     int arity = t >> 6;
                     TRACE("- Boxed is tuple (%lx), arity: %i\n", t, arity);
 
@@ -322,11 +322,11 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
                     break;
                 }
 
-                case 4:
+                case TERM_BOXED_REF:
                     TRACE("- Found ref.\n");
                     break;
 
-                case 9:
+                case TERM_BOXED_HEAP_BINARY:
                     TRACE("- Found binary.\n");
                     break;
 

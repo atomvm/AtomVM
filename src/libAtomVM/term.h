@@ -40,7 +40,10 @@
 #define TERM_BOXED_VALUE_TAG 0x2
 #define TERM_CATCH_TAG 0x1B
 
+#define TERM_BOXED_TAG_MASK 0x3F
+#define TERM_BOXED_TUPLE 0x0
 #define TERM_BOXED_REF 0x10
+#define TERM_BOXED_HEAP_BINARY 0x24
 
 /**
  * @brief Gets a pointer to a term stored on the heap
