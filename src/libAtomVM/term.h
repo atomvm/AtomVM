@@ -171,6 +171,18 @@ static inline int term_is_movable_boxed(term t)
 }
 
 /**
+ * @brief Returns size of a boxed term from its header
+ *
+ * @details Returns the size that is stored in boxed term header most significant bits.
+ * @param t the boxed term header.
+ * @return the size of the boxed term that follows the header. 0 is returned if the boxed term is just the header.
+ */
+static inline int term_get_size_from_boxed_header(term header)
+{
+    return header >> 6;
+}
+
+/**
  * @brief Returns size of a boxed term
  *
  * @details Returns the size of a boxed term in term units.
@@ -183,7 +195,7 @@ static inline int term_boxed_size(term t)
     /* boxed: 10 */
     if ((t & 0x3) == 0x2) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        return (*boxed_value) >> 6;
+        return term_get_size_from_boxed_header(*boxed_value);
 
     } else {
         //TODO: error here
@@ -668,7 +680,7 @@ static inline int term_get_tuple_arity(term t)
 
     const term *boxed_value = term_to_const_term_ptr(t);
     if ((boxed_value[0] & 0x3F) == 0) {
-        return boxed_value[0] >> 6;
+        return term_get_size_from_boxed_header(boxed_value[0]);
     } else {
         abort();
     }

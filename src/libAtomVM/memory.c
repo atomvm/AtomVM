@@ -313,7 +313,7 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
 
             switch (t & TERM_BOXED_TAG_MASK) {
                 case TERM_BOXED_TUPLE: {
-                    int arity = t >> 6;
+                    int arity = term_get_size_from_boxed_header(t);
                     TRACE("- Boxed is tuple (%lx), arity: %i\n", t, arity);
 
                     for (int i = 1; i <= arity; i++) {
@@ -336,7 +336,7 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
                     abort();
             }
 
-            ptr += (t >> 6) + 1;
+            ptr += term_get_size_from_boxed_header(t) + 1;
 
         } else if (term_is_nonempty_list(t)) {
             TRACE("Found nonempty list (%lx)\n", t);
