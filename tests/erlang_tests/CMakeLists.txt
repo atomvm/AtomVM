@@ -162,6 +162,7 @@ compile_erlang(copy_terms0)
 compile_erlang(copy_terms1)
 compile_erlang(copy_terms2)
 compile_erlang(copy_terms3)
+compile_erlang(copy_terms4)
 compile_erlang(copy_terms5)
 compile_erlang(copy_terms6)
 compile_erlang(copy_terms7)
@@ -334,6 +335,7 @@ add_custom_target(erlang_test_modules DEPENDS
     copy_terms1.beam
     copy_terms2.beam
     copy_terms3.beam
+    copy_terms4.beam
     copy_terms5.beam
     copy_terms6.beam
     copy_terms7.beam
