@@ -239,15 +239,6 @@ unsigned long memory_estimate_usage(term t)
         } else if (term_is_pid(t)) {
             t = temp_stack_pop(&temp_stack);
 
-        } else if (term_is_reference(t)) {
-            acc += term_boxed_size(t) + 1;
-            t = temp_stack_pop(&temp_stack);
-
-        } else if (term_is_binary(t)) {
-            //TODO: binaries might be shared outside process heap.
-            acc += term_boxed_size(t) + 1;
-            t = temp_stack_pop(&temp_stack);
-
         } else if (term_is_nonempty_list(t)) {
             acc += 2;
             temp_stack_push(&temp_stack, term_get_list_tail(t));
@@ -266,6 +257,10 @@ unsigned long memory_estimate_usage(term t)
             } else {
                 t = term_nil();
             }
+
+        } else if (term_is_boxed(t)) {
+            acc += term_boxed_size(t) + 1;
+            t = temp_stack_pop(&temp_stack);
 
         } else {
             fprintf(stderr, "bug: found unknown term type: 0x%lx\n", t);
