@@ -18,7 +18,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -module(console).
 
--export([start/0, puts/1, puts/2]).
+-export([start/0, puts/1, puts/2, flush/0, flush/1]).
 
 -opaque console() :: any().
 
@@ -29,16 +29,26 @@ puts(String) ->
 %% @hidden
 -spec puts(console(), string()) -> ok.
 puts(Console, String) ->
-    call(Console, String).
+    call(Console, {puts, String}).
+
+-spec flush() -> ok.
+flush() ->
+    flush(get_pid()).
+
+%% @hidden
+-spec flush(console()) -> ok.
+flush(Console) ->
+    call(Console, flush).
 
 %% Internal operations
 
 %% @private
 -spec call(console(), string()) -> ok.
 call(Console, Msg) ->
-    Console ! {self(), Msg},
+    Ref = make_ref(),
+    Console ! {self(), Ref, Msg},
     receive
-        ok -> ok
+        {Ref, Reply} -> Reply
     end.
 
 %% @private

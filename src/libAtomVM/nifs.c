@@ -21,9 +21,11 @@
 
 #include "atomshashtable.h"
 #include "context.h"
+#include "ccontext.h"
 #include "interop.h"
 #include "mailbox.h"
 #include "module.h"
+#include "port.h"
 #include "scheduler.h"
 #include "term.h"
 #include "utils.h"
@@ -49,7 +51,6 @@
     return term_invalid_term();
 
 static const char *const latin1_atom = "\x6" "latin1";
-static const char *const ok_atom = "\x2" "ok";
 static const char *const error_atom = "\x5" "error";
 static const char *const undefined_atom = "\x9" "undefined";
 static const char *const true_atom = "\x4" "true";
@@ -57,6 +58,8 @@ static const char *const false_atom = "\x5" "false";
 static const char *const badarg_atom = "\x6" "badarg";
 static const char *const overflow_atom = "\x8" "overflow";
 static const char *const system_limit_atom = "\xC" "system_limit";
+static const char *const puts_a = "\x4" "puts";
+static const char *const flush_a = "\x5" "flush";
 
 static void process_echo_mailbox(Context *ctx);
 static void process_console_mailbox(Context *ctx);
@@ -370,28 +373,47 @@ static void process_echo_mailbox(Context *ctx)
 
 static void process_console_mailbox(Context *ctx)
 {
+    Message *message = mailbox_dequeue(ctx);
+    term msg = message->message;
 
-    Message *msg = mailbox_dequeue(ctx);
-    term pid = term_get_tuple_element(msg->message, 0);
-    term val = term_get_tuple_element(msg->message, 1);
+    if (port_is_standard_port_command(msg)) {
+        CContext ccontext;
+        CContext *cc = &ccontext;
+        ccontext_init(cc, ctx);
+        
+        term_ref pid = ccontext_make_term_ref(cc, term_get_tuple_element(msg, 0));
+        term_ref ref = ccontext_make_term_ref(cc, term_get_tuple_element(msg, 1));
+        term cmd = term_get_tuple_element(msg, 2);
+        
+        if (term_is_atom(cmd) && cmd == context_make_atom(ctx, flush_a)) {
+            fflush(stdout);
+            port_send_reply(cc, pid, ref, port_make_ok_atom(cc));
+        } else if (term_is_tuple(cmd) && term_get_tuple_arity(cmd) == 2) {
+            term cmd_name = term_get_tuple_element(cmd, 0);
+            if (cmd_name == context_make_atom(ctx, puts_a)) {
+                char *str = interop_term_to_string(term_get_tuple_element(cmd, 1));
+                if (IS_NULL_PTR(str)) {
+                    term_ref error = port_create_error_tuple(cc, "Unable to convert term to string");
+                    port_send_reply(cc, pid, ref, error);
+                } else {
+                    printf("%s", str);
+                    port_send_reply(cc, pid, ref, port_make_ok_atom(cc));
+                }
+                free(str);
+            } else {
+                term_ref error = port_create_error_tuple(cc, "Expected puts command");
+                port_send_reply(cc, pid, ref, error);
+            }
+        } else {
+            port_send_reply(cc, pid, ref, port_create_error_tuple(cc, "unrecognized command"));
+        }
 
-    int local_process_id = term_to_local_process_id(pid);
-    Context *target = globalcontext_get_process(ctx->global, local_process_id);
-
-    char *str = interop_term_to_string(val);
-    if (IS_NULL_PTR(str)) {
-        free(msg);
-        return;
+        ccontext_release_all_refs(cc);
+    } else {
+        fprintf(stderr, "WARNING: Invalid port command.  Unable to send reply");
     }
 
-    printf("%s", str);
-    free(str);
-
-    //TODO: use globalcontext_get_atom_id(ctx->global, ok_atom);
-    int ok_index = globalcontext_insert_atom(ctx->global, ok_atom);
-    mailbox_send(target, term_from_atom_index(ok_index));
-
-    free(msg);
+    free(message);
 }
 
 static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])

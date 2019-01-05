@@ -32,6 +32,11 @@ static inline term_ref port_make_atom(CContext *cc, AtomString atom)
     return ccontext_make_term_ref(cc, context_make_atom(cc->ctx, atom));
 }
 
+static inline term_ref port_make_ok_atom(CContext *cc)
+{
+    return ccontext_make_term_ref(cc, context_make_atom(cc->ctx, port_ok_a));
+}
+
 term_ref port_create_tuple2(CContext *cc, term_ref a, term_ref b);
 term_ref port_create_tuple3(CContext *cc, term_ref a, term_ref b, term_ref c);
 term_ref port_create_tuple_n(CContext *cc, size_t num_terms, term_ref *terms);
@@ -39,5 +44,6 @@ term_ref port_create_error_tuple(CContext *cc, const char *reason);
 term_ref port_create_ok_tuple(CContext *cc, term_ref t);
 void port_send_reply(CContext *cc, term_ref pid, term_ref ref, term_ref reply);
 void port_ensure_available(Context *ctx, size_t size);
+int port_is_standard_port_command(term msg);
 
 #endif
