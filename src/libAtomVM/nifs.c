@@ -380,11 +380,11 @@ static void process_console_mailbox(Context *ctx)
         CContext ccontext;
         CContext *cc = &ccontext;
         ccontext_init(cc, ctx);
-        
+
         term_ref pid = ccontext_make_term_ref(cc, term_get_tuple_element(msg, 0));
         term_ref ref = ccontext_make_term_ref(cc, term_get_tuple_element(msg, 1));
         term cmd = term_get_tuple_element(msg, 2);
-        
+
         if (term_is_atom(cmd) && cmd == context_make_atom(ctx, flush_a)) {
             fflush(stdout);
             port_send_reply(cc, pid, ref, port_make_ok_atom(cc));
