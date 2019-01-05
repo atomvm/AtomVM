@@ -177,6 +177,9 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
     MappedFile *beam_file = NULL;
     if (!(global->avmpack_data && avmpack_find_section_by_name(global->avmpack_data, module_name, &beam_module, &beam_module_size))) {
         beam_file = mapped_file_open_beam(module_name);
+        if (IS_NULL_PTR(beam_file)) {
+            return NULL;
+        }
         if (UNLIKELY(!iff_is_valid_beam(beam_file->mapped))) {
             fprintf(stderr, "%s is not a valid BEAM file.\n", module_name);
         }

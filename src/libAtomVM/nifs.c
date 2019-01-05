@@ -429,10 +429,8 @@ static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
 
     Context *new_ctx = context_new(ctx->global);
 
-    int mod_atom_index = term_to_atom_index(argv[0]);
-    AtomString module_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table, mod_atom_index, (unsigned long) NULL);
-    int func_atom_index = term_to_atom_index(argv[1]);
-    AtomString function_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table, func_atom_index, (unsigned long) NULL);
+    AtomString module_string = globalcontext_atomstring_from_term(ctx->global, argv[0]);
+    AtomString function_string = globalcontext_atomstring_from_term(ctx->global, argv[1]);
 
     Module *found_module = globalcontext_get_module(ctx->global, module_string);
     if (UNLIKELY(!found_module)) {
