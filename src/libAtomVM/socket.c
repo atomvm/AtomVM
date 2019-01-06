@@ -69,12 +69,8 @@ static void socket_consume_mailbox(Context *ctx)
     if (UNLIKELY(ctx->native_handler != socket_consume_mailbox)) {
         abort();
     }
-
-    struct CContext *cc = malloc(sizeof(struct CContext));
-    if (!cc) {
-        fprintf(stderr, "malloc %s:%d", __FILE__, __LINE__);
-        abort();
-    }
+    CContext ccontext;
+    CContext *cc = &ccontext;
     ccontext_init(cc, ctx);
 
     port_ensure_available(ctx, 16);
@@ -108,8 +104,6 @@ static void socket_consume_mailbox(Context *ctx)
     }
 
     ccontext_release_all_refs(cc);
-    free(cc);
-
     free(message);
     TRACE("END socket_consume_mailbox\n");
 }
