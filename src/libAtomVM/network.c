@@ -36,18 +36,18 @@ static void network_consume_mailbox(Context *ctx)
 {
     Message *message = mailbox_dequeue(ctx);
     term msg = message->message;
-    
+
     if (port_is_standard_port_command(msg)) {
         CContext ccontext;
         CContext *cc = &ccontext;
         ccontext_init(cc, ctx);
-        
+
         port_ensure_available(ctx, 32);
-        
+
         term_ref pid = ccontext_make_term_ref(cc, term_get_tuple_element(msg, 0));
         term_ref ref = ccontext_make_term_ref(cc, term_get_tuple_element(msg, 1));
         term cmd = term_get_tuple_element(msg, 2);
-        
+
         if (term_is_atom(cmd) && cmd == context_make_atom(ctx, ifconfig_a)) {
             term_ref reply = network_driver_ifconfig(cc);
             port_send_reply(cc, pid, ref, reply);
