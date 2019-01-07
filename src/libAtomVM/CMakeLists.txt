@@ -23,6 +23,8 @@ if(${CMAKE_GENERATOR} STREQUAL "Xcode")
         memory.h
         module.h
         opcodesswitch.h
+        network.h
+        network_driver.h
         nifs.h
         port.h
         scheduler.h
@@ -50,6 +52,7 @@ set(SOURCE_FILES
     mailbox.c
     memory.c
     module.c
+    network.c
     nifs.c
     port.c
     scheduler.c

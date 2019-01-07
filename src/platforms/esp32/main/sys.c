@@ -24,7 +24,7 @@
 #include "globalcontext.h"
 #include "socket.h"
 #include "gpio_driver.h"
-#include "network_driver.h"
+#include "network.h"
 
 #include "freertos/FreeRTOS.h"
 #include "esp_system.h"
@@ -136,7 +136,7 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
     if (!strcmp(driver_name, "socket")) {
         socket_init(new_ctx, opts);
     } else if (!strcmp(driver_name, "network")) {
-        networkdriver_init(new_ctx);
+        network_init(new_ctx, opts);
     } else if (!strcmp(driver_name, "gpio")) {
         gpiodriver_init(new_ctx);
     } else {

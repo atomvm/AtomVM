@@ -1,5 +1,6 @@
 /***************************************************************************
  *   Copyright 2018 by Davide Bettio <davide@uninstall.it>                 *
+ *   Copyright 2018 by Fred Dushin <fred@dushin.nt>                        *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU Lesser General Public License as        *
@@ -17,11 +18,13 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#ifndef _NETWORKDRIVER_H_
-#define _NETWORKDRIVER_H_
+#ifndef _NETWORK_DRIVER_H_
+#define _NETWORK_DRIVER_H_
 
-#include "context.h"
+#include "ccontext.h"
+#include "term.h"
 
-void networkdriver_init(Context *ctx);
+void network_driver_setup(CContext *cc, term pid, term_ref ref, term config);
+term_ref network_driver_ifconfig(CContext *cc);
 
 #endif
