@@ -310,7 +310,7 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
     }
 
     free(driver_name);
-    
+
     if (!new_ctx) {
         RAISE_ERROR(badarg_atom);
     } else {

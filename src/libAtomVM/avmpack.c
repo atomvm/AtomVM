@@ -125,6 +125,6 @@ void *avmpack_fold(void *accum, const void *avmpack_binary, avmpack_fold_fun fol
             offset += size;
         }
     } while(size > 0);
-    
+
     return accum;
 }
