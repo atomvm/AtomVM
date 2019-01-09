@@ -2333,7 +2333,7 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                 NEXT_INSTRUCTION(next_off);
                 break;
             }
-                
+
             case OP_APPLY: {
                 int next_off = 1;
                 int arity;
