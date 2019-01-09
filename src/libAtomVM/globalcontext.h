@@ -31,6 +31,7 @@
 #include <time.h>
 
 #include "atom.h"
+#include "term.h"
 #include "linkedlist.h"
 
 struct Context;
@@ -138,6 +139,20 @@ int globalcontext_get_registered_process(GlobalContext *glb, int atom_index);
  * @returns newly added atom id or -1 in case of failure.
  */
 int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string);
+
+/**
+ * @brief   Returns the AtomString value of a term.
+ *
+ * @details This function fetches the AtomString value of the atom associated
+ *          with the supplied term.  The input term must be an atom type.
+ *          If no such atom is registered in the global table, this function
+ *          returns NULL.  The caller should NOT free the data associated with
+ *          the returned value.
+ * @param   glb the global context
+ * @param   t the atom term
+ * @returns the AtomString associated with the supplied atom term.
+ */
+AtomString globalcontext_atomstring_from_term(GlobalContext *glb, term t);
 
 /*
  * @brief Insert an already loaded module with a certain filename to the modules table.

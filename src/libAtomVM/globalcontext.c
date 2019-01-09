@@ -160,6 +160,19 @@ int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string)
     return (int) atom_index;
 }
 
+AtomString globalcontext_atomstring_from_term(GlobalContext *glb, term t)
+{
+    if (!term_is_atom(t)) {
+        abort();
+    }
+    unsigned long atom_index = term_to_atom_index(t);
+    unsigned long ret = valueshashtable_get_value(glb->atoms_ids_table, atom_index, ULONG_MAX);
+    if (ret == ULONG_MAX) {
+        return NULL;
+    }
+    return (AtomString) ret;
+}
+
 int globalcontext_insert_module(GlobalContext *global, Module *module, AtomString module_name_atom)
 {
     if (!atomshashtable_insert(global->modules_table, module_name_atom, TO_ATOMSHASHTABLE_VALUE(module))) {

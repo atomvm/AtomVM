@@ -39,7 +39,6 @@ MappedFile *mapped_file_open_beam(const char *file_name)
 
     mf->fd = open(file_name, O_RDONLY);
     if (UNLIKELY(mf->fd < 0)) {
-        fprintf(stderr, "Cannot open %s\n", file_name);
         free(mf);
         return NULL;
     }
