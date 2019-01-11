@@ -610,6 +610,7 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                         ctx->x[1] = context_make_atom(ctx, function_clause_atom);
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
+                        fprintf(stderr, "FUNC_INFO: No function clause for module %i atom %i arity %i.\n", module_atom, function_name_atom, arity);
                         abort();
                     }
 
@@ -2150,6 +2151,7 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                     if (target_label) {
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
+                        fprintf(stderr, "No target label for OP_BADMATCH.  arg1=0x%lx\n", arg1);
                         abort();
                     }
                 #endif
@@ -2170,6 +2172,7 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                     if (target_label) {
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
+                        fprintf(stderr, "No target label for OP_IF_END\n");
                         abort();
                     }
                 #endif
@@ -2199,6 +2202,7 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                     if (target_label) {
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
+                        fprintf(stderr, "No target label for OP_CASE_END.  arg1=0x%lx\n", arg1);
                         abort();
                     }
                 #endif

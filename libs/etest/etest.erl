@@ -73,8 +73,9 @@ assert_true(_) -> fail.
 %% @private
 run_test(Test) ->
     try
-        Test:test(),
-        console:puts("+"), console:flush()
+        Result = Test:test(),
+        console:puts("+"), console:flush(),
+        Result
     catch
         _:_ ->
             console:puts("-"), console:flush(),

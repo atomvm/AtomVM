@@ -11,6 +11,8 @@ set(ERLANG_MODULES
     gpio
     logger
     network
+    timer_manager
+    timestamp_util
 )
 
 pack_archive(eavmlib ${ERLANG_MODULES})

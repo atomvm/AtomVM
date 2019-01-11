@@ -10,6 +10,7 @@ set(ERLANG_MODULES
     calendar
     erlang
     gen_server
+    gen_statem
     gen_udp
     lists
     proplists

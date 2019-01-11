@@ -8,6 +8,7 @@ include(BuildErlang)
 
 set(ERLANG_MODULES
     test_gen_server
+    test_gen_statem
     test_lists
     test_proplists
     test_timer

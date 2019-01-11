@@ -28,7 +28,7 @@
 %%-----------------------------------------------------------------------------
 -module(logger).
 
--export([start/0, start/1, log/3, stop/0]).
+-export([start/0, start/1, log/3, get_levels/0, set_levels/1, stop/0]).
 -export([loop/1]).
 
 -record(state, {
@@ -101,6 +101,35 @@ log(Location, Level, Msg) ->
     Pid ! {Location, erlang:universaltime(), self(), Level, Msg},
     ok.
 
+%%-----------------------------------------------------------------------------
+%% @param   Levels the list of levels to set
+%% @return  ok
+%% @doc     Set the levels in the logger.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_levels(Levels::[level()]) -> ok.
+set_levels(Levels) ->
+    {ok, Pid} = maybe_start(whereis(?MODULE)),
+    Pid ! {set_levels, Levels},
+    ok.
+
+%%-----------------------------------------------------------------------------
+%% @return  the current list of levels set in the logger
+%% @doc     Get the current levels in the logger.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_levels() -> {ok, Levels::[level()]} | {error, timeout}.
+get_levels() ->
+    {ok, Pid} = maybe_start(whereis(?MODULE)),
+    Ref = erlang:make_reference(),
+    Pid ! {get_levels, Ref, self()},
+    receive
+        {Ref, Levels} ->
+            {ok, Levels}
+    after 5000 ->
+        {error, timeout}
+    end.
+
 %%
 %% Internal operations
 %%
@@ -113,9 +142,14 @@ loop(#state{pid=Pid, config=Config} = State0) ->
             Pid ! started,
             State0#state{pid=undefined}
     end,
+    Levels = proplists:get_value(levels, Config, []),
     receive
+        {get_levels, Ref, Pid} ->
+            Pid ! {Ref, Levels};
+        {set_levels, NewLevels} ->
+            loop(State#state{config=[{levels, NewLevels} | lists:keydelete(levels, 1, Levels)]});
         {_Location, _Time, _Pid, Level, _Msg} = Request ->
-            do_log(Request, Level, proplists:get_value(levels, Config)),
+            do_log(Request, Level, Levels),
             loop(State);
         stop ->
             ok;
