@@ -33,6 +33,8 @@
 #include "utils.h"
 #include "term.h"
 
+static const char *ok_a = "\x2" "ok";
+
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -82,13 +84,20 @@ int main(int argc, char **argv)
     ctx->leader = 1;
 
     context_execute_loop(ctx, mod, "start", 0);
+    
+    term ret_value = ctx->x[0];
+    printf("Return value: %lx\n", ret_value);
 
-    printf("Return value: %lx\n", ctx->x[0]);
+    term ok_atom = context_make_atom(ctx, ok_a);
 
     context_destroy(ctx);
     globalcontext_destroy(glb);
     module_destroy(mod);
     mapped_file_close(mapped_file);
 
-    return EXIT_SUCCESS;
+    if (ok_atom == ret_value) {
+        return EXIT_SUCCESS;
+    } else {
+        return EXIT_FAILURE;
+    }
 }

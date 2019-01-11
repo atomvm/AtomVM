@@ -1,7 +1,10 @@
 cmake_minimum_required (VERSION 2.6)
 project (tests)
 
-add_subdirectory(erlang_tests)
+if (NOT "${CMAKE_GENERATOR}" MATCHES "Xcode")
+    add_subdirectory(erlang_tests)
+    add_subdirectory(libs/estdlib)
+endif()
 
 if(CMAKE_COMPILER_IS_GNUCC)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -pedantic -Wextra -ggdb")
@@ -30,7 +33,9 @@ set(
 add_executable(test-erlang test.c)
 target_link_libraries(test-erlang libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX} libAtomVM)
 set_property(TARGET test-erlang PROPERTY C_STANDARD 99)
-add_dependencies(test-erlang erlang_test_modules)
+if (NOT "${CMAKE_GENERATOR}" MATCHES "Xcode")
+    add_dependencies(test-erlang erlang_test_modules)
+endif()
 
 add_executable(test-structs test-structs.c)
 target_link_libraries(test-structs libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})

@@ -12,6 +12,7 @@ set(ERLANG_MODULES
     gen_udp
     lists
     timer
+    erlang
 )
 
 pack_archive(estdlib ${ERLANG_MODULES})

@@ -91,6 +91,7 @@ static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_time_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_tuple_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[]);
+static term nif_erlang_timestamp_0(Context *ctx, int argc, term argv[]);
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[]);
 
 static const struct Nif make_ref_nif =
@@ -223,6 +224,12 @@ static const struct Nif universaltime_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_universaltime_0
+};
+
+static const struct Nif timestamp_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_timestamp_0
 };
 
 static const struct Nif tuple_to_list_nif =
@@ -450,6 +457,7 @@ static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
     //TODO: check available registers count
     int reg_index = 0;
     term t = argv[2];
+    memory_ensure_free(new_ctx, memory_estimate_usage(t));
     while (!term_is_nil(t)) {
         term *t_ptr = term_get_list_ptr(t);
         new_ctx->x[reg_index] = memory_copy_term_tree(&new_ctx->heap_ptr, t_ptr[1]);
@@ -598,6 +606,25 @@ term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[])
     term_put_tuple_element(date_time_tuple, 1, time_tuple);
 
     return date_time_tuple;
+}
+
+term nif_erlang_timestamp_0(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
+
+    memory_ensure_free(ctx, 4);
+    term timestamp_tuple = term_alloc_tuple(3, ctx);
+
+    struct timespec ts;
+    sys_time(&ts);
+
+    term_put_tuple_element(timestamp_tuple, 0, term_from_int32(ts.tv_sec / 1000000));
+    term_put_tuple_element(timestamp_tuple, 1, term_from_int32(ts.tv_sec % 1000000));
+    term_put_tuple_element(timestamp_tuple, 2, term_from_int32(ts.tv_nsec / 1000));
+
+    return timestamp_tuple;
 }
 
 static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[])

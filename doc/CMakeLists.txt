@@ -8,7 +8,7 @@ find_package(Doxygen)
 
 if(DOXYGEN_FOUND)
 
-    foreach(ERLANG_LIB estdlib eavmlib)
+    foreach(ERLANG_LIB estdlib eavmlib etest)
         file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/ref/${ERLANG_LIB})
         add_custom_target(edoc-${ERLANG_LIB}
             COMMAND escript ${CMAKE_SOURCE_DIR}/tools/doc/gendoc.erl ${ERLANG_LIB} ${CMAKE_SOURCE_DIR}/libs/${ERLANG_LIB} ${CMAKE_CURRENT_BINARY_DIR}/html/ref/${ERLANG_LIB}
