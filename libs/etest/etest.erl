@@ -74,10 +74,10 @@ assert_true(_) -> fail.
 run_test(Test) ->
     try
         Test:test(),
-        console:puts("+")
+        console:puts("+"), console:flush()
     catch
         _:_ ->
-            console:puts("-"),
+            console:puts("-"), console:flush(),
             exception
     end.
 

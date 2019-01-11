@@ -4,6 +4,7 @@
 
 test() ->
     ok = test_nth(),
+    ok = test_member(),
     ok.
 
 test_nth() ->
@@ -16,4 +17,11 @@ test_nth() ->
     % catch
     %     _:_ -> ok
     % end,
+    ok.
+
+test_member() ->
+    etest:assert_true(lists:member(a, [a,b,c])),
+    etest:assert_true(lists:member(b, [a,b,c])),
+    etest:assert_true(lists:member(c, [a,b,c])),
+    etest:assert_true(not lists:member(d, [a,b,c])),
     ok.
