@@ -385,7 +385,9 @@
 #define OP_BADMATCH 72
 #define OP_IF_END 73
 #define OP_CASE_END 74
+#define OP_CALL_FUN 75
 #define OP_CALL_EXT_ONLY 78
+#define OP_MAKE_FUN2 103
 #define OP_TRY 104
 #define OP_TRY_END 105
 #define OP_TRY_CASE 106
@@ -488,6 +490,24 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
         default:
             abort();
     }
+}
+
+term make_fun(Context *ctx, const Module *mod, int fun_index)
+{
+    uint32_t n_freeze = module_get_fun_freeze(mod, fun_index);
+
+    int size = 2 + n_freeze;
+    term *boxed_func = memory_heap_alloc(ctx, size + 1);
+
+    boxed_func[0] = (size << 6) | TERM_BOXED_FUN;
+    boxed_func[1] = (term) mod;
+    boxed_func[2] = fun_index;
+
+    for (uint32_t i = 3; i < n_freeze + 3; i++) {
+        boxed_func[i] = ctx->x[i - 3];
+    }
+
+    return ((term) boxed_func) | TERM_BOXED_VALUE_TAG;
 }
 
 #endif
@@ -2186,6 +2206,53 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                 break;
             }
 
+            case OP_CALL_FUN: {
+                int next_off = 1;
+                unsigned int args_count;
+                DECODE_INTEGER(args_count, code, i, next_off, next_off)
+
+                TRACE("call_fun/1, args_count=%i\n", args_count);
+                USED_BY_TRACE(args_count);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    term fun = ctx->x[args_count];
+
+                    const term *boxed_value = term_to_const_term_ptr(fun);
+
+                    Module *fun_module = (Module *) boxed_value[1];
+                    uint32_t fun_index = boxed_value[2];
+
+                    uint32_t label;
+                    uint32_t arity;
+                    uint32_t n_freeze;
+                    module_get_fun(mod, fun_index, &label, &arity, &n_freeze);
+
+                    mod = fun_module;
+                    code = mod->code->code;
+
+                    for (unsigned int j = arity - n_freeze; j < arity + n_freeze; j++) {
+                        ctx->x[j] = boxed_value[j - (arity - n_freeze) + 3];
+                    }
+
+                    NEXT_INSTRUCTION(next_off);
+                    ctx->cp = module_address(mod->module_index, i);
+
+                    remaining_reductions--;
+                    if (LIKELY(remaining_reductions)) {
+                        JUMP_TO_ADDRESS(mod->labels[label]);
+                    } else {
+                        SCHEDULE_NEXT(mod, mod->labels[label]);
+                    }
+
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                break;
+            }
+
             case OP_CALL_EXT_ONLY: {
                 int next_off = 1;
                 int arity;
@@ -2247,6 +2314,21 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                 #endif
 
                 break;
+            }
+
+            case OP_MAKE_FUN2: {
+                int next_off = 1;
+                int fun_index;
+                DECODE_LABEL(fun_index, code, i, next_off, next_off)
+
+                TRACE("make_fun/2, fun_index=%i\n", fun_index);
+                #ifdef IMPL_EXECUTE_LOOP
+                    ctx->x[0] = make_fun(ctx, mod, fun_index);
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+
             }
 
             case OP_TRY: {
