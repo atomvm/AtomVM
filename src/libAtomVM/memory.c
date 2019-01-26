@@ -327,6 +327,19 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
                     TRACE("- Found ref.\n");
                     break;
 
+                case TERM_BOXED_FUN: {
+                    int fun_size = term_get_size_from_boxed_header(t);
+                    TRACE("- Found fun, size: %i.\n", fun_size);
+
+                    // first term is the boxed header, followed by module and fun index.
+
+                    for (int i = 3; i <= fun_size; i++) {
+                        TRACE("-- Frozen: %lx\n", ptr[i]);
+                        ptr[i] = memory_shallow_copy_term(ptr[i], &new_heap, move);
+                    }
+                    break;
+                }
+
                 case TERM_BOXED_HEAP_BINARY:
                     TRACE("- Found binary.\n");
                     break;
