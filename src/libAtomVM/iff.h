@@ -44,11 +44,14 @@
 #define LITT 5
 /** Uncompressed literals table section */
 #define LITU 6
+/** Funs table section */
+#define FUNT 7
+
 
 /** Required size for offsets array */
-#define MAX_OFFS 7
+#define MAX_OFFS 8
 /** Required size for sizes array */
-#define MAX_SIZES 7
+#define MAX_SIZES 8
 
 /** sizeof IFF section header in bytes */
 #define IFF_SECTION_HEADER_SIZE 8

@@ -176,6 +176,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     mod->code = (CodeChunk *) (beam_file + offsets[CODE]);
     mod->export_table = beam_file + offsets[EXPT];
     mod->atom_table = beam_file + offsets[AT8U];
+    mod->fun_table = beam_file + offsets[FUNT];
     mod->labels = calloc(ENDIAN_SWAP_32(mod->code->labels), sizeof(void *));
     if (IS_NULL_PTR(mod->labels)) {
         module_destroy(mod);

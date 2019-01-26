@@ -56,6 +56,7 @@ struct Module
     CodeChunk *code;
     void *export_table;
     void *atom_table;
+    void *fun_table;
 
     union imported_func *imported_funcs;
     void *local_labels;

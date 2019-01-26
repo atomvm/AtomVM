@@ -85,6 +85,9 @@ void scan_iff(const void *iff_binary, int buf_size, unsigned long *offsets, unsi
         } else if (!memcmp(current_record->name, "ImpT", 4)) {
             offsets[IMPT] = current_pos;
             sizes[IMPT] = ENDIAN_SWAP_32(current_record->size);
+        } else if (!memcmp(current_record->name, "FunT", 4)) {
+            offsets[FUNT] = current_pos;
+            sizes[FUNT] = ENDIAN_SWAP_32(current_record->size);
         }
 
         current_pos += iff_align(ENDIAN_SWAP_32(current_record->size) + 8);
