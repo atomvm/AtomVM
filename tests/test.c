@@ -152,6 +152,10 @@ struct Test tests[] =
     {"test_func_info.beam", 89},
     {"test_func_info2.beam", 1},
     {"test_func_info3.beam", 120},
+    {"test_funs.beam", 20},
+    {"test_funs2.beam", 52},
+    {"test_funs3.beam", 40},
+    {"test_funs6.beam", 16},
 
     {"nested_list_size0.beam", 0},
     {"nested_list_size1.beam", 2},
