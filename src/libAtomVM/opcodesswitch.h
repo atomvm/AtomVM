@@ -428,6 +428,8 @@
 static const char *const true_atom = "\x04" "true";
 static const char *const false_atom = "\x05" "false";
 static const char *const function_clause_atom = "\x0F" "function_clause";
+static const char *const badarity_atom = "\x08" "badarity";
+static const char *const badfun_atom = "\x06" "badfun";
 
 #ifdef IMPL_EXECUTE_LOOP
 struct Int24
@@ -2217,6 +2219,22 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                 #ifdef IMPL_EXECUTE_LOOP
                     term fun = ctx->x[args_count];
 
+                    if (UNLIKELY(!term_is_function(fun))) {
+                        int target_label = get_catch_label_and_change_module(ctx, &mod);
+                        if (target_label) {
+                            ctx->x[0] = context_make_atom(ctx, error_atom);
+                            term new_error_tuple = term_alloc_tuple(2, ctx);
+                            term_put_tuple_element(new_error_tuple, 0, context_make_atom(ctx, badfun_atom));
+                            term_put_tuple_element(new_error_tuple, 1, ctx->x[args_count]);
+                            ctx->x[1] = new_error_tuple;
+                            JUMP_TO_ADDRESS(mod->labels[target_label]);
+                            continue;
+
+                        } else {
+                            abort();
+                        }
+                    }
+
                     const term *boxed_value = term_to_const_term_ptr(fun);
 
                     Module *fun_module = (Module *) boxed_value[1];
@@ -2226,6 +2244,19 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                     uint32_t arity;
                     uint32_t n_freeze;
                     module_get_fun(mod, fun_index, &label, &arity, &n_freeze);
+
+                    if (UNLIKELY(args_count != arity - n_freeze)) {
+                        int target_label = get_catch_label_and_change_module(ctx, &mod);
+                        if (target_label) {
+                            ctx->x[0] = context_make_atom(ctx, error_atom);
+                            ctx->x[1] = context_make_atom(ctx, badarity_atom);
+                            JUMP_TO_ADDRESS(mod->labels[target_label]);
+                            continue;
+
+                        } else {
+                            abort();
+                        }
+                    }
 
                     mod = fun_module;
                     code = mod->code->code;

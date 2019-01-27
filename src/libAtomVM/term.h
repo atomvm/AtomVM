@@ -294,6 +294,25 @@ static inline int term_is_reference(term t)
 }
 
 /**
+ * @brief Checks if a term is a function
+ *
+ * @details Returns 1 if a term is a fun, otherwise 0.
+ * @param t the term that will be checked.
+ * @return 1 if check succedes, 0 otherwise.
+ */
+static inline int term_is_function(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        if ((boxed_value[0] & 0x3F) == TERM_BOXED_FUN) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+/**
  * @brief Checks if a term is a saved CP
  *
  * @details Returns 1 if a term is a saved continuation pointer, otherwise 0.
