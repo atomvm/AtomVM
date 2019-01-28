@@ -129,6 +129,7 @@ compile_erlang(test_funs6)
 compile_erlang(test_funs7)
 compile_erlang(test_funs8)
 compile_erlang(test_funs9)
+compile_erlang(test_funs10)
 
 compile_erlang(complex_struct_size0)
 compile_erlang(complex_struct_size1)
@@ -314,6 +315,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_funs7.beam
     test_funs8.beam
     test_funs9.beam
+    test_funs10.beam
 
     complex_struct_size0.beam
     complex_struct_size1.beam
