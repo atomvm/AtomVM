@@ -21,6 +21,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "utils.h"
 
@@ -50,4 +51,24 @@ int atom_are_equals(AtomString a, AtomString b)
     } else {
         return 0;
     }
+}
+
+void atom_write_mfa(char *buf, size_t buf_size, AtomString module, AtomString function, int arity)
+{
+    int module_name_len = atom_string_len(module);
+    memcpy(buf, atom_string_data(module), module_name_len);
+
+    buf[module_name_len] = ':';
+
+    int function_name_len = atom_string_len(function);
+    if (UNLIKELY((arity > 9) || (module_name_len + function_name_len + 4 > buf_size))) {
+        fprintf(stderr, "Insufficient room to write mfa.\n");
+        abort();
+    }
+    memcpy(buf + module_name_len + 1, atom_string_data(function), function_name_len);
+
+    //TODO: handle functions with more than 9 parameters
+    buf[module_name_len + function_name_len + 1] = '/';
+    buf[module_name_len + function_name_len + 2] = '0' + arity;
+    buf[module_name_len + function_name_len + 3] = 0;
 }

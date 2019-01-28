@@ -227,6 +227,7 @@ struct Test tests[] =
     {"copy_terms18.beam", -19},
 
     {"test_apply.beam", 17},
+    {"test_timestamp.beam", 1},
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 

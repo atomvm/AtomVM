@@ -28,6 +28,7 @@
 #define _ATOM_H_
 
 #include <stdint.h>
+#include <stdlib.h>
 
 typedef const void * AtomString;
 
@@ -74,5 +75,19 @@ static inline const void *atom_string_data(AtomString atom_str)
 {
     return ((const uint8_t *) atom_str) + 1;
 }
+
+/**
+ * @brief Write module:function/arity to the supplied buffer.
+ *
+ * @details Write module:function/arity to the supplied buffer.  This function will abort
+ *          if the written module, function, and arity are longer than the supplied
+ *          buffer size.
+ * @param   buf the buffer to write into
+ * @param   buf_size the amount of room in the buffer
+ * @param   module the module name
+ * @param   function the function name
+ * @param   arity the function arity
+ */
+void atom_write_mfa(char *buf, size_t buf_size, AtomString module, AtomString function, int arity);
 
 #endif

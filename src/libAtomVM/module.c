@@ -301,6 +301,12 @@ const struct ExportedFunction *module_resolve_function(Module *mod, int import_t
 
     if (LIKELY(found_module != NULL)) {
         int exported_label = module_search_exported_function(found_module, function_name_atom, arity);
+        if (exported_label == 0) {
+            char buf[256];
+            atom_write_mfa(buf, 256, module_name_atom, function_name_atom, arity);
+            fprintf(stderr, "Warning: function %s cannot be resolved.\n", buf);
+            return NULL;
+        }
         struct ModuleFunction *mfunc = malloc(sizeof(struct ModuleFunction));
         if (IS_NULL_PTR(mfunc)) {
             fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
@@ -313,9 +319,10 @@ const struct ExportedFunction *module_resolve_function(Module *mod, int import_t
         free(unresolved);
         mod->imported_funcs[import_table_index].func = &mfunc->base;
         return &mfunc->base;
+    } else {
+        char buf[256];
+        atom_string_to_c(module_name_atom, buf, 256);
+        fprintf(stderr, "Warning: module %s cannot be resolved.\n", buf);
+        return NULL;
     }
-
-    fprintf(stderr, "warning: module has not been loaded.\n");
-
-    return NULL;
 }
