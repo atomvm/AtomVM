@@ -55,12 +55,12 @@ int atom_are_equals(AtomString a, AtomString b)
 
 void atom_write_mfa(char *buf, size_t buf_size, AtomString module, AtomString function, int arity)
 {
-    int module_name_len = atom_string_len(module);
+    unsigned int module_name_len = atom_string_len(module);
     memcpy(buf, atom_string_data(module), module_name_len);
 
     buf[module_name_len] = ':';
 
-    int function_name_len = atom_string_len(function);
+    unsigned int function_name_len = atom_string_len(function);
     if (UNLIKELY((arity > 9) || (module_name_len + function_name_len + 4 > buf_size))) {
         fprintf(stderr, "Insufficient room to write mfa.\n");
         abort();
