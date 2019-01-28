@@ -84,7 +84,7 @@ int main(int argc, char **argv)
     ctx->leader = 1;
 
     context_execute_loop(ctx, mod, "start", 0);
-    
+
     term ret_value = ctx->x[0];
     printf("Return value: %lx\n", ret_value);
 
