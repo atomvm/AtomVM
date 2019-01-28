@@ -1,4 +1,4 @@
--module(test_funs).
+-module(test_funs0).
 
 -export([start/0, sumeach/3]).
 
