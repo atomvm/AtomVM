@@ -386,6 +386,7 @@
 #define OP_IF_END 73
 #define OP_CASE_END 74
 #define OP_CALL_FUN 75
+#define OP_IS_FUNCTION 77
 #define OP_CALL_EXT_ONLY 78
 #define OP_MAKE_FUN2 103
 #define OP_TRY 104
@@ -2278,6 +2279,33 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                break;
+            }
+
+           case OP_IS_FUNCTION: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_function/2, label=%i, arg1=%lx\n", label, arg1);
+
+                    if (term_is_function(arg1)) {
+                        NEXT_INSTRUCTION(next_off);
+                    } else {
+                        i = POINTER_TO_II(mod->labels[label]);
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_function/2\n");
+                    UNUSED(label)
+                    UNUSED(arg1)
                     NEXT_INSTRUCTION(next_off);
                 #endif
 
