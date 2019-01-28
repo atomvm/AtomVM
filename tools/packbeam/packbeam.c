@@ -72,7 +72,7 @@ static void usage(const char *program)
 int main(int argc, char **argv)
 {
     int opt;
-    
+
     const char *action = "pack";
     int is_archive = 0;
     while ((opt = getopt(argc, argv, "hal")) != -1) {
@@ -137,7 +137,7 @@ FileData read_file_data(FILE *file)
         exit(EXIT_FAILURE);
     }
     assert(fread(data, sizeof(uint8_t), size, file) == size);
-    
+
     FileData file_data = {
         .data = data,
         .size = size
@@ -188,11 +188,11 @@ static void validate_pack_options(int argc, char ** argv)
         }
     }
 }
-        
+
 static int do_pack(int argc, char **argv, int is_archive)
 {
     validate_pack_options(argc, argv);
-    
+
     FILE *pack = fopen(argv[0], "w");
     if (!pack) {
         char buf[BUF_SIZE];
@@ -224,7 +224,7 @@ static int do_pack(int argc, char **argv, int is_archive)
         fseek(file, 0, SEEK_END);
         size_t file_size = ftell(file);
         fseek(file, 0, SEEK_SET);
-        
+
 
         uint8_t *file_data = malloc(file_size);
         if (!file_data) {
@@ -239,17 +239,17 @@ static int do_pack(int argc, char **argv, int is_archive)
             pack_beam_file(pack, file_data, file_size, filename, !is_archive && i == 1);
         }
     }
-    
+
     add_module_header(pack, "end", END_OF_FILE);
     fclose(pack);
-    
+
     return EXIT_SUCCESS;
 }
 
 static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *section_name, int is_entrypoint)
 {
     size_t zero_pos = ftell(pack);
-    
+
     if (is_entrypoint) {
         add_module_header(pack, section_name, BEAM_CODE_FLAG | BEAM_START_FLAG);
     } else {
@@ -348,7 +348,7 @@ static int do_list(int argc, char **argv)
 {
     UNUSED(argc);
     validate_list_options(argv[0]);
-    
+
     MappedFile *mapped_file = mapped_file_open_beam(argv[0]);
     if (IS_NULL_PTR(mapped_file)) {
         char buf[BUF_SIZE];
@@ -356,7 +356,7 @@ static int do_list(int argc, char **argv)
         perror(buf);
         return EXIT_FAILURE;
     }
-    
+
     int ret = EXIT_SUCCESS;
     if (avmpack_is_valid(mapped_file->mapped, mapped_file->size)) {
         avmpack_fold(NULL, mapped_file->mapped, print_section);
