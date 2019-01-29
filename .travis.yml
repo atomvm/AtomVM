@@ -30,6 +30,8 @@ matrix:
         - make
         - valgrind ./tests/test-erlang
         - ./tests/test-erlang
+        - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+        - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
       before_install:
         - eval "${MATRIX_EVAL}"
 
@@ -61,6 +63,8 @@ matrix:
         - make
         - valgrind ./tests/test-erlang
         - ./tests/test-erlang
+        - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+        - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
       before_install:
         - eval "${MATRIX_EVAL}"
 
@@ -92,6 +96,8 @@ matrix:
         - make
         - valgrind ./tests/test-erlang
         - ./tests/test-erlang
+        - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+        - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
       before_install:
         - eval "${MATRIX_EVAL}"
 
@@ -123,6 +129,8 @@ matrix:
         - make
         - valgrind ./tests/test-erlang
         - ./tests/test-erlang
+        - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+        - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
       before_install:
         - eval "${MATRIX_EVAL}"
 
@@ -154,6 +162,8 @@ matrix:
         - make
         - valgrind ./tests/test-erlang
         - ./tests/test-erlang
+        - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+        - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
       before_install:
         - eval "${MATRIX_EVAL}"
 
@@ -180,6 +190,8 @@ matrix:
         - make
         - valgrind ./tests/test-erlang
         - ./tests/test-erlang
+        - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+        - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 
     - name: "GCC 4.8 (with -O2, 32 bit) on Trusty with OTP 20"
       os: linux
@@ -209,6 +221,8 @@ matrix:
         - make
         - valgrind ./tests/test-erlang
         - ./tests/test-erlang
+        - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+        - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 
     - name: "clang 5 (with -O2) on Trusty with OTP 20"
       os: linux
@@ -233,6 +247,8 @@ matrix:
         - make
         - valgrind ./tests/test-erlang
         - ./tests/test-erlang
+        - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+        - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
       env:
         - MATRIX_EVAL="CC=clang && CXX=clang++"
       before_install:
@@ -264,5 +280,7 @@ matrix:
         - make
         - valgrind ./tests/test-erlang
         - ./tests/test-erlang
+        - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+        - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
       before_install:
         - eval "${MATRIX_EVAL}"

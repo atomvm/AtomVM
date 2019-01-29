@@ -1,5 +1,5 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%    Copyright 2017 by Davide Bettio <davide@uninstall.it>                %
+%   Copyright 2019 by Fred Dushin <fred@dushin.net>                       %
 %                                                                         %
 %   This program is free software; you can redistribute it and/or modify  %
 %   it under the terms of the GNU Lesser General Public License as        %
@@ -18,44 +18,47 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %%-----------------------------------------------------------------------------
-%% @doc An implementation of the Erlang/OTP lists interface.
+%% @doc An implementation of the Erlang/OTP proplists interface.
 %%
-%% This module implements a strict susbset of the Erlang/OTP lists
+%% This module implements a strict susbset of the Erlang/OTP proplists
 %% interface.
 %% @end
 %%-----------------------------------------------------------------------------
--module(lists).
+-module(proplists).
 
--export([nth/2, member/2]).
+-export([get_value/2, get_value/3]).
+
+-type property() :: atom() | {atom(), term()}.
 
 %%-----------------------------------------------------------------------------
-%% @param   N the index in the list to get
-%% @param   L the list from which to get the value
-%% @returns the value in the list at position N.
-%% @doc     Get the value in a list at position N.
+%% @equiv   get_value(Key, List, undefined)
+%% @doc     Get a value from a property list.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_value(Key::atom(), List::list(property())) -> term() | true | undefined.
+get_value(Key, List) ->
+    get_value(Key, List, undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Key the key with which to find the value
+%% @param   List the property list from which to get the value
+%% @param   Default the default value to return, if Key is not in the property list.
+%% @returns the value in the property list under the key, or Default, if Key is
+%%          not in List.
+%% @doc     Get a value from a property list.
 %%
-%%          Returns the value at the specified position in the list.
-%%          The bhavior of this function is undefined if N is outside of the
-%%          {1..length(L)}.
+%%          Returns the value under the specified key, or the specified Default,
+%%          if the Key is not in the supplied List.  If the Key corresponds to
+%%          an entry in the property list that is just a single atom, this
+%%          function returns the atom true.
 %% @end
 %%-----------------------------------------------------------------------------
--spec nth(N::non_neg_integer(), L::list()) -> term().
-nth(1, [H | _T]) ->
-    H;
-nth(Index, [_H | T]) when Index > 1 ->
-    nth(Index - 1, T).
-
-%%-----------------------------------------------------------------------------
-%% @param   E the member to search for
-%% @param   L the list from which to get the value
-%% @returns true if E is a member of L; false, otherwise.
-%% @doc     Determine whether a term is a member of a list.
-%% @end
-%%-----------------------------------------------------------------------------
--spec member(E::term(), L::list()) -> boolean().
-member(_, []) ->
-    false;
-member(E, [E | _]) ->
+-spec get_value(Key::atom(), list(property()), Default::term()) -> term().
+get_value(_Key, [], Default) ->
+    Default;
+get_value(Key, [{Key, Value} | _T], _Default) when is_atom(Key) ->
+    Value;
+get_value(Key, [Key | _T], _Default) when is_atom(Key) ->
     true;
-member(E, [_ | T]) ->
-    member(E, T).
+get_value(Key, [_Key | T], Default) when is_atom(Key) ->
+    get_value(Key, T, Default).

@@ -25,8 +25,6 @@
 
 -export([start/0, puts/1, puts/2, flush/0, flush/1]).
 
--opaque console() :: any().
-
 %%-----------------------------------------------------------------------------
 %% @param   String the string data to write to the console
 %% @returns ok if the data was written, or {error, Reason}, if there was
@@ -44,7 +42,7 @@ puts(String) ->
     puts(get_pid(), String).
 
 %% @hidden
--spec puts(console(), string()) -> ok.
+-spec puts(pid(), string()) -> ok.
 puts(Console, String) ->
     call(Console, {puts, String}).
 
@@ -59,14 +57,14 @@ flush() ->
     flush(get_pid()).
 
 %% @hidden
--spec flush(console()) -> ok.
+-spec flush(pid()) -> ok.
 flush(Console) ->
     call(Console, flush).
 
 %% Internal operations
 
 %% @private
--spec call(console(), string()) -> ok.
+-spec call(pid(), string()) -> ok.
 call(Console, Msg) ->
     Ref = make_ref(),
     Console ! {self(), Ref, Msg},
@@ -75,7 +73,7 @@ call(Console, Msg) ->
     end.
 
 %% @private
--spec get_pid() -> console().
+-spec get_pid() -> pid().
 get_pid() ->
     case whereis(console) of
         undefined ->
@@ -85,7 +83,7 @@ get_pid() ->
     end.
 
 %% @private
--spec start() -> console().
+-spec start() -> pid().
 start() ->
     Pid = erlang:open_port({spawn, "console"}, []),
     erlang:register(console, Pid),

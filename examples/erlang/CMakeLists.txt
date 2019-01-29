@@ -8,6 +8,7 @@ include(BuildErlang)
 
 add_subdirectory(esp32)
 
-pack_runnable(hello_world hello_world estdlib)
-pack_runnable(udp_server udp_server estdlib)
-pack_runnable(udp_client udp_client estdlib)
+pack_runnable(hello_world hello_world eavmlib)
+pack_runnable(udp_server udp_server estdlib eavmlib)
+pack_runnable(udp_client udp_client estdlib eavmlib)
+pack_runnable(server server estdlib eavmlib)

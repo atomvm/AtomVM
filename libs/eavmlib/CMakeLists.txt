@@ -7,7 +7,9 @@ project(eavmlib)
 include(BuildErlang)
 
 set(ERLANG_MODULES
+    console
     gpio
+    logger
     network
 )
 

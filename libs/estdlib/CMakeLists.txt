@@ -8,11 +8,12 @@ include(BuildErlang)
 
 set(ERLANG_MODULES
     calendar
-    console
+    erlang
+    gen_server
     gen_udp
     lists
+    proplists
     timer
-    erlang
 )
 
 pack_archive(estdlib ${ERLANG_MODULES})
