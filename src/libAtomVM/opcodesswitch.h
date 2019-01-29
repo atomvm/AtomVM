@@ -395,6 +395,7 @@
 #define OP_TRY_CASE_END 107
 #define OP_APPLY 112
 #define OP_IS_BOOLEAN 114
+#define OP_IS_FUNCTION2 115
 #define OP_GC_BIF1 124
 #define OP_GC_BIF2 125
 #define OP_TRIM 136
@@ -2548,6 +2549,50 @@ static const char *const try_clause_atom = "\xA" "try_clause";
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("is_boolean/2\n");
+                    UNUSED(label)
+                    UNUSED(arg1)
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                break;
+            }
+
+            case OP_IS_FUNCTION2: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
+                unsigned int arity;
+                DECODE_INTEGER(arity, code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_function2/3, label=%i, arg1=%lx, arity=%i\n", label, arg1, arity);
+
+                    if (term_is_function(arg1)) {
+                        const term *boxed_value = term_to_const_term_ptr(arg1);
+
+                        Module *fun_module = (Module *) boxed_value[1];
+                        uint32_t fun_index = boxed_value[2];
+
+                        uint32_t fun_label;
+                        uint32_t fun_arity;
+                        uint32_t fun_n_freeze;
+
+                        module_get_fun(fun_module, fun_index, &fun_label, &fun_arity, &fun_n_freeze);
+
+                        if (arity == fun_arity - fun_n_freeze) {
+                            NEXT_INSTRUCTION(next_off);
+                        } else {
+                            i = POINTER_TO_II(mod->labels[label]);
+                        }
+                    } else {
+                        i = POINTER_TO_II(mod->labels[label]);
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_function/3\n");
                     UNUSED(label)
                     UNUSED(arg1)
                     NEXT_INSTRUCTION(next_off);
