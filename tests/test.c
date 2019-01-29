@@ -163,6 +163,7 @@ struct Test tests[] =
     {"test_funs8.beam", 22000},
     {"test_funs9.beam", 3555},
     {"test_funs10.beam", 6817},
+    {"test_funs11.beam", 817},
 
     {"nested_list_size0.beam", 0},
     {"nested_list_size1.beam", 2},
