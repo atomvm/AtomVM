@@ -394,6 +394,7 @@
 #define OP_TRY_CASE 106
 #define OP_TRY_CASE_END 107
 #define OP_APPLY 112
+#define OP_APPLY_LAST 113
 #define OP_IS_BOOLEAN 114
 #define OP_IS_FUNCTION2 115
 #define OP_GC_BIF1 124
@@ -2523,6 +2524,58 @@ static const char *const try_clause_atom = "\xA" "try_clause";
 #endif
 #ifdef IMPL_CODE_LOADER
                 TRACE("apply/1 arity=%i\n", arity);
+                NEXT_INSTRUCTION(next_off);
+#endif
+                break;
+            }
+
+            case OP_APPLY_LAST: {
+                int next_off = 1;
+                int arity;
+                DECODE_INTEGER(arity, code, i, next_off, next_off)
+                int n_words;
+                DECODE_INTEGER(n_words, code, i, next_off, next_off);
+#ifdef IMPL_EXECUTE_LOOP
+                term module = ctx->x[arity];
+                term function = ctx->x[arity+1];
+                TRACE("apply_last/1, module=%lu, function=%lu arity=%i deallocate=%i\n", module, function, arity, n_words);
+
+                remaining_reductions--;
+                if (UNLIKELY(!remaining_reductions)) {
+                    SCHEDULE_NEXT(mod, INSTRUCTION_POINTER());
+                    continue;
+                }
+
+                ctx->cp = ctx->e[n_words];
+                ctx->e += (n_words + 1);
+
+                AtomString module_name = globalcontext_atomstring_from_term(mod->global, module);
+                AtomString function_name = globalcontext_atomstring_from_term(mod->global, function);
+
+                struct Nif *nif = (struct Nif *) nifs_get(module_name, function_name, arity);
+                if (!IS_NULL_PTR(nif)) {
+                    term return_value = nif->nif_ptr(ctx, arity, ctx->x);
+                    if (UNLIKELY(term_is_invalid_term(return_value))) {
+                        RAISE_EXCEPTION();
+                    }
+                    ctx->x[0] = return_value;
+                    DO_RETURN();
+                } else {
+                    Module *target_module = globalcontext_get_module(ctx->global, module_name);
+                    if (IS_NULL_PTR(target_module)) {
+                        RAISE_EXCEPTION();
+                    }
+                    int target_label = module_search_exported_function(target_module, function_name, arity);
+                    if (target_label == 0) {
+                        RAISE_EXCEPTION();
+                    }
+                    mod = target_module;
+                    code = mod->code->code;
+                    JUMP_TO_ADDRESS(mod->labels[target_label]);
+                }
+#endif
+#ifdef IMPL_CODE_LOADER
+                TRACE("apply_last/1 arity=%i deallocate=%i\n", arity, n_words);
                 NEXT_INSTRUCTION(next_off);
 #endif
                 break;
