@@ -38,10 +38,9 @@ static term memory_shallow_copy_term(term t, term **new_heap, int move);
 HOT_FUNC term *memory_heap_alloc(Context *c, uint32_t size)
 {
     term *allocated = c->heap_ptr;
-    if (c->heap_ptr + size > c->e) {
-        TRACE("GC is needed.\n");
-        memory_ensure_free(c, size);
-        allocated = c->heap_ptr;
+    if (UNLIKELY(c->heap_ptr + size > c->e)) {
+        fprintf(stderr, "Cannot allocate unavailable memory.\n");
+        abort();
     }
     c->heap_ptr += size;
 
