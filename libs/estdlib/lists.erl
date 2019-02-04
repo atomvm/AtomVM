@@ -26,7 +26,7 @@
 %%-----------------------------------------------------------------------------
 -module(lists).
 
--export([nth/2, member/2]).
+-export([nth/2, member/2, reverse/1, keydelete/3, keyfind/3]).
 
 %%-----------------------------------------------------------------------------
 %% @param   N the index in the list to get
@@ -59,3 +59,78 @@ member(E, [E | _]) ->
     true;
 member(E, [_ | T]) ->
     member(E, T).
+
+
+%%-----------------------------------------------------------------------------
+%% @param   L the list to reverse
+%% @returns the elments of L in reverse order
+%% @doc     Reverse the elements of L.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec reverse(list()) -> list().
+reverse(L) ->
+    %% TODO this should be done in unit time in a BIF
+    reverse(L, []).
+
+%% @private
+reverse([], Accum) ->
+    Accum;
+reverse([H|T], Accum) ->
+    reverse(T, [H|Accum]).
+
+%%-----------------------------------------------------------------------------
+%% @param   K the key to match
+%% @param   I the position in the tuple to compare (1..tuple_size)
+%% @param   L the list from which to delete the element
+%% @returns the result of deleting any element in L who's Ith element matches K
+%% @doc     Delete the entry in L whose Ith element matches K.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec keydelete(K::term(), I::pos_integer(), L::list()) -> list().
+keydelete(K, I, L) ->
+    keydelete(K, I, L, []).
+
+%% @private
+keydelete(_K, _I, [], L) ->
+    reverse(L);
+keydelete(K, I, [H|T], L2) when is_tuple(H) ->
+    case I =< tuple_size(H) of
+        true ->
+            case element(I, H) of
+                K ->
+                    reverse(L2) ++ T;
+                _ ->
+                    keydelete(K, I, T, [H|L2])
+            end;
+        false ->
+            keydelete(K, I, T, [H|L2])
+    end;
+keydelete(K, I, [H|T], L2) ->
+    keydelete(K, I, T, [H|L2]).
+
+
+%%-----------------------------------------------------------------------------
+%% @param   K the key to match
+%% @param   I the position in the tuple to compare (1..tuple_size)
+%% @param   L the list from which to find the element
+%% @returns the tuple in L who's Ith element matches K; the atom false, otherwise
+%% @doc     Find the entry in L whose Ith element matches K.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec keyfind(K::term(), I::pos_integer(), L::list(tuple())) -> tuple() | false.
+keyfind(_K, _I, []) ->
+    false;
+keyfind(K, I, [H|T]) when is_tuple(H) ->
+    case I =< tuple_size(H) of
+        true ->
+            case element(I, H) of
+                K ->
+                    H;
+                _ ->
+                    keyfind(K, I, T)
+            end;
+        false ->
+            keyfind(K, I, T)
+    end;
+keyfind(K, I, [_H|T]) ->
+    keyfind(K, I, T).
