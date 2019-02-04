@@ -569,6 +569,9 @@ term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
 
+    // a ref is 64 bits, hence 8 bytes
+    memory_ensure_free(ctx, (8 / TERM_BYTES) + 1);
+
     uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
 
     return term_from_ref_ticks(ref_ticks, ctx);
