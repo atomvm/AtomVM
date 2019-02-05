@@ -59,6 +59,7 @@ static const char *const overflow_atom = "\x8" "overflow";
 static const char *const system_limit_atom = "\xC" "system_limit";
 static const char *const puts_a = "\x4" "puts";
 static const char *const flush_a = "\x5" "flush";
+static const char *const max_heap_size_a ="\xD" "max_heap_size";
 
 #ifdef ENABLE_ADVANCED_TRACE
 static const char *const ok_atom = "\x2" "ok";
@@ -95,7 +96,7 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_register_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_send_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_setelement_3(Context *ctx, int argc, term argv[]);
-static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[]);
+static term nif_erlang_spawn(Context *ctx, int argc, term argv[]);
 static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_time_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_tuple_to_list_1(Context *ctx, int argc, term argv[]);
@@ -197,7 +198,13 @@ static const struct Nif register_nif =
 static const struct Nif spawn_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_erlang_spawn_3
+    .nif_ptr = nif_erlang_spawn
+};
+
+static const struct Nif spawn_opt_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_spawn
 };
 
 static const struct Nif send_nif =
@@ -439,16 +446,23 @@ static void process_console_mailbox(Context *ctx)
     free(message);
 }
 
-static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
+static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
-
     term module_term = argv[0];
     term function_term = argv[1];
     term args_term = argv[2];
+    term opts_term = argv[3];
     VALIDATE_VALUE(module_term, term_is_atom);
     VALIDATE_VALUE(function_term, term_is_atom);
     VALIDATE_VALUE(args_term, term_is_list);
+
+    if (argc == 4) {
+        // spawn_opt has been called
+        VALIDATE_VALUE(opts_term, term_is_list);
+    } else {
+        // regular spawn
+        opts_term = term_nil();
+    }
 
     Context *new_ctx = context_new(ctx->global);
 
@@ -469,6 +483,12 @@ static term nif_erlang_spawn_3(Context *ctx, int argc, term argv[])
     new_ctx->saved_module = found_module;
     new_ctx->saved_ip = found_module->labels[label];
     new_ctx->cp = module_address(found_module->module_index, found_module->end_instruction_ii);
+
+    term max_heap_size_term = interop_proplist_get_value(opts_term, context_make_atom(ctx, max_heap_size_a));
+    if (max_heap_size_term != term_nil()) {
+        new_ctx->has_max_heap_size = 1;
+        new_ctx->max_heap_size = term_to_int32(max_heap_size_term);
+    }
 
     //TODO: check available registers count
     int reg_index = 0;

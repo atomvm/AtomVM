@@ -29,6 +29,7 @@ erlang:register/2, &register_nif
 erlang:send/2, &send_nif
 erlang:setelement/3, &setelement_nif
 erlang:spawn/3, &spawn_nif
+erlang:spawn_opt/4, &spawn_opt_nif
 erlang:whereis/1, &whereis_nif
 erlang:++/2, &concat_nif
 erlang:system_time/1, &system_time_nif

@@ -35,7 +35,8 @@ typedef struct Context Context;
 enum MemoryGCResult
 {
     MEMORY_GC_OK = 0,
-    MEMORY_GC_ERROR_FAILED_ALLOCATION = 1
+    MEMORY_GC_ERROR_FAILED_ALLOCATION = 1,
+    MEMORY_GC_DENIED_ALLOCATION = 2
 };
 
 /**

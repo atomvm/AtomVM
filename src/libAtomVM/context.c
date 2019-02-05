@@ -50,6 +50,9 @@ Context *context_new(GlobalContext *glb)
     ctx->avail_registers = 16;
     context_clean_registers(ctx, 0);
 
+    ctx->max_heap_size = 0;
+    ctx->has_max_heap_size = 0;
+
     list_append(&glb->ready_processes, &ctx->processes_list_head);
 
     ctx->mailbox = NULL;

@@ -88,6 +88,11 @@ static inline void push_to_stack(term **stack, term value)
 enum MemoryGCResult memory_gc(Context *ctx, int new_size)
 {
     TRACE("Going to perform gc\n");
+
+    if (UNLIKELY(ctx->has_max_heap_size && (new_size > ctx->max_heap_size))) {
+        return MEMORY_GC_DENIED_ALLOCATION;
+    }
+
     term *new_heap = calloc(new_size, sizeof(term));
     if (IS_NULL_PTR(new_heap)) {
         return MEMORY_GC_ERROR_FAILED_ALLOCATION;
