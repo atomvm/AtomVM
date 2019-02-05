@@ -47,32 +47,36 @@ HOT_FUNC term *memory_heap_alloc(Context *c, uint32_t size)
     return allocated;
 }
 
-void memory_ensure_free(Context *c, uint32_t size)
+enum MemoryGCResult memory_ensure_free(Context *c, uint32_t size)
 {
     if (context_memory_size(c) > size) {
         if (UNLIKELY(memory_gc(c, context_memory_size(c)) != MEMORY_GC_OK)) {
             //TODO: handle this more gracefully
-            fprintf(stderr, "Unable to allocate memory for GC\n");
-            abort();
+            TRACE("Unable to allocate memory for GC\n");
+            return MEMORY_GC_ERROR_FAILED_ALLOCATION;
         }
     }
 
     if (context_avail_free_memory(c) < size + MIN_FREE_SPACE_SIZE) {
         if (UNLIKELY(memory_gc(c, MAX(context_memory_size(c) * 2, context_memory_size(c) + size)) != MEMORY_GC_OK)) {
             //TODO: handle this more gracefully
-            fprintf(stderr, "Unable to allocate memory for GC\n");
-            abort();
+            TRACE("Unable to allocate memory for GC\n");
+            return MEMORY_GC_ERROR_FAILED_ALLOCATION;
         }
     }
+
+    return MEMORY_GC_OK;
 }
 
-void memory_gc_and_shrink(Context *c)
+enum MemoryGCResult memory_gc_and_shrink(Context *c)
 {
     if (context_avail_free_memory(c) >= MIN_FREE_SPACE_SIZE * 2) {
         if (UNLIKELY(memory_gc(c, context_memory_size(c) - context_avail_free_memory(c) / 2) != MEMORY_GC_OK)) {
             fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         }
     }
+
+    return MEMORY_GC_OK;
 }
 
 static inline void push_to_stack(term **stack, term value)

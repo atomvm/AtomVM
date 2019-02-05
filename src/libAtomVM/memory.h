@@ -75,7 +75,7 @@ term memory_copy_term_tree(term **new_heap, term t);
  * @param ctx the target context.
  * @param size needed available memory.
  */
-void memory_ensure_free(Context *ctx, uint32_t size);
+enum MemoryGCResult memory_ensure_free(Context *ctx, uint32_t size) MUST_CHECK;
 
 /**
  * @brief runs a garbage collection and shrinks used memory
@@ -83,7 +83,7 @@ void memory_ensure_free(Context *ctx, uint32_t size);
  * @details runs a garbage collection and shrinks used memory, a new heap will be allocted, any existing term might be invalid after this call.
  * @param ctx the context on which the garbage collection will be performed.
  */
-void memory_gc_and_shrink(Context *ctx);
+enum MemoryGCResult memory_gc_and_shrink(Context *ctx) MUST_CHECK;
 
 /**
  * @brief calculates term memory usage

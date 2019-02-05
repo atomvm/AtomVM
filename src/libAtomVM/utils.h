@@ -96,6 +96,12 @@
     #define MALLOC_LIKE
 #endif
 
+#ifdef __GNUC__
+    #define MUST_CHECK __attribute__((warn_unused_result))
+#else
+    #define MUST_CHECK
+#endif
+
 #ifdef ALLOC_RANDOM_FAILURE
 
 #ifndef RAND_MODULO
