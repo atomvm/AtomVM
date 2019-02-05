@@ -24,9 +24,9 @@
 %% interface.
 %% @end
 %%-----------------------------------------------------------------------------
--module(lists).
+-module(avm_lists).
 
--export([nth/2, member/2, reverse/1, keydelete/3, keyfind/3]).
+-export([nth/2, member/2, delete/2, reverse/1, keydelete/3, keyfind/3]).
 
 %%-----------------------------------------------------------------------------
 %% @param   N the index in the list to get
@@ -60,6 +60,24 @@ member(E, [E | _]) ->
 member(E, [_ | T]) ->
     member(E, T).
 
+%%-----------------------------------------------------------------------------
+%% @param   E the member to delete
+%% @param   L the list from which to delete the value
+%% @returns the result of removing E from L, if it exists in L; otherwise, L.
+%% @doc     Remove E from L
+%% @end
+%%-----------------------------------------------------------------------------
+-spec delete(E::term(), L::list()) -> Result::list().
+delete(E, L) ->
+    delete(E, L, []).
+
+%% @private
+delete(_, [], Accum) ->
+    reverse(Accum);
+delete(E, [E|T], Accum) ->
+    reverse(Accum) ++ T;
+delete(E, [H|T], Accum) ->
+    delete(E, T, [H|Accum]).
 
 %%-----------------------------------------------------------------------------
 %% @param   L the list to reverse

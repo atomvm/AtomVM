@@ -7,14 +7,14 @@ project(estdlib)
 include(BuildErlang)
 
 set(ERLANG_MODULES
-    calendar
-    erlang
-    gen_server
-    gen_statem
-    gen_udp
-    lists
-    proplists
-    timer
+    avm_calendar
+    avm_gen_server
+    avm_gen_statem
+    avm_gen_udp
+    avm_lists
+    avm_proplists
+    avm_timer
+        erlang
 )
 
 pack_archive(estdlib ${ERLANG_MODULES})

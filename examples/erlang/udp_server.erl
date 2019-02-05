@@ -2,17 +2,19 @@
 
 -export([start/0]).
 
+-include("estdlib.hrl").
+
 start() ->
     Console = console:start(),
     console:puts(Console, "Opening socket ...\n"),
-    Socket = gen_udp:open(44444),
+    Socket = ?GEN_UDP:open(44444),
     erlang:display(Socket),
     loop(Console, Socket).
 
 
 loop(Console, Socket) ->
     console:puts(Console, "Waiting to receive data...\n"),
-    case gen_udp:recv(Socket, 1000) of
+    case ?GEN_UDP:recv(Socket, 1000) of
         {ok, RecvData} ->
             {Address, Port, Packet} = RecvData,
             console:puts(Console, "Address: "), erlang:display(Address),

@@ -2,15 +2,17 @@
 
 -export([start/0]).
 
+-include("estdlib.hrl").
+
 start() ->
     Console = console:start(),
     console:puts(Console, "Opening socket...\n"),
-    Socket = gen_udp:open(0),
+    Socket = ?GEN_UDP:open(0),
     loop(Console, Socket).
 
 loop(Console, Socket) ->
     console:puts(Console, "Sending foo...\n"),
-    case gen_udp:send(Socket, {127,0,0,1}, 44444, "foo") of
+    case ?GEN_UDP:send(Socket, {127,0,0,1}, 44444, "foo") of
         ok ->
             ok;
         {error, Reason} ->

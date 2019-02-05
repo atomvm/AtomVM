@@ -39,14 +39,16 @@
 %% </ul>
 %% @end
 %%-----------------------------------------------------------------------------
--module(gen_statem).
+-module(avm_gen_statem).
 
 -export([start/3, start/4, stop/1, stop/3, call/2, call/3, cast/2, reply/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
+-include("estdlib.hrl").
+
 -record(state, {
     mod :: module(),
-    state_name :: atom(),
+    current_state :: atom(),
     data :: term()
 }).
 
@@ -74,7 +76,7 @@
 -spec start(ServerName::{local, Name::atom()}, Module::module(), Args::term(), Options::options()) -> {ok, pid()} | {error, Reason::term()}.
 start({local, Name} = ServerName, Module, Args, Options) when is_atom(Name) ->
     ?LOG_DEBUG({start, ServerName, Module, Args, Options}),
-    gen_server:start(ServerName, ?MODULE, {Module, Args}, Options).
+    ?GEN_SERVER:start(ServerName, ?MODULE, {Module, Args}, Options).
 
 %%-----------------------------------------------------------------------------
 %% @param   Module the module in which the gen_statem callbacks are defined
@@ -91,7 +93,7 @@ start({local, Name} = ServerName, Module, Args, Options) when is_atom(Name) ->
 -spec start(Module::module(), Args::term(), Options::options()) -> {ok, pid()} | {error, Reason::term()}.
 start(Module, Args, Options) ->
     ?LOG_DEBUG({start, Module, Args, Options}),
-    gen_server:start(?MODULE, {Module, Args}, Options).
+    ?GEN_SERVER:start(?MODULE, {Module, Args}, Options).
 
 
 %%-----------------------------------------------------------------------------
@@ -102,7 +104,7 @@ start(Module, Args, Options) ->
 -spec stop(ServerRef::server_ref()) -> ok | {error, Reason::term()}.
 stop(ServerRef) ->
     ?LOG_DEBUG({stop, ServerRef}),
-    gen_server:stop(ServerRef).
+    ?GEN_SERVER:stop(ServerRef).
 
 %%-----------------------------------------------------------------------------
 %% @param   ServerRef a reference to the gen_statem acquired via start
@@ -117,7 +119,7 @@ stop(ServerRef) ->
 -spec stop(ServerRef::server_ref(), Reason::term(), Timeout::non_neg_integer() | infinity) -> ok | {error, Reason::term()}.
 stop(ServerRef, Reason, Timeout) ->
     ?LOG_DEBUG({stop, ServerRef, Reason, Timeout}),
-    gen_server:stop(ServerRef, Reason, Timeout).
+    ?GEN_SERVER:stop(ServerRef, Reason, Timeout).
 
 %%-----------------------------------------------------------------------------
 %% @equiv   call(ServerRef, Request, infinity)
@@ -143,7 +145,7 @@ call(ServerRef, Request) ->
 -spec call(ServerRef::server_ref(), Request::term(), Timeout::timeout()) -> Reply::term() | {error, Reason::term()}.
 call(ServerRef, Request, Timeout) ->
     ?LOG_DEBUG({call, ServerRef, Request, Timeout}),
-    gen_server:call(ServerRef, Request, Timeout).
+    ?GEN_SERVER:call(ServerRef, Request, Timeout).
 
 %%-----------------------------------------------------------------------------
 %% @param   ServerRef a reference to the gen_statem acquired via start
@@ -157,7 +159,7 @@ call(ServerRef, Request, Timeout) ->
 %%-----------------------------------------------------------------------------
 cast(ServerRef, Request) ->
     ?LOG_DEBUG({cast, ServerRef, Request}),
-    gen_server:cast(ServerRef, Request).
+    ?GEN_SERVER:cast(ServerRef, Request).
 
 %%-----------------------------------------------------------------------------
 %% @param   Client the client to whom to send the reply
@@ -172,7 +174,7 @@ cast(ServerRef, Request) ->
 %%-----------------------------------------------------------------------------
 reply(Client, Reply) ->
     ?LOG_DEBUG({reply, Client, Reply}),
-    gen_server:reply(Client, Reply).
+    ?GEN_SERVER:reply(Client, Reply).
 
 %%
 %% gen_statem callbacks
@@ -181,8 +183,8 @@ reply(Client, Reply) ->
 %% @hidden
 init({Module, Args}) ->
     case Module:init(Args) of
-        {ok, StateName, Data} ->
-            {ok, #state{mod=Module, state_name=StateName, data=Data}};
+        {ok, NextState, Data} ->
+            {ok, #state{mod=Module, current_state=NextState, data=Data}};
         {stop, Reason} ->
             {stop, Reason};
         _ ->
@@ -203,9 +205,9 @@ handle_cast(Request, State) ->
 
 
 %% @hidden
-handle_info({timeout, _TimerRef, {state_timeout, CurrentState, Msg}}, #state{state_name=StateName} = State) ->
+handle_info({timeout, _TimerRef, {state_timeout, State, Msg}}, #state{current_state=CurrentState} = State) ->
     ?LOG_DEBUG({handle_info, {state_timeout, CurrentState, Msg}, State}),
-    case StateName of
+    case State of
         CurrentState ->
             do_handle_state(state_timeout, Msg, State);
         _ -> ok
@@ -216,8 +218,8 @@ handle_info(Request, State) ->
 
 
 %% @hidden
-terminate(Reason, #state{mod=Module, state_name=StateName, data=Data} = _State) ->
-    Module:terminate(Reason, StateName, Data),
+terminate(Reason, #state{mod=Module, current_state=CurrentState, data=Data} = _State) ->
+    Module:terminate(Reason, CurrentState, Data),
     ok.
 
 %%
@@ -225,14 +227,16 @@ terminate(Reason, #state{mod=Module, state_name=StateName, data=Data} = _State) 
 %%
 
 %% @private
-do_handle_state(EventType, Request, #state{mod=Module, state_name=StateName, data=Data} = State) ->
+do_handle_state(EventType, Request, #state{mod=Module, current_state=CurrentState, data=Data} = State) ->
     ?LOG_DEBUG({do_handle_state, EventType, Request, State}),
-    case Module:StateName(EventType, Request, Data) of
+    case Module:CurrentState(EventType, Request, Data) of
         {next_state, NextState, NewData} ->
-            {noreply, State#state{state_name=NextState, data=NewData}};
+            maybe_log_state_transition(CurrentState, NextState),
+            {noreply, State#state{current_state=NextState, data=NewData}};
         {next_state, NextState, NewData, Actions} ->
-            handle_actions(Actions, [{current_state, StateName}, {next_state, NextState}]),
-            {noreply, State#state{state_name=NextState, data=NewData}};
+            maybe_log_state_transition(CurrentState, NextState),
+            handle_actions(Actions, [{current_state, CurrentState}, {next_state, NextState}]),
+            {noreply, State#state{current_state=NextState, data=NewData}};
         Reply ->
             {error, {unexpected_reply, Reply}}
     end.
@@ -247,8 +251,14 @@ handle_actions([{reply, From, Reply} | T], Context) ->
     handle_actions(T, Context);
 handle_actions([{state_timeout, Timeout, Msg} | T], Context) ->
     ?LOG_DEBUG({handle_actions, state_timeout}),
-    erlang:start_timer(Timeout, self(), {state_timeout, proplists:get_value(next_state, Context), Msg}),
+    erlang:start_timer(Timeout, self(), {state_timeout, ?PROPLISTS:get_value(next_state, Context), Msg}),
     handle_actions(T, Context);
 handle_actions([_ | T], Context) ->
     ?LOG_DEBUG({handle_actions, rest, T}),
     handle_actions(T, Context).
+
+%% @private
+maybe_log_state_transition(CurrentState, CurrentState) ->
+    ok;
+maybe_log_state_transition(CurrentState, NextState) ->
+    ?LOG_DEBUG({state_transition, CurrentState, NextState}).

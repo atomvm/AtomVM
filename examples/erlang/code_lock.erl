@@ -8,6 +8,8 @@
 -export([init/1,callback_mode/0,terminate/3]).
 -export([locked/3,open/3]).
 
+-include("estdlib.hrl").
+
 -record(state, {
     code, length, buttons
 }).
@@ -23,10 +25,10 @@ start() ->
     ok.
 
 start(Code) ->
-    gen_statem:start({local,?NAME}, ?MODULE, Code, []).
+    ?GEN_STATEM:start({local,?NAME}, ?MODULE, Code, []).
 
 button(Button) ->
-    gen_statem:cast(?NAME, {button,Button}).
+    ?GEN_STATEM:cast(?NAME, {button,Button}).
 
 init(Code) ->
     do_lock(),

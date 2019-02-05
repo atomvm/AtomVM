@@ -3,14 +3,16 @@
 -export([start/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
+-include("estdlib.hrl").
+
 -record(state, {
     %% fun stuff goes here
 }).
 
 
 start() ->
-    {ok, Pid} = gen_server:start(?MODULE, [], []),
-    Reply = gen_server:call(Pid, hello),
+    {ok, Pid} = ?GEN_SERVER:start(?MODULE, [], []),
+    Reply = ?GEN_SERVER:call(Pid, hello),
     erlang:display(Reply),
     ok.
 
