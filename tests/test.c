@@ -231,6 +231,7 @@ struct Test tests[] =
     {"test_apply.beam", 17},
     {"test_apply_last.beam", 17},
     {"test_timestamp.beam", 1},
+    {"test_set_tuple_element.beam", 0},
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
