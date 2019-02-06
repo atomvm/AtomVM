@@ -31,7 +31,6 @@
 #include "utils.h"
 #include "sys.h"
 
-#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -64,7 +63,6 @@ static const char *const flush_a = "\x5" "flush";
 static void process_echo_mailbox(Context *ctx);
 static void process_console_mailbox(Context *ctx);
 
-static void display_term(term t, Context *ctx);
 static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new);
 static term list_to_atom(Context *ctx, int argc, term argv[], int create_new);
 
@@ -975,109 +973,10 @@ static term nif_erlang_display_1(Context *ctx, int argc, term argv[])
     UNUSED(ctx);
     UNUSED(argc);
 
-    display_term(argv[0], ctx);
+    term_display(argv[0], ctx);
     printf("\n");
 
     return term_nil();
-}
-
-static void display_term(term t, Context *ctx)
-{
-    if (term_is_atom(t)) {
-        int atom_index = term_to_atom_index(t);
-        AtomString atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table, atom_index, (unsigned long) NULL);
-        printf("%.*s", (int) atom_string_len(atom_string), (char *) atom_string_data(atom_string));
-
-    } else if (term_is_integer(t)) {
-        long iv = term_to_int32(t);
-        printf("%li", iv);
-
-    } else if (term_is_nil(t)) {
-        printf("[]");
-
-    } else if (term_is_nonempty_list(t)) {
-        int is_printable = 1;
-        term list_item = t;
-        while (!term_is_nil(list_item)) {
-            term head = term_get_list_head(list_item);
-            if (!term_is_integer(head) || !isprint(term_to_int32(head))) {
-                is_printable = 0;
-            }
-            list_item = term_get_list_tail(list_item);
-        }
-
-        if (is_printable) {
-            char *printable = interop_list_to_string(t);
-            printf("\"%s\"", printable);
-            free(printable);
-
-        } else {
-            putchar('[');
-            int display_separator = 0;
-            while (!term_is_nil(t)) {
-                if (display_separator) {
-                    putchar(',');
-                } else {
-                    display_separator = 1;
-                }
-
-                display_term(term_get_list_head(t), ctx);
-                t = term_get_list_tail(t);
-            }
-            putchar(']');
-        }
-    } else if (term_is_pid(t)) {
-        printf("<0.%i.0>", term_to_local_process_id(t));
-
-    } else if (term_is_tuple(t)) {
-        putchar('{');
-
-        int tuple_size = term_get_tuple_arity(t);
-        for (int i = 0; i < tuple_size; i++) {
-            if (i != 0) {
-                putchar(',');
-            }
-            display_term(term_get_tuple_element(t, i), ctx);
-        }
-
-        putchar('}');
-
-    } else if (term_is_binary(t)) {
-        int len = term_binary_size(t);
-        const char *binary_data = term_binary_data(t);
-
-        int is_printable = 1;
-        for (int i = 0; i < len; i++) {
-            if (!isprint(binary_data[i])) {
-                is_printable = 0;
-            }
-        }
-
-        if (is_printable) {
-            printf("<<\"%.*s\">>", len, binary_data);
-
-        } else {
-            int display_separator = 0;
-            for (int i = 0; i < len; i++) {
-                if (display_separator) {
-                    putchar(',');
-                } else {
-                    display_separator = 1;
-                }
-
-                printf("%i", binary_data[i]);
-            }
-        }
-
-    } else if (term_is_reference(t)) {
-        const char *format =
-#ifdef __clang__
-        "#Ref<0.0.0.%llu>";
-#else
-        "#Ref<0.0.0.%lu>";
-#endif
-        printf(format, term_to_ref_ticks(t));
-    }
 }
 
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])

@@ -902,4 +902,13 @@ static inline int term_equals(term a, term b)
     }
 }
 
+/**
+ * @brief Prints a term to stdout
+ *
+ * @details Print any given term to the standard output.
+ * @param t the term that will be printed.
+ * @param ctx the context.
+ */
+void term_display(term t, const Context *ctx);
+
 #endif

@@ -57,6 +57,7 @@ set(SOURCE_FILES
     port.c
     scheduler.c
     socket.c
+    term.c
     valueshashtable.c
 )
 
