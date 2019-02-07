@@ -69,6 +69,11 @@ Context *context_new(GlobalContext *glb)
     ctx->timeout_at.tv_sec = 0;
     ctx->timeout_at.tv_nsec = 0;
 
+    #ifdef ENABLE_ADVANCED_TRACE
+        ctx->trace_calls = 0;
+        ctx->trace_call_args = 0;
+    #endif
+
     ctx->platform_data = NULL;
 
     return ctx;

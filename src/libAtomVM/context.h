@@ -76,6 +76,11 @@ struct Context
 
     unsigned int leader : 1;
 
+    #ifdef ENABLE_ADVANCED_TRACE
+        unsigned int trace_calls : 1;
+        unsigned int trace_call_args : 1;
+    #endif
+
     void *platform_data;
 };
 

@@ -516,6 +516,49 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
     return ((term) boxed_func) | TERM_BOXED_VALUE_TAG;
 }
 
+#ifdef ENABLE_ADVANCED_TRACE
+    static void print_function_args(const Context *ctx, int arity)
+    {
+        for (int i = 0; i < arity; i++) {
+            printf("DBG: -- arg%i: ", i);
+            term_display(ctx->x[i], ctx);
+            printf("\n");
+        }
+        printf("\n");
+
+    }
+
+    static void trace_call(const Context *ctx, const char *call_type, int label, int arity)
+    {
+        if (ctx->trace_calls) {
+            if (ctx->trace_call_args && (arity != 0)) {
+                printf("DBG: - %s label: %i, arity: %i:\n", call_type, label, arity);
+                print_function_args(ctx, arity);
+            } else {
+                printf("DBG: - %s label: %i, arity: %i.\n", call_type, label, arity);
+            }
+        }
+    }
+
+    static void trace_call_ext(const Context *ctx, const Module *mod, const char *call_type, int label, int arity)
+    {
+        if (ctx->trace_calls) {
+            if (ctx->trace_call_args && (arity != 0)) {
+                printf("DBG: - %s label: %i, arity: %i:\n", call_type, label, arity);
+                print_function_args(ctx, arity);
+            } else {
+                printf("DBG: - %s label: %i, arity: %i.\n", call_type, label, arity);
+            }
+        }
+    }
+
+    #define TRACE_CALL trace_call
+    #define TRACE_CALL_EXT trace_call_ext
+#else
+    #define TRACE_CALL(...)
+    #define TRACE_CALL_EXT(...)
+#endif
+
 #endif
 
 #ifdef IMPL_EXECUTE_LOOP
@@ -673,6 +716,7 @@ static const char *const try_clause_atom = "\xA" "try_clause";
 
                     remaining_reductions--;
                     if (LIKELY(remaining_reductions)) {
+                        TRACE_CALL(ctx, "call", label, arity);
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
                         SCHEDULE_NEXT(mod, mod->labels[label]);
@@ -708,6 +752,7 @@ static const char *const try_clause_atom = "\xA" "try_clause";
 
                     remaining_reductions--;
                     if (LIKELY(remaining_reductions)) {
+                        TRACE_CALL(ctx, "call_last", label, arity);
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
                         SCHEDULE_NEXT(mod, mod->labels[label]);
@@ -737,6 +782,7 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                     NEXT_INSTRUCTION(next_off);
                     remaining_reductions--;
                     if (LIKELY(remaining_reductions)) {
+                        TRACE_CALL(ctx, "call_only", label, arity);
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
                         SCHEDULE_NEXT(mod, mod->labels[label]);
@@ -797,6 +843,7 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                             ctx->cp = module_address(mod->module_index, i);
                             mod = jump->target;
                             code = mod->code->code;
+                            TRACE_CALL_EXT(ctx, mod, "call_ext", label, arity);
                             JUMP_TO_ADDRESS(mod->labels[jump->label]);
 
                             break;
@@ -859,6 +906,7 @@ static const char *const try_clause_atom = "\xA" "try_clause";
 
                             mod = jump->target;
                             code = mod->code->code;
+                            TRACE_CALL_EXT(ctx, mod, "call_ext_last", label, arity);
                             JUMP_TO_ADDRESS(mod->labels[jump->label]);
 
                             break;
@@ -2393,6 +2441,7 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                             mod = jump->target;
                             code = mod->code->code;
 
+                            TRACE_CALL_EXT(ctx, mod, "call_ext_only", label, arity);
                             JUMP_TO_ADDRESS(mod->labels[jump->label]);
 
                             break;
