@@ -104,6 +104,7 @@ compile_erlang(test_bif_badargument2)
 compile_erlang(test_bif_badargument3)
 compile_erlang(test_tuple_nifs_badargs)
 compile_erlang(test_apply)
+compile_erlang(test_apply_last)
 compile_erlang(test_timestamp)
 compile_erlang(long_atoms)
 compile_erlang(test_concat_badarg)
@@ -291,6 +292,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_bif_badargument3.beam
     test_tuple_nifs_badargs.beam
     test_apply.beam
+    test_apply_last.beam
     test_timestamp.beam
     long_atoms.beam
     test_concat_badarg.beam
