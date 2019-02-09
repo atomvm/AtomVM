@@ -524,13 +524,11 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
             term_display(ctx->x[i], ctx);
             printf("\n");
         }
-        printf("\n");
-
     }
 
     static void trace_call(const Context *ctx, const char *call_type, int label, int arity)
     {
-        if (ctx->trace_calls) {
+        if (UNLIKELY(ctx->trace_calls)) {
             if (ctx->trace_call_args && (arity != 0)) {
                 printf("DBG: - %s label: %i, arity: %i:\n", call_type, label, arity);
                 print_function_args(ctx, arity);
@@ -540,14 +538,22 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
         }
     }
 
-    static void trace_call_ext(const Context *ctx, const Module *mod, const char *call_type, int label, int arity)
+    static void trace_call_ext(const Context *ctx, const Module *mod, const char *call_type, int index, int arity)
     {
-        if (ctx->trace_calls) {
+        if (UNLIKELY(ctx->trace_calls)) {
+            AtomString module_name;
+            AtomString function_name;
+            module_get_imported_function_module_and_name(mod, index, &module_name, &function_name);
+            char module_string[255];
+            atom_string_to_c(module_name, module_string, 255);
+            char func_string[255];
+            atom_string_to_c(function_name, func_string, 255);
+
             if (ctx->trace_call_args && (arity != 0)) {
-                printf("DBG: - %s label: %i, arity: %i:\n", call_type, label, arity);
+                printf("DBG: - %s %s:%s/%i:\n", call_type, module_string, func_string, arity);
                 print_function_args(ctx, arity);
             } else {
-                printf("DBG: - %s label: %i, arity: %i.\n", call_type, label, arity);
+                printf("DBG: - %s %s:%s/%i.\n", call_type, module_string, func_string, arity);
             }
         }
     }
@@ -821,6 +827,8 @@ static const char *const try_clause_atom = "\xA" "try_clause";
 
                     NEXT_INSTRUCTION(next_off);
 
+                    TRACE_CALL_EXT(ctx, mod, "call_ext", index, arity);
+
                     const struct ExportedFunction *func = mod->imported_funcs[index].func;
 
                     if (func->type == UnresolvedFunctionCall) {
@@ -843,7 +851,6 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                             ctx->cp = module_address(mod->module_index, i);
                             mod = jump->target;
                             code = mod->code->code;
-                            TRACE_CALL_EXT(ctx, mod, "call_ext", label, arity);
                             JUMP_TO_ADDRESS(mod->labels[jump->label]);
 
                             break;
@@ -879,6 +886,8 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                         continue;
                     }
 
+                    TRACE_CALL_EXT(ctx, mod, "call_ext_last", index, arity);
+
                     ctx->cp = ctx->e[n_words];
                     ctx->e += (n_words + 1);
 
@@ -906,7 +915,6 @@ static const char *const try_clause_atom = "\xA" "try_clause";
 
                             mod = jump->target;
                             code = mod->code->code;
-                            TRACE_CALL_EXT(ctx, mod, "call_ext_last", label, arity);
                             JUMP_TO_ADDRESS(mod->labels[jump->label]);
 
                             break;
@@ -2413,6 +2421,8 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                         continue;
                     }
 
+                    TRACE_CALL_EXT(ctx, mod, "call_ext_only", index, arity);
+
                     const struct ExportedFunction *func = mod->imported_funcs[index].func;
 
                     if (func->type == UnresolvedFunctionCall) {
@@ -2441,7 +2451,6 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                             mod = jump->target;
                             code = mod->code->code;
 
-                            TRACE_CALL_EXT(ctx, mod, "call_ext_only", label, arity);
                             JUMP_TO_ADDRESS(mod->labels[jump->label]);
 
                             break;

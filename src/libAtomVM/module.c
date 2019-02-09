@@ -123,6 +123,22 @@ static enum ModuleLoadResult module_build_imported_functions_table(Module *this_
     return MODULE_LOAD_OK;
 }
 
+#ifdef ENABLE_ADVANCED_TRACE
+void module_get_imported_function_module_and_name(const Module *this_module, int index, AtomString *module_atom, AtomString *function_atom)
+{
+    const uint8_t *table_data = (const uint8_t *) this_module->import_table;
+    int functions_count = READ_32_ALIGNED(table_data + 8);
+
+    if (UNLIKELY(index > functions_count)) {
+        abort();
+    }
+    int local_module_atom_index = READ_32_ALIGNED(table_data + index * 12 + 12);
+    int local_function_atom_index = READ_32_ALIGNED(table_data + index * 12 + 4 + 12);
+    *module_atom = module_get_atom_string_by_id(this_module, local_module_atom_index);
+    *function_atom = module_get_atom_string_by_id(this_module, local_function_atom_index);
+}
+#endif
+
 uint32_t module_search_exported_function(Module *this_module, AtomString func_name, int func_arity)
 {
     const uint8_t *table_data = (const uint8_t *) this_module->export_table;
@@ -173,6 +189,9 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
         return NULL;
     }
 
+#ifdef ENABLE_ADVANCED_TRACE
+    mod->import_table = beam_file + offsets[IMPT];
+#endif
     mod->code = (CodeChunk *) (beam_file + offsets[CODE]);
     mod->export_table = beam_file + offsets[EXPT];
     mod->atom_table = beam_file + offsets[AT8U];

@@ -53,6 +53,10 @@ struct Module
 {
     GlobalContext *global;
 
+#ifdef ENABLE_ADVANCED_TRACE
+    void *import_table;
+#endif
+
     CodeChunk *code;
     void *export_table;
     void *atom_table;
@@ -87,6 +91,18 @@ enum ModuleLoadResult
     MODULE_LOAD_OK = 0,
     MODULE_ERROR_FAILED_ALLOCATION = 1
 };
+
+#ifdef ENABLE_ADVANCED_TRACE
+/**
+ * @briefs Gets imported function module and name
+ *
+ * @details Gets imported function module and name given its import table index.
+ * @param this_module the module on which the function will be searched.
+ * @param module_atom module name atom string.
+ * @param function_atom function name atom string.
+ */
+void module_get_imported_function_module_and_name(const Module *this_module, int index, AtomString *module_atom, AtomString *function_atom);
+#endif
 
 /**
  * @briefs Gets exported function index by searching it by function name and arity
