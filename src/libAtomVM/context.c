@@ -72,6 +72,7 @@ Context *context_new(GlobalContext *glb)
     #ifdef ENABLE_ADVANCED_TRACE
         ctx->trace_calls = 0;
         ctx->trace_call_args = 0;
+        ctx->trace_returns = 0;
     #endif
 
     ctx->platform_data = NULL;

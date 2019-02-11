@@ -558,11 +558,22 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
         }
     }
 
+    static void trace_return(const Context *ctx)
+    {
+        if (UNLIKELY(ctx->trace_returns)) {
+            printf("DBG: - return, value: ");
+            term_display(ctx->x[0], ctx);
+            printf(".\n");
+        }
+    }
+
     #define TRACE_CALL trace_call
     #define TRACE_CALL_EXT trace_call_ext
+    #define TRACE_RETURN trace_return
 #else
     #define TRACE_CALL(...)
     #define TRACE_CALL_EXT(...)
+    #define TRACE_RETURN(...)
 #endif
 
 #endif
@@ -1227,6 +1238,8 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                 TRACE("return/0\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
+                    TRACE_RETURN(ctx);
+
                     if ((long) ctx->cp == -1) {
                         return 0;
                     }
