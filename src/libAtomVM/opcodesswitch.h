@@ -379,6 +379,7 @@
 #define OP_MOVE 64
 #define OP_GET_LIST 65
 #define OP_GET_TUPLE_ELEMENT 66
+#define OP_SET_TUPLE_ELEMENT 67
 #define OP_PUT_LIST 69
 #define OP_PUT_TUPLE 70
 #define OP_PUT 71
@@ -2052,6 +2053,30 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                     UNUSED(src_value)
                 #endif
 
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_SET_TUPLE_ELEMENT: {
+                int next_off = 1;
+                term new_element;
+                DECODE_COMPACT_TERM(new_element, code, i, next_off, next_off);
+                term tuple;
+                DECODE_COMPACT_TERM(tuple, code, i, next_off, next_off);
+                int position;
+                DECODE_INTEGER(position, code, i, next_off, next_off);
+
+                TRACE("set_tuple_element/2\n");
+
+#ifdef IMPL_EXECUTE_LOOP
+                term_put_tuple_element(tuple, position, new_element);
+#endif
+
+#ifdef IMPL_CODE_LOADER
+                UNUSED(tuple);
+                UNUSED(position);
+                UNUSED(new_element);
+#endif
                 NEXT_INSTRUCTION(next_off);
                 break;
             }
