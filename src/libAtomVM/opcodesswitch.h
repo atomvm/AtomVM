@@ -526,6 +526,23 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
         }
     }
 
+    static void trace_apply(const Context *ctx, const char *call_type, AtomString module_name, AtomString function_name, int arity)
+    {
+        if (UNLIKELY(ctx->trace_calls)) {
+            char module_string[255];
+            atom_string_to_c(module_name, module_string, 255);
+            char func_string[255];
+            atom_string_to_c(function_name, func_string, 255);
+
+            if (ctx->trace_call_args && (arity != 0)) {
+                printf("DBG: - %s %s:%s/%i:\n", call_type, module_string, func_string, arity);
+                print_function_args(ctx, arity);
+            } else {
+                printf("DBG: - %s %s:%s/%i.\n", call_type, module_string, func_string, arity);
+            }
+        }
+    }
+
     static void trace_call(const Context *ctx, const char *call_type, int label, int arity)
     {
         if (UNLIKELY(ctx->trace_calls)) {
@@ -544,17 +561,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
             AtomString module_name;
             AtomString function_name;
             module_get_imported_function_module_and_name(mod, index, &module_name, &function_name);
-            char module_string[255];
-            atom_string_to_c(module_name, module_string, 255);
-            char func_string[255];
-            atom_string_to_c(function_name, func_string, 255);
-
-            if (ctx->trace_call_args && (arity != 0)) {
-                printf("DBG: - %s %s:%s/%i:\n", call_type, module_string, func_string, arity);
-                print_function_args(ctx, arity);
-            } else {
-                printf("DBG: - %s %s:%s/%i.\n", call_type, module_string, func_string, arity);
-            }
+            trace_apply(ctx, call_type, module_name, function_name, arity);
         }
     }
 
@@ -567,10 +574,12 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
         }
     }
 
+    #define TRACE_APPLY trace_apply
     #define TRACE_CALL trace_call
     #define TRACE_CALL_EXT trace_call_ext
     #define TRACE_RETURN trace_return
 #else
+    #define TRACE_APPLY(...)
     #define TRACE_CALL(...)
     #define TRACE_CALL_EXT(...)
     #define TRACE_RETURN(...)
@@ -2596,6 +2605,8 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                 AtomString module_name = globalcontext_atomstring_from_term(mod->global, module);
                 AtomString function_name = globalcontext_atomstring_from_term(mod->global, function);
 
+                TRACE_APPLY(ctx, "apply", module_name, function_name, arity);
+
                 struct Nif *nif = (struct Nif *) nifs_get(module_name, function_name, arity);
                 if (!IS_NULL_PTR(nif)) {
                     term return_value = nif->nif_ptr(ctx, arity, ctx->x);
@@ -2647,6 +2658,8 @@ static const char *const try_clause_atom = "\xA" "try_clause";
 
                 AtomString module_name = globalcontext_atomstring_from_term(mod->global, module);
                 AtomString function_name = globalcontext_atomstring_from_term(mod->global, function);
+
+                TRACE_APPLY(ctx, "apply_last", module_name, function_name, arity);
 
                 struct Nif *nif = (struct Nif *) nifs_get(module_name, function_name, arity);
                 if (!IS_NULL_PTR(nif)) {
