@@ -520,7 +520,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
     static void print_function_args(const Context *ctx, int arity)
     {
         for (int i = 0; i < arity; i++) {
-            printf("DBG: -- arg%i: ", i);
+            printf("DBG: <0.%i.0> -- arg%i: ", ctx->process_id, i);
             term_display(ctx->x[i], ctx);
             printf("\n");
         }
@@ -535,10 +535,10 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
             atom_string_to_c(function_name, func_string, 255);
 
             if (ctx->trace_call_args && (arity != 0)) {
-                printf("DBG: - %s %s:%s/%i:\n", call_type, module_string, func_string, arity);
+                printf("DBG: <0.%i.0> - %s %s:%s/%i:\n", ctx->process_id, call_type, module_string, func_string, arity);
                 print_function_args(ctx, arity);
             } else {
-                printf("DBG: - %s %s:%s/%i.\n", call_type, module_string, func_string, arity);
+                printf("DBG: <0.%i.0> - %s %s:%s/%i.\n", ctx->process_id, call_type, module_string, func_string, arity);
             }
         }
     }
@@ -547,10 +547,10 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
     {
         if (UNLIKELY(ctx->trace_calls)) {
             if (ctx->trace_call_args && (arity != 0)) {
-                printf("DBG: - %s %i:%i/%i:\n", call_type, mod->module_index, label, arity);
+                printf("DBG: <0.%i.0> - %s %i:%i/%i:\n", ctx->process_id, call_type, mod->module_index, label, arity);
                 print_function_args(ctx, arity);
             } else {
-                printf("DBG: - %s %i:%i/%i.\n", call_type, mod->module_index, label, arity);
+                printf("DBG: <0.%i.0> - %s %i:%i/%i.\n", ctx->process_id, call_type, mod->module_index, label, arity);
             }
         }
     }
@@ -568,7 +568,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
     static void trace_return(const Context *ctx)
     {
         if (UNLIKELY(ctx->trace_returns)) {
-            printf("DBG: - return, value: ");
+            printf("DBG: <0.%i.0> - return, value: ", ctx->process_id);
             term_display(ctx->x[0], ctx);
             printf(".\n");
         }
@@ -577,7 +577,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
     static void trace_send(const Context *ctx, term pid, term message)
     {
         if (UNLIKELY(ctx->trace_send)) {
-            printf("DBG: - send, pid: ");
+            printf("DBG: <0.%i.0> - send, pid: ", ctx->process_id);
             term_display(pid, ctx);
             printf(" message: ");
             term_display(message, ctx);
@@ -588,7 +588,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
     static void trace_receive(const Context *ctx, term message)
     {
         if (UNLIKELY(ctx->trace_send)) {
-            printf("DBG: - receive, message: ");
+            printf("DBG: <0.%i.0> - receive, message: ", ctx->process_id);
             term_display(message, ctx);
             printf(".\n");
         }
