@@ -2355,6 +2355,8 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                     uint32_t n_freeze;
                     module_get_fun(mod, fun_index, &label, &arity, &n_freeze);
 
+                    TRACE_CALL(ctx, "call_fun", label, args_count);
+
                     if (UNLIKELY(args_count != arity - n_freeze)) {
                         int target_label = get_catch_label_and_change_module(ctx, &mod);
                         if (target_label) {
