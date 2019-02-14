@@ -574,15 +574,39 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
         }
     }
 
+    static void trace_send(const Context *ctx, term pid, term message)
+    {
+        if (UNLIKELY(ctx->trace_send)) {
+            printf("DBG: - send, pid: ");
+            term_display(pid, ctx);
+            printf(" message: ");
+            term_display(message, ctx);
+            printf(".\n");
+        }
+    }
+
+    static void trace_receive(const Context *ctx, term message)
+    {
+        if (UNLIKELY(ctx->trace_send)) {
+            printf("DBG: - receive, message: ");
+            term_display(message, ctx);
+            printf(".\n");
+        }
+    }
+
     #define TRACE_APPLY trace_apply
     #define TRACE_CALL trace_call
     #define TRACE_CALL_EXT trace_call_ext
     #define TRACE_RETURN trace_return
+    #define TRACE_SEND trace_send
+    #define TRACE_RECEIVE trace_receive
 #else
     #define TRACE_APPLY(...)
     #define TRACE_CALL(...)
     #define TRACE_CALL_EXT(...)
     #define TRACE_RETURN(...)
+    #define TRACE_SEND(...)
+    #define TRACE_RECEIVE(...)
 #endif
 
 #endif
@@ -1271,6 +1295,7 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                 #ifdef IMPL_EXECUTE_LOOP
                     int local_process_id = term_to_local_process_id(ctx->x[0]);
                     TRACE("send/0 target_pid=%i\n", local_process_id);
+                    TRACE_SEND(ctx, ctx->x[0], ctx->x[1]);
                     Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
                     mailbox_send(target, ctx->x[1]);
@@ -1322,6 +1347,7 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
                         term ret = mailbox_peek(ctx);
+                        TRACE_RECEIVE(ctx, ret);
 
                         WRITE_REGISTER(dreg_type, dreg, ret);
                         NEXT_INSTRUCTION(next_off);

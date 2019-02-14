@@ -80,6 +80,8 @@ struct Context
         unsigned int trace_calls : 1;
         unsigned int trace_call_args : 1;
         unsigned int trace_returns : 1;
+        unsigned int trace_send : 1;
+        unsigned int trace_receive : 1;
     #endif
 
     void *platform_data;

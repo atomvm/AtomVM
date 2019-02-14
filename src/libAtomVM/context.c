@@ -73,6 +73,8 @@ Context *context_new(GlobalContext *glb)
         ctx->trace_calls = 0;
         ctx->trace_call_args = 0;
         ctx->trace_returns = 0;
+        ctx->trace_send = 0;
+        ctx->trace_receive = 0;
     #endif
 
     ctx->platform_data = NULL;
