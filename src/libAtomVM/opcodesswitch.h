@@ -543,14 +543,14 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
         }
     }
 
-    static void trace_call(const Context *ctx, const char *call_type, int label, int arity)
+    static void trace_call(const Context *ctx, const Module *mod, const char *call_type, int label, int arity)
     {
         if (UNLIKELY(ctx->trace_calls)) {
             if (ctx->trace_call_args && (arity != 0)) {
-                printf("DBG: - %s label: %i, arity: %i:\n", call_type, label, arity);
+                printf("DBG: - %s %i:%i/%i:\n", call_type, mod->module_index, label, arity);
                 print_function_args(ctx, arity);
             } else {
-                printf("DBG: - %s label: %i, arity: %i.\n", call_type, label, arity);
+                printf("DBG: - %s %i:%i/%i.\n", call_type, mod->module_index, label, arity);
             }
         }
     }
@@ -742,7 +742,7 @@ static const char *const try_clause_atom = "\xA" "try_clause";
 
                     remaining_reductions--;
                     if (LIKELY(remaining_reductions)) {
-                        TRACE_CALL(ctx, "call", label, arity);
+                        TRACE_CALL(ctx, mod, "call", label, arity);
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
                         SCHEDULE_NEXT(mod, mod->labels[label]);
@@ -778,7 +778,7 @@ static const char *const try_clause_atom = "\xA" "try_clause";
 
                     remaining_reductions--;
                     if (LIKELY(remaining_reductions)) {
-                        TRACE_CALL(ctx, "call_last", label, arity);
+                        TRACE_CALL(ctx, mod, "call_last", label, arity);
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
                         SCHEDULE_NEXT(mod, mod->labels[label]);
@@ -808,7 +808,7 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                     NEXT_INSTRUCTION(next_off);
                     remaining_reductions--;
                     if (LIKELY(remaining_reductions)) {
-                        TRACE_CALL(ctx, "call_only", label, arity);
+                        TRACE_CALL(ctx, mod, "call_only", label, arity);
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
                         SCHEDULE_NEXT(mod, mod->labels[label]);
@@ -2355,7 +2355,7 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                     uint32_t n_freeze;
                     module_get_fun(mod, fun_index, &label, &arity, &n_freeze);
 
-                    TRACE_CALL(ctx, "call_fun", label, args_count);
+                    TRACE_CALL(ctx, mod, "call_fun", label, args_count);
 
                     if (UNLIKELY(args_count != arity - n_freeze)) {
                         int target_label = get_catch_label_and_change_module(ctx, &mod);
