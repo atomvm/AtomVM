@@ -60,6 +60,17 @@ static const char *const system_limit_atom = "\xC" "system_limit";
 static const char *const puts_a = "\x4" "puts";
 static const char *const flush_a = "\x5" "flush";
 
+#ifdef ENABLE_ADVANCED_TRACE
+static const char *const ok_atom = "\x2" "ok";
+
+static const char *const trace_calls_atom = "\xB" "trace_calls";
+static const char *const trace_call_args_atom = "\xF" "trace_call_args";
+static const char *const trace_returns_atom = "\xD" "trace_returns";
+static const char *const trace_send_atom = "\xA" "trace_send";
+static const char *const trace_receive_atom = "\xD" "trace_receive";
+#endif
+
+
 static void process_echo_mailbox(Context *ctx);
 static void process_console_mailbox(Context *ctx);
 
@@ -91,6 +102,7 @@ static term nif_erlang_tuple_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_timestamp_0(Context *ctx, int argc, term argv[]);
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[]);
+static term nifs_erlang_process_flag(Context *ctx, int argc, term argv[]);
 
 static const struct Nif make_ref_nif =
 {
@@ -240,6 +252,12 @@ static const struct Nif flat_size_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erts_debug_flat_size
+};
+
+static const struct Nif process_flag_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nifs_erlang_process_flag
 };
 
 //Ignore warning caused by gperf generated code
@@ -977,6 +995,71 @@ static term nif_erlang_display_1(Context *ctx, int argc, term argv[])
     printf("\n");
 
     return term_nil();
+}
+
+static term nifs_erlang_process_flag(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+#ifdef ENABLE_ADVANCED_TRACE
+    term pid = argv[0];
+    term flag = argv[1];
+    term value = argv[2];
+
+    int local_process_id = term_to_local_process_id(pid);
+    Context *target = globalcontext_get_process(ctx->global, local_process_id);
+
+    term true_term = context_make_atom(ctx, true_atom);
+    term false_term = context_make_atom(ctx, false_atom);
+    term ok_term = context_make_atom(ctx, ok_atom);
+
+    if (flag == context_make_atom(target, trace_calls_atom)) {
+        if (value == true_term) {
+            target->trace_calls = 1;
+            return ok_term;
+        } else if (value == false_term) {
+            target->trace_calls = 0;
+            return ok_term;
+        }
+    } else if (flag == context_make_atom(target, trace_call_args_atom)) {
+        if (value == true_term) {
+            target->trace_call_args = 1;
+            return ok_term;
+        } else if (value == false_term) {
+            target->trace_call_args = 0;
+            return ok_term;
+        }
+    } else if (flag == context_make_atom(target, trace_returns_atom)) {
+        if (value == true_term) {
+            target->trace_returns = 1;
+            return ok_term;
+        } else if (value == false_term) {
+            target->trace_returns = 0;
+            return ok_term;
+        }
+    } else if (flag == context_make_atom(target, trace_send_atom)) {
+        if (value == true_term) {
+            target->trace_send = 1;
+            return ok_term;
+        } else if (value == false_term) {
+            target->trace_send = 0;
+            return ok_term;
+        }
+    } else if (flag == context_make_atom(target, trace_receive_atom)) {
+        if (value == true_term) {
+            target->trace_receive = 1;
+            return ok_term;
+        } else if (value == false_term) {
+            target->trace_receive = 0;
+            return ok_term;
+        }
+    }
+#else
+    UNUSED(ctx);
+    UNUSED(argv);
+#endif
+
+    RAISE_ERROR(badarg_atom);
 }
 
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])
