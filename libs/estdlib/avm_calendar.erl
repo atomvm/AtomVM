@@ -1,4 +1,4 @@
--module(calendar).
+-module(avm_calendar).
 
 -export([date_to_gregorian_days/1, date_to_gregorian_days/3, day_of_the_week/1, day_of_the_week/3]).
 

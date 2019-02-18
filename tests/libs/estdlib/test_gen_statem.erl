@@ -3,6 +3,8 @@
 -export([test/0]).
 -export([init/1, initial/3, terminate/3]).
 
+-include("estdlib.hrl").
+
 -record(data, {
     num_casts=0,
     num_infos=0
@@ -16,37 +18,37 @@ test() ->
 
 
 test_call() ->
-    {ok, Pid} = gen_statem:start(?MODULE, [], []),
-    pong = gen_statem:call(Pid, ping),
-    gen_statem:stop(Pid),
+    {ok, Pid} = ?GEN_STATEM:start(?MODULE, [], []),
+    pong = ?GEN_STATEM:call(Pid, ping),
+    ?GEN_STATEM:stop(Pid),
     ok.
 
 test_cast() ->
-    {ok, Pid} = gen_statem:start(?MODULE, [], []),
+    {ok, Pid} = ?GEN_STATEM:start(?MODULE, [], []),
 
-    ok = gen_statem:cast(Pid, ping),
-    ok = gen_statem:cast(Pid, ping),
-    ok = gen_statem:cast(Pid, ping),
-    ok = gen_statem:cast(Pid, ping),
-    ok = gen_statem:cast(Pid, ping),
+    ok = ?GEN_STATEM:cast(Pid, ping),
+    ok = ?GEN_STATEM:cast(Pid, ping),
+    ok = ?GEN_STATEM:cast(Pid, ping),
+    ok = ?GEN_STATEM:cast(Pid, ping),
+    ok = ?GEN_STATEM:cast(Pid, ping),
 
-    5 = gen_statem:call(Pid, get_num_casts),
-    0 = gen_statem:call(Pid, get_num_casts),
+    5 = ?GEN_STATEM:call(Pid, get_num_casts),
+    0 = ?GEN_STATEM:call(Pid, get_num_casts),
 
-    gen_statem:stop(Pid),
+    ?GEN_STATEM:stop(Pid),
     ok.
 
 test_info() ->
-    {ok, Pid} = gen_statem:start(?MODULE, [], []),
+    {ok, Pid} = ?GEN_STATEM:start(?MODULE, [], []),
 
     Pid ! ping,
     Pid ! ping,
     Pid ! ping,
 
-    3 = gen_statem:call(Pid, get_num_infos),
-    0 = gen_statem:call(Pid, get_num_infos),
+    3 = ?GEN_STATEM:call(Pid, get_num_infos),
+    0 = ?GEN_STATEM:call(Pid, get_num_infos),
 
-    gen_statem:stop(Pid),
+    ?GEN_STATEM:stop(Pid),
     ok.
 
 %%

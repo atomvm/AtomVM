@@ -38,10 +38,12 @@
 %% </ul>
 %% @end
 %%-----------------------------------------------------------------------------
--module(gen_server).
+-module(avm_gen_server).
 
 -export([start/3, start/4, stop/1, stop/3, call/2, call/3, cast/2, reply/2]).
 -export([loop/1]).
+
+-include("estdlib.hrl").
 
 -record(state, {
     name = undefined :: atom(),
@@ -108,7 +110,7 @@ start(Module, Args, Options) ->
     case Module:init(Args) of
         {ok, ModState} ->
             State = #state{
-                name = proplists:get_value(name, Options),
+                name = ?PROPLISTS:get_value(name, Options),
                 mod = Module,
                 mod_state = ModState
             },

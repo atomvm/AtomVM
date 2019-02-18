@@ -26,6 +26,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -export([run_timer/5]).
 
+-include("estdlib.hrl").
+
 -record(state, {
     timers = [] :: [{reference(), pid()}]
 }).
@@ -37,25 +39,25 @@
 -spec start() -> {ok, Pid::pid()} | {error, Reason::term()}.
 start() ->
     ?LOG_DEBUG(start),
-    gen_server:start({local, ?SERVER_NAME}, ?MODULE, [], []).
+    ?GEN_SERVER:start({local, ?SERVER_NAME}, ?MODULE, [], []).
 
 -spec start_timer(Time::non_neg_integer(), Dest::pid(), Msg::term()) -> TimerRef::reference().
 start_timer(Time, Dest, Msg) ->
     ?LOG_DEBUG({start_timer, Time, Dest, Msg}),
-    gen_server:call(?SERVER_NAME, {Time, Dest, Msg}).
+    ?GEN_SERVER:call(?SERVER_NAME, {Time, Dest, Msg}).
 
 -spec cancel_timer(TimerRef::reference()) -> ok.
 cancel_timer(TimerRef) ->
     ?LOG_DEBUG({cancel_timer, TimerRef}),
-    gen_server:call(?SERVER_NAME, {cancel, TimerRef}).
+    ?GEN_SERVER:call(?SERVER_NAME, {cancel, TimerRef}).
 
 -spec get_timer_refs() -> [reference()].
 get_timer_refs() ->
     ?LOG_DEBUG(get_timer_refs),
-    gen_server:call(?SERVER_NAME, get_timer_refs).
+    ?GEN_SERVER:call(?SERVER_NAME, get_timer_refs).
 
 %%
-%% gen_server callbacks
+%% ?GEN_SERVER callbacks
 %%
 
 %% @hidden
@@ -66,7 +68,7 @@ init([]) ->
 handle_call(get_timer_refs, _From, #state{timers=Timers} = State) ->
     {reply, [TimerRef || {TimerRef, _Pid} <- Timers], State};
 handle_call({cancel, TimerRef}, From, #state{timers=Timers} = State) ->
-    case lists:keyfind(TimerRef, 1, Timers) of
+    case ?LISTS:keyfind(TimerRef, 1, Timers) of
         false ->
             {reply, false, State};
         {TimerRef, Pid} ->
@@ -83,7 +85,7 @@ handle_cast(_Request, State) ->
 
 %% @hidden
 handle_info({finished, TimerRef}, #state{timers=Timers} = State) ->
-    {noreply, State#state{timers=lists:keydelete(TimerRef, 1, Timers)}}.
+    {noreply, State#state{timers=?LISTS:keydelete(TimerRef, 1, Timers)}}.
 
 %% @hidden
 terminate(_Reason, _State) ->
@@ -104,7 +106,7 @@ run_timer(MgrPid, Time, TimerRef, Dest, Msg) ->
     Start = erlang:timestamp(),
     receive
         {cancel, From} ->
-            gen_server:reply(From, Time - timestamp_util:delta_ms(erlang:timestamp(), Start))
+            ?GEN_SERVER:reply(From, Time - timestamp_util:delta_ms(erlang:timestamp(), Start))
     after Time ->
         Dest ! {timeout, TimerRef, Msg}
     end,

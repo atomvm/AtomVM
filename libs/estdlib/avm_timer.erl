@@ -1,4 +1,4 @@
--module(timer).
+-module(avm_timer).
 
 -export([sleep/1]).
 

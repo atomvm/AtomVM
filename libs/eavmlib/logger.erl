@@ -28,8 +28,10 @@
 %%-----------------------------------------------------------------------------
 -module(logger).
 
--export([start/0, start/1, log/3, get_levels/0, set_levels/1, stop/0]).
+-export([start/0, start/1, log/3, get_levels/0, set_levels/1, get_filter/0, set_filter/1, stop/0]).
 -export([loop/1]).
+
+-include("estdlib.hrl").
 
 -record(state, {
     pid,
@@ -50,7 +52,7 @@
 %%-----------------------------------------------------------------------------
 -spec start() -> {ok, pid()}.
 start() ->
-    start([{levels, [info, warning, error]}]).
+    start([{levels, [info, warning, error]}, {filter, []}]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Config the logging configuration
@@ -67,7 +69,8 @@ start(Config) ->
             State = #state{pid=self(), config=Config},
             Pid = spawn(?MODULE, loop, [State]),
             receive
-                started -> ok
+                started -> 
+                    ok
             end,
             erlang:register(?MODULE, Pid),
             Pid;
@@ -121,11 +124,44 @@ set_levels(Levels) ->
 -spec get_levels() -> {ok, Levels::[level()]} | {error, timeout}.
 get_levels() ->
     {ok, Pid} = maybe_start(whereis(?MODULE)),
-    Ref = erlang:make_reference(),
+    Ref = erlang:make_ref(),
     Pid ! {get_levels, Ref, self()},
     receive
         {Ref, Levels} ->
             {ok, Levels}
+    after 5000 ->
+        {error, timeout}
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @param   Filter the filter to set
+%% @return  ok
+%% @doc     Set the filter in the logger.
+%%          Currently, a filter is a set of module names.  If the filter is
+%%          non-empty, then a log will be triggered only if the module
+%%          being logged is in the filter list; otherwise, if the filter is
+%%          empty, then the log will be triggered (if the level matches, as well)
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_filter(Filter::[module()]) -> ok.
+set_filter(Filter) ->
+    {ok, Pid} = maybe_start(whereis(?MODULE)),
+    Pid ! {set_filter, Filter},
+    ok.
+
+%%-----------------------------------------------------------------------------
+%% @return  the current filter set in the logger
+%% @doc     Get the current filter in the logger.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_filter() -> {ok, Filter::[module()]} | {error, timeout}.
+get_filter() ->
+    {ok, Pid} = maybe_start(whereis(?MODULE)),
+    Ref = erlang:make_ref(),
+    Pid ! {get_filter, Ref, self()},
+    receive
+        {Ref, Filter} ->
+            {ok, Filter}
     after 5000 ->
         {error, timeout}
     end.
@@ -135,21 +171,28 @@ get_levels() ->
 %%
 
 %% @private
-loop(#state{pid=Pid, config=Config} = State0) ->
-    State = case Pid of
+loop(#state{pid=StartingPid, config=Config} = State0) ->
+    State = case StartingPid of
         undefined -> State0;
         _ ->
-            Pid ! started,
+            StartingPid ! started,
             State0#state{pid=undefined}
     end,
-    Levels = proplists:get_value(levels, Config, []),
+    Levels = ?PROPLISTS:get_value(levels, Config, []),
+    Filter = ?PROPLISTS:get_value(filter, Config, []),
     receive
         {get_levels, Ref, Pid} ->
-            Pid ! {Ref, Levels};
+            Pid ! {Ref, Levels},
+            loop(State);
+        {get_filter, Ref, Pid} ->
+            Pid ! {Ref, Filter},
+            loop(State);
         {set_levels, NewLevels} ->
-            loop(State#state{config=[{levels, NewLevels} | lists:keydelete(levels, 1, Levels)]});
+            loop(State#state{config=[{levels, NewLevels} | ?LISTS:keydelete(levels, 1, Config)]});
+        {set_filter, NewFilter} ->
+            loop(State#state{config=[{filter, NewFilter} | ?LISTS:keydelete(filter, 1, Config)]});
         {_Location, _Time, _Pid, Level, _Msg} = Request ->
-            do_log(Request, Level, Levels),
+            do_log(Request, Level, Levels, Filter),
             loop(State);
         stop ->
             ok;
@@ -164,10 +207,23 @@ maybe_start(Pid) ->
     {ok, Pid}.
 
 %% @private
-do_log(_Request, _Level, undefined) ->
+do_log(_Request, _Level, undefined, _Filter) ->
     ok;
+do_log({Location, _Time, _Pid, _Level, _Msg} = Request, Level, Levels, Filter) ->
+    case match_filter(Location, Filter) of
+        true ->
+            do_log(Request, Level, Levels);
+        _ ->
+            ok
+    end.
+
+match_filter(_Location, []) ->
+    true;
+match_filter({Module, _Function, _Arity, _Line}, Filter) ->
+    ?LISTS:member(Module, Filter).
+
 do_log(Request, Level, Levels) ->
-    case lists:member(Level, Levels) of
+    case ?LISTS:member(Level, Levels) of
         true ->
             erlang:display(Request);
         _ ->

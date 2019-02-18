@@ -35,7 +35,7 @@
 %% on all AtomVM platforms.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--module(gen_udp).
+-module(avm_gen_udp).
 
 -export([open/1, open/2, send/4, recv/2, recv/3]).
 -export([get_port_num/1]).
