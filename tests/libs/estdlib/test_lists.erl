@@ -9,8 +9,13 @@ test() ->
     ok = test_nth(),
     ok = test_member(),
     ok = test_reverse(),
+    ok = test_delete(),
     ok = test_keyfind(),
     ok = test_keydelete(),
+    ok = test_foldl(),
+    ok = test_foldr(),
+    ok = test_all(),
+    ok = test_any(),
     ok = test_list_match(),
     ok.
 
@@ -63,6 +68,36 @@ test_keydelete() ->
     ?ASSERT_MATCH(?LISTS:keydelete(a, 1, [{a, x}, b, []]), [b, []]),
     ?ASSERT_MATCH(?LISTS:keydelete(a, 1, [b, {a, x}, []]), [b, []]),
     ?ASSERT_MATCH(?LISTS:keydelete(a, 1, [b, {a, x}, {a, x}, {a, x}, []]), [b, {a, x}, {a, x}, []]),
+    ok.
+
+test_foldl() ->
+    ?ASSERT_MATCH(?LISTS:foldl(fun(I, Accum) -> Accum + I end, 0, [1,2,3,4,5]), 15),
+    ?ASSERT_MATCH(?LISTS:foldl(fun(I, Accum) -> Accum + I end, 0, []), 0),
+    ok.
+
+test_foldr() ->
+    ?ASSERT_MATCH(?LISTS:foldr(fun(I, Accum) -> Accum + I end, 0, [1,2,3,4,5]), 15),
+    ?ASSERT_MATCH(?LISTS:foldr(fun(I, Accum) -> Accum + I end, 0, []), 0),
+    ok.
+
+test_all() ->
+    ?ASSERT_MATCH(?LISTS:all(fun(_E) -> false end, []), true),
+    ?ASSERT_MATCH(?LISTS:all(fun(_E) -> false end, [a]), false),
+    ?ASSERT_MATCH(?LISTS:all(fun(_E) -> true end, [a]), true),
+    ?ASSERT_MATCH(?LISTS:all(fun(E) -> is_atom(E) end, [a,b,c,d]), true),
+    ?ASSERT_MATCH(?LISTS:all(fun(E) -> is_atom(E) end, [a, []]), false),
+    ?ASSERT_MATCH(?LISTS:all(fun(E) -> is_atom(E) end, [[], a]), false),
+    ok.
+
+test_any() ->
+    ?ASSERT_MATCH(?LISTS:any(fun(_E) -> false end, []), false),
+    ?ASSERT_MATCH(?LISTS:any(fun(_E) -> false end, [a]), false),
+    ?ASSERT_MATCH(?LISTS:any(fun(_E) -> true end, []), false),
+    ?ASSERT_MATCH(?LISTS:any(fun(_E) -> true end, [a]), true),
+    ?ASSERT_MATCH(?LISTS:any(fun(E) -> is_atom(E) end, [a,b,c,d]), true),
+    ?ASSERT_MATCH(?LISTS:any(fun(E) -> is_atom(E) end, [a, []]), true),
+    ?ASSERT_MATCH(?LISTS:any(fun(E) -> is_atom(E) end, [[], a]), true),
+    ?ASSERT_MATCH(?LISTS:any(fun(E) -> is_atom(E) end, [[], {a}]), false),
     ok.
 
 test_list_match() ->

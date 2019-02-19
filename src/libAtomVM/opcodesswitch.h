@@ -2275,7 +2275,7 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                     uint32_t label;
                     uint32_t arity;
                     uint32_t n_freeze;
-                    module_get_fun(mod, fun_index, &label, &arity, &n_freeze);
+                    module_get_fun(fun_module, fun_index, &label, &arity, &n_freeze);
 
                     if (UNLIKELY(args_count != arity - n_freeze)) {
                         int target_label = get_catch_label_and_change_module(ctx, &mod);
@@ -2290,15 +2290,15 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                         }
                     }
 
-                    mod = fun_module;
-                    code = mod->code->code;
-
                     for (unsigned int j = arity - n_freeze; j < arity + n_freeze; j++) {
                         ctx->x[j] = boxed_value[j - (arity - n_freeze) + 3];
                     }
 
                     NEXT_INSTRUCTION(next_off);
                     ctx->cp = module_address(mod->module_index, i);
+
+                    mod = fun_module;
+                    code = mod->code->code;
 
                     remaining_reductions--;
                     if (LIKELY(remaining_reductions)) {

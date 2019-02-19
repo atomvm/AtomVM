@@ -290,6 +290,14 @@ static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const c
         fwrite(data + offsets[IMPT], sizeof(uint8_t), sizes[IMPT] + IFF_SECTION_HEADER_SIZE, pack);
         pad_and_align(pack);
     }
+    if (offsets[LITU]) {
+        fwrite(data + offsets[LITU], sizeof(uint8_t), sizes[LITU] + IFF_SECTION_HEADER_SIZE, pack);
+        pad_and_align(pack);
+    }
+    if (offsets[FUNT]) {
+        fwrite(data + offsets[FUNT], sizeof(uint8_t), sizes[FUNT] + IFF_SECTION_HEADER_SIZE, pack);
+        pad_and_align(pack);
+    }
 
     if (offsets[LITT]) {
         size_t u_size;

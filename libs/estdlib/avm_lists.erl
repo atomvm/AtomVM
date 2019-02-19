@@ -26,7 +26,7 @@
 %%-----------------------------------------------------------------------------
 -module(avm_lists).
 
--export([nth/2, member/2, delete/2, reverse/1, keydelete/3, keyfind/3]).
+-export([nth/2, member/2, delete/2, reverse/1, keydelete/3, keyfind/3, foldl/3, foldr/3, all/2, any/2]).
 
 %%-----------------------------------------------------------------------------
 %% @param   N the index in the list to get
@@ -152,3 +152,58 @@ keyfind(K, I, [H|T]) when is_tuple(H) ->
     end;
 keyfind(K, I, [_H|T]) ->
     keyfind(K, I, T).
+
+%%-----------------------------------------------------------------------------
+%% @param   Fun the function to apply
+%% @param   Accum0 the initial accumulator
+%% @param   List the list over which to fold
+%% @returns the result of folding Fun over L
+%% @doc     Fold over a list of terms, from left to right, applying Fun(E, Accum)
+%%          to each successive element in List
+%% @end
+%%-----------------------------------------------------------------------------
+-spec foldl(Fun::fun((Elem::term(), AccIn::term()) -> AccOut::term()), Acc0::term(), List::list()) -> Acc1::term().
+foldl(_Fun, Acc0, []) ->
+    Acc0;
+foldl(Fun, Acc0, [H|T]) ->
+    Acc1 = Fun(H, Acc0),
+    foldl(Fun, Acc1, T).
+
+%%-----------------------------------------------------------------------------
+%% @equiv   foldl(Fun, Acc0, reverse(List))
+%% @doc     Fold over a list of terms, from right to left, applying Fun(E, Accum)
+%%          to each successive element in List
+%% @end
+%%-----------------------------------------------------------------------------
+-spec foldr(Fun::fun((Elem::term(), AccIn::term()) -> AccOut::term()), Acc0::term(), List::list()) -> Acc1::term().
+foldr(Fun, Acc0, List) ->
+    foldl(Fun, Acc0, reverse(List)).
+
+%%-----------------------------------------------------------------------------
+%% @param   Fun the predicate to evaluate
+%% @param   List the list over which to evaluate elements
+%% @returns true if Fun(E) evaluates to true, for all elements in List
+%% @doc     Evaluates to true iff Fun(E) =:= true, for all E in List
+%% @end
+%%-----------------------------------------------------------------------------
+-spec all(Fun::fun((Elem::term()) -> boolean()), List::list()) -> boolean().
+all(_Fun, []) ->
+    true;
+all(Fun, [H|T]) ->
+    case Fun(H) of
+        true ->
+            all(Fun, T);
+        _ ->
+            false
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @param   Fun the predicate to evaluate
+%% @param   List the list over which to evaluate elements
+%% @returns true if Fun(E) evaluates to true, for at least one in List
+%% @doc     Evaluates to true iff Fun(E) =:= true, for some E in List
+%% @end
+%%-----------------------------------------------------------------------------
+-spec any(Fun::fun((Elem::term()) -> boolean()), List::list()) -> boolean().
+any(Fun, L) ->
+    not all(fun(E) -> not Fun(E) end, L).
