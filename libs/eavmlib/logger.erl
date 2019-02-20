@@ -69,7 +69,7 @@ start(Config) ->
             State = #state{pid=self(), config=Config},
             Pid = spawn(?MODULE, loop, [State]),
             receive
-                started -> 
+                started ->
                     ok
             end,
             erlang:register(?MODULE, Pid),
