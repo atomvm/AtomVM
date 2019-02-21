@@ -24,10 +24,7 @@
 %%-----------------------------------------------------------------------------
 -module(erlang).
 
--export([
-    start_timer/3, start_timer/4, cancel_timer/1, send_after/3
-]).
--export([send_after_timer/3]).
+-export([start_timer/3, start_timer/4, cancel_timer/1, send_after/3]).
 
 
 %%-----------------------------------------------------------------------------
@@ -58,7 +55,6 @@ start_timer(Time, Dest, Msg) ->
 %%-----------------------------------------------------------------------------
 -spec start_timer(non_neg_integer(), pid() | atom(), term(), list()) -> reference().
 start_timer(Time, Dest, Msg, _Options) ->
-    timer_manager:start(),
     timer_manager:start_timer(Time, Dest, Msg).
 
 
@@ -76,7 +72,6 @@ start_timer(Time, Dest, Msg, _Options) ->
 %%-----------------------------------------------------------------------------
 -spec cancel_timer(TimerRef::reference()) -> ok.
 cancel_timer(TimerRef) ->
-    timer_manager:start(),
     timer_manager:cancel_timer(TimerRef).
 
 %%-----------------------------------------------------------------------------
@@ -89,18 +84,4 @@ cancel_timer(TimerRef) ->
 %%-----------------------------------------------------------------------------
 -spec send_after(non_neg_integer(), pid() | atom(), term()) -> reference().
 send_after(Time, Dest, Msg) ->
-    TimerRef = erlang:make_ref(),
-    spawn(?MODULE, send_after_timer, [Time, Dest, Msg]),
-    TimerRef.
-
-
-%%=============================================================================
-%% internal functions
-
-%% @private
-send_after_timer(Time, Dest, Msg) ->
-    TimerRef = start_timer(Time, self(), Msg),
-    receive
-        {timeout, TimerRef, Msg} ->
-            Dest ! Msg
-    end.
+    timer_manager:send_after(Time, Dest, Msg).

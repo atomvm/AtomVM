@@ -128,7 +128,7 @@ stop(ServerRef, Reason, Timeout) ->
 %%-----------------------------------------------------------------------------
 -spec call(ServerRef::server_ref(), Request::term) -> Reply::term() | {error, Reason::term()}.
 call(ServerRef, Request) ->
-    call(ServerRef, Request, infinity).
+    call(ServerRef, Request, 5000).
 
 %%-----------------------------------------------------------------------------
 %% @param   ServerRef a reference to the gen_statem acquired via start
@@ -185,6 +185,9 @@ init({Module, Args}) ->
     case Module:init(Args) of
         {ok, NextState, Data} ->
             {ok, #state{mod=Module, current_state=NextState, data=Data}};
+        {ok, NextState, Data, Actions} ->
+            handle_actions(Actions, [{next_state, NextState}]),
+            {ok, #state{mod=Module, current_state=NextState, data=Data}};
         {stop, Reason} ->
             {stop, Reason};
         _ ->
@@ -228,7 +231,7 @@ terminate(Reason, #state{mod=Module, current_state=CurrentState, data=Data} = _S
 
 %% @private
 do_handle_state(EventType, Request, #state{mod=Module, current_state=CurrentState, data=Data} = State) ->
-    ?LOG_DEBUG({do_handle_state, EventType, Request, State}),
+    ?LOG_DEBUG({do_handle_state, [EventType, Request, State]}),
     case Module:CurrentState(EventType, Request, Data) of
         {next_state, NextState, NewData} ->
             maybe_log_state_transition(CurrentState, NextState),
@@ -237,6 +240,16 @@ do_handle_state(EventType, Request, #state{mod=Module, current_state=CurrentStat
             maybe_log_state_transition(CurrentState, NextState),
             handle_actions(Actions, [{current_state, CurrentState}, {next_state, NextState}]),
             {noreply, State#state{current_state=NextState, data=NewData}};
+        {stop, Reason} ->
+            {stop, Reason, State};
+        {stop, Reason, NewData} ->
+            {stop, Reason, State#state{data=NewData}};
+        {stop_and_reply, Reason, Replies} ->
+            handle_actions(Replies, []),
+            {stop, Reason, State};
+        {stop_and_reply, Reason, Replies, NewData} ->
+            handle_actions(Replies, []),
+            {stop, Reason, State#state{data=NewData}};
         Reply ->
             {error, {unexpected_reply, Reply}}
     end.
@@ -251,7 +264,7 @@ handle_actions([{reply, From, Reply} | T], Context) ->
     handle_actions(T, Context);
 handle_actions([{state_timeout, Timeout, Msg} | T], Context) ->
     ?LOG_DEBUG({handle_actions, state_timeout}),
-    erlang:start_timer(Timeout, self(), {state_timeout, ?PROPLISTS:get_value(next_state, Context), Msg}),
+    timer_manager:start_timer(Timeout, self(), {state_timeout, ?PROPLISTS:get_value(next_state, Context), Msg}),
     handle_actions(T, Context);
 handle_actions([_ | T], Context) ->
     ?LOG_DEBUG({handle_actions, rest, T}),

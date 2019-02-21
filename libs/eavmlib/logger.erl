@@ -29,7 +29,7 @@
 -module(logger).
 
 -export([start/0, start/1, log/3, get_levels/0, set_levels/1, get_filter/0, set_filter/1, stop/0]).
--export([loop/1]).
+-export([loop/1, console_log/1]).
 
 -include("estdlib.hrl").
 
@@ -42,8 +42,19 @@
     Module::module(), Function::atom(), Arity::non_neg_integer(), Line::non_neg_integer()
 }.
 -type level() :: debug | info | warning | error.
+-type year() :: integer().
+-type month() :: 1..12.
+-type day() :: 1..31.
+-type hour() :: 0..59.
+-type minute() :: 0..59.
+-type second() :: 0..59.
+-type timestamp() :: {year(), month(), day(), hour(), minute(), second()}.
+-type log_request() :: {location(), timestamp(), pid(), level(), term()}.
+
 -type config_item() :: {levels, [level()]}.
 -type config() :: [config_item()].
+
+-define(DEFAULT_CONFIG, [{levels, [info, warning, error]}, {filter, []}, {sink, {?MODULE, console_log}}]).
 
 %%-----------------------------------------------------------------------------
 %% @equiv   start([{levels, [info, warning, error]}])
@@ -52,7 +63,7 @@
 %%-----------------------------------------------------------------------------
 -spec start() -> {ok, pid()}.
 start() ->
-    start([{levels, [info, warning, error]}, {filter, []}]).
+    start([]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Config the logging configuration
@@ -63,7 +74,8 @@ start() ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec start(Config::config()) -> {ok, pid()}.
-start(Config) ->
+start(Config0) ->
+    Config = fill_defaults(Config0, ?DEFAULT_CONFIG),
     LoggerPid = case whereis(?MODULE) of
         undefined ->
             State = #state{pid=self(), config=Config},
@@ -166,6 +178,11 @@ get_filter() ->
         {error, timeout}
     end.
 
+%% @hidden
+-spec console_log(Request::log_request()) -> ok.
+console_log(Request) ->
+    erlang:display(Request).
+
 %%
 %% Internal operations
 %%
@@ -180,6 +197,7 @@ loop(#state{pid=StartingPid, config=Config} = State0) ->
     end,
     Levels = ?PROPLISTS:get_value(levels, Config, []),
     Filter = ?PROPLISTS:get_value(filter, Config, []),
+    Sink   = ?PROPLISTS:get_value(sink, Config, {foo, bar}),
     receive
         {get_levels, Ref, Pid} ->
             Pid ! {Ref, Levels},
@@ -192,7 +210,7 @@ loop(#state{pid=StartingPid, config=Config} = State0) ->
         {set_filter, NewFilter} ->
             loop(State#state{config=[{filter, NewFilter} | ?LISTS:keydelete(filter, 1, Config)]});
         {_Location, _Time, _Pid, Level, _Msg} = Request ->
-            do_log(Request, Level, Levels, Filter),
+            do_log(Sink, Request, Level, Levels, Filter),
             loop(State);
         stop ->
             ok;
@@ -207,25 +225,42 @@ maybe_start(Pid) ->
     {ok, Pid}.
 
 %% @private
-do_log(_Request, _Level, undefined, _Filter) ->
+do_log(_Sink, _Request, _Level, undefined, _Filter) ->
     ok;
-do_log({Location, _Time, _Pid, _Level, _Msg} = Request, Level, Levels, Filter) ->
+do_log(Sink, {Location, _Time, _Pid, _Level, _Msg} = Request, Level, Levels, Filter) ->
     case match_filter(Location, Filter) of
         true ->
-            do_log(Request, Level, Levels);
+            do_log(Sink, Request, Level, Levels);
         _ ->
             ok
     end.
 
+%% @private
 match_filter(_Location, []) ->
     true;
 match_filter({Module, _Function, _Arity, _Line}, Filter) ->
     ?LISTS:member(Module, Filter).
 
-do_log(Request, Level, Levels) ->
+%% @private
+do_log({Module, Function} = _Sink, Request, Level, Levels) ->
     case ?LISTS:member(Level, Levels) of
         true ->
-            erlang:display(Request);
+            Module:Function(Request);
         _ ->
             ok
+    end.
+
+%% @private
+fill_defaults(Config, Defaults) ->
+    fill_defaults(Config, Defaults, []).
+
+%% @private
+fill_defaults(_Config, [], Accum) ->
+    Accum;
+fill_defaults(Config, [{K,V}=H|T], Accum) ->
+    case ?PROPLISTS:get_value(K, Config) of
+        undefined ->
+            fill_defaults(Config, T, [H|Accum]);
+        Value ->
+            fill_defaults(Config, T, [{K,Value}|Accum])
     end.
