@@ -1,6 +1,11 @@
 cmake_minimum_required (VERSION 2.6)
 project (AtomVM)
 
+option(ADVANCED_TRACING "Enable advanced tracing" OFF)
+if (ADVANCED_TRACING)
+    add_definitions(-DENABLE_ADVANCED_TRACE)
+endif()
+
 add_subdirectory(libAtomVM)
 
 if((${CMAKE_SYSTEM_NAME} STREQUAL "Darwin") OR
