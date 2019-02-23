@@ -8,6 +8,7 @@ include(BuildErlang)
 
 set(ERLANG_MODULES
     test_logger
+    test_timer_manager
 )
 
 pack_archive(test_eavmlib_lib ${ERLANG_MODULES})

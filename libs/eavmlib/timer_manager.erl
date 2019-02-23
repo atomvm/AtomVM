@@ -22,9 +22,9 @@
 %%-----------------------------------------------------------------------------
 -module(timer_manager).
 
--export([start/0, start_timer/3, cancel_timer/1, get_timer_refs/0]).
+-export([start/0, start_timer/3, cancel_timer/1, get_timer_refs/0, send_after/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
--export([run_timer/5]).
+-export([run_timer/5, send_after_timer/3]).
 
 -include("estdlib.hrl").
 
@@ -41,20 +41,59 @@ start() ->
     ?LOG_DEBUG(start),
     ?GEN_SERVER:start({local, ?SERVER_NAME}, ?MODULE, [], []).
 
+%%-----------------------------------------------------------------------------
+%% @param   Time time in milliseconds after which to send the timeout message.
+%% @param   Dest Pid or server name to which to send the timeout message.
+%% @param   Msg Message to send to Dest after Time ms.
+%% @returns a reference that can be used to cancel the timer, if desired.
+%% @doc     Start a timer, and send {timeout, TimerRef, Msg} to Dest after
+%%          Time ms, where TimerRef is the reference returned from this function.
+%% @end
+%%-----------------------------------------------------------------------------
 -spec start_timer(Time::non_neg_integer(), Dest::pid(), Msg::term()) -> TimerRef::reference().
 start_timer(Time, Dest, Msg) ->
     ?LOG_DEBUG({start_timer, Time, Dest, Msg}),
+    start(),
     ?GEN_SERVER:call(?SERVER_NAME, {Time, Dest, Msg}).
 
+%%-----------------------------------------------------------------------------
+%% @hidden
+%% @param   Time time in milliseconds after which to send the timeout message.
+%% @param   Dest Pid or server name to which to send the timeout message.
+%% @param   Msg Message to send to Dest after Time ms.
+%% @param   Options options
+%% @returns a reference that can be used to cancel the timer, if desired.
+%% @doc     Start a timer, and send {timeout, TimerRef, Msg} to Dest after
+%%          Time ms, where TimerRef is the reference returned from this function.
+%%
+%%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
+%%-----------------------------------------------------------------------------
 -spec cancel_timer(TimerRef::reference()) -> ok.
 cancel_timer(TimerRef) ->
     ?LOG_DEBUG({cancel_timer, TimerRef}),
+    start(),
     ?GEN_SERVER:call(?SERVER_NAME, {cancel, TimerRef}).
 
 -spec get_timer_refs() -> [reference()].
 get_timer_refs() ->
     ?LOG_DEBUG(get_timer_refs),
+    start(),
     ?GEN_SERVER:call(?SERVER_NAME, get_timer_refs).
+
+%%-----------------------------------------------------------------------------
+%% @param   Time time in milliseconds after which to send the message.
+%% @param   Dest Pid or server name to which to send the message.
+%% @param   Msg Message to send to Dest after Time ms.
+%% @returns a reference that can be used to cancel the timer, if desired.
+%% @doc     Send Msg to Dest after Time ms.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec send_after(non_neg_integer(), pid() | atom(), term()) -> reference().
+send_after(Time, Dest, Msg) ->
+    TimerRef = erlang:make_ref(),
+    spawn(?MODULE, send_after_timer, [Time, Dest, Msg]),
+    TimerRef.
+
 
 %%
 %% ?GEN_SERVER callbacks
@@ -66,8 +105,10 @@ init([]) ->
 
 %% @hidden
 handle_call(get_timer_refs, _From, #state{timers=Timers} = State) ->
+    ?LOG_DEBUG({handle_call, get_timer_refs, State}),
     {reply, [TimerRef || {TimerRef, _Pid} <- Timers], State};
 handle_call({cancel, TimerRef}, From, #state{timers=Timers} = State) ->
+    ?LOG_DEBUG({handle_call, cancel, State}),
     case ?LISTS:keyfind(TimerRef, 1, Timers) of
         false ->
             {reply, false, State};
@@ -76,6 +117,7 @@ handle_call({cancel, TimerRef}, From, #state{timers=Timers} = State) ->
             {noreply, State}
     end;
 handle_call({Time, Dest, Msg}, _From, #state{timers=Timers} = State) ->
+    ?LOG_DEBUG({handle_call, start_timer, State}),
     {TimerRef, Pid} = do_start_timer(Time, Dest, Msg),
     {reply, TimerRef, State#state{timers=[{TimerRef, Pid} | Timers]}}.
 
@@ -85,6 +127,7 @@ handle_cast(_Request, State) ->
 
 %% @hidden
 handle_info({finished, TimerRef}, #state{timers=Timers} = State) ->
+    ?LOG_DEBUG({handle_info, finished, State}),
     {noreply, State#state{timers=?LISTS:keydelete(TimerRef, 1, Timers)}}.
 
 %% @hidden
@@ -103,11 +146,22 @@ do_start_timer(Time, Dest, Msg) ->
 
 %% @private
 run_timer(MgrPid, Time, TimerRef, Dest, Msg) ->
+    ?LOG_DEBUG({run_timer, [MgrPid, Time, TimerRef, Dest, Msg]}),
     Start = erlang:timestamp(),
     receive
         {cancel, From} ->
+            ?LOG_DEBUG({run_timer, received_cancel, From}),
             ?GEN_SERVER:reply(From, Time - timestamp_util:delta_ms(erlang:timestamp(), Start))
     after Time ->
+        ?LOG_DEBUG({run_timer, timed_out, Time}),
         Dest ! {timeout, TimerRef, Msg}
     end,
     MgrPid ! {finished, TimerRef}.
+
+%% @private
+send_after_timer(Time, Dest, Msg) ->
+    TimerRef = start_timer(Time, self(), Msg),
+    receive
+        {timeout, TimerRef, Msg} ->
+            Dest ! Msg
+    end.
