@@ -27,19 +27,19 @@
 #include <ctype.h>
 #include <stdio.h>
 
-void term_display(term t, const Context *ctx)
+void term_display(FILE *fd, term t, const Context *ctx)
 {
     if (term_is_atom(t)) {
         int atom_index = term_to_atom_index(t);
-        AtomString atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table, atom_index, (unsigned long) NULL);
-        printf("%.*s", (int) atom_string_len(atom_string), (char *) atom_string_data(atom_string));
+            AtomString atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table, atom_index, (unsigned long) NULL);
+            fprintf(fd, "%.*s", (int) atom_string_len(atom_string), (char *) atom_string_data(atom_string));
 
     } else if (term_is_integer(t)) {
         long iv = term_to_int32(t);
-        printf("%li", iv);
+        fprintf(fd, "%li", iv);
 
     } else if (term_is_nil(t)) {
-        printf("[]");
+        fprintf(fd, "[]");
 
     } else if (term_is_nonempty_list(t)) {
         int is_printable = 1;
@@ -54,11 +54,11 @@ void term_display(term t, const Context *ctx)
 
         if (is_printable) {
             char *printable = interop_list_to_string(t);
-            printf("\"%s\"", printable);
+            fprintf(fd, "\"%s\"", printable);
             free(printable);
 
         } else {
-            putchar('[');
+            fputc('[', fd);
             int display_separator = 0;
             while (!term_is_nil(t)) {
                 if (display_separator) {
@@ -67,26 +67,26 @@ void term_display(term t, const Context *ctx)
                     display_separator = 1;
                 }
 
-                term_display(term_get_list_head(t), ctx);
+                term_display(fd, term_get_list_head(t), ctx);
                 t = term_get_list_tail(t);
             }
-            putchar(']');
+            fputc(']', fd);
         }
     } else if (term_is_pid(t)) {
-        printf("<0.%i.0>", term_to_local_process_id(t));
+        fprintf(fd, "<0.%i.0>", term_to_local_process_id(t));
 
     } else if (term_is_tuple(t)) {
-        putchar('{');
+        fputc('{', fd);
 
         int tuple_size = term_get_tuple_arity(t);
         for (int i = 0; i < tuple_size; i++) {
             if (i != 0) {
-                putchar(',');
+                fputc(',', fd);
             }
-            term_display(term_get_tuple_element(t, i), ctx);
+            term_display(fd, term_get_tuple_element(t, i), ctx);
         }
 
-        putchar('}');
+        fputc('}', fd);
 
     } else if (term_is_binary(t)) {
         int len = term_binary_size(t);
@@ -100,18 +100,18 @@ void term_display(term t, const Context *ctx)
         }
 
         if (is_printable) {
-            printf("<<\"%.*s\">>", len, binary_data);
+            fprintf(fd, "<<\"%.*s\">>", len, binary_data);
 
         } else {
             int display_separator = 0;
             for (int i = 0; i < len; i++) {
                 if (display_separator) {
-                    putchar(',');
+                    fputc(',', fd);
                 } else {
                     display_separator = 1;
                 }
 
-                printf("%i", binary_data[i]);
+                fprintf(fd, "%i", binary_data[i]);
             }
         }
 
@@ -122,6 +122,8 @@ void term_display(term t, const Context *ctx)
 #else
         "#Ref<0.0.0.%lu>";
 #endif
-        printf(format, term_to_ref_ticks(t));
+        fprintf(fd, format, term_to_ref_ticks(t));
+    } else {
+        fprintf(fd, "Unknown term type: %li", t);
     }
 }
