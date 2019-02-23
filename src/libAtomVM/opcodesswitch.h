@@ -2186,9 +2186,6 @@ static const char *const try_clause_atom = "\xA" "try_clause";
             }
 
             case OP_PUT_LIST: {
-                #ifdef IMPL_EXECUTE_LOOP
-                    term *list_elem = term_list_alloc(ctx);
-                #endif
 
                 int next_off = 1;
                 term head;
@@ -2198,6 +2195,10 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                 int dreg;
                 uint8_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
+
+#ifdef IMPL_EXECUTE_LOOP
+                term *list_elem = term_list_alloc(ctx);
+#endif
 
                 TRACE("op_put_list/3\n");
 
