@@ -61,6 +61,8 @@ static const char *const puts_a = "\x4" "puts";
 static const char *const flush_a = "\x5" "flush";
 static const char *const max_heap_size_a ="\xD" "max_heap_size";
 
+static const char *const out_of_memory_atom = "\xD" "out_of_memory";
+
 #ifdef ENABLE_ADVANCED_TRACE
 static const char *const ok_atom = "\x2" "ok";
 
@@ -549,7 +551,9 @@ static term nif_erlang_concat_2(Context *ctx, int argc, term argv[])
     }
 
     int len = term_list_length(prepend_list);
-    memory_ensure_free(ctx, len * 2);
+    if (UNLIKELY(memory_ensure_free(ctx, len * 2) != MEMORY_GC_OK)) {
+        RAISE_ERROR(out_of_memory_atom);
+    }
 
     // GC might have changed all pointers
     prepend_list = argv[0];
@@ -590,7 +594,9 @@ term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[])
     UNUSED(argv);
 
     // a ref is 64 bits, hence 8 bytes
-    memory_ensure_free(ctx, (8 / TERM_BYTES) + 1);
+    if (UNLIKELY(memory_ensure_free(ctx, (8 / TERM_BYTES) + 1) != MEMORY_GC_OK)) {
+        RAISE_ERROR(out_of_memory_atom);
+    }
 
     uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
 
@@ -622,7 +628,9 @@ term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[])
     UNUSED(argv);
 
     // 4 = size of date/time tuple, 3 size of date time tuple
-    memory_ensure_free(ctx, 3 + 4 + 4);
+    if (UNLIKELY(memory_ensure_free(ctx, 3 + 4 + 4) != MEMORY_GC_OK)) {
+        RAISE_ERROR(out_of_memory_atom);
+    }
     term date_tuple = term_alloc_tuple(3, ctx);
     term time_tuple = term_alloc_tuple(3, ctx);
     term date_time_tuple = term_alloc_tuple(2, ctx);
@@ -653,7 +661,9 @@ term nif_erlang_timestamp_0(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
 
-    memory_ensure_free(ctx, 4);
+    if (UNLIKELY(memory_ensure_free(ctx, 4) != MEMORY_GC_OK)) {
+        RAISE_ERROR(out_of_memory_atom);
+    }
     term timestamp_tuple = term_alloc_tuple(3, ctx);
 
     struct timespec ts;
@@ -678,7 +688,9 @@ static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[])
         RAISE_ERROR(badarg_atom);
     }
 
-    memory_ensure_free(ctx, count_elem + 1);
+    if (UNLIKELY(memory_ensure_free(ctx, count_elem + 1) != MEMORY_GC_OK)) {
+        RAISE_ERROR(out_of_memory_atom);
+    }
     term new_tuple = term_alloc_tuple(count_elem, ctx);
 
     term element = argv[1];
@@ -707,7 +719,9 @@ static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[])
     }
 
     int new_tuple_size = old_tuple_size + 1;
-    memory_ensure_free(ctx, new_tuple_size + 1);
+    if (UNLIKELY(memory_ensure_free(ctx, new_tuple_size + 1) != MEMORY_GC_OK)) {
+        RAISE_ERROR(out_of_memory_atom);
+    }
     term new_tuple = term_alloc_tuple(new_tuple_size, ctx);
 
     term old_tuple = argv[1];
@@ -744,7 +758,9 @@ static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[])
     }
 
     int new_tuple_size = old_tuple_size - 1;
-    memory_ensure_free(ctx, new_tuple_size + 1);
+    if (UNLIKELY(memory_ensure_free(ctx, new_tuple_size + 1) != MEMORY_GC_OK)) {
+        RAISE_ERROR(out_of_memory_atom);
+    }
     term new_tuple = term_alloc_tuple(new_tuple_size, ctx);
 
     term old_tuple = argv[1];
@@ -776,7 +792,9 @@ static term nif_erlang_setelement_3(Context *ctx, int argc, term argv[])
         RAISE_ERROR(badarg_atom);
     }
 
-    memory_ensure_free(ctx, tuple_size + 1);
+    if (UNLIKELY(memory_ensure_free(ctx, tuple_size + 1) != MEMORY_GC_OK)) {
+        RAISE_ERROR(out_of_memory_atom);
+    }
     term new_tuple = term_alloc_tuple(tuple_size, ctx);
 
     term old_tuple = argv[1];
@@ -798,7 +816,9 @@ static term nif_erlang_tuple_to_list_1(Context *ctx, int argc, term argv[])
 
     int tuple_size = term_get_tuple_arity(argv[0]);
 
-    memory_ensure_free(ctx, tuple_size * 2);
+    if (UNLIKELY(memory_ensure_free(ctx, tuple_size * 2) != MEMORY_GC_OK)) {
+        RAISE_ERROR(out_of_memory_atom);
+    }
 
     term tuple = argv[0];
     term prev = term_nil();
@@ -924,7 +944,9 @@ static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
 
     int atom_len = atom_string_len(atom_string);
 
-    memory_ensure_free(ctx, atom_len * 2);
+    if (UNLIKELY(memory_ensure_free(ctx, atom_len * 2) != MEMORY_GC_OK)) {
+        RAISE_ERROR(out_of_memory_atom);
+    }
 
     term prev = term_nil();
     for (int i = atom_len - 1; i >= 0; i--) {
@@ -948,7 +970,9 @@ static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[])
     snprintf(integer_string, 24, "%i", int_value);
     int integer_string_len = strlen(integer_string);
 
-    memory_ensure_free(ctx, integer_string_len * 2);
+    if (UNLIKELY(memory_ensure_free(ctx, integer_string_len * 2) != MEMORY_GC_OK)) {
+        RAISE_ERROR(out_of_memory_atom);
+    }
 
     term prev = term_nil();
     for (int i = integer_string_len - 1; i >= 0; i--) {
