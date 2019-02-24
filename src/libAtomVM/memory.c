@@ -49,14 +49,6 @@ HOT_FUNC term *memory_heap_alloc(Context *c, uint32_t size)
 
 enum MemoryGCResult memory_ensure_free(Context *c, uint32_t size)
 {
-    if (context_memory_size(c) > size) {
-        if (UNLIKELY(memory_gc(c, context_memory_size(c)) != MEMORY_GC_OK)) {
-            //TODO: handle this more gracefully
-            TRACE("Unable to allocate memory for GC\n");
-            return MEMORY_GC_ERROR_FAILED_ALLOCATION;
-        }
-    }
-
     if (context_avail_free_memory(c) < size + MIN_FREE_SPACE_SIZE) {
         if (UNLIKELY(memory_gc(c, MAX(context_memory_size(c) * 2, context_memory_size(c) + size)) != MEMORY_GC_OK)) {
             //TODO: handle this more gracefully
