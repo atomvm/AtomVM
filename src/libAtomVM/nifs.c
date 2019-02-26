@@ -495,7 +495,10 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
     //TODO: check available registers count
     int reg_index = 0;
     term t = argv[2];
-    memory_ensure_free(new_ctx, memory_estimate_usage(t));
+    if (UNLIKELY(memory_ensure_free(new_ctx, memory_estimate_usage(t)) != MEMORY_GC_OK)) {
+        //TODO: new process should be terminated, however a new pid is returned anyway
+        abort();
+    }
     while (!term_is_nil(t)) {
         term *t_ptr = term_get_list_ptr(t);
         new_ctx->x[reg_index] = memory_copy_term_tree(&new_ctx->heap_ptr, t_ptr[1]);
