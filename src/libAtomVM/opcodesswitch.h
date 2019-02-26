@@ -536,6 +536,18 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 #ifdef IMPL_EXECUTE_LOOP
 static const char *const error_atom = "\x5" "error";
 static const char *const try_clause_atom = "\xA" "try_clause";
+static const char *const out_of_memory_atom = "\xD" "out_of_memory";
+
+#define RAISE_ERROR(error_type_atom)                                    \
+    int target_label = get_catch_label_and_change_module(ctx, &mod);    \
+    if (target_label) {                                                 \
+        ctx->x[0] = context_make_atom(ctx, error_atom);                 \
+        ctx->x[1] = context_make_atom(ctx, (error_type_atom));          \
+        JUMP_TO_ADDRESS(mod->labels[target_label]);                     \
+        continue;                                                       \
+    } else {                                                            \
+        abort();                                                        \
+    }
 #endif
 
 #pragma GCC diagnostic push
@@ -1017,7 +1029,9 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                     context_clean_registers(ctx, live);
 
                     if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
-                        memory_ensure_free(ctx, stack_need + 1);
+                        if (UNLIKELY(memory_ensure_free(ctx, stack_need + 1) != MEMORY_GC_OK)) {
+                            RAISE_ERROR(out_of_memory_atom);
+                        }
                     }
                     ctx->e -= stack_need + 1;
                     ctx->e[stack_need] = ctx->cp;
@@ -1049,7 +1063,9 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                     context_clean_registers(ctx, live);
 
                     if ((ctx->heap_ptr + heap_need) > ctx->e - (stack_need + 1)) {
-                        memory_ensure_free(ctx, heap_need + stack_need + 1);
+                        if (UNLIKELY(memory_ensure_free(ctx, heap_need + stack_need + 1) != MEMORY_GC_OK)) {
+                            RAISE_ERROR(out_of_memory_atom);
+                        }
                     }
                     ctx->e -= stack_need + 1;
                     ctx->e[stack_need] = ctx->cp;
@@ -1078,7 +1094,9 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                     context_clean_registers(ctx, live);
 
                     if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
-                        memory_ensure_free(ctx, stack_need + 1);
+                        if (UNLIKELY(memory_ensure_free(ctx, stack_need + 1) != MEMORY_GC_OK)) {
+                            RAISE_ERROR(out_of_memory_atom);
+                        }
                     }
 
                     ctx->e -= stack_need + 1;
@@ -1114,7 +1132,9 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                     context_clean_registers(ctx, live);
 
                     if ((ctx->heap_ptr + heap_need) > ctx->e - (stack_need + 1)) {
-                        memory_ensure_free(ctx, heap_need + stack_need + 1);
+                        if (UNLIKELY(memory_ensure_free(ctx, heap_need + stack_need + 1) != MEMORY_GC_OK)) {
+                            RAISE_ERROR(out_of_memory_atom);
+                        }
                     }
                     ctx->e -= stack_need + 1;
                     for (int s = 0; s < stack_need; s++) {
@@ -1141,11 +1161,15 @@ static const char *const try_clause_atom = "\xA" "try_clause";
                 #ifdef IMPL_EXECUTE_LOOP
                     if (context_avail_free_memory(ctx) < heap_need) {
                         context_clean_registers(ctx, live_registers);
-                        memory_ensure_free(ctx, heap_need);
+                        if (UNLIKELY(memory_ensure_free(ctx, heap_need) != MEMORY_GC_OK)) {
+                            RAISE_ERROR(out_of_memory_atom);
+                        }
                     } else if (context_avail_free_memory(ctx) > heap_need * HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF) {
                         context_clean_registers(ctx, live_registers);
                         int used_size = context_memory_size(ctx) - context_avail_free_memory(ctx);
-                        memory_ensure_free(ctx, used_size + heap_need * (HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF / 2));
+                        if (UNLIKELY(memory_ensure_free(ctx, used_size + heap_need * (HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF / 2)) != MEMORY_GC_OK)) {
+                            RAISE_ERROR(out_of_memory_atom);
+                        }
                     }
                 #endif
 
@@ -2504,7 +2528,9 @@ static const char *const try_clause_atom = "\xA" "try_clause";
 
             case OP_TRY_CASE_END: {
                 #ifdef IMPL_EXECUTE_LOOP
-                    memory_ensure_free(ctx, 3);
+                    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(out_of_memory_atom);
+                    }
                 #endif
 
                 int next_off = 1;
