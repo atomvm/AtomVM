@@ -18,67 +18,64 @@
  ***************************************************************************/
 
 #include "port.h"
-#include "ccontext.h"
+#include "context.h"
 #include "globalcontext.h"
 #include "mailbox.h"
 
-const char *const port_ok_a = "\x2" "ok";
-const char *const port_error_a = "\x5" "error";
+const char *const port_ok_a     = "\x2" "ok";
+const char *const port_error_a  = "\x5" "error";
 
 
-term_ref port_create_tuple2(CContext *cc, term_ref a, term_ref b)
+term port_create_tuple2(Context *ctx, term a, term b)
 {
-    term_ref terms[2];
+    term terms[2];
     terms[0] = a;
     terms[1] = b;
 
-    return port_create_tuple_n(cc, 2, terms);
+    return port_create_tuple_n(ctx, 2, terms);
 }
 
-term_ref port_create_tuple3(CContext *cc, term_ref a, term_ref b, term_ref c)
+term port_create_tuple3(Context *ctx, term a, term b, term c)
 {
-    term_ref terms[3];
+    term terms[3];
     terms[0] = a;
     terms[1] = b;
     terms[2] = c;
 
-    return port_create_tuple_n(cc, 3, terms);
+    return port_create_tuple_n(ctx, 3, terms);
 }
 
-term_ref port_create_tuple_n(CContext *cc, size_t num_terms, term_ref *terms)
+term port_create_tuple_n(Context *ctx, size_t num_terms, term *terms)
 {
-    term ret = term_alloc_tuple(num_terms, cc->ctx);
+    term ret = term_alloc_tuple(num_terms, ctx);
 
     for (size_t i = 0; i < num_terms;  ++i) {
-        term_put_tuple_element(ret, i, ccontext_get_term(cc, terms[i]));
+        term_put_tuple_element(ret, i, terms[i]);
     }
 
-    return ccontext_make_term_ref(cc, ret);
+    return ret;
 }
 
-term_ref port_create_error_tuple(CContext *cc, const char *reason)
+term port_create_error_tuple(Context *ctx, const char *reason)
 {
     int len = strnlen(reason, 424);
-    term error_atom = context_make_atom(cc->ctx, port_error_a);
-    term error_reason = term_from_string((const uint8_t*) reason, len, cc->ctx);
-    return port_create_tuple2(cc,
-        ccontext_make_term_ref(cc, error_atom),
-        ccontext_make_term_ref(cc, error_reason)
-    );
+    term error_atom = context_make_atom(ctx, port_error_a);
+    term error_reason = term_from_string((const uint8_t*) reason, len, ctx);
+    return port_create_tuple2(ctx, error_atom, error_reason);
 }
 
-term_ref port_create_ok_tuple(CContext *cc, term_ref t)
+term port_create_ok_tuple(Context *ctx, term t)
 {
-    term_ref ok_atom = port_make_atom(cc, port_ok_a);
-    return port_create_tuple2(cc, ok_atom, t);
+    term ok_atom = context_make_atom(ctx, port_ok_a);
+    return port_create_tuple2(ctx, ok_atom, t);
 }
 
-void port_send_reply(CContext *cc, term_ref pid, term_ref ref, term_ref reply)
+void port_send_reply(Context *ctx, term pid, term ref, term reply)
 {
-    int local_process_id = term_to_local_process_id(ccontext_get_term(cc, pid));
-    Context *target = globalcontext_get_process(cc->ctx->global, local_process_id);
-    term_ref msg = port_create_tuple2(cc, ref, reply);
-    mailbox_send(target, ccontext_get_term(cc, msg));
+    int local_process_id = term_to_local_process_id(pid);
+    Context *target = globalcontext_get_process(ctx->global, local_process_id);
+    term msg = port_create_tuple2(ctx, ref, reply);
+    mailbox_send(target, msg);
 }
 
 void port_ensure_available(Context *ctx, size_t size)

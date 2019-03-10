@@ -67,49 +67,47 @@ void socket_driver_delete_data(void *data)
 }
 
 
-term_ref socket_driver_do_init(CContext *cc, term params)
+term socket_driver_do_init(Context *ctx, term params)
 {
-    Context *ctx = cc->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
     if (!term_is_list(params)) {
-        return port_create_error_tuple(cc, "badarg: params is not a list");
+        return port_create_error_tuple(ctx, "badarg: params is not a list");
     }
     term proto = interop_proplist_get_value(params, context_make_atom(ctx, tag_proto_a));
 
     if (term_is_nil(proto)) {
-        return port_create_error_tuple(cc, "badarg: no proto in params");
+        return port_create_error_tuple(ctx, "badarg: no proto in params");
     }
 
     if (proto == context_make_atom(ctx, proto_udp_a)) {
         int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
         if (sockfd == -1) {
             const char *error_string = strerror(errno);
-            return port_create_error_tuple(cc, error_string);
+            return port_create_error_tuple(ctx, error_string);
         }
         socket_data->sockfd = sockfd;
     } else if (proto == context_make_atom(ctx, proto_tcp_a)) {
         socket_data->sockfd = socket(AF_INET, SOCK_STREAM, 0);
     } else {
-        return port_create_error_tuple(cc, "badarg: unsupported protocol");
+        return port_create_error_tuple(ctx, "badarg: unsupported protocol");
     }
     if (fcntl(socket_data->sockfd, F_SETFL, O_NONBLOCK) == -1){
         const char *error_string = strerror(errno);
-        return port_create_error_tuple(cc, error_string);
+        return port_create_error_tuple(ctx, error_string);
     }
 
-    return ccontext_make_term_ref(cc, context_make_atom(ctx, port_ok_a));
+    return context_make_atom(ctx, port_ok_a);
 }
 
 
-term_ref socket_driver_do_bind(CContext *cc, term address, term port)
+term socket_driver_do_bind(Context *ctx, term address, term port)
 {
-    return port_create_error_tuple(cc, "unimplemented");
+    return port_create_error_tuple(ctx, "unimplemented");
 }
 
-term_ref socket_driver_do_send(CContext *cc, term dest_address, term dest_port, term buffer)
+term socket_driver_do_send(Context *ctx, term dest_address, term dest_port, term buffer)
 {
-    Context *ctx = cc->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
     struct sockaddr_in addr;
@@ -127,7 +125,7 @@ term_ref socket_driver_do_send(CContext *cc, term dest_address, term dest_port, 
         buf = interop_list_to_string(buffer);
         len = strlen(buf);
     } else {
-        return port_create_error_tuple(cc, "unsupported type for send");
+        return port_create_error_tuple(ctx, "unsupported type for send");
     }
 
     TRACE("send: data with len: %i, to: %i, port: %i\n", len, ntohl(addr.sin_addr.s_addr), ntohs(addr.sin_port));
@@ -135,17 +133,17 @@ term_ref socket_driver_do_send(CContext *cc, term dest_address, term dest_port, 
     int sent_data = sendto(socket_data->sockfd, buf, len, 0, (struct sockaddr *) &addr, sizeof(addr));
     if (sent_data == -1) {
         const char *error_string = strerror(errno);
-        return port_create_error_tuple(cc, error_string);
+        return port_create_error_tuple(ctx, error_string);
     } else {
         term sent_atom = term_from_int32(sent_data);
-        return port_create_ok_tuple(cc, ccontext_make_term_ref(cc, sent_atom));
+        return port_create_ok_tuple(ctx, sent_atom);
     }
 }
 
-void socket_driver_do_recvfrom(CContext *cc, term_ref pid, term_ref ref)
+void socket_driver_do_recvfrom(Context *ctx, term pid, term ref)
 {
     port_send_reply(
-        cc, pid, ref,
-        port_create_error_tuple(cc, "unimplemented")
+        ctx, pid, ref,
+        port_create_error_tuple(ctx, "unimplemented")
     );
 }

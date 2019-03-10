@@ -20,15 +20,15 @@
 #ifndef _SOCKET_DRIVER_H_
 #define _SOCKET_DRIVER_H_
 
-#include "ccontext.h"
+#include "context.h"
 #include "term.h"
 
 void *socket_driver_create_data();
 void socket_driver_delete_data(void *data);
 
-term_ref socket_driver_do_init(CContext *cc, term params);
-term_ref socket_driver_do_bind(CContext *cc, term address, term port);
-term_ref socket_driver_do_send(CContext *cc, term dest_address, term dest_port, term buffer);
-void socket_driver_do_recvfrom(CContext *cc, term_ref pid, term_ref ref);
+term socket_driver_do_init(Context *ctx, term params);
+term socket_driver_do_bind(Context *ctx, term address, term port);
+term socket_driver_do_send(Context *ctx, term dest_address, term dest_port, term buffer);
+void socket_driver_do_recvfrom(Context *ctx, term pid, term ref);
 
 #endif

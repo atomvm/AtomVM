@@ -21,7 +21,6 @@
 
 #include "atomshashtable.h"
 #include "context.h"
-#include "ccontext.h"
 #include "defaultatoms.h"
 #include "interop.h"
 #include "mailbox.h"
@@ -424,38 +423,33 @@ static void process_console_mailbox(Context *ctx)
     port_ensure_available(ctx, 64);
 
     if (port_is_standard_port_command(msg)) {
-        CContext ccontext;
-        CContext *cc = &ccontext;
-        ccontext_init(cc, ctx);
 
-        term_ref pid = ccontext_make_term_ref(cc, term_get_tuple_element(msg, 0));
-        term_ref ref = ccontext_make_term_ref(cc, term_get_tuple_element(msg, 1));
+        term pid = term_get_tuple_element(msg, 0);
+        term ref = term_get_tuple_element(msg, 1);
         term cmd = term_get_tuple_element(msg, 2);
 
         if (term_is_atom(cmd) && cmd == FLUSH_ATOM) {
             fflush(stdout);
-            port_send_reply(cc, pid, ref, port_make_ok_atom(cc));
+            port_send_reply(ctx, pid, ref, port_make_ok_atom(ctx));
         } else if (term_is_tuple(cmd) && term_get_tuple_arity(cmd) == 2) {
             term cmd_name = term_get_tuple_element(cmd, 0);
             if (cmd_name == PUTS_ATOM) {
                 char *str = interop_term_to_string(term_get_tuple_element(cmd, 1));
                 if (IS_NULL_PTR(str)) {
-                    term_ref error = port_create_error_tuple(cc, "Unable to convert term to string");
-                    port_send_reply(cc, pid, ref, error);
+                    term error = port_create_error_tuple(ctx, "Unable to convert term to string");
+                    port_send_reply(ctx, pid, ref, error);
                 } else {
                     printf("%s", str);
-                    port_send_reply(cc, pid, ref, port_make_ok_atom(cc));
+                    port_send_reply(ctx, pid, ref, port_make_ok_atom(ctx));
                 }
                 free(str);
             } else {
-                term_ref error = port_create_error_tuple(cc, "Expected puts command");
-                port_send_reply(cc, pid, ref, error);
+                term error = port_create_error_tuple(ctx, "Expected puts command");
+                port_send_reply(ctx, pid, ref, error);
             }
         } else {
-            port_send_reply(cc, pid, ref, port_create_error_tuple(cc, "unrecognized command"));
+            port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, "unrecognized command"));
         }
-
-        ccontext_release_all_refs(cc);
     } else {
         fprintf(stderr, "WARNING: Invalid port command.  Unable to send reply");
     }

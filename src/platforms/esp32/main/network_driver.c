@@ -55,18 +55,16 @@
 
 static esp_err_t wifi_event_handler(void *ctx, system_event_t *event);
 
-static const char *const sta_a = "\x3" "sta";
+static const char *const sta_a  = "\x3" "sta";
 static const char *const ssid_a = "\x4" "ssid";
-static const char *const psk_a = "\x3" "psk";
+static const char *const psk_a  = "\x3" "psk";
 static const char *const sntp_a = "\x4" "sntp";
 
 static EventGroupHandle_t wifi_event_group;
 
 
-void network_driver_setup(CContext *cc, term_ref pid, term_ref ref, term config)
+void network_driver_setup(Context *ctx, term_ref pid, term_ref ref, term config)
 {
-    Context *ctx = cc->ctx;
-
     term sta_config = interop_proplist_get_value(config, context_make_atom(ctx, sta_a));
     if (!term_is_nil(sta_config)) {
         term ssid_value = interop_proplist_get_value(sta_config, context_make_atom(ctx, ssid_a));
@@ -83,8 +81,8 @@ void network_driver_setup(CContext *cc, term_ref pid, term_ref ref, term config)
             if (psk != NULL) {
                 free(psk);
             }
-            term_ref reply = port_create_error_tuple(cc, "cannot allocate memory for ssid or psk");
-            port_send_reply(cc, pid, ref, reply);
+            term reply = port_create_error_tuple(ctx, "cannot allocate memory for ssid or psk");
+            port_send_reply(ctx, pid, ref, reply);
             return;
         }
 
@@ -99,8 +97,8 @@ void network_driver_setup(CContext *cc, term_ref pid, term_ref ref, term config)
             TRACE("ssid or psk is too long\n");
             free(ssid);
             free(psk);
-            term_ref reply = port_create_error_tuple(cc, "ssid or psk is too long");
-            port_send_reply(cc, pid, ref, reply);
+            term reply = port_create_error_tuple(ctx, "ssid or psk is too long");
+            port_send_reply(ctx, pid, ref, reply);
             return;
         }
 
@@ -125,17 +123,17 @@ void network_driver_setup(CContext *cc, term_ref pid, term_ref ref, term config)
             }
         }
         // TODO make this async
-        term_ref reply = port_make_atom(cc, port_ok_a);
-        port_send_reply(cc, pid, ref, reply);
+        term reply = context_make_atom(ctx, port_ok_a);
+        port_send_reply(ctx, pid, ref, reply);
     } else {
-        term_ref reply = port_create_error_tuple(cc, "unsupported config");
-        port_send_reply(cc, pid, ref, reply);
+        term reply = port_create_error_tuple(ctx, "unsupported config");
+        port_send_reply(ctx, pid, ref, reply);
     }
 }
 
-term_ref network_driver_ifconfig(CContext *cc)
+term network_driver_ifconfig(Context *ctx)
 {
-    return port_create_error_tuple(cc, "unimplemented");
+    return port_create_error_tuple(ctx, "unimplemented");
 }
 
 static esp_err_t wifi_event_handler(void *ctx, system_event_t *event)

@@ -26,7 +26,6 @@
 
 #include "atom.h"
 #include "context.h"
-#include "ccontext.h"
 #include "globalcontext.h"
 #include "interop.h"
 #include "utils.h"
@@ -68,44 +67,42 @@ void socket_driver_delete_data(void *data)
 }
 
 
-term_ref socket_driver_do_init(CContext *cc, term params)
+term socket_driver_do_init(Context *ctx, term params)
 {
-    Context *ctx = cc->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
     if (!term_is_list(params)) {
-        return port_create_error_tuple(cc, "badarg: params is not a list");
+        return port_create_error_tuple(ctx, "badarg: params is not a list");
     }
     term proto = interop_proplist_get_value(params, context_make_atom(ctx, tag_proto_a));
 
     if (term_is_nil(proto)) {
-        return port_create_error_tuple(cc, "badarg: no proto in params");
+        return port_create_error_tuple(ctx, "badarg: no proto in params");
     }
 
     if (proto == context_make_atom(ctx, proto_udp_a)) {
         int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
         if (sockfd == -1) {
             const char *error_string = strerror(errno);
-            return port_create_error_tuple(cc, error_string);
+            return port_create_error_tuple(ctx, error_string);
         }
         socket_data->sockfd = sockfd;
     } else if (proto == context_make_atom(ctx, proto_tcp_a)) {
         socket_data->sockfd = socket(AF_INET, SOCK_STREAM, 0);
     } else {
-        return port_create_error_tuple(cc, "badarg: unsupported protocol");
+        return port_create_error_tuple(ctx, "badarg: unsupported protocol");
     }
     if (fcntl(socket_data->sockfd, F_SETFL, O_NONBLOCK) == -1){
         const char *error_string = strerror(errno);
-        return port_create_error_tuple(cc, error_string);
+        return port_create_error_tuple(ctx, error_string);
     }
 
-    return ccontext_make_term_ref(cc, context_make_atom(ctx, port_ok_a));
+    return context_make_atom(ctx, port_ok_a);
 }
 
 
-term_ref socket_driver_do_bind(CContext *cc, term address, term port)
+term socket_driver_do_bind(Context *ctx, term address, term port)
 {
-    Context *ctx = cc->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
     struct sockaddr_in serveraddr;
@@ -119,21 +116,20 @@ term_ref socket_driver_do_bind(CContext *cc, term address, term port)
     socklen_t address_len = sizeof(serveraddr);
     if (bind(socket_data->sockfd, (struct sockaddr *) &serveraddr, address_len) == -1) {
         const char *error_string = strerror(errno);
-        return port_create_error_tuple(cc, error_string);
+        return port_create_error_tuple(ctx, error_string);
     } else {
         if (getsockname(socket_data->sockfd, (struct sockaddr *) &serveraddr, &address_len) == -1) {
             const char *error_string = strerror(errno);
-            return port_create_error_tuple(cc, error_string);
+            return port_create_error_tuple(ctx, error_string);
         } else {
             term port_atom = term_from_int32(ntohs(serveraddr.sin_port));
-            return port_create_ok_tuple(cc, ccontext_make_term_ref(cc, port_atom));
+            return port_create_ok_tuple(ctx, port_atom);
         }
     }
 }
 
-term_ref socket_driver_do_send(CContext *cc, term dest_address, term dest_port, term buffer)
+term socket_driver_do_send(Context *ctx, term dest_address, term dest_port, term buffer)
 {
-    Context *ctx = cc->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
     struct sockaddr_in addr;
@@ -151,7 +147,7 @@ term_ref socket_driver_do_send(CContext *cc, term dest_address, term dest_port, 
         buf = interop_list_to_string(buffer);
         len = strlen(buf);
     } else {
-        return port_create_error_tuple(cc, "unsupported type for send");
+        return port_create_error_tuple(ctx, "unsupported type for send");
     }
 
     TRACE("send: data with len: %i, to: %i, port: %i\n", len, ntohl(addr.sin_addr.s_addr), ntohs(addr.sin_port));
@@ -159,10 +155,10 @@ term_ref socket_driver_do_send(CContext *cc, term dest_address, term dest_port, 
     int sent_data = sendto(socket_data->sockfd, buf, len, 0, (struct sockaddr *) &addr, sizeof(addr));
     if (sent_data == -1) {
         const char *error_string = strerror(errno);
-        return port_create_error_tuple(cc, error_string);
+        return port_create_error_tuple(ctx, error_string);
     } else {
         term sent_atom = term_from_int32(sent_data);
-        return port_create_ok_tuple(cc, ccontext_make_term_ref(cc, sent_atom));
+        return port_create_ok_tuple(ctx, sent_atom);
     }
 }
 
@@ -190,12 +186,8 @@ static void recvfrom_callback(void *data)
         abort();
     }
 
-    struct CContext *cc = malloc(sizeof(struct CContext));
-    if (!cc) {
-        fprintf(stderr, "malloc %s:%d", __FILE__, __LINE__);
-        abort();
-    }
-    ccontext_init(cc, ctx);
+    term pid = recvfrom_data->pid;
+    term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
 
     ssize_t len = recvfrom(socket_data->sockfd, buf, BUFSIZE, 0, (struct sockaddr *) &clientaddr, &clientlen);
     if (len == -1) {
@@ -205,10 +197,10 @@ static void recvfrom_callback(void *data)
         // ref:                 3 (max)
         // string               2*strlen(string)
         const char *error_string = strerror(errno);
-        port_ensure_available(cc->ctx, 9 + 2*strlen(error_string) + 1);
-        term_ref pid = ccontext_make_term_ref(cc, recvfrom_data->pid);
-        term_ref ref = ccontext_make_term_ref(cc, term_from_ref_ticks(recvfrom_data->ref_ticks, cc->ctx));
-        port_send_reply(cc, pid, ref, port_create_error_tuple(cc, error_string));
+        port_ensure_available(ctx, 9 + 2*strlen(error_string) + 1);
+        term pid = recvfrom_data->pid;
+        term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
+        port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, error_string));
     } else {
         // {Ref, {{int,int,int,int}, int, binary}}
         // tuple arity 2:       3
@@ -216,19 +208,16 @@ static void recvfrom_callback(void *data)
         // tuple arity 4:       5
         // ref:                 3 (max)
         // binary:              2 + len(binary)/WORD_SIZE + 1
-        port_ensure_available(cc->ctx, 18 + len/(TERM_BITS/8));
-        term_ref pid = ccontext_make_term_ref(cc, recvfrom_data->pid);
-        term_ref ref = ccontext_make_term_ref(cc, term_from_ref_ticks(recvfrom_data->ref_ticks, cc->ctx));
-        term_ref addr = socket_tuple_from_addr(cc, htonl(clientaddr.sin_addr.s_addr));
-        term_ref port = ccontext_make_term_ref(cc, term_from_int32(htons(clientaddr.sin_port)));
-        term_ref packet = socket_create_packet_term(cc, buf, len);
-        term_ref addr_port_packet = port_create_tuple3(cc, addr, port, packet);
-        term_ref reply = port_create_ok_tuple(cc, addr_port_packet);
-        port_send_reply(cc, pid, ref, reply);
+        port_ensure_available(ctx, 18 + len/(TERM_BITS/8));
+        term pid = recvfrom_data->pid;
+        term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
+        term addr = socket_tuple_from_addr(ctx, htonl(clientaddr.sin_addr.s_addr));
+        term port = term_from_int32(htons(clientaddr.sin_port));
+        term packet = socket_create_packet_term(ctx, buf, len);
+        term addr_port_packet = port_create_tuple3(ctx, addr, port, packet);
+        term reply = port_create_ok_tuple(ctx, addr_port_packet);
+        port_send_reply(ctx, pid, ref, reply);
     }
-
-    ccontext_release_all_refs(cc);
-    free(cc);
 
     linkedlist_remove(&ctx->global->listeners, &listener->listeners_list_head);
     free(listener);
@@ -236,9 +225,8 @@ static void recvfrom_callback(void *data)
     free(buf);
 }
 
-void socket_driver_do_recvfrom(CContext *cc, term_ref pid, term_ref ref)
+void socket_driver_do_recvfrom(Context *ctx, term pid, term ref)
 {
-    Context *ctx = cc->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
     EventListener *listener = malloc(sizeof(EventListener));
@@ -253,8 +241,8 @@ void socket_driver_do_recvfrom(CContext *cc, term_ref pid, term_ref ref)
         abort();
     }
     data->ctx = ctx;
-    data->pid = ccontext_get_term(cc, pid);
-    data->ref_ticks = term_to_ref_ticks(ccontext_get_term(cc, ref));
+    data->pid = pid;
+    data->ref_ticks = term_to_ref_ticks(ref);
 
     linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
 
