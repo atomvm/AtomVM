@@ -29,7 +29,7 @@
 #include "utils.h"
 #include "term.h"
 
-static const char *const setup_a = "\x5" "setup";
+static const char *const start_a = "\x5" "start";
 static const char *const ifconfig_a = "\x8" "ifconfig";
 
 static void network_consume_mailbox(Context *ctx)
@@ -50,8 +50,8 @@ static void network_consume_mailbox(Context *ctx)
         } else if (term_is_tuple(cmd) && term_get_tuple_arity(cmd) == 2) {
             term cmd_name = term_get_tuple_element(cmd, 0);
             term config = term_get_tuple_element(cmd, 1);
-            if (cmd_name == context_make_atom(ctx, setup_a)) {
-                network_driver_setup(ctx, pid, ref, config);
+            if (cmd_name == context_make_atom(ctx, start_a)) {
+                network_driver_start(ctx, pid, ref, config);
             } else {
                 port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
             }

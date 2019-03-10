@@ -105,7 +105,7 @@ extern void sys_waitevents(GlobalContext *glb)
             }
             listener = next_listener;
             listeners = GET_LIST_ENTRY(glb->listeners, EventListener, listeners_list_head);
-        } while (listener != listeners);
+        } while (listeners != NULL && listener != listeners);
     } else {
         vTaskDelay(min_timeout / portTICK_PERIOD_MS);
     }
@@ -126,7 +126,7 @@ extern void sys_waitevents(GlobalContext *glb)
 
             listener = next_listener;
             listeners = GET_LIST_ENTRY(glb->listeners, EventListener, listeners_list_head);
-        } while (listener != listeners);
+        } while (listeners != NULL && listener != listeners);
     }
 }
 

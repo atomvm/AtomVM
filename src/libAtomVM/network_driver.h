@@ -24,7 +24,7 @@
 #include "ccontext.h"
 #include "term.h"
 
-void network_driver_setup(Context *ctx, term pid, term_ref ref, term config);
+void network_driver_start(Context *ctx, term pid, term_ref ref, term config);
 term network_driver_ifconfig(Context *ctx);
 
 #endif
