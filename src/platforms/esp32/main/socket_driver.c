@@ -42,16 +42,16 @@
 #include "trace.h"
 #include "sys.h"
 
+#define BUFSIZE 128
+
 static const char *const tag_proto_a = "\x5" "proto";
 static const char *const proto_udp_a = "\x3" "udp";
 static const char *const proto_tcp_a = "\x3" "tcp";
 static const char *const socket_a    = "\x6" "socket";
 static const char *const fcntl_a     = "\x5" "fcntl";
-
-// 3 unused variables -> won't compile using esp-idf v 3.2
-// static const char *const bind_a      = "\x4" "bind";
-// static const char *const getsockname_a = "\xB" "getsockname";
-// static const char *const recvfrom_a    = "\x8" "recvfrom";
+static const char *const bind_a      = "\x4" "bind";
+static const char *const getsockname_a = "\xB" "getsockname";
+static const char *const recvfrom_a    = "\x8" "recvfrom";
 static const char *const sendto_a      = "\x6" "sendto";
 
 // TODO use net_conn instead of BSD Sockets
@@ -109,7 +109,27 @@ term socket_driver_do_init(Context *ctx, term params)
 
 term socket_driver_do_bind(Context *ctx, term address, term port)
 {
-    return port_create_error_tuple(ctx, UNDEFINED_ATOM);
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+
+    struct sockaddr_in serveraddr;
+
+    UNUSED(address);
+    memset(&serveraddr, 0, sizeof(serveraddr));
+    serveraddr.sin_family = AF_INET;
+    serveraddr.sin_addr.s_addr = htonl(INADDR_ANY); // TODO
+    serveraddr.sin_port = htons(term_to_int32(port));
+
+    socklen_t address_len = sizeof(serveraddr);
+    if (bind(socket_data->sockfd, (struct sockaddr *) &serveraddr, address_len) == -1) {
+        return port_create_sys_error_tuple(ctx, bind_a, errno);
+    } else {
+        if (getsockname(socket_data->sockfd, (struct sockaddr *) &serveraddr, &address_len) == -1) {
+            return port_create_sys_error_tuple(ctx, getsockname_a, errno);
+        } else {
+            term port_atom = term_from_int32(ntohs(serveraddr.sin_port));
+            return port_create_ok_tuple(ctx, port_atom);
+        }
+    }
 }
 
 term socket_driver_do_send(Context *ctx, term dest_address, term dest_port, term buffer)
@@ -145,10 +165,93 @@ term socket_driver_do_send(Context *ctx, term dest_address, term dest_port, term
     }
 }
 
+typedef struct RecvFromData {
+    Context *ctx;
+    term pid;
+    uint64_t ref_ticks;
+} RecvFromData;
+
+static void recvfrom_callback(void *data)
+{
+    EventListener *listener = (EventListener *) data;
+    RecvFromData *recvfrom_data = (RecvFromData *) listener->data;
+    Context *ctx = recvfrom_data->ctx;
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+
+    GlobalContext *global = ctx->global;
+    linkedlist_remove(&global->listeners, &listener->listeners_list_head);
+
+    struct sockaddr_in clientaddr;
+    socklen_t clientlen = sizeof(clientaddr);
+    char *buf = malloc(BUFSIZE*sizeof(char));
+    if (UNLIKELY(!buf)) {
+        fprintf(stderr, "malloc %s:%d", __FILE__, __LINE__);
+        abort();
+    }
+
+    ssize_t len = recvfrom(socket_data->sockfd, buf, BUFSIZE, 0, (struct sockaddr *) &clientaddr, &clientlen);
+    if (len == -1) {
+        // {Ref, {error, {SysCall, Errno}}}
+        // tuple arity 2:       3
+        // tuple arity 2:       3
+        // tuple arity 2:       3
+        // ref:                 3 (max)
+        port_ensure_available(ctx, 12);
+        term pid = recvfrom_data->pid;
+        term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
+        port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, sendto_a, errno));
+    } else {
+        // {Ref, {ok, {{int,int,int,int}, int, binary}}}
+        // tuple arity 2:       3
+        // tuple arity 3:       4
+        // tuple arity 4:       5
+        // tuple arity 2:       3
+        // ref:                 3 (max)
+        // binary:              2 + len(binary)/WORD_SIZE + 1
+        port_ensure_available(ctx, 20 + len/(TERM_BITS/8) + 1);
+        term pid = recvfrom_data->pid;
+        term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
+        term addr = socket_tuple_from_addr(ctx, htonl(clientaddr.sin_addr.s_addr));
+        term port = term_from_int32(htons(clientaddr.sin_port));
+        term packet = socket_create_packet_term(ctx, buf, len);
+        term addr_port_packet = port_create_tuple3(ctx, addr, port, packet);
+        term reply = port_create_ok_tuple(ctx, addr_port_packet);
+        port_send_reply(ctx, pid, ref, reply);
+    }
+
+    linkedlist_remove(&ctx->global->listeners, &listener->listeners_list_head);
+    free(listener);
+    free(recvfrom_data);
+    free(buf);
+}
+
 void socket_driver_do_recvfrom(Context *ctx, term pid, term ref)
 {
-    port_send_reply(
-        ctx, pid, ref,
-        port_create_error_tuple(ctx, UNDEFINED_ATOM)
-    );
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+
+    EventListener *listener = malloc(sizeof(EventListener));
+    if (IS_NULL_PTR(listener)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        abort();
+    }
+
+    RecvFromData *data = (RecvFromData *) malloc(sizeof(RecvFromData));
+    if (IS_NULL_PTR(data)) {
+        fprintf(stderr, "Unable to allocate space for RecvFromData: %s:%i\n", __FILE__, __LINE__);
+        abort();
+    }
+    data->ctx = ctx;
+    data->pid = pid;
+    data->ref_ticks = term_to_ref_ticks(ref);
+
+    linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+
+    listener->fd = socket_data->sockfd;
+    listener->expires = 0;
+    listener->expiral_timestamp.tv_sec = 60*60*24; // TODO
+    listener->expiral_timestamp.tv_nsec = 0;
+    listener->one_shot = 1;
+    listener->data = data;
+    listener->handler = recvfrom_callback;
 }
+
