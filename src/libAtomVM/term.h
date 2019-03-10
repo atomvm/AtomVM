@@ -524,14 +524,14 @@ static inline term term_from_local_process_id(uint32_t local_process_id)
 static inline term term_from_literal_binary(void *data, uint32_t size, Context *ctx)
 {
 #if TERM_BYTES == 4
-    int size_in_terms = ((size + 4 - 1) >> 2);
+    int size_in_terms = ((size + 4 - 1) >> 2) + 1;
 #elif TERM_BYTES == 8
-    int size_in_terms = ((size + 8 - 1) >> 3);
+    int size_in_terms = ((size + 8 - 1) >> 3) + 1;
 #else
     #error
 #endif
 
-    term *boxed_value = memory_heap_alloc(ctx, size_in_terms + 2);
+    term *boxed_value = memory_heap_alloc(ctx, size_in_terms + 1);
     boxed_value[0] = (size_in_terms << 6) | 0x24; // heap binary
     boxed_value[1] = size;
 

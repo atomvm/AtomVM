@@ -197,17 +197,28 @@ static void recvfrom_callback(void *data)
     }
     ccontext_init(cc, ctx);
 
-    // temporary workaround
-    port_ensure_available(cc->ctx, BUFSIZE*2 + 5 + 4 + 3);
-
-    term_ref pid = ccontext_make_term_ref(cc, recvfrom_data->pid);
-    term_ref ref = ccontext_make_term_ref(cc, term_from_ref_ticks(recvfrom_data->ref_ticks, cc->ctx));
-
     ssize_t len = recvfrom(socket_data->sockfd, buf, BUFSIZE, 0, (struct sockaddr *) &clientaddr, &clientlen);
     if (len == -1) {
+        // {Ref, {error, string}}
+        // tuple arity 2:       3
+        // tuple arity 2:       3
+        // ref:                 3 (max)
+        // string               2*strlen(string)
         const char *error_string = strerror(errno);
+        port_ensure_available(cc->ctx, 9 + 2*strlen(error_string) + 1);
+        term_ref pid = ccontext_make_term_ref(cc, recvfrom_data->pid);
+        term_ref ref = ccontext_make_term_ref(cc, term_from_ref_ticks(recvfrom_data->ref_ticks, cc->ctx));
         port_send_reply(cc, pid, ref, port_create_error_tuple(cc, error_string));
     } else {
+        // {Ref, {{int,int,int,int}, int, binary}}
+        // tuple arity 2:       3
+        // tuple arity 3:       4
+        // tuple arity 4:       5
+        // ref:                 3 (max)
+        // binary:              2 + len(binary)/WORD_SIZE + 1
+        port_ensure_available(cc->ctx, 18 + len/(TERM_BITS/8));
+        term_ref pid = ccontext_make_term_ref(cc, recvfrom_data->pid);
+        term_ref ref = ccontext_make_term_ref(cc, term_from_ref_ticks(recvfrom_data->ref_ticks, cc->ctx));
         term_ref addr = socket_tuple_from_addr(cc, htonl(clientaddr.sin_addr.s_addr));
         term_ref port = ccontext_make_term_ref(cc, term_from_int32(htons(clientaddr.sin_port)));
         term_ref packet = socket_create_packet_term(cc, buf, len);

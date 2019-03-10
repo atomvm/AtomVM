@@ -60,7 +60,7 @@ term_ref socket_tuple_from_addr(CContext *cc, uint32_t addr)
 
 term_ref socket_create_packet_term(CContext *cc, const char *buf, ssize_t len)
 {
-    return ccontext_make_term_ref(cc, term_from_string((const uint8_t *)buf, len, cc->ctx));
+    return ccontext_make_term_ref(cc, term_from_literal_binary((void *)buf, len, cc->ctx));
 }
 
 static void socket_consume_mailbox(Context *ctx)
