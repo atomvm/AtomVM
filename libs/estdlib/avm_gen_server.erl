@@ -24,7 +24,7 @@
 %% interface, supporting operations for local creation and management of
 %% gen_server instances.
 %%
-%% This module is designed to be API-compatible with gen_udp, with exceptions noted
+%% This module is designed to be API-compatible with gen_server, with exceptions noted
 %% below.
 %%
 %% Caveats:
@@ -62,7 +62,7 @@
 %% @param   Module the module in which the gen_server callbacks are defined
 %% @param   Args the arguments to pass to the module's init callback
 %% @param   Options the options used to create the gen_server
-%% @returns the gen_server pid, if successfule; {error, Reason}, otherwise.
+%% @returns the gen_server pid, if successful; {error, Reason}, otherwise.
 %% @doc     Start a named gen_server.
 %%
 %%          This function will start a gen_server instance and register the
@@ -96,7 +96,7 @@ start({local, Name}, Module, Args, Options) when is_atom(Name) ->
 %% @param   Module the module in which the gen_server callbacks are defined
 %% @param   Args the arguments to pass to the module's init callback
 %% @param   Options the options used to create the gen_server
-%% @returns the gen_server pid, if successfule; {error, Reason}, otherwise.
+%% @returns the gen_server pid, if successful; {error, Reason}, otherwise.
 %% @doc     Start an un-named gen_server.
 %%
 %%          This function will start a gen_server instance.
@@ -121,7 +121,7 @@ start(Module, Args, Options) ->
         {stop, Reason} ->
             {error, {init_stopped, Reason}};
         _ ->
-            {error, unexepcted_reply_from_init}
+            {error, unexpected_reply_from_init}
     end.
 
 
