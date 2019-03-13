@@ -909,6 +909,6 @@ static inline int term_equals(term a, term b)
  * @param t the term that will be printed.
  * @param ctx the context.
  */
-void term_display(term t, const Context *ctx);
+void term_display(FILE *fd, term t, const Context *ctx);
 
 #endif

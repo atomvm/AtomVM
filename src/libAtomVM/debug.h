@@ -30,12 +30,47 @@
 #include "context.h"
 
 /**
- * @brief Print stack content to stderr.
+ * @brief Print a repreentation of the context to stderr.
+ *
+ * @details Print heap, stack, and registers of the given context to stderr.
+ * @param ctx the process context.
+ */
+void debug_dump_context(Context *ctx);
+
+/**
+ * @brief Print heap contents to stderr.
+ *
+ * @details Print the dump of the heap of the given context to stderr.
+ * @param ctx the process context.
+ */
+void debug_dump_heap(Context *ctx);
+
+/**
+ * @brief Print stack contents to stderr.
  *
  * @details Print the dump of the stack of the given context to stderr.
  * @param ctx the process context.
  */
 void debug_dump_stack(Context *ctx);
+
+/**
+ * @brief Print register contents to stderr.
+ *
+ * @details Print the dump of the registers of the given context to stderr.
+ * @param ctx the process context.
+ */
+void debug_dump_registers(Context *ctx);
+
+/**
+ * @brief Print a region of (term) memory to stderr.
+ *
+ * @details Print the dump of the memory the given context to stderr.
+ * @param ctx the process context.
+ * @param start the start address.
+ * @param end the end address.
+ * @param region the name of the region to display.
+ */
+void debug_dump_memory(Context *ctx, term *start, term *end, const char *region);
 
 /**
  * @brief Gets a printable char for a given register type.

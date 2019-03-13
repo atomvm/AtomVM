@@ -991,7 +991,7 @@ static term nif_erlang_display_1(Context *ctx, int argc, term argv[])
     UNUSED(ctx);
     UNUSED(argc);
 
-    term_display(argv[0], ctx);
+    term_display(stdout, argv[0], ctx);
     printf("\n");
 
     return term_nil();
