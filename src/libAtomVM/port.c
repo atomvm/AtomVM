@@ -84,7 +84,18 @@ void port_send_reply(CContext *cc, term_ref pid, term_ref ref, term_ref reply)
 void port_ensure_available(Context *ctx, size_t size)
 {
     if (context_avail_free_memory(ctx) < size) {
-        memory_ensure_free(ctx, size);
+        switch (memory_ensure_free(ctx, size)) {
+            case MEMORY_GC_OK:
+                break;
+            case MEMORY_GC_ERROR_FAILED_ALLOCATION:
+                // TODO Improve error handling
+                fprintf(stderr, "Failed to allocate additional heap storage: [%s:%i]\n", __FILE__, __LINE__);
+                abort();
+            case MEMORY_GC_DENIED_ALLOCATION:
+                // TODO Improve error handling
+                fprintf(stderr, "Not permitted to allocate additional heap storage: [%s:%i]\n", __FILE__, __LINE__);
+                abort();
+        }
     }
 }
 

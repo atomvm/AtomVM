@@ -408,6 +408,8 @@ static void process_console_mailbox(Context *ctx)
     Message *message = mailbox_dequeue(ctx);
     term msg = message->message;
 
+    port_ensure_available(ctx, 64);
+
     if (port_is_standard_port_command(msg)) {
         CContext ccontext;
         CContext *cc = &ccontext;
