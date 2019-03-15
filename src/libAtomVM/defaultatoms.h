@@ -47,6 +47,7 @@
 #define MESSAGE_QUEUE_LEN_ATOM_INDEX 18
 #define PUTS_ATOM_INDEX 19
 #define STACK_SIZE_ATOM_INDEX 20
+#define MIN_HEAP_SIZE_ATOM_INDEX 21
 
 #define FALSE_ATOM term_from_atom_index(FALSE_ATOM_INDEX)
 #define TRUE_ATOM term_from_atom_index(TRUE_ATOM_INDEX)
@@ -73,6 +74,7 @@
 #define MESSAGE_QUEUE_LEN_ATOM term_from_atom_index(MESSAGE_QUEUE_LEN_ATOM_INDEX)
 #define PUTS_ATOM term_from_atom_index(PUTS_ATOM_INDEX)
 #define STACK_SIZE_ATOM term_from_atom_index(STACK_SIZE_ATOM_INDEX)
+#define MIN_HEAP_SIZE_ATOM term_from_atom_index(MIN_HEAP_SIZE_ATOM_INDEX)
 
 void defaultatoms_init(GlobalContext *glb);
 

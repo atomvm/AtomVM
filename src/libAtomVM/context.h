@@ -57,6 +57,7 @@ struct Context
     term *heap_ptr;
     term *e;
 
+    int min_heap_size;
     int max_heap_size;
 
     unsigned long cp;
@@ -77,6 +78,7 @@ struct Context
     struct timespec timeout_at;
 
     unsigned int leader : 1;
+    unsigned int has_min_heap_size : 1;
     unsigned int has_max_heap_size : 1;
 
     #ifdef ENABLE_ADVANCED_TRACE

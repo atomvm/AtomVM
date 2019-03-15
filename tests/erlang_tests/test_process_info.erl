@@ -5,7 +5,7 @@ start() ->
     Self = self(),
     Pid = spawn(?MODULE, loop, [Self, []]), receive ok -> ok end,
     test_message_queue_len(Pid, Self),
-    Pid ! {Self, stop}, receive X -> erlang:display(X), 0 end.
+    Pid ! {Self, stop}, receive X -> 0 end.
 
 test_message_queue_len(Pid, Self) ->
     {message_queue_len, MessageQueueLen} = process_info(Pid, message_queue_len),

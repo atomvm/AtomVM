@@ -26,6 +26,7 @@ static const char *const memory_atom = "\x6" "memory";
 static const char *const message_queue_len_atom = "\x11" "message_queue_len";
 static const char *const puts_atom = "\x4" "puts";
 static const char *const stack_size_atom = "\xA" "stack_size";
+static const char *const min_heap_size_atom ="\xD" "min_heap_size";
 
 void defaultatoms_init(GlobalContext *glb)
 {
@@ -56,6 +57,7 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, message_queue_len_atom) == MESSAGE_QUEUE_LEN_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, puts_atom) == PUTS_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, stack_size_atom) == STACK_SIZE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, min_heap_size_atom) == MIN_HEAP_SIZE_ATOM_INDEX;
 
     if (!ok) {
         abort();
