@@ -51,7 +51,18 @@ term externalterm_to_term(const void *external_term, Context *ctx)
 
     int eterm_size;
     int heap_usage = calculate_heap_usage(external_term_buf + 1, &eterm_size, ctx);
-    memory_ensure_free(ctx, heap_usage);
+    switch (memory_ensure_free(ctx, heap_usage)) {
+        case MEMORY_GC_OK:
+            break;
+        case MEMORY_GC_ERROR_FAILED_ALLOCATION:
+            // TODO Improve error handling
+            fprintf(stderr, "Failed to allocate additional heap storage: [%s:%i]\n", __FILE__, __LINE__);
+            abort();
+        case MEMORY_GC_DENIED_ALLOCATION:
+            // TODO Improve error handling
+            fprintf(stderr, "Not permitted to allocate additional heap storage: [%s:%i]\n", __FILE__, __LINE__);
+            abort();
+    }
 
     return parse_external_terms(external_term_buf + 1, &eterm_size, ctx);
 }

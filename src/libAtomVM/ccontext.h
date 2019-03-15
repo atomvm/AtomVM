@@ -84,7 +84,18 @@ static inline term_ref ccontext_make_term_ref(struct CContext *ccontext, term t)
     Context *ctx = ccontext->ctx;
 
     if (ctx->heap_ptr > ctx->e - 1) {
-        memory_ensure_free(ctx, 1);
+        switch (memory_ensure_free(ctx, 1)) {
+            case MEMORY_GC_OK:
+                break;
+            case MEMORY_GC_ERROR_FAILED_ALLOCATION:
+                // TODO Improve error handling
+                fprintf(stderr, "Failed to allocate additional heap storage: [%s:%i]\n", __FILE__, __LINE__);
+                abort();
+            case MEMORY_GC_DENIED_ALLOCATION:
+                // TODO Improve error handling
+                fprintf(stderr, "Not permitted to allocate additional heap storage: [%s:%i]\n", __FILE__, __LINE__);
+                abort();
+        }
     }
 
     ctx->e--;
