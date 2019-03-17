@@ -106,6 +106,7 @@ static term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_timestamp_0(Context *ctx, int argc, term argv[]);
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[]);
 static term nifs_erlang_process_flag(Context *ctx, int argc, term argv[]);
+static term nifs_erlang_processes(Context *ctx, int argc, term argv[]);
 
 static const struct Nif make_ref_nif =
 {
@@ -267,6 +268,12 @@ static const struct Nif process_flag_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nifs_erlang_process_flag
+};
+
+static const struct Nif processes_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nifs_erlang_processes
 };
 
 //Ignore warning caused by gperf generated code
@@ -1112,6 +1119,52 @@ static term nifs_erlang_process_flag(Context *ctx, int argc, term argv[])
 #endif
 
     RAISE_ERROR(badarg_atom);
+}
+
+typedef void *(*context_iterator)(Context *ctx, void *accum);
+
+static void *nifs_increment_context_count(Context *ctx, void *accum)
+{
+    return (void *) ((size_t) accum + 1);
+}
+
+static void *nifs_cons_context(Context *ctx, void *accum)
+{
+    return (void *) term_list_prepend(term_from_local_process_id(ctx->process_id), (term) accum, ctx);
+}
+
+static void *nifs_iterate_processes(GlobalContext *glb, context_iterator fun, void *accum)
+{
+    Context *processes = GET_LIST_ENTRY(glb->processes_table, Context, processes_table_head);
+    Context *p = processes;
+    do {
+        accum = fun(p, accum);
+        p = GET_LIST_ENTRY(p->processes_table_head.next, Context, processes_table_head);
+    } while (processes != p);
+    return accum;
+}
+
+static size_t nifs_num_processes(GlobalContext *glb)
+{
+    return (size_t) nifs_iterate_processes(glb, nifs_increment_context_count, NULL);
+}
+
+static term nifs_list_processes(GlobalContext *glb)
+{
+    term initial = term_nil();
+    return (term) nifs_iterate_processes(glb, nifs_cons_context, (void *) initial);
+}
+
+static term nifs_erlang_processes(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argv);
+    UNUSED(argc);
+
+    size_t num_processes = nifs_num_processes(ctx->global);
+    if (memory_ensure_free(ctx, 2 * num_processes) != MEMORY_GC_OK) {
+        RAISE_ERROR(out_of_memory_atom);
+    }
+    return nifs_list_processes(ctx->global);
 }
 
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])

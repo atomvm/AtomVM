@@ -37,4 +37,5 @@ erlang:tuple_to_list/1, &tuple_to_list_nif
 erlang:universaltime/0, &universaltime_nif
 erlang:timestamp/0, &timestamp_nif
 erlang:process_flag/3, &process_flag_nif
+erlang:processes/0, &processes_nif
 erts_debug:flat_size/1, &flat_size_nif
