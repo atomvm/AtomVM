@@ -60,6 +60,10 @@ static const char *const system_limit_atom = "\xC" "system_limit";
 static const char *const puts_a = "\x4" "puts";
 static const char *const flush_a = "\x5" "flush";
 static const char *const max_heap_size_a ="\xD" "max_heap_size";
+static const char *const heap_size_a  = "\x9" "heap_size";
+static const char *const stack_size_a = "\xA" "stack_size";
+static const char *const message_queue_len_a = "\x11" "message_queue_len";
+static const char *const memory_a = "\x6" "memory";
 
 static const char *const out_of_memory_atom = "\xD" "out_of_memory";
 
@@ -107,6 +111,7 @@ static term nif_erlang_timestamp_0(Context *ctx, int argc, term argv[]);
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[]);
 static term nifs_erlang_process_flag(Context *ctx, int argc, term argv[]);
 static term nifs_erlang_processes(Context *ctx, int argc, term argv[]);
+static term nifs_erlang_process_info(Context *ctx, int argc, term argv[]);
 
 static const struct Nif make_ref_nif =
 {
@@ -274,6 +279,12 @@ static const struct Nif processes_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nifs_erlang_processes
+};
+
+static const struct Nif process_info_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nifs_erlang_process_info
 };
 
 //Ignore warning caused by gperf generated code
@@ -1165,6 +1176,62 @@ static term nifs_erlang_processes(Context *ctx, int argc, term argv[])
         RAISE_ERROR(out_of_memory_atom);
     }
     return nifs_list_processes(ctx->global);
+}
+
+static term nifs_erlang_process_info(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    
+    term pid = argv[0];
+    term item_or_item_info = argv[1];
+    
+    if (!term_is_atom(item_or_item_info)) {
+        RAISE_ERROR(badarg_atom);
+    }
+    // TODO add support for process_info/1
+    // and process_info/2 when second argument is a list
+    term item = item_or_item_info;
+    
+    int local_process_id = term_to_local_process_id(pid);
+    Context *target = globalcontext_get_process(ctx->global, local_process_id);
+    
+    if (memory_ensure_free(ctx, 3) != MEMORY_GC_OK) {
+        RAISE_ERROR(out_of_memory_atom);
+    }
+    
+    // heap_size size in words of the heap of the process
+    term heap_size = context_make_atom(ctx, heap_size_a);
+    if (item == heap_size) {
+        term ret = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(ret, 0, heap_size);
+        term_put_tuple_element(ret, 1, term_from_int32(context_heap_size(target)));
+        return ret;
+    }
+    // stack_size stack size, in words, of the process
+    term stack_size = context_make_atom(ctx, stack_size_a);
+    if (item == stack_size) {
+        term ret = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(ret, 0, stack_size);
+        term_put_tuple_element(ret, 1, term_from_int32(context_stack_size(target)));
+        return ret;
+    }
+    // message_queue_len number of messages currently in the message queue of the process
+    term message_queue_len = context_make_atom(ctx, message_queue_len_a);
+    if (item == message_queue_len) {
+        term ret = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(ret, 0, message_queue_len);
+        term_put_tuple_element(ret, 1, term_from_int32(context_message_queue_len(target)));
+        return ret;
+    }
+    // memory size in bytes of the process. This includes call stack, heap, and internal structures.
+    term memory = context_make_atom(ctx, memory_a);
+    if (item == memory) {
+        term ret = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(ret, 0, memory);
+        term_put_tuple_element(ret, 1, term_from_int32(context_size(target)));
+        return ret;
+    }
+    RAISE_ERROR(badarg_atom);
 }
 
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])
