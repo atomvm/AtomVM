@@ -85,6 +85,7 @@ compile_erlang(test_tuple_to_list)
 compile_erlang(test_make_tuple)
 compile_erlang(test_make_list)
 compile_erlang(test_list_gc)
+compile_erlang(test_list_processes)
 compile_erlang(test_tl)
 compile_erlang(test_list_to_atom)
 compile_erlang(test_list_to_existing_atom)
@@ -276,6 +277,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_make_tuple.beam
     test_make_list.beam
     test_list_gc.beam
+    test_list_processes.beam
     test_tl.beam
     test_list_to_atom.beam
     test_list_to_existing_atom.beam
