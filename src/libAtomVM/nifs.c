@@ -32,6 +32,7 @@
 #include "term.h"
 #include "utils.h"
 #include "sys.h"
+#include "version.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -107,6 +108,7 @@ static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[]);
 static term nifs_erlang_process_flag(Context *ctx, int argc, term argv[]);
 static term nifs_erlang_processes(Context *ctx, int argc, term argv[]);
 static term nifs_erlang_process_info(Context *ctx, int argc, term argv[]);
+static term nifs_erlang_system_info(Context *ctx, int argc, term argv[]);
 
 static const struct Nif binary_at_nif =
 {
@@ -352,6 +354,12 @@ static const struct Nif process_info_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nifs_erlang_process_info
+};
+
+static const struct Nif system_info_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nifs_erlang_system_info
 };
 
 //Ignore warning caused by gperf generated code
@@ -1372,6 +1380,15 @@ static void *nifs_increment_context_count(Context *ctx, void *accum)
     return (void *) ((size_t) accum + 1);
 }
 
+static void *nifs_increment_port_count(Context *ctx, void *accum)
+{
+    if (ctx->native_handler) {
+        return (void *) ((size_t) accum + 1);
+    } else {
+        return accum;
+    }
+}
+
 struct ContextAccumulator {
     Context *ctx;
     term result;
@@ -1398,6 +1415,11 @@ static void *nifs_iterate_processes(GlobalContext *glb, context_iterator fun, vo
 static size_t nifs_num_processes(GlobalContext *glb)
 {
     return (size_t) nifs_iterate_processes(glb, nifs_increment_context_count, NULL);
+}
+
+static size_t nifs_num_ports(GlobalContext *glb)
+{
+    return (size_t) nifs_iterate_processes(glb, nifs_increment_port_count, NULL);
 }
 
 static term nifs_list_processes(Context *ctx)
@@ -1468,6 +1490,39 @@ static term nifs_erlang_process_info(Context *ctx, int argc, term argv[])
     }
 
     return ret;
+}
+
+static term nifs_erlang_system_info(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term key = argv[0];
+    
+    if (!term_is_atom(key)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    
+    if (key == PROCESS_COUNT_ATOM) {
+        return term_from_int32(nifs_num_processes(ctx->global));
+    }
+    if (key == PORT_COUNT_ATOM) {
+        return term_from_int32(nifs_num_ports(ctx->global));
+    }
+    if (key == ATOM_COUNT_ATOM) {
+        return term_from_int32(ctx->global->atoms_table->count);
+    }
+    if (key == WORDSIZE_ATOM) {
+        return term_from_int32(TERM_BYTES);
+    }
+    if (key == SYSTEM_ARCHITECTURE_ATOM) {
+        char buf[128];
+        snprintf(buf, 128, "%s-%s-%s", SYSTEM_NAME, SYSTEM_VERSION, SYSTEM_ARCHITECTURE);
+        size_t len = strnlen(buf, 128);
+        if (memory_ensure_free(ctx, term_binary_data_size_in_terms(len)) != MEMORY_GC_OK) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return term_from_literal_binary((const uint8_t *) buf, len, ctx);
+    }
+    return sys_get_info(ctx, key);
 }
 
 static term nif_binary_at_2(Context *ctx, int argc, term argv[])

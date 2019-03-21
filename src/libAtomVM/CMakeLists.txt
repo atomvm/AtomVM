@@ -37,6 +37,7 @@ if(${CMAKE_GENERATOR} STREQUAL "Xcode")
         trace.h
         utils.h
         valueshashtable.h
+        version.h
     )
 endif()
 set(SOURCE_FILES
@@ -62,13 +63,16 @@ set(SOURCE_FILES
     term.c
     valueshashtable.c
 )
-
-find_package(ZLIB)
-if (ZLIB_FOUND)
-    add_definitions(-DWITH_ZLIB)
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin" OR ${CMAKE_SYSTEM_NAME} STREQUAL "Linux" OR ${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
+    find_package(ZLIB)
+    if (ZLIB_FOUND)
+        add_definitions(-DWITH_ZLIB)
+    else(ZLIB_FOUND)
+        set(ZLIB_LIBRARIES "")
+    endif(ZLIB_FOUND)
 else()
     set(ZLIB_LIBRARIES "")
-endif (ZLIB_FOUND)
+endif()
 
 function(gperf_generate input output)
     add_custom_command(
@@ -88,6 +92,9 @@ gperf_generate(${CMAKE_CURRENT_SOURCE_DIR}/nifs.gperf nifs_hash.h)
 
 add_custom_target(generated DEPENDS bifs_hash.h)
 add_custom_target(generated-nifs-hash DEPENDS nifs_hash.h)
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in version.h)
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 set(
     PLATFORM_LIB_SUFFIX

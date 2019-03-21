@@ -24,7 +24,7 @@
 %%-----------------------------------------------------------------------------
 -module(erlang).
 
--export([start_timer/3, start_timer/4, cancel_timer/1, send_after/3]).
+-export([start_timer/3, start_timer/4, cancel_timer/1, send_after/3, process_info/2, system_info/1]).
 
 
 %%-----------------------------------------------------------------------------
@@ -85,3 +85,61 @@ cancel_timer(TimerRef) ->
 -spec send_after(non_neg_integer(), pid() | atom(), term()) -> reference().
 send_after(Time, Dest, Msg) ->
     timer_manager:send_after(Time, Dest, Msg).
+
+%%-----------------------------------------------------------------------------
+%% @param   Pid the process pid.
+%% @param   Key key used to find process information.
+%% @returns process information for the specified pid defined by the specified key.
+%% @doc     Return process information.
+%%
+%% This function returns information about the specified process.
+%% The type of information returned is dependent on the specified key.
+%%
+%% The following keys are supported:
+%% <ul>
+%%      <li><b>heap_size</b> the number of words used in the heap (integer)</li>
+%%      <li><b>stack_size</b> the number of words used in the stack (integer)</li>
+%%      <li><b>message_queue_len</b> the number of messages enqueued for the process (integer)</li>
+%%      <li><b>memory</b> the estimated total number of bytes in use by the process (integer)</li>
+%% </ul>
+%% Specifying an unsupported term or atom raises a bad_arg error.
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-spec process_info(Pid::pid(), Key::atom()) -> term().
+process_info(_Pid, _Key) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Key key used to find system information.
+%% @returns system information defined by the specified key.
+%% @doc     Return system information.
+%%
+%% This function returns information about the system on which AtomVM is
+%% running. The type of information returned is dependent on the specified key.
+%%
+%% The following keys are supported on all platforms:
+%% <ul>
+%%      <li><b>process_count</b> the number of processes running in the node (integer)</li>
+%%      <li><b>port_count</b> the number of ports running in the node (integer)</li>
+%%      <li><b>atom_count</b> the number of atoms currently allocated (integer)</li>
+%%      <li><b>system_architecture</b> the processor and OS architecture (binary)</li>
+%%      <li><b>version</b> the version of the AtomVM executable image (binary)</li>
+%%      <li><b>wordsize</b> the number of bytes in a machine word on the current platform (integer)</li>
+%% </ul>
+%% The following keys are supported on the ESP32 platform:
+%% <ul>
+%%      <li><b>esp32_free_heap_size</b> the number of (noncontiguous) free bytes in the ESP32 heap (integer)</li>
+%% </ul>
+%%
+%% Additional keys may be supported on some platforms that are not documented here.
+%%
+%% Specifying an unsupported atom key will results in returning the atom 'undefined'.
+%%
+%% Specifying a term that is not an atom will result in a bad_arg error.
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-spec system_info(Key::atom()) -> term().
+system_info(_Key) ->
+    throw(nif_error).

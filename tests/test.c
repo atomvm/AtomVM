@@ -159,6 +159,7 @@ struct Test tests[] =
     {"test_func_info3.beam", 120},
     {"test_process_info.beam", 0},
     {"test_min_heap_size.beam", 0},
+    {"test_system_info.beam", 0},
     {"test_funs0.beam", 20},
     {"test_funs1.beam", 517},
     {"test_funs2.beam", 52},

@@ -103,4 +103,16 @@ Module *sys_load_module(GlobalContext *global, const char *module_name);
  */
 Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts);
 
+/**
+ * @brief Get platform-dependent information for the specified key.
+ * @details This function returns platform-depndent information specified by the supplied key.
+ * If not information is available for the specified key, this function should return the
+ * atom 'undefined'
+ * @param ctx the current context
+ * @param key an atom used to indicate the type of information requested.
+ * @return a term containing the requested information, or the atom undefined, if
+ * there is no system information for the specified key.
+ */
+term sys_get_info(Context *ctx, term key);
+
 #endif
