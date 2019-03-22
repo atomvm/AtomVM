@@ -20,6 +20,7 @@
 #include <sys.h>
 
 #include <avmpack.h>
+#include <gpiodriver.h>
 #include <scheduler.h>
 
 // Monotonically increasing number of milliseconds from reset
@@ -132,4 +133,18 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
 void sys_platform_periodic_tasks()
 {
     // TODO: implement
+}
+
+Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
+{
+    Context *new_ctx = context_new(glb);
+
+    if (!strcmp(driver_name, "gpio")) {
+        gpiodriver_init(new_ctx);
+    } else {
+        context_destroy(new_ctx);
+        return NULL;
+    }
+
+    return new_ctx;
 }
