@@ -22,7 +22,7 @@ defmodule MultiBlink do
   def blink_loop(gpio_driver, gpio, interval_ms, level) do
     GPIO.set_level(gpio_driver, gpio, level)
 
-    :timer.sleep(interval_ms)
+    :avm_timer.sleep(interval_ms)
 
     blink_loop(gpio_driver, gpio, interval_ms, 1 - level)
   end
