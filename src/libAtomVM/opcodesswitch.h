@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include "debug.h"
+#include "defaultatoms.h"
 #include "exportedfunction.h"
 #include "utils.h"
 #include "scheduler.h"
@@ -351,12 +352,6 @@
         abort(); \
     }
 
-static const char *const true_atom = "\x04" "true";
-static const char *const false_atom = "\x05" "false";
-static const char *const function_clause_atom = "\x0F" "function_clause";
-static const char *const badarity_atom = "\x08" "badarity";
-static const char *const badfun_atom = "\x06" "badfun";
-
 #ifdef IMPL_EXECUTE_LOOP
 struct Int24
 {
@@ -635,8 +630,8 @@ static const char *const out_of_memory_atom = "\xD" "out_of_memory";
                     int target_label = get_catch_label_and_change_module(ctx, &mod);
 
                     if (target_label) {
-                        ctx->x[0] = context_make_atom(ctx, error_atom);
-                        ctx->x[1] = context_make_atom(ctx, function_clause_atom);
+                        ctx->x[0] = ERROR_ATOM;
+                        ctx->x[1] = FUNCTION_CLAUSE_ATOM;
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
                         fprintf(stderr, "FUNC_INFO: No function clause for module %i atom %i arity %i.\n", module_atom, function_name_atom, arity);
@@ -2307,7 +2302,7 @@ static const char *const out_of_memory_atom = "\xD" "out_of_memory";
                         if (target_label) {
                             ctx->x[0] = context_make_atom(ctx, error_atom);
                             term new_error_tuple = term_alloc_tuple(2, ctx);
-                            term_put_tuple_element(new_error_tuple, 0, context_make_atom(ctx, badfun_atom));
+                            term_put_tuple_element(new_error_tuple, 0, BADFUN_ATOM);
                             term_put_tuple_element(new_error_tuple, 1, ctx->x[args_count]);
                             ctx->x[1] = new_error_tuple;
                             JUMP_TO_ADDRESS(mod->labels[target_label]);
@@ -2333,8 +2328,8 @@ static const char *const out_of_memory_atom = "\xD" "out_of_memory";
                     if (UNLIKELY(args_count != arity - n_freeze)) {
                         int target_label = get_catch_label_and_change_module(ctx, &mod);
                         if (target_label) {
-                            ctx->x[0] = context_make_atom(ctx, error_atom);
-                            ctx->x[1] = context_make_atom(ctx, badarity_atom);
+                            ctx->x[0] = ERROR_ATOM;
+                            ctx->x[1] = BADARITY_ATOM;
                             JUMP_TO_ADDRESS(mod->labels[target_label]);
                             continue;
 

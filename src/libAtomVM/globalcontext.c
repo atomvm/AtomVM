@@ -23,6 +23,7 @@
 #include "globalcontext.h"
 
 #include "atomshashtable.h"
+#include "defaultatoms.h"
 #include "list.h"
 #include "utils.h"
 #include "valueshashtable.h"
@@ -62,6 +63,8 @@ GlobalContext *globalcontext_new()
         free(glb);
         return NULL;
     }
+
+    defaultatoms_init(glb);
 
     glb->modules_by_index = NULL;
     glb->loaded_modules_count = 0;

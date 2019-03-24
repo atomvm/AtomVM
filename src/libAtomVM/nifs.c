@@ -22,6 +22,7 @@
 #include "atomshashtable.h"
 #include "context.h"
 #include "ccontext.h"
+#include "defaultatoms.h"
 #include "interop.h"
 #include "mailbox.h"
 #include "module.h"
@@ -39,37 +40,17 @@
 
 #define VALIDATE_VALUE(value, verify_function) \
     if (UNLIKELY(!verify_function((value)))) { \
-        argv[0] = context_make_atom(ctx, error_atom); \
-        argv[1] = context_make_atom(ctx, badarg_atom); \
+        argv[0] = ERROR_ATOM; \
+        argv[1] = BADARG_ATOM; \
         return term_invalid_term(); \
     } \
 
 #define RAISE_ERROR(error_type_atom) \
-    ctx->x[0] = context_make_atom(ctx, error_atom); \
-    ctx->x[1] = context_make_atom(ctx, (error_type_atom)); \
+    ctx->x[0] = ERROR_ATOM; \
+    ctx->x[1] = (error_type_atom); \
     return term_invalid_term();
 
-static const char *const latin1_atom = "\x6" "latin1";
-static const char *const error_atom = "\x5" "error";
-static const char *const undefined_atom = "\x9" "undefined";
-static const char *const true_atom = "\x4" "true";
-static const char *const false_atom = "\x5" "false";
-static const char *const badarg_atom = "\x6" "badarg";
-static const char *const overflow_atom = "\x8" "overflow";
-static const char *const system_limit_atom = "\xC" "system_limit";
-static const char *const puts_a = "\x4" "puts";
-static const char *const flush_a = "\x5" "flush";
-static const char *const max_heap_size_a ="\xD" "max_heap_size";
-static const char *const heap_size_a  = "\x9" "heap_size";
-static const char *const stack_size_a = "\xA" "stack_size";
-static const char *const message_queue_len_a = "\x11" "message_queue_len";
-static const char *const memory_a = "\x6" "memory";
-
-static const char *const out_of_memory_atom = "\xD" "out_of_memory";
-
 #ifdef ENABLE_ADVANCED_TRACE
-static const char *const ok_atom = "\x2" "ok";
-
 static const char *const trace_calls_atom = "\xB" "trace_calls";
 static const char *const trace_call_args_atom = "\xF" "trace_call_args";
 static const char *const trace_returns_atom = "\xD" "trace_returns";
@@ -333,7 +314,7 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(opts, term_is_list);
 
     if (UNLIKELY(term_get_tuple_arity(port_name_tuple) != 2)) {
-        RAISE_ERROR(badarg_atom);
+        RAISE_ERROR(BADARG_ATOM);
     }
 
     term t = term_get_tuple_element(port_name_tuple, 1);
@@ -341,7 +322,7 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
     char *driver_name = interop_term_to_string(t);
     if (IS_NULL_PTR(driver_name)) {
         //TODO: handle atoms here
-        RAISE_ERROR(badarg_atom);
+        RAISE_ERROR(BADARG_ATOM);
     }
 
     Context *new_ctx = NULL;
@@ -362,7 +343,7 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
     free(driver_name);
 
     if (!new_ctx) {
-        RAISE_ERROR(badarg_atom);
+        RAISE_ERROR(BADARG_ATOM);
     } else {
         scheduler_make_waiting(ctx->global, new_ctx);
         return term_from_local_process_id(new_ctx->process_id);
@@ -403,8 +384,7 @@ static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[])
     if (local_process_id) {
         return term_from_local_process_id(local_process_id);
     } else {
-        int undefined_index = globalcontext_insert_atom(ctx->global, undefined_atom);
-        return term_from_atom_index(undefined_index);
+        return UNDEFINED_ATOM;
     }
 }
 
@@ -437,12 +417,12 @@ static void process_console_mailbox(Context *ctx)
         term_ref ref = ccontext_make_term_ref(cc, term_get_tuple_element(msg, 1));
         term cmd = term_get_tuple_element(msg, 2);
 
-        if (term_is_atom(cmd) && cmd == context_make_atom(ctx, flush_a)) {
+        if (term_is_atom(cmd) && cmd == FLUSH_ATOM) {
             fflush(stdout);
             port_send_reply(cc, pid, ref, port_make_ok_atom(cc));
         } else if (term_is_tuple(cmd) && term_get_tuple_arity(cmd) == 2) {
             term cmd_name = term_get_tuple_element(cmd, 0);
-            if (cmd_name == context_make_atom(ctx, puts_a)) {
+            if (cmd_name == PUTS_ATOM) {
                 char *str = interop_term_to_string(term_get_tuple_element(cmd, 1));
                 if (IS_NULL_PTR(str)) {
                     term_ref error = port_create_error_tuple(cc, "Unable to convert term to string");
@@ -493,11 +473,7 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
 
     Module *found_module = globalcontext_get_module(ctx->global, module_string);
     if (UNLIKELY(!found_module)) {
-        int undefined_index = globalcontext_insert_atom(ctx->global, undefined_atom);
-        if (undefined_index < 0) {
-            abort();
-        }
-        return term_from_atom_index(undefined_index);
+        return UNDEFINED_ATOM;
     }
 
     int label = module_search_exported_function(found_module, function_string, term_list_length(argv[2]));
@@ -506,7 +482,7 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
     new_ctx->saved_ip = found_module->labels[label];
     new_ctx->cp = module_address(found_module->module_index, found_module->end_instruction_ii);
 
-    term max_heap_size_term = interop_proplist_get_value(opts_term, context_make_atom(ctx, max_heap_size_a));
+    term max_heap_size_term = interop_proplist_get_value(opts_term, MAX_HEAP_SIZE_ATOM);
     if (max_heap_size_term != term_nil()) {
         new_ctx->has_max_heap_size = 1;
         new_ctx->max_heap_size = term_to_int32(max_heap_size_term);
@@ -549,13 +525,8 @@ static term nif_erlang_is_process_alive_1(Context *ctx, int argc, term argv[])
 
     int local_process_id = term_to_local_process_id(argv[0]);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
-    if (target) {
-        int true_i = globalcontext_insert_atom(ctx->global, true_atom);
-        return term_from_atom_index(true_i);
-    } else {
-        int false_i = globalcontext_insert_atom(ctx->global, false_atom);
-        return term_from_atom_index(false_i);
-    }
+
+    return target ? TRUE_ATOM : FALSE_ATOM;
 }
 
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[])
@@ -569,13 +540,13 @@ static term nif_erlang_concat_2(Context *ctx, int argc, term argv[])
             return argv[1];
 
         } else {
-            RAISE_ERROR(badarg_atom);
+            RAISE_ERROR(BADARG_ATOM);
         }
     }
 
     int len = term_list_length(prepend_list);
     if (UNLIKELY(memory_ensure_free(ctx, len * 2) != MEMORY_GC_OK)) {
-        RAISE_ERROR(out_of_memory_atom);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     // GC might have changed all pointers
@@ -618,7 +589,7 @@ term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[])
 
     // a ref is 64 bits, hence 8 bytes
     if (UNLIKELY(memory_ensure_free(ctx, (8 / TERM_BYTES) + 1) != MEMORY_GC_OK)) {
-        RAISE_ERROR(out_of_memory_atom);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
@@ -640,7 +611,7 @@ term nif_erlang_system_time_1(Context *ctx, int argc, term argv[])
         return term_from_int32(ts.tv_sec / 60);
 
     } else {
-        RAISE_ERROR(badarg_atom);
+        RAISE_ERROR(BADARG_ATOM);
     }
 }
 
@@ -652,7 +623,7 @@ term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[])
 
     // 4 = size of date/time tuple, 3 size of date time tuple
     if (UNLIKELY(memory_ensure_free(ctx, 3 + 4 + 4) != MEMORY_GC_OK)) {
-        RAISE_ERROR(out_of_memory_atom);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term date_tuple = term_alloc_tuple(3, ctx);
     term time_tuple = term_alloc_tuple(3, ctx);
@@ -685,7 +656,7 @@ term nif_erlang_timestamp_0(Context *ctx, int argc, term argv[])
     UNUSED(argv);
 
     if (UNLIKELY(memory_ensure_free(ctx, 4) != MEMORY_GC_OK)) {
-        RAISE_ERROR(out_of_memory_atom);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term timestamp_tuple = term_alloc_tuple(3, ctx);
 
@@ -708,11 +679,11 @@ static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[])
     int count_elem = term_to_int32(argv[0]);
 
     if (UNLIKELY(count_elem < 0)) {
-        RAISE_ERROR(badarg_atom);
+        RAISE_ERROR(BADARG_ATOM);
     }
 
     if (UNLIKELY(memory_ensure_free(ctx, count_elem + 1) != MEMORY_GC_OK)) {
-        RAISE_ERROR(out_of_memory_atom);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term new_tuple = term_alloc_tuple(count_elem, ctx);
 
@@ -738,12 +709,12 @@ static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[])
     int old_tuple_size = term_get_tuple_arity(argv[1]);
 
     if (UNLIKELY((insert_index > old_tuple_size) || (insert_index < 0))) {
-        RAISE_ERROR(badarg_atom);
+        RAISE_ERROR(BADARG_ATOM);
     }
 
     int new_tuple_size = old_tuple_size + 1;
     if (UNLIKELY(memory_ensure_free(ctx, new_tuple_size + 1) != MEMORY_GC_OK)) {
-        RAISE_ERROR(out_of_memory_atom);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term new_tuple = term_alloc_tuple(new_tuple_size, ctx);
 
@@ -777,12 +748,12 @@ static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[])
     int old_tuple_size = term_get_tuple_arity(argv[1]);
 
     if (UNLIKELY((delete_index > old_tuple_size) || (delete_index < 0))) {
-        RAISE_ERROR(badarg_atom);
+        RAISE_ERROR(BADARG_ATOM);
     }
 
     int new_tuple_size = old_tuple_size - 1;
     if (UNLIKELY(memory_ensure_free(ctx, new_tuple_size + 1) != MEMORY_GC_OK)) {
-        RAISE_ERROR(out_of_memory_atom);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term new_tuple = term_alloc_tuple(new_tuple_size, ctx);
 
@@ -812,11 +783,11 @@ static term nif_erlang_setelement_3(Context *ctx, int argc, term argv[])
     int tuple_size = term_get_tuple_arity(argv[1]);
 
     if (UNLIKELY((replace_index >= tuple_size) || (replace_index < 0))) {
-        RAISE_ERROR(badarg_atom);
+        RAISE_ERROR(BADARG_ATOM);
     }
 
     if (UNLIKELY(memory_ensure_free(ctx, tuple_size + 1) != MEMORY_GC_OK)) {
-        RAISE_ERROR(out_of_memory_atom);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term new_tuple = term_alloc_tuple(tuple_size, ctx);
 
@@ -840,7 +811,7 @@ static term nif_erlang_tuple_to_list_1(Context *ctx, int argc, term argv[])
     int tuple_size = term_get_tuple_arity(argv[0]);
 
     if (UNLIKELY(memory_ensure_free(ctx, tuple_size * 2) != MEMORY_GC_OK)) {
-        RAISE_ERROR(out_of_memory_atom);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     term tuple = argv[0];
@@ -870,8 +841,8 @@ static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
     term a_binary = argv[0];
     VALIDATE_VALUE(a_binary, term_is_binary);
 
-    if (UNLIKELY(argv[1] != context_make_atom(ctx, latin1_atom))) {
-        RAISE_ERROR(badarg_atom);
+    if (UNLIKELY(argv[1] != LATIN1_ATOM)) {
+        RAISE_ERROR(BADARG_ATOM);
     }
 
     char *atom_string = interop_binary_to_string(a_binary);
@@ -882,7 +853,7 @@ static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
     int atom_string_len = strlen(atom_string);
     if (UNLIKELY(atom_string_len > 255)) {
         free(atom_string);
-        RAISE_ERROR(system_limit_atom);
+        RAISE_ERROR(SYSTEM_LIMIT_ATOM);
     }
 
     AtomString atom = malloc(atom_string_len + 1);
@@ -902,7 +873,7 @@ static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
 
     } else {
         free((void *) atom);
-        RAISE_ERROR(badarg_atom);
+        RAISE_ERROR(BADARG_ATOM);
     }
 }
 
@@ -931,7 +902,7 @@ term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
     int atom_string_len = strlen(atom_string);
     if (UNLIKELY(atom_string_len > 255)) {
         free(atom_string);
-        RAISE_ERROR(system_limit_atom);
+        RAISE_ERROR(SYSTEM_LIMIT_ATOM);
     }
 
     AtomString atom = malloc(atom_string_len + 1);
@@ -951,7 +922,7 @@ term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
 
     } else {
         free((void *) atom);
-        RAISE_ERROR(badarg_atom);
+        RAISE_ERROR(BADARG_ATOM);
     }
 }
 
@@ -968,7 +939,7 @@ static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
     int atom_len = atom_string_len(atom_string);
 
     if (UNLIKELY(memory_ensure_free(ctx, atom_len * 2) != MEMORY_GC_OK)) {
-        RAISE_ERROR(out_of_memory_atom);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     term prev = term_nil();
@@ -994,7 +965,7 @@ static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[])
     int integer_string_len = strlen(integer_string);
 
     if (UNLIKELY(memory_ensure_free(ctx, integer_string_len * 2) != MEMORY_GC_OK)) {
-        RAISE_ERROR(out_of_memory_atom);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     term prev = term_nil();
@@ -1032,12 +1003,12 @@ static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
         int32_t c = term_to_int32(head);
 
         if (UNLIKELY((c < '0') || (c > '9'))) {
-            RAISE_ERROR(badarg_atom);
+            RAISE_ERROR(BADARG_ATOM);
         }
 
         if (acc > INT32_MAX / 10) {
             // overflow error is not standard, but we need it since we are running on an embedded device
-            RAISE_ERROR(overflow_atom);
+            RAISE_ERROR(OVERFLOW_ATOM);
         }
 
         acc = (acc * 10) + (c - '0');
@@ -1050,7 +1021,7 @@ static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
     }
 
     if (UNLIKELY(digits == 0)) {
-        RAISE_ERROR(badarg_atom);
+        RAISE_ERROR(BADARG_ATOM);
     }
 
     return term_from_int32(acc);
@@ -1129,7 +1100,7 @@ static term nifs_erlang_process_flag(Context *ctx, int argc, term argv[])
     UNUSED(argv);
 #endif
 
-    RAISE_ERROR(badarg_atom);
+    RAISE_ERROR(BADARG_ATOM);
 }
 
 typedef void *(*context_iterator)(Context *ctx, void *accum);
@@ -1173,7 +1144,7 @@ static term nifs_erlang_processes(Context *ctx, int argc, term argv[])
 
     size_t num_processes = nifs_num_processes(ctx->global);
     if (memory_ensure_free(ctx, 2 * num_processes) != MEMORY_GC_OK) {
-        RAISE_ERROR(out_of_memory_atom);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     return nifs_list_processes(ctx->global);
 }
@@ -1186,7 +1157,7 @@ static term nifs_erlang_process_info(Context *ctx, int argc, term argv[])
     term item_or_item_info = argv[1];
 
     if (!term_is_atom(item_or_item_info)) {
-        RAISE_ERROR(badarg_atom);
+        RAISE_ERROR(BADARG_ATOM);
     }
     // TODO add support for process_info/1
     // and process_info/2 when second argument is a list
@@ -1196,42 +1167,35 @@ static term nifs_erlang_process_info(Context *ctx, int argc, term argv[])
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
     if (memory_ensure_free(ctx, 3) != MEMORY_GC_OK) {
-        RAISE_ERROR(out_of_memory_atom);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
+    term ret = term_alloc_tuple(2, ctx);
     // heap_size size in words of the heap of the process
-    term heap_size = context_make_atom(ctx, heap_size_a);
-    if (item == heap_size) {
-        term ret = term_alloc_tuple(2, ctx);
-        term_put_tuple_element(ret, 0, heap_size);
+    if (item == HEAP_SIZE_ATOM) {
+        term_put_tuple_element(ret, 0, HEAP_SIZE_ATOM);
         term_put_tuple_element(ret, 1, term_from_int32(context_heap_size(target)));
-        return ret;
-    }
+
     // stack_size stack size, in words, of the process
-    term stack_size = context_make_atom(ctx, stack_size_a);
-    if (item == stack_size) {
-        term ret = term_alloc_tuple(2, ctx);
-        term_put_tuple_element(ret, 0, stack_size);
+    } else if (item == STACK_SIZE_ATOM) {
+        term_put_tuple_element(ret, 0, STACK_SIZE_ATOM);
         term_put_tuple_element(ret, 1, term_from_int32(context_stack_size(target)));
-        return ret;
-    }
+
     // message_queue_len number of messages currently in the message queue of the process
-    term message_queue_len = context_make_atom(ctx, message_queue_len_a);
-    if (item == message_queue_len) {
-        term ret = term_alloc_tuple(2, ctx);
-        term_put_tuple_element(ret, 0, message_queue_len);
+    } else if (item == MESSAGE_QUEUE_LEN_ATOM) {
+        term_put_tuple_element(ret, 0, MESSAGE_QUEUE_LEN_ATOM);
         term_put_tuple_element(ret, 1, term_from_int32(context_message_queue_len(target)));
-        return ret;
-    }
+
     // memory size in bytes of the process. This includes call stack, heap, and internal structures.
-    term memory = context_make_atom(ctx, memory_a);
-    if (item == memory) {
-        term ret = term_alloc_tuple(2, ctx);
-        term_put_tuple_element(ret, 0, memory);
+    } else if (item == MEMORY_ATOM) {
+        term_put_tuple_element(ret, 0, MEMORY_ATOM);
         term_put_tuple_element(ret, 1, term_from_int32(context_size(target)));
-        return ret;
+
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
     }
-    RAISE_ERROR(badarg_atom);
+
+    return ret;
 }
 
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])

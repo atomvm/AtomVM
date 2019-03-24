@@ -12,6 +12,7 @@ if(${CMAKE_GENERATOR} STREQUAL "Xcode")
         context.h
         ccontext.h
         debug.h
+        defaultatoms.h
         exportedfunction.h
         externalterm.h
         globalcontext.h
@@ -45,6 +46,7 @@ set(SOURCE_FILES
     bif.c
     context.c
     debug.c
+    defaultatoms.c
     externalterm.c
     globalcontext.c
     iff.c

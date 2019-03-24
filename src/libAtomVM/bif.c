@@ -22,6 +22,7 @@
 #include <stdlib.h>
 
 #include "atom.h"
+#include "defaultatoms.h"
 #include "trace.h"
 #include "utils.h"
 
@@ -32,21 +33,14 @@
 #pragma GCC diagnostic pop
 
 #define RAISE_ERROR(error_type_atom) \
-    ctx->x[0] = context_make_atom(ctx, error_atom); \
-    ctx->x[1] = context_make_atom(ctx, (error_type_atom)); \
+    ctx->x[0] = ERROR_ATOM; \
+    ctx->x[1] = (error_type_atom); \
     return term_invalid_term();
 
 #define VALIDATE_VALUE(value, verify_function) \
     if (UNLIKELY(!verify_function((value)))) { \
-        RAISE_ERROR(badarg_atom); \
+        RAISE_ERROR(BADARG_ATOM); \
     }
-
-static const char *const true_atom = "\x04" "true";
-static const char *const false_atom = "\x05" "false";
-static const char *const error_atom = "\x05" "error";
-static const char *const badarith_atom = "\x08" "badarith";
-static const char *const badarg_atom = "\x6" "badarg";
-
 
 BifImpl bif_registry_get_handler(AtomString module, AtomString function, int arity)
 {
@@ -78,75 +72,59 @@ term bif_erlang_byte_size_1(Context *ctx, int live, term arg1)
 
 term bif_erlang_is_atom_1(Context *ctx, term arg1)
 {
-    if (term_is_atom(arg1)) {
-        return context_make_atom(ctx, true_atom);
-    } else {
-        return context_make_atom(ctx, false_atom);
-    }
+    UNUSED(ctx);
+
+    return term_is_atom(arg1) ? TRUE_ATOM : FALSE_ATOM;
 }
 
 term bif_erlang_is_binary_1(Context *ctx, term arg1)
 {
-    if (term_is_binary(arg1)) {
-        return context_make_atom(ctx, true_atom);
-    } else {
-        return context_make_atom(ctx, false_atom);
-    }
+    UNUSED(ctx);
+
+    return term_is_binary(arg1) ? TRUE_ATOM : FALSE_ATOM;
 }
 
 term bif_erlang_is_integer_1(Context *ctx, term arg1)
 {
-    if (term_is_integer(arg1)) {
-        return context_make_atom(ctx, true_atom);
-    } else {
-        return context_make_atom(ctx, false_atom);
-    }
+    UNUSED(ctx);
+
+    return term_is_integer(arg1) ? TRUE_ATOM : FALSE_ATOM;
 }
 
 term bif_erlang_is_list_1(Context *ctx, term arg1)
 {
-    if (term_is_list(arg1)) {
-        return context_make_atom(ctx, true_atom);
-    } else {
-        return context_make_atom(ctx, false_atom);
-    }
+    UNUSED(ctx);
+
+    return term_is_list(arg1) ? TRUE_ATOM : FALSE_ATOM;
 }
 
 term bif_erlang_is_number_1(Context *ctx, term arg1)
 {
+    UNUSED(ctx);
+
     //TODO: change to term_is_number
-    if (term_is_integer(arg1)) {
-        return context_make_atom(ctx, true_atom);
-    } else {
-        return context_make_atom(ctx, false_atom);
-    }
+    return term_is_integer(arg1) ? TRUE_ATOM : FALSE_ATOM;
 }
 
 term bif_erlang_is_pid_1(Context *ctx, term arg1)
 {
-    if (term_is_pid(arg1)) {
-        return context_make_atom(ctx, true_atom);
-    } else {
-        return context_make_atom(ctx, false_atom);
-    }
+    UNUSED(ctx);
+
+    return term_is_pid(arg1) ? TRUE_ATOM : FALSE_ATOM;
 }
 
 term bif_erlang_is_reference_1(Context *ctx, term arg1)
 {
-    if (term_is_reference(arg1)) {
-        return context_make_atom(ctx, true_atom);
-    } else {
-        return context_make_atom(ctx, false_atom);
-    }
+    UNUSED(ctx);
+
+    return term_is_reference(arg1) ? TRUE_ATOM : FALSE_ATOM;
 }
 
 term bif_erlang_is_tuple_1(Context *ctx, term arg1)
 {
-    if (term_is_tuple(arg1)) {
-        return context_make_atom(ctx, true_atom);
-    } else {
-        return context_make_atom(ctx, false_atom);
-    }
+    UNUSED(ctx);
+
+    return term_is_tuple(arg1) ? TRUE_ATOM : FALSE_ATOM;
 }
 
 term bif_erlang_length_1(Context *ctx, int live, term arg1)
@@ -183,7 +161,7 @@ term bif_erlang_element_2(Context *ctx, term arg1, term arg2)
         return term_get_tuple_element(arg2, elem_index);
 
     } else {
-        RAISE_ERROR(badarg_atom);
+        RAISE_ERROR(BADARG_ATOM);
     }
 }
 
@@ -204,7 +182,7 @@ term bif_erlang_add_2(Context *ctx, int live, term arg1, term arg2)
 
     } else {
         TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
-        RAISE_ERROR(badarith_atom);
+        RAISE_ERROR(BADARITH_ATOM);
     }
 }
 
@@ -218,7 +196,7 @@ term bif_erlang_sub_2(Context *ctx, int live, term arg1, term arg2)
 
     } else {
         TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
-        RAISE_ERROR(badarith_atom);
+        RAISE_ERROR(BADARITH_ATOM);
     }
 }
 
@@ -232,7 +210,7 @@ term bif_erlang_mul_2(Context *ctx, int live, term arg1, term arg2)
 
     } else {
         TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
-        RAISE_ERROR(badarith_atom);
+        RAISE_ERROR(BADARITH_ATOM);
     }
 }
 
@@ -246,12 +224,12 @@ term bif_erlang_div_2(Context *ctx, int live, term arg1, term arg2)
             return term_from_int32(term_to_int32(arg1) / operand_b);
 
         } else {
-            RAISE_ERROR(badarith_atom);
+            RAISE_ERROR(BADARITH_ATOM);
         }
 
     } else {
         TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
-        RAISE_ERROR(badarith_atom);
+        RAISE_ERROR(BADARITH_ATOM);
     }
 }
 
@@ -264,7 +242,7 @@ term bif_erlang_neg_1(Context *ctx, int live, term arg1)
 
     } else {
         TRACE("error: arg1: %lx\n", arg1);
-        RAISE_ERROR(badarith_atom);
+        RAISE_ERROR(BADARITH_ATOM);
     }
 }
 
@@ -282,7 +260,7 @@ term bif_erlang_abs_1(Context *ctx, int live, term arg1)
 
     } else {
         TRACE("error: arg1: %lx\n", arg1);
-        RAISE_ERROR(badarg_atom);
+        RAISE_ERROR(BADARG_ATOM);
     }
 }
 
@@ -296,12 +274,12 @@ term bif_erlang_rem_2(Context *ctx, int live, term arg1, term arg2)
             return term_from_int32(term_to_int32(arg1) % operand_b);
 
         } else {
-            RAISE_ERROR(badarith_atom);
+            RAISE_ERROR(BADARITH_ATOM);
         }
 
     } else {
         TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
-        RAISE_ERROR(badarith_atom);
+        RAISE_ERROR(BADARITH_ATOM);
     }
 }
 
@@ -313,7 +291,7 @@ term bif_erlang_bor_2(Context *ctx, int live, term arg1, term arg2)
         return term_from_int32(term_to_int32(arg1) | term_to_int32(arg2));
 
     } else {
-        RAISE_ERROR(badarith_atom);
+        RAISE_ERROR(BADARITH_ATOM);
     }
 }
 
@@ -325,7 +303,7 @@ term bif_erlang_band_2(Context *ctx, int live, term arg1, term arg2)
         return term_from_int32(term_to_int32(arg1) & term_to_int32(arg2));
 
     } else {
-        RAISE_ERROR(badarith_atom);
+        RAISE_ERROR(BADARITH_ATOM);
     }
 }
 
@@ -337,7 +315,7 @@ term bif_erlang_bxor_2(Context *ctx, int live, term arg1, term arg2)
         return term_from_int32(term_to_int32(arg1) ^ term_to_int32(arg2));
 
     } else {
-        RAISE_ERROR(badarith_atom);
+        RAISE_ERROR(BADARITH_ATOM);
     }
 }
 
@@ -349,7 +327,7 @@ term bif_erlang_bsl_2(Context *ctx, int live, term arg1, term arg2)
         return term_from_int32(term_to_int32(arg1) << term_to_int32(arg2));
 
     } else {
-        RAISE_ERROR(badarith_atom);
+        RAISE_ERROR(BADARITH_ATOM);
     }
 }
 
@@ -361,7 +339,7 @@ term bif_erlang_bsr_2(Context *ctx, int live, term arg1, term arg2)
         return term_from_int32(term_to_int32(arg1) >> term_to_int32(arg2));
 
     } else {
-        RAISE_ERROR(badarith_atom);
+        RAISE_ERROR(BADARITH_ATOM);
     }
 }
 
@@ -373,171 +351,175 @@ term bif_erlang_bnot_1(Context *ctx, int live, term arg1)
         return term_from_int32(~term_to_int32(arg1));
 
     } else {
-        RAISE_ERROR(badarith_atom);
+        RAISE_ERROR(BADARITH_ATOM);
     }
 }
 
 term bif_erlang_not_1(Context *ctx, term arg1)
 {
-    term true_term = context_make_atom(ctx, true_atom);
-    term false_term = context_make_atom(ctx, false_atom);
+    if (arg1 == TRUE_ATOM) {
+        return FALSE_ATOM;
 
-    if (arg1 == true_term) {
-        return false_term;
-
-    } else if (arg1 == false_term) {
-        return true_term;
+    } else if (arg1 == FALSE_ATOM) {
+        return TRUE_ATOM;
 
     } else {
-        RAISE_ERROR(badarg_atom);
+        RAISE_ERROR(BADARG_ATOM);
     }
 }
 
 term bif_erlang_and_2(Context *ctx, term arg1, term arg2)
 {
-    term true_term = context_make_atom(ctx, true_atom);
-    term false_term = context_make_atom(ctx, false_atom);
+    if ((arg1 == FALSE_ATOM) && (arg2 == FALSE_ATOM)) {
+        return FALSE_ATOM;
 
-    if ((arg1 == false_term) && (arg2 == false_term)) {
-        return false_term;
+    } else if ((arg1 == FALSE_ATOM) && (arg2 == TRUE_ATOM)) {
+        return FALSE_ATOM;
 
-    } else if ((arg1 == false_term) && (arg2 == true_term)) {
-        return false_term;
+    } else if ((arg1 == TRUE_ATOM) && (arg2 == FALSE_ATOM)) {
+        return FALSE_ATOM;
 
-    } else if ((arg1 == true_term) && (arg2 == false_term)) {
-        return false_term;
-
-    } else if ((arg1 == true_term) && (arg2 == true_term)) {
-        return true_term;
+    } else if ((arg1 == TRUE_ATOM) && (arg2 == TRUE_ATOM)) {
+        return TRUE_ATOM;
 
     } else {
-        RAISE_ERROR(badarg_atom);
+        RAISE_ERROR(BADARG_ATOM);
     }
 }
 
 term bif_erlang_or_2(Context *ctx, term arg1, term arg2)
 {
-    term true_term = context_make_atom(ctx, true_atom);
-    term false_term = context_make_atom(ctx, false_atom);
+    if ((arg1 == FALSE_ATOM) && (arg2 == FALSE_ATOM)) {
+        return FALSE_ATOM;
 
-    if ((arg1 == false_term) && (arg2 == false_term)) {
-        return false_term;
+    } else if ((arg1 == FALSE_ATOM) && (arg2 == TRUE_ATOM)) {
+        return TRUE_ATOM;
 
-    } else if ((arg1 == false_term) && (arg2 == true_term)) {
-        return true_term;
+    } else if ((arg1 == TRUE_ATOM) && (arg2 == FALSE_ATOM)) {
+        return TRUE_ATOM;
 
-    } else if ((arg1 == true_term) && (arg2 == false_term)) {
-        return true_term;
-
-    } else if ((arg1 == true_term) && (arg2 == true_term)) {
-        return true_term;
+    } else if ((arg1 == TRUE_ATOM) && (arg2 == TRUE_ATOM)) {
+        return TRUE_ATOM;
 
     } else {
-        RAISE_ERROR(badarg_atom);
+        RAISE_ERROR(BADARG_ATOM);
     }
 }
 
 term bif_erlang_xor_2(Context *ctx, term arg1, term arg2)
 {
-    term true_term = context_make_atom(ctx, true_atom);
-    term false_term = context_make_atom(ctx, false_atom);
+    if ((arg1 == FALSE_ATOM) && (arg2 == FALSE_ATOM)) {
+        return FALSE_ATOM;
 
-    if ((arg1 == false_term) && (arg2 == false_term)) {
-        return false_term;
+    } else if ((arg1 == FALSE_ATOM) && (arg2 == TRUE_ATOM)) {
+        return TRUE_ATOM;
 
-    } else if ((arg1 == false_term) && (arg2 == true_term)) {
-        return true_term;
+    } else if ((arg1 == TRUE_ATOM) && (arg2 == FALSE_ATOM)) {
+        return TRUE_ATOM;
 
-    } else if ((arg1 == true_term) && (arg2 == false_term)) {
-        return true_term;
-
-    } else if ((arg1 == true_term) && (arg2 == true_term)) {
-        return false_term;
+    } else if ((arg1 == TRUE_ATOM) && (arg2 == TRUE_ATOM)) {
+        return FALSE_ATOM;
 
     } else {
-        RAISE_ERROR(badarg_atom);
+        RAISE_ERROR(BADARG_ATOM);
     }
 }
 
 term bif_erlang_equal_to_2(Context *ctx, term arg1, term arg2)
 {
+    UNUSED(ctx);
+
     //TODO: fix this implementation
     //it should compare any kind of type, and 5.0 == 5
     if (arg1 == arg2) {
-        return context_make_atom(ctx, true_atom);
+        return TRUE_ATOM;
     } else {
-        return context_make_atom(ctx, false_atom);
+        return FALSE_ATOM;
     }
 }
 
 term bif_erlang_not_equal_to_2(Context *ctx, term arg1, term arg2)
 {
+    UNUSED(ctx);
+
     //TODO: fix this implementation
     //it should compare any kind of type, and 5.0 != 5 is false
     if (arg1 != arg2) {
-        return context_make_atom(ctx, true_atom);
+        return TRUE_ATOM;
     } else {
-        return context_make_atom(ctx, false_atom);
+        return FALSE_ATOM;
     }
 }
 
 term bif_erlang_exactly_equal_to_2(Context *ctx, term arg1, term arg2)
 {
+    UNUSED(ctx);
+
     //TODO: fix this implementation, it needs to cover more types
     if (arg1 == arg2) {
-        return context_make_atom(ctx, true_atom);
+        return TRUE_ATOM;
     } else {
-        return context_make_atom(ctx, false_atom);
+        return FALSE_ATOM;
     }
 }
 
 term bif_erlang_exactly_not_equal_to_2(Context *ctx, term arg1, term arg2)
 {
+    UNUSED(ctx);
+
     //TODO: fix this implementation, it needs to cover more types
     if (arg1 != arg2) {
-        return context_make_atom(ctx, true_atom);
+        return TRUE_ATOM;
     } else {
-        return context_make_atom(ctx, false_atom);
+        return FALSE_ATOM;
     }
 }
 
 
 term bif_erlang_greater_than_2(Context *ctx, term arg1, term arg2)
 {
+    UNUSED(ctx);
+
     //TODO: fix this implementation, it needs to cover more types
     if (term_to_int32(arg1) > term_to_int32(arg2)) {
-        return context_make_atom(ctx, true_atom);
+        return TRUE_ATOM;
     } else {
-        return context_make_atom(ctx, false_atom);
+        return FALSE_ATOM;
     }
 }
 
 term bif_erlang_less_than_2(Context *ctx, term arg1, term arg2)
 {
+    UNUSED(ctx);
+
     //TODO: fix this implementation, it needs to cover more types
     if (term_to_int32(arg1) < term_to_int32(arg2)) {
-        return context_make_atom(ctx, true_atom);
+        return TRUE_ATOM;
     } else {
-        return context_make_atom(ctx, false_atom);
+        return FALSE_ATOM;
     }
 }
 
 term bif_erlang_less_than_or_equal_2(Context *ctx, term arg1, term arg2)
 {
+    UNUSED(ctx);
+
     //TODO: fix this implementation, it needs to cover more types
     if (term_to_int32(arg1) <= term_to_int32(arg2)) {
-        return context_make_atom(ctx, true_atom);
+        return TRUE_ATOM;
     } else {
-        return context_make_atom(ctx, false_atom);
+        return FALSE_ATOM;
     }
 }
 
 term bif_erlang_greater_than_or_equal_2(Context *ctx, term arg1, term arg2)
 {
+    UNUSED(ctx);
+
     //TODO: fix this implementation, it needs to cover more types
     if (term_to_int32(arg1) >= term_to_int32(arg2)) {
-        return context_make_atom(ctx, true_atom);
+        return TRUE_ATOM;
     } else {
-        return context_make_atom(ctx, false_atom);
+        return FALSE_ATOM;
     }
 }
