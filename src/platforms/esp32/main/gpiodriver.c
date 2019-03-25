@@ -31,6 +31,7 @@
 #include "bif.h"
 #include "context.h"
 #include "debug.h"
+#include "defaultatoms.h"
 #include "globalcontext.h"
 #include "mailbox.h"
 #include "module.h"
@@ -46,8 +47,6 @@ static Context *gpio_ctx;
 static void consume_gpio_mailbox(Context *ctx);
 static void IRAM_ATTR gpio_isr_handler(void *arg);
 
-static const char *const ok_a = "\x2" "ok";
-static const char *const error_a = "\x5" "error";
 static const char *const set_level_a = "\x9" "set_level";
 static const char *const input_a = "\x5" "input";
 static const char *const output_a = "\x6" "output";
@@ -79,7 +78,7 @@ static void consume_gpio_mailbox(Context *ctx)
         int32_t level = term_to_int32(term_get_tuple_element(msg, 3));
         gpio_set_level(gpio_num, level != 0);
         TRACE("gpio: set_level: %i %i\n", gpio_num, level != 0);
-        ret = context_make_atom(ctx, ok_a);
+        ret = OK_ATOM;
 
     } else if (cmd == context_make_atom(ctx, set_direction_a)) {
         int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
@@ -88,16 +87,16 @@ static void consume_gpio_mailbox(Context *ctx)
         if (direction == context_make_atom(ctx, input_a)) {
             gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
             TRACE("gpio: set_direction: %i INPUT\n", gpio_num);
-            ret = context_make_atom(ctx, ok_a);
+            ret = OK_ATOM;
 
         } else if (direction == context_make_atom(ctx, output_a)) {
             gpio_set_direction(gpio_num, GPIO_MODE_OUTPUT);
             TRACE("gpio: set_direction: %i OUTPUT\n", gpio_num);
-            ret = context_make_atom(ctx, ok_a);
+            ret = OK_ATOM;
 
         } else {
             TRACE("gpio: unrecognized direction\n");
-            ret = context_make_atom(ctx, error_a);
+            ret = ERROR_ATOM;
         }
 
     } else if (cmd == context_make_atom(ctx, set_int_a)) {
@@ -118,11 +117,11 @@ static void consume_gpio_mailbox(Context *ctx)
 
         gpio_isr_handler_add(gpio_num, gpio_isr_handler, (void *) gpio_num);
 
-        ret = context_make_atom(ctx, ok_a);
+        ret = OK_ATOM;
 
     } else {
         TRACE("gpio: unrecognized command\n");
-        ret = context_make_atom(ctx, error_a);
+        ret = ERROR_ATOM;
     }
 
     free(message);
