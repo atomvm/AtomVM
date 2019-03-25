@@ -96,11 +96,13 @@ void term_display(FILE *fd, term t, const Context *ctx)
         for (int i = 0; i < len; i++) {
             if (!isprint(binary_data[i])) {
                 is_printable = 0;
+                break;
             }
         }
 
+        fprintf(fd, "<<");
         if (is_printable) {
-            fprintf(fd, "<<\"%.*s\">>", len, binary_data);
+            fprintf(fd, "\"%.*s\"", len, binary_data);
 
         } else {
             int display_separator = 0;
@@ -114,6 +116,7 @@ void term_display(FILE *fd, term t, const Context *ctx)
                 fprintf(fd, "%i", binary_data[i]);
             }
         }
+        fprintf(fd, ">>");
 
     } else if (term_is_reference(t)) {
         const char *format =
