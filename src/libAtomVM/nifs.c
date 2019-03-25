@@ -1181,24 +1181,24 @@ static term nifs_erlang_processes(Context *ctx, int argc, term argv[])
 static term nifs_erlang_process_info(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
-    
+
     term pid = argv[0];
     term item_or_item_info = argv[1];
-    
+
     if (!term_is_atom(item_or_item_info)) {
         RAISE_ERROR(badarg_atom);
     }
     // TODO add support for process_info/1
     // and process_info/2 when second argument is a list
     term item = item_or_item_info;
-    
+
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
-    
+
     if (memory_ensure_free(ctx, 3) != MEMORY_GC_OK) {
         RAISE_ERROR(out_of_memory_atom);
     }
-    
+
     // heap_size size in words of the heap of the process
     term heap_size = context_make_atom(ctx, heap_size_a);
     if (item == heap_size) {
