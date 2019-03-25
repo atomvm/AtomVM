@@ -5,4 +5,5 @@ project(libs)
 
 add_subdirectory(estdlib)
 add_subdirectory(eavmlib)
+add_subdirectory(exavmlib)
 add_subdirectory(etest)

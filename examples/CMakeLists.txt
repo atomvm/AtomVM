@@ -3,4 +3,5 @@
 ##
 project(libs)
 
+add_subdirectory(elixir)
 add_subdirectory(erlang)
