@@ -80,11 +80,11 @@ Context *scheduler_wait(GlobalContext *global, Context *c)
                 listener->data = global;
                 listener->handler = scheduler_timeout_callback;
 
-                sys_waitevents(global->listeners);
+                sys_waitevents(global);
             }
         } else if (list_is_empty(&global->ready_processes)) {
             if (LIKELY(global->listeners)) {
-                sys_waitevents(global->listeners);
+                sys_waitevents(global);
             } else {
                 fprintf(stderr, "Hang detected\n");
                 abort();

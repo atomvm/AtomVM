@@ -55,7 +55,7 @@ typedef struct EventListener {
  * @details wait any of the specified events using a platform specific implementation, that might be poll on unix-like systems.
  * @param listeners_list a list of listeners that are waiting for some events, each listener waits an event and has a callback.
  */
-void sys_waitevents(struct ListHead *listeners_list);
+void sys_waitevents(GlobalContext *glb);
 
 /**
  * @brief sets the timestamp for a future event
