@@ -174,6 +174,28 @@ static inline unsigned long context_memory_size(const Context *ctx)
 }
 
 /**
+ * @brief Returns context heap size in term units
+ *
+ * @param ctx a valid context.
+ * @returns context heap size in term units
+ */
+static inline unsigned long context_heap_size(const Context *ctx)
+{
+    return ctx->heap_ptr - ctx->heap_start;
+}
+
+/**
+ * @brief Returns context heap size in term units
+ *
+ * @param ctx a valid context.
+ * @returns context heap size in term units
+ */
+static inline unsigned long context_stack_size(const Context *ctx)
+{
+    return ctx->stack_base - ctx->e;
+}
+
+/**
  * @brief Checks if a contex is waiting a timeout.
  *
  * @details Check if given context has a timeout timestamp set, regardless current timestamp.
@@ -199,5 +221,21 @@ static inline term context_make_atom(Context *ctx, AtomString string)
     int global_atom_index = globalcontext_insert_atom(ctx->global, string);
     return term_from_atom_index(global_atom_index);
 }
+
+/**
+ * @brief Returns number of messages in the process's mailbox
+ *
+ * @param ctx a valid context.
+ * @returns the number of messages in the process's mailbox
+ */
+size_t context_message_queue_len(Context *ctx);
+
+/**
+ * @brief Returns total amount of size (in byes) occuped by the process.
+ *
+ * @param ctx a valid context.
+ * @returns total amount of size (in byes) occuped by the process
+ */
+size_t context_size(Context *ctx);
 
 #endif

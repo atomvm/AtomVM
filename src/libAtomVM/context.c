@@ -21,12 +21,14 @@
 
 #include "globalcontext.h"
 #include "list.h"
+#include "mailbox.h"
 
 #define IMPL_EXECUTE_LOOP
 #include "opcodesswitch.h"
 #undef IMPL_EXECUTE_LOOP
 
 #define DEFAULT_STACK_SIZE 8
+#define BYTES_PER_TERM (TERM_BITS/8)
 
 Context *context_new(GlobalContext *glb)
 {
@@ -91,4 +93,44 @@ void context_destroy(Context *ctx)
 
     free(ctx->heap_start);
     free(ctx);
+}
+
+typedef void *(*maibox_iterator)(Message *msg, void *accum);
+
+static void *context_num_messages(Message *msg, void *accum)
+{
+    return (void *) ((size_t) accum + 1);
+}
+
+static void *context_message_size(Message *msg, void *accum)
+{
+    return (void *) (sizeof(Message) + msg->msg_memory_size + (size_t) accum);
+}
+
+static void *context_mailbox_iterator(Context *ctx, maibox_iterator fun, void *initial)
+{
+    if (ctx->mailbox == NULL) {
+        return initial;
+    }
+    Message *messages = GET_LIST_ENTRY(ctx->mailbox, Message, mailbox_list_head);
+    Message *m = messages;
+    void *accum = initial;
+    do {
+        accum = fun(m, accum);
+        m = GET_LIST_ENTRY(m->mailbox_list_head.next, Message, mailbox_list_head);
+    } while (messages != m);
+    return accum;
+}
+
+size_t context_message_queue_len(Context *ctx)
+{
+    return (size_t) context_mailbox_iterator(ctx, context_num_messages, NULL);
+}
+
+size_t context_size(Context *ctx)
+{
+    // TODO include ctx->platform_data
+    return sizeof(Context)
+        + (size_t) context_mailbox_iterator(ctx, context_message_size, NULL)
+        + context_memory_size(ctx) * BYTES_PER_TERM;
 }
