@@ -84,6 +84,7 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_send_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_setelement_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_spawn(Context *ctx, int argc, term argv[]);
+static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[]);
 static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_time_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_tuple_to_list_1(Context *ctx, int argc, term argv[]);
@@ -194,6 +195,18 @@ static const struct Nif spawn_opt_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_spawn
+};
+
+static const struct Nif spawn_fun_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_spawn_fun
+};
+
+static const struct Nif spawn_fun_opt_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_spawn_fun
 };
 
 static const struct Nif send_nif =
@@ -446,6 +459,51 @@ static void process_console_mailbox(Context *ctx)
     }
 
     free(message);
+}
+
+static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])
+{
+    term fun_term = argv[0];
+    term opts_term = argv[1];
+    VALIDATE_VALUE(fun_term, term_is_function);
+
+    if (argc == 2) {
+        // spawn_opt has been called
+        VALIDATE_VALUE(opts_term, term_is_list);
+    } else {
+        // regular spawn
+        opts_term = term_nil();
+    }
+
+    Context *new_ctx = context_new(ctx->global);
+
+    const term *boxed_value = term_to_const_term_ptr(fun_term);
+
+    Module *fun_module = (Module *) boxed_value[1];
+    uint32_t fun_index = boxed_value[2];
+
+    uint32_t label;
+    uint32_t arity;
+    uint32_t n_freeze;
+    module_get_fun(fun_module, fun_index, &label, &arity, &n_freeze);
+
+    // TODO: new process should fail with badarity if arity != 0
+
+    for (unsigned int i = arity - n_freeze; i < arity + n_freeze; i++) {
+        new_ctx->x[i] = boxed_value[i - (arity - n_freeze) + 3];
+    }
+
+    new_ctx->saved_module = fun_module;
+    new_ctx->saved_ip = fun_module->labels[label];
+    new_ctx->cp = module_address(fun_module->module_index, fun_module->end_instruction_ii);
+
+    term max_heap_size_term = interop_proplist_get_value(opts_term, MAX_HEAP_SIZE_ATOM);
+    if (max_heap_size_term != term_nil()) {
+        new_ctx->has_max_heap_size = 1;
+        new_ctx->max_heap_size = term_to_int32(max_heap_size_term);
+    }
+
+    return term_from_local_process_id(new_ctx->process_id);
 }
 
 static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
