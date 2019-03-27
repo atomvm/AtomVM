@@ -201,6 +201,9 @@ compile_erlang(copy_terms18)
 
 compile_erlang(memlimit)
 
+compile_erlang(spawn_fun1)
+compile_erlang(spawn_fun2)
+compile_erlang(spawn_fun3)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -394,4 +397,8 @@ add_custom_target(erlang_test_modules DEPENDS
     copy_terms18.beam
 
     memlimit.beam
+
+    spawn_fun1.beam
+    spawn_fun2.beam
+    spawn_fun3.beam
 )
