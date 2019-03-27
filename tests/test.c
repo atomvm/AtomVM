@@ -238,6 +238,10 @@ struct Test tests[] =
     {"test_timestamp.beam", 1},
     {"test_set_tuple_element.beam", 0},
 
+    {"spawn_fun1.beam", 42},
+    {"spawn_fun2.beam", 33},
+    {"spawn_fun3.beam", 10},
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}
