@@ -420,6 +420,9 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
     uint32_t n_freeze = module_get_fun_freeze(mod, fun_index);
 
     int size = 2 + n_freeze;
+    if (memory_ensure_free(ctx, size + 1) != MEMORY_GC_OK) {
+        return term_invalid_term();
+    }
     term *boxed_func = memory_heap_alloc(ctx, size + 1);
 
     boxed_func[0] = (size << 6) | TERM_BOXED_FUN;
@@ -2466,7 +2469,12 @@ static const char *const out_of_memory_atom = "\xD" "out_of_memory";
 
                 TRACE("make_fun/2, fun_index=%i\n", fun_index);
                 #ifdef IMPL_EXECUTE_LOOP
-                    ctx->x[0] = make_fun(ctx, mod, fun_index);
+                    term f = make_fun(ctx, mod, fun_index);
+                    if (term_is_invalid_term(f)) {
+                        RAISE_ERROR(out_of_memory_atom);
+                    } else {
+                        ctx->x[0] = f;
+                    }
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
