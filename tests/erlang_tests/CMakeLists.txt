@@ -18,6 +18,7 @@ compile_erlang(biggerintegers)
 compile_erlang(biggerdifference)
 compile_erlang(moreintegertests)
 compile_erlang(send_receive)
+compile_erlang(send_to_dead_process)
 compile_erlang(selval)
 compile_erlang(byte_size_test)
 compile_erlang(tuple)
@@ -211,6 +212,7 @@ add_custom_target(erlang_test_modules DEPENDS
     biggerdifference.beam
     moreintegertests.beam
     send_receive.beam
+    send_to_dead_process.beam
     selval.beam
     byte_size_test.beam
     tuple.beam

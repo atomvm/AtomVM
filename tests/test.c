@@ -50,6 +50,7 @@ struct Test tests[] =
     {"biggerdifference.beam", 250},
     {"moreintegertests.beam", 32},
     {"send_receive.beam", 18},
+    {"send_to_dead_process.beam", 20},
     {"byte_size_test.beam", 10},
     {"tuple.beam", 6},
     {"len_test.beam", 5},
