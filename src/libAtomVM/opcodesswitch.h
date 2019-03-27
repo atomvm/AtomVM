@@ -1238,8 +1238,10 @@ static const char *const out_of_memory_atom = "\xD" "out_of_memory";
                     TRACE("send/0 target_pid=%i\n", local_process_id);
                     TRACE_SEND(ctx, ctx->x[0], ctx->x[1]);
                     Context *target = globalcontext_get_process(ctx->global, local_process_id);
+                    if (!IS_NULL_PTR(target)) {
+                        mailbox_send(target, ctx->x[1]);
+                    }
 
-                    mailbox_send(target, ctx->x[1]);
                 #endif
 
                 NEXT_INSTRUCTION(1);
