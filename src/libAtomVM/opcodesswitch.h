@@ -1242,6 +1242,7 @@ static const char *const out_of_memory_atom = "\xD" "out_of_memory";
                         mailbox_send(target, ctx->x[1]);
                     }
 
+                    ctx->x[0] = ctx->x[1];
                 #endif
 
                 NEXT_INSTRUCTION(1);
