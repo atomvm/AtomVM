@@ -3,5 +3,9 @@
 ##
 project(libs)
 
-add_subdirectory(elixir)
 add_subdirectory(erlang)
+if (Elixir_FOUND)
+    add_subdirectory(elixir)
+else()
+    message("Unable to find elixirc -- skipping Elixir examples")
+endif()
