@@ -3,6 +3,7 @@
 ##
 
 macro(pack_archive avm_name)
+    find_package(Elixir REQUIRED)
 
     foreach(module_name ${ARGN})
         add_custom_command(
@@ -32,6 +33,7 @@ macro(pack_archive avm_name)
 endmacro()
 
 macro(pack_runnable avm_name main)
+    find_package(Elixir REQUIRED)
 
     add_custom_command(
         OUTPUT Elixir.${main}.beam
