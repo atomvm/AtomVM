@@ -32,6 +32,7 @@
 #include "esp_event_loop.h"
 #include <limits.h>
 #include <stdint.h>
+#include <posix/sys/socket.h>
 
 static inline void sys_clock_gettime(struct timespec *t)
 {
@@ -45,8 +46,9 @@ static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *
     return (timespec1->tv_sec - timespec2->tv_sec) * 1000 + (timespec1->tv_nsec - timespec2->tv_nsec) / 1000000;
 }
 
-extern void sys_waitevents(struct ListHead *listeners_list)
+extern void sys_waitevents(GlobalContext *glb)
 {
+    struct ListHead *listeners_list = glb->listeners;
     struct timespec now;
     sys_clock_gettime(&now);
 
@@ -55,8 +57,14 @@ extern void sys_waitevents(struct ListHead *listeners_list)
     int min_timeout = INT_MAX;
     int count = 0;
 
-    //first: find maximum allowed sleep time, and count file descriptor listeners
+    //
+    // First: Find maximum allowed sleep time, and count file descriptor listeners,
+    // the max FD, and set the read FD set
+    //
     EventListener *listener = listeners;
+    int max_fd = 0;
+    fd_set read_fds;
+    FD_ZERO(&read_fds);
     do {
         if (listener->expires) {
             int wait_ms = timespec_diff_to_ms(&listener->expiral_timestamp, &now);
@@ -68,12 +76,40 @@ extern void sys_waitevents(struct ListHead *listeners_list)
         }
         if (listener->fd >= 0) {
             count++;
+            FD_SET(listener->fd, &read_fds);
+            if (listener->fd >= max_fd) {
+                max_fd = listener->fd;
+            }
         }
-
         listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
     } while (listener != listeners);
 
-    vTaskDelay(min_timeout / portTICK_PERIOD_MS);
+    if (count > 0) {
+        //
+        // Is anyone ready to read?
+        //
+        struct timeval select_timeout;
+        select_timeout.tv_sec = 0; // min_timeout / 1000;
+        select_timeout.tv_usec = 10000; // (min_timeout % 1000) * 1000000;
+        select(max_fd + 1, &read_fds, NULL, NULL, &select_timeout);
+        //
+        // If so, call the handler
+        //
+        listener = listeners;
+        do {
+            EventListener *next_listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
+            if (listener->fd >= 0) {
+                if (FD_ISSET(listener->fd, &read_fds)) {
+                    listener->handler(listener);
+                }
+            }
+            listener = next_listener;
+            listeners = GET_LIST_ENTRY(glb->listeners, EventListener, listeners_list_head);
+        } while (listener != listeners);
+    } else {
+        vTaskDelay(min_timeout / portTICK_PERIOD_MS);
+    }
+    
 
     //second: execute handlers for expiered timers
     if (min_timeout != INT_MAX) {
@@ -90,6 +126,7 @@ extern void sys_waitevents(struct ListHead *listeners_list)
             }
 
             listener = next_listener;
+            listeners = GET_LIST_ENTRY(glb->listeners, EventListener, listeners_list_head);
         } while (listener != listeners);
     }
 }
