@@ -50,6 +50,8 @@
     ctx->x[1] = (error_type_atom); \
     return term_invalid_term();
 
+#define MAX(x, y) (((x) > (y)) ? (x) : (y))
+
 #ifdef ENABLE_ADVANCED_TRACE
 static const char *const trace_calls_atom = "\xB" "trace_calls";
 static const char *const trace_call_args_atom = "\xF" "trace_call_args";
@@ -540,7 +542,19 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
     new_ctx->saved_ip = found_module->labels[label];
     new_ctx->cp = module_address(found_module->module_index, found_module->end_instruction_ii);
 
+    term min_heap_size_term = interop_proplist_get_value(opts_term, MIN_HEAP_SIZE_ATOM);
     term max_heap_size_term = interop_proplist_get_value(opts_term, MAX_HEAP_SIZE_ATOM);
+    if (min_heap_size_term != term_nil() && max_heap_size_term != term_nil()) {
+        if (term_to_int32(min_heap_size_term) > term_to_int32(max_heap_size_term)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
+    if (min_heap_size_term != term_nil()) {
+        new_ctx->has_min_heap_size = 1;
+        new_ctx->min_heap_size = term_to_int32(min_heap_size_term);
+    } else {
+        min_heap_size_term = term_from_int32(0);
+    }
     if (max_heap_size_term != term_nil()) {
         new_ctx->has_max_heap_size = 1;
         new_ctx->max_heap_size = term_to_int32(max_heap_size_term);
@@ -549,8 +563,10 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
     //TODO: check available registers count
     int reg_index = 0;
     term t = argv[2];
-    if (UNLIKELY(memory_ensure_free(new_ctx, memory_estimate_usage(t)) != MEMORY_GC_OK)) {
+    uint32_t size = MAX(term_to_int32(min_heap_size_term), memory_estimate_usage(t));
+    if (UNLIKELY(memory_ensure_free(new_ctx, size) != MEMORY_GC_OK)) {
         //TODO: new process should be terminated, however a new pid is returned anyway
+        fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
         abort();
     }
     while (!term_is_nil(t)) {
