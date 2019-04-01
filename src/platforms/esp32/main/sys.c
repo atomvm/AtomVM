@@ -109,7 +109,6 @@ extern void sys_waitevents(GlobalContext *glb)
     } else {
         vTaskDelay(min_timeout / portTICK_PERIOD_MS);
     }
-    
 
     //second: execute handlers for expiered timers
     if (min_timeout != INT_MAX) {
