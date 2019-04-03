@@ -24,10 +24,10 @@
 void network_driver_setup(Context *ctx, term pid, term ref, term config)
 {
     UNUSED(config);
-    port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, "unimplemented"));
+    port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, UNDEFINED_ATOM));
 }
 
 term network_driver_ifconfig(Context *ctx)
 {
-    return port_create_error_tuple(ctx, "unimplemented");
+    return port_create_error_tuple(ctx, UNDEFINED_ATOM);
 }

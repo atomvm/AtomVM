@@ -441,7 +441,7 @@ static void process_console_mailbox(Context *ctx)
     Message *message = mailbox_dequeue(ctx);
     term msg = message->message;
 
-    port_ensure_available(ctx, 64);
+    port_ensure_available(ctx, 12);
 
     if (port_is_standard_port_command(msg)) {
 
@@ -451,25 +451,25 @@ static void process_console_mailbox(Context *ctx)
 
         if (term_is_atom(cmd) && cmd == FLUSH_ATOM) {
             fflush(stdout);
-            port_send_reply(ctx, pid, ref, port_make_ok_atom(ctx));
+            port_send_reply(ctx, pid, ref, OK_ATOM);
         } else if (term_is_tuple(cmd) && term_get_tuple_arity(cmd) == 2) {
             term cmd_name = term_get_tuple_element(cmd, 0);
             if (cmd_name == PUTS_ATOM) {
                 char *str = interop_term_to_string(term_get_tuple_element(cmd, 1));
                 if (IS_NULL_PTR(str)) {
-                    term error = port_create_error_tuple(ctx, "Unable to convert term to string");
+                    term error = port_create_error_tuple(ctx, BADARG_ATOM);
                     port_send_reply(ctx, pid, ref, error);
                 } else {
                     printf("%s", str);
-                    port_send_reply(ctx, pid, ref, port_make_ok_atom(ctx));
+                    port_send_reply(ctx, pid, ref, OK_ATOM);
                 }
                 free(str);
             } else {
-                term error = port_create_error_tuple(ctx, "Expected puts command");
+                term error = port_create_error_tuple(ctx, BADARG_ATOM);
                 port_send_reply(ctx, pid, ref, error);
             }
         } else {
-            port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, "unrecognized command"));
+            port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
         }
     } else {
         fprintf(stderr, "WARNING: Invalid port command.  Unable to send reply");

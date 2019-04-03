@@ -53,10 +53,10 @@ static void network_consume_mailbox(Context *ctx)
             if (cmd_name == context_make_atom(ctx, setup_a)) {
                 network_driver_setup(ctx, pid, ref, config);
             } else {
-                port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, "unrecognized tuple command"));
+                port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
             }
         } else {
-            port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, "unrecognized command"));
+            port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
         }
     } else {
         fprintf(stderr, "WARNING: Invalid port command.  Unable to send reply");
