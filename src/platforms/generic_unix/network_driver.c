@@ -21,13 +21,13 @@
 #include "network_driver.h"
 #include "port.h"
 
-void network_driver_setup(CContext *cc, term_ref pid, term_ref ref, term config)
+void network_driver_setup(Context *ctx, term pid, term ref, term config)
 {
     UNUSED(config);
-    port_send_reply(cc, pid, ref, port_create_error_tuple(cc, "unimplemented"));
+    port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, "unimplemented"));
 }
 
-term_ref network_driver_ifconfig(CContext *cc)
+term network_driver_ifconfig(Context *ctx)
 {
-    return port_create_error_tuple(cc, "unimplemented");
+    return port_create_error_tuple(ctx, "unimplemented");
 }

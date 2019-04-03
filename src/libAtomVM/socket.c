@@ -47,20 +47,20 @@ uint32_t socket_tuple_to_addr(term addr_tuple)
     | (term_to_int32(term_get_tuple_element(addr_tuple, 3)) & 0xFF);
 }
 
-term_ref socket_tuple_from_addr(CContext *cc, uint32_t addr)
+term socket_tuple_from_addr(Context *ctx, uint32_t addr)
 {
-    term_ref terms[4];
-    terms[0] = ccontext_make_term_ref(cc, term_from_int32((addr >> 24) & 0xFF));
-    terms[1] = ccontext_make_term_ref(cc, term_from_int32((addr >> 16) & 0xFF));
-    terms[2] = ccontext_make_term_ref(cc, term_from_int32((addr >>  8) & 0xFF));
-    terms[3] = ccontext_make_term_ref(cc, term_from_int32( addr        & 0xFF));
+    term terms[4];
+    terms[0] = term_from_int32((addr >> 24) & 0xFF);
+    terms[1] = term_from_int32((addr >> 16) & 0xFF);
+    terms[2] = term_from_int32((addr >>  8) & 0xFF);
+    terms[3] = term_from_int32( addr        & 0xFF);
 
-    return port_create_tuple_n(cc, 4, terms);
+    return port_create_tuple_n(ctx, 4, terms);
 }
 
-term_ref socket_create_packet_term(CContext *cc, const char *buf, ssize_t len)
+term socket_create_packet_term(Context *ctx, const char *buf, ssize_t len)
 {
-    return ccontext_make_term_ref(cc, term_from_literal_binary((void *)buf, len, cc->ctx));
+    return term_from_literal_binary((void *)buf, len, ctx);
 }
 
 static void socket_consume_mailbox(Context *ctx)
@@ -69,41 +69,37 @@ static void socket_consume_mailbox(Context *ctx)
     if (UNLIKELY(ctx->native_handler != socket_consume_mailbox)) {
         abort();
     }
-    CContext ccontext;
-    CContext *cc = &ccontext;
-    ccontext_init(cc, ctx);
 
     port_ensure_available(ctx, 16);
 
     Message *message = mailbox_dequeue(ctx);
     term     msg = message->message;
-    term_ref pid = ccontext_make_term_ref(cc, term_get_tuple_element(msg, 0));
-    term_ref ref = ccontext_make_term_ref(cc, term_get_tuple_element(msg, 1));
+    term     pid = term_get_tuple_element(msg, 0);
+    term     ref = term_get_tuple_element(msg, 1);
     term     cmd = term_get_tuple_element(msg, 2);
 
     term cmd_name = term_get_tuple_element(cmd, 0);
     if (cmd_name == context_make_atom(ctx, init_a)) {
         term params = term_get_tuple_element(cmd, 1);
-        term_ref reply = socket_driver_do_init(cc, params);
-        port_send_reply(cc, pid, ref, reply);
+        term reply = socket_driver_do_init(ctx, params);
+        port_send_reply(ctx, pid, ref, reply);
     } else if (cmd_name == context_make_atom(ctx, bind_a)) {
         term address = term_get_tuple_element(cmd, 1);
         term port = term_get_tuple_element(cmd, 2);
-        term_ref reply = socket_driver_do_bind(cc, address, port);
-        port_send_reply(cc, pid, ref, reply);
+        term reply = socket_driver_do_bind(ctx, address, port);
+        port_send_reply(ctx, pid, ref, reply);
     } else if (cmd_name == context_make_atom(ctx, send_a)) {
         term dest_address = term_get_tuple_element(cmd, 1);
         term dest_port = term_get_tuple_element(cmd, 2);
         term buffer = term_get_tuple_element(cmd, 3);
-        term_ref reply = socket_driver_do_send(cc, dest_address, dest_port, buffer);
-        port_send_reply(cc, pid, ref, reply);
+        term reply = socket_driver_do_send(ctx, dest_address, dest_port, buffer);
+        port_send_reply(ctx, pid, ref, reply);
     } else if (cmd_name == context_make_atom(ctx, recvfrom_a)) {
-        socket_driver_do_recvfrom(cc, pid, ref);
+        socket_driver_do_recvfrom(ctx, pid, ref);
     } else {
-        port_send_reply(cc, pid, ref, port_create_error_tuple(cc, "unrecognized command"));
+        port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, "unrecognized command"));
     }
 
-    ccontext_release_all_refs(cc);
     free(message);
     TRACE("END socket_consume_mailbox\n");
 }

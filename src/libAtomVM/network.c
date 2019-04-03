@@ -18,7 +18,7 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#include "ccontext.h"
+#include "context.h"
 #include "port.h"
 #include "network.h"
 #include "network_driver.h"
@@ -38,32 +38,26 @@ static void network_consume_mailbox(Context *ctx)
     term msg = message->message;
 
     if (port_is_standard_port_command(msg)) {
-        CContext ccontext;
-        CContext *cc = &ccontext;
-        ccontext_init(cc, ctx);
-
         port_ensure_available(ctx, 32);
 
-        term_ref pid = ccontext_make_term_ref(cc, term_get_tuple_element(msg, 0));
-        term_ref ref = ccontext_make_term_ref(cc, term_get_tuple_element(msg, 1));
+        term pid = term_get_tuple_element(msg, 0);
+        term ref = term_get_tuple_element(msg, 1);
         term cmd = term_get_tuple_element(msg, 2);
 
         if (term_is_atom(cmd) && cmd == context_make_atom(ctx, ifconfig_a)) {
-            term_ref reply = network_driver_ifconfig(cc);
-            port_send_reply(cc, pid, ref, reply);
+            term reply = network_driver_ifconfig(ctx);
+            port_send_reply(ctx, pid, ref, reply);
         } else if (term_is_tuple(cmd) && term_get_tuple_arity(cmd) == 2) {
             term cmd_name = term_get_tuple_element(cmd, 0);
             term config = term_get_tuple_element(cmd, 1);
             if (cmd_name == context_make_atom(ctx, setup_a)) {
-                network_driver_setup(cc, pid, ref, config);
+                network_driver_setup(ctx, pid, ref, config);
             } else {
-                port_send_reply(cc, pid, ref, port_create_error_tuple(cc, "unrecognized tuple command"));
+                port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, "unrecognized tuple command"));
             }
         } else {
-            port_send_reply(cc, pid, ref, port_create_error_tuple(cc, "unrecognized command"));
+            port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, "unrecognized command"));
         }
-
-        ccontext_release_all_refs(cc);
     } else {
         fprintf(stderr, "WARNING: Invalid port command.  Unable to send reply");
     }

@@ -20,14 +20,14 @@
 #ifndef _SOCKET_H_
 #define _SOCKET_H_
 
-#include "ccontext.h"
+#include "context.h"
 #include "term.h"
 
 
 void socket_init(Context *ctx, term params);
 
 uint32_t socket_tuple_to_addr(term addr_tuple);
-term_ref socket_tuple_from_addr(CContext *cc, uint32_t addr);
-term_ref socket_create_packet_term(CContext *cc, const char *buf, ssize_t len);
+term socket_tuple_from_addr(Context *ctx, uint32_t addr);
+term socket_create_packet_term(Context *ctx, const char *buf, ssize_t len);
 
 #endif
