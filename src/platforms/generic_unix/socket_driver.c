@@ -199,13 +199,14 @@ static void recvfrom_callback(void *data)
         term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
         port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, sendto_a, errno));
     } else {
-        // {Ref, {{int,int,int,int}, int, binary}}
+        // {Ref, {ok, {{int,int,int,int}, int, binary}}}
         // tuple arity 2:       3
         // tuple arity 3:       4
         // tuple arity 4:       5
+        // tuple arity 2:       3
         // ref:                 3 (max)
         // binary:              2 + len(binary)/WORD_SIZE + 1
-        port_ensure_available(ctx, 18 + len/(TERM_BITS/8));
+        port_ensure_available(ctx, 20 + len/(TERM_BITS/8) + 1);
         term pid = recvfrom_data->pid;
         term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
         term addr = socket_tuple_from_addr(ctx, htonl(clientaddr.sin_addr.s_addr));
