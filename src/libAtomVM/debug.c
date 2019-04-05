@@ -29,6 +29,12 @@ static COLD_FUNC void debug_display_type(term t, const Context *ctx)
         fprintf(stderr, "boxed(0x%lx)", (unsigned long) term_to_term_ptr(t));
     } else if ((t & 0x3) == 0x1) {
         fprintf(stderr, "list(0x%lx)", (unsigned long) term_to_term_ptr(t));
+    } else if (term_is_catch_label(t)) {
+        int module_index;
+        int catch_label = term_to_catch_label_and_module(t, &module_index);
+        fprintf(stderr, "catch label(%i:%i)", module_index, catch_label);
+    } else if (term_is_cp(t)) {
+        fprintf(stderr, "continuation pointer");
     } else {
         fprintf(stderr, "unknown");
     }
