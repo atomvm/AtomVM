@@ -94,6 +94,7 @@ struct Test tests[] =
     {"catch_badmatch.beam", 1},
     {"catch_nocasematch.beam", 1},
     {"catch_noifmatch.beam", 1},
+    {"try_catch_test.beam", 109},
     {"list_concat.beam", 2270},
     {"make_ref_test.beam", 130},
     {"is_ref_test.beam", 3},
