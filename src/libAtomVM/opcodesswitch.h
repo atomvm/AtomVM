@@ -375,7 +375,7 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
             return target_label;
 
         } else if (term_is_cp(*ct)) {
-            last_frame = ct - 1;
+            last_frame = ct + 1;
         }
 
         ct++;
