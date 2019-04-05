@@ -47,6 +47,12 @@
 static const char *const tag_proto_a = "\x5" "proto";
 static const char *const proto_udp_a = "\x3" "udp";
 static const char *const proto_tcp_a = "\x3" "tcp";
+static const char *const socket_a    = "\x6" "socket";
+static const char *const fcntl_a     = "\x5" "fcntl";
+static const char *const bind_a      = "\x4" "bind";
+static const char *const getsockname_a = "\xB" "getsockname";
+static const char *const sendto_a      = "\x6" "sendto";
+static const char *const recvfrom_a    = "\x8" "recvfrom";
 
 typedef struct SocketDriverData
 {
@@ -72,32 +78,30 @@ term socket_driver_do_init(Context *ctx, term params)
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
     if (!term_is_list(params)) {
-        return port_create_error_tuple(ctx, "badarg: params is not a list");
+        return port_create_error_tuple(ctx, BADARG_ATOM);
     }
     term proto = interop_proplist_get_value(params, context_make_atom(ctx, tag_proto_a));
 
     if (term_is_nil(proto)) {
-        return port_create_error_tuple(ctx, "badarg: no proto in params");
+        return port_create_error_tuple(ctx, BADARG_ATOM);
     }
 
     if (proto == context_make_atom(ctx, proto_udp_a)) {
         int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
         if (sockfd == -1) {
-            const char *error_string = strerror(errno);
-            return port_create_error_tuple(ctx, error_string);
+            return port_create_sys_error_tuple(ctx, socket_a, errno);
         }
         socket_data->sockfd = sockfd;
     } else if (proto == context_make_atom(ctx, proto_tcp_a)) {
         socket_data->sockfd = socket(AF_INET, SOCK_STREAM, 0);
     } else {
-        return port_create_error_tuple(ctx, "badarg: unsupported protocol");
+        return port_create_error_tuple(ctx, BADARG_ATOM);
     }
     if (fcntl(socket_data->sockfd, F_SETFL, O_NONBLOCK) == -1){
-        const char *error_string = strerror(errno);
-        return port_create_error_tuple(ctx, error_string);
+        return port_create_sys_error_tuple(ctx, fcntl_a, errno);
     }
 
-    return context_make_atom(ctx, port_ok_a);
+    return OK_ATOM;
 }
 
 
@@ -115,12 +119,10 @@ term socket_driver_do_bind(Context *ctx, term address, term port)
 
     socklen_t address_len = sizeof(serveraddr);
     if (bind(socket_data->sockfd, (struct sockaddr *) &serveraddr, address_len) == -1) {
-        const char *error_string = strerror(errno);
-        return port_create_error_tuple(ctx, error_string);
+        return port_create_sys_error_tuple(ctx, bind_a, errno);
     } else {
         if (getsockname(socket_data->sockfd, (struct sockaddr *) &serveraddr, &address_len) == -1) {
-            const char *error_string = strerror(errno);
-            return port_create_error_tuple(ctx, error_string);
+            return port_create_sys_error_tuple(ctx, getsockname_a, errno);
         } else {
             term port_atom = term_from_int32(ntohs(serveraddr.sin_port));
             return port_create_ok_tuple(ctx, port_atom);
@@ -147,15 +149,14 @@ term socket_driver_do_send(Context *ctx, term dest_address, term dest_port, term
         buf = interop_list_to_string(buffer);
         len = strlen(buf);
     } else {
-        return port_create_error_tuple(ctx, "unsupported type for send");
+        return port_create_error_tuple(ctx, BADARG_ATOM);
     }
 
     TRACE("send: data with len: %i, to: %i, port: %i\n", len, ntohl(addr.sin_addr.s_addr), ntohs(addr.sin_port));
 
     int sent_data = sendto(socket_data->sockfd, buf, len, 0, (struct sockaddr *) &addr, sizeof(addr));
     if (sent_data == -1) {
-        const char *error_string = strerror(errno);
-        return port_create_error_tuple(ctx, error_string);
+        return port_create_sys_error_tuple(ctx, sendto_a, errno);
     } else {
         term sent_atom = term_from_int32(sent_data);
         return port_create_ok_tuple(ctx, sent_atom);
@@ -186,21 +187,17 @@ static void recvfrom_callback(void *data)
         abort();
     }
 
-    term pid = recvfrom_data->pid;
-    term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
-
     ssize_t len = recvfrom(socket_data->sockfd, buf, BUFSIZE, 0, (struct sockaddr *) &clientaddr, &clientlen);
     if (len == -1) {
-        // {Ref, {error, string}}
+        // {Ref, {error, {SysCall, Errno}}}
+        // tuple arity 2:       3
         // tuple arity 2:       3
         // tuple arity 2:       3
         // ref:                 3 (max)
-        // string               2*strlen(string)
-        const char *error_string = strerror(errno);
-        port_ensure_available(ctx, 9 + 2*strlen(error_string) + 1);
+        port_ensure_available(ctx, 12);
         term pid = recvfrom_data->pid;
         term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
-        port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, error_string));
+        port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, sendto_a, errno));
     } else {
         // {Ref, {{int,int,int,int}, int, binary}}
         // tuple arity 2:       3

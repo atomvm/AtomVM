@@ -97,7 +97,7 @@ static void socket_consume_mailbox(Context *ctx)
     } else if (cmd_name == context_make_atom(ctx, recvfrom_a)) {
         socket_driver_do_recvfrom(ctx, pid, ref);
     } else {
-        port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, "unrecognized command"));
+        port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
     }
 
     free(message);

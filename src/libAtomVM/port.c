@@ -21,9 +21,7 @@
 #include "context.h"
 #include "globalcontext.h"
 #include "mailbox.h"
-
-const char *const port_ok_a     = "\x2" "ok";
-const char *const port_error_a  = "\x5" "error";
+#include "defaultatoms.h"
 
 
 term port_create_tuple2(Context *ctx, term a, term b)
@@ -56,18 +54,20 @@ term port_create_tuple_n(Context *ctx, size_t num_terms, term *terms)
     return ret;
 }
 
-term port_create_error_tuple(Context *ctx, const char *reason)
+term port_create_error_tuple(Context *ctx, term reason)
 {
-    int len = strnlen(reason, 424);
-    term error_atom = context_make_atom(ctx, port_error_a);
-    term error_reason = term_from_string((const uint8_t*) reason, len, ctx);
-    return port_create_tuple2(ctx, error_atom, error_reason);
+    return port_create_tuple2(ctx, ERROR_ATOM, reason);
+}
+
+term port_create_sys_error_tuple(Context *ctx, AtomString syscall, int errno)
+{
+    term reason = port_create_tuple2(ctx, context_make_atom(ctx, syscall), term_from_int32(errno));
+    return port_create_error_tuple(ctx, reason);
 }
 
 term port_create_ok_tuple(Context *ctx, term t)
 {
-    term ok_atom = context_make_atom(ctx, port_ok_a);
-    return port_create_tuple2(ctx, ok_atom, t);
+    return port_create_tuple2(ctx, OK_ATOM, t);
 }
 
 void port_send_reply(Context *ctx, term pid, term ref, term reply)

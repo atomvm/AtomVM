@@ -81,7 +81,7 @@ void network_driver_setup(Context *ctx, term_ref pid, term_ref ref, term config)
             if (psk != NULL) {
                 free(psk);
             }
-            term reply = port_create_error_tuple(ctx, "cannot allocate memory for ssid or psk");
+            term reply = port_create_error_tuple(ctx, OUT_OF_MEMORY_ATOM);
             port_send_reply(ctx, pid, ref, reply);
             return;
         }
@@ -97,7 +97,7 @@ void network_driver_setup(Context *ctx, term_ref pid, term_ref ref, term config)
             TRACE("ssid or psk is too long\n");
             free(ssid);
             free(psk);
-            term reply = port_create_error_tuple(ctx, "ssid or psk is too long");
+            term reply = port_create_error_tuple(ctx, BADARG_ATOM);
             port_send_reply(ctx, pid, ref, reply);
             return;
         }
@@ -122,11 +122,9 @@ void network_driver_setup(Context *ctx, term_ref pid, term_ref ref, term config)
                 sntp_init();
             }
         }
-        // TODO make this async
-        term reply = context_make_atom(ctx, port_ok_a);
-        port_send_reply(ctx, pid, ref, reply);
+        port_send_reply(ctx, pid, ref, OK_ATOM);
     } else {
-        term reply = port_create_error_tuple(ctx, "unsupported config");
+        term reply = port_create_error_tuple(ctx, BADARG_ATOM);
         port_send_reply(ctx, pid, ref, reply);
     }
 }

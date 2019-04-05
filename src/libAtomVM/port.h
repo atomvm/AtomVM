@@ -23,19 +23,13 @@
 #include "globalcontext.h"
 #include "context.h"
 #include "term.h"
-
-extern const char *const port_ok_a;
-extern const char *const port_error_a;
-
-static inline term port_make_ok_atom(Context *ctx)
-{
-    return context_make_atom(ctx, port_ok_a);
-}
+#include "defaultatoms.h"
 
 term port_create_tuple2(Context *ctx, term a, term b);
 term port_create_tuple3(Context *ctx, term a, term b, term c);
 term port_create_tuple_n(Context *ctx, size_t num_terms, term *terms);
-term port_create_error_tuple(Context *ctx, const char *reason);
+term port_create_error_tuple(Context *ctx, term reason);
+term port_create_sys_error_tuple(Context *ctx, AtomString syscall, int errno);
 term port_create_ok_tuple(Context *ctx, term t);
 void port_send_reply(Context *ctx, term pid, term ref, term reply);
 void port_ensure_available(Context *ctx, size_t size);
