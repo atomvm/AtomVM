@@ -370,7 +370,9 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
             TRACE("- found catch: label: %i, module: %i\n", target_label, target_module);
             *mod = ctx->global->modules_by_index[target_module];
 
+            DEBUG_DUMP_STACK(ctx);
             ctx->e = last_frame;
+            DEBUG_DUMP_STACK(ctx);
 
             return target_label;
 
