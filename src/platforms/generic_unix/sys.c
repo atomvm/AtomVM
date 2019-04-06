@@ -144,7 +144,7 @@ extern void sys_waitevents(GlobalContext *glb)
 #endif
             listener = next_listener;
             listeners = GET_LIST_ENTRY(glb->listeners, EventListener, listeners_list_head);
-        } while (listener != listeners);
+        } while (listeners != NULL && listener != listeners);
 
 #ifndef USE_SELECT
         free(fds);
@@ -179,7 +179,7 @@ extern void sys_waitevents(GlobalContext *glb)
 
             listener = next_listener;
             listeners = GET_LIST_ENTRY(glb->listeners, EventListener, listeners_list_head);
-        } while (listener != last_listener);
+        } while (listeners != NULL && listener != last_listener);
     }
 }
 
