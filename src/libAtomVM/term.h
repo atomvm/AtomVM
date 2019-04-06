@@ -539,7 +539,7 @@ static inline int term_binary_data_size_in_terms(uint32_t size)
  * @param ctx the context that owns the memory that will be allocated.
  * @return a term pointing to the boxed binary pointer.
  */
-static inline term term_from_literal_binary(void *data, uint32_t size, Context *ctx)
+static inline term term_from_literal_binary(const void *data, uint32_t size, Context *ctx)
 {
     int size_in_terms = term_binary_data_size_in_terms(size);
 
