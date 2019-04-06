@@ -513,6 +513,24 @@ static inline term term_from_local_process_id(uint32_t local_process_id)
 }
 
 /**
+ * @brief The count of terms needed to store the given amount of bytes
+ *
+ * @details Returns the count of terms needed to store the given size in bytes.
+ * @param size the size in bytes
+ * @return the count of terms
+ */
+static inline int term_binary_data_size_in_terms(uint32_t size)
+{
+#if TERM_BYTES == 4
+    return ((size + 4 - 1) >> 2) + 1;
+#elif TERM_BYTES == 8
+    return ((size + 8 - 1) >> 3) + 1;
+#else
+    #error
+#endif
+}
+
+/**
  * @brief Term from binary data
  *
  * @details Allocates a binary on the heap, and returns a term pointing to it.
@@ -523,13 +541,7 @@ static inline term term_from_local_process_id(uint32_t local_process_id)
  */
 static inline term term_from_literal_binary(void *data, uint32_t size, Context *ctx)
 {
-#if TERM_BYTES == 4
-    int size_in_terms = ((size + 4 - 1) >> 2) + 1;
-#elif TERM_BYTES == 8
-    int size_in_terms = ((size + 8 - 1) >> 3) + 1;
-#else
-    #error
-#endif
+    int size_in_terms = term_binary_data_size_in_terms(size);
 
     term *boxed_value = memory_heap_alloc(ctx, size_in_terms + 1);
     boxed_value[0] = (size_in_terms << 6) | 0x24; // heap binary
