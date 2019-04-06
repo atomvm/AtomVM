@@ -14,6 +14,7 @@ struct NifNameAndNifPtr
 binary:at/2, &binary_at_nif
 binary:first/1, &binary_first_nif
 binary:last/1, &binary_last_nif
+binary:split/2, &binary_split_nif
 erlang:atom_to_list/1, &atom_to_list_nif
 erlang:binary_to_atom/2, &binary_to_atom_nif
 erlang:binary_to_existing_atom/2, &binary_to_existing_atom_nif

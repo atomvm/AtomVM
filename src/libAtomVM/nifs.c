@@ -17,6 +17,8 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+#define _GNU_SOURCE
+
 #include "nifs.h"
 
 #include "atomshashtable.h"
@@ -69,6 +71,7 @@ static term list_to_atom(Context *ctx, int argc, term argv[], int create_new);
 static term nif_binary_at_2(Context *ctx, int argc, term argv[]);
 static term nif_binary_first_1(Context *ctx, int argc, term argv[]);
 static term nif_binary_last_1(Context *ctx, int argc, term argv[]);
+static term nif_binary_split_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_atom_2(Context *ctx, int argc, term argv[]);
@@ -115,6 +118,12 @@ static const struct Nif binary_last_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_last_1
+};
+
+static const struct Nif binary_split_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_binary_split_2
 };
 
 static const struct Nif make_ref_nif =
@@ -1337,7 +1346,63 @@ static term nif_binary_last_1(Context *ctx, int argc, term argv[])
     }
 
     return term_from_int11(term_binary_data(bin_term)[size - 1]);
+}
 
+static term nif_binary_split_2(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term bin_term = argv[0];
+    term pattern_term = argv[1];
+
+    VALIDATE_VALUE(bin_term, term_is_binary);
+    VALIDATE_VALUE(pattern_term, term_is_binary);
+
+    int bin_size = term_binary_size(bin_term);
+    int pattern_size = term_binary_size(pattern_term);
+
+    if (UNLIKELY(pattern_size == 0)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    const char *bin_data = term_binary_data(bin_term);
+    const char *pattern_data = term_binary_data(pattern_term);
+
+    const char *found = (const char *) memmem(bin_data, bin_size, pattern_data, pattern_size);
+
+    int offset = found - bin_data;
+
+    if (found) {
+        int tok_size = offset;
+        // + 2, which is the binary header size
+        int tok_size_in_terms = term_binary_data_size_in_terms(tok_size) + 2;
+
+        int rest_size = bin_size - offset - pattern_size;
+        // + 2, which is the binary header size
+        int rest_size_in_terms = term_binary_data_size_in_terms(rest_size) + 2;
+
+        // + 2 which is the result cons
+        if (UNLIKELY(memory_ensure_free(ctx, tok_size_in_terms + rest_size_in_terms + 2) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+
+        const char *bin_data = term_binary_data(argv[0]);
+
+        term tok = term_from_literal_binary(bin_data, tok_size, ctx);
+        term rest = term_from_literal_binary(bin_data + offset + pattern_size, rest_size, ctx);
+
+        term result_list = term_list_prepend(rest, term_nil(), ctx);
+        result_list = term_list_prepend(tok, result_list, ctx);
+
+        return result_list;
+
+    } else {
+        if (UNLIKELY(memory_ensure_free(ctx, 2) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+
+        return term_list_prepend(argv[0], term_nil(), ctx);
+    }
 }
 
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])
