@@ -244,6 +244,10 @@ struct Test tests[] =
     {"spawn_fun2.beam", 33},
     {"spawn_fun3.beam", 10},
 
+    {"binary_at_test.beam", 121},
+    {"binary_first_test.beam", 82},
+    {"binary_last_test.beam", 110},
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}

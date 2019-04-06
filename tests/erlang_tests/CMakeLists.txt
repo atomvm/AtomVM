@@ -208,6 +208,10 @@ compile_erlang(spawn_fun1)
 compile_erlang(spawn_fun2)
 compile_erlang(spawn_fun3)
 
+compile_erlang(binary_at_test)
+compile_erlang(binary_first_test)
+compile_erlang(binary_last_test)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -407,4 +411,8 @@ add_custom_target(erlang_test_modules DEPENDS
     spawn_fun1.beam
     spawn_fun2.beam
     spawn_fun3.beam
+
+    binary_at_test.beam
+    binary_first_test.beam
+    binary_last_test.beam
 )
