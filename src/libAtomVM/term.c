@@ -62,7 +62,7 @@ void term_display(FILE *fd, term t, const Context *ctx)
             int display_separator = 0;
             while (!term_is_nil(t)) {
                 if (display_separator) {
-                    putchar(',');
+                    fputc(',', fd);
                 } else {
                     display_separator = 1;
                 }
