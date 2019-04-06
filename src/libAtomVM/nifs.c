@@ -1300,7 +1300,7 @@ static term nif_binary_at_2(Context *ctx, int argc, term argv[])
     int32_t size = term_binary_size(bin_term);
     int32_t pos = term_to_int32(pos_term);
 
-    if (UNLIKELY((pos < 0) && (pos >= size))) {
+    if (UNLIKELY((pos < 0) || (pos >= size))) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -1315,6 +1315,10 @@ static term nif_binary_first_1(Context *ctx, int argc, term argv[])
 
     VALIDATE_VALUE(bin_term, term_is_binary);
 
+    if (UNLIKELY(term_binary_size(bin_term) == 0)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
     return term_from_int11(term_binary_data(bin_term)[0]);
 }
 
@@ -1327,6 +1331,10 @@ static term nif_binary_last_1(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(bin_term, term_is_binary);
 
     int size = term_binary_size(bin_term);
+
+    if (UNLIKELY(size == 0)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
 
     return term_from_int11(term_binary_data(bin_term)[size - 1]);
 
