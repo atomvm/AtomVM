@@ -74,16 +74,21 @@ static term nif_binary_last_1(Context *ctx, int argc, term argv[]);
 static term nif_binary_part_3(Context *ctx, int argc, term argv[]);
 static term nif_binary_split_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_atom_to_binary_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_atom_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_binary_to_integer_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_existing_atom_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_display_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[]);
+static term nif_erlang_integer_to_binary_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_is_process_alive_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_existing_atom_1(Context *ctx, int argc, term argv[]);
@@ -139,6 +144,12 @@ static const struct Nif make_ref_nif =
     .nif_ptr = nif_erlang_make_ref_0
 };
 
+static const struct Nif atom_to_binary_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_atom_to_binary_2
+};
+
 static const struct Nif atom_to_list_nif =
 {
     .base.type = NIFFunctionType,
@@ -149,6 +160,18 @@ static const struct Nif binary_to_atom_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_binary_to_atom_2
+};
+
+static const struct Nif binary_to_integer_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_binary_to_integer_1
+};
+
+static const struct Nif binary_to_list_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_binary_to_list_1
 };
 
 static const struct Nif binary_to_existing_atom_nif =
@@ -175,6 +198,12 @@ static const struct Nif insert_element_nif =
     .nif_ptr = nif_erlang_insert_element_3
 };
 
+static const struct Nif integer_to_binary_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_integer_to_binary_1
+};
+
 static const struct Nif integer_to_list_nif =
 {
     .base.type = NIFFunctionType,
@@ -197,6 +226,12 @@ static const struct Nif list_to_existing_atom_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_list_to_existing_atom_1
+};
+
+static const struct Nif list_to_binary_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_list_to_binary_1
 };
 
 static const struct Nif list_to_integer_nif =
@@ -934,6 +969,57 @@ static term nif_erlang_binary_to_atom_2(Context *ctx, int argc, term argv[])
     return binary_to_atom(ctx, argc, argv, 1);
 }
 
+static term nif_erlang_binary_to_integer_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term bin_term = argv[0];
+    VALIDATE_VALUE(bin_term, term_is_binary);
+
+    const char *bin_data = term_binary_data(bin_term);
+    int bin_data_size = term_binary_size(bin_term);
+
+    if (UNLIKELY((bin_data_size == 0) || (bin_data_size >= 24))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    char null_terminated_buf[24];
+    memcpy(null_terminated_buf, bin_data, bin_data_size);
+    null_terminated_buf[bin_data_size] = '\0';
+
+    //TODO: handle 64 bits numbers
+    //TODO: handle errors
+    const char *endptr;
+    uint32_t value = strtol(null_terminated_buf, &endptr, 10);
+    if (*endptr != '\0') {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    return term_from_int32(value);
+}
+
+static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term value = argv[0];
+    VALIDATE_VALUE(value, term_is_binary);
+
+    int bin_size = term_binary_size(value);
+    if (UNLIKELY(memory_ensure_free(ctx, bin_size * 2) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    const char *bin_data = term_binary_data(argv[0]);
+
+    term prev = term_nil();
+    for (int i = bin_size - 1; i >= 0; i--) {
+        prev = term_list_prepend(term_from_int11(bin_data[i]), prev, ctx);
+    }
+
+    return prev;
+}
+
 static term nif_erlang_binary_to_existing_atom_2(Context *ctx, int argc, term argv[])
 {
     return binary_to_atom(ctx, argc, argv, 0);
@@ -1031,6 +1117,30 @@ term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
     }
 }
 
+static term nif_erlang_atom_to_binary_2(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term atom_term = argv[0];
+    VALIDATE_VALUE(atom_term, term_is_atom);
+
+    if (UNLIKELY(argv[1] != LATIN1_ATOM)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int atom_index = term_to_atom_index(atom_term);
+    AtomString atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table, atom_index, (unsigned long) NULL);
+
+    int atom_len = atom_string_len(atom_string);
+
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(atom_len) + 2) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    const char *atom_data = (const char *) atom_string_data(atom_string);
+    return term_from_literal_binary(atom_data, atom_len, ctx);
+}
+
 static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -1056,6 +1166,27 @@ static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
     return prev;
 }
 
+static term nif_erlang_integer_to_binary_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term value = argv[0];
+    VALIDATE_VALUE(value, term_is_integer);
+
+    int32_t int_value = term_to_int32(value);
+    char integer_string[24];
+
+    //TODO: just copy data to the binary instead of using the stack
+    snprintf(integer_string, 24, "%i", int_value);
+    int len = strlen(integer_string);
+
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(len) + 2) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return term_from_literal_binary(integer_string, len, ctx);
+}
+
 static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -1079,6 +1210,32 @@ static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[])
     }
 
     return prev;
+}
+
+static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term t = argv[0];
+    VALIDATE_VALUE(t, term_is_list);
+
+    int len = term_list_length(t);
+
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(len) + 2) != MEMORY_GC_OK)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    //TODO: avoid this copy: just write to binary memory
+    char *string = interop_list_to_string(argv[0]);
+    if (IS_NULL_PTR(string)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    term bin_term = term_from_literal_binary(string, len, ctx);
+
+    free(string);
+
+    return bin_term;
 }
 
 static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
