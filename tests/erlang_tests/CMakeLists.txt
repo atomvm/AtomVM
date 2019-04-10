@@ -212,6 +212,11 @@ compile_erlang(binary_at_test)
 compile_erlang(binary_first_test)
 compile_erlang(binary_last_test)
 
+compile_erlang(test_integer_to_binary)
+compile_erlang(test_list_to_binary)
+compile_erlang(test_binary_to_list)
+compile_erlang(test_atom_to_binary)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -415,4 +420,9 @@ add_custom_target(erlang_test_modules DEPENDS
     binary_at_test.beam
     binary_first_test.beam
     binary_last_test.beam
+
+    test_integer_to_binary.beam
+    test_list_to_binary.beam
+    test_binary_to_list.beam
+    test_atom_to_binary.beam
 )
