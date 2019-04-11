@@ -47,10 +47,12 @@ static const char *const proto_udp_a = "\x3" "udp";
 static const char *const proto_tcp_a = "\x3" "tcp";
 static const char *const socket_a    = "\x6" "socket";
 static const char *const fcntl_a     = "\x5" "fcntl";
-static const char *const bind_a      = "\x4" "bind";
-static const char *const getsockname_a = "\xB" "getsockname";
+
+// 3 unused variables -> won't compile using esp-idf v 3.2
+// static const char *const bind_a      = "\x4" "bind";
+// static const char *const getsockname_a = "\xB" "getsockname";
+// static const char *const recvfrom_a    = "\x8" "recvfrom"; 
 static const char *const sendto_a      = "\x6" "sendto";
-static const char *const recvfrom_a    = "\x8" "recvfrom";
 
 // TODO use net_conn instead of BSD Sockets
 
