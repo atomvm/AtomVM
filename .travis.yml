@@ -284,3 +284,26 @@ matrix:
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
       before_install:
         - eval "${MATRIX_EVAL}"
+
+    - name: "ESP32 platform"
+      services:
+        - docker
+      os: linux
+      dist: trusty
+      sudo: true
+      script: |
+        docker run -it -v ${TRAVIS_BUILD_DIR}:/root/AtomVM rbino/atomvm-platforms-docker /bin/bash -c '
+        cd /root/AtomVM/src/platforms/esp32
+        make defconfig && make -j4'
+
+    - name: "STM32 platform"
+      services:
+        - docker
+      os: linux
+      dist: trusty
+      sudo: true
+      script: |
+        docker run -it -v ${TRAVIS_BUILD_DIR}:/root/AtomVM rbino/atomvm-platforms-docker /bin/bash -c '
+        cd /root/AtomVM/src/platforms/stm32
+        mkdir build && cd build
+        cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/arm-toolchain.cmake -DLIBOPENCM3_DIR=$LIBOPENCM3_DIR .. && make -j4'
