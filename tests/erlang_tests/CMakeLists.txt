@@ -217,6 +217,8 @@ compile_erlang(test_list_to_binary)
 compile_erlang(test_binary_to_list)
 compile_erlang(test_atom_to_binary)
 
+compile_erlang(test_binary_part)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -425,4 +427,6 @@ add_custom_target(erlang_test_modules DEPENDS
     test_list_to_binary.beam
     test_binary_to_list.beam
     test_atom_to_binary.beam
+
+    test_binary_part.beam
 )

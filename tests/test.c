@@ -253,6 +253,8 @@ struct Test tests[] =
     {"test_binary_to_list.beam", 1},
     {"test_atom_to_binary.beam", 1},
 
+    {"test_binary_part.beam", 12},
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}
