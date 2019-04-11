@@ -51,7 +51,7 @@ static const char *const fcntl_a     = "\x5" "fcntl";
 // 3 unused variables -> won't compile using esp-idf v 3.2
 // static const char *const bind_a      = "\x4" "bind";
 // static const char *const getsockname_a = "\xB" "getsockname";
-// static const char *const recvfrom_a    = "\x8" "recvfrom"; 
+// static const char *const recvfrom_a    = "\x8" "recvfrom";
 static const char *const sendto_a      = "\x6" "sendto";
 
 // TODO use net_conn instead of BSD Sockets
