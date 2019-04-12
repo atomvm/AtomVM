@@ -1133,7 +1133,7 @@ static term nif_erlang_atom_to_binary_2(Context *ctx, int argc, term argv[])
 
     int atom_len = atom_string_len(atom_string);
 
-    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(atom_len) + 2) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(atom_len) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -1180,7 +1180,7 @@ static term nif_erlang_integer_to_binary_1(Context *ctx, int argc, term argv[])
     snprintf(integer_string, 24, "%i", int_value);
     int len = strlen(integer_string);
 
-    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(len) + 2) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -1221,7 +1221,7 @@ static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
 
     int len = term_list_length(t);
 
-    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(len) + 2) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -1538,7 +1538,7 @@ static term nif_binary_part_3(Context *ctx, int argc, term argv[])
     }
 
     // + 2, which is the binary header size
-    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(len) + 2) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -1573,11 +1573,11 @@ static term nif_binary_split_2(Context *ctx, int argc, term argv[])
     if (found) {
         int tok_size = offset;
         // + 2, which is the binary header size
-        int tok_size_in_terms = term_binary_data_size_in_terms(tok_size) + 2;
+        int tok_size_in_terms = term_binary_data_size_in_terms(tok_size) + BINARY_HEADER_SIZE;
 
         int rest_size = bin_size - offset - pattern_size;
         // + 2, which is the binary header size
-        int rest_size_in_terms = term_binary_data_size_in_terms(rest_size) + 2;
+        int rest_size_in_terms = term_binary_data_size_in_terms(rest_size) + BINARY_HEADER_SIZE;
 
         // + 2 which is the result cons
         if (UNLIKELY(memory_ensure_free(ctx, tok_size_in_terms + rest_size_in_terms + 2) != MEMORY_GC_OK)) {

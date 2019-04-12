@@ -46,6 +46,8 @@
 #define TERM_BOXED_FUN 0x14
 #define TERM_BOXED_HEAP_BINARY 0x24
 
+#define BINARY_HEADER_SIZE 2
+
 /**
  * @brief Gets a pointer to a term stored on the heap
  *
