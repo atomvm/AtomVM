@@ -53,8 +53,9 @@ static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *
     return (timespec1->tv_sec - timespec2->tv_sec) * 1000 + (timespec1->tv_nsec - timespec2->tv_nsec) / 1000000;
 }
 
-void sys_waitevents(struct ListHead *listeners_list)
+void sys_waitevents(GlobalContext *glb)
 {
+    struct ListHead *listeners_list = glb->listeners;
     struct timespec now;
     sys_clock_gettime(&now);
 
