@@ -218,6 +218,7 @@ compile_erlang(test_binary_to_list)
 compile_erlang(test_atom_to_binary)
 
 compile_erlang(test_binary_part)
+compile_erlang(test_binary_split)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -429,4 +430,5 @@ add_custom_target(erlang_test_modules DEPENDS
     test_atom_to_binary.beam
 
     test_binary_part.beam
+    test_binary_split.beam
 )
