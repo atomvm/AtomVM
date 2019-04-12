@@ -66,10 +66,18 @@ void app_main()
 
     printf("Starting: %s...\n", startup_module_name);
     printf("---\n");
-    context_execute_loop(ctx, mod, "start", 0);
-    printf("Return value: %lx\n", (long) term_to_int32(ctx->x[0]));
-
-    while(1);
+    context_execute_loop(ctx, mod, "start", 0);    
+    term ret_value = ctx->x[0];
+    fprintf(stderr, "AtomVM finished with return value = ");
+    term_display(stderr, ret_value, ctx);
+    fprintf(stderr, "\n");
+    
+    fprintf(stderr, "going to sleep forever..\n");
+    while(1) {
+        // avoid task_wdt: Task watchdog got triggered. The following tasks did not reset the watchdog in time
+        // ..
+        vTaskDelay(5000 / portTICK_PERIOD_MS);
+    }
 }
 
 const void *avm_partition(int *size)
