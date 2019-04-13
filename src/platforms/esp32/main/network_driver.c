@@ -44,7 +44,7 @@
 
 #include <apps/sntp/sntp.h>
 
-#define ENABLE_TRACE 1
+//#define ENABLE_TRACE 1
 
 #ifndef TRACE
     #ifdef ENABLE_TRACE
