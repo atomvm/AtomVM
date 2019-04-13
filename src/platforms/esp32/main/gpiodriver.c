@@ -140,6 +140,12 @@ void sys_platform_periodic_tasks()
     uint32_t gpio_num;
     if (listening_ctx && xQueueReceive(gpio_evt_queue, &gpio_num, 0)) {
 
+        // 1 header + 2 elements
+        if (UNLIKELY(memory_ensure_free(gpio_ctx, 3) != MEMORY_GC_OK)) {
+            //TODO: it must not fail
+            abort();
+        }
+
         term int_msg = term_alloc_tuple(2, gpio_ctx);
         term_put_tuple_element(int_msg, 0, context_make_atom(gpio_ctx, gpio_interrupt_a));
         term_put_tuple_element(int_msg, 1, term_from_int32(gpio_num));
