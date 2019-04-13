@@ -167,7 +167,7 @@ static void send_got_ip(ClientData *data, tcpip_adapter_ip_info_t *info)
 {
     TRACE("Sending got_ip back to AtomVM\n");
     Context *ctx = data->ctx;
-    
+
     port_ensure_available(ctx, ((4 + 1) * 3 + (2 + 1) + (2 + 1))*2);
 
     term pid = data->pid;

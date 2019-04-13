@@ -62,7 +62,7 @@
 %% @doc     Start a network_fsm.
 %%
 %%          This function will start a network_fsm, which will attempt to
-%%          connect to an AP endpoint in the background.  Specify callback 
+%%          connect to an AP endpoint in the background.  Specify callback
 %%          functions to receive definitive
 %%          information that the connection succeeded.  See the AtomVM Network
 %%          FSM Programming Manual for more information.

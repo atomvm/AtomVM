@@ -4,7 +4,7 @@ The AtomVM `network_fsm` provides an Erlang API interface for interacting with t
 
 This API is designed to allow applications to be responsive to changes in the underlying network, which can frequently occur in embedded applications, where devices can easily lose and then regain network connectivity.  In such cases, it is important for applications to be resilient to changes in network avaialbility, by closing or re-opening socket connections in response to disconnections and re-connections in the underlying network.
 
-This document describes the basic design of the AtomVM Network FSM, and how to interact programmatically with it. 
+This document describes the basic design of the AtomVM Network FSM, and how to interact programmatically with it.
 
 ## Finite State Machine
 
@@ -130,9 +130,9 @@ To stop the Network FSM, issue the `stop/0` function:
 The following example connects to a network ("myssid") using a password ("mypsk"), and handles `connected`, `disconnected`, and `got_ip` events by displying them to the console.
 
     -module(sta_network).
-    
+
     -export([start/0]).
-    
+
     start() ->
         Self = self(),
         Config = [
@@ -150,7 +150,7 @@ The following example connects to a network ("myssid") using a password ("mypsk"
             Error ->
                 erlang:display(Error)
         end.
-    
+
     wait_for_message() ->
         receive
             connected ->

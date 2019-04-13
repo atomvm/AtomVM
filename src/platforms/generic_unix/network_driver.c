@@ -58,10 +58,10 @@ void network_driver_start(Context *ctx, term_ref pid, term_ref ref, term config)
     UNUSED(config);
 
     port_ensure_available(ctx, 24);
-    
+
     // ok
     port_send_reply(ctx, pid, ref, OK_ATOM);
-    
+
     // sta_connected
     port_send_reply(ctx, pid, ref, context_make_atom(ctx, connected_a));
 
