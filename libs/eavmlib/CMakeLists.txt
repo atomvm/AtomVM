@@ -10,7 +10,7 @@ set(ERLANG_MODULES
     console
     gpio
     logger
-    network
+    network_fsm
     timer_manager
     timestamp_util
 )
