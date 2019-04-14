@@ -254,4 +254,3 @@ void socket_driver_do_recvfrom(Context *ctx, term pid, term ref)
     listener->data = data;
     listener->handler = recvfrom_callback;
 }
-

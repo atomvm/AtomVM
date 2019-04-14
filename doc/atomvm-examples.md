@@ -124,7 +124,7 @@ Flash the example program to your device as follows:
     Auto-detected Flash size: 4MB
     Wrote 32768 bytes at 0x00110000 in 2.9 seconds (91.3 kbit/s)...
     Hash of data verified.
-    
+
     Leaving...
     Hard resetting via RTS pin...
 
@@ -156,7 +156,7 @@ Flash the example program to your device as follows:
     Auto-detected Flash size: 4MB
     Wrote 49152 bytes at 0x00110000 in 4.3 seconds (91.3 kbit/s)...
     Hash of data verified.
-    
+
     Leaving...
     Hard resetting via RTS pin...
 
@@ -196,7 +196,7 @@ You should see the following output when monitoring the ESP32 output (truncated 
     I (1490) wifi: state: assoc -> run (10)
     I (1500) wifi: connected with myssid, channel 1
     I (1500) wifi: pm start, type: 1
-    
+
     I (1500) NETWORK: SYSTEM_EVENT_STA_CONNECTED received.
     I (3690) event: sta ip: 192.168.1.236, mask: 255.255.255.0, gw: 192.168.1.1
     I (3690) NETWORK: SYSTEM_EVENT_STA_GOT_IP: 192.168.1.236
@@ -229,7 +229,7 @@ Flash the example program to your device as follows:
     Auto-detected Flash size: 4MB
     Wrote 49152 bytes at 0x00110000 in 4.3 seconds (91.3 kbit/s)...
     Hash of data verified.
-    
+
     Leaving...
     Hard resetting via RTS pin...
 
@@ -269,7 +269,7 @@ You should see the following output when monitoring the ESP32 output (truncated 
     I (1562) wifi: state: assoc -> run (10)
     I (1582) wifi: connected with myssid, channel 1
     I (1582) wifi: pm start, type: 1
-    
+
     I (1582) NETWORK: SYSTEM_EVENT_STA_CONNECTED received.
     I (2212) event: sta ip: 192.168.1.236, mask: 255.255.255.0, gw: 192.168.1.1
     I (2212) NETWORK: SYSTEM_EVENT_STA_GOT_IP: 192.168.1.236
