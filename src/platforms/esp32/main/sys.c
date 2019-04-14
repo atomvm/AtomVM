@@ -34,6 +34,8 @@
 #include <stdint.h>
 #include <posix/sys/socket.h>
 
+xQueueHandle event_queue = NULL;
+
 static inline void sys_clock_gettime(struct timespec *t)
 {
     TickType_t ticks = xTaskGetTickCount();
@@ -48,6 +50,10 @@ static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *
 
 extern void sys_waitevents(GlobalContext *glb)
 {
+    if (!event_queue) {
+        event_queue = xQueueCreate(10, sizeof(uint32_t));
+    }
+
     struct ListHead *listeners_list = glb->listeners;
     struct timespec now;
     sys_clock_gettime(&now);
@@ -55,16 +61,8 @@ extern void sys_waitevents(GlobalContext *glb)
     EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
 
     int min_timeout = INT_MAX;
-    int count = 0;
 
-    //
-    // First: Find maximum allowed sleep time, and count file descriptor listeners,
-    // the max FD, and set the read FD set
-    //
     EventListener *listener = listeners;
-    int max_fd = 0;
-    fd_set read_fds;
-    FD_ZERO(&read_fds);
     do {
         if (listener->expires) {
             int wait_ms = timespec_diff_to_ms(&listener->expiral_timestamp, &now);
@@ -74,41 +72,13 @@ extern void sys_waitevents(GlobalContext *glb)
                 min_timeout = wait_ms;
             }
         }
-        if (listener->fd >= 0) {
-            count++;
-            FD_SET(listener->fd, &read_fds);
-            if (listener->fd >= max_fd) {
-                max_fd = listener->fd;
-            }
-        }
         listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
     } while (listener != listeners);
 
-    if (count > 0) {
-        //
-        // Is anyone ready to read?
-        //
-        struct timeval select_timeout;
-        select_timeout.tv_sec = 0; // min_timeout / 1000;
-        select_timeout.tv_usec = 10000; // (min_timeout % 1000) * 1000000;
-        select(max_fd + 1, &read_fds, NULL, NULL, &select_timeout);
-        //
-        // If so, call the handler
-        //
-        listener = listeners;
-        do {
-            EventListener *next_listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-            if (listener->fd >= 0) {
-                if (FD_ISSET(listener->fd, &read_fds)) {
-                    listener->handler(listener);
-                }
-            }
-            listener = next_listener;
-            listeners = GET_LIST_ENTRY(glb->listeners, EventListener, listeners_list_head);
-        } while (listeners != NULL && listener != listeners);
-    } else {
-        vTaskDelay(min_timeout / portTICK_PERIOD_MS);
-    }
+    TickType_t ticks_to_wait = min_timeout / portTICK_PERIOD_MS;
+
+    int event_descriptor;
+    xQueueReceive(event_queue, &event_descriptor, ticks_to_wait);
 
     //second: execute handlers for expiered timers
     if (min_timeout != INT_MAX) {
