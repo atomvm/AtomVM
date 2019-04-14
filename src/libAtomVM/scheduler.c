@@ -39,8 +39,6 @@ Context *scheduler_wait(GlobalContext *global, Context *c)
     #endif
     scheduler_make_waiting(global, c);
 
-    sys_platform_periodic_tasks();
-
     do {
         struct timespec next_timeout;
         next_timeout.tv_sec = global->next_timeout_at.tv_sec;
@@ -103,8 +101,6 @@ Context *scheduler_wait(GlobalContext *global, Context *c)
 
 Context *scheduler_next(GlobalContext *global, Context *c)
 {
-    sys_platform_periodic_tasks();
-
     UNUSED(global);
     c->reductions += DEFAULT_REDUCTIONS_AMOUNT;
 

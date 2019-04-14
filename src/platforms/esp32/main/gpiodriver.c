@@ -40,8 +40,9 @@
 
 #include "trace.h"
 
-static xQueueHandle gpio_evt_queue = NULL;
-static Context *listening_ctx;
+#include "sys.h"
+#include "esp32_sys.h"
+
 static Context *gpio_ctx;
 
 static void consume_gpio_mailbox(Context *ctx);
@@ -59,6 +60,24 @@ void gpiodriver_init(Context *ctx)
 {
     ctx->native_handler = consume_gpio_mailbox;
     ctx->platform_data = NULL;
+}
+
+void gpio_interrupt_callback(EventListener *listener)
+{
+    Context *listening_ctx = listener->data;
+    int gpio_num = listener->fd;
+
+    // 1 header + 2 elements
+    if (UNLIKELY(memory_ensure_free(gpio_ctx, 3) != MEMORY_GC_OK)) {
+        //TODO: it must not fail
+        abort();
+    }
+
+    term int_msg = term_alloc_tuple(2, gpio_ctx);
+    term_put_tuple_element(int_msg, 0, context_make_atom(gpio_ctx, gpio_interrupt_a));
+    term_put_tuple_element(int_msg, 1, term_from_int32(gpio_num));
+
+    mailbox_send(listening_ctx, int_msg);
 }
 
 static void consume_gpio_mailbox(Context *ctx)
@@ -103,11 +122,10 @@ static void consume_gpio_mailbox(Context *ctx)
         int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
         TRACE("going to install interrupt for %i.\n", gpio_num);
 
-        if (!gpio_evt_queue) {
+        if (!event_queue) {
             //TODO: ugly workaround here, write a real implementation
-            listening_ctx = target;
             gpio_ctx = ctx;
-            gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
+            event_queue = xQueueCreate(10, sizeof(uint32_t));
             gpio_install_isr_service(0);
             TRACE("created queue.\n");
         }
@@ -116,6 +134,23 @@ static void consume_gpio_mailbox(Context *ctx)
         gpio_set_intr_type(gpio_num, GPIO_PIN_INTR_POSEDGE);
 
         gpio_isr_handler_add(gpio_num, gpio_isr_handler, (void *) gpio_num);
+
+        GlobalContext *global = ctx->global;
+
+        EventListener *listener = malloc(sizeof(EventListener));
+        if (IS_NULL_PTR(listener)) {
+            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            abort();
+        }
+        linkedlist_append(&global->listeners, &listener->listeners_list_head);
+        listener->fd = gpio_num;
+
+        listener->expires = 0;
+        listener->expiral_timestamp.tv_sec = INT_MAX;
+        listener->expiral_timestamp.tv_nsec = INT_MAX;
+        listener->one_shot = 0;
+        listener->data = target;
+        listener->handler = gpio_interrupt_callback;
 
         ret = OK_ATOM;
 
@@ -132,24 +167,5 @@ static void consume_gpio_mailbox(Context *ctx)
 static void IRAM_ATTR gpio_isr_handler(void *arg)
 {
     uint32_t gpio_num = (uint32_t) arg;
-    xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
-}
-
-void sys_platform_periodic_tasks()
-{
-    uint32_t gpio_num;
-    if (listening_ctx && xQueueReceive(gpio_evt_queue, &gpio_num, 0)) {
-
-        // 1 header + 2 elements
-        if (UNLIKELY(memory_ensure_free(gpio_ctx, 3) != MEMORY_GC_OK)) {
-            //TODO: it must not fail
-            abort();
-        }
-
-        term int_msg = term_alloc_tuple(2, gpio_ctx);
-        term_put_tuple_element(int_msg, 0, context_make_atom(gpio_ctx, gpio_interrupt_a));
-        term_put_tuple_element(int_msg, 1, term_from_int32(gpio_num));
-
-        mailbox_send(listening_ctx, int_msg);
-    }
+    xQueueSendFromISR(event_queue, &gpio_num, NULL);
 }

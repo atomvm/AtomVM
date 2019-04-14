@@ -235,10 +235,6 @@ static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *
     return (timespec1->tv_sec - timespec2->tv_sec) * 1000 + (timespec1->tv_nsec - timespec2->tv_nsec) / 1000000;
 }
 
-void sys_platform_periodic_tasks()
-{
-}
-
 Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 {
     Context *new_ctx = context_new(glb);

@@ -83,8 +83,6 @@ void sys_time(struct timespec *t);
  */
 Module *sys_load_module(GlobalContext *global, const char *module_name);
 
-void sys_platform_periodic_tasks();
-
 /**
  * @brief Create a port driver
  * @details This function creates a port driver, enscapsulated in a Context object.  This function should

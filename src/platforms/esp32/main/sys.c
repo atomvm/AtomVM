@@ -78,7 +78,18 @@ extern void sys_waitevents(GlobalContext *glb)
     TickType_t ticks_to_wait = min_timeout / portTICK_PERIOD_MS;
 
     int event_descriptor;
-    xQueueReceive(event_queue, &event_descriptor, ticks_to_wait);
+    if (xQueueReceive(event_queue, &event_descriptor, ticks_to_wait) != pdTRUE) {
+        event_descriptor = -1;
+    } else {
+        EventListener *listener = listeners;
+        do {
+            if (listener->fd == event_descriptor) {
+                listener->handler(listener);
+            }
+
+            listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
+        } while (listener != listeners);
+    }
 
     //second: execute handlers for expiered timers
     if (min_timeout != INT_MAX) {

@@ -131,11 +131,6 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
     return new_module;
 }
 
-void sys_platform_periodic_tasks()
-{
-    // TODO: implement
-}
-
 Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 {
     Context *new_ctx = context_new(glb);
