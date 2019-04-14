@@ -103,6 +103,11 @@ void sys_waitevents(GlobalContext *glb)
     }
 }
 
+void sys_consume_pending_events(GlobalContext *glb)
+{
+    UNUSED(glb);
+}
+
 void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis)
 {
     sys_clock_gettime(t);

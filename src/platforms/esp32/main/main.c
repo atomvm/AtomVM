@@ -34,12 +34,16 @@
 #include "utils.h"
 #include "term.h"
 
+#include "esp32_sys.h"
+
 const void *avm_partition(int *size);
 
 void app_main()
 {
     nvs_flash_init();
     tcpip_adapter_init();
+
+    esp32_sys_queue_init();
 
     int size;
     const void *flashed_avm = avm_partition(&size);

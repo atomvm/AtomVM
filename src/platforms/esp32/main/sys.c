@@ -34,7 +34,14 @@
 #include <stdint.h>
 #include <posix/sys/socket.h>
 
+#define EVENT_QUEUE_LEN 16
+
 xQueueHandle event_queue = NULL;
+
+void esp32_sys_queue_init()
+{
+    event_queue = xQueueCreate(EVENT_QUEUE_LEN, sizeof(uint32_t));
+}
 
 static inline void sys_clock_gettime(struct timespec *t)
 {
@@ -48,12 +55,26 @@ static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *
     return (timespec1->tv_sec - timespec2->tv_sec) * 1000 + (timespec1->tv_nsec - timespec2->tv_nsec) / 1000000;
 }
 
-extern void sys_waitevents(GlobalContext *glb)
+static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
 {
-    if (!event_queue) {
-        event_queue = xQueueCreate(10, sizeof(uint32_t));
-    }
+    struct ListHead *listeners_list = glb->listeners;
+    EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
 
+    int event_descriptor;
+    if (xQueueReceive(event_queue, &event_descriptor, wait_ticks) == pdTRUE) {
+        EventListener *listener = listeners;
+        do {
+            if (listener->fd == event_descriptor) {
+                listener->handler(listener);
+            }
+
+            listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
+        } while (listener != listeners);
+    }
+}
+
+void sys_waitevents(GlobalContext *glb)
+{
     struct ListHead *listeners_list = glb->listeners;
     struct timespec now;
     sys_clock_gettime(&now);
@@ -77,19 +98,7 @@ extern void sys_waitevents(GlobalContext *glb)
 
     TickType_t ticks_to_wait = min_timeout / portTICK_PERIOD_MS;
 
-    int event_descriptor;
-    if (xQueueReceive(event_queue, &event_descriptor, ticks_to_wait) != pdTRUE) {
-        event_descriptor = -1;
-    } else {
-        EventListener *listener = listeners;
-        do {
-            if (listener->fd == event_descriptor) {
-                listener->handler(listener);
-            }
-
-            listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-        } while (listener != listeners);
-    }
+    receive_events(glb, ticks_to_wait);
 
     //second: execute handlers for expiered timers
     if (min_timeout != INT_MAX) {
@@ -109,6 +118,11 @@ extern void sys_waitevents(GlobalContext *glb)
             listeners = GET_LIST_ENTRY(glb->listeners, EventListener, listeners_list_head);
         } while (listeners != NULL && listener != listeners);
     }
+}
+
+void sys_consume_pending_events(GlobalContext *glb)
+{
+    receive_events(glb, 0);
 }
 
 extern void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis)

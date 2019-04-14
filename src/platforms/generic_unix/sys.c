@@ -183,6 +183,11 @@ extern void sys_waitevents(GlobalContext *glb)
     }
 }
 
+void sys_consume_pending_events(GlobalContext *glb)
+{
+    UNUSED(glb);
+}
+
 extern void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis)
 {
     if (UNLIKELY(clock_gettime(CLOCK_MONOTONIC, t))) {

@@ -21,5 +21,6 @@
 #define _ESP32_SYS_H_
 
 extern xQueueHandle event_queue;
+void esp32_sys_queue_init();
 
 #endif

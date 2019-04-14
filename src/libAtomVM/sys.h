@@ -58,6 +58,14 @@ typedef struct EventListener {
 void sys_waitevents(GlobalContext *glb);
 
 /**
+ * @brief process any pending event without blocking
+ *
+ * @details check all open file descriptors/queues, dispatch messages for new events and wake up contexts accordingly.
+ * @param glb the global context.
+ */
+void sys_consume_pending_events(GlobalContext *glb);
+
+/**
  * @brief sets the timestamp for a future event
  *
  * @details sets the timestamp to a timestamp n milliseconds in the future using platform monotonic timer source.

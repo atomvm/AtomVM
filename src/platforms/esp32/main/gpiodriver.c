@@ -122,18 +122,17 @@ static void consume_gpio_mailbox(Context *ctx)
         int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
         TRACE("going to install interrupt for %i.\n", gpio_num);
 
-        if (!event_queue) {
-            //TODO: ugly workaround here, write a real implementation
-            gpio_ctx = ctx;
-            event_queue = xQueueCreate(10, sizeof(uint32_t));
-            gpio_install_isr_service(0);
-            TRACE("created queue.\n");
-        }
+        //TODO: ugly workaround here, write a real implementation
+        gpio_ctx = ctx;
+        gpio_install_isr_service(0);
+        TRACE("installed ISR service 0.\n");
+
         gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
         //TODO: both posedge and negedge must be supproted
         gpio_set_intr_type(gpio_num, GPIO_PIN_INTR_POSEDGE);
 
         gpio_isr_handler_add(gpio_num, gpio_isr_handler, (void *) gpio_num);
+
 
         GlobalContext *global = ctx->global;
 
