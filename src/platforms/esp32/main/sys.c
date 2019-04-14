@@ -18,6 +18,7 @@
  ***************************************************************************/
 
 #include "sys.h"
+#include "esp32_sys.h"
 
 #include "avmpack.h"
 #include "scheduler.h"
@@ -37,6 +38,32 @@
 #define EVENT_QUEUE_LEN 16
 
 xQueueHandle event_queue = NULL;
+
+void *event_descriptors[EVENT_DESCRIPTORS_COUNT];
+
+int open_event_descriptor(void *ptr)
+{
+    for (int i = 0; i < EVENT_DESCRIPTORS_COUNT; i++) {
+        if (!event_descriptors[i]) {
+            event_descriptors[i] = ptr;
+            return i;
+        }
+    }
+
+    fprintf(stderr, "exausted descriptors\n");
+
+    return -1;
+}
+
+void close_event_descriptor(int index)
+{
+    if (UNLIKELY(index >= EVENT_DESCRIPTORS_COUNT)) {
+        fprintf(stderr, "tried to close invalid event descriptor\n");
+        abort();
+    }
+
+    event_descriptors[index] = NULL;
+}
 
 void esp32_sys_queue_init()
 {

@@ -24,7 +24,6 @@
 #include <driver/gpio.h>
 
 #include <freertos/FreeRTOS.h>
-#include <freertos/queue.h>
 #include <freertos/task.h>
 
 #include "atom.h"
@@ -65,7 +64,7 @@ void gpiodriver_init(Context *ctx)
 void gpio_interrupt_callback(EventListener *listener)
 {
     Context *listening_ctx = listener->data;
-    int gpio_num = listener->fd;
+    int gpio_num = (int) event_descriptors[listener->fd];
 
     // 1 header + 2 elements
     if (UNLIKELY(memory_ensure_free(gpio_ctx, 3) != MEMORY_GC_OK)) {
@@ -127,11 +126,13 @@ static void consume_gpio_mailbox(Context *ctx)
         gpio_install_isr_service(0);
         TRACE("installed ISR service 0.\n");
 
+        int event_desc = open_event_descriptor((void *) gpio_num);
+
         gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
         //TODO: both posedge and negedge must be supproted
         gpio_set_intr_type(gpio_num, GPIO_PIN_INTR_POSEDGE);
 
-        gpio_isr_handler_add(gpio_num, gpio_isr_handler, (void *) gpio_num);
+        gpio_isr_handler_add(gpio_num, gpio_isr_handler, (void *) event_desc);
 
 
         GlobalContext *global = ctx->global;
@@ -142,7 +143,7 @@ static void consume_gpio_mailbox(Context *ctx)
             abort();
         }
         linkedlist_append(&global->listeners, &listener->listeners_list_head);
-        listener->fd = gpio_num;
+        listener->fd = event_desc;
 
         listener->expires = 0;
         listener->expiral_timestamp.tv_sec = INT_MAX;
@@ -165,6 +166,6 @@ static void consume_gpio_mailbox(Context *ctx)
 
 static void IRAM_ATTR gpio_isr_handler(void *arg)
 {
-    uint32_t gpio_num = (uint32_t) arg;
-    xQueueSendFromISR(event_queue, &gpio_num, NULL);
+    uint32_t event_desc = (uint32_t) arg;
+    xQueueSendFromISR(event_queue, &event_desc, NULL);
 }
