@@ -34,9 +34,11 @@
 #include <stdint.h>
 #include <time.h>
 
-typedef void (*event_handler_t)(void *data);
+typedef struct EventListener EventListener;
 
-typedef struct EventListener {
+typedef void (*event_handler_t)(EventListener *listener);
+
+struct EventListener {
     struct ListHead listeners_list_head;
 
     int expires;
@@ -47,7 +49,7 @@ typedef struct EventListener {
     int fd;
 
     unsigned int one_shot : 1;
-} EventListener;
+};
 
 /**
  * @brief waits platform events

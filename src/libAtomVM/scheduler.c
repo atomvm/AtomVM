@@ -25,7 +25,7 @@
 
 #include "time.h"
 
-static void scheduler_timeout_callback(void *data);
+static void scheduler_timeout_callback(EventListener *listener);
 static void scheduler_execute_native_handlers(GlobalContext *global);
 static Context *scheduler_get_expired_before(const GlobalContext *global, const struct timespec *before_timestamp);
 static int scheduler_find_min_timeout(const GlobalContext *global, struct timespec *found_timeout);
@@ -192,9 +192,8 @@ int scheduler_is_timeout_expired(const Context *ctx)
     return before_than(&ctx->timeout_at, &now_timestamp);
 }
 
-static void scheduler_timeout_callback(void *data)
+static void scheduler_timeout_callback(EventListener *listener)
 {
-    EventListener *listener = (EventListener *) data;
     GlobalContext *global = (GlobalContext *) listener->data;
     linkedlist_remove(&global->listeners, &listener->listeners_list_head);
 

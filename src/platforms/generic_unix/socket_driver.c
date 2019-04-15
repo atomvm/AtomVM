@@ -169,9 +169,8 @@ typedef struct RecvFromData {
     uint64_t ref_ticks;
 } RecvFromData;
 
-static void recvfrom_callback(void *data)
+static void recvfrom_callback(EventListener *listener)
 {
-    EventListener *listener = (EventListener *) data;
     RecvFromData *recvfrom_data = (RecvFromData *) listener->data;
     Context *ctx = recvfrom_data->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
