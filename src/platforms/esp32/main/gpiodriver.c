@@ -42,7 +42,7 @@
 #include "sys.h"
 #include "esp32_sys.h"
 
-static Context *gpio_ctx;
+static Context *global_gpio_ctx = NULL;
 
 static void consume_gpio_mailbox(Context *ctx);
 static void IRAM_ATTR gpio_isr_handler(void *arg);
@@ -57,8 +57,15 @@ static const char *const gpio_interrupt_a = "\xE" "gpio_interrupt";
 
 void gpiodriver_init(Context *ctx)
 {
-    ctx->native_handler = consume_gpio_mailbox;
-    ctx->platform_data = NULL;
+    if (LIKELY(!global_gpio_ctx)) {
+        global_gpio_ctx = ctx;
+
+        ctx->native_handler = consume_gpio_mailbox;
+        ctx->platform_data = NULL;
+    } else {
+        fprintf(stderr, "Only a single GPIO driver can be opened.\n");
+        abort();
+    }
 }
 
 void gpio_interrupt_callback(EventListener *listener)
@@ -67,13 +74,13 @@ void gpio_interrupt_callback(EventListener *listener)
     int gpio_num = (int) event_descriptors[listener->fd];
 
     // 1 header + 2 elements
-    if (UNLIKELY(memory_ensure_free(gpio_ctx, 3) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(global_gpio_ctx, 3) != MEMORY_GC_OK)) {
         //TODO: it must not fail
         abort();
     }
 
-    term int_msg = term_alloc_tuple(2, gpio_ctx);
-    term_put_tuple_element(int_msg, 0, context_make_atom(gpio_ctx, gpio_interrupt_a));
+    term int_msg = term_alloc_tuple(2, global_gpio_ctx);
+    term_put_tuple_element(int_msg, 0, context_make_atom(global_gpio_ctx, gpio_interrupt_a));
     term_put_tuple_element(int_msg, 1, term_from_int32(gpio_num));
 
     mailbox_send(listening_ctx, int_msg);
@@ -122,7 +129,6 @@ static void consume_gpio_mailbox(Context *ctx)
         TRACE("going to install interrupt for %i.\n", gpio_num);
 
         //TODO: ugly workaround here, write a real implementation
-        gpio_ctx = ctx;
         gpio_install_isr_service(0);
         TRACE("installed ISR service 0.\n");
 
