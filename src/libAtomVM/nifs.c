@@ -1372,9 +1372,16 @@ static void *nifs_increment_context_count(Context *ctx, void *accum)
     return (void *) ((size_t) accum + 1);
 }
 
-static void *nifs_cons_context(Context *ctx, void *accum)
+struct ContextAccumulator {
+    Context *ctx;
+    term result;
+};
+
+static void *nifs_cons_context(Context *ctx, void *p)
 {
-    return (void *) term_list_prepend(term_from_local_process_id(ctx->process_id), (term) accum, ctx);
+    struct ContextAccumulator *accum = (struct ContextAccumulator *) p;
+    accum->result = term_list_prepend(term_from_local_process_id(ctx->process_id), accum->result, accum->ctx);
+    return (void *) accum;
 }
 
 static void *nifs_iterate_processes(GlobalContext *glb, context_iterator fun, void *accum)
@@ -1393,10 +1400,13 @@ static size_t nifs_num_processes(GlobalContext *glb)
     return (size_t) nifs_iterate_processes(glb, nifs_increment_context_count, NULL);
 }
 
-static term nifs_list_processes(GlobalContext *glb)
+static term nifs_list_processes(Context *ctx)
 {
-    term initial = term_nil();
-    return (term) nifs_iterate_processes(glb, nifs_cons_context, (void *) initial);
+    struct ContextAccumulator accum;
+    accum.ctx = ctx;
+    accum.result = term_nil();
+    nifs_iterate_processes(ctx->global, nifs_cons_context, (void *) &accum);
+    return accum.result;
 }
 
 static term nifs_erlang_processes(Context *ctx, int argc, term argv[])
@@ -1408,7 +1418,7 @@ static term nifs_erlang_processes(Context *ctx, int argc, term argv[])
     if (memory_ensure_free(ctx, 2 * num_processes) != MEMORY_GC_OK) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    return nifs_list_processes(ctx->global);
+    return nifs_list_processes(ctx);
 }
 
 static term nifs_erlang_process_info(Context *ctx, int argc, term argv[])
