@@ -200,6 +200,7 @@ static void scheduler_timeout_callback(void *data)
     EventListener *listener = (EventListener *) data;
     GlobalContext *global = (GlobalContext *) listener->data;
     linkedlist_remove(&global->listeners, &listener->listeners_list_head);
+    free(listener);
 
     make_ready_expired_contexts(global);
 }
