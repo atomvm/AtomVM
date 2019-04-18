@@ -21,10 +21,55 @@
 #include "network_driver.h"
 #include "port.h"
 
-void network_driver_setup(Context *ctx, term pid, term ref, term config)
+const char *connected_a  = "\xD" "sta_connected";
+const char *sta_got_ip_a = "\xA" "sta_got_ip";
+
+static term create_dummy_ip_info(Context *ctx)
+{
+    // {{192,168,1,236}, {255,255,255,0}, {192,168,1,1}}
+    term ip = term_alloc_tuple(4, ctx);
+    term_put_tuple_element(ip, 0, term_from_int32(192));
+    term_put_tuple_element(ip, 1, term_from_int32(168));
+    term_put_tuple_element(ip, 2, term_from_int32(1));
+    term_put_tuple_element(ip, 3, term_from_int32(236));
+
+    term netmask = term_alloc_tuple(4, ctx);
+    term_put_tuple_element(netmask, 0, term_from_int32(255));
+    term_put_tuple_element(netmask, 1, term_from_int32(255));
+    term_put_tuple_element(netmask, 2, term_from_int32(255));
+    term_put_tuple_element(netmask, 3, term_from_int32(0));
+
+    term gateway = term_alloc_tuple(4, ctx);
+    term_put_tuple_element(gateway, 0, term_from_int32(192));
+    term_put_tuple_element(gateway, 1, term_from_int32(168));
+    term_put_tuple_element(gateway, 2, term_from_int32(1));
+    term_put_tuple_element(gateway, 3, term_from_int32(1));
+
+    term ret = term_alloc_tuple(3, ctx);
+    term_put_tuple_element(ret, 0, ip);
+    term_put_tuple_element(ret, 1, netmask);
+    term_put_tuple_element(ret, 2, gateway);
+
+    return ret;
+}
+
+void network_driver_start(Context *ctx, term_ref pid, term_ref ref, term config)
 {
     UNUSED(config);
-    port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, UNDEFINED_ATOM));
+
+    port_ensure_available(ctx, 24);
+
+    // ok
+    port_send_reply(ctx, pid, ref, OK_ATOM);
+
+    // sta_connected
+    port_send_reply(ctx, pid, ref, context_make_atom(ctx, connected_a));
+
+    // {sta_got_ip, IpInfo}
+    term sta_got_ip_tuple = term_alloc_tuple(2, ctx);
+    term_put_tuple_element(sta_got_ip_tuple, 0, context_make_atom(ctx, sta_got_ip_a));
+    term_put_tuple_element(sta_got_ip_tuple, 1, create_dummy_ip_info(ctx));
+    port_send_reply(ctx, pid, ref, sta_got_ip_tuple);
 }
 
 term network_driver_ifconfig(Context *ctx)

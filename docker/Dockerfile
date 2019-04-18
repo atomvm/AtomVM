@@ -41,7 +41,7 @@ ENV PATH $PATH:/tools/esp/xtensa-esp32-elf/bin
 ENV IDF_PATH /tools/esp/esp-idf
 
 # Clone and build esp-idf v3.2-rc
-RUN git clone -b v3.2-rc --recursive https://github.com/espressif/esp-idf.git esp-idf && \
+RUN git clone -b v3.2 --recursive https://github.com/espressif/esp-idf.git esp-idf && \
     python -m pip install --user -r $IDF_PATH/requirements.txt
 
 # STM32 stuff

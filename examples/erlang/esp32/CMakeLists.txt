@@ -7,4 +7,5 @@ project(examples_erlang_esp32)
 include(BuildErlang)
 
 pack_runnable(blink blink eavmlib estdlib)
-pack_runnable(setup_network setup_network eavmlib estdlib)
+pack_runnable(sta_network sta_network eavmlib estdlib)
+pack_runnable(udp_server_blink udp_server_blink eavmlib estdlib)

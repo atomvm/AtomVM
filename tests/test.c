@@ -248,6 +248,14 @@ struct Test tests[] =
     {"binary_first_test.beam", 82},
     {"binary_last_test.beam", 110},
 
+    {"test_integer_to_binary.beam", 2},
+    {"test_list_to_binary.beam", 1},
+    {"test_binary_to_list.beam", 1},
+    {"test_atom_to_binary.beam", 1},
+
+    {"test_binary_part.beam", 12},
+    {"test_binary_split.beam", 16},
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}

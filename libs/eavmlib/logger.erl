@@ -257,7 +257,7 @@ fill_defaults(Config, Defaults) ->
 %% @private
 fill_defaults(_Config, [], Accum) ->
     Accum;
-fill_defaults(Config, [{K,V}=H|T], Accum) ->
+fill_defaults(Config, [{K,_V}=H|T], Accum) ->
     case ?PROPLISTS:get_value(K, Config) of
         undefined ->
             fill_defaults(Config, T, [H|Accum]);
