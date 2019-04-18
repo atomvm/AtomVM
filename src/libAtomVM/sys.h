@@ -38,7 +38,7 @@ typedef void (*event_handler_t)(void *data);
 
 typedef struct EventListener {
     struct ListHead listeners_list_head;    // coution: never move this component behind any other
-                                            // because scheduler relies on it to be the first
+                                            // because scheduler relies on it to be the first component
 
     int expires;
     struct timespec expiral_timestamp;
