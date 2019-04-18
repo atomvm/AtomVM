@@ -53,6 +53,7 @@ extern void sys_waitevents(GlobalContext *glb)
     sys_clock_gettime(&now);
 
     EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
+    EventListener *last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
 
     int min_timeout = INT_MAX;
     int count = 0;
@@ -126,7 +127,7 @@ extern void sys_waitevents(GlobalContext *glb)
 
             listener = next_listener;
             listeners = GET_LIST_ENTRY(glb->listeners, EventListener, listeners_list_head);
-        } while (listeners != NULL && listener != listeners);
+        } while (listeners != NULL && listener != last_listener);
     }
 }
 
