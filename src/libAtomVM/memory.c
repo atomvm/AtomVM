@@ -49,11 +49,22 @@ HOT_FUNC term *memory_heap_alloc(Context *c, uint32_t size)
 
 enum MemoryGCResult memory_ensure_free(Context *c, uint32_t size)
 {
-    if (context_avail_free_memory(c) < size + MIN_FREE_SPACE_SIZE) {
-        if (UNLIKELY(memory_gc(c, MAX(context_memory_size(c) * 2, context_memory_size(c) + size)) != MEMORY_GC_OK)) {
+    size_t free_space = context_avail_free_memory(c);
+    if (free_space < size + MIN_FREE_SPACE_SIZE) {
+        size_t memory_size = context_memory_size(c);
+        if (UNLIKELY(memory_gc(c, memory_size + size + MIN_FREE_SPACE_SIZE) != MEMORY_GC_OK)) {
             //TODO: handle this more gracefully
             TRACE("Unable to allocate memory for GC\n");
             return MEMORY_GC_ERROR_FAILED_ALLOCATION;
+        }
+        size_t new_free_space = context_avail_free_memory(c);
+        size_t new_minimum_free_space = 2 * (size + MIN_FREE_SPACE_SIZE);
+        if (new_free_space > new_minimum_free_space) {
+            size_t new_memory_size = context_memory_size(c);
+            if (UNLIKELY(memory_gc(c, (new_memory_size - new_free_space) + new_minimum_free_space) != MEMORY_GC_OK)) {
+                TRACE("Unable to allocate memory for GC shrink\n");
+                return MEMORY_GC_ERROR_FAILED_ALLOCATION;
+            }
         }
     }
 
