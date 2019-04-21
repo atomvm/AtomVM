@@ -65,6 +65,7 @@ typedef struct SocketDriverData
     term binary;
     term active;
     term buffer;
+    EventListener *active_listener;
 } SocketDriverData;
 
 void *socket_driver_create_data()
@@ -77,6 +78,7 @@ void *socket_driver_create_data()
     data->binary = term_invalid_term();
     data->active = term_invalid_term();
     data->buffer = term_invalid_term();
+    data->active_listener = NULL;
 
     return (void *) data;
 }
@@ -264,6 +266,8 @@ term socket_driver_do_init(Context *ctx, term params)
         listener->one_shot = 0;
         listener->data = ctx;
         listener->handler = socket_handling_callback;
+        socket_data->active_listener = listener;
+
         TRACE("socket: initialized\n");
     } else {
         return port_create_error_tuple(ctx, BADARG_ATOM);
@@ -321,6 +325,24 @@ term socket_driver_do_send(Context *ctx, term dest_address, term dest_port, term
     netbuf_delete(sendbuf);
 
     return port_create_ok_tuple(ctx, OK_ATOM);
+}
+
+void socket_driver_do_close(Context *ctx)
+{
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+    if (socket_data->active == TRUE_ATOM) {
+        linkedlist_remove(&ctx->global->listeners, &socket_data->active_listener->listeners_list_head);
+    }
+    if (netconn_close(socket_data->conn) != ERR_OK) {
+        TRACE("socket: close failed");
+    }
+}
+
+term socket_driver_get_port(Context *ctx)
+{
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+    port_ensure_available(ctx, 7);
+    return port_create_ok_tuple(ctx, term_from_int(socket_data->port));
 }
 
 static void passive_recvfrom_callback(Context *ctx)

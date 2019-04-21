@@ -14,8 +14,15 @@ function clean_file {
     rm ${file}.cleaned
 }
 
+nargs=$#
+if [ "${nargs}" -gt 0 ]; then
+    files=$@
+else
+    files=$(git ls-files)
+fi
+
 cd ${ROOT_DIR}
-for f in $(git ls-files); do
+for f in $@; do
     case $f in
         *.sh | *.erl | *.c | *.h | *.txt)
             clean_file $f

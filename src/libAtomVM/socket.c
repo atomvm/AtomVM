@@ -37,6 +37,8 @@ const char *const send_a = "\x4" "send";
 const char *const init_a = "\x4" "init";
 const char *const bind_a = "\x4" "bind";
 const char *const recvfrom_a = "\x8" "recvfrom";
+const char *const close_a = "\x5" "close";
+const char *const get_port_a = "\x8" "get_port";
 
 
 uint32_t socket_tuple_to_addr(term addr_tuple)
@@ -87,6 +89,11 @@ static void socket_consume_mailbox(Context *ctx)
         term params = term_get_tuple_element(cmd, 1);
         term reply = socket_driver_do_init(ctx, params);
         port_send_reply(ctx, pid, ref, reply);
+        if (reply != OK_ATOM) {
+            // TODO handle shutdown
+            // socket_driver_delete_data(ctx->platform_data);
+            // context_destroy(ctx);
+        }
     } else if (cmd_name == context_make_atom(ctx, send_a)) {
         term dest_address = term_get_tuple_element(cmd, 1);
         term dest_port = term_get_tuple_element(cmd, 2);
@@ -96,6 +103,15 @@ static void socket_consume_mailbox(Context *ctx)
     } else if (cmd_name == context_make_atom(ctx, recvfrom_a)) {
         // handle TODO length and timeout
         socket_driver_do_recvfrom(ctx, pid, ref);
+    } else if (cmd_name == context_make_atom(ctx, close_a)) {
+        socket_driver_do_close(ctx);
+        port_send_reply(ctx, pid, ref, OK_ATOM);
+        // TODO handle shutdown
+        // socket_driver_delete_data(ctx->platform_data);
+        // context_destroy(ctx);
+    } else if (cmd_name == context_make_atom(ctx, get_port_a)) {
+        term reply = socket_driver_get_port(ctx);
+        port_send_reply(ctx, pid, ref, reply);
     } else {
         port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
     }

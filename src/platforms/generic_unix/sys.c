@@ -111,9 +111,9 @@ extern void sys_waitevents(GlobalContext *glb)
                 fds[poll_fd_index].fd = listener->fd;
                 fds[poll_fd_index].events = POLLIN;
                 fds[poll_fd_index].revents = 0;
+                poll_fd_index++;
             }
 
-            poll_fd_index++;
 
             listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
         } while (listener != listeners);
