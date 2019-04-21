@@ -37,12 +37,14 @@
 #include <unistd.h>
 
 #include <esp_log.h>
+#include <lwip/ip_addr.h>
 #include <lwip/inet.h>
+#include <lwip/api.h>
 
+#include "esp32_sys.h"
 #include "trace.h"
 #include "sys.h"
-
-#define BUFSIZE 128
+#include "term.h"
 
 static const char *const tag_proto_a = "\x5" "proto";
 static const char *const proto_udp_a = "\x3" "udp";
@@ -54,29 +56,101 @@ static const char *const getsockname_a = "\xB" "getsockname";
 static const char *const recvfrom_a    = "\x8" "recvfrom";
 static const char *const sendto_a      = "\x6" "sendto";
 
-// TODO use net_conn instead of BSD Sockets
+static void recvfrom_callback(Context *ctx);
 
 typedef struct SocketDriverData
 {
-    int sockfd;
+    struct netconn *conn;
+    uint64_t ref_ticks;
+    term listener_pid;
 } SocketDriverData;
-
 
 void *socket_driver_create_data()
 {
     struct SocketDriverData *data = calloc(1, sizeof(struct SocketDriverData));
+    data->conn = NULL;
+    data->ref_ticks = 0;
+    data->listener_pid = term_invalid_term();
+
     return (void *) data;
 }
-
 
 void socket_driver_delete_data(void *data)
 {
     free(data);
 }
 
+void socket_callback(struct netconn *netconn, enum netconn_evt evt, u16_t len)
+{
+    TRACE("socket: netconn callback, evt: %i, len: %i\n", evt, len);
+
+    if (evt != NETCONN_EVT_RCVPLUS) {
+        return;
+    }
+
+    int event_descriptor = find_event_descriptor(netconn);
+    if (UNLIKELY(event_descriptor < 0)) {
+        abort();
+    }
+
+    int result = xQueueSend(event_queue, &event_descriptor, 0);
+    if (result != pdTRUE) {
+        fprintf(stderr, "socket: failed to enqueue: %i.\n", result);
+    }
+}
+
+void socket_handling_callback(EventListener *listener)
+{
+    Context *socket_ctx = listener->data;
+
+    SocketDriverData *socket_data = (SocketDriverData *) socket_ctx->platform_data;
+    if (!term_is_invalid_term(socket_data->listener_pid)) {
+        recvfrom_callback(socket_ctx);
+    } else {
+        TRACE("socket: no listening context, discarding data.\n");
+    }
+}
+
+static term socket_addr_to_tuple(Context *ctx, ip_addr_t *addr)
+{
+    term addr_tuple;
+
+    switch (IP_GET_TYPE(addr)) {
+        case IPADDR_TYPE_V4: {
+            uint8_t ad1 = ip4_addr1(&(addr->u_addr.ip4));
+            uint8_t ad2 = ip4_addr2(&(addr->u_addr.ip4));
+            uint8_t ad3 = ip4_addr3(&(addr->u_addr.ip4));
+            uint8_t ad4 = ip4_addr4(&(addr->u_addr.ip4));
+            addr_tuple = term_alloc_tuple(4, ctx);
+            term_put_tuple_element(addr_tuple, 0, term_from_int11(ad1));
+            term_put_tuple_element(addr_tuple, 1, term_from_int11(ad2));
+            term_put_tuple_element(addr_tuple, 2, term_from_int11(ad3));
+            term_put_tuple_element(addr_tuple, 3, term_from_int11(ad4));
+            break;
+        }
+
+        case IPADDR_TYPE_V6:
+            //TODO: implement IPv6
+            addr_tuple = term_invalid_term();
+            break;
+
+        default:
+            addr_tuple = term_invalid_term();
+    }
+
+    return addr_tuple;
+}
+
+static void tuple_to_ip_addr(term address_tuple, ip_addr_t *out_addr)
+{
+    out_addr->type = IPADDR_TYPE_V4;
+    out_addr->u_addr.ip4.addr = htonl(socket_tuple_to_addr(address_tuple));
+}
 
 term socket_driver_do_init(Context *ctx, term params)
 {
+    TRACE("socket: init\n");
+
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
     if (!term_is_list(params)) {
@@ -88,59 +162,80 @@ term socket_driver_do_init(Context *ctx, term params)
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
 
+    enum netconn_type conn_type;
+
     if (proto == context_make_atom(ctx, proto_udp_a)) {
-        int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-        if (sockfd == -1) {
-            return port_create_sys_error_tuple(ctx, socket_a, errno);
-        }
-        socket_data->sockfd = sockfd;
+        conn_type = NETCONN_UDP;
+
     } else if (proto == context_make_atom(ctx, proto_tcp_a)) {
-        socket_data->sockfd = socket(AF_INET, SOCK_STREAM, 0);
+        conn_type = NETCONN_TCP;
+
     } else {
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
-    if (fcntl(socket_data->sockfd, F_SETFL, O_NONBLOCK) == -1){
-        return port_create_sys_error_tuple(ctx, fcntl_a, errno);
+
+    TRACE("socket: creating netconn\n");
+
+    struct netconn *conn = netconn_new_with_proto_and_callback(conn_type, 0, socket_callback);
+    socket_data->conn = conn;
+
+    int event_descriptor = open_event_descriptor(conn);
+
+    GlobalContext *global = ctx->global;
+
+    EventListener *listener = malloc(sizeof(EventListener));
+    if (IS_NULL_PTR(listener)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        abort();
     }
+    linkedlist_append(&global->listeners, &listener->listeners_list_head);
+    listener->fd = event_descriptor;
+
+    listener->expires = 0;
+    listener->expiral_timestamp.tv_sec = INT_MAX;
+    listener->expiral_timestamp.tv_nsec = INT_MAX;
+    listener->one_shot = 0;
+    listener->data = ctx;
+    listener->handler = socket_handling_callback;
+
+    TRACE("socket: initialized\n");
 
     return OK_ATOM;
 }
 
 
-term socket_driver_do_bind(Context *ctx, term address, term port)
+term socket_driver_do_bind(Context *ctx, term address_term, term port_term)
 {
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
-    struct sockaddr_in serveraddr;
+    UNUSED(address_term);
 
-    UNUSED(address);
-    memset(&serveraddr, 0, sizeof(serveraddr));
-    serveraddr.sin_family = AF_INET;
-    serveraddr.sin_addr.s_addr = htonl(INADDR_ANY); // TODO
-    serveraddr.sin_port = htons(term_to_int32(port));
+    u16_t port = term_to_int32(port_term);
 
-    socklen_t address_len = sizeof(serveraddr);
-    if (bind(socket_data->sockfd, (struct sockaddr *) &serveraddr, address_len) == -1) {
+    TRACE("socket: binding to IP_ADDR_ANY on port %i\n", (int) port);
+
+    //TODO: replace IP_ADDR_ANY
+    if (UNLIKELY(netconn_bind(socket_data->conn, IP_ADDR_ANY, port) != ERR_OK)) {
         return port_create_sys_error_tuple(ctx, bind_a, errno);
-    } else {
-        if (getsockname(socket_data->sockfd, (struct sockaddr *) &serveraddr, &address_len) == -1) {
-            return port_create_sys_error_tuple(ctx, getsockname_a, errno);
-        } else {
-            term port_atom = term_from_int32(ntohs(serveraddr.sin_port));
-            return port_create_ok_tuple(ctx, port_atom);
-        }
     }
+
+    ip_addr_t naddr;
+
+    if (UNLIKELY(netconn_getaddr(socket_data->conn, &naddr, &port, 1) != ERR_OK)) {
+        return port_create_sys_error_tuple(ctx, getsockname_a, errno);
+    } else {
+        term port_atom = term_from_int32(port);
+        return port_create_ok_tuple(ctx, port_atom);
+    }
+
+    TRACE("socket: binded");
 }
 
 term socket_driver_do_send(Context *ctx, term dest_address, term dest_port, term buffer)
 {
-    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+    TRACE("socket: Going to send data\n");
 
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(struct sockaddr_in));
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(socket_tuple_to_addr(dest_address));
-    addr.sin_port = htons(term_to_int32(dest_port));
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
     const char *buf = NULL;
     size_t len = 0;
@@ -154,53 +249,57 @@ term socket_driver_do_send(Context *ctx, term dest_address, term dest_port, term
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
 
-    TRACE("send: data with len: %i, to: %i, port: %i\n", len, ntohl(addr.sin_addr.s_addr), ntohs(addr.sin_port));
-
-    int sent_data = sendto(socket_data->sockfd, buf, len, 0, (struct sockaddr *) &addr, sizeof(addr));
-    if (sent_data == -1) {
+    struct netbuf *sendbuf = netbuf_new();
+    if (IS_NULL_PTR(sendbuf)) {
+        TRACE("socket: netbuf alloc failed\n");
         return port_create_sys_error_tuple(ctx, sendto_a, errno);
-    } else {
-        term sent_atom = term_from_int32(sent_data);
-        return port_create_ok_tuple(ctx, sent_atom);
     }
+
+    ip_addr_t ip4addr;
+    tuple_to_ip_addr(dest_address, &ip4addr);
+    uint16_t destport = term_to_int32(dest_port);
+
+    TRACE("socket: send: data with len: %i, to: %x, port: %i\n", len, ip4addr.u_addr.ip4.addr, destport);
+
+    if (UNLIKELY(netbuf_ref(sendbuf, buf, len) != ERR_OK)) {
+        TRACE("socket: netbuf_ref fail\n");
+        netbuf_delete(sendbuf);
+        return port_create_sys_error_tuple(ctx, sendto_a, errno);
+    }
+
+    if (UNLIKELY(netconn_sendto(socket_data->conn, sendbuf, &ip4addr, destport) != ERR_OK)) {
+        TRACE("socket: send failed\n");
+        netbuf_delete(sendbuf);
+        return port_create_sys_error_tuple(ctx, sendto_a, errno);
+    }
+
+    netbuf_delete(sendbuf);
+
+    return port_create_ok_tuple(ctx, OK_ATOM);
 }
 
-typedef struct RecvFromData {
-    Context *ctx;
-    term pid;
-    uint64_t ref_ticks;
-} RecvFromData;
-
-static void recvfrom_callback(void *data)
+static void recvfrom_callback(Context *ctx)
 {
-    EventListener *listener = (EventListener *) data;
-    RecvFromData *recvfrom_data = (RecvFromData *) listener->data;
-    Context *ctx = recvfrom_data->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
-    GlobalContext *global = ctx->global;
-    linkedlist_remove(&global->listeners, &listener->listeners_list_head);
+    struct netbuf *buf = NULL;
 
-    struct sockaddr_in clientaddr;
-    socklen_t clientlen = sizeof(clientaddr);
-    char *buf = malloc(BUFSIZE*sizeof(char));
-    if (UNLIKELY(!buf)) {
-        fprintf(stderr, "malloc %s:%d", __FILE__, __LINE__);
-        abort();
-    }
-
-    ssize_t len = recvfrom(socket_data->sockfd, buf, BUFSIZE, 0, (struct sockaddr *) &clientaddr, &clientlen);
-    if (len == -1) {
+    if (UNLIKELY(netconn_recv(socket_data->conn, &buf) != ERR_OK)) {
         // {Ref, {error, {SysCall, Errno}}}
         // tuple arity 2:       3
         // tuple arity 2:       3
         // tuple arity 2:       3
         // ref:                 3 (max)
         port_ensure_available(ctx, 12);
-        term pid = recvfrom_data->pid;
-        term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
+        term pid = socket_data->listener_pid;
+        term ref = term_from_ref_ticks(socket_data->ref_ticks, ctx);
         port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, sendto_a, errno));
+
     } else {
+        void *data;
+        uint16_t datalen;
+        netbuf_data(buf, &data, &datalen);
+
         // {Ref, {ok, {{int,int,int,int}, int, binary}}}
         // tuple arity 2:       3
         // tuple arity 3:       4
@@ -208,49 +307,24 @@ static void recvfrom_callback(void *data)
         // tuple arity 2:       3
         // ref:                 3 (max)
         // binary:              2 + len(binary)/WORD_SIZE + 1
-        port_ensure_available(ctx, 20 + len/(TERM_BITS/8) + 1);
-        term pid = recvfrom_data->pid;
-        term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
-        term addr = socket_tuple_from_addr(ctx, htonl(clientaddr.sin_addr.s_addr));
-        term port = term_from_int32(htons(clientaddr.sin_port));
-        term packet = socket_create_packet_term(ctx, buf, len);
+        port_ensure_available(ctx, 20 + datalen/(TERM_BITS/8) + 1);
+
+        term ref = term_from_ref_ticks(socket_data->ref_ticks, ctx);
+        term addr = socket_addr_to_tuple(ctx, netbuf_fromaddr(buf));
+        term port = term_from_int32(netbuf_fromport(buf));
+        term packet = term_from_literal_binary(data, datalen, ctx);
         term addr_port_packet = port_create_tuple3(ctx, addr, port, packet);
         term reply = port_create_ok_tuple(ctx, addr_port_packet);
-        port_send_reply(ctx, pid, ref, reply);
+        port_send_reply(ctx, socket_data->listener_pid, ref, reply);
     }
 
-    linkedlist_remove(&ctx->global->listeners, &listener->listeners_list_head);
-    free(listener);
-    free(recvfrom_data);
-    free(buf);
+    netbuf_delete(buf);
 }
 
 void socket_driver_do_recvfrom(Context *ctx, term pid, term ref)
 {
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
-    EventListener *listener = malloc(sizeof(EventListener));
-    if (IS_NULL_PTR(listener)) {
-        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        abort();
-    }
-
-    RecvFromData *data = (RecvFromData *) malloc(sizeof(RecvFromData));
-    if (IS_NULL_PTR(data)) {
-        fprintf(stderr, "Unable to allocate space for RecvFromData: %s:%i\n", __FILE__, __LINE__);
-        abort();
-    }
-    data->ctx = ctx;
-    data->pid = pid;
-    data->ref_ticks = term_to_ref_ticks(ref);
-
-    linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
-
-    listener->fd = socket_data->sockfd;
-    listener->expires = 0;
-    listener->expiral_timestamp.tv_sec = 60*60*24; // TODO
-    listener->expiral_timestamp.tv_nsec = 0;
-    listener->one_shot = 1;
-    listener->data = data;
-    listener->handler = recvfrom_callback;
+    socket_data->listener_pid = pid;
+    socket_data->ref_ticks = term_to_ref_ticks(ref);
 }
