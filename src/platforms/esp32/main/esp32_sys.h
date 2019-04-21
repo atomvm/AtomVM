@@ -31,5 +31,6 @@ void esp32_sys_queue_init();
 extern void *event_descriptors[EVENT_DESCRIPTORS_COUNT];
 int open_event_descriptor(void *ptr);
 void close_event_descriptor(int index);
+int find_event_descriptor(void *ptr);
 
 #endif

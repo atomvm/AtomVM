@@ -65,6 +65,19 @@ void close_event_descriptor(int index)
     event_descriptors[index] = NULL;
 }
 
+int find_event_descriptor(void *ptr)
+{
+    for (int i = 0; i < EVENT_DESCRIPTORS_COUNT; i++) {
+        if (event_descriptors[i] == ptr) {
+            return i;
+        }
+    }
+
+    fprintf(stderr, "warning: event descriptor not found\n");
+
+    return -1;
+}
+
 void esp32_sys_queue_init()
 {
     event_queue = xQueueCreate(EVENT_QUEUE_LEN, sizeof(uint32_t));
@@ -90,6 +103,12 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
     int event_descriptor;
     if (xQueueReceive(event_queue, &event_descriptor, wait_ticks) == pdTRUE) {
         EventListener *listener = listeners;
+
+        if (!listener) {
+            fprintf(stderr, "warning: no listeners.\n");
+            return;
+        }
+
         do {
             if (listener->fd == event_descriptor) {
                 listener->handler(listener);
