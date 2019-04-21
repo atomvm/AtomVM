@@ -33,10 +33,13 @@
 #include "trace.h"
 #include "sys.h"
 
+// TODO define in defaultatoms
 const char *const send_a = "\x4" "send";
+const char *const sendto_a = "\x6" "sendto";
 const char *const init_a = "\x4" "init";
 const char *const bind_a = "\x4" "bind";
 const char *const recvfrom_a = "\x8" "recvfrom";
+const char *const recv_a = "\x4" "recv";
 const char *const close_a = "\x5" "close";
 const char *const get_port_a = "\x8" "get_port";
 
@@ -94,15 +97,24 @@ static void socket_consume_mailbox(Context *ctx)
             // socket_driver_delete_data(ctx->platform_data);
             // context_destroy(ctx);
         }
-    } else if (cmd_name == context_make_atom(ctx, send_a)) {
+    } else if (cmd_name == context_make_atom(ctx, sendto_a)) {
         term dest_address = term_get_tuple_element(cmd, 1);
         term dest_port = term_get_tuple_element(cmd, 2);
         term buffer = term_get_tuple_element(cmd, 3);
-        term reply = socket_driver_do_send(ctx, dest_address, dest_port, buffer);
+        term reply = socket_driver_do_sendto(ctx, dest_address, dest_port, buffer);
+        port_send_reply(ctx, pid, ref, reply);
+    } else if (cmd_name == context_make_atom(ctx, send_a)) {
+        term buffer = term_get_tuple_element(cmd, 1);
+        term reply = socket_driver_do_send(ctx, buffer);
         port_send_reply(ctx, pid, ref, reply);
     } else if (cmd_name == context_make_atom(ctx, recvfrom_a)) {
-        // handle TODO length and timeout
-        socket_driver_do_recvfrom(ctx, pid, ref);
+        term length = term_get_tuple_element(cmd, 1);
+        term timeout = term_get_tuple_element(cmd, 2);
+        socket_driver_do_recvfrom(ctx, pid, ref, length, timeout);
+    } else if (cmd_name == context_make_atom(ctx, recv_a)) {
+        term length = term_get_tuple_element(cmd, 1);
+        term timeout = term_get_tuple_element(cmd, 2);
+        socket_driver_do_recv(ctx, pid, ref, length, timeout);
     } else if (cmd_name == context_make_atom(ctx, close_a)) {
         socket_driver_do_close(ctx);
         port_send_reply(ctx, pid, ref, OK_ATOM);

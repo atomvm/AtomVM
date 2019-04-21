@@ -18,7 +18,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -module(avm_inet).
 
--export([port/1]).
+-export([port/1, close/1]).
 
 -type port_number() :: 0..65535.
 -type socket() :: pid().
@@ -36,6 +36,20 @@
 -spec port(Socket::socket()) -> port_number().
 port(Socket) ->
     call(Socket, {get_port}).
+
+%%-----------------------------------------------------------------------------
+%% @param   Socket the socket to close
+%% @returns ok.
+%% @doc     Close the socket.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec close(Socket::socket()) -> ok.
+close(Socket) ->
+    call(Socket, {close}).
+
+%%
+%% Internal operations
+%%
 
 %% @private
 call(Socket, Msg) ->

@@ -11,6 +11,7 @@ set(ERLANG_MODULES
     avm_gen_server
     avm_gen_statem
     avm_gen_udp
+    avm_gen_tcp
     avm_inet
     avm_lists
     avm_proplists

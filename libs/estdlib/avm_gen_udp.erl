@@ -98,7 +98,7 @@ open(PortNum, Params0) ->
 %%-----------------------------------------------------------------------------
 -spec send(avm_inet:socket(), address(), avm_inet:port_number(), packet()) -> ok | {error, reason()}.
 send(Socket, Address, PortNum, Packet) ->
-    case call(Socket, {send, Address, PortNum, Packet}) of
+    case call(Socket, {sendto, Address, PortNum, Packet}) of
         {ok, _Sent} ->
             ok;
         Else -> Else
@@ -136,7 +136,7 @@ recv(Socket, Length) ->
 -spec recv(avm_inet:socket(), non_neg_integer(), non_neg_integer()) ->
     {ok, {address(), avm_inet:port_number(), packet()}} | {error, reason()}.
 recv(Socket, Length, Timeout) ->
-    internal_recv(Socket, Length, Timeout).
+    call(Socket, {recvfrom, Length, Timeout}).
 
 
 %%-----------------------------------------------------------------------------
@@ -166,10 +166,6 @@ init(DriverPid, PortNum, Params) ->
             %% TODO close port
             ErrorReason
     end.
-
-% @private
-internal_recv(DriverPid, Length, Timeout) ->
-    call(DriverPid, {recvfrom, Length, Timeout}).
 
 %% @private
 call(DriverPid, Msg) ->
