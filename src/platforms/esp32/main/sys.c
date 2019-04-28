@@ -99,6 +99,7 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
 {
     struct ListHead *listeners_list = glb->listeners;
     EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
+    EventListener *last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
 
     int event_descriptor;
     if (xQueueReceive(event_queue, &event_descriptor, wait_ticks) == pdTRUE) {
@@ -115,7 +116,7 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
             }
 
             listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-        } while (listener != listeners);
+        } while (listeners != NULL && listener != last_listener);
     }
 }
 
@@ -146,6 +147,9 @@ void sys_waitevents(GlobalContext *glb)
 
     receive_events(glb, ticks_to_wait);
 
+    listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
+    EventListener *last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
+
     //second: execute handlers for expiered timers
     if (min_timeout != INT_MAX) {
         listener = listeners;
@@ -162,7 +166,7 @@ void sys_waitevents(GlobalContext *glb)
 
             listener = next_listener;
             listeners = GET_LIST_ENTRY(glb->listeners, EventListener, listeners_list_head);
-        } while (listeners != NULL && listener != listeners);
+        } while (listeners != NULL && listener != last_listener);
     }
 }
 
