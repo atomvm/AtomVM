@@ -34,15 +34,7 @@
 #include <time.h>
 #include <unistd.h>
 
-//#define ENABLE_TRACE
-
-#ifndef TRACE
-    #ifdef ENABLE_TRACE
-        #define TRACE printf
-    #else
-        #define TRACE(...)
-    #endif
-#endif
+#include "trace.h"
 
 static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *timespec2);
 
@@ -54,6 +46,8 @@ static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *
 
 extern void sys_waitevents(GlobalContext *glb)
 {
+    TRACE("sys: entered sys_waitevents.\n");
+
     struct ListHead *listeners_list = glb->listeners;
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
@@ -81,6 +75,7 @@ extern void sys_waitevents(GlobalContext *glb)
             }
         }
         if (listener->fd >= 0) {
+            TRACE("sys_waitevents: fd: %i.\n", listener->fd);
             count++;
 #ifdef USE_SELECT
             FD_SET(listener->fd, &read_fds);
