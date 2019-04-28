@@ -185,7 +185,79 @@ extern void sys_waitevents(GlobalContext *glb)
 
 void sys_consume_pending_events(GlobalContext *glb)
 {
-    UNUSED(glb);
+    struct ListHead *listeners_list = glb->listeners;
+
+    if (!glb->listeners) {
+        return;
+    }
+
+    EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
+    EventListener *last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
+
+    EventListener *listener = listeners;
+
+    int fds_count = 0;
+
+    do {
+        int listener_fd = listener->fd;
+        if (listener_fd >= 0) {
+            fds_count++;
+        }
+    } while (listeners != NULL && listener != last_listener);
+
+    if (fds_count == 0) {
+        return;
+    }
+
+    listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
+    last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
+
+    listener = listeners;
+
+    struct pollfd *fds = malloc(fds_count * sizeof(struct pollfd));
+    int fd_index = 0;
+
+    do {
+        int listener_fd = listener->fd;
+        if (listener_fd >= 0) {
+            fds[fd_index].fd = listener_fd;
+            fds[fd_index].events = POLLIN;
+            fds[fd_index].revents = 0;
+
+            fd_index++;
+        }
+    } while (listeners != NULL && listener != last_listener);
+
+    listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
+    last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
+
+    if (poll(fds, fd_index, 0) > 0) {
+        for (int i = 0; i < fd_index; i++) {
+            if (!(fds[i].revents & fds[i].events)) {
+                continue;
+            }
+
+            int current_fd = fds[i].fd;
+
+            EventListener *listener = listeners;
+
+            if (!listener) {
+                fprintf(stderr, "warning: no listeners.\n");
+                free(fds);
+                return;
+            }
+
+            do {
+                if (listener->fd == current_fd) {
+                    listener->handler(listener);
+                    break;
+                }
+                listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
+            } while (listeners != NULL && listener != last_listener);
+        }
+    }
+
+    free(fds);
 }
 
 extern void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis)
