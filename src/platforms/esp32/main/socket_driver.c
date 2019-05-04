@@ -30,6 +30,8 @@
 #include "utils.h"
 #include "term.h"
 
+#include "platform_defaultatoms.h"
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -45,16 +47,6 @@
 #include "trace.h"
 #include "sys.h"
 #include "term.h"
-
-static const char *const tag_proto_a = "\x5" "proto";
-static const char *const proto_udp_a = "\x3" "udp";
-static const char *const proto_tcp_a = "\x3" "tcp";
-static const char *const socket_a    = "\x6" "socket";
-static const char *const fcntl_a     = "\x5" "fcntl";
-static const char *const bind_a      = "\x4" "bind";
-static const char *const getsockname_a = "\xB" "getsockname";
-static const char *const recvfrom_a    = "\x8" "recvfrom";
-static const char *const sendto_a      = "\x6" "sendto";
 
 static void recvfrom_callback(Context *ctx);
 
@@ -156,7 +148,7 @@ term socket_driver_do_init(Context *ctx, term params)
     if (!term_is_list(params)) {
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
-    term proto = interop_proplist_get_value(params, context_make_atom(ctx, tag_proto_a));
+    term proto = interop_proplist_get_value(params, PROTO_ATOM);
 
     if (term_is_nil(proto)) {
         return port_create_error_tuple(ctx, BADARG_ATOM);
@@ -164,10 +156,10 @@ term socket_driver_do_init(Context *ctx, term params)
 
     enum netconn_type conn_type;
 
-    if (proto == context_make_atom(ctx, proto_udp_a)) {
+    if (proto == UDP_ATOM) {
         conn_type = NETCONN_UDP;
 
-    } else if (proto == context_make_atom(ctx, proto_tcp_a)) {
+    } else if (proto == TCP_ATOM) {
         conn_type = NETCONN_TCP;
 
     } else {
@@ -216,13 +208,13 @@ term socket_driver_do_bind(Context *ctx, term address_term, term port_term)
 
     //TODO: replace IP_ADDR_ANY
     if (UNLIKELY(netconn_bind(socket_data->conn, IP_ADDR_ANY, port) != ERR_OK)) {
-        return port_create_sys_error_tuple(ctx, bind_a, errno);
+        return port_create_sys_error_tuple(ctx, BIND_ATOM, errno);
     }
 
     ip_addr_t naddr;
 
     if (UNLIKELY(netconn_getaddr(socket_data->conn, &naddr, &port, 1) != ERR_OK)) {
-        return port_create_sys_error_tuple(ctx, getsockname_a, errno);
+        return port_create_sys_error_tuple(ctx, GETSOCKNAME_ATOM, errno);
     } else {
         term port_atom = term_from_int32(port);
         return port_create_ok_tuple(ctx, port_atom);
@@ -252,7 +244,7 @@ term socket_driver_do_send(Context *ctx, term dest_address, term dest_port, term
     struct netbuf *sendbuf = netbuf_new();
     if (IS_NULL_PTR(sendbuf)) {
         TRACE("socket: netbuf alloc failed\n");
-        return port_create_sys_error_tuple(ctx, sendto_a, errno);
+        return port_create_sys_error_tuple(ctx, SENDTO_ATOM, errno);
     }
 
     ip_addr_t ip4addr;
@@ -264,13 +256,13 @@ term socket_driver_do_send(Context *ctx, term dest_address, term dest_port, term
     if (UNLIKELY(netbuf_ref(sendbuf, buf, len) != ERR_OK)) {
         TRACE("socket: netbuf_ref fail\n");
         netbuf_delete(sendbuf);
-        return port_create_sys_error_tuple(ctx, sendto_a, errno);
+        return port_create_sys_error_tuple(ctx, SENDTO_ATOM, errno);
     }
 
     if (UNLIKELY(netconn_sendto(socket_data->conn, sendbuf, &ip4addr, destport) != ERR_OK)) {
         TRACE("socket: send failed\n");
         netbuf_delete(sendbuf);
-        return port_create_sys_error_tuple(ctx, sendto_a, errno);
+        return port_create_sys_error_tuple(ctx, SENDTO_ATOM, errno);
     }
 
     netbuf_delete(sendbuf);
@@ -293,7 +285,7 @@ static void recvfrom_callback(Context *ctx)
         port_ensure_available(ctx, 12);
         term pid = socket_data->listener_pid;
         term ref = term_from_ref_ticks(socket_data->ref_ticks, ctx);
-        port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, sendto_a, errno));
+        port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, RECVFROM_ATOM, errno));
 
     } else {
         void *data;

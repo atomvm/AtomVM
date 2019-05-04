@@ -42,17 +42,9 @@
 #include "trace.h"
 #include "sys.h"
 
-#define BUFSIZE 128
+#include "platform_defaultatoms.h"
 
-static const char *const tag_proto_a = "\x5" "proto";
-static const char *const proto_udp_a = "\x3" "udp";
-static const char *const proto_tcp_a = "\x3" "tcp";
-static const char *const socket_a    = "\x6" "socket";
-static const char *const fcntl_a     = "\x5" "fcntl";
-static const char *const bind_a      = "\x4" "bind";
-static const char *const getsockname_a = "\xB" "getsockname";
-static const char *const sendto_a      = "\x6" "sendto";
-static const char *const recvfrom_a    = "\x8" "recvfrom";
+#define BUFSIZE 128
 
 typedef struct SocketDriverData
 {
@@ -80,25 +72,25 @@ term socket_driver_do_init(Context *ctx, term params)
     if (!term_is_list(params)) {
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
-    term proto = interop_proplist_get_value(params, context_make_atom(ctx, tag_proto_a));
+    term proto = interop_proplist_get_value(params, PROTO_ATOM);
 
     if (term_is_nil(proto)) {
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
 
-    if (proto == context_make_atom(ctx, proto_udp_a)) {
+    if (proto == UDP_ATOM) {
         int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
         if (sockfd == -1) {
-            return port_create_sys_error_tuple(ctx, socket_a, errno);
+            return port_create_sys_error_tuple(ctx, SOCKET_ATOM, errno);
         }
         socket_data->sockfd = sockfd;
-    } else if (proto == context_make_atom(ctx, proto_tcp_a)) {
+    } else if (proto == TCP_ATOM) {
         socket_data->sockfd = socket(AF_INET, SOCK_STREAM, 0);
     } else {
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
     if (fcntl(socket_data->sockfd, F_SETFL, O_NONBLOCK) == -1){
-        return port_create_sys_error_tuple(ctx, fcntl_a, errno);
+        return port_create_sys_error_tuple(ctx, FCNTL_ATOM, errno);
     }
 
     return OK_ATOM;
@@ -119,10 +111,10 @@ term socket_driver_do_bind(Context *ctx, term address, term port)
 
     socklen_t address_len = sizeof(serveraddr);
     if (bind(socket_data->sockfd, (struct sockaddr *) &serveraddr, address_len) == -1) {
-        return port_create_sys_error_tuple(ctx, bind_a, errno);
+        return port_create_sys_error_tuple(ctx, BIND_ATOM, errno);
     } else {
         if (getsockname(socket_data->sockfd, (struct sockaddr *) &serveraddr, &address_len) == -1) {
-            return port_create_sys_error_tuple(ctx, getsockname_a, errno);
+            return port_create_sys_error_tuple(ctx, GETSOCKNAME_ATOM, errno);
         } else {
             term port_atom = term_from_int32(ntohs(serveraddr.sin_port));
             return port_create_ok_tuple(ctx, port_atom);
@@ -156,7 +148,7 @@ term socket_driver_do_send(Context *ctx, term dest_address, term dest_port, term
 
     int sent_data = sendto(socket_data->sockfd, buf, len, 0, (struct sockaddr *) &addr, sizeof(addr));
     if (sent_data == -1) {
-        return port_create_sys_error_tuple(ctx, sendto_a, errno);
+        return port_create_sys_error_tuple(ctx, SENDTO_ATOM, errno);
     } else {
         term sent_atom = term_from_int32(sent_data);
         return port_create_ok_tuple(ctx, sent_atom);
@@ -196,7 +188,7 @@ static void recvfrom_callback(EventListener *listener)
         port_ensure_available(ctx, 12);
         term pid = recvfrom_data->pid;
         term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
-        port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, sendto_a, errno));
+        port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, SENDTO_ATOM, errno));
     } else {
         // {Ref, {ok, {{int,int,int,int}, int, binary}}}
         // tuple arity 2:       3

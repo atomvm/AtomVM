@@ -31,6 +31,7 @@
 #include "context.h"
 #include "debug.h"
 #include "defaultatoms.h"
+#include "platform_defaultatoms.h"
 #include "globalcontext.h"
 #include "mailbox.h"
 #include "module.h"
@@ -46,14 +47,6 @@ static Context *global_gpio_ctx = NULL;
 
 static void consume_gpio_mailbox(Context *ctx);
 static void IRAM_ATTR gpio_isr_handler(void *arg);
-
-static const char *const set_level_a = "\x9" "set_level";
-static const char *const input_a = "\x5" "input";
-static const char *const output_a = "\x6" "output";
-static const char *const set_direction_a ="\xD" "set_direction";
-static const char *const set_int_a = "\x7" "set_int";
-static const char *const gpio_interrupt_a = "\xE" "gpio_interrupt";
-
 
 void gpiodriver_init(Context *ctx)
 {
@@ -80,7 +73,7 @@ void gpio_interrupt_callback(EventListener *listener)
     }
 
     term int_msg = term_alloc_tuple(2, global_gpio_ctx);
-    term_put_tuple_element(int_msg, 0, context_make_atom(global_gpio_ctx, gpio_interrupt_a));
+    term_put_tuple_element(int_msg, 0, GPIO_INTERRUPT_ATOM);
     term_put_tuple_element(int_msg, 1, term_from_int32(gpio_num));
 
     mailbox_send(listening_ctx, int_msg);
@@ -98,23 +91,23 @@ static void consume_gpio_mailbox(Context *ctx)
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
-    if (cmd == context_make_atom(ctx, set_level_a)) {
+    if (cmd == SET_LEVEL_ATOM) {
         int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
         int32_t level = term_to_int32(term_get_tuple_element(msg, 3));
         gpio_set_level(gpio_num, level != 0);
         TRACE("gpio: set_level: %i %i\n", gpio_num, level != 0);
         ret = OK_ATOM;
 
-    } else if (cmd == context_make_atom(ctx, set_direction_a)) {
+    } else if (cmd == SET_DIRECTION_ATOM) {
         int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
         term direction = term_get_tuple_element(msg, 3);
 
-        if (direction == context_make_atom(ctx, input_a)) {
+        if (direction == INPUT_ATOM) {
             gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
             TRACE("gpio: set_direction: %i INPUT\n", gpio_num);
             ret = OK_ATOM;
 
-        } else if (direction == context_make_atom(ctx, output_a)) {
+        } else if (direction == OUTPUT_ATOM) {
             gpio_set_direction(gpio_num, GPIO_MODE_OUTPUT);
             TRACE("gpio: set_direction: %i OUTPUT\n", gpio_num);
             ret = OK_ATOM;
@@ -124,7 +117,7 @@ static void consume_gpio_mailbox(Context *ctx)
             ret = ERROR_ATOM;
         }
 
-    } else if (cmd == context_make_atom(ctx, set_int_a)) {
+    } else if (cmd == SET_INT_ATOM) {
         int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
         TRACE("going to install interrupt for %i.\n", gpio_num);
 

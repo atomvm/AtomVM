@@ -49,6 +49,8 @@
 #define STACK_SIZE_ATOM_INDEX 20
 #define MIN_HEAP_SIZE_ATOM_INDEX 21
 
+#define PLATFORM_ATOMS_BASE_INDEX 22
+
 #define FALSE_ATOM term_from_atom_index(FALSE_ATOM_INDEX)
 #define TRUE_ATOM term_from_atom_index(TRUE_ATOM_INDEX)
 
@@ -77,5 +79,7 @@
 #define MIN_HEAP_SIZE_ATOM term_from_atom_index(MIN_HEAP_SIZE_ATOM_INDEX)
 
 void defaultatoms_init(GlobalContext *glb);
+
+void platform_defaultatoms_init(GlobalContext *glb);
 
 #endif

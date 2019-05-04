@@ -62,4 +62,6 @@ void defaultatoms_init(GlobalContext *glb)
     if (!ok) {
         abort();
     }
+
+    platform_defaultatoms_init(glb);
 }

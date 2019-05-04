@@ -33,6 +33,8 @@
 #include "socket.h"
 #include "term.h"
 
+#include "platform_defaultatoms.h"
+
 #include <esp_log.h>
 #include <esp_event_loop.h>
 #include <esp_log.h>
@@ -58,14 +60,6 @@
 
 static esp_err_t wifi_event_handler(void *ctx, system_event_t *event);
 
-static const char *const sta_a = "\x3" "sta";
-static const char *const ssid_a = "\x4" "ssid";
-static const char *const psk_a = "\x3" "psk";
-static const char *const sntp_a = "\x4" "sntp";
-static const char *const sta_got_ip_a = "\xA" "sta_got_ip";
-static const char *const sta_connected_a = "\xD" "sta_connected";
-static const char *const sta_disconnected_a = "\x10" "sta_disconnected";
-
 static EventGroupHandle_t wifi_event_group;
 
 typedef struct ClientData {
@@ -78,11 +72,11 @@ void network_driver_start(Context *ctx, term_ref pid, term_ref ref, term config)
 {
     TRACE("network_driver_start");
 
-    term sta_config = interop_proplist_get_value(config, context_make_atom(ctx, sta_a));
+    term sta_config = interop_proplist_get_value(config, STA_ATOM);
     if (!term_is_nil(sta_config)) {
-        term ssid_value = interop_proplist_get_value(sta_config, context_make_atom(ctx, ssid_a));
-        term pass_value = interop_proplist_get_value(sta_config, context_make_atom(ctx, psk_a));
-        term sntp_value = interop_proplist_get_value(sta_config, context_make_atom(ctx, sntp_a));
+        term ssid_value = interop_proplist_get_value(sta_config, SSID_ATOM);
+        term pass_value = interop_proplist_get_value(sta_config, PSK_ATOM);
+        term sntp_value = interop_proplist_get_value(sta_config, SNTP_ATOM);
 
         char *ssid = interop_list_to_string(ssid_value);
         char *psk = interop_list_to_string(pass_value);
@@ -178,11 +172,11 @@ static void send_got_ip(ClientData *data, tcpip_adapter_ip_info_t *info)
     term gw = socket_tuple_from_addr(ctx, ntohl(get_ipv4_addr(&info->gw)));
 
     term ip_info = port_create_tuple3(ctx, ip, netmask, gw);
-    term reply = port_create_tuple2(ctx, context_make_atom(ctx, sta_got_ip_a), ip_info);
+    term reply = port_create_tuple2(ctx, STA_GOT_IP_ATOM, ip_info);
     port_send_reply(ctx, pid, ref, reply);
 }
 
-static void send_atom(ClientData *data, AtomString atom)
+static void send_atom(ClientData *data, term atom)
 {
     Context *ctx = data->ctx;
     port_ensure_available(ctx, 6);
@@ -190,19 +184,19 @@ static void send_atom(ClientData *data, AtomString atom)
     term pid = data->pid;
     term ref = term_from_ref_ticks(data->ref_ticks, ctx);
     // Pid ! {Ref, Atom}
-    port_send_reply(ctx, pid, ref, context_make_atom(ctx, atom));
+    port_send_reply(ctx, pid, ref, atom);
 }
 
 static void send_sta_connected(ClientData *data)
 {
     TRACE("Sending sta_connected back to AtomVM\n");
-    send_atom(data, sta_connected_a);
+    send_atom(data, STA_CONNECTED_ATOM);
 }
 
 static void send_sta_disconnected(ClientData *data)
 {
     TRACE("Sending sta_disconnected back to AtomVM\n");
-    send_atom(data, sta_disconnected_a);
+    send_atom(data, STA_DISCONNECTED_ATOM);
 }
 
 static esp_err_t wifi_event_handler(void *ctx, system_event_t *event)

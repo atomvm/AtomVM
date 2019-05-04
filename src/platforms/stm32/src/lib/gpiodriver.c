@@ -28,24 +28,12 @@
 
 #include <trace.h>
 
+#include "platform_defaultatoms.h"
+
 static void consume_gpio_mailbox(Context *ctx);
 static uint32_t port_atom_to_gpio_port(Context *ctx, term port_atom);
 static uint16_t gpio_port_to_rcc_port(uint32_t gpio_port);
 static char gpio_port_to_name(uint32_t gpio_port);
-
-static const char *const ok_a = "\x2" "ok";
-static const char *const error_a = "\x5" "error";
-static const char *const set_level_a = "\x9" "set_level";
-static const char *const input_a = "\x5" "input";
-static const char *const output_a = "\x6" "output";
-static const char *const set_direction_a ="\xD" "set_direction";
-static const char *const a_a = "\x01" "a";
-static const char *const b_a = "\x01" "b";
-static const char *const c_a = "\x01" "c";
-static const char *const d_a = "\x01" "d";
-static const char *const e_a = "\x01" "e";
-static const char *const f_a = "\x01" "f";
-
 
 void gpiodriver_init(Context *ctx)
 {
@@ -65,7 +53,7 @@ static void consume_gpio_mailbox(Context *ctx)
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
-    if (cmd == context_make_atom(ctx, set_level_a)) {
+    if (cmd == SET_LEVEL_ATOM) {
         term gpio_tuple = term_get_tuple_element(msg, 2);
         term gpio_port_atom = term_get_tuple_element(gpio_tuple, 0);
         uint32_t gpio_port = port_atom_to_gpio_port(ctx, gpio_port_atom);
@@ -78,9 +66,9 @@ static void consume_gpio_mailbox(Context *ctx)
             gpio_clear(gpio_port, 1 << gpio_pin_num);
         }
         TRACE("gpio: set_level: %c%i %i\n", gpio_port_to_name(gpio_port), gpio_pin_num, level != 0);
-        ret = context_make_atom(ctx, ok_a);
+        ret = OK_ATOM;
 
-    } else if (cmd == context_make_atom(ctx, set_direction_a)) {
+    } else if (cmd == SET_DIRECTION_ATOM) {
         term gpio_tuple = term_get_tuple_element(msg, 2);
         term gpio_port_atom = term_get_tuple_element(gpio_tuple, 0);
         uint32_t gpio_port = port_atom_to_gpio_port(ctx, gpio_port_atom);
@@ -91,24 +79,24 @@ static void consume_gpio_mailbox(Context *ctx)
         // Set direction implicitly enables the port of the GPIO
         rcc_periph_clock_enable(rcc_port);
 
-        if (direction == context_make_atom(ctx, input_a)) {
+        if (direction == INPUT_ATOM) {
             gpio_mode_setup(gpio_port, GPIO_MODE_INPUT, GPIO_PUPD_NONE, 1 << gpio_pin_num);
             TRACE("gpio: set_direction: %c%i INPUT\n", gpio_port_to_name(gpio_port), gpio_pin_num);
-            ret = context_make_atom(ctx, ok_a);
+            ret = OK_ATOM;
 
-        } else if (direction == context_make_atom(ctx, output_a)) {
+        } else if (direction == OUTPUT_ATOM) {
             gpio_mode_setup(gpio_port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, 1 << gpio_pin_num);
             TRACE("gpio: set_direction: %c%i OUTPUT\n", gpio_port_to_name(gpio_port), gpio_pin_num);
-            ret = context_make_atom(ctx, ok_a);
+            ret = OK_ATOM;
 
         } else {
             TRACE("gpio: unrecognized direction\n");
-            ret = context_make_atom(ctx, error_a);
+            ret = ERROR_ATOM;
         }
 
     } else {
         TRACE("gpio: unrecognized command\n");
-        ret = context_make_atom(ctx, error_a);
+        ret = ERROR_ATOM;
     }
 
     free(message);
@@ -118,17 +106,17 @@ static void consume_gpio_mailbox(Context *ctx)
 
 static uint32_t port_atom_to_gpio_port(Context *ctx, term port_atom)
 {
-    if (port_atom == context_make_atom(ctx, a_a)) {
+    if (port_atom == A_ATOM) {
         return GPIOA;
-    } else if (port_atom == context_make_atom(ctx, b_a)) {
+    } else if (port_atom == B_ATOM) {
         return GPIOB;
-    } else if (port_atom == context_make_atom(ctx, c_a)) {
+    } else if (port_atom == C_ATOM) {
         return GPIOC;
-    } else if (port_atom == context_make_atom(ctx, d_a)) {
+    } else if (port_atom == D_ATOM) {
         return GPIOD;
-    } else if (port_atom == context_make_atom(ctx, e_a)) {
+    } else if (port_atom == E_ATOM) {
         return GPIOE;
-    } else if (port_atom == context_make_atom(ctx, f_a)) {
+    } else if (port_atom == F_ATOM) {
         return GPIOF;
     } else {
         return 0;

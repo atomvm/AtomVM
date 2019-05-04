@@ -59,9 +59,9 @@ term port_create_error_tuple(Context *ctx, term reason)
     return port_create_tuple2(ctx, ERROR_ATOM, reason);
 }
 
-term port_create_sys_error_tuple(Context *ctx, AtomString syscall, int errno)
+term port_create_sys_error_tuple(Context *ctx, term syscall, int errno)
 {
-    term reason = port_create_tuple2(ctx, context_make_atom(ctx, syscall), term_from_int32(errno));
+    term reason = port_create_tuple2(ctx, syscall, term_from_int32(errno));
     return port_create_error_tuple(ctx, reason);
 }
 

@@ -21,8 +21,7 @@
 #include "network_driver.h"
 #include "port.h"
 
-const char *connected_a  = "\xD" "sta_connected";
-const char *sta_got_ip_a = "\xA" "sta_got_ip";
+#include "platform_defaultatoms.h"
 
 static term create_dummy_ip_info(Context *ctx)
 {
@@ -63,11 +62,11 @@ void network_driver_start(Context *ctx, term_ref pid, term_ref ref, term config)
     port_send_reply(ctx, pid, ref, OK_ATOM);
 
     // sta_connected
-    port_send_reply(ctx, pid, ref, context_make_atom(ctx, connected_a));
+    port_send_reply(ctx, pid, ref, STA_CONNECTED_ATOM);
 
     // {sta_got_ip, IpInfo}
     term sta_got_ip_tuple = term_alloc_tuple(2, ctx);
-    term_put_tuple_element(sta_got_ip_tuple, 0, context_make_atom(ctx, sta_got_ip_a));
+    term_put_tuple_element(sta_got_ip_tuple, 0, STA_GOT_IP_ATOM);
     term_put_tuple_element(sta_got_ip_tuple, 1, create_dummy_ip_info(ctx));
     port_send_reply(ctx, pid, ref, sta_got_ip_tuple);
 }
