@@ -97,12 +97,11 @@ static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *
 
 static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
 {
-    struct ListHead *listeners_list = glb->listeners;
-    EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
-    EventListener *last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
-
     int event_descriptor;
     if (xQueueReceive(event_queue, &event_descriptor, wait_ticks) == pdTRUE) {
+        struct ListHead *listeners_list = glb->listeners;
+        EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
+        EventListener *last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
         EventListener *listener = listeners;
 
         if (!listener) {
