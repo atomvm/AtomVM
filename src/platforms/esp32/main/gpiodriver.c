@@ -79,10 +79,84 @@ void gpio_interrupt_callback(EventListener *listener)
     mailbox_send(listening_ctx, int_msg);
 }
 
+static term gpiodriver_set_level(term msg)
+{
+    int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
+    int32_t level = term_to_int32(term_get_tuple_element(msg, 3));
+    gpio_set_level(gpio_num, level != 0);
+    TRACE("gpio: set_level: %i %i\n", gpio_num, level != 0);
+
+    return OK_ATOM;
+}
+
+static term gpiodriver_set_direction(term msg)
+{
+    int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
+    term direction = term_get_tuple_element(msg, 3);
+
+    if (direction == INPUT_ATOM) {
+        gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
+        TRACE("gpio: set_direction: %i INPUT\n", gpio_num);
+        return OK_ATOM;
+
+    } else if (direction == OUTPUT_ATOM) {
+        gpio_set_direction(gpio_num, GPIO_MODE_OUTPUT);
+        TRACE("gpio: set_direction: %i OUTPUT\n", gpio_num);
+        return OK_ATOM;
+
+    } else {
+        TRACE("gpio: unrecognized direction\n");
+        return ERROR_ATOM;
+    }
+}
+
+static term gpiodriver_read(term msg)
+{
+    int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
+    int level = gpio_get_level(gpio_num);
+    return term_from_int11(level);
+}
+
+static term gpiodriver_set_int(Context *ctx, Context *target, term msg)
+{
+    int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
+    TRACE("going to install interrupt for %i.\n", gpio_num);
+
+    //TODO: ugly workaround here, write a real implementation
+    gpio_install_isr_service(0);
+    TRACE("installed ISR service 0.\n");
+
+    int event_desc = open_event_descriptor((void *) gpio_num);
+
+    gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
+    //TODO: both posedge and negedge must be supproted
+    gpio_set_intr_type(gpio_num, GPIO_PIN_INTR_POSEDGE);
+
+    gpio_isr_handler_add(gpio_num, gpio_isr_handler, (void *) event_desc);
+
+
+    GlobalContext *global = ctx->global;
+
+    EventListener *listener = malloc(sizeof(EventListener));
+    if (IS_NULL_PTR(listener)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        abort();
+    }
+    linkedlist_append(&global->listeners, &listener->listeners_list_head);
+    listener->fd = event_desc;
+
+    listener->expires = 0;
+    listener->expiral_timestamp.tv_sec = INT_MAX;
+    listener->expiral_timestamp.tv_nsec = INT_MAX;
+    listener->one_shot = 0;
+    listener->data = target;
+    listener->handler = gpio_interrupt_callback;
+
+    return OK_ATOM;
+}
+
 static void consume_gpio_mailbox(Context *ctx)
 {
-    term ret;
-
     Message *message = mailbox_dequeue(ctx);
     term msg = message->message;
     term pid = term_get_tuple_element(msg, 0);
@@ -91,76 +165,28 @@ static void consume_gpio_mailbox(Context *ctx)
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
-    if (cmd == SET_LEVEL_ATOM) {
-        int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
-        int32_t level = term_to_int32(term_get_tuple_element(msg, 3));
-        gpio_set_level(gpio_num, level != 0);
-        TRACE("gpio: set_level: %i %i\n", gpio_num, level != 0);
-        ret = OK_ATOM;
+    term ret;
 
-    } else if (cmd == SET_DIRECTION_ATOM) {
-        int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
-        term direction = term_get_tuple_element(msg, 3);
+    switch (cmd) {
+        case SET_LEVEL_ATOM:
+            ret = gpiodriver_set_level(msg);
+            break;
 
-        if (direction == INPUT_ATOM) {
-            gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
-            TRACE("gpio: set_direction: %i INPUT\n", gpio_num);
-            ret = OK_ATOM;
+        case SET_DIRECTION_ATOM:
+            ret = gpiodriver_set_direction(msg);
+            break;
 
-        } else if (direction == OUTPUT_ATOM) {
-            gpio_set_direction(gpio_num, GPIO_MODE_OUTPUT);
-            TRACE("gpio: set_direction: %i OUTPUT\n", gpio_num);
-            ret = OK_ATOM;
+        case READ_ATOM:
+            ret = gpiodriver_read(msg);
+            break;
 
-        } else {
-            TRACE("gpio: unrecognized direction\n");
+        case SET_INT_ATOM:
+            ret = gpiodriver_set_int(ctx, target, msg);
+            break;
+
+        default:
+            TRACE("gpio: unrecognized command\n");
             ret = ERROR_ATOM;
-        }
-
-    } else if (cmd == READ_ATOM) {
-        int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
-        int level = gpio_get_level(gpio_num);
-        ret = term_from_int11(level);
-
-    } else if (cmd == SET_INT_ATOM) {
-        int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
-        TRACE("going to install interrupt for %i.\n", gpio_num);
-
-        //TODO: ugly workaround here, write a real implementation
-        gpio_install_isr_service(0);
-        TRACE("installed ISR service 0.\n");
-
-        int event_desc = open_event_descriptor((void *) gpio_num);
-
-        gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
-        //TODO: both posedge and negedge must be supproted
-        gpio_set_intr_type(gpio_num, GPIO_PIN_INTR_POSEDGE);
-
-        gpio_isr_handler_add(gpio_num, gpio_isr_handler, (void *) event_desc);
-
-
-        GlobalContext *global = ctx->global;
-
-        EventListener *listener = malloc(sizeof(EventListener));
-        if (IS_NULL_PTR(listener)) {
-            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-            abort();
-        }
-        linkedlist_append(&global->listeners, &listener->listeners_list_head);
-        listener->fd = event_desc;
-
-        listener->expires = 0;
-        listener->expiral_timestamp.tv_sec = INT_MAX;
-        listener->expiral_timestamp.tv_nsec = INT_MAX;
-        listener->one_shot = 0;
-        listener->data = target;
-        listener->handler = gpio_interrupt_callback;
-
-        ret = OK_ATOM;
-
-    } else {
-        TRACE("gpio: unrecognized command\n");
-        ret = ERROR_ATOM;
     }
 
     free(message);
