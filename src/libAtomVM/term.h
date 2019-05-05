@@ -48,6 +48,8 @@
 
 #define BINARY_HEADER_SIZE 2
 
+#define TERM_FROM_ATOM_INDEX(atom_index) ((atom_index << 6) | 0xB)
+
 /**
  * @brief Gets a pointer to a term stored on the heap
  *
@@ -369,7 +371,7 @@ static inline int term_to_atom_index(term t)
  */
 static inline term term_from_atom_index(int atom_index)
 {
-    return (atom_index << 6) | 0xB;
+    return TERM_FROM_ATOM_INDEX(atom_index);
 }
 
 /**
