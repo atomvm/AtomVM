@@ -1,9 +1,16 @@
 -module(gpio).
 
--export([open/0, set_direction/3, set_level/3, set_int/2]).
+-export([open/0, read/2, set_direction/3, set_level/3, set_int/2]).
 
 open() ->
     open_port({spawn, "gpio"}, []).
+
+read(GPIO, GPIONum) ->
+    GPIO ! {self(), read, GPIONum},
+    receive
+        Ret ->
+            Ret
+    end.
 
 set_direction(GPIO, GPIONum, Direction) ->
     GPIO ! {self(), set_direction, GPIONum, Direction},
