@@ -20,6 +20,7 @@
 #include "platform_defaultatoms.h"
 
 static const char *const set_level_atom = "\x9" "set_level";
+static const char *const read_atom = "\x4" "read";
 static const char *const input_atom = "\x5" "input";
 static const char *const output_atom = "\x6" "output";
 static const char *const set_direction_atom ="\xD" "set_direction";
@@ -49,6 +50,7 @@ void platform_defaultatoms_init(GlobalContext *glb)
     int ok = 1;
 
     ok &= globalcontext_insert_atom(glb, set_level_atom) == SET_LEVEL_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, read_atom) == READ_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, input_atom) == INPUT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, output_atom) == OUTPUT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, set_direction_atom) == SET_DIRECTION_ATOM_INDEX;

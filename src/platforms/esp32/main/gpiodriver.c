@@ -117,6 +117,11 @@ static void consume_gpio_mailbox(Context *ctx)
             ret = ERROR_ATOM;
         }
 
+    } else if (cmd == READ_ATOM) {
+        int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
+        int level = gpio_get_level(gpio_num);
+        ret = term_from_int11(level);
+
     } else if (cmd == SET_INT_ATOM) {
         int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
         TRACE("going to install interrupt for %i.\n", gpio_num);
