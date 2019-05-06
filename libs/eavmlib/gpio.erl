@@ -1,6 +1,6 @@
 -module(gpio).
 
--export([open/0, read/2, set_direction/3, set_level/3, set_int/2]).
+-export([open/0, read/2, set_direction/3, set_level/3, set_int/3]).
 
 open() ->
     open_port({spawn, "gpio"}, []).
@@ -26,8 +26,8 @@ set_level(GPIO, GPIONum, Level) ->
             Ret
     end.
 
-set_int(GPIO, GPIONum) ->
-    GPIO ! {self(), set_int, GPIONum},
+set_int(GPIO, GPIONum, Trigger) ->
+    GPIO ! {self(), set_int, GPIONum, Trigger},
     receive
         Ret ->
             Ret
