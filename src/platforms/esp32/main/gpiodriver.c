@@ -120,6 +120,38 @@ static term gpiodriver_read(term msg)
 static term gpiodriver_set_int(Context *ctx, Context *target, term msg)
 {
     int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
+    term trigger = term_get_tuple_element(msg, 3);
+
+    gpio_int_type_t interrupt_type;
+    switch (trigger) {
+        case NONE_ATOM:
+            interrupt_type = GPIO_INTR_DISABLE;
+            break;
+
+        case RISING_ATOM:
+            interrupt_type = GPIO_INTR_POSEDGE;
+            break;
+
+        case FALLING_ATOM:
+            interrupt_type = GPIO_INTR_NEGEDGE;
+            break;
+
+        case BOTH_ATOM:
+            interrupt_type = GPIO_INTR_ANYEDGE;
+            break;
+
+        case LOW_ATOM:
+            interrupt_type = GPIO_INTR_LOW_LEVEL;
+            break;
+
+        case HIGH_ATOM:
+            interrupt_type = GPIO_INTR_HIGH_LEVEL;
+            break;
+
+        default:
+            return ERROR_ATOM;
+    }
+
     TRACE("going to install interrupt for %i.\n", gpio_num);
 
     //TODO: ugly workaround here, write a real implementation
@@ -129,8 +161,7 @@ static term gpiodriver_set_int(Context *ctx, Context *target, term msg)
     int event_desc = open_event_descriptor((void *) gpio_num);
 
     gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
-    //TODO: both posedge and negedge must be supproted
-    gpio_set_intr_type(gpio_num, GPIO_PIN_INTR_POSEDGE);
+    gpio_set_intr_type(gpio_num, interrupt_type);
 
     gpio_isr_handler_add(gpio_num, gpio_isr_handler, (void *) event_desc);
 

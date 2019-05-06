@@ -26,6 +26,12 @@ static const char *const output_atom = "\x6" "output";
 static const char *const set_direction_atom ="\xD" "set_direction";
 static const char *const set_int_atom = "\x7" "set_int";
 static const char *const gpio_interrupt_atom = "\xE" "gpio_interrupt";
+static const char *const none_atom = "\x4" "none";
+static const char *const rising_atom = "\x6" "rising";
+static const char *const falling_atom = "\x7" "falling";
+static const char *const both_atom = "\x4" "both";
+static const char *const low_atom = "\x3" "low";
+static const char *const high_atom = "\x4" "high";
 
 static const char *const proto_atom = "\x5" "proto";
 static const char *const udp_atom = "\x3" "udp";
@@ -56,6 +62,12 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, set_direction_atom) == SET_DIRECTION_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, set_int_atom) == SET_INT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, gpio_interrupt_atom) == GPIO_INTERRUPT_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, none_atom) == NONE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, rising_atom) == RISING_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, falling_atom) == FALLING_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, both_atom) == BOTH_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, low_atom) == LOW_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, high_atom) == HIGH_ATOM_INDEX;
 
     ok &= globalcontext_insert_atom(glb, proto_atom) == PROTO_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, udp_atom) == UDP_ATOM_INDEX;
