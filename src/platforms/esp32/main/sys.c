@@ -25,6 +25,7 @@
 #include "globalcontext.h"
 #include "socket.h"
 #include "gpio_driver.h"
+#include "spidriver.h"
 #include "network.h"
 #include "defaultatoms.h"
 
@@ -225,6 +226,8 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
         network_init(new_ctx, opts);
     } else if (!strcmp(driver_name, "gpio")) {
         gpiodriver_init(new_ctx);
+    } else if (!strcmp(driver_name, "spi")) {
+        spidriver_init(new_ctx, opts);
     } else {
         context_destroy(new_ctx);
         return NULL;

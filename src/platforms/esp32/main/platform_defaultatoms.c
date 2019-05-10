@@ -51,6 +51,19 @@ static const char *const sta_got_ip_atom = "\xA" "sta_got_ip";
 static const char *const sta_connected_atom = "\xD" "sta_connected";
 static const char *const sta_disconnected_atom = "\x10" "sta_disconnected";
 
+//spidriver
+static const char *const bus_config_atom = "\xA" "bus_config";
+static const char *const miso_io_num_atom = "\xB" "miso_io_num";
+static const char *const mosi_io_num_atom = "\xB" "mosi_io_num";
+static const char *const sclk_io_num_atom = "\xB" "sclk_io_num";
+static const char *const device_config_atom = "\xD" "device_config";
+static const char *const spi_clock_hz_atom = "\xC" "spi_clock_hz";
+static const char *const spi_mode_atom = "\x8" "spi_mode";
+static const char *const spi_cs_io_num_atom = "\xD" "spi_cs_io_num";
+static const char *const address_len_bits_atom = "\x10" "address_len_bits";
+static const char *const read_at_atom = "\x7" "read_at";
+static const char *const write_at_atom = "\x8" "write_at";
+
 void platform_defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -86,6 +99,19 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, sta_got_ip_atom) == STA_GOT_IP_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, sta_connected_atom) == STA_CONNECTED_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, sta_disconnected_atom) == STA_DISCONNECTED_ATOM_INDEX;
+
+    //spidriver
+    ok &= globalcontext_insert_atom(glb, bus_config_atom) == BUS_CONFIG_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, miso_io_num_atom) == MISO_IO_NUM_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, mosi_io_num_atom) == MOSI_IO_NUM_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, sclk_io_num_atom) == SCLK_IO_NUM_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, device_config_atom) == DEVICE_CONFIG_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, spi_clock_hz_atom) == SPI_CLOCK_HZ_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, spi_mode_atom) == SPI_MODE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, spi_cs_io_num_atom) == SPI_CS_IO_NUM_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, address_len_bits_atom) == ADDRESS_LEN_BITS_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, read_at_atom) == READ_AT_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, write_at_atom) == WRITE_AT_ATOM_INDEX;
 
     if (!ok) {
         abort();
