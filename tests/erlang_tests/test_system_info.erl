@@ -8,12 +8,12 @@ start() ->
     assert(erlang:system_info(wordsize) > 0),
     assert(is_binary(erlang:system_info(system_architecture))),
     assert(erlang:system_info(some_wierd_unused_key) =:= undefined),
-    
+
     Self = self(),
     Pid = spawn(?MODULE, loop, [Self]), receive ok -> ok end,
-    
+
     assert(erlang:system_info(process_count) =:= 2),
-    
+
     Pid ! {Self, stop}, receive ok -> 0 end.
 
 loop(undefined) ->

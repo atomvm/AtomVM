@@ -1496,11 +1496,11 @@ static term nifs_erlang_system_info(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
     term key = argv[0];
-    
+
     if (!term_is_atom(key)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-    
+
     if (key == PROCESS_COUNT_ATOM) {
         return term_from_int32(nifs_num_processes(ctx->global));
     }
