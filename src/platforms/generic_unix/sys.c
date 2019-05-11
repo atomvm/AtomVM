@@ -27,6 +27,7 @@
 #include "gpio_driver.h"
 #include "network.h"
 #include "utils.h"
+#include "defaultatoms.h"
 
 #include <limits.h>
 #include <poll.h>
@@ -323,4 +324,9 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
     }
 
     return new_ctx;
+}
+
+term sys_get_info(Context *ctx, term key)
+{
+    return UNDEFINED_ATOM;
 }

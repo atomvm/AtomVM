@@ -26,6 +26,7 @@
 #include "socket.h"
 #include "gpio_driver.h"
 #include "network.h"
+#include "defaultatoms.h"
 
 #include "freertos/FreeRTOS.h"
 #include "esp_system.h"
@@ -36,6 +37,11 @@
 #include <posix/sys/socket.h>
 
 #define EVENT_QUEUE_LEN 16
+
+static const char *const esp_free_heap_size_atom = "\x14" "esp32_free_heap_size";
+static const char *const esp_chip_info_atom = "\xF" "esp32_chip_info";
+static const char *const esp_idf_version_atom = "\xF" "esp_idf_version";
+static const char *const esp32_atom = "\x5" "esp32";
 
 xQueueHandle event_queue = NULL;
 
@@ -227,3 +233,31 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
     return new_ctx;
 }
 
+term sys_get_info(Context *ctx, term key)
+{
+    if (key == context_make_atom(ctx, esp_free_heap_size_atom)) {
+        return term_from_int32(esp_get_free_heap_size());
+    }
+    if (key == context_make_atom(ctx, esp_chip_info_atom)) {
+        esp_chip_info_t info;
+        esp_chip_info(&info);
+        if (memory_ensure_free(ctx, 5) != MEMORY_GC_OK) {
+            return OUT_OF_MEMORY_ATOM;
+        }
+        term ret = term_alloc_tuple(4, ctx);
+        term_put_tuple_element(ret, 0, context_make_atom(ctx, esp32_atom));
+        term_put_tuple_element(ret, 1, term_from_int32(info.features));
+        term_put_tuple_element(ret, 2, term_from_int32(info.cores));
+        term_put_tuple_element(ret, 3, term_from_int32(info.revision));
+        return ret;
+    }
+    if (key == context_make_atom(ctx, esp_idf_version_atom)) {
+        const char *str = esp_get_idf_version();
+        size_t n = strlen(str);
+        if (memory_ensure_free(ctx, 2 * n) != MEMORY_GC_OK) {
+            return OUT_OF_MEMORY_ATOM;
+        }
+        return term_from_string((const uint8_t *) str, n, ctx);
+    }
+    return UNDEFINED_ATOM;
+}

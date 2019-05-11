@@ -22,6 +22,7 @@
 #include <avmpack.h>
 #include <gpiodriver.h>
 #include <scheduler.h>
+#include "defaultatoms.h"
 
 // Monotonically increasing number of milliseconds from reset
 // Overflows every 49 days
@@ -148,4 +149,9 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
     }
 
     return new_ctx;
+}
+
+term sys_get_info(Context *ctx, term key)
+{
+    return UNDEFINED_ATOM;
 }

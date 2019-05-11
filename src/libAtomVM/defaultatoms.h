@@ -49,7 +49,13 @@
 #define STACK_SIZE_ATOM_INDEX 20
 #define MIN_HEAP_SIZE_ATOM_INDEX 21
 
-#define PLATFORM_ATOMS_BASE_INDEX 22
+#define PROCESS_COUNT_ATOM_INDEX 22
+#define PORT_COUNT_ATOM_INDEX 23
+#define ATOM_COUNT_ATOM_INDEX 24
+#define SYSTEM_ARCHITECTURE_ATOM_INDEX 25
+#define WORDSIZE_ATOM_INDEX 26
+
+#define PLATFORM_ATOMS_BASE_INDEX 27
 
 #define FALSE_ATOM term_from_atom_index(FALSE_ATOM_INDEX)
 #define TRUE_ATOM term_from_atom_index(TRUE_ATOM_INDEX)
@@ -77,6 +83,12 @@
 #define PUTS_ATOM term_from_atom_index(PUTS_ATOM_INDEX)
 #define STACK_SIZE_ATOM term_from_atom_index(STACK_SIZE_ATOM_INDEX)
 #define MIN_HEAP_SIZE_ATOM term_from_atom_index(MIN_HEAP_SIZE_ATOM_INDEX)
+
+#define PROCESS_COUNT_ATOM term_from_atom_index(PROCESS_COUNT_ATOM_INDEX)
+#define PORT_COUNT_ATOM term_from_atom_index(PORT_COUNT_ATOM_INDEX)
+#define ATOM_COUNT_ATOM term_from_atom_index(ATOM_COUNT_ATOM_INDEX)
+#define SYSTEM_ARCHITECTURE_ATOM term_from_atom_index(SYSTEM_ARCHITECTURE_ATOM_INDEX)
+#define WORDSIZE_ATOM term_from_atom_index(WORDSIZE_ATOM_INDEX)
 
 void defaultatoms_init(GlobalContext *glb);
 

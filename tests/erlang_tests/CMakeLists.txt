@@ -127,6 +127,7 @@ compile_erlang(test_func_info2)
 compile_erlang(test_func_info3)
 compile_erlang(test_process_info)
 compile_erlang(test_min_heap_size)
+compile_erlang(test_system_info)
 
 compile_erlang(test_funs0)
 compile_erlang(test_funs1)
@@ -338,6 +339,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_func_info3.beam
     test_process_info.beam
     test_min_heap_size.beam
+    test_system_info.beam
 
     test_funs0.beam
     test_funs1.beam

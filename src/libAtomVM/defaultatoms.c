@@ -27,6 +27,12 @@ static const char *const message_queue_len_atom = "\x11" "message_queue_len";
 static const char *const puts_atom = "\x4" "puts";
 static const char *const stack_size_atom = "\xA" "stack_size";
 static const char *const min_heap_size_atom ="\xD" "min_heap_size";
+static const char *const process_count_atom = "\xD" "process_count";
+static const char *const port_count_atom = "\xA" "port_count";
+static const char *const atom_count_atom = "\xA" "atom_count";
+static const char *const system_architecture_atom = "\x13" "system_architecture";
+static const char *const version_atom = "\x7" "version";
+static const char *const wordsize_atom = "\x8" "wordsize";
 
 void defaultatoms_init(GlobalContext *glb)
 {
@@ -58,6 +64,11 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, puts_atom) == PUTS_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, stack_size_atom) == STACK_SIZE_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, min_heap_size_atom) == MIN_HEAP_SIZE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, process_count_atom) == PROCESS_COUNT_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, port_count_atom) == PORT_COUNT_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, atom_count_atom) == ATOM_COUNT_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, system_architecture_atom) == SYSTEM_ARCHITECTURE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, wordsize_atom) == WORDSIZE_ATOM_INDEX;
 
     if (!ok) {
         abort();
