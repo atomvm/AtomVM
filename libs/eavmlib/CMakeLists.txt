@@ -11,6 +11,7 @@ set(ERLANG_MODULES
     gpio
     logger
     network_fsm
+    spi
     timer_manager
     timestamp_util
 )
