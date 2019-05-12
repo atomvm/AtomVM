@@ -28,7 +28,7 @@
 
 #include "trace.h"
 
-#define MIN_FREE_SPACE_SIZE 8
+#define MIN_FREE_SPACE_SIZE 16
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
