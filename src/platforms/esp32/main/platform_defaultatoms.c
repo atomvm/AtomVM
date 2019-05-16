@@ -64,6 +64,15 @@ static const char *const address_len_bits_atom = "\x10" "address_len_bits";
 static const char *const read_at_atom = "\x7" "read_at";
 static const char *const write_at_atom = "\x8" "write_at";
 
+//i2cdriver
+static const char *const begin_transmission_atom = "\x12" "begin_transmission";
+static const char *const end_transmission_atom = "\x10" "end_transmission";
+static const char *const write_byte_atom = "\xA" "write_byte";
+static const char *const scl_io_num_atom = "\xA" "scl_io_num";
+static const char *const sda_io_num_atom = "\xA" "sda_io_num";
+static const char *const i2c_clock_hz_atom = "\xC" "i2c_clock_hz";
+
+
 void platform_defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -112,6 +121,14 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, address_len_bits_atom) == ADDRESS_LEN_BITS_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, read_at_atom) == READ_AT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, write_at_atom) == WRITE_AT_ATOM_INDEX;
+
+    //i2cdriver
+    ok &= globalcontext_insert_atom(glb, begin_transmission_atom) == BEGIN_TRANSMISSION_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, end_transmission_atom) == END_TRANSMISSION_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, write_byte_atom) == WRITE_BYTE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, scl_io_num_atom) == SCL_IO_NUM_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, sda_io_num_atom) == SDA_IO_NUM_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, i2c_clock_hz_atom) == I2C_CLOCK_HZ_ATOM_INDEX;
 
     if (!ok) {
         abort();

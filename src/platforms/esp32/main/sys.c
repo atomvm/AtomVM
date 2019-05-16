@@ -21,6 +21,7 @@
 #include "esp32_sys.h"
 
 #include "avmpack.h"
+#include "i2cdriver.h"
 #include "scheduler.h"
 #include "globalcontext.h"
 #include "socket.h"
@@ -228,6 +229,8 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
         gpiodriver_init(new_ctx);
     } else if (!strcmp(driver_name, "spi")) {
         spidriver_init(new_ctx, opts);
+    } else if (!strcmp(driver_name, "i2c")) {
+        i2cdriver_init(new_ctx, opts);
     } else {
         context_destroy(new_ctx);
         return NULL;
