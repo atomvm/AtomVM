@@ -53,9 +53,14 @@ void term_display(FILE *fd, term t, const Context *ctx)
         }
 
         if (is_printable) {
-            char *printable = interop_list_to_string(t);
-            fprintf(fd, "\"%s\"", printable);
-            free(printable);
+            int ok;
+            char *printable = interop_list_to_string(t, &ok);
+            if (LIKELY(ok)) {
+                fprintf(fd, "\"%s\"", printable);
+                free(printable);
+            } else {
+                fprintf(fd, "???");
+            }
 
         } else {
             fputc('[', fd);

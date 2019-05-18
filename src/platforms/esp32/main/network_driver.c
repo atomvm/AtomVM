@@ -78,10 +78,12 @@ void network_driver_start(Context *ctx, term_ref pid, term_ref ref, term config)
         term pass_value = interop_proplist_get_value(sta_config, PSK_ATOM);
         term sntp_value = interop_proplist_get_value(sta_config, SNTP_ATOM);
 
-        char *ssid = interop_list_to_string(ssid_value);
-        char *psk = interop_list_to_string(pass_value);
+        int ssid_ok;
+        char *ssid = interop_list_to_string(ssid_value, &ssid_ok);
+        int psk_ok;
+        char *psk = interop_list_to_string(pass_value, &psk_ok);
 
-        if (UNLIKELY(!ssid || !psk)) {
+        if (UNLIKELY(!ssid_ok || !psk_ok)) {
             if (ssid != NULL) {
                 free(ssid);
             }
@@ -133,8 +135,9 @@ void network_driver_start(Context *ctx, term_ref pid, term_ref ref, term config)
         ESP_ERROR_CHECK(esp_wifi_start());
 
         if (sntp_value != term_nil()) {
-            char *sntp = interop_list_to_string(sntp_value);
-            if (sntp) {
+            int ok;
+            char *sntp = interop_list_to_string(sntp_value, &ok);
+            if (LIKELY(ok)) {
                 sntp_setoperatingmode(SNTP_OPMODE_POLL);
                 sntp_setservername(0, sntp);
                 sntp_init();

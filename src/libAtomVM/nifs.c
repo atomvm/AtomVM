@@ -413,8 +413,9 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
 
     term t = term_get_tuple_element(port_name_tuple, 1);
     //TODO: validate port name
-    char *driver_name = interop_term_to_string(t);
-    if (IS_NULL_PTR(driver_name)) {
+    int ok;
+    char *driver_name = interop_term_to_string(t, &ok);
+    if (UNLIKELY(!ok)) {
         //TODO: handle atoms here
         RAISE_ERROR(BADARG_ATOM);
     }
@@ -514,8 +515,9 @@ static void process_console_mailbox(Context *ctx)
         } else if (term_is_tuple(cmd) && term_get_tuple_arity(cmd) == 2) {
             term cmd_name = term_get_tuple_element(cmd, 0);
             if (cmd_name == PUTS_ATOM) {
-                char *str = interop_term_to_string(term_get_tuple_element(cmd, 1));
-                if (IS_NULL_PTR(str)) {
+                int ok;
+                char *str = interop_term_to_string(term_get_tuple_element(cmd, 1), &ok);
+                if (UNLIKELY(!ok)) {
                     term error = port_create_error_tuple(ctx, BADARG_ATOM);
                     port_send_reply(ctx, pid, ref, error);
                 } else {
@@ -1104,8 +1106,9 @@ term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
     term a_list = argv[0];
     VALIDATE_VALUE(a_list, term_is_list);
 
-    char *atom_string = interop_list_to_string(a_list);
-    if (IS_NULL_PTR(atom_string)) {
+    int ok;
+    char *atom_string = interop_list_to_string(a_list, &ok);
+    if (UNLIKELY(!ok)) {
         fprintf(stderr, "Failed to alloc temporary string\n");
         abort();
     }
@@ -1245,8 +1248,9 @@ static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
     }
 
     //TODO: avoid this copy: just write to binary memory
-    char *string = interop_list_to_string(argv[0]);
-    if (IS_NULL_PTR(string)) {
+    int ok;
+    char *string = interop_list_to_string(argv[0], &ok);
+    if (UNLIKELY(!ok)) {
         RAISE_ERROR(BADARG_ATOM);
     }
 

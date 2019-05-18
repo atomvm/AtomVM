@@ -235,7 +235,11 @@ term socket_driver_do_send(Context *ctx, term dest_address, term dest_port, term
         buf = term_binary_data(buffer);
         len = term_binary_size(buffer);
     } else if (term_is_list(buffer)) {
-        buf = interop_list_to_string(buffer);
+        int ok;
+        buf = interop_list_to_string(buffer, &ok);
+        if (UNLIKELY(!ok)) {
+            return port_create_error_tuple(ctx, BADARG_ATOM);
+        }
         len = strlen(buf);
     } else {
         return port_create_error_tuple(ctx, BADARG_ATOM);

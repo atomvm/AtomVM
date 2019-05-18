@@ -19,16 +19,19 @@
 
 #include "interop.h"
 
-char *interop_term_to_string(term t)
+char *interop_term_to_string(term t, int *ok)
 {
     if (term_is_nonempty_list(t)) {
-        return interop_list_to_string(t);
+        return interop_list_to_string(t, ok);
 
     } else if (term_is_binary(t)) {
-        return interop_binary_to_string(t);
+        char *str = interop_binary_to_string(t);
+        *ok = str != NULL;
+        return str;
 
     } else {
         //TODO: implement also for other types?
+        *ok = 0;
         return NULL;
     }
 }
@@ -48,8 +51,7 @@ char *interop_binary_to_string(term binary)
     return str;
 }
 
-
-char *interop_list_to_string(term list)
+char *interop_list_to_string(term list, int *ok)
 {
     int len = 0;
 
@@ -69,11 +71,27 @@ char *interop_list_to_string(term list)
 
     for (int i = 0; i < len; i++) {
         term *t_ptr = term_get_list_ptr(t);
-        str[i] = (char) term_to_int32(t_ptr[1]);
+
+        term byte_value_term = t_ptr[1];
+        if (UNLIKELY(!term_is_integer(byte_value_term))) {
+            *ok = 0;
+            free(str);
+            return NULL;
+        }
+
+        int32_t byte_value = term_to_int32(byte_value_term);
+        if (UNLIKELY((byte_value < 0) || (byte_value > 255))) {
+            *ok = 0;
+            free(str);
+            return NULL;
+        }
+
+        str[i] = (char) byte_value;
         t = *t_ptr;
     }
     str[len] = 0;
 
+    *ok = 1;
     return str;
 }
 
