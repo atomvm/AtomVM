@@ -576,6 +576,7 @@ static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])
     term max_heap_size_term = interop_proplist_get_value(opts_term, MAX_HEAP_SIZE_ATOM);
     if (max_heap_size_term != term_nil()) {
         new_ctx->has_max_heap_size = 1;
+        //TODO: check type, make sure max_heap_size_term is an int32
         new_ctx->max_heap_size = term_to_int32(max_heap_size_term);
     }
 
@@ -618,20 +619,30 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
 
     term min_heap_size_term = interop_proplist_get_value(opts_term, MIN_HEAP_SIZE_ATOM);
     term max_heap_size_term = interop_proplist_get_value(opts_term, MAX_HEAP_SIZE_ATOM);
-    if (min_heap_size_term != term_nil() && max_heap_size_term != term_nil()) {
-        if (term_to_int32(min_heap_size_term) > term_to_int32(max_heap_size_term)) {
-            RAISE_ERROR(BADARG_ATOM);
-        }
-    }
+
     if (min_heap_size_term != term_nil()) {
+        if (UNLIKELY(!term_is_integer(min_heap_size_term))) {
+            //TODO: gracefully handle this error
+            abort();
+        }
         new_ctx->has_min_heap_size = 1;
         new_ctx->min_heap_size = term_to_int32(min_heap_size_term);
     } else {
         min_heap_size_term = term_from_int32(0);
     }
     if (max_heap_size_term != term_nil()) {
+        if (UNLIKELY(!term_is_integer(max_heap_size_term))) {
+            //TODO: gracefully handle this error
+            abort();
+        }
         new_ctx->has_max_heap_size = 1;
         new_ctx->max_heap_size = term_to_int32(max_heap_size_term);
+    }
+
+    if (new_ctx->has_min_heap_size && new_ctx->has_max_heap_size) {
+        if (term_to_int32(min_heap_size_term) > term_to_int32(max_heap_size_term)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
     }
 
     //TODO: check available registers count
