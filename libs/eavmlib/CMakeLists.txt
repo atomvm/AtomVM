@@ -9,6 +9,7 @@ include(BuildErlang)
 set(ERLANG_MODULES
     console
     gpio
+    i2c
     logger
     network_fsm
     spi
