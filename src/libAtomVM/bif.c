@@ -320,7 +320,7 @@ term bif_erlang_bor_2(Context *ctx, int live, term arg1, term arg2)
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
-        return term_from_int32(term_to_int32(arg1) | term_to_int32(arg2));
+        return arg1 | arg2;
 
     } else {
         RAISE_ERROR(BADARITH_ATOM);
@@ -332,7 +332,7 @@ term bif_erlang_band_2(Context *ctx, int live, term arg1, term arg2)
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
-        return term_from_int32(term_to_int32(arg1) & term_to_int32(arg2));
+        return arg1 & arg2;
 
     } else {
         RAISE_ERROR(BADARITH_ATOM);
