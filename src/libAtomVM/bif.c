@@ -177,9 +177,14 @@ term bif_erlang_add_2(Context *ctx, int live, term arg1, term arg2)
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
-        //NEED CHECK OVERFLOW AND BIG INTEGER
-        return term_from_int32(term_to_int32(arg1) + term_to_int32(arg2));
-
+        //TODO: use long integer instead, and term_to_longint
+        int32_t res;
+        if (!BUILTIN_ADD_OVERFLOW((int32_t) (arg1 & ~TERM_INTEGER_TAG), (int32_t) (arg2 & ~TERM_INTEGER_TAG), &res)) {
+            return res | TERM_INTEGER_TAG;
+        } else {
+            TRACE("overflow: arg1: %lx, arg2: %lx\n", arg1, arg2);
+            RAISE_ERROR(OVERFLOW_ATOM);
+        }
     } else {
         TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
@@ -191,9 +196,14 @@ term bif_erlang_sub_2(Context *ctx, int live, term arg1, term arg2)
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
-        //NEED CHECK OVERFLOW AND BIG INTEGER
-        return term_from_int32(term_to_int32(arg1) - term_to_int32(arg2));
-
+        //TODO: use long integer instead, and term_to_longint
+        int32_t res;
+        if (!BUILTIN_SUB_OVERFLOW((int32_t) (arg1 & ~TERM_INTEGER_TAG), (int32_t) (arg2 & ~TERM_INTEGER_TAG), &res)) {
+            return res | TERM_INTEGER_TAG;
+        } else {
+            TRACE("overflow: arg1: %lx, arg2: %lx\n", arg1, arg2);
+            RAISE_ERROR(OVERFLOW_ATOM);
+        }
     } else {
         TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
@@ -205,9 +215,16 @@ term bif_erlang_mul_2(Context *ctx, int live, term arg1, term arg2)
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
-        //NEED CHECK OVERFLOW AND BIG INTEGER
-        return term_from_int32(term_to_int32(arg1) * term_to_int32(arg2));
-
+        //TODO: use long integer instead, and term_to_longint
+        int32_t res;
+        int32_t a = ((int32_t) (arg1 & ~TERM_INTEGER_TAG)) >> 2;
+        int32_t b = ((int32_t) (arg2 & ~TERM_INTEGER_TAG)) >> 2;
+        if (!BUILTIN_MUL_OVERFLOW(a, b, &res)) {
+            return res | TERM_INTEGER_TAG;
+        } else {
+            TRACE("overflow: arg1: %lx, arg2: %lx\n", arg1, arg2);
+            RAISE_ERROR(OVERFLOW_ATOM);
+        }
     } else {
         TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
