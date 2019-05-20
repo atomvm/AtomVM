@@ -38,6 +38,7 @@
 #include "term_typedef.h"
 
 #define TERM_BOXED_VALUE_TAG 0x2
+#define TERM_INTEGER_TAG 0xF
 #define TERM_CATCH_TAG 0x1B
 
 #define TERM_BOXED_TAG_MASK 0x3F
