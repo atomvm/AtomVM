@@ -257,6 +257,15 @@ struct Test tests[] =
     {"test_binary_part.beam", 12},
     {"test_binary_split.beam", 16},
 
+    {"plusone.beam", 67108863},
+    {"plusone2.beam", 1},
+    {"minusone.beam", -67108864},
+    {"minusone2.beam", -16},
+    {"int28mul.beam", 22369621},
+    {"int28mulneg.beam", -44739242},
+    {"int28mulneg2.beam", 134217724},
+    {"negdiv.beam", -134217718},
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}

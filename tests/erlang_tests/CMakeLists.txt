@@ -221,6 +221,16 @@ compile_erlang(test_atom_to_binary)
 compile_erlang(test_binary_part)
 compile_erlang(test_binary_split)
 
+compile_erlang(plusone)
+compile_erlang(plusone2)
+compile_erlang(minusone)
+compile_erlang(minusone2)
+compile_erlang(int28mul)
+compile_erlang(int28mulneg)
+compile_erlang(int28mulneg2)
+compile_erlang(int28mulneg2)
+compile_erlang(negdiv)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -433,4 +443,13 @@ add_custom_target(erlang_test_modules DEPENDS
 
     test_binary_part.beam
     test_binary_split.beam
+
+    plusone.beam
+    plusone2.beam
+    minusone.beam
+    minusone2.beam
+    int28mul.beam
+    int28mulneg.beam
+    int28mulneg2.beam
+    negdiv.beam
 )
