@@ -261,8 +261,12 @@ term bif_erlang_neg_1(Context *ctx, int live, term arg1)
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1))) {
-        return term_from_int32(-term_to_int32(arg1));
-
+        int32_t int_val = term_to_int32(arg1);
+        if (UNLIKELY(int_val < -134217727)) {
+            RAISE_ERROR(OVERFLOW_ATOM);
+        } else {
+            return term_from_int32(-int_val);
+        }
     } else {
         TRACE("error: arg1: %lx\n", arg1);
         RAISE_ERROR(BADARITH_ATOM);
@@ -275,8 +279,13 @@ term bif_erlang_abs_1(Context *ctx, int live, term arg1)
 
     if (LIKELY(term_is_integer(arg1))) {
         int32_t int_val = term_to_int32(arg1);
-        if (int_val < 0) {
-            return term_from_int32(-int_val);
+
+        if  (int_val < 0) {
+            if (UNLIKELY(int_val < -134217727)) {
+                RAISE_ERROR(OVERFLOW_ATOM);
+            } else {
+                return term_from_int32(-int_val);
+            }
         } else {
             return arg1;
         }
