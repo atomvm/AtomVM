@@ -265,6 +265,8 @@ struct Test tests[] =
     {"int28mulneg.beam", -44739242},
     {"int28mulneg2.beam", 134217724},
     {"negdiv.beam", -134217718},
+    {"absovf.beam", -134217718},
+    {"negovf.beam", -134217718},
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 

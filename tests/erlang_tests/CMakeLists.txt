@@ -230,6 +230,8 @@ compile_erlang(int28mulneg)
 compile_erlang(int28mulneg2)
 compile_erlang(int28mulneg2)
 compile_erlang(negdiv)
+compile_erlang(absovf)
+compile_erlang(negovf)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -452,4 +454,6 @@ add_custom_target(erlang_test_modules DEPENDS
     int28mulneg.beam
     int28mulneg2.beam
     negdiv.beam
+    absovf.beam
+    negovf.beam
 )
