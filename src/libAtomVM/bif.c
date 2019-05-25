@@ -238,8 +238,14 @@ term bif_erlang_div_2(Context *ctx, int live, term arg1, term arg2)
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         int32_t operand_b = term_to_int32(arg2);
         if (operand_b != 0) {
-            return term_from_int32(term_to_int32(arg1) / operand_b);
+            int32_t res = term_to_int32(arg1) / operand_b;
+            if (UNLIKELY(res > 134217727)) {
+                TRACE("overflow: arg1: %lx, arg2: %lx\n", arg1, arg2);
+                RAISE_ERROR(OVERFLOW_ATOM);
 
+            } else {
+                return term_from_int32(res);
+            }
         } else {
             RAISE_ERROR(BADARITH_ATOM);
         }
