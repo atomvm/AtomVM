@@ -666,16 +666,13 @@ static inline term term_alloc_tuple(uint32_t size, Context *ctx)
  */
 static inline void term_put_tuple_element(term t, uint32_t elem_index, term put_value)
 {
-    if (UNLIKELY(!term_is_boxed(t))) {
-        abort();
-    }
+    TERM_DEBUG_ASSERT(term_is_tuple(t));
 
     term *boxed_value = term_to_term_ptr(t);
-    if ( ((boxed_value[0] & 0x3F) == 0) && (elem_index < (boxed_value[0] >> 6)) )  {
-        boxed_value[elem_index + 1] = put_value;
-    } else {
-        abort();
-    }
+
+    TERM_DEBUG_ASSERT(((boxed_value[0] & 0x3F) == 0) && (elem_index < (boxed_value[0] >> 6)));
+
+    boxed_value[elem_index + 1] = put_value;
 }
 
 /**
@@ -688,16 +685,13 @@ static inline void term_put_tuple_element(term t, uint32_t elem_index, term put_
  */
 static inline term term_get_tuple_element(term t, int elem_index)
 {
-    if (UNLIKELY(!term_is_boxed(t))) {
-        abort();
-    }
+    TERM_DEBUG_ASSERT(term_is_tuple(t));
 
     const term *boxed_value = term_to_const_term_ptr(t);
-    if ((boxed_value[0] & 0x3F) == 0) {
-        return boxed_value[elem_index + 1];
-    } else {
-        abort();
-    }
+
+    TERM_DEBUG_ASSERT(((boxed_value[0] & 0x3F) == 0) && (elem_index < (boxed_value[0] >> 6)));
+
+    return boxed_value[elem_index + 1];
 }
 
 /*
@@ -709,16 +703,10 @@ static inline term term_get_tuple_element(term t, int elem_index)
  */
 static inline int term_get_tuple_arity(term t)
 {
-    if (UNLIKELY(!term_is_boxed(t))) {
-        abort();
-    }
+    TERM_DEBUG_ASSERT(term_is_tuple(t));
 
     const term *boxed_value = term_to_const_term_ptr(t);
-    if ((boxed_value[0] & 0x3F) == 0) {
-        return term_get_size_from_boxed_header(boxed_value[0]);
-    } else {
-        abort();
-    }
+    return term_get_size_from_boxed_header(boxed_value[0]);
 }
 
 /**
