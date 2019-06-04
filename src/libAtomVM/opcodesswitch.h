@@ -1882,7 +1882,7 @@ static const char *const out_of_memory_atom = "\xD" "out_of_memory";
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("test_arity/2, label=%i, arg1=%lx\n", label, arg1);
 
-                    if (term_get_tuple_arity(arg1) == arity) {
+                    if (term_is_tuple(arg1) && term_get_tuple_arity(arg1) == arity) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = (uint8_t *) mod->labels[label] - code;
@@ -1975,22 +1975,31 @@ static const char *const out_of_memory_atom = "\xD" "out_of_memory";
                     void *jump_to_address = NULL;
                 #endif
 
-                for (int j = 0; j < size / 2; j++) {
-                    int cmp_value;
-                    DECODE_INTEGER(cmp_value, code, i, next_off, next_off)
-                    int jmp_label;
-                    DECODE_LABEL(jmp_label, code, i, next_off, next_off)
+                #ifdef IMPL_EXECUTE_LOOP
+                if (LIKELY(term_is_tuple(src_value))) {
+                    int arity = term_get_tuple_arity(src_value);
+                #endif
 
-                    #ifdef IMPL_CODE_LOADER
-                        UNUSED(cmp_value);
-                    #endif
+                    for (int j = 0; j < size / 2; j++) {
+                        int cmp_value;
+                        DECODE_INTEGER(cmp_value, code, i, next_off, next_off)
+                        int jmp_label;
+                        DECODE_LABEL(jmp_label, code, i, next_off, next_off)
 
-                    #ifdef IMPL_EXECUTE_LOOP
-                        if (!jump_to_address && (term_get_tuple_arity(src_value) == cmp_value)) {
-                            jump_to_address = mod->labels[jmp_label];
-                        }
-                    #endif
+                        #ifdef IMPL_CODE_LOADER
+                            UNUSED(cmp_value);
+                        #endif
+
+                        #ifdef IMPL_EXECUTE_LOOP
+                            //TODO: check if src_value is a tuple
+                            if (!jump_to_address && (arity == cmp_value)) {
+                                jump_to_address = mod->labels[jmp_label];
+                            }
+                        #endif
+                    }
+                #ifdef IMPL_EXECUTE_LOOP
                 }
+                #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
                     if (!jump_to_address) {
@@ -2098,6 +2107,10 @@ static const char *const out_of_memory_atom = "\xD" "out_of_memory";
                 USED_BY_TRACE(element);
 
                 #ifdef IMPL_EXECUTE_LOOP
+                    if (UNLIKELY(!term_is_tuple(src_value) || (element < 0) || (element >= term_get_tuple_arity(src_value)))) {
+                        abort();
+                    }
+
                     term t = term_get_tuple_element(src_value, element);
                     WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
@@ -2122,6 +2135,10 @@ static const char *const out_of_memory_atom = "\xD" "out_of_memory";
                 TRACE("set_tuple_element/2\n");
 
 #ifdef IMPL_EXECUTE_LOOP
+                if (UNLIKELY(!term_is_tuple(tuple) || (position < 0) || (position >= term_get_tuple_arity(tuple)))) {
+                    abort();
+                }
+
                 term_put_tuple_element(tuple, position, new_element);
 #endif
 

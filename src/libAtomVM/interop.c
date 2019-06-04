@@ -103,7 +103,10 @@ term interop_proplist_get_value(term list, term key)
         term *t_ptr = term_get_list_ptr(t);
 
         term head = t_ptr[1];
-        if (term_get_tuple_element(head, 0) == key) {
+        if (term_is_tuple(head) && term_get_tuple_element(head, 0) == key) {
+            if (UNLIKELY(term_get_tuple_arity(head) != 2)) {
+                break;
+            }
             return term_get_tuple_element(head, 1);
         }
 
