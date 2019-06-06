@@ -202,14 +202,10 @@ static inline int term_get_size_from_boxed_header(term header)
 static inline int term_boxed_size(term t)
 {
     /* boxed: 10 */
-    if ((t & 0x3) == 0x2) {
-        const term *boxed_value = term_to_const_term_ptr(t);
-        return term_get_size_from_boxed_header(*boxed_value);
+    TERM_DEBUG_ASSERT((t & 0x3) == 0x2);
 
-    } else {
-        //TODO: error here
-        abort();
-    }
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return term_get_size_from_boxed_header(*boxed_value);
 }
 
 /**
