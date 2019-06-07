@@ -558,7 +558,7 @@ static inline term term_from_literal_binary(const void *data, uint32_t size, Con
  * @param t a term pointing to binary data. Fails if t is not a binary term.
  * @return binary size in bytes.
  */
-static inline term term_binary_size(term t)
+static inline unsigned long term_binary_size(term t)
 {
     TERM_DEBUG_ASSERT(term_is_binary(t));
 
