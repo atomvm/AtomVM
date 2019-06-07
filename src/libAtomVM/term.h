@@ -597,16 +597,16 @@ static inline term term_from_ref_ticks(uint64_t ref_ticks, Context *ctx)
     term *boxed_value = memory_heap_alloc(ctx, ref_size + 1);
     boxed_value[0] = (ref_size << 6) | TERM_BOXED_REF;
 
-    if (ref_size == 1) {
+    #if TERM_BYTES == 8
         boxed_value[1] = (term) ref_ticks;
 
-    } else if (ref_size == 2) {
+    #elif TERM_BYTES == 4
         boxed_value[1] = (ref_ticks >> 4);
         boxed_value[2] = (ref_ticks & 0xFFFFFFFF);
 
-    } else {
-        abort();
-    }
+    #else
+        #error "terms must be either 32 or 64 bit wide"
+    #endif
 
     return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
 }
@@ -616,17 +616,16 @@ static inline uint64_t term_to_ref_ticks(term rt)
     TERM_DEBUG_ASSERT(term_is_reference(rt));
 
     const term *boxed_value = term_to_const_term_ptr(rt);
-    int ref_size = (sizeof(uint64_t) / sizeof(term));
 
-    if (ref_size == 1) {
+    #if TERM_BYTES == 8
         return boxed_value[1];
 
-    } else if (ref_size == 2) {
+    #elif TERM_BYTES == 4
         return (boxed_value[1] << 4) | boxed_value[2];
 
-    } else {
-        abort();
-    }
+    #else
+        #error "terms must be either 32 or 64 bit wide"
+    #endif
 }
 
 /**
