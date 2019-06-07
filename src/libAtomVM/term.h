@@ -613,19 +613,16 @@ static inline term term_from_ref_ticks(uint64_t ref_ticks, Context *ctx)
 
 static inline uint64_t term_to_ref_ticks(term rt)
 {
+    TERM_DEBUG_ASSERT(term_is_reference(rt));
+
     const term *boxed_value = term_to_const_term_ptr(rt);
-    if ((boxed_value[0] & 0x3F) == TERM_BOXED_REF) {
-        int ref_size = (sizeof(uint64_t) / sizeof(term));
+    int ref_size = (sizeof(uint64_t) / sizeof(term));
 
-        if (ref_size == 1) {
-            return boxed_value[1];
+    if (ref_size == 1) {
+        return boxed_value[1];
 
-        } else if (ref_size == 2) {
-            return (boxed_value[1] << 4) | boxed_value[2];
-
-        } else {
-            abort();
-        }
+    } else if (ref_size == 2) {
+        return (boxed_value[1] << 4) | boxed_value[2];
 
     } else {
         abort();
