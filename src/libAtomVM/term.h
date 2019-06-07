@@ -577,12 +577,10 @@ static inline term term_binary_size(term t)
  */
 static inline const char *term_binary_data(term t)
 {
+    TERM_DEBUG_ASSERT(term_is_binary(t));
+
     const term *boxed_value = term_to_const_term_ptr(t);
-    if (boxed_value[0] & 0x3F) {
-        return (const char *) (boxed_value + 2);
-    } else {
-        abort();
-    }
+    return (const char *) (boxed_value + 2);
 }
 
 /**
