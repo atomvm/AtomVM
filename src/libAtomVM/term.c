@@ -35,7 +35,7 @@ void term_display(FILE *fd, term t, const Context *ctx)
             fprintf(fd, "%.*s", (int) atom_string_len(atom_string), (char *) atom_string_data(atom_string));
 
     } else if (term_is_integer(t)) {
-        long iv = term_to_int32(t);
+        long iv = term_to_long(t);
         fprintf(fd, "%li", iv);
 
     } else if (term_is_nil(t)) {
@@ -131,6 +131,22 @@ void term_display(FILE *fd, term t, const Context *ctx)
         "#Ref<0.0.0.%lu>";
 #endif
         fprintf(fd, format, term_to_ref_ticks(t));
+
+    } else if (term_is_boxed_integer(t)) {
+        int size = term_boxed_size(t);
+        switch (size) {
+            case 1:
+                fprintf(fd, "%li", term_unbox_long(t));
+                break;
+
+            case 2:
+                fprintf(fd, "%lli", term_unbox_longlong(t));
+                break;
+
+            default:
+                abort();
+        }
+
     } else {
         fprintf(fd, "Unknown term type: %li", t);
     }

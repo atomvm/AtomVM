@@ -257,7 +257,10 @@ struct Test tests[] =
     {"test_binary_part.beam", 12},
     {"test_binary_split.beam", 16},
 
-    {"plusone.beam", 67108863},
+    #if LONG_MAX == 9223372036854775807
+        {"plusone.beam", 134217728},
+    #endif
+
     {"plusone2.beam", 1},
     {"minusone.beam", -67108864},
     {"minusone2.beam", -16},
@@ -303,9 +306,9 @@ int test_modules_execution()
 
         context_execute_loop(ctx, mod, "start", 0);
 
-        int32_t value = term_to_int32(ctx->x[0]);
+        long value = term_to_long(ctx->x[0]);
         if (value != test->expected_value) {
-            fprintf(stderr, "\x1b[1;31mFailed test module %s, got value: %i\x1b[0m\n", test->test_file, value);
+            fprintf(stderr, "\x1b[1;31mFailed test module %s, got value: %li\x1b[0m\n", test->test_file, value);
             failed_tests++;
         }
 

@@ -334,6 +334,10 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
                     break;
                 }
 
+                case TERM_BOXED_POSITIVE_INTEGER:
+                    TRACE("- Found boxed pos int.\n");
+                    break;
+
                 case TERM_BOXED_REF:
                     TRACE("- Found ref.\n");
                     break;

@@ -43,12 +43,21 @@
 
 #define TERM_BOXED_TAG_MASK 0x3F
 #define TERM_BOXED_TUPLE 0x0
+#define TERM_BOXED_POSITIVE_INTEGER 0x8
 #define TERM_BOXED_REF 0x10
 #define TERM_BOXED_FUN 0x14
 #define TERM_BOXED_HEAP_BINARY 0x24
 
 #define BINARY_HEADER_SIZE 2
+#define BOXED_LONG_SIZE 2
 
+#if TERM_BYTES == 4
+    #define MIN_NOT_BOXED_INT -134217728
+    #define MAX_NOT_BOXED_INT 134217727
+#elif TERM_BYTES == 8
+    #define MIN_NOT_BOXED_INT -576460752303423488
+    #define MAX_NOT_BOXED_INT 576460752303423487
+#endif
 
 #define TERM_DEBUG_ASSERT(...)
 
@@ -241,6 +250,18 @@ static inline int term_is_integer(term t)
     return ((t & 0xF) == 0xF);
 }
 
+static inline int term_is_boxed_integer(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        if ((boxed_value[0] & 0x3F) == TERM_BOXED_POSITIVE_INTEGER) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 static inline int term_is_catch_label(term t)
 {
     return (t & 0x3F) == TERM_CATCH_TAG;
@@ -388,6 +409,13 @@ static inline int32_t term_to_int32(term t)
     return ((int32_t) t) >> 4;
 }
 
+static inline int32_t term_to_long(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_integer(t));
+
+    return ((long) t) >> 4;
+}
+
 static inline int term_to_catch_label_and_module(term t, int *module_index)
 {
     *module_index = t >> 24;
@@ -487,6 +515,75 @@ static inline term term_from_int64(int64_t value)
 #else
     #error "Wrong TERM_BITS define"
 #endif
+}
+
+static inline long int term_unbox_long(term boxed_long)
+{
+    TERM_DEBUG_ASSERT(term_is_boxed_integer(boxed_long));
+
+    const term *boxed_value = term_to_const_term_ptr(boxed_long);
+
+    return boxed_value[1];
+}
+
+static inline long long int term_unbox_longlong(term boxed_long)
+{
+    TERM_DEBUG_ASSERT(term_is_boxed_integer(boxed_long));
+
+    const term *boxed_value = term_to_const_term_ptr(boxed_long);
+
+    return boxed_value[1] | boxed_value[2] << sizeof(long long);
+}
+
+static inline term term_make_boxed_int32(int32_t large_int32, Context *ctx)
+{
+    #if TERM_BYTES == 4
+        int size_in_terms = sizeof(term) / sizeof(int32_t);
+
+        term *boxed_int = memory_heap_alloc(ctx, 1 + size_in_terms);
+        boxed_int[0] = (size_in_terms << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
+        boxed_int[1] = large_int32;
+
+        return ((term) boxed_int) | TERM_BOXED_VALUE_TAG;
+
+    #elif TERM_BYTES == 8
+        UNUSED(ctx);
+        return term_from_int32(large_int32);
+    #endif
+}
+
+static inline term term_make_boxed_int64(int64_t large_int64, Context *ctx)
+{
+    int size_in_terms = sizeof(term) / sizeof(int64_t);
+
+    term *boxed_int = memory_heap_alloc(ctx, 1 + size_in_terms);
+    boxed_int[0] = (size_in_terms << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
+    #if TERM_BYTES == 8
+        boxed_int[1] = large_int64;
+    #elif TERM_BYTES == 4
+        #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+            boxed_int[1] = large_int64;
+            boxed_int[2] = large_int64 >> 32;
+        #else
+            boxed_int[2] = large_int64;
+            boxed_int[1] = large_int64 >> 32;
+        #endif
+    #else
+        #error "term must be either 32 or 64 bit"
+    #endif
+
+    return ((term) boxed_int) | TERM_BOXED_VALUE_TAG;
+}
+
+static inline term term_make_boxed_long(long large_long, Context *ctx)
+{
+    #if TERM_BYTES == 4 && LONG_MAX == 2147483647
+        return term_make_boxed_int32(large_long, ctx);
+    #elif TERM_BYTES == 8 && LONG_MAX == 9223372036854775807
+        return term_make_boxed_int64(large_long, ctx);
+    #else
+        #error "term must be either 32 or 64 bit"
+    #endif
 }
 
 static inline term term_from_catch_label(unsigned int module_index, unsigned int label)

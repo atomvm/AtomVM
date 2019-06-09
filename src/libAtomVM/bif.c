@@ -172,18 +172,29 @@ term bif_erlang_tuple_size_1(Context *ctx, term arg1)
     return term_from_int32(term_get_tuple_arity(arg1));
 }
 
+static term add_overflow_helper(Context *ctx, term arg1, term arg2)
+{
+    long int val1 = term_to_long(arg1);
+    long int val2 = term_to_long(arg2);
+
+    if (UNLIKELY(memory_ensure_free(ctx, BOXED_LONG_SIZE) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return term_make_boxed_long(val1 + val2, ctx);
+}
+
 term bif_erlang_add_2(Context *ctx, int live, term arg1, term arg2)
 {
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         //TODO: use long integer instead, and term_to_longint
-        int32_t res;
-        if (!BUILTIN_ADD_OVERFLOW((int32_t) (arg1 & ~TERM_INTEGER_TAG), (int32_t) (arg2 & ~TERM_INTEGER_TAG), &res)) {
+        long int res;
+        if (!BUILTIN_ADD_OVERFLOW((long) (arg1 & ~TERM_INTEGER_TAG), (long) (arg2 & ~TERM_INTEGER_TAG), &res)) {
             return res | TERM_INTEGER_TAG;
         } else {
-            TRACE("overflow: arg1: %lx, arg2: %lx\n", arg1, arg2);
-            RAISE_ERROR(OVERFLOW_ATOM);
+            return add_overflow_helper(ctx, arg1, arg2);
         }
     } else {
         TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);

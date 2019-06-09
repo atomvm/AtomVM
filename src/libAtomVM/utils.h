@@ -126,13 +126,14 @@
 #define BUILTIN_ADD_OVERFLOW atomvm_add_overflow
 
 #include <stdint.h>
+#include "term.h"
 
-static inline int atomvm_add_overflow(int32_t a, int32_t b, int32_t *res)
+static inline int atomvm_add_overflow(long a, long b, long *res)
 {
     // a and b are shifted integers
-    int32_t sum = (a >> 4) + (b >> 4);
+    long sum = (a >> 4) + (b >> 4);
     *res = sum << 4;
-    return ((sum > 134217727) || (sum < -134217728));
+    return ((sum > MAX_NOT_BOXED_INT) || (sum < MIN_NOT_BOXED_INT));
 }
 #endif
 
