@@ -101,6 +101,8 @@ typedef void *(*maibox_iterator)(Message *msg, void *accum);
 
 static void *context_num_messages(Message *msg, void *accum)
 {
+    UNUSED(msg);
+
     return (void *) ((size_t) accum + 1);
 }
 

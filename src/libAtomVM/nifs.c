@@ -650,7 +650,7 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
     //TODO: check available registers count
     int reg_index = 0;
     term t = argv[2];
-    uint32_t size = MAX(term_to_int32(min_heap_size_term), memory_estimate_usage(t));
+    uint32_t size = MAX((unsigned long) term_to_int32(min_heap_size_term), memory_estimate_usage(t));
     if (UNLIKELY(memory_ensure_free(new_ctx, size) != MEMORY_GC_OK)) {
         //TODO: new process should be terminated, however a new pid is returned anyway
         fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
@@ -1010,7 +1010,7 @@ static term nif_erlang_binary_to_integer_1(Context *ctx, int argc, term argv[])
 
     //TODO: handle 64 bits numbers
     //TODO: handle errors
-    const char *endptr;
+    char *endptr;
     uint32_t value = strtol(null_terminated_buf, &endptr, 10);
     if (*endptr != '\0') {
         RAISE_ERROR(BADARG_ATOM);
@@ -1392,6 +1392,8 @@ typedef void *(*context_iterator)(Context *ctx, void *accum);
 
 static void *nifs_increment_context_count(Context *ctx, void *accum)
 {
+    UNUSED(ctx);
+
     return (void *) ((size_t) accum + 1);
 }
 

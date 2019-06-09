@@ -31,7 +31,6 @@ static const char *const process_count_atom = "\xD" "process_count";
 static const char *const port_count_atom = "\xA" "port_count";
 static const char *const atom_count_atom = "\xA" "atom_count";
 static const char *const system_architecture_atom = "\x13" "system_architecture";
-static const char *const version_atom = "\x7" "version";
 static const char *const wordsize_atom = "\x8" "wordsize";
 
 void defaultatoms_init(GlobalContext *glb)

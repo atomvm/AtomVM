@@ -42,7 +42,7 @@ static COLD_FUNC void debug_display_type(term t, const Context *ctx)
 
 static COLD_FUNC void debug_dump_binary_mem(char *buf, term val, unsigned n)
 {
-    for (int i = 0;  i < n;  ++i) {
+    for (unsigned int i = 0; i < n;  ++i) {
         int bit_i = val >> i & 0x1;
         buf[(n - 1) - i] = bit_i ? '1' : '0';
     }
