@@ -23,6 +23,7 @@
 
 #include "atom.h"
 #include "defaultatoms.h"
+#include "overflow_helpers.h"
 #include "trace.h"
 #include "utils.h"
 

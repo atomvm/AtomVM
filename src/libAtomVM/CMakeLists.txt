@@ -24,6 +24,7 @@ if(${CMAKE_GENERATOR} STREQUAL "Xcode")
         memory.h
         module.h
         opcodesswitch.h
+        overflow_helpers.h
         network.h
         network_driver.h
         nifs.h

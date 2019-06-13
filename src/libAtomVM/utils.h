@@ -102,68 +102,6 @@
     #define MUST_CHECK
 #endif
 
-#ifdef __GNUC__
-#if __GNUC__ >= 5
-    #define BUILTIN_ADD_OVERFLOW __builtin_add_overflow
-    #define BUILTIN_SUB_OVERFLOW __builtin_sub_overflow
-    #define BUILTIN_MUL_OVERFLOW __builtin_mul_overflow
-#endif
-#endif
-
-#ifdef __has_builtin
-#if __has_builtin(__builtin_add_overflow)
-    #define BUILTIN_ADD_OVERFLOW __builtin_add_overflow
-#endif
-#if __has_builtin(__builtin_sub_overflow)
-    #define BUILTIN_SUB_OVERFLOW __builtin_sub_overflow
-#endif
-#if __has_builtin(__builtin_mul_overflow)
-    #define BUILTIN_MUL_OVERFLOW __builtin_mul_overflow
-#endif
-#endif
-
-#ifndef BUILTIN_ADD_OVERFLOW
-#define BUILTIN_ADD_OVERFLOW atomvm_add_overflow
-
-#include <stdint.h>
-#include "term.h"
-
-static inline int atomvm_add_overflow(long a, long b, long *res)
-{
-    // a and b are shifted integers
-    long sum = (a >> 4) + (b >> 4);
-    *res = sum << 4;
-    return ((sum > MAX_NOT_BOXED_INT) || (sum < MIN_NOT_BOXED_INT));
-}
-#endif
-
-#ifndef BUILTIN_SUB_OVERFLOW
-#define BUILTIN_SUB_OVERFLOW atomvm_sub_overflow
-
-#include <stdint.h>
-
-static inline int atomvm_sub_overflow(int32_t a, int32_t b, int32_t *res)
-{
-    // a and b are shifted integers
-    int32_t diff = (a >> 4) - (b >> 4);
-    *res = diff << 4;
-    return ((diff > 134217727) || (diff < -134217728));
-}
-#endif
-
-#ifndef BUILTIN_MUL_OVERFLOW
-#define BUILTIN_MUL_OVERFLOW atomvm_mul_overflow
-
-#include <stdint.h>
-
-static inline int atomvm_mul_overflow(int32_t a, int32_t b, int32_t *res)
-{
-    int64_t mul = (a >> 2) * (b >> 2);
-    *res = (mul << 4);
-    return ((mul > 134217727) || (mul < -134217728));
-}
-#endif
-
 #ifdef ALLOC_RANDOM_FAILURE
 
 #ifndef RAND_MODULO
