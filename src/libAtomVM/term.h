@@ -403,14 +403,9 @@ static inline int term_to_catch_label_and_module(term t, int *module_index)
  */
 static inline int32_t term_to_local_process_id(term t)
 {
-    switch (t & 0xF) {
-        case 0x3:
-            return t >> 4;
+    TERM_DEBUG_ASSERT(term_is_pid(t));
 
-        default:
-            printf("term is not a pid: %lx\n", t);
-            return 0;
-    }
+    return t >> 4;
 }
 
 /**
