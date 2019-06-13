@@ -28,11 +28,12 @@
 #define _TERM_TYPEDEF_H_
 
 #include "limits.h"
+#include <stdint.h>
 
 /**
  * A value of any data type, types bigger than a machine word will require some additional space on heap.
  */
-typedef unsigned long term;
+typedef uintptr_t term;
 
 #if ULONG_MAX == 4294967295UL
     #define TERM_BITS 32

@@ -27,6 +27,8 @@
 #ifndef _CCONTEXT_H_
 #define _CCONTEXT_H_
 
+#include <stdint.h>
+
 #include "context.h"
 #include "memory.h"
 #include "term.h"
@@ -34,7 +36,7 @@
 /**
  * A reference to a term that stays valid after a garbage collection.
  */
-typedef unsigned long term_ref;
+typedef uintptr_t term_ref;
 
 /**
  * Holds information required to handle term references.
