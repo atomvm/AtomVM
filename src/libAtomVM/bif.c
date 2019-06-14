@@ -175,14 +175,14 @@ term bif_erlang_tuple_size_1(Context *ctx, term arg1)
 
 static term add_overflow_helper(Context *ctx, term arg1, term arg2)
 {
-    long int val1 = term_to_long(arg1);
-    long int val2 = term_to_long(arg2);
+    avm_int_t val1 = term_to_int(arg1);
+    avm_int_t val2 = term_to_int(arg2);
 
-    if (UNLIKELY(memory_ensure_free(ctx, BOXED_LONG_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, BOXED_TERMS_REQUIRED_FOR_INT) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    return term_make_boxed_long(val1 + val2, ctx);
+    return term_make_boxed_int(val1 + val2, ctx);
 }
 
 term bif_erlang_add_2(Context *ctx, int live, term arg1, term arg2)
@@ -191,8 +191,8 @@ term bif_erlang_add_2(Context *ctx, int live, term arg1, term arg2)
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         //TODO: use long integer instead, and term_to_longint
-        long int res;
-        if (!BUILTIN_ADD_OVERFLOW((long) (arg1 & ~TERM_INTEGER_TAG), (long) (arg2 & ~TERM_INTEGER_TAG), &res)) {
+        avm_int_t res;
+        if (!BUILTIN_ADD_OVERFLOW((avm_int_t) (arg1 & ~TERM_INTEGER_TAG), (avm_int_t) (arg2 & ~TERM_INTEGER_TAG), &res)) {
             return res | TERM_INTEGER_TAG;
         } else {
             return add_overflow_helper(ctx, arg1, arg2);

@@ -27,7 +27,7 @@
 #ifndef _TERM_TYPEDEF_H_
 #define _TERM_TYPEDEF_H_
 
-#include "limits.h"
+#include <limits.h>
 #include <stdint.h>
 
 /**
@@ -35,16 +35,64 @@
  */
 typedef uintptr_t term;
 
-#if ULONG_MAX == 4294967295UL
+#if ( (UINT32_MAX != 4294967295ULL) || (UINT64_MAX != 18446744073709551615ULL) \
+    || (INT32_MAX != 2147483647LL) || (INT64_MAX != 9223372036854775807LL))
+    #error "limits.h or preprocessor is not sane."
+#endif
+
+#if UINTPTR_MAX == UINT32_MAX
     #define TERM_BITS 32
     #define TERM_BYTES 4
 
-#elif ULONG_MAX == 18446744073709551615UL
+#elif UINTPTR_MAX == UINT64_MAX
     #define TERM_BITS 64
     #define TERM_BYTES 8
 
 #else
-    #error "Cannot detect unsigned long size."
+    #error "Term size must be either 32 bit or 64 bit."
+#endif
+
+typedef intptr_t avm_int_t;
+typedef uintptr_t avm_uint_t;
+
+typedef int64_t avm_int64_t;
+typedef uint64_t avm_uint64_t;
+
+#if UINTPTR_MAX == UINT32_MAX
+    #define AVM_INT_MIN INT32_MIN
+    #define AVM_INT_MAX INT32_MAX
+    #define INT64_IS_ALWAYS_BOXED 1
+    #define BOXED_TERMS_REQUIRED_FOR_INT 1
+    #define BOXED_TERMS_REQUIRED_FOR_INT64 2
+
+#elif UINTPTR_MAX == UINT64_MAX
+    #define AVM_INT_MIN INT64_MIN
+    #define AVM_INT_MAX INT64_MAX
+    #define INT64_IS_ALWAYS_BOXED 0
+    #define BOXED_TERMS_REQUIRED_FOR_INT 1
+    #define BOXED_TERMS_REQUIRED_FOR_INT64 1
+
+#else
+    #error "term size must be either 32 bit or 64 bit."
+#endif
+
+#define MIN_NOT_BOXED_INT (AVM_INT_MIN >> 4)
+#define MAX_NOT_BOXED_INT (AVM_INT_MAX >> 4)
+
+#if AVM_INT_MAX == LONG_MAX
+    #define AVM_INT_FMT "%li"
+#elif AVM_INT_MAX == LLONG_INT_MAX
+    #define AVM_INT_FMT "%lli"
+#else
+    #error "cannot define AVM_INT_MAX: invalid build env."
+#endif
+
+#if INT64_MAX == LONG_MAX
+    #define AVM_INT64_FMT "%li"
+#elif INT64_MAX == LLONG_MAX
+    #define AVM_INT64_FMT "%lli"
+#else
+    #error "cannot define AVM_INT64_FMT: invalid build env."
 #endif
 
 #endif

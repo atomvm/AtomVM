@@ -46,10 +46,10 @@
 #include <stdint.h>
 #include "term.h"
 
-static inline int atomvm_add_overflow(long a, long b, long *res)
+static inline int atomvm_add_overflow(avm_int_t a, avm_int_t b, avm_int_t *res)
 {
     // a and b are shifted integers
-    long sum = (a >> 4) + (b >> 4);
+    avm_int_t sum = (a >> 4) + (b >> 4);
     *res = sum << 4;
     return ((sum > MAX_NOT_BOXED_INT) || (sum < MIN_NOT_BOXED_INT));
 }

@@ -306,7 +306,7 @@ int test_modules_execution()
 
         context_execute_loop(ctx, mod, "start", 0);
 
-        long value = term_to_long(ctx->x[0]);
+        avm_int_t value = term_to_int(ctx->x[0]);
         if (value != test->expected_value) {
             fprintf(stderr, "\x1b[1;31mFailed test module %s, got value: %li\x1b[0m\n", test->test_file, value);
             failed_tests++;

@@ -35,8 +35,8 @@ void term_display(FILE *fd, term t, const Context *ctx)
             fprintf(fd, "%.*s", (int) atom_string_len(atom_string), (char *) atom_string_data(atom_string));
 
     } else if (term_is_integer(t)) {
-        long iv = term_to_long(t);
-        fprintf(fd, "%li", iv);
+        avm_int_t iv = term_to_int(t);
+        fprintf(fd, AVM_INT_FMT, iv);
 
     } else if (term_is_nil(t)) {
         fprintf(fd, "[]");
@@ -136,12 +136,14 @@ void term_display(FILE *fd, term t, const Context *ctx)
         int size = term_boxed_size(t);
         switch (size) {
             case 1:
-                fprintf(fd, "%li", term_unbox_long(t));
+                fprintf(fd, AVM_INT_FMT, term_unbox_int(t));
                 break;
 
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
             case 2:
-                fprintf(fd, "%lli", term_unbox_longlong(t));
+                fprintf(fd, AVM_INT64_FMT, term_unbox_int64(t));
                 break;
+#endif
 
             default:
                 abort();
