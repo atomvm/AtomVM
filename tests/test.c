@@ -271,6 +271,9 @@ struct Test tests[] =
     {"absovf.beam", -134217718},
     {"negovf.beam", -134217718},
 
+    {"plusone3.beam", 134217726},
+    {"plusone4.beam", 134217728},
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}
@@ -306,7 +309,7 @@ int test_modules_execution()
 
         context_execute_loop(ctx, mod, "start", 0);
 
-        avm_int_t value = term_to_int(ctx->x[0]);
+        avm_int_t value = term_maybe_unbox_int(ctx->x[0]);
         if (value != test->expected_value) {
             fprintf(stderr, "\x1b[1;31mFailed test module %s, got value: %li\x1b[0m\n", test->test_file, value);
             failed_tests++;
