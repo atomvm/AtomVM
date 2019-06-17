@@ -539,6 +539,15 @@ static inline avm_int64_t term_unbox_int64(term boxed_long)
     #endif
 }
 
+static inline avm_int_t term_maybe_unbox_int(term maybe_boxed_int)
+{
+    if (term_is_boxed_integer(maybe_boxed_int)) {
+        return term_unbox_int(maybe_boxed_int);
+    } else {
+        return term_to_int(maybe_boxed_int);
+    }
+}
+
 static inline term term_make_boxed_int(avm_int_t value, Context *ctx)
 {
     term *boxed_int = memory_heap_alloc(ctx, 1 + BOXED_TERMS_REQUIRED_FOR_INT);

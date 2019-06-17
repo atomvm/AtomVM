@@ -25,12 +25,15 @@
     #define BUILTIN_ADD_OVERFLOW __builtin_add_overflow
     #define BUILTIN_SUB_OVERFLOW __builtin_sub_overflow
     #define BUILTIN_MUL_OVERFLOW __builtin_mul_overflow
+
+    #define BUILTIN_ADD_OVERFLOW_INT __builtin_add_overflow
 #endif
 #endif
 
 #ifdef __has_builtin
 #if __has_builtin(__builtin_add_overflow)
     #define BUILTIN_ADD_OVERFLOW __builtin_add_overflow
+    #define BUILTIN_ADD_OVERFLOW_INT __builtin_add_overflow
 #endif
 #if __has_builtin(__builtin_sub_overflow)
     #define BUILTIN_SUB_OVERFLOW __builtin_sub_overflow
@@ -42,6 +45,7 @@
 
 #ifndef BUILTIN_ADD_OVERFLOW
 #define BUILTIN_ADD_OVERFLOW atomvm_add_overflow
+#define BUILTIN_ADD_OVERFLOW_INT atomvm_add_overflow_int
 
 #include <stdint.h>
 #include "term.h"
@@ -52,6 +56,13 @@ static inline int atomvm_add_overflow(avm_int_t a, avm_int_t b, avm_int_t *res)
     avm_int_t sum = (a >> 4) + (b >> 4);
     *res = sum << 4;
     return ((sum > MAX_NOT_BOXED_INT) || (sum < MIN_NOT_BOXED_INT));
+}
+
+static inline int atomvm_add_overflow_int(avm_int_t a, avm_int_t b, avm_int_t *res)
+{
+    avm_int64_t tmp_res = a + b;
+    *res = tmp_res;
+    return ((tmp_res > AVM_INT_MAX) || (tmp_res < AVM_INT_MIN));
 }
 #endif
 
