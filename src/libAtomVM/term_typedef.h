@@ -79,7 +79,9 @@ typedef uint64_t avm_uint64_t;
 #define MIN_NOT_BOXED_INT (AVM_INT_MIN >> 4)
 #define MAX_NOT_BOXED_INT (AVM_INT_MAX >> 4)
 
-#if AVM_INT_MAX == LONG_MAX
+#if AVM_INT_MAX == INT_MAX
+    #define AVM_INT_FMT "%i"
+#elif AVM_INT_MAX == LONG_MAX
     #define AVM_INT_FMT "%li"
 #elif AVM_INT_MAX == LLONG_INT_MAX
     #define AVM_INT_FMT "%lli"
@@ -87,7 +89,9 @@ typedef uint64_t avm_uint64_t;
     #error "cannot define AVM_INT_MAX: invalid build env."
 #endif
 
-#if INT64_MAX == LONG_MAX
+#if INT64_MAX == INT_MAX
+    #define AVM_INT64_FMT "%i"
+#elif INT64_MAX == LONG_MAX
     #define AVM_INT64_FMT "%li"
 #elif INT64_MAX == LLONG_MAX
     #define AVM_INT64_FMT "%lli"
