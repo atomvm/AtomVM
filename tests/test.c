@@ -268,8 +268,8 @@ struct Test tests[] =
     {"int28mulneg.beam", -268435456},
     {"int28mulneg2.beam", 268435448},
     {"negdiv.beam", -134217718},
-    {"absovf.beam", -134217718},
-    {"negovf.beam", -134217718},
+    {"absovf.beam", 134217728},
+    {"negovf.beam", 134217728},
 
     {"plusone3.beam", 134217726},
     {"plusone4.beam", 134217728},
