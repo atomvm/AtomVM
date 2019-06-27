@@ -27,9 +27,11 @@
     #define BUILTIN_MUL_OVERFLOW __builtin_mul_overflow
 
     #define BUILTIN_ADD_OVERFLOW_INT __builtin_add_overflow
+    #define BUILTIN_SUB_OVERFLOW_INT __builtin_sub_overflow
     #define BUILTIN_MUL_OVERFLOW_INT __builtin_mul_overflow
 
     #define BUILTIN_ADD_OVERFLOW_INT64 __builtin_add_overflow
+    #define BUILTIN_SUB_OVERFLOW_INT64 __builtin_sub_overflow
     #define BUILTIN_MUL_OVERFLOW_INT64 __builtin_mul_overflow
 #endif
 #endif
@@ -42,6 +44,8 @@
 #endif
 #if __has_builtin(__builtin_sub_overflow)
     #define BUILTIN_SUB_OVERFLOW __builtin_sub_overflow
+    #define BUILTIN_SUB_OVERFLOW_INT __builtin_sub_overflow
+    #define BUILTIN_SUB_OVERFLOW_INT64 __builtin_sub_overflow
 #endif
 #if __has_builtin(__builtin_mul_overflow)
     #define BUILTIN_MUL_OVERFLOW __builtin_mul_overflow
@@ -82,15 +86,31 @@ static inline int atomvm_add_overflow_int64(avm_int64_t a, avm_int64_t b, avm_in
 
 #ifndef BUILTIN_SUB_OVERFLOW
 #define BUILTIN_SUB_OVERFLOW atomvm_sub_overflow
+#define BUILTIN_SUB_OVERFLOW_INT atomvm_sub_overflow_int
+#define BUILTIN_SUB_OVERFLOW_INT64 atomvm_sub_overflow_int64
 
 #include <stdint.h>
 
-static inline int atomvm_sub_overflow(int32_t a, int32_t b, int32_t *res)
+static inline int atomvm_sub_overflow(avm_int_t a, avm_int_t b, avm_int_t *res)
 {
     // a and b are shifted integers
-    int32_t diff = (a >> 4) - (b >> 4);
+    avm_int_t diff = (a >> 4) - (b >> 4);
     *res = diff << 4;
-    return ((diff > 134217727) || (diff < -134217728));
+    return ((diff > MAX_NOT_BOXED_INT) || (diff < MIN_NOT_BOXED_INT));
+}
+
+static inline int atomvm_sub_overflow_int(avm_int_t a, avm_int_t b, avm_int_t *res)
+{
+    avm_int64_t diff = (avm_int64_t) a - (avm_int64_t) b;
+    *res = diff;
+    return ((diff > AVM_INT_MAX) || (diff < AVM_INT_MIN));
+}
+
+static inline int atomvm_sub_overflow_int64(avm_int64_t a, avm_int64_t b, avm_int64_t *res)
+{
+    avm_int64_t diff = a - b;
+    *res = diff;
+    return 0;
 }
 #endif
 

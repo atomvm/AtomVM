@@ -262,7 +262,7 @@ struct Test tests[] =
     #endif
 
     {"plusone2.beam", 1},
-    {"minusone.beam", -67108864},
+    {"minusone.beam", -134217729},
     {"minusone2.beam", -16},
     {"int28mul.beam", 134217728},
     {"int28mulneg.beam", -268435456},
