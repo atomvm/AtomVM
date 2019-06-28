@@ -567,38 +567,105 @@ term bif_erlang_mul_2(Context *ctx, int live, term arg1, term arg2)
     }
 }
 
+static term make_minus_min_not_boxed_int(Context *ctx)
+{
+    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return term_make_boxed_int(-MIN_NOT_BOXED_INT, ctx);
+}
+
+static term div_boxed_helper(Context *ctx, term arg1, term arg2)
+{
+    int size = 0;
+    if (term_is_boxed_integer(arg1)) {
+        size = term_boxed_size(arg1);
+    } else if (UNLIKELY(!term_is_integer(arg1))) {
+        TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
+        RAISE_ERROR(BADARITH_ATOM);
+    }
+    if (term_is_boxed_integer(arg2)) {
+        size |= term_boxed_size(arg2);
+    } else if (UNLIKELY(!term_is_integer(arg2))) {
+        TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
+        RAISE_ERROR(BADARITH_ATOM);
+    }
+
+    switch (size) {
+        case 0: {
+            //BUG
+            abort();
+        }
+
+        case 1: {
+            avm_int_t val1 = term_maybe_unbox_int(arg1);
+            avm_int_t val2 = term_maybe_unbox_int(arg2);
+            if (UNLIKELY(val2 == 0)) {
+                RAISE_ERROR(BADARITH_ATOM);
+
+            } else if (UNLIKELY((val2 == -1) && (val1 == AVM_INT_MIN))) {
+                #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+                    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+
+                    return term_make_boxed_int64(-((avm_int64_t) AVM_INT_MIN), ctx);
+
+                #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
+                    TRACE("overflow: arg1: %lx, arg2: %lx\n", arg1, arg2);
+                    RAISE_ERROR(OVERFLOW_ATOM);
+                #endif
+
+            } else {
+                return term_make_maybe_boxed_int(ctx, val1 / val2);
+            }
+        }
+
+        #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+        case 2:
+        case 3: {
+            avm_int64_t val1 = term_maybe_unbox_int64(arg1);
+            avm_int64_t val2 = term_maybe_unbox_int64(arg2);
+            if (UNLIKELY(val2 == 0)) {
+                RAISE_ERROR(BADARITH_ATOM);
+
+            } else if (UNLIKELY((val2 == -1) && (val1 == INT64_MIN))) {
+                TRACE("overflow: arg1: %lx, arg2: %lx\n", arg1, arg2);
+                RAISE_ERROR(OVERFLOW_ATOM);
+
+            } else {
+                return term_make_maybe_boxed_int64(ctx, val1 / val2);
+            }
+        }
+        #endif
+
+        default:
+            abort();
+    }
+}
+
 term bif_erlang_div_2(Context *ctx, int live, term arg1, term arg2)
 {
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
-        int32_t operand_b = term_to_int32(arg2);
+        avm_int_t operand_b = term_to_int(arg2);
         if (operand_b != 0) {
-            int32_t res = term_to_int32(arg1) / operand_b;
-            if (UNLIKELY(res > 134217727)) {
-                TRACE("overflow: arg1: %lx, arg2: %lx\n", arg1, arg2);
-                RAISE_ERROR(OVERFLOW_ATOM);
+            avm_int_t res = term_to_int(arg1) / operand_b;
+            if (UNLIKELY(res == -MIN_NOT_BOXED_INT)) {
+                return make_minus_min_not_boxed_int(ctx);
 
             } else {
-                return term_from_int32(res);
+                return term_from_int(res);
             }
         } else {
             RAISE_ERROR(BADARITH_ATOM);
         }
 
     } else {
-        TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
-        RAISE_ERROR(BADARITH_ATOM);
+        return div_boxed_helper(ctx, arg1, arg2);
     }
-}
-
-static term make_minus_min_not_boxed_int(Context *ctx)
-{
-    if (UNLIKELY(memory_ensure_free(ctx, BOXED_TERMS_REQUIRED_FOR_INT) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    return term_make_boxed_int(-MIN_NOT_BOXED_INT, ctx);
 }
 
 static term neg_boxed_helper(Context *ctx, term arg1)
