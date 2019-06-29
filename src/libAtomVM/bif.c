@@ -843,22 +843,71 @@ term bif_erlang_abs_1(Context *ctx, int live, term arg1)
     }
 }
 
+static term rem_boxed_helper(Context *ctx, term arg1, term arg2)
+{
+    int size = 0;
+    if (term_is_boxed_integer(arg1)) {
+        size = term_boxed_size(arg1);
+    } else if (UNLIKELY(!term_is_integer(arg1))) {
+        TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
+        RAISE_ERROR(BADARITH_ATOM);
+    }
+    if (term_is_boxed_integer(arg2)) {
+        size |= term_boxed_size(arg2);
+    } else if (UNLIKELY(!term_is_integer(arg2))) {
+        TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
+        RAISE_ERROR(BADARITH_ATOM);
+    }
+
+    switch (size) {
+        case 0: {
+            //BUG
+            abort();
+        }
+
+        case 1: {
+            avm_int_t val1 = term_maybe_unbox_int(arg1);
+            avm_int_t val2 = term_maybe_unbox_int(arg2);
+            if (UNLIKELY(val2 == 0)) {
+                RAISE_ERROR(BADARITH_ATOM);
+            }
+
+            return term_make_maybe_boxed_int(ctx, val1 % val2);
+        }
+
+        #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+        case 2:
+        case 3: {
+            avm_int64_t val1 = term_maybe_unbox_int64(arg1);
+            avm_int64_t val2 = term_maybe_unbox_int64(arg2);
+            if (UNLIKELY(val2 == 0)) {
+                RAISE_ERROR(BADARITH_ATOM);
+            }
+
+            return term_make_maybe_boxed_int64(ctx, val1 % val2);
+        }
+        #endif
+
+        default:
+            abort();
+    }
+}
+
 term bif_erlang_rem_2(Context *ctx, int live, term arg1, term arg2)
 {
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
-        int32_t operand_b = term_to_int32(arg2);
+        avm_int_t operand_b = term_to_int(arg2);
         if (LIKELY(operand_b != 0)) {
-            return term_from_int32(term_to_int32(arg1) % operand_b);
+            return term_from_int(term_to_int(arg1) % operand_b);
 
         } else {
             RAISE_ERROR(BADARITH_ATOM);
         }
 
     } else {
-        TRACE("error: arg1: %lx, arg2: %lx\n", arg1, arg2);
-        RAISE_ERROR(BADARITH_ATOM);
+        return rem_boxed_helper(ctx, arg1, arg2);
     }
 }
 
