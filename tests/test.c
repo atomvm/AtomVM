@@ -273,6 +273,14 @@ struct Test tests[] =
 
     {"plusone3.beam", 134217726},
     {"plusone4.beam", 134217728},
+    {"bigfact.beam", 1860480},
+    {"bigfact2.beam", 189907211},
+    {"bigfact3.beam", 3078559},
+    {"boxedabs.beam", 15},
+    {"boxedneg.beam", 15},
+    {"boxedmul.beam", 15},
+    {"pow32.beam", 528},
+    {"pow64.beam", 1794},
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 

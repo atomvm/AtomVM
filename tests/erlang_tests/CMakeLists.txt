@@ -235,6 +235,14 @@ compile_erlang(negovf)
 
 compile_erlang(plusone3)
 compile_erlang(plusone4)
+compile_erlang(bigfact)
+compile_erlang(bigfact2)
+compile_erlang(bigfact3)
+compile_erlang(boxedabs)
+compile_erlang(boxedneg)
+compile_erlang(boxedmul)
+compile_erlang(pow32)
+compile_erlang(pow64)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -462,4 +470,12 @@ add_custom_target(erlang_test_modules DEPENDS
 
     plusone3.beam
     plusone4.beam
+    bigfact.beam
+    bigfact2.beam
+    bigfact3.beam
+    boxedabs.beam
+    boxedneg.beam
+    boxedmul.beam
+    pow32.beam
+    pow64.beam
 )
