@@ -173,6 +173,45 @@ term bif_erlang_tuple_size_1(Context *ctx, term arg1)
     return term_from_int32(term_get_tuple_arity(arg1));
 }
 
+static inline term term_make_maybe_boxed_int(Context *ctx, avm_int_t value)
+{
+    if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
+        if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+
+        return term_make_boxed_int(value, ctx);
+
+    } else {
+        return term_from_int(value);
+    }
+}
+
+static inline term term_make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
+{
+    #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+        if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
+            if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+
+            return term_make_boxed_int64(value, ctx);
+
+        }
+    #endif
+
+    if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
+        if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+
+        return term_make_boxed_int(value, ctx);
+
+    } else {
+        return term_from_int(value);
+    }
+}
+
 static term add_overflow_helper(Context *ctx, term arg1, term arg2)
 {
     avm_int_t val1 = term_to_int(arg1);
