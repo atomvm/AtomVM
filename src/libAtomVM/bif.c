@@ -259,17 +259,9 @@ static term add_boxed_helper(Context *ctx, term arg1, term arg2)
                 }
 
                 return term_make_boxed_int64(res64, ctx);
-
-            } else if ((res >= MIN_NOT_BOXED_INT) && (res <= MAX_NOT_BOXED_INT)) {
-                return term_from_int(res);
-
-            } else {
-                if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                }
-
-                return term_make_boxed_int(res, ctx);
             }
+
+            return term_make_maybe_boxed_int(ctx, res);
         }
 
     #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
@@ -281,23 +273,9 @@ static term add_boxed_helper(Context *ctx, term arg1, term arg2)
 
             if (BUILTIN_ADD_OVERFLOW_INT64(val1, val2, &res)) {
                 abort();
-
-            } else if ((res >= MIN_NOT_BOXED_INT) && (res <= MAX_NOT_BOXED_INT)) {
-                return term_from_int(res);
-
-            } else if ((res >= AVM_INT_MIN) && (res <= AVM_INT_MAX)) {
-                if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                }
-
-                return term_make_boxed_int(res, ctx);
-            } else {
-                if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                }
-
-                return term_make_boxed_int64(res, ctx);
             }
+
+            return term_make_maybe_boxed_int64(ctx, res);
         }
     #endif
 
@@ -370,17 +348,9 @@ static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
                 }
 
                 return term_make_boxed_int64(res64, ctx);
-
-            } else if ((res >= MIN_NOT_BOXED_INT) && (res <= MAX_NOT_BOXED_INT)) {
-                return term_from_int(res);
-
-            } else {
-                if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                }
-
-                return term_make_boxed_int(res, ctx);
             }
+
+            return term_make_maybe_boxed_int(ctx, res);
         }
 
     #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
@@ -392,23 +362,9 @@ static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
 
             if (BUILTIN_SUB_OVERFLOW_INT64(val1, val2, &res)) {
                 abort();
-
-            } else if ((res >= MIN_NOT_BOXED_INT) && (res <= MAX_NOT_BOXED_INT)) {
-                return term_from_int(res);
-
-            } else if ((res >= AVM_INT_MIN) && (res <= AVM_INT_MAX)) {
-                if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                }
-
-                return term_make_boxed_int(res, ctx);
-            } else {
-                if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                }
-
-                return term_make_boxed_int64(res, ctx);
             }
+
+            return term_make_maybe_boxed_int64(ctx, res);
         }
     #endif
 
@@ -500,17 +456,9 @@ static term mul_boxed_helper(Context *ctx, term arg1, term arg2)
                 }
 
                 return term_make_boxed_int64(res64, ctx);
-
-            } else if ((res >= MIN_NOT_BOXED_INT) && (res <= MAX_NOT_BOXED_INT)) {
-                return term_from_int(res);
-
-            } else {
-                if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                }
-
-                return term_make_boxed_int(res, ctx);
             }
+
+            return term_make_maybe_boxed_int(ctx, res);
         }
 
     #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
@@ -523,24 +471,9 @@ static term mul_boxed_helper(Context *ctx, term arg1, term arg2)
             if (BUILTIN_MUL_OVERFLOW_INT64(val1, val2, &res)) {
                 TRACE("overflow: arg1: %lx, arg2: %lx\n", arg1, arg2);
                 RAISE_ERROR(OVERFLOW_ATOM);
-
-            } else if ((res >= MIN_NOT_BOXED_INT) && (res <= MAX_NOT_BOXED_INT)) {
-                return term_from_int(res);
-
-            } else if ((res >= AVM_INT_MIN) && (res <= AVM_INT_MAX)) {
-                if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                }
-
-                return term_make_boxed_int(res, ctx);
-
-            } else {
-                if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                }
-
-                return term_make_boxed_int64(res, ctx);
             }
+
+            return term_make_maybe_boxed_int64(ctx, res);
         }
     #endif
 
