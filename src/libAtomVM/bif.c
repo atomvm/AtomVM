@@ -272,7 +272,8 @@ static term add_boxed_helper(Context *ctx, term arg1, term arg2)
             avm_int64_t res;
 
             if (BUILTIN_ADD_OVERFLOW_INT64(val1, val2, &res)) {
-                abort();
+                TRACE("overflow: val1: " AVM_INT64_FMT ", val2: " AVM_INT64_FMT "\n", arg1, arg2);
+                RAISE_ERROR(OVERFLOW_ATOM);
             }
 
             return term_make_maybe_boxed_int64(ctx, res);
@@ -361,7 +362,8 @@ static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
             avm_int64_t res;
 
             if (BUILTIN_SUB_OVERFLOW_INT64(val1, val2, &res)) {
-                abort();
+                TRACE("overflow: val1: " AVM_INT64_FMT ", val2: " AVM_INT64_FMT "\n", arg1, arg2);
+                RAISE_ERROR(OVERFLOW_ATOM);
             }
 
             return term_make_maybe_boxed_int64(ctx, res);
