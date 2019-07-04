@@ -281,7 +281,7 @@ static term add_boxed_helper(Context *ctx, term arg1, term arg2)
     #endif
 
         default:
-            abort();
+            RAISE_ERROR(OVERFLOW_ATOM);
     }
 }
 
@@ -371,7 +371,7 @@ static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
     #endif
 
         default:
-            abort();
+            RAISE_ERROR(OVERFLOW_ATOM);
     }
 }
 
@@ -419,7 +419,7 @@ static term mul_overflow_helper(Context *ctx, term arg1, term arg2)
 #endif
 
     } else {
-        abort();
+        RAISE_ERROR(OVERFLOW_ATOM);
     }
 }
 
@@ -480,7 +480,7 @@ static term mul_boxed_helper(Context *ctx, term arg1, term arg2)
     #endif
 
         default:
-            abort();
+            RAISE_ERROR(OVERFLOW_ATOM);
     }
 }
 
@@ -576,7 +576,7 @@ static term div_boxed_helper(Context *ctx, term arg1, term arg2)
         #endif
 
         default:
-            abort();
+            RAISE_ERROR(OVERFLOW_ATOM);
     }
 }
 
@@ -659,10 +659,8 @@ static term neg_boxed_helper(Context *ctx, term arg1)
                 }
             }
             #endif
-            default: {
-                //Not supported
-                abort();
-            }
+            default:
+                RAISE_ERROR(OVERFLOW_ATOM);
         }
     } else {
         TRACE("error: arg1: %lx\n", arg1);
@@ -745,10 +743,8 @@ static term abs_boxed_helper(Context *ctx, term arg1)
                 }
             }
             #endif
-            default: {
-                //Not supported
-                abort();
-            }
+            default:
+                RAISE_ERROR(OVERFLOW_ATOM);
         }
     } else {
         TRACE("error: arg1: %lx\n", arg1);
@@ -824,7 +820,7 @@ static term rem_boxed_helper(Context *ctx, term arg1, term arg2)
         #endif
 
         default:
-            abort();
+            RAISE_ERROR(OVERFLOW_ATOM);
     }
 }
 
