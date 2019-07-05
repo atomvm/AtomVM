@@ -89,7 +89,7 @@ term bif_erlang_is_integer_1(Context *ctx, term arg1)
 {
     UNUSED(ctx);
 
-    return term_is_integer(arg1) ? TRUE_ATOM : FALSE_ATOM;
+    return term_is_any_integer(arg1) ? TRUE_ATOM : FALSE_ATOM;
 }
 
 term bif_erlang_is_list_1(Context *ctx, term arg1)
@@ -104,7 +104,7 @@ term bif_erlang_is_number_1(Context *ctx, term arg1)
     UNUSED(ctx);
 
     //TODO: change to term_is_number
-    return term_is_integer(arg1) ? TRUE_ATOM : FALSE_ATOM;
+    return term_is_any_integer(arg1) ? TRUE_ATOM : FALSE_ATOM;
 }
 
 term bif_erlang_is_pid_1(Context *ctx, term arg1)

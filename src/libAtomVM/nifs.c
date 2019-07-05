@@ -398,6 +398,31 @@ const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
     return nameAndPtr->nif;
 }
 
+static inline term term_make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
+{
+    #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+        if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
+            if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+
+            return term_make_boxed_int64(value, ctx);
+
+        }
+    #endif
+
+    if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
+        if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+
+        return term_make_boxed_int(value, ctx);
+
+    } else {
+        return term_from_int(value);
+    }
+}
+
 static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -1011,12 +1036,12 @@ static term nif_erlang_binary_to_integer_1(Context *ctx, int argc, term argv[])
     //TODO: handle 64 bits numbers
     //TODO: handle errors
     char *endptr;
-    uint32_t value = strtol(null_terminated_buf, &endptr, 10);
+    uint64_t value = strtoll(null_terminated_buf, &endptr, 10);
     if (*endptr != '\0') {
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    return term_from_int32(value);
+    return term_make_maybe_boxed_int64(ctx, value);
 }
 
 static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[])
@@ -1193,13 +1218,13 @@ static term nif_erlang_integer_to_binary_1(Context *ctx, int argc, term argv[])
     UNUSED(argc);
 
     term value = argv[0];
-    VALIDATE_VALUE(value, term_is_integer);
+    VALIDATE_VALUE(value, term_is_any_integer);
 
-    int32_t int_value = term_to_int32(value);
-    char integer_string[24];
+    avm_int64_t int_value = term_maybe_unbox_int64(value);
+    char integer_string[21];
 
     //TODO: just copy data to the binary instead of using the stack
-    snprintf(integer_string, 24, "%i", int_value);
+    snprintf(integer_string, 21, AVM_INT64_FMT, int_value);
     int len = strlen(integer_string);
 
     if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
@@ -1214,12 +1239,12 @@ static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[])
     UNUSED(argc);
 
     term value = argv[0];
-    VALIDATE_VALUE(value, term_is_integer);
+    VALIDATE_VALUE(value, term_is_any_integer);
 
-    int32_t int_value = term_to_int32(value);
-    char integer_string[24];
+    avm_int64_t int_value = term_maybe_unbox_int64(value);
+    char integer_string[21];
 
-    snprintf(integer_string, 24, "%i", int_value);
+    snprintf(integer_string, 21, AVM_INT64_FMT, int_value);
     int integer_string_len = strlen(integer_string);
 
     if (UNLIKELY(memory_ensure_free(ctx, integer_string_len * 2) != MEMORY_GC_OK)) {
@@ -1266,7 +1291,7 @@ static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
     UNUSED(argc);
 
     term t = argv[0];
-    int32_t acc = 0;
+    int64_t acc = 0;
     int digits = 0;
 
     VALIDATE_VALUE(t, term_is_nonempty_list);
@@ -1285,13 +1310,14 @@ static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
 
         VALIDATE_VALUE(head, term_is_integer);
 
-        int32_t c = term_to_int32(head);
+        avm_int_t c = term_to_int(head);
 
         if (UNLIKELY((c < '0') || (c > '9'))) {
             RAISE_ERROR(BADARG_ATOM);
         }
 
-        if (acc > INT32_MAX / 10) {
+        //TODO: fix this
+        if (acc > INT64_MAX / 10) {
             // overflow error is not standard, but we need it since we are running on an embedded device
             RAISE_ERROR(OVERFLOW_ATOM);
         }
@@ -1309,7 +1335,7 @@ static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    return term_from_int32(acc);
+    return term_make_maybe_boxed_int64(ctx, acc);
 }
 
 static term nif_erlang_display_1(Context *ctx, int argc, term argv[])

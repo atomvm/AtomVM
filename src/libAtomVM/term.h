@@ -255,6 +255,11 @@ static inline int term_is_boxed_integer(term t)
     return 0;
 }
 
+static inline int term_is_any_integer(term t)
+{
+    return term_is_integer(t) || term_is_boxed_integer(t);
+}
+
 static inline int term_is_catch_label(term t)
 {
     return (t & 0x3F) == TERM_CATCH_TAG;

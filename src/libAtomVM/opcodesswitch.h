@@ -1583,7 +1583,7 @@ static const char *const out_of_memory_atom = "\xD" "out_of_memory";
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_integer/2, label=%i, arg1=%lx\n", label, arg1);
 
-                    if (term_is_integer(arg1)) {
+                    if (term_is_any_integer(arg1)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
@@ -1611,7 +1611,7 @@ static const char *const out_of_memory_atom = "\xD" "out_of_memory";
                     TRACE("is_number/2, label=%i, arg1=%lx\n", label, arg1);
 
                     //TODO: check for floats too
-                    if (term_is_integer(arg1)) {
+                    if (term_is_any_integer(arg1)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
