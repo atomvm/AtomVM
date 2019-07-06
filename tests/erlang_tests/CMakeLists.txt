@@ -243,6 +243,8 @@ compile_erlang(boxedneg)
 compile_erlang(boxedmul)
 compile_erlang(pow32)
 compile_erlang(pow64)
+compile_erlang(pow32_is_integer)
+compile_erlang(pow64_is_integer)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -478,4 +480,7 @@ add_custom_target(erlang_test_modules DEPENDS
     boxedmul.beam
     pow32.beam
     pow64.beam
+
+    pow32_is_integer.beam
+    pow64_is_integer.beam
 )

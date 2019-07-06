@@ -281,6 +281,8 @@ struct Test tests[] =
     {"boxedmul.beam", 15},
     {"pow32.beam", 528},
     {"pow64.beam", 1794},
+    {"pow32_is_integer.beam", 528},
+    {"pow64_is_integer.beam", 1794},
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
