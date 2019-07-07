@@ -252,13 +252,20 @@ static term add_boxed_helper(Context *ctx, term arg1, term arg2)
             avm_int_t res;
 
             if (BUILTIN_ADD_OVERFLOW_INT(val1, val2, &res)) {
-                avm_int64_t res64 = (avm_int64_t) val1 + (avm_int64_t) val2;
+                #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+                    avm_int64_t res64 = (avm_int64_t) val1 + (avm_int64_t) val2;
 
-                if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                }
+                    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
 
-                return term_make_boxed_int64(res64, ctx);
+                    return term_make_boxed_int64(res64, ctx);
+                #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
+                    TRACE("overflow: arg1: " AVM_INT64_FMT ", arg2: " AVM_INT64_FMT "\n", arg1, arg2);
+                    RAISE_ERROR(OVERFLOW_ATOM);
+                #else
+                    #error "Unsupported configuration."
+                #endif
             }
 
             return term_make_maybe_boxed_int(ctx, res);
@@ -342,13 +349,20 @@ static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
             avm_int_t res;
 
             if (BUILTIN_SUB_OVERFLOW_INT(val1, val2, &res)) {
-                avm_int64_t res64 = (avm_int64_t) val1 + (avm_int64_t) val2;
+                #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+                    avm_int64_t res64 = (avm_int64_t) val1 + (avm_int64_t) val2;
 
-                if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                }
+                    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
 
-                return term_make_boxed_int64(res64, ctx);
+                    return term_make_boxed_int64(res64, ctx);
+                #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
+                    TRACE("overflow: arg1: " AVM_INT64_FMT ", arg2: " AVM_INT64_FMT "\n", arg1, arg2);
+                    RAISE_ERROR(OVERFLOW_ATOM);
+                #else
+                    #error "Unsupported configuration."
+                #endif
             }
 
             return term_make_maybe_boxed_int(ctx, res);
@@ -451,13 +465,20 @@ static term mul_boxed_helper(Context *ctx, term arg1, term arg2)
             avm_int_t res;
 
             if (BUILTIN_MUL_OVERFLOW_INT(val1, val2, &res)) {
-                avm_int64_t res64 = (avm_int64_t) val1 * (avm_int64_t) val2;
+                #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+                    avm_int64_t res64 = (avm_int64_t) val1 * (avm_int64_t) val2;
 
-                if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                }
+                    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
 
-                return term_make_boxed_int64(res64, ctx);
+                    return term_make_boxed_int64(res64, ctx);
+                #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
+                    TRACE("overflow: arg1: " AVM_INT64_FMT ", arg2: " AVM_INT64_FMT "\n", arg1, arg2);
+                    RAISE_ERROR(OVERFLOW_ATOM);
+                #else
+                    #error "Unsupported configuration."
+                #endif
             }
 
             return term_make_maybe_boxed_int(ctx, res);
