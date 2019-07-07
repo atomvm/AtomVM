@@ -283,6 +283,13 @@ struct Test tests[] =
     {"pow64.beam", 1794},
     {"pow32_is_integer.beam", 528},
     {"pow64_is_integer.beam", 1794},
+    {"addovf32.beam", 791},
+    {"subovf32.beam", 282},
+    {"negovf32.beam", -1935},
+    {"addovf64.beam", 2781},
+    {"subovf64.beam", 282},
+    {"negovf64.beam", -6865},
+    {"powsquare.beam", 1572},
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 

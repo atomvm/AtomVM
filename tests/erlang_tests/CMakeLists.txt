@@ -245,6 +245,13 @@ compile_erlang(pow32)
 compile_erlang(pow64)
 compile_erlang(pow32_is_integer)
 compile_erlang(pow64_is_integer)
+compile_erlang(addovf32)
+compile_erlang(subovf32)
+compile_erlang(negovf32)
+compile_erlang(addovf64)
+compile_erlang(subovf64)
+compile_erlang(negovf64)
+compile_erlang(powsquare)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -483,4 +490,11 @@ add_custom_target(erlang_test_modules DEPENDS
 
     pow32_is_integer.beam
     pow64_is_integer.beam
+    addovf32.beam
+    subovf32.beam
+    negovf32.beam
+    addovf64.beam
+    subovf64.beam
+    negovf64.beam
+    powsquare.beam
 )
