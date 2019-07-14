@@ -290,6 +290,17 @@ struct Test tests[] =
     {"subovf64.beam", 282},
     {"negovf64.beam", -6865},
     {"powsquare.beam", 1572},
+    {"minuspow31minusone.beam", -566},
+    {"pow31plusone.beam", 547},
+    {"minuspow31divminusone.beam", 547},
+    {"pow31abs.beam", 547},
+    {"minuspow31abs.beam", 547},
+    {"pow31minusoneabs.beam", 528},
+    {"minuspow31plusoneabs.beam", 528},
+    {"minuspow31plustwoabs.beam", 509},
+    {"minuspow63plusoneabs.beam", 1794},
+    {"minuspow63plustwoabs.beam", 1757},
+
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 

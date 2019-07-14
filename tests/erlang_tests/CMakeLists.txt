@@ -252,6 +252,17 @@ compile_erlang(addovf64)
 compile_erlang(subovf64)
 compile_erlang(negovf64)
 compile_erlang(powsquare)
+compile_erlang(minuspow31minusone)
+compile_erlang(pow31plusone)
+compile_erlang(minuspow31divminusone)
+compile_erlang(pow31abs)
+compile_erlang(minuspow31abs)
+compile_erlang(pow31minusoneabs)
+compile_erlang(minuspow31plusoneabs)
+compile_erlang(minuspow31plustwoabs)
+compile_erlang(minuspow63plusoneabs)
+compile_erlang(minuspow63plustwoabs)
+
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -497,4 +508,14 @@ add_custom_target(erlang_test_modules DEPENDS
     subovf64.beam
     negovf64.beam
     powsquare.beam
+    minuspow31minusone.beam
+    pow31plusone.beam
+    minuspow31divminusone.beam
+    pow31abs.beam
+    minuspow31abs.beam
+    pow31minusoneabs.beam
+    minuspow31plusoneabs.beam
+    minuspow31plustwoabs.beam
+    minuspow63plusoneabs.beam
+    minuspow63plustwoabs.beam
 )
