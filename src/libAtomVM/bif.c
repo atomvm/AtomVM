@@ -350,7 +350,7 @@ static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
 
             if (BUILTIN_SUB_OVERFLOW_INT(val1, val2, &res)) {
                 #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-                    avm_int64_t res64 = (avm_int64_t) val1 + (avm_int64_t) val2;
+                    avm_int64_t res64 = (avm_int64_t) val1 - (avm_int64_t) val2;
 
                     if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
