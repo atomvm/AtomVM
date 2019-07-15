@@ -16,13 +16,24 @@
 %   Free Software Foundation, Inc.,                                       %
 %   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-module(avm_inet).
 
--define(CALENDAR,       avm_calendar).
--define(ERLANG,             erlang).
--define(GEN_SERVER,     avm_gen_server).
--define(GEN_STATEM,     avm_gen_statem).
--define(INET,           avm_inet).
--define(GEN_UDP,        avm_gen_udp).
--define(LISTS,          avm_lists).
--define(PROPLISTS,      avm_proplists).
--define(TIMER,          avm_timer).
+-export([port/1]).
+
+-type port_number() :: 0..65535.
+-type socket() :: pid().
+
+-export_type([socket/0, port_number/0]).
+
+%%-----------------------------------------------------------------------------
+%% @param   Socket the socket from which to obtain the port number
+%% @returns the port number associated with the local socket
+%% @doc     Retrieve the actual port number to which the socket is bound.
+%%          This function is useful if the port assignment is done by the
+%%          operating system.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec port(Socket::socket()) -> port_number().
+port(Socket) ->
+    %% TODO implement a call to the port to get the actual port
+    undefined.

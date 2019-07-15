@@ -44,25 +44,39 @@
 #include <lwip/api.h>
 
 #include "esp32_sys.h"
-#include "trace.h"
 #include "sys.h"
 #include "term.h"
 
-static void recvfrom_callback(Context *ctx);
+// #define ENABLE_TRACE 1
+#include "trace.h"
+
+#define BUFSIZE 128
+
+static void passive_recvfrom_callback(Context *ctx);
+static void active_recvfrom_callback(Context *ctx);
 
 typedef struct SocketDriverData
 {
     struct netconn *conn;
     uint64_t ref_ticks;
-    term listener_pid;
+    term proto;
+    term port;
+    term controlling_process;
+    term binary;
+    term active;
+    term buffer;
 } SocketDriverData;
 
 void *socket_driver_create_data()
 {
     struct SocketDriverData *data = calloc(1, sizeof(struct SocketDriverData));
     data->conn = NULL;
-    data->ref_ticks = 0;
-    data->listener_pid = term_invalid_term();
+    data->proto = term_invalid_term();
+    data->port = term_invalid_term();
+    data->controlling_process = term_invalid_term();
+    data->binary = term_invalid_term();
+    data->active = term_invalid_term();
+    data->buffer = term_invalid_term();
 
     return (void *) data;
 }
@@ -96,10 +110,15 @@ void socket_handling_callback(EventListener *listener)
     Context *socket_ctx = listener->data;
 
     SocketDriverData *socket_data = (SocketDriverData *) socket_ctx->platform_data;
-    if (!term_is_invalid_term(socket_data->listener_pid)) {
-        recvfrom_callback(socket_ctx);
-    } else {
+
+    if (term_is_invalid_term(socket_data->controlling_process)) {
         TRACE("socket: no listening context, discarding data.\n");
+    } else {
+        if (socket_data->active == TRUE_ATOM) {
+            active_recvfrom_callback(socket_ctx);
+        } else {
+            passive_recvfrom_callback(socket_ctx);
+        }
     }
 }
 
@@ -139,6 +158,38 @@ static void tuple_to_ip_addr(term address_tuple, ip_addr_t *out_addr)
     out_addr->u_addr.ip4.addr = htonl(socket_tuple_to_addr(address_tuple));
 }
 
+
+static term do_bind(Context *ctx, term params)
+{
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+
+    term address_term = interop_proplist_get_value(params, ADDRESS_ATOM);
+    term port_term = interop_proplist_get_value(params, PORT_ATOM);
+
+    UNUSED(address_term);
+
+    u16_t port = term_to_int32(port_term);
+
+    TRACE("socket: binding to IP_ADDR_ANY on port %i\n", (int) port);
+
+    //TODO: replace IP_ADDR_ANY
+    if (UNLIKELY(netconn_bind(socket_data->conn, IP_ADDR_ANY, port) != ERR_OK)) {
+        TRACE("socket: Failed to bin");
+        return port_create_sys_error_tuple(ctx, BIND_ATOM, errno);
+    }
+
+    ip_addr_t naddr;
+
+    if (UNLIKELY(netconn_getaddr(socket_data->conn, &naddr, &port, 1) != ERR_OK)) {
+        TRACE("socket: Failed to getaddr");
+        return port_create_sys_error_tuple(ctx, GETSOCKNAME_ATOM, errno);
+    } else {
+        TRACE("socket: binded");
+        socket_data->port = term_from_int32(port);
+        return OK_ATOM;
+    }
+}
+
 term socket_driver_do_init(Context *ctx, term params)
 {
     TRACE("socket: init\n");
@@ -159,8 +210,26 @@ term socket_driver_do_init(Context *ctx, term params)
     if (proto == UDP_ATOM) {
         conn_type = NETCONN_UDP;
 
-    } else if (proto == TCP_ATOM) {
-        conn_type = NETCONN_TCP;
+        term controlling_process = interop_proplist_get_value_default(params, CONTROLLING_PROCESS_ATOM, term_invalid_term());
+        if (!(term_is_invalid_term(controlling_process) || term_is_pid(controlling_process))) {
+            TRACE("invalid controlling process pid");
+            return port_create_error_tuple(ctx, BADARG_ATOM);
+        }
+        socket_data->controlling_process = controlling_process;
+        
+        term binary = interop_proplist_get_value_default(params, BINARY_ATOM, TRUE_ATOM);
+        if (!(binary == TRUE_ATOM || binary == FALSE_ATOM)) {
+            TRACE("invalid binary flag");
+            return port_create_error_tuple(ctx, BADARG_ATOM);
+        }
+        socket_data->binary = binary;
+        
+        term buffer = interop_proplist_get_value_default(params, BUFFER_ATOM, term_from_int(BUFSIZE));
+        if (!term_is_integer(buffer)) {
+            TRACE("invalid buffer flag");
+            return port_create_error_tuple(ctx, BADARG_ATOM);
+        }
+        socket_data->buffer = buffer;
 
     } else {
         return port_create_error_tuple(ctx, BADARG_ATOM);
@@ -169,58 +238,38 @@ term socket_driver_do_init(Context *ctx, term params)
     TRACE("socket: creating netconn\n");
 
     struct netconn *conn = netconn_new_with_proto_and_callback(conn_type, 0, socket_callback);
+    // TODO check for invalid return
     socket_data->conn = conn;
 
     int event_descriptor = open_event_descriptor(conn);
 
-    GlobalContext *global = ctx->global;
+    term ret = do_bind(ctx, params);
 
-    EventListener *listener = malloc(sizeof(EventListener));
-    if (IS_NULL_PTR(listener)) {
-        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        abort();
-    }
-    linkedlist_append(&global->listeners, &listener->listeners_list_head);
-    listener->fd = event_descriptor;
+    term active = interop_proplist_get_value_default(params, ACTIVE_ATOM, FALSE_ATOM);
+    socket_data->active = active;
+    if (ret == OK_ATOM && active == TRUE_ATOM) {
+        GlobalContext *global = ctx->global;
 
-    listener->expires = 0;
-    listener->expiral_timestamp.tv_sec = INT_MAX;
-    listener->expiral_timestamp.tv_nsec = INT_MAX;
-    listener->one_shot = 0;
-    listener->data = ctx;
-    listener->handler = socket_handling_callback;
+        EventListener *listener = malloc(sizeof(EventListener));
+        if (IS_NULL_PTR(listener)) {
+            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            abort();
+        }
+        linkedlist_append(&global->listeners, &listener->listeners_list_head);
+        listener->fd = event_descriptor;
 
-    TRACE("socket: initialized\n");
-
-    return OK_ATOM;
-}
-
-
-term socket_driver_do_bind(Context *ctx, term address_term, term port_term)
-{
-    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-
-    UNUSED(address_term);
-
-    u16_t port = term_to_int32(port_term);
-
-    TRACE("socket: binding to IP_ADDR_ANY on port %i\n", (int) port);
-
-    //TODO: replace IP_ADDR_ANY
-    if (UNLIKELY(netconn_bind(socket_data->conn, IP_ADDR_ANY, port) != ERR_OK)) {
-        return port_create_sys_error_tuple(ctx, BIND_ATOM, errno);
-    }
-
-    ip_addr_t naddr;
-
-    if (UNLIKELY(netconn_getaddr(socket_data->conn, &naddr, &port, 1) != ERR_OK)) {
-        return port_create_sys_error_tuple(ctx, GETSOCKNAME_ATOM, errno);
+        listener->expires = 0;
+        listener->expiral_timestamp.tv_sec = INT_MAX;
+        listener->expiral_timestamp.tv_nsec = INT_MAX;
+        listener->one_shot = 0;
+        listener->data = ctx;
+        listener->handler = socket_handling_callback;
+        TRACE("socket: initialized\n");
     } else {
-        term port_atom = term_from_int32(port);
-        return port_create_ok_tuple(ctx, port_atom);
+        return port_create_error_tuple(ctx, BADARG_ATOM);
     }
 
-    TRACE("socket: binded");
+    return ret;
 }
 
 term socket_driver_do_send(Context *ctx, term dest_address, term dest_port, term buffer)
@@ -274,7 +323,7 @@ term socket_driver_do_send(Context *ctx, term dest_address, term dest_port, term
     return port_create_ok_tuple(ctx, OK_ATOM);
 }
 
-static void recvfrom_callback(Context *ctx)
+static void passive_recvfrom_callback(Context *ctx)
 {
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
@@ -287,7 +336,7 @@ static void recvfrom_callback(Context *ctx)
         // tuple arity 2:       3
         // ref:                 3 (max)
         port_ensure_available(ctx, 12);
-        term pid = socket_data->listener_pid;
+        term pid = socket_data->controlling_process;
         term ref = term_from_ref_ticks(socket_data->ref_ticks, ctx);
         port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, RECVFROM_ATOM, errno));
 
@@ -311,7 +360,50 @@ static void recvfrom_callback(Context *ctx)
         term packet = term_from_literal_binary(data, datalen, ctx);
         term addr_port_packet = port_create_tuple3(ctx, addr, port, packet);
         term reply = port_create_ok_tuple(ctx, addr_port_packet);
-        port_send_reply(ctx, socket_data->listener_pid, ref, reply);
+        port_send_reply(ctx, socket_data->controlling_process, ref, reply);
+    }
+
+    netbuf_delete(buf);
+}
+
+static void active_recvfrom_callback(Context *ctx)
+{
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+
+    struct netbuf *buf = NULL;
+
+    if (UNLIKELY(netconn_recv(socket_data->conn, &buf) != ERR_OK)) {
+        // {udp, Socket, {error, {SysCall, Errno}}}
+        // tuple arity 2:       3
+        // tuple arity 2:       3
+        // tuple arity 4:       5
+        port_ensure_available(ctx, 12);
+        term pid = socket_data->controlling_process;
+        term msgs[5] = {UDP_ATOM, term_from_local_process_id(ctx->process_id), port_create_sys_error_tuple(ctx, RECVFROM_ATOM, errno)};
+        term msg = port_create_tuple_n(ctx, 5, msgs);
+        port_send_message(ctx, pid, msg);
+
+    } else {
+        void *data;
+        uint16_t datalen;
+        netbuf_data(buf, &data, &datalen);
+
+        // {Ref, {ok, {{int,int,int,int}, int, binary}}}
+        // tuple arity 2:       3
+        // tuple arity 3:       4
+        // tuple arity 4:       5
+        // tuple arity 2:       3
+        // ref:                 3 (max)
+        // binary:              2 + len(binary)/WORD_SIZE + 1
+        port_ensure_available(ctx, 20 + datalen/(TERM_BITS/8) + 1);
+
+        term pid = socket_data->controlling_process;
+        term addr = socket_addr_to_tuple(ctx, netbuf_fromaddr(buf));
+        term port = term_from_int32(netbuf_fromport(buf));
+        term packet = socket_create_packet_term(ctx, data, datalen, socket_data->binary == TRUE_ATOM);
+        term msgs[5] = {UDP_ATOM, term_from_local_process_id(ctx->process_id), addr, port, packet};
+        term msg = port_create_tuple_n(ctx, 5, msgs);
+        port_send_message(ctx, pid, msg);
     }
 
     netbuf_delete(buf);
@@ -321,6 +413,11 @@ void socket_driver_do_recvfrom(Context *ctx, term pid, term ref)
 {
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
-    socket_data->listener_pid = pid;
+    if (socket_data->active == TRUE_ATOM) {
+        port_ensure_available(ctx, 12);
+        port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
+    }
+
+    socket_data->controlling_process = pid;
     socket_data->ref_ticks = term_to_ref_ticks(ref);
 }

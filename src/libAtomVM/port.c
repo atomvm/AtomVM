@@ -72,9 +72,14 @@ term port_create_ok_tuple(Context *ctx, term t)
 
 void port_send_reply(Context *ctx, term pid, term ref, term reply)
 {
+    term msg = port_create_tuple2(ctx, ref, reply);
+    port_send_message(ctx, pid, msg);
+}
+
+void port_send_message(Context *ctx, term pid, term msg)
+{
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
-    term msg = port_create_tuple2(ctx, ref, reply);
     mailbox_send(target, msg);
 }
 

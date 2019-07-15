@@ -28,6 +28,6 @@ void socket_init(Context *ctx, term params);
 
 uint32_t socket_tuple_to_addr(term addr_tuple);
 term socket_tuple_from_addr(Context *ctx, uint32_t addr);
-term socket_create_packet_term(Context *ctx, const char *buf, ssize_t len);
+term socket_create_packet_term(Context *ctx, const char *buf, ssize_t len, int is_binary);
 
 #endif

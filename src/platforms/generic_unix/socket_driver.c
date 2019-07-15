@@ -49,12 +49,27 @@
 typedef struct SocketDriverData
 {
     int sockfd;
+    term proto;
+    term port;
+    term controlling_process;
+    term binary;
+    term active;
+    term buffer;
 } SocketDriverData;
 
+static void passive_recvfrom_callback(EventListener *listener);
+static void active_recvfrom_callback(EventListener *listener);
 
 void *socket_driver_create_data()
 {
     struct SocketDriverData *data = calloc(1, sizeof(struct SocketDriverData));
+    data->sockfd = -1;
+    data->proto = term_invalid_term();
+    data->port = term_invalid_term();
+    data->controlling_process = term_invalid_term();
+    data->binary = term_invalid_term();
+    data->active = term_invalid_term();
+    data->buffer = term_invalid_term();
     return (void *) data;
 }
 
@@ -62,6 +77,55 @@ void *socket_driver_create_data()
 void socket_driver_delete_data(void *data)
 {
     free(data);
+}
+
+
+static term do_bind(Context *ctx, term address, term port)
+{
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+    
+    struct sockaddr_in serveraddr;
+    
+    UNUSED(address);
+    memset(&serveraddr, 0, sizeof(serveraddr));
+    serveraddr.sin_family = AF_INET;
+    serveraddr.sin_addr.s_addr = htonl(INADDR_ANY); // TODO
+    avm_int_t p = term_to_int(port);
+    serveraddr.sin_port = htons(p);
+    
+    socklen_t address_len = sizeof(serveraddr);
+    if (bind(socket_data->sockfd, (struct sockaddr *) &serveraddr, address_len) == -1) {
+        return port_create_sys_error_tuple(ctx, BIND_ATOM, errno);
+    } else {
+        if (getsockname(socket_data->sockfd, (struct sockaddr *) &serveraddr, &address_len) == -1) {
+            return port_create_sys_error_tuple(ctx, GETSOCKNAME_ATOM, errno);
+        } else {
+            socket_data->port = ntohs(serveraddr.sin_port);
+            return OK_ATOM;
+        }
+    }
+    
+}
+
+static term init_udp_socket(SocketDriverData *socket_data, Context *ctx, term params)
+{
+    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd == -1) {
+        return port_create_sys_error_tuple(ctx, SOCKET_ATOM, errno);
+    }
+    socket_data->sockfd = sockfd;
+    if (fcntl(socket_data->sockfd, F_SETFL, O_NONBLOCK) == -1) {
+        close(sockfd);
+        return port_create_sys_error_tuple(ctx, FCNTL_ATOM, errno);
+    }
+    term address = interop_proplist_get_value(params, ADDRESS_ATOM);
+    term port = interop_proplist_get_value(params, PORT_ATOM);
+
+    term ret = do_bind(ctx, address, port);
+    if (ret != OK_ATOM) {
+        close(sockfd);
+    }
+    return ret;
 }
 
 
@@ -73,52 +137,57 @@ term socket_driver_do_init(Context *ctx, term params)
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
     term proto = interop_proplist_get_value(params, PROTO_ATOM);
-
     if (term_is_nil(proto)) {
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
 
     if (proto == UDP_ATOM) {
-        int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-        if (sockfd == -1) {
-            return port_create_sys_error_tuple(ctx, SOCKET_ATOM, errno);
+        socket_data->proto = UDP_ATOM;
+        
+        term controlling_process = interop_proplist_get_value_default(params, CONTROLLING_PROCESS_ATOM, term_invalid_term());
+        if (!(term_is_invalid_term(controlling_process) || term_is_pid(controlling_process))) {
+            return port_create_error_tuple(ctx, BADARG_ATOM);
         }
-        socket_data->sockfd = sockfd;
-    } else if (proto == TCP_ATOM) {
-        socket_data->sockfd = socket(AF_INET, SOCK_STREAM, 0);
+        socket_data->controlling_process = controlling_process;
+        
+        term binary = interop_proplist_get_value_default(params, BINARY_ATOM, TRUE_ATOM);
+        if (!(binary == TRUE_ATOM || binary == FALSE_ATOM)) {
+            return port_create_error_tuple(ctx, BADARG_ATOM);
+        }
+        socket_data->binary = binary;
+        
+        term buffer = interop_proplist_get_value_default(params, BUFFER_ATOM, term_from_int(BUFSIZE));
+        if (!term_is_integer(buffer)) {
+            return port_create_error_tuple(ctx, BADARG_ATOM);
+        }
+        socket_data->buffer = buffer;
+
+        term ret = init_udp_socket(socket_data, ctx, params);
+
+        term active = interop_proplist_get_value_default(params, ACTIVE_ATOM, FALSE_ATOM);
+        socket_data->active = active;
+        if (ret == OK_ATOM && active == TRUE_ATOM) {
+            EventListener *listener = malloc(sizeof(EventListener));
+            if (IS_NULL_PTR(listener)) {
+                fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+                abort();
+            }
+            listener->fd = socket_data->sockfd;
+            listener->expires = 0;
+            listener->expiral_timestamp.tv_sec = INT_MAX;
+            listener->expiral_timestamp.tv_nsec = INT_MAX;
+            listener->one_shot = 0;
+            listener->data = ctx;
+            listener->handler = active_recvfrom_callback;
+            
+            linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+        }
+        return ret;
     } else {
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
     if (fcntl(socket_data->sockfd, F_SETFL, O_NONBLOCK) == -1){
         return port_create_sys_error_tuple(ctx, FCNTL_ATOM, errno);
-    }
-
-    return OK_ATOM;
-}
-
-
-term socket_driver_do_bind(Context *ctx, term address, term port)
-{
-    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-
-    struct sockaddr_in serveraddr;
-
-    UNUSED(address);
-    memset(&serveraddr, 0, sizeof(serveraddr));
-    serveraddr.sin_family = AF_INET;
-    serveraddr.sin_addr.s_addr = htonl(INADDR_ANY); // TODO
-    serveraddr.sin_port = htons(term_to_int32(port));
-
-    socklen_t address_len = sizeof(serveraddr);
-    if (bind(socket_data->sockfd, (struct sockaddr *) &serveraddr, address_len) == -1) {
-        return port_create_sys_error_tuple(ctx, BIND_ATOM, errno);
-    } else {
-        if (getsockname(socket_data->sockfd, (struct sockaddr *) &serveraddr, &address_len) == -1) {
-            return port_create_sys_error_tuple(ctx, GETSOCKNAME_ATOM, errno);
-        } else {
-            term port_atom = term_from_int32(ntohs(serveraddr.sin_port));
-            return port_create_ok_tuple(ctx, port_atom);
-        }
     }
 }
 
@@ -165,7 +234,7 @@ typedef struct RecvFromData {
     uint64_t ref_ticks;
 } RecvFromData;
 
-static void recvfrom_callback(EventListener *listener)
+static void passive_recvfrom_callback(EventListener *listener)
 {
     RecvFromData *recvfrom_data = (RecvFromData *) listener->data;
     Context *ctx = recvfrom_data->ctx;
@@ -176,13 +245,15 @@ static void recvfrom_callback(EventListener *listener)
 
     struct sockaddr_in clientaddr;
     socklen_t clientlen = sizeof(clientaddr);
-    char *buf = malloc(256*sizeof(char));
-    if (UNLIKELY(!buf)) {
-        fprintf(stderr, "malloc %s:%d", __FILE__, __LINE__);
+    
+    avm_int_t buf_size = term_to_int(socket_data->buffer);
+    char *buf = malloc(buf_size);
+    if (IS_NULL_PTR(buf)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         abort();
     }
 
-    ssize_t len = recvfrom(socket_data->sockfd, buf, BUFSIZE, 0, (struct sockaddr *) &clientaddr, &clientlen);
+    ssize_t len = recvfrom(socket_data->sockfd, buf, buf_size, 0, (struct sockaddr *) &clientaddr, &clientlen);
     if (len == -1) {
         // {Ref, {error, {SysCall, Errno}}}
         // tuple arity 2:       3
@@ -206,7 +277,7 @@ static void recvfrom_callback(EventListener *listener)
         term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
         term addr = socket_tuple_from_addr(ctx, htonl(clientaddr.sin_addr.s_addr));
         term port = term_from_int32(htons(clientaddr.sin_port));
-        term packet = socket_create_packet_term(ctx, buf, len);
+        term packet = socket_create_packet_term(ctx, buf, len, socket_data->binary == TRUE_ATOM);
         term addr_port_packet = port_create_tuple3(ctx, addr, port, packet);
         term reply = port_create_ok_tuple(ctx, addr_port_packet);
         port_send_reply(ctx, pid, ref, reply);
@@ -218,9 +289,60 @@ static void recvfrom_callback(EventListener *listener)
     free(buf);
 }
 
+static void active_recvfrom_callback(EventListener *listener)
+{
+    Context *ctx = (Context *) listener->data;
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+    
+    struct sockaddr_in clientaddr;
+    socklen_t clientlen = sizeof(clientaddr);
+    
+    avm_int_t buf_size = term_to_int(socket_data->buffer);
+    char *buf = malloc(buf_size);
+    if (IS_NULL_PTR(buf)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        abort();
+    }
+
+    ssize_t len = recvfrom(socket_data->sockfd, buf, buf_size, 0, (struct sockaddr *) &clientaddr, &clientlen);
+    if (len == -1) {
+        // {udp, Socket, {error, {SysCall, Errno}}}
+        // tuple arity 2:       3
+        // tuple arity 2:       3
+        // tuple arity 4:       5
+        port_ensure_available(ctx, 12);
+        term pid = socket_data->controlling_process;
+        term msgs[5] = {UDP_ATOM, term_from_local_process_id(ctx->process_id), port_create_sys_error_tuple(ctx, RECVFROM_ATOM, errno)};
+        term msg = port_create_tuple_n(ctx, 5, msgs);
+        port_send_message(ctx, pid, msg);
+    } else {
+        // {udp, pid, {int,int,int,int}, int, binary}
+        // tuple arity 5:       6
+        // atom:                1
+        // pid:                 1
+        // tuple arity 4:       5
+        // port:                1
+        // binary:              2 + len(binary)/WORD_SIZE + 1
+        port_ensure_available(ctx, 20 + len/(TERM_BITS/8) + 1);
+        term pid = socket_data->controlling_process;
+        term addr = socket_tuple_from_addr(ctx, htonl(clientaddr.sin_addr.s_addr));
+        term port = term_from_int32(htons(clientaddr.sin_port));
+        term packet = socket_create_packet_term(ctx, buf, len, socket_data->binary == TRUE_ATOM);
+        term msgs[5] = {UDP_ATOM, term_from_local_process_id(ctx->process_id), addr, port, packet};
+        term msg = port_create_tuple_n(ctx, 5, msgs);
+        port_send_message(ctx, pid, msg);
+    }
+    free(buf);
+}
+
 void socket_driver_do_recvfrom(Context *ctx, term pid, term ref)
 {
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+    
+    if (socket_data->active == TRUE_ATOM) {
+        port_ensure_available(ctx, 12);
+        port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
+    }
 
     EventListener *listener = malloc(sizeof(EventListener));
     if (IS_NULL_PTR(listener)) {
@@ -245,5 +367,5 @@ void socket_driver_do_recvfrom(Context *ctx, term pid, term ref)
     listener->expiral_timestamp.tv_nsec = 0;
     listener->one_shot = 1;
     listener->data = data;
-    listener->handler = recvfrom_callback;
+    listener->handler = passive_recvfrom_callback;
 }

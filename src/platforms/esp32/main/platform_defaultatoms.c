@@ -42,6 +42,12 @@ static const char *const bind_atom = "\x4" "bind";
 static const char *const getsockname_atom = "\xB" "getsockname";
 static const char *const recvfrom_atom = "\x8" "recvfrom";
 static const char *const sendto_atom = "\x6" "sendto";
+static const char *const address_atom = "\x7" "address";
+static const char *const port_atom = "\x4" "port";
+static const char *const controlling_process_atom = "\x13" "controlling_process";
+static const char *const binary_atom = "\x6" "binary";
+static const char *const active_atom = "\x6" "active";
+static const char *const buffer_atom = "\x6" "buffer";
 
 static const char *const sta_atom = "\x3" "sta";
 static const char *const ssid_atom = "\x4" "ssid";
@@ -100,6 +106,12 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, getsockname_atom) == GETSOCKNAME_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, recvfrom_atom) == RECVFROM_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, sendto_atom) == SENDTO_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, address_atom) == ADDRESS_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, port_atom) == PORT_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, controlling_process_atom) == CONTROLLING_PROCESS_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, binary_atom) == BINARY_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, active_atom) == ACTIVE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, buffer_atom) == BUFFER_ATOM_INDEX;
 
     ok &= globalcontext_insert_atom(glb, sta_atom) == STA_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, ssid_atom) == SSID_ATOM_INDEX;
