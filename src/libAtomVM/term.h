@@ -535,12 +535,19 @@ static inline avm_int64_t term_unbox_int64(term boxed_long)
 
     const term *boxed_value = term_to_const_term_ptr(boxed_long);
 
-    #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-        return (avm_int64_t) ((avm_uint64_t) boxed_value[1] | ((avm_uint64_t) boxed_value[2] << 32));
-    #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-        return (avm_int64_t) ((avm_uint64_t) boxed_value[1] << 32) | (avm_uint64_t) boxed_value[2];
+    #if BOXED_TERMS_REQUIRED_FOR_INT64 == 1
+        return (avm_int64_t) boxed_value[1];
+
+    #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+        #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+            return (avm_int64_t) ((avm_uint64_t) boxed_value[1] | ((avm_uint64_t) boxed_value[2] << 32));
+        #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+            return (avm_int64_t) ((avm_uint64_t) boxed_value[1] << 32) | (avm_uint64_t) boxed_value[2];
+        #else
+            #error "unsupported endianess."
+        #endif
     #else
-        #error "unsupported endianess."
+        #error "unsupported configuration."
     #endif
 }
 
