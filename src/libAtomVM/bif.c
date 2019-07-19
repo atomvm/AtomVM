@@ -417,7 +417,7 @@ static term mul_overflow_helper(Context *ctx, term arg1, term arg2)
 #endif
 
     if (!BUILTIN_MUL_OVERFLOW_INT(val1, val2, &res)) {
-        if (UNLIKELY(memory_ensure_free(ctx, BOXED_TERMS_REQUIRED_FOR_INT) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 
@@ -425,7 +425,7 @@ static term mul_overflow_helper(Context *ctx, term arg1, term arg2)
 
 #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
     } else if (!BUILTIN_MUL_OVERFLOW_INT64((avm_int64_t) val1, (avm_int64_t) val2, &res64)) {
-        if (UNLIKELY(memory_ensure_free(ctx, BOXED_TERMS_REQUIRED_FOR_INT64) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 
