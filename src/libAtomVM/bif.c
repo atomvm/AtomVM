@@ -182,6 +182,8 @@ static inline term make_boxed_int(Context *ctx, avm_int_t value)
     return term_make_boxed_int(value, ctx);
 }
 
+
+#if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
 static inline term make_boxed_int64(Context *ctx, avm_int64_t value)
 {
     if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
@@ -190,6 +192,7 @@ static inline term make_boxed_int64(Context *ctx, avm_int64_t value)
 
     return term_make_boxed_int64(value, ctx);
 }
+#endif
 
 static inline term make_maybe_boxed_int(Context *ctx, avm_int_t value)
 {
@@ -201,21 +204,21 @@ static inline term make_maybe_boxed_int(Context *ctx, avm_int_t value)
     }
 }
 
+
+#if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
 static inline term make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
 {
-    #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-        if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
-            return make_boxed_int64(ctx, value);
-        }
-    #endif
+    if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
+        return make_boxed_int64(ctx, value);
 
-    if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
+    } else if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
         return make_boxed_int(ctx, value);
 
     } else {
         return term_from_int(value);
     }
 }
+#endif
 
 static term add_overflow_helper(Context *ctx, term arg1, term arg2)
 {
