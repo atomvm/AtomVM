@@ -212,6 +212,15 @@ static inline term term_make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
     }
 }
 
+static inline term make_boxed_int(Context *ctx, avm_int_t value)
+{
+    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return term_make_boxed_int(value, ctx);
+}
+
 static inline term make_boxed_int64(Context *ctx, avm_int64_t value)
 {
     if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
@@ -226,11 +235,7 @@ static term add_overflow_helper(Context *ctx, term arg1, term arg2)
     avm_int_t val1 = term_to_int(arg1);
     avm_int_t val2 = term_to_int(arg2);
 
-    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    return term_make_boxed_int(val1 + val2, ctx);
+    return make_boxed_int(ctx, val1 + val2);
 }
 
 static term add_boxed_helper(Context *ctx, term arg1, term arg2)
@@ -319,11 +324,7 @@ static term sub_overflow_helper(Context *ctx, term arg1, term arg2)
     avm_int_t val1 = term_to_int(arg1);
     avm_int_t val2 = term_to_int(arg2);
 
-    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    return term_make_boxed_int(val1 - val2, ctx);
+    return make_boxed_int(ctx, val1 - val2);
 }
 
 static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
@@ -418,11 +419,7 @@ static term mul_overflow_helper(Context *ctx, term arg1, term arg2)
 #endif
 
     if (!BUILTIN_MUL_OVERFLOW_INT(val1, val2, &res)) {
-        if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-
-        return term_make_boxed_int(res, ctx);
+        return make_boxed_int(ctx, res);
 
 #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
     } else if (!BUILTIN_MUL_OVERFLOW_INT64((avm_int64_t) val1, (avm_int64_t) val2, &res64)) {
@@ -516,15 +513,6 @@ term bif_erlang_mul_2(Context *ctx, int live, term arg1, term arg2)
     }
 }
 
-static term make_minus_min_not_boxed_int(Context *ctx)
-{
-    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    return term_make_boxed_int(-MIN_NOT_BOXED_INT, ctx);
-}
-
 static term div_boxed_helper(Context *ctx, term arg1, term arg2)
 {
     int size = 0;
@@ -599,7 +587,7 @@ term bif_erlang_div_2(Context *ctx, int live, term arg1, term arg2)
         if (operand_b != 0) {
             avm_int_t res = term_to_int(arg1) / operand_b;
             if (UNLIKELY(res == -MIN_NOT_BOXED_INT)) {
-                return make_minus_min_not_boxed_int(ctx);
+                return make_boxed_int(ctx, -MIN_NOT_BOXED_INT);
 
             } else {
                 return term_from_int(res);
@@ -640,11 +628,7 @@ static term neg_boxed_helper(Context *ctx, term arg1)
                         #endif
 
                     default:
-                        if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
-
-                        return term_make_boxed_int(-val, ctx);
+                        return make_boxed_int(ctx, -val);
                 }
             }
 
@@ -677,7 +661,7 @@ term bif_erlang_neg_1(Context *ctx, int live, term arg1)
     if (LIKELY(term_is_integer(arg1))) {
         avm_int_t int_val = term_to_int(arg1);
         if (UNLIKELY(int_val == MIN_NOT_BOXED_INT)) {
-            return make_minus_min_not_boxed_int(ctx);
+            return make_boxed_int(ctx, -MIN_NOT_BOXED_INT);
         } else {
             return term_from_int(-int_val);
         }
@@ -713,11 +697,7 @@ static term abs_boxed_helper(Context *ctx, term arg1)
                     #endif
 
                 } else {
-                    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-
-                    return term_make_boxed_int(-val, ctx);
+                    return make_boxed_int(ctx, -val);
                 }
             }
 
@@ -755,7 +735,7 @@ term bif_erlang_abs_1(Context *ctx, int live, term arg1)
 
         if (int_val < 0) {
             if (UNLIKELY(int_val == MIN_NOT_BOXED_INT)) {
-                return make_minus_min_not_boxed_int(ctx);
+                return make_boxed_int(ctx, -MIN_NOT_BOXED_INT);
             } else {
                 return term_from_int(-int_val);
             }
