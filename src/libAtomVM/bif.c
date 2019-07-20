@@ -212,6 +212,15 @@ static inline term term_make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
     }
 }
 
+static inline term make_boxed_int64(Context *ctx, avm_int64_t value)
+{
+    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return term_make_boxed_int64(value, ctx);
+}
+
 static term add_overflow_helper(Context *ctx, term arg1, term arg2)
 {
     avm_int_t val1 = term_to_int(arg1);
@@ -254,12 +263,8 @@ static term add_boxed_helper(Context *ctx, term arg1, term arg2)
             if (BUILTIN_ADD_OVERFLOW_INT(val1, val2, &res)) {
                 #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
                     avm_int64_t res64 = (avm_int64_t) val1 + (avm_int64_t) val2;
+                    return make_boxed_int64(ctx, res64);
 
-                    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-
-                    return term_make_boxed_int64(res64, ctx);
                 #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
                     TRACE("overflow: arg1: " AVM_INT64_FMT ", arg2: " AVM_INT64_FMT "\n", arg1, arg2);
                     RAISE_ERROR(OVERFLOW_ATOM);
@@ -351,12 +356,8 @@ static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
             if (BUILTIN_SUB_OVERFLOW_INT(val1, val2, &res)) {
                 #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
                     avm_int64_t res64 = (avm_int64_t) val1 - (avm_int64_t) val2;
+                    return make_boxed_int64(ctx, res64);
 
-                    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-
-                    return term_make_boxed_int64(res64, ctx);
                 #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
                     TRACE("overflow: arg1: " AVM_INT64_FMT ", arg2: " AVM_INT64_FMT "\n", arg1, arg2);
                     RAISE_ERROR(OVERFLOW_ATOM);
@@ -425,11 +426,7 @@ static term mul_overflow_helper(Context *ctx, term arg1, term arg2)
 
 #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
     } else if (!BUILTIN_MUL_OVERFLOW_INT64((avm_int64_t) val1, (avm_int64_t) val2, &res64)) {
-        if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-
-        return term_make_boxed_int64(res64, ctx);
+        return make_boxed_int64(ctx, res64);
 #endif
 
     } else {
@@ -467,12 +464,8 @@ static term mul_boxed_helper(Context *ctx, term arg1, term arg2)
             if (BUILTIN_MUL_OVERFLOW_INT(val1, val2, &res)) {
                 #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
                     avm_int64_t res64 = (avm_int64_t) val1 * (avm_int64_t) val2;
+                    return make_boxed_int64(ctx, res64);
 
-                    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-
-                    return term_make_boxed_int64(res64, ctx);
                 #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
                     TRACE("overflow: arg1: " AVM_INT64_FMT ", arg2: " AVM_INT64_FMT "\n", arg1, arg2);
                     RAISE_ERROR(OVERFLOW_ATOM);
@@ -562,11 +555,7 @@ static term div_boxed_helper(Context *ctx, term arg1, term arg2)
 
             } else if (UNLIKELY((val2 == -1) && (val1 == AVM_INT_MIN))) {
                 #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-                    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-
-                    return term_make_boxed_int64(-((avm_int64_t) AVM_INT_MIN), ctx);
+                    return make_boxed_int64(ctx, -((avm_int64_t) AVM_INT_MIN));
 
                 #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
                     TRACE("overflow: arg1: %lx, arg2: %lx\n", arg1, arg2);
@@ -640,11 +629,7 @@ static term neg_boxed_helper(Context *ctx, term arg1)
 
                     case AVM_INT_MIN:
                         #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-                            if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                            }
-
-                            return term_make_boxed_int64(-((avm_int64_t) val), ctx);
+                            return make_boxed_int64(ctx, -((avm_int64_t) val));
 
                         #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
                             TRACE("overflow: arg1: %lx, arg2: %lx\n", arg1, arg2);
@@ -672,11 +657,7 @@ static term neg_boxed_helper(Context *ctx, term arg1)
                     RAISE_ERROR(OVERFLOW_ATOM);
 
                 } else {
-                    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-
-                    return term_make_boxed_int64(-val, ctx);
+                    return make_boxed_int64(ctx, -val);
                 }
             }
             #endif
@@ -721,11 +702,7 @@ static term abs_boxed_helper(Context *ctx, term arg1)
 
                 if (val == AVM_INT_MIN) {
                     #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-                        if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
-
-                        return term_make_boxed_int64(-((avm_int64_t) val), ctx);
+                        return make_boxed_int64(ctx, -((avm_int64_t) val));
 
                     #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
                         TRACE("overflow: arg1: %lx, arg2: %lx\n", arg1, arg2);
@@ -756,11 +733,7 @@ static term abs_boxed_helper(Context *ctx, term arg1)
                     RAISE_ERROR(OVERFLOW_ATOM);
 
                 } else {
-                    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-
-                    return term_make_boxed_int64(-val, ctx);
+                    return make_boxed_int64(ctx, -val);
                 }
             }
             #endif
