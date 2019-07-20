@@ -398,7 +398,7 @@ const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
     return nameAndPtr->nif;
 }
 
-static inline term term_make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
+static inline term make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
 {
     #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
         if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
@@ -1041,7 +1041,7 @@ static term nif_erlang_binary_to_integer_1(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    return term_make_maybe_boxed_int64(ctx, value);
+    return make_maybe_boxed_int64(ctx, value);
 }
 
 static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[])
@@ -1335,7 +1335,7 @@ static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    return term_make_maybe_boxed_int64(ctx, acc);
+    return make_maybe_boxed_int64(ctx, acc);
 }
 
 static term nif_erlang_display_1(Context *ctx, int argc, term argv[])

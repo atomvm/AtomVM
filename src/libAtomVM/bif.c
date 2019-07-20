@@ -173,45 +173,6 @@ term bif_erlang_tuple_size_1(Context *ctx, term arg1)
     return term_from_int32(term_get_tuple_arity(arg1));
 }
 
-static inline term term_make_maybe_boxed_int(Context *ctx, avm_int_t value)
-{
-    if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
-        if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-
-        return term_make_boxed_int(value, ctx);
-
-    } else {
-        return term_from_int(value);
-    }
-}
-
-static inline term term_make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
-{
-    #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-        if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
-            if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-            }
-
-            return term_make_boxed_int64(value, ctx);
-
-        }
-    #endif
-
-    if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
-        if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-
-        return term_make_boxed_int(value, ctx);
-
-    } else {
-        return term_from_int(value);
-    }
-}
-
 static inline term make_boxed_int(Context *ctx, avm_int_t value)
 {
     if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
@@ -228,6 +189,32 @@ static inline term make_boxed_int64(Context *ctx, avm_int64_t value)
     }
 
     return term_make_boxed_int64(value, ctx);
+}
+
+static inline term make_maybe_boxed_int(Context *ctx, avm_int_t value)
+{
+    if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
+        return make_boxed_int(ctx, value);
+
+    } else {
+        return term_from_int(value);
+    }
+}
+
+static inline term make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
+{
+    #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+        if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
+            return make_boxed_int64(ctx, value);
+        }
+    #endif
+
+    if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
+        return make_boxed_int(ctx, value);
+
+    } else {
+        return term_from_int(value);
+    }
 }
 
 static term add_overflow_helper(Context *ctx, term arg1, term arg2)
@@ -278,7 +265,7 @@ static term add_boxed_helper(Context *ctx, term arg1, term arg2)
                 #endif
             }
 
-            return term_make_maybe_boxed_int(ctx, res);
+            return make_maybe_boxed_int(ctx, res);
         }
 
     #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
@@ -293,7 +280,7 @@ static term add_boxed_helper(Context *ctx, term arg1, term arg2)
                 RAISE_ERROR(OVERFLOW_ATOM);
             }
 
-            return term_make_maybe_boxed_int64(ctx, res);
+            return make_maybe_boxed_int64(ctx, res);
         }
     #endif
 
@@ -367,7 +354,7 @@ static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
                 #endif
             }
 
-            return term_make_maybe_boxed_int(ctx, res);
+            return make_maybe_boxed_int(ctx, res);
         }
 
     #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
@@ -382,7 +369,7 @@ static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
                 RAISE_ERROR(OVERFLOW_ATOM);
             }
 
-            return term_make_maybe_boxed_int64(ctx, res);
+            return make_maybe_boxed_int64(ctx, res);
         }
     #endif
 
@@ -471,7 +458,7 @@ static term mul_boxed_helper(Context *ctx, term arg1, term arg2)
                 #endif
             }
 
-            return term_make_maybe_boxed_int(ctx, res);
+            return make_maybe_boxed_int(ctx, res);
         }
 
     #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
@@ -486,7 +473,7 @@ static term mul_boxed_helper(Context *ctx, term arg1, term arg2)
                 RAISE_ERROR(OVERFLOW_ATOM);
             }
 
-            return term_make_maybe_boxed_int64(ctx, res);
+            return make_maybe_boxed_int64(ctx, res);
         }
     #endif
 
@@ -551,7 +538,7 @@ static term div_boxed_helper(Context *ctx, term arg1, term arg2)
                 #endif
 
             } else {
-                return term_make_maybe_boxed_int(ctx, val1 / val2);
+                return make_maybe_boxed_int(ctx, val1 / val2);
             }
         }
 
@@ -568,7 +555,7 @@ static term div_boxed_helper(Context *ctx, term arg1, term arg2)
                 RAISE_ERROR(OVERFLOW_ATOM);
 
             } else {
-                return term_make_maybe_boxed_int64(ctx, val1 / val2);
+                return make_maybe_boxed_int64(ctx, val1 / val2);
             }
         }
         #endif
@@ -777,7 +764,7 @@ static term rem_boxed_helper(Context *ctx, term arg1, term arg2)
                 RAISE_ERROR(BADARITH_ATOM);
             }
 
-            return term_make_maybe_boxed_int(ctx, val1 % val2);
+            return make_maybe_boxed_int(ctx, val1 % val2);
         }
 
         #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
@@ -789,7 +776,7 @@ static term rem_boxed_helper(Context *ctx, term arg1, term arg2)
                 RAISE_ERROR(BADARITH_ATOM);
             }
 
-            return term_make_maybe_boxed_int64(ctx, val1 % val2);
+            return make_maybe_boxed_int64(ctx, val1 % val2);
         }
         #endif
 
