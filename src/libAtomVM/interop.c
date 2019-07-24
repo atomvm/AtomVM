@@ -79,7 +79,7 @@ char *interop_list_to_string(term list, int *ok)
             return NULL;
         }
 
-        int32_t byte_value = term_to_int32(byte_value_term);
+        avm_int_t byte_value = term_to_int(byte_value_term);
         if (UNLIKELY((byte_value < 0) || (byte_value > 255))) {
             *ok = 0;
             free(str);
