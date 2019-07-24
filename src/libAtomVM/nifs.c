@@ -604,7 +604,7 @@ static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])
     if (max_heap_size_term != term_nil()) {
         new_ctx->has_max_heap_size = 1;
         //TODO: check type, make sure max_heap_size_term is an int32
-        new_ctx->max_heap_size = term_to_int32(max_heap_size_term);
+        new_ctx->max_heap_size = term_to_int(max_heap_size_term);
     }
 
     return term_from_local_process_id(new_ctx->process_id);
@@ -653,9 +653,9 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
             abort();
         }
         new_ctx->has_min_heap_size = 1;
-        new_ctx->min_heap_size = term_to_int32(min_heap_size_term);
+        new_ctx->min_heap_size = term_to_int(min_heap_size_term);
     } else {
-        min_heap_size_term = term_from_int32(0);
+        min_heap_size_term = term_from_int(0);
     }
     if (max_heap_size_term != term_nil()) {
         if (UNLIKELY(!term_is_integer(max_heap_size_term))) {
@@ -663,7 +663,7 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
             abort();
         }
         new_ctx->has_max_heap_size = 1;
-        new_ctx->max_heap_size = term_to_int32(max_heap_size_term);
+        new_ctx->max_heap_size = term_to_int(max_heap_size_term);
     }
 
     if (new_ctx->has_min_heap_size && new_ctx->has_max_heap_size) {
@@ -675,7 +675,7 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
     //TODO: check available registers count
     int reg_index = 0;
     term t = argv[2];
-    uint32_t size = MAX((unsigned long) term_to_int32(min_heap_size_term), memory_estimate_usage(t));
+    avm_int_t size = MAX((unsigned long) term_to_int(min_heap_size_term), memory_estimate_usage(t));
     if (UNLIKELY(memory_ensure_free(new_ctx, size) != MEMORY_GC_OK)) {
         //TODO: new process should be terminated, however a new pid is returned anyway
         fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
