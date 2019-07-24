@@ -667,7 +667,7 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
     }
 
     if (new_ctx->has_min_heap_size && new_ctx->has_max_heap_size) {
-        if (term_to_int32(min_heap_size_term) > term_to_int32(max_heap_size_term)) {
+        if (term_to_int(min_heap_size_term) > term_to_int(max_heap_size_term)) {
             RAISE_ERROR(BADARG_ATOM);
         }
     }
@@ -861,7 +861,7 @@ static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[])
 
     VALIDATE_VALUE(argv[0], term_is_integer);
 
-    int count_elem = term_to_int32(argv[0]);
+    avm_int_t count_elem = term_to_int(argv[0]);
 
     if (UNLIKELY(count_elem < 0)) {
         RAISE_ERROR(BADARG_ATOM);
@@ -889,7 +889,7 @@ static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(argv[1], term_is_tuple);
 
     // indexes are 1 based
-    int insert_index = term_to_int32(argv[0]) - 1;
+    avm_int_t insert_index = term_to_int(argv[0]) - 1;
 
     int old_tuple_size = term_get_tuple_arity(argv[1]);
 
@@ -928,7 +928,7 @@ static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(argv[1], term_is_tuple);
 
     // indexes are 1 based
-    int delete_index = term_to_int32(argv[0]) - 1;
+    avm_int_t delete_index = term_to_int(argv[0]) - 1;
 
     int old_tuple_size = term_get_tuple_arity(argv[1]);
 
@@ -963,7 +963,7 @@ static term nif_erlang_setelement_3(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(argv[1], term_is_tuple);
 
     // indexes are 1 based
-    int replace_index = term_to_int32(argv[0]) - 1;
+    avm_int_t replace_index = term_to_int(argv[0]) - 1;
 
     int tuple_size = term_get_tuple_arity(argv[1]);
 
@@ -1578,7 +1578,7 @@ static term nif_binary_at_2(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(pos_term, term_is_integer);
 
     int32_t size = term_binary_size(bin_term);
-    int32_t pos = term_to_int32(pos_term);
+    avm_int_t pos = term_to_int(pos_term);
 
     if (UNLIKELY((pos < 0) || (pos >= size))) {
         RAISE_ERROR(BADARG_ATOM);
@@ -1632,8 +1632,8 @@ static term nif_binary_part_3(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(len_term, term_is_integer);
 
     int bin_size = term_binary_size(bin_term);
-    int pos = term_to_int32(pos_term);
-    int len = term_to_int32(len_term);
+    avm_int_t pos = term_to_int(pos_term);
+    avm_int_t len = term_to_int(len_term);
 
     if (len < 0) {
         pos += len;
