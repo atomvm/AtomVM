@@ -791,10 +791,9 @@ term nif_erlang_system_time_1(Context *ctx, int argc, term argv[])
     struct timespec ts;
     sys_time(&ts);
 
-    term minute_atom = context_make_atom(ctx, "\x6" "minute");
-    if (argv[0] == minute_atom) {
-        // FIXME: This is not standard, however we cannot hold seconds since 1970 in just 27 bits.
-        return term_from_int32(ts.tv_sec / 60);
+    term second_atom = context_make_atom(ctx, "\x6" "second");
+    if (argv[0] == second_atom) {
+        return make_maybe_boxed_int64(ctx, ts.tv_sec);
 
     } else {
         RAISE_ERROR(BADARG_ATOM);
