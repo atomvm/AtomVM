@@ -89,6 +89,10 @@ struct Context
         unsigned int trace_receive : 1;
     #endif
 
+
+    struct ListHead heap_fragments;
+    int heap_fragments_size;
+
     void *platform_data;
 };
 

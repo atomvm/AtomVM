@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include "context.h"
+#include "list.h"
 #include "debug.h"
 #include "memory.h"
 
@@ -38,10 +39,6 @@ static term memory_shallow_copy_term(term t, term **new_heap, int move);
 HOT_FUNC term *memory_heap_alloc(Context *c, uint32_t size)
 {
     term *allocated = c->heap_ptr;
-    if (UNLIKELY(c->heap_ptr + size > c->e)) {
-        fprintf(stderr, "Cannot allocate unavailable memory.\n");
-        abort();
-    }
     c->heap_ptr += size;
 
     return allocated;
@@ -92,6 +89,9 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
 {
     TRACE("Going to perform gc\n");
 
+    new_size += ctx->heap_fragments_size;
+    ctx->heap_fragments_size = 0;
+
     if (UNLIKELY(ctx->has_max_heap_size && (new_size > ctx->max_heap_size))) {
         return MEMORY_GC_DENIED_ALLOCATION;
     }
@@ -131,6 +131,13 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
     heap_ptr = temp_end;
 
     free(ctx->heap_start);
+
+    struct ListHead *fragment;
+    struct ListHead *tmp;
+    MUTABLE_LIST_FOR_EACH(fragment, tmp, &ctx->heap_fragments) {
+        free(fragment);
+    }
+    list_init(&ctx->heap_fragments);
 
     ctx->heap_start = new_heap;
     ctx->stack_base = ctx->heap_start + new_size;

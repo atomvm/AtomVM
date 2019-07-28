@@ -84,6 +84,9 @@ Context *context_new(GlobalContext *glb)
         ctx->trace_receive = 0;
     #endif
 
+    list_init(&ctx->heap_fragments);
+    ctx->heap_fragments_size = 0;
+
     ctx->platform_data = NULL;
 
     return ctx;
