@@ -54,6 +54,24 @@
 #define COMPACT_11BITS_VALUE 0x8
 #define COMPACT_NBITS_VALUE 0x18
 
+
+#ifdef IMPL_EXECUTE_LOOP
+static const char *const error_atom = "\x5" "error";
+static const char *const try_clause_atom = "\xA" "try_clause";
+static const char *const out_of_memory_atom = "\xD" "out_of_memory";
+
+#define RAISE_ERROR(error_type_atom)                                    \
+    int target_label = get_catch_label_and_change_module(ctx, &mod);    \
+    if (target_label) {                                                 \
+        ctx->x[0] = context_make_atom(ctx, error_atom);                 \
+        ctx->x[1] = context_make_atom(ctx, (error_type_atom));          \
+        JUMP_TO_ADDRESS(mod->labels[target_label]);                     \
+        continue;                                                       \
+    } else {                                                            \
+        abort();                                                        \
+    }
+#endif
+
 #ifdef IMPL_CODE_LOADER
 #define DECODE_COMPACT_TERM(dest_term, code_chunk, base_index, off, next_operand_offset)\
 {                                                                                       \
@@ -155,6 +173,9 @@
                         next_operand_offset += 3;                                                                       \
                     } else {                                                                                            \
                         abort();                                                                                        \
+                    }                                                                                                   \
+                    if (UNLIKELY(term_is_invalid_term(dest_term))) {                                                    \
+                        RAISE_ERROR(out_of_memory_atom);                                                                \
                     }                                                                                                   \
                                                                                                                         \
                     break;                                                                                              \
@@ -531,23 +552,6 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
     #define TRACE_RECEIVE(...)
 #endif
 
-#endif
-
-#ifdef IMPL_EXECUTE_LOOP
-static const char *const error_atom = "\x5" "error";
-static const char *const try_clause_atom = "\xA" "try_clause";
-static const char *const out_of_memory_atom = "\xD" "out_of_memory";
-
-#define RAISE_ERROR(error_type_atom)                                    \
-    int target_label = get_catch_label_and_change_module(ctx, &mod);    \
-    if (target_label) {                                                 \
-        ctx->x[0] = context_make_atom(ctx, error_atom);                 \
-        ctx->x[1] = context_make_atom(ctx, (error_type_atom));          \
-        JUMP_TO_ADDRESS(mod->labels[target_label]);                     \
-        continue;                                                       \
-    } else {                                                            \
-        abort();                                                        \
-    }
 #endif
 
 #pragma GCC diagnostic push
