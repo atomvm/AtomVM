@@ -20,6 +20,7 @@
 #include "externalterm.h"
 
 #include "context.h"
+#include "list.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -51,20 +52,23 @@ term externalterm_to_term(const void *external_term, Context *ctx)
 
     int eterm_size;
     int heap_usage = calculate_heap_usage(external_term_buf + 1, &eterm_size, ctx);
-    switch (memory_ensure_free(ctx, heap_usage)) {
-        case MEMORY_GC_OK:
-            break;
-        case MEMORY_GC_ERROR_FAILED_ALLOCATION:
-            // TODO Improve error handling
-            fprintf(stderr, "Failed to allocate additional heap storage: [%s:%i]\n", __FILE__, __LINE__);
-            abort();
-        case MEMORY_GC_DENIED_ALLOCATION:
-            // TODO Improve error handling
-            fprintf(stderr, "Not permitted to allocate additional heap storage: [%s:%i]\n", __FILE__, __LINE__);
-            abort();
-    }
 
-    return parse_external_terms(external_term_buf + 1, &eterm_size, ctx);
+    struct ListHead *heap_fragment = malloc(heap_usage * sizeof(term) + sizeof(struct ListHead));
+    if (IS_NULL_PTR(heap_fragment)) {
+        return term_invalid_term();
+    }
+    list_append(&ctx->heap_fragments, heap_fragment);
+    ctx->heap_fragments_size += heap_usage;
+    term *external_term_heap = (term *) (heap_fragment + 1);
+
+    // save the heap pointer and temporary switch to the newly created heap fragment
+    // so all existing functions can be used on the heap fragment without any change.
+    term *main_heap = ctx->heap_ptr;
+    ctx->heap_ptr = external_term_heap;
+    term result = parse_external_terms(external_term_buf + 1, &eterm_size, ctx);
+    ctx->heap_ptr = main_heap;
+
+    return result;
 }
 
 static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx)
