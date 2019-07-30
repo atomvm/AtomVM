@@ -301,6 +301,8 @@ struct Test tests[] =
     {"minuspow63plusoneabs.beam", 1794},
     {"minuspow63plustwoabs.beam", 1757},
 
+    {"literal_test0.beam", 333575620},
+    {"literal_test1.beam", 1680},
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 

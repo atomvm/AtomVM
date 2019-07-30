@@ -262,6 +262,8 @@ compile_erlang(minuspow31plusoneabs)
 compile_erlang(minuspow31plustwoabs)
 compile_erlang(minuspow63plusoneabs)
 compile_erlang(minuspow63plustwoabs)
+compile_erlang(literal_test0)
+compile_erlang(literal_test1)
 
 
 add_custom_target(erlang_test_modules DEPENDS
@@ -518,4 +520,7 @@ add_custom_target(erlang_test_modules DEPENDS
     minuspow31plustwoabs.beam
     minuspow63plusoneabs.beam
     minuspow63plustwoabs.beam
+
+    literal_test0.beam
+    literal_test1.beam
 )
