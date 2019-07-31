@@ -298,20 +298,6 @@ static const char *const out_of_memory_atom = "\xD" "out_of_memory";
     next_operand_offset++;                                                                          \
 }
 
-#define READ_REGISTER(sreg_type, sreg, value)                                                       \
-{                                                                                                   \
-    switch (sreg_type) {                                                                            \
-        case 3:                                                                                     \
-            value = ctx->x[sreg];                                                                   \
-            break;                                                                                  \
-        case 4:                                                                                     \
-            value = ctx->e[sreg];                                                                   \
-            break;                                                                                  \
-        default:                                                                                    \
-            abort();                                                                                \
-    }                                                                                               \
-}
-
 #define WRITE_REGISTER(dreg_type, dreg, value)                                                      \
 {                                                                                                   \
     switch (dreg_type) {                                                                            \
@@ -2200,12 +2186,6 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #ifdef IMPL_EXECUTE_LOOP
                     term t = term_alloc_tuple(size, ctx);
                     WRITE_REGISTER(dreg_type, dreg, t);
-
-                    // DECODE_COMPACT_TERM might trigger GC
-                    // make sure GC will not find uninitialized memory
-                    for (int j = 0; j < size; j++) {
-                        term_put_tuple_element(t, j, term_nil());
-                    }
                 #endif
 
                 for (int j = 0; j < size; j++) {
@@ -2223,9 +2203,6 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
                     #ifdef IMPL_EXECUTE_LOOP
                         TRACE("put/2 elem=%i, value=0x%lx\n", j, put_value);
-
-                        // DECODE_COMPACT_TERM might trigger GC, so t might be invalid
-                        READ_REGISTER(dreg_type, dreg, t);
                         term_put_tuple_element(t, j, put_value);
                     #endif
                 }
