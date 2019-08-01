@@ -15,6 +15,7 @@ static const char *const badarity_atom = "\x08" "badarity";
 static const char *const badfun_atom = "\x06" "badfun";
 static const char *const system_limit_atom = "\xC" "system_limit";
 static const char *const function_clause_atom = "\x0F" "function_clause";
+static const char *const try_clause_atom = "\xA" "try_clause";
 static const char *const out_of_memory_atom = "\xD" "out_of_memory";
 static const char *const overflow_atom = "\x8" "overflow";
 
@@ -50,6 +51,7 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, badarity_atom) == BADARITY_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, badfun_atom) == BADFUN_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, function_clause_atom) == FUNCTION_CLAUSE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, try_clause_atom) == TRY_CLAUSE_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, out_of_memory_atom) == OUT_OF_MEMORY_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, overflow_atom) == OVERFLOW_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, system_limit_atom) == SYSTEM_LIMIT_ATOM_INDEX;

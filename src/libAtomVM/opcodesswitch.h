@@ -56,15 +56,11 @@
 
 
 #ifdef IMPL_EXECUTE_LOOP
-static const char *const error_atom = "\x5" "error";
-static const char *const try_clause_atom = "\xA" "try_clause";
-static const char *const out_of_memory_atom = "\xD" "out_of_memory";
-
 #define RAISE_ERROR(error_type_atom)                                    \
     int target_label = get_catch_label_and_change_module(ctx, &mod);    \
     if (target_label) {                                                 \
-        ctx->x[0] = context_make_atom(ctx, error_atom);                 \
-        ctx->x[1] = context_make_atom(ctx, (error_type_atom));          \
+        ctx->x[0] = ERROR_ATOM;                                         \
+        ctx->x[1] = error_type_atom;                                    \
         JUMP_TO_ADDRESS(mod->labels[target_label]);                     \
         continue;                                                       \
     } else {                                                            \
@@ -175,7 +171,7 @@ static const char *const out_of_memory_atom = "\xD" "out_of_memory";
                         abort();                                                                                        \
                     }                                                                                                   \
                     if (UNLIKELY(term_is_invalid_term(dest_term))) {                                                    \
-                        RAISE_ERROR(out_of_memory_atom);                                                                \
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);                                                                \
                     }                                                                                                   \
                                                                                                                         \
                     break;                                                                                              \
@@ -1020,7 +1016,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
                     if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
                         if (UNLIKELY(memory_ensure_free(ctx, stack_need + 1) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(out_of_memory_atom);
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     }
                     ctx->e -= stack_need + 1;
@@ -1054,7 +1050,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
                     if ((ctx->heap_ptr + heap_need) > ctx->e - (stack_need + 1)) {
                         if (UNLIKELY(memory_ensure_free(ctx, heap_need + stack_need + 1) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(out_of_memory_atom);
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     }
                     ctx->e -= stack_need + 1;
@@ -1085,7 +1081,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
                     if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
                         if (UNLIKELY(memory_ensure_free(ctx, stack_need + 1) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(out_of_memory_atom);
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     }
 
@@ -1123,7 +1119,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
                     if ((ctx->heap_ptr + heap_need) > ctx->e - (stack_need + 1)) {
                         if (UNLIKELY(memory_ensure_free(ctx, heap_need + stack_need + 1) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(out_of_memory_atom);
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     }
                     ctx->e -= stack_need + 1;
@@ -1152,13 +1148,13 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     if (context_avail_free_memory(ctx) < heap_need) {
                         context_clean_registers(ctx, live_registers);
                         if (UNLIKELY(memory_ensure_free(ctx, heap_need) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(out_of_memory_atom);
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     } else if (context_avail_free_memory(ctx) > heap_need * HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF) {
                         context_clean_registers(ctx, live_registers);
                         int used_size = context_memory_size(ctx) - context_avail_free_memory(ctx);
                         if (UNLIKELY(memory_ensure_free(ctx, used_size + heap_need * (HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF / 2)) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(out_of_memory_atom);
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     }
                 #endif
@@ -2306,7 +2302,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     if (UNLIKELY(!term_is_function(fun))) {
                         int target_label = get_catch_label_and_change_module(ctx, &mod);
                         if (target_label) {
-                            ctx->x[0] = context_make_atom(ctx, error_atom);
+                            ctx->x[0] = ERROR_ATOM;
                             term new_error_tuple = term_alloc_tuple(2, ctx);
                             term_put_tuple_element(new_error_tuple, 0, BADFUN_ATOM);
                             term_put_tuple_element(new_error_tuple, 1, ctx->x[args_count]);
@@ -2471,7 +2467,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #ifdef IMPL_EXECUTE_LOOP
                     term f = make_fun(ctx, mod, fun_index);
                     if (term_is_invalid_term(f)) {
-                        RAISE_ERROR(out_of_memory_atom);
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     } else {
                         ctx->x[0] = f;
                     }
@@ -2535,7 +2531,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
             case OP_TRY_CASE_END: {
                 #ifdef IMPL_EXECUTE_LOOP
                     if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(out_of_memory_atom);
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
 
@@ -2555,9 +2551,9 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
                     if (target_label) {
                         term new_error_tuple = term_alloc_tuple(2, ctx);
-                        term_put_tuple_element(new_error_tuple, 0, context_make_atom(ctx, try_clause_atom));
+                        term_put_tuple_element(new_error_tuple, 0, TRY_CLAUSE_ATOM);
                         term_put_tuple_element(new_error_tuple, 1, arg1);
-                        ctx->x[0] = context_make_atom(ctx, error_atom);
+                        ctx->x[0] = ERROR_ATOM;
                         ctx->x[1] = new_error_tuple;
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
