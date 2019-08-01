@@ -2679,13 +2679,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_boolean/2, label=%i, arg1=%lx\n", label, arg1);
 
-                    static const char *const true_atom = "\x04" "true";
-                    static const char *const false_atom = "\x05" "false";
-
-                    term true_term = context_make_atom(ctx, true_atom);
-                    term false_term = context_make_atom(ctx, false_atom);
-
-                    if ((arg1 == true_term) || (arg1 == false_term)) {
+                    if ((arg1 == TRUE_ATOM) || (arg1 == FALSE_ATOM)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
