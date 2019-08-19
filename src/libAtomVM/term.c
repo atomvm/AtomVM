@@ -23,6 +23,7 @@
 #include "context.h"
 #include "interop.h"
 #include "valueshashtable.h"
+#include "tempstack.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -152,4 +153,103 @@ void term_display(FILE *fd, term t, const Context *ctx)
     } else {
         fprintf(fd, "Unknown term type: %li", t);
     }
+}
+
+int term_compare(term t, term other)
+{
+    struct TempStack temp_stack;
+    temp_stack_init(&temp_stack);
+
+    temp_stack_push(&temp_stack, t);
+    temp_stack_push(&temp_stack, other);
+
+    int result = 0;
+
+    while (!temp_stack_is_empty(&temp_stack)) {
+        if (t == other) {
+            other = temp_stack_pop(&temp_stack);
+            t = temp_stack_pop(&temp_stack);
+
+        } else if (term_is_nonempty_list(t) && term_is_nonempty_list(other)) {
+            temp_stack_push(&temp_stack, term_get_list_tail(t));
+            temp_stack_push(&temp_stack, term_get_list_tail(other));
+            t = term_get_list_head(t);
+            other = term_get_list_head(other);
+
+        } else if (term_is_tuple(t) && term_is_tuple(other)) {
+            int tuple_size = term_get_tuple_arity(t);
+            int other_tuple_size = term_get_tuple_arity(other);
+
+            if (tuple_size != other_tuple_size) {
+                //TODO
+                result = 1;
+                break;
+            }
+
+            if (tuple_size > 0) {
+                for (int i = 1; i < tuple_size; i++) {
+                    temp_stack_push(&temp_stack, term_get_tuple_element(t, i));
+                    temp_stack_push(&temp_stack, term_get_tuple_element(other, i));
+                }
+                t = term_get_tuple_element(t, 0);
+                other = term_get_tuple_element(other, 0);
+
+            } else {
+                t = term_nil();
+                other = term_nil();
+            }
+
+        } else if (term_is_binary(t) && term_is_binary(other)) {
+            int t_size = term_binary_size(t);
+            int other_size = term_binary_size(other);
+
+            if (t_size == other_size) {
+                const char *t_data = term_binary_data(t);
+                const char *other_data = term_binary_data(other);
+
+                if (memcmp(t_data, other_data, t_size) == 0) {
+                    other = temp_stack_pop(&temp_stack);
+                    t = temp_stack_pop(&temp_stack);
+                } else {
+                    //TODO
+                    result = 1;
+                    break;
+                }
+            } else {
+                //TODO
+                result = 1;
+                break;
+            }
+
+        } else if (term_is_boxed(t) && term_is_boxed(other)) {
+            int t_size = term_boxed_size(t);
+            int other_size = term_boxed_size(other);
+
+            if (t_size == other_size) {
+                const term *boxed_t = term_to_const_term_ptr(t);
+                const term *boxed_other = term_to_const_term_ptr(other);
+
+                if (memcmp(boxed_t, boxed_other, (t_size + 1) * sizeof(term)) == 0) {
+                    other = temp_stack_pop(&temp_stack);
+                    t = temp_stack_pop(&temp_stack);
+                } else {
+                    //TODO
+                    result = 1;
+                    break;
+                }
+            } else {
+                //TODO
+                result = 1;
+                break;
+            }
+        } else {
+            //TODO
+            result = 1;
+            break;
+        }
+    }
+
+    temp_stack_destory(&temp_stack);
+
+    return result;
 }

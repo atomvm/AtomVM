@@ -62,6 +62,16 @@
 extern const term empty_tuple;
 
 /**
+ * @brief Compares two terms
+ *
+ * @details Tells if first term is >, < or == to the second term.
+ * @param t the first term
+ * @param other the second term
+ * @return 0 when given terms are equals, otherwise -1 when t < other, or 1 when t > other.
+ */
+int term_compare(term t, term other);
+
+/**
  * @brief Gets a pointer to a term stored on the heap
  *
  * @details Casts a term to a term * that points to a value stored on the heap. Be aware: terms are assumed to be immutable.
@@ -985,22 +995,8 @@ static inline int term_exactly_equals(term a, term b)
 {
     if (a == b) {
         return 1;
-
-    } else if (term_is_boxed(a) && term_is_boxed(b)) {
-        const term *boxed_a = term_to_const_term_ptr(a);
-        const term *boxed_b = term_to_const_term_ptr(b);
-
-        int a_size = term_boxed_size(a);
-        int b_size = term_boxed_size(b);
-
-        if (a_size == b_size) {
-            return memcmp(boxed_a, boxed_b, (a_size + 1) * sizeof(term)) == 0;
-        } else {
-            return 0;
-        }
     } else {
-        //TODO: we might have to perform a deep comparison
-        return 0;
+        return term_compare(a, b) == 0;
     }
 }
 

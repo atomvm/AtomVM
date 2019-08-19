@@ -24,6 +24,7 @@
 #include "list.h"
 #include "debug.h"
 #include "memory.h"
+#include "tempstack.h"
 
 //#define ENABLE_TRACE
 
@@ -183,62 +184,6 @@ term memory_copy_term_tree(term **new_heap, term t)
     *new_heap = temp_end;
 
     return copied_term;
-}
-
-struct TempStack
-{
-    term *stack_end;
-    term *stack_pos;
-    int size;
-};
-
-static inline void temp_stack_init(struct TempStack *temp_stack)
-{
-    temp_stack->size = 8;
-    temp_stack->stack_end = ((term *) malloc(temp_stack->size * sizeof(term))) + temp_stack->size;
-    temp_stack->stack_pos = temp_stack->stack_end;
-}
-
-static inline void temp_stack_destory(struct TempStack *temp_stack)
-{
-    free(temp_stack->stack_end - temp_stack->size);
-}
-
-static void temp_stack_grow(struct TempStack *temp_stack)
-{
-    int old_used_size = temp_stack->stack_end - temp_stack->stack_pos;
-    int new_size = temp_stack->size * 2;
-    term *new_stack_end = ((term *) malloc(new_size * sizeof(term))) + new_size;
-    term *new_stack_pos = new_stack_end - old_used_size;
-    memcpy(new_stack_pos, temp_stack->stack_pos, old_used_size * sizeof(term));
-
-    free(temp_stack->stack_end - temp_stack->size);
-    temp_stack->stack_end = new_stack_end;
-    temp_stack->stack_pos = new_stack_pos;
-    temp_stack->size = new_size;
-}
-
-static inline int temp_stack_is_empty(const struct TempStack *temp_stack)
-{
-    return temp_stack->stack_end == temp_stack->stack_pos;
-}
-
-static inline void temp_stack_push(struct TempStack *temp_stack, term value)
-{
-    if (temp_stack->stack_end - temp_stack->stack_pos == temp_stack->size - 1) {
-        temp_stack_grow(temp_stack);
-    }
-
-    temp_stack->stack_pos--;
-    *temp_stack->stack_pos = value;
-}
-
-static inline term temp_stack_pop(struct TempStack *temp_stack)
-{
-    term value = *temp_stack->stack_pos;
-    temp_stack->stack_pos++;
-
-    return value;
 }
 
 unsigned long memory_estimate_usage(term t)

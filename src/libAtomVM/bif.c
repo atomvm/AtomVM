@@ -952,9 +952,7 @@ term bif_erlang_equal_to_2(Context *ctx, term arg1, term arg2)
 {
     UNUSED(ctx);
 
-    //TODO: fix this implementation
-    //it should compare any kind of type, and 5.0 == 5
-    if (arg1 == arg2) {
+    if (term_equals(arg1, arg2)) {
         return TRUE_ATOM;
     } else {
         return FALSE_ATOM;
