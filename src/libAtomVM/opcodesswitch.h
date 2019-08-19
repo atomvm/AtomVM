@@ -1394,7 +1394,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_lt/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
-                    if (arg1 < arg2) {
+                    if (term_compare(arg1, arg2, ctx) < 0) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
@@ -1423,7 +1423,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_ge/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
-                    if (arg1 >= arg2) {
+                    if (term_compare(arg1, arg2, ctx) >= 0) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
@@ -1453,7 +1453,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     TRACE("is_equal/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
                     //TODO: implement this
-                    if (term_equals(arg1, arg2)) {
+                    if (term_equals(arg1, arg2, ctx)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
@@ -1482,7 +1482,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_not_equal/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
-                    if (arg1 != arg2) {
+                    if (!term_equals(arg1, arg2, ctx)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
@@ -1512,7 +1512,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     TRACE("is_eq_exact/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
                     //TODO: implement this
-                    if (term_exactly_equals(arg1, arg2)) {
+                    if (term_exactly_equals(arg1, arg2, ctx)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
@@ -1542,7 +1542,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     TRACE("is_not_eq_exact/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
                     //TODO: implement this
-                    if (arg1 != arg2) {
+                    if (!term_exactly_equals(arg1, arg2, ctx)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);

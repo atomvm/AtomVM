@@ -952,7 +952,7 @@ term bif_erlang_equal_to_2(Context *ctx, term arg1, term arg2)
 {
     UNUSED(ctx);
 
-    if (term_equals(arg1, arg2)) {
+    if (term_equals(arg1, arg2, ctx)) {
         return TRUE_ATOM;
     } else {
         return FALSE_ATOM;
@@ -965,7 +965,7 @@ term bif_erlang_not_equal_to_2(Context *ctx, term arg1, term arg2)
 
     //TODO: fix this implementation
     //it should compare any kind of type, and 5.0 != 5 is false
-    if (arg1 != arg2) {
+    if (!term_equals(arg1, arg2, ctx)) {
         return TRUE_ATOM;
     } else {
         return FALSE_ATOM;
@@ -976,8 +976,8 @@ term bif_erlang_exactly_equal_to_2(Context *ctx, term arg1, term arg2)
 {
     UNUSED(ctx);
 
-    //TODO: fix this implementation, it needs to cover more types
-    if (arg1 == arg2) {
+    //TODO: 5.0 != 5
+    if (term_equals(arg1, arg2, ctx)) {
         return TRUE_ATOM;
     } else {
         return FALSE_ATOM;
@@ -988,8 +988,8 @@ term bif_erlang_exactly_not_equal_to_2(Context *ctx, term arg1, term arg2)
 {
     UNUSED(ctx);
 
-    //TODO: fix this implementation, it needs to cover more types
-    if (arg1 != arg2) {
+    //TODO: 5.0 != 5
+    if (!term_equals(arg1, arg2, ctx)) {
         return TRUE_ATOM;
     } else {
         return FALSE_ATOM;
@@ -1001,13 +1001,7 @@ term bif_erlang_greater_than_2(Context *ctx, term arg1, term arg2)
 {
     UNUSED(ctx);
 
-    //TODO: fix this implementation, it needs to cover more types
-    if (UNLIKELY(!(term_is_integer(arg1) && term_is_integer(arg2)))) {
-        abort();
-    }
-
-    //TODO: fix this implementation, it needs to cover more types
-    if (term_to_int32(arg1) > term_to_int32(arg2)) {
+    if (term_compare(arg1, arg2, ctx) > 0) {
         return TRUE_ATOM;
     } else {
         return FALSE_ATOM;
@@ -1018,13 +1012,7 @@ term bif_erlang_less_than_2(Context *ctx, term arg1, term arg2)
 {
     UNUSED(ctx);
 
-    //TODO: fix this implementation, it needs to cover more types
-    if (UNLIKELY(!(term_is_integer(arg1) && term_is_integer(arg2)))) {
-        abort();
-    }
-
-    //TODO: fix this implementation, it needs to cover more types
-    if (term_to_int32(arg1) < term_to_int32(arg2)) {
+    if (term_compare(arg1, arg2, ctx) < 0) {
         return TRUE_ATOM;
     } else {
         return FALSE_ATOM;
@@ -1035,13 +1023,7 @@ term bif_erlang_less_than_or_equal_2(Context *ctx, term arg1, term arg2)
 {
     UNUSED(ctx);
 
-    //TODO: fix this implementation, it needs to cover more types
-    if (UNLIKELY(!(term_is_integer(arg1) && term_is_integer(arg2)))) {
-        abort();
-    }
-
-    //TODO: fix this implementation, it needs to cover more types
-    if (term_to_int32(arg1) <= term_to_int32(arg2)) {
+    if (term_compare(arg1, arg2, ctx) <= 0) {
         return TRUE_ATOM;
     } else {
         return FALSE_ATOM;
@@ -1052,13 +1034,7 @@ term bif_erlang_greater_than_or_equal_2(Context *ctx, term arg1, term arg2)
 {
     UNUSED(ctx);
 
-    //TODO: fix this implementation, it needs to cover more types
-    if (UNLIKELY(!(term_is_integer(arg1) && term_is_integer(arg2)))) {
-        abort();
-    }
-
-    //TODO: fix this implementation, it needs to cover more types
-    if (term_to_int32(arg1) >= term_to_int32(arg2)) {
+    if (term_compare(arg1, arg2, ctx) >= 0) {
         return TRUE_ATOM;
     } else {
         return FALSE_ATOM;

@@ -155,7 +155,44 @@ void term_display(FILE *fd, term t, const Context *ctx)
     }
 }
 
-int term_compare(term t, term other)
+static int term_type_to_index(term t)
+{
+    if (term_is_invalid_term(t)) {
+        return 0;
+
+    } else if (term_is_any_integer(t)) {
+        return 1;
+
+    } else if (term_is_atom(t)) {
+        return 2;
+
+    } else if (term_is_reference(t)) {
+        return 3;
+
+    } else if (term_is_function(t)) {
+        return 4;
+
+    } else if (term_is_pid(t)) {
+        return 6;
+
+    } else if (term_is_tuple(t)) {
+        return 7;
+
+    } else if (term_is_nil(t)) {
+        return 8;
+
+    } else if (term_is_nonempty_list(t)) {
+        return 9;
+
+    } else if (term_is_binary(t)) {
+        return 10;
+
+    } else {
+        abort();
+    }
+}
+
+int term_compare(term t, term other, Context *ctx)
 {
     struct TempStack temp_stack;
     temp_stack_init(&temp_stack);
@@ -170,9 +207,37 @@ int term_compare(term t, term other)
             other = temp_stack_pop(&temp_stack);
             t = temp_stack_pop(&temp_stack);
 
+        } else if (term_is_integer(t) && term_is_integer(other)) {
+            avm_int_t t_int = term_to_int(t);
+            avm_int_t other_int = term_to_int(other);
+            //They cannot be equal
+            result = (t_int > other_int) ? 1 : -1;
+            break;
+
+        } else if (term_is_reference(t) && term_is_reference(other)) {
+            int64_t t_ticks = term_to_ref_ticks(t);
+            int64_t other_ticks = term_to_ref_ticks(other);
+            if (t_ticks == other_ticks) {
+                other = temp_stack_pop(&temp_stack);
+                t = temp_stack_pop(&temp_stack);
+            } else {
+                result = (t_ticks > other_ticks) ? 1 : -1;
+                break;
+            }
+
         } else if (term_is_nonempty_list(t) && term_is_nonempty_list(other)) {
-            temp_stack_push(&temp_stack, term_get_list_tail(t));
-            temp_stack_push(&temp_stack, term_get_list_tail(other));
+            term t_tail = term_get_list_tail(t);
+            term other_tail = term_get_list_tail(other);
+            // invalid term is used as a term lower than any other
+            // so "a" < "ab" -> true can be implemented.
+            if (term_is_nil(t_tail)) {
+                t_tail = term_invalid_term();
+            }
+            if (term_is_nil(other_tail)) {
+                other_tail = term_invalid_term();
+            }
+            temp_stack_push(&temp_stack, t_tail);
+            temp_stack_push(&temp_stack, other_tail);
             t = term_get_list_head(t);
             other = term_get_list_head(other);
 
@@ -181,8 +246,7 @@ int term_compare(term t, term other)
             int other_tuple_size = term_get_tuple_arity(other);
 
             if (tuple_size != other_tuple_size) {
-                //TODO
-                result = 1;
+                result = (tuple_size > other_tuple_size) ? 1 : -1;
                 break;
             }
 
@@ -195,56 +259,77 @@ int term_compare(term t, term other)
                 other = term_get_tuple_element(other, 0);
 
             } else {
-                t = term_nil();
-                other = term_nil();
+                other = temp_stack_pop(&temp_stack);
+                t = temp_stack_pop(&temp_stack);
             }
 
         } else if (term_is_binary(t) && term_is_binary(other)) {
             int t_size = term_binary_size(t);
             int other_size = term_binary_size(other);
 
-            if (t_size == other_size) {
-                const char *t_data = term_binary_data(t);
-                const char *other_data = term_binary_data(other);
+            const char *t_data = term_binary_data(t);
+            const char *other_data = term_binary_data(other);
 
-                if (memcmp(t_data, other_data, t_size) == 0) {
+            int cmp_size = (t_size > other_size) ? other_size : t_size;
+
+            int memcmp_result = memcmp(t_data, other_data, cmp_size);
+            if (memcmp_result == 0) {
+                if (t_size == other_size) {
                     other = temp_stack_pop(&temp_stack);
                     t = temp_stack_pop(&temp_stack);
                 } else {
-                    //TODO
-                    result = 1;
+                    result = (t_size > other_size) ? 1 : -1;
                     break;
                 }
             } else {
-                //TODO
-                result = 1;
+                result = (memcmp_result > 0) ? 1 : -1;
                 break;
             }
 
-        } else if (term_is_boxed(t) && term_is_boxed(other)) {
-            int t_size = term_boxed_size(t);
-            int other_size = term_boxed_size(other);
-
-            if (t_size == other_size) {
-                const term *boxed_t = term_to_const_term_ptr(t);
-                const term *boxed_other = term_to_const_term_ptr(other);
-
-                if (memcmp(boxed_t, boxed_other, (t_size + 1) * sizeof(term)) == 0) {
-                    other = temp_stack_pop(&temp_stack);
-                    t = temp_stack_pop(&temp_stack);
-                } else {
-                    //TODO
-                    result = 1;
-                    break;
-                }
+        } else if (term_is_any_integer(t) && term_is_any_integer(other)) {
+            avm_int64_t t_int = term_maybe_unbox_int64(t);
+            avm_int64_t other_int = term_maybe_unbox_int64(other);
+            if (t_int == other_int) {
+                other = temp_stack_pop(&temp_stack);
+                t = temp_stack_pop(&temp_stack);
             } else {
-                //TODO
-                result = 1;
+                result = (t_int > other_int) ? 1 : -1;
                 break;
             }
+
+        } else if (term_is_atom(t) && term_is_atom(other)) {
+            int t_atom_index = term_to_atom_index(t);
+            AtomString t_atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table,
+                    t_atom_index, (unsigned long) NULL);
+
+            int t_atom_len = atom_string_len(t_atom_string);
+            const char *t_atom_data = (const char *) atom_string_data(t_atom_string);
+
+            int other_atom_index = term_to_atom_index(other);
+            AtomString other_atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table,
+                    other_atom_index, (unsigned long) NULL);
+
+            int other_atom_len = atom_string_len(other_atom_string);
+            const char *other_atom_data = (const char *) atom_string_data(other_atom_string);
+
+            int cmp_size = (t_atom_len > other_atom_len) ? other_atom_len : t_atom_len;
+
+            int memcmp_result = memcmp(t_atom_data, other_atom_data, cmp_size);
+            if (memcmp_result == 0) {
+                result = (t_atom_len > other_atom_len) ? 1 : -1;
+                break;
+            } else {
+                result = memcmp_result > 0 ? 1 : -1;
+                break;
+            }
+
+        } else if (term_is_pid(t) && term_is_pid(other)) {
+            //TODO: handle ports
+            result = (t > other) ? 1 : -1;
+            break;
+
         } else {
-            //TODO
-            result = 1;
+            result = (term_type_to_index(t) > term_type_to_index(other)) ? 1 : -1;
             break;
         }
     }
