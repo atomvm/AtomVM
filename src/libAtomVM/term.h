@@ -57,6 +57,11 @@
 #define TERM_FROM_ATOM_INDEX(atom_index) ((atom_index << 6) | 0xB)
 
 /**
+ * @brief All empty tuples will reference this
+ */
+extern const term empty_tuple;
+
+/**
  * @brief Gets a pointer to a term stored on the heap
  *
  * @details Casts a term to a term * that points to a value stored on the heap. Be aware: terms are assumed to be immutable.

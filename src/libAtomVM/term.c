@@ -27,6 +27,8 @@
 #include <ctype.h>
 #include <stdio.h>
 
+const term empty_tuple = 0;
+
 void term_display(FILE *fd, term t, const Context *ctx)
 {
     if (term_is_atom(t)) {
