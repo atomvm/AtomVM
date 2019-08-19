@@ -304,6 +304,14 @@ struct Test tests[] =
     {"literal_test0.beam", 333575620},
     {"literal_test1.beam", 1680},
 
+    {"test_list_eq.beam", 1},
+    {"test_tuple_eq.beam", 1},
+    {"test_tuple_list_eq.beam", 1},
+    {"test_list_tuple_eq.beam", 1},
+    {"test_ref_eq.beam", 1},
+    {"test_binary_eq.beam", 1},
+    {"test_bigint_eq.beam", 1},
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}
