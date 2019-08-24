@@ -5,7 +5,7 @@ Brings meme languages ＡＥＳＴＨＥＴＩＣＳ to really small systems.
 
 AtomVM implements from scratch a minimal Erlang VM that supports a subset of ErlangVM features and that is able to run unmodified BEAM binaries on really small systems like MCUs.
 
-A short but explanatory introduction into the usage of the VM can be found in this [blog post](https://medium.com/@Bettio/atomvm-how-to-run-elixir-code-on-a-3-microcontroller-b414773498a6)
+A short but explanatory introduction into the usage of the VM can be found in this [blog post](https://medium.com/@Bettio/atomvm-how-to-run-elixir-code-on-a-3-microcontroller-b414773498a6).
 
 Dependencies
 ============
