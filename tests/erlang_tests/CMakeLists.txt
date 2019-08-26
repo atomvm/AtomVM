@@ -273,6 +273,15 @@ compile_erlang(test_ref_eq)
 compile_erlang(test_binary_eq)
 compile_erlang(test_bigint_eq)
 
+compile_erlang(test_binaries_ordering)
+compile_erlang(test_lists_ordering)
+compile_erlang(test_tuples_ordering)
+compile_erlang(test_types_ordering)
+compile_erlang(test_bigintegers_ordering)
+compile_erlang(test_refs_ordering)
+compile_erlang(test_atom_ordering)
+compile_erlang(test_pids_ordering)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -538,4 +547,13 @@ add_custom_target(erlang_test_modules DEPENDS
     test_ref_eq.beam
     test_binary_eq.beam
     test_bigint_eq.beam
+
+    test_binaries_ordering.beam
+    test_lists_ordering.beam
+    test_tuples_ordering.beam
+    test_types_ordering.beam
+    test_bigintegers_ordering.beam
+    test_refs_ordering.beam
+    test_atom_ordering.beam
+    test_pids_ordering.beam
 )

@@ -312,6 +312,15 @@ struct Test tests[] =
     {"test_binary_eq.beam", 1},
     {"test_bigint_eq.beam", 1},
 
+    {"test_binaries_ordering.beam", 15},
+    {"test_lists_ordering.beam", 7},
+    {"test_tuples_ordering.beam", 7},
+    {"test_types_ordering.beam", 1},
+    {"test_bigintegers_ordering.beam", 7},
+    {"test_refs_ordering.beam", 7},
+    {"test_atom_ordering.beam", 7},
+    {"test_pids_ordering.beam", 7},
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}
