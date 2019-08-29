@@ -79,12 +79,12 @@ char *interop_list_to_string(term list, int *ok)
             return NULL;
         }
 
-        avm_int_t byte_value = term_to_int(byte_value_term);
-        if (UNLIKELY((byte_value < 0) || (byte_value > 255))) {
+        if (UNLIKELY(!term_is_uint8(byte_value_term))) {
             *ok = 0;
             free(str);
             return NULL;
         }
+        uint8_t byte_value = term_to_uint8(byte_value_term);
 
         str[i] = (char) byte_value;
         t = *t_ptr;

@@ -248,6 +248,18 @@ static inline int term_is_integer(term t)
     return ((t & 0xF) == 0xF);
 }
 
+/**
+ * @brief Checks if a term is a uint8_t
+ *
+ * @details Returns 1 if a term is an integer value in the [0, 255] range, otherwise 0.
+ * @param t the term that will be checked.
+ * @return 1 if check succedes, 0 otherwise.
+ */
+static inline uint8_t term_is_uint8(term t)
+{
+    return ((t & ~((term) 0xFF0)) == 0xF);
+}
+
 static inline int term_is_boxed_integer(term t)
 {
     if (term_is_boxed(t)) {
@@ -396,6 +408,20 @@ static inline int term_to_atom_index(term t)
 static inline term term_from_atom_index(int atom_index)
 {
     return TERM_FROM_ATOM_INDEX(atom_index);
+}
+
+/**
+ * @brief Term to uint8
+ *
+ * @details Returns an uint8 for a given term. No overflow check is executed.
+ * @param t the term that will be converted to uint8.
+ * @return an uint8_t value.
+ */
+static inline uint8_t term_to_uint8(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_uint8(t));
+
+    return ((uint16_t) t) >> 4;
 }
 
 /**
