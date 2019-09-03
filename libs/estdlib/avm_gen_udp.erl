@@ -21,7 +21,7 @@
 %% @doc An implementation of the Erlang/OTP gen_udp interface.
 %%
 %% This module provides an implementation of a subset of the functionality of
-%% the Erlang/OTP gen_udp interface.  It is designed to be API-compatible with 
+%% the Erlang/OTP gen_udp interface.  It is designed to be API-compatible with
 %% gen_udp, with exceptions noted below.
 %%
 %% This interface may be used to send and receive UDP packets, as either
@@ -156,8 +156,8 @@ close(Socket) ->
 %% @private
 init(DriverPid, PortNum, Params) ->
     InitParams = [
-        {proto, udp}, 
-        {port, PortNum}, 
+        {proto, udp},
+        {port, PortNum},
         {controlling_process, self()} | Params
     ],
     case call(DriverPid, {init, InitParams}) of

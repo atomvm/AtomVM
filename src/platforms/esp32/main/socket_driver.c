@@ -216,14 +216,14 @@ term socket_driver_do_init(Context *ctx, term params)
             return port_create_error_tuple(ctx, BADARG_ATOM);
         }
         socket_data->controlling_process = controlling_process;
-        
+
         term binary = interop_proplist_get_value_default(params, BINARY_ATOM, TRUE_ATOM);
         if (!(binary == TRUE_ATOM || binary == FALSE_ATOM)) {
             TRACE("invalid binary flag");
             return port_create_error_tuple(ctx, BADARG_ATOM);
         }
         socket_data->binary = binary;
-        
+
         term buffer = interop_proplist_get_value_default(params, BUFFER_ATOM, term_from_int(BUFSIZE));
         if (!term_is_integer(buffer)) {
             TRACE("invalid buffer flag");
