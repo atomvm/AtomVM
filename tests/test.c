@@ -320,6 +320,7 @@ struct Test tests[] =
     {"test_refs_ordering.beam", 7},
     {"test_atom_ordering.beam", 7},
     {"test_pids_ordering.beam", 7},
+    {"test_list_match.beam", 31},
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
