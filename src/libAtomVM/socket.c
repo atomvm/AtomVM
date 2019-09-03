@@ -58,9 +58,13 @@ term socket_tuple_from_addr(Context *ctx, uint32_t addr)
     return port_create_tuple_n(ctx, 4, terms);
 }
 
-term socket_create_packet_term(Context *ctx, const char *buf, ssize_t len)
+term socket_create_packet_term(Context *ctx, const char *buf, ssize_t len, int is_binary)
 {
-    return term_from_literal_binary((void *)buf, len, ctx);
+    if (is_binary) {
+        return term_from_literal_binary((void *)buf, len, ctx);
+    } else {
+        return term_from_string((const uint8_t *) buf, len, ctx);
+    }
 }
 
 static void socket_consume_mailbox(Context *ctx)
@@ -83,11 +87,6 @@ static void socket_consume_mailbox(Context *ctx)
         term params = term_get_tuple_element(cmd, 1);
         term reply = socket_driver_do_init(ctx, params);
         port_send_reply(ctx, pid, ref, reply);
-    } else if (cmd_name == context_make_atom(ctx, bind_a)) {
-        term address = term_get_tuple_element(cmd, 1);
-        term port = term_get_tuple_element(cmd, 2);
-        term reply = socket_driver_do_bind(ctx, address, port);
-        port_send_reply(ctx, pid, ref, reply);
     } else if (cmd_name == context_make_atom(ctx, send_a)) {
         term dest_address = term_get_tuple_element(cmd, 1);
         term dest_port = term_get_tuple_element(cmd, 2);
@@ -95,6 +94,7 @@ static void socket_consume_mailbox(Context *ctx)
         term reply = socket_driver_do_send(ctx, dest_address, dest_port, buffer);
         port_send_reply(ctx, pid, ref, reply);
     } else if (cmd_name == context_make_atom(ctx, recvfrom_a)) {
+        // handle TODO length and timeout
         socket_driver_do_recvfrom(ctx, pid, ref);
     } else {
         port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));

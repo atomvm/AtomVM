@@ -97,6 +97,11 @@ char *interop_list_to_string(term list, int *ok)
 
 term interop_proplist_get_value(term list, term key)
 {
+    return interop_proplist_get_value_default(list, key, term_nil());
+}
+
+term interop_proplist_get_value_default(term list, term key, term default_value)
+{
     term t = list;
 
     while (!term_is_nil(t)) {
@@ -113,5 +118,5 @@ term interop_proplist_get_value(term list, term key)
         t = *t_ptr;
     }
 
-    return term_nil();
+    return default_value;
 }

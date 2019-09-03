@@ -26,5 +26,6 @@ char *interop_term_to_string(term t, int *ok);
 char *interop_binary_to_string(term binary);
 char *interop_list_to_string(term list, int *ok);
 term interop_proplist_get_value(term list, term key);
+term interop_proplist_get_value_default(term list, term key, term default_value);
 
 #endif
