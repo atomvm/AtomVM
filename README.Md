@@ -38,6 +38,8 @@ $ make
 $ ./src/AtomVM ./examples/erlang/hello_world.avm
 ```
 
+More examples can be found in examples directory, including [generic examples](examples/erlang/erlang-examples-readme.md) that can be tested on any platform and platform specific examples (such as those for [ESP32](examples/erlang/esp32/esp32-examples-readme.md)).
+
 Project Status
 ==============
 

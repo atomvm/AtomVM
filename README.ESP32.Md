@@ -61,3 +61,7 @@ Flash blink example using following commands:
 # Flash the blink.avm to the device
 $ $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 115200 --before default_reset --after hard_reset write_flash -u --flash_mode dio --flash_freq 40m --flash_size detect  0x110000 build/examples/erlang/esp32/blink.avm
 ```
+
+More Examples
+=============
+You can find more information about ESP32 examples on the [ESP32 examples readme](examples/erlang/esp32/esp32-examples-readme.md).

@@ -1,81 +1,8 @@
-# AtomVM Examples
-
-AtomVM includes a collection of useful examples for getting started.  This section describes what these examples do, and how to run them, for example, on an ESP32 device.
-
-## Erlang Examples
-
-Erlang examples may be run in the UNIX shell or on supported microcontroller devices.
-
-### `hello_world`
-
-This example program prints the string "Hello World" and quits.
-
-#### Command line
-
-The `hello_world.avm` file will get created as part of a build.  This file may be supplied as an argument to the `AtomVM` command:
-
-    shell$ ./src/AtomVM ./examples/erlang/hello_world.avm
-    Hello World
-    Return value: ok
-
-### `udp_server`
-
-This example program listens on UDP port 44444 and will print information about the received message, including the source IP, (ephemeral) source port, and packet received, to the console.
-
-#### Command line
-
-The `udp_server.avm` file will get created as part of a build.  This file may be supplied as an argument to the `AtomVM` command:
-
-    shell$ ./src/AtomVM ./examples/erlang/udp_server.avm
-    Opening socket ...
-    {socket,<0.3.0>,44444}
-    Waiting to receive data...
-
-You can send UDP packets to the AtomVM instance using `netcat` (or `nc` on some platforms), in a separate terminal window:
-
-    shell$ nc -u localhost 44444
-
-This command will wait for you to enter a line of text, e.g.,
-
-    testing 1 2 3
-
-In the AtomVM termianl window, you see:
-
-    Address: {127,0,0,1}
-    Port: 50889
-    Packet: <<116,101,115,116,105,110,103,32,49,32,50,32,51,10>>
-    Waiting to receive data...
-
-> Note.  Netcat appends a newline character at the end of the input, so the packet binary does not display as printable text.
-
-### `udp_client`
-
-This example program send the packet of data (":アトムＶＭ") over UDP to port 44444 on the loopback address every 5 seconds, in a loop.  The program will print a period (`.`) to the console, every time it sends a message.
-
-This command may be used in tandem with the `udp_server` program to illustrate sending messages between AtomVM processes over UDP.
-
-#### Command line
-
-The `udp_client.avm` file will get created as part of a build.  This file may be supplied as an argument to the `AtomVM` command:
-
-    shell$ ./src/AtomVM ./examples/erlang/udp_client.avm
-    Opening socket...
-    .................................
-
-If you are running the `udp_server` program, you should see messages like the following printed to the console:
-
-    Address: {127,0,0,1}
-    Port: 52443
-    Packet: <<58,-94,-56,-32,54,45>>
-    Waiting to receive data...
-
-> Note. AtomVM does not currently treat characters outside of the printable ASCII character set as printable characters.
-
-## ESP32 Examples
+# ESP32 Examples
 
 AtomVM includes examples that are specifically designed for the ESP32 and other microcontrollers.
 
-## Flashing AtomVM Examples for ESP32
+# Flashing AtomVM Examples for ESP32
 
 In order to run the ESP32 examples, you will need to flash the example AVM files that are created as part of the build to your device.
 
@@ -104,7 +31,7 @@ You can montor the console output of these examples by issuing the `monitor` tar
     ets Jun  8 2016 00:22:57
     ...
 
-### `blink`
+## `blink`
 
 The `blink` example will turn the blue LED on an ESP32 SoC (pin 2) on and off, once every second.
 
@@ -130,7 +57,7 @@ Flash the example program to your device as follows:
 
 You should see the blue LED turn on and off on your ESP32 device.
 
-### `sta_network`
+## `sta_network`
 
 The `sta_network` example will connect to your local WiFi network and obtain and IP address.  Once a connection is established, a `connected` message will be displayed.  Once an IP address is obtained, the device IP address, netmask, and gateway will be displayed on the console.
 
@@ -203,7 +130,7 @@ You should see the following output when monitoring the ESP32 output (truncated 
     connected
     {{192,168,1,236},{255,255,255,0},{192,168,1,1}}
 
-### `udp_server_blink`
+## `udp_server_blink`
 
 The `udp_server_blink` example will connect to your local WiFi network and obtain and IP address.  It will then start a UDP server on port 44444.  When a UDP message is received, the blue LED on the ESP32 SoC (pin 2) will toggle on and off.
 
