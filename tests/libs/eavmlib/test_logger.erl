@@ -74,6 +74,7 @@ increment_counter(Level) ->
     Pid ! {increment, Level}.
 
 get_counter(Level) ->
+    ?TIMER:sleep(50),
     Pid = erlang:whereis(counter),
     Ref = erlang:make_ref(),
     Pid ! {self(), Ref, get_counter, Level},
