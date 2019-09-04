@@ -27,6 +27,7 @@
 
 #include <ctype.h>
 #include <stdio.h>
+#include <inttypes.h>
 
 const term empty_tuple = 0;
 
@@ -119,7 +120,7 @@ void term_display(FILE *fd, term t, const Context *ctx)
                     display_separator = 1;
                 }
 
-                fprintf(fd, "%i", binary_data[i]);
+                fprintf(fd, PRIu8, binary_data[i]);
             }
         }
         fprintf(fd, ">>");
