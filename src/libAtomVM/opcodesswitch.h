@@ -47,6 +47,7 @@
 #define COMPACT_EXTENDED 7
 #define COMPACT_LARGE_INTEGER 9
 #define COMPACT_LARGE_ATOM 10
+#define COMPACT_LARGE_YREG 12
 
 #define COMPACT_EXTENDED_LITERAL 0x47
 
@@ -54,6 +55,11 @@
 #define COMPACT_11BITS_VALUE 0x8
 #define COMPACT_NBITS_VALUE 0x18
 
+typedef union
+{
+    term *dest;
+    int index;
+} dreg_t;
 
 #ifdef IMPL_EXECUTE_LOOP
 #define RAISE_ERROR(error_type_atom)                                    \
@@ -69,6 +75,10 @@
 #endif
 
 #ifdef IMPL_CODE_LOADER
+
+#define T_DEST_REG(dreg_type, dreg) \
+    reg_type_c(dreg_type), ((dreg).index)
+
 #define DECODE_COMPACT_TERM(dest_term, code_chunk, base_index, off, next_operand_offset)\
 {                                                                                       \
     uint8_t first_byte = (code_chunk[(base_index) + (off)]);                            \
@@ -118,15 +128,42 @@
             }                                                                           \
             break;                                                                      \
                                                                                         \
+        case COMPACT_LARGE_YREG:                                                        \
+            next_operand_offset += 2;                                                   \
+            break;                                                                      \
+                                                                                        \
         default:                                                                        \
             fprintf(stderr, "unknown compect term type: %i\n", ((first_byte) & 0xF));   \
             abort();                                                                    \
             break;                                                                      \
     }                                                                                   \
 }
+
+#define DECODE_DEST_REGISTER(dreg, dreg_type, code_chunk, base_index, off, next_operand_offset)     \
+{                                                                                                   \
+    uint8_t first_byte = code_chunk[(base_index) + (off)];                                          \
+    dreg_type = first_byte & 0xF;                                                                   \
+    switch (dreg_type) {                                                                            \
+        case COMPACT_XREG:                                                                          \
+        case COMPACT_YREG:                                                                          \
+            (dreg).index = code_chunk[(base_index) + (off)] >> 4;                                   \
+            next_operand_offset += 1;                                                               \
+            break;                                                                                  \
+        case COMPACT_LARGE_YREG:                                                                    \
+            (dreg).index = (((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]);     \
+            next_operand_offset += 2;                                                               \
+            break;                                                                                  \
+        default:                                                                                    \
+            abort();                                                                                \
+    }                                                                                               \
+}
 #endif
 
 #ifdef IMPL_EXECUTE_LOOP
+
+#define T_DEST_REG(dreg_type, dreg) \
+    reg_type_c(dreg_type), ((int) ((dreg).dest - (((dreg_type) == COMPACT_XREG) ? ctx->x : ctx->e)))
+
 #define DECODE_COMPACT_TERM(dest_term, code_chunk, base_index, off, next_operand_offset)                                \
 {                                                                                                                       \
     uint8_t first_byte = (code_chunk[(base_index) + (off)]);                                                            \
@@ -214,12 +251,52 @@
             }                                                                                                           \
             break;                                                                                                      \
                                                                                                                         \
+        case COMPACT_LARGE_YREG:                                                                                        \
+            if (LIKELY((first_byte & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE)) {                                \
+                dest_term = ctx->e[((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]];                  \
+                next_operand_offset += 2;                                                                               \
+            } else {                                                                                                    \
+                abort();                                                                                                \
+            }                                                                                                           \
+            break;                                                                                                      \
+                                                                                                                        \
         default:                                                                                                        \
             abort();                                                                                                    \
     }                                                                                                                   \
 }
-#endif
 
+#define WRITE_REGISTER(dreg_type, dreg, value)                                                      \
+{                                                                                                   \
+    *(dreg).dest = value;                                                                           \
+}
+
+#define DECODE_DEST_REGISTER(dreg, dreg_type, code_chunk, base_index, off, next_operand_offset)                 \
+{                                                                                                               \
+    uint8_t first_byte = code_chunk[(base_index) + (off)];                                                      \
+    dreg_type = first_byte & 0xF;                                                                               \
+    uint8_t reg_index = (first_byte >> 4);                                                                      \
+    switch (dreg_type) {                                                                                        \
+        case COMPACT_XREG:                                                                                      \
+            (dreg).dest = ctx->x + reg_index;                                                                   \
+            next_operand_offset++;                                                                              \
+            break;                                                                                              \
+        case COMPACT_YREG:                                                                                      \
+            (dreg).dest = ctx->e + reg_index;                                                                   \
+            next_operand_offset++;                                                                              \
+            break;                                                                                              \
+        case COMPACT_LARGE_YREG:                                                                                \
+            if (LIKELY((first_byte & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE)) {                        \
+                (dreg).dest = ctx->e + (((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]);     \
+                next_operand_offset += 2;                                                                       \
+            } else {                                                                                            \
+                abort();                                                                                        \
+            }                                                                                                   \
+            break;                                                                                              \
+        default:                                                                                                \
+            abort();                                                                                            \
+    }                                                                                                           \
+}
+#endif
 
 #define DECODE_LABEL(label, code_chunk, base_index, off, next_operand_offset)                       \
 {                                                                                                   \
@@ -286,28 +363,6 @@
             break;                                                                                  \
     }                                                                                               \
 }
-
-#define DECODE_DEST_REGISTER(dreg, dreg_type, code_chunk, base_index, off, next_operand_offset)     \
-{                                                                                                   \
-    dreg_type = code_chunk[(base_index) + (off)] & 0xF;                                             \
-    dreg = code_chunk[(base_index) + (off)] >> 4;                                                   \
-    next_operand_offset++;                                                                          \
-}
-
-#define WRITE_REGISTER(dreg_type, dreg, value)                                                      \
-{                                                                                                   \
-    switch (dreg_type) {                                                                            \
-        case 3:                                                                                     \
-            ctx->x[dreg] = value;                                                                   \
-            break;                                                                                  \
-        case 4:                                                                                     \
-            ctx->e[dreg] = value;                                                                   \
-            break;                                                                                  \
-        default:                                                                                    \
-            abort();                                                                                \
-    }                                                                                               \
-}
-
 
 #define NEXT_INSTRUCTION(operands_size) \
     i += operands_size
@@ -901,11 +956,11 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 int next_off = 1;
                 int bif;
                 DECODE_INTEGER(bif, code, i, next_off, next_off);
-                int dreg;
+                dreg_t dreg;
                 uint8_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
-                TRACE("bif0/2 bif=%i, dreg=%i\n", bif, dreg);
+                TRACE("bif0/2 bif=%i, dreg=%c%i\n", bif, T_DEST_REG(dreg_type, dreg));
                 USED_BY_TRACE(bif);
                 USED_BY_TRACE(dreg);
 
@@ -930,11 +985,11 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 DECODE_INTEGER(bif, code, i, next_off, next_off);
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
-                int dreg;
+                dreg_t dreg;
                 uint8_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
-                TRACE("bif1/2 bif=%i, fail=%i, dreg=%i\n", bif, fail_label, dreg);
+                TRACE("bif1/2 bif=%i, fail=%i, dreg=%c%i\n", bif, fail_label, T_DEST_REG(dreg_type, dreg));
                 USED_BY_TRACE(bif);
                 USED_BY_TRACE(dreg);
 
@@ -968,11 +1023,11 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, code, i, next_off, next_off)
-                int dreg;
+                dreg_t dreg;
                 uint8_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
-                TRACE("bif2/2 bif=%i, fail=%i, dreg=%i\n", bif, fail_label, dreg);
+                TRACE("bif2/2 bif=%i, fail=%i, dreg=%c%i\n", bif, fail_label, T_DEST_REG(dreg_type, dreg));
                 USED_BY_TRACE(bif);
                 USED_BY_TRACE(dreg);
 
@@ -1270,11 +1325,11 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 int next_off = 1;
                 int label;
                 DECODE_LABEL(label, code, i, next_off, next_off)
-                int dreg;
+                dreg_t dreg;
                 uint8_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
-                TRACE("loop_rec/2, dreg=%i\n", dreg);
+                TRACE("loop_rec/2, dreg=%c%i\n", T_DEST_REG(dreg_type, dreg));
                 USED_BY_TRACE(dreg);
 
                 #ifdef IMPL_EXECUTE_LOOP
@@ -2030,12 +2085,12 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 int next_off = 1;
                 term src_value;
                 DECODE_COMPACT_TERM(src_value, code, i, next_off, next_off);
-                int dreg;
+                dreg_t dreg;
                 uint8_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("move/2 %lx, %c%i\n", src_value, reg_type_c(dreg_type), dreg);
+                    TRACE("move/2 %lx, %c%i\n", src_value, T_DEST_REG(dreg_type, dreg));
 
                     WRITE_REGISTER(dreg_type, dreg, src_value);
                 #endif
@@ -2053,15 +2108,15 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 int next_off = 1;
                 term src_value;
                 DECODE_COMPACT_TERM(src_value, code, i, next_off, next_off)
-                int head_dreg;
+                dreg_t head_dreg;
                 uint8_t head_dreg_type;
                 DECODE_DEST_REGISTER(head_dreg, head_dreg_type, code, i, next_off, next_off);
-                int tail_dreg;
+                dreg_t tail_dreg;
                 uint8_t tail_dreg_type;
                 DECODE_DEST_REGISTER(tail_dreg, tail_dreg_type, code, i, next_off, next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("get_list/3 %lx, %c%i, %c%i\n", src_value, reg_type_c(head_dreg_type), head_dreg, reg_type_c(tail_dreg_type), tail_dreg);
+                    TRACE("get_list/3 %lx, %c%i, %c%i\n", src_value, T_DEST_REG(head_dreg_type, head_dreg), T_DEST_REG(tail_dreg_type, tail_dreg));
 
                     term head = term_get_list_head(src_value);
                     term tail = term_get_list_tail(src_value);
@@ -2085,11 +2140,11 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 DECODE_COMPACT_TERM(src_value, code, i, next_off, next_off);
                 int element;
                 DECODE_INTEGER(element, code, i, next_off, next_off);
-                int dreg;
+                dreg_t dreg;
                 uint8_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
-                TRACE("get_tuple_element/2, element=%i, dest=%c%i\n", element, reg_type_c(dreg_type), dreg);
+                TRACE("get_tuple_element/2, element=%i, dest=%c%i\n", element, T_DEST_REG(dreg_type, dreg));
                 USED_BY_TRACE(element);
 
                 #ifdef IMPL_EXECUTE_LOOP
@@ -2144,7 +2199,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 DECODE_COMPACT_TERM(head, code, i, next_off, next_off);
                 term tail;
                 DECODE_COMPACT_TERM(tail, code, i, next_off, next_off);
-                int dreg;
+                dreg_t dreg;
                 uint8_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
@@ -2172,11 +2227,11 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 int next_off = 1;
                 int size;
                 DECODE_INTEGER(size, code, i, next_off, next_off);
-                int dreg;
+                dreg_t dreg;
                 uint8_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
-                TRACE("put_tuple/2 size=%i, dest=%c%i\n", size, reg_type_c(dreg_type), dreg);
+                TRACE("put_tuple/2 size=%i, dest=%c%i\n", size, T_DEST_REG(dreg_type, dreg));
                 USED_BY_TRACE(dreg);
 
                 #ifdef IMPL_EXECUTE_LOOP
@@ -2480,13 +2535,13 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
             case OP_TRY: {
                 int next_off = 1;
-                int dreg;
+                dreg_t dreg;
                 uint8_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
                 int label;
                 DECODE_LABEL(label, code, i, next_off, next_off)
 
-                TRACE("try/2, label=%i, reg=%c%i\n", label, reg_type_c(dreg_type), dreg);
+                TRACE("try/2, label=%i, reg=%c%i\n", label, T_DEST_REG(dreg_type, dreg));
 
                 #ifdef IMPL_EXECUTE_LOOP
                     term catch_term = term_from_catch_label(mod->module_index, label);
@@ -2500,11 +2555,11 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
             case OP_TRY_END: {
                 int next_off = 1;
-                int dreg;
+                dreg_t dreg;
                 uint8_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
-                TRACE("try_end/1, reg=%c%i\n", reg_type_c(dreg_type), dreg);
+                TRACE("try_end/1, reg=%c%i\n", T_DEST_REG(dreg_type, dreg));
 
                 #ifdef IMPL_EXECUTE_LOOP
                     //TODO: here just write to y registers is enough
@@ -2518,11 +2573,11 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
             //TODO: implement
             case OP_TRY_CASE: {
                 int next_off = 1;
-                int dreg;
+                dreg_t dreg;
                 uint8_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
-                TRACE("try_case/1, reg=%c%i\n", reg_type_c(dreg_type), dreg);
+                TRACE("try_case/1, reg=%c%i\n", T_DEST_REG(dreg_type, dreg));
 
                 NEXT_INSTRUCTION(next_off);
                 break;
@@ -2750,12 +2805,12 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 DECODE_INTEGER(bif, code, i, next_off, next_off); //s?
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
-                int dreg;
+                dreg_t dreg;
                 uint8_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("gc_bif1/5 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, dest=r%i\n", f_label, live, bif, arg1, dreg);
+                    TRACE("gc_bif1/5 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, dest=%c%i\n", f_label, live, bif, arg1, T_DEST_REG(dreg_type, dreg));
 
                     GCBifImpl1 func = (GCBifImpl1) mod->imported_funcs[bif].bif;
                     term ret = func(ctx, live, arg1);
@@ -2794,12 +2849,12 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off);
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, code, i, next_off, next_off);
-                int dreg;
+                dreg_t dreg;
                 uint8_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("gc_bif2/6 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, arg2=0x%lx, dest=r%i\n", f_label, live, bif, arg1, arg2, dreg);
+                    TRACE("gc_bif2/6 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, arg2=0x%lx, dest=%c%i\n", f_label, live, bif, arg1, arg2, T_DEST_REG(dreg_type, dreg));
 
                     GCBifImpl2 func = (GCBifImpl2) mod->imported_funcs[bif].bif;
                     term ret = func(ctx, live, arg1, arg2);
@@ -2927,12 +2982,12 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 int next_off = 1;
                 term src_value;
                 DECODE_COMPACT_TERM(src_value, code, i, next_off, next_off)
-                int head_dreg;
+                dreg_t head_dreg;
                 uint8_t head_dreg_type;
                 DECODE_DEST_REGISTER(head_dreg, head_dreg_type, code, i, next_off, next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("get_hd/2 %lx, %c%i\n", src_value, reg_type_c(head_dreg_type), head_dreg);
+                    TRACE("get_hd/2 %lx, %c%i\n", src_value, T_DEST_REG(head_dreg_type, head_dreg));
 
                     term head = term_get_list_head(src_value);
 
@@ -2952,12 +3007,12 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 int next_off = 1;
                 term src_value;
                 DECODE_COMPACT_TERM(src_value, code, i, next_off, next_off)
-                int tail_dreg;
+                dreg_t tail_dreg;
                 uint8_t tail_dreg_type;
                 DECODE_DEST_REGISTER(tail_dreg, tail_dreg_type, code, i, next_off, next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("get_tl/2 %lx, %c%i\n", src_value, reg_type_c(tail_dreg_type), tail_dreg);
+                    TRACE("get_tl/2 %lx, %c%i\n", src_value, T_DEST_REG(tail_dreg_type, tail_dreg));
 
                     term tail = term_get_list_tail(src_value);
 

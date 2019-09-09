@@ -127,6 +127,9 @@ COLD_FUNC char reg_type_c(int reg_type)
         case 4:
             return 'y';
 
+        case 12:
+            return 'y';
+
         default:
             return '?';
     }
