@@ -283,6 +283,7 @@ compile_erlang(test_atom_ordering)
 compile_erlang(test_pids_ordering)
 compile_erlang(test_list_match)
 compile_erlang(test_match)
+compile_erlang(test_ordering_0)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -560,4 +561,5 @@ add_custom_target(erlang_test_modules DEPENDS
     test_pids_ordering.beam
     test_list_match.beam
     test_match.beam
+    test_ordering_0.beam
 )
