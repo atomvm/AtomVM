@@ -1624,7 +1624,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_binary/2, label=%i, arg1=%lx\n", label, arg1);
 
-                    if (term_is_binary(arg1) || term_is_nil(arg1)) {
+                    if (term_is_binary(arg1)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
