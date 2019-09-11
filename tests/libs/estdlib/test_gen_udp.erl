@@ -28,8 +28,8 @@ make_messages(N) ->
 
 start_sender(Socket, Port, Msgs) ->
     send(Socket, Port, Msgs),
-    receive stop -> 
-        ok 
+    receive stop ->
+        ok
     end.
 
 send(_Socket, _Port, []) ->
