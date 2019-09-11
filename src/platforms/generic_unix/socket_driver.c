@@ -37,7 +37,9 @@
 #include "trace.h"
 #include "sys.h"
 #include "platform_defaultatoms.h"
+
 #define BUFSIZE 128
+
 typedef struct SocketDriverData
 {
     int sockfd;
@@ -47,9 +49,12 @@ typedef struct SocketDriverData
     term binary;
     term active;
     term buffer;
+    EventListener *active_listener;
 } SocketDriverData;
+
 static void passive_recvfrom_callback(EventListener *listener);
 static void active_recvfrom_callback(EventListener *listener);
+
 void *socket_driver_create_data()
 {
     struct SocketDriverData *data = calloc(1, sizeof(struct SocketDriverData));
@@ -60,12 +65,15 @@ void *socket_driver_create_data()
     data->binary = term_invalid_term();
     data->active = term_invalid_term();
     data->buffer = term_invalid_term();
+    data->active_listener = NULL;
     return (void *) data;
 }
+
 void socket_driver_delete_data(void *data)
 {
     free(data);
 }
+
 static term do_bind(Context *ctx, term address, term port)
 {
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
@@ -88,6 +96,7 @@ static term do_bind(Context *ctx, term address, term port)
         }
     }
 }
+
 static term init_udp_socket(SocketDriverData *socket_data, Context *ctx, term params)
 {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -107,6 +116,7 @@ static term init_udp_socket(SocketDriverData *socket_data, Context *ctx, term pa
     }
     return ret;
 }
+
 term socket_driver_do_init(Context *ctx, term params)
 {
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
@@ -151,6 +161,7 @@ term socket_driver_do_init(Context *ctx, term params)
             listener->data = ctx;
             listener->handler = active_recvfrom_callback;
             linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+            socket_data->active_listener = listener;
         }
         return ret;
     } else {
@@ -160,6 +171,25 @@ term socket_driver_do_init(Context *ctx, term params)
         return port_create_sys_error_tuple(ctx, FCNTL_ATOM, errno);
     }
 }
+
+void socket_driver_do_close(Context *ctx)
+{
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+    if (socket_data->active == TRUE_ATOM) {
+        linkedlist_remove(&ctx->global->listeners, &socket_data->active_listener->listeners_list_head);
+    }
+    if (close(socket_data->sockfd) == -1) {
+        TRACE("socket: close failed");
+    }
+}
+
+term socket_driver_get_port(Context *ctx)
+{
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+    port_ensure_available(ctx, 7);
+    return port_create_ok_tuple(ctx, term_from_int(socket_data->port));
+}
+
 term socket_driver_do_send(Context *ctx, term dest_address, term dest_port, term buffer)
 {
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
@@ -192,11 +222,13 @@ term socket_driver_do_send(Context *ctx, term dest_address, term dest_port, term
         return port_create_ok_tuple(ctx, sent_atom);
     }
 }
+
 typedef struct RecvFromData {
     Context *ctx;
     term pid;
     uint64_t ref_ticks;
 } RecvFromData;
+
 static void passive_recvfrom_callback(EventListener *listener)
 {
     RecvFromData *recvfrom_data = (RecvFromData *) listener->data;
@@ -246,6 +278,7 @@ static void passive_recvfrom_callback(EventListener *listener)
     free(recvfrom_data);
     free(buf);
 }
+
 static void active_recvfrom_callback(EventListener *listener)
 {
     Context *ctx = (Context *) listener->data;
@@ -288,6 +321,7 @@ static void active_recvfrom_callback(EventListener *listener)
     }
     free(buf);
 }
+
 void socket_driver_do_recvfrom(Context *ctx, term pid, term ref)
 {
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;

@@ -35,5 +35,13 @@
 %%-----------------------------------------------------------------------------
 -spec port(Socket::socket()) -> port_number().
 port(Socket) ->
-    %% TODO implement a call to the port to get the actual port
-    undefined.
+    call(Socket, {get_port}).
+
+%% @private
+call(Socket, Msg) ->
+    Ref = erlang:make_ref(),
+    Socket ! {self(), Ref, Msg},
+    receive
+        {Ref, Ret} ->
+            Ret
+    end.
