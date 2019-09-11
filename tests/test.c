@@ -323,6 +323,7 @@ struct Test tests[] =
     {"test_list_match.beam", 31},
     {"test_match.beam", 0},
     {"test_ordering_0.beam", 1},
+    {"test_ordering_1.beam", 1},
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
