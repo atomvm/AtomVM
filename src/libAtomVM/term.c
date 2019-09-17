@@ -120,7 +120,8 @@ void term_display(FILE *fd, term t, const Context *ctx)
                     display_separator = 1;
                 }
 
-                fprintf(fd, PRIu8, binary_data[i]);
+                uint8_t c = (uint8_t) binary_data[i];
+                fprintf(fd, "%i", (int) c);
             }
         }
         fprintf(fd, ">>");
