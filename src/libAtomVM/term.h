@@ -46,11 +46,13 @@
 #define TERM_BOXED_POSITIVE_INTEGER 0x8
 #define TERM_BOXED_REF 0x10
 #define TERM_BOXED_FUN 0x14
+#define TERM_BOXED_FLOAT 0x18
 #define TERM_BOXED_HEAP_BINARY 0x24
 
 #define BINARY_HEADER_SIZE 2
 #define BOXED_INT_SIZE (BOXED_TERMS_REQUIRED_FOR_INT + 1)
 #define BOXED_INT64_SIZE (BOXED_TERMS_REQUIRED_FOR_INT64 + 1)
+#define FLOAT_SIZE (sizeof(float_term_t) / sizeof(term) + 1)
 
 #define TERM_DEBUG_ASSERT(...)
 
@@ -1017,6 +1019,47 @@ static inline int term_equals(term a, term b, Context *ctx)
         return term_compare(a, b, ctx) == 0;
     }
 }
+
+#ifndef AVM_NO_FP
+
+static inline int term_is_float(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        return (boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_FLOAT;
+
+    } else {
+        return 0;
+    }
+}
+
+static inline term term_from_float(avm_float_t f, Context *ctx)
+{
+    term *boxed_value = memory_heap_alloc(ctx, FLOAT_SIZE);
+    boxed_value[0] = ((FLOAT_SIZE - 1) << 6) | TERM_BOXED_FLOAT;
+
+    float_term_t *boxed_float = (float_term_t *) (boxed_value + 1);
+    boxed_float->f = f;
+
+    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+}
+
+static inline avm_float_t term_to_float(term t)
+{
+    const float_term_t *boxed_float = (float_term_t *) (term_to_const_term_ptr(t) + 1);
+    return boxed_float->f;
+}
+
+static inline avm_float_t term_conv_to_float(term t)
+{
+    if (term_is_any_integer(t)) {
+        return term_maybe_unbox_int64(t);
+    } else {
+        return term_to_float(t);
+    }
+}
+
+#endif
 
 /**
  * @brief Prints a term to stdout

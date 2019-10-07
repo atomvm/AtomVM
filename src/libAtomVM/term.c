@@ -152,6 +152,12 @@ void term_display(FILE *fd, term t, const Context *ctx)
                 abort();
         }
 
+#ifndef AVM_NO_FP
+    } else if (term_is_float(t)) {
+        avm_float_t f = term_to_float(t);
+        fprintf(fd, AVM_FLOAT_FMT, f);
+#endif
+
     } else {
         fprintf(fd, "Unknown term type: %li", t);
     }

@@ -307,6 +307,10 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
                     break;
                 }
 
+                case TERM_BOXED_FLOAT:
+                    TRACE("- Found float.\n");
+                    break;
+
                 case TERM_BOXED_HEAP_BINARY:
                     TRACE("- Found binary.\n");
                     break;
