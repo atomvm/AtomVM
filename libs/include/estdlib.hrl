@@ -23,6 +23,7 @@
 -define(GEN_STATEM,     avm_gen_statem).
 -define(INET,           avm_inet).
 -define(GEN_UDP,        avm_gen_udp).
+-define(GEN_TCP,        avm_gen_tcp).
 -define(LISTS,          avm_lists).
 -define(PROPLISTS,      avm_proplists).
 -define(TIMER,          avm_timer).

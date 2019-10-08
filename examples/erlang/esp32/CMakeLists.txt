@@ -1,5 +1,5 @@
 ##
-## Copyright (c) 2018 Fred Dushin <fred@dushin.net>
+## Copyright (c) 2019 Fred Dushin <fred@dushin.net>
 ##
 
 project(examples_erlang_esp32)
@@ -9,3 +9,4 @@ include(BuildErlang)
 pack_runnable(blink blink eavmlib estdlib)
 pack_runnable(sta_network sta_network eavmlib estdlib)
 pack_runnable(udp_server_blink udp_server_blink eavmlib estdlib)
+pack_runnable(tcp_client_esp32 tcp_client_esp32 eavmlib estdlib)

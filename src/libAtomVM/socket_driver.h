@@ -27,8 +27,10 @@ void *socket_driver_create_data();
 void socket_driver_delete_data(void *data);
 
 term socket_driver_do_init(Context *ctx, term params);
-term socket_driver_do_send(Context *ctx, term dest_address, term dest_port, term buffer);
-void socket_driver_do_recvfrom(Context *ctx, term pid, term ref);
+term socket_driver_do_send(Context *ctx, term buffer);
+term socket_driver_do_sendto(Context *ctx, term dest_address, term dest_port, term buffer);
+void socket_driver_do_recv(Context *ctx, term pid, term ref, term length, term timeout);
+void socket_driver_do_recvfrom(Context *ctx, term pid, term ref, term length, term timeout);
 void socket_driver_do_close(Context *ctx);
 term socket_driver_get_port(Context *ctx);
 
