@@ -37,12 +37,21 @@
     #endif
 
     #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
+        #define READ_64_UNALIGNED(ptr) \
+            __builtin_bswap64(*((uint64_t *) (ptr)))
+
         #define READ_32_UNALIGNED(ptr) \
             __builtin_bswap32(*((uint32_t *) (ptr)))
 
         #define READ_16_UNALIGNED(ptr) \
             __builtin_bswap16(*((uint16_t *) (ptr)))
     #else
+        #define READ_64_UNALIGNED(ptr) \
+            ( (((uint64_t) ((uint8_t *)(ptr))[0]) << 56) | (((uint64_t) ((uint8_t *) (ptr))[1]) << 48) | \
+              (((uint64_t) ((uint8_t *)(ptr))[2]) << 40) | (((uint64_t) ((uint8_t *) (ptr))[3]) << 32) | \
+              (((uint64_t) ((uint8_t *)(ptr))[4]) << 24) | (((uint64_t) ((uint8_t *) (ptr))[5]) << 16) | \
+              (((uint64_t) ((uint8_t *)(ptr))[6]) << 8) | (((uint64_t) ((uint8_t *) (ptr))[7])) )
+
         #define READ_32_UNALIGNED(ptr) \
             ( (((uint8_t *)(ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) | (((uint8_t *)(ptr))[2] << 8) | ((uint8_t *)(ptr))[3] )
 

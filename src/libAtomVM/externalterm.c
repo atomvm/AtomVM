@@ -29,6 +29,7 @@
 #include "utils.h"
 
 #define EXTERNAL_TERM_TAG 131
+#define NEW_FLOAT_EXT 70
 #define SMALL_INTEGER_EXT 97
 #define INTEGER_EXT 98
 #define ATOM_EXT 100
@@ -74,6 +75,22 @@ term externalterm_to_term(const void *external_term, Context *ctx)
 static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx)
 {
     switch (external_term_buf[0]) {
+        case NEW_FLOAT_EXT: {
+            #ifndef AVM_NO_FP
+                union {
+                    uint64_t intvalue;
+                    double doublevalue;
+                } v;
+                v.intvalue = READ_64_UNALIGNED(external_term_buf + 1);
+
+                *eterm_size = 9;
+                return term_from_float(v.doublevalue, ctx);
+            #else
+                fprintf(stderr, "floating point support not enabled.\n");
+                abort();
+            #endif
+        }
+
         case SMALL_INTEGER_EXT: {
             *eterm_size = 2;
             return term_from_int11(external_term_buf[1]);
@@ -181,6 +198,16 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
 static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_size, Context *ctx)
 {
     switch (external_term_buf[0]) {
+        case NEW_FLOAT_EXT: {
+            #ifndef AVM_NO_FP
+                *eterm_size = 9;
+                return FLOAT_SIZE;
+            #else
+                fprintf(stderr, "floating point support not enabled.\n");
+                abort();
+            #endif
+        }
+
         case SMALL_INTEGER_EXT: {
             *eterm_size = 2;
             return 0;
