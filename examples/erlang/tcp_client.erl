@@ -12,9 +12,9 @@ start() ->
             erlang:display({connected, Socket}),
             case ?GEN_TCP:send(Socket, "GET / HTTP/1.0\r\n\r\n") of
                 ok ->
-                    case Active of 
-                        true -> active_receive_data(); 
-                        _ -> passive_receive_data(Socket) 
+                    case Active of
+                        true -> active_receive_data();
+                        _ -> passive_receive_data(Socket)
                     end;
                 Error ->
                     erlang:display(Error)

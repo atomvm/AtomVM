@@ -33,4 +33,3 @@ passive_loop(Socket) ->
         ErrorReason ->
             erlang:display(ErrorReason)
     end.
-

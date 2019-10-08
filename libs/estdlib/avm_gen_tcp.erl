@@ -69,7 +69,7 @@
 %%          in order to receive data on the socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec connect(avm_inet:address(), avm_inet:port_number(), Options::avm_inet:opts()) -> 
+-spec connect(avm_inet:address(), avm_inet:port_number(), Options::avm_inet:opts()) ->
     {ok, Socket::avm_inet:socket()} | {error, Reason::term()}.
 connect(Address, Port, Params0) ->
     Socket = open_port({spawn, "socket"}, []),
@@ -170,7 +170,7 @@ connect(DriverPid, Address, Port, Params) ->
         {connect, true},
         {controlling_process, self()},
         {address, Address},
-        {port, Port} 
+        {port, Port}
         | Params
     ],
     case call(DriverPid, {init, InitParams}) of
@@ -213,7 +213,7 @@ merge(Config, [H | T], Accum) ->
 %% @private
 normalize_address(loopback) -> "127.0.0.1";
 normalize_address(Address) when is_list(Address) -> Address;
-normalize_address({A,B,C,D}) when is_integer(A) and is_integer(B) and is_integer(C) and is_integer(D) -> 
+normalize_address({A,B,C,D}) when is_integer(A) and is_integer(B) and is_integer(C) and is_integer(D) ->
               integer_to_list(A)
     ++ "." ++ integer_to_list(B)
     ++ "." ++ integer_to_list(C)

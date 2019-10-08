@@ -154,7 +154,7 @@ static term do_connect(SocketDriverData *socket_data, Context *ctx, term address
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
-    
+
     int ok;
     char *addr_str = interop_term_to_string(address, &ok);
     if (!ok) {
@@ -319,7 +319,7 @@ term socket_driver_get_port(Context *ctx)
 term socket_driver_do_send(Context *ctx, term buffer)
 {
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-    
+
     const char *buf = NULL;
     size_t len = 0;
     if (term_is_binary(buffer)) {
@@ -335,7 +335,7 @@ term socket_driver_do_send(Context *ctx, term buffer)
     } else {
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
-    
+
     int sent_data = send(socket_data->sockfd, buf, len, 0);
     if (sent_data == -1) {
         return port_create_sys_error_tuple(ctx, SEND_ATOM, errno);

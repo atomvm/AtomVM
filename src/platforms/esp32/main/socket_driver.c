@@ -226,7 +226,7 @@ static term do_connect(SocketDriverData *socket_data, Context *ctx, term address
     }
     TRACE("socket_driver: resolving %s ...\n", addr_str);
 
-    struct ip_addr remote_ip; 
+    struct ip_addr remote_ip;
     err_t status = netconn_gethostbyname(addr_str, &remote_ip);
 
     free(addr_str);
@@ -237,7 +237,7 @@ static term do_connect(SocketDriverData *socket_data, Context *ctx, term address
     }
 
     int port_val = term_to_int(port);
-    
+
     TRACE("socket_driver: connecting to port %i ...\n", port_val);
     status = netconn_connect(socket_data->conn, &remote_ip, port_val);
 
@@ -377,7 +377,7 @@ term socket_driver_get_port(Context *ctx)
 term socket_driver_do_send(Context *ctx, term buffer)
 {
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-    
+
     const char *buf = NULL;
     size_t len = 0;
     if (term_is_binary(buffer)) {
@@ -393,7 +393,7 @@ term socket_driver_do_send(Context *ctx, term buffer)
     } else {
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
-    
+
     err_t status = netconn_write(socket_data->conn, buf, len, NETCONN_NOCOPY);
     if (status != ERR_OK) {
         return port_create_sys_error_tuple(ctx, SEND_ATOM, status);
