@@ -32,5 +32,8 @@ extern void *event_descriptors[EVENT_DESCRIPTORS_COUNT];
 int open_event_descriptor(void *ptr);
 void close_event_descriptor(int index);
 int find_event_descriptor(void *ptr);
+void *get_event_ptr(int i);
+// for debugging only
+void print_event_descriptors();
 
 #endif

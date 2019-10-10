@@ -6,40 +6,30 @@
 
 start() ->
     console:puts("Connecting...\n"),
-    Active = true,
-    case ?GEN_TCP:connect("www.example.com", 80, [{active, Active}, {buffer, 1024}]) of
+    Address = "localhost",
+    Port = 44404,
+    case ?GEN_TCP:connect(Address, Port, []) of
         {ok, Socket} ->
-            erlang:display({connected, Socket}),
-            case ?GEN_TCP:send(Socket, "GET / HTTP/1.0\r\n\r\n") of
-                ok ->
-                    case Active of
-                        true -> active_receive_data();
-                        _ -> passive_receive_data(Socket)
-                    end;
-                Error ->
-                    erlang:display(Error)
-            end;
+            console:puts("Connected.\n"),
+            loop(Socket);
         Error ->
             erlang:display(Error)
     end.
 
-active_receive_data() ->
-    receive
-        {tcp_closed, _Socket} ->
-            erlang:display(closed),
-            ok;
-        {tcp, _Socket, Packet} ->
-            erlang:display(Packet),
-            active_receive_data()
-    end.
-
-passive_receive_data(Socket) ->
-    case ?GEN_TCP:recv(Socket, 128) of
-        {error, closed} ->
-            ok;
-        {ok, Packet} ->
-            erlang:display(Packet),
-            passive_receive_data(Socket);
+loop(Socket) ->
+    console:puts("Sending message to server...\n"),
+    case ?GEN_TCP:send(Socket, <<":アトムＶＭ">>) of
+        ok ->
+            receive
+                {tcp_closed, _Socket} ->
+                    console:puts("Closed.\n"),
+                    ok;
+                {tcp, _Socket, Packet} ->
+                    console:puts("Received packet.\n"),
+                    erlang:display(Packet),
+                    ?TIMER:sleep(1000),
+                    loop(Socket)
+            end;
         Error ->
             erlang:display(Error)
     end.

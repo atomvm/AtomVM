@@ -49,6 +49,13 @@
 #define CONNECT_ATOM_INDEX (PLATFORM_ATOMS_BASE_INDEX + 21)
 #define TCP_CLOSED_ATOM_INDEX (PLATFORM_ATOMS_BASE_INDEX + 22)
 
+#define LISTEN_ATOM_INDEX (PLATFORM_ATOMS_BASE_INDEX + 23)
+#define BACKLOG_ATOM_INDEX (PLATFORM_ATOMS_BASE_INDEX + 24)
+#define ACCEPT_ATOM_INDEX (PLATFORM_ATOMS_BASE_INDEX + 25)
+#define FD_ATOM_INDEX (PLATFORM_ATOMS_BASE_INDEX + 26)
+
+
+
 #define PROTO_ATOM term_from_atom_index(PROTO_ATOM_INDEX)
 #define UDP_ATOM term_from_atom_index(UDP_ATOM_INDEX)
 #define TCP_ATOM term_from_atom_index(TCP_ATOM_INDEX)
@@ -75,5 +82,10 @@
 #define NO_SUCH_HOST_ATOM term_from_atom_index(NO_SUCH_HOST_ATOM_INDEX)
 #define CONNECT_ATOM term_from_atom_index(CONNECT_ATOM_INDEX)
 #define TCP_CLOSED_ATOM term_from_atom_index(TCP_CLOSED_ATOM_INDEX)
+
+#define LISTEN_ATOM term_from_atom_index(LISTEN_ATOM_INDEX)
+#define BACKLOG_ATOM term_from_atom_index(BACKLOG_ATOM_INDEX)
+#define ACCEPT_ATOM term_from_atom_index(ACCEPT_ATOM_INDEX)
+#define FD_ATOM term_from_atom_index(FD_ATOM_INDEX)
 
 #endif

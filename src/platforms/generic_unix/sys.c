@@ -199,6 +199,7 @@ void sys_consume_pending_events(GlobalContext *glb)
         if (listener_fd >= 0) {
             fds_count++;
         }
+        listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
     } while (listeners != NULL && listener != last_listener);
 
     if (fds_count == 0) {
@@ -222,6 +223,7 @@ void sys_consume_pending_events(GlobalContext *glb)
 
             fd_index++;
         }
+        listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
     } while (listeners != NULL && listener != last_listener);
 
     listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);

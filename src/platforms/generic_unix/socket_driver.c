@@ -229,6 +229,71 @@ static term init_client_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
     return ret;
 }
 
+static term do_listen(SocketDriverData *socket_data, Context *ctx, term params)
+{
+    term backlog = interop_proplist_get_value(params, BACKLOG_ATOM);
+    if (!term_is_integer(backlog)) {
+        return port_create_error_tuple(ctx, BADARG_ATOM);
+    }
+    int status = listen(socket_data->sockfd, term_from_int(backlog));
+    if (status == -1) {
+        return port_create_sys_error_tuple(ctx, LISTEN_ATOM, errno);
+    } else {
+        return OK_ATOM;
+    }
+}
+
+static term init_server_tcp_socket(Context *ctx, SocketDriverData *socket_data, term params)
+{
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd == -1) {
+        return port_create_sys_error_tuple(ctx, SOCKET_ATOM, errno);
+    }
+    socket_data->sockfd = sockfd;
+    
+    if (fcntl(socket_data->sockfd, F_SETFL, O_NONBLOCK) == -1) {
+        close(sockfd);
+        return port_create_sys_error_tuple(ctx, FCNTL_ATOM, errno);
+    }
+    term address = interop_proplist_get_value(params, ADDRESS_ATOM);
+    term port = interop_proplist_get_value(params, PORT_ATOM);
+    term ret = do_bind(ctx, address, port);
+    if (ret != OK_ATOM) {
+        close(sockfd);
+    } else {
+        ret = do_listen(socket_data, ctx, params);
+        if (ret != OK_ATOM) {
+            close(sockfd);
+        } else {
+            TRACE("socket_driver: listening on port %u\n", (unsigned) term_to_int(port));
+        }
+    }
+    return ret;
+}
+
+static term init_accepting_socket(Context *ctx, SocketDriverData *socket_data, term fd, term active)
+{
+    socket_data->sockfd = term_to_int(fd);
+    
+    if (active == TRUE_ATOM) {
+        EventListener *listener = malloc(sizeof(EventListener));
+        if (IS_NULL_PTR(listener)) {
+            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            abort();
+        }
+        listener->fd = socket_data->sockfd;
+        listener->expires = 0;
+        listener->expiral_timestamp.tv_sec = INT_MAX;
+        listener->expiral_timestamp.tv_nsec = INT_MAX;
+        listener->one_shot = 0;
+        listener->data = ctx;
+        listener->handler = active_recv_callback;
+        linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+        socket_data->active_listener = listener;
+    }
+    return OK_ATOM;
+}
+
 term socket_driver_do_init(Context *ctx, term params)
 {
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
@@ -280,8 +345,22 @@ term socket_driver_do_init(Context *ctx, term params)
         if (connect == TRUE_ATOM) {
             return init_client_tcp_socket(ctx, socket_data, params, active);
         } else {
-            // TODO add TCP server support
-            return port_create_error_tuple(ctx, BADARG_ATOM);
+            term listen = interop_proplist_get_value_default(params, LISTEN_ATOM, FALSE_ATOM);
+            if (listen == TRUE_ATOM) {
+                return init_server_tcp_socket(ctx, socket_data, params);
+            } else {
+                term accept = interop_proplist_get_value_default(params, ACCEPT_ATOM, FALSE_ATOM);
+                if (accept == TRUE_ATOM) {
+                    term fd = interop_proplist_get_value(params, FD_ATOM);
+                    if (!term_is_integer(fd)) {
+                        return port_create_error_tuple(ctx, BADARG_ATOM);
+                    } else {
+                        return init_accepting_socket(ctx, socket_data, fd, active);
+                    }
+                } else {
+                    return port_create_error_tuple(ctx, BADARG_ATOM);
+                }
+            }
         }
     } else {
         return port_create_error_tuple(ctx, BADARG_ATOM);
@@ -607,4 +686,75 @@ void socket_driver_do_recvfrom(Context *ctx, term pid, term ref, term length, te
 void socket_driver_do_recv(Context *ctx, term pid, term ref, term length, term timeout)
 {
     do_recv(ctx, pid, ref, length, timeout, passive_recv_callback);
+}
+
+//
+// accept
+//
+
+static void accept_callback(EventListener *listener)
+{
+    RecvFromData *recvfrom_data = (RecvFromData *) listener->data;
+    Context *ctx = recvfrom_data->ctx;
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+    //
+    // accept the connection
+    //
+    struct sockaddr_in clientaddr;
+    socklen_t clientlen = sizeof(clientaddr);
+    int fd = accept(socket_data->sockfd, (struct sockaddr *) &clientaddr, &clientlen);
+    if (fd == -1) {
+        // {Ref, {error, {SysCall, Errno}}}
+        port_ensure_available(ctx, 12);
+        term pid = recvfrom_data->pid;
+        term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
+        port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, ACCEPT_ATOM, errno));
+    } else {
+        // {Ref, {ok, Fd::int()}}
+        port_ensure_available(ctx, 10);
+        term pid = recvfrom_data->pid;
+        term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
+        term reply = port_create_ok_tuple(ctx, term_from_int(fd));
+        port_send_reply(ctx, pid, ref, reply);
+    }
+    //
+    // remove the EventListener from the global list and clean up
+    //
+    linkedlist_remove(&ctx->global->listeners, &listener->listeners_list_head);
+    free(listener);
+    free(recvfrom_data);
+}
+
+void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
+{
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+    //
+    // Create and initialize the request-specific data
+    //
+    RecvFromData *data = (RecvFromData *) malloc(sizeof(RecvFromData));
+    if (IS_NULL_PTR(data)) {
+        fprintf(stderr, "Unable to allocate space for RecvFromData: %s:%i\n", __FILE__, __LINE__);
+        abort();
+    }
+    data->ctx = ctx;
+    data->pid = pid;
+    data->length = 0;
+    data->ref_ticks = term_to_ref_ticks(ref);
+    //
+    // Create an event listener with this request-specific data, and append to the global list
+    //
+    EventListener *listener = malloc(sizeof(EventListener));
+    if (IS_NULL_PTR(listener)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        abort();
+    }
+    listener->fd = socket_data->sockfd;
+    listener->expires = 0;
+    listener->expiral_timestamp.tv_sec = 60*60*24; // TODO handle timeout
+    listener->expiral_timestamp.tv_nsec = 0;
+    listener->one_shot = 1;
+    listener->handler = accept_callback;
+    listener->data = data;
+    linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+
 }

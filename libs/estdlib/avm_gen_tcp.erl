@@ -39,7 +39,7 @@
 %%-----------------------------------------------------------------------------
 -module(avm_gen_tcp).
 
--export([connect/3, send/2, recv/2, recv/3, close/1, listen/2]).
+-export([connect/3, send/2, recv/2, recv/3, close/1, listen/2, accept/1, accept/2]).
 
 -include("estdlib.hrl").
 
@@ -141,12 +141,63 @@ recv(Socket, Length, Timeout) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec listen(Port::avm_inet:port_number(), Options::avm_inet:opts()) -> {ok, ListeningSocket::avm_inet:socket()} | {error, Reason::term()}.
-listen(_Port, _Options0) ->
-    % Socket = open_port({spawn, "socket"}, []),
-    % Params = merge(Params0, ?DEFAULT_PARAMS),
-    % listen(Socket, Port, Params).
-    {error, unimplemented}.
+listen(Port, Options0) ->
+    Socket = open_port({spawn, "socket"}, []),
+    Params = merge(Options0, ?DEFAULT_PARAMS),
+    InitParams = [
+        {proto, tcp},
+        {listen, true},
+        {controlling_process, self()},
+        {port, Port},
+        {backlog, 5}
+        | Params
+    ],
+    case call(Socket, {init, InitParams}) of
+        ok -> {ok, Socket};
+        ErrorReason ->
+            %% TODO close port
+            ErrorReason
+    end.
 
+%%-----------------------------------------------------------------------------
+%% @param   ListenSocket the listening socket.
+%% @returns a connection-based (tcp) socket that can be used for reading and writing
+%% @doc     Accept a connection on a listening socket.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec accept(avm_inet:socket()) -> {ok, Socket::avm_inet:socket()} | {error, Reason::term()}.
+accept(ListenSocket) ->
+    accept(ListenSocket, infinity).
+
+%%-----------------------------------------------------------------------------
+%% @param   ListenSocket the listening socket.
+%% @param   Timeout amount of time in milliseconds to wait for a connection
+%% @returns a connection-based (tcp) socket that can be used for reading and writing
+%% @doc     Accept a connection on a listening socket.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec accept(avm_inet:socket(), Timeout::non_neg_integer()) -> {ok, Socket::avm_inet:socket()} | {error, Reason::term()}.
+accept(ListenSocket, Timeout) ->
+    case call(ListenSocket, {accept, Timeout}) of
+        {ok, FD} ->
+            Socket = open_port({spawn, "socket"}, []),
+            InitParams = [
+                {proto, tcp},
+                {accept, true},
+                {controlling_process, self()},
+                {fd, FD}
+                | ?DEFAULT_PARAMS
+            ],
+            case call(Socket, {init, InitParams}) of
+                ok -> {ok, Socket};
+                ErrorReason ->
+                    %% TODO close port
+                    ErrorReason
+            end;
+        ErrorReason ->
+            %% TODO close port
+            ErrorReason
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket to close

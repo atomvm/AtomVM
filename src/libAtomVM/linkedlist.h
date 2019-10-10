@@ -121,4 +121,25 @@ static inline void linkedlist_prepend(struct ListHead **list, struct ListHead *n
     *list = new_item;
 }
 
+/**
+ * @brief Returns the length of a linked list
+ *
+ * @details Returns the length of a linked list
+ * @param list a pointer to the linked list
+ */
+static inline size_t linkedlist_length(struct ListHead *list)
+{
+    if (list == NULL) {
+        return 0;
+    } else {
+        size_t len = 0;
+        struct ListHead *curr = list;
+        do {
+            len++;
+            curr = curr->next;
+        } while (curr != NULL && curr != list);
+        return len;
+    }
+}
+
 #endif

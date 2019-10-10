@@ -42,6 +42,7 @@ const char *const recvfrom_a = "\x8" "recvfrom";
 const char *const recv_a = "\x4" "recv";
 const char *const close_a = "\x5" "close";
 const char *const get_port_a = "\x8" "get_port";
+const char *const accept_a = "\x6" "accept";
 
 
 uint32_t socket_tuple_to_addr(term addr_tuple)
@@ -115,6 +116,9 @@ static void socket_consume_mailbox(Context *ctx)
         term length = term_get_tuple_element(cmd, 1);
         term timeout = term_get_tuple_element(cmd, 2);
         socket_driver_do_recv(ctx, pid, ref, length, timeout);
+    } else if (cmd_name == context_make_atom(ctx, accept_a)) {
+        term timeout = term_get_tuple_element(cmd, 1);
+        socket_driver_do_accept(ctx, pid, ref, timeout);
     } else if (cmd_name == context_make_atom(ctx, close_a)) {
         socket_driver_do_close(ctx);
         port_send_reply(ctx, pid, ref, OK_ATOM);

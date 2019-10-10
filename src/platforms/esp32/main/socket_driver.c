@@ -92,14 +92,16 @@ void socket_driver_delete_data(void *data)
 
 void socket_callback(struct netconn *netconn, enum netconn_evt evt, u16_t len)
 {
-    TRACE("socket: netconn callback, evt: %i, len: %i\n", evt, len);
+    TRACE("socket: netconn callback, netconn: 0x%lx, evt: %i, len: %i\n", (unsigned long) netconn, evt, len);
 
     if (evt != NETCONN_EVT_RCVPLUS) {
         return;
     }
 
+    // print_event_descriptors();
     int event_descriptor = find_event_descriptor(netconn);
     if (UNLIKELY(event_descriptor < 0)) {
+        TRACE("socket: event descriptor not found in socket_callback for netconn 0x%lx\n", (unsigned long) netconn);
         abort();
     }
 
@@ -161,7 +163,7 @@ static term do_bind(Context *ctx, term params)
 
     //TODO: replace IP_ADDR_ANY
     if (UNLIKELY(netconn_bind(socket_data->conn, IP_ADDR_ANY, port) != ERR_OK)) {
-        TRACE("socket: Failed to bin");
+        TRACE("socket: Failed to bind\n");
         return port_create_sys_error_tuple(ctx, BIND_ATOM, errno);
     }
 
@@ -171,8 +173,8 @@ static term do_bind(Context *ctx, term params)
         TRACE("socket: Failed to getaddr");
         return port_create_sys_error_tuple(ctx, GETSOCKNAME_ATOM, errno);
     } else {
-        TRACE("socket: binded");
-        socket_data->port = term_from_int32(port);
+        socket_data->port = port;
+        TRACE("socket: bound to port %i\n", port);
         return OK_ATOM;
     }
 }
@@ -186,7 +188,7 @@ static term init_udp_socket(Context *ctx, SocketDriverData *socket_data, term pa
     socket_data->conn = conn;
 
     int event_descriptor = open_event_descriptor(conn);
-
+    TRACE("socket: opened event descriptor %i in init_udp_socket for netconn 0x%lx\n", event_descriptor, (unsigned long) socket_data->conn);
     term ret = do_bind(ctx, params);
 
     socket_data->active = active;
@@ -252,14 +254,15 @@ static term do_connect(SocketDriverData *socket_data, Context *ctx, term address
 
 static term init_client_tcp_socket(Context *ctx, SocketDriverData *socket_data, term params, term active)
 {
-    TRACE("socket: creating tcp netconn\n");
+    TRACE("socket: creating client tcp netconn\n");
 
     struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_TCP, 0, socket_callback);
     // TODO check for invalid return
     socket_data->conn = conn;
 
     int event_descriptor = open_event_descriptor(conn);
-
+    TRACE("socket: opened event descriptor %i in init_client_tcp_socket for netconn 0x%lx\n", event_descriptor, (unsigned long) socket_data->conn);
+    
     term address = interop_proplist_get_value(params, ADDRESS_ATOM);
     term port = interop_proplist_get_value(params, PORT_ATOM);
     term ret = do_connect(socket_data, ctx, address, port);
@@ -285,6 +288,76 @@ static term init_client_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
         }
     }
     return ret;
+}
+
+static term do_listen(SocketDriverData *socket_data, Context *ctx, term params)
+{
+    term backlog = interop_proplist_get_value(params, BACKLOG_ATOM);
+    if (!term_is_integer(backlog)) {
+        return port_create_error_tuple(ctx, BADARG_ATOM);
+    }
+    err_t status = netconn_listen_with_backlog(socket_data->conn, term_to_int(backlog));
+    if (status == -1) {
+        return port_create_sys_error_tuple(ctx, LISTEN_ATOM, errno);
+    } else {
+        return OK_ATOM;
+    }
+}
+
+static term init_server_tcp_socket(Context *ctx, SocketDriverData *socket_data, term params)
+{
+    TRACE("socket: creating server tcp netconn\n");
+
+    struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_TCP, 0, socket_callback);
+    // TODO check for invalid return
+    socket_data->conn = conn;
+
+    int event_descriptor = open_event_descriptor(conn);
+    TRACE("socket: opened event descriptor %i in init_server_tcp_socket for netconn 0x%lx\n", event_descriptor, (unsigned long) socket_data->conn);
+
+    term ret = do_bind(ctx, params);
+    if (ret != OK_ATOM) {
+        // TODO close
+        // close(conn);
+    } else {
+        ret = do_listen(socket_data, ctx, params);
+        if (ret != OK_ATOM) {
+        // TODO close
+        // close(conn);
+        } else {
+            // netconn_set_nonblocking(conn, 1);
+            TRACE("socket: listening on port %u\n", (unsigned) term_to_int(interop_proplist_get_value(params, PORT_ATOM)));
+        }
+    }
+    return ret;
+}
+
+static term init_accepting_socket(Context *ctx, SocketDriverData *socket_data, term fd, term active)
+{
+    TRACE("socket: init_accepting_socket\n");
+
+    int event_descriptor = term_to_int(fd);
+    socket_data->conn = (struct netconn *) get_event_ptr(event_descriptor);
+    //
+    // 
+    //
+    if (active == TRUE_ATOM) {
+        EventListener *listener = malloc(sizeof(EventListener));
+        if (IS_NULL_PTR(listener)) {
+            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            abort();
+        }
+        listener->fd = event_descriptor;
+        listener->expires = 0;
+        listener->expiral_timestamp.tv_sec = INT_MAX;
+        listener->expiral_timestamp.tv_nsec = INT_MAX;
+        listener->one_shot = 0;
+        listener->data = ctx;
+        listener->handler = active_recv_callback;
+        linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+        socket_data->active_listener = listener;
+    }
+    return OK_ATOM;
 }
 
 term socket_driver_do_init(Context *ctx, term params)
@@ -340,8 +413,22 @@ term socket_driver_do_init(Context *ctx, term params)
         if (connect == TRUE_ATOM) {
             return init_client_tcp_socket(ctx, socket_data, params, active);
         } else {
-            // TODO add TCP server support
-            return port_create_error_tuple(ctx, BADARG_ATOM);
+            term listen = interop_proplist_get_value_default(params, LISTEN_ATOM, FALSE_ATOM);
+            if (listen == TRUE_ATOM) {
+                return init_server_tcp_socket(ctx, socket_data, params);
+            } else {
+                term accept = interop_proplist_get_value_default(params, ACCEPT_ATOM, FALSE_ATOM);
+                if (accept == TRUE_ATOM) {
+                    term fd = interop_proplist_get_value(params, FD_ATOM);
+                    if (!term_is_integer(fd)) {
+                        return port_create_error_tuple(ctx, BADARG_ATOM);
+                    } else {
+                        return init_accepting_socket(ctx, socket_data, fd, active);
+                    }
+                } else {
+                    return port_create_error_tuple(ctx, BADARG_ATOM);
+                }
+            }
         }
     } else {
         return port_create_error_tuple(ctx, BADARG_ATOM);
@@ -635,6 +722,7 @@ static void do_recv(Context *ctx, term pid, term ref, term length, term timeout,
     //
     int event_descriptor = find_event_descriptor(socket_data->conn);
     if (UNLIKELY(event_descriptor < 0)) {
+        TRACE("socket: event descriptor not found in do_recv for netconn 0x%lx\n", (unsigned long)socket_data->conn);
         abort();
     }
     //
@@ -663,4 +751,104 @@ void socket_driver_do_recvfrom(Context *ctx, term pid, term ref, term length, te
 void socket_driver_do_recv(Context *ctx, term pid, term ref, term length, term timeout)
 {
     do_recv(ctx, pid, ref, length, timeout, passive_recv_callback);
+}
+
+//
+// accept
+//
+
+static void accept_callback(EventListener *listener)
+{
+    TRACE("socket: accepting callback\n");
+
+    RecvFromData *recvfrom_data = (RecvFromData *) listener->data;
+    Context *ctx = recvfrom_data->ctx;
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+    //
+    // Look up the event descriptor for our socket
+    //
+    int event_descriptor = find_event_descriptor(socket_data->conn);
+    if (UNLIKELY(event_descriptor < 0)) {
+        TRACE("socket: event descriptor not found in accept_callback for netconn 0x%lx\n", (unsigned long)socket_data->conn);
+        abort();
+    } else {
+        TRACE("socket: Found event descriptor in accept_callback for netconn 0x%lx\n", (unsigned long)socket_data->conn);
+    }
+    //
+    // accept the connection
+    //
+    struct netconn *conn;
+    err_t status = netconn_accept(socket_data->conn, &conn);
+    TRACE("socket: netconn_accept: status: %i; conn: 0x%lx\n", status, (unsigned long) conn);
+    if (status != ERR_OK) {
+        // {Ref, {error, {SysCall, Errno}}}
+        port_ensure_available(ctx, 12);
+        term pid = recvfrom_data->pid;
+        term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
+        port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, ACCEPT_ATOM, errno));
+    } else {
+        TRACE("socket: accepted new connection\n");
+        int new_event_descriptor = open_event_descriptor(conn);
+        TRACE("socket: opened event descriptor %i in accept_callback for netconn 0x%lx\n", new_event_descriptor, (unsigned long) conn);
+        // {Ref, {ok, Fd::int()}}
+        port_ensure_available(ctx, 10);
+        term pid = recvfrom_data->pid;
+        term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
+        term reply = port_create_ok_tuple(ctx, term_from_int(new_event_descriptor));
+        TRACE("socket: sending reply\n");
+        port_send_reply(ctx, pid, ref, reply);
+    }
+    //
+    // remove the EventListener from the global list and clean up
+    //
+    linkedlist_remove(&ctx->global->listeners, &listener->listeners_list_head);
+    free(listener);
+    free(recvfrom_data);
+    TRACE("socket: accept_callback done.\n");
+}
+
+void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
+{
+    TRACE("socket: accepting tcp netconn\n");
+
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+    //
+    // Create and initialize the request-specific data
+    //
+    RecvFromData *data = (RecvFromData *) malloc(sizeof(RecvFromData));
+    if (IS_NULL_PTR(data)) {
+        fprintf(stderr, "Unable to allocate space for RecvFromData: %s:%i\n", __FILE__, __LINE__);
+        abort();
+    }
+    data->ctx = ctx;
+    data->pid = pid;
+    data->length = 0;
+    data->ref_ticks = term_to_ref_ticks(ref);
+    //
+    // Look up the event descriptor for our socket
+    //
+    int event_descriptor = find_event_descriptor(socket_data->conn);
+    if (UNLIKELY(event_descriptor < 0)) {
+        TRACE("socket: event descriptor not found in socket_driver_do_accept for netconn 0x%lx\n", (unsigned long)socket_data->conn);
+        abort();
+    } else {
+        TRACE("socket: Found event descriptor in socket_driver_do_accept for netconn 0x%lx\n", (unsigned long)socket_data->conn);
+    }
+    //
+    // Create an event listener with this request-specific data, and append to the global list
+    //
+    EventListener *listener = malloc(sizeof(EventListener));
+    if (IS_NULL_PTR(listener)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        abort();
+    }
+    listener->fd = event_descriptor;
+    listener->expires = 0;
+    listener->expiral_timestamp.tv_sec = 60*60*24; // TODO handle timeout
+    listener->expiral_timestamp.tv_nsec = 0;
+    listener->one_shot = 1;
+    listener->handler = accept_callback;
+    listener->data = data;
+    linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+    TRACE("socket: accepting tcp netconn COMPLETE\n");
 }

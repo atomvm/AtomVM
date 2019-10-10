@@ -71,6 +71,94 @@ If you are running the `udp_server` program, you should see messages like the fo
 
 > Note. AtomVM does not currently treat characters outside of the printable ASCII character set as printable characters.
 
+### `tcp_server`
+
+This example program listens on TCP port 44404 and accept connections on that port.  Once accepted, it will wait for packets to be sent from the client.  Once received, the server will print the packet received to the console, and then echo the packet back to the calling client.
+
+#### Command line
+
+The `tcp_server.avm` file will get created as part of a build.  This file may be supplied as an argument to the `AtomVM` command:
+
+    shell$ ./src/AtomVM ./examples/erlang/tcp_server.avm
+    Listening on port 44404.
+    Waiting to accept connection...
+
+You can send TCP packets to the AtomVM instance using `netcat` (or `nc` on some platforms), in a separate terminal window:
+
+    shell$ nc localhost 44404
+
+This will open a TCP connection to the `tcp_server`, and you should see the following on the console:
+
+    Accepted connection.
+    Waiting to receive data...
+    Waiting to accept connection...
+
+The netcat command will wait for you to enter a line of text, e.g.,
+
+    testing 1 2 3
+
+In the AtomVM terminal window, you see:
+
+    <<116,101,115,116,105,110,103,32,49,32,50,32,51,10>>
+    Sending packet back to client...
+    Waiting to receive data...
+
+> Note.  Netcat appends a newline character at the end of the input, so the packet binary does not display as printable text.
+
+You may enter as much data as you like, though by default, the packet size will be limited to 128 bytes.
+
+If you stop the `netcat` command (via ^C), you should
+
+    Closed connection.
+
+printed to the AtomVM console.
+
+Note that you can have multiple, concurrent TCP/IP connections to your AtomVM server.
+
+### `tcp_client`
+
+This example program send the packet of data (":アトムＶＭ") over TCP to port 44404 on the loopback address every 1 second, in a loop.  The program will wait for a response from the server, before proceeding. 
+
+This command may be used in tandem with the `tcp_server` program to illustrate sending messages between AtomVM processes over TCP.
+
+> Note.  You will need to change the `Address` variable in the `tcp_client.erl` program in order to test against an AtomVM server running on a different host or device.
+
+#### Command line
+
+The `tcp_client.avm` file will get created as part of a build.  This file may be supplied as an argument to the `AtomVM` command:
+
+    shell$ ./src/AtomVM ./examples/erlang/tcp_client.avm
+    Connecting...
+    Connected.
+    Sending message to server...
+    Received packet.
+    <<58,162,200,224,54,45>>
+    Sending message to server...
+    Received packet.
+    <<58,162,200,224,54,45>>
+    Sending message to server...
+    Received packet.
+    <<58,162,200,224,54,45>>
+    ...
+
+If you are running the `tcp
+_server` program, you should see messages like the following printed to the console:
+
+    Accepted connection.
+    Waiting to receive data...
+    Waiting to accept connection...
+    <<58,162,200,224,54,45>>
+    Sending packet back to client...
+    Waiting to receive data...
+    <<58,162,200,224,54,45>>
+    Sending packet back to client...
+    Waiting to receive data...
+    ...
+
+> Note. AtomVM does not currently treat characters outside of the printable ASCII character set as printable characters.
+
+You may run multiple concurrent instances of the `tcp_client` against a single `tcp_server` instance.
+
 ## ESP32 Examples
 
 AtomVM includes examples that are specifically designed for the ESP32 and other microcontrollers.
@@ -284,3 +372,97 @@ You can send UDP packets to the AtomVM instance using `netcat` (or `nc` on some 
     shell$ nc -u 192.168.1.236 44444
 
 Every time you enter a line of text, the blue LED on the ESP32 SoC (pin 2) should toggle on and off.
+
+### `tcp_server_blink`
+
+The `tcp_server_blink` example will connect to your local WiFi network and obtain and IP address.  It will then start a TCP server on port 44404.  When a TCP message is received, the blue LED on the ESP32 SoC (pin 2) will toggle on and off.
+
+> Note.  AtomVM currently only supports station mode (STA).
+
+> Note.  AtomVM currently only supports IPv4 addresses.
+
+> Note.  You will need to edit the `examples/erlang/esp32/tcp_server_blink.erl` source file and set the `ssid` and `psk` parameters to match your local WiFi network, and then rebuild the example.
+
+Flash the example program to your device as follows:
+
+    shell$ flash.sh examples/erlang/esp32/tcp_server_blink.avm
+    esptool.py v2.6
+    Serial port /dev/tty.SLAB_USBtoUART
+    Connecting........_____....._
+    Chip is ESP32D0WDQ6 (revision 1)
+    Features: WiFi, BT, Dual Core, 240MHz, VRef calibration in efuse, Coding Scheme None
+    MAC: 3c:71:bf:84:d9:08
+    Uploading stub...
+    Running stub...
+    Stub running...
+    Configuring flash size...
+    Auto-detected Flash size: 4MB
+    Wrote 147456 bytes at 0x00110000 in 12.9 seconds (91.3 kbit/s)...
+    Hash of data verified.
+
+    Leaving...
+    Hard resetting via RTS pin...
+
+You should see the following output when monitoring the ESP32 output (truncated for brevity):
+
+    shell$ make monitor
+    MONITOR
+    --- WARNING: Serial ports accessed as /dev/tty.* will hang gdb if launched.
+    --- Using /dev/cu.SLAB_USBtoUART instead...
+    --- idf_monitor on /dev/cu.SLAB_USBtoUART 115200 ---
+    --- Quit: Ctrl+] | Menu: Ctrl+T | Help: Ctrl+T followed by Ctrl+H ---
+    ets Jun  8 2016 00:22:57
+    ...
+    Found AVM partition: size: 1048576, address: 0x110000
+    Booting file mapped at: 0x3f420000, size: 1048576
+    Starting: tcp_server_esp32.beam...
+    ---
+    start
+    I (296) wifi: wifi driver task: 3ffc650c, prio:23, stack:3584, core=0
+    I (296) wifi: wifi firmware version: 9415913
+    I (296) wifi: config NVS flash: enabled
+    I (296) wifi: config nano formating: disabled
+    I (296) system_api: Base MAC address is not set, read default base MAC address from BLK0 of EFUSE
+    I (306) system_api: Base MAC address is not set, read default base MAC address from BLK0 of EFUSE
+    I (346) wifi: Init dynamic tx buffer num: 32
+    I (346) wifi: Init data frame dynamic rx buffer num: 32
+    I (346) wifi: Init management frame dynamic rx buffer num: 32
+    I (346) wifi: Init static rx buffer size: 1600
+    I (356) wifi: Init static rx buffer num: 10
+    I (356) wifi: Init dynamic rx buffer num: 32
+    I (366) NETWORK: starting wifi: SSID: [myssid], password: [XXXXXXXX].
+    I (446) phy: phy_version: 4008, c9ae59f, Jan 25 2019, 16:54:06, 0, 0
+    I (446) wifi: mode : sta (3c:71:bf:84:d9:08)
+    I (446) NETWORK: SYSTEM_EVENT_STA_START received.
+    I (1176) wifi: n:6 0, o:1 0, ap:255 255, sta:6 0, prof:1
+    I (2156) wifi: state: init -> auth (b0)
+    I (2166) wifi: state: auth -> assoc (0)
+    I (2166) wifi: state: assoc -> run (10)
+    I (2196) wifi: connected with myssid, channel 6
+    I (2196) wifi: pm start, type: 1
+    I (2196) NETWORK: SYSTEM_EVENT_STA_CONNECTED received.
+    I (2746) event: sta ip: 192.168.1.236, mask: 255.255.255.0, gw: 192.168.1.1
+    I (2746) NETWORK: SYSTEM_EVENT_STA_GOT_IP: 192.168.1.236
+    connected
+    {{192,168,1,236},{255,255,255,0},{192,168,1,1}}
+    Listening on port 44404.
+    Waiting to accept connection...
+
+You can send TCP packets to the AtomVM instance using `netcat` (or `nc` on some platforms), in a separate terminal window, e.g.,
+
+    shell$ nc 192.168.1.236 44404
+
+On the ESP32 console, you should see:
+
+    Accepted connection.
+    Waiting to receive data...
+
+Every time you enter a line of text, the blue LED on the ESP32 SoC (pin 2) should toggle on and off, and the data you entered should get echoed back to the `netcat` console.
+
+On the ESP32 console, you should see:
+
+    <<100,102,115,100,102,10>>
+    Sending packet back to client...
+    Waiting to receive data...
+
+every time a packet is sent to the server.
