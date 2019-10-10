@@ -60,6 +60,8 @@ term bif_erlang_rem_2(Context *ctx, int live, term arg1, term arg2);
 term bif_erlang_neg_1(Context *ctx, int live, term arg1);
 term bif_erlang_abs_1(Context *ctx, int live, term arg1);
 
+term bif_erlang_round_1(Context *ctx, int live, term arg1);
+
 term bif_erlang_bor_2(Context *ctx, int live, term arg1, term arg2);
 term bif_erlang_band_2(Context *ctx, int live, term arg1, term arg2);
 term bif_erlang_bxor_2(Context *ctx, int live, term arg1, term arg2);

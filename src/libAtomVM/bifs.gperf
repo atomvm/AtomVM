@@ -40,6 +40,7 @@ erlang:div/2, bif_erlang_div_2
 erlang:rem/2, bif_erlang_rem_2
 erlang:-/1, bif_erlang_neg_1
 erlang:abs/1, bif_erlang_abs_1
+erlang:round/1, bif_erlang_round_1
 erlang:bor/2, bif_erlang_bor_2
 erlang:band/2, bif_erlang_band_2
 erlang:bxor/2, bif_erlang_bxor_2
