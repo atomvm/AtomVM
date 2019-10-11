@@ -22,6 +22,7 @@
 #include <stdlib.h>
 
 #ifndef AVM_NO_FP
+#include <fenv.h>
 #include <math.h>
 #endif
 
@@ -234,19 +235,53 @@ static term add_overflow_helper(Context *ctx, term arg1, term arg2)
 
 static term add_boxed_helper(Context *ctx, term arg1, term arg2)
 {
+#ifndef AVM_NO_FP
+    int use_float = 0;
+#endif
     int size = 0;
     if (term_is_boxed_integer(arg1)) {
         size = term_boxed_size(arg1);
+
+#ifndef AVM_NO_FP
+    } else if (term_is_float(arg1)) {
+        use_float = 1;
+#endif
+
     } else if (!term_is_integer(arg1)) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
     }
+
     if (term_is_boxed_integer(arg2)) {
         size |= term_boxed_size(arg2);
+
+#ifndef AVM_NO_FP
+    } else if (term_is_float(arg2)) {
+        use_float = 1;
+#endif
+
     } else if (!term_is_integer(arg2)) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
     }
+
+#ifndef AVM_NO_FP
+    if (use_float) {
+        feclearexcept(FE_INVALID | FE_OVERFLOW);
+        avm_float_t farg1 = term_conv_to_float(arg1);
+        avm_float_t farg2 = term_conv_to_float(arg2);
+        avm_float_t fresult = farg1 + farg2;
+        if (UNLIKELY(fetestexcept(FE_INVALID | FE_OVERFLOW))) {
+            feclearexcept(FE_INVALID | FE_OVERFLOW);
+            RAISE_ERROR(BADARITH_ATOM);
+        }
+
+        if (UNLIKELY(memory_ensure_free(ctx, FLOAT_SIZE) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return term_from_float(fresult, ctx);
+    }
+#endif
 
     switch (size) {
         case 0: {
@@ -323,19 +358,49 @@ static term sub_overflow_helper(Context *ctx, term arg1, term arg2)
 
 static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
 {
+#ifndef AVM_NO_FP
+    int use_float = 0;
+#endif
     int size = 0;
     if (term_is_boxed_integer(arg1)) {
         size = term_boxed_size(arg1);
+
+#ifndef AVM_NO_FP
+    } else if (term_is_float(arg1)) {
+        use_float = 1;
+#endif
     } else if (!term_is_integer(arg1)) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
     }
+
     if (term_is_boxed_integer(arg2)) {
         size |= term_boxed_size(arg2);
+#ifndef AVM_NO_FP
+    } else if (term_is_float(arg2)) {
+        use_float = 1;
+#endif
     } else if (!term_is_integer(arg2)) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
     }
+
+#ifndef AVM_NO_FP
+    if (use_float) {
+        feclearexcept(FE_INVALID | FE_OVERFLOW);
+        avm_float_t farg1 = term_conv_to_float(arg1);
+        avm_float_t farg2 = term_conv_to_float(arg2);
+        avm_float_t fresult = farg1 - farg2;
+        if (UNLIKELY(fetestexcept(FE_INVALID | FE_OVERFLOW))) {
+            feclearexcept(FE_INVALID | FE_OVERFLOW);
+            RAISE_ERROR(BADARITH_ATOM);
+        }
+        if (UNLIKELY(memory_ensure_free(ctx, FLOAT_SIZE) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return term_from_float(fresult, ctx);
+    }
+#endif
 
     switch (size) {
         case 0: {
@@ -427,19 +492,48 @@ static term mul_overflow_helper(Context *ctx, term arg1, term arg2)
 
 static term mul_boxed_helper(Context *ctx, term arg1, term arg2)
 {
+#ifndef AVM_NO_FP
+    int use_float = 0;
+#endif
     int size = 0;
     if (term_is_boxed_integer(arg1)) {
         size = term_boxed_size(arg1);
+#ifndef AVM_NO_FP
+    } else if (term_is_float(arg1)) {
+        use_float = 1;
+#endif
     } else if (!term_is_integer(arg1)) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
     }
+
     if (term_is_boxed_integer(arg2)) {
         size |= term_boxed_size(arg2);
+#ifndef AVM_NO_FP
+    } else if (term_is_float(arg2)) {
+        use_float = 1;
+#endif
     } else if (!term_is_integer(arg2)) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
     }
+
+#ifndef AVM_NO_FP
+    if (use_float) {
+        feclearexcept(FE_INVALID | FE_OVERFLOW);
+        avm_float_t farg1 = term_conv_to_float(arg1);
+        avm_float_t farg2 = term_conv_to_float(arg2);
+        avm_float_t fresult = farg1 * farg2;
+        if (UNLIKELY(fetestexcept(FE_INVALID | FE_OVERFLOW))) {
+            feclearexcept(FE_INVALID | FE_OVERFLOW);
+            RAISE_ERROR(BADARITH_ATOM);
+        }
+        if (UNLIKELY(memory_ensure_free(ctx, FLOAT_SIZE) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return term_from_float(fresult, ctx);
+    }
+#endif
 
     switch (size) {
         case 0: {
@@ -597,6 +691,22 @@ term bif_erlang_div_2(Context *ctx, int live, term arg1, term arg2)
 
 static term neg_boxed_helper(Context *ctx, term arg1)
 {
+#ifndef AVM_NO_FP
+    if (term_is_float(arg1)) {
+        feclearexcept(FE_INVALID);
+        avm_float_t farg1 = term_conv_to_float(arg1);
+        avm_float_t fresult = -farg1;
+        if (UNLIKELY(fetestexcept(FE_INVALID))) {
+            feclearexcept(FE_INVALID);
+            RAISE_ERROR(BADARITH_ATOM);
+        }
+        if (UNLIKELY(memory_ensure_free(ctx, FLOAT_SIZE) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return term_from_float(fresult, ctx);
+    }
+#endif
+
     if (term_is_boxed_integer(arg1)) {
         switch (term_boxed_size(arg1)) {
             case 0:
@@ -666,6 +776,28 @@ term bif_erlang_neg_1(Context *ctx, int live, term arg1)
 
 static term abs_boxed_helper(Context *ctx, term arg1)
 {
+#ifndef AVM_NO_FP
+    if (term_is_float(arg1)) {
+        feclearexcept(FE_INVALID);
+        avm_float_t farg1 = term_conv_to_float(arg1);
+        avm_float_t fresult;
+        #if AVM_USE_SINGLE_PRECISION
+            fresult = fabsf(farg1);
+        #else
+            fresult = fabs(farg1);
+        #endif
+
+        if (UNLIKELY(fetestexcept(FE_INVALID))) {
+            feclearexcept(FE_INVALID);
+            RAISE_ERROR(BADARITH_ATOM);
+        }
+        if (UNLIKELY(memory_ensure_free(ctx, FLOAT_SIZE) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return term_from_float(fresult, ctx);
+    }
+#endif
+
     if (term_is_boxed_integer(arg1)) {
         switch (term_boxed_size(arg1)) {
             case 0:
