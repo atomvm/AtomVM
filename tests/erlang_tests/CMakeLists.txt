@@ -286,6 +286,10 @@ compile_erlang(test_match)
 compile_erlang(test_ordering_0)
 compile_erlang(test_ordering_1)
 
+compile_erlang(roundint)
+compile_erlang(roundbadarg)
+compile_erlang(roundfloat)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -564,4 +568,8 @@ add_custom_target(erlang_test_modules DEPENDS
     test_match.beam
     test_ordering_0.beam
     test_ordering_1.beam
+
+    roundint.beam
+    roundbadarg.beam
+    roundfloat.beam
 )

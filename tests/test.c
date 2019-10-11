@@ -325,6 +325,12 @@ struct Test tests[] =
     {"test_ordering_0.beam", 1},
     {"test_ordering_1.beam", 1},
 
+    {"roundint.beam", 1},
+    {"roundbadarg.beam", -1},
+#ifndef AVM_NO_FP
+    {"roundfloat.beam", -3},
+#endif
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}
