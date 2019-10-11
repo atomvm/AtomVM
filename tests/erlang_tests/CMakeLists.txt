@@ -289,6 +289,17 @@ compile_erlang(test_ordering_1)
 compile_erlang(roundint)
 compile_erlang(roundbadarg)
 compile_erlang(roundfloat)
+compile_erlang(floatadd)
+compile_erlang(floataddovf)
+compile_erlang(floatsub)
+compile_erlang(floatsubovf)
+compile_erlang(floatmul)
+compile_erlang(floatmulovf)
+compile_erlang(floatneg)
+compile_erlang(floatabs)
+
+compile_erlang(boxed_is_not_float)
+compile_erlang(float_is_float)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -572,4 +583,15 @@ add_custom_target(erlang_test_modules DEPENDS
     roundint.beam
     roundbadarg.beam
     roundfloat.beam
+    floatadd.beam
+    floataddovf.beam
+    floatsub.beam
+    floatsubovf.beam
+    floatmul.beam
+    floatmulovf.beam
+    floatneg.beam
+    floatabs.beam
+
+    boxed_is_not_float.beam
+    float_is_float.beam
 )

@@ -329,6 +329,18 @@ struct Test tests[] =
     {"roundbadarg.beam", -1},
 #ifndef AVM_NO_FP
     {"roundfloat.beam", -3},
+
+    {"floataddovf.beam", -2},
+    {"floatadd.beam", 2},
+    {"floatsubovf.beam", -2},
+    {"floatsub.beam", 2},
+    {"floatmulovf.beam", -2},
+    {"floatmul.beam", 50},
+    {"floatneg.beam", -2},
+    {"floatabs.beam", 3},
+
+    {"boxed_is_not_float.beam", 16},
+    {"float_is_float.beam", 32},
 #endif
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
