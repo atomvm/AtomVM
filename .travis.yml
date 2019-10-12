@@ -28,7 +28,9 @@ matrix:
         - cd build
         - cmake ..
         - make
+        - export SKIP_FLOAT_TESTS=true
         - valgrind ./tests/test-erlang
+        - unset SKIP_FLOAT_TESTS
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
@@ -61,7 +63,9 @@ matrix:
         - cd build
         - cmake ..
         - make
+        - export SKIP_FLOAT_TESTS=true
         - valgrind ./tests/test-erlang
+        - unset SKIP_FLOAT_TESTS
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
@@ -94,7 +98,9 @@ matrix:
         - cd build
         - cmake ..
         - make
+        - export SKIP_FLOAT_TESTS=true
         - valgrind ./tests/test-erlang
+        - unset SKIP_FLOAT_TESTS
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
@@ -127,7 +133,9 @@ matrix:
         - cd build
         - cmake ..
         - make
+        - export SKIP_FLOAT_TESTS=true
         - valgrind ./tests/test-erlang
+        - unset SKIP_FLOAT_TESTS
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
@@ -160,7 +168,9 @@ matrix:
         - cd build
         - cmake ..
         - make
+        - export SKIP_FLOAT_TESTS=true
         - valgrind ./tests/test-erlang
+        - unset SKIP_FLOAT_TESTS
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
@@ -188,7 +198,9 @@ matrix:
         - export CXXFLAGS="-O2"
         - cmake ..
         - make
+        - export SKIP_FLOAT_TESTS=true
         - valgrind ./tests/test-erlang
+        - unset SKIP_FLOAT_TESTS
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
@@ -219,7 +231,9 @@ matrix:
         - export CXXFLAGS="-m32 -O2"
         - cmake ..
         - make
+        - export SKIP_FLOAT_TESTS=true
         - valgrind ./tests/test-erlang
+        - unset SKIP_FLOAT_TESTS
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
@@ -245,7 +259,9 @@ matrix:
         - cd build
         - cmake ..
         - make
+        - export SKIP_FLOAT_TESTS=true
         - valgrind ./tests/test-erlang
+        - unset SKIP_FLOAT_TESTS
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
@@ -278,7 +294,9 @@ matrix:
         - cd build
         - cmake ..
         - make
+        - export SKIP_FLOAT_TESTS=true
         - valgrind ./tests/test-erlang
+        - unset SKIP_FLOAT_TESTS
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
