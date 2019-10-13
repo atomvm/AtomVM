@@ -1654,7 +1654,36 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 break;
             }
 
-           case OP_IS_NUMBER: {
+#ifndef AVM_NO_FP
+            case OP_IS_FLOAT: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("is_float/2, label=%i, arg1=%lx\n", label, arg1);
+
+                    if (term_is_float(arg1)) {
+                        NEXT_INSTRUCTION(next_off);
+                    } else {
+                        i = POINTER_TO_II(mod->labels[label]);
+                    }
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("is_float/2\n");
+                    UNUSED(label)
+                    UNUSED(arg1)
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                break;
+            }
+#endif
+
+            case OP_IS_NUMBER: {
                 int next_off = 1;
                 int label;
                 DECODE_LABEL(label, code, i, next_off, next_off)

@@ -53,6 +53,7 @@
 #define OP_IS_EQ_EXACT 43
 #define OP_IS_NOT_EQ_EXACT 44
 #define OP_IS_INTEGER 45
+#define OP_IS_FLOAT 46
 #define OP_IS_NUMBER 47
 #define OP_IS_ATOM 48
 #define OP_IS_PID 49
