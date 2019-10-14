@@ -22,7 +22,6 @@
 #include <stdlib.h>
 
 #ifndef AVM_NO_FP
-#include <fenv.h>
 #include <math.h>
 #endif
 
@@ -267,12 +266,10 @@ static term add_boxed_helper(Context *ctx, term arg1, term arg2)
 
 #ifndef AVM_NO_FP
     if (use_float) {
-        feclearexcept(FE_INVALID | FE_OVERFLOW);
         avm_float_t farg1 = term_conv_to_float(arg1);
         avm_float_t farg2 = term_conv_to_float(arg2);
         avm_float_t fresult = farg1 + farg2;
-        if (UNLIKELY(fetestexcept(FE_INVALID | FE_OVERFLOW))) {
-            feclearexcept(FE_INVALID | FE_OVERFLOW);
+        if (UNLIKELY(!isfinite(fresult))) {
             RAISE_ERROR(BADARITH_ATOM);
         }
 
@@ -387,12 +384,10 @@ static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
 
 #ifndef AVM_NO_FP
     if (use_float) {
-        feclearexcept(FE_INVALID | FE_OVERFLOW);
         avm_float_t farg1 = term_conv_to_float(arg1);
         avm_float_t farg2 = term_conv_to_float(arg2);
         avm_float_t fresult = farg1 - farg2;
-        if (UNLIKELY(fetestexcept(FE_INVALID | FE_OVERFLOW))) {
-            feclearexcept(FE_INVALID | FE_OVERFLOW);
+        if (UNLIKELY(!isfinite(fresult))) {
             RAISE_ERROR(BADARITH_ATOM);
         }
         if (UNLIKELY(memory_ensure_free(ctx, FLOAT_SIZE) != MEMORY_GC_OK)) {
@@ -520,12 +515,10 @@ static term mul_boxed_helper(Context *ctx, term arg1, term arg2)
 
 #ifndef AVM_NO_FP
     if (use_float) {
-        feclearexcept(FE_INVALID | FE_OVERFLOW);
         avm_float_t farg1 = term_conv_to_float(arg1);
         avm_float_t farg2 = term_conv_to_float(arg2);
         avm_float_t fresult = farg1 * farg2;
-        if (UNLIKELY(fetestexcept(FE_INVALID | FE_OVERFLOW))) {
-            feclearexcept(FE_INVALID | FE_OVERFLOW);
+        if (UNLIKELY(!isfinite(fresult))) {
             RAISE_ERROR(BADARITH_ATOM);
         }
         if (UNLIKELY(memory_ensure_free(ctx, FLOAT_SIZE) != MEMORY_GC_OK)) {
@@ -693,11 +686,9 @@ static term neg_boxed_helper(Context *ctx, term arg1)
 {
 #ifndef AVM_NO_FP
     if (term_is_float(arg1)) {
-        feclearexcept(FE_INVALID);
         avm_float_t farg1 = term_conv_to_float(arg1);
         avm_float_t fresult = -farg1;
-        if (UNLIKELY(fetestexcept(FE_INVALID))) {
-            feclearexcept(FE_INVALID);
+        if (UNLIKELY(!isfinite(fresult))) {
             RAISE_ERROR(BADARITH_ATOM);
         }
         if (UNLIKELY(memory_ensure_free(ctx, FLOAT_SIZE) != MEMORY_GC_OK)) {
@@ -778,7 +769,6 @@ static term abs_boxed_helper(Context *ctx, term arg1)
 {
 #ifndef AVM_NO_FP
     if (term_is_float(arg1)) {
-        feclearexcept(FE_INVALID);
         avm_float_t farg1 = term_conv_to_float(arg1);
         avm_float_t fresult;
         #if AVM_USE_SINGLE_PRECISION
@@ -787,8 +777,7 @@ static term abs_boxed_helper(Context *ctx, term arg1)
             fresult = fabs(farg1);
         #endif
 
-        if (UNLIKELY(fetestexcept(FE_INVALID))) {
-            feclearexcept(FE_INVALID);
+        if (UNLIKELY(!isfinite(fresult))) {
             RAISE_ERROR(BADARITH_ATOM);
         }
         if (UNLIKELY(memory_ensure_free(ctx, FLOAT_SIZE) != MEMORY_GC_OK)) {
