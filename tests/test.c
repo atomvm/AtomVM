@@ -356,23 +356,9 @@ int test_modules_execution()
         return EXIT_FAILURE;
     }
 
-    // Older valgrind versions have buggy float behaviour
-    int skip_float = 0;
-    char *env_skip_float = getenv("SKIP_FLOAT_TESTS");
-    if (env_skip_float && !strncmp(env_skip_float, "true", strlen("true"))) {
-        skip_float = 1;
-        printf("Skipping float tests.\n");
-    }
-
     int failed_tests = 0;
 
     do {
-        if (skip_float && strstr(test->test_file, "float")) {
-            printf("-- SKIPPING TEST: %s\n", test->test_file);
-            test++;
-            continue;
-        }
-
         printf("-- EXECUTING TEST: %s\n", test->test_file);
         MappedFile *beam_file = mapped_file_open_beam(test->test_file);
         assert(beam_file != NULL);
