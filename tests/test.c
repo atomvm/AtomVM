@@ -325,10 +325,23 @@ struct Test tests[] =
     {"test_ordering_0.beam", 1},
     {"test_ordering_1.beam", 1},
 
+    {"ceilint.beam", 1},
+    {"ceilbadarg.beam", -1},
+    {"floorint.beam", 1},
+    {"floorbadarg.beam", -1},
     {"roundint.beam", 1},
     {"roundbadarg.beam", -1},
+    {"truncint.beam", 1},
+    {"truncbadarg.beam", -1},
 #ifndef AVM_NO_FP
+    {"ceilfloat.beam", -2},
+    {"ceilfloatovf.beam", -1},
+    {"floorfloat.beam", -3},
+    {"floorfloatovf.beam", -1},
     {"roundfloat.beam", -3},
+    {"roundfloatovf.beam", -1},
+    {"truncfloat.beam", -2},
+    {"truncfloatovf.beam", -1},
 
     {"floataddovf.beam", -2},
     {"floatadd.beam", 2},

@@ -286,9 +286,22 @@ compile_erlang(test_match)
 compile_erlang(test_ordering_0)
 compile_erlang(test_ordering_1)
 
+compile_erlang(ceilint)
+compile_erlang(ceilbadarg)
+compile_erlang(floorint)
+compile_erlang(floorbadarg)
 compile_erlang(roundint)
 compile_erlang(roundbadarg)
+compile_erlang(truncint)
+compile_erlang(truncbadarg)
+compile_erlang(ceilfloat)
+compile_erlang(ceilfloatovf)
+compile_erlang(floorfloat)
+compile_erlang(floorfloatovf)
 compile_erlang(roundfloat)
+compile_erlang(roundfloatovf)
+compile_erlang(truncfloat)
+compile_erlang(truncfloatovf)
 compile_erlang(floatadd)
 compile_erlang(floataddovf)
 compile_erlang(floatsub)
@@ -580,9 +593,22 @@ add_custom_target(erlang_test_modules DEPENDS
     test_ordering_0.beam
     test_ordering_1.beam
 
+    ceilint.beam
+    ceilbadarg.beam
+    floorint.beam
+    floorbadarg.beam
     roundint.beam
     roundbadarg.beam
+    truncint.beam
+    truncbadarg.beam
+    ceilfloat.beam
+    ceilfloatovf.beam
+    floorfloat.beam
+    floorfloatovf.beam
     roundfloat.beam
+    roundfloatovf.beam
+    truncfloat.beam
+    truncfloatovf.beam
     floatadd.beam
     floataddovf.beam
     floatsub.beam
