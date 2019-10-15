@@ -931,6 +931,74 @@ term bif_erlang_rem_2(Context *ctx, int live, term arg1, term arg2)
     }
 }
 
+term bif_erlang_ceil_1(Context *ctx, int live, term arg1)
+{
+    UNUSED(live);
+
+    #ifndef AVM_NO_FP
+        if (term_is_float(arg1)) {
+            avm_float_t fvalue = term_to_float(arg1);
+            if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+                RAISE_ERROR(OVERFLOW_ATOM);
+            }
+
+            avm_int64_t result;
+            #if AVM_USE_SINGLE_PRECISION
+                result = ceilf(fvalue);
+            #else
+                result = ceil(fvalue);
+            #endif
+
+            #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+                return make_maybe_boxed_int64(ctx, result);
+            #else
+                return make_maybe_boxed_int(ctx, result);
+            #endif
+        }
+    #endif
+
+    if (term_is_any_integer(arg1)) {
+        return arg1;
+
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+}
+
+term bif_erlang_floor_1(Context *ctx, int live, term arg1)
+{
+    UNUSED(live);
+
+    #ifndef AVM_NO_FP
+        if (term_is_float(arg1)) {
+            avm_float_t fvalue = term_to_float(arg1);
+            if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+                RAISE_ERROR(OVERFLOW_ATOM);
+            }
+
+            avm_int64_t result;
+            #if AVM_USE_SINGLE_PRECISION
+                result = floorf(fvalue);
+            #else
+                result = floor(fvalue);
+            #endif
+
+            #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+                return make_maybe_boxed_int64(ctx, result);
+            #else
+                return make_maybe_boxed_int(ctx, result);
+            #endif
+        }
+    #endif
+
+    if (term_is_any_integer(arg1)) {
+        return arg1;
+
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+}
+
 term bif_erlang_round_1(Context *ctx, int live, term arg1)
 {
     UNUSED(live);
@@ -947,6 +1015,40 @@ term bif_erlang_round_1(Context *ctx, int live, term arg1)
                 result = llroundf(fvalue);
             #else
                 result = llround(fvalue);
+            #endif
+
+            #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+                return make_maybe_boxed_int64(ctx, result);
+            #else
+                return make_maybe_boxed_int(ctx, result);
+            #endif
+        }
+    #endif
+
+    if (term_is_any_integer(arg1)) {
+        return arg1;
+
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+}
+
+term bif_erlang_trunc_1(Context *ctx, int live, term arg1)
+{
+    UNUSED(live);
+
+    #ifndef AVM_NO_FP
+        if (term_is_float(arg1)) {
+            avm_float_t fvalue = term_to_float(arg1);
+            if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+                RAISE_ERROR(OVERFLOW_ATOM);
+            }
+
+            avm_int64_t result;
+            #if AVM_USE_SINGLE_PRECISION
+                result = truncf(fvalue);
+            #else
+                result = trunc(fvalue);
             #endif
 
             #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
