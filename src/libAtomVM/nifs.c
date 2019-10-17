@@ -89,6 +89,8 @@ static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_integer_to_binary_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_is_process_alive_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_float_to_binary(Context *ctx, int argc, term argv[]);
+static term nif_erlang_float_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_atom_1(Context *ctx, int argc, term argv[]);
@@ -210,6 +212,18 @@ static const struct Nif integer_to_list_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_integer_to_list_1
+};
+
+static const struct Nif float_to_binary_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_float_to_binary
+};
+
+static const struct Nif float_to_list_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_float_to_list
 };
 
 static const struct Nif is_process_alive_nif =
@@ -1256,6 +1270,110 @@ static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[])
     }
 
     return prev;
+}
+
+#ifndef AVM_NO_FP
+static int format_float(term value, int scientific, int decimals, int compact, char *out_buf, int outbuf_len)
+{
+    const char *format;
+    if (scientific) {
+        format = "%.*e";
+    } else {
+        format = "%.*f";
+    }
+
+    avm_float_t float_value = term_to_float(value);
+
+    snprintf(out_buf, outbuf_len, format, decimals, float_value);
+
+    if (compact) {
+        int start = 0;
+        int len = strlen(out_buf);
+        for (int i = 0; i < len; i++) {
+            if (out_buf[i] == '.') {
+                start = i + 2;
+                break;
+            }
+        }
+        if (start > 1) {
+            int zero_seq_len = 0;
+            for (int i = start; i < len; i++) {
+                if (out_buf[i] == '0') {
+                    if (zero_seq_len == 0) {
+                        start = i;
+                    }
+                    zero_seq_len++;
+                } else {
+                    zero_seq_len = 0;
+                }
+            }
+            if (zero_seq_len) {
+                out_buf[start] = 0;
+            }
+        }
+    }
+
+    return strlen(out_buf);
+}
+#endif
+
+static term nif_erlang_float_to_binary(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+#ifndef AVM_NO_FP
+    term float_term = argv[0];
+    VALIDATE_VALUE(float_term, term_is_float);
+
+    int scientific = 1;
+    int decimals = 20;
+    int compact = 0;
+
+    char float_buf[64];
+    int len = format_float(float_term, scientific, decimals, compact, float_buf, 64);
+
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return term_from_literal_binary(float_buf, len, ctx);
+#else
+    UNUSED(ctx);
+    UNUSED(argv);
+    RAISE_ERROR(BADARG_ATOM);
+#endif
+}
+
+static term nif_erlang_float_to_list(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+#ifndef AVM_NO_FP
+    term float_term = argv[0];
+    VALIDATE_VALUE(float_term, term_is_float);
+
+    int scientific = 1;
+    int decimals = 20;
+    int compact = 0;
+
+    char float_buf[64];
+    int len = format_float(float_term, scientific, decimals, compact, float_buf, 64);
+
+    if (UNLIKELY(memory_ensure_free(ctx, len * 2) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term prev = term_nil();
+    for (int i = len - 1; i >= 0; i--) {
+        prev = term_list_prepend(term_from_int11(float_buf[i]), prev, ctx);
+    }
+
+    return prev;
+#else
+    UNUSED(ctx);
+    UNUSED(argv);
+    RAISE_ERROR(BADARG_ATOM);
+#endif
 }
 
 static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
