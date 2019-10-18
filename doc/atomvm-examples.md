@@ -117,7 +117,7 @@ Note that you can have multiple, concurrent TCP/IP connections to your AtomVM se
 
 ### `tcp_client`
 
-This example program send the packet of data (":アトムＶＭ") over TCP to port 44404 on the loopback address every 1 second, in a loop.  The program will wait for a response from the server, before proceeding. 
+This example program send the packet of data (":アトムＶＭ") over TCP to port 44404 on the loopback address every 1 second, in a loop.  The program will wait for a response from the server, before proceeding.
 
 This command may be used in tandem with the `tcp_server` program to illustrate sending messages between AtomVM processes over TCP.
 

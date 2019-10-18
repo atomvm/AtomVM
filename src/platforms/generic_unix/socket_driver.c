@@ -250,7 +250,7 @@ static term init_server_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
         return port_create_sys_error_tuple(ctx, SOCKET_ATOM, errno);
     }
     socket_data->sockfd = sockfd;
-    
+
     if (fcntl(socket_data->sockfd, F_SETFL, O_NONBLOCK) == -1) {
         close(sockfd);
         return port_create_sys_error_tuple(ctx, FCNTL_ATOM, errno);
@@ -274,7 +274,7 @@ static term init_server_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
 static term init_accepting_socket(Context *ctx, SocketDriverData *socket_data, term fd, term active)
 {
     socket_data->sockfd = term_to_int(fd);
-    
+
     if (active == TRUE_ATOM) {
         EventListener *listener = malloc(sizeof(EventListener));
         if (IS_NULL_PTR(listener)) {

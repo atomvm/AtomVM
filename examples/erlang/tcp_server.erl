@@ -12,7 +12,7 @@ start() ->
         Error ->
             erlang:display(Error)
     end.
-    
+
 accept(ListenSocket) ->
     console:puts("Waiting to accept connection...\n"),
     case ?GEN_TCP:accept(ListenSocket) of

@@ -262,7 +262,7 @@ static term init_client_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
 
     int event_descriptor = open_event_descriptor(conn);
     TRACE("socket: opened event descriptor %i in init_client_tcp_socket for netconn 0x%lx\n", event_descriptor, (unsigned long) socket_data->conn);
-    
+
     term address = interop_proplist_get_value(params, ADDRESS_ATOM);
     term port = interop_proplist_get_value(params, PORT_ATOM);
     term ret = do_connect(socket_data, ctx, address, port);
@@ -339,7 +339,7 @@ static term init_accepting_socket(Context *ctx, SocketDriverData *socket_data, t
     int event_descriptor = term_to_int(fd);
     socket_data->conn = (struct netconn *) get_event_ptr(event_descriptor);
     //
-    // 
+    //
     //
     if (active == TRUE_ATOM) {
         EventListener *listener = malloc(sizeof(EventListener));
