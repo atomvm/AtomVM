@@ -46,6 +46,10 @@ static const char *const no_such_host_atom = "\xC" "no_such_host";
 static const char *const connect_atom = "\x7" "connect";
 static const char *const tcp_closed_atom = "\xA" "tcp_closed";
 
+static const char *const listen_atom = "\x6" "listen";
+static const char *const backlog_atom = "\x7" "backlog";
+static const char *const accept_atom = "\x6" "accept";
+static const char *const fd_atom = "\x2" "fd";
 
 void platform_defaultatoms_init(GlobalContext *glb)
 {
@@ -77,6 +81,11 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, no_such_host_atom) == NO_SUCH_HOST_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, connect_atom) == CONNECT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, tcp_closed_atom) == TCP_CLOSED_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, listen_atom) == LISTEN_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, backlog_atom) == BACKLOG_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, accept_atom) == ACCEPT_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, fd_atom) == FD_ATOM_INDEX;
 
     if (!ok) {
         abort();

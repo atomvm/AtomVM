@@ -86,6 +86,25 @@ int find_event_descriptor(void *ptr)
     return -1;
 }
 
+// for debugging only
+void print_event_descriptors()
+{
+    for (int i = 0; i < EVENT_DESCRIPTORS_COUNT; i++) {
+        if (event_descriptors[i] != NULL) {
+            fprintf(stderr, "\tevent_descriptor[%i]: 0x%lx\n", i, (unsigned long) event_descriptors[i]);
+        }
+    }
+}
+
+void *get_event_ptr(int i)
+{
+    if (i < 0 || EVENT_DESCRIPTORS_COUNT <= i) {
+        fprintf(stderr, "fatal: event descriptor index out of range: %i\n", i);
+        abort();
+    }
+    return event_descriptors[i];
+}
+
 void esp32_sys_queue_init()
 {
     event_queue = xQueueCreate(EVENT_QUEUE_LEN, sizeof(uint32_t));
@@ -117,13 +136,14 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
             return;
         }
 
-        do {
+        size_t n = linkedlist_length(glb->listeners);
+        for (size_t i = 0;  i < n;  ++i) {
+            EventListener *next_listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
             if (listener->fd == event_descriptor) {
                 listener->handler(listener);
             }
-
-            listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-        } while (listeners != NULL && listener != last_listener);
+            listener = next_listener;
+        }
     }
 }
 
@@ -154,7 +174,7 @@ void sys_waitevents(GlobalContext *glb)
 
     receive_events(glb, ticks_to_wait);
 
-    listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
+    listeners = GET_LIST_ENTRY(glb->listeners, EventListener, listeners_list_head);
     EventListener *last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
 
     //second: execute handlers for expiered timers
@@ -173,7 +193,7 @@ void sys_waitevents(GlobalContext *glb)
 
             listener = next_listener;
             listeners = GET_LIST_ENTRY(glb->listeners, EventListener, listeners_list_head);
-        } while (listeners != NULL && listener != last_listener);
+        } while (listeners != NULL && listener != listeners);
     }
 }
 
