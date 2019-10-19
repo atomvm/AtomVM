@@ -357,6 +357,12 @@ struct Test tests[] =
 
     {"float2bin.beam", 31},
     {"float2list.beam", 31},
+    {"float2bin2scientific.beam", 31},
+    {"float2bin2decimals.beam", 255},
+    {"float2bin2.beam", 31},
+    {"float2list2scientific.beam", 31},
+    {"float2list2decimals.beam", 255},
+    {"float2list2.beam", 31},
 #endif
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
