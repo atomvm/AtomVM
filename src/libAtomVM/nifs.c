@@ -39,6 +39,7 @@
 #include <time.h>
 
 #define MAX_NIF_NAME_LEN 260
+#define FLOAT_BUF_SIZE 64
 
 #define VALIDATE_VALUE(value, verify_function) \
     if (UNLIKELY(!verify_function((value)))) { \
@@ -1286,7 +1287,7 @@ static int format_float(term value, int scientific, int decimals, int compact, c
 
     snprintf(out_buf, outbuf_len, format, decimals, float_value);
 
-    if (compact) {
+    if (compact && !scientific) {
         int start = 0;
         int len = strlen(out_buf);
         for (int i = 0; i < len; i++) {
@@ -1315,6 +1316,50 @@ static int format_float(term value, int scientific, int decimals, int compact, c
 
     return strlen(out_buf);
 }
+
+int get_float_format_opts(term opts, int *scientific, int *decimals, int *compact)
+{
+    term t = opts;
+
+    while (term_is_nonempty_list(t)) {
+        term head = term_get_list_head(t);
+
+        if (term_is_tuple(head) && term_get_tuple_arity(head) == 2) {
+            term val_term = term_get_tuple_element(head, 1);
+            if (!term_is_integer(val_term)) {
+                return 0;
+            }
+            *decimals = term_to_int(val_term);
+            if ((*decimals < 0) || (*decimals > FLOAT_BUF_SIZE - 7)) {
+                return 0;
+            }
+
+            switch (term_get_tuple_element(head, 0)) {
+                case DECIMALS_ATOM:
+                    *scientific = 0;
+                    break;
+                case SCIENTIFIC_ATOM:
+                    *scientific = 1;
+                    break;
+                default:
+                    return 0;
+            }
+
+        } else if (head == DEFAULTATOMS_COMPACT_ATOM) {
+            *compact = 1;
+
+        } else {
+            return 0;
+        }
+
+        t = term_get_list_tail(t);
+        if (!term_is_list(t)) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
 #endif
 
 static term nif_erlang_float_to_binary(Context *ctx, int argc, term argv[])
@@ -1329,8 +1374,19 @@ static term nif_erlang_float_to_binary(Context *ctx, int argc, term argv[])
     int decimals = 20;
     int compact = 0;
 
-    char float_buf[64];
-    int len = format_float(float_term, scientific, decimals, compact, float_buf, 64);
+    term opts = argv[1];
+    if (argc == 2) {
+        VALIDATE_VALUE(opts, term_is_list);
+        if (UNLIKELY(!get_float_format_opts(opts, &scientific, &decimals, &compact))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
+
+    char float_buf[FLOAT_BUF_SIZE];
+    int len = format_float(float_term, scientific, decimals, compact, float_buf, FLOAT_BUF_SIZE);
+    if (len > FLOAT_BUF_SIZE) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
 
     if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -1356,8 +1412,19 @@ static term nif_erlang_float_to_list(Context *ctx, int argc, term argv[])
     int decimals = 20;
     int compact = 0;
 
-    char float_buf[64];
-    int len = format_float(float_term, scientific, decimals, compact, float_buf, 64);
+    term opts = argv[1];
+    if (argc == 2) {
+        VALIDATE_VALUE(opts, term_is_list);
+        if (UNLIKELY(!get_float_format_opts(opts, &scientific, &decimals, &compact))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
+
+    char float_buf[FLOAT_BUF_SIZE];
+    int len = format_float(float_term, scientific, decimals, compact, float_buf, FLOAT_BUF_SIZE);
+    if (len > FLOAT_BUF_SIZE) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
 
     if (UNLIKELY(memory_ensure_free(ctx, len * 2) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);

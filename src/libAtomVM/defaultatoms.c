@@ -34,6 +34,10 @@ static const char *const atom_count_atom = "\xA" "atom_count";
 static const char *const system_architecture_atom = "\x13" "system_architecture";
 static const char *const wordsize_atom = "\x8" "wordsize";
 
+static const char *const decimals_atom = "\x8" "decimals";
+static const char *const scientific_atom = "\xA" "scientific";
+static const char *const compact_atom = "\x7" "compact";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -70,6 +74,10 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, atom_count_atom) == ATOM_COUNT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, system_architecture_atom) == SYSTEM_ARCHITECTURE_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, wordsize_atom) == WORDSIZE_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, decimals_atom) == DECIMALS_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, scientific_atom) == SCIENTIFIC_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, compact_atom) == COMPACT_ATOM_INDEX;
 
     if (!ok) {
         abort();
