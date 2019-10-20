@@ -305,6 +305,19 @@ int term_compare(term t, term other, Context *ctx)
                 break;
             }
 
+#ifndef AVM_NO_FP
+        } else if (term_is_number(t) && term_is_number(other)) {
+            avm_float_t t_float = term_conv_to_float(t);
+            avm_float_t other_float = term_conv_to_float(other);
+            if (t_float == other_float) {
+                other = temp_stack_pop(&temp_stack);
+                t = temp_stack_pop(&temp_stack);
+            } else {
+                result = (t_float > other_float) ? 1 : -1;
+                break;
+            }
+#endif
+
         } else if (term_is_atom(t) && term_is_atom(other)) {
             int t_atom_index = term_to_atom_index(t);
             AtomString t_atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table,
