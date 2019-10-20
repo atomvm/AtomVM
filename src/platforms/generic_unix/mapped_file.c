@@ -34,12 +34,14 @@ MappedFile *mapped_file_open_beam(const char *file_name)
 {
     MappedFile *mf = malloc(sizeof(MappedFile));
     if (IS_NULL_PTR(mf)) {
+        fprintf(stderr, "Unable to allocate MappedFile struct\n");
         return NULL;
     }
 
     mf->fd = open(file_name, O_RDONLY);
     if (UNLIKELY(mf->fd < 0)) {
         free(mf);
+        fprintf(stderr, "Unable to open %s\n", file_name);
         return NULL;
     }
 

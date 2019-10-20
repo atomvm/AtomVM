@@ -304,7 +304,7 @@ static void const* *module_build_literals_table(const void *literalsBuf)
 
 term module_load_literal(Module *mod, int index, Context *ctx)
 {
-    return externalterm_to_term(mod->literals_table[index], ctx);
+    return externalterm_to_term(mod->literals_table[index], ctx, 1);
 }
 
 const struct ExportedFunction *module_resolve_function(Module *mod, int import_table_index)

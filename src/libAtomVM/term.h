@@ -1080,4 +1080,24 @@ static inline int term_is_number(term t)
  */
 void term_display(FILE *fd, term t, const Context *ctx);
 
+/**
+ * @brief Checks if a term is a string (i.e., a list of characters)
+ *
+ * @details Returns 1 if a term is a proper (nil-terminated) list of characters
+ * or an empty list (nil term), otherwise 0.
+ * @param t the term that will be checked.
+ * @return 1 if check succedes, 0 otherwise.
+ */
+static inline int term_is_string(term t)
+{
+    while (term_is_nonempty_list(t)) {
+        term e = term_get_list_head(t);
+        if (!term_is_uint8(e)) {
+            return 0;
+        }
+        t = term_get_list_tail(t);
+    }
+    return term_is_nil(t);
+}
+
 #endif

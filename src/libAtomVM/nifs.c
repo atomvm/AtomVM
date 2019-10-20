@@ -33,6 +33,7 @@
 #include "utils.h"
 #include "sys.h"
 #include "version.h"
+#include "externalterm.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -112,10 +113,12 @@ static term nif_erlang_tuple_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_timestamp_0(Context *ctx, int argc, term argv[]);
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[]);
-static term nifs_erlang_process_flag(Context *ctx, int argc, term argv[]);
-static term nifs_erlang_processes(Context *ctx, int argc, term argv[]);
-static term nifs_erlang_process_info(Context *ctx, int argc, term argv[]);
-static term nifs_erlang_system_info(Context *ctx, int argc, term argv[]);
+static term nif_erlang_process_flag(Context *ctx, int argc, term argv[]);
+static term nif_erlang_processes(Context *ctx, int argc, term argv[]);
+static term nif_erlang_process_info(Context *ctx, int argc, term argv[]);
+static term nif_erlang_system_info(Context *ctx, int argc, term argv[]);
+static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[]);
+static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[]);
 
 static const struct Nif binary_at_nif =
 {
@@ -384,25 +387,37 @@ static const struct Nif flat_size_nif =
 static const struct Nif process_flag_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nifs_erlang_process_flag
+    .nif_ptr = nif_erlang_process_flag
 };
 
 static const struct Nif processes_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nifs_erlang_processes
+    .nif_ptr = nif_erlang_processes
 };
 
 static const struct Nif process_info_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nifs_erlang_process_info
+    .nif_ptr = nif_erlang_process_info
 };
 
 static const struct Nif system_info_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nifs_erlang_system_info
+    .nif_ptr = nif_erlang_system_info
+};
+
+static const struct Nif binary_to_term_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_binary_to_term
+};
+
+static const struct Nif term_to_binary_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_term_to_binary
 };
 
 //Ignore warning caused by gperf generated code
@@ -1746,7 +1761,7 @@ static term nif_erlang_display_1(Context *ctx, int argc, term argv[])
     return term_nil();
 }
 
-static term nifs_erlang_process_flag(Context *ctx, int argc, term argv[])
+static term nif_erlang_process_flag(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
@@ -1813,14 +1828,14 @@ static term nifs_erlang_process_flag(Context *ctx, int argc, term argv[])
 
 typedef void *(*context_iterator)(Context *ctx, void *accum);
 
-static void *nifs_increment_context_count(Context *ctx, void *accum)
+static void *nif_increment_context_count(Context *ctx, void *accum)
 {
     UNUSED(ctx);
 
     return (void *) ((size_t) accum + 1);
 }
 
-static void *nifs_increment_port_count(Context *ctx, void *accum)
+static void *nif_increment_port_count(Context *ctx, void *accum)
 {
     if (ctx->native_handler) {
         return (void *) ((size_t) accum + 1);
@@ -1834,14 +1849,14 @@ struct ContextAccumulator {
     term result;
 };
 
-static void *nifs_cons_context(Context *ctx, void *p)
+static void *nif_cons_context(Context *ctx, void *p)
 {
     struct ContextAccumulator *accum = (struct ContextAccumulator *) p;
     accum->result = term_list_prepend(term_from_local_process_id(ctx->process_id), accum->result, accum->ctx);
     return (void *) accum;
 }
 
-static void *nifs_iterate_processes(GlobalContext *glb, context_iterator fun, void *accum)
+static void *nif_iterate_processes(GlobalContext *glb, context_iterator fun, void *accum)
 {
     Context *processes = GET_LIST_ENTRY(glb->processes_table, Context, processes_table_head);
     Context *p = processes;
@@ -1852,38 +1867,38 @@ static void *nifs_iterate_processes(GlobalContext *glb, context_iterator fun, vo
     return accum;
 }
 
-static size_t nifs_num_processes(GlobalContext *glb)
+static size_t nif_num_processes(GlobalContext *glb)
 {
-    return (size_t) nifs_iterate_processes(glb, nifs_increment_context_count, NULL);
+    return (size_t) nif_iterate_processes(glb, nif_increment_context_count, NULL);
 }
 
-static size_t nifs_num_ports(GlobalContext *glb)
+static size_t nif_num_ports(GlobalContext *glb)
 {
-    return (size_t) nifs_iterate_processes(glb, nifs_increment_port_count, NULL);
+    return (size_t) nif_iterate_processes(glb, nif_increment_port_count, NULL);
 }
 
-static term nifs_list_processes(Context *ctx)
+static term nif_list_processes(Context *ctx)
 {
     struct ContextAccumulator accum;
     accum.ctx = ctx;
     accum.result = term_nil();
-    nifs_iterate_processes(ctx->global, nifs_cons_context, (void *) &accum);
+    nif_iterate_processes(ctx->global, nif_cons_context, (void *) &accum);
     return accum.result;
 }
 
-static term nifs_erlang_processes(Context *ctx, int argc, term argv[])
+static term nif_erlang_processes(Context *ctx, int argc, term argv[])
 {
     UNUSED(argv);
     UNUSED(argc);
 
-    size_t num_processes = nifs_num_processes(ctx->global);
+    size_t num_processes = nif_num_processes(ctx->global);
     if (memory_ensure_free(ctx, 2 * num_processes) != MEMORY_GC_OK) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    return nifs_list_processes(ctx);
+    return nif_list_processes(ctx);
 }
 
-static term nifs_erlang_process_info(Context *ctx, int argc, term argv[])
+static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
@@ -1932,7 +1947,7 @@ static term nifs_erlang_process_info(Context *ctx, int argc, term argv[])
     return ret;
 }
 
-static term nifs_erlang_system_info(Context *ctx, int argc, term argv[])
+static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
     term key = argv[0];
@@ -1942,10 +1957,10 @@ static term nifs_erlang_system_info(Context *ctx, int argc, term argv[])
     }
 
     if (key == PROCESS_COUNT_ATOM) {
-        return term_from_int32(nifs_num_processes(ctx->global));
+        return term_from_int32(nif_num_processes(ctx->global));
     }
     if (key == PORT_COUNT_ATOM) {
-        return term_from_int32(nifs_num_ports(ctx->global));
+        return term_from_int32(nif_num_ports(ctx->global));
     }
     if (key == ATOM_COUNT_ATOM) {
         return term_from_int32(ctx->global->atoms_table->count);
@@ -1963,6 +1978,46 @@ static term nifs_erlang_system_info(Context *ctx, int argc, term argv[])
         return term_from_literal_binary((const uint8_t *) buf, len, ctx);
     }
     return sys_get_info(ctx, key);
+}
+
+static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
+{
+    if (argc != 1) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    term binary = argv[0];
+    if (!term_is_binary(binary)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    term dst = term_invalid_term();
+    enum ExternalTermResult result = externalterm_from_binary(ctx, &dst, binary);
+    switch (result) {
+        case EXTERNAL_TERM_BAD_ARG:
+            RAISE_ERROR(BADARG_ATOM);
+        case EXTERNAL_TERM_MALLOC:
+        case EXTERNAL_TERM_HEAP_ALLOC:
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        case EXTERNAL_TERM_OK:
+        default:
+            break;
+    }
+    if (term_is_invalid_term(dst)) {
+        RAISE_ERROR(BADARG_ATOM)
+    }
+    return dst;
+}
+
+static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[])
+{
+    if (argc != 1) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    term t = argv[0];
+    term ret = externalterm_to_binary(ctx, t);
+    if (term_is_invalid_term(ret)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    return ret;
 }
 
 static term nif_binary_at_2(Context *ctx, int argc, term argv[])
