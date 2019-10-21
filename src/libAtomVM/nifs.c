@@ -79,6 +79,7 @@ static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_binary_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_atom_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_binary_to_float_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_integer_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_existing_atom_2(Context *ctx, int argc, term argv[]);
@@ -94,6 +95,7 @@ static term nif_erlang_float_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_float_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_list_to_float_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_existing_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[]);
@@ -165,6 +167,12 @@ static const struct Nif binary_to_atom_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_binary_to_atom_2
+};
+
+static const struct Nif binary_to_float_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_binary_to_float_1
 };
 
 static const struct Nif binary_to_integer_nif =
@@ -255,6 +263,12 @@ static const struct Nif list_to_integer_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_list_to_integer_1
+};
+
+static const struct Nif list_to_float_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_list_to_float_1
 };
 
 static const struct Nif open_port_nif =
@@ -1056,6 +1070,110 @@ static term nif_erlang_binary_to_integer_1(Context *ctx, int argc, term argv[])
     }
 
     return make_maybe_boxed_int64(ctx, value);
+}
+
+#ifndef AVM_NO_FP
+static int is_valid_float_string(const char *str, int len)
+{
+    int has_point = 0;
+    int scientific = 0;
+    for (int i = 0; i < len; i++) {
+        switch (str[i]) {
+            case '.':
+                if (!scientific) {
+                    has_point = 1;
+                } else {
+                    return 0;
+                }
+                break;
+
+            case 'e':
+                if (!scientific) {
+                    scientific = 1;
+                } else {
+                    return 0;
+                }
+                break;
+
+            default:
+                continue;
+        }
+    }
+    return has_point;
+}
+
+static term parse_float(Context *ctx, const char *buf, int len)
+{
+    if (UNLIKELY((len == 0) || (len >= FLOAT_BUF_SIZE - 1))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    char null_terminated_buf[FLOAT_BUF_SIZE];
+    memcpy(null_terminated_buf, buf, len);
+    null_terminated_buf[len] = '\0';
+
+    avm_float_t fvalue;
+    if (UNLIKELY(sscanf(null_terminated_buf, AVM_FLOAT_FMT, &fvalue) != 1)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    // *_to_float requires that given input is a float
+    if (UNLIKELY(!is_valid_float_string(null_terminated_buf, len))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, FLOAT_SIZE) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    return term_from_float(fvalue, ctx);
+}
+#endif
+
+static term nif_erlang_binary_to_float_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+#ifndef AVM_NO_FP
+    term bin_term = argv[0];
+    VALIDATE_VALUE(bin_term, term_is_binary);
+
+    const char *bin_data = term_binary_data(bin_term);
+    int bin_data_size = term_binary_size(bin_term);
+
+    return parse_float(ctx, bin_data, bin_data_size);
+
+#else
+    UNUSED(ctx);
+    UNUSED(argv);
+    RAISE_ERROR(BADARG_ATOM);
+#endif
+}
+
+static term nif_erlang_list_to_float_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+#ifndef AVM_NO_FP
+    term t = argv[0];
+    VALIDATE_VALUE(t, term_is_list);
+
+    int len = term_list_length(t);
+
+    int ok;
+    char *string = interop_list_to_string(argv[0], &ok);
+    if (UNLIKELY(!ok)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    term res_term = parse_float(ctx, string, len);
+
+    free(string);
+
+    return res_term;
+#else
+    UNUSED(ctx);
+    UNUSED(argv);
+    RAISE_ERROR(BADARG_ATOM);
+#endif
 }
 
 static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[])
