@@ -50,6 +50,7 @@ struct Context
     int32_t process_id;
 
     term x[16];
+    term *x_ptr;
     int avail_registers;
 
     term *heap_start;
