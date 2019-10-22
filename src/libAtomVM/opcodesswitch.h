@@ -55,11 +55,7 @@
 #define COMPACT_11BITS_VALUE 0x8
 #define COMPACT_NBITS_VALUE 0x18
 
-typedef union
-{
-    int dest;
-    int index;
-} dreg_t;
+typedef int dreg_t;
 
 typedef union
 {
@@ -83,7 +79,7 @@ typedef union
 #ifdef IMPL_CODE_LOADER
 
 #define T_DEST_REG(dreg_type, dreg) \
-    reg_type_c((dreg_type).reg_type), ((dreg).index)
+    reg_type_c((dreg_type).reg_type), ((dreg))
 
 #define DECODE_COMPACT_TERM(dest_term, code_chunk, base_index, off, next_operand_offset)\
 {                                                                                       \
@@ -153,11 +149,11 @@ typedef union
     switch (reg_type) {                                                                             \
         case COMPACT_XREG:                                                                          \
         case COMPACT_YREG:                                                                          \
-            (dreg).index = code_chunk[(base_index) + (off)] >> 4;                                   \
+            (dreg) = code_chunk[(base_index) + (off)] >> 4;                                         \
             next_operand_offset += 1;                                                               \
             break;                                                                                  \
         case COMPACT_LARGE_YREG:                                                                    \
-            (dreg).index = (((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]);     \
+            (dreg) = (((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]);           \
             next_operand_offset += 2;                                                               \
             break;                                                                                  \
         default:                                                                                    \
@@ -169,7 +165,7 @@ typedef union
 #ifdef IMPL_EXECUTE_LOOP
 
 #define T_DEST_REG(dreg_type, dreg) \
-    (*dreg_type.ptr == ctx->x) ? 'x' : 'y', (dreg).dest
+    (*dreg_type.ptr == ctx->x) ? 'x' : 'y', (dreg)
 
 #define DECODE_COMPACT_TERM(dest_term, code_chunk, base_index, off, next_operand_offset)                                \
 {                                                                                                                       \
@@ -274,7 +270,7 @@ typedef union
 
 #define WRITE_REGISTER(dreg_type, dreg, value)                                                      \
 {                                                                                                   \
-    *(*((dreg_type).ptr) + (dreg).dest) = value;                                                    \
+    *(*((dreg_type).ptr) + (dreg)) = value;                                                         \
 }
 
 #define DECODE_DEST_REGISTER(dreg, dreg_type, code_chunk, base_index, off, next_operand_offset)                 \
@@ -285,18 +281,18 @@ typedef union
     switch (reg_type) {                                                                                         \
         case COMPACT_XREG:                                                                                      \
             (dreg_type).ptr = &ctx->x_ptr;                                                                      \
-            (dreg).dest = reg_index;                                                                            \
+            (dreg) = reg_index;                                                                                 \
             next_operand_offset++;                                                                              \
             break;                                                                                              \
         case COMPACT_YREG:                                                                                      \
             (dreg_type).ptr = &ctx->e;                                                                          \
-            (dreg).dest = reg_index;                                                                            \
+            (dreg) = reg_index;                                                                                 \
             next_operand_offset++;                                                                              \
             break;                                                                                              \
         case COMPACT_LARGE_YREG:                                                                                \
             if (LIKELY((first_byte & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE)) {                        \
                 (dreg_type).ptr = &ctx->e;                                                                      \
-                (dreg).dest = (((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]);              \
+                (dreg) = (((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]);                   \
                 next_operand_offset += 2;                                                                       \
             } else {                                                                                            \
                 abort();                                                                                        \
