@@ -280,7 +280,7 @@ typedef union
     uint8_t reg_index = (first_byte >> 4);                                                                      \
     switch (reg_type) {                                                                                         \
         case COMPACT_XREG:                                                                                      \
-            (dreg_type).ptr = &ctx->x_ptr;                                                                      \
+            (dreg_type).ptr = &x_regs;                                                                          \
             (dreg) = reg_index;                                                                                 \
             next_operand_offset++;                                                                              \
             break;                                                                                              \
@@ -389,6 +389,7 @@ typedef union
         ctx->saved_module = restore_mod;                                                          \
         Context *scheduled_context = scheduler_next(ctx->global, ctx);                            \
         ctx = scheduled_context;                                                                  \
+        x_regs = ctx->x;                                                                          \
         mod = ctx->saved_module;                                                                  \
         code = mod->code->code;                                                                   \
         remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;                                         \
@@ -615,6 +616,9 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 #endif
 {
     uint8_t *code = mod->code->code;
+    #ifdef IMPL_EXECUTE_LOOP
+        term *x_regs = ctx->x;
+    #endif
 
     unsigned int i = 0;
 
@@ -722,6 +726,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 scheduler_terminate(ctx);
 
                 ctx = scheduled_context;
+                x_regs = ctx->x;
                 mod = ctx->saved_module;
                 code = mod->code->code;
                 remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;
@@ -1384,6 +1389,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     ctx->saved_module = mod;
                     Context *scheduled_context = scheduler_wait(ctx->global, ctx);
                     ctx = scheduled_context;
+                    x_regs = ctx->x;
 
                     mod = ctx->saved_module;
                     code = mod->code->code;
@@ -1425,6 +1431,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     if (needs_to_wait) {
                         Context *scheduled_context = scheduler_wait(ctx->global, ctx);
                         ctx = scheduled_context;
+                        x_regs = ctx->x;
                         mod = ctx->saved_module;
                         code = mod->code->code;
                         JUMP_TO_ADDRESS(scheduled_context->saved_ip);

@@ -49,7 +49,6 @@ Context *context_new(GlobalContext *glb)
     ctx->e = ctx->stack_base;
     ctx->heap_ptr = ctx->heap_start;
 
-    ctx->x_ptr = ctx->x;
     ctx->avail_registers = 16;
     context_clean_registers(ctx, 0);
 
