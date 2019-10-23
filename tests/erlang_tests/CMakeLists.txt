@@ -322,6 +322,8 @@ compile_erlang(float2bin2)
 compile_erlang(float2list2decimals)
 compile_erlang(float2list2scientific)
 compile_erlang(float2list2)
+compile_erlang(bin2float)
+compile_erlang(list2float)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -638,4 +640,6 @@ add_custom_target(erlang_test_modules DEPENDS
     float2list2decimals.beam
     float2list2scientific.beam
     float2list2.beam
+    bin2float.beam
+    list2float.beam
 )

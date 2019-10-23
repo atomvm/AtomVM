@@ -363,6 +363,8 @@ struct Test tests[] =
     {"float2list2scientific.beam", 31},
     {"float2list2decimals.beam", 255},
     {"float2list2.beam", 31},
+    {"bin2float.beam", 511},
+    {"list2float.beam", 511},
 #endif
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
