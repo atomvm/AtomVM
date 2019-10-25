@@ -254,6 +254,38 @@ matrix:
       before_install:
         - eval "${MATRIX_EVAL}"
 
+    - name: "clang 8 (with -O3 and -DAVM_DISABLE_FP=on) on Bionic with OTP 21"
+      os: linux
+      dist: bionic
+      sudo: true
+      compiler: clang
+      addons:
+        apt:
+          sources:
+            - sourceline: deb https://packages.erlang-solutions.com/ubuntu bionic contrib
+              key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
+          packages:
+            - clang-8
+            - gperf
+            - valgrind
+            - esl-erlang=1:21.0
+      script:
+        - export CFLAGS="-O3"
+        - export CXXFLAGS="-O3"
+        - mkdir -p build
+        - cd build
+        - cc --version
+        - cmake -DAVM_DISABLE_FP=on ..
+        - make
+        - valgrind ./tests/test-erlang
+        - ./tests/test-erlang
+        - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+        - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+      env:
+        - MATRIX_EVAL="CC=clang-8 && CXX=clang++-8"
+      before_install:
+        - eval "${MATRIX_EVAL}"
+
     - name: "GCC 7 on Trusty with OTP 21"
       os: linux
       dist: trusty
