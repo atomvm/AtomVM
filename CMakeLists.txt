@@ -5,6 +5,11 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMakeModules)
 
 find_package(Elixir)
 
+option(AVM_DISABLE_FP "Disable floating point support." OFF)
+if (AVM_DISABLE_FP)
+    add_definitions(-DAVM_NO_FP)
+endif()
+
 add_subdirectory(src)
 add_subdirectory(tests)
 add_subdirectory(tools/packbeam)

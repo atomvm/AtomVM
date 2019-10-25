@@ -88,6 +88,10 @@ if(CMAKE_COMPILER_IS_GNUCC)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -pedantic -Wextra -ggdb")
 endif()
 
+if (NOT AVM_DISABLE_FP)
+    set(MATH_LIB "m")
+endif()
+
 gperf_generate(${CMAKE_CURRENT_SOURCE_DIR}/bifs.gperf bifs_hash.h)
 gperf_generate(${CMAKE_CURRENT_SOURCE_DIR}/nifs.gperf nifs_hash.h)
 
@@ -104,7 +108,7 @@ set(
 
 add_library(libAtomVM ${SOURCE_FILES} ${HEADER_FILES})
 add_dependencies(libAtomVM generated generated-nifs-hash)
-target_link_libraries(libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX} ${ZLIB_LIBRARIES} m)
+target_link_libraries(libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX} ${ZLIB_LIBRARIES} ${MATH_LIB})
 set_property(TARGET libAtomVM PROPERTY C_STANDARD 99)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Coverage")
