@@ -168,7 +168,7 @@ static int term_type_to_index(term t)
     if (term_is_invalid_term(t)) {
         return 0;
 
-    } else if (term_is_any_integer(t)) {
+    } else if (term_is_number(t)) {
         return 1;
 
     } else if (term_is_atom(t)) {
