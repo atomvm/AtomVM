@@ -354,6 +354,7 @@ struct Test tests[] =
 
     {"boxed_is_not_float.beam", 16},
     {"float_is_float.beam", 32},
+    {"float_is_number.beam", 32},
 
     {"float2bin.beam", 31},
     {"float2list.beam", 31},

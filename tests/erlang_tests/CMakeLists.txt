@@ -313,6 +313,7 @@ compile_erlang(floatabs)
 
 compile_erlang(boxed_is_not_float)
 compile_erlang(float_is_float)
+compile_erlang(float_is_number)
 
 compile_erlang(float2list)
 compile_erlang(float2bin)
@@ -631,6 +632,7 @@ add_custom_target(erlang_test_modules DEPENDS
 
     boxed_is_not_float.beam
     float_is_float.beam
+    float_is_number.beam
 
     float2list.beam
     float2bin.beam
