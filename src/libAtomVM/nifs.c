@@ -1394,6 +1394,7 @@ static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[])
 #ifndef AVM_NO_FP
 static int format_float(term value, int scientific, int decimals, int compact, char *out_buf, int outbuf_len)
 {
+    // %lf and %f are the same since C99 due to double promotion.
     const char *format;
     if (scientific) {
         format = "%.*e";

@@ -101,6 +101,8 @@ typedef uint64_t avm_uint64_t;
 
 #ifndef AVM_NO_FP
 
+    // %f and %lf are the same since C99 when using printf
+    // this is not true for scanf.
     #ifdef AVM_USE_SINGLE_PRECISION
         typedef float avm_float_t;
         #define AVM_FLOAT_FMT "%f"
