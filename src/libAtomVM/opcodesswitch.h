@@ -1694,7 +1694,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     TRACE("is_number/2, label=%i, arg1=%lx\n", label, arg1);
 
                     //TODO: check for floats too
-                    if (term_is_any_integer(arg1)) {
+                    if (term_is_number(arg1)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
