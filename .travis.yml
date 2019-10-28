@@ -286,6 +286,45 @@ matrix:
       before_install:
         - eval "${MATRIX_EVAL}"
 
+    - name: "GCC 8 on Bionic (32 bit and -DAVM_USE_32BIT_FLOAT=on) with OTP 21"
+      os: linux
+      dist: bionic
+      sudo: true
+      addons:
+        apt:
+          sources:
+            - sourceline: deb https://packages.erlang-solutions.com/ubuntu bionic contrib
+              key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
+          packages:
+            - gcc-8
+            - g++-8
+            - gcc-8-multilib
+            - g++-8-multilib
+            - libc6-dev-i386
+            - libc6-dbg:i386
+            - zlib1g-dev:i386
+            - gperf
+            - valgrind
+            - esl-erlang=1:21.0
+      script:
+        - export CC=gcc-8
+        - export CXX=g++-8
+        - export CFLAGS="-O2 -m32"
+        - export CXXFLAGS="-O2 -m32"
+        - mkdir -p build
+        - cd build
+        - cc --version
+        - cmake -DAVM_USE_32BIT_FLOAT=on ..
+        - make
+        - valgrind ./tests/test-erlang
+        - ./tests/test-erlang
+        - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+        - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+      env:
+        - MATRIX_EVAL="CC=gcc-8 && CXX=g++-8"
+      before_install:
+        - eval "${MATRIX_EVAL}"
+
     - name: "GCC 7 on Trusty with OTP 21"
       os: linux
       dist: trusty
