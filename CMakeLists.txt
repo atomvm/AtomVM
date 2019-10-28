@@ -10,6 +10,11 @@ if (AVM_DISABLE_FP)
     add_definitions(-DAVM_NO_FP)
 endif()
 
+option(AVM_USE_32BIT_FLOAT "Use 32 bit floats." OFF)
+if (AVM_USE_32BIT_FLOAT)
+    add_definitions(-DAVM_USE_SINGLE_PRECISION)
+endif()
+
 add_subdirectory(src)
 add_subdirectory(tests)
 add_subdirectory(tools/packbeam)
