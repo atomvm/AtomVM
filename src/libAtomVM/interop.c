@@ -53,26 +53,21 @@ char *interop_binary_to_string(term binary)
 
 char *interop_list_to_string(term list, int *ok)
 {
-    int len = 0;
-
-    term t = list;
-
-    while (!term_is_nil(t)) {
-        len++;
-        term *t_ptr = term_get_list_ptr(t);
-        t = *t_ptr;
+    int proper;
+    int len = term_list_length(list, &proper);
+    if (UNLIKELY(!proper)) {
+        *ok = 0;
+        return NULL;
     }
 
-    t = list;
     char *str = malloc(len + 1);
     if (IS_NULL_PTR(str)) {
         return NULL;
     }
 
+    term t = list;
     for (int i = 0; i < len; i++) {
-        term *t_ptr = term_get_list_ptr(t);
-
-        term byte_value_term = t_ptr[1];
+        term byte_value_term = term_get_list_head(t);
         if (UNLIKELY(!term_is_integer(byte_value_term))) {
             *ok = 0;
             free(str);
@@ -87,7 +82,7 @@ char *interop_list_to_string(term list, int *ok)
         uint8_t byte_value = term_to_uint8(byte_value_term);
 
         str[i] = (char) byte_value;
-        t = *t_ptr;
+        t = term_get_list_tail(t);
     }
     str[len] = 0;
 

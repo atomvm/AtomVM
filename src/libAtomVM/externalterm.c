@@ -170,12 +170,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
             if (prev_term) {
                 int tail_size;
                 term tail = parse_external_terms(external_term_buf + buf_pos, &tail_size, ctx);
-                if (tail != term_nil()) {
-                    //TODO: add support for imporper lists
-                    abort();
-                }
-
-                prev_term[0] = term_nil();
+                prev_term[0] = tail;
                 buf_pos += tail_size;
             }
 

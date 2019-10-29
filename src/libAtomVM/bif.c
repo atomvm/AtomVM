@@ -138,7 +138,13 @@ term bif_erlang_length_1(Context *ctx, int live, term arg1)
 
     VALIDATE_VALUE(arg1, term_is_list);
 
-    return term_from_int32(term_list_length(arg1));
+    int proper;
+    avm_int_t len = term_list_length(arg1, &proper);
+    if (UNLIKELY(!proper)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    return term_from_int(len);
 }
 
 term bif_erlang_hd_1(Context *ctx, term arg1)

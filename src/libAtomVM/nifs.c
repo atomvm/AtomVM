@@ -667,7 +667,12 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
         return UNDEFINED_ATOM;
     }
 
-    int label = module_search_exported_function(found_module, function_string, term_list_length(argv[2]));
+    int proper;
+    int args_len = term_list_length(argv[2], &proper);
+    if (UNLIKELY(!proper)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    int label = module_search_exported_function(found_module, function_string, args_len);
     //TODO: fail here if no function has been found
     new_ctx->saved_module = found_module;
     new_ctx->saved_ip = found_module->labels[label];
@@ -710,11 +715,14 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
         fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
         abort();
     }
-    while (!term_is_nil(t)) {
-        term *t_ptr = term_get_list_ptr(t);
-        new_ctx->x[reg_index] = memory_copy_term_tree(&new_ctx->heap_ptr, t_ptr[1]);
-        t = *t_ptr;
+    while (term_is_nonempty_list(t)) {
+        new_ctx->x[reg_index] = memory_copy_term_tree(&new_ctx->heap_ptr, term_get_list_head(t));
         reg_index++;
+
+        t = term_get_list_tail(t);
+        if (!term_is_list(t)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
     }
 
     return term_from_local_process_id(new_ctx->process_id);
@@ -759,7 +767,11 @@ static term nif_erlang_concat_2(Context *ctx, int argc, term argv[])
         }
     }
 
-    int len = term_list_length(prepend_list);
+    int proper;
+    int len = term_list_length(prepend_list, &proper);
+    if (UNLIKELY(!proper)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
     if (UNLIKELY(memory_ensure_free(ctx, len * 2) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
@@ -772,8 +784,7 @@ static term nif_erlang_concat_2(Context *ctx, int argc, term argv[])
     term list_begin = term_nil();
     term *prev_term = NULL;
 
-    // TODO: handle impropers list
-    while (!term_is_nil(t)) {
+    while (term_is_nonempty_list(t)) {
         term head = term_get_list_head(t);
 
         term *new_list_item = term_list_alloc(ctx);
@@ -1157,7 +1168,11 @@ static term nif_erlang_list_to_float_1(Context *ctx, int argc, term argv[])
     term t = argv[0];
     VALIDATE_VALUE(t, term_is_list);
 
-    int len = term_list_length(t);
+    int proper;
+    int len = term_list_length(t, &proper);
+    if (UNLIKELY(!proper)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
 
     int ok;
     char *string = interop_list_to_string(argv[0], &ok);
@@ -1569,7 +1584,11 @@ static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
     term t = argv[0];
     VALIDATE_VALUE(t, term_is_list);
 
-    int len = term_list_length(t);
+    int proper;
+    int len = term_list_length(t, &proper);
+    if (UNLIKELY(!proper)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
 
     if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
         RAISE_ERROR(BADARG_ATOM);
@@ -1608,7 +1627,7 @@ static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
         t = term_get_list_tail(t);
     }
 
-    while (!term_is_nil(t)) {
+    while (term_is_nonempty_list(t)) {
         term head = term_get_list_head(t);
 
         VALIDATE_VALUE(head, term_is_integer);
@@ -1628,6 +1647,9 @@ static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
         acc = (acc * 10) + (c - '0');
         digits++;
         t = term_get_list_tail(t);
+        if (!term_is_list(t)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
     }
 
     if (negative) {

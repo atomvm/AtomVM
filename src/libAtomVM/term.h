@@ -973,14 +973,15 @@ static inline term term_list_prepend(term head, term tail, Context *ctx)
  * @details Counts the number of list items
  * @return number of list items
  */
-static inline int term_list_length(term t)
+static inline int term_list_length(term t, int *proper)
 {
     int len = 0;
 
-    while (!term_is_nil(t)) {
+    while (term_is_nonempty_list(t)) {
         len++;
         t = term_get_list_tail(t);
     }
+    *proper = term_is_nil(t);
 
     return len;
 }

@@ -48,10 +48,14 @@ void term_display(FILE *fd, term t, const Context *ctx)
     } else if (term_is_nonempty_list(t)) {
         int is_printable = 1;
         term list_item = t;
-        while (!term_is_nil(list_item)) {
+        while (term_is_nonempty_list(list_item)) {
             term head = term_get_list_head(list_item);
             is_printable = is_printable && term_is_uint8(head) && isprint(term_to_uint8(head));
             list_item = term_get_list_tail(list_item);
+        }
+        // improper lists are not printable
+        if (!term_is_nil(list_item)) {
+            is_printable = 0;
         }
 
         if (is_printable) {
@@ -67,7 +71,7 @@ void term_display(FILE *fd, term t, const Context *ctx)
         } else {
             fputc('[', fd);
             int display_separator = 0;
-            while (!term_is_nil(t)) {
+            while (term_is_nonempty_list(t)) {
                 if (display_separator) {
                     fputc(',', fd);
                 } else {
@@ -76,6 +80,10 @@ void term_display(FILE *fd, term t, const Context *ctx)
 
                 term_display(fd, term_get_list_head(t), ctx);
                 t = term_get_list_tail(t);
+            }
+            if (!term_is_nil(t)) {
+                fputc('|', fd);
+                term_display(fd, t, ctx);
             }
             fputc(']', fd);
         }
