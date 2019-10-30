@@ -368,6 +368,11 @@ struct Test tests[] =
     {"list2float.beam", 511},
 #endif
 
+    {"improper_concat.beam", 7},
+    {"improper_cmp.beam", 3},
+    {"improper_literal.beam", 3},
+    {"improper_length.beam", 3},
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}
