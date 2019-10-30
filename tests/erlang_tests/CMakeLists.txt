@@ -286,6 +286,7 @@ compile_erlang(test_list_match)
 compile_erlang(test_match)
 compile_erlang(test_ordering_0)
 compile_erlang(test_ordering_1)
+compile_erlang(test_bs)
 
 compile_erlang(ceilint)
 compile_erlang(ceilbadarg)
@@ -622,6 +623,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_match.beam
     test_ordering_0.beam
     test_ordering_1.beam
+    test_bs.beam
 
     ceilint.beam
     ceilbadarg.beam

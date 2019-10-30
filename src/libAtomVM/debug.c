@@ -23,6 +23,8 @@ static COLD_FUNC void debug_display_type(term t, const Context *ctx)
 {
     if (term_is_atom(t) || term_is_integer(t) || term_is_nil(t) || term_is_pid(t)) {
         term_display(stderr, t, ctx);
+    } else if ((t & 0x3F) == 0x24) {
+        fprintf(stderr, "binary(%li)", (unsigned long) (t >> 6));
     } else if ((t & 0x3F) == 0) {
         fprintf(stderr, "tuple(%i)", term_get_size_from_boxed_header(t));
     } else if (term_is_boxed(t)) {
@@ -49,52 +51,121 @@ static COLD_FUNC void debug_dump_binary_mem(char *buf, term val, unsigned n)
     buf[n] = '\0';
 }
 
-static COLD_FUNC void debug_dump_term(Context *ctx, term *pos, const char *region, unsigned i)
+static COLD_FUNC size_t debug_dump_term(Context *ctx, term *pos, const char *region, unsigned i)
 {
     term t = *pos;
-    // TODO use TERM_BITS instead
-    char buf[32 + 1];
-    debug_dump_binary_mem(buf, *pos, 32);
-    fprintf(stderr, "DEBUG: %s 0x%lx %3i: (%s)b 0x%09lx: ", region, (unsigned long) pos, i, buf, t);
+    unsigned long boxed_words = 0, boxed_words_i = 0;
+    while (1) {
+        // TODO use TERM_BITS instead
+        size_t n = sizeof(term) * 8;
+        char buf[n + 1];
+        debug_dump_binary_mem(buf, *pos, n);
+        const char* format_str =
+        #if TERM_BYTES == 4
+            "DEBUG: %s 0x%lx %3i: (%s)b 0x%08lx: ";
+        #elif TERM_BYTES == 8
+            "DEBUG: %s 0x%lx %3i: (%s)b 0x%016lx: ";
+        #else
+            #error
+        #endif
+        fprintf(stderr, format_str, region, (unsigned long) pos, i, buf, t);
+
+        if (strncmp(region, "f", 1) == 0) {
+            fprintf(stderr, "\n");
+            return i + 1;
+        } else if (boxed_words) {
+            if (boxed_words_i > 1) {
+                fprintf(stderr, "^^^\n");
+                boxed_words_i--;
+                pos++; i++;
+            } else {
+                fprintf(stderr, "^^^\n");
+                return boxed_words + 1;
+            }
+        } else if (term_is_atom(t) || term_is_integer(t) || term_is_nil(t) || term_is_pid(t)) {
+            term_display(stderr, t, ctx);
+            fprintf(stderr, "\n");
+            return i + 1;
+        } else if ((t & 0x3F) == 0x24) {
+            boxed_words = boxed_words_i = (unsigned long) (t >> 6);
+            fprintf(stderr, "binary(%li)\n", boxed_words);
+            pos++; i++;
+        } else if ((t & 0x3F) == 0) {
+            fprintf(stderr, "tuple(%i)\n", term_get_size_from_boxed_header(t));
+            return i + 1;
+        } else if (term_is_boxed(t)) {
+            fprintf(stderr, "boxed(0x%lx)\n", (unsigned long) term_to_term_ptr(t));
+            return i + 1;
+        } else if ((t & 0x3) == 0x1) {
+            fprintf(stderr, "list(0x%lx)\n", (unsigned long) term_to_term_ptr(t));
+            return i + 1;
+        } else if (term_is_catch_label(t)) {
+            int module_index;
+            int catch_label = term_to_catch_label_and_module(t, &module_index);
+            fprintf(stderr, "catch label(%i:%i)\n", module_index, catch_label);
+            return i + 1;
+        } else if (term_is_cp(t)) {
+            fprintf(stderr, "continuation pointer\n");
+            return i + 1;
+        } else {
+            fprintf(stderr, "unknown\n");
+            return i + 1;
+        }
+    }
+
     debug_display_type(t, ctx);
-    fprintf(stderr, "\n");
+    return i + 1;
 }
 
 COLD_FUNC void debug_dump_memory(Context *ctx, term *start, term *end, const char *region)
 {
-    unsigned long size = end - start;
-    fprintf(stderr, "DEBUG:\n");
-    fprintf(stderr, "DEBUG: %s start: 0x%lx\n", region, (unsigned long) start);
-    fprintf(stderr, "DEBUG: %s end:   0x%lx\n", region, (unsigned long) end);
-    fprintf(stderr, "DEBUG: %s size:  %li words\n", region, size);
-    term *pos = start;
-    for (unsigned i = 0; i < size;  ++i) {
-        debug_dump_term(ctx, pos, region, i);
-        ++pos;
+    if (start <= end) {
+        unsigned long size = end - start;
+        fprintf(stderr, "DEBUG:\n");
+        fprintf(stderr, "DEBUG: %s start: 0x%lx\n", region, (unsigned long) start);
+        fprintf(stderr, "DEBUG: %s end:   0x%lx\n", region, (unsigned long) end);
+        fprintf(stderr, "DEBUG: %s size:  %li words\n", region, size);
+        term *pos = start;
+        for (unsigned i = 0; i < size;) {
+            i = debug_dump_term(ctx, pos, region, i);
+            pos += i;
+        }
+    } else {
+        fprintf(stderr, "DEBUG:\n");
+        fprintf(stderr, "DEBUG: %s ERROR! start > end!!\n", region);
+        fprintf(stderr, "DEBUG: %s start: 0x%lx\n", region, (unsigned long) start);
+        fprintf(stderr, "DEBUG: %s end:   0x%lx\n", region, (unsigned long) end);
+        abort();
     }
     fprintf(stderr, "DEBUG:\n");
+}
+
+COLD_FUNC void debug_dump_heap(Context *ctx)
+{
+    debug_dump_memory(ctx, ctx->heap_start, ctx->heap_ptr, "h");
+}
+
+COLD_FUNC void debug_dump_free(Context *ctx)
+{
+    debug_dump_memory(ctx, ctx->heap_ptr, ctx->e, "f");
+}
+
+COLD_FUNC void debug_dump_stack(Context *ctx)
+{
+    debug_dump_memory(ctx, ctx->e, ctx->stack_base, "s");
+}
+
+COLD_FUNC void debug_dump_registers(Context *ctx)
+{
+    debug_dump_memory(ctx, ctx->x, ctx->x + 16, "r");
 }
 
 COLD_FUNC void debug_dump_context(Context *ctx)
 {
     debug_dump_heap(ctx);
+    debug_dump_free(ctx);
     debug_dump_stack(ctx);
     debug_dump_registers(ctx);
-}
-
-COLD_FUNC void debug_dump_heap(Context *ctx)
-{
-    debug_dump_memory(ctx, ctx->heap_start, ctx->heap_ptr, "heap");
-}
-
-COLD_FUNC void debug_dump_stack(Context *ctx)
-{
-    debug_dump_memory(ctx, ctx->e, ctx->stack_base, "stack");
-}
-
-COLD_FUNC void debug_dump_registers(Context *ctx)
-{
-    debug_dump_memory(ctx, ctx->x, ctx->x + 16, "register");
 }
 
 
