@@ -373,6 +373,13 @@ struct Test tests[] =
     {"improper_literal.beam", 3},
     {"improper_length.beam", 3},
 
+#ifndef AVM_NO_FP
+    {"jsonish_encode.beam", 1058},
+#else
+    {"jsonish_encode_no_fp.beam", 1046},
+#endif
+    {"iolist_concat_bin.beam", 71006},
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}

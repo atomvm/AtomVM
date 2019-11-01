@@ -331,6 +331,10 @@ compile_erlang(improper_cmp)
 compile_erlang(improper_literal)
 compile_erlang(improper_length)
 
+compile_erlang(jsonish_encode)
+compile_erlang(jsonish_encode_no_fp)
+compile_erlang(iolist_concat_bin)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -654,4 +658,8 @@ add_custom_target(erlang_test_modules DEPENDS
     improper_cmp.beam
     improper_literal.beam
     improper_length.beam
+
+    jsonish_encode.beam
+    jsonish_encode_no_fp.beam
+    iolist_concat_bin.beam
 )
