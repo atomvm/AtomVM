@@ -32,6 +32,7 @@
 #include "term.h"
 #include "utils.h"
 #include "sys.h"
+#include "tempstack.h"
 #include "version.h"
 
 #include <stdio.h>
@@ -98,6 +99,8 @@ static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_float_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_existing_atom_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_iolist_size_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_iolist_to_binary_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_register_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_send_2(Context *ctx, int argc, term argv[]);
@@ -269,6 +272,18 @@ static const struct Nif list_to_float_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_list_to_float_1
+};
+
+static const struct Nif iolist_size_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_iolist_size_1
+};
+
+static const struct Nif iolist_to_binary_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_iolist_to_binary_1
 };
 
 static const struct Nif open_port_nif =
@@ -450,6 +465,107 @@ static inline term make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
     } else {
         return term_from_int(value);
     }
+}
+
+static term nif_erlang_iolist_size_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term t = argv[0];
+    VALIDATE_VALUE(t, term_is_list);
+
+    unsigned long acc = 0;
+
+    struct TempStack temp_stack;
+    temp_stack_init(&temp_stack);
+
+    temp_stack_push(&temp_stack, t);
+
+    while (!temp_stack_is_empty(&temp_stack)) {
+        if (term_is_integer(t)) {
+            acc++;
+            t = temp_stack_pop(&temp_stack);
+
+        } else if (term_is_nil(t)) {
+            t = temp_stack_pop(&temp_stack);
+
+        } else if (term_is_nonempty_list(t)) {
+            temp_stack_push(&temp_stack, term_get_list_tail(t));
+            t = term_get_list_head(t);
+
+        } else if (term_is_binary(t)) {
+            acc += term_binary_size(t);
+            t = temp_stack_pop(&temp_stack);
+
+        } else {
+            temp_stack_destory(&temp_stack);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
+
+    temp_stack_destory(&temp_stack);
+
+    return term_from_int(acc);
+}
+
+static term nif_erlang_iolist_to_binary_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term bin_size_term = nif_erlang_iolist_size_1(ctx, argc, argv);
+    if (UNLIKELY(!term_is_integer(bin_size_term))) {
+        return bin_size_term;
+    }
+
+    avm_int_t bin_size = term_to_int(bin_size_term);
+    char *bin_buf = malloc(bin_size);
+    if (IS_NULL_PTR(bin_buf)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    char *p = bin_buf;
+
+    term t = argv[0];
+
+    struct TempStack temp_stack;
+    temp_stack_init(&temp_stack);
+
+    temp_stack_push(&temp_stack, t);
+
+    while (!temp_stack_is_empty(&temp_stack)) {
+        if (term_is_integer(t)) {
+            *p = term_to_int(t);
+            p++;
+            t = temp_stack_pop(&temp_stack);
+
+        } else if (term_is_nil(t)) {
+            t = temp_stack_pop(&temp_stack);
+
+        } else if (term_is_nonempty_list(t)) {
+            temp_stack_push(&temp_stack, term_get_list_tail(t));
+            t = term_get_list_head(t);
+
+        } else if (term_is_binary(t)) {
+            int len = term_binary_size(t);
+            memcpy(p, term_binary_data(t), len);
+            p += len;
+            t = temp_stack_pop(&temp_stack);
+
+        } else {
+            temp_stack_destory(&temp_stack);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
+
+    temp_stack_destory(&temp_stack);
+
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(bin_size) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term bin_res = term_from_literal_binary(bin_buf, bin_size, ctx);
+
+    free(bin_buf);
+
+    return bin_res;
 }
 
 static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
