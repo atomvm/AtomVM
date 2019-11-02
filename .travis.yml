@@ -26,6 +26,8 @@ matrix:
         - export CXXFLAGS="-Os"
         - mkdir -p build
         - cd build
+        - cat /usr/lib/erlang/releases/RELEASES
+        - cc --version
         - cmake ..
         - make
         - valgrind ./tests/test-erlang
@@ -59,6 +61,8 @@ matrix:
         - export CXXFLAGS="-O2"
         - mkdir -p build
         - cd build
+        - cat /usr/lib/erlang/releases/RELEASES
+        - cc --version
         - cmake ..
         - make
         - valgrind ./tests/test-erlang
@@ -92,6 +96,8 @@ matrix:
         - export CXXFLAGS="-O3"
         - mkdir -p build
         - cd build
+        - cat /usr/lib/erlang/releases/RELEASES
+        - cc --version
         - cmake ..
         - make
         - valgrind ./tests/test-erlang
@@ -125,6 +131,8 @@ matrix:
         - export CXXFLAGS="-O2"
         - mkdir -p build
         - cd build
+        - cat /usr/lib/erlang/releases/RELEASES
+        - cc --version
         - cmake ..
         - make
         - valgrind ./tests/test-erlang
@@ -158,6 +166,8 @@ matrix:
         - export CXXFLAGS="-O2"
         - mkdir -p build
         - cd build
+        - cat /usr/lib/erlang/releases/RELEASES
+        - cc --version
         - cmake ..
         - make
         - valgrind ./tests/test-erlang
@@ -186,6 +196,8 @@ matrix:
         - cd build
         - export CFLAGS="-O2"
         - export CXXFLAGS="-O2"
+        - cat /usr/lib/erlang/releases/RELEASES
+        - cc --version
         - cmake ..
         - make
         - valgrind ./tests/test-erlang
@@ -274,6 +286,7 @@ matrix:
         - export CXXFLAGS="-O3"
         - mkdir -p build
         - cd build
+        - cat /usr/lib/erlang/releases/RELEASES
         - cc --version
         - cmake -DAVM_DISABLE_FP=on ..
         - make
@@ -313,6 +326,7 @@ matrix:
         - export CXXFLAGS="-O2 -m32"
         - mkdir -p build
         - cd build
+        - cat /usr/lib/erlang/releases/RELEASES
         - cc --version
         - cmake -DAVM_USE_32BIT_FLOAT=on ..
         - make
@@ -347,6 +361,8 @@ matrix:
         - export CXX=g++-7
         - mkdir -p build
         - cd build
+        - cat /usr/lib/erlang/releases/RELEASES
+        - cc --version
         - cmake ..
         - make
         - valgrind ./tests/test-erlang
