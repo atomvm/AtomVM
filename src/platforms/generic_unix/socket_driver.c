@@ -316,7 +316,7 @@ term socket_driver_do_init(Context *ctx, term params)
     //
     // get the binary flag
     //
-    term binary = interop_proplist_get_value_default(params, BINARY_ATOM, TRUE_ATOM);
+    term binary = interop_proplist_get_value_default(params, BINARY_ATOM, FALSE_ATOM);
     if (!(binary == TRUE_ATOM || binary == FALSE_ATOM)) {
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
