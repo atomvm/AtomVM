@@ -10,6 +10,7 @@ set(ERLANG_MODULES
     console
     gpio
     i2c
+    http_server
     logger
     network_fsm
     spi
