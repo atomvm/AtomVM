@@ -574,10 +574,20 @@ static void active_recv_callback(EventListener *listener)
         netbuf_data(buf, &data, &data_len);
 
         TRACE("socket_driver: active received data of len: %i\n", data_len);
+        int ensure_packet_avail;
+        int binary;
+        if (socket_data->binary == TRUE_ATOM) {
+            binary = 1;
+            ensure_packet_avail = term_binary_data_size_in_terms(data_len) + BINARY_HEADER_SIZE;
+        } else {
+            binary = 0;
+            ensure_packet_avail = data_len * 2;
+        }
         // {tcp, pid, binary}
-        port_ensure_available(ctx, 20 + data_len/(TERM_BITS/8) + 1);
+        port_ensure_available(ctx, 20 + ensure_packet_avail);
+
         term pid = socket_data->controlling_process;
-        term packet = socket_create_packet_term(ctx, data, data_len, socket_data->binary == TRUE_ATOM);
+        term packet = socket_create_packet_term(ctx, data, data_len, binary);
         term msgs[3] = {TCP_ATOM, term_from_local_process_id(ctx->process_id), packet};
         term msg = port_create_tuple_n(ctx, 3, msgs);
         port_send_message(ctx, pid, msg);
@@ -606,8 +616,18 @@ static void passive_recv_callback(EventListener *listener)
         netbuf_data(buf, &data, &data_len);
 
         TRACE("socket_driver: passive received data of len: %i\n", data_len);
-        port_ensure_available(ctx, 20 + data_len/(TERM_BITS/8) + 1);
+        int ensure_packet_avail;
+        int binary;
+        if (socket_data->binary == TRUE_ATOM) {
+            binary = 1;
+            ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
+        } else {
+            binary = 0;
+            ensure_packet_avail = len * 2;
+        }
         // {Ref, {ok, Packet::binary()}}
+        port_ensure_available(ctx, 20 + ensure_packet_avail);
+
         term pid = recvfrom_data->pid;
         term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
         term packet = socket_create_packet_term(ctx, data, data_len, socket_data->binary == TRUE_ATOM);
@@ -642,8 +662,18 @@ static void active_recvfrom_callback(EventListener *listener)
         void *data;
         uint16_t datalen;
         netbuf_data(buf, &data, &datalen);
+        int ensure_packet_avail;
+        int binary;
+        if (socket_data->binary == TRUE_ATOM) {
+            binary = 1;
+            ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
+        } else {
+            binary = 0;
+            ensure_packet_avail = len * 2;
+        }
         // {udp, pid, {int,int,int,int}, int, binary}
-        port_ensure_available(ctx, 20 + datalen/(TERM_BITS/8) + 1);
+        port_ensure_available(ctx, 20 + ensure_packet_avail);
+
         term pid = socket_data->controlling_process;
         term addr = socket_addr_to_tuple(ctx, netbuf_fromaddr(buf));
         term port = term_from_int32(netbuf_fromport(buf));
@@ -674,8 +704,17 @@ static void passive_recvfrom_callback(EventListener *listener)
         void *data;
         uint16_t datalen;
         netbuf_data(buf, &data, &datalen);
+        int ensure_packet_avail;
+        int binary;
+        if (socket_data->binary == TRUE_ATOM) {
+            binary = 1;
+            ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
+        } else {
+            binary = 0;
+            ensure_packet_avail = len * 2;
+        }
         // {Ref, {ok, {{int,int,int,int}, int, binary}}}
-        port_ensure_available(ctx, 20 + datalen/(TERM_BITS/8) + 1);
+        port_ensure_available(ctx, 20 + ensure_packet_avail);
 
         term ref = term_from_ref_ticks(socket_data->ref_ticks, ctx);
         term addr = socket_addr_to_tuple(ctx, netbuf_fromaddr(buf));
