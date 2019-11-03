@@ -405,12 +405,13 @@ term socket_driver_do_send(Context *ctx, term buffer)
         buf = term_binary_data(buffer);
         len = term_binary_size(buffer);
     } else if (term_is_list(buffer)) {
+        int proper;
+        len = term_list_length(buffer, &proper);
         int ok;
         buf = interop_list_to_string(buffer, &ok);
-        if (!ok) {
+        if (!proper || !ok) {
             // TODO error
         }
-        len = strlen(buf);
     } else {
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
@@ -439,12 +440,13 @@ term socket_driver_do_sendto(Context *ctx, term dest_address, term dest_port, te
         buf = term_binary_data(buffer);
         len = term_binary_size(buffer);
     } else if (term_is_list(buffer)) {
+        int proper;
+        len = term_list_length(buffer, &proper);
         int ok;
         buf = interop_list_to_string(buffer, &ok);
-        if (UNLIKELY(!ok)) {
+        if (UNLIKELY(!proper || !ok)) {
             return port_create_error_tuple(ctx, BADARG_ATOM);
         }
-        len = strlen(buf);
     } else {
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
