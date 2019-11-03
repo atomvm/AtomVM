@@ -465,10 +465,10 @@ term socket_driver_do_send(Context *ctx, term buffer)
 {
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
-    const char *buf = NULL;
+    char *buf = NULL;
     size_t len = 0;
     if (term_is_binary(buffer)) {
-        buf = term_binary_data(buffer);
+        buf = (char *) term_binary_data(buffer);
         len = term_binary_size(buffer);
     } else if (term_is_list(buffer)) {
         int proper;
@@ -483,6 +483,9 @@ term socket_driver_do_send(Context *ctx, term buffer)
     }
 
     err_t status = netconn_write(socket_data->conn, buf, len, NETCONN_NOCOPY);
+    if (term_is_list(buffer)) {
+        free(buf);
+    }
     if (status != ERR_OK) {
         return port_create_sys_error_tuple(ctx, SEND_ATOM, status);
     } else {
@@ -498,10 +501,10 @@ term socket_driver_do_sendto(Context *ctx, term dest_address, term dest_port, te
 
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
-    const char *buf = NULL;
+    char *buf = NULL;
     size_t len = 0;
     if (term_is_binary(buffer)) {
-        buf = term_binary_data(buffer);
+        buf = (char *) term_binary_data(buffer);
         len = term_binary_size(buffer);
     } else if (term_is_list(buffer)) {
         int proper;
@@ -530,16 +533,25 @@ term socket_driver_do_sendto(Context *ctx, term dest_address, term dest_port, te
     if (UNLIKELY(netbuf_ref(sendbuf, buf, len) != ERR_OK)) {
         TRACE("socket: netbuf_ref fail\n");
         netbuf_delete(sendbuf);
+        if (term_is_list(buffer)) {
+            free(buf);
+        }
         return port_create_sys_error_tuple(ctx, SENDTO_ATOM, errno);
     }
 
     if (UNLIKELY(netconn_sendto(socket_data->conn, sendbuf, &ip4addr, destport) != ERR_OK)) {
         TRACE("socket: send failed\n");
         netbuf_delete(sendbuf);
+        if (term_is_list(buffer)) {
+            free(buf);
+        }
         return port_create_sys_error_tuple(ctx, SENDTO_ATOM, errno);
     }
 
     netbuf_delete(sendbuf);
+    if (term_is_list(buffer)) {
+        free(buf);
+    }
 
     return port_create_ok_tuple(ctx, OK_ATOM);
 }
