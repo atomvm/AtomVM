@@ -399,10 +399,10 @@ term socket_driver_do_send(Context *ctx, term buffer)
 {
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
-    const char *buf = NULL;
+    char *buf = NULL;
     size_t len = 0;
     if (term_is_binary(buffer)) {
-        buf = term_binary_data(buffer);
+        buf = (char *) term_binary_data(buffer);
         len = term_binary_size(buffer);
     } else if (term_is_list(buffer)) {
         int proper;
@@ -417,6 +417,10 @@ term socket_driver_do_send(Context *ctx, term buffer)
     }
 
     int sent_data = send(socket_data->sockfd, buf, len, 0);
+    if (term_is_list(buffer)) {
+        free(buf);
+    }
+
     if (sent_data == -1) {
         return port_create_sys_error_tuple(ctx, SEND_ATOM, errno);
     } else {
@@ -434,10 +438,10 @@ term socket_driver_do_sendto(Context *ctx, term dest_address, term dest_port, te
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(socket_tuple_to_addr(dest_address));
     addr.sin_port = htons(term_to_int32(dest_port));
-    const char *buf = NULL;
+    char *buf = NULL;
     size_t len = 0;
     if (term_is_binary(buffer)) {
-        buf = term_binary_data(buffer);
+        buf = (char *) term_binary_data(buffer);
         len = term_binary_size(buffer);
     } else if (term_is_list(buffer)) {
         int proper;
@@ -451,6 +455,9 @@ term socket_driver_do_sendto(Context *ctx, term dest_address, term dest_port, te
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
     int sent_data = sendto(socket_data->sockfd, buf, len, 0, (struct sockaddr *) &addr, sizeof(addr));
+    if (term_is_list(buffer)) {
+        free(buf);
+    }
     if (sent_data == -1) {
         return port_create_sys_error_tuple(ctx, SENDTO_ATOM, errno);
     } else {
