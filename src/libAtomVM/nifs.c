@@ -737,8 +737,17 @@ static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])
 
     // TODO: new process should fail with badarity if arity != 0
 
-    for (unsigned int i = arity - n_freeze; i < arity + n_freeze; i++) {
-        new_ctx->x[i] = boxed_value[i - (arity - n_freeze) + 3];
+    int size = 0;
+    for (uint32_t i = 0; i < n_freeze; i++) {
+        size += memory_estimate_usage(boxed_value[i + 3]);
+    }
+    if (UNLIKELY(memory_ensure_free(new_ctx, size) != MEMORY_GC_OK)) {
+        //TODO: new process should be terminated, however a new pid is returned anyway
+        fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
+        abort();
+    }
+    for (uint32_t i = 0; i < n_freeze; i++) {
+        new_ctx->x[i + arity - n_freeze] = memory_copy_term_tree(&new_ctx->heap_ptr, boxed_value[i + 3]);
     }
 
     new_ctx->saved_module = fun_module;
