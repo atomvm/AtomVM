@@ -2437,8 +2437,8 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                         }
                     }
 
-                    for (unsigned int j = arity - n_freeze; j < arity + n_freeze; j++) {
-                        ctx->x[j] = boxed_value[j - (arity - n_freeze) + 3];
+                    for (uint32_t i = 0; i < n_freeze; i++) {
+                        ctx->x[i + arity - n_freeze] = boxed_value[i + 3];
                     }
 
                     NEXT_INSTRUCTION(next_off);
