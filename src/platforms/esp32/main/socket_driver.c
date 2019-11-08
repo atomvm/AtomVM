@@ -634,10 +634,10 @@ static void passive_recv_callback(EventListener *listener)
         int binary;
         if (socket_data->binary == TRUE_ATOM) {
             binary = 1;
-            ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
+            ensure_packet_avail = term_binary_data_size_in_terms(data_len) + BINARY_HEADER_SIZE;
         } else {
             binary = 0;
-            ensure_packet_avail = len * 2;
+            ensure_packet_avail = data_len * 2;
         }
         // {Ref, {ok, Packet::binary()}}
         port_ensure_available(ctx, 20 + ensure_packet_avail);
@@ -680,10 +680,10 @@ static void active_recvfrom_callback(EventListener *listener)
         int binary;
         if (socket_data->binary == TRUE_ATOM) {
             binary = 1;
-            ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
+            ensure_packet_avail = term_binary_data_size_in_terms(datalen) + BINARY_HEADER_SIZE;
         } else {
             binary = 0;
-            ensure_packet_avail = len * 2;
+            ensure_packet_avail = datalen * 2;
         }
         // {udp, pid, {int,int,int,int}, int, binary}
         port_ensure_available(ctx, 20 + ensure_packet_avail);
@@ -722,10 +722,10 @@ static void passive_recvfrom_callback(EventListener *listener)
         int binary;
         if (socket_data->binary == TRUE_ATOM) {
             binary = 1;
-            ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
+            ensure_packet_avail = term_binary_data_size_in_terms(datalen) + BINARY_HEADER_SIZE;
         } else {
             binary = 0;
-            ensure_packet_avail = len * 2;
+            ensure_packet_avail = datalen * 2;
         }
         // {Ref, {ok, {{int,int,int,int}, int, binary}}}
         port_ensure_available(ctx, 20 + ensure_packet_avail);
