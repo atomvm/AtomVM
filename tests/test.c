@@ -379,6 +379,7 @@ struct Test tests[] =
     {"jsonish_encode_no_fp.beam", 1046},
 #endif
     {"iolist_concat_bin.beam", 71006},
+    {"binary_is_iolist.beam", 1006},
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 

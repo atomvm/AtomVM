@@ -334,6 +334,7 @@ compile_erlang(improper_length)
 compile_erlang(jsonish_encode)
 compile_erlang(jsonish_encode_no_fp)
 compile_erlang(iolist_concat_bin)
+compile_erlang(binary_is_iolist)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -662,4 +663,5 @@ add_custom_target(erlang_test_modules DEPENDS
     jsonish_encode.beam
     jsonish_encode_no_fp.beam
     iolist_concat_bin.beam
+    binary_is_iolist.beam
 )
