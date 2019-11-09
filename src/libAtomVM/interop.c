@@ -18,6 +18,7 @@
  ***************************************************************************/
 
 #include "interop.h"
+#include "tempstack.h"
 
 char *interop_term_to_string(term t, int *ok)
 {
@@ -114,4 +115,83 @@ term interop_proplist_get_value_default(term list, term key, term default_value)
     }
 
     return default_value;
+}
+
+int interop_iolist_size(term t, int *ok)
+{
+    if (UNLIKELY(!term_is_list(t))) {
+        *ok = 0;
+        return 0;
+    }
+
+    unsigned long acc = 0;
+
+    struct TempStack temp_stack;
+    temp_stack_init(&temp_stack);
+
+    temp_stack_push(&temp_stack, t);
+
+    while (!temp_stack_is_empty(&temp_stack)) {
+        if (term_is_integer(t)) {
+            acc++;
+            t = temp_stack_pop(&temp_stack);
+
+        } else if (term_is_nil(t)) {
+            t = temp_stack_pop(&temp_stack);
+
+        } else if (term_is_nonempty_list(t)) {
+            temp_stack_push(&temp_stack, term_get_list_tail(t));
+            t = term_get_list_head(t);
+
+        } else if (term_is_binary(t)) {
+            acc += term_binary_size(t);
+            t = temp_stack_pop(&temp_stack);
+
+        } else {
+            temp_stack_destory(&temp_stack);
+            *ok = 0;
+            return 0;
+        }
+    }
+
+    temp_stack_destory(&temp_stack);
+
+    *ok = 1;
+    return acc;
+}
+
+int interop_write_iolist(term t, char *p)
+{
+    struct TempStack temp_stack;
+    temp_stack_init(&temp_stack);
+
+    temp_stack_push(&temp_stack, t);
+
+    while (!temp_stack_is_empty(&temp_stack)) {
+        if (term_is_integer(t)) {
+            *p = term_to_int(t);
+            p++;
+            t = temp_stack_pop(&temp_stack);
+
+        } else if (term_is_nil(t)) {
+            t = temp_stack_pop(&temp_stack);
+
+        } else if (term_is_nonempty_list(t)) {
+            temp_stack_push(&temp_stack, term_get_list_tail(t));
+            t = term_get_list_head(t);
+
+        } else if (term_is_binary(t)) {
+            int len = term_binary_size(t);
+            memcpy(p, term_binary_data(t), len);
+            p += len;
+            t = temp_stack_pop(&temp_stack);
+
+        } else {
+            temp_stack_destory(&temp_stack);
+            return 0;
+        }
+    }
+
+    temp_stack_destory(&temp_stack);
+    return 1;
 }

@@ -28,4 +28,7 @@ char *interop_list_to_string(term list, int *ok);
 term interop_proplist_get_value(term list, term key);
 term interop_proplist_get_value_default(term list, term key, term default_value);
 
+int interop_iolist_size(term t, int *ok);
+int interop_write_iolist(term t, char *p);
+
 #endif

@@ -32,7 +32,6 @@
 #include "term.h"
 #include "utils.h"
 #include "sys.h"
-#include "tempstack.h"
 #include "version.h"
 
 #include <stdio.h>
@@ -471,92 +470,36 @@ static term nif_erlang_iolist_size_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-    term t = argv[0];
-    VALIDATE_VALUE(t, term_is_list);
+    int ok;
+    avm_int_t size = interop_iolist_size(argv[0], &ok);
 
-    unsigned long acc = 0;
-
-    struct TempStack temp_stack;
-    temp_stack_init(&temp_stack);
-
-    temp_stack_push(&temp_stack, t);
-
-    while (!temp_stack_is_empty(&temp_stack)) {
-        if (term_is_integer(t)) {
-            acc++;
-            t = temp_stack_pop(&temp_stack);
-
-        } else if (term_is_nil(t)) {
-            t = temp_stack_pop(&temp_stack);
-
-        } else if (term_is_nonempty_list(t)) {
-            temp_stack_push(&temp_stack, term_get_list_tail(t));
-            t = term_get_list_head(t);
-
-        } else if (term_is_binary(t)) {
-            acc += term_binary_size(t);
-            t = temp_stack_pop(&temp_stack);
-
-        } else {
-            temp_stack_destory(&temp_stack);
-            RAISE_ERROR(BADARG_ATOM);
-        }
+    if (ok) {
+        return term_from_int(size);
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
     }
-
-    temp_stack_destory(&temp_stack);
-
-    return term_from_int(acc);
 }
 
 static term nif_erlang_iolist_to_binary_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-    term bin_size_term = nif_erlang_iolist_size_1(ctx, argc, argv);
-    if (UNLIKELY(!term_is_integer(bin_size_term))) {
-        return bin_size_term;
+    term t = argv[0];
+
+    int ok;
+    int bin_size = interop_iolist_size(t, &ok);
+    if (!ok) {
+        RAISE_ERROR(BADARG_ATOM);
     }
 
-    avm_int_t bin_size = term_to_int(bin_size_term);
     char *bin_buf = malloc(bin_size);
     if (IS_NULL_PTR(bin_buf)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    char *p = bin_buf;
 
-    term t = argv[0];
-
-    struct TempStack temp_stack;
-    temp_stack_init(&temp_stack);
-
-    temp_stack_push(&temp_stack, t);
-
-    while (!temp_stack_is_empty(&temp_stack)) {
-        if (term_is_integer(t)) {
-            *p = term_to_int(t);
-            p++;
-            t = temp_stack_pop(&temp_stack);
-
-        } else if (term_is_nil(t)) {
-            t = temp_stack_pop(&temp_stack);
-
-        } else if (term_is_nonempty_list(t)) {
-            temp_stack_push(&temp_stack, term_get_list_tail(t));
-            t = term_get_list_head(t);
-
-        } else if (term_is_binary(t)) {
-            int len = term_binary_size(t);
-            memcpy(p, term_binary_data(t), len);
-            p += len;
-            t = temp_stack_pop(&temp_stack);
-
-        } else {
-            temp_stack_destory(&temp_stack);
-            RAISE_ERROR(BADARG_ATOM);
-        }
+    if (UNLIKELY(!interop_write_iolist(t, bin_buf))) {
+        RAISE_ERROR(BADARG_ATOM);
     }
-
-    temp_stack_destory(&temp_stack);
 
     if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(bin_size) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
