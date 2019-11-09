@@ -486,6 +486,10 @@ static term nif_erlang_iolist_to_binary_1(Context *ctx, int argc, term argv[])
 
     term t = argv[0];
 
+    if (term_is_binary(t)) {
+        return t;
+    }
+
     int ok;
     int bin_size = interop_iolist_size(t, &ok);
     if (!ok) {

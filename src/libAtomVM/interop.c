@@ -119,6 +119,11 @@ term interop_proplist_get_value_default(term list, term key, term default_value)
 
 int interop_iolist_size(term t, int *ok)
 {
+    if (term_is_binary(t)) {
+        *ok = 1;
+        return term_binary_size(t);
+    }
+
     if (UNLIKELY(!term_is_list(t))) {
         *ok = 0;
         return 0;
@@ -162,6 +167,12 @@ int interop_iolist_size(term t, int *ok)
 
 int interop_write_iolist(term t, char *p)
 {
+    if (term_is_binary(t)) {
+        int len = term_binary_size(t);
+        memcpy(p, term_binary_data(t), len);
+        return 1;
+    }
+
     struct TempStack temp_stack;
     temp_stack_init(&temp_stack);
 
