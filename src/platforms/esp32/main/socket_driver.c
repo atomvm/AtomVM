@@ -465,18 +465,21 @@ term socket_driver_do_send(Context *ctx, term buffer)
 {
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
-    char *buf = NULL;
-    size_t len = 0;
+    char *buf;
+    size_t len;
     if (term_is_binary(buffer)) {
         buf = (char *) term_binary_data(buffer);
         len = term_binary_size(buffer);
     } else if (term_is_list(buffer)) {
-        int proper;
-        len = term_list_length(buffer, &proper);
         int ok;
-        buf = interop_list_to_string(buffer, &ok);
-        if (UNLIKELY(!proper || !ok)) {
-            // TODO error
+        len = interop_iolist_size(buffer, &ok);
+        if (UNLIKELY(!ok)) {
+            return port_create_error_tuple(ctx, BADARG_ATOM);
+        }
+        buf = malloc(len);
+        if (UNLIKELY(!interop_write_iolist(buffer, buf))) {
+            free(buf);
+            return port_create_error_tuple(ctx, BADARG_ATOM);
         }
     } else {
         return port_create_error_tuple(ctx, BADARG_ATOM);
@@ -501,17 +504,20 @@ term socket_driver_do_sendto(Context *ctx, term dest_address, term dest_port, te
 
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
-    char *buf = NULL;
-    size_t len = 0;
+    char *buf;
+    size_t len;
     if (term_is_binary(buffer)) {
         buf = (char *) term_binary_data(buffer);
         len = term_binary_size(buffer);
     } else if (term_is_list(buffer)) {
-        int proper;
-        len = term_list_length(buffer, &proper);
         int ok;
-        buf = interop_list_to_string(buffer, &ok);
-        if (UNLIKELY(!proper || !ok)) {
+        len = interop_iolist_size(buffer, &ok);
+        if (UNLIKELY(!ok)) {
+            return port_create_error_tuple(ctx, BADARG_ATOM);
+        }
+        buf = malloc(len);
+        if (UNLIKELY(!interop_write_iolist(buffer, buf))) {
+            free(buf);
             return port_create_error_tuple(ctx, BADARG_ATOM);
         }
     } else {
