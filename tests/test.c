@@ -381,6 +381,8 @@ struct Test tests[] =
     {"iolist_concat_bin.beam", 71006},
     {"binary_is_iolist.beam", 1006},
 
+    {"catch_from_other_module.beam", 7},
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}

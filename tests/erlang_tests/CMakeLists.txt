@@ -336,6 +336,11 @@ compile_erlang(jsonish_encode_no_fp)
 compile_erlang(iolist_concat_bin)
 compile_erlang(binary_is_iolist)
 
+compile_erlang(raise_badmatch)
+compile_erlang(raise_case_end)
+compile_erlang(raise_if_end)
+compile_erlang(catch_from_other_module)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -664,4 +669,9 @@ add_custom_target(erlang_test_modules DEPENDS
     jsonish_encode_no_fp.beam
     iolist_concat_bin.beam
     binary_is_iolist.beam
+
+    raise_badmatch.beam
+    raise_case_end.beam
+    raise_if_end.beam
+    catch_from_other_module.beam
 )
