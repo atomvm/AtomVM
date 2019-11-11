@@ -11,6 +11,7 @@ set(ERLANG_MODULES
     gpio
     i2c
     http_server
+    json_encoder
     logger
     network_fsm
     spi
