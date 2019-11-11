@@ -69,6 +69,7 @@ typedef union
     if (target_label) {                                                 \
         ctx->x[0] = ERROR_ATOM;                                         \
         ctx->x[1] = error_type_atom;                                    \
+        code = mod->code->code;                                         \
         JUMP_TO_ADDRESS(mod->labels[target_label]);                     \
         continue;                                                       \
     } else {                                                            \
@@ -410,6 +411,7 @@ typedef union
 #define RAISE_EXCEPTION() \
     int target_label = get_catch_label_and_change_module(ctx, &mod); \
     if (target_label) { \
+        code = mod->code->code; \
         JUMP_TO_ADDRESS(mod->labels[target_label]); \
         break; \
     } else { \
@@ -688,6 +690,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     if (target_label) {
                         ctx->x[0] = ERROR_ATOM;
                         ctx->x[1] = FUNCTION_CLAUSE_ATOM;
+                        code = mod->code->code;
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
                         fprintf(stderr, "FUNC_INFO: No function clause for module %i atom %i arity %i.\n", module_atom, function_name_atom, arity);
@@ -2320,6 +2323,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     int target_label = get_catch_label_and_change_module(ctx, &mod);
 
                     if (target_label) {
+                        code = mod->code->code;
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
                         fprintf(stderr, "No target label for OP_BADMATCH.  arg1=0x%lx\n", arg1);
@@ -2341,6 +2345,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     int target_label = get_catch_label_and_change_module(ctx, &mod);
 
                     if (target_label) {
+                        code = mod->code->code;
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
                         fprintf(stderr, "No target label for OP_IF_END\n");
@@ -2371,6 +2376,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     int target_label = get_catch_label_and_change_module(ctx, &mod);
 
                     if (target_label) {
+                        code = mod->code->code;
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
                         fprintf(stderr, "No target label for OP_CASE_END.  arg1=0x%lx\n", arg1);
@@ -2404,6 +2410,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                             term_put_tuple_element(new_error_tuple, 0, BADFUN_ATOM);
                             term_put_tuple_element(new_error_tuple, 1, ctx->x[args_count]);
                             ctx->x[1] = new_error_tuple;
+                            code = mod->code->code;
                             JUMP_TO_ADDRESS(mod->labels[target_label]);
                             continue;
 
@@ -2429,6 +2436,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                         if (target_label) {
                             ctx->x[0] = ERROR_ATOM;
                             ctx->x[1] = BADARITY_ATOM;
+                            code = mod->code->code;
                             JUMP_TO_ADDRESS(mod->labels[target_label]);
                             continue;
 
@@ -2652,6 +2660,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                         term_put_tuple_element(new_error_tuple, 1, arg1);
                         ctx->x[0] = ERROR_ATOM;
                         ctx->x[1] = new_error_tuple;
+                        code = mod->code->code;
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
                         abort();
