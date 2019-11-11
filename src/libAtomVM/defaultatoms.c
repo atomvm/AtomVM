@@ -38,6 +38,10 @@ static const char *const decimals_atom = "\x8" "decimals";
 static const char *const scientific_atom = "\xA" "scientific";
 static const char *const compact_atom = "\x7" "compact";
 
+static const char *const badmatch_atom = "\x8" "badmatch";
+static const char *const case_clause_atom = "\xB" "case_clause";
+static const char *const if_clause_atom = "\x9" "if_clause";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -78,6 +82,10 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, decimals_atom) == DECIMALS_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, scientific_atom) == SCIENTIFIC_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, compact_atom) == COMPACT_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, badmatch_atom) == BADMATCH_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, case_clause_atom) == CASE_CLAUSE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, if_clause_atom) == IF_CLAUSE_ATOM_INDEX;
 
     if (!ok) {
         abort();

@@ -2308,6 +2308,12 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
             }
 
             case OP_BADMATCH: {
+                #ifdef IMPL_EXECUTE_LOOP
+                    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+                #endif
+
                 int next_off = 1;
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
@@ -2323,6 +2329,11 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     int target_label = get_catch_label_and_change_module(ctx, &mod);
 
                     if (target_label) {
+                        term new_error_tuple = term_alloc_tuple(2, ctx);
+                        term_put_tuple_element(new_error_tuple, 0, BADMATCH_ATOM);
+                        term_put_tuple_element(new_error_tuple, 1, arg1);
+                        ctx->x[0] = ERROR_ATOM;
+                        ctx->x[1] = new_error_tuple;
                         code = mod->code->code;
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
@@ -2345,6 +2356,8 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     int target_label = get_catch_label_and_change_module(ctx, &mod);
 
                     if (target_label) {
+                        ctx->x[0] = ERROR_ATOM;
+                        ctx->x[1] = IF_CLAUSE_ATOM;
                         code = mod->code->code;
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
@@ -2361,6 +2374,12 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
             }
 
             case OP_CASE_END: {
+                #ifdef IMPL_EXECUTE_LOOP
+                    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+                #endif
+
                 int next_off = 1;
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off)
@@ -2376,6 +2395,11 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     int target_label = get_catch_label_and_change_module(ctx, &mod);
 
                     if (target_label) {
+                        term new_error_tuple = term_alloc_tuple(2, ctx);
+                        term_put_tuple_element(new_error_tuple, 0, CASE_CLAUSE_ATOM);
+                        term_put_tuple_element(new_error_tuple, 1, arg1);
+                        ctx->x[0] = ERROR_ATOM;
+                        ctx->x[1] = new_error_tuple;
                         code = mod->code->code;
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
