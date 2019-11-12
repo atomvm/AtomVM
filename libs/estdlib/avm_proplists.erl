@@ -28,14 +28,14 @@
 
 -export([get_value/2, get_value/3]).
 
--type property() :: atom() | {atom(), term()}.
+-type property() :: atom() | {term(), term()}.
 
 %%-----------------------------------------------------------------------------
 %% @equiv   get_value(Key, List, undefined)
 %% @doc     Get a value from a property list.
 %% @end
 %%-----------------------------------------------------------------------------
--spec get_value(Key::atom(), List::list(property())) -> term() | true | undefined.
+-spec get_value(Key::term(), List::list(property())) -> term() | true | undefined.
 get_value(Key, List) ->
     get_value(Key, List, undefined).
 
@@ -53,12 +53,12 @@ get_value(Key, List) ->
 %%          function returns the atom true.
 %% @end
 %%-----------------------------------------------------------------------------
--spec get_value(Key::atom(), list(property()), Default::term()) -> term().
+-spec get_value(Key::term(), list(property()), Default::term()) -> term().
 get_value(_Key, [], Default) ->
     Default;
-get_value(Key, [{Key, Value} | _T], _Default) when is_atom(Key) ->
+get_value(Key, [{Key, Value} | _T], _Default) ->
     Value;
 get_value(Key, [Key | _T], _Default) when is_atom(Key) ->
     true;
-get_value(Key, [_Key | T], Default) when is_atom(Key) ->
+get_value(Key, [_H | T], Default) ->
     get_value(Key, T, Default).
