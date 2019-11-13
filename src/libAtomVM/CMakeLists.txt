@@ -28,6 +28,7 @@ if(${CMAKE_GENERATOR} STREQUAL "Xcode")
         network.h
         network_driver.h
         nifs.h
+        platform_nifs.h
         port.h
         scheduler.h
         socket.h

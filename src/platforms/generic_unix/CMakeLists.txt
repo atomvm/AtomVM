@@ -15,6 +15,7 @@ set(SOURCE_FILES
     mapped_file.c
     network_driver.c
     platform_defaultatoms.c
+    platform_nifs.c
     socket_driver.c
 )
 

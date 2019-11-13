@@ -28,6 +28,7 @@
 #include "mailbox.h"
 #include "module.h"
 #include "port.h"
+#include "platform_nifs.h"
 #include "scheduler.h"
 #include "term.h"
 #include "utils.h"
@@ -450,7 +451,7 @@ const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
 
     const NifNameAndNifPtr *nameAndPtr = nif_in_word_set(nifname, strlen(nifname));
     if (!nameAndPtr) {
-        return NULL;
+        return platform_nifs_get_nif(nifname);
     }
 
     return nameAndPtr->nif;
