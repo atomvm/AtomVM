@@ -19,7 +19,7 @@
 
 -module(http_server).
 
--export([start_server/2, reply/3]).
+-export([start_server/2, reply/3, parse_query_string/1]).
 
 -include("estdlib.hrl").
 
@@ -92,6 +92,38 @@ code_to_status_string(200) ->
     <<"200 OK">>;
 code_to_status_string(Code) ->
     [erlang:integer_to_binary(Code), <<" NotOK">>].
+
+parse_query_string(L) ->
+    parse_query_string(L, key, [], []).
+
+parse_query_string([$+ | Tail], State, Acc, Data) ->
+    parse_query_string([$\s | Tail], State, Acc, Data);
+
+parse_query_string([$%, Hex1, Hex2 | Tail], State, Acc, Data) ->
+    Char = (hex_char_to_n(Hex1) bsl 4) bor hex_char_to_n(Hex2),
+    parse_query_string([Char | Tail], State, Acc, Data);
+
+parse_query_string([$& | Tail], value, Acc, [LastKey | Data]) ->
+    NewData = [{LastKey, reverse(Acc)} | Data],
+    parse_query_string(Tail, key, [], NewData);
+
+parse_query_string([$= | Tail], key, Acc, Data) ->
+    parse_query_string(Tail, value, [], [ reverse(Acc) | Data]);
+
+parse_query_string([], value, Acc, [LastKey | Data]) ->
+    [{LastKey, reverse(Acc)} | Data ];
+
+parse_query_string([C | Tail], State, Acc, Data) ->
+    parse_query_string(Tail, State, [C | Acc], Data).
+
+hex_char_to_n(N) when N >= $0 andalso N =< $9 ->
+    N - $0;
+
+hex_char_to_n(N) when N >= $a andalso N =< $f ->
+    (N - $a) + 10;
+
+hex_char_to_n(N) when N >= $A andalso N =< $F ->
+    (N - $A) + 10.
 
 split(L) ->
     Tokens = split(L, [], []),
