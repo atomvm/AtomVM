@@ -115,6 +115,9 @@ split([H | T], TokenAcc, Acc) ->
 parse_http([], {waiting_body, [], Data}) ->
     {got_request, Data};
 
+parse_http([], {in_body, Acc, Data}) ->
+    {got_request, [{body_chunk, reverse(Acc)} | Data]};
+
 parse_http([], StateAndData) ->
     {need_more, StateAndData};
 
@@ -159,6 +162,12 @@ parse_http([$\r | Tail], {in_header, Acc, Data}) ->
 
 parse_http([C | Tail], {in_header, Acc, Data}) ->
     parse_http(Tail, {in_header, [C | Acc], Data});
+
+parse_http([C | Tail], {waiting_body, [], Data}) ->
+    parse_http(Tail, {in_body, [C], Data});
+
+parse_http([C | Tail], {in_body, Acc, Data}) ->
+    parse_http(Tail, {in_body, [C | Acc], Data});
 
 parse_http([C | Tail], {_, _Acc, Data}) ->
     erlang:display({consume, [C]}),
