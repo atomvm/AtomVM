@@ -15,8 +15,9 @@ set(ERLANG_MODULES
     avm_inet
     avm_lists
     avm_proplists
+    avm_string
     avm_timer
-        erlang
+    erlang
 )
 
 pack_archive(estdlib ${ERLANG_MODULES})
