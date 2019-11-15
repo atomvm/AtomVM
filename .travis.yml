@@ -419,3 +419,29 @@ matrix:
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+
+    - name: "GCC 7 (with -O2) on Bionic/ppc64le with OTP 20"
+      os: linux
+      dist: bionic
+      arch: ppc64le
+      compiler: gcc
+      sudo: true
+      addons:
+        apt:
+          packages:
+            - erlang
+            - gperf
+      script:
+        - erl -eval 'erlang:display(erlang:system_info(otp_release)), halt().'  -noshell
+        - uname -a
+        - cat /etc/lsb-release
+        - export CFLAGS="-O2"
+        - export CXXFLAGS="-O2"
+        - mkdir -p build
+        - cd build
+        - cc --version
+        - cmake ..
+        - make
+        - ./tests/test-erlang
+        - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+        - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
