@@ -2,8 +2,6 @@
 
 -export([start/0, handle_req/3]).
 
--include("estdlib.hrl").
-
 start() ->
     Self = self(),
     Config = [
@@ -36,13 +34,13 @@ handle_req("GET", [], Conn) ->
     http_server:reply(200, Body, Conn);
 
 handle_req("POST", [], Conn) ->
-    ParamsBody = ?PROPLISTS:get_value(body_chunk, Conn),
+    ParamsBody = avm_proplists:get_value(body_chunk, Conn),
     Params = http_server:parse_query_string(ParamsBody),
 
-    GPIOString = ?PROPLISTS:get_value("gpio", Params),
+    GPIOString = avm_proplists:get_value("gpio", Params),
     GPIONum = safe_list_to_integer(GPIOString),
 
-    Text = ?PROPLISTS:get_value("text", Params, "off"),
+    Text = avm_proplists:get_value("text", Params, "off"),
     MorseText = morse_encode(Text),
 
     spawn(fun() -> blink_led(GPIONum, MorseText) end),
@@ -134,14 +132,8 @@ morse_encode([], Acc) ->
     Acc;
 
 morse_encode([H | L], Acc) ->
-    M = to_morse(to_upper(H)),
+    M = to_morse(avm_string:to_upper(H)),
     morse_encode(L, Acc ++ M).
-
-to_upper(C) when is_integer(C) andalso C >= $a andalso C =< $z ->
-    C - 32;
-
-to_upper(C) ->
-    C.
 
 to_morse(C) ->
     case C of
