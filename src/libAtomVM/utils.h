@@ -43,8 +43,15 @@
         #define READ_32_UNALIGNED(ptr) \
             __builtin_bswap32(*((uint32_t *) (ptr)))
 
+        #define WRITE_32_UNALIGNED(ptr, val) \
+            *((uint32_t *) (ptr)) = __builtin_bswap32(val)
+
         #define READ_16_UNALIGNED(ptr) \
             __builtin_bswap16(*((uint16_t *) (ptr)))
+
+        #define WRITE_16_UNALIGNED(ptr, val) \
+            *((uint16_t *) (ptr)) = __builtin_bswap16(val)
+
     #else
         #define READ_64_UNALIGNED(ptr) \
             ( (((uint64_t) ((uint8_t *)(ptr))[0]) << 56) | (((uint64_t) ((uint8_t *) (ptr))[1]) << 48) | \
@@ -55,8 +62,14 @@
         #define READ_32_UNALIGNED(ptr) \
             ( (((uint8_t *)(ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) | (((uint8_t *)(ptr))[2] << 8) | ((uint8_t *)(ptr))[3] )
 
+        #define WRITE_32_UNALIGNED(ptr, val) \
+            *((uint32_t *) (ptr)) = ( (((uint8_t *)(&val))[0] << 24) | (((uint8_t *) (&val))[1] << 16) | (((uint8_t *)(&val))[2] << 8) | ((uint8_t *)(&val))[3] )
+
         #define READ_16_UNALIGNED(ptr) \
             ( (((uint8_t *)(ptr))[0] << 8) | ((uint8_t *)(ptr))[1] )
+
+        #define WRITE_16_UNALIGNED(ptr, val) \
+            *((uint16_t *) (ptr)) = ( (((uint8_t *)(&val))[0] << 8) | ((uint8_t *)(&val))[1] )
     #endif
 
     #ifdef __GNUC__
@@ -72,8 +85,14 @@
     #define READ_32_UNALIGNED(ptr) \
         ( (((uint8_t *)(ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) | (((uint8_t *)(ptr))[2] << 8) | ((uint8_t *)(ptr))[3] )
 
+    #define WRITE_32_UNALIGNED(ptr, val) \
+        *((uint32_t *) (ptr)) = ( (((uint8_t *)(&val))[0] << 24) | (((uint8_t *) (&val))[1] << 16) | (((uint8_t *)(&val))[2] << 8) | ((uint8_t *)(&val))[3] )
+
     #define READ_16_UNALIGNED(ptr) \
         ( (((uint8_t *)(ptr))[0] << 8) | ((uint8_t *)(ptr))[1] )
+
+    #define WRITE_16_UNALIGNED(ptr, val) \
+        *((uint16_t *) (ptr)) = ( (((uint8_t *)(&val))[0] << 8) | ((uint8_t *)(&val))[1] )
 
     #define ENDIAN_SWAP_32(value) (value)
 #endif

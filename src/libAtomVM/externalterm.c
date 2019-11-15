@@ -41,8 +41,11 @@
 
 static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx);
 static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_size, Context *ctx);
+static size_t compute_external_size(Context *ctx, term t);
+static int externalterm_from_term(Context *ctx, uint8_t **buf, size_t *len, term t);
+static int serialize_term(Context *ctx, uint8_t *buf, term t);
 
-term externalterm_to_term(const void *external_term, Context *ctx)
+term externalterm_to_term(const void *external_term, Context *ctx, int use_heap_fragment)
 {
     const uint8_t *external_term_buf = (const uint8_t *) external_term;
 
@@ -54,22 +57,218 @@ term externalterm_to_term(const void *external_term, Context *ctx)
     int eterm_size;
     int heap_usage = calculate_heap_usage(external_term_buf + 1, &eterm_size, ctx);
 
-    struct ListHead *heap_fragment = malloc(heap_usage * sizeof(term) + sizeof(struct ListHead));
-    if (IS_NULL_PTR(heap_fragment)) {
+    if (use_heap_fragment) {
+        struct ListHead *heap_fragment = malloc(heap_usage * sizeof(term) + sizeof(struct ListHead));
+        if (IS_NULL_PTR(heap_fragment)) {
+            return term_invalid_term();
+        }
+        list_append(&ctx->heap_fragments, heap_fragment);
+        ctx->heap_fragments_size += heap_usage;
+        term *external_term_heap = (term *) (heap_fragment + 1);
+
+        // save the heap pointer and temporary switch to the newly created heap fragment
+        // so all existing functions can be used on the heap fragment without any change.
+        term *main_heap = ctx->heap_ptr;
+        ctx->heap_ptr = external_term_heap;
+        term result = parse_external_terms(external_term_buf + 1, &eterm_size, ctx);
+        ctx->heap_ptr = main_heap;
+
+        return result;
+    } else {
+        if (UNLIKELY(memory_ensure_free(ctx, heap_usage) != MEMORY_GC_OK)) {
+            fprintf(stderr, "Unable to ensure %i free words in heap\n", eterm_size);
+            return term_invalid_term();
+        }
+        term result = parse_external_terms(external_term_buf + 1, &eterm_size, ctx);
+        return result;
+    }
+}
+
+enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term binary)
+{
+    if (!term_is_binary(binary)) {
+        return EXTERNAL_TERM_BAD_ARG;
+    }
+    //
+    // Copy the binary data to a buffer (in case of GC)
+    //
+    size_t len = term_binary_size(binary);
+    const uint8_t *data = (const uint8_t *) term_binary_data(binary);
+    uint8_t *buf = malloc(len);
+    if (UNLIKELY(IS_NULL_PTR(buf))) {
+        fprintf(stderr, "Unable to allocate %zu bytes for binary buffer.\n", len);
+        return EXTERNAL_TERM_MALLOC;
+    }
+    memcpy(buf, data, len);
+    //
+    // Ensure enough free space in heap for terms
+    //
+    int eterm_size;
+    calculate_heap_usage(data + 1, &eterm_size, ctx);
+    if (UNLIKELY(memory_ensure_free(ctx, eterm_size) != MEMORY_GC_OK)) {
+        fprintf(stderr, "Unable to ensure %i free words in heap\n", eterm_size);
+        free(buf);
+        return EXTERNAL_TERM_HEAP_ALLOC;
+    }
+    //
+    // convert
+    //
+    *dst = externalterm_to_term(buf, ctx, 0);
+    free(buf);
+    return EXTERNAL_TERM_OK;
+}
+
+static int externalterm_from_term(Context *ctx, uint8_t **buf, size_t *len, term t)
+{
+    *len = compute_external_size(ctx, t) + 1;
+    *buf = malloc(*len);
+    if (UNLIKELY(IS_NULL_PTR(*buf))) {
+        fprintf(stderr, "Unable to allocate %zu bytes for externalized term.\n", *len);
+        abort();
+    }
+    size_t k = serialize_term(ctx, *buf + 1, t);
+    *buf[0] = EXTERNAL_TERM_TAG;
+    return k + 1;
+}
+
+term externalterm_to_binary(Context *ctx, term t)
+{
+    //
+    // convert
+    //
+    uint8_t *buf;
+    size_t len;
+    externalterm_from_term(ctx, &buf, &len, t);
+    //
+    // Ensure enough free space in heap for binary
+    //
+    int size_in_terms = term_binary_data_size_in_terms(len);
+    if (UNLIKELY(memory_ensure_free(ctx, size_in_terms + 1) != MEMORY_GC_OK)) {
+        fprintf(stderr, "Unable to ensure %i free words in heap\n", size_in_terms);
         return term_invalid_term();
     }
-    list_append(&ctx->heap_fragments, heap_fragment);
-    ctx->heap_fragments_size += heap_usage;
-    term *external_term_heap = (term *) (heap_fragment + 1);
+    //
+    // create and return the binary
+    //
+    term binary = term_from_literal_binary((void *)buf, len, ctx);
+    free(buf);
+    return binary;
+}
 
-    // save the heap pointer and temporary switch to the newly created heap fragment
-    // so all existing functions can be used on the heap fragment without any change.
-    term *main_heap = ctx->heap_ptr;
-    ctx->heap_ptr = external_term_heap;
-    term result = parse_external_terms(external_term_buf + 1, &eterm_size, ctx);
-    ctx->heap_ptr = main_heap;
+static size_t compute_external_size(Context *ctx, term t)
+{
+    return serialize_term(ctx, NULL, t);
+}
 
-    return result;
+static int serialize_term(Context *ctx, uint8_t *buf, term t)
+{
+    if (term_is_uint8(t)) {
+        if (!IS_NULL_PTR(buf)) {
+            buf[0] = SMALL_INTEGER_EXT;
+            buf[1] = term_to_uint8(t);
+        }
+        return 2;
+
+    } else if (term_is_integer(t)) {
+        if (!IS_NULL_PTR(buf)) {
+            int32_t val = term_to_int32(t);
+            buf[0] = INTEGER_EXT;
+            WRITE_32_UNALIGNED(buf + 1, val);
+        }
+        return 5;
+
+    } else if (term_is_atom(t)) {
+        AtomString atom_string = globalcontext_atomstring_from_term(ctx->global, t);
+        size_t atom_len = atom_string_len(atom_string);
+        if (!IS_NULL_PTR(buf)) {
+            buf[0] = ATOM_EXT;
+            WRITE_16_UNALIGNED(buf + 1, atom_len);
+            int8_t *atom_data = (int8_t *) atom_string_data(atom_string);
+            for (size_t i = 3;  i < atom_len + 3;  ++i) {
+                buf[i] = (int8_t) atom_data[i - 3];
+            }
+        }
+        return 3 + atom_len;
+
+    } else if (term_is_tuple(t)) {
+        size_t arity = term_get_tuple_arity(t);
+        if (arity > 255) {
+            fprintf(stderr, "Tuple arity greater than 255: %zu\n", arity);
+            abort();
+        }
+        if (!IS_NULL_PTR(buf)) {
+            buf[0] = SMALL_TUPLE_EXT;
+            buf[1] = (int8_t) arity;
+        }
+        size_t k = 2;
+        for (size_t i = 0;  i < arity;  ++i) {
+            term e = term_get_tuple_element(t, i);
+            k += serialize_term(ctx, IS_NULL_PTR(buf) ? NULL : buf + k, e);
+        }
+        return k;
+
+    } else if (term_is_nil(t)) {
+        if (!IS_NULL_PTR(buf)) {
+            buf[0] = NIL_EXT;
+        }
+        return 1;
+
+    } else if (term_is_string(t)) {
+        if (!IS_NULL_PTR(buf)) {
+            buf[0] = STRING_EXT;
+        }
+        size_t len = 0;
+        size_t k = 3;
+        term i = t;
+        while (!term_is_nil(i)) {
+            term e = term_get_list_head(i);
+            if (!IS_NULL_PTR(buf)) {
+                *(buf + k) = term_to_uint8(e);
+            }
+            ++k;
+            i = term_get_list_tail(i);
+            ++len;
+        }
+        if (!IS_NULL_PTR(buf)) {
+            WRITE_16_UNALIGNED(buf + 1, len);
+        }
+        return k;
+
+    } else if (term_is_list(t)) {
+        if (!IS_NULL_PTR(buf)) {
+            buf[0] = LIST_EXT;
+        }
+        size_t len = 0;
+        size_t k = 5;
+        term i = t;
+        while (term_is_nonempty_list(i)) {
+            term e = term_get_list_head(i);
+            k += serialize_term(ctx, IS_NULL_PTR(buf) ? NULL : buf + k, e);
+            i = term_get_list_tail(i);
+            ++len;
+        }
+        k += serialize_term(ctx, IS_NULL_PTR(buf) ? NULL : buf + k, i);
+        if (!IS_NULL_PTR(buf)) {
+            WRITE_32_UNALIGNED(buf + 1, len);
+        }
+        return k;
+
+    } else if (term_is_binary(t)) {
+        if (!IS_NULL_PTR(buf)) {
+            buf[0] = BINARY_EXT;
+        }
+        size_t len = term_binary_size(t);
+        if (!IS_NULL_PTR(buf)) {
+            const uint8_t *data = (const uint8_t *) term_binary_data(t);
+            WRITE_32_UNALIGNED(buf + 1, len);
+            memcpy(buf + 5, data, len);
+        }
+        return 5 + len;
+
+    } else {
+        fprintf(stderr, "Unknown term type: %li\n", t);
+        abort();
+    }
 }
 
 static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx)
