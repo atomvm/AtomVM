@@ -372,6 +372,31 @@ matrix:
       before_install:
         - eval "${MATRIX_EVAL}"
 
+    - name: "xcode11.2/Mojave (using -O2) on macOS with OTP 21"
+      os: osx
+      osx_image: xcode11.2
+      addons:
+        homebrew:
+          packages:
+            - gperf
+            - erlang@21
+      script:
+        - export PATH="/usr/local/opt/erlang@21/bin:$PATH"
+        - erl -eval 'erlang:display(erlang:system_info(otp_release)), halt().' -noshell
+        - export CFLAGS="-O2"
+        - export CXXFLAGS="-O2"
+        - mkdir -p build
+        - cd build
+        - cmake ..
+        - make
+        - ./tests/test-erlang
+        - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+        - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+      env:
+        - MATRIX_EVAL="CC=clang && CXX=clang++"
+      before_install:
+        - eval "${MATRIX_EVAL}"
+
     - name: "ESP32 platform"
       services:
         - docker
