@@ -35,6 +35,7 @@
 #include "term.h"
 
 #include "esp32_sys.h"
+#include "nvs_flash.h"
 
 const void *avm_partition(int *size);
 
@@ -44,6 +45,14 @@ void app_main()
     tcpip_adapter_init();
 
     esp32_sys_queue_init();
+
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        fprintf(stderr, "Warning: Erasing flash...\n");
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
 
     int size;
     const void *flashed_avm = avm_partition(&size);
