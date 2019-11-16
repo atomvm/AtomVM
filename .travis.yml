@@ -445,3 +445,51 @@ matrix:
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+
+    - name: "GCC 4.6 (with -O2) on Wheezy (armv4t build) using OTP 20 .BEAM files"
+      services:
+        - docker
+      os: linux
+      arch: arm64
+      dist: bionic
+      sudo: true
+      addons:
+        apt:
+          packages:
+            - erlang
+            - gperf
+      script: |
+        mkdir build_tests
+        cd build_tests
+        cmake ..
+        cd tests/erlang_tests
+        make erlang_test_modules
+        cd ../..
+        cd tests/libs/estdlib
+        make
+        cd ../..
+        cd tests/libs/eavmlib
+        make
+        cd ../..
+        docker run -v ${TRAVIS_BUILD_DIR}:/root/AtomVM arm32v5/debian:7 /bin/bash -c '
+        echo "deb http://archive.debian.org/debian wheezy main" > /etc/apt/sources.list
+        echo "deb http://archive.debian.org/debian-security wheezy/updates main" >> /etc/apt/sources.list
+        cat /etc/apt/sources.list
+        apt-get -o Acquire::Check-Valid-Until=false update
+        apt-get -y dist-upgrade
+        apt-get install -y file
+        apt-get install -y build-essential gcc g++ cmake gperf zlib1g-dev valgrind
+        cd /root/AtomVM/
+        export CFLAGS="-std=gnu99 -O2 -mthumb -mthumb-interwork -march=armv4t"
+        export CXXFLAGS="-std=gnu99 -O2 -mthumb -mthumb-interwork -march=armv4t"
+        mkdir -p build
+        cd build
+        cc --version
+        cmake --version
+        cmake ..
+        cp ../build_tests/tests/erlang_tests/*.beam tests/erlang_tests/
+        make
+        ./tests/test-erlang
+        ./src/AtomVM ../build_tests/tests/libs/estdlib/test_estdlib.avm
+        ./src/AtomVM ../build_tests/tests/libs/eavmlib/test_eavmlib.avm
+        '
