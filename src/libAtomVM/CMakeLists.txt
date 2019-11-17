@@ -36,6 +36,7 @@ if(${CMAKE_GENERATOR} STREQUAL "Xcode")
         sys.h
         term_typedef.h
         term.h
+        timer_wheel.h
         trace.h
         utils.h
         valueshashtable.h
@@ -63,6 +64,7 @@ set(SOURCE_FILES
     scheduler.c
     socket.c
     term.c
+    timer_wheel.c
     valueshashtable.c
 )
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin" OR ${CMAKE_SYSTEM_NAME} STREQUAL "Linux" OR ${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
