@@ -221,6 +221,20 @@ void sys_time(struct timespec *t)
     t->tv_nsec = tv.tv_usec * 1000;
 }
 
+void sys_start_millis_timer()
+{
+}
+
+void sys_stop_millis_timer()
+{
+}
+
+uint32_t sys_millis()
+{
+    TickType_t ticks = xTaskGetTickCount();
+    return ticks * portTICK_PERIOD_MS;
+}
+
 Module *sys_load_module(GlobalContext *global, const char *module_name)
 {
     const void *beam_module = NULL;

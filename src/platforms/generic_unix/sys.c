@@ -30,12 +30,20 @@
 #include "defaultatoms.h"
 
 #include <limits.h>
+#include <signal.h>
 #include <poll.h>
+#include <stdbool.h>
 #include <stdint.h>
+#include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
 
 #include "trace.h"
+
+static volatile uint32_t millis;
+static bool has_signal_handler;
+
+static void alarm_handler(int sig);
 
 static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *timespec2);
 
@@ -331,4 +339,55 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 term sys_get_info(Context *ctx, term key)
 {
     return UNDEFINED_ATOM;
+}
+
+void sys_start_millis_timer()
+{
+    if (!has_signal_handler) {
+        struct sigaction saction = {
+            .sa_handler = alarm_handler,
+            .sa_flags = SA_RESTART
+        };
+
+        sigaction(SIGALRM, &saction, NULL);
+    }
+
+    struct itimerval ival = {
+        .it_interval = {
+            .tv_sec = 0,
+            .tv_usec = 1000
+        },
+        .it_value = {
+            .tv_sec = 0,
+            .tv_usec = 1000
+        }
+    };
+
+    setitimer(ITIMER_REAL, &ival, NULL);
+}
+
+void sys_stop_millis_timer()
+{
+    struct itimerval ival = {
+        .it_interval = {
+            .tv_sec = 0,
+            .tv_usec = 0
+        },
+        .it_value = {
+            .tv_sec = 0,
+            .tv_usec = 0
+        }
+    };
+
+    setitimer(ITIMER_REAL, &ival, NULL);
+}
+
+uint32_t sys_millis()
+{
+    return millis;
+}
+
+static void alarm_handler(int sig)
+{
+    millis++;
 }
