@@ -79,4 +79,9 @@ static inline void timer_wheel_item_init(struct TimerWheelItem *it, timer_wheel_
     it->callback = cb;
 }
 
+static inline uint64_t timer_wheel_expiry_to_monotonic(const struct TimerWheel *tw, uint32_t expiry)
+{
+    return tw->monotonic_time + expiry;
+}
+
 #endif

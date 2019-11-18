@@ -73,6 +73,7 @@ Context *context_new(GlobalContext *glb)
 
     ctx->leader = 0;
 
+    timer_wheel_item_init(&ctx->timer_wheel_head, NULL, 0);
     ctx->timeout_at.tv_sec = 0;
     ctx->timeout_at.tv_nsec = 0;
 

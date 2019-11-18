@@ -69,7 +69,8 @@ typedef struct
     const void *avmpack_data;
     const void *avmpack_platform_data;
 
-    struct timespec next_timeout_at;
+    struct TimerWheel *timer_wheel;
+    uint32_t last_seen_millis;
 
     uint64_t ref_ticks;
 
