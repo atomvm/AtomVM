@@ -74,8 +74,6 @@ Context *context_new(GlobalContext *glb)
     ctx->leader = 0;
 
     timer_wheel_item_init(&ctx->timer_wheel_head, NULL, 0);
-    ctx->timeout_at.tv_sec = 0;
-    ctx->timeout_at.tv_nsec = 0;
 
     #ifdef ENABLE_ADVANCED_TRACE
         ctx->trace_calls = 0;
@@ -87,6 +85,8 @@ Context *context_new(GlobalContext *glb)
 
     list_init(&ctx->heap_fragments);
     ctx->heap_fragments_size = 0;
+
+    ctx->flags = 0;
 
     ctx->platform_data = NULL;
 

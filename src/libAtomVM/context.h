@@ -43,6 +43,14 @@ typedef struct Module Module;
 
 typedef void (*native_handler)(Context *ctx);
 
+enum ContextFlags
+{
+    NoFlags = 0,
+    WaitingMessages = 1,
+    WaitingTimeout = 2,
+    WaitingTimeoutExpired = 4
+};
+
 struct Context
 {
     struct ListHead processes_list_head;
@@ -78,7 +86,6 @@ struct Context
     native_handler native_handler;
 
     uint64_t reductions;
-    struct timespec timeout_at;
 
     unsigned int leader : 1;
     unsigned int has_min_heap_size : 1;
@@ -95,6 +102,8 @@ struct Context
 
     struct ListHead heap_fragments;
     int heap_fragments_size;
+
+    enum ContextFlags flags;
 
     void *platform_data;
 };

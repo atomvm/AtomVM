@@ -119,12 +119,16 @@ static void scheduler_timeout_callback(struct TimerWheelItem *it)
 {
     timer_wheel_item_init(it, NULL, 0);
     Context *ctx = GET_LIST_ENTRY(it, Context, timer_wheel_head);
+    ctx->flags = (ctx->flags | WaitingTimeoutExpired) & ~WaitingTimeout;
     scheduler_make_ready(ctx->global, ctx);
 }
 
 void scheduler_set_timeout(Context *ctx, uint32_t timeout)
 {
     GlobalContext *glb = ctx->global;
+
+    ctx->flags |= WaitingTimeout;
+
     struct TimerWheel *tw = glb->timer_wheel;
 
     if (timer_wheel_is_empty(tw)) {
@@ -135,15 +139,6 @@ void scheduler_set_timeout(Context *ctx, uint32_t timeout)
     timer_wheel_item_init(&ctx->timer_wheel_head, scheduler_timeout_callback, expiry);
 
     timer_wheel_insert(tw, &ctx->timer_wheel_head);
-}
-
-int scheduler_is_timeout_expired(const Context *ctx)
-{
-#if 0
-    struct timespec now_timestamp;
-    sys_set_timestamp_from_relative_to_abs(&now_timestamp, 0);
-    return before_than(&ctx->timeout_at, &now_timestamp);
-#endif
 }
 
 static void scheduler_execute_native_handlers(GlobalContext *global)

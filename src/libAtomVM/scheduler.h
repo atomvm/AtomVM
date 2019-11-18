@@ -89,15 +89,6 @@ int schudule_processes_count(GlobalContext *global);
 Context *scheduler_next(GlobalContext *global, Context *c);
 
 /**
- * @brief checks if a context timeout has exired.
- *
- * @details compare context timeout timestamp against current timestamp.
- * @param ctx the context that will be checked for an expired timeout.
- * @returns 1 if the timeout has expired, otherwise 0.
- */
-int scheduler_is_timeout_expired(const Context *ctx);
-
-/**
  * @brief sets context timeout
  *
  * @details set context timeout timestamp, move context to wait queue and update global next timeout timestamp.

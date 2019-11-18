@@ -1326,8 +1326,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 TRACE("timeout/0\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    ctx->timeout_at.tv_sec = 0;
-                    ctx->timeout_at.tv_nsec = 0;
+                    ctx->flags &= ~WaitingTimeoutExpired;
                 #endif
 
                 NEXT_INSTRUCTION(1);
@@ -1424,10 +1423,10 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     ctx->saved_module = mod;
 
                     int needs_to_wait = 0;
-                    if (!context_is_waiting_timeout(ctx)) {
+                    if ((ctx->flags & (WaitingTimeout | WaitingTimeoutExpired)) == 0) {
                         scheduler_set_timeout(ctx, term_to_int32(timeout));
                         needs_to_wait = 1;
-                    } else if (!scheduler_is_timeout_expired(ctx)){
+                    } else if ((ctx->flags & WaitingTimeout) == 0) {
                         needs_to_wait = 1;
                     }
 
