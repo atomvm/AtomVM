@@ -2,12 +2,14 @@
 
 -export([start/0, handle_req/3]).
 
+-include("atomvm.hrl").
+
 start() ->
     Self = self(),
     Config = [
         {sta, [
-            {ssid, "SSID"},
-            {psk,  "PSK"},
+            {ssid, esp:nvs_get_binary(?ATOMVM_NVS_NS, ?ATOMVM_NVS_STA_SSID, <<"myssid">>)},
+            {psk,  esp:nvs_get_binary(?ATOMVM_NVS_NS, ?ATOMVM_NVS_STA_PSK, <<"mypsk">>)},
             {connected, fun() -> Self ! connected end},
             {got_ip, fun(IpInfo) -> Self ! {ok, IpInfo} end},
             {disconnected, fun() -> Self ! disconnected end}

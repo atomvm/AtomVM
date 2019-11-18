@@ -95,8 +95,8 @@ Use the `sta` tag to denote this mode:
 
 A `sta_config_property()` is a properties list whose types are defined as follows:
 
-    -type ssid_config() :: {ssid, string()}.
-    -type psk_config() :: {psk, string()}.
+    -type ssid_config() :: {ssid, binary()}.
+    -type psk_config() :: {psk, binary()}.
     -type connected_config() :: {connected, fun(() -> term())}.
     -type disconnected_config() :: {disconnected, fun(() -> term())}.
     -type got_ip_config() :: {got_ip, fun((ip_info()) -> term())}.
@@ -104,7 +104,7 @@ A `sta_config_property()` is a properties list whose types are defined as follow
 
 Notes:
 
-* The `ssid` parameter denotes the network id and is _required_ for WIFI networks.
+* The `ssid` parameter denotes the network id and is _required_ for WIFI networks.  However, the STA SSID (and PSK) _may_ be stored in NVS storage (see below).
 * The `psk` parameter denotes the password or phrase used to authenticate to the network.  This parameter is not required on open networks (strongly discouraged)
 * The `connected_config()`, `disconnected_config()`, and `got_ip_config()` parameters denote callbacks that get called during Network FSM state transitions descibed above.  These paramters are optional, but use of them is strongly encouraged, in order to design robust applications.
 
@@ -116,6 +116,21 @@ The `got_ip_config()` callback function takes a `ip_info()` structure, whose typ
     -type ip_info() :: ipv4_info().
 
 > Note.  Currently, only IPv4 addresses are supported.
+
+#### NVS Credentials
+
+You may store a STA SSID and PSK in non-volatile storage (NVS) on and ESP32 device under the `atomvm` namespace.  The `network.hrl` header file defines macros for the network NVS namespace, and for the STA SSID and PSK keys.
+
+If set in NVS storage, you may remove the `ssid` and `psk` parameters from the `ssid_config()` used to initialize the network, and the SSID and PSK configured in NVS will be used, instead.  An SSID or PSK defined in configuration will override any values in NVS.
+
+You can set these credentials once, as follows:
+
+    esp:nvs_get_binary(?ATOMVM_NVS_STA_SSID, <<"myssid">>).
+    esp:nvs_get_binary(?ATOMVM_NVS_STA_PSK, <<"mypsk">>).
+
+where `MySSID` and `MyPSK` are the SSID and password, respectively, for your network.  A sample program is provided, which can be edited with your SSID and PSK, flashed, and run once.  From that point forward (until you reformat NVS storage, or delete the SSID and PSK entries), you can run ESP prorgams that initialize the network without configuring your SSID and PSK for your local network.
+
+> Note.  Credentials are stored unencrypted and in plaintext and should not be considered secure.  Future versions may use encrypted NVS storage.
 
 ### Stopping the Network FSM
 

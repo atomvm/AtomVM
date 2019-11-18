@@ -23,11 +23,13 @@
 %%
 -module(network_fsm).
 
+-export([wait_for_sta/0, wait_for_sta/1, wait_for_sta/2]).
 -export([start/1, stop/0]).
 -export([init/1, initial/3, wait_for_sta_connected/3, wait_for_sta_got_ip/3, sta_got_ip/3, terminate/3]).
 -export([simulation_loop/0]).
 
 -include("estdlib.hrl").
+-include("atomvm.hrl").
 
 -define(SERVER, ?MODULE).
 
@@ -54,6 +56,52 @@
     ref :: reference(),
     sta_ip_info :: ip_info()
 }).
+
+
+%%-----------------------------------------------------------------------------
+%% @doc     Equivalent to wait_for_sta(15000).
+%% @end
+%%-----------------------------------------------------------------------------
+wait_for_sta() ->
+    wait_for_sta(15000).
+
+
+%%-----------------------------------------------------------------------------
+%% @doc     Equivalent to wait_for_sta([], Timeout).
+%% @end
+%%-----------------------------------------------------------------------------
+wait_for_sta(Timeout) ->
+    wait_for_sta([], Timeout).
+
+
+%%-----------------------------------------------------------------------------
+%% @param   Creds list containing ssid and psk for station mode
+%% @param   Timeout amount of time in milliseconds to wait for a connection
+%% @returns {ok, IpInfo}, if the network_fsm was started, or {error, Reason} if
+%%          a failure occurred (e.g., due to malformed network configuration).
+%% @doc     Start a network_fsm in station mode and wait for a connection to be established
+%%
+%%          This function will start a network_fsm instation mode, and will wait
+%%          for a connection to be established.  This is a convenience function,
+%%          for applications that do not need to be notified of connectivity
+%%          changes in the network.
+%% @end
+%%-----------------------------------------------------------------------------
+wait_for_sta(Creds, Timeout) ->
+    Self = self(),
+    StaConfig = Creds ++ [
+        {connected, fun() -> Self ! connected end},
+        {got_ip, fun(IpInfo) -> Self ! {ok, IpInfo} end},
+        {disconnected, fun() -> Self ! disconnected end}
+    ],
+    Config = [{sta, StaConfig}],
+    case network_fsm:start(Config) of
+        ok ->
+            wait_for_ip(Timeout);
+        Error ->
+            Error
+    end.
+
 
 %%-----------------------------------------------------------------------------
 %% @param   Config The network configuration
@@ -104,7 +152,7 @@ init(Config) ->
 initial({call, From}, start, #data{config=Config} = Data) ->
     Port = get_port(),
     Ref = make_ref(),
-    case start_network(Port, Ref, get_port_config(Config)) of
+    case start_network(Port, Ref, get_driver_config(Config)) of
         ok ->
             ?GEN_STATEM:reply(From, ok),
             {next_state, wait_for_sta_connected, Data#data{port=Port, ref=Ref}, get_timeout_actions(Config)};
@@ -187,19 +235,31 @@ terminate(_Reason, _StateName, _Data) ->
 %%
 
 %% @private
-get_port_config(Config) ->
+get_driver_config(Config) ->
     Sta = case ?PROPLISTS:get_value(sta, Config) of
         undefined -> [];
         StaConfig ->
-            PasswordConfig = case ?PROPLISTS:get_value(psk, StaConfig) of
-                undefined ->
-                    [];
-                Value ->
-                    [{psk, Value}]
-            end,
-            {sta, [{ssid, ?PROPLISTS:get_value(ssid, StaConfig)} | PasswordConfig]}
+            {sta, [{ssid, get_ssid(StaConfig)}, {psk, get_psk(StaConfig)}]}
     end,
     [Sta | ?LISTS:keydelete(sta, 1, Config)].
+
+%% @private
+get_ssid(Config) ->
+    get_config_value(Config, ssid, ?ATOMVM_NVS_STA_SSID).
+
+%% @private
+get_psk(Config) ->
+    get_config_value(Config, psk, ?ATOMVM_NVS_STA_PSK).
+
+%% @private
+get_config_value(Config, Key, NVSKey) ->
+    case ?PROPLISTS:get_value(Key, Config) of
+        undefined ->
+            esp:nvs_get_binary(?ATOMVM_NVS_NS, NVSKey, <<"">>);
+        Value ->
+            Value
+    end.
+
 
 get_timeout_actions(Config) ->
     case ?PROPLISTS:get_value(timeout, Config) of
@@ -259,6 +319,19 @@ open_port() ->
     %Pid = spawn(?MODULE, simulation_loop, []),
     erlang:register(network_port, Pid),
     Pid.
+
+%% @private
+wait_for_ip(Timeout) ->
+    receive
+        connected ->
+            wait_for_ip(Timeout);
+        {ok, _IpInfo} = Started ->
+            Started;
+        disconnected ->
+            {error, disconnected}
+    after Timeout ->
+        {error, timeout}
+    end.
 
 simulation_loop() ->
     receive

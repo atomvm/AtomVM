@@ -48,8 +48,7 @@
     esp_rst_brownout |
     esp_rst_sdio.
 
-
--define(DEFAULT_NVS_NAMESPACE, atomvm).
+-include("atomvm.hrl").
 
 %%-----------------------------------------------------------------------------
 %% @returns random 32-bit integer.
@@ -93,12 +92,12 @@ reset_reason() ->
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------
-%% @doc Equivalent to nvs_get_binary(?DEFAULT_NVS_NAMESPACE, Key).
+%% @doc Equivalent to nvs_get_binary(?ATOMVM_NVS_NS, Key).
 %% @end
 %%-----------------------------------------------------------------------------
 -spec nvs_get_binary(Key::atom()) -> binary() | undefined.
 nvs_get_binary(Key) when is_atom(Key) ->
-    esp:nvs_get_binary(?DEFAULT_NVS_NAMESPACE, Key).
+    esp:nvs_get_binary(?ATOMVM_NVS_NS, Key).
 
 %%-----------------------------------------------------------------------------
 %% @param   Namespace NVS namespace
@@ -133,12 +132,12 @@ nvs_get_binary(Namespace, Key, Default) when is_atom(Namespace) andalso is_atom(
     end.
 
 %%-----------------------------------------------------------------------------
-%% @doc Equivalent to nvs_set_binary(?DEFAULT_NVS_NAMESPACE, Key, Value).
+%% @doc Equivalent to nvs_set_binary(?ATOMVM_NVS_NS, Key, Value).
 %% @end
 %%-----------------------------------------------------------------------------
 -spec nvs_set_binary(Key::atom(), Value::binary()) -> ok.
 nvs_set_binary(Key, Value) when is_atom(Key) andalso is_binary(Value) ->
-    esp:nvs_set_binary(?DEFAULT_NVS_NAMESPACE, Key, Value).
+    esp:nvs_set_binary(?ATOMVM_NVS_NS, Key, Value).
 
 %%-----------------------------------------------------------------------------
 %% @param   Namespace NVS namespace
@@ -154,12 +153,12 @@ nvs_set_binary(Namespace, Key, Value) when is_atom(Namespace) andalso is_atom(Ke
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------
-%% @doc Equivalent to nvs_erase_key(?DEFAULT_NVS_NAMESPACE, Key).
+%% @doc Equivalent to nvs_erase_key(?ATOMVM_NVS_NS, Key).
 %% @end
 %%-----------------------------------------------------------------------------
 -spec nvs_erase_key(Key::atom()) -> ok.
 nvs_erase_key(Key) when is_atom(Key) ->
-    esp:nvs_erase_key(?DEFAULT_NVS_NAMESPACE, Key).
+    esp:nvs_erase_key(?ATOMVM_NVS_NS, Key).
 
 %%-----------------------------------------------------------------------------
 %% @param   Namespace NVS namespace
@@ -174,12 +173,12 @@ nvs_erase_key(Namespace, Key) when is_atom(Namespace) andalso is_atom(Key) ->
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------
-%% @doc Equivalent to nvs_erase_all(?DEFAULT_NVS_NAMESPACE).
+%% @doc Equivalent to nvs_erase_all(?ATOMVM_NVS_NS).
 %% @end
 %%-----------------------------------------------------------------------------
 -spec nvs_erase_all() -> ok.
 nvs_erase_all() ->
-    esp:nvs_erase_all(?DEFAULT_NVS_NAMESPACE).
+    esp:nvs_erase_all(?ATOMVM_NVS_NS).
 
 %%-----------------------------------------------------------------------------
 %% @param   Namespace NVS namespace

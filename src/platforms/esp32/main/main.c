@@ -79,12 +79,12 @@ void app_main()
 
     printf("Starting: %s...\n", startup_module_name);
     printf("---\n");
-    context_execute_loop(ctx, mod, "start", 0);    
+    context_execute_loop(ctx, mod, "start", 0);
     term ret_value = ctx->x[0];
     fprintf(stderr, "AtomVM finished with return value = ");
     term_display(stderr, ret_value, ctx);
     fprintf(stderr, "\n");
-    
+
     fprintf(stderr, "going to sleep forever..\n");
     while(1) {
         // avoid task_wdt: Task watchdog got triggered. The following tasks did not reset the watchdog in time
