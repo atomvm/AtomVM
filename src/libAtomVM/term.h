@@ -460,7 +460,7 @@ static inline avm_int_t term_to_int(term t)
 static inline int term_to_catch_label_and_module(term t, int *module_index)
 {
     *module_index = t >> 24;
-    return (t >> 6) & 0xFFFFF;
+    return (t >> 6) & 0x3FFFF;
 }
 
 /**
