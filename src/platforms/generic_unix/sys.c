@@ -64,7 +64,8 @@ extern void sys_waitevents(GlobalContext *glb)
     EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
     EventListener *last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
 
-    int min_timeout = INT_MAX;
+    //workaround
+    int min_timeout = 1;
     int count = 0;
 
 #ifdef USE_SELECT
