@@ -135,10 +135,29 @@ void scheduler_set_timeout(Context *ctx, uint32_t timeout)
         sys_start_millis_timer();
     }
 
-    uint64_t expiry = timer_wheel_expiry_to_monotonic(tw, timeout);
-    timer_wheel_item_init(&ctx->timer_wheel_head, scheduler_timeout_callback, expiry);
+    struct TimerWheelItem *twi = &ctx->timer_wheel_head;
+    if (UNLIKELY(twi->callback)) {
+        abort();
+    }
 
-    timer_wheel_insert(tw, &ctx->timer_wheel_head);
+    uint64_t expiry = timer_wheel_expiry_to_monotonic(tw, timeout);
+    timer_wheel_item_init(twi, scheduler_timeout_callback, expiry);
+
+    timer_wheel_insert(tw, twi);
+}
+
+void scheduler_cancel_timeout(Context *ctx)
+{
+    GlobalContext *glb = ctx->global;
+
+    ctx->flags &= ~(WaitingTimeout | WaitingTimeoutExpired);
+
+    struct TimerWheel *tw = glb->timer_wheel;
+    struct TimerWheelItem *twi = &ctx->timer_wheel_head;
+    if (twi->callback) {
+        timer_wheel_remove(tw, twi);
+        timer_wheel_item_init(twi, NULL, 0);
+    }
 }
 
 static void scheduler_execute_native_handlers(GlobalContext *global)

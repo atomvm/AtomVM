@@ -97,4 +97,6 @@ Context *scheduler_next(GlobalContext *global, Context *c);
  */
 void scheduler_set_timeout(Context *ctx, uint32_t timeout);
 
+void scheduler_cancel_timeout(Context *ctx);
+
 #endif

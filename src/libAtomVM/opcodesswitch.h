@@ -1309,11 +1309,13 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 break;
             }
 
-            //TODO: implement remove_message/0
             case OP_REMOVE_MESSAGE: {
                 TRACE("remove_message/0\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
+                    if (ctx->flags & (WaitingTimeout | WaitingTimeoutExpired)) {
+                        scheduler_cancel_timeout(ctx);
+                    }
                     mailbox_remove(ctx);
                 #endif
 
