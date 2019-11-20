@@ -27,7 +27,7 @@
 
 -export([random/0, random_bytes/1, restart/0, reset_reason/0]).
 
--type esp_reset_reason() :: 
+-type esp_reset_reason() ::
     esp_rst_unknown |
     esp_rst_poweron |
     esp_rst_ext |

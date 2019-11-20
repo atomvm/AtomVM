@@ -57,7 +57,7 @@ static const char *const esp_rst_sdio           = "\xC"  "esp_rst_sdio";
 //
 // NIFs
 //
-    
+
 static term nif_esp_random(Context *ctx, int argc, term argv[])
 {
     uint32_t r = esp_random();
@@ -80,7 +80,7 @@ static term nif_esp_random_bytes(Context *ctx, int argc, term argv[])
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         term binary = term_from_literal_binary(NULL, len, ctx);
-        return binary;        
+        return binary;
     } else {
         uint8_t *buf = malloc(len);
         if (UNLIKELY(IS_NULL_PTR(buf))) {
@@ -92,7 +92,7 @@ static term nif_esp_random_bytes(Context *ctx, int argc, term argv[])
         }
         term binary = term_from_literal_binary(buf, len, ctx);
         free(buf);
-        return binary;        
+        return binary;
     }
 }
 
