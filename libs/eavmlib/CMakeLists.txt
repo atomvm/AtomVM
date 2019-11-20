@@ -8,6 +8,7 @@ include(BuildErlang)
 
 set(ERLANG_MODULES
     console
+    esp
     gpio
     i2c
     http_server
