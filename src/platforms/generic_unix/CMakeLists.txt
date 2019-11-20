@@ -5,6 +5,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_SOURCE_DIR}/src/libAtomV
 
 if(${CMAKE_GENERATOR} STREQUAL "Xcode")
     set(HEADER_FILES
+        generic_unix_sys.h
         mapped_file.h
         platform_defaultatoms.h
     )

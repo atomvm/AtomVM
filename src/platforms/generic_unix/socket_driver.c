@@ -23,6 +23,7 @@
 #include <string.h>
 #include "atom.h"
 #include "context.h"
+#include "generic_unix_sys.h"
 #include "globalcontext.h"
 #include "interop.h"
 #include "utils.h"

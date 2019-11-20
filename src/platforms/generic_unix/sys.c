@@ -18,6 +18,7 @@
  ***************************************************************************/
 
 #include "sys.h"
+#include "generic_unix_sys.h"
 
 #include "avmpack.h"
 #include "iff.h"

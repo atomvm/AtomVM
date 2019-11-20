@@ -34,23 +34,6 @@
 #include <stdint.h>
 #include <time.h>
 
-typedef struct EventListener EventListener;
-
-typedef void (*event_handler_t)(EventListener *listener);
-
-struct EventListener {
-    struct ListHead listeners_list_head;
-
-    int expires;
-    struct timespec expiral_timestamp;
-
-    event_handler_t handler;
-    void *data;
-    int fd;
-
-    unsigned int one_shot : 1;
-};
-
 /**
  * @brief waits platform events
  *
