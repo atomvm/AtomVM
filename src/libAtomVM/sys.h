@@ -51,15 +51,6 @@ void sys_waitevents(GlobalContext *glb);
 void sys_consume_pending_events(GlobalContext *glb);
 
 /**
- * @brief sets the timestamp for a future event
- *
- * @details sets the timestamp to a timestamp n milliseconds in the future using platform monotonic timer source.
- * @param t the timespec that will be updated.
- * @param millis ammount of milliseconds relative to current timestamp.
- */
-void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis);
-
-/**
  * @brief gets wall clock time
  *
  * @details gets system wall clock time.

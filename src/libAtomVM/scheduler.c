@@ -23,8 +23,6 @@
 #include "sys.h"
 #include "utils.h"
 
-#include "time.h"
-
 static void scheduler_execute_native_handlers(GlobalContext *global);
 
 static void update_timer_wheel(GlobalContext *global)

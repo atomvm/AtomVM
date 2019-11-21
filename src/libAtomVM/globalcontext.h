@@ -28,7 +28,6 @@
 #define _GLOBALCONTEXT_H_
 
 #include <stdint.h>
-#include <time.h>
 
 #include "atom.h"
 #include "term.h"

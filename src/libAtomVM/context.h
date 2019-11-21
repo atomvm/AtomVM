@@ -27,8 +27,6 @@
 #ifndef _CONTEXT_H_
 #define _CONTEXT_H_
 
-#include <time.h>
-
 #include "linkedlist.h"
 #include "globalcontext.h"
 #include "term.h"

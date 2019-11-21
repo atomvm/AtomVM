@@ -202,13 +202,6 @@ void sys_consume_pending_events(GlobalContext *glb)
     receive_events(glb, 0);
 }
 
-extern void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis)
-{
-    sys_clock_gettime(t);
-    t->tv_sec += millis / 1000;
-    t->tv_nsec += (millis % 1000) * 1000000;
-}
-
 void sys_time(struct timespec *t)
 {
     struct timeval tv;
