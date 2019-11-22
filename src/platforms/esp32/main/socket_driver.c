@@ -208,7 +208,7 @@ static term init_udp_socket(Context *ctx, SocketDriverData *socket_data, term pa
         listener->one_shot = 0;
         listener->data = ctx;
         listener->handler = active_recvfrom_callback;
-        linkedlist_append(&platform->listeners, &listener->listeners_list_head);
+        list_append(&platform->listeners, &listener->listeners_list_head);
         socket_data->active_listener = listener;
         TRACE("socket: initialized\n");
     } else {
@@ -289,7 +289,7 @@ static term init_client_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
             listener->one_shot = 0;
             listener->data = ctx;
             listener->handler = active_recv_callback;
-            linkedlist_append(&platform->listeners, &listener->listeners_list_head);
+            list_append(&platform->listeners, &listener->listeners_list_head);
             socket_data->active_listener = listener;
         }
     }
@@ -363,7 +363,7 @@ static term init_accepting_socket(Context *ctx, SocketDriverData *socket_data, t
         listener->one_shot = 0;
         listener->data = ctx;
         listener->handler = active_recv_callback;
-        linkedlist_append(&platform->listeners, &listener->listeners_list_head);
+        list_append(&platform->listeners, &listener->listeners_list_head);
         socket_data->active_listener = listener;
     }
     return OK_ATOM;
@@ -451,7 +451,7 @@ void socket_driver_do_close(Context *ctx)
 
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     if (socket_data->active == TRUE_ATOM) {
-        linkedlist_remove(&platform->listeners, &socket_data->active_listener->listeners_list_head);
+        list_remove(&socket_data->active_listener->listeners_list_head);
     }
     if (netconn_close(socket_data->conn) != ERR_OK) {
         TRACE("socket: close failed");
@@ -673,7 +673,7 @@ static void passive_recv_callback(EventListener *listener)
     //
     // remove the EventListener from the global list and clean up
     //
-    linkedlist_remove(&platform->listeners, &listener->listeners_list_head);
+    list_remove(&listener->listeners_list_head);
     free(listener);
     free(recvfrom_data);
     netbuf_delete(buf);
@@ -766,7 +766,7 @@ static void passive_recvfrom_callback(EventListener *listener)
     //
     // remove the EventListener from the global list and clean up
     //
-    linkedlist_remove(&platform->listeners, &listener->listeners_list_head);
+    list_remove(&listener->listeners_list_head);
     free(listener);
     free(recvfrom_data);
     netbuf_delete(buf);
@@ -821,7 +821,7 @@ static void do_recv(Context *ctx, term pid, term ref, term length, term timeout,
     listener->one_shot = 1;
     listener->handler = handler;
     listener->data = data;
-    linkedlist_append(&platform->listeners, &listener->listeners_list_head);
+    list_append(&platform->listeners, &listener->listeners_list_head);
 }
 
 void socket_driver_do_recvfrom(Context *ctx, term pid, term ref, term length, term timeout)
@@ -886,7 +886,7 @@ static void accept_callback(EventListener *listener)
     //
     // remove the EventListener from the global list and clean up
     //
-    linkedlist_remove(&platform->listeners, &listener->listeners_list_head);
+    list_remove(&listener->listeners_list_head);
     free(listener);
     free(recvfrom_data);
     TRACE("socket: accept_callback done.\n");
@@ -937,6 +937,6 @@ void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
     listener->one_shot = 1;
     listener->handler = accept_callback;
     listener->data = data;
-    linkedlist_append(&platform->listeners, &listener->listeners_list_head);
+    list_append(&platform->listeners, &listener->listeners_list_head);
     TRACE("socket: accepting tcp netconn COMPLETE\n");
 }

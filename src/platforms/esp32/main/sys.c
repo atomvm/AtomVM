@@ -123,23 +123,17 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
 
     int event_descriptor;
     if (xQueueReceive(event_queue, &event_descriptor, wait_ticks) == pdTRUE) {
-        struct ListHead *listeners_list = platform->listeners;
-        EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
-        EventListener *last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
-        EventListener *listener = listeners;
-
-        if (!listener) {
+        if (UNLIKELY(list_is_empty(&platform->listeners))) {
             fprintf(stderr, "warning: no listeners.\n");
             return;
         }
 
-        size_t n = linkedlist_length(platform->listeners);
-        for (size_t i = 0;  i < n;  ++i) {
-            EventListener *next_listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
+        struct ListHead *listener_lh;
+        LIST_FOR_EACH(listener_lh, &platform->listeners) {
+            EventListener *listener = GET_LIST_ENTRY(listener_lh, EventListener, listeners_list_head);
             if (listener->fd == event_descriptor) {
                 listener->handler(listener);
             }
-            listener = next_listener;
         }
     }
 }
@@ -164,7 +158,7 @@ void sys_time(struct timespec *t)
 void sys_init_platform(GlobalContext *glb)
 {
     struct ESP32PlatformData *platform = malloc(sizeof(struct ESP32PlatformData));
-    platform->listeners = NULL;
+    list_init(&platform->listeners);
     glb->platform_data = platform;
 }
 

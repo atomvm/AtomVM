@@ -176,7 +176,7 @@ static term gpiodriver_set_int(Context *ctx, Context *target, term msg)
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         abort();
     }
-    linkedlist_append(&platform->listeners, &listener->listeners_list_head);
+    list_append(&platform->listeners, &listener->listeners_list_head);
     listener->fd = event_desc;
 
     listener->expires = 0;

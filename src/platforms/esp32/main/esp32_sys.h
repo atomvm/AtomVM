@@ -46,7 +46,7 @@ struct EventListener {
 
 struct ESP32PlatformData
 {
-    struct ListHead *listeners;
+    struct ListHead listeners;
 };
 
 extern xQueueHandle event_queue;
