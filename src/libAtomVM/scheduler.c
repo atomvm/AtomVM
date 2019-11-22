@@ -57,11 +57,7 @@ Context *scheduler_wait(GlobalContext *global, Context *c)
 
     do {
         update_timer_wheel(global);
-
-        if (global->listeners) {
-            sys_waitevents(global);
-        }
-
+        sys_consume_pending_events(global);
         scheduler_execute_native_handlers(global);
     } while (list_is_empty(&global->ready_processes));
 

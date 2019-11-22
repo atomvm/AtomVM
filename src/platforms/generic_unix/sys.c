@@ -46,148 +46,11 @@ static bool has_signal_handler;
 
 static void alarm_handler(int sig);
 
-static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *timespec2);
-
 //#define USE_SELECT
 #ifdef USE_SELECT
 #include <socket.h>
 #else
 #endif
-
-extern void sys_waitevents(GlobalContext *glb)
-{
-    TRACE("sys: entered sys_waitevents.\n");
-
-    struct ListHead *listeners_list = glb->listeners;
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-
-    EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
-    EventListener *last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
-
-    //workaround
-    int min_timeout = 1;
-    int count = 0;
-
-#ifdef USE_SELECT
-    int max_fd = 0;
-    fd_set read_fds;
-    FD_ZERO(&read_fds);
-#endif
-    //first: find maximum allowed sleep time, and count file descriptor listeners
-    EventListener *listener = listeners;
-    do {
-        if (listener->expires) {
-            int wait_ms = timespec_diff_to_ms(&listener->expiral_timestamp, &now);
-            if (wait_ms <= 0) {
-                min_timeout = 0;
-            } else if (min_timeout > wait_ms) {
-                min_timeout = wait_ms;
-            }
-        }
-        if (listener->fd >= 0) {
-            TRACE("sys_waitevents: fd: %i.\n", listener->fd);
-            count++;
-#ifdef USE_SELECT
-            FD_SET(listener->fd, &read_fds);
-            if (listener->fd >= max_fd) {
-                max_fd = listener->fd;
-            }
-#endif
-        }
-
-        listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-    } while (listener != listeners);
-
-    //second: use either poll or nanosleep
-    if (count > 0) {
-#ifdef USE_SELECT
-        struct timeval select_timeout;
-        select_timeout.tv_sec = min_timeout / 1000;
-        select_timeout.tv_usec = (min_timeout % 1000) * 1000000;
-        select(max_fd + 1, &read_fds, NULL, NULL, &select_timeout);
-#else
-        struct pollfd *fds = calloc(count, sizeof(struct pollfd));
-        if (IS_NULL_PTR(fds)) {
-            fprintf(stderr, "Cannot allocate memory for pollfd, aborting.\n");
-            abort();
-        }
-        int poll_fd_index = 0;
-
-        //build pollfd array
-        EventListener *listener = listeners;
-        do {
-            if (listener->fd >= 0) {
-                fds[poll_fd_index].fd = listener->fd;
-                fds[poll_fd_index].events = POLLIN;
-                fds[poll_fd_index].revents = 0;
-                poll_fd_index++;
-            }
-
-
-            listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-        } while (listener != listeners);
-
-        poll(fds, poll_fd_index, min_timeout);
-#endif
-        //check which event happened
-        listener = listeners;
-        do {
-            EventListener *next_listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-#ifdef USE_SELECT
-            if (listener->fd >= 0) {
-                if (FD_ISSET(listener->fd, &read_fds)) {
-                    listener->handler(listener);
-                }
-            }
-#else
-            for (int i = 0; i < poll_fd_index; i++) {
-                if ((fds[i].fd == listener->fd) && (fds[i].revents & fds[i].events)) {
-                    //it is completely safe to free a listener in the callback, we are going to not use it after this call
-                    listener->handler(listener);
-                }
-            }
-#endif
-            listener = next_listener;
-            listeners = GET_LIST_ENTRY(glb->listeners, EventListener, listeners_list_head);
-        } while (listeners != NULL && listener != listeners);
-
-#ifndef USE_SELECT
-        free(fds);
-#endif
-    //just need to wait for a certain timespan
-    } else {
-        struct timespec t;
-        t.tv_sec = min_timeout / 1000;
-        t.tv_nsec = (min_timeout % 1000) * 1000000;
-
-        struct timespec rem;
-        int nanosleep_result = nanosleep(&t, &rem);
-        while (nanosleep_result == -1) {
-            nanosleep_result = nanosleep(&rem, &rem);
-        }
-    }
-
-    //third: execute handlers for expiered timers
-    if (min_timeout != INT_MAX) {
-        listener = listeners;
-        clock_gettime(CLOCK_MONOTONIC, &now);
-        do {
-            EventListener *next_listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-            if (listener->expires) {
-                int wait_ms = timespec_diff_to_ms(&listener->expiral_timestamp, &now);
-                if (wait_ms <= 0) {
-                    //it is completely safe to free a listener in the callback, we are going to not use it after this call
-                    listener->handler(listener);
-                    //TODO check if one shot
-                }
-            }
-
-            listener = next_listener;
-            listeners = GET_LIST_ENTRY(glb->listeners, EventListener, listeners_list_head);
-        } while (listeners != NULL && listener != last_listener);
-    }
-}
 
 void sys_consume_pending_events(GlobalContext *glb)
 {
@@ -303,11 +166,6 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
     new_module->module_platform_data = beam_file;
 
     return new_module;
-}
-
-static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *timespec2)
-{
-    return (timespec1->tv_sec - timespec2->tv_sec) * 1000 + (timespec1->tv_nsec - timespec2->tv_nsec) / 1000000;
 }
 
 Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)

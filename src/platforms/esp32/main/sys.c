@@ -117,11 +117,6 @@ static inline void sys_clock_gettime(struct timespec *t)
     t->tv_nsec = ((ticks * portTICK_PERIOD_MS) % 1000) * 1000000;
 }
 
-static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *timespec2)
-{
-    return (timespec1->tv_sec - timespec2->tv_sec) * 1000 + (timespec1->tv_nsec - timespec2->tv_nsec) / 1000000;
-}
-
 static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
 {
     int event_descriptor;
@@ -144,56 +139,6 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
             }
             listener = next_listener;
         }
-    }
-}
-
-void sys_waitevents(GlobalContext *glb)
-{
-    struct ListHead *listeners_list = glb->listeners;
-    struct timespec now;
-    sys_clock_gettime(&now);
-
-    EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
-
-    int min_timeout = INT_MAX;
-
-    EventListener *listener = listeners;
-    do {
-        if (listener->expires) {
-            int wait_ms = timespec_diff_to_ms(&listener->expiral_timestamp, &now);
-            if (wait_ms <= 0) {
-                min_timeout = 0;
-            } else if (min_timeout > wait_ms) {
-                min_timeout = wait_ms;
-            }
-        }
-        listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-    } while (listener != listeners);
-
-    TickType_t ticks_to_wait = min_timeout / portTICK_PERIOD_MS;
-
-    receive_events(glb, ticks_to_wait);
-
-    listeners = GET_LIST_ENTRY(glb->listeners, EventListener, listeners_list_head);
-    EventListener *last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
-
-    //second: execute handlers for expiered timers
-    if (min_timeout != INT_MAX) {
-        listener = listeners;
-        sys_clock_gettime(&now);
-        do {
-            EventListener *next_listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-            if (listener->expires) {
-                int wait_ms = timespec_diff_to_ms(&listener->expiral_timestamp, &now);
-                if (wait_ms <= 0) {
-                    //it is completely safe to free a listener in the callback, we are going to not use it after this call
-                    listener->handler(listener);
-                }
-            }
-
-            listener = next_listener;
-            listeners = GET_LIST_ENTRY(glb->listeners, EventListener, listeners_list_head);
-        } while (listeners != NULL && listener != listeners);
     }
 }
 

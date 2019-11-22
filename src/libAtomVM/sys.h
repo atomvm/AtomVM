@@ -35,14 +35,6 @@
 #include <time.h>
 
 /**
- * @brief waits platform events
- *
- * @details wait any of the specified events using a platform specific implementation, that might be poll on unix-like systems.
- * @param listeners_list a list of listeners that are waiting for some events, each listener waits an event and has a callback.
- */
-void sys_waitevents(GlobalContext *glb);
-
-/**
  * @brief process any pending event without blocking
  *
  * @details check all open file descriptors/queues, dispatch messages for new events and wake up contexts accordingly.
