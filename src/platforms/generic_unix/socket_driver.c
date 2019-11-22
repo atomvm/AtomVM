@@ -106,6 +106,9 @@ static term do_bind(Context *ctx, term address, term port)
 
 static term init_udp_socket(Context *ctx, SocketDriverData *socket_data, term params, term active)
 {
+    GlobalContext *glb = ctx->global;
+    struct GenericUnixPlatformData *platform = glb->platform_data;
+
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd == -1) {
         return port_create_sys_error_tuple(ctx, SOCKET_ATOM, errno);
@@ -137,7 +140,7 @@ static term init_udp_socket(Context *ctx, SocketDriverData *socket_data, term pa
             listener->one_shot = 0;
             listener->data = ctx;
             listener->handler = active_recvfrom_callback;
-            linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+            linkedlist_append(&platform->listeners, &listener->listeners_list_head);
             socket_data->active_listener = listener;
         }
     }
@@ -199,6 +202,9 @@ static term do_connect(SocketDriverData *socket_data, Context *ctx, term address
 
 static term init_client_tcp_socket(Context *ctx, SocketDriverData *socket_data, term params, term active)
 {
+    GlobalContext *glb = ctx->global;
+    struct GenericUnixPlatformData *platform = glb->platform_data;
+
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd == -1) {
         return port_create_sys_error_tuple(ctx, SOCKET_ATOM, errno);
@@ -223,7 +229,7 @@ static term init_client_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
             listener->one_shot = 0;
             listener->data = ctx;
             listener->handler = active_recv_callback;
-            linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+            linkedlist_append(&platform->listeners, &listener->listeners_list_head);
             socket_data->active_listener = listener;
         }
     }
@@ -274,6 +280,9 @@ static term init_server_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
 
 static term init_accepting_socket(Context *ctx, SocketDriverData *socket_data, term fd, term active)
 {
+    GlobalContext *glb = ctx->global;
+    struct GenericUnixPlatformData *platform = glb->platform_data;
+
     socket_data->sockfd = term_to_int(fd);
 
     if (active == TRUE_ATOM) {
@@ -289,7 +298,7 @@ static term init_accepting_socket(Context *ctx, SocketDriverData *socket_data, t
         listener->one_shot = 0;
         listener->data = ctx;
         listener->handler = active_recv_callback;
-        linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+        linkedlist_append(&platform->listeners, &listener->listeners_list_head);
         socket_data->active_listener = listener;
     }
     return OK_ATOM;
@@ -370,9 +379,12 @@ term socket_driver_do_init(Context *ctx, term params)
 
 void socket_driver_do_close(Context *ctx)
 {
+    GlobalContext *glb = ctx->global;
+    struct GenericUnixPlatformData *platform = glb->platform_data;
+
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     if (socket_data->active == TRUE_ATOM) {
-        linkedlist_remove(&ctx->global->listeners, &socket_data->active_listener->listeners_list_head);
+        linkedlist_remove(&platform->listeners, &socket_data->active_listener->listeners_list_head);
     }
     if (close(socket_data->sockfd) == -1) {
         TRACE("socket: close failed");
@@ -537,6 +549,10 @@ static void passive_recv_callback(EventListener *listener)
     RecvFromData *recvfrom_data = (RecvFromData *) listener->data;
     Context *ctx = recvfrom_data->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+
+    GlobalContext *glb = ctx->global;
+    struct GenericUnixPlatformData *platform = glb->platform_data;
+
     //
     // allocate the receive buffer
     //
@@ -578,7 +594,7 @@ static void passive_recv_callback(EventListener *listener)
     //
     // remove the EventListener from the global list and clean up
     //
-    linkedlist_remove(&ctx->global->listeners, &listener->listeners_list_head);
+    linkedlist_remove(&platform->listeners, &listener->listeners_list_head);
     free(listener);
     free(recvfrom_data);
     free(buf);
@@ -638,6 +654,10 @@ static void passive_recvfrom_callback(EventListener *listener)
     RecvFromData *recvfrom_data = (RecvFromData *) listener->data;
     Context *ctx = recvfrom_data->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+
+    GlobalContext *glb = ctx->global;
+    struct GenericUnixPlatformData *platform = glb->platform_data;
+
     //
     // allocate the receive buffer
     //
@@ -683,7 +703,7 @@ static void passive_recvfrom_callback(EventListener *listener)
     //
     // remove the EventListener from the global list and clean up
     //
-    linkedlist_remove(&ctx->global->listeners, &listener->listeners_list_head);
+    linkedlist_remove(&platform->listeners, &listener->listeners_list_head);
     free(listener);
     free(recvfrom_data);
     free(buf);
@@ -691,6 +711,9 @@ static void passive_recvfrom_callback(EventListener *listener)
 
 static void do_recv(Context *ctx, term pid, term ref, term length, term timeout, event_handler_t handler)
 {
+    GlobalContext *glb = ctx->global;
+    struct GenericUnixPlatformData *platform = glb->platform_data;
+
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     //
     // The socket must be in active mode
@@ -727,7 +750,7 @@ static void do_recv(Context *ctx, term pid, term ref, term length, term timeout,
     listener->one_shot = 1;
     listener->handler = handler;
     listener->data = data;
-    linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+    linkedlist_append(&platform->listeners, &listener->listeners_list_head);
 }
 
 void socket_driver_do_recvfrom(Context *ctx, term pid, term ref, term length, term timeout)
@@ -749,6 +772,10 @@ static void accept_callback(EventListener *listener)
     RecvFromData *recvfrom_data = (RecvFromData *) listener->data;
     Context *ctx = recvfrom_data->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+
+    GlobalContext *glb = ctx->global;
+    struct GenericUnixPlatformData *platform = glb->platform_data;
+
     //
     // accept the connection
     //
@@ -772,13 +799,16 @@ static void accept_callback(EventListener *listener)
     //
     // remove the EventListener from the global list and clean up
     //
-    linkedlist_remove(&ctx->global->listeners, &listener->listeners_list_head);
+    linkedlist_remove(&platform->listeners, &listener->listeners_list_head);
     free(listener);
     free(recvfrom_data);
 }
 
 void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
 {
+    GlobalContext *glb = ctx->global;
+    struct GenericUnixPlatformData *platform = glb->platform_data;
+
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     //
     // Create and initialize the request-specific data
@@ -807,6 +837,6 @@ void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
     listener->one_shot = 1;
     listener->handler = accept_callback;
     listener->data = data;
-    linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+    linkedlist_append(&platform->listeners, &listener->listeners_list_head);
 
 }

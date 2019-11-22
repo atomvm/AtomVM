@@ -119,6 +119,9 @@ static term gpiodriver_read(term msg)
 
 static term gpiodriver_set_int(Context *ctx, Context *target, term msg)
 {
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
     term trigger = term_get_tuple_element(msg, 3);
 
@@ -173,7 +176,7 @@ static term gpiodriver_set_int(Context *ctx, Context *target, term msg)
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         abort();
     }
-    linkedlist_append(&global->listeners, &listener->listeners_list_head);
+    linkedlist_append(&platform->listeners, &listener->listeners_list_head);
     listener->fd = event_desc;
 
     listener->expires = 0;

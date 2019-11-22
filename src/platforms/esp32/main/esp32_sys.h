@@ -44,6 +44,11 @@ struct EventListener {
     unsigned int one_shot : 1;
 };
 
+struct ESP32PlatformData
+{
+    struct ListHead *listeners;
+};
+
 extern xQueueHandle event_queue;
 void esp32_sys_queue_init();
 

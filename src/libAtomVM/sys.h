@@ -81,6 +81,8 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
  */
 term sys_get_info(Context *ctx, term key);
 
+void sys_init_platform(GlobalContext *global);
+
 void sys_start_millis_timer();
 
 void sys_stop_millis_timer();

@@ -39,4 +39,9 @@ struct EventListener {
     unsigned int one_shot : 1;
 };
 
+struct GenericUnixPlatformData
+{
+    struct ListHead *listeners;
+};
+
 #endif

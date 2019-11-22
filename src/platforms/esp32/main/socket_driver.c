@@ -183,6 +183,9 @@ static term init_udp_socket(Context *ctx, SocketDriverData *socket_data, term pa
 {
     TRACE("socket: creating udp netconn\n");
 
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_UDP, 0, socket_callback);
     // TODO check for invalid return
     socket_data->conn = conn;
@@ -205,7 +208,7 @@ static term init_udp_socket(Context *ctx, SocketDriverData *socket_data, term pa
         listener->one_shot = 0;
         listener->data = ctx;
         listener->handler = active_recvfrom_callback;
-        linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+        linkedlist_append(&platform->listeners, &listener->listeners_list_head);
         socket_data->active_listener = listener;
         TRACE("socket: initialized\n");
     } else {
@@ -256,6 +259,9 @@ static term init_client_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
 {
     TRACE("socket: creating client tcp netconn\n");
 
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_TCP, 0, socket_callback);
     // TODO check for invalid return
     socket_data->conn = conn;
@@ -283,7 +289,7 @@ static term init_client_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
             listener->one_shot = 0;
             listener->data = ctx;
             listener->handler = active_recv_callback;
-            linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+            linkedlist_append(&platform->listeners, &listener->listeners_list_head);
             socket_data->active_listener = listener;
         }
     }
@@ -336,6 +342,9 @@ static term init_accepting_socket(Context *ctx, SocketDriverData *socket_data, t
 {
     TRACE("socket: init_accepting_socket\n");
 
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     int event_descriptor = term_to_int(fd);
     socket_data->conn = (struct netconn *) get_event_ptr(event_descriptor);
     //
@@ -354,7 +363,7 @@ static term init_accepting_socket(Context *ctx, SocketDriverData *socket_data, t
         listener->one_shot = 0;
         listener->data = ctx;
         listener->handler = active_recv_callback;
-        linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+        linkedlist_append(&platform->listeners, &listener->listeners_list_head);
         socket_data->active_listener = listener;
     }
     return OK_ATOM;
@@ -437,9 +446,12 @@ term socket_driver_do_init(Context *ctx, term params)
 
 void socket_driver_do_close(Context *ctx)
 {
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     if (socket_data->active == TRUE_ATOM) {
-        linkedlist_remove(&ctx->global->listeners, &socket_data->active_listener->listeners_list_head);
+        linkedlist_remove(&platform->listeners, &socket_data->active_listener->listeners_list_head);
     }
     if (netconn_close(socket_data->conn) != ERR_OK) {
         TRACE("socket: close failed");
@@ -620,6 +632,10 @@ static void passive_recv_callback(EventListener *listener)
     RecvFromData *recvfrom_data = (RecvFromData *) listener->data;
     Context *ctx = recvfrom_data->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     //
     // receive the data
     //
@@ -657,7 +673,7 @@ static void passive_recv_callback(EventListener *listener)
     //
     // remove the EventListener from the global list and clean up
     //
-    linkedlist_remove(&ctx->global->listeners, &listener->listeners_list_head);
+    linkedlist_remove(&platform->listeners, &listener->listeners_list_head);
     free(listener);
     free(recvfrom_data);
     netbuf_delete(buf);
@@ -711,6 +727,9 @@ static void passive_recvfrom_callback(EventListener *listener)
     Context *ctx = recvfrom_data->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     struct netbuf *buf = NULL;
 
     if (UNLIKELY(netconn_recv(socket_data->conn, &buf) != ERR_OK)) {
@@ -747,7 +766,7 @@ static void passive_recvfrom_callback(EventListener *listener)
     //
     // remove the EventListener from the global list and clean up
     //
-    linkedlist_remove(&ctx->global->listeners, &listener->listeners_list_head);
+    linkedlist_remove(&platform->listeners, &listener->listeners_list_head);
     free(listener);
     free(recvfrom_data);
     netbuf_delete(buf);
@@ -755,6 +774,9 @@ static void passive_recvfrom_callback(EventListener *listener)
 
 static void do_recv(Context *ctx, term pid, term ref, term length, term timeout, event_handler_t handler)
 {
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     //
     // The socket must be in active mode
@@ -799,7 +821,7 @@ static void do_recv(Context *ctx, term pid, term ref, term length, term timeout,
     listener->one_shot = 1;
     listener->handler = handler;
     listener->data = data;
-    linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+    linkedlist_append(&platform->listeners, &listener->listeners_list_head);
 }
 
 void socket_driver_do_recvfrom(Context *ctx, term pid, term ref, term length, term timeout)
@@ -823,6 +845,10 @@ static void accept_callback(EventListener *listener)
     RecvFromData *recvfrom_data = (RecvFromData *) listener->data;
     Context *ctx = recvfrom_data->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     //
     // Look up the event descriptor for our socket
     //
@@ -860,7 +886,7 @@ static void accept_callback(EventListener *listener)
     //
     // remove the EventListener from the global list and clean up
     //
-    linkedlist_remove(&ctx->global->listeners, &listener->listeners_list_head);
+    linkedlist_remove(&platform->listeners, &listener->listeners_list_head);
     free(listener);
     free(recvfrom_data);
     TRACE("socket: accept_callback done.\n");
@@ -868,6 +894,9 @@ static void accept_callback(EventListener *listener)
 
 void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
 {
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     TRACE("socket: accepting tcp netconn\n");
 
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
@@ -908,6 +937,6 @@ void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
     listener->one_shot = 1;
     listener->handler = accept_callback;
     listener->data = data;
-    linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+    linkedlist_append(&platform->listeners, &listener->listeners_list_head);
     TRACE("socket: accepting tcp netconn COMPLETE\n");
 }

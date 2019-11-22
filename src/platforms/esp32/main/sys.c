@@ -119,9 +119,11 @@ static inline void sys_clock_gettime(struct timespec *t)
 
 static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
 {
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     int event_descriptor;
     if (xQueueReceive(event_queue, &event_descriptor, wait_ticks) == pdTRUE) {
-        struct ListHead *listeners_list = glb->listeners;
+        struct ListHead *listeners_list = platform->listeners;
         EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
         EventListener *last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
         EventListener *listener = listeners;
@@ -131,7 +133,7 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
             return;
         }
 
-        size_t n = linkedlist_length(glb->listeners);
+        size_t n = linkedlist_length(platform->listeners);
         for (size_t i = 0;  i < n;  ++i) {
             EventListener *next_listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
             if (listener->fd == event_descriptor) {
@@ -157,6 +159,13 @@ void sys_time(struct timespec *t)
 
     t->tv_sec = tv.tv_sec;
     t->tv_nsec = tv.tv_usec * 1000;
+}
+
+void sys_init_platform(GlobalContext *glb)
+{
+    struct ESP32PlatformData *platform = malloc(sizeof(struct ESP32PlatformData));
+    platform->listeners = NULL;
+    glb->platform_data = platform;
 }
 
 void sys_start_millis_timer()

@@ -46,7 +46,6 @@ GlobalContext *globalcontext_new()
     }
     list_init(&glb->ready_processes);
     list_init(&glb->waiting_processes);
-    glb->listeners = NULL;
     glb->processes_table = NULL;
     glb->registered_processes = NULL;
 
@@ -87,6 +86,8 @@ GlobalContext *globalcontext_new()
     glb->last_seen_millis = 0;
 
     glb->ref_ticks = 0;
+
+    sys_init_platform(glb);
 
     return glb;
 }

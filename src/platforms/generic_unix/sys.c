@@ -54,9 +54,10 @@ static void alarm_handler(int sig);
 
 void sys_consume_pending_events(GlobalContext *glb)
 {
-    struct ListHead *listeners_list = glb->listeners;
+    struct GenericUnixPlatformData *platform = glb->platform_data;
+    struct ListHead *listeners_list = platform->listeners;
 
-    if (!glb->listeners) {
+    if (!platform->listeners) {
         return;
     }
 
@@ -189,6 +190,16 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 term sys_get_info(Context *ctx, term key)
 {
     return UNDEFINED_ATOM;
+}
+
+void sys_init_platform(GlobalContext *global)
+{
+    struct GenericUnixPlatformData *platform = malloc(sizeof(struct GenericUnixPlatformData));
+    if (UNLIKELY(!platform)) {
+        abort();
+    }
+    platform->listeners = 0;
+    global->platform_data = platform;
 }
 
 void sys_start_millis_timer()
