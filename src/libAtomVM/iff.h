@@ -46,12 +46,14 @@
 #define LITU 6
 /** Funs table section */
 #define FUNT 7
+/** Str table section */
+#define STRT 8
 
 
 /** Required size for offsets array */
-#define MAX_OFFS 8
+#define MAX_OFFS 9
 /** Required size for sizes array */
-#define MAX_SIZES 8
+#define MAX_SIZES 9
 
 /** sizeof IFF section header in bytes */
 #define IFF_SECTION_HEADER_SIZE 8
