@@ -706,6 +706,27 @@ static inline term term_from_literal_binary(const void *data, uint32_t size, Con
 }
 
 /**
+* @brief Create an unititialized binary.
+*
+* @details Allocates a binary on the heap, and returns a term pointing to it.
+* Note that the data in teh binary is unitialized and could contain any garbage.
+* Make sure to initialize before use, if needed (e.g., via memset).
+* @param size size of binary data buffer.
+* @param ctx the context that owns the memory that will be allocated.
+* @return a term pointing to the boxed binary pointer.
+*/
+static inline term term_create_uninitialized_binary(uint32_t size, Context *ctx)
+{
+    int size_in_terms = term_binary_data_size_in_terms(size);
+
+    term *boxed_value = memory_heap_alloc(ctx, size_in_terms + 1);
+    boxed_value[0] = (size_in_terms << 6) | 0x24; // heap binary
+    boxed_value[1] = size;
+
+    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+}
+
+/**
  * @brief Gets binary size
  *
  * @details Returns binary size for a given binary term.
