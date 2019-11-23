@@ -1774,49 +1774,45 @@ static term nif_erlang_process_flag(Context *ctx, int argc, term argv[])
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
-    term true_term = context_make_atom(ctx, true_atom);
-    term false_term = context_make_atom(ctx, false_atom);
-    term ok_term = context_make_atom(ctx, ok_atom);
-
     if (flag == context_make_atom(target, trace_calls_atom)) {
-        if (value == true_term) {
+        if (value == TRUE_ATOM) {
             target->trace_calls = 1;
-            return ok_term;
-        } else if (value == false_term) {
+            return OK_ATOM;
+        } else if (value == FALSE_ATOM) {
             target->trace_calls = 0;
-            return ok_term;
+            return OK_ATOM;
         }
     } else if (flag == context_make_atom(target, trace_call_args_atom)) {
-        if (value == true_term) {
+        if (value == TRUE_ATOM) {
             target->trace_call_args = 1;
-            return ok_term;
-        } else if (value == false_term) {
+            return OK_ATOM;
+        } else if (value == FALSE_ATOM) {
             target->trace_call_args = 0;
-            return ok_term;
+            return OK_ATOM;
         }
     } else if (flag == context_make_atom(target, trace_returns_atom)) {
-        if (value == true_term) {
+        if (value == TRUE_ATOM) {
             target->trace_returns = 1;
-            return ok_term;
-        } else if (value == false_term) {
+            return OK_ATOM;
+        } else if (value == FALSE_ATOM) {
             target->trace_returns = 0;
-            return ok_term;
+            return OK_ATOM;
         }
     } else if (flag == context_make_atom(target, trace_send_atom)) {
-        if (value == true_term) {
+        if (value == TRUE_ATOM) {
             target->trace_send = 1;
-            return ok_term;
-        } else if (value == false_term) {
+            return OK_ATOM;
+        } else if (value == FALSE_ATOM) {
             target->trace_send = 0;
-            return ok_term;
+            return OK_ATOM;
         }
     } else if (flag == context_make_atom(target, trace_receive_atom)) {
-        if (value == true_term) {
+        if (value == TRUE_ATOM) {
             target->trace_receive = 1;
-            return ok_term;
-        } else if (value == false_term) {
+            return OK_ATOM;
+        } else if (value == FALSE_ATOM) {
             target->trace_receive = 0;
-            return ok_term;
+            return OK_ATOM;
         }
     }
 #else
