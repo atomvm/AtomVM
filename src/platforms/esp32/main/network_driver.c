@@ -30,7 +30,7 @@
 #include "interop.h"
 #include "mailbox.h"
 #include "utils.h"
-#include "socket.h"
+#include "socket_driver.h"
 #include "term.h"
 
 #include "platform_defaultatoms.h"

@@ -48,6 +48,12 @@ static Context *global_gpio_ctx = NULL;
 static void consume_gpio_mailbox(Context *ctx);
 static void IRAM_ATTR gpio_isr_handler(void *arg);
 
+struct GPIOListenerData
+{
+    Context *target_context;
+    int gpio;
+};
+
 void gpiodriver_init(Context *ctx)
 {
     if (LIKELY(!global_gpio_ctx)) {
@@ -63,8 +69,9 @@ void gpiodriver_init(Context *ctx)
 
 void gpio_interrupt_callback(EventListener *listener)
 {
-    Context *listening_ctx = listener->data;
-    int gpio_num = (int) event_descriptors[listener->fd];
+    struct GPIOListenerData *data = listener->data;
+    Context *listening_ctx = data->target_context;
+    int gpio_num = data->gpio;
 
     // 1 header + 2 elements
     if (UNLIKELY(memory_ensure_free(global_gpio_ctx, 3) != MEMORY_GC_OK)) {
@@ -161,15 +168,13 @@ static term gpiodriver_set_int(Context *ctx, Context *target, term msg)
     gpio_install_isr_service(0);
     TRACE("installed ISR service 0.\n");
 
-    int event_desc = open_event_descriptor((void *) gpio_num);
-
-    gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
-    gpio_set_intr_type(gpio_num, interrupt_type);
-
-    gpio_isr_handler_add(gpio_num, gpio_isr_handler, (void *) event_desc);
-
-
-    GlobalContext *global = ctx->global;
+    struct GPIOListenerData *data = malloc(sizeof(struct GPIOListenerData));
+    if (IS_NULL_PTR(data)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        abort();
+    }
+    data->gpio = gpio_num;
+    data->target_context = target;
 
     EventListener *listener = malloc(sizeof(EventListener));
     if (IS_NULL_PTR(listener)) {
@@ -177,14 +182,18 @@ static term gpiodriver_set_int(Context *ctx, Context *target, term msg)
         abort();
     }
     list_append(&platform->listeners, &listener->listeners_list_head);
-    listener->fd = event_desc;
-
+    listener->sender = data;
     listener->expires = 0;
     listener->expiral_timestamp.tv_sec = INT_MAX;
     listener->expiral_timestamp.tv_nsec = INT_MAX;
     listener->one_shot = 0;
-    listener->data = target;
+    listener->data = data;
     listener->handler = gpio_interrupt_callback;
+
+    gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
+    gpio_set_intr_type(gpio_num, interrupt_type);
+
+    gpio_isr_handler_add(gpio_num, gpio_isr_handler, data);
 
     return OK_ATOM;
 }
@@ -230,6 +239,5 @@ static void consume_gpio_mailbox(Context *ctx)
 
 static void IRAM_ATTR gpio_isr_handler(void *arg)
 {
-    uint32_t event_desc = (uint32_t) arg;
-    xQueueSendFromISR(event_queue, &event_desc, NULL);
+    xQueueSendFromISR(event_queue, &arg, NULL);
 }

@@ -44,4 +44,6 @@ struct GenericUnixPlatformData
     struct ListHead *listeners;
 };
 
+void socket_init(Context *ctx, term opts);
+
 #endif

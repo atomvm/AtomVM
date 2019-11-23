@@ -24,7 +24,6 @@
 #include "i2cdriver.h"
 #include "scheduler.h"
 #include "globalcontext.h"
-#include "socket.h"
 #include "gpio_driver.h"
 #include "spidriver.h"
 #include "network.h"
@@ -47,67 +46,9 @@ static const char *const esp32_atom = "\x5" "esp32";
 
 xQueueHandle event_queue = NULL;
 
-void *event_descriptors[EVENT_DESCRIPTORS_COUNT];
-
-int open_event_descriptor(void *ptr)
-{
-    for (int i = 0; i < EVENT_DESCRIPTORS_COUNT; i++) {
-        if (!event_descriptors[i]) {
-            event_descriptors[i] = ptr;
-            return i;
-        }
-    }
-
-    fprintf(stderr, "exausted descriptors\n");
-
-    return -1;
-}
-
-void close_event_descriptor(int index)
-{
-    if (UNLIKELY(index >= EVENT_DESCRIPTORS_COUNT)) {
-        fprintf(stderr, "tried to close invalid event descriptor\n");
-        abort();
-    }
-
-    event_descriptors[index] = NULL;
-}
-
-int find_event_descriptor(void *ptr)
-{
-    for (int i = 0; i < EVENT_DESCRIPTORS_COUNT; i++) {
-        if (event_descriptors[i] == ptr) {
-            return i;
-        }
-    }
-
-    fprintf(stderr, "warning: event descriptor not found\n");
-
-    return -1;
-}
-
-// for debugging only
-void print_event_descriptors()
-{
-    for (int i = 0; i < EVENT_DESCRIPTORS_COUNT; i++) {
-        if (event_descriptors[i] != NULL) {
-            fprintf(stderr, "\tevent_descriptor[%i]: 0x%lx\n", i, (unsigned long) event_descriptors[i]);
-        }
-    }
-}
-
-void *get_event_ptr(int i)
-{
-    if (i < 0 || EVENT_DESCRIPTORS_COUNT <= i) {
-        fprintf(stderr, "fatal: event descriptor index out of range: %i\n", i);
-        abort();
-    }
-    return event_descriptors[i];
-}
-
 void esp32_sys_queue_init()
 {
-    event_queue = xQueueCreate(EVENT_QUEUE_LEN, sizeof(uint32_t));
+    event_queue = xQueueCreate(EVENT_QUEUE_LEN, sizeof(void *));
 }
 
 static inline void sys_clock_gettime(struct timespec *t)
@@ -121,8 +62,9 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
 {
     struct ESP32PlatformData *platform = glb->platform_data;
 
-    int event_descriptor;
-    if (xQueueReceive(event_queue, &event_descriptor, wait_ticks) == pdTRUE) {
+    void *sender = NULL;
+    while (xQueueReceive(event_queue, &sender, wait_ticks) == pdTRUE) {
+
         if (UNLIKELY(list_is_empty(&platform->listeners))) {
             fprintf(stderr, "warning: no listeners.\n");
             return;
@@ -131,8 +73,9 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
         struct ListHead *listener_lh;
         LIST_FOR_EACH(listener_lh, &platform->listeners) {
             EventListener *listener = GET_LIST_ENTRY(listener_lh, EventListener, listeners_list_head);
-            if (listener->fd == event_descriptor) {
+            if (listener->sender == sender) {
                 listener->handler(listener);
+                return;
             }
         }
     }

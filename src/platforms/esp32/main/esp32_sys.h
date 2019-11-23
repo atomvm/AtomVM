@@ -39,7 +39,7 @@ struct EventListener {
 
     event_handler_t handler;
     void *data;
-    int fd;
+    void *sender;
 
     unsigned int one_shot : 1;
 };
@@ -52,12 +52,6 @@ struct ESP32PlatformData
 extern xQueueHandle event_queue;
 void esp32_sys_queue_init();
 
-extern void *event_descriptors[EVENT_DESCRIPTORS_COUNT];
-int open_event_descriptor(void *ptr);
-void close_event_descriptor(int index);
-int find_event_descriptor(void *ptr);
-void *get_event_ptr(int i);
-// for debugging only
-void print_event_descriptors();
+void socket_init(Context *ctx, term opts);
 
 #endif

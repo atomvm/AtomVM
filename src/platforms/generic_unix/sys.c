@@ -24,7 +24,6 @@
 #include "iff.h"
 #include "mapped_file.h"
 #include "scheduler.h"
-#include "socket.h"
 #include "gpio_driver.h"
 #include "network.h"
 #include "utils.h"
