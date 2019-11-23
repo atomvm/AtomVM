@@ -11,9 +11,9 @@
 start() ->
     Bin = esp:nvs_get_binary(start),
     Record = case Bin of
-        undefined -> 
+        undefined ->
             #record{};
-        _ -> 
+        _ ->
             case erlang:binary_to_term(Bin) of
                 #record{count=Count} ->
                     case esp:random() rem 100 of
