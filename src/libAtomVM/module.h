@@ -61,6 +61,8 @@ struct Module
     void *export_table;
     void *atom_table;
     void *fun_table;
+    void *str_table;
+    size_t str_table_len;
 
     union imported_func *imported_funcs;
     void *local_labels;
@@ -225,6 +227,14 @@ static inline void module_get_fun(const Module *this_module, int fun_index, uint
     // index
     *n_freeze = READ_32_ALIGNED(table_data + fun_index * 24 + 16 + 12);
     // ouniq
+}
+
+static inline uint8_t *module_get_str(Module *mod, size_t offset, size_t *remaining) {
+    if (offset >= mod->str_table_len) {
+        return NULL;
+    }
+    *remaining = mod->str_table_len - offset;
+    return mod->str_table + 8 + offset;
 }
 
 #endif

@@ -298,6 +298,10 @@ static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const c
         fwrite(data + offsets[FUNT], sizeof(uint8_t), sizes[FUNT] + IFF_SECTION_HEADER_SIZE, pack);
         pad_and_align(pack);
     }
+    if (offsets[STRT]) {
+        fwrite(data + offsets[STRT], sizeof(uint8_t), sizes[STRT] + IFF_SECTION_HEADER_SIZE, pack);
+        pad_and_align(pack);
+    }
 
     if (offsets[LITT]) {
         size_t u_size;
