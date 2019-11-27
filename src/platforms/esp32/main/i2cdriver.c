@@ -154,6 +154,56 @@ static term i2cdriver_write_byte(Context *ctx, term pid, term req)
     return OK_ATOM;
 }
 
+static term i2cdriver_read_bytes(Context *ctx, term pid, term req)
+{
+    struct I2CData *i2c_data = ctx->platform_data;
+
+    if (UNLIKELY(i2c_data->transmitting_pid != term_invalid_term())) {
+        // another process is already transmitting
+        return ERROR_ATOM;
+    }
+
+    term address_term = term_get_tuple_element(req, 1);
+    uint8_t address = term_to_int32(address_term);
+
+    term read_bytes_term = term_get_tuple_element(req, 2);
+    avm_int_t read_count = term_to_int32(read_bytes_term);
+
+    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
+        return ERROR_ATOM;
+    }
+    term data_term = term_create_uninitialized_binary(read_count, ctx);
+    uint8_t *data = (uint8_t *) term_binary_data(data_term);
+
+    i2c_data->cmd = i2c_cmd_link_create();
+    i2c_master_start(i2c_data->cmd);
+    esp_err_t result = i2c_master_write_byte(i2c_data->cmd, (address << 1) | I2C_MASTER_READ, true);
+
+    if (UNLIKELY(result != ESP_OK)) {
+        TRACE("i2cdriver read_bytes error: result was: %i.\n", result);
+        return ERROR_ATOM;
+    }
+
+    result = i2c_master_read(i2c_data->cmd, data, read_count, I2C_MASTER_LAST_NACK);
+    if (UNLIKELY(result != ESP_OK)) {
+        TRACE("i2cdriver read_bytes error: result was: %i.\n", result);
+        return ERROR_ATOM;
+    }
+
+    i2c_master_stop(i2c_data->cmd);
+    result = i2c_master_cmd_begin(I2C_NUM_0, i2c_data->cmd, portMAX_DELAY);
+    i2c_cmd_link_delete(i2c_data->cmd);
+
+    i2c_data->transmitting_pid = term_invalid_term();
+
+    if (UNLIKELY(result != ESP_OK)) {
+        TRACE("i2cdriver write_byte error: result was: %i.\n", result);
+        return ERROR_ATOM;
+    }
+
+    return data_term;
+}
+
 static void i2cdriver_consume_mailbox(Context *ctx)
 {
     Message *message = mailbox_dequeue(ctx);
@@ -180,6 +230,10 @@ static void i2cdriver_consume_mailbox(Context *ctx)
 
         case WRITE_BYTE_ATOM:
             ret = i2cdriver_write_byte(ctx, pid, req);
+            break;
+
+        case READ_BYTES_ATOM:
+            ret = i2cdriver_read_bytes(ctx, pid, req);
             break;
 
         default:
