@@ -181,6 +181,8 @@ In the remainder of this document, we assume a script `flash.sh`, which has some
 
 > Note.  Substitute the USB serial device on your platform for `/dev/ttyUSB0`, in this script.
 
+> Note. Experiment with baud rates (e.g., 921600).  You may find you can shorten the flash-debug-flash cycle with higher rates.
+
 You can montor the console output of these examples by issuing the `monitor` target to `make`, in the `src/platforms/esp32` directory of the AtomVM source tree:
 
     shell$ make monitor
@@ -199,24 +201,137 @@ The `blink` example will turn the blue LED on an ESP32 SoC (pin 2) on and off, o
 Flash the example program to your device as follows:
 
     shell$ flash.sh examples/erlang/esp32/blink.avm
-    esptool.py v2.6-beta1
-    Serial port /dev/tty.SLAB_USBtoUART
-    Connecting........_____....._
-    Chip is ESP32D0WDQ6 (revision 1)
-    Features: WiFi, BT, Dual Core, 240MHz, VRef calibration in efuse, Coding Scheme None
-    MAC: 3c:71:bf:84:d9:08
-    Uploading stub...
-    Running stub...
-    Stub running...
-    Configuring flash size...
-    Auto-detected Flash size: 4MB
-    Wrote 32768 bytes at 0x00110000 in 2.9 seconds (91.3 kbit/s)...
-    Hash of data verified.
-
-    Leaving...
+    ...
     Hard resetting via RTS pin...
 
 You should see the blue LED turn on and off on your ESP32 device.
+
+### `esp_random`
+
+This demo program illustrates use of the ESP32 `random`, `restart`, and `reset_reason` functions.
+
+The program will generate a random binary of a random size (at most 127 bytes) every 5 seconds.  If a 0-length byte sequence is generated (1:128 probability), the ESP will restart.
+
+Flash the example program to your device as follows:
+
+    shell$ flash.sh examples/erlang/esp32/esp_random.avm
+    ...
+    Hard resetting via RTS pin...
+
+You should see something like the following output when monitoring the ESP32 output (truncated for brevity):
+
+    shell$ make monitor
+    ...
+    Found AVM partition: size: 1048576, address: 0x110000
+    Booting file mapped at: 0x3f420000, size: 1048576
+    Starting: esp_random.beam...
+    ---
+    esp_rst_poweron
+    <<81,49,229,244,89,18,17>>
+    <<207,222,26,227,183,159,182,171,138,177,92,230,217,29,254,115,213,91,73,156,,229,87>>
+    <<248,27,206,,9,118,62,231,123,146,135,90,92,155,,1,59,157,60,226,63,74,18,,84,26,51,30,96,198>>
+    ...
+    <<"">>
+    ets Jun  8 2016 00:22:57
+    ...
+    Found AVM partition: size: 1048576, address: 0x110000
+    Booting file mapped at: 0x3f420000, size: 1048576
+    Starting: esp_random.beam...
+    ---
+    esp_rst_sw
+    <<155,174,204,143,232,202,136,242,49,1,188,113,134,184,80,18,118,177,77,230,10,21,72,91,92,160,198,115,249,217,206,52,102,32,230>>
+    ...
+
+### `esp_nvs`
+
+This demo program illustrates the use of ESP32 non-volatile storage (NVS).
+
+The program will store the number of times the device has been rebooted, along with the start time, in NVS.  The program will either:
+
+* delete the key use
+
+Flash the example program to your device as follows:
+
+    shell$ flash.sh examples/erlang/esp32/esp_random.avm
+    ...
+    Hard resetting via RTS pin...
+
+You should see the following output when monitoring the ESP32 output (truncated for brevity):
+
+    shell$ make monitor
+    ...
+    Found AVM partition: size: 1048576, address: 0x110000
+    Booting file mapped at: 0x3f420000, size: 1048576
+    Starting: esp_nvs.beam...
+    ---
+    {state,0,{0,0,78821}}
+    AtomVM finished with return value = ok
+    going to sleep forever..
+
+Hit the reset button on your device, and the ESP device will reboot, and display something like the following:
+
+    Found AVM partition: size: 1048576, address: 0x110000
+    Booting file mapped at: 0x3f420000, size: 1048576
+    Starting: esp_nvs.beam...
+    ---
+    {state,2,{0,0,78821}}
+    AtomVM finished with return value = ok
+    going to sleep forever..
+
+### `reformat_nvs`
+
+This demo program will reformat the non-volatile storage (NVS) partition.
+
+Flash the example program to your device as follows:
+
+    shell$ flash.sh examples/erlang/esp32/reformat_nvs.avm
+    ...
+    Hard resetting via RTS pin...
+
+You should see the following output when monitoring the ESP32 output (truncated for brevity):
+
+    shell$ make monitor
+    ...
+    Found AVM partition: size: 1048576, address: 0x110000
+    Booting file mapped at: 0x3f420000, size: 1048576
+    Starting: esp_nvs.beam...
+    ---
+    Warning: Reformatted NVS partition!
+    AtomVM finished with return value = ok
+    going to sleep forever..
+
+The NVS partition on your ESP device should be reformatted.
+
+> Note.  This program will irrevocably delete all existing key-values stored on the NVS partition.  Use with caution.
+
+### `set_network_config`
+
+This demo program can be used to set the WIFI credentials in NVS.  Setting WIFI credentials in NVS can greatly simplify the task of running ESP programs that require connectivity to WIFI networks.
+
+> Note.  Credentials are stored unencrypted and in plaintext and should not be considered secure.  Future versions may use encrypted NVS storage.
+
+Edit the `sta_network_config.erl` program and set the `Ssid` binary with your WIFI AP SSID, and `Psk` binary with the password used to access your WIFI network.  Save the file, rebuild, and flash to your device:
+
+    shell$ make
+    ...
+    shell$ flash.sh examples/erlang/esp32/sta_network_config.avm
+    ...
+    Hard resetting via RTS pin...
+
+You should see the following output when monitoring the ESP32 output (truncated for brevity):
+
+    shell$ make monitor
+    ...
+    Found AVM partition: size: 1048576, address: 0x110000
+    Booting file mapped at: 0x3f420000, size: 1048576
+    Starting: set_network_config.beam...
+    ---
+    {atomvm,sta_ssid,<<"myssid">>}
+    {atomvm,sta_psk,<<"xxxxxx">>}
+    AtomVM finished with return value = ok
+    going to sleep forever..
+
+You may now run programs that use your WIFI network (see below) without needing to enter WIFI credentials.
 
 ### `sta_network`
 
@@ -226,26 +341,12 @@ The `sta_network` example will connect to your local WiFi network and obtain and
 
 > Note.  AtomVM currently only supports IPv4 addresses.
 
-> Note.  You will need to edit the `examples/erlang/esp32/sta_network.erl` source file and set the `ssid` and `psk` parameters to match your local WiFi network, and then rebuild the example.
+> Note.  If you have not set WIFI credentials in NVS (see above), you will need to edit the `examples/erlang/esp32/sta_network.erl` source file and set the `ssid` and `psk` parameters to match your local WiFi network, and then rebuild the example.
 
 Flash the example program to your device as follows:
 
     shell$ flash.sh examples/erlang/esp32/sta_network.avm
-    esptool.py v2.6-beta1
-    Serial port /dev/tty.SLAB_USBtoUART
-    Connecting........_____....._____....._____.....__
-    Chip is ESP32D0WDQ6 (revision 1)
-    Features: WiFi, BT, Dual Core, 240MHz, VRef calibration in efuse, Coding Scheme None
-    MAC: 3c:71:bf:84:d9:08
-    Uploading stub...
-    Running stub...
-    Stub running...
-    Configuring flash size...
-    Auto-detected Flash size: 4MB
-    Wrote 49152 bytes at 0x00110000 in 4.3 seconds (91.3 kbit/s)...
-    Hash of data verified.
-
-    Leaving...
+    ...
     Hard resetting via RTS pin...
 
 You should see the following output when monitoring the ESP32 output (truncated for brevity):

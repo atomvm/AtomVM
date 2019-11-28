@@ -78,19 +78,17 @@ void network_driver_start(Context *ctx, term_ref pid, term_ref ref, term config)
         term pass_value = interop_proplist_get_value(sta_config, PSK_ATOM);
         term sntp_value = interop_proplist_get_value(sta_config, SNTP_ATOM);
 
-        int ssid_ok;
-        char *ssid = interop_list_to_string(ssid_value, &ssid_ok);
-        int psk_ok;
-        char *psk = interop_list_to_string(pass_value, &psk_ok);
-
-        if (UNLIKELY(!ssid_ok || !psk_ok)) {
-            if (ssid != NULL) {
-                free(ssid);
-            }
-            if (psk != NULL) {
-                free(psk);
-            }
-            term reply = port_create_error_tuple(ctx, OUT_OF_MEMORY_ATOM);
+        int ok = 0;
+        char *ssid = interop_term_to_string(ssid_value, &ok);
+        if (!ok || IS_NULL_PTR(ssid)) {
+            term reply = port_create_error_tuple(ctx, BADARG_ATOM);
+            port_send_reply(ctx, pid, ref, reply);
+            return;
+        }
+        char *psk  = interop_term_to_string(pass_value, &ok);
+        if (!ok || IS_NULL_PTR(psk)) {
+            free(ssid);
+            term reply = port_create_error_tuple(ctx, BADARG_ATOM);
             port_send_reply(ctx, pid, ref, reply);
             return;
         }
