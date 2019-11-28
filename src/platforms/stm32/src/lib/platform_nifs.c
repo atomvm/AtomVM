@@ -18,9 +18,33 @@
  ***************************************************************************/
 
 #include "platform_nifs.h"
+#include "defaultatoms.h"
+#include "platform_defaultatoms.h"
+#include "term.h"
+#include "nifs.h"
+
+//#define ENABLE_TRACE
+#include "trace.h"
+
+static term nif_atomvm_platform(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
+    return STM32_ATOM;
+}
+
+static const struct Nif atomvm_platform_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_platform
+};
 
 const struct Nif *platform_nifs_get_nif(const char *nifname)
 {
-    // currently no platform-specific NIFs for STM
+    if (strcmp("atomvm:platform/0", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &atomvm_platform_nif;
+    }
     return NULL;
 }

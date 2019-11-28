@@ -21,13 +21,16 @@
 
 #include "atom.h"
 #include "defaultatoms.h"
+#include "platform_defaultatoms.h"
 #include "nifs.h"
 #include "memory.h"
 #include "term.h"
 
+#include <stdlib.h>
 #include <esp_system.h>
 #include <nvs.h>
 #include <nvs_flash.h>
+#include <rom/md5_hash.h>
 
 //#define ENABLE_TRACE
 #include "trace.h"
@@ -45,6 +48,7 @@
     return term_invalid_term();
 
 #define MAX_NVS_KEY_SIZE 15
+#define MD5_DIGEST_LENGTH 16
 
 static const char *const esp_rst_unknown_atom   = "\xF"  "esp_rst_unknown";
 static const char *const esp_rst_poweron        = "\xF"  "esp_rst_poweron";
@@ -67,6 +71,8 @@ static int write_atom_c_string(Context *ctx, char *buf, size_t bufsize, term t);
 
 static term nif_esp_random(Context *ctx, int argc, term argv[])
 {
+    UNUSED(argc);
+    UNUSED(argv);
     uint32_t r = esp_random();
     if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -76,6 +82,7 @@ static term nif_esp_random(Context *ctx, int argc, term argv[])
 
 static term nif_esp_random_bytes(Context *ctx, int argc, term argv[])
 {
+    UNUSED(argc);
     VALIDATE_VALUE(argv[0], term_is_integer);
 
     avm_int_t len = term_to_int(argv[0]);
@@ -105,12 +112,17 @@ static term nif_esp_random_bytes(Context *ctx, int argc, term argv[])
 
 static term nif_esp_restart(Context *ctx, int argc, term argv[])
 {
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
     esp_restart();
     return OK_ATOM;
 }
 
 static term nif_esp_reset_reason(Context *ctx, int argc, term argv[])
 {
+    UNUSED(argc);
+    UNUSED(argv);
     esp_reset_reason_t reason = esp_reset_reason();
     switch (reason) {
         case ESP_RST_UNKNOWN:
@@ -142,6 +154,7 @@ static term nif_esp_reset_reason(Context *ctx, int argc, term argv[])
 
 static term nif_esp_nvs_get_binary(Context *ctx, int argc, term argv[])
 {
+    UNUSED(argc);
     VALIDATE_VALUE(argv[0], term_is_atom);
     VALIDATE_VALUE(argv[1], term_is_atom);
 
@@ -200,6 +213,7 @@ static term nif_esp_nvs_get_binary(Context *ctx, int argc, term argv[])
 
 static term nif_esp_nvs_set_binary(Context *ctx, int argc, term argv[])
 {
+    UNUSED(argc);
     VALIDATE_VALUE(argv[0], term_is_atom);
     VALIDATE_VALUE(argv[1], term_is_atom);
     VALIDATE_VALUE(argv[2], term_is_binary);
@@ -239,6 +253,7 @@ static term nif_esp_nvs_set_binary(Context *ctx, int argc, term argv[])
 
 static term nif_esp_nvs_erase_key(Context *ctx, int argc, term argv[])
 {
+    UNUSED(argc);
     VALIDATE_VALUE(argv[0], term_is_atom);
     VALIDATE_VALUE(argv[1], term_is_atom);
 
@@ -278,6 +293,7 @@ static term nif_esp_nvs_erase_key(Context *ctx, int argc, term argv[])
 
 static term nif_esp_nvs_erase_all(Context *ctx, int argc, term argv[])
 {
+    UNUSED(argc);
     VALIDATE_VALUE(argv[0], term_is_atom);
 
     char namespace[MAX_NVS_KEY_SIZE + 1];
@@ -309,6 +325,8 @@ static term nif_esp_nvs_erase_all(Context *ctx, int argc, term argv[])
 
 static term nif_esp_nvs_reformat(Context *ctx, int argc, term argv[])
 {
+    UNUSED(argc);
+    UNUSED(argv);
     esp_err_t err = nvs_flash_erase();
     switch (err) {
         case ESP_OK:
@@ -326,6 +344,28 @@ static term nif_esp_nvs_reformat(Context *ctx, int argc, term argv[])
             fprintf(stderr, "Unable to initialize NVS partition. err=%i\n", err);
             RAISE_ERROR(term_from_int(err));
     }
+}
+
+static term nif_rom_md5(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term data = argv[0];
+    VALIDATE_VALUE(data, term_is_binary);
+
+    unsigned char digest[MD5_DIGEST_LENGTH];
+    struct MD5Context md5;
+    MD5Init(&md5);
+    MD5Update(&md5, (const unsigned char *) term_binary_data(data), term_binary_size(data));
+    MD5Final(digest, &md5);
+    return term_from_literal_binary(digest, MD5_DIGEST_LENGTH, ctx);
+}
+
+static term nif_atomvm_platform(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
+    return ESP32_ATOM;
 }
 
 //
@@ -377,14 +417,24 @@ static const struct Nif esp_nvs_reformat_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_nvs_reformat
 };
+static const struct Nif rom_md5_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_rom_md5
+};
+static const struct Nif atomvm_platform_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_platform
+};
 
 const struct Nif *platform_nifs_get_nif(const char *nifname)
 {
-    if (strcmp("esp:random/0", nifname) == 0) {
+    if (strcmp("atomvm:random/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_random_nif;
     }
-    if (strcmp("esp:random_bytes/1", nifname) == 0) {
+    if (strcmp("atomvm:rand_bytes/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_random_bytes_nif;
     }
@@ -415,6 +465,14 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     if (strcmp("esp:nvs_reformat/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_nvs_reformat_nif;
+    }
+    if (strcmp("erlang:md5/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &rom_md5_nif;
+    }
+    if (strcmp("atomvm:platform/0", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &atomvm_platform_nif;
     }
     return NULL;
 }

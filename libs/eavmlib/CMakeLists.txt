@@ -7,6 +7,7 @@ project(eavmlib)
 include(BuildErlang)
 
 set(ERLANG_MODULES
+    atomvm
     console
     esp
     gpio

@@ -31,6 +31,7 @@ static const char *const c_atom = "\x01" "c";
 static const char *const d_atom = "\x01" "d";
 static const char *const e_atom = "\x01" "e";
 static const char *const f_atom = "\x01" "f";
+static const char *const stm32_atom = "\x5" "stm32";
 
 void platform_defaultatoms_init(GlobalContext *glb)
 {
@@ -48,6 +49,7 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, d_atom) == D_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, e_atom) == E_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, f_atom) == F_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, stm32_atom) == STM32_ATOM_INDEX;
 
     if (!ok) {
         abort();

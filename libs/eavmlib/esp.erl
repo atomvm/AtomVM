@@ -26,7 +26,6 @@
 -module(esp).
 
 -export([
-    random/0, random_bytes/1,
     restart/0, reset_reason/0,
     nvs_get_binary/1, nvs_get_binary/2, nvs_get_binary/3,
     nvs_set_binary/2, nvs_set_binary/3,
@@ -49,30 +48,6 @@
     esp_rst_sdio.
 
 -include("atomvm.hrl").
-
-%%-----------------------------------------------------------------------------
-%% @returns random 32-bit integer.
-%% @doc     Returns a random 32-bit integer value.
-%%          This function will use the ESP32 hardware RNG if Bluetooth or WIFI
-%%          is enabled.  Otherwise, the random value is generated using a PRNG.
-%% @end
-%%-----------------------------------------------------------------------------
--spec random() -> integer().
-random() ->
-    throw(nif_error).
-
-%%-----------------------------------------------------------------------------
-%% @param   Len non-negative integer
-%% @returns Binary containing random sequence of bytes of length Len.
-%% @doc     Returns a binary containing random sequence of bytes of length Len.
-%%          Supplying a negative value will result in a badarg error.
-%%          This function will use the ESP32 hardware RNG if Bluetooth or WIFI
-%%          is enabled.  Otherwise, the random value is generated using a PRNG.
-%% @end
-%%-----------------------------------------------------------------------------
--spec random_bytes(Len::non_neg_integer()) -> binary().
-random_bytes(_Len) ->
-    throw(nif_error).
 
 %%-----------------------------------------------------------------------------
 %% @doc     Restarts the ESP device
