@@ -7,6 +7,7 @@
 test() ->
     ok = test_start_timer(),
     ok = test_cancel_timer(),
+    ok = test_send_after(),
     ok.
 
 -include("etest.hrl").
@@ -27,7 +28,8 @@ test_cancel_timer() ->
 
 test_send_after() ->
     timer_manager:send_after(100, self(), ping),
-    pong = wait_for_timeout(ping, 5000).
+    pong = wait_for_timeout(ping, 5000),
+    ok.
 
 
 wait_for_timeout(Msg, Timeout) ->

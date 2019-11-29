@@ -76,6 +76,8 @@ static term nif_openssl_rand_bytes(Context *ctx, int argc, term argv[])
 
     int status = RAND_bytes((unsigned char *) buf, n);
     if (status != 1) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
         if (RAND_pseudo_bytes((unsigned char *) buf, n) != 1) {
             free(buf);
             RAISE_ERROR(LOW_ENTROPY_ATOM);
@@ -83,6 +85,7 @@ static term nif_openssl_rand_bytes(Context *ctx, int argc, term argv[])
             fprintf(stderr, "WARNING: Unable to generate cryptographically strong random bytes.  Generated pseudo-random bytes.\n");
         }
     }
+#pragma GCC diagnostic pop
 
     if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(n) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -125,6 +128,9 @@ static const struct Nif openssl_random_nif =
 
 static term nif_atomvm_platform(Context *ctx, int argc, term argv[])
 {
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
     return GENERIC_UNIX_ATOM;
 }
 

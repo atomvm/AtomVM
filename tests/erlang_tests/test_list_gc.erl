@@ -8,5 +8,4 @@ start() ->
         {foo, [{bar, Self}]},
         {tapas, 30000}
     ],
-    erlang:display(Config),
     length(Config).

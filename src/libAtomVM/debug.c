@@ -55,7 +55,7 @@ static COLD_FUNC void debug_dump_term(Context *ctx, term *pos, const char *regio
     // TODO use TERM_BITS instead
     char buf[32 + 1];
     debug_dump_binary_mem(buf, *pos, 32);
-    fprintf(stderr, "DEBUG: %s 0x%lx %3i: (%s)b 0x%09lx: ", region, (unsigned long) pos, i, buf, t);
+    fprintf(stderr, "DEBUG: %s 0x%lx %3i: (%s)b 0x%09lx: ", region, (unsigned long) pos, i, buf, (unsigned long) t);
     debug_display_type(t, ctx);
     fprintf(stderr, "\n");
 }

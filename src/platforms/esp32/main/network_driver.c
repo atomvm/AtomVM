@@ -44,7 +44,7 @@
 
 #include <lwip/inet.h>
 
-#include <apps/sntp/sntp.h>
+#include <lwip/apps/sntp.h>
 
 //#define ENABLE_TRACE 1
 

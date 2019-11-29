@@ -147,12 +147,7 @@ void term_display(FILE *fd, term t, const Context *ctx)
         fprintf(fd, ">>");
 
     } else if (term_is_reference(t)) {
-        const char *format =
-#ifdef __clang__
-        "#Ref<0.0.0.%llu>";
-#else
-        "#Ref<0.0.0.%lu>";
-#endif
+        const char *format = "#Ref<0.0.0." AVM_UINT64_FMT ">";
         fprintf(fd, format, term_to_ref_ticks(t));
 
     } else if (term_is_boxed_integer(t)) {
@@ -179,7 +174,7 @@ void term_display(FILE *fd, term t, const Context *ctx)
 #endif
 
     } else {
-        fprintf(fd, "Unknown term type: %li", t);
+        fprintf(fd, "Unknown term type: 0x%lx", (unsigned long) t);
     }
 }
 

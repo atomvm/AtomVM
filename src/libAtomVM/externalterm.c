@@ -273,7 +273,7 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
         return 5 + len;
 
     } else {
-        fprintf(stderr, "Unknown term type: %li\n", t);
+        fprintf(stderr, "Unknown term type: 0x%lx\n", (unsigned long) t);
         abort();
     }
 }

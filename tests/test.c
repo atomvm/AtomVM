@@ -451,7 +451,10 @@ int main(int argc, char **argv)
     printf("Seed is %li\n", seed);
     srand(seed);
 
-    chdir(dirname(argv[0]));
+    if (chdir(dirname(argv[0]))) {
+        fprintf(stderr, "Unable to chdir into directory containing %s\n", argv[0]);
+        return -1;
+    }
 
     return test_modules_execution();
 }

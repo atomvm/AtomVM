@@ -648,12 +648,9 @@ static void passive_recv_callback(EventListener *listener)
     } else {
         TRACE("socket_driver: passive received data of len: %li\n", len);
         int ensure_packet_avail;
-        int binary;
         if (socket_data->binary == TRUE_ATOM) {
-            binary = 1;
             ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
         } else {
-            binary = 0;
             ensure_packet_avail = len * 2;
         }
         port_ensure_available(ctx, 20 + ensure_packet_avail);
@@ -701,12 +698,9 @@ static void active_recvfrom_callback(EventListener *listener)
         port_send_message(ctx, pid, msg);
     } else {
         int ensure_packet_avail;
-        int binary;
         if (socket_data->binary == TRUE_ATOM) {
-            binary = 1;
             ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
         } else {
-            binary = 0;
             ensure_packet_avail = len * 2;
         }
         // {udp, pid, {int,int,int,int}, int, binary}
@@ -754,12 +748,9 @@ static void passive_recvfrom_callback(EventListener *listener)
         port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, RECVFROM_ATOM, errno));
     } else {
         int ensure_packet_avail;
-        int binary;
         if (socket_data->binary == TRUE_ATOM) {
-            binary = 1;
             ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
         } else {
-            binary = 0;
             ensure_packet_avail = len * 2;
         }
         // {Ref, {ok, {{int,int,int,int}, int, binary}}}
@@ -784,6 +775,7 @@ static void passive_recvfrom_callback(EventListener *listener)
 
 static void do_recv(Context *ctx, term pid, term ref, term length, term timeout, event_handler_t handler)
 {
+    UNUSED(timeout);
     GlobalContext *glb = ctx->global;
     struct GenericUnixPlatformData *platform = glb->platform_data;
 
@@ -875,6 +867,7 @@ static void accept_callback(EventListener *listener)
 
 void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
 {
+    UNUSED(timeout);
     GlobalContext *glb = ctx->global;
     struct GenericUnixPlatformData *platform = glb->platform_data;
 

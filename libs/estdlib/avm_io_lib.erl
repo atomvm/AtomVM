@@ -105,12 +105,6 @@ to_string(T) when is_tuple(T) ->
 to_string(_T) -> "unknown".
 
 %% @private
-list_elements_to_string([], Accum) ->
-    ?LISTS:reverse(Accum);
-list_elements_to_string([E|R], Accum) ->
-    list_elements_to_string(R, [to_string(E) | Accum]).
-
-%% @private
 is_printable_ascii([]) -> true;
 is_printable_ascii([E|R]) when is_integer(E) andalso 32 =< E andalso E < 127 ->
     is_printable_ascii(R);

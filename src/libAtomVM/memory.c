@@ -168,7 +168,7 @@ static inline term memory_dereference_moved_marker(const term *moved_marker)
 
 term memory_copy_term_tree(term **new_heap, term t)
 {
-    TRACE("Copy term tree: 0x%lx, heap: 0x%p\n", t, *new_heap);
+    TRACE("Copy term tree: 0x%lx, heap: 0x%p\n", (unsigned long) t, *new_heap);
 
     term *temp_start = *new_heap;
     term copied_term = memory_shallow_copy_term(t, new_heap, 0);
@@ -232,11 +232,11 @@ unsigned long memory_estimate_usage(term t)
             t = temp_stack_pop(&temp_stack);
 
         } else {
-            fprintf(stderr, "bug: found unknown term type: 0x%lx\n", t);
+            fprintf(stderr, "bug: found unknown term type: 0x%lx\n", (unsigned long) t);
             if (term_is_boxed(t)) {
                 const term *boxed_value = term_to_const_term_ptr(t);
                 int boxed_size = term_boxed_size(t) + 1;
-                fprintf(stderr, "boxed header: 0x%lx, size: %i\n", boxed_value[0], boxed_size);
+                fprintf(stderr, "boxed header: 0x%lx, size: %i\n", (unsigned long) boxed_value[0], boxed_size);
             }
             abort();
         }
@@ -316,7 +316,7 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
                     break;
 
                 default:
-                    fprintf(stderr, "- Found unknown boxed type: %lx\n", (t >> 2) & 0xF);
+                    fprintf(stderr, "- Found unknown boxed type: 0x%lx\n", (unsigned long) ((t >> 2) & 0xF));
                     abort();
             }
 
@@ -333,7 +333,7 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
             ptr++;
 
         } else {
-            fprintf(stderr, "bug: found unknown term type: 0x%lx\n", t);
+            fprintf(stderr, "bug: found unknown term type: 0x%lx\n", (unsigned long) t);
             abort();
         }
     }
@@ -415,7 +415,7 @@ HOT_FUNC static term memory_shallow_copy_term(term t, term **new_heap, int move)
         return new_term;
 
     } else {
-        fprintf(stderr, "Unexpected term. Term is: %lx\n", t);
+        fprintf(stderr, "Unexpected term. Term is: 0x%lx\n", (unsigned long) t);
         abort();
     }
 }

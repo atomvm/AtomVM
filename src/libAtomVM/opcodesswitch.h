@@ -2338,7 +2338,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                         code = mod->code->code;
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
-                        fprintf(stderr, "No target label for OP_BADMATCH.  arg1=0x%lx\n", arg1);
+                        fprintf(stderr, "No target label for OP_BADMATCH.  arg1=0x%lx\n", (unsigned long) arg1);
                         abort();
                     }
                 #endif
@@ -2404,7 +2404,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                         code = mod->code->code;
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
-                        fprintf(stderr, "No target label for OP_CASE_END.  arg1=0x%lx\n", arg1);
+                        fprintf(stderr, "No target label for OP_CASE_END.  arg1=0x%lx\n", (unsigned long) arg1);
                         abort();
                     }
                 #endif

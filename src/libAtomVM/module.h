@@ -234,7 +234,7 @@ static inline uint8_t *module_get_str(Module *mod, size_t offset, size_t *remain
         return NULL;
     }
     *remaining = mod->str_table_len - offset;
-    return mod->str_table + 8 + offset;
+    return ((uint8_t *) mod->str_table) + 8 + offset;
 }
 
 #endif
