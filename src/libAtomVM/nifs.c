@@ -120,6 +120,7 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[]);
 static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[]);
+static term nif_erlang_throw(Context *ctx, int argc, term argv[]);
 
 static const struct Nif binary_at_nif =
 {
@@ -419,6 +420,12 @@ static const struct Nif term_to_binary_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_term_to_binary
+};
+
+static const struct Nif throw_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_throw
 };
 
 //Ignore warning caused by gperf generated code
@@ -2158,6 +2165,17 @@ static term nif_binary_split_2(Context *ctx, int argc, term argv[])
 
         return term_list_prepend(argv[0], term_nil(), ctx);
     }
+}
+
+static term nif_erlang_throw(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term t = argv[0];
+
+    ctx->x[0] = THROW_ATOM;
+    ctx->x[1] = t;
+    return term_invalid_term();
 }
 
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])
