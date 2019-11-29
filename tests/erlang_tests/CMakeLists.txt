@@ -341,6 +341,7 @@ compile_erlang(raise_badmatch)
 compile_erlang(raise_case_end)
 compile_erlang(raise_if_end)
 compile_erlang(catch_from_other_module)
+compile_erlang(throwtest)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -676,4 +677,5 @@ add_custom_target(erlang_test_modules DEPENDS
     raise_case_end.beam
     raise_if_end.beam
     catch_from_other_module.beam
+    throwtest.beam
 )

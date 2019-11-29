@@ -383,6 +383,7 @@ struct Test tests[] =
     {"binary_is_iolist.beam", 1006},
 
     {"catch_from_other_module.beam", 7},
+    {"throwtest.beam", -10},
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
