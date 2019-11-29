@@ -22,7 +22,7 @@
 
 char *interop_term_to_string(term t, int *ok)
 {
-    if (term_is_nonempty_list(t)) {
+    if (term_is_list(t)) {
         return interop_list_to_string(t, ok);
 
     } else if (term_is_binary(t)) {
