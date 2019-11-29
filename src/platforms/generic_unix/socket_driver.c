@@ -164,10 +164,6 @@ static term init_udp_socket(Context *ctx, SocketDriverData *socket_data, term pa
                 abort();
             }
             listener->fd = socket_data->sockfd;
-            listener->expires = 0;
-            listener->expiral_timestamp.tv_sec = INT_MAX;
-            listener->expiral_timestamp.tv_nsec = INT_MAX;
-            listener->one_shot = 0;
             listener->data = ctx;
             listener->handler = active_recvfrom_callback;
             linkedlist_append(&platform->listeners, &listener->listeners_list_head);
@@ -253,10 +249,6 @@ static term init_client_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
                 abort();
             }
             listener->fd = socket_data->sockfd;
-            listener->expires = 0;
-            listener->expiral_timestamp.tv_sec = INT_MAX;
-            listener->expiral_timestamp.tv_nsec = INT_MAX;
-            listener->one_shot = 0;
             listener->data = ctx;
             listener->handler = active_recv_callback;
             linkedlist_append(&platform->listeners, &listener->listeners_list_head);
@@ -322,10 +314,6 @@ static term init_accepting_socket(Context *ctx, SocketDriverData *socket_data, t
             abort();
         }
         listener->fd = socket_data->sockfd;
-        listener->expires = 0;
-        listener->expiral_timestamp.tv_sec = INT_MAX;
-        listener->expiral_timestamp.tv_nsec = INT_MAX;
-        listener->one_shot = 0;
         listener->data = ctx;
         listener->handler = active_recv_callback;
         linkedlist_append(&platform->listeners, &listener->listeners_list_head);
@@ -774,10 +762,6 @@ static void do_recv(Context *ctx, term pid, term ref, term length, term timeout,
         abort();
     }
     listener->fd = socket_data->sockfd;
-    listener->expires = 0;
-    listener->expiral_timestamp.tv_sec = 60*60*24; // TODO handle timeout
-    listener->expiral_timestamp.tv_nsec = 0;
-    listener->one_shot = 1;
     listener->handler = handler;
     listener->data = data;
     linkedlist_append(&platform->listeners, &listener->listeners_list_head);
@@ -861,10 +845,6 @@ void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
         abort();
     }
     listener->fd = socket_data->sockfd;
-    listener->expires = 0;
-    listener->expiral_timestamp.tv_sec = 60*60*24; // TODO handle timeout
-    listener->expiral_timestamp.tv_nsec = 0;
-    listener->one_shot = 1;
     listener->handler = accept_callback;
     listener->data = data;
     linkedlist_append(&platform->listeners, &listener->listeners_list_head);

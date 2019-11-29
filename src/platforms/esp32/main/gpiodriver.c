@@ -183,10 +183,6 @@ static term gpiodriver_set_int(Context *ctx, Context *target, term msg)
     }
     list_append(&platform->listeners, &listener->listeners_list_head);
     listener->sender = data;
-    listener->expires = 0;
-    listener->expiral_timestamp.tv_sec = INT_MAX;
-    listener->expiral_timestamp.tv_nsec = INT_MAX;
-    listener->one_shot = 0;
     listener->data = data;
     listener->handler = gpio_interrupt_callback;
 
