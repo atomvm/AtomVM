@@ -18,12 +18,15 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -module(avm_inet).
 
--export([port/1, close/1]).
+-export([port/1, close/1, sockname/1, peername/1]).
 
 -type port_number() :: 0..65535.
 -type socket() :: pid().
+-type address() :: ipv4_address().
+-type ipv4_address() :: {octet(), octet(), octet(), octet()}.
+-type octet() :: 0..255.
 
--export_type([socket/0, port_number/0]).
+-export_type([socket/0, port_number/0, address/0, ipv4_address/0, octet/0]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket from which to obtain the port number
@@ -46,6 +49,28 @@ port(Socket) ->
 -spec close(Socket::socket()) -> ok.
 close(Socket) ->
     call(Socket, {close}).
+
+%%-----------------------------------------------------------------------------
+%% @param   Socket the socket
+%% @returns The address and port of the local end of an established connection.
+%% @doc     The address and port representing the "local" end of a connection.
+%%          This function should be called on a running socket instance.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sockname(Socket::socket()) -> {address(), port_number()} | {error, Reason::term()}.
+sockname(Socket) ->
+    call(Socket, {sockname}).
+
+%%-----------------------------------------------------------------------------
+%% @param   Socket the socket
+%% @returns The address and port of the remote end of an established connection.
+%% @doc     The address and port representing the "remote" end of a connection.
+%%          This function should be called on a running socket instance.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec peername(Socket::socket()) -> {address(), port_number()} | {error, Reason::term()}.
+peername(Socket) ->
+    call(Socket, {peername}).
 
 %%
 %% Internal operations

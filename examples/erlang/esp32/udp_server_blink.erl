@@ -52,7 +52,7 @@ udp_server_start() ->
     console:puts("Opening socket 44444 ...\n"),
     case ?GEN_UDP:open(44444, [{active, true}]) of
         {ok, Socket} ->
-            erlang:display(Socket),
+            erlang:display({Socket, ?INET:sockname(Socket)}),
             Gpio = gpio:open(),
             gpio:set_direction(Gpio, ?PIN, output),
             console:puts("Waiting to receive data...\n"),

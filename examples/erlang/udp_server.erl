@@ -9,7 +9,7 @@ start() ->
     Active = true,
     case ?GEN_UDP:open(44444, [{active, Active}]) of
         {ok, Socket} ->
-            erlang:display(Socket),
+            erlang:display({Socket, ?INET:sockname(Socket)}),
             console:puts("Waiting to receive data...\n"),
             case Active of
                 true -> active_loop();

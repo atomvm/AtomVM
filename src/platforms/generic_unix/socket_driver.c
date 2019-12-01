@@ -86,7 +86,14 @@ static term do_bind(Context *ctx, term address, term port)
     UNUSED(address);
     memset(&serveraddr, 0, sizeof(serveraddr));
     serveraddr.sin_family = AF_INET;
-    serveraddr.sin_addr.s_addr = htonl(INADDR_ANY); // TODO
+    if (address == UNDEFINED_ATOM) {
+        serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    } else if (term_is_tuple(address)) {
+        serveraddr.sin_addr.s_addr = htonl(socket_tuple_to_addr(address));
+    } else {
+        term_display(stderr, address, ctx);
+        return port_create_error_tuple(ctx, BADARG_ATOM);
+    }
     avm_int_t p = term_to_int(port);
     serveraddr.sin_port = htons(p);
     socklen_t address_len = sizeof(serveraddr);
@@ -114,7 +121,7 @@ static term init_udp_socket(Context *ctx, SocketDriverData *socket_data, term pa
         close(sockfd);
         return port_create_sys_error_tuple(ctx, FCNTL_ATOM, errno);
     }
-    term address = interop_proplist_get_value(params, ADDRESS_ATOM);
+    term address = interop_proplist_get_value_default(params, ADDRESS_ATOM, UNDEFINED_ATOM);
     term port = interop_proplist_get_value(params, PORT_ATOM);
     term ret = do_bind(ctx, address, port);
     if (ret != OK_ATOM) {
@@ -255,7 +262,7 @@ static term init_server_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
         close(sockfd);
         return port_create_sys_error_tuple(ctx, FCNTL_ATOM, errno);
     }
-    term address = interop_proplist_get_value(params, ADDRESS_ATOM);
+    term address = interop_proplist_get_value_default(params, ADDRESS_ATOM, UNDEFINED_ATOM);
     term port = interop_proplist_get_value(params, PORT_ATOM);
     term ret = do_bind(ctx, address, port);
     if (ret != OK_ATOM) {
@@ -389,6 +396,54 @@ term socket_driver_get_port(Context *ctx)
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     port_ensure_available(ctx, 7);
     return port_create_ok_tuple(ctx, term_from_int(socket_data->port));
+}
+
+term socket_driver_sockname(Context *ctx)
+{
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+
+    struct sockaddr_in addr;
+    socklen_t addrlen = sizeof(addr);
+    int result = getsockname(socket_data->sockfd, (struct sockaddr *) &addr, &addrlen);
+    if (result != 0) {
+        port_ensure_available(ctx, 3);
+        return port_create_error_tuple(ctx, term_from_int(errno));
+    } else {
+        port_ensure_available(ctx, 8);
+        term addr_term = socket_tuple_from_addr(
+            ctx, ntohl(addr.sin_addr.s_addr)
+        );
+        term port_term = term_from_int(ntohs(addr.sin_port));
+        return port_create_tuple2(
+            ctx,
+            addr_term,
+            port_term
+        );
+    }
+}
+
+term socket_driver_peername(Context *ctx)
+{
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+
+    struct sockaddr_in addr;
+    socklen_t addrlen = sizeof(addr);
+    int result = getpeername(socket_data->sockfd, (struct sockaddr *) &addr, &addrlen);
+    if (result != 0) {
+        port_ensure_available(ctx, 3);
+        return port_create_error_tuple(ctx, term_from_int(errno));
+    } else {
+        port_ensure_available(ctx, 8);
+        term addr_term = socket_tuple_from_addr(
+            ctx, ntohl(addr.sin_addr.s_addr)
+        );
+        term port_term = term_from_int(ntohs(addr.sin_port));
+        return port_create_tuple2(
+            ctx,
+            addr_term,
+            port_term
+        );
+    }
 }
 
 //

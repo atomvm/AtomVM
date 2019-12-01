@@ -34,5 +34,7 @@ void socket_driver_do_recvfrom(Context *ctx, term pid, term ref, term length, te
 void socket_driver_do_close(Context *ctx);
 term socket_driver_get_port(Context *ctx);
 void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout);
+term socket_driver_sockname(Context *ctx);
+term socket_driver_peername(Context *ctx);
 
 #endif
