@@ -42,10 +42,13 @@ struct EventListener {
 struct ESP32PlatformData
 {
     struct ListHead listeners;
+    struct ListHead sockets_list_head;
 };
 
 extern xQueueHandle event_queue;
 void esp32_sys_queue_init();
+
+void sys_event_listener_init(EventListener *listener, void *sender, event_handler_t handler, void *data);
 
 void socket_init(Context *ctx, term opts);
 

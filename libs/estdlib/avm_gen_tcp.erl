@@ -195,7 +195,7 @@ accept(ListenSocket, Timeout) ->
                     ErrorReason
             end;
         {ok, Socket} ->
-            Socket;
+            {ok, Socket};
         ErrorReason ->
             %% TODO close port
             ErrorReason

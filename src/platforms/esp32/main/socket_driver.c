@@ -1,5 +1,6 @@
 /***************************************************************************
- *   Copyright 2018 by Davide Bettio <davide@uninstall.it>                 *
+ *   Copyright 2018,2019 by Davide Bettio <davide@uninstall.it>            *
+ *   Copyright 2019 by Fred Dushin <fred@dushin.net>                       *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU Lesser General Public License as        *
@@ -21,6 +22,7 @@
 #include "port.h"
 
 #include <string.h>
+#include <stdbool.h>
 
 #include "atom.h"
 #include "context.h"
@@ -28,50 +30,28 @@
 #include "mailbox.h"
 #include "interop.h"
 #include "utils.h"
+#include "scheduler.h"
+#include "sys.h"
 #include "term.h"
 
+#include "esp32_sys.h"
 #include "platform_defaultatoms.h"
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <errno.h>
-#include <unistd.h>
-
 #include <esp_log.h>
+
 #include <lwip/ip_addr.h>
 #include <lwip/inet.h>
 #include <lwip/api.h>
 
-#include "esp32_sys.h"
-#include "sys.h"
-#include "term.h"
-
-// #define ENABLE_TRACE 1
+//#define ENABLE_TRACE 1
 #include "trace.h"
 
-#define BUFSIZE 128
+static void tcp_server_handler(Context *ctx);
+static void tcp_client_handler(Context *ctx);
+static void udp_handler(Context *ctx);
+static void socket_consume_mailbox(Context *ctx);
 
-static void active_recv_callback(EventListener *listener);
-static void passive_recv_callback(EventListener *listener);
-static void active_recvfrom_callback(EventListener *listener);
-static void passive_recvfrom_callback(EventListener *listener);
-
-struct netconn *fds[16];
-int next_fd;
-
-typedef struct SocketDriverData
-{
-    struct netconn *conn;
-    uint64_t ref_ticks;
-    term proto;
-    term port;
-    term controlling_process;
-    term binary;
-    term active;
-    term buffer;
-    EventListener *active_listener;
-} SocketDriverData;
+static const char *const ealready_atom = "\x8" "ealready";
 
 uint32_t socket_tuple_to_addr(term addr_tuple)
 {
@@ -92,47 +72,10 @@ term socket_tuple_from_addr(Context *ctx, uint32_t addr)
     return port_create_tuple_n(ctx, 4, terms);
 }
 
-term socket_create_packet_term(Context *ctx, const char *buf, ssize_t len, int is_binary)
+static void tuple_to_ip_addr(term address_tuple, ip_addr_t *out_addr)
 {
-    if (is_binary) {
-        return term_from_literal_binary((void *)buf, len, ctx);
-    } else {
-        return term_from_string((const uint8_t *) buf, len, ctx);
-    }
-}
-
-void *socket_driver_create_data()
-{
-    struct SocketDriverData *data = calloc(1, sizeof(struct SocketDriverData));
-    data->conn = NULL;
-    data->proto = term_invalid_term();
-    data->port = term_invalid_term();
-    data->controlling_process = term_invalid_term();
-    data->binary = term_invalid_term();
-    data->active = term_invalid_term();
-    data->buffer = term_invalid_term();
-    data->active_listener = NULL;
-
-    return (void *) data;
-}
-
-void socket_driver_delete_data(void *data)
-{
-    free(data);
-}
-
-void socket_callback(struct netconn *netconn, enum netconn_evt evt, u16_t len)
-{
-    TRACE("socket: netconn callback, netconn: 0x%lx, evt: %i, len: %i\n", (unsigned long) netconn, evt, len);
-
-    if (evt != NETCONN_EVT_RCVPLUS) {
-        return;
-    }
-
-    int result = xQueueSend(event_queue, &netconn, 0);
-    if (result != pdTRUE) {
-        fprintf(stderr, "socket: failed to enqueue: %i.\n", result);
-    }
+    out_addr->type = IPADDR_TYPE_V4;
+    out_addr->u_addr.ip4.addr = htonl(socket_tuple_to_addr(address_tuple));
 }
 
 static term socket_addr_to_tuple(Context *ctx, ip_addr_t *addr)
@@ -165,830 +108,1134 @@ static term socket_addr_to_tuple(Context *ctx, ip_addr_t *addr)
     return addr_tuple;
 }
 
-static void tuple_to_ip_addr(term address_tuple, ip_addr_t *out_addr)
+enum socket_type
 {
-    out_addr->type = IPADDR_TYPE_V4;
-    out_addr->u_addr.ip4.addr = htonl(socket_tuple_to_addr(address_tuple));
+    TCPServerSocket,
+    TCPClientSocket,
+    UDPSocket
+};
+
+struct SocketData
+{
+    struct ListHead sockets_head;
+    struct netconn *conn;
+    Context *ctx;
+    enum socket_type type;
+    term controlling_process_pid;
+
+    term passive_receiver_process_pid;
+    uint64_t passive_ref_ticks;
+
+    int avail_bytes;
+
+    uint16_t port;
+
+    bool active : 1;
+    bool binary : 1;
+};
+
+struct TCPClientSocketData
+{
+    struct SocketData socket_data;
+};
+
+struct TCPServerSocketData
+{
+    struct SocketData socket_data;
+    int ready_connections;
+
+    struct ListHead accepters_list_head;
+};
+
+struct TCPServerAccepter
+{
+    struct ListHead accepter_head;
+    term accepting_process_pid;
+    uint64_t ref_ticks;
+};
+
+struct UDPSocketData
+{
+    struct SocketData socket_data;
+};
+
+struct NetconnEvent
+{
+    struct netconn *netconn;
+    enum netconn_evt evt;
+    u16_t len;
+};
+
+xQueueHandle netconn_events = NULL;
+
+void socket_events_handler(EventListener *listener)
+{
+    TRACE("socket_events_handler\n");
+
+    GlobalContext *glb = listener->data;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
+    struct NetconnEvent event;
+    while (xQueueReceive(netconn_events, &event, 1) == pdTRUE) {
+        TRACE("Got netconn event: %p %i %i\n", event.netconn, event.evt, event.len);
+
+        struct netconn *netconn = event.netconn;
+        enum netconn_evt evt = event.evt;
+        u16_t len = event.len;
+
+        struct SocketData *socket = NULL;
+        struct ListHead *socket_head;
+        LIST_FOR_EACH(socket_head, &platform->sockets_list_head) {
+            struct SocketData *current_socket = GET_LIST_ENTRY(socket_head, struct SocketData, sockets_head);
+            if (current_socket->conn == netconn) {
+                socket = current_socket;
+            }
+        }
+
+        if (socket) {
+            if ((evt == NETCONN_EVT_RCVMINUS) /*&& (len != 0)*/) {
+                TRACE("Ignoring RCVMINUS event\n");
+                continue;
+            }
+
+            if ((evt == NETCONN_EVT_SENDMINUS) || (evt == NETCONN_EVT_SENDPLUS)) {
+                TRACE("Ignoring SENDMINUS/SENDPLUS event\n");
+                continue;
+            }
+
+            if (evt == NETCONN_EVT_ERROR) {
+                TRACE("Ignoring ERROR event\n");
+                continue;
+            }
+
+            socket->avail_bytes += len;
+
+            switch (socket->type) {
+                case TCPServerSocket:
+                    tcp_server_handler(socket->ctx);
+                    break;
+
+                case TCPClientSocket:
+                    tcp_client_handler(socket->ctx);
+                    break;
+
+                case UDPSocket:
+                    udp_handler(socket->ctx);
+                    break;
+
+                default:
+                    fprintf(stderr, "bug: unknown socket type.\n");
+            }
+
+        } else {
+            TRACE("Got event for unknown conn: %p, evt: %i, len: %i\n", netconn, (int) evt, (int) len);
+        }
+    }
 }
 
-
-static term do_bind(Context *ctx, term params)
+void socket_driver_init(GlobalContext *glb)
 {
-    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+    TRACE("Initializing socket driver\n");
+
+    netconn_events = xQueueCreate(32, sizeof(struct NetconnEvent));
+    EventListener *socket_listener = malloc(sizeof(EventListener));
+
+    struct ESP32PlatformData *platform = glb->platform_data;
+    sys_event_listener_init(socket_listener, &netconn_events, socket_events_handler, glb);
+    list_append(&platform->listeners, &socket_listener->listeners_list_head);
+
+    list_init(&platform->sockets_list_head);
+
+    TRACE("Socket driver init: done\n");
+}
+
+static void socket_data_init(struct SocketData *data, Context *ctx, struct netconn *conn,
+        enum socket_type type, struct ESP32PlatformData *platform)
+{
+    data->type = type;
+    data->conn = conn;
+    data->ctx = ctx;
+    data->controlling_process_pid = term_invalid_term();
+    data->port = 0;
+    data->active = true;
+    data->binary = false;
+
+    list_append(&platform->sockets_list_head, &data->sockets_head);
+
+    data->passive_receiver_process_pid = term_invalid_term();
+    data->passive_ref_ticks = 0;
+
+    data->avail_bytes = 0;
+
+    ctx->platform_data = data;
+}
+
+static struct TCPServerSocketData *tcp_server_socket_data_new(Context *ctx, struct netconn *conn,
+        struct ESP32PlatformData *platform)
+{
+    struct TCPServerSocketData *tcp_data = malloc(sizeof(struct TCPServerSocketData));
+    if (IS_NULL_PTR(tcp_data)) {
+        return NULL;
+    }
+    socket_data_init(&tcp_data->socket_data, ctx, conn, TCPServerSocket, platform);
+    tcp_data->ready_connections = 0;
+    list_init(&tcp_data->accepters_list_head);
+
+    return tcp_data;
+}
+
+static struct TCPClientSocketData *tcp_client_socket_data_new(Context *ctx, struct netconn *conn,
+        struct ESP32PlatformData *platform, term controlling_process_pid)
+{
+    struct TCPClientSocketData *tcp_data = malloc(sizeof(struct TCPClientSocketData));
+    if (IS_NULL_PTR(tcp_data)) {
+        return NULL;
+    }
+    socket_data_init(&tcp_data->socket_data, ctx, conn, TCPClientSocket, platform);
+    tcp_data->socket_data.controlling_process_pid = controlling_process_pid;
+
+    return tcp_data;
+}
+
+static struct UDPSocketData *udp_socket_data_new(Context *ctx, struct netconn *conn,
+        struct ESP32PlatformData *platform, term controlling_process_pid)
+{
+    struct UDPSocketData *udp_data = malloc(sizeof(struct UDPSocketData));
+    if (IS_NULL_PTR(udp_data)) {
+        return NULL;
+    }
+    socket_data_init(&udp_data->socket_data, ctx, conn, UDPSocket, platform);
+    udp_data->socket_data.controlling_process_pid = controlling_process_pid;
+
+    return udp_data;
+}
+
+static void send_message(term pid, term message, GlobalContext *global)
+{
+    int local_process_id = term_to_local_process_id(pid);
+    Context *target = globalcontext_get_process(global, local_process_id);
+    mailbox_send(target, message);
+}
+
+void ESP_IRAM_ATTR socket_callback(struct netconn *netconn, enum netconn_evt evt, u16_t len)
+{
+    struct NetconnEvent event = {
+        .netconn = netconn,
+        .evt = evt,
+        .len = len
+    };
+
+    BaseType_t xHigherPriorityTaskWoken;
+    int result = xQueueSendFromISR(netconn_events, &event, &xHigherPriorityTaskWoken);
+    if (result != pdTRUE) {
+        fprintf(stderr, "socket: failed to enqueue: %i to netconn_events.\n", result);
+    }
+
+    void *netconn_events_ptr = &netconn_events;
+    result = xQueueSendFromISR(event_queue, &netconn_events_ptr, &xHigherPriorityTaskWoken);
+    if (result != pdTRUE) {
+        fprintf(stderr, "socket: failed to enqueue: %i to event_queue.\n", result);
+    }
+}
+
+void accept_conn(struct TCPServerAccepter *accepter, Context *ctx)
+{
+        TRACE("Going to accept a TCP connection\n");
+
+        struct TCPServerSocketData *tcp_data = ctx->platform_data;
+        GlobalContext *glb = ctx->global;
+        struct ESP32PlatformData *platform = glb->platform_data;
+
+        struct netconn *accepted_conn;
+        err_t status = netconn_accept(tcp_data->socket_data.conn, &accepted_conn);
+        if (UNLIKELY(status != ERR_OK)) {
+            //TODO
+            fprintf(stderr, "accept error: %i on %p\n", status, (void *) tcp_data->socket_data.conn);
+            return;
+        }
+
+        term pid = accepter->accepting_process_pid;
+
+        TRACE("accepted conn: %p\n", accepted_conn);
+
+        Context *new_ctx = context_new(glb);
+        new_ctx->native_handler = socket_consume_mailbox;
+        scheduler_make_waiting(glb, new_ctx);
+
+        term socket_pid = term_from_local_process_id(new_ctx->process_id);
+
+        struct TCPClientSocketData *new_tcp_data = tcp_client_socket_data_new(new_ctx, accepted_conn, platform, pid);
+        if (IS_NULL_PTR(new_tcp_data)) {
+            abort();
+        }
+
+        //TODO
+        if (UNLIKELY(memory_ensure_free(ctx, 128) != MEMORY_GC_OK)) {
+            abort();
+        }
+        term ref = term_from_ref_ticks(accepter->ref_ticks, ctx);
+        term return_tuple = term_alloc_tuple(2, ctx);
+
+        free(accepter);
+
+        term result_tuple = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(result_tuple, 0, OK_ATOM);
+        term_put_tuple_element(result_tuple, 1, socket_pid);
+
+        term_put_tuple_element(return_tuple, 0, ref);
+        term_put_tuple_element(return_tuple, 1, result_tuple);
+
+        send_message(pid, return_tuple, glb);
+}
+
+static void do_accept(Context *ctx, term msg)
+{
+    struct TCPServerSocketData *tcp_data = ctx->platform_data;
+
+    term pid = term_get_tuple_element(msg, 0);
+    term ref = term_get_tuple_element(msg, 1);
+
+    struct TCPServerAccepter *accepter = malloc(sizeof(struct TCPServerAccepter));
+    accepter->accepting_process_pid = pid;
+    accepter->ref_ticks = term_to_ref_ticks(ref);
+    list_append(&tcp_data->accepters_list_head, &accepter->accepter_head);
+
+
+    if (tcp_data->ready_connections) {
+        TRACE("accepting existing connections.\n");
+
+        struct ListHead *accepter_head;
+        struct ListHead *tmp;
+        struct TCPServerAccepter *accepter = NULL;
+        MUTABLE_LIST_FOR_EACH(accepter_head, tmp, &tcp_data->accepters_list_head) {
+            //TODO: check if is alive here
+            if (1) {
+                accepter = GET_LIST_ENTRY(accepter_head, struct TCPServerAccepter, accepter_head);
+                list_remove(accepter_head);
+            }
+        }
+
+        if (accepter) {
+            accept_conn(accepter, ctx);
+            tcp_data->ready_connections--;
+        }
+    }
+}
+
+static void tcp_client_handler(Context *ctx)
+{
+    TRACE("tcp_client_handler\n");
+
+    struct TCPClientSocketData *tcp_data = ctx->platform_data;
+    GlobalContext *glb = ctx->global;
+
+    if (!tcp_data->socket_data.active) {
+        return;
+    }
+
+    if (!tcp_data->socket_data.avail_bytes) {
+        TRACE("No bytes to receive.\n");
+        return;
+    }
+
+    struct netbuf *buf = NULL;
+    err_t status = netconn_recv(tcp_data->socket_data.conn, &buf);
+    if (UNLIKELY(status != ERR_OK)) {
+        //TODO
+        fprintf(stderr, "tcp_client_handler error: %i\n", status);
+        return;
+    }
+
+    void *data;
+    u16_t data_len;
+    status = netbuf_data(buf, &data, &data_len);
+    if (UNLIKELY(status != ERR_OK)) {
+        //TODO
+        fprintf(stderr, "netbuf_data error: %i\n", status);
+        return;
+    }
+
+    tcp_data->socket_data.avail_bytes -= data_len;
+
+    //HANDLE fragments here?
+
+    TRACE("%*s\n", (int) data_len, (char *) data);
+
+    int recv_terms_size;
+    if (tcp_data->socket_data.binary) {
+        recv_terms_size = term_binary_data_size_in_terms(data_len) + BINARY_HEADER_SIZE;
+    } else {
+        recv_terms_size = data_len * 2;
+    }
+
+    int tuples_size;
+    if (tcp_data->socket_data.active) {
+        // tuples_size = 5 (result_tuple size)
+        tuples_size = 4;
+    } else {
+        // tuples_size = 3 (ok_tuple size) + 3 (result_tuple size)
+        tuples_size = 3 + 3;
+    }
+    if (UNLIKELY(memory_ensure_free(ctx, tuples_size + recv_terms_size) != MEMORY_GC_OK)) {
+        abort();
+    }
+
+    term recv_data;
+    if (tcp_data->socket_data.binary) {
+        recv_data = term_create_uninitialized_binary(data_len, ctx);
+        memcpy((void *) term_binary_data(recv_data), data, data_len);
+    } else {
+        recv_data = term_from_string((const uint8_t *) data, data_len, ctx);
+    }
+
+    netbuf_delete(buf);
+
+    term pid = tcp_data->socket_data.controlling_process_pid;
+
+    term result_tuple;
+    if (tcp_data->socket_data.active) {
+        result_tuple = term_alloc_tuple(3, ctx);
+        term_put_tuple_element(result_tuple, 0, TCP_ATOM);
+        term_put_tuple_element(result_tuple, 1, term_from_local_process_id(ctx->process_id));
+        term_put_tuple_element(result_tuple, 2, recv_data);
+
+    } else {
+        term ok_tuple = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(ok_tuple, 0, OK_ATOM);
+        term_put_tuple_element(ok_tuple, 1, recv_data);
+
+        result_tuple = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(tcp_data->socket_data.passive_ref_ticks, ctx));
+        term_put_tuple_element(result_tuple, 1, ok_tuple);
+
+        pid = tcp_data->socket_data.passive_receiver_process_pid;
+
+        tcp_data->socket_data.passive_receiver_process_pid = term_invalid_term();
+        tcp_data->socket_data.passive_ref_ticks = 0;
+    }
+
+    TRACE("sending received: ");
+    #ifdef ENABLE_TRACE
+        term_display(stdout, result_tuple, ctx);
+    #endif
+    TRACE(" to ");
+     #ifdef ENABLE_TRACE
+        term_display(stdout, pid, ctx);
+    #endif
+    TRACE("\n");
+
+    send_message(pid, result_tuple, glb);
+}
+
+static void tcp_server_handler(Context *ctx)
+{
+    TRACE("tcp_server_handler\n");
+
+    struct TCPServerSocketData *tcp_data = ctx->platform_data;
+
+    struct ListHead *accepter_head;
+    struct ListHead *tmp;
+    struct TCPServerAccepter *accepter = NULL;
+    MUTABLE_LIST_FOR_EACH(accepter_head, tmp, &tcp_data->accepters_list_head) {
+        //TODO: is alive here
+        if (1) {
+            accepter = GET_LIST_ENTRY(accepter_head, struct TCPServerAccepter, accepter_head);
+            list_remove(accepter_head);
+        }
+    }
+
+    if (accepter) {
+        accept_conn(accepter, ctx);
+
+    } else {
+        tcp_data->ready_connections++;
+    }
+}
+
+static void udp_handler(Context *ctx)
+{
+    TRACE("udp_client_handler\n");
+
+    struct UDPSocketData *udp_data = ctx->platform_data;
+    GlobalContext *glb = ctx->global;
+
+    struct SocketData *socket_data = &udp_data->socket_data;
+    if (!socket_data->active && (socket_data->passive_receiver_process_pid == term_invalid_term())) {
+        return;
+    }
+
+    if (!udp_data->socket_data.avail_bytes) {
+        TRACE("No bytes to receive.\n");
+        return;
+    }
+
+    struct netbuf *buf = NULL;
+    err_t status = netconn_recv(udp_data->socket_data.conn, &buf);
+    if (UNLIKELY(status != ERR_OK)) {
+        //TODO
+        fprintf(stderr, "tcp_client_handler error: %i\n", status);
+        return;
+    }
+
+    void *data;
+    u16_t data_len;
+    status = netbuf_data(buf, &data, &data_len);
+    if (UNLIKELY(status != ERR_OK)) {
+        //TODO
+        fprintf(stderr, "netbuf_data error: %i\n", status);
+        return;
+    }
+
+    udp_data->socket_data.avail_bytes -= data_len;
+
+    //HANDLE fragments here?
+
+    TRACE("%*s\n", (int) data_len, (char *) data);
+
+    int recv_terms_size;
+    if (udp_data->socket_data.binary) {
+        recv_terms_size = term_binary_data_size_in_terms(data_len) + BINARY_HEADER_SIZE;
+    } else {
+        recv_terms_size = data_len * 2;
+    }
+
+    int tuples_size;
+    if (socket_data->active) {
+        // tuples_size = 5 (addr size) + 6 (result_tuple size)
+        tuples_size = 5 + 6;
+    } else {
+        // tuples_size = 4 (recv_ret size) + 5 (addr size) + 3 (ok_tuple size) + 3 (result_tuple size)
+        tuples_size = 4 + 5 + 3 + 3;
+    }
+    if (UNLIKELY(memory_ensure_free(ctx, tuples_size + recv_terms_size) != MEMORY_GC_OK)) {
+        abort();
+    }
+
+    term recv_data;
+    if (udp_data->socket_data.binary) {
+        recv_data = term_create_uninitialized_binary(data_len, ctx);
+        memcpy((void *) term_binary_data(recv_data), data, data_len);
+    } else {
+        recv_data = term_from_string((const uint8_t *) data, data_len, ctx);
+    }
+
+    term addr = socket_addr_to_tuple(ctx, netbuf_fromaddr(buf));
+    term port = term_from_int32(netbuf_fromport(buf));
+
+    netbuf_delete(buf);
+
+    term pid = udp_data->socket_data.controlling_process_pid;
+
+    term result_tuple;
+    if (socket_data->active) {
+        result_tuple = term_alloc_tuple(5, ctx);
+        term_put_tuple_element(result_tuple, 0, UDP_ATOM);
+        term_put_tuple_element(result_tuple, 1, term_from_local_process_id(ctx->process_id));
+        term_put_tuple_element(result_tuple, 2, addr);
+        term_put_tuple_element(result_tuple, 3, port);
+        term_put_tuple_element(result_tuple, 4, recv_data);
+
+    } else {
+        term recv_ret = term_alloc_tuple(3, ctx);
+        term_put_tuple_element(recv_ret, 0, addr);
+        term_put_tuple_element(recv_ret, 1, port);
+        term_put_tuple_element(recv_ret, 2, recv_data);
+
+        term ok_tuple = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(ok_tuple, 0, OK_ATOM);
+        term_put_tuple_element(ok_tuple, 1, recv_ret);
+
+        result_tuple = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(socket_data->passive_ref_ticks, ctx));
+        term_put_tuple_element(result_tuple, 1, ok_tuple);
+
+        pid = socket_data->passive_receiver_process_pid;
+
+        socket_data->passive_receiver_process_pid = term_invalid_term();
+        socket_data->passive_ref_ticks = 0;
+    }
+
+    TRACE("sending received: ");
+    #ifdef ENABLE_TRACE
+        term_display(stdout, result_tuple, ctx);
+    #endif
+    TRACE(" to ");
+     #ifdef ENABLE_TRACE
+        term_display(stdout, pid, ctx);
+    #endif
+    TRACE("\n");
+
+    send_message(pid, result_tuple, glb);
+}
+
+static bool bool_term_to_bool(term b, bool *ok)
+{
+    switch (b) {
+        case TRUE_ATOM:
+            *ok = true;
+            return true;
+
+        case FALSE_ATOM:
+            *ok = true;
+            return false;
+
+        default:
+            return false;
+            *ok = false;
+    }
+}
+
+static void do_connect(Context *ctx, term msg)
+{
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
+    term cmd = term_get_tuple_element(msg, 2);
+    term params = term_get_tuple_element(cmd, 1);
 
     term address_term = interop_proplist_get_value(params, ADDRESS_ATOM);
     term port_term = interop_proplist_get_value(params, PORT_ATOM);
+    term binary_term = interop_proplist_get_value(params, BINARY_ATOM);
+    term active_term = interop_proplist_get_value(params, ACTIVE_ATOM);
+    term controlling_process_term = interop_proplist_get_value(params, CONTROLLING_PROCESS_ATOM);
 
-    UNUSED(address_term);
+    int ok_int;
+    char *address_string = interop_term_to_string(address_term, &ok_int);
+    if (UNLIKELY(!ok_int)) {
+        abort();
+    }
 
-    u16_t port = term_to_int32(port_term);
+    avm_int_t port = term_to_int(port_term);
+    bool ok;
+    bool active = bool_term_to_bool(active_term, &ok);
+    if (UNLIKELY(!ok)) {
+        abort();
+    }
+    bool binary = bool_term_to_bool(binary_term, &ok);
+    if (UNLIKELY(!ok)) {
+        abort();
+    }
 
-    TRACE("socket: binding to IP_ADDR_ANY on port %i\n", (int) port);
+    TRACE("tcp: connecting to: %s\n", address_string);
 
-    //TODO: replace IP_ADDR_ANY
-    if (UNLIKELY(netconn_bind(socket_data->conn, IP_ADDR_ANY, port) != ERR_OK)) {
-        TRACE("socket: Failed to bind\n");
-        return port_create_sys_error_tuple(ctx, BIND_ATOM, errno);
+    struct ip_addr remote_ip;
+    //TODO: use dns_gethostbyname instead
+    err_t status = netconn_gethostbyname(address_string, &remote_ip);
+    if (UNLIKELY(status != ERR_OK)) {
+        free(address_string);
+        TRACE("tcp: host resolution failed.\n");
+        return;
+    }
+
+    TRACE("tcp: host resolved.\n");
+
+    free(address_string);
+
+    struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_TCP, 0, socket_callback);
+    if (IS_NULL_PTR(conn)) {
+        abort();
+    }
+
+    status = netconn_connect(conn, &remote_ip, port);
+    if (UNLIKELY(status != ERR_OK)) {
+        TRACE("tcp: failed connect: %i\n", status);
+        return;
+    }
+
+    TRACE("tcp: connected.\n");
+
+    struct TCPClientSocketData *tcp_data = tcp_client_socket_data_new(ctx, conn, platform, controlling_process_term);
+    if (IS_NULL_PTR(tcp_data)) {
+        abort();
+    }
+    tcp_data->socket_data.active = active;
+    tcp_data->socket_data.binary = binary;
+    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+        abort();
+    }
+    term return_tuple = term_alloc_tuple(2, ctx);
+
+    term pid = term_get_tuple_element(msg, 0);
+    term ref = term_get_tuple_element(msg, 1);
+
+    term_put_tuple_element(return_tuple, 0, ref);
+    term_put_tuple_element(return_tuple, 1, OK_ATOM);
+
+    send_message(pid, return_tuple, glb);
+}
+
+static void do_listen(Context *ctx, term msg)
+{
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
+    term cmd = term_get_tuple_element(msg, 2);
+    term params = term_get_tuple_element(cmd, 1);
+
+    term port_term = interop_proplist_get_value(params, PORT_ATOM);
+    term backlog_term = interop_proplist_get_value(params, BACKLOG_ATOM);
+    term binary_term = interop_proplist_get_value(params, BINARY_ATOM);
+    term active_term = interop_proplist_get_value(params, ACTIVE_ATOM);
+
+    avm_int_t port = term_to_int(port_term);
+    avm_int_t backlog = term_to_int(backlog_term);
+    bool ok;
+    bool active = bool_term_to_bool(active_term, &ok);
+    if (UNLIKELY(!ok)) {
+        abort();
+    }
+    bool binary = bool_term_to_bool(binary_term, &ok);
+    if (UNLIKELY(!ok)) {
+        abort();
+    }
+
+    struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_TCP, 0, socket_callback);
+
+    err_t status = netconn_bind(conn, IP_ADDR_ANY, port);
+    if (UNLIKELY(status != ERR_OK)) {
+        //TODO
+        fprintf(stderr, "bind error: %i\n", status);
+        return;
     }
 
     ip_addr_t naddr;
-
-    if (UNLIKELY(netconn_getaddr(socket_data->conn, &naddr, &port, 1) != ERR_OK)) {
-        TRACE("socket: Failed to getaddr");
-        return port_create_sys_error_tuple(ctx, GETSOCKNAME_ATOM, errno);
-    } else {
-        socket_data->port = port;
-        TRACE("socket: bound to port %i\n", port);
-        return OK_ATOM;
+    u16_t nport;
+    status = netconn_getaddr(conn, &naddr, &nport, 1);
+    if (UNLIKELY(status != ERR_OK)) {
+        //TODO
+        fprintf(stderr, "getaddr error: %i\n", status);
+        return;
     }
+
+    status = netconn_listen_with_backlog(conn, backlog);
+    if (UNLIKELY(status != ERR_OK)) {
+        //TODO
+        fprintf(stderr, "listen error: %i\n", status);
+        return;
+    }
+
+    struct TCPServerSocketData *tcp_data = tcp_server_socket_data_new(ctx, conn, platform);
+    if (IS_NULL_PTR(tcp_data)) {
+        abort();
+    }
+    tcp_data->socket_data.port = nport;
+    tcp_data->socket_data.active = active;
+    tcp_data->socket_data.binary = binary;
+    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+        abort();
+    }
+    term return_tuple = term_alloc_tuple(2, ctx);
+
+    term pid = term_get_tuple_element(msg, 0);
+    term ref = term_get_tuple_element(msg, 1);
+
+    term_put_tuple_element(return_tuple, 0, ref);
+    term_put_tuple_element(return_tuple, 1, OK_ATOM);
+
+    send_message(pid, return_tuple, glb);
 }
 
-static term init_udp_socket(Context *ctx, SocketDriverData *socket_data, term params, term active)
+void do_udp_open(Context *ctx, term msg)
 {
-    TRACE("socket: creating udp netconn\n");
-
     GlobalContext *glb = ctx->global;
     struct ESP32PlatformData *platform = glb->platform_data;
+
+    term cmd = term_get_tuple_element(msg, 2);
+    term params = term_get_tuple_element(cmd, 1);
+
+    term port_term = interop_proplist_get_value(params, PORT_ATOM);
+    term binary_term = interop_proplist_get_value(params, BINARY_ATOM);
+    term active_term = interop_proplist_get_value(params, ACTIVE_ATOM);
+    term controlling_process = interop_proplist_get_value(params, CONTROLLING_PROCESS_ATOM);
+
+    avm_int_t port = term_to_int(port_term);
+    bool ok;
+    bool active = bool_term_to_bool(active_term, &ok);
+    if (UNLIKELY(!ok)) {
+        abort();
+    }
+    bool binary = bool_term_to_bool(binary_term, &ok);
+    if (UNLIKELY(!ok)) {
+        abort();
+    }
 
     struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_UDP, 0, socket_callback);
-    // TODO check for invalid return
-    socket_data->conn = conn;
-
-    term ret = do_bind(ctx, params);
-
-    socket_data->active = active;
-    if (ret == OK_ATOM && active == TRUE_ATOM) {
-        EventListener *listener = malloc(sizeof(EventListener));
-        if (IS_NULL_PTR(listener)) {
-            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-            abort();
-        }
-        listener->sender = conn;
-        listener->data = ctx;
-        listener->handler = active_recvfrom_callback;
-        list_append(&platform->listeners, &listener->listeners_list_head);
-        socket_data->active_listener = listener;
-        TRACE("socket: initialized\n");
-    } else {
-        return port_create_error_tuple(ctx, BADARG_ATOM);
+    if (IS_NULL_PTR(conn)) {
+        fprintf(stderr, "failed to open conn\n");
+        abort();
     }
-    return ret;
+
+    struct UDPSocketData *udp_data = udp_socket_data_new(ctx, conn, platform, controlling_process);
+    if (IS_NULL_PTR(udp_data)) {
+        abort();
+    }
+    udp_data->socket_data.active = active;
+    udp_data->socket_data.binary = binary;
+
+    if (port != 0) {
+        err_t status = netconn_bind(conn, IP_ADDR_ANY, port);
+        if (UNLIKELY(status != ERR_OK)) {
+            fprintf(stderr, "bind error: %i\n", status);
+            return;
+        }
+    }
+
+    ip_addr_t naddr;
+    u16_t nport;
+    err_t status = netconn_getaddr(conn, &naddr, &nport, 1);
+    if (UNLIKELY(status != ERR_OK)) {
+        //TODO
+        fprintf(stderr, "getaddr error: %i\n", status);
+        return;
+    }
+    udp_data->socket_data.port = nport;
+
+    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+        abort();
+    }
+    term return_tuple = term_alloc_tuple(2, ctx);
+
+    term pid = term_get_tuple_element(msg, 0);
+    term ref = term_get_tuple_element(msg, 1);
+
+    term_put_tuple_element(return_tuple, 0, ref);
+    term_put_tuple_element(return_tuple, 1, OK_ATOM);
+
+    send_message(pid, return_tuple, glb);
 }
 
-static term do_connect(SocketDriverData *socket_data, Context *ctx, term address, term port)
+// Required for compatibility with existing erlang libraries
+// TODO: remove this when not required anymore
+static void do_init(Context *ctx, term msg)
 {
-    // TODO handle IP addresses
-    if (!term_is_list(address)) {
-        return port_create_error_tuple(ctx, BADARG_ATOM);
+    term cmd = term_get_tuple_element(msg, 2);
+    term params = term_get_tuple_element(cmd, 1);
+
+    if (interop_proplist_get_value_default(params, LISTEN_ATOM, FALSE_ATOM) == TRUE_ATOM) {
+        TRACE("listen\n");
+        do_listen(ctx, msg);
+
+    } else if (interop_proplist_get_value_default(params, CONNECT_ATOM, FALSE_ATOM) == TRUE_ATOM) {
+        TRACE("connect\n");
+        do_connect(ctx, msg);
+
+    } else if (interop_proplist_get_value_default(params, PROTO_ATOM, FALSE_ATOM) == UDP_ATOM) {
+        TRACE("udp_open\n");
+        do_udp_open(ctx, msg);
     }
+}
+
+static void do_send(Context *ctx, term msg)
+{
+    GlobalContext *glb = ctx->global;
+    struct TCPServerSocketData *tcp_data = ctx->platform_data;
+
+    term pid = term_get_tuple_element(msg, 0);
+    term ref = term_get_tuple_element(msg, 1);
+    term cmd = term_get_tuple_element(msg, 2);
+
+    term data = term_get_tuple_element(cmd, 1);
 
     int ok;
-    char *addr_str = interop_term_to_string(address, &ok);
-    if (!ok) {
-        return port_create_error_tuple(ctx, BADARG_ATOM);
-    }
-    TRACE("socket_driver: resolving %s ...\n", addr_str);
-
-    struct ip_addr remote_ip;
-    err_t status = netconn_gethostbyname(addr_str, &remote_ip);
-
-    free(addr_str);
-
-    if (status != ERR_OK) {
-        // TODO atom
-        return port_create_sys_error_tuple(ctx, UNDEFINED_ATOM, status);
+    int buffer_size = interop_iolist_size(data, &ok);
+    void *buffer = malloc(buffer_size);
+    interop_write_iolist(data, buffer);
+    err_t status = netconn_write(tcp_data->socket_data.conn, buffer, buffer_size, NETCONN_NOCOPY);
+    if (UNLIKELY(status != ERR_OK)) {
+        fprintf(stderr, "write error: %i\n", status);
+        return;
     }
 
-    int port_val = term_to_int(port);
+    free(buffer);
 
-    TRACE("socket_driver: connecting to port %i ...\n", port_val);
-    status = netconn_connect(socket_data->conn, &remote_ip, port_val);
 
-    if (status != ERR_OK) {
-        // TODO atom
-        return port_create_sys_error_tuple(ctx, CONNECT_ATOM, status);
-    } else {
-        TRACE("socket_driver: connected.\n");
-        return OK_ATOM;
+    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+        abort();
     }
+    term return_tuple = term_alloc_tuple(2, ctx);
+
+    term_put_tuple_element(return_tuple, 0, ref);
+    term_put_tuple_element(return_tuple, 1, OK_ATOM);
+
+    send_message(pid, return_tuple, glb);
 }
 
-static term init_client_tcp_socket(Context *ctx, SocketDriverData *socket_data, term params, term active)
-{
-    TRACE("socket: creating client tcp netconn\n");
-
-    GlobalContext *glb = ctx->global;
-    struct ESP32PlatformData *platform = glb->platform_data;
-
-    struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_TCP, 0, socket_callback);
-    // TODO check for invalid return
-    socket_data->conn = conn;
-
-    term address = interop_proplist_get_value(params, ADDRESS_ATOM);
-    term port = interop_proplist_get_value(params, PORT_ATOM);
-    term ret = do_connect(socket_data, ctx, address, port);
-    if (ret != OK_ATOM) {
-        // TODO
-        // close(sockfd);
-    } else {
-        if (active == TRUE_ATOM) {
-            EventListener *listener = malloc(sizeof(EventListener));
-            if (IS_NULL_PTR(listener)) {
-                fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-                abort();
-            }
-            listener->sender = conn;
-            listener->data = ctx;
-            listener->handler = active_recv_callback;
-            list_append(&platform->listeners, &listener->listeners_list_head);
-            socket_data->active_listener = listener;
-        }
-    }
-    return ret;
-}
-
-static term do_listen(SocketDriverData *socket_data, Context *ctx, term params)
-{
-    term backlog = interop_proplist_get_value(params, BACKLOG_ATOM);
-    if (!term_is_integer(backlog)) {
-        return port_create_error_tuple(ctx, BADARG_ATOM);
-    }
-    err_t status = netconn_listen_with_backlog(socket_data->conn, term_to_int(backlog));
-    if (status == -1) {
-        return port_create_sys_error_tuple(ctx, LISTEN_ATOM, errno);
-    } else {
-        return OK_ATOM;
-    }
-}
-
-static term init_server_tcp_socket(Context *ctx, SocketDriverData *socket_data, term params)
-{
-    TRACE("socket: creating server tcp netconn\n");
-
-    struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_TCP, 0, socket_callback);
-    // TODO check for invalid return
-    socket_data->conn = conn;
-
-    term ret = do_bind(ctx, params);
-    if (ret != OK_ATOM) {
-        // TODO close
-        // close(conn);
-    } else {
-        ret = do_listen(socket_data, ctx, params);
-        if (ret != OK_ATOM) {
-        // TODO close
-        // close(conn);
-        } else {
-            // netconn_set_nonblocking(conn, 1);
-            TRACE("socket: listening on port %u\n", (unsigned) term_to_int(interop_proplist_get_value(params, PORT_ATOM)));
-        }
-    }
-    return ret;
-}
-
-static term init_accepting_socket(Context *ctx, SocketDriverData *socket_data, term fd_term, term active)
-{
-    TRACE("socket: init_accepting_socket\n");
-
-    GlobalContext *glb = ctx->global;
-    struct ESP32PlatformData *platform = glb->platform_data;
-
-    socket_data->conn = (struct netconn *) fds[term_to_int(fd_term)];
-    //
-    //
-    //
-    if (active == TRUE_ATOM) {
-        EventListener *listener = malloc(sizeof(EventListener));
-        if (IS_NULL_PTR(listener)) {
-            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-            abort();
-        }
-        listener->sender = socket_data->conn;
-        listener->data = ctx;
-        listener->handler = active_recv_callback;
-        list_append(&platform->listeners, &listener->listeners_list_head);
-        socket_data->active_listener = listener;
-    }
-    return OK_ATOM;
-}
-
-term socket_driver_do_init(Context *ctx, term params)
-{
-    TRACE("socket: init\n");
-
-    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-
-    if (!term_is_list(params)) {
-        return port_create_error_tuple(ctx, BADARG_ATOM);
-    }
-    term proto = interop_proplist_get_value(params, PROTO_ATOM);
-    if (term_is_nil(proto)) {
-        return port_create_error_tuple(ctx, BADARG_ATOM);
-    }
-    socket_data->proto = proto;
-    //
-    // get the controlling process
-    //
-    term controlling_process = interop_proplist_get_value_default(params, CONTROLLING_PROCESS_ATOM, term_invalid_term());
-    if (!(term_is_invalid_term(controlling_process) || term_is_pid(controlling_process))) {
-        return port_create_error_tuple(ctx, BADARG_ATOM);
-    }
-    socket_data->controlling_process = controlling_process;
-    //
-    // get the binary flag
-    //
-    term binary = interop_proplist_get_value_default(params, BINARY_ATOM, FALSE_ATOM);
-    if (!(binary == TRUE_ATOM || binary == FALSE_ATOM)) {
-        return port_create_error_tuple(ctx, BADARG_ATOM);
-    }
-    socket_data->binary = binary;
-    //
-    // get the buffer size
-    //
-    term buffer = interop_proplist_get_value_default(params, BUFFER_ATOM, term_from_int(BUFSIZE));
-    if (!term_is_integer(buffer)) {
-        return port_create_error_tuple(ctx, BADARG_ATOM);
-    }
-    socket_data->buffer = buffer;
-    //
-    // get the active flag
-    //
-    term active = interop_proplist_get_value_default(params, ACTIVE_ATOM, FALSE_ATOM);
-    socket_data->active = active;
-    //
-    // initialize based on specified protocol and action
-    //
-    if (proto == UDP_ATOM) {
-        return init_udp_socket(ctx, socket_data, params, active);
-    } else if (proto == TCP_ATOM) {
-        term connect = interop_proplist_get_value_default(params, CONNECT_ATOM, FALSE_ATOM);
-        if (connect == TRUE_ATOM) {
-            return init_client_tcp_socket(ctx, socket_data, params, active);
-        } else {
-            term listen = interop_proplist_get_value_default(params, LISTEN_ATOM, FALSE_ATOM);
-            if (listen == TRUE_ATOM) {
-                return init_server_tcp_socket(ctx, socket_data, params);
-            } else {
-                term accept = interop_proplist_get_value_default(params, ACCEPT_ATOM, FALSE_ATOM);
-                if (accept == TRUE_ATOM) {
-                    term fd = interop_proplist_get_value(params, FD_ATOM);
-                    if (!term_is_integer(fd)) {
-                        return port_create_error_tuple(ctx, BADARG_ATOM);
-                    } else {
-                        return init_accepting_socket(ctx, socket_data, fd, active);
-                    }
-                } else {
-                    return port_create_error_tuple(ctx, BADARG_ATOM);
-                }
-            }
-        }
-    } else {
-        return port_create_error_tuple(ctx, BADARG_ATOM);
-    }
-}
-
-void socket_driver_do_close(Context *ctx)
+static void do_sendto(Context *ctx, term msg)
 {
     GlobalContext *glb = ctx->global;
-    struct ESP32PlatformData *platform = glb->platform_data;
+    struct UDPSocketData *udp_data = ctx->platform_data;
 
-    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-    if (socket_data->active == TRUE_ATOM) {
-        list_remove(&socket_data->active_listener->listeners_list_head);
-    }
-    if (netconn_close(socket_data->conn) != ERR_OK) {
-        TRACE("socket: close failed");
-    }
-}
+    term pid = term_get_tuple_element(msg, 0);
+    term ref = term_get_tuple_element(msg, 1);
+    term cmd = term_get_tuple_element(msg, 2);
 
-//
-// INET API
-//
+    term dest_addr_term = term_get_tuple_element(cmd, 1);
+    term dest_port_term = term_get_tuple_element(cmd, 2);
+    term data = term_get_tuple_element(cmd, 3);
 
-term socket_driver_get_port(Context *ctx)
-{
-    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-    port_ensure_available(ctx, 7);
-    return port_create_ok_tuple(ctx, term_from_int(socket_data->port));
-}
-
-//
-// send operations
-//
-
-term socket_driver_do_send(Context *ctx, term buffer)
-{
-    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-
-    char *buf;
-    size_t len;
-    if (term_is_binary(buffer)) {
-        buf = (char *) term_binary_data(buffer);
-        len = term_binary_size(buffer);
-    } else if (term_is_list(buffer)) {
-        int ok;
-        len = interop_iolist_size(buffer, &ok);
-        if (UNLIKELY(!ok)) {
-            return port_create_error_tuple(ctx, BADARG_ATOM);
-        }
-        buf = malloc(len);
-        if (UNLIKELY(!interop_write_iolist(buffer, buf))) {
-            free(buf);
-            return port_create_error_tuple(ctx, BADARG_ATOM);
-        }
-    } else {
-        return port_create_error_tuple(ctx, BADARG_ATOM);
-    }
-
-    err_t status = netconn_write(socket_data->conn, buf, len, NETCONN_NOCOPY);
-    if (term_is_list(buffer)) {
-        free(buf);
-    }
-    if (status != ERR_OK) {
-        return port_create_sys_error_tuple(ctx, SEND_ATOM, status);
-    } else {
-        TRACE("socket_driver: sent data with len: %i\n", len);
-        term sent_atom = term_from_int(len);
-        return port_create_ok_tuple(ctx, sent_atom);
-    }
-}
-
-term socket_driver_do_sendto(Context *ctx, term dest_address, term dest_port, term buffer)
-{
-    TRACE("socket: Going to send data\n");
-
-    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-
-    char *buf;
-    size_t len;
-    if (term_is_binary(buffer)) {
-        buf = (char *) term_binary_data(buffer);
-        len = term_binary_size(buffer);
-    } else if (term_is_list(buffer)) {
-        int ok;
-        len = interop_iolist_size(buffer, &ok);
-        if (UNLIKELY(!ok)) {
-            return port_create_error_tuple(ctx, BADARG_ATOM);
-        }
-        buf = malloc(len);
-        if (UNLIKELY(!interop_write_iolist(buffer, buf))) {
-            free(buf);
-            return port_create_error_tuple(ctx, BADARG_ATOM);
-        }
-    } else {
-        return port_create_error_tuple(ctx, BADARG_ATOM);
-    }
-
-    struct netbuf *sendbuf = netbuf_new();
-    if (IS_NULL_PTR(sendbuf)) {
-        TRACE("socket: netbuf alloc failed\n");
-        return port_create_sys_error_tuple(ctx, SENDTO_ATOM, errno);
-    }
+    int ok;
+    int buffer_size = interop_iolist_size(data, &ok);
+    void *buffer = malloc(buffer_size);
+    interop_write_iolist(data, buffer);
 
     ip_addr_t ip4addr;
-    tuple_to_ip_addr(dest_address, &ip4addr);
-    uint16_t destport = term_to_int32(dest_port);
+    tuple_to_ip_addr(dest_addr_term, &ip4addr);
+    uint16_t destport = term_to_int32(dest_port_term);
 
-    TRACE("socket: send: data with len: %i, to: %x, port: %i\n", len, ip4addr.u_addr.ip4.addr, destport);
+    struct netbuf *sendbuf = netbuf_new();
 
-    if (UNLIKELY(netbuf_ref(sendbuf, buf, len) != ERR_OK)) {
-        TRACE("socket: netbuf_ref fail\n");
+    err_t status = netbuf_ref(sendbuf, buffer, buffer_size);
+    if (UNLIKELY(status != ERR_OK)) {
+        fprintf(stderr, "netbuf_ref error: %i\n", status);
         netbuf_delete(sendbuf);
-        if (term_is_list(buffer)) {
-            free(buf);
-        }
-        return port_create_sys_error_tuple(ctx, SENDTO_ATOM, errno);
+        return;
     }
 
-    if (UNLIKELY(netconn_sendto(socket_data->conn, sendbuf, &ip4addr, destport) != ERR_OK)) {
-        TRACE("socket: send failed\n");
+    status = netconn_sendto(udp_data->socket_data.conn, sendbuf, &ip4addr, destport);
+    if (UNLIKELY(status != ERR_OK)) {
+        fprintf(stderr, "netbuf_ref error: %i\n", status);
         netbuf_delete(sendbuf);
-        if (term_is_list(buffer)) {
-            free(buf);
-        }
-        return port_create_sys_error_tuple(ctx, SENDTO_ATOM, errno);
+        return;
     }
 
     netbuf_delete(sendbuf);
-    if (term_is_list(buffer)) {
-        free(buf);
-    }
+    free(buffer);
 
-    return port_create_ok_tuple(ctx, OK_ATOM);
+    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+        abort();
+    }
+    term return_tuple = term_alloc_tuple(2, ctx);
+
+    term_put_tuple_element(return_tuple, 0, ref);
+    term_put_tuple_element(return_tuple, 1, OK_ATOM);
+
+    send_message(pid, return_tuple, glb);
 }
 
-//
-// receive operations
-//
-
-typedef struct RecvFromData {
-    Context *ctx;
-    term pid;
-    term length;
-    uint64_t ref_ticks;
-} RecvFromData;
-
-static void active_recv_callback(EventListener *listener)
-{
-    Context *ctx = listener->data;
-    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-
-    struct netbuf *buf = NULL;
-
-    if (UNLIKELY(netconn_recv(socket_data->conn, &buf) != ERR_OK)) {
-        // {tcp, Socket, {error, {SysCall, Errno}}}
-        port_ensure_available(ctx, 12);
-        term pid = socket_data->controlling_process;
-        term msgs[2] = {TCP_CLOSED_ATOM, term_from_local_process_id(ctx->process_id)};
-        term msg = port_create_tuple_n(ctx, 2, msgs);
-        port_send_message(ctx, pid, msg);
-        socket_driver_do_close(ctx);
-    } else {
-        void *data;
-        u16_t data_len;
-        netbuf_data(buf, &data, &data_len);
-
-        TRACE("socket_driver: active received data of len: %i\n", data_len);
-        int ensure_packet_avail;
-        int binary;
-        if (socket_data->binary == TRUE_ATOM) {
-            binary = 1;
-            ensure_packet_avail = term_binary_data_size_in_terms(data_len) + BINARY_HEADER_SIZE;
-        } else {
-            binary = 0;
-            ensure_packet_avail = data_len * 2;
-        }
-        // {tcp, pid, binary}
-        port_ensure_available(ctx, 20 + ensure_packet_avail);
-
-        term pid = socket_data->controlling_process;
-        term packet = socket_create_packet_term(ctx, data, data_len, binary);
-        term msgs[3] = {TCP_ATOM, term_from_local_process_id(ctx->process_id), packet};
-        term msg = port_create_tuple_n(ctx, 3, msgs);
-        port_send_message(ctx, pid, msg);
-    }
-    netbuf_delete(buf);
-}
-
-static void passive_recv_callback(EventListener *listener)
-{
-    RecvFromData *recvfrom_data = (RecvFromData *) listener->data;
-    Context *ctx = recvfrom_data->ctx;
-    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-
-    GlobalContext *glb = ctx->global;
-    struct ESP32PlatformData *platform = glb->platform_data;
-
-    //
-    // receive the data
-    //
-    struct netbuf *buf = NULL;
-    if (UNLIKELY(netconn_recv(socket_data->conn, &buf) != ERR_OK)) {
-        // {Ref, {error, {SysCall, Errno}}}
-        port_ensure_available(ctx, 12);
-        term pid = recvfrom_data->pid;
-        term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
-        port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, RECV_ATOM, errno));
-    } else {
-        void *data;
-        u16_t data_len;
-        netbuf_data(buf, &data, &data_len);
-
-        TRACE("socket_driver: passive received data of len: %i\n", data_len);
-        int ensure_packet_avail;
-        int binary;
-        if (socket_data->binary == TRUE_ATOM) {
-            binary = 1;
-            ensure_packet_avail = term_binary_data_size_in_terms(data_len) + BINARY_HEADER_SIZE;
-        } else {
-            binary = 0;
-            ensure_packet_avail = data_len * 2;
-        }
-        // {Ref, {ok, Packet::binary()}}
-        port_ensure_available(ctx, 20 + ensure_packet_avail);
-
-        term pid = recvfrom_data->pid;
-        term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
-        term packet = socket_create_packet_term(ctx, data, data_len, socket_data->binary == TRUE_ATOM);
-        term reply = port_create_ok_tuple(ctx, packet);
-        port_send_reply(ctx, pid, ref, reply);
-    }
-    //
-    // remove the EventListener from the global list and clean up
-    //
-    list_remove(&listener->listeners_list_head);
-    free(listener);
-    free(recvfrom_data);
-    netbuf_delete(buf);
-}
-
-static void active_recvfrom_callback(EventListener *listener)
-{
-    Context *ctx = listener->data;
-    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-
-    struct netbuf *buf = NULL;
-
-    if (UNLIKELY(netconn_recv(socket_data->conn, &buf) != ERR_OK)) {
-        // {udp, Socket, {error, {SysCall, Errno}}}
-        port_ensure_available(ctx, 12);
-        term pid = socket_data->controlling_process;
-        term msgs[5] = {UDP_ATOM, term_from_local_process_id(ctx->process_id), port_create_sys_error_tuple(ctx, RECVFROM_ATOM, errno)};
-        term msg = port_create_tuple_n(ctx, 5, msgs);
-        port_send_message(ctx, pid, msg);
-
-    } else {
-        void *data;
-        uint16_t datalen;
-        netbuf_data(buf, &data, &datalen);
-        int ensure_packet_avail;
-        int binary;
-        if (socket_data->binary == TRUE_ATOM) {
-            binary = 1;
-            ensure_packet_avail = term_binary_data_size_in_terms(datalen) + BINARY_HEADER_SIZE;
-        } else {
-            binary = 0;
-            ensure_packet_avail = datalen * 2;
-        }
-        // {udp, pid, {int,int,int,int}, int, binary}
-        port_ensure_available(ctx, 20 + ensure_packet_avail);
-
-        term pid = socket_data->controlling_process;
-        term addr = socket_addr_to_tuple(ctx, netbuf_fromaddr(buf));
-        term port = term_from_int32(netbuf_fromport(buf));
-        term packet = socket_create_packet_term(ctx, data, datalen, socket_data->binary == TRUE_ATOM);
-        term msgs[5] = {UDP_ATOM, term_from_local_process_id(ctx->process_id), addr, port, packet};
-        term msg = port_create_tuple_n(ctx, 5, msgs);
-        port_send_message(ctx, pid, msg);
-    }
-    netbuf_delete(buf);
-}
-
-static void passive_recvfrom_callback(EventListener *listener)
-{
-    RecvFromData *recvfrom_data = (RecvFromData *) listener->data;
-    Context *ctx = recvfrom_data->ctx;
-    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-
-    GlobalContext *glb = ctx->global;
-    struct ESP32PlatformData *platform = glb->platform_data;
-
-    struct netbuf *buf = NULL;
-
-    if (UNLIKELY(netconn_recv(socket_data->conn, &buf) != ERR_OK)) {
-        // {Ref, {error, {SysCall, Errno}}}
-        port_ensure_available(ctx, 12);
-        term pid = socket_data->controlling_process;
-        term ref = term_from_ref_ticks(socket_data->ref_ticks, ctx);
-        port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, RECVFROM_ATOM, errno));
-
-    } else {
-        void *data;
-        uint16_t datalen;
-        netbuf_data(buf, &data, &datalen);
-        int ensure_packet_avail;
-        int binary;
-        if (socket_data->binary == TRUE_ATOM) {
-            binary = 1;
-            ensure_packet_avail = term_binary_data_size_in_terms(datalen) + BINARY_HEADER_SIZE;
-        } else {
-            binary = 0;
-            ensure_packet_avail = datalen * 2;
-        }
-        // {Ref, {ok, {{int,int,int,int}, int, binary}}}
-        port_ensure_available(ctx, 20 + ensure_packet_avail);
-
-        term ref = term_from_ref_ticks(socket_data->ref_ticks, ctx);
-        term addr = socket_addr_to_tuple(ctx, netbuf_fromaddr(buf));
-        term port = term_from_int32(netbuf_fromport(buf));
-        term packet = term_from_literal_binary(data, datalen, ctx);
-        term addr_port_packet = port_create_tuple3(ctx, addr, port, packet);
-        term reply = port_create_ok_tuple(ctx, addr_port_packet);
-        port_send_reply(ctx, socket_data->controlling_process, ref, reply);
-    }
-    //
-    // remove the EventListener from the global list and clean up
-    //
-    list_remove(&listener->listeners_list_head);
-    free(listener);
-    free(recvfrom_data);
-    netbuf_delete(buf);
-}
-
-static void do_recv(Context *ctx, term pid, term ref, term length, term timeout, event_handler_t handler)
+static void do_close(Context *ctx, term msg)
 {
     GlobalContext *glb = ctx->global;
-    struct ESP32PlatformData *platform = glb->platform_data;
+    struct TCPServerSocketData *tcp_data = ctx->platform_data;
 
-    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-    //
-    // The socket must be in active mode
-    //
-    if (socket_data->active == TRUE_ATOM) {
-        port_ensure_available(ctx, 12);
-        port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
+    term pid = term_get_tuple_element(msg, 0);
+    term ref = term_get_tuple_element(msg, 1);
+
+    err_t res = netconn_delete(tcp_data->socket_data.conn);
+    if (res != ERR_OK) {
+        TRACE("socket: close failed");
         return;
     }
-    //
-    // Create and initialize the request-specific data
-    //
-    RecvFromData *data = (RecvFromData *) malloc(sizeof(RecvFromData));
-    if (IS_NULL_PTR(data)) {
-        fprintf(stderr, "Unable to allocate space for RecvFromData: %s:%i\n", __FILE__, __LINE__);
+    //TODO
+    tcp_data->socket_data.conn = NULL;
+
+    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
         abort();
     }
-    data->ctx = ctx;
-    data->pid = pid;
-    data->length = length;
-    data->ref_ticks = term_to_ref_ticks(ref);
+    term return_tuple = term_alloc_tuple(2, ctx);
 
-    //
-    // Create an event listener with this request-specific data, and append to the global list
-    //
-    EventListener *listener = malloc(sizeof(EventListener));
-    if (IS_NULL_PTR(listener)) {
-        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        abort();
-    }
-    listener->sender = socket_data->conn;
-    listener->handler = handler;
-    listener->data = data;
-    list_append(&platform->listeners, &listener->listeners_list_head);
+    term_put_tuple_element(return_tuple, 0, ref);
+    term_put_tuple_element(return_tuple, 1, OK_ATOM);
+
+    send_message(pid, return_tuple, glb);
 }
 
-void socket_driver_do_recvfrom(Context *ctx, term pid, term ref, term length, term timeout)
+static void do_recvfrom(Context *ctx, term msg)
 {
-    do_recv(ctx, pid, ref, length, timeout, passive_recvfrom_callback);
-}
-
-void socket_driver_do_recv(Context *ctx, term pid, term ref, term length, term timeout)
-{
-    do_recv(ctx, pid, ref, length, timeout, passive_recv_callback);
-}
-
-//
-// accept
-//
-
-static void accept_callback(EventListener *listener)
-{
-    TRACE("socket: accepting callback\n");
-
-    RecvFromData *recvfrom_data = (RecvFromData *) listener->data;
-    Context *ctx = recvfrom_data->ctx;
-    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-
     GlobalContext *glb = ctx->global;
-    struct ESP32PlatformData *platform = glb->platform_data;
+    struct SocketData *socket_data = ctx->platform_data;
 
-    //
-    // accept the connection
-    //
-    struct netconn *conn;
-    err_t status = netconn_accept(socket_data->conn, &conn);
-    int this_fd = next_fd;
-    next_fd++;
-    fds[this_fd] = conn;
-    TRACE("socket: netconn_accept: status: %i; conn: 0x%lx\n", status, (unsigned long) conn);
-    if (status != ERR_OK) {
-        // {Ref, {error, {SysCall, Errno}}}
-        port_ensure_available(ctx, 12);
-        term pid = recvfrom_data->pid;
-        term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
-        port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, ACCEPT_ATOM, errno));
+    term pid = term_get_tuple_element(msg, 0);
+    term ref = term_get_tuple_element(msg, 1);
+
+    if (socket_data->passive_receiver_process_pid != term_invalid_term()) {
+        // 3 (error_tuple) + 3 (result_tuple)
+        if (UNLIKELY(memory_ensure_free(ctx, 3 + 3) != MEMORY_GC_OK)) {
+            abort();
+        }
+
+        term ealready = context_make_atom(ctx, ealready_atom);
+
+        term error_tuple = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(error_tuple, 1, ealready);
+
+        term result_tuple = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(result_tuple, 0, ref);
+        term_put_tuple_element(result_tuple, 1, error_tuple);
+
+        send_message(pid, result_tuple, glb);
+    }
+
+    if (socket_data->avail_bytes) {
+        TRACE(stderr, "do_recvfrom: have already ready bytes.\n");
+
+        struct netbuf *buf = NULL;
+        err_t status = netconn_recv(socket_data->conn, &buf);
+        if (UNLIKELY(status != ERR_OK)) {
+            //TODO
+            fprintf(stderr, "tcp_client_handler error: %i\n", status);
+            return;
+        }
+
+        void *data;
+        u16_t data_len;
+        status = netbuf_data(buf, &data, &data_len);
+        if (UNLIKELY(status != ERR_OK)) {
+            //TODO
+            fprintf(stderr, "netbuf_data error: %i\n", status);
+            return;
+        }
+
+        socket_data->avail_bytes -= data_len;
+
+        //HANDLE fragments here?
+
+        TRACE("%*s\n", (int) data_len, (char *) data);
+
+        int recv_terms_size;
+        if (socket_data->binary) {
+            recv_terms_size = term_binary_data_size_in_terms(data_len) + BINARY_HEADER_SIZE;
+        } else {
+            recv_terms_size = data_len * 2;
+        }
+
+        // 4 (recv_ret size) + 3 (ok_tuple size) + 3 (result_tuple size) + recv_terms_size
+        if (UNLIKELY(memory_ensure_free(ctx, 4 + 3 + 3 + recv_terms_size) != MEMORY_GC_OK)) {
+            abort();
+        }
+
+        term recv_data;
+        if (socket_data->binary) {
+            recv_data = term_create_uninitialized_binary(data_len, ctx);
+            memcpy((void *) term_binary_data(recv_data), data, data_len);
+        } else {
+            recv_data = term_from_string((const uint8_t *) data, data_len, ctx);
+        }
+
+        term addr = socket_addr_to_tuple(ctx, netbuf_fromaddr(buf));
+        term port = term_from_int32(netbuf_fromport(buf));
+
+        netbuf_delete(buf);
+
+        term recv_ret = term_alloc_tuple(3, ctx);
+        term_put_tuple_element(recv_ret, 0, addr);
+        term_put_tuple_element(recv_ret, 1, port);
+        term_put_tuple_element(recv_ret, 2, recv_data);
+
+        term ok_tuple = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(ok_tuple, 0, OK_ATOM);
+        term_put_tuple_element(ok_tuple, 1, recv_ret);
+
+        term result_tuple = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(result_tuple, 0, ref);
+        term_put_tuple_element(result_tuple, 1, ok_tuple);
+
+        send_message(pid, result_tuple, glb);
+
     } else {
-        TRACE("socket: accepted new connection\n");
-        // {Ref, {ok, Fd::int()}}
-        port_ensure_available(ctx, 10);
-        term pid = recvfrom_data->pid;
-        term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
-        term reply = port_create_ok_tuple(ctx, term_from_int(this_fd));
-        TRACE("socket: sending reply\n");
-        port_send_reply(ctx, pid, ref, reply);
+        socket_data->passive_receiver_process_pid = pid;
+        socket_data->passive_ref_ticks = term_to_ref_ticks(ref);
     }
-    //
-    // remove the EventListener from the global list and clean up
-    //
-    list_remove(&listener->listeners_list_head);
-    free(listener);
-    free(recvfrom_data);
-    TRACE("socket: accept_callback done.\n");
 }
 
-void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
+static void do_get_port(Context *ctx, term msg)
 {
     GlobalContext *glb = ctx->global;
-    struct ESP32PlatformData *platform = glb->platform_data;
+    struct SocketData *socket_data = ctx->platform_data;
 
-    TRACE("socket: accepting tcp netconn\n");
+    term pid = term_get_tuple_element(msg, 0);
+    term ref = term_get_tuple_element(msg, 1);
 
-    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-    //
-    // Create and initialize the request-specific data
-    //
-    RecvFromData *data = (RecvFromData *) malloc(sizeof(RecvFromData));
-    if (IS_NULL_PTR(data)) {
-        fprintf(stderr, "Unable to allocate space for RecvFromData: %s:%i\n", __FILE__, __LINE__);
+    // 3 (error_ok_tuple) + 3 (result_tuple)
+    if (UNLIKELY(memory_ensure_free(ctx, 3 + 3) != MEMORY_GC_OK)) {
         abort();
     }
-    data->ctx = ctx;
-    data->pid = pid;
-    data->length = 0;
-    data->ref_ticks = term_to_ref_ticks(ref);
 
-    //
-    // Create an event listener with this request-specific data, and append to the global list
-    //
-    EventListener *listener = malloc(sizeof(EventListener));
-    if (IS_NULL_PTR(listener)) {
-        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        abort();
+    term error_ok_tuple = term_alloc_tuple(2, ctx);
+    if (socket_data->port != 0) {
+        term_put_tuple_element(error_ok_tuple, 0, OK_ATOM);
+        term_put_tuple_element(error_ok_tuple, 1, term_from_int(socket_data->port));
+    } else {
+        term_put_tuple_element(error_ok_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(error_ok_tuple, 1, BADARG_ATOM);
     }
-    listener->sender = socket_data->conn;
-    listener->handler = accept_callback;
-    listener->data = data;
-    list_append(&platform->listeners, &listener->listeners_list_head);
-    TRACE("socket: accepting tcp netconn COMPLETE\n");
+
+    term result_tuple = term_alloc_tuple(2, ctx);
+    term_put_tuple_element(result_tuple, 0, ref);
+    term_put_tuple_element(result_tuple, 1, error_ok_tuple);
+
+    send_message(pid, result_tuple, glb);
 }
-
-// TODO define in defaultatoms
-const char *const send_a = "\x4" "send";
-const char *const sendto_a = "\x6" "sendto";
-const char *const init_a = "\x4" "init";
-const char *const bind_a = "\x4" "bind";
-const char *const recvfrom_a = "\x8" "recvfrom";
-const char *const recv_a = "\x4" "recv";
-const char *const close_a = "\x5" "close";
-const char *const get_port_a = "\x8" "get_port";
-const char *const accept_a = "\x6" "accept";
 
 static void socket_consume_mailbox(Context *ctx)
 {
-    TRACE("START socket_consume_mailbox\n");
-    if (UNLIKELY(ctx->native_handler != socket_consume_mailbox)) {
-        abort();
-    }
+    while (ctx->mailbox != NULL) {
+        Message *message = mailbox_dequeue(ctx);
+        term msg = message->message;
 
-    port_ensure_available(ctx, 16);
+        TRACE("message: ");
+        #ifdef ENABLE_TRACE
+            term_display(stdout, msg, ctx);
+        #endif
+        TRACE("\n");
 
-    Message *message = mailbox_dequeue(ctx);
-    term     msg = message->message;
-    term     pid = term_get_tuple_element(msg, 0);
-    term     ref = term_get_tuple_element(msg, 1);
-    term     cmd = term_get_tuple_element(msg, 2);
+        term cmd = term_get_tuple_element(msg, 2);
+        term cmd_name = term_get_tuple_element(cmd, 0);
 
-    term cmd_name = term_get_tuple_element(cmd, 0);
-    if (cmd_name == context_make_atom(ctx, init_a)) {
-        term params = term_get_tuple_element(cmd, 1);
-        term reply = socket_driver_do_init(ctx, params);
-        port_send_reply(ctx, pid, ref, reply);
-        if (reply != OK_ATOM) {
-            // TODO handle shutdown
-            // socket_driver_delete_data(ctx->platform_data);
-            // context_destroy(ctx);
+        switch (cmd_name) {
+            //TODO: remove this
+            case INIT_ATOM:
+                TRACE("init\n");
+                do_init(ctx, msg);
+                break;
+
+            case SENDTO_ATOM:
+                TRACE("sendto\n");
+                do_sendto(ctx, msg);
+                break;
+
+            case SEND_ATOM:
+                TRACE("send\n");
+                do_send(ctx, msg);
+                break;
+
+            case RECVFROM_ATOM:
+                TRACE("recvfrom\n");
+                do_recvfrom(ctx, msg);
+                break;
+
+            case RECV_ATOM:
+                TRACE("recv\n");
+                do_recvfrom(ctx, msg);
+                break;
+
+            case ACCEPT_ATOM:
+                TRACE("accept\n");
+                do_accept(ctx, msg);
+                break;
+
+            case CLOSE_ATOM:
+                TRACE("close\n");
+                do_close(ctx, msg);
+                break;
+
+            case GET_PORT_ATOM:
+                fprintf(stderr, "get_port\n");
+                do_get_port(ctx, msg);
+                break;
+
+            default:
+                TRACE("badarg\n");
+                break;
         }
-    } else if (cmd_name == context_make_atom(ctx, sendto_a)) {
-        term dest_address = term_get_tuple_element(cmd, 1);
-        term dest_port = term_get_tuple_element(cmd, 2);
-        term buffer = term_get_tuple_element(cmd, 3);
-        term reply = socket_driver_do_sendto(ctx, dest_address, dest_port, buffer);
-        port_send_reply(ctx, pid, ref, reply);
-    } else if (cmd_name == context_make_atom(ctx, send_a)) {
-        term buffer = term_get_tuple_element(cmd, 1);
-        term reply = socket_driver_do_send(ctx, buffer);
-        port_send_reply(ctx, pid, ref, reply);
-    } else if (cmd_name == context_make_atom(ctx, recvfrom_a)) {
-        term length = term_get_tuple_element(cmd, 1);
-        term timeout = term_get_tuple_element(cmd, 2);
-        socket_driver_do_recvfrom(ctx, pid, ref, length, timeout);
-    } else if (cmd_name == context_make_atom(ctx, recv_a)) {
-        term length = term_get_tuple_element(cmd, 1);
-        term timeout = term_get_tuple_element(cmd, 2);
-        socket_driver_do_recv(ctx, pid, ref, length, timeout);
-    } else if (cmd_name == context_make_atom(ctx, accept_a)) {
-        term timeout = term_get_tuple_element(cmd, 1);
-        socket_driver_do_accept(ctx, pid, ref, timeout);
-    } else if (cmd_name == context_make_atom(ctx, close_a)) {
-        socket_driver_do_close(ctx);
-        port_send_reply(ctx, pid, ref, OK_ATOM);
-        // TODO handle shutdown
-        // socket_driver_delete_data(ctx->platform_data);
-        // context_destroy(ctx);
-    } else if (cmd_name == context_make_atom(ctx, get_port_a)) {
-        term reply = socket_driver_get_port(ctx);
-        port_send_reply(ctx, pid, ref, reply);
-    } else {
-        port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
-    }
 
-    free(message);
-    TRACE("END socket_consume_mailbox\n");
+        free(message);
+    }
 }
 
 void socket_init(Context *ctx, term opts)
 {
     UNUSED(opts);
-    void *data = socket_driver_create_data();
     ctx->native_handler = socket_consume_mailbox;
-    ctx->platform_data = data;
+    ctx->platform_data = NULL;
 }

@@ -57,6 +57,10 @@ static const char *const backlog_atom = "\x7" "backlog";
 static const char *const accept_atom = "\x6" "accept";
 static const char *const fd_atom = "\x2" "fd";
 
+static const char *const init_atom = "\x4" "init";
+static const char *const close_atom = "\x5" "close";
+static const char *const get_port_atom = "\x8" "get_port";
+
 static const char *const sta_atom = "\x3" "sta";
 static const char *const ssid_atom = "\x4" "ssid";
 static const char *const psk_atom = "\x3" "psk";
@@ -129,6 +133,10 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, backlog_atom) == BACKLOG_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, accept_atom) == ACCEPT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, fd_atom) == FD_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, init_atom) == INIT_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, close_atom) == CLOSE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, get_port_atom) == GET_PORT_ATOM_INDEX;
 
     ok &= globalcontext_insert_atom(glb, sta_atom) == STA_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, ssid_atom) == SSID_ATOM_INDEX;
