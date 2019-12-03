@@ -25,7 +25,7 @@
 -module(erlang).
 
 -export([
-    start_timer/3, start_timer/4, cancel_timer/1, send_after/3, 
+    start_timer/3, start_timer/4, cancel_timer/1, send_after/3,
     process_info/2, system_info/1,
     md5/1
 ]).
