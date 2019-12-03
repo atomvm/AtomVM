@@ -32,6 +32,7 @@ static const char *const falling_atom = "\x7" "falling";
 static const char *const both_atom = "\x4" "both";
 static const char *const low_atom = "\x3" "low";
 static const char *const high_atom = "\x4" "high";
+static const char *const esp32_atom = "\x5" "esp32";
 
 static const char *const proto_atom = "\x5" "proto";
 static const char *const udp_atom = "\x3" "udp";
@@ -105,6 +106,7 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, both_atom) == BOTH_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, low_atom) == LOW_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, high_atom) == HIGH_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, esp32_atom) == ESP32_ATOM_INDEX;
 
     ok &= globalcontext_insert_atom(glb, proto_atom) == PROTO_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, udp_atom) == UDP_ATOM_INDEX;

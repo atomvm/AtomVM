@@ -24,12 +24,22 @@ set(
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
 )
 
+find_package(OpenSSL)
+if (${OPENSSL_FOUND} STREQUAL TRUE)
+    include_directories(${OPENSSL_INCLUDE_DIR})
+    add_definitions(-DATOMVM_HAS_OPENSSL)
+    set(EXTRA_LIBS ${OPENSSL_CRYPTO_LIBRARY})
+else()
+    message("WARNING:  Some crypto operations will not be supported.")
+    set(EXTRA_LIBS "")
+endif()
+
 if(CMAKE_COMPILER_IS_GNUCC)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -pedantic -Wextra -ggdb")
 endif()
 
 add_library(libAtomVM${PLATFORM_LIB_SUFFIX} ${SOURCE_FILES} ${HEADER_FILES})
-target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} libAtomVM)
+target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} libAtomVM ${EXTRA_LIBS})
 set_property(TARGET libAtomVM${PLATFORM_LIB_SUFFIX} PROPERTY C_STANDARD 99)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Coverage")

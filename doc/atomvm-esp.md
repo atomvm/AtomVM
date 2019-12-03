@@ -4,15 +4,6 @@ AtomVM provides ESP-specific APIs for programming on the ESP platform.  This doc
 
 For more detailed information about these APIs, please see the [AtomVM Reference API documentation](ref/eavmlib/index.html).
 
-## ESP random functions
-
-The `esp` module provides functions for generating random 32-bit integer values, as well as creating binaries with randomly generated data:
-
-* `esp:random\0`
-* `esp:random_bytes/1`
-
-The esp random functions make use of the hardware random number generator on the ESP32 board and is active if teh WIFI or Bluetooth system is enabled.
-
 ## ESP reset functions
 
 The `esp` module provides functions for restarting the ESP device, as well as retrieving the reason

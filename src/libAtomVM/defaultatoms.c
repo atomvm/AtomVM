@@ -42,6 +42,7 @@ static const char *const badmatch_atom = "\x8" "badmatch";
 static const char *const case_clause_atom = "\xB" "case_clause";
 static const char *const if_clause_atom = "\x9" "if_clause";
 static const char *const throw_atom = "\x5" "throw";
+static const char *const low_entropy_atom = "\xB" "low_entropy";
 
 void defaultatoms_init(GlobalContext *glb)
 {
@@ -88,6 +89,7 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, case_clause_atom) == CASE_CLAUSE_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, if_clause_atom) == IF_CLAUSE_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, throw_atom) == THROW_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, low_entropy_atom) == LOW_ENTROPY_ATOM_INDEX;
 
     if (!ok) {
         abort();

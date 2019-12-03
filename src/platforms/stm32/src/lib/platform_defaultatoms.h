@@ -34,6 +34,7 @@
 #define D_ATOM_INDEX (PLATFORM_ATOMS_BASE_INDEX + 9)
 #define E_ATOM_INDEX (PLATFORM_ATOMS_BASE_INDEX + 10)
 #define F_ATOM_INDEX (PLATFORM_ATOMS_BASE_INDEX + 11)
+#define STM32_ATOM_INDEX (PLATFORM_ATOMS_BASE_INDEX + 12)
 
 #define SET_LEVEL_ATOM term_from_atom_index(SET_LEVEL_ATOM_INDEX)
 #define INPUT_ATOM term_from_atom_index(INPUT_ATOM_INDEX)
@@ -47,5 +48,6 @@
 #define D_ATOM term_from_atom_index(D_ATOM_INDEX)
 #define E_ATOM term_from_atom_index(E_ATOM_INDEX)
 #define F_ATOM term_from_atom_index(F_ATOM_INDEX)
+#define STM32_ATOM term_from_atom_index(STM32_ATOM_INDEX)
 
 #endif

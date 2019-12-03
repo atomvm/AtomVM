@@ -50,6 +50,7 @@ static const char *const listen_atom = "\x6" "listen";
 static const char *const backlog_atom = "\x7" "backlog";
 static const char *const accept_atom = "\x6" "accept";
 static const char *const fd_atom = "\x2" "fd";
+static const char *const generic_unix_atom = "\xC" "generic_unix";
 
 void platform_defaultatoms_init(GlobalContext *glb)
 {
@@ -86,6 +87,7 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, backlog_atom) == BACKLOG_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, accept_atom) == ACCEPT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, fd_atom) == FD_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, generic_unix_atom) == GENERIC_UNIX_ATOM_INDEX;
 
     if (!ok) {
         abort();

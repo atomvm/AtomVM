@@ -8,8 +8,8 @@ start() ->
     loop().
 
 loop() ->
-    RandomLen = abs(esp:random()) rem 128,
-    RandomBytes = esp:random_bytes(RandomLen),
+    RandomLen = abs(atomvm:random()) rem 128,
+    RandomBytes = atomvm:rand_bytes(RandomLen),
     erlang:display(RandomBytes),
     ?TIMER:sleep(5000),
     case RandomLen of
