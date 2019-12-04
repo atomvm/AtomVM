@@ -144,7 +144,7 @@ static term socket_addr_to_tuple(Context *ctx, ip_addr_t *addr)
 static int socket_tuple_to_ipv4_addr(term t, ip_addr_t *addr)
 {
     // assert term_is_tuple(addr_tuple);
-    
+
     if (!term_is_tuple(t)) {
         return -1;
     }
