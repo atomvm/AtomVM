@@ -141,9 +141,9 @@ recv(Socket, Length, Timeout) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec listen(Port::avm_inet:port_number(), Options::avm_inet:opts()) -> {ok, ListeningSocket::avm_inet:socket()} | {error, Reason::term()}.
-listen(Port, Options0) ->
+listen(Port, Options) ->
     Socket = open_port({spawn, "socket"}, []),
-    Params = merge(Options0, ?DEFAULT_PARAMS),
+    Params = merge(Options, ?DEFAULT_PARAMS),
     InitParams = [
         {proto, tcp},
         {listen, true},
@@ -244,7 +244,7 @@ call(DriverPid, Msg) ->
 
 %% @private
 merge(Config, Defaults) ->
-    merge(Config, Defaults, []).
+    merge(Config, Defaults, []) ++ Config.
 
 %% @private
 merge(_Config, [], Accum) ->

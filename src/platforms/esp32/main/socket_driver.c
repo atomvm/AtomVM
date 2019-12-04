@@ -141,6 +141,38 @@ static term socket_addr_to_tuple(Context *ctx, ip_addr_t *addr)
     return addr_tuple;
 }
 
+static int socket_tuple_to_ipv4_addr(term t, ip_addr_t *addr)
+{
+    // assert term_is_tuple(addr_tuple);
+    
+    if (!term_is_tuple(t)) {
+        return -1;
+    }
+    if (term_get_tuple_arity(t) != 4) {
+        return -1;
+    }
+    term a = term_get_tuple_element(t, 1);
+    if (!term_is_integer(a)) {
+        return -1;
+    }
+    term b = term_get_tuple_element(t, 1);
+    if (!term_is_integer(b)) {
+        return -1;
+    }
+    term c = term_get_tuple_element(t, 1);
+    if (!term_is_integer(c)) {
+        return -1;
+    }
+    term d = term_get_tuple_element(t, 1);
+    if (!term_is_integer(d)) {
+        return -1;
+    }
+    IP_ADDR4(addr,
+        term_to_int(a), term_to_int(b), term_to_int(c), term_to_int(d)
+    );
+    return 0;
+}
+
 static void tuple_to_ip_addr(term address_tuple, ip_addr_t *out_addr)
 {
     out_addr->type = IPADDR_TYPE_V4;
@@ -152,17 +184,30 @@ static term do_bind(Context *ctx, term params)
 {
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
-    term address_term = interop_proplist_get_value(params, ADDRESS_ATOM);
+    term address_term = interop_proplist_get_value_default(params, ADDRESS_ATOM, UNDEFINED_ATOM);
     term port_term = interop_proplist_get_value(params, PORT_ATOM);
-
-    UNUSED(address_term);
 
     u16_t port = term_to_int32(port_term);
 
-    TRACE("socket: binding to IP_ADDR_ANY on port %i\n", (int) port);
+    TRACE("socket: binding on port %i\n", (int) port);
 
-    //TODO: replace IP_ADDR_ANY
-    if (UNLIKELY(netconn_bind(socket_data->conn, IP_ADDR_ANY, port) != ERR_OK)) {
+    ip_addr_t addr;
+    ip_addr_t *addr_ptr = NULL;
+    if (address_term == UNDEFINED_ATOM) {
+        addr_ptr = INADDR_ANY;
+    } else if (term_is_tuple(address_term)) {
+        // Probably no compelling use-case for ESP32, as there is only one address,
+        // but we support specifying IP address, just in case user cares.
+        if (socket_tuple_to_ipv4_addr(address_term, &addr) != 0) {
+            return port_create_error_tuple(ctx, BADARG_ATOM);
+        }
+        addr_ptr = &addr;
+    } else {
+        term_display(stderr, address_term, ctx);
+        return port_create_error_tuple(ctx, BADARG_ATOM);
+    }
+
+    if (UNLIKELY(netconn_bind(socket_data->conn, addr_ptr, port) != ERR_OK)) {
         TRACE("socket: Failed to bind\n");
         return port_create_sys_error_tuple(ctx, BIND_ATOM, errno);
     }
@@ -455,6 +500,50 @@ term socket_driver_get_port(Context *ctx)
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     port_ensure_available(ctx, 7);
     return port_create_ok_tuple(ctx, term_from_int(socket_data->port));
+}
+
+term socket_driver_sockname(Context *ctx)
+{
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+
+    ip_addr_t addr;
+    u16_t port;
+    err_t result = netconn_addr(socket_data->conn, &addr, &port);
+    if (result != ERR_OK) {
+        port_ensure_available(ctx, 3);
+        return port_create_error_tuple(ctx, term_from_int(errno));
+    } else {
+        port_ensure_available(ctx, 8);
+        term addr_term = socket_addr_to_tuple(ctx, &addr);
+        term port_term = term_from_int(port);
+        return port_create_tuple2(
+            ctx,
+            addr_term,
+            port_term
+        );
+    }
+}
+
+term socket_driver_peername(Context *ctx)
+{
+    SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+
+    ip_addr_t addr;
+    u16_t port;
+    err_t result = netconn_peer(socket_data->conn, &addr, &port);
+    if (result != ERR_OK) {
+        port_ensure_available(ctx, 3);
+        return port_create_error_tuple(ctx, term_from_int(errno));
+    } else {
+        port_ensure_available(ctx, 8);
+        term addr_term = socket_addr_to_tuple(ctx, &addr);
+        term port_term = term_from_int(port);
+        return port_create_tuple2(
+            ctx,
+            addr_term,
+            port_term
+        );
+    }
 }
 
 //

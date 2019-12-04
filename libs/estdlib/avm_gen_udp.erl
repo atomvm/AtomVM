@@ -43,15 +43,12 @@
 -export([open/1, open/2, send/4, recv/2, recv/3, close/1]).
 
 -type proplist() :: [{atom(), any()}].
--type address() :: ipv4_address().
--type ipv4_address() :: {octet(), octet(), octet(), octet()}.
--type octet() :: 0..255.
 -type packet() :: string() | binary().
 -type reason() :: term().
 
 -include("estdlib.hrl").
 
--define(DEFAULT_PARAMS, [{active, false}, {buffer, 128}, {binary, true}, {address, {127, 0, 0, 1}}, {timeout, infinity}]).
+-define(DEFAULT_PARAMS, [{active, false}, {buffer, 128}, {binary, true}, {timeout, infinity}]).
 
 %%-----------------------------------------------------------------------------
 %% @doc     Create a UDP socket.  This function will instatiate a UDP socket
@@ -96,7 +93,7 @@ open(PortNum, Params0) ->
 %%          <em><b>Note.</b> Currently only ipv4 addresses are supported.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec send(avm_inet:socket(), address(), avm_inet:port_number(), packet()) -> ok | {error, reason()}.
+-spec send(avm_inet:socket(), avm_inet:address(), avm_inet:port_number(), packet()) -> ok | {error, reason()}.
 send(Socket, Address, PortNum, Packet) ->
     case call(Socket, {sendto, Address, PortNum, Packet}) of
         {ok, _Sent} ->
@@ -111,7 +108,7 @@ send(Socket, Address, PortNum, Packet) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec recv(avm_inet:socket(), non_neg_integer()) ->
-    {ok, {address(), avm_inet:port_number(), packet()}} | {error, reason()}.
+    {ok, {avm_inet:address(), avm_inet:port_number(), packet()}} | {error, reason()}.
 recv(Socket, Length) ->
     recv(Socket, Length, infinity).
 
@@ -134,7 +131,7 @@ recv(Socket, Length) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec recv(avm_inet:socket(), non_neg_integer(), non_neg_integer()) ->
-    {ok, {address(), avm_inet:port_number(), packet()}} | {error, reason()}.
+    {ok, {avm_inet:address(), avm_inet:port_number(), packet()}} | {error, reason()}.
 recv(Socket, Length, Timeout) ->
     call(Socket, {recvfrom, Length, Timeout}).
 
@@ -181,7 +178,7 @@ call(DriverPid, Msg) ->
 
 %% @private
 merge(Config, Defaults) ->
-    merge(Config, Defaults, []).
+    merge(Config, Defaults, []) ++ Config.
 
 %% @private
 merge(_Config, [], Accum) ->

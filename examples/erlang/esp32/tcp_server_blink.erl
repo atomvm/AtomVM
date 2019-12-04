@@ -53,6 +53,7 @@ tcp_server_start() ->
     case ?GEN_TCP:listen(44404, []) of
         {ok, ListenSocket} ->
             console:puts("Listening on port 44404.\n"),
+            erlang:display(?INET:sockname(ListenSocket)),
             Gpio = gpio:open(),
             gpio:set_direction(Gpio, ?PIN, output),
             spawn(fun() -> accept(ListenSocket, Gpio) end);
@@ -63,8 +64,9 @@ tcp_server_start() ->
 accept(ListenSocket, Gpio) ->
     console:puts("Waiting to accept connection...\n"),
     case ?GEN_TCP:accept(ListenSocket) of
-        {ok, _Socket} ->
+        {ok, Socket} ->
             console:puts("Accepted connection.\n"),
+            erlang:display({?INET:peername(Socket), ?INET:sockname(Socket)}),
             spawn(fun() -> accept(ListenSocket, Gpio) end),
             echo(Gpio, 0);
         Error ->
