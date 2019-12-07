@@ -8,6 +8,7 @@ start() ->
         , test_gen_server
         , test_gen_statem
         , test_gen_udp
+        , test_io_lib
         , test_proplists
         , test_timer
     ]).

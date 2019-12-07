@@ -63,4 +63,7 @@ erlang:process_info/2, &process_info_nif
 erlang:binary_to_term/1, &binary_to_term_nif
 erlang:term_to_binary/1, &term_to_binary_nif
 erlang:throw/1, &throw_nif
+erlang:pid_to_list/1, &pid_to_list_nif
+erlang:ref_to_list/1, &ref_to_list_nif
+erlang:fun_to_list/1, &fun_to_list_nif
 erts_debug:flat_size/1, &flat_size_nif

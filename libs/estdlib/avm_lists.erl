@@ -26,7 +26,7 @@
 %%-----------------------------------------------------------------------------
 -module(avm_lists).
 
--export([nth/2, member/2, delete/2, reverse/1, keydelete/3, keyfind/3, foldl/3, foldr/3, all/2, any/2]).
+-export([nth/2, member/2, delete/2, reverse/1, keydelete/3, keyfind/3, foldl/3, foldr/3, all/2, any/2, flatten/1]).
 
 %%-----------------------------------------------------------------------------
 %% @param   N the index in the list to get
@@ -207,3 +207,25 @@ all(Fun, [H|T]) ->
 -spec any(Fun::fun((Elem::term()) -> boolean()), List::list()) -> boolean().
 any(Fun, L) ->
     not all(fun(E) -> not Fun(E) end, L).
+
+%%-----------------------------------------------------------------------------
+%% @param   L the list to flatten
+%% @returns flattened list
+%% @doc     recursively flattens elements of L into a single list
+%% @end
+%%-----------------------------------------------------------------------------
+-spec flatten(L::list()) -> list().
+flatten(L) when is_list(L) ->
+    flatten(L, []).
+
+%% @private
+%% pre: Accum is flattened
+flatten([], Accum) ->
+    Accum;
+flatten([H|T], Accum) when is_list(H) ->
+    FlattenedT = flatten(T, Accum),
+    flatten(H, FlattenedT);
+flatten([H|T], Accum) ->
+    FlattenedT = flatten(T, Accum),
+    [H|FlattenedT].
+%% post: return is flattened

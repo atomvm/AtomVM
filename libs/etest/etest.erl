@@ -25,7 +25,7 @@
 -module(etest).
 
 -export([test/1]).
--export([assert_match/2, assert_true/1]).
+-export([assert_match/2, assert_true/1, assert_failure/2]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Tests a list of test modules
@@ -66,6 +66,22 @@ assert_match(_, _) -> fail.
 assert_true(true) -> ok;
 assert_true(_) -> fail.
 
+%%-----------------------------------------------------------------------------
+%% @param   F a function to evaluate
+%% @returns ok if evaluating F results in Error being thrown; fail, otherwise
+%% @end
+%%-----------------------------------------------------------------------------
+-spec assert_failure(fun(), Error::atom()) -> ok | fail.
+assert_failure(F, _E) ->
+    try
+        F(),
+        fail
+    catch
+        %% TODO implement opcode 108 (raise/2)
+        _:E ->
+            id(E),
+            ok
+    end.
 
 %%=============================================================================
 %% internal operations
@@ -89,3 +105,6 @@ check_results([{_Test, ok} | T]) ->
     check_results(T);
 check_results(_) ->
     fail.
+
+
+id(X) -> X.

@@ -121,6 +121,9 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[]);
 static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_throw(Context *ctx, int argc, term argv[]);
+static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[]);
+static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
+static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[]);
 
 static const struct Nif binary_at_nif =
 {
@@ -426,6 +429,24 @@ static const struct Nif throw_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_throw
+};
+
+static const struct Nif pid_to_list_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_pid_to_list
+};
+
+static const struct Nif ref_to_list_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_ref_to_list
+};
+
+static const struct Nif fun_to_list_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_fun_to_list
 };
 
 //Ignore warning caused by gperf generated code
@@ -2188,4 +2209,95 @@ static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])
     terms_count = memory_estimate_usage(argv[0]);
 
     return term_from_int32(terms_count);
+}
+
+static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term t = argv[0];
+    VALIDATE_VALUE(t, term_is_pid);
+
+    // 2^32 = 4294967296 (10 chars)
+    // 6 chars of static text + '\0'
+    char buf[17];
+    snprintf(buf, 17, "<0.%i.0>", term_to_local_process_id(t));
+
+    int str_len = strnlen(buf, 17);
+
+    if (UNLIKELY(memory_ensure_free(ctx, str_len * 2) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term prev = term_nil();
+    for (int i = str_len - 1; i >= 0; i--) {
+        prev = term_list_prepend(term_from_int11(buf[i]), prev, ctx);
+    }
+    return prev;
+}
+
+static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term t = argv[0];
+    VALIDATE_VALUE(t, term_is_reference);
+
+    const char *format =
+    #ifdef __clang__
+            "#Ref<0.0.0.%llu>";
+    #else
+            "#Ref<0.0.0.%lu>";
+    #endif
+    // 2^64 = 18446744073709551616 (20 chars)
+    // 12 chars of static text + '\0'
+    char buf[33];
+    snprintf(buf, 33, format, term_to_ref_ticks(t));
+
+    int str_len = strnlen(buf, 33);
+
+    if (UNLIKELY(memory_ensure_free(ctx, str_len * 2) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term prev = term_nil();
+    for (int i = str_len - 1; i >= 0; i--) {
+        prev = term_list_prepend(term_from_int11(buf[i]), prev, ctx);
+    }
+    return prev;
+}
+
+static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term t = argv[0];
+    VALIDATE_VALUE(t, term_is_function);
+
+    const term *boxed_value = term_to_const_term_ptr(t);
+    Module *fun_module = (Module *) boxed_value[1];
+    uint32_t fun_index = boxed_value[2];
+
+    // char-len(address) + char-len(32-bit-num) + 16 + '\0' = 47
+    // 20                  10
+    const char *format =
+    #ifdef __clang__
+            "#Fun<erl_eval.%lu.%llu>";
+    #else
+            "#Fun<erl_eval.%lu.%llu>";
+    #endif
+    char buf[47];
+    snprintf(buf, 47, format, fun_index, (unsigned long) fun_module);
+
+    int str_len = strnlen(buf, 47);
+
+    if (UNLIKELY(memory_ensure_free(ctx, str_len * 2) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term prev = term_nil();
+    for (int i = str_len - 1; i >= 0; i--) {
+        prev = term_list_prepend(term_from_int11(buf[i]), prev, ctx);
+    }
+    return prev;
 }

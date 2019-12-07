@@ -17,6 +17,7 @@ test() ->
     ok = test_all(),
     ok = test_any(),
     ok = test_list_match(),
+    ok = test_flatten(),
     ok.
 
 test_nth() ->
@@ -110,6 +111,19 @@ test_list_match() ->
     ?ASSERT_MATCH(?MODULE:id([]), []),
     ?ASSERT_MATCH(?MODULE:id([a]), [a]),
     ?ASSERT_MATCH(?MODULE:id([a,b]), [a,b]),
+    ok.
+
+test_flatten() ->
+    ?ASSERT_MATCH(?LISTS:flatten([]), []),
+    ?ASSERT_MATCH(?LISTS:flatten([a]), [a]),
+    ?ASSERT_MATCH(?LISTS:flatten([a, []]), [a]),
+    ?ASSERT_MATCH(?LISTS:flatten([[[[[[[[a]]]]]]]]), [a]),
+    ?ASSERT_MATCH(?LISTS:flatten([a,[b]]), [a,b]),
+    ?ASSERT_MATCH(?LISTS:flatten([[a],b]), [a,b]),
+    ?ASSERT_MATCH(?LISTS:flatten([[a],[b]]), [a,b]),
+    ?ASSERT_MATCH(?LISTS:flatten([[a],[b, [c]]]), [a,b,c]),
+    ?ASSERT_MATCH(?LISTS:flatten([[a],[b, {c, [d, [e, [f]]]}]]), [a,b,{c, [d, [e, [f]]]}]),
+    ?ASSERT_MATCH(?LISTS:flatten([[a,b,c],[d,e,f],[g,h,i]]), [a,b,c,d,e,f,g,h,i]),
     ok.
 
 id(X) -> X.
