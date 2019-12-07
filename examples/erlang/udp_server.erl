@@ -5,31 +5,24 @@
 -include("estdlib.hrl").
 
 start() ->
-    console:puts("Opening socket ...\n"),
-    Active = true,
-    case ?GEN_UDP:open(44444, [{active, Active}]) of
+    case ?GEN_UDP:open(44404, [{active, true}]) of
         {ok, Socket} ->
-            erlang:display({Socket, ?INET:sockname(Socket)}),
-            console:puts("Waiting to receive data...\n"),
-            case Active of
-                true -> active_loop();
-                _ ->    passive_loop(Socket)
-            end;
-        ErrorReason ->
-            erlang:display(ErrorReason)
+            ?IO:format("Opened UDP socket on ~p.~n", [local_address(Socket)]),
+            active_loop();
+        Error ->
+            ?IO:format("An error occurred opening UDP socket: ~p~n", [Error])
     end.
 
 active_loop() ->
+    ?IO:format("Waiting to receive data...~n"),
     receive
-        Msg -> erlang:display(Msg)
+        {udp, _Socket, Address, Port, Packet} -> 
+            ?IO:format("Received UDP packet ~p from ~p~n", [Packet, to_string({Address, Port})])
     end,
     active_loop().
 
-passive_loop(Socket) ->
-    case ?GEN_UDP:recv(Socket, 128) of
-        {ok, RecvData} ->
-            erlang:display(RecvData),
-            passive_loop(Socket);
-        ErrorReason ->
-            erlang:display(ErrorReason)
-    end.
+local_address(Socket) ->
+    to_string(?INET:sockname(Socket)).
+
+to_string({{A,B,C,D}, Port}) ->
+    ?IO_LIB:format("~p.~p.~p.~p:~p", [A,B,C,D, Port]).

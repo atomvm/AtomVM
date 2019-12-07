@@ -62,6 +62,7 @@
 %% @doc     Equivalent to wait_for_sta(15000).
 %% @end
 %%-----------------------------------------------------------------------------
+-spec wait_for_sta() -> {ok, ip_info()} | {error, Reason::term()}.
 wait_for_sta() ->
     wait_for_sta(15000).
 
@@ -70,6 +71,7 @@ wait_for_sta() ->
 %% @doc     Equivalent to wait_for_sta([], Timeout).
 %% @end
 %%-----------------------------------------------------------------------------
+-spec wait_for_sta(Timeout::non_neg_integer()) -> {ok, ip_info()} | {error, Reason::term()}.
 wait_for_sta(Timeout) ->
     wait_for_sta([], Timeout).
 
@@ -87,6 +89,7 @@ wait_for_sta(Timeout) ->
 %%          changes in the network.
 %% @end
 %%-----------------------------------------------------------------------------
+-spec wait_for_sta(Creds::[ssid_config()|psk_config()], Timeout::non_neg_integer()) -> {ok, ip_info()} | {error, Reason::term()}.
 wait_for_sta(Creds, Timeout) ->
     Self = self(),
     StaConfig = Creds ++ [

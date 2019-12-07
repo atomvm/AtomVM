@@ -5,31 +5,39 @@
 -include("estdlib.hrl").
 
 start() ->
-    console:puts("Connecting...\n"),
     Address = "localhost",
     Port = 44404,
     case ?GEN_TCP:connect(Address, Port, []) of
         {ok, Socket} ->
-            console:puts("Connected.\n"),
+            ?IO:format("Connected to ~p from ~p~n", [peer_address(Socket), local_address(Socket)]),
             loop(Socket);
         Error ->
-            erlang:display(Error)
+            ?IO:format("An error occurred connecting: ~p~n", [Error])
     end.
 
 loop(Socket) ->
-    console:puts("Sending message to server...\n"),
-    case ?GEN_TCP:send(Socket, <<":アトムＶＭ">>) of
+    SendPacket = <<":アトムＶＭ">>,
+    case ?GEN_TCP:send(Socket, SendPacket) of
         ok ->
+            ?IO:format("Sent ~p to ~p\n", [SendPacket, peer_address(Socket)]),
             receive
                 {tcp_closed, _Socket} ->
-                    console:puts("Closed.\n"),
+                    ?IO:format("Connection closed.~n"),
                     ok;
-                {tcp, _Socket, Packet} ->
-                    console:puts("Received packet.\n"),
-                    erlang:display(Packet),
+                {tcp, _Socket, ReceivedPacket} ->
+                    ?IO:format("Received ~p from ~p~n", [ReceivedPacket, peer_address(Socket)]),
                     ?TIMER:sleep(1000),
                     loop(Socket)
             end;
         Error ->
-            erlang:display(Error)
+            ?IO:format("An error occurred sending a packet: ~p~n", [Error])
     end.
+
+local_address(Socket) ->
+    to_string(?INET:sockname(Socket)).
+
+peer_address(Socket) ->
+    to_string(?INET:peername(Socket)).
+
+to_string({{A,B,C,D}, Port}) ->
+    ?IO_LIB:format("~p.~p.~p.~p:~p", [A,B,C,D, Port]).

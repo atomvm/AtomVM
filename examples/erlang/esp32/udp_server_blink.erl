@@ -10,62 +10,47 @@
 -define(OFF, 0).
 
 start() ->
-    try
-        Self = self(),
-        Config = [
-            {sta, [
-                {ssid, esp:nvs_get_binary(?ATOMVM_NVS_NS, ?ATOMVM_NVS_STA_SSID, <<"myssid">>)},
-                {psk,  esp:nvs_get_binary(?ATOMVM_NVS_NS, ?ATOMVM_NVS_STA_PSK, <<"mypsk">>)},
-                {connected, fun() -> Self ! connected end},
-                {got_ip, fun(IpInfo) -> Self ! {ok, IpInfo} end},
-                {disconnected, fun() -> Self ! disconnected end}
-            ]}
-        ],
-        case network_fsm:start(Config) of
-            ok ->
-                wait_for_network();
-            Error ->
-                erlang:display(Error)
-        end
-    catch
-        _:E ->
-            erlang:display(E)
+    Creds = [
+        {ssid, esp:nvs_get_binary(?ATOMVM_NVS_NS, ?ATOMVM_NVS_STA_SSID, <<"myssid">>)},
+        {psk,  esp:nvs_get_binary(?ATOMVM_NVS_NS, ?ATOMVM_NVS_STA_PSK, <<"mypsk">>)}
+    ],
+    case network_fsm:wait_for_sta(Creds, 30000) of
+        {ok, {Address, Netmask, Gateway}} ->
+            ?IO:format(
+                "Acquired IP address: ~p Netmask: ~p Gateway: ~p~n", 
+                [to_string(Address), to_string(Netmask), to_string(Gateway)]
+            ),
+            udp_server_start();
+        Error ->
+            ?IO:format("An error occurred starting network: ~p~n", [Error])
     end.
 
 
-wait_for_network() ->
-    receive
-        connected ->
-            erlang:display(connected);
-        {ok, IpInfo} ->
-            erlang:display(IpInfo),
-            udp_server_start();
-        disconnected ->
-            erlang:display(disconnected)
-    after 15000 ->
-        ok
-    end,
-    wait_for_network().
-
-
 udp_server_start() ->
-    console:puts("Opening socket 44444 ...\n"),
-    case ?GEN_UDP:open(44444, [{active, true}]) of
+    case ?GEN_UDP:open(44404, [{active, true}]) of
         {ok, Socket} ->
-            erlang:display({Socket, ?INET:sockname(Socket)}),
+            ?IO:format("Opened UDP socket on ~p.~n", [local_address(Socket)]),
             Gpio = gpio:open(),
             gpio:set_direction(Gpio, ?PIN, output),
-            console:puts("Waiting to receive data...\n"),
             loop(Socket, Gpio, 0);
-        ErrorReason ->
-            erlang:display(ErrorReason)
+        Error ->
+            ?IO:format("An error occurred opening UDP socket: ~p~n", [Error])
     end.
 
 
 loop(Socket, Gpio, PinState) ->
+    ?IO:format("Waiting to receive data...~n"),
     gpio:set_level(Gpio, ?PIN, PinState),
     receive
-        Msg ->
-            erlang:display(Msg)
+        {udp, _Socket, Address, Port, Packet} -> 
+            ?IO:format("Received UDP packet ~p from ~p~n", [Packet, to_string({Address, Port})])
     end,
     loop(Socket, Gpio, 1 - PinState).
+
+local_address(Socket) ->
+    to_string(?INET:sockname(Socket)).
+
+to_string({{A,B,C,D}, Port}) ->
+    ?IO_LIB:format("~p.~p.~p.~p:~p", [A,B,C,D, Port]);
+to_string({A,B,C,D}) ->
+    ?IO_LIB:format("~p.~p.~p.~p", [A,B,C,D]).

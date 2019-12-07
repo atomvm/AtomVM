@@ -27,13 +27,12 @@ This example program listens on UDP port 44444 and will print information about 
 The `udp_server.avm` file will get created as part of a build.  This file may be supplied as an argument to the `AtomVM` command:
 
     shell$ ./src/AtomVM ./examples/erlang/udp_server.avm
-    Opening socket ...
-    {socket,<0.3.0>,44444}
+    Opened UDP socket on "0.0.0.0:44404".
     Waiting to receive data...
 
 You can send UDP packets to the AtomVM instance using `netcat` (or `nc` on some platforms), in a separate terminal window:
 
-    shell$ nc -u localhost 44444
+    shell$ nc -u localhost 44404
 
 This command will wait for you to enter a line of text, e.g.,
 
@@ -41,9 +40,7 @@ This command will wait for you to enter a line of text, e.g.,
 
 In the AtomVM termianl window, you see:
 
-    Address: {127,0,0,1}
-    Port: 50889
-    Packet: <<116,101,115,116,105,110,103,32,49,32,50,32,51,10>>
+    Received UDP packet <<116,101,115,116,105,110,103,32,49,32,50,32,51,10>> from "127.0.0.1:55261"
     Waiting to receive data...
 
 > Note.  Netcat appends a newline character at the end of the input, so the packet binary does not display as printable text.
@@ -59,15 +56,21 @@ This command may be used in tandem with the `udp_server` program to illustrate s
 The `udp_client.avm` file will get created as part of a build.  This file may be supplied as an argument to the `AtomVM` command:
 
     shell$ ./src/AtomVM ./examples/erlang/udp_client.avm
-    Opening socket...
-    .................................
+    Opened UDP socket on "0.0.0.0:63665".
+    Sent <<58,-94,-56,-32,54,45>>
+    Sent <<58,-94,-56,-32,54,45>>
+    Sent <<58,-94,-56,-32,54,45>>
+    ...
 
 If you are running the `udp_server` program, you should see messages like the following printed to the console:
 
-    Address: {127,0,0,1}
-    Port: 52443
-    Packet: <<58,-94,-56,-32,54,45>>
+    Received UDP packet <<58,-94,-56,-32,54,45>> from "127.0.0.1:63665"
     Waiting to receive data...
+    Received UDP packet <<58,-94,-56,-32,54,45>> from "127.0.0.1:63665"
+    Waiting to receive data...
+    Received UDP packet <<58,-94,-56,-32,54,45>> from "127.0.0.1:63665"
+    Waiting to receive data...
+    ...
 
 > Note. AtomVM does not currently treat characters outside of the printable ASCII character set as printable characters.
 
@@ -80,7 +83,7 @@ This example program listens on TCP port 44404 and accept connections on that po
 The `tcp_server.avm` file will get created as part of a build.  This file may be supplied as an argument to the `AtomVM` command:
 
     shell$ ./src/AtomVM ./examples/erlang/tcp_server.avm
-    Listening on port 44404.
+    Listening on "0.0.0.0:44404".
     Waiting to accept connection...
 
 You can send TCP packets to the AtomVM instance using `netcat` (or `nc` on some platforms), in a separate terminal window:
@@ -89,7 +92,7 @@ You can send TCP packets to the AtomVM instance using `netcat` (or `nc` on some 
 
 This will open a TCP connection to the `tcp_server`, and you should see the following on the console:
 
-    Accepted connection.
+    Accepted connection.  local: "127.0.0.1:44404" peer: "127.0.0.1:56628"
     Waiting to receive data...
     Waiting to accept connection...
 
@@ -99,8 +102,7 @@ The netcat command will wait for you to enter a line of text, e.g.,
 
 In the AtomVM terminal window, you see:
 
-    <<116,101,115,116,105,110,103,32,49,32,50,32,51,10>>
-    Sending packet back to client...
+    Received packet [116,101,115,116,105,110,103,32,49,32,50,32,51,10] from "127.0.0.1:56628".  Echoing back...
     Waiting to receive data...
 
 > Note.  Netcat appends a newline character at the end of the input, so the packet binary does not display as printable text.
@@ -109,7 +111,7 @@ You may enter as much data as you like, though by default, the packet size will 
 
 If you stop the `netcat` command (via ^C), you should
 
-    Closed connection.
+    Connection closed.
 
 printed to the AtomVM console.
 
@@ -128,30 +130,26 @@ This command may be used in tandem with the `tcp_server` program to illustrate s
 The `tcp_client.avm` file will get created as part of a build.  This file may be supplied as an argument to the `AtomVM` command:
 
     shell$ ./src/AtomVM ./examples/erlang/tcp_client.avm
-    Connecting...
-    Connected.
-    Sending message to server...
-    Received packet.
-    <<58,162,200,224,54,45>>
-    Sending message to server...
-    Received packet.
-    <<58,162,200,224,54,45>>
-    Sending message to server...
-    Received packet.
-    <<58,162,200,224,54,45>>
+    Connected to "127.0.0.1:44404" from "127.0.0.1:56741"
+    Sent <<58,-94,-56,-32,54,45>> to "127.0.0.1:44404"
+    Received [58,162,200,224,54,45] from "127.0.0.1:44404"
+    Sent <<58,-94,-56,-32,54,45>> to "127.0.0.1:44404"
+    Received [58,162,200,224,54,45] from "127.0.0.1:44404"
+    Sent <<58,-94,-56,-32,54,45>> to "127.0.0.1:44404"
+    Received [58,162,200,224,54,45] from "127.0.0.1:44404"
     ...
 
 If you are running the `tcp
 _server` program, you should see messages like the following printed to the console:
 
-    Accepted connection.
+    Accepted connection.  local: "127.0.0.1:44404" peer: "127.0.0.1:56741"
     Waiting to receive data...
     Waiting to accept connection...
-    <<58,162,200,224,54,45>>
-    Sending packet back to client...
+    Received packet [58,162,200,224,54,45] from "127.0.0.1:56741".  Echoing back...
     Waiting to receive data...
-    <<58,162,200,224,54,45>>
-    Sending packet back to client...
+    Received packet [58,162,200,224,54,45] from "127.0.0.1:56741".  Echoing back...
+    Waiting to receive data...
+    Received packet [58,162,200,224,54,45] from "127.0.0.1:56741".  Echoing back...
     Waiting to receive data...
     ...
 
@@ -167,19 +165,16 @@ AtomVM includes examples that are specifically designed for the ESP32 and other 
 
 In order to run the ESP32 examples, you will need to flash the example AVM files that are created as part of the build to your device.
 
-In the remainder of this document, we assume a script `flash.sh`, which has something like the following contents:
+In the remainder of this document, we assume the `flash.sh` script, located in the `tools/dev` directory of the AtomVM source tree.
 
-    #!/bin/sh
-    ${IDF_PATH}/components/esptool_py/esptool/esptool.py \
-        --chip esp32 \
-        --port /dev/ttyUSB0 \
-        --baud 115200 \
-        --before default_reset --after hard_reset \
-        write_flash -u --flash_mode dio --flash_freq 40m --flash_size detect 0x110000 ${1}
+> Note. You must set the `ESP_IDF` environment varibale to the root directory of the ESP IDF SDK installation on your development machine.
 
-> Note.  Set the IDF_PATH environement variable to be the root directory of the ESP IDF tool, which you have installed as part of the AtomVM build tool chain.
+You can control the serial port and baud rate via the `FLASH_SERIAL_PORT` and `FLASH_BAUD_RATE` enviornment variables, e.g.,
 
-> Note.  Substitute the USB serial device on your platform for `/dev/ttyUSB0`, in this script.
+    shell$ export FLASH_SERIAL_PORT="/dev/tty.SLAB_USBtoUART"
+    shell$ export FLASH_BAUD_RATE=921600
+
+The default values for these variables, if not set, are `/dev/ttyUSB0` and `115200`, respectively.
 
 > Note. Experiment with baud rates (e.g., 921600).  You may find you can shorten the flash-debug-flash cycle with higher rates.
 
@@ -200,7 +195,7 @@ The `blink` example will turn the blue LED on an ESP32 SoC (pin 2) on and off, o
 
 Flash the example program to your device as follows:
 
-    shell$ flash.sh examples/erlang/esp32/blink.avm
+    shell$ ./tools/dev/flash.sh build/examples/erlang/esp32/blink.avm
     ...
     Hard resetting via RTS pin...
 
@@ -214,7 +209,7 @@ The program will generate a random binary of a random size (at most 127 bytes) e
 
 Flash the example program to your device as follows:
 
-    shell$ flash.sh examples/erlang/esp32/esp_random.avm
+    shell$ ./tools/dev/flash.sh build/examples/erlang/esp32/esp_random.avm
     ...
     Hard resetting via RTS pin...
 
@@ -226,10 +221,11 @@ You should see something like the following output when monitoring the ESP32 out
     Booting file mapped at: 0x3f420000, size: 1048576
     Starting: esp_random.beam...
     ---
-    esp_rst_poweron
-    <<81,49,229,244,89,18,17>>
-    <<207,222,26,227,183,159,182,171,138,177,92,230,217,29,254,115,213,91,73,156,,229,87>>
-    <<248,27,206,,9,118,62,231,123,146,135,90,92,155,,1,59,157,60,226,63,74,18,,84,26,51,30,96,198>>
+    Reset reason: esp_rst_poweron
+    Random bytes: <<71,13,221,24,8,15,...,197,120,152,205>>
+    Random bytes: <<37,155,124,177,44,141,40,106,...,43,48,62,109,2,78,39,107>>
+    Random bytes: <<217,210,239,183,...,78,68,253,146,212,71,17,208,219,126,240,218,34,0,152,80,20,166,194,106>>
+    Random bytes: <<112,77,123,249,162,...,238,237,128,227,58,29,64,74>>
     ...
     <<"">>
     ets Jun  8 2016 00:22:57
@@ -239,20 +235,18 @@ You should see something like the following output when monitoring the ESP32 out
     Starting: esp_random.beam...
     ---
     esp_rst_sw
-    <<155,174,204,143,232,202,136,242,49,1,188,113,134,184,80,18,118,177,77,230,10,21,72,91,92,160,198,115,249,217,206,52,102,32,230>>
+    Random bytes: <<155,174,204,143,232,202,136,...,118,177,77,230,10,21,72,91,92,160,198,115,249,217,206,52,102,32,230>>
     ...
 
 ### `esp_nvs`
 
 This demo program illustrates the use of ESP32 non-volatile storage (NVS).
 
-The program will store the number of times the device has been rebooted, along with the start time, in NVS.  The program will either:
-
-* delete the key use
+The program will store the number of times the device has been rebooted, along with the start time, in NVS.
 
 Flash the example program to your device as follows:
 
-    shell$ flash.sh examples/erlang/esp32/esp_random.avm
+    shell$ ./tools/dev/flash.sh build/examples/erlang/esp32/esp_nvs.avm
     ...
     Hard resetting via RTS pin...
 
@@ -264,7 +258,8 @@ You should see the following output when monitoring the ESP32 output (truncated 
     Booting file mapped at: 0x3f420000, size: 1048576
     Starting: esp_nvs.beam...
     ---
-    {state,0,{0,0,78821}}
+    Saving count 0 to NVS...
+    Reset device to increment.
     AtomVM finished with return value = ok
     going to sleep forever..
 
@@ -274,7 +269,8 @@ Hit the reset button on your device, and the ESP device will reboot, and display
     Booting file mapped at: 0x3f420000, size: 1048576
     Starting: esp_nvs.beam...
     ---
-    {state,2,{0,0,78821}}
+    Saving count 1 to NVS...
+    Reset device to increment.
     AtomVM finished with return value = ok
     going to sleep forever..
 
@@ -284,7 +280,7 @@ This demo program will reformat the non-volatile storage (NVS) partition.
 
 Flash the example program to your device as follows:
 
-    shell$ flash.sh examples/erlang/esp32/reformat_nvs.avm
+    shell$ ./tools/dev/flash.sh build/examples/erlang/esp32/reformat_nvs.avm
     ...
     Hard resetting via RTS pin...
 
@@ -314,7 +310,7 @@ Edit the `sta_network_config.erl` program and set the `Ssid` binary with your WI
 
     shell$ make
     ...
-    shell$ flash.sh examples/erlang/esp32/sta_network_config.avm
+    shell$ ./tools/dev/flash.sh build/examples/erlang/esp32/sta_network_config.avm
     ...
     Hard resetting via RTS pin...
 
@@ -345,22 +341,14 @@ The `sta_network` example will connect to your local WiFi network and obtain and
 
 Flash the example program to your device as follows:
 
-    shell$ flash.sh examples/erlang/esp32/sta_network.avm
+    shell$ ./tools/dev/flash.sh build/examples/erlang/esp32/sta_network.avm
     ...
     Hard resetting via RTS pin...
 
 You should see the following output when monitoring the ESP32 output (truncated for brevity):
 
     shell$ make monitor
-    MONITOR
-    --- WARNING: Serial ports accessed as /dev/tty.* will hang gdb if launched.
-    --- Using /dev/cu.SLAB_USBtoUART instead...
-    --- idf_monitor on /dev/cu.SLAB_USBtoUART 115200 ---
-    --- Quit: Ctrl+] | Menu: Ctrl+T | Help: Ctrl+T followed by Ctrl+H ---
-    ets Jun  8 2016 00:22:57
     ...
-    Found AVM partition: size: 1048576, address: 0x110000
-    Booting file mapped at: 0x3f420000, size: 1048576
     Starting: sta_network.beam...
     ---
     I (220) wifi: wifi driver task: 3ffc3b54, prio:23, stack:3584, core=0
@@ -385,7 +373,6 @@ You should see the following output when monitoring the ESP32 output (truncated 
     I (1490) wifi: state: assoc -> run (10)
     I (1500) wifi: connected with myssid, channel 1
     I (1500) wifi: pm start, type: 1
-
     I (1500) NETWORK: SYSTEM_EVENT_STA_CONNECTED received.
     I (3690) event: sta ip: 192.168.1.236, mask: 255.255.255.0, gw: 192.168.1.1
     I (3690) NETWORK: SYSTEM_EVENT_STA_GOT_IP: 192.168.1.236
@@ -404,33 +391,13 @@ The `udp_server_blink` example will connect to your local WiFi network and obtai
 
 Flash the example program to your device as follows:
 
-    shell$ flash.sh examples/erlang/esp32/udp_server_blink.avm
-    esptool.py v2.6-beta1
-    Serial port /dev/tty.SLAB_USBtoUART
-    Connecting........_____....._____....._____.....__
-    Chip is ESP32D0WDQ6 (revision 1)
-    Features: WiFi, BT, Dual Core, 240MHz, VRef calibration in efuse, Coding Scheme None
-    MAC: 3c:71:bf:84:d9:08
-    Uploading stub...
-    Running stub...
-    Stub running...
-    Configuring flash size...
-    Auto-detected Flash size: 4MB
-    Wrote 49152 bytes at 0x00110000 in 4.3 seconds (91.3 kbit/s)...
-    Hash of data verified.
-
-    Leaving...
+    shell$ ./tools/dev/flash.sh build/examples/erlang/esp32/udp_server_blink.avm
+    ...
     Hard resetting via RTS pin...
 
 You should see the following output when monitoring the ESP32 output (truncated for brevity):
 
     shell$ make monitor
-    MONITOR
-    --- WARNING: Serial ports accessed as /dev/tty.* will hang gdb if launched.
-    --- Using /dev/cu.SLAB_USBtoUART instead...
-    --- idf_monitor on /dev/cu.SLAB_USBtoUART 115200 ---
-    --- Quit: Ctrl+] | Menu: Ctrl+T | Help: Ctrl+T followed by Ctrl+H ---
-    ets Jun  8 2016 00:22:57
     ...
     Found AVM partition: size: 1048576, address: 0x110000
     Booting file mapped at: 0x3f420000, size: 1048576
@@ -458,21 +425,21 @@ You should see the following output when monitoring the ESP32 output (truncated 
     I (1562) wifi: state: assoc -> run (10)
     I (1582) wifi: connected with myssid, channel 1
     I (1582) wifi: pm start, type: 1
-
     I (1582) NETWORK: SYSTEM_EVENT_STA_CONNECTED received.
     I (2212) event: sta ip: 192.168.1.236, mask: 255.255.255.0, gw: 192.168.1.1
     I (2212) NETWORK: SYSTEM_EVENT_STA_GOT_IP: 192.168.1.236
-    connected
-    {{192,168,1,236},{255,255,255,0},{192,168,1,1}}
-    Opening socket 44444 ...
-    {socket,<0.6.0>,44444}
+    Acquired IP address: "192.168.1.236" Netmask: "255.255.255.0" Gateway: "192.168.1.1"
+    Opened UDP socket on "0.0.0.0:44404".
     Waiting to receive data...
 
 You can send UDP packets to the AtomVM instance using `netcat` (or `nc` on some platforms), in a separate terminal window:
 
-    shell$ nc -u 192.168.1.236 44444
+    shell$ nc -u 192.168.1.236 44404
 
-Every time you enter a line of text, the blue LED on the ESP32 SoC (pin 2) should toggle on and off.
+Every time you enter a line of text, the blue LED on the ESP32 SoC (pin 2) should toggle on and off, and you should see output on the console, such as
+
+    Received UDP packet <<100,115,102,115,100,10>> from "192.168.1.237:53291"
+    Waiting to receive data...
 
 ### `tcp_server_blink`
 
@@ -486,37 +453,16 @@ The `tcp_server_blink` example will connect to your local WiFi network and obtai
 
 Flash the example program to your device as follows:
 
-    shell$ flash.sh examples/erlang/esp32/tcp_server_blink.avm
-    esptool.py v2.6
-    Serial port /dev/tty.SLAB_USBtoUART
-    Connecting........_____....._
-    Chip is ESP32D0WDQ6 (revision 1)
-    Features: WiFi, BT, Dual Core, 240MHz, VRef calibration in efuse, Coding Scheme None
-    MAC: 3c:71:bf:84:d9:08
-    Uploading stub...
-    Running stub...
-    Stub running...
-    Configuring flash size...
-    Auto-detected Flash size: 4MB
-    Wrote 147456 bytes at 0x00110000 in 12.9 seconds (91.3 kbit/s)...
-    Hash of data verified.
-
-    Leaving...
+    shell$ ./tools/dev/flash.sh build/examples/erlang/esp32/tcp_server_blink.avm
+    ...
     Hard resetting via RTS pin...
 
 You should see the following output when monitoring the ESP32 output (truncated for brevity):
 
     shell$ make monitor
-    MONITOR
-    --- WARNING: Serial ports accessed as /dev/tty.* will hang gdb if launched.
-    --- Using /dev/cu.SLAB_USBtoUART instead...
-    --- idf_monitor on /dev/cu.SLAB_USBtoUART 115200 ---
-    --- Quit: Ctrl+] | Menu: Ctrl+T | Help: Ctrl+T followed by Ctrl+H ---
-    ets Jun  8 2016 00:22:57
-    ...
     Found AVM partition: size: 1048576, address: 0x110000
     Booting file mapped at: 0x3f420000, size: 1048576
-    Starting: tcp_server_esp32.beam...
+    Starting: tcp_server_blink.beam...
     ---
     start
     I (296) wifi: wifi driver task: 3ffc650c, prio:23, stack:3584, core=0
@@ -544,9 +490,8 @@ You should see the following output when monitoring the ESP32 output (truncated 
     I (2196) NETWORK: SYSTEM_EVENT_STA_CONNECTED received.
     I (2746) event: sta ip: 192.168.1.236, mask: 255.255.255.0, gw: 192.168.1.1
     I (2746) NETWORK: SYSTEM_EVENT_STA_GOT_IP: 192.168.1.236
-    connected
-    {{192,168,1,236},{255,255,255,0},{192,168,1,1}}
-    Listening on port 44404.
+    Acquired IP address: "192.168.1.236" Netmask: "255.255.255.0" Gateway: "192.168.1.1"
+    Listening on "0.0.0.0:44404".
     Waiting to accept connection...
 
 You can send TCP packets to the AtomVM instance using `netcat` (or `nc` on some platforms), in a separate terminal window, e.g.,
@@ -555,15 +500,15 @@ You can send TCP packets to the AtomVM instance using `netcat` (or `nc` on some 
 
 On the ESP32 console, you should see:
 
-    Accepted connection.
+    Accepted connection.  local: "192.168.1.236:44404" peer: "192.168.1.237:55275"
     Waiting to receive data...
+    Waiting to accept connection...
 
 Every time you enter a line of text, the blue LED on the ESP32 SoC (pin 2) should toggle on and off, and the data you entered should get echoed back to the `netcat` console.
 
 On the ESP32 console, you should see:
 
-    <<100,102,115,100,102,10>>
-    Sending packet back to client...
+    Received packet [115,100,102,115,100,102,10] from "192.168.1.237:55275".  Echoing back...
     Waiting to receive data...
 
 every time a packet is sent to the server.

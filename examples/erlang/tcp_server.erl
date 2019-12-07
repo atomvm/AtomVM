@@ -7,35 +7,40 @@
 start() ->
     case ?GEN_TCP:listen(44404, []) of
         {ok, ListenSocket} ->
-            console:puts("Listening on port 44404.\n"),
-            erlang:display(?INET:sockname(ListenSocket)),
+            ?IO:format("Listening on ~p.~n", [local_address(ListenSocket)]),
             spawn(fun() -> accept(ListenSocket) end);
         Error ->
-            erlang:display(Error)
+            ?IO:format("An error occurred listening: ~p~n", [Error])
     end.
 
 accept(ListenSocket) ->
-    console:puts("Waiting to accept connection...\n"),
+    ?IO:format("Waiting to accept connection...~n"),
     case ?GEN_TCP:accept(ListenSocket) of
         {ok, Socket} ->
-            console:puts("Accepted connection.\n"),
-            erlang:display({?INET:peername(Socket), ?INET:sockname(Socket)}),
+            ?IO:format("Accepted connection.  local: ~p peer: ~p~n", [local_address(Socket), peer_address(Socket)]),
             spawn(fun() -> accept(ListenSocket) end),
             echo();
         Error ->
-            erlang:display(Error)
+            ?IO:format("An error occurred accepting connection: ~p~n", [Error])
     end.
 
 echo() ->
-    console:puts("Waiting to receive data...\n"),
+    ?IO:format("Waiting to receive data...~n"),
     receive
         {tcp_closed, _Socket} ->
-            console:puts("Closed connection.\n"),
+            ?IO:format("Connection closed.~n"),
             ok;
         {tcp, Socket, Packet} ->
-            erlang:display(Packet),
-            console:puts("Sending packet back to client...\n"),
+            ?IO:format("Received packet ~p from ~p.  Echoing back...~n", [Packet, peer_address(Socket)]),
             ?GEN_TCP:send(Socket, Packet),
             echo()
     end.
 
+local_address(Socket) ->
+    to_string(?INET:sockname(Socket)).
+
+peer_address(Socket) ->
+    to_string(?INET:peername(Socket)).
+
+to_string({{A,B,C,D}, Port}) ->
+    ?IO_LIB:format("~p.~p.~p.~p:~p", [A,B,C,D, Port]).

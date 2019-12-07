@@ -6,82 +6,52 @@
 -include("atomvm.hrl").
 
 start() ->
-    try
-        Self = self(),
-        Config = [
-            {sta, [
-                {ssid, esp:nvs_get_binary(?ATOMVM_NVS_NS, ?ATOMVM_NVS_STA_SSID, <<"myssid">>)},
-                {psk,  esp:nvs_get_binary(?ATOMVM_NVS_NS, ?ATOMVM_NVS_STA_PSK, <<"mypsk">>)},
-                {connected, fun() -> Self ! connected end},
-                {got_ip, fun(IpInfo) -> Self ! {ok, IpInfo} end},
-                {disconnected, fun() -> Self ! disconnected end}
-            ]}
-        ],
-        case network_fsm:start(Config) of
-            ok ->
-                wait_for_network();
-            Error ->
-                erlang:display(Error)
-        end
-    catch
-        _:E ->
-            erlang:display(E)
+    Creds = [
+        {ssid, esp:nvs_get_binary(?ATOMVM_NVS_NS, ?ATOMVM_NVS_STA_SSID, <<"myssid">>)},
+        {psk,  esp:nvs_get_binary(?ATOMVM_NVS_NS, ?ATOMVM_NVS_STA_PSK, <<"mypsk">>)}
+    ],
+    case network_fsm:wait_for_sta(Creds, 30000) of
+        {ok, {Address, Netmask, Gateway}} ->
+            ?IO:format(
+                "Acquired IP address: ~p Netmask: ~p Gateway: ~p~n", 
+                [to_string(Address), to_string(Netmask), to_string(Gateway)]
+            ),
+            tcp_client_start();
+        Error ->
+            ?IO:format("An error occurred starting network: ~p~n", [Error])
     end.
 
-
-wait_for_network() ->
-    receive
-        connected ->
-            erlang:display(connected),
-            wait_for_network();
-        {ok, IpInfo} ->
-            erlang:display(IpInfo),
-            tcp_client_start();
-        disconnected ->
-            erlang:display(disconnected)
-    end,
-    infinite_loop().
-
-infinite_loop() ->
-    ?TIMER:sleep(1000),
-    infinite_loop().
-
 tcp_client_start() ->
-    erlang:display("Connecting...\n"),
-    Active = true,
-    case ?GEN_TCP:connect("www.example.com", 80, [{active, Active}]) of
+    case ?GEN_TCP:connect("www.example.com", 80, [{active, true}]) of
         {ok, Socket} ->
-            erlang:display({connected, Socket}),
+            ?IO:format("Connected to ~p from ~p~n", [peer_address(Socket), local_address(Socket)]),
             case ?GEN_TCP:send(Socket, "GET / HTTP/1.0\r\n\r\n") of
                 ok ->
-                    case Active of
-                        true -> active_receive_data();
-                        _ -> passive_receive_data(Socket)
-                    end;
+                    active_receive_data();
                 Error ->
-                    erlang:display(Error)
+                    ?IO:format("An error occurred sending a packet: ~p~n", [Error])
             end;
         Error ->
-            erlang:display(Error)
+            ?IO:format("An error occurred connecting: ~p~n", [Error])
     end.
 
 active_receive_data() ->
     receive
         {tcp_closed, _Socket} ->
-            erlang:display(closed),
+            ?IO:format("Connection closed.~n"),
             ok;
-        {tcp, _Socket, Packet} ->
-            erlang:display(Packet),
+        {tcp, Socket, Packet} ->
+            ?IO:format("Received ~p from ~p~n", [Packet, peer_address(Socket)]),
             active_receive_data()
     end.
 
-passive_receive_data(Socket) ->
-    case ?GEN_TCP:recv(Socket, 128) of
-        {error, closed} ->
-            ok;
-        {ok, Packet} ->
-            erlang:display(Packet),
-            passive_receive_data(Socket);
-        Error ->
-            erlang:display(Error)
-    end.
+local_address(Socket) ->
+    to_string(?INET:sockname(Socket)).
+
+peer_address(Socket) ->
+    to_string(?INET:peername(Socket)).
+
+to_string({{A,B,C,D}, Port}) ->
+    ?IO_LIB:format("~p.~p.~p.~p:~p", [A,B,C,D, Port]);
+to_string({A,B,C,D}) ->
+    ?IO_LIB:format("~p.~p.~p.~p", [A,B,C,D]).
