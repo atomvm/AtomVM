@@ -1657,7 +1657,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 break;
             }
 
-#ifndef AVM_NO_FP
+
             case OP_IS_FLOAT: {
                 int next_off = 1;
                 int label;
@@ -1668,11 +1668,16 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_float/2, label=%i, arg1=%lx\n", label, arg1);
 
+#ifndef AVM_NO_FP
                     if (term_is_float(arg1)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
                     }
+#else
+                    fprintf(stderr, "Warning: is_float/1 unsupported on this platform\n");
+                    i = POINTER_TO_II(mod->labels[label]);
+#endif
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -1684,7 +1689,6 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
                 break;
             }
-#endif
 
             case OP_IS_NUMBER: {
                 int next_off = 1;

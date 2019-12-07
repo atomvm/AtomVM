@@ -22,6 +22,8 @@
 -define(GEN_SERVER,     avm_gen_server).
 -define(GEN_STATEM,     avm_gen_statem).
 -define(INET,           avm_inet).
+-define(IO_LIB,         avm_io_lib).
+-define(IO,             avm_io).
 -define(GEN_UDP,        avm_gen_udp).
 -define(GEN_TCP,        avm_gen_tcp).
 -define(LISTS,          avm_lists).

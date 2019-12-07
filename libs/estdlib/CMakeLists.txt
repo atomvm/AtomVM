@@ -13,6 +13,8 @@ set(ERLANG_MODULES
     avm_gen_udp
     avm_gen_tcp
     avm_inet
+    avm_io_lib
+    avm_io
     avm_lists
     avm_proplists
     avm_string

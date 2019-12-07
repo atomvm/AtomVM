@@ -90,6 +90,18 @@ void term_display(FILE *fd, term t, const Context *ctx)
     } else if (term_is_pid(t)) {
         fprintf(fd, "<0.%i.0>", term_to_local_process_id(t));
 
+    } else if (term_is_function(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        Module *fun_module = (Module *) boxed_value[1];
+        uint32_t fun_index = boxed_value[2];
+        const char *format =
+        #ifdef __clang__
+                "#Fun<erl_eval.%lu.%llu>";
+        #else
+                "#Fun<erl_eval.%lu.%llu>";
+        #endif
+        fprintf(fd, format, fun_index, (unsigned long) fun_module);
+
     } else if (term_is_tuple(t)) {
         fputc('{', fd);
 

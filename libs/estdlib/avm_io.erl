@@ -16,29 +16,36 @@
 %   Free Software Foundation, Inc.,                                       %
 %   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-module(avm_io).
 
--define(ASSERT_MATCH(A, B), 
-    case etest:assert_match(A, B) of 
-        ok -> ok; 
-        fail -> 
-            erlang:display({failed_assert_match, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, A, B}), 
-            fail 
-    end
-).
--define(ASSERT_TRUE(C), 
-    case etest:assert_true(C) of 
-        ok -> ok; 
-        fail -> 
-            erlang:display({failed_assert_true, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, C}),
-            fail 
-    end
-).
--define(ASSERT_FAILURE(A, E), 
-    case etest:assert_failure(fun() -> A end, E) of 
-        ok -> ok; 
-        fail -> 
-            erlang:display({failed_assert_failure, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, E}),
-            fail 
-    end
-).
+-export([format/1, format/2]).
 
+-include("estdlib.hrl").
+
+%%-----------------------------------------------------------------------------
+%% @doc     Equivalent to format(Format, []).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec format(Format::string()) -> string().
+format(Format) when is_list(Format) ->
+    format(Format, []).
+
+%%-----------------------------------------------------------------------------
+%% @param   Format format string
+%% @param   Args format argument
+%% @returns string
+%% @doc     Format string and data to console.
+%%          See avm_io_lib:format/2 for information about
+%%          formatting capabilities.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec format(Format::string(), Args::list()) -> string().
+format(Format, Args) when is_list(Format) andalso is_list(Args) ->
+    Msg =
+        try
+            ?IO_LIB:format(Format, Args)
+        catch
+            _:_ ->
+                ?IO_LIB:format("Bad format!  Format: ~p Args: ~p~n", [Format, Args])
+        end,
+    console:puts(Msg).
