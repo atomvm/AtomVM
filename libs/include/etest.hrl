@@ -17,28 +17,28 @@
 %   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--define(ASSERT_MATCH(A, B), 
-    case etest:assert_match(A, B) of 
-        ok -> ok; 
-        fail -> 
-            erlang:display({failed_assert_match, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, A, B}), 
-            fail 
+-define(ASSERT_MATCH(A, B),
+    case etest:assert_match(A, B) of
+        ok -> ok;
+        fail ->
+            erlang:display({failed_assert_match, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, A, B}),
+            fail
     end
 ).
--define(ASSERT_TRUE(C), 
-    case etest:assert_true(C) of 
-        ok -> ok; 
-        fail -> 
+-define(ASSERT_TRUE(C),
+    case etest:assert_true(C) of
+        ok -> ok;
+        fail ->
             erlang:display({failed_assert_true, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, C}),
-            fail 
+            fail
     end
 ).
--define(ASSERT_FAILURE(A, E), 
-    case etest:assert_failure(fun() -> A end, E) of 
-        ok -> ok; 
-        fail -> 
+-define(ASSERT_FAILURE(A, E),
+    case etest:assert_failure(fun() -> A end, E) of
+        ok -> ok;
+        fail ->
             erlang:display({failed_assert_failure, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, E}),
-            fail 
+            fail
     end
 ).
 
