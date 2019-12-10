@@ -13,7 +13,7 @@ start() ->
     case network_fsm:wait_for_sta(Creds, 30000) of
         {ok, {Address, Netmask, Gateway}} ->
             ?IO:format(
-                "Acquired IP address: ~p Netmask: ~p Gateway: ~p~n", 
+                "Acquired IP address: ~p Netmask: ~p Gateway: ~p~n",
                 [to_string(Address), to_string(Netmask), to_string(Gateway)]
             ),
             tcp_client_start();

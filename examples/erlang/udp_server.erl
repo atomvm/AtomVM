@@ -16,7 +16,7 @@ start() ->
 active_loop() ->
     ?IO:format("Waiting to receive data...~n"),
     receive
-        {udp, _Socket, Address, Port, Packet} -> 
+        {udp, _Socket, Address, Port, Packet} ->
             ?IO:format("Received UDP packet ~p from ~p~n", [Packet, to_string({Address, Port})])
     end,
     active_loop().

@@ -17,7 +17,7 @@ start() ->
     case network_fsm:wait_for_sta(Creds, 30000) of
         {ok, {Address, Netmask, Gateway}} ->
             ?IO:format(
-                "Acquired IP address: ~p Netmask: ~p Gateway: ~p~n", 
+                "Acquired IP address: ~p Netmask: ~p Gateway: ~p~n",
                 [to_string(Address), to_string(Netmask), to_string(Gateway)]
             ),
             udp_server_start();
@@ -42,7 +42,7 @@ loop(Socket, Gpio, PinState) ->
     ?IO:format("Waiting to receive data...~n"),
     gpio:set_level(Gpio, ?PIN, PinState),
     receive
-        {udp, _Socket, Address, Port, Packet} -> 
+        {udp, _Socket, Address, Port, Packet} ->
             ?IO:format("Received UDP packet ~p from ~p~n", [Packet, to_string({Address, Port})])
     end,
     loop(Socket, Gpio, 1 - PinState).
