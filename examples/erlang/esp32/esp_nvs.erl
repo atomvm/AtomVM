@@ -1,6 +1,8 @@
 -module(esp_nvs).
 -export([start/0]).
 
+-include("estdlib.hrl").
+
 -record(
     state, {
         count = 0,
@@ -16,26 +18,11 @@ start() ->
         _ ->
             case erlang:binary_to_term(Bin) of
                 #state{count=Count} ->
-                    case esp:random() rem 100 of
-                        0 ->
-                            erlang:display(reformat),
-                            esp:nvs_reformat(),
-                            #state{};
-                        1 ->
-                            erlang:display(erase_all),
-                            esp:nvs_erase_all(?MODULE),
-                            #state{};
-                        2 ->
-                            erlang:display(erase_key),
-                            esp:nvs_erase_key(?MODULE, start),
-                            #state{};
-                        _ ->
-                            #state{count = Count + 1}
-                    end;
+                    #state{count = Count + 1};
                 _ ->
                     erlang:display({error, bad_value}),
                     #state{}
             end
     end,
-    erlang:display(State),
+    ?IO:format("Saving count ~p to NVS...~nReset device to increment.~n", [State#state.count]),
     esp:nvs_set_binary(?MODULE, starts, erlang:term_to_binary(State)).

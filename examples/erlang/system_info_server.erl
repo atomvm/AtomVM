@@ -19,7 +19,7 @@ start() ->
         ok ->
             wait_for_message();
         Error ->
-            erlang:display(Error)
+            ?IO:format("An error occurred starting network: ~p~n", [Error])
     end.
 
 wait_for_message() ->
@@ -28,12 +28,12 @@ wait_for_message() ->
     ],
     receive
         connected ->
-            erlang:display(connected);
+            ?IO:format("Connected~n");
         {ok, IpInfo} ->
-            erlang:display(IpInfo),
+            ?IO:format("Acquired IP address: ~p~n", [IpInfo]),
             http_server:start_server(8080, Router);
         disconnected ->
-            erlang:display(disconnected)
+            ?IO:format("Disonnected~n")
     after 15000 ->
         ok
     end,
@@ -61,7 +61,7 @@ handle_req("GET", ["processes", PidString, "info"], Conn) ->
     http_server:reply(Code, Body, Conn);
 
 handle_req(Method, Path, Conn) ->
-    erlang:display({Method, Path}),
+    ?IO:format("Method: ~p Path: ~p~n", [Method, Path]),
     Body = <<"<html><body><h1>Not Found</h1></body></html>">>,
     http_server:reply(404, Body, Conn).
 
@@ -86,7 +86,7 @@ proc_info_list(PidString) ->
     PidInteger = erlang:list_to_integer(PidString),
     Procs = erlang:processes(),
     Pid = ?LISTS:nth(PidInteger, Procs),
-    erlang:display(Pid),
+    ?IO:format("pid: ~p~n", [Pid]),
     [
         erlang:process_info(Pid, heap_size),
         erlang:process_info(Pid, stack_size),
