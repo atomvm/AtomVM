@@ -36,6 +36,7 @@ typedef term (*BifImpl2)(Context *ctx, term arg1, term arg2);
 
 typedef term (*GCBifImpl1)(Context *ctx, int live, term arg1);
 typedef term (*GCBifImpl2)(Context *ctx, int live, term arg1, term arg2);
+typedef term (*GCBifImpl3)(Context *ctx, int live, term arg1, term arg2, term arg3);
 
 typedef term (*NifImpl)(Context *ctx, int argc, term argv[]);
 
