@@ -61,10 +61,13 @@ term externalterm_to_term(const void *external_term, Context *ctx, int use_heap_
  * WARNING: This function may call the GC, which may render the input binary invalid.
  * @param ctx the context that owns the memory that will be allocated.
  * @param binary the binary
+ * @param bytes_read the number of bytes read from the input binary
+ * @param num_extra_terms the number of words (terms) to (possibly) allocate space for
+ * in the heap, prior to instantiating the destination term (may trigger GC).
  * @returns the term deserialized from the input term, or an invalid term, if
  * deserialization fails.
  */
-enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term binary);
+enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term binary, size_t *bytes_read, size_t num_extra_terms);
 
 /**
 * @brief Create a binary from a term.

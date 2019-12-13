@@ -131,14 +131,22 @@ void globalcontext_register_process(GlobalContext *glb, int atom_index, int loca
 int globalcontext_get_registered_process(GlobalContext *glb, int atom_index);
 
 /**
- * @brief Inserts an atom into the global atoms table
- *
- * @details Inserts an atom into the global atoms table and returns its id.
- * @param glb the global context.
- * @param atom_string the atom string that will be added to the global atoms table, it will not be copied so it must stay allocated and valid.
- * @returns newly added atom id or -1 in case of failure.
+ * @brief equivalent to globalcontext_insert_atom_maybe_copy(glb, atom_string, 0);
  */
 int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string);
+
+/**
+* @brief Inserts an atom into the global atoms table, making a copy of the supplied atom
+* string, if copy is non-zero.
+*
+* @details Inserts an atom into the global atoms table and returns its id.
+* @param glb the global context.
+* @param atom_string the atom string that will be added to the global atoms table, it will not be copied so it must stay allocated and valid.
+* @param copy if non-zero, make a copy of the input atom_string if the atom is not already in the table.  The table
+* assumes "ownership" of the allocated memory.
+* @returns newly added atom id or -1 in case of failure.
+*/
+int globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_string, int copy);
 
 /**
  * @brief   Returns the AtomString value of a term.

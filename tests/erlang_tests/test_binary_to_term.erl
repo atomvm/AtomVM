@@ -21,12 +21,36 @@ start() ->
     test_reverse("",            <<131,106>>),
     test_reverse("foobar",      <<131,107,0,6,102,111,111,98,97,114>>),
     test_reverse(":アトムＶＭ",  <<131,108,0,0,0,6,97,58,98,0,0,48,162,98,0,0,48,200,98,0,0,48,224,98,0,0,255,54,98,0,0,255,45,106>>),
+
+    {32768, 6} = erlang:binary_to_term(<<131,98,0,0,128,0, 127>>, [used]),
+    test_catentate_and_split([foo, bar, 128, {foo, bar}, [a,b,c, {d}]]),
     0.
 
 test_reverse(T, Interop) ->
     Bin = erlang:term_to_binary(T),
     %% erlang:display(Bin),
     Bin = Interop,
+    {X, Used} = erlang:binary_to_term(Bin, [used]),
+    Used = erlang:byte_size(Bin),
     X = erlang:binary_to_term(Bin),
     %% erlang:display(X),
     X = T.
+
+
+test_catentate_and_split(L) ->
+    Bins = [erlang:term_to_binary(E) || E <- L],
+    Bin = erlang:iolist_to_binary(Bins),
+    L2 = split(Bin, []),
+    L = L2.
+
+
+split(<<"">>, Accum) ->
+    reverse(Accum, []);
+split(Bin, Accum) ->
+    {T, Used} = erlang:binary_to_term(Bin, [used]),
+    Bin2 = binary:part(Bin, Used, erlang:byte_size(Bin) - Used),
+    split(Bin2, [T|Accum]).
+
+reverse([], Accum) -> Accum;
+reverse([H|T], Accum) ->
+    reverse(T, [H|Accum]).

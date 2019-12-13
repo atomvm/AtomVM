@@ -155,10 +155,25 @@ int globalcontext_get_registered_process(GlobalContext *glb, int atom_index)
 
 int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string)
 {
+    return globalcontext_insert_atom_maybe_copy(glb, atom_string, 0);
+}
+
+int globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_string, int copy)
+{
     struct AtomsHashTable *htable = glb->atoms_table;
 
     unsigned long atom_index = atomshashtable_get_value(htable, atom_string, ULONG_MAX);
     if (atom_index == ULONG_MAX) {
+        if (copy) {
+            uint8_t len = *((uint8_t *)atom_string);
+            uint8_t *buf = malloc(1 + len);
+            if (UNLIKELY(IS_NULL_PTR(buf))) {
+                fprintf(stderr, "Unable to allocate memory for atom string\n");
+                abort();
+            }
+            memcpy(buf, atom_string, 1 + len);
+            atom_string = buf;
+        }
         atom_index = htable->count;
         if (!atomshashtable_insert(htable, atom_string, atom_index)) {
             return -1;
