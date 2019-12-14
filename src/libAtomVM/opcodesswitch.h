@@ -2961,6 +2961,54 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 break;
             }
 
+            case OP_GC_BIF3: {
+                int next_off = 1;
+                int f_label;
+                DECODE_LABEL(f_label, code, i, next_off, next_off);
+                int live;
+                DECODE_INTEGER(live, code, i, next_off, next_off);
+                int bif;
+                DECODE_INTEGER(bif, code, i, next_off, next_off); //s?
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, code, i, next_off, next_off);
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, code, i, next_off, next_off);
+                term arg3;
+                DECODE_COMPACT_TERM(arg3, code, i, next_off, next_off);
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("gc_bif3/7 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, arg2=0x%lx, arg3=0x%lx, dest=%c%i\n", f_label, live, bif, arg1, arg2, arg3, T_DEST_REG(dreg_type, dreg));
+
+                    GCBifImpl3 func = (GCBifImpl3) mod->imported_funcs[bif].bif;
+                    term ret = func(ctx, live, arg1, arg2, arg3);
+                    if (UNLIKELY(term_is_invalid_term(ret))) {
+                        RAISE_EXCEPTION();
+                    }
+
+                    WRITE_REGISTER(dreg_type, dreg, ret);
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("gc_bif2/6\n");
+
+                    UNUSED(f_label)
+                    UNUSED(live)
+                    UNUSED(bif)
+                    UNUSED(arg1)
+                    UNUSED(arg2)
+                    UNUSED(arg3)
+                    UNUSED(dreg)
+                #endif
+
+                UNUSED(f_label)
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
             case OP_TRIM: {
                 int next_offset = 1;
                 int n_words;
