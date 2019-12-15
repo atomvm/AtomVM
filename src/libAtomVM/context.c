@@ -90,6 +90,9 @@ Context *context_new(GlobalContext *glb)
 
     ctx->platform_data = NULL;
 
+    ctx->bs = term_invalid_term();
+    ctx->bs_offset = 0;
+
     return ctx;
 }
 

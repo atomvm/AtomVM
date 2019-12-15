@@ -104,6 +104,9 @@ struct Context
     enum ContextFlags flags;
 
     void *platform_data;
+
+    term bs;
+    size_t bs_offset;
 };
 
 #ifndef TYPEDEF_CONTEXT

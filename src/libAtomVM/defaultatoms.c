@@ -45,6 +45,9 @@ static const char *const throw_atom = "\x5" "throw";
 static const char *const low_entropy_atom = "\xB" "low_entropy";
 static const char *const unsupported_atom = "\xB" "unsupported";
 static const char *const used_atom = "\x4" "used";
+static const char *const all_atom = "\x3" "all";
+static const char *const start_atom = "\x5" "start";
+
 
 void defaultatoms_init(GlobalContext *glb)
 {
@@ -94,6 +97,8 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, low_entropy_atom) == LOW_ENTROPY_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, unsupported_atom) == UNSUPPORTED_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, used_atom) == USED_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, all_atom) == ALL_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, start_atom) == START_ATOM_INDEX;
 
     if (!ok) {
         abort();

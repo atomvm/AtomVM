@@ -22,6 +22,7 @@ set(HEADER_FILES
     mailbox.h
     memory.h
     module.h
+    opcodes.h
     opcodesswitch.h
     overflow_helpers.h
     network.h
