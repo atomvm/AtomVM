@@ -6,7 +6,7 @@
 -type month() :: 1..12.
 -type day() :: 1..31.
 -type gregorian_days() :: integer().
--type day_of_week() :: 0..6.
+-type day_of_week() :: 1..7.
 
 -spec date_to_gregorian_days({year(), month(), day()}) -> gregorian_days().
 date_to_gregorian_days({Y, M, D}) ->
@@ -40,4 +40,4 @@ day_of_the_week({Y, M, D}) ->
 
 -spec day_of_the_week(year(), month(), day()) -> day_of_week().
 day_of_the_week(Y, M, D) ->
-    (date_to_gregorian_days(Y, M, D) + 6) rem 7.
+    (date_to_gregorian_days(Y, M, D) + 5) rem 7 + 1.
