@@ -76,7 +76,7 @@ void network_driver_start(Context *ctx, term_ref pid, term_ref ref, term config)
     if (!term_is_nil(sta_config)) {
         term ssid_value = interop_proplist_get_value(sta_config, SSID_ATOM);
         term pass_value = interop_proplist_get_value(sta_config, PSK_ATOM);
-        term sntp_value = interop_proplist_get_value(sta_config, SNTP_ATOM);
+        term sntp_value = interop_proplist_get_value(config, SNTP_ATOM);
 
         int ok = 0;
         char *ssid = interop_term_to_string(ssid_value, &ok);
@@ -134,8 +134,9 @@ void network_driver_start(Context *ctx, term_ref pid, term_ref ref, term config)
 
         if (sntp_value != term_nil()) {
             int ok;
-            char *sntp = interop_list_to_string(sntp_value, &ok);
+            char *sntp = interop_term_to_string(sntp_value, &ok);
             if (LIKELY(ok)) {
+                // do not free(sntp)
                 sntp_setoperatingmode(SNTP_OPMODE_POLL);
                 sntp_setservername(0, sntp);
                 sntp_init();
