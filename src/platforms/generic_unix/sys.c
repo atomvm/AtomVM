@@ -247,6 +247,11 @@ uint32_t sys_millis()
     return millis;
 }
 
+void sys_sleep(GlobalContext *glb)
+{
+    UNUSED(glb);
+}
+
 static void alarm_handler(int sig)
 {
     millis++;

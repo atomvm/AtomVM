@@ -59,6 +59,11 @@ Context *scheduler_wait(GlobalContext *global, Context *c)
         update_timer_wheel(global);
         sys_consume_pending_events(global);
         scheduler_execute_native_handlers(global);
+
+        update_timer_wheel(global);
+        if (list_is_empty(&global->ready_processes)) {
+            sys_sleep(global);
+        }
     } while (list_is_empty(&global->ready_processes));
 
     struct ListHead *next_ready = list_first(&global->ready_processes);

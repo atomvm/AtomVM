@@ -89,4 +89,6 @@ void sys_stop_millis_timer();
 
 uint32_t sys_millis();
 
+void sys_sleep(GlobalContext *glb);
+
 #endif

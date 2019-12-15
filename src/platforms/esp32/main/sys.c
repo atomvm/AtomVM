@@ -185,3 +185,10 @@ term sys_get_info(Context *ctx, term key)
     }
     return UNDEFINED_ATOM;
 }
+
+void sys_sleep(GlobalContext *glb)
+{
+    UNUSED(glb);
+
+    vTaskDelay(1);
+}
