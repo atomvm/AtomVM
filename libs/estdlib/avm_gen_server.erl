@@ -74,19 +74,15 @@
 %%-----------------------------------------------------------------------------
 -spec start(ServerName::{local, Name::atom()}, Module::module(), Args::term(), Options::options()) -> {ok, pid()} | {error, Reason::term()}.
 start({local, Name}, Module, Args, Options) when is_atom(Name) ->
-    ?LOG_DEBUG({{local, Name}, Module, Args, Options}),
     case erlang:whereis(Name) of
         undefined ->
             Response = start(Module, Args, [{name, Name} | Options]),
-            ?LOG_DEBUG({start_response, Response}),
             case Response of
                 {ok, Pid} ->
-                    ?LOG_DEBUG({registering, Name, Pid}),
                     erlang:register(Name, Pid),
                     ok;
                 _ -> ok
             end,
-            ?LOG_DEBUG({returning_response, Response}),
             Response;
         _Pid ->
             {error, already_started}
@@ -106,7 +102,6 @@ start({local, Name}, Module, Args, Options) when is_atom(Name) ->
 %%-----------------------------------------------------------------------------
 -spec start(Module::module(), Args::term(), Options::options()) -> {ok, pid()} | {error, Reason::term()}.
 start(Module, Args, Options) ->
-    ?LOG_DEBUG({Module, Args, Options}),
     case Module:init(Args) of
         {ok, ModState} ->
             State = #state{
@@ -114,9 +109,7 @@ start(Module, Args, Options) ->
                 mod = Module,
                 mod_state = ModState
             },
-            ?LOG_DEBUG({spawning_loop, State}),
             Pid = spawn(?MODULE, loop, [State]),
-            ?LOG_DEBUG(ok),
             {ok, Pid};
         {stop, Reason} ->
             {error, {init_stopped, Reason}};
@@ -202,7 +195,6 @@ call(Pid, Request, Timeout) when is_pid(Pid) ->
 %%-----------------------------------------------------------------------------
 -spec cast(ServerRef::server_ref(), Request::term()) -> ok | {error, Reason::term()}.
 cast(Name, Request) when is_atom(Name) ->
-    ?LOG_DEBUG({cast, Name, Request}),
     case erlang:whereis(Name) of
         undefined ->
             {error, undefined};
@@ -210,7 +202,6 @@ cast(Name, Request) when is_atom(Name) ->
             cast(Pid, Request)
     end;
 cast(Pid, Request) when is_pid(Pid) ->
-    ?LOG_DEBUG({cast, Pid, Request}),
     Pid ! {'$cast', Request},
     ok.
 
@@ -227,7 +218,6 @@ cast(Pid, Request) when is_pid(Pid) ->
 %%-----------------------------------------------------------------------------
 -spec reply(Client::term(), Reply::term) -> term().
 reply({Pid, Ref} = _Client, Reply) ->
-    ?LOG_DEBUG({reply, {{Pid, Ref}, Reply}}),
     Pid ! {Ref, Reply}, ok.
 
 
@@ -237,12 +227,9 @@ reply({Pid, Ref} = _Client, Reply) ->
 
 %% @private
 call_internal(Pid, Ref, Msg, Timeout) ->
-    ?LOG_DEBUG({call_internal, Pid, Ref, Msg, Timeout}),
     Pid ! Msg,
-    ?LOG_DEBUG({waiting, Ref, Timeout}),
     receive
         {Ref, Reply} ->
-        ?LOG_DEBUG({reply, Reply}),
         Reply
     after Timeout ->
         %% throw(timeout)
@@ -251,16 +238,13 @@ call_internal(Pid, Ref, Msg, Timeout) ->
 
 %% @private
 loop(#state{mod=Mod, mod_state=ModState} = State) ->
-    ?LOG_DEBUG({loop, State}),
     receive
         {'$call', Pid, Ref, Request} ->
-            ?LOG_DEBUG({'$call', Pid, Ref, Request}),
             case Mod:handle_call(Request, {Pid, Ref}, ModState) of
                 {reply, Reply, NewModState} ->
                     Pid ! {Ref, Reply},
                     loop(State#state{mod_state=NewModState});
                 {noreply, NewModState} ->
-                    ?LOG_DEBUG({noreply, NewModState}),
                     loop(State#state{mod_state=NewModState});
                 {stop, Reason, Reply, NewModState} ->
                      Pid ! {Ref, Reply},
@@ -271,7 +255,6 @@ loop(#state{mod=Mod, mod_state=ModState} = State) ->
                     do_terminate(State, {error, unexpected_reply}, ModState)
             end;
         {'$cast', Request} ->
-            ?LOG_DEBUG({'$cast', Request}),
             case Mod:handle_cast(Request, ModState) of
                 {noreply, NewModState} ->
                     loop(State#state{mod_state=NewModState});
@@ -281,11 +264,9 @@ loop(#state{mod=Mod, mod_state=ModState} = State) ->
                     do_terminate(State, {error, unexpected_reply}, ModState)
             end;
         {'$stop', Pid, Ref, Reason} ->
-            ?LOG_DEBUG({'$stop', Pid, Ref, Reason}),
             do_terminate(State, Reason, ModState),
             Pid ! {Ref, ok};
         Info ->
-            ?LOG_DEBUG({'Info', Info}),
             case Mod:handle_info(Info, ModState) of
                 {noreply, NewModState} ->
                     loop(State#state{mod_state=NewModState});

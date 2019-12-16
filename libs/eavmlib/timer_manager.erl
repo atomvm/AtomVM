@@ -38,7 +38,6 @@
 
 -spec start() -> {ok, Pid::pid()} | {error, Reason::term()}.
 start() ->
-    ?LOG_DEBUG(start),
     ?GEN_SERVER:start({local, ?SERVER_NAME}, ?MODULE, [], []).
 
 %%-----------------------------------------------------------------------------
@@ -52,7 +51,6 @@ start() ->
 %%-----------------------------------------------------------------------------
 -spec start_timer(Time::non_neg_integer(), Dest::pid(), Msg::term()) -> TimerRef::reference().
 start_timer(Time, Dest, Msg) ->
-    ?LOG_DEBUG({start_timer, Time, Dest, Msg}),
     start(),
     ?GEN_SERVER:call(?SERVER_NAME, {Time, Dest, Msg}).
 
@@ -70,13 +68,11 @@ start_timer(Time, Dest, Msg) ->
 %%-----------------------------------------------------------------------------
 -spec cancel_timer(TimerRef::reference()) -> ok.
 cancel_timer(TimerRef) ->
-    ?LOG_DEBUG({cancel_timer, TimerRef}),
     start(),
     ?GEN_SERVER:call(?SERVER_NAME, {cancel, TimerRef}).
 
 -spec get_timer_refs() -> [reference()].
 get_timer_refs() ->
-    ?LOG_DEBUG(get_timer_refs),
     start(),
     ?GEN_SERVER:call(?SERVER_NAME, get_timer_refs).
 
@@ -105,10 +101,8 @@ init([]) ->
 
 %% @hidden
 handle_call(get_timer_refs, _From, #state{timers=Timers} = State) ->
-    ?LOG_DEBUG({handle_call, get_timer_refs, State}),
     {reply, [TimerRef || {TimerRef, _Pid} <- Timers], State};
 handle_call({cancel, TimerRef}, From, #state{timers=Timers} = State) ->
-    ?LOG_DEBUG({handle_call, cancel, State}),
     case ?LISTS:keyfind(TimerRef, 1, Timers) of
         false ->
             {reply, false, State};
@@ -117,7 +111,6 @@ handle_call({cancel, TimerRef}, From, #state{timers=Timers} = State) ->
             {noreply, State}
     end;
 handle_call({Time, Dest, Msg}, _From, #state{timers=Timers} = State) ->
-    ?LOG_DEBUG({handle_call, start_timer, State}),
     {TimerRef, Pid} = do_start_timer(Time, Dest, Msg),
     {reply, TimerRef, State#state{timers=[{TimerRef, Pid} | Timers]}}.
 
@@ -127,7 +120,6 @@ handle_cast(_Request, State) ->
 
 %% @hidden
 handle_info({finished, TimerRef}, #state{timers=Timers} = State) ->
-    ?LOG_DEBUG({handle_info, finished, State}),
     {noreply, State#state{timers=?LISTS:keydelete(TimerRef, 1, Timers)}}.
 
 %% @hidden
@@ -146,14 +138,11 @@ do_start_timer(Time, Dest, Msg) ->
 
 %% @private
 run_timer(MgrPid, Time, TimerRef, Dest, Msg) ->
-    ?LOG_DEBUG({run_timer, [MgrPid, Time, TimerRef, Dest, Msg]}),
     Start = erlang:timestamp(),
     receive
         {cancel, From} ->
-            ?LOG_DEBUG({run_timer, received_cancel, From}),
             ?GEN_SERVER:reply(From, Time - timestamp_util:delta_ms(erlang:timestamp(), Start))
     after Time ->
-        ?LOG_DEBUG({run_timer, timed_out, Time}),
         Dest ! {timeout, TimerRef, Msg}
     end,
     MgrPid ! {finished, TimerRef}.

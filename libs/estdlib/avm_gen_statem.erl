@@ -75,7 +75,6 @@
 %%-----------------------------------------------------------------------------
 -spec start(ServerName::{local, Name::atom()}, Module::module(), Args::term(), Options::options()) -> {ok, pid()} | {error, Reason::term()}.
 start({local, Name} = ServerName, Module, Args, Options) when is_atom(Name) ->
-    ?LOG_DEBUG({start, ServerName, Module, Args, Options}),
     ?GEN_SERVER:start(ServerName, ?MODULE, {Module, Args}, Options).
 
 %%-----------------------------------------------------------------------------
@@ -92,7 +91,6 @@ start({local, Name} = ServerName, Module, Args, Options) when is_atom(Name) ->
 %%-----------------------------------------------------------------------------
 -spec start(Module::module(), Args::term(), Options::options()) -> {ok, pid()} | {error, Reason::term()}.
 start(Module, Args, Options) ->
-    ?LOG_DEBUG({start, Module, Args, Options}),
     ?GEN_SERVER:start(?MODULE, {Module, Args}, Options).
 
 
@@ -103,7 +101,6 @@ start(Module, Args, Options) ->
 %%-----------------------------------------------------------------------------
 -spec stop(ServerRef::server_ref()) -> ok | {error, Reason::term()}.
 stop(ServerRef) ->
-    ?LOG_DEBUG({stop, ServerRef}),
     ?GEN_SERVER:stop(ServerRef).
 
 %%-----------------------------------------------------------------------------
@@ -118,7 +115,6 @@ stop(ServerRef) ->
 %%-----------------------------------------------------------------------------
 -spec stop(ServerRef::server_ref(), Reason::term(), Timeout::non_neg_integer() | infinity) -> ok | {error, Reason::term()}.
 stop(ServerRef, Reason, Timeout) ->
-    ?LOG_DEBUG({stop, ServerRef, Reason, Timeout}),
     ?GEN_SERVER:stop(ServerRef, Reason, Timeout).
 
 %%-----------------------------------------------------------------------------
@@ -144,7 +140,6 @@ call(ServerRef, Request) ->
 %%-----------------------------------------------------------------------------
 -spec call(ServerRef::server_ref(), Request::term(), Timeout::timeout()) -> Reply::term() | {error, Reason::term()}.
 call(ServerRef, Request, Timeout) ->
-    ?LOG_DEBUG({call, ServerRef, Request, Timeout}),
     ?GEN_SERVER:call(ServerRef, Request, Timeout).
 
 %%-----------------------------------------------------------------------------
@@ -158,7 +153,6 @@ call(ServerRef, Request, Timeout) ->
 %% @end
 %%-----------------------------------------------------------------------------
 cast(ServerRef, Request) ->
-    ?LOG_DEBUG({cast, ServerRef, Request}),
     ?GEN_SERVER:cast(ServerRef, Request).
 
 %%-----------------------------------------------------------------------------
@@ -173,7 +167,6 @@ cast(ServerRef, Request) ->
 %% @end
 %%-----------------------------------------------------------------------------
 reply(Client, Reply) ->
-    ?LOG_DEBUG({reply, Client, Reply}),
     ?GEN_SERVER:reply(Client, Reply).
 
 %%
@@ -197,26 +190,22 @@ init({Module, Args}) ->
 
 %% @hidden
 handle_call(Request, From, State) ->
-    ?LOG_DEBUG({handle_call, Request, From, State}),
     do_handle_state({call, From}, Request, State).
 
 
 %% @hidden
 handle_cast(Request, State) ->
-    ?LOG_DEBUG({handle_cast, Request, State}),
     do_handle_state(cast, Request, State).
 
 
 %% @hidden
 handle_info({timeout, _TimerRef, {state_timeout, State, Msg}}, #state{current_state=CurrentState} = State) ->
-    ?LOG_DEBUG({handle_info, {state_timeout, CurrentState, Msg}, State}),
     case State of
         CurrentState ->
             do_handle_state(state_timeout, Msg, State);
         _ -> ok
     end;
 handle_info(Request, State) ->
-    ?LOG_DEBUG({handle_info, Request, State}),
     do_handle_state(info, Request, State).
 
 
@@ -231,13 +220,10 @@ terminate(Reason, #state{mod=Module, current_state=CurrentState, data=Data} = _S
 
 %% @private
 do_handle_state(EventType, Request, #state{mod=Module, current_state=CurrentState, data=Data} = State) ->
-    ?LOG_DEBUG({do_handle_state, [EventType, Request, State]}),
     case Module:CurrentState(EventType, Request, Data) of
         {next_state, NextState, NewData} ->
-            maybe_log_state_transition(CurrentState, NextState),
             {noreply, State#state{current_state=NextState, data=NewData}};
         {next_state, NextState, NewData, Actions} ->
-            maybe_log_state_transition(CurrentState, NextState),
             handle_actions(Actions, [{current_state, CurrentState}, {next_state, NextState}]),
             {noreply, State#state{current_state=NextState, data=NewData}};
         {stop, Reason} ->
@@ -256,22 +242,12 @@ do_handle_state(EventType, Request, #state{mod=Module, current_state=CurrentStat
 
 %% @private
 handle_actions([], _Context) ->
-    ?LOG_DEBUG({handle_actions, []}),
     ok;
 handle_actions([{reply, From, Reply} | T], Context) ->
-    ?LOG_DEBUG({handle_actions, From, Reply, T, Context}),
     reply(From, Reply),
     handle_actions(T, Context);
 handle_actions([{state_timeout, Timeout, Msg} | T], Context) ->
-    ?LOG_DEBUG({handle_actions, state_timeout}),
     timer_manager:start_timer(Timeout, self(), {state_timeout, ?PROPLISTS:get_value(next_state, Context), Msg}),
     handle_actions(T, Context);
 handle_actions([_ | T], Context) ->
-    ?LOG_DEBUG({handle_actions, rest, T}),
     handle_actions(T, Context).
-
-%% @private
-maybe_log_state_transition(CurrentState, CurrentState) ->
-    ok;
-maybe_log_state_transition(CurrentState, NextState) ->
-    ?LOG_DEBUG({state_transition, CurrentState, NextState}).

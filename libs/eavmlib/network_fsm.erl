@@ -121,7 +121,6 @@ wait_for_sta(Creds, Timeout) ->
 %%-----------------------------------------------------------------------------
 -spec start(Config::network_config()) -> ok | {error, Reason::term()}.
 start(Config) ->
-    ?LOG_DEBUG({start, Config}),
     case ?GEN_STATEM:start({local, ?MODULE}, ?MODULE, Config, []) of
         {ok, Pid} ->
             ?GEN_STATEM:call(Pid, start);
@@ -169,20 +168,17 @@ initial({call, From}, start, #data{config=Config} = Data) ->
 %% wait_for_sta_connected state
 %%-----------------------------------------------------------------------------
 
-wait_for_sta_connected(info, {Ref, sta_connected} = Msg, #data{ref=Ref, config=Config} = Data) ->
-    ?LOG_DEBUG({wait_for_sta_connected, [info, Msg, Data]}),
+wait_for_sta_connected(info, {Ref, sta_connected} = _Msg, #data{ref=Ref, config=Config} = Data) ->
     maybe_sta_connected_callback(Config),
     {next_state, wait_for_sta_got_ip, Data};
 
 %% disconnected; likely an authn failure
-wait_for_sta_connected(info, {Ref, sta_disconnected} = Msg, #data{ref=Ref, config=Config} = Data) ->
-    ?LOG_DEBUG({wait_for_sta_connected, [info, Msg, Data]}),
+wait_for_sta_connected(info, {Ref, sta_disconnected} = _Msg, #data{ref=Ref, config=Config} = Data) ->
     maybe_sta_disconnected_callback(Config),
     {next_state, wait_for_sta_connected, Data};
 
 % catch-all
 wait_for_sta_connected(EventType, Msg, Data) ->
-    ?LOG_DEBUG({wait_for_sta_connected, [EventType, Msg, Data]}),
     {stop, {unexpected_msg, wait_for_sta_connected, EventType, Msg}, Data}.
 
 
@@ -191,20 +187,17 @@ wait_for_sta_connected(EventType, Msg, Data) ->
 %%-----------------------------------------------------------------------------
 
 %% disconnected; likely an authn failure
-wait_for_sta_got_ip(info, {Ref, sta_disconnected} = Msg, #data{ref=Ref, config=Config} = Data) ->
-    ?LOG_DEBUG({wait_for_sta_got_ip, [info, Msg, Data]}),
+wait_for_sta_got_ip(info, {Ref, sta_disconnected} = _Msg, #data{ref=Ref, config=Config} = Data) ->
     maybe_sta_disconnected_callback(Config),
     {next_state, wait_for_sta_connected, Data};
 
 %% got an ip!
-wait_for_sta_got_ip(info, {Ref, {sta_got_ip, IpInfo}} = Msg, #data{ref=Ref, config=Config} = Data) ->
-    ?LOG_DEBUG({wait_for_sta_got_ip, [info, Msg, Data]}),
+wait_for_sta_got_ip(info, {Ref, {sta_got_ip, IpInfo}} = _Msg, #data{ref=Ref, config=Config} = Data) ->
     maybe_sta_got_ip_callback(Config, IpInfo),
     {next_state, sta_got_ip, Data#data{sta_ip_info=IpInfo}};
 
 % catch-all
 wait_for_sta_got_ip(EventType, Msg, Data) ->
-    ?LOG_DEBUG({wait_for_sta_got_ip, [EventType, Msg, Data]}),
     {stop, {unexpected_msg, wait_for_sta_got_ip, EventType, Msg}, Data}.
 
 
@@ -214,18 +207,15 @@ wait_for_sta_got_ip(EventType, Msg, Data) ->
 
 %% @hidden
 sta_got_ip({call, From}, get_ip, #data{sta_ip_info=IpInfo} = Data) ->
-    ?LOG_DEBUG({sta_got_ip, [{call, From}, get_ip, Data]}),
     {next_state, sta_got_ip, Data, [{reply, From, {ok, IpInfo}}]};
 
 %% disconnected; likely an authn failure
-sta_got_ip(info, {Ref, sta_disconnected} = Msg, #data{ref=Ref, config=Config} = Data) ->
-    ?LOG_DEBUG({sta_got_ip, [info, Msg, Data]}),
+sta_got_ip(info, {Ref, sta_disconnected} = _Msg, #data{ref=Ref, config=Config} = Data) ->
     maybe_sta_disconnected_callback(Config),
     {next_state, wait_for_sta_connected, Data#data{sta_ip_info=undefined}};
 
 % catch-all
 sta_got_ip(EventType, Msg, Data) ->
-    ?LOG_DEBUG({sta_got_ip, [EventType, Msg, Data]}),
     {stop, {unexpected_msg, sta_got_ip, EventType, Msg}, Data}.
 
 
@@ -302,7 +292,6 @@ maybe_callback1({Key, Arg} = Msg, Config) ->
 
 %% @private
 start_network(Port, Ref, Config) ->
-    ?LOG_DEBUG({sending_to_port, Port, {self(), Ref, {start, Config}}}),
     Port ! {self(), Ref, {start, Config}},
     receive
         {Ref, Msg} -> Msg

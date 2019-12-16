@@ -28,7 +28,13 @@
 %%-----------------------------------------------------------------------------
 -module(logger).
 
--export([start/0, start/1, log/3, get_levels/0, set_levels/1, get_filter/0, set_filter/1, stop/0]).
+-export([
+    start/0, start/1, log/3,
+    get_levels/0, set_levels/1,
+    get_filter/0, set_filter/1,
+    get_sinks/0, set_sinks/1,
+    stop/0
+]).
 -export([loop/1, console_log/1]).
 
 -include("estdlib.hrl").
@@ -42,6 +48,7 @@
     Module::module(), Function::atom(), Arity::non_neg_integer(), Line::non_neg_integer()
 }.
 -type level() :: debug | info | warning | error.
+-type sink() :: {atom(), atom()}.
 -type year() :: integer().
 -type month() :: 1..12.
 -type day() :: 1..31.
@@ -49,12 +56,13 @@
 -type minute() :: 0..59.
 -type second() :: 0..59.
 -type timestamp() :: {year(), month(), day(), hour(), minute(), second()}.
--type log_request() :: {location(), timestamp(), pid(), level(), term()}.
+-type msg_format() :: {string(), list(term())}.
+-type log_request() :: {location(), timestamp(), pid(), level(), msg_format()}.
 
 -type config_item() :: {levels, [level()]}.
 -type config() :: [config_item()].
 
--define(DEFAULT_CONFIG, [{levels, [info, warning, error]}, {filter, []}, {sink, {?MODULE, console_log}}]).
+-define(DEFAULT_CONFIG, [{levels, [info, warning, error]}, {filter, []}, {sinks, [{?MODULE, console_log}]}]).
 
 %%-----------------------------------------------------------------------------
 %% @equiv   start([{levels, [info, warning, error]}])
@@ -110,10 +118,10 @@ stop() ->
 %%          calling this function directly.
 %% @end
 %%-----------------------------------------------------------------------------
--spec log(Location::location(), Level::level(), Msg::term()) -> ok.
-log(Location, Level, Msg) ->
+-spec log(Location::location(), Level::level(), MsgFormat::{Format::string(), Args::list(term())}) -> ok.
+log(Location, Level, MsgFormat) ->
     {ok, Pid} = maybe_start(whereis(?MODULE)),
-    Pid ! {Location, erlang:universaltime(), self(), Level, Msg},
+    Pid ! {Location, erlang:universaltime(), self(), Level, MsgFormat},
     ok.
 
 %%-----------------------------------------------------------------------------
@@ -178,10 +186,56 @@ get_filter() ->
         {error, timeout}
     end.
 
+%%-----------------------------------------------------------------------------
+%% @param   Sinks the list of sinks to set
+%% @return  ok
+%% @doc     Set the sinks in the logger.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_sinks(Sinks::[sink()]) -> ok.
+set_sinks(Sinks) ->
+    {ok, Pid} = maybe_start(whereis(?MODULE)),
+    Pid ! {set_sinks, Sinks},
+    ok.
+
+%%-----------------------------------------------------------------------------
+%% @return  the current list of sinks set in the logger
+%% @doc     Get the current sinks in the logger.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_sinks() -> {ok, Sinks::[sink()]} | {error, timeout}.
+get_sinks() ->
+    {ok, Pid} = maybe_start(whereis(?MODULE)),
+    Ref = erlang:make_ref(),
+    Pid ! {get_sinks, Ref, self()},
+    receive
+        {Ref, Sinks} ->
+            {ok, Sinks}
+    after 5000 ->
+        {error, timeout}
+    end.
+
 %% @hidden
 -spec console_log(Request::log_request()) -> ok.
 console_log(Request) ->
-    erlang:display(Request).
+    {Location, Timestamp, Pid, Level, {Format, Args}} = Request,
+    TimestampStr = make_timestamp(Timestamp),
+    MFALStr = make_location(Location),
+    PidLevelStr = ?IO_LIB:format("~p ~p", [Pid, Level]),
+    MsgStr = ?IO_LIB:format(Format, Args),
+    ?IO:format(TimestampStr ++ " " ++ MFALStr ++ " " ++ PidLevelStr ++ ": " ++ MsgStr ++ "~n").
+
+make_timestamp(Timestamp) ->
+    {{Year, Month, Day}, {Hour, Minute, Second}} = Timestamp,
+    ?IO_LIB:format("~p:~p:~pT~p:~p:~p", [
+        Year, Month, Day, Hour, Minute, Second
+    ]).
+
+make_location(Location) ->
+    {Module, Function, Arity, Line} = Location,
+    ?IO_LIB:format("~p:~p/~p:~p", [
+        Module, Function, Arity, Line
+    ]).
 
 %%
 %% Internal operations
@@ -197,7 +251,7 @@ loop(#state{pid=StartingPid, config=Config} = State0) ->
     end,
     Levels = ?PROPLISTS:get_value(levels, Config, []),
     Filter = ?PROPLISTS:get_value(filter, Config, []),
-    Sink   = ?PROPLISTS:get_value(sink, Config, {foo, bar}),
+    Sinks   = ?PROPLISTS:get_value(sinks, Config, []),
     receive
         {get_levels, Ref, Pid} ->
             Pid ! {Ref, Levels},
@@ -205,12 +259,17 @@ loop(#state{pid=StartingPid, config=Config} = State0) ->
         {get_filter, Ref, Pid} ->
             Pid ! {Ref, Filter},
             loop(State);
+        {get_sinks, Ref, Pid} ->
+            Pid ! {Ref, Sinks},
+            loop(State);
         {set_levels, NewLevels} ->
             loop(State#state{config=[{levels, NewLevels} | ?LISTS:keydelete(levels, 1, Config)]});
         {set_filter, NewFilter} ->
             loop(State#state{config=[{filter, NewFilter} | ?LISTS:keydelete(filter, 1, Config)]});
-        {_Location, _Time, _Pid, Level, _Msg} = Request ->
-            do_log(Sink, Request, Level, Levels, Filter),
+        {set_sinks, NewSinks} ->
+            loop(State#state{config=[{sinks, NewSinks} | ?LISTS:keydelete(sinks, 1, Config)]});
+        {_Location, _Time, _Pid, Level, _MsgFormat} = Request ->
+            maybe_do_log(Sinks, Request, Level, Levels, Filter),
             loop(State);
         stop ->
             ok;
@@ -225,12 +284,12 @@ maybe_start(Pid) ->
     {ok, Pid}.
 
 %% @private
-do_log(_Sink, _Request, _Level, undefined, _Filter) ->
+maybe_do_log(_Sinks, _Request, _Level, undefined, _Filter) ->
     ok;
-do_log(Sink, {Location, _Time, _Pid, _Level, _Msg} = Request, Level, Levels, Filter) ->
+maybe_do_log(Sinks, {Location, _Time, _Pid, _Level, _MsgFormat} = Request, Level, Levels, Filter) ->
     case match_filter(Location, Filter) of
         true ->
-            do_log(Sink, Request, Level, Levels);
+            do_log_sinks(Sinks, Request, Level, Levels);
         _ ->
             ok
     end.
@@ -241,11 +300,25 @@ match_filter(_Location, []) ->
 match_filter({Module, _Function, _Arity, _Line}, Filter) ->
     ?LISTS:member(Module, Filter).
 
+do_log_sinks([], _Request, _Level, _Levels) ->
+    ok;
+do_log_sinks([Sink|Rest], Request, Level, Levels) ->
+    do_log_sink(Sink, Request, Level, Levels),
+    do_log_sinks(Rest, Request, Level, Levels).
+
 %% @private
-do_log({Module, Function} = _Sink, Request, Level, Levels) ->
+do_log_sink({Module, Function} = _Sink, Request, Level, Levels) ->
     case ?LISTS:member(Level, Levels) of
         true ->
-            Module:Function(Request);
+            try
+                Module:Function(Request)
+            catch
+                _:_ ->
+                    ?IO:format(
+                        "An error occurred attempting to log to sink ~p:~p/1.  request=~p~n",
+                        [Module, Function, Request]
+                    )
+            end;
         _ ->
             ok
     end.
