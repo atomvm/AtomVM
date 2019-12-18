@@ -73,3 +73,4 @@ erlang:fun_to_list/1, &fun_to_list_nif
 erlang:!/2, &send_nif
 erts_debug:flat_size/1, &flat_size_nif
 atomvm:read_priv/2, &atomvm_read_priv_nif
+console:print/1, &console_print_nif

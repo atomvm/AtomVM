@@ -23,7 +23,7 @@
 %%-----------------------------------------------------------------------------
 -module(console).
 
--export([start/0, puts/1, puts/2, flush/0, flush/1]).
+-export([start/0, puts/1, puts/2, flush/0, flush/1, print/1]).
 
 %%-----------------------------------------------------------------------------
 %% @param   String the string data to write to the console
@@ -60,6 +60,19 @@ flush() ->
 -spec flush(pid()) -> ok.
 flush(Console) ->
     call(Console, flush).
+    
+%%-----------------------------------------------------------------------------
+%% @param   String the string data to write to the console
+%% @returns ok if the data was written, or {error, Reason}, if there was
+%%          an error.
+%% @see     erlang:display/1
+%% @doc     Write a string to the console.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec print(string()) -> ok | error.
+print(String) ->
+    throw(nif_error).
+
 
 %% Internal operations
 

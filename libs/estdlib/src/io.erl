@@ -46,4 +46,4 @@ format(Format, Args) when is_list(Format) andalso is_list(Args) ->
             _:_ ->
                 io_lib:format("Bad format!  Format: ~p Args: ~p~n", [Format, Args])
         end,
-    console:puts(Msg).
+    console:print(Msg).
