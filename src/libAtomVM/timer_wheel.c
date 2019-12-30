@@ -17,36 +17,36 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#ifndef _ESP32_SYS_H_
-#define _ESP32_SYS_H_
+#include "timer_wheel.h"
 
-#include "freertos/FreeRTOS.h"
-#include <freertos/queue.h>
-
-#include <time.h>
-
-#define EVENT_DESCRIPTORS_COUNT 16
-
-typedef struct EventListener EventListener;
-
-typedef void (*event_handler_t)(EventListener *listener);
-
-struct EventListener {
-    struct ListHead listeners_list_head;
-
-    event_handler_t handler;
-    void *data;
-    void *sender;
-};
-
-struct ESP32PlatformData
+struct TimerWheel *timer_wheel_new(int slots_count)
 {
-    struct ListHead listeners;
-};
+    struct TimerWheel *tw = malloc(sizeof(struct TimerWheel));
+    tw->slots = malloc(sizeof(struct ListHead) * slots_count);
+    for (int i = 0; i < slots_count; i++) {
+        list_init(&tw->slots[i]);
+    }
+    tw->slots_count = slots_count;
+    tw->timers = 0;
+    tw->monotonic_time = 0;
 
-extern xQueueHandle event_queue;
-void esp32_sys_queue_init();
+    return tw;
+}
 
-void socket_init(Context *ctx, term opts);
+void timer_wheel_tick(struct TimerWheel *tw)
+{
+    tw->monotonic_time++;
+    uint64_t monotonic_time = tw->monotonic_time;
+    int pos = tw->monotonic_time % tw->slots_count;
 
-#endif
+    struct ListHead *item;
+    struct ListHead *tmp;
+    MUTABLE_LIST_FOR_EACH(item, tmp, &tw->slots[pos]) {
+        struct TimerWheelItem *ti = GET_LIST_ENTRY(item, struct TimerWheelItem, head);
+        if (ti->expiry_time <= monotonic_time) {
+            tw->timers--;
+            list_remove(item);
+            ti->callback(ti);
+        }
+    }
+}

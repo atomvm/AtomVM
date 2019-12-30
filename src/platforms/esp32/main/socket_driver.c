@@ -17,7 +17,6 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#include "socket.h"
 #include "socket_driver.h"
 #include "port.h"
 
@@ -26,6 +25,7 @@
 #include "atom.h"
 #include "context.h"
 #include "globalcontext.h"
+#include "mailbox.h"
 #include "interop.h"
 #include "utils.h"
 #include "term.h"
@@ -57,6 +57,9 @@ static void passive_recv_callback(EventListener *listener);
 static void active_recvfrom_callback(EventListener *listener);
 static void passive_recvfrom_callback(EventListener *listener);
 
+struct netconn *fds[16];
+int next_fd;
+
 typedef struct SocketDriverData
 {
     struct netconn *conn;
@@ -69,6 +72,34 @@ typedef struct SocketDriverData
     term buffer;
     EventListener *active_listener;
 } SocketDriverData;
+
+uint32_t socket_tuple_to_addr(term addr_tuple)
+{
+    return ((term_to_int32(term_get_tuple_element(addr_tuple, 0)) & 0xFF) << 24)
+    | ((term_to_int32(term_get_tuple_element(addr_tuple, 1)) & 0xFF) << 16)
+    | ((term_to_int32(term_get_tuple_element(addr_tuple, 2)) & 0xFF) << 8)
+    | (term_to_int32(term_get_tuple_element(addr_tuple, 3)) & 0xFF);
+}
+
+term socket_tuple_from_addr(Context *ctx, uint32_t addr)
+{
+    term terms[4];
+    terms[0] = term_from_int32((addr >> 24) & 0xFF);
+    terms[1] = term_from_int32((addr >> 16) & 0xFF);
+    terms[2] = term_from_int32((addr >>  8) & 0xFF);
+    terms[3] = term_from_int32( addr        & 0xFF);
+
+    return port_create_tuple_n(ctx, 4, terms);
+}
+
+term socket_create_packet_term(Context *ctx, const char *buf, ssize_t len, int is_binary)
+{
+    if (is_binary) {
+        return term_from_literal_binary((void *)buf, len, ctx);
+    } else {
+        return term_from_string((const uint8_t *) buf, len, ctx);
+    }
+}
 
 void *socket_driver_create_data()
 {
@@ -98,14 +129,7 @@ void socket_callback(struct netconn *netconn, enum netconn_evt evt, u16_t len)
         return;
     }
 
-    // print_event_descriptors();
-    int event_descriptor = find_event_descriptor(netconn);
-    if (UNLIKELY(event_descriptor < 0)) {
-        TRACE("socket: event descriptor not found in socket_callback for netconn 0x%lx\n", (unsigned long) netconn);
-        abort();
-    }
-
-    int result = xQueueSend(event_queue, &event_descriptor, 0);
+    int result = xQueueSend(event_queue, &netconn, 0);
     if (result != pdTRUE) {
         fprintf(stderr, "socket: failed to enqueue: %i.\n", result);
     }
@@ -228,12 +252,13 @@ static term init_udp_socket(Context *ctx, SocketDriverData *socket_data, term pa
 {
     TRACE("socket: creating udp netconn\n");
 
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_UDP, 0, socket_callback);
     // TODO check for invalid return
     socket_data->conn = conn;
 
-    int event_descriptor = open_event_descriptor(conn);
-    TRACE("socket: opened event descriptor %i in init_udp_socket for netconn 0x%lx\n", event_descriptor, (unsigned long) socket_data->conn);
     term ret = do_bind(ctx, params);
 
     socket_data->active = active;
@@ -243,14 +268,10 @@ static term init_udp_socket(Context *ctx, SocketDriverData *socket_data, term pa
             fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
             abort();
         }
-        listener->fd = event_descriptor;
-        listener->expires = 0;
-        listener->expiral_timestamp.tv_sec = INT_MAX;
-        listener->expiral_timestamp.tv_nsec = INT_MAX;
-        listener->one_shot = 0;
+        listener->sender = conn;
         listener->data = ctx;
         listener->handler = active_recvfrom_callback;
-        linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+        list_append(&platform->listeners, &listener->listeners_list_head);
         socket_data->active_listener = listener;
         TRACE("socket: initialized\n");
     } else {
@@ -301,12 +322,12 @@ static term init_client_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
 {
     TRACE("socket: creating client tcp netconn\n");
 
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_TCP, 0, socket_callback);
     // TODO check for invalid return
     socket_data->conn = conn;
-
-    int event_descriptor = open_event_descriptor(conn);
-    TRACE("socket: opened event descriptor %i in init_client_tcp_socket for netconn 0x%lx\n", event_descriptor, (unsigned long) socket_data->conn);
 
     term address = interop_proplist_get_value(params, ADDRESS_ATOM);
     term port = interop_proplist_get_value(params, PORT_ATOM);
@@ -321,14 +342,10 @@ static term init_client_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
                 fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
                 abort();
             }
-            listener->fd = event_descriptor;
-            listener->expires = 0;
-            listener->expiral_timestamp.tv_sec = INT_MAX;
-            listener->expiral_timestamp.tv_nsec = INT_MAX;
-            listener->one_shot = 0;
+            listener->sender = conn;
             listener->data = ctx;
             listener->handler = active_recv_callback;
-            linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+            list_append(&platform->listeners, &listener->listeners_list_head);
             socket_data->active_listener = listener;
         }
     }
@@ -357,9 +374,6 @@ static term init_server_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
     // TODO check for invalid return
     socket_data->conn = conn;
 
-    int event_descriptor = open_event_descriptor(conn);
-    TRACE("socket: opened event descriptor %i in init_server_tcp_socket for netconn 0x%lx\n", event_descriptor, (unsigned long) socket_data->conn);
-
     term ret = do_bind(ctx, params);
     if (ret != OK_ATOM) {
         // TODO close
@@ -377,12 +391,14 @@ static term init_server_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
     return ret;
 }
 
-static term init_accepting_socket(Context *ctx, SocketDriverData *socket_data, term fd, term active)
+static term init_accepting_socket(Context *ctx, SocketDriverData *socket_data, term fd_term, term active)
 {
     TRACE("socket: init_accepting_socket\n");
 
-    int event_descriptor = term_to_int(fd);
-    socket_data->conn = (struct netconn *) get_event_ptr(event_descriptor);
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
+    socket_data->conn = (struct netconn *) fds[term_to_int(fd_term)];
     //
     //
     //
@@ -392,14 +408,10 @@ static term init_accepting_socket(Context *ctx, SocketDriverData *socket_data, t
             fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
             abort();
         }
-        listener->fd = event_descriptor;
-        listener->expires = 0;
-        listener->expiral_timestamp.tv_sec = INT_MAX;
-        listener->expiral_timestamp.tv_nsec = INT_MAX;
-        listener->one_shot = 0;
+        listener->sender = socket_data->conn;
         listener->data = ctx;
         listener->handler = active_recv_callback;
-        linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+        list_append(&platform->listeners, &listener->listeners_list_head);
         socket_data->active_listener = listener;
     }
     return OK_ATOM;
@@ -482,9 +494,12 @@ term socket_driver_do_init(Context *ctx, term params)
 
 void socket_driver_do_close(Context *ctx)
 {
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     if (socket_data->active == TRUE_ATOM) {
-        linkedlist_remove(&ctx->global->listeners, &socket_data->active_listener->listeners_list_head);
+        list_remove(&socket_data->active_listener->listeners_list_head);
     }
     if (netconn_close(socket_data->conn) != ERR_OK) {
         TRACE("socket: close failed");
@@ -709,6 +724,10 @@ static void passive_recv_callback(EventListener *listener)
     RecvFromData *recvfrom_data = (RecvFromData *) listener->data;
     Context *ctx = recvfrom_data->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
+
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     //
     // receive the data
     //
@@ -746,7 +765,7 @@ static void passive_recv_callback(EventListener *listener)
     //
     // remove the EventListener from the global list and clean up
     //
-    linkedlist_remove(&ctx->global->listeners, &listener->listeners_list_head);
+    list_remove(&listener->listeners_list_head);
     free(listener);
     free(recvfrom_data);
     netbuf_delete(buf);
@@ -800,6 +819,9 @@ static void passive_recvfrom_callback(EventListener *listener)
     Context *ctx = recvfrom_data->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
 
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     struct netbuf *buf = NULL;
 
     if (UNLIKELY(netconn_recv(socket_data->conn, &buf) != ERR_OK)) {
@@ -836,7 +858,7 @@ static void passive_recvfrom_callback(EventListener *listener)
     //
     // remove the EventListener from the global list and clean up
     //
-    linkedlist_remove(&ctx->global->listeners, &listener->listeners_list_head);
+    list_remove(&listener->listeners_list_head);
     free(listener);
     free(recvfrom_data);
     netbuf_delete(buf);
@@ -844,6 +866,9 @@ static void passive_recvfrom_callback(EventListener *listener)
 
 static void do_recv(Context *ctx, term pid, term ref, term length, term timeout, event_handler_t handler)
 {
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     //
     // The socket must be in active mode
@@ -865,14 +890,7 @@ static void do_recv(Context *ctx, term pid, term ref, term length, term timeout,
     data->pid = pid;
     data->length = length;
     data->ref_ticks = term_to_ref_ticks(ref);
-    //
-    // Look up the event descriptor for our socket
-    //
-    int event_descriptor = find_event_descriptor(socket_data->conn);
-    if (UNLIKELY(event_descriptor < 0)) {
-        TRACE("socket: event descriptor not found in do_recv for netconn 0x%lx\n", (unsigned long)socket_data->conn);
-        abort();
-    }
+
     //
     // Create an event listener with this request-specific data, and append to the global list
     //
@@ -881,14 +899,10 @@ static void do_recv(Context *ctx, term pid, term ref, term length, term timeout,
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         abort();
     }
-    listener->fd = event_descriptor;
-    listener->expires = 0;
-    listener->expiral_timestamp.tv_sec = 60*60*24; // TODO handle timeout
-    listener->expiral_timestamp.tv_nsec = 0;
-    listener->one_shot = 1;
+    listener->sender = socket_data->conn;
     listener->handler = handler;
     listener->data = data;
-    linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+    list_append(&platform->listeners, &listener->listeners_list_head);
 }
 
 void socket_driver_do_recvfrom(Context *ctx, term pid, term ref, term length, term timeout)
@@ -912,21 +926,18 @@ static void accept_callback(EventListener *listener)
     RecvFromData *recvfrom_data = (RecvFromData *) listener->data;
     Context *ctx = recvfrom_data->ctx;
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-    //
-    // Look up the event descriptor for our socket
-    //
-    int event_descriptor = find_event_descriptor(socket_data->conn);
-    if (UNLIKELY(event_descriptor < 0)) {
-        TRACE("socket: event descriptor not found in accept_callback for netconn 0x%lx\n", (unsigned long)socket_data->conn);
-        abort();
-    } else {
-        TRACE("socket: Found event descriptor in accept_callback for netconn 0x%lx\n", (unsigned long)socket_data->conn);
-    }
+
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     //
     // accept the connection
     //
     struct netconn *conn;
     err_t status = netconn_accept(socket_data->conn, &conn);
+    int this_fd = next_fd;
+    next_fd++;
+    fds[this_fd] = conn;
     TRACE("socket: netconn_accept: status: %i; conn: 0x%lx\n", status, (unsigned long) conn);
     if (status != ERR_OK) {
         // {Ref, {error, {SysCall, Errno}}}
@@ -936,20 +947,18 @@ static void accept_callback(EventListener *listener)
         port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, ACCEPT_ATOM, errno));
     } else {
         TRACE("socket: accepted new connection\n");
-        int new_event_descriptor = open_event_descriptor(conn);
-        TRACE("socket: opened event descriptor %i in accept_callback for netconn 0x%lx\n", new_event_descriptor, (unsigned long) conn);
         // {Ref, {ok, Fd::int()}}
         port_ensure_available(ctx, 10);
         term pid = recvfrom_data->pid;
         term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
-        term reply = port_create_ok_tuple(ctx, term_from_int(new_event_descriptor));
+        term reply = port_create_ok_tuple(ctx, term_from_int(this_fd));
         TRACE("socket: sending reply\n");
         port_send_reply(ctx, pid, ref, reply);
     }
     //
     // remove the EventListener from the global list and clean up
     //
-    linkedlist_remove(&ctx->global->listeners, &listener->listeners_list_head);
+    list_remove(&listener->listeners_list_head);
     free(listener);
     free(recvfrom_data);
     TRACE("socket: accept_callback done.\n");
@@ -957,6 +966,9 @@ static void accept_callback(EventListener *listener)
 
 void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
 {
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
     TRACE("socket: accepting tcp netconn\n");
 
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
@@ -972,16 +984,7 @@ void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
     data->pid = pid;
     data->length = 0;
     data->ref_ticks = term_to_ref_ticks(ref);
-    //
-    // Look up the event descriptor for our socket
-    //
-    int event_descriptor = find_event_descriptor(socket_data->conn);
-    if (UNLIKELY(event_descriptor < 0)) {
-        TRACE("socket: event descriptor not found in socket_driver_do_accept for netconn 0x%lx\n", (unsigned long)socket_data->conn);
-        abort();
-    } else {
-        TRACE("socket: Found event descriptor in socket_driver_do_accept for netconn 0x%lx\n", (unsigned long)socket_data->conn);
-    }
+
     //
     // Create an event listener with this request-specific data, and append to the global list
     //
@@ -990,13 +993,91 @@ void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         abort();
     }
-    listener->fd = event_descriptor;
-    listener->expires = 0;
-    listener->expiral_timestamp.tv_sec = 60*60*24; // TODO handle timeout
-    listener->expiral_timestamp.tv_nsec = 0;
-    listener->one_shot = 1;
+    listener->sender = socket_data->conn;
     listener->handler = accept_callback;
     listener->data = data;
-    linkedlist_append(&ctx->global->listeners, &listener->listeners_list_head);
+    list_append(&platform->listeners, &listener->listeners_list_head);
     TRACE("socket: accepting tcp netconn COMPLETE\n");
+}
+
+// TODO define in defaultatoms
+const char *const send_a = "\x4" "send";
+const char *const sendto_a = "\x6" "sendto";
+const char *const init_a = "\x4" "init";
+const char *const bind_a = "\x4" "bind";
+const char *const recvfrom_a = "\x8" "recvfrom";
+const char *const recv_a = "\x4" "recv";
+const char *const close_a = "\x5" "close";
+const char *const get_port_a = "\x8" "get_port";
+const char *const accept_a = "\x6" "accept";
+
+static void socket_consume_mailbox(Context *ctx)
+{
+    TRACE("START socket_consume_mailbox\n");
+    if (UNLIKELY(ctx->native_handler != socket_consume_mailbox)) {
+        abort();
+    }
+
+    port_ensure_available(ctx, 16);
+
+    Message *message = mailbox_dequeue(ctx);
+    term     msg = message->message;
+    term     pid = term_get_tuple_element(msg, 0);
+    term     ref = term_get_tuple_element(msg, 1);
+    term     cmd = term_get_tuple_element(msg, 2);
+
+    term cmd_name = term_get_tuple_element(cmd, 0);
+    if (cmd_name == context_make_atom(ctx, init_a)) {
+        term params = term_get_tuple_element(cmd, 1);
+        term reply = socket_driver_do_init(ctx, params);
+        port_send_reply(ctx, pid, ref, reply);
+        if (reply != OK_ATOM) {
+            // TODO handle shutdown
+            // socket_driver_delete_data(ctx->platform_data);
+            // context_destroy(ctx);
+        }
+    } else if (cmd_name == context_make_atom(ctx, sendto_a)) {
+        term dest_address = term_get_tuple_element(cmd, 1);
+        term dest_port = term_get_tuple_element(cmd, 2);
+        term buffer = term_get_tuple_element(cmd, 3);
+        term reply = socket_driver_do_sendto(ctx, dest_address, dest_port, buffer);
+        port_send_reply(ctx, pid, ref, reply);
+    } else if (cmd_name == context_make_atom(ctx, send_a)) {
+        term buffer = term_get_tuple_element(cmd, 1);
+        term reply = socket_driver_do_send(ctx, buffer);
+        port_send_reply(ctx, pid, ref, reply);
+    } else if (cmd_name == context_make_atom(ctx, recvfrom_a)) {
+        term length = term_get_tuple_element(cmd, 1);
+        term timeout = term_get_tuple_element(cmd, 2);
+        socket_driver_do_recvfrom(ctx, pid, ref, length, timeout);
+    } else if (cmd_name == context_make_atom(ctx, recv_a)) {
+        term length = term_get_tuple_element(cmd, 1);
+        term timeout = term_get_tuple_element(cmd, 2);
+        socket_driver_do_recv(ctx, pid, ref, length, timeout);
+    } else if (cmd_name == context_make_atom(ctx, accept_a)) {
+        term timeout = term_get_tuple_element(cmd, 1);
+        socket_driver_do_accept(ctx, pid, ref, timeout);
+    } else if (cmd_name == context_make_atom(ctx, close_a)) {
+        socket_driver_do_close(ctx);
+        port_send_reply(ctx, pid, ref, OK_ATOM);
+        // TODO handle shutdown
+        // socket_driver_delete_data(ctx->platform_data);
+        // context_destroy(ctx);
+    } else if (cmd_name == context_make_atom(ctx, get_port_a)) {
+        term reply = socket_driver_get_port(ctx);
+        port_send_reply(ctx, pid, ref, reply);
+    } else {
+        port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
+    }
+
+    free(message);
+    TRACE("END socket_consume_mailbox\n");
+}
+
+void socket_init(Context *ctx, term opts)
+{
+    UNUSED(opts);
+    void *data = socket_driver_create_data();
+    ctx->native_handler = socket_consume_mailbox;
+    ctx->platform_data = data;
 }

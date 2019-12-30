@@ -31,11 +31,10 @@ if(${CMAKE_GENERATOR} STREQUAL "Xcode")
         platform_nifs.h
         port.h
         scheduler.h
-        socket.h
-        socket_driver.h
         sys.h
         term_typedef.h
         term.h
+        timer_wheel.h
         trace.h
         utils.h
         valueshashtable.h
@@ -61,8 +60,8 @@ set(SOURCE_FILES
     nifs.c
     port.c
     scheduler.c
-    socket.c
     term.c
+    timer_wheel.c
     valueshashtable.c
 )
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin" OR ${CMAKE_SYSTEM_NAME} STREQUAL "Linux" OR ${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")

@@ -24,7 +24,6 @@
 #include "i2cdriver.h"
 #include "scheduler.h"
 #include "globalcontext.h"
-#include "socket.h"
 #include "gpio_driver.h"
 #include "spidriver.h"
 #include "network.h"
@@ -47,67 +46,9 @@ static const char *const esp32_atom = "\x5" "esp32";
 
 xQueueHandle event_queue = NULL;
 
-void *event_descriptors[EVENT_DESCRIPTORS_COUNT];
-
-int open_event_descriptor(void *ptr)
-{
-    for (int i = 0; i < EVENT_DESCRIPTORS_COUNT; i++) {
-        if (!event_descriptors[i]) {
-            event_descriptors[i] = ptr;
-            return i;
-        }
-    }
-
-    fprintf(stderr, "exausted descriptors\n");
-
-    return -1;
-}
-
-void close_event_descriptor(int index)
-{
-    if (UNLIKELY(index >= EVENT_DESCRIPTORS_COUNT)) {
-        fprintf(stderr, "tried to close invalid event descriptor\n");
-        abort();
-    }
-
-    event_descriptors[index] = NULL;
-}
-
-int find_event_descriptor(void *ptr)
-{
-    for (int i = 0; i < EVENT_DESCRIPTORS_COUNT; i++) {
-        if (event_descriptors[i] == ptr) {
-            return i;
-        }
-    }
-
-    fprintf(stderr, "warning: event descriptor not found\n");
-
-    return -1;
-}
-
-// for debugging only
-void print_event_descriptors()
-{
-    for (int i = 0; i < EVENT_DESCRIPTORS_COUNT; i++) {
-        if (event_descriptors[i] != NULL) {
-            fprintf(stderr, "\tevent_descriptor[%i]: 0x%lx\n", i, (unsigned long) event_descriptors[i]);
-        }
-    }
-}
-
-void *get_event_ptr(int i)
-{
-    if (i < 0 || EVENT_DESCRIPTORS_COUNT <= i) {
-        fprintf(stderr, "fatal: event descriptor index out of range: %i\n", i);
-        abort();
-    }
-    return event_descriptors[i];
-}
-
 void esp32_sys_queue_init()
 {
-    event_queue = xQueueCreate(EVENT_QUEUE_LEN, sizeof(uint32_t));
+    event_queue = xQueueCreate(EVENT_QUEUE_LEN, sizeof(void *));
 }
 
 static inline void sys_clock_gettime(struct timespec *t)
@@ -117,96 +58,32 @@ static inline void sys_clock_gettime(struct timespec *t)
     t->tv_nsec = ((ticks * portTICK_PERIOD_MS) % 1000) * 1000000;
 }
 
-static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *timespec2)
-{
-    return (timespec1->tv_sec - timespec2->tv_sec) * 1000 + (timespec1->tv_nsec - timespec2->tv_nsec) / 1000000;
-}
-
 static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
 {
-    int event_descriptor;
-    if (xQueueReceive(event_queue, &event_descriptor, wait_ticks) == pdTRUE) {
-        struct ListHead *listeners_list = glb->listeners;
-        EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
-        EventListener *last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
-        EventListener *listener = listeners;
+    struct ESP32PlatformData *platform = glb->platform_data;
 
-        if (!listener) {
+    void *sender = NULL;
+    while (xQueueReceive(event_queue, &sender, wait_ticks) == pdTRUE) {
+
+        if (UNLIKELY(list_is_empty(&platform->listeners))) {
             fprintf(stderr, "warning: no listeners.\n");
             return;
         }
 
-        size_t n = linkedlist_length(glb->listeners);
-        for (size_t i = 0;  i < n;  ++i) {
-            EventListener *next_listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-            if (listener->fd == event_descriptor) {
+        struct ListHead *listener_lh;
+        LIST_FOR_EACH(listener_lh, &platform->listeners) {
+            EventListener *listener = GET_LIST_ENTRY(listener_lh, EventListener, listeners_list_head);
+            if (listener->sender == sender) {
                 listener->handler(listener);
-            }
-            listener = next_listener;
-        }
-    }
-}
-
-void sys_waitevents(GlobalContext *glb)
-{
-    struct ListHead *listeners_list = glb->listeners;
-    struct timespec now;
-    sys_clock_gettime(&now);
-
-    EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
-
-    int min_timeout = INT_MAX;
-
-    EventListener *listener = listeners;
-    do {
-        if (listener->expires) {
-            int wait_ms = timespec_diff_to_ms(&listener->expiral_timestamp, &now);
-            if (wait_ms <= 0) {
-                min_timeout = 0;
-            } else if (min_timeout > wait_ms) {
-                min_timeout = wait_ms;
+                return;
             }
         }
-        listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-    } while (listener != listeners);
-
-    TickType_t ticks_to_wait = min_timeout / portTICK_PERIOD_MS;
-
-    receive_events(glb, ticks_to_wait);
-
-    listeners = GET_LIST_ENTRY(glb->listeners, EventListener, listeners_list_head);
-    EventListener *last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
-
-    //second: execute handlers for expiered timers
-    if (min_timeout != INT_MAX) {
-        listener = listeners;
-        sys_clock_gettime(&now);
-        do {
-            EventListener *next_listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-            if (listener->expires) {
-                int wait_ms = timespec_diff_to_ms(&listener->expiral_timestamp, &now);
-                if (wait_ms <= 0) {
-                    //it is completely safe to free a listener in the callback, we are going to not use it after this call
-                    listener->handler(listener);
-                }
-            }
-
-            listener = next_listener;
-            listeners = GET_LIST_ENTRY(glb->listeners, EventListener, listeners_list_head);
-        } while (listeners != NULL && listener != listeners);
     }
 }
 
 void sys_consume_pending_events(GlobalContext *glb)
 {
     receive_events(glb, 0);
-}
-
-extern void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis)
-{
-    sys_clock_gettime(t);
-    t->tv_sec += millis / 1000;
-    t->tv_nsec += (millis % 1000) * 1000000;
 }
 
 void sys_time(struct timespec *t)
@@ -219,6 +96,27 @@ void sys_time(struct timespec *t)
 
     t->tv_sec = tv.tv_sec;
     t->tv_nsec = tv.tv_usec * 1000;
+}
+
+void sys_init_platform(GlobalContext *glb)
+{
+    struct ESP32PlatformData *platform = malloc(sizeof(struct ESP32PlatformData));
+    list_init(&platform->listeners);
+    glb->platform_data = platform;
+}
+
+void sys_start_millis_timer()
+{
+}
+
+void sys_stop_millis_timer()
+{
+}
+
+uint32_t sys_millis()
+{
+    TickType_t ticks = xTaskGetTickCount();
+    return ticks * portTICK_PERIOD_MS;
 }
 
 Module *sys_load_module(GlobalContext *global, const char *module_name)
@@ -286,4 +184,11 @@ term sys_get_info(Context *ctx, term key)
         return term_from_string((const uint8_t *) str, n, ctx);
     }
     return UNDEFINED_ATOM;
+}
+
+void sys_sleep(GlobalContext *glb)
+{
+    UNUSED(glb);
+
+    vTaskDelay(1);
 }

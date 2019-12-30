@@ -28,7 +28,6 @@
 #define _GLOBALCONTEXT_H_
 
 #include <stdint.h>
-#include <time.h>
 
 #include "atom.h"
 #include "term.h"
@@ -54,7 +53,6 @@ typedef struct
 {
     struct ListHead ready_processes;
     struct ListHead waiting_processes;
-    struct ListHead *listeners;
     struct ListHead *processes_table;
     struct ListHead *registered_processes;
 
@@ -69,10 +67,12 @@ typedef struct
     const void *avmpack_data;
     const void *avmpack_platform_data;
 
-    struct timespec next_timeout_at;
+    struct TimerWheel *timer_wheel;
+    uint32_t last_seen_millis;
 
     uint64_t ref_ticks;
 
+    void *platform_data;
 } GlobalContext;
 
 /**

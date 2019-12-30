@@ -34,31 +34,6 @@
 #include <stdint.h>
 #include <time.h>
 
-typedef struct EventListener EventListener;
-
-typedef void (*event_handler_t)(EventListener *listener);
-
-struct EventListener {
-    struct ListHead listeners_list_head;
-
-    int expires;
-    struct timespec expiral_timestamp;
-
-    event_handler_t handler;
-    void *data;
-    int fd;
-
-    unsigned int one_shot : 1;
-};
-
-/**
- * @brief waits platform events
- *
- * @details wait any of the specified events using a platform specific implementation, that might be poll on unix-like systems.
- * @param listeners_list a list of listeners that are waiting for some events, each listener waits an event and has a callback.
- */
-void sys_waitevents(GlobalContext *glb);
-
 /**
  * @brief process any pending event without blocking
  *
@@ -66,15 +41,6 @@ void sys_waitevents(GlobalContext *glb);
  * @param glb the global context.
  */
 void sys_consume_pending_events(GlobalContext *glb);
-
-/**
- * @brief sets the timestamp for a future event
- *
- * @details sets the timestamp to a timestamp n milliseconds in the future using platform monotonic timer source.
- * @param t the timespec that will be updated.
- * @param millis ammount of milliseconds relative to current timestamp.
- */
-void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis);
 
 /**
  * @brief gets wall clock time
@@ -114,5 +80,15 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
  * there is no system information for the specified key.
  */
 term sys_get_info(Context *ctx, term key);
+
+void sys_init_platform(GlobalContext *global);
+
+void sys_start_millis_timer();
+
+void sys_stop_millis_timer();
+
+uint32_t sys_millis();
+
+void sys_sleep(GlobalContext *glb);
 
 #endif

@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright 2019 by Davide Bettio <davide@uninstall.it>                 *
+ *   Copyright 2019 by Fred Dushin <fred@dushin.net>                       *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU Lesser General Public License as        *
@@ -17,15 +17,10 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#ifndef _ESP32_SYS_H_
-#define _ESP32_SYS_H_
-
-#include "freertos/FreeRTOS.h"
-#include <freertos/queue.h>
+#ifndef _GENERIC_UNIX_SYS_H_
+#define _GENERIC_UNIX_SYS_H_
 
 #include <time.h>
-
-#define EVENT_DESCRIPTORS_COUNT 16
 
 typedef struct EventListener EventListener;
 
@@ -36,16 +31,13 @@ struct EventListener {
 
     event_handler_t handler;
     void *data;
-    void *sender;
+    int fd;
 };
 
-struct ESP32PlatformData
+struct GenericUnixPlatformData
 {
-    struct ListHead listeners;
+    struct ListHead *listeners;
 };
-
-extern xQueueHandle event_queue;
-void esp32_sys_queue_init();
 
 void socket_init(Context *ctx, term opts);
 

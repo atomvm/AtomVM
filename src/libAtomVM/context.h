@@ -27,11 +27,10 @@
 #ifndef _CONTEXT_H_
 #define _CONTEXT_H_
 
-#include <time.h>
-
 #include "linkedlist.h"
 #include "globalcontext.h"
 #include "term.h"
+#include "timer_wheel.h"
 
 struct Module;
 
@@ -42,12 +41,22 @@ typedef struct Module Module;
 
 typedef void (*native_handler)(Context *ctx);
 
+enum ContextFlags
+{
+    NoFlags = 0,
+    WaitingMessages = 1,
+    WaitingTimeout = 2,
+    WaitingTimeoutExpired = 4
+};
+
 struct Context
 {
     struct ListHead processes_list_head;
 
     struct ListHead processes_table_head;
     int32_t process_id;
+
+    struct TimerWheelItem timer_wheel_head;
 
     term x[16];
     int avail_registers;
@@ -75,7 +84,6 @@ struct Context
     native_handler native_handler;
 
     uint64_t reductions;
-    struct timespec timeout_at;
 
     unsigned int leader : 1;
     unsigned int has_min_heap_size : 1;
@@ -92,6 +100,8 @@ struct Context
 
     struct ListHead heap_fragments;
     int heap_fragments_size;
+
+    enum ContextFlags flags;
 
     void *platform_data;
 };
@@ -210,7 +220,7 @@ static inline unsigned long context_stack_size(const Context *ctx)
  */
 static inline int context_is_waiting_timeout(const Context *ctx)
 {
-    return ctx->timeout_at.tv_sec || ctx->timeout_at.tv_nsec;
+    return ctx->timer_wheel_head.callback != NULL;
 }
 
 /**

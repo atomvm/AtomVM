@@ -46,7 +46,6 @@ GlobalContext *globalcontext_new()
     }
     list_init(&glb->ready_processes);
     list_init(&glb->waiting_processes);
-    glb->listeners = NULL;
     glb->processes_table = NULL;
     glb->registered_processes = NULL;
 
@@ -76,10 +75,19 @@ GlobalContext *globalcontext_new()
         return NULL;
     }
 
-    glb->next_timeout_at.tv_sec = 0;
-    glb->next_timeout_at.tv_nsec = 0;
+    glb->timer_wheel = timer_wheel_new(16);
+    if (IS_NULL_PTR(glb->timer_wheel)) {
+        free(glb->modules_table);
+        free(glb->atoms_ids_table);
+        free(glb->atoms_table);
+        free(glb);
+        return NULL;
+    }
+    glb->last_seen_millis = 0;
 
     glb->ref_ticks = 0;
+
+    sys_init_platform(glb);
 
     return glb;
 }

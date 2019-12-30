@@ -17,17 +17,24 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#ifndef _SOCKET_H_
-#define _SOCKET_H_
+#ifndef _SOCKET_DRIVER_H_
+#define _SOCKET_DRIVER_H_
 
 #include "context.h"
 #include "term.h"
 
+void *socket_driver_create_data();
+void socket_driver_delete_data(void *data);
 
-void socket_init(Context *ctx, term params);
+term socket_driver_do_init(Context *ctx, term params);
+term socket_driver_do_send(Context *ctx, term buffer);
+term socket_driver_do_sendto(Context *ctx, term dest_address, term dest_port, term buffer);
+void socket_driver_do_recv(Context *ctx, term pid, term ref, term length, term timeout);
+void socket_driver_do_recvfrom(Context *ctx, term pid, term ref, term length, term timeout);
+void socket_driver_do_close(Context *ctx);
+term socket_driver_get_port(Context *ctx);
+void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout);
 
-uint32_t socket_tuple_to_addr(term addr_tuple);
 term socket_tuple_from_addr(Context *ctx, uint32_t addr);
-term socket_create_packet_term(Context *ctx, const char *buf, ssize_t len, int is_binary);
 
 #endif
