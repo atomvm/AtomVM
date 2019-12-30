@@ -29,6 +29,8 @@
 #include "network.h"
 #include "defaultatoms.h"
 
+#include "trace.h"
+
 #include "freertos/FreeRTOS.h"
 #include "esp_system.h"
 #include "esp_event.h"
@@ -74,16 +76,28 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
         LIST_FOR_EACH(listener_lh, &platform->listeners) {
             EventListener *listener = GET_LIST_ENTRY(listener_lh, EventListener, listeners_list_head);
             if (listener->sender == sender) {
+                TRACE("sys: handler found for: %p\n", (void *) sender);
                 listener->handler(listener);
+                TRACE("sys: handler executed\n");
                 return;
             }
         }
+
+        TRACE("sys: handler not found for: %p\n", (void *) sender);
     }
 }
 
 void sys_consume_pending_events(GlobalContext *glb)
 {
     receive_events(glb, 0);
+}
+
+void sys_event_listener_init(EventListener *listener, void *sender, event_handler_t handler, void *data)
+{
+    list_init(&listener->listeners_list_head);
+    listener->sender = sender;
+    listener->handler = handler;
+    listener->data = data;
 }
 
 void sys_time(struct timespec *t)

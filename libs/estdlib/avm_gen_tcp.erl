@@ -179,7 +179,7 @@ accept(ListenSocket) ->
 -spec accept(avm_inet:socket(), Timeout::non_neg_integer()) -> {ok, Socket::avm_inet:socket()} | {error, Reason::term()}.
 accept(ListenSocket, Timeout) ->
     case call(ListenSocket, {accept, Timeout}) of
-        {ok, FD} ->
+        {ok, FD} when is_integer(FD) ->
             Socket = open_port({spawn, "socket"}, []),
             InitParams = [
                 {proto, tcp},
@@ -194,6 +194,8 @@ accept(ListenSocket, Timeout) ->
                     %% TODO close port
                     ErrorReason
             end;
+        {ok, Socket} ->
+            {ok, Socket};
         ErrorReason ->
             %% TODO close port
             ErrorReason

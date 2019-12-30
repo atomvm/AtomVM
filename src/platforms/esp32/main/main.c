@@ -31,6 +31,7 @@
 #include "globalcontext.h"
 #include "iff.h"
 #include "module.h"
+#include "socket_driver.h"
 #include "utils.h"
 #include "term.h"
 
@@ -64,6 +65,8 @@ void app_main()
     printf("Booting file mapped at: %p, size: %i\n", flashed_avm, size);
 
     GlobalContext *glb = globalcontext_new();
+
+    socket_driver_init(glb);
 
     if (!avmpack_is_valid(flashed_avm, size) || !avmpack_find_section_by_flag(flashed_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
         fprintf(stderr, "error: invalid AVM Pack\n");
