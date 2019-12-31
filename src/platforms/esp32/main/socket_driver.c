@@ -1027,6 +1027,7 @@ static void do_close(Context *ctx, term msg)
     }
     //TODO
     tcp_data->socket_data.conn = NULL;
+    list_remove(&tcp_data->socket_data.sockets_head);
 
     if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
         abort();
@@ -1037,6 +1038,9 @@ static void do_close(Context *ctx, term msg)
     term_put_tuple_element(return_tuple, 1, OK_ATOM);
 
     send_message(pid, return_tuple, glb);
+
+    free(tcp_data);
+    scheduler_terminate(ctx);
 }
 
 static void do_recvfrom(Context *ctx, term msg)

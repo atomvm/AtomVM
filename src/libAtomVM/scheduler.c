@@ -167,8 +167,10 @@ static void scheduler_execute_native_handlers(GlobalContext *global)
         Context *context = GET_LIST_ENTRY(item, Context, processes_list_head);
 
         if (context->native_handler) {
-            context->native_handler(context);
             scheduler_make_waiting(global, context);
+            // context might terminate itself
+            // so call to native_handler must be the last action here.
+            context->native_handler(context);
         }
     }
 }
