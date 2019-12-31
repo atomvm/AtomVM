@@ -713,19 +713,14 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
             #ifdef IMPL_EXECUTE_LOOP
                 TRACE("-- Code execution finished for %i--\n", ctx->process_id);
-                if (schudule_processes_count(ctx->global) == 1) {
-                    scheduler_terminate(ctx);
+                if (ctx->leader) {
                     return 0;
                 }
-
-                TRACE("WARNING: some processes are still running.\n");
-
-                Context *scheduled_context = scheduler_next(ctx->global, ctx);
-                if (scheduled_context == ctx) {
-                    TRACE("There are no more runnable processes\n");
+                Context *scheduled_context = scheduler_wait(ctx->global, ctx);
+                if (UNLIKELY(scheduled_context == ctx)) {
+                    fprintf(stderr, "bug: scheduled a terminated process!\n");
                     return 0;
                 }
-
                 scheduler_terminate(ctx);
 
                 ctx = scheduled_context;

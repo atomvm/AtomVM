@@ -79,6 +79,7 @@ void app_main()
     Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
     globalcontext_insert_module_with_filename(glb, mod, startup_module_name);
     Context *ctx = context_new(glb);
+    ctx->leader = 1;
 
     printf("Starting: %s...\n", startup_module_name);
     printf("---\n");
