@@ -54,8 +54,8 @@ loop(Router, OldStateAndData) ->
                     Method = ?PROPLISTS:get_value(method, Conn),
                     PathTokens = ?PROPLISTS:get_value(uri, Conn),
                     {ok, Module} = find_route(Method, PathTokens, Router),
-                    Module:handle_req(Method, split(PathTokens), Conn),
-                    loop(Router, {waiting_body, [], RequestData});
+                    {ok, _UpdatedConn} = Module:handle_req(Method, split(PathTokens), Conn),
+                    ok;
 
                 {need_more, StateAndData} ->
                     loop(Router, StateAndData)
@@ -86,7 +86,9 @@ reply(StatusCode, Reply, Conn) ->
         Reply
     ],
     ?GEN_TCP:send(Socket, FullReply),
-    ?GEN_TCP:close(Socket).
+    ?GEN_TCP:close(Socket),
+    ClosedConn = [{closed, true} | Conn],
+    {ok, ClosedConn}.
 
 code_to_status_string(200) ->
     <<"200 OK">>;
