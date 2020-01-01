@@ -10,6 +10,7 @@ Dependencies
 
 * CMake ([CMake build system](https://cmake.org/)) is required to build AtomVM.
 * gperf ([GNU Perfect Hash Function Generator](https://www.gnu.org/software/gperf/manual/gperf.html)) is required to build AtomVM.
+* erlc ([erlang compiler](https://www.erlang.org/)) is required to build AtomVM
 * zlib ([zlib compression and decompression library](https://zlib.net/)) is optionally needed to run standard BEAM files (without uncompressed literals extension).
 
 * gcov and lcov are optionally required to generate coverage report (make coverage).
