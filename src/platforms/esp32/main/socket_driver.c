@@ -1167,6 +1167,79 @@ static void do_get_port(Context *ctx, term msg)
     send_message(pid, result_tuple, glb);
 }
 
+static void do_sockname(Context *ctx, term msg)
+{
+    GlobalContext *glb = ctx->global;
+    struct SocketData *socket_data = ctx->platform_data;
+
+    term pid = term_get_tuple_element(msg, 0);
+    term ref = term_get_tuple_element(msg, 1);
+
+    ip_addr_t addr;
+    u16_t port;
+    err_t result = netconn_addr(socket_data->conn, &addr, &port);
+    term return_msg;
+    if (result != ERR_OK) {
+        if (UNLIKELY(memory_ensure_free(ctx, 3 + 3) != MEMORY_GC_OK)) {
+            abort();
+        }
+        return_msg = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(return_msg, 0, ERROR_ATOM);
+        term_put_tuple_element(return_msg, 1, term_from_int(result));
+    } else {
+        if (UNLIKELY(memory_ensure_free(ctx, 3 + 8) != MEMORY_GC_OK)) {
+            abort();
+        }
+        return_msg = term_alloc_tuple(2, ctx);
+        term addr_term = socket_addr_to_tuple(ctx, &addr);
+        term port_term = term_from_int(port);
+        term_put_tuple_element(return_msg, 0, addr_term);
+        term_put_tuple_element(return_msg, 1, port_term);
+    }
+
+    term result_tuple = term_alloc_tuple(2, ctx);
+    term_put_tuple_element(result_tuple, 0, ref);
+    term_put_tuple_element(result_tuple, 1, return_msg);
+    send_message(pid, result_tuple, glb);
+}
+
+static void do_peername(Context *ctx, term msg)
+{
+    GlobalContext *glb = ctx->global;
+    struct SocketData *socket_data = ctx->platform_data;
+
+    term pid = term_get_tuple_element(msg, 0);
+    term ref = term_get_tuple_element(msg, 1);
+
+    ip_addr_t addr;
+    u16_t port;
+    err_t result = netconn_peer(socket_data->conn, &addr, &port);
+    term return_msg;
+    if (result != ERR_OK) {
+        if (UNLIKELY(memory_ensure_free(ctx, 3 + 3) != MEMORY_GC_OK)) {
+            abort();
+        }
+        return_msg = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(return_msg, 0, ERROR_ATOM);
+        term_put_tuple_element(return_msg, 1, term_from_int(result));
+    } else {
+        if (UNLIKELY(memory_ensure_free(ctx, 3 + 8) != MEMORY_GC_OK)) {
+            abort();
+        }
+        return_msg = term_alloc_tuple(2, ctx);
+        term addr_term = socket_addr_to_tuple(ctx, &addr);
+        term port_term = term_from_int(port);
+        term_put_tuple_element(return_msg, 0, addr_term);
+        term_put_tuple_element(return_msg, 1, port_term);
+    }
+
+    term result_tuple = term_alloc_tuple(2, ctx);
+    term_put_tuple_element(result_tuple, 0, ref);
+    term_put_tuple_element(result_tuple, 1, return_msg);
+    send_message(pid, result_tuple, glb);
+}
+
+
 static void socket_consume_mailbox(Context *ctx)
 {
     while (ctx->mailbox != NULL) {
@@ -1222,6 +1295,16 @@ static void socket_consume_mailbox(Context *ctx)
             case GET_PORT_ATOM:
                 fprintf(stderr, "get_port\n");
                 do_get_port(ctx, msg);
+                break;
+
+            case SOCKNAME_ATOM:
+                fprintf(stderr, "sockname\n");
+                do_sockname(ctx, msg);
+                break;
+
+            case PEERNAME_ATOM:
+                fprintf(stderr, "peername\n");
+                do_peername(ctx, msg);
                 break;
 
             default:

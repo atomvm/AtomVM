@@ -916,6 +916,8 @@ const char *const recv_a = "\x4" "recv";
 const char *const close_a = "\x5" "close";
 const char *const get_port_a = "\x8" "get_port";
 const char *const accept_a = "\x6" "accept";
+const char *const sockname_a = "\x8" "sockname";
+const char *const peername_a = "\x8" "peername";
 
 static void socket_consume_mailbox(Context *ctx)
 {
@@ -969,6 +971,12 @@ static void socket_consume_mailbox(Context *ctx)
         // TODO handle shutdown
         // socket_driver_delete_data(ctx->platform_data);
         // context_destroy(ctx);
+    } else if (cmd_name == context_make_atom(ctx, sockname_a)) {
+        term reply = socket_driver_sockname(ctx);
+        port_send_reply(ctx, pid, ref, reply);
+    } else if (cmd_name == context_make_atom(ctx, peername_a)) {
+        term reply = socket_driver_peername(ctx);
+        port_send_reply(ctx, pid, ref, reply);
     } else if (cmd_name == context_make_atom(ctx, get_port_a)) {
         term reply = socket_driver_get_port(ctx);
         port_send_reply(ctx, pid, ref, reply);
