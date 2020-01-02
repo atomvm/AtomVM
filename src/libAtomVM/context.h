@@ -76,7 +76,7 @@ struct Context
     const void *saved_ip;
     const void *jump_to_on_restore;
 
-    struct ListHead *mailbox;
+    struct ListHead mailbox;
 
     GlobalContext *global;
 

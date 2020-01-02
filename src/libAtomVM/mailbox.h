@@ -27,7 +27,7 @@
 #ifndef _MAILBOX_H_
 #define _MAILBOX_H_
 
-#include "linkedlist.h"
+#include "list.h"
 #include "term.h"
 #include "context.h"
 

@@ -1343,7 +1343,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 USED_BY_TRACE(dreg);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (ctx->mailbox == NULL) {
+                    if (list_is_empty(&ctx->mailbox)) {
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
                         term ret = mailbox_peek(ctx);

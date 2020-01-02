@@ -45,7 +45,7 @@ void mailbox_send(Context *c, term t)
     m->message = memory_copy_term_tree(&heap_pos, t);
     m->msg_memory_size = estimated_mem_usage;
 
-    linkedlist_append(&c->mailbox, &m->mailbox_list_head);
+    list_append(&c->mailbox, &m->mailbox_list_head);
 
     if (c->jump_to_on_restore) {
         c->saved_ip = c->jump_to_on_restore;
@@ -56,8 +56,8 @@ void mailbox_send(Context *c, term t)
 
 term mailbox_receive(Context *c)
 {
-    Message *m = GET_LIST_ENTRY(c->mailbox, Message, mailbox_list_head);
-    linkedlist_remove(&c->mailbox, &m->mailbox_list_head);
+    Message *m = GET_LIST_ENTRY(list_first(&c->mailbox), Message, mailbox_list_head);
+    list_remove(&m->mailbox_list_head);
 
     if (c->e - c->heap_ptr < m->msg_memory_size) {
         //ADDITIONAL_PROCESSING_MEMORY_SIZE: ensure some additional memory for message processing, so there is
@@ -78,8 +78,8 @@ term mailbox_receive(Context *c)
 
 Message *mailbox_dequeue(Context *c)
 {
-    Message *m = GET_LIST_ENTRY(c->mailbox, Message, mailbox_list_head);
-    linkedlist_remove(&c->mailbox, &m->mailbox_list_head);
+    Message *m = GET_LIST_ENTRY(list_first(&c->mailbox), Message, mailbox_list_head);
+    list_remove(&m->mailbox_list_head);
 
     TRACE("Pid %i is dequeueing 0x%lx.\n", c->process_id, m->message);
 
@@ -88,7 +88,7 @@ Message *mailbox_dequeue(Context *c)
 
 term mailbox_peek(Context *c)
 {
-    Message *m = GET_LIST_ENTRY(c->mailbox, Message, mailbox_list_head);
+    Message *m = GET_LIST_ENTRY(list_first(&c->mailbox), Message, mailbox_list_head);
 
     TRACE("Pid %i is peeking 0x%lx.\n", c->process_id, m->message);
 
@@ -107,13 +107,13 @@ term mailbox_peek(Context *c)
 
 void mailbox_remove(Context *c)
 {
-    if (!c->mailbox) {
+    if (UNLIKELY(list_is_empty(&c->mailbox))) {
         TRACE("Pid %i tried to remove a message from an empty mailbox.\n", c->process_id);
         return;
     }
 
-    Message *m = GET_LIST_ENTRY(c->mailbox, Message, mailbox_list_head);
-    linkedlist_remove(&c->mailbox, &m->mailbox_list_head);
+    Message *m = GET_LIST_ENTRY(list_first(&c->mailbox), Message, mailbox_list_head);
+    list_remove(&m->mailbox_list_head);
 
     TRACE("Pid %i is removing a message.\n", c->process_id);
 

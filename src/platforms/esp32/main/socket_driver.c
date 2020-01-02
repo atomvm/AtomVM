@@ -1246,7 +1246,7 @@ static void do_peername(Context *ctx, term msg)
 
 static void socket_consume_mailbox(Context *ctx)
 {
-    while (ctx->mailbox != NULL) {
+    while (!list_is_empty(&ctx->mailbox)) {
         Message *message = mailbox_dequeue(ctx);
         term msg = message->message;
 

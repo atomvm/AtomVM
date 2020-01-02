@@ -59,7 +59,7 @@ Context *context_new(GlobalContext *glb)
 
     list_append(&glb->ready_processes, &ctx->processes_list_head);
 
-    ctx->mailbox = NULL;
+    list_init(&ctx->mailbox);
 
     ctx->global = glb;
 
@@ -101,44 +101,30 @@ void context_destroy(Context *ctx)
     free(ctx);
 }
 
-typedef void *(*maibox_iterator)(Message *msg, void *accum);
-
-static void *context_num_messages(Message *msg, void *accum)
-{
-    UNUSED(msg);
-
-    return (void *) ((size_t) accum + 1);
-}
-
-static void *context_message_size(Message *msg, void *accum)
-{
-    return (void *) (sizeof(Message) + msg->msg_memory_size + (size_t) accum);
-}
-
-static void *context_mailbox_iterator(Context *ctx, maibox_iterator fun, void *initial)
-{
-    if (ctx->mailbox == NULL) {
-        return initial;
-    }
-    Message *messages = GET_LIST_ENTRY(ctx->mailbox, Message, mailbox_list_head);
-    Message *m = messages;
-    void *accum = initial;
-    do {
-        accum = fun(m, accum);
-        m = GET_LIST_ENTRY(m->mailbox_list_head.next, Message, mailbox_list_head);
-    } while (messages != m);
-    return accum;
-}
-
 size_t context_message_queue_len(Context *ctx)
 {
-    return (size_t) context_mailbox_iterator(ctx, context_num_messages, NULL);
+    size_t num_messages = 0;
+
+    struct ListHead *item;
+    LIST_FOR_EACH(item, &ctx->mailbox) {
+        num_messages++;
+    }
+
+    return num_messages;
 }
 
 size_t context_size(Context *ctx)
 {
+    size_t messages_size = 0;
+
+    struct ListHead *item;
+    LIST_FOR_EACH(item, &ctx->mailbox) {
+        Message *msg = GET_LIST_ENTRY(item, Message, mailbox_list_head);
+        messages_size += sizeof(Message) + msg->msg_memory_size;
+    }
+
     // TODO include ctx->platform_data
     return sizeof(Context)
-        + (size_t) context_mailbox_iterator(ctx, context_message_size, NULL)
+        + messages_size
         + context_memory_size(ctx) * BYTES_PER_TERM;
 }
