@@ -46,7 +46,7 @@
 
 static void spidriver_consume_mailbox(Context *ctx);
 
-static uint8_t spidriver_transfer_at(Context *ctx, uint8_t address, uint8_t data);
+static uint32_t spidriver_transfer_at(Context *ctx, uint64_t address, int data_len, uint32_t data, bool *ok);
 
 struct SPIData
 {
@@ -105,7 +105,7 @@ void spidriver_init(Context *ctx, term opts)
     }
 }
 
-static uint8_t spidriver_transfer_at(Context *ctx, uint8_t address, uint8_t data)
+static uint32_t spidriver_transfer_at(Context *ctx, uint64_t address, int data_len, uint32_t data, bool *ok)
 {
     TRACE("--- SPI transfer ---\n");
     TRACE("spi: address: %x, tx: %x\n", (int) address, (int) data);
@@ -114,23 +114,61 @@ static uint8_t spidriver_transfer_at(Context *ctx, uint8_t address, uint8_t data
 
     memset(&spi_data->transaction, 0, sizeof(spi_transaction_t));
 
+    uint32_t tx_data = SPI_SWAP_DATA_TX(data, data_len);
+
     spi_data->transaction.flags = SPI_TRANS_USE_TXDATA | SPI_TRANS_USE_RXDATA;
-    spi_data->transaction.length = 8;
+    spi_data->transaction.length = data_len;
     spi_data->transaction.addr = address;
-    spi_data->transaction.tx_data[0] = data;
+    spi_data->transaction.tx_data[0] = tx_data;
+    spi_data->transaction.tx_data[1] = (tx_data >> 8) & 0xFF;
+    spi_data->transaction.tx_data[2] = (tx_data >> 16) & 0xFF;
+    spi_data->transaction.tx_data[3] = (tx_data >> 24) & 0xFF;
 
     //TODO: int ret = spi_device_queue_trans(spi_data->handle, &spi_data->transaction, portMAX_DELAY);
     int ret = spi_device_polling_transmit(spi_data->handle, &spi_data->transaction);
+    if (UNLIKELY(ret != ESP_OK)) {
+        *ok = false;
+        return 0;
+    }
 
     //TODO check return code
 
-    uint8_t rx_data = spi_data->transaction.rx_data[0];
+    uint32_t rx_data = ((uint32_t) spi_data->transaction.rx_data[0]) |
+        ((uint32_t) spi_data->transaction.rx_data[1] << 8) |
+        ((uint32_t) spi_data->transaction.rx_data[2] << 16) |
+        ((uint32_t) spi_data->transaction.rx_data[3] << 24);
 
     TRACE("spi: ret: %x\n", (int) ret);
     TRACE("spi: rx: %x\n", (int) rx_data);
     TRACE("--- end of transfer ---\n");
 
-    return rx_data;
+    *ok = true;
+    return SPI_SWAP_DATA_RX(rx_data, data_len);
+}
+
+static inline term make_read_result_tuple(uint32_t read_value, Context *ctx)
+{
+    bool boxed;
+    int required;
+    if (read_value > MAX_NOT_BOXED_INT) {
+        boxed = true;
+        required = 3 + BOXED_INT_SIZE;
+    } else {
+        boxed = false;
+        required = 3;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, required) != MEMORY_GC_OK)) {
+        return ERROR_ATOM;
+    }
+
+    term read_value_term = boxed ? term_make_boxed_int(read_value, ctx) : term_from_int(read_value);
+
+    term result_tuple = term_alloc_tuple(2, ctx);
+    term_put_tuple_element(result_tuple, 0, OK_ATOM);
+    term_put_tuple_element(result_tuple, 1, read_value_term);
+
+    return result_tuple;
 }
 
 static term spidriver_read_at(Context *ctx, term req)
@@ -139,19 +177,16 @@ static term spidriver_read_at(Context *ctx, term req)
     term address_term = term_get_tuple_element(req, 1);
     term len_term = term_get_tuple_element(req, 2);
 
-    uint8_t address = term_to_int32(address_term);
-    UNUSED(len_term);
+    avm_int64_t address = term_maybe_unbox_int64(address_term);
+    avm_int_t data_len = term_to_int(len_term);
 
-    if (UNLIKELY(memory_ensure_free(ctx, 1 + 2) != MEMORY_GC_OK)) {
+    bool ok;
+    uint32_t read_value = spidriver_transfer_at(ctx, address, data_len, 0, &ok);
+    if (UNLIKELY(!ok)) {
         return ERROR_ATOM;
     }
-    term result_tuple = term_alloc_tuple(2, ctx);
 
-    uint8_t read_value = spidriver_transfer_at(ctx, address, 0);
-    term_put_tuple_element(result_tuple, 0, OK_ATOM);
-    term_put_tuple_element(result_tuple, 1, term_from_int11(read_value));
-
-    return result_tuple;
+    return make_read_result_tuple(read_value, ctx);
 }
 
 static term spidriver_write_at(Context *ctx, term req)
@@ -161,20 +196,17 @@ static term spidriver_write_at(Context *ctx, term req)
     term len_term = term_get_tuple_element(req, 2);
     term data_term = term_get_tuple_element(req, 3);
 
-    uint8_t address = term_to_int32(address_term);
-    UNUSED(len_term);
-    uint8_t data = term_to_int32(data_term);
+    uint64_t address = term_maybe_unbox_int64(address_term);
+    avm_int_t data_len = term_to_int(len_term);
+    avm_int_t data = term_maybe_unbox_int(data_term);
 
-    if (UNLIKELY(memory_ensure_free(ctx, 1 + 2) != MEMORY_GC_OK)) {
+    bool ok;
+    uint32_t read_value = spidriver_transfer_at(ctx, address, data_len, data, &ok);
+    if (UNLIKELY(!ok)) {
         return ERROR_ATOM;
     }
-    term result_tuple = term_alloc_tuple(2, ctx);
 
-    uint8_t read_value = spidriver_transfer_at(ctx, address, data);
-    term_put_tuple_element(result_tuple, 0, OK_ATOM);
-    term_put_tuple_element(result_tuple, 1, term_from_int11(read_value));
-
-    return result_tuple;
+    return make_read_result_tuple(read_value, ctx);
 }
 
 static void spidriver_consume_mailbox(Context *ctx)
