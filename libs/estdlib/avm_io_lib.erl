@@ -58,6 +58,8 @@ split([], Cur, Accum) ->
     ?LISTS:reverse([?LISTS:reverse(Cur)|Accum]);
 split([$~, $p | Rest], Cur, Accum) ->
     split(Rest, [], [?LISTS:reverse(Cur)|Accum]);
+split([$~, $s | Rest], Cur, Accum) ->
+    split(Rest, [], [?LISTS:reverse(Cur)|Accum]);
 split([$~, $n | Rest], Cur, Accum) ->
     split(Rest, [$\n|Cur], Accum);
 split([$~, $~ | Rest], Cur, Accum) ->

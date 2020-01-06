@@ -64,16 +64,24 @@ start() ->
     loop(SPI, 0).
 
 loop(SPI, Count) ->
-    avm_timer:sleep(1000),
-    TheList = "AVM" ++ integer_to_list(Count),
-    console:puts("Sending: " ++ TheList ++ "\n"),
-    broadcast_packet(SPI, TheList),
+    wait_interrupt(SPI),
+    %avm_timer:sleep(1000),
+    %TheList = "AVM" ++ integer_to_list(Count),
+    %console:puts("Sending: " ++ TheList ++ "\n"),
+    %broadcast_packet(SPI, TheList),
     loop(SPI, Count + 1).
 
 init_sx127x(GPIO, SPISettings) ->
     case init_hw(GPIO, SPISettings) of
         {ok, SPI} ->
             init_regs(SPI),
+            write_register(SPI, ?REG_DIO_MAPPING_1, 16#00),
+            gpio:set_int(GPIO, 26, rising),
+            %%%
+            gpio:set_direction(GPIO, 0, input),
+            gpio:set_int(GPIO, 0, rising),
+            %%%%
+            enable_receive(SPI),
             {ok, SPI};
         Error ->
             erlang:display(Error),
@@ -120,7 +128,7 @@ broadcast_packet(SPI, Data) ->
     % prepare transmit
     idle(SPI),
     set_explicit_header_mode(SPI),
-    write_register(SPI, ?REG_FIFO_ADDR_PTR, 0), 
+    write_register(SPI, ?REG_FIFO_ADDR_PTR, 0),
     write_register(SPI, ?REG_PAYLOAD_LENGTH, 0),
 
     % write data
@@ -144,11 +152,11 @@ write_packet_data(SPI, [H | T], Len) ->
     write_packet_data(SPI, T, Len + 1).
 
 set_explicit_header_mode(SPI) ->
-    {ok, ModemConfig1} = read_register(SPI, ?REG_MODEM_CONFIG_1), 
+    {ok, ModemConfig1} = read_register(SPI, ?REG_MODEM_CONFIG_1),
     write_register(SPI, 16#fe, ModemConfig1 band 16#fe).
 
 idle(SPI) ->
-    write_register(SPI, ?REG_OP_MODE, ?MODE_LONG_RANGE_MODE bor ?MODE_STDBY). 
+    write_register(SPI, ?REG_OP_MODE, ?MODE_LONG_RANGE_MODE bor ?MODE_STDBY).
 
 enable_crc(SPI) ->
     {ok, ModemConfig2} = read_register(SPI, ?REG_MODEM_CONFIG_2),
@@ -171,7 +179,7 @@ set_spreading_factor(SPI, SF) ->
     {ok, ModemConfig2} = read_register(SPI, ?REG_MODEM_CONFIG_2),
     write_register(SPI, ?REG_MODEM_CONFIG_2, (ModemConfig2 band 16#0f) bor ((SF bsl 4) band 16#f0)).
 
-sleep(SPI) -> 
+sleep(SPI) ->
     write_register(SPI, ?REG_OP_MODE, ?MODE_LONG_RANGE_MODE bor ?MODE_SLEEP).
 
 set_frequency(SPI, 868) ->
@@ -179,6 +187,52 @@ set_frequency(SPI, 868) ->
     write_register(SPI, ?REG_FRF_MSB, ((F bsr 16) band 16#FF)),
     write_register(SPI, ?REG_FRF_MID, ((F bsr 8) band 16#FF)),
     write_register(SPI, ?REG_FRF_LSB, F band 16#FF).
+
+enable_receive(SPI) ->
+    write_register(SPI, ?REG_OP_MODE, ?MODE_LONG_RANGE_MODE bor ?MODE_RX_CONTINUOUS).
+
+handle_irq(SPI) ->
+    {ok, IRQFlags} = read_register(SPI, ?REG_IRQ_FLAGS),
+    %explicitHeaderMode();
+    write_register(SPI, ?REG_IRQ_FLAGS, IRQFlags),
+
+    erlang:display({flags, IRQFlags}),
+
+    if
+        ((IRQFlags band ?IRQ_RX_DONE_MASK) /= 0) andalso ((IRQFlags band ?IRQ_PAYLOAD_CRC_ERROR_MASK) == 0) ->
+            {ok, PacketLength} = read_register(SPI, ?REG_RX_NB_BYTES),
+            {ok, CurrentAddr} = read_register(SPI, ?REG_FIFO_RX_CURRENT_ADDR),
+
+            erlang:display({wat, PacketLength, CurrentAddr}),
+
+            write_register(SPI, ?REG_FIFO_ADDR_PTR, CurrentAddr),
+            %%%%%%%%%%%%%%%%%%%%idle(SPI),
+            erlang:display(read(SPI, PacketLength)),
+
+            %%%%%
+            write_register(SPI, ?REG_FIFO_ADDR_PTR, 0);
+            %%%%%%%%%%%%%%%%%%%%enable_receive(SPI);
+
+        (IRQFlags band ?IRQ_RX_DONE_MASK) /= 0 ->
+            erlang:display(crc_error);
+
+        true ->
+            erlang:display(not_rx_done)
+    end.
+
+read(_SPI, 0) ->
+    [];
+
+read(SPI, Len) ->
+    {ok, Data} = read_register(SPI, ?REG_FIFO),
+    [Data | read(SPI, Len - 1)].
+
+wait_interrupt(SPI) ->
+    receive
+        Any ->
+            handle_irq(SPI),
+            erlang:display(Any)
+    end.
 
 wait_flags(SPI, Register, Mask) ->
     wait_flags(SPI, Register, Mask, 0).
