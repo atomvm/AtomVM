@@ -1,5 +1,6 @@
 -module(sx127x).
--export([start/0, init_sx127x/2, broadcast_packet/2]).
+-export([start/0]).
+-export([init/1, handle_call/3, handle_info/2, terminate/2]).
 
 -define (REG_FIFO, 16#00).
 -define (REG_OP_MODE, 16#01).
@@ -59,17 +60,40 @@
     ]).
 
 start() ->
+    {ok, P} = avm_gen_server:start(?MODULE, [], []),
+    avm_gen_server:call(P, init),
+    loop(P).
+
+loop(P) ->
+    avm_timer:sleep(1000),
+    TheList = "AVM",
+    avm_gen_server:call(P, {send, TheList}),
+    avm_io:format("Sending: ~s~n", [TheList]),
+    loop(P).
+
+init(_) ->
+    {ok, {}}.
+
+handle_call(init, _From, _State) ->
     GPIO = gpio:open(),
     {ok, SPI} = init_sx127x(GPIO, ?SPISettings),
-    loop(SPI, 0).
+    {reply, ok, SPI};
 
-loop(SPI, Count) ->
-    wait_interrupt(SPI),
-    %avm_timer:sleep(1000),
-    %TheList = "AVM" ++ integer_to_list(Count),
-    %console:puts("Sending: " ++ TheList ++ "\n"),
-    %broadcast_packet(SPI, TheList),
-    loop(SPI, Count + 1).
+handle_call({send, Msg}, _From, SPI) ->
+    broadcast_packet(SPI, Msg),
+    enable_receive(SPI),
+    {reply, ok, SPI};
+
+handle_call(Call, _From, State) ->
+    erlang:display(Call),
+    {reply, ok, State}.
+
+handle_info({gpio_interrupt, 26}, SPI) ->
+    handle_irq(SPI),
+    {noreply, SPI}.
+
+terminate(_Reason, _State) ->
+    ok.
 
 init_sx127x(GPIO, SPISettings) ->
     case init_hw(GPIO, SPISettings) of
@@ -77,10 +101,6 @@ init_sx127x(GPIO, SPISettings) ->
             init_regs(SPI),
             write_register(SPI, ?REG_DIO_MAPPING_1, 16#00),
             gpio:set_int(GPIO, 26, rising),
-            %%%
-            gpio:set_direction(GPIO, 0, input),
-            gpio:set_int(GPIO, 0, rising),
-            %%%%
             enable_receive(SPI),
             {ok, SPI};
         Error ->
@@ -193,31 +213,23 @@ enable_receive(SPI) ->
 
 handle_irq(SPI) ->
     {ok, IRQFlags} = read_register(SPI, ?REG_IRQ_FLAGS),
-    %explicitHeaderMode();
     write_register(SPI, ?REG_IRQ_FLAGS, IRQFlags),
-
-    erlang:display({flags, IRQFlags}),
 
     if
         ((IRQFlags band ?IRQ_RX_DONE_MASK) /= 0) andalso ((IRQFlags band ?IRQ_PAYLOAD_CRC_ERROR_MASK) == 0) ->
             {ok, PacketLength} = read_register(SPI, ?REG_RX_NB_BYTES),
             {ok, CurrentAddr} = read_register(SPI, ?REG_FIFO_RX_CURRENT_ADDR),
 
-            erlang:display({wat, PacketLength, CurrentAddr}),
-
             write_register(SPI, ?REG_FIFO_ADDR_PTR, CurrentAddr),
-            %%%%%%%%%%%%%%%%%%%%idle(SPI),
-            erlang:display(read(SPI, PacketLength)),
+            avm_io:format("Received data: ~s~n", [read(SPI, PacketLength)]),
 
-            %%%%%
             write_register(SPI, ?REG_FIFO_ADDR_PTR, 0);
-            %%%%%%%%%%%%%%%%%%%%enable_receive(SPI);
 
         (IRQFlags band ?IRQ_RX_DONE_MASK) /= 0 ->
-            erlang:display(crc_error);
+            avm_io:format("CRC error");
 
         true ->
-            erlang:display(not_rx_done)
+            avm_io:format("Unexpected IRQ")
     end.
 
 read(_SPI, 0) ->
@@ -226,13 +238,6 @@ read(_SPI, 0) ->
 read(SPI, Len) ->
     {ok, Data} = read_register(SPI, ?REG_FIFO),
     [Data | read(SPI, Len - 1)].
-
-wait_interrupt(SPI) ->
-    receive
-        Any ->
-            handle_irq(SPI),
-            erlang:display(Any)
-    end.
 
 wait_flags(SPI, Register, Mask) ->
     wait_flags(SPI, Register, Mask, 0).
