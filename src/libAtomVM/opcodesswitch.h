@@ -35,6 +35,7 @@
 #endif
 
 #define ENABLE_OTP21
+#define ENABLE_OTP22
 
 //#define ENABLE_TRACE
 
@@ -3145,6 +3146,49 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #ifdef IMPL_CODE_LOADER
                     TRACE("get_tl/2\n");
                     UNUSED(src_value)
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+#endif
+
+#ifdef ENABLE_OTP22
+            case OP_PUT_TUPLE2: {
+                int next_off = 1;
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
+                next_off++; //skip extended list tag
+                int size;
+                DECODE_INTEGER(size, code, i, next_off, next_off)
+
+                TRACE("put_tuple2/2, size=%i\n", size);
+                USED_BY_TRACE(size);
+
+                #ifdef IMPL_CODE_LOADER
+                    UNUSED(dreg);
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    term t = term_alloc_tuple(size, ctx);
+                #endif
+
+                for (int j = 0; j < size; j++) {
+                    term element;
+                    DECODE_COMPACT_TERM(element, code, i, next_off, next_off)
+
+                    #ifdef IMPL_CODE_LOADER
+                        UNUSED(element);
+                    #endif
+
+                    #ifdef IMPL_EXECUTE_LOOP
+                        term_put_tuple_element(t, j, element);
+                    #endif
+                }
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
 
                 NEXT_INSTRUCTION(next_off);

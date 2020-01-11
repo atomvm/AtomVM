@@ -100,5 +100,6 @@
 #define OP_IS_TAGGED_TUPLE 159
 #define OP_GET_HD 162
 #define OP_GET_TL 163
+#define OP_PUT_TUPLE2 164
 
 #endif
