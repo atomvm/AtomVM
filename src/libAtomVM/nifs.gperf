@@ -66,4 +66,5 @@ erlang:throw/1, &throw_nif
 erlang:pid_to_list/1, &pid_to_list_nif
 erlang:ref_to_list/1, &ref_to_list_nif
 erlang:fun_to_list/1, &fun_to_list_nif
+erlang:!/2, &send_nif
 erts_debug:flat_size/1, &flat_size_nif
