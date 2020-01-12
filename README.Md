@@ -44,7 +44,7 @@ Project Status
 
 [![Build Status](https://travis-ci.com/bettio/AtomVM.svg?branch=master)](https://travis-ci.com/bettio/AtomVM)
 
-Right now only binaries compiled with OTP 20 and 21 are supported, support for newer versions (such as OTP 22) will be added soon.
+Right now only binaries compiled with OTP 20-22 are supported.
 
 AtomVM is still in its early stages, but it can run simple applications similar to those available in examples and tests.
 AtomVM might crash with a similar message:
