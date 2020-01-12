@@ -377,6 +377,40 @@ matrix:
       before_install:
         - eval "${MATRIX_EVAL}"
 
+    - name: "GCC 7 on Trusty with OTP 22"
+      os: linux
+      dist: trusty
+      sudo: true
+      addons:
+        apt:
+          sources:
+            - sourceline: deb https://packages.erlang-solutions.com/ubuntu trusty contrib
+              key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+            - gperf
+            - valgrind
+            - esl-erlang=1:22.0.1-1
+      env:
+        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
+      script:
+        - export CC=gcc-7
+        - export CXX=g++-7
+        - mkdir -p build
+        - cd build
+        - cc --version
+        # Disable FP tests when building code with OTP 22 erlang compiler
+        # TODO: enable FP when fmove instruction will be supported
+        - cmake -DAVM_DISABLE_FP=on ..
+        - make
+        - valgrind ./tests/test-erlang
+        - ./tests/test-erlang
+        - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+        - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+      before_install:
+        - eval "${MATRIX_EVAL}"
+
     - name: "xcode11.2/Mojave (using -O2) on macOS with OTP 21"
       os: osx
       osx_image: xcode11.2
