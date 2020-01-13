@@ -1121,4 +1121,25 @@ static inline int term_is_string(term t)
     return term_is_nil(t);
 }
 
+/**
+ * @brief Checks to see if e is a member of list
+ *
+ * @details returns 1 if e is equal to an element of list; 0, otherwise
+ * @param   list list term
+ * @param   e element term
+ * @return  1 if e is equal to a member of list; 0, otherwise
+ */
+static inline int term_list_member(term list, term e, Context *ctx)
+{
+    term t = list;
+    while (term_is_nonempty_list(t)) {
+        term head = term_get_list_head(t);
+        if (term_equals(head, e, ctx)) {
+            return 1;
+        }
+        t = term_get_list_tail(t);
+    }
+    return 0;
+}
+
 #endif

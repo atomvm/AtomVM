@@ -2007,15 +2007,25 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
 {
-    if (argc != 1) {
+    if (argc < 1 || 2 < argc) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (argc == 2 && !term_is_list(argv[1])) {
         RAISE_ERROR(BADARG_ATOM);
     }
     term binary = argv[0];
     if (!term_is_binary(binary)) {
         RAISE_ERROR(BADARG_ATOM);
     }
+    uint8_t return_used = 0;
+    size_t num_extra_terms = 0;
+    if (argc == 2 && term_list_member(argv[1], USED_ATOM, ctx)) {
+        return_used = 1;
+        num_extra_terms = 3;
+    }
     term dst = term_invalid_term();
-    enum ExternalTermResult result = externalterm_from_binary(ctx, &dst, binary);
+    size_t bytes_read = 0;
+    enum ExternalTermResult result = externalterm_from_binary(ctx, &dst, binary, &bytes_read, num_extra_terms);
     switch (result) {
         case EXTERNAL_TERM_BAD_ARG:
             RAISE_ERROR(BADARG_ATOM);
@@ -2029,7 +2039,14 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
     if (term_is_invalid_term(dst)) {
         RAISE_ERROR(BADARG_ATOM)
     }
-    return dst;
+    if (return_used) {
+        term ret = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(ret, 0, dst);
+        term_put_tuple_element(ret, 1, term_from_int(bytes_read));
+        return ret;
+    } else {
+        return dst;
+    }
 }
 
 static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[])
