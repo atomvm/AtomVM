@@ -46,7 +46,7 @@ static int externalterm_from_term(Context *ctx, uint8_t **buf, size_t *len, term
 static int serialize_term(Context *ctx, uint8_t *buf, term t);
 
 /**
- * @brief   
+ * @brief
  * @param   external_term   buffer containing external term
  * @param   ctx             current context in which terms may be stored
  * @param   use_heap_fragment whether to store parsed terms in a heap fragement.  If 0, terms
