@@ -38,6 +38,12 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifdef DYNLOAD_PORT_DRIVERS
+    #include <dlfcn.h>
+
+    typedef int (*port_driver_init_t)(Context *, term);
+#endif
+
 #include "trace.h"
 
 static volatile uint32_t millis;
@@ -179,8 +185,29 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
     } else if (!strcmp(driver_name, "gpio")) {
         gpiodriver_init(new_ctx);
     } else {
+#ifdef DYNLOAD_PORT_DRIVERS
+        void *handle;
+        {
+            char port_driver_name[83];
+            snprintf(port_driver_name, 83, "./avm_%s_port_driver.so", driver_name);
+            handle = dlopen(port_driver_name, RTLD_NOW);
+            if (!handle) {
+                context_destroy(new_ctx);
+                return NULL;
+            }
+        }
+        char port_driver_func_name[81];
+        snprintf(port_driver_func_name, 81, "%s_port_driver_init", driver_name);
+        port_driver_init_t port_driver_init = dlsym(handle, port_driver_func_name);
+        if (!port_driver_init) {
+            context_destroy(new_ctx);
+            return NULL;
+        }
+        port_driver_init(new_ctx, opts);
+#else
         context_destroy(new_ctx);
         return NULL;
+#endif
     }
 
     return new_ctx;

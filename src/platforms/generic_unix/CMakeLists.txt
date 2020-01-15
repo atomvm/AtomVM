@@ -35,6 +35,10 @@ else()
     set(EXTRA_LIBS "")
 endif()
 
+# enable by default dynamic loading on unix
+add_definitions(-DDYNLOAD_PORT_DRIVERS)
+set(EXTRA_LIBS ${EXTRA_LIBS} ${CMAKE_DL_LIBS})
+
 if(CMAKE_COMPILER_IS_GNUCC)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -pedantic -Wextra -ggdb")
 endif()
