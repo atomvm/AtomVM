@@ -24,3 +24,5 @@ endif()
 add_executable(PackBEAM packbeam.c)
 target_link_libraries(PackBEAM ${ZLIB_LIBRARIES} libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
 set_property(TARGET PackBEAM PROPERTY C_STANDARD 99)
+
+install(TARGETS PackBEAM DESTINATION bin)

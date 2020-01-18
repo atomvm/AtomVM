@@ -11,3 +11,5 @@ set(ERLANG_MODULES
 )
 
 pack_archive(etest ${ERLANG_MODULES})
+
+install(FILES etest.avm DESTINATION lib/AtomVM/ebin)

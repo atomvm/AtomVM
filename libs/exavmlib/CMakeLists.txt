@@ -12,3 +12,5 @@ set(ELIXIR_MODULES
 )
 
 pack_archive(exavmlib ${ELIXIR_MODULES})
+
+install(FILES exavmlib.avm DESTINATION lib/AtomVM/ebin)

@@ -47,3 +47,5 @@ set_property(TARGET AtomVM PROPERTY C_STANDARD 99)
 if (CMAKE_BUILD_TYPE STREQUAL "Coverage")
     set_target_properties(AtomVM PROPERTIES COMPILE_FLAGS "-O0 -fprofile-arcs -ftest-coverage")
 endif()
+
+install(TARGETS AtomVM DESTINATION bin)

@@ -22,3 +22,5 @@ set(ERLANG_MODULES
 )
 
 pack_archive(eavmlib ${ERLANG_MODULES})
+
+install(FILES eavmlib.avm DESTINATION lib/AtomVM/ebin)

@@ -3,44 +3,43 @@ project (libAtomVM)
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-if(${CMAKE_GENERATOR} STREQUAL "Xcode")
-    set(HEADER_FILES
-        atom.h
-        atomshashtable.h
-        avmpack.h
-        bif.h
-        context.h
-        ccontext.h
-        debug.h
-        defaultatoms.h
-        exportedfunction.h
-        externalterm.h
-        globalcontext.h
-        iff.h
-        interop.h
-        list.h
-        linkedlist.h
-        mailbox.h
-        memory.h
-        module.h
-        opcodesswitch.h
-        overflow_helpers.h
-        network.h
-        network_driver.h
-        nifs.h
-        platform_nifs.h
-        port.h
-        scheduler.h
-        sys.h
-        term_typedef.h
-        term.h
-        timer_wheel.h
-        trace.h
-        utils.h
-        valueshashtable.h
-        version.h
-    )
-endif()
+set(HEADER_FILES
+    atom.h
+    atomshashtable.h
+    avmpack.h
+    bif.h
+    context.h
+    ccontext.h
+    debug.h
+    defaultatoms.h
+    exportedfunction.h
+    externalterm.h
+    globalcontext.h
+    iff.h
+    interop.h
+    list.h
+    linkedlist.h
+    mailbox.h
+    memory.h
+    module.h
+    opcodesswitch.h
+    overflow_helpers.h
+    network.h
+    network_driver.h
+    nifs.h
+    platform_nifs.h
+    port.h
+    scheduler.h
+    sys.h
+    term_typedef.h
+    term.h
+    timer_wheel.h
+    trace.h
+    utils.h
+    valueshashtable.h
+    version.h
+)
+
 set(SOURCE_FILES
     atom.c
     atomshashtable.c
@@ -114,3 +113,5 @@ set_property(TARGET libAtomVM PROPERTY C_STANDARD 99)
 if (CMAKE_BUILD_TYPE STREQUAL "Coverage")
     set_target_properties(libAtomVM PROPERTIES COMPILE_FLAGS "-O0 -fprofile-arcs -ftest-coverage")
 endif()
+
+install(FILES ${HEADER_FILES} DESTINATION include/AtomVM)
