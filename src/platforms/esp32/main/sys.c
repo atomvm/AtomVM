@@ -149,6 +149,16 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
     return new_module;
 }
 
+// This function allows to use AtomVM as a component on ESP32 and customize it
+__attribute__ ((weak)) Context *sys_create_port_fallback(Context *new_ctx, const char *driver_name, term opts)
+{
+    UNUSED(driver_name);
+    UNUSED(opts);
+
+    context_destroy(new_ctx);
+    return NULL;
+}
+
 Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 {
     Context *new_ctx = context_new(glb);
@@ -164,8 +174,7 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
     } else if (!strcmp(driver_name, "i2c")) {
         i2cdriver_init(new_ctx, opts);
     } else {
-        context_destroy(new_ctx);
-        return NULL;
+        return sys_create_port_fallback(new_ctx, driver_name, opts);
     }
 
     return new_ctx;
