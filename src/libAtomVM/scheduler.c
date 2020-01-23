@@ -73,6 +73,14 @@ Context *scheduler_wait(GlobalContext *global, Context *c)
     return GET_LIST_ENTRY(next_ready, Context, processes_list_head);
 }
 
+static inline void scheduler_execute_native_handler(GlobalContext *global, Context *c)
+{
+    scheduler_make_waiting(global, c);
+    // context might terminate itself
+    // so call to native_handler must be the last action here.
+    c->native_handler(c);
+}
+
 Context *scheduler_next(GlobalContext *global, Context *c)
 {
     c->reductions += DEFAULT_REDUCTIONS_AMOUNT;
@@ -86,7 +94,10 @@ Context *scheduler_next(GlobalContext *global, Context *c)
     struct ListHead *tmp;
     MUTABLE_LIST_FOR_EACH(item, tmp, &global->ready_processes) {
         Context *next_context = GET_LIST_ENTRY(item, Context, processes_list_head);
-        if (!next_context->native_handler && (next_context != c)) {
+        if (next_context->native_handler) {
+            scheduler_execute_native_handler(global, next_context);
+
+        } else if (!next_context->native_handler && (next_context != c)) {
             return next_context;
         }
     }
@@ -167,10 +178,7 @@ static void scheduler_execute_native_handlers(GlobalContext *global)
         Context *context = GET_LIST_ENTRY(item, Context, processes_list_head);
 
         if (context->native_handler) {
-            scheduler_make_waiting(global, context);
-            // context might terminate itself
-            // so call to native_handler must be the last action here.
-            context->native_handler(context);
+            scheduler_execute_native_handler(global, context);
         }
     }
 }
