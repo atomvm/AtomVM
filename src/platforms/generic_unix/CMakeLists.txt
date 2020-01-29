@@ -3,13 +3,12 @@ project (libAtomVMPlatformGenericUnix)
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_SOURCE_DIR}/src/libAtomVM)
 
-if(${CMAKE_GENERATOR} STREQUAL "Xcode")
-    set(HEADER_FILES
-        generic_unix_sys.h
-        mapped_file.h
-        platform_defaultatoms.h
-    )
-endif()
+set(HEADER_FILES
+    generic_unix_sys.h
+    mapped_file.h
+    platform_defaultatoms.h
+)
+
 set(SOURCE_FILES
     gpio_driver.c
     sys.c
@@ -46,6 +45,8 @@ endif()
 add_library(libAtomVM${PLATFORM_LIB_SUFFIX} ${SOURCE_FILES} ${HEADER_FILES})
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} libAtomVM ${EXTRA_LIBS})
 set_property(TARGET libAtomVM${PLATFORM_LIB_SUFFIX} PROPERTY C_STANDARD 99)
+
+install(FILES ${HEADER_FILES} DESTINATION include/AtomVM)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Coverage")
     set_target_properties(libAtomVM${PLATFORM_LIB_SUFFIX} PROPERTIES COMPILE_FLAGS "-O0 -fprofile-arcs -ftest-coverage")
