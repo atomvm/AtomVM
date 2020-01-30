@@ -94,6 +94,18 @@ static const char *const scl_io_num_atom = "\xA" "scl_io_num";
 static const char *const sda_io_num_atom = "\xA" "sda_io_num";
 static const char *const i2c_clock_hz_atom = "\xC" "i2c_clock_hz";
 
+//uart
+static const char *const name_atom = "\x4" "name";
+static const char *const speed_atom = "\x5" "speed";
+static const char *const write_atom = "\x5" "write";
+static const char *const data_bits_atom = "\x9" "data_bits";
+static const char *const stop_bits_atom = "\x9" "stop_bits";
+static const char *const flow_control_atom = "\xC" "flow_control";
+static const char *const hardware_atom = "\x8" "hardware";
+static const char *const software_atom = "\x8" "software";
+static const char *const parity_atom = "\x6" "parity";
+static const char *const even_atom = "\x4" "even";
+static const char *const odd_atom = "\x3" "odd";
 
 void platform_defaultatoms_init(GlobalContext *glb)
 {
@@ -173,6 +185,20 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, scl_io_num_atom) == SCL_IO_NUM_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, sda_io_num_atom) == SDA_IO_NUM_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, i2c_clock_hz_atom) == I2C_CLOCK_HZ_ATOM_INDEX;
+
+    //uart
+    ok &= globalcontext_insert_atom(glb, name_atom) == NAME_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, speed_atom) == SPEED_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, write_atom) == WRITE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, data_bits_atom) == DATA_BITS_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, stop_bits_atom) == STOP_BITS_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, flow_control_atom) == FLOW_CONTROL_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, hardware_atom) == HARDWARE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, software_atom) == SOFTWARE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, parity_atom) == PARITY_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, even_atom) == EVEN_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, odd_atom) == ODD_ATOM_INDEX;
+
 
     if (!ok) {
         abort();

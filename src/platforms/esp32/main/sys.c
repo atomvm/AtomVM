@@ -27,6 +27,7 @@
 #include "gpio_driver.h"
 #include "spidriver.h"
 #include "network.h"
+#include "uart_driver.h"
 #include "defaultatoms.h"
 
 #include "trace.h"
@@ -173,6 +174,8 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
         spidriver_init(new_ctx, opts);
     } else if (!strcmp(driver_name, "i2c")) {
         i2cdriver_init(new_ctx, opts);
+    } else if (!strcmp(driver_name, "uart")) {
+        uart_driver_init(new_ctx, opts);
     } else {
         return sys_create_port_fallback(new_ctx, driver_name, opts);
     }
