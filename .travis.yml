@@ -1,9 +1,6 @@
 language: c
 
 matrix:
-  allow_failures:
-    - name: "STM32 platform"
-
   include:
     - name: "GCC 7 (with -Os) on Trusty with OTP 20"
       os: linux

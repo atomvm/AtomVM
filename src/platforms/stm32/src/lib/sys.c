@@ -54,54 +54,9 @@ static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *
     return (timespec1->tv_sec - timespec2->tv_sec) * 1000 + (timespec1->tv_nsec - timespec2->tv_nsec) / 1000000;
 }
 
-void sys_waitevents(GlobalContext *glb)
+void sys_init_platform(GlobalContext *glb)
 {
-    struct ListHead *listeners_list = glb->listeners;
-    struct timespec now;
-    sys_clock_gettime(&now);
-
-    EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
-
-    int min_timeout = INT_MAX;
-    int count = 0;
-
-    //first: find maximum allowed sleep time, and count file descriptor listeners
-    EventListener *listener = listeners;
-    do {
-        if (listener->expires) {
-            int wait_ms = timespec_diff_to_ms(&listener->expiral_timestamp, &now);
-            if (wait_ms <= 0) {
-                min_timeout = 0;
-            } else if (min_timeout > wait_ms) {
-                min_timeout = wait_ms;
-            }
-        }
-        if (listener->fd >= 0) {
-            count++;
-        }
-
-        listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-    } while (listener != listeners);
-
-    msleep(min_timeout);
-
-    //second: execute handlers for expiered timers
-    if (min_timeout != INT_MAX) {
-        listener = listeners;
-        sys_clock_gettime(&now);
-        do {
-            EventListener *next_listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-            if (listener->expires) {
-                int wait_ms = timespec_diff_to_ms(&listener->expiral_timestamp, &now);
-                if (wait_ms <= 0) {
-                    //it is completely safe to free a listener in the callback, we are going to not use it after this call
-                    listener->handler(listener);
-                }
-            }
-
-            listener = next_listener;
-        } while (listener != listeners);
-    }
+    UNUSED(glb);
 }
 
 void sys_consume_pending_events(GlobalContext *glb)
@@ -119,6 +74,20 @@ void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis)
 void sys_time(struct timespec *t)
 {
     sys_clock_gettime(t);
+}
+
+
+uint32_t sys_millis()
+{
+    return system_millis;
+}
+
+void sys_start_millis_timer()
+{
+}
+
+void sys_stop_millis_timer()
+{
 }
 
 Module *sys_load_module(GlobalContext *global, const char *module_name)
@@ -154,4 +123,9 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 term sys_get_info(Context *ctx, term key)
 {
     return UNDEFINED_ATOM;
+}
+
+void sys_sleep(GlobalContext *glb)
+{
+    UNUSED(glb);
 }
