@@ -19,6 +19,7 @@ set(ERLANG_MODULES
     spi
     timer_manager
     timestamp_util
+    uart
 )
 
 pack_archive(eavmlib ${ERLANG_MODULES})
