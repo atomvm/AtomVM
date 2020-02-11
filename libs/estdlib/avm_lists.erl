@@ -26,7 +26,7 @@
 %%-----------------------------------------------------------------------------
 -module(avm_lists).
 
--export([nth/2, member/2, delete/2, reverse/1, keydelete/3, keyfind/3, foldl/3, foldr/3, all/2, any/2, flatten/1]).
+-export([nth/2, member/2, delete/2, reverse/1, keydelete/3, keyfind/3, keymember/3, foldl/3, foldr/3, all/2, any/2, flatten/1]).
 
 %%-----------------------------------------------------------------------------
 %% @param   N the index in the list to get
@@ -152,6 +152,32 @@ keyfind(K, I, [H|T]) when is_tuple(H) ->
     end;
 keyfind(K, I, [_H|T]) ->
     keyfind(K, I, T).
+
+%%-----------------------------------------------------------------------------
+%% @param   K the key to match
+%% @param   I the position in the tuple to compare (1..tuple_size)
+%% @param   L the list from which to find the element
+%% @returns true if there is a tuple in L who's Ith element matches K; the atom false, otherwise
+%% @doc     Returns true if a Ith element matches K.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec keymember(K::term(), I::pos_integer(), L::list(tuple())) -> boolean().
+keymember(_K, _I, []) ->
+    false;
+keymember(K, I, [H|T]) when is_tuple(H) ->
+    case I =< tuple_size(H) of
+        true ->
+            case element(I, H) of
+                K ->
+                    true;
+                _ ->
+                    keyfind(K, I, T)
+            end;
+        false ->
+            keyfind(K, I, T)
+    end;
+keymember(K, I, [_H|T]) ->
+    keymember(K, I, T).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun the function to apply
