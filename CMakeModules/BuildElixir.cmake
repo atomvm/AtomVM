@@ -8,7 +8,7 @@ macro(pack_archive avm_name)
     foreach(module_name ${ARGN})
         add_custom_command(
             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/Elixir.${module_name}.beam
-            COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams && elixirc -o ${CMAKE_CURRENT_BINARY_DIR}/beams ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.ex
+            COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams && elixirc --no-docs --no-debug-info --ignore-module-conflict -o ${CMAKE_CURRENT_BINARY_DIR}/beams ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.ex
             DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.ex
             COMMENT "Compiling ${module_name}.ex"
             VERBATIM
