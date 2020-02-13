@@ -11,6 +11,7 @@ set(ELIXIR_MODULES
     GPIO
     Access
     Keyword
+    Kernel
     Process
 )
 
