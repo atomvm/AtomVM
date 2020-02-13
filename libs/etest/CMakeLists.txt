@@ -12,4 +12,4 @@ set(ERLANG_MODULES
 
 pack_archive(etest ${ERLANG_MODULES})
 
-install(FILES etest.avm DESTINATION lib/AtomVM/ebin)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/etest.avm DESTINATION lib/AtomVM/ebin)

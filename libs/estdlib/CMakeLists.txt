@@ -24,4 +24,4 @@ set(ERLANG_MODULES
 
 pack_archive(estdlib ${ERLANG_MODULES})
 
-install(FILES estdlib.avm DESTINATION lib/AtomVM/ebin)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/estdlib.avm DESTINATION lib/AtomVM/ebin)
