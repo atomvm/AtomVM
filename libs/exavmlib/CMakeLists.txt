@@ -10,6 +10,7 @@ set(ELIXIR_MODULES
     Console
     GPIO
     Access
+    List
     Keyword
     Kernel
     Process
