@@ -9,6 +9,7 @@ include(BuildElixir)
 set(ELIXIR_MODULES
     Console
     GPIO
+    Process
 )
 
 pack_archive(exavmlib ${ELIXIR_MODULES})
