@@ -97,7 +97,7 @@ gperf_generate(${CMAKE_CURRENT_SOURCE_DIR}/nifs.gperf nifs_hash.h)
 add_custom_target(generated DEPENDS bifs_hash.h)
 add_custom_target(generated-nifs-hash DEPENDS nifs_hash.h)
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in version.h)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/version.h)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 set(
