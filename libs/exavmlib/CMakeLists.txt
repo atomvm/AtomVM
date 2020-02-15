@@ -15,6 +15,7 @@ set(ELIXIR_MODULES
     Keyword
     Kernel
     Process
+    Tuple
 )
 
 pack_archive(exavmlib ${ELIXIR_MODULES})
