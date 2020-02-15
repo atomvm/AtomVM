@@ -26,7 +26,7 @@
 %%-----------------------------------------------------------------------------
 -module(avm_lists).
 
--export([nth/2, member/2, delete/2, reverse/1, keydelete/3, keyfind/3, keymember/3, foldl/3, foldr/3, all/2, any/2, flatten/1]).
+-export([nth/2, member/2, delete/2, reverse/1, foreach/2, keydelete/3, keyfind/3, keymember/3, foldl/3, foldr/3, all/2, any/2, flatten/1]).
 
 %%-----------------------------------------------------------------------------
 %% @param   N the index in the list to get
@@ -95,6 +95,20 @@ reverse([], Accum) ->
     Accum;
 reverse([H|T], Accum) ->
     reverse(T, [H|Accum]).
+
+%%-----------------------------------------------------------------------------
+%% @param   Fun the predicate to evaluate
+%% @param   List the list over which to evaluate elements
+%% @returns ok
+%% @doc     Applies given fun to each list element
+%% @end
+%%-----------------------------------------------------------------------------
+-spec foreach(Fun::fun((Elem::term()) -> term()), List::list()) -> ok.
+foreach(_Fun, []) ->
+    ok;
+foreach(Fun, [H|T]) ->
+    Fun(H),
+    foreach(Fun, T).
 
 %%-----------------------------------------------------------------------------
 %% @param   K the key to match
