@@ -1,4 +1,7 @@
 defmodule Access do
+  # This avoids crashing the compiler at build time
+  @compile {:autoload, false}
+
   def fetch(list, key) when is_list(list) and is_atom(key) do
     case :avm_lists.keyfind(key, 1, list) do
       {_, value} -> {:ok, value}

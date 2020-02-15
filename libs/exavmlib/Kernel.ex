@@ -1,4 +1,7 @@
 defmodule Kernel do
+  # This avoids crashing the compiler at build time
+  @compile {:autoload, false}
+
   def inspect(term, opts \\ []) when is_list(opts) do
     case term do
       t when is_atom(t) ->

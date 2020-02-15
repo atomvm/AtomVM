@@ -1,4 +1,7 @@
 defmodule Keyword do
+  # This avoids crashing the compiler at build time
+  @compile {:autoload, false}
+
   def fetch(keywords, key) when is_list(keywords) and is_atom(key) do
     case :avm_lists.keyfind(key, 1, keywords) do
       {^key, value} -> {:ok, value}
