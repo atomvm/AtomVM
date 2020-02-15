@@ -10,6 +10,7 @@ set(ELIXIR_MODULES
     Console
     GPIO
     Access
+    Enum
     List
     Keyword
     Kernel
