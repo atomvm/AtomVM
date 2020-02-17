@@ -97,6 +97,7 @@
 #define OP_RECV_SET 151
 #define OP_GC_BIF3 152
 #define OP_LINE 153
+#define OP_IS_MAP 156
 #define OP_IS_TAGGED_TUPLE 159
 #define OP_GET_HD 162
 #define OP_GET_TL 163
