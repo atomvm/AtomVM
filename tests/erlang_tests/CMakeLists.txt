@@ -343,6 +343,8 @@ compile_erlang(raise_if_end)
 compile_erlang(catch_from_other_module)
 compile_erlang(throwtest)
 
+compile_erlang(test_tuple_is_not_map)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -678,4 +680,6 @@ add_custom_target(erlang_test_modules DEPENDS
     raise_if_end.beam
     catch_from_other_module.beam
     throwtest.beam
+
+    test_tuple_is_not_map.beam
 )

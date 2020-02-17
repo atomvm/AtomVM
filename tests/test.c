@@ -385,6 +385,8 @@ struct Test tests[] =
     {"catch_from_other_module.beam", 7},
     {"throwtest.beam", -10},
 
+    {"test_tuple_is_not_map.beam", 16},
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}
