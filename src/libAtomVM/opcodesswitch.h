@@ -47,6 +47,7 @@
 #define COMPACT_XREG 3
 #define COMPACT_YREG 4
 #define COMPACT_EXTENDED 7
+#define COMPACT_LARGE_LITERAL 8
 #define COMPACT_LARGE_INTEGER 9
 #define COMPACT_LARGE_ATOM 10
 #define COMPACT_LARGE_YREG 12
@@ -88,6 +89,7 @@ typedef union
 {                                                                                       \
     uint8_t first_byte = (code_chunk[(base_index) + (off)]);                            \
     switch (first_byte & 0xF) {                                                         \
+        case COMPACT_LARGE_LITERAL:                                                     \
         case COMPACT_LITERAL:                                                           \
             switch (((first_byte) >> 3) & 0x3) {                                        \
                 case 0:                                                                 \
@@ -194,6 +196,7 @@ typedef union
 {                                                                                                                       \
     uint8_t first_byte = (code_chunk[(base_index) + (off)]);                                                            \
     switch (first_byte & 0xF) {                                                                                         \
+        case COMPACT_LARGE_LITERAL:                                                                                     \
         case COMPACT_LITERAL:                                                                                           \
             switch (((first_byte) >> 3) & 0x3) {                                                                        \
                 case 0:                                                                                                 \
@@ -3118,6 +3121,136 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     ctx->bs = src;
                     ctx->bs_offset = 0;
                     WRITE_REGISTER(dreg_type, dreg, src);
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_BS_START_MATCH3: {
+                int next_off = 1;
+                int fail;
+                DECODE_LABEL(fail, code, i, next_off, next_off)
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off, next_off);
+                term live;
+                DECODE_COMPACT_TERM(live, code, i, next_off, next_off);
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_start_match2/5\n");
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    VERIFY_IS_BINARY(src, "bs_start_match3");
+
+                    TRACE("bs_start_match3/4, fail=%i src=0x%lx live=0x%lx dreg=%c%i\n", fail, src, live, T_DEST_REG(dreg_type, dreg));
+                    ctx->bs = src;
+                    ctx->bs_offset = 0;
+                    WRITE_REGISTER(dreg_type, dreg, src);
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_BS_GET_POSITION: {
+                int next_off = 1;
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off, next_off);
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
+                term live;
+                DECODE_COMPACT_TERM(live, code, i, next_off, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_get_position/3\n");
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    VERIFY_IS_BINARY(src, "bs_get_position");
+
+                    TRACE("bs_get_position/3 src=0x%lx dreg=%c%i live=0x%lx \n", src, T_DEST_REG(dreg_type, dreg), live);
+                    WRITE_REGISTER(dreg_type, dreg, term_from_int(ctx->bs_offset));
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_BS_GET_TAIL: {
+                int next_off = 1;
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off, next_off);
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
+                term live;
+                DECODE_COMPACT_TERM(live, code, i, next_off, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_get_tail/3\n");
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    VERIFY_IS_BINARY(src, "bs_get_tail");
+
+                    TRACE("bs_get_tail/3 src=0x%lx dreg=%c%i live=0x%lx \n", src, T_DEST_REG(dreg_type, dreg), live);
+                    if (ctx->bs_offset == 0) {
+                        WRITE_REGISTER(dreg_type, dreg, src);
+                    } else {
+                        if (ctx->bs_offset % 8 != 0) {
+                            TRACE("bs_get_tail: Unsupported alignment.\n");
+                            RAISE_ERROR(UNSUPPORTED_ATOM);
+                        } else {
+                            size_t start_pos = ctx->bs_offset / 8;
+                            size_t src_size = term_binary_size(src);
+                            size_t new_bin_size = src_size - start_pos;
+                            uint8_t *src_buf = malloc(new_bin_size);
+                            if (UNLIKELY(IS_NULL_PTR(src_buf))) {
+                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                            }
+                            memcpy(src_buf + start_pos, term_binary_data(src), new_bin_size);
+
+                            if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(new_bin_size) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+                                free(src_buf);
+                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                            }
+
+                            term t = term_from_literal_binary(src_buf + start_pos, new_bin_size, ctx);
+
+                            free(src_buf);
+                            WRITE_REGISTER(dreg_type, dreg, t);
+
+                        }
+                    }
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_BS_SET_POSITION: {
+                int next_off = 1;
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off, next_off);
+                term pos;
+                DECODE_COMPACT_TERM(pos, code, i, next_off, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_set_position/2\n");
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    VERIFY_IS_BINARY(src, "bs_set_position");
+                    VERIFY_IS_INTEGER(pos, "bs_set_position");
+
+                    avm_int_t pos_val = term_to_int(pos);
+                    TRACE("bs_set_position/2 src=0x%lx pos=%li\n", src, pos_val);
+                    ctx->bs_offset = pos_val;
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
