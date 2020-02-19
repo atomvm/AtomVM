@@ -75,6 +75,15 @@ term bif_erlang_byte_size_1(Context *ctx, int live, term arg1)
     return term_from_int32(term_binary_size(arg1));
 }
 
+term bif_erlang_bit_size_1(Context *ctx, int live, term arg1)
+{
+    UNUSED(live);
+
+    VALIDATE_VALUE(arg1, term_is_binary);
+
+    return term_from_int32(term_binary_size(arg1) * 8);
+}
+
 term bif_erlang_is_atom_1(Context *ctx, term arg1)
 {
     UNUSED(ctx);

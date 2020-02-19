@@ -757,6 +757,147 @@ static inline const char *term_binary_data(term t)
 }
 
 /**
+* @brief Create an empty binary.  All bytes in the binary are initialized to 0x00
+*
+* @details Allocates a binary on the heap, and returns a term pointing to it.
+* @param size size of binary data buffer.
+* @param ctx the context that owns the memory that will be allocated.
+* @return a term pointing to the boxed binary pointer.
+*/
+static inline term term_create_empty_binary(uint32_t size, Context *ctx)
+{
+    term t = term_create_uninitialized_binary(size, ctx);
+    memset((char *) term_binary_data(t), 0x00, size);
+    return t;
+}
+
+/**
+* @brief Insert an integer into a binary (using bit syntax).
+*
+* @details Insert the low order n bits on value into the binary stored in t, starting
+* at the bit position starting in offset.
+* @param t a term pointing to binary data. Fails if t is not a binary term.
+* @param offset the bitwise offset in t at which to start writing the integer value
+* @param value the integer value to write
+* @param n the number of low-order bits from value to write.
+* @return 0 on success; non-zero value if:
+*           t is not a binary term
+*           n is greater than the number of bits in an integer
+*           there is insufficient capacity in the binary to write these bits
+* In general, none of these conditions should apply, if this function is being
+* called in the context of generated bit syntax instructions.
+*/
+static inline int term_bs_insert_integer(term t, avm_int_t offset, avm_int_t value, avm_int_t n, avm_int_t flags)
+{
+    if (!term_is_binary(t)) {
+        return -1;
+    }
+    if (n > sizeof(avm_int_t) * 8) {
+        return -2;
+    }
+    size_t capacity = term_binary_size(t);
+    if (8 * capacity < (offset + n)) {
+        return -3;
+    }
+    // TODO optimize by xor'ing by byte (or mask on boundaries)
+    // TODO support big/little endian flags
+    for (int i = 0;  i < n;  ++i) {
+        int k = (n - 1) - i;
+        int bit_val = (value & (0x01 << k)) >> k;
+        if (bit_val) {
+            int bit_pos = offset + i;
+            int byte_pos = bit_pos / 8;
+            uint8_t *pos = (uint8_t *) (term_binary_data(t) + byte_pos);
+            int shift = 7 - (bit_pos % 8);
+            *pos ^= (0x01 << shift);
+        }
+    }
+    return 0;
+}
+
+/**
+* @brief Extract an integer from a binary (using bit syntax).
+*
+* @details Extract the next size * unit bits from src into dst, starting
+* at the bit position starting in offset.
+* @param dst the location of the integer value to write
+* @param src a term pointing to binary data. Fails if src is not a binary term.
+* @param n the number of low-order bits from value to read.
+* @return 0 on success; non-zero value if:
+*           src is not a binary term
+*           there is insufficient capacity in the binary to read the desired number of bits
+* In general, none of these conditions should apply, if this function is being
+* called in the context of generated bit syntax instructions.
+*/
+static inline int term_bs_extract_integer(avm_int_t *dst, term src, size_t offset, avm_int_t n, avm_int_t flags)
+{
+    if (!term_is_binary(src)) {
+        return -1;
+    }
+    size_t capacity = term_binary_size(src);
+    if (8 * capacity - offset < n) {
+        return -2;
+    }
+    *dst = 0;
+    // TODO optimize by xor'ing by byte (or mask on boundaries)
+    // TODO support big/little endian flags
+    // TODO support big/little sign flags
+    for (int i = 0;  i < n;  ++i) {
+        int bit_pos = offset + i;
+        int byte_pos = bit_pos / 8;
+        uint8_t *pos = (uint8_t *) (term_binary_data(src) + byte_pos);
+        int shift = 7 - (bit_pos % 8);
+
+        uint8_t bit_val = ((0x01 << shift) & *pos) >> shift;
+        if (bit_val) {
+            *dst |= 0x01 << (n - i - 1);
+        }
+    }
+    return 0;
+}
+
+/**
+* @brief Insert an binary into a binary (using bit syntax).
+*
+* @details Insert the data from the input binary, starting
+* at the bit position starting in offset.
+* @param t a term pointing to binary data. Fails if t is not a binary term.
+* @param offset the bitwise offset in t at which to start writing the integer value
+* @param value the integer value to write
+* @param n the bumber of low-order bits from value to write.
+* @return 0 on success; non-zero value if:
+*           t is not a binary term
+*           n is greater than the number of bits in an integer
+*           there is insufficient capacity in the binary to write these bits
+* In general, none of these conditions should apply, if this function is being
+* called in the context of generated bit syntax instructions.
+*/
+static inline int term_bs_insert_binary(term t, int offset, term src, int n)
+{
+    if (!term_is_binary(t)) {
+        fprintf(stderr, "Target is not a binary\n");
+        return -1;
+    }
+    if (!term_is_binary(src)) {
+        fprintf(stderr, "Source is not a binary\n");
+        return -2;
+    }
+    if (offset % 8 != 0) {
+        fprintf(stderr, "Offset not aligned on a byte boundary\n");
+        return -3;
+    }
+    size_t capacity = term_binary_size(t);
+    if (capacity < (offset/8 + n)) {
+        fprintf(stderr, "Insufficient capacity to write binary\n");
+        return -4;
+    }
+    uint8_t *dst_pos = (uint8_t *) term_binary_data(t) + offset/8;
+    uint8_t *src_pos = (uint8_t *) term_binary_data(src);
+    memcpy(dst_pos, src_pos, n);
+    return 0;
+}
+
+/**
  * @brief Get a ref term from ref ticks
  *
  * @param ref_ticks an unique uint64 value that will be used to create ref term.
