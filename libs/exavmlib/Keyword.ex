@@ -10,7 +10,7 @@ defmodule Keyword do
   end
 
   def fetch!(keywords, key) when is_list(keywords) and is_atom(key) do
-    case :lists.keyfind(key, 1, keywords) do
+    case :avm_lists.keyfind(key, 1, keywords) do
       {^key, value} -> value
       false -> raise(KeyError, key: key, term: keywords)
     end
