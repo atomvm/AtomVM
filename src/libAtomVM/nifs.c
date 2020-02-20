@@ -951,6 +951,9 @@ term nif_erlang_system_time_1(Context *ctx, int argc, term argv[])
     if (argv[0] == second_atom) {
         return make_maybe_boxed_int64(ctx, ts.tv_sec);
 
+    } else if (argv[0] == context_make_atom(ctx, "\xB" "millisecond")) {
+        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000 + ts.tv_nsec / 1000000);
+
     } else {
         RAISE_ERROR(BADARG_ATOM);
     }
