@@ -185,10 +185,10 @@ keymember(K, I, [H|T]) when is_tuple(H) ->
                 K ->
                     true;
                 _ ->
-                    keyfind(K, I, T)
+                    keymember(K, I, T)
             end;
         false ->
-            keyfind(K, I, T)
+            keymember(K, I, T)
     end;
 keymember(K, I, [_H|T]) ->
     keymember(K, I, T).
