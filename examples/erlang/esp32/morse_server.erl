@@ -36,13 +36,13 @@ handle_req("GET", [], Conn) ->
     http_server:reply(200, Body, Conn);
 
 handle_req("POST", [], Conn) ->
-    ParamsBody = avm_proplists:get_value(body_chunk, Conn),
+    ParamsBody = proplists:get_value(body_chunk, Conn),
     Params = http_server:parse_query_string(ParamsBody),
 
-    GPIOString = avm_proplists:get_value("gpio", Params),
+    GPIOString = proplists:get_value("gpio", Params),
     GPIONum = safe_list_to_integer(GPIOString),
 
-    Text = avm_proplists:get_value("text", Params, "off"),
+    Text = proplists:get_value("text", Params, "off"),
     MorseText = morse_encode(Text),
 
     spawn(fun() -> blink_led(GPIONum, MorseText) end),
@@ -111,19 +111,19 @@ blink_led(GPIO, GPIONum, [H | T]) ->
     case H of
         $\s ->
             gpio:set_level(GPIO, GPIONum, 0),
-            avm_timer:sleep(120);
+            timer:sleep(120);
 
         $. ->
             gpio:set_level(GPIO, GPIONum, 1),
-            avm_timer:sleep(120),
+            timer:sleep(120),
             gpio:set_level(GPIO, GPIONum, 0),
-            avm_timer:sleep(120);
+            timer:sleep(120);
 
         $- ->
             gpio:set_level(GPIO, GPIONum, 1),
-            avm_timer:sleep(120 * 3),
+            timer:sleep(120 * 3),
             gpio:set_level(GPIO, GPIONum, 0),
-            avm_timer:sleep(120)
+            timer:sleep(120)
     end,
     blink_led(GPIO, GPIONum, T).
 
@@ -134,7 +134,7 @@ morse_encode([], Acc) ->
     Acc;
 
 morse_encode([H | L], Acc) ->
-    M = to_morse(avm_string:to_upper(H)),
+    M = to_morse(string:to_upper(H)),
     morse_encode(L, Acc ++ M).
 
 to_morse(C) ->

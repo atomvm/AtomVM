@@ -16,7 +16,7 @@
 %   Free Software Foundation, Inc.,                                       %
 %   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--module(avm_io_lib).
+-module(io_lib).
 
 -export([format/2]).
 

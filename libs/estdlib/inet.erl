@@ -16,7 +16,7 @@
 %   Free Software Foundation, Inc.,                                       %
 %   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--module(avm_inet).
+-module(inet).
 
 -export([port/1, close/1, sockname/1, peername/1]).
 

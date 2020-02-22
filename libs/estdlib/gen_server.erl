@@ -38,7 +38,7 @@
 %% </ul>
 %% @end
 %%-----------------------------------------------------------------------------
--module(avm_gen_server).
+-module(gen_server).
 
 -export([start/3, start/4, stop/1, stop/3, call/2, call/3, cast/2, reply/2]).
 -export([loop/1]).

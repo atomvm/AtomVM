@@ -3,21 +3,21 @@ defmodule Keyword do
   @compile {:autoload, false}
 
   def fetch(keywords, key) when is_list(keywords) and is_atom(key) do
-    case :avm_lists.keyfind(key, 1, keywords) do
+    case :lists.keyfind(key, 1, keywords) do
       {^key, value} -> {:ok, value}
       false -> :error
     end
   end
 
   def fetch!(keywords, key) when is_list(keywords) and is_atom(key) do
-    case :avm_lists.keyfind(key, 1, keywords) do
+    case :lists.keyfind(key, 1, keywords) do
       {^key, value} -> value
       false -> raise(KeyError, key: key, term: keywords)
     end
   end
 
   def get(keywords, key, default \\ nil) when is_list(keywords) and is_atom(key) do
-    case :avm_lists.keyfind(key, 1, keywords) do
+    case :lists.keyfind(key, 1, keywords) do
       {^key, value} -> value
       false -> default
     end
@@ -25,7 +25,7 @@ defmodule Keyword do
 
   def get_lazy(keywords, key, fun)
       when is_list(keywords) and is_atom(key) and is_function(fun, 0) do
-    case :avm_lists.keyfind(key, 1, keywords) do
+    case :lists.keyfind(key, 1, keywords) do
       {^key, value} -> value
       false -> fun.()
     end
@@ -36,7 +36,7 @@ defmodule Keyword do
   end
 
   def delete(keywords, key) when is_list(keywords) and is_atom(key) do
-    case :avm_lists.keymember(key, 1, keywords) do
+    case :lists.keymember(key, 1, keywords) do
       true -> delete_key(keywords, key)
       _ -> keywords
     end

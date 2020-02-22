@@ -171,7 +171,7 @@ defmodule List do
   """
   @spec flatten(deep_list) :: list when deep_list: [any | deep_list]
   def flatten(list) do
-    :avm_lists.flatten(list)
+    :lists.flatten(list)
   end
 
   @doc """
@@ -189,7 +189,7 @@ defmodule List do
   """
   @spec foldl([elem], acc, (elem, acc -> acc)) :: acc when elem: var, acc: var
   def foldl(list, acc, fun) when is_list(list) and is_function(fun) do
-    :avm_lists.foldl(fun, acc, list)
+    :lists.foldl(fun, acc, list)
   end
 
   @doc """
@@ -204,7 +204,7 @@ defmodule List do
   """
   @spec foldr([elem], acc, (elem, acc -> acc)) :: acc when elem: var, acc: var
   def foldr(list, acc, fun) when is_list(list) and is_function(fun) do
-    :avm_lists.foldr(fun, acc, list)
+    :lists.foldr(fun, acc, list)
   end
 
   @doc """
@@ -269,7 +269,7 @@ defmodule List do
   """
   @spec keyfind([tuple], any, non_neg_integer, any) :: any
   def keyfind(list, key, position, default \\ nil) do
-    :avm_lists.keyfind(key, position + 1, list) || default
+    :lists.keyfind(key, position + 1, list) || default
   end
 
   @doc """
@@ -291,7 +291,7 @@ defmodule List do
   """
   @spec keymember?([tuple], any, non_neg_integer) :: boolean
   def keymember?(list, key, position) do
-    :avm_lists.keymember(key, position + 1, list)
+    :lists.keymember(key, position + 1, list)
   end
 
   @doc """
@@ -313,7 +313,7 @@ defmodule List do
   """
   @spec keydelete([tuple], any, non_neg_integer) :: [tuple]
   def keydelete(list, key, position) do
-    :avm_lists.keydelete(key, position + 1, list)
+    :lists.keydelete(key, position + 1, list)
   end
 
   @doc """

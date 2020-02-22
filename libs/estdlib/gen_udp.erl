@@ -38,7 +38,7 @@
 %% on all AtomVM platforms.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--module(avm_gen_udp).
+-module(gen_udp).
 
 -export([open/1, open/2, send/4, recv/2, recv/3, close/1]).
 
@@ -56,7 +56,7 @@
 %%          send or receive UDP messages.
 %% @end
 %%-----------------------------------------------------------------------------
--spec open(avm_inet:port_number()) -> {ok, avm_inet:socket()} | {error, Reason::reason()}.
+-spec open(inet:port_number()) -> {ok, inet:socket()} | {error, Reason::reason()}.
 open(PortNum) ->
     open(PortNum, []).
 
@@ -76,7 +76,7 @@ open(PortNum) ->
 %%          <em><b>Note.</b>  The Params argument is currently ignored.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec open(avm_inet:port_number(), proplist()) -> {ok, avm_inet:socket()} | {error, Reason::reason()}.
+-spec open(inet:port_number(), proplist()) -> {ok, inet:socket()} | {error, Reason::reason()}.
 open(PortNum, Params0) ->
     DriverPid = open_port({spawn, "socket"}, []),
     Params = merge(Params0, ?DEFAULT_PARAMS),
@@ -93,7 +93,7 @@ open(PortNum, Params0) ->
 %%          <em><b>Note.</b> Currently only ipv4 addresses are supported.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec send(avm_inet:socket(), avm_inet:address(), avm_inet:port_number(), packet()) -> ok | {error, reason()}.
+-spec send(inet:socket(), inet:address(), inet:port_number(), packet()) -> ok | {error, reason()}.
 send(Socket, Address, PortNum, Packet) ->
     case call(Socket, {sendto, Address, PortNum, Packet}) of
         {ok, _Sent} ->
@@ -107,8 +107,8 @@ send(Socket, Address, PortNum, Packet) ->
 %% @doc     Receive a packet over a UDP socket from a source address/port.
 %% @end
 %%-----------------------------------------------------------------------------
--spec recv(avm_inet:socket(), non_neg_integer()) ->
-    {ok, {avm_inet:address(), avm_inet:port_number(), packet()}} | {error, reason()}.
+-spec recv(inet:socket(), non_neg_integer()) ->
+    {ok, {inet:address(), inet:port_number(), packet()}} | {error, reason()}.
 recv(Socket, Length) ->
     recv(Socket, Length, infinity).
 
@@ -130,8 +130,8 @@ recv(Socket, Length) ->
 %%          is limited to 128 bytes.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec recv(avm_inet:socket(), non_neg_integer(), non_neg_integer()) ->
-    {ok, {avm_inet:address(), avm_inet:port_number(), packet()}} | {error, reason()}.
+-spec recv(inet:socket(), non_neg_integer(), non_neg_integer()) ->
+    {ok, {inet:address(), inet:port_number(), packet()}} | {error, reason()}.
 recv(Socket, Length, Timeout) ->
     call(Socket, {recvfrom, Length, Timeout}).
 
@@ -143,7 +143,7 @@ recv(Socket, Length, Timeout) ->
 %% @doc     Close the socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec close(avm_inet:socket()) -> ok | {error, Reason::reason()}.
+-spec close(inet:socket()) -> ok | {error, Reason::reason()}.
 close(Socket) ->
     call(Socket, {close}).
 

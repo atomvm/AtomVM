@@ -16,7 +16,7 @@
 %   Free Software Foundation, Inc.,                                       %
 %   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--module(avm_io).
+-module(io).
 
 -export([format/1, format/2]).
 
@@ -35,7 +35,7 @@ format(Format) when is_list(Format) ->
 %% @param   Args format argument
 %% @returns string
 %% @doc     Format string and data to console.
-%%          See avm_io_lib:format/2 for information about
+%%          See io_lib:format/2 for information about
 %%          formatting capabilities.
 %% @end
 %%-----------------------------------------------------------------------------

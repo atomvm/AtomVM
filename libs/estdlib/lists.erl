@@ -24,7 +24,7 @@
 %% interface.
 %% @end
 %%-----------------------------------------------------------------------------
--module(avm_lists).
+-module(lists).
 
 -export([nth/2, member/2, delete/2, reverse/1, foreach/2, keydelete/3, keyfind/3, keymember/3, foldl/3, foldr/3, all/2, any/2, flatten/1]).
 
