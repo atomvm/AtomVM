@@ -47,7 +47,10 @@
 #define TERM_BOXED_REF 0x10
 #define TERM_BOXED_FUN 0x14
 #define TERM_BOXED_FLOAT 0x18
+#define TERM_BOXED_REFC_BINARY 0x20
 #define TERM_BOXED_HEAP_BINARY 0x24
+
+#define TERM_BOXED_REFC_BINARY_SIZE 3
 
 #define BINARY_HEADER_SIZE 2
 #define BOXED_INT_SIZE (BOXED_TERMS_REQUIRED_FOR_INT + 1)
@@ -239,8 +242,13 @@ static inline int term_is_binary(term t)
     /* boxed: 10 */
     if ((t & 0x3) == 0x2) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == 0x24) {
-            return 1;
+        int masked_value = boxed_value[0] & 0x3F;
+        switch (masked_value) {
+            case TERM_BOXED_REFC_BINARY:
+            case TERM_BOXED_HEAP_BINARY:
+                return 1;
+            default:
+                return 0;
         }
     }
 
@@ -705,6 +713,16 @@ static inline term term_from_literal_binary(const void *data, uint32_t size, Con
     return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
 }
 
+static inline term term_from_const_binary(const void *data, uint32_t size, Context *ctx)
+{
+    term *boxed_value = memory_heap_alloc(ctx, TERM_BOXED_REFC_BINARY_SIZE);
+    boxed_value[0] = (2 << 6) | TERM_BOXED_REFC_BINARY;
+    boxed_value[1] = size;
+    boxed_value[2] = (term) data;
+
+    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+}
+
 /**
 * @brief Create an unititialized binary.
 *
@@ -753,7 +771,11 @@ static inline const char *term_binary_data(term t)
     TERM_DEBUG_ASSERT(term_is_binary(t));
 
     const term *boxed_value = term_to_const_term_ptr(t);
-    return (const char *) (boxed_value + 2);
+    if (boxed_value[0] & 0x4) {
+        return (const char *) (boxed_value + 2);
+    } else {
+        return ((const char *) boxed_value[2]);
+    }
 }
 
 /**

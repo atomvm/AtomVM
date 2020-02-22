@@ -22,6 +22,7 @@
 #include "context.h"
 #include "list.h"
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,7 +41,7 @@
 #define BINARY_EXT 109
 
 static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx, int copy);
-static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_size, Context *ctx);
+static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_size, bool copy, Context *ctx);
 static size_t compute_external_size(Context *ctx, term t);
 static int externalterm_from_term(Context *ctx, uint8_t **buf, size_t *len, term t);
 static int serialize_term(Context *ctx, uint8_t *buf, term t);
@@ -64,7 +65,7 @@ static term externalterm_to_term_internal(const void *external_term, Context *ct
     }
 
     int eterm_size;
-    int heap_usage = calculate_heap_usage(external_term_buf + 1, &eterm_size, ctx);
+    int heap_usage = calculate_heap_usage(external_term_buf + 1, &eterm_size, false, ctx);
 
     if (use_heap_fragment) {
         struct ListHead *heap_fragment = malloc(heap_usage * sizeof(term) + sizeof(struct ListHead));
@@ -387,7 +388,11 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
         case BINARY_EXT: {
             uint32_t binary_size = READ_32_UNALIGNED(external_term_buf + 1);
             *eterm_size = 5 + binary_size;
-            return term_from_literal_binary((uint8_t *) external_term_buf + 5, binary_size, ctx);
+            if (copy) {
+                return term_from_literal_binary((uint8_t *) external_term_buf + 5, binary_size, ctx);
+            } else {
+                return term_from_const_binary((uint8_t *) external_term_buf + 5, binary_size, ctx);
+            }
         }
 
         default:
@@ -396,7 +401,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
     }
 }
 
-static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_size, Context *ctx)
+static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_size, bool copy, Context *ctx)
 {
     switch (external_term_buf[0]) {
         case NEW_FLOAT_EXT: {
@@ -433,7 +438,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_siz
 
             for (int i = 0; i < arity; i++) {
                 int element_size;
-                heap_usage += calculate_heap_usage(external_term_buf + buf_pos, &element_size, ctx) + 1;
+                heap_usage += calculate_heap_usage(external_term_buf + buf_pos, &element_size, copy, ctx) + 1;
 
                 buf_pos += element_size;
             }
@@ -461,13 +466,13 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_siz
 
             for (unsigned int i = 0; i < list_len; i++) {
                 int item_size;
-                heap_usage += calculate_heap_usage(external_term_buf + buf_pos, &item_size, ctx) + 2;
+                heap_usage += calculate_heap_usage(external_term_buf + buf_pos, &item_size, copy, ctx) + 2;
 
                 buf_pos += item_size;
             }
 
             int tail_size;
-            heap_usage += calculate_heap_usage(external_term_buf + buf_pos, &tail_size, ctx);
+            heap_usage += calculate_heap_usage(external_term_buf + buf_pos, &tail_size, copy, ctx);
             buf_pos += tail_size;
 
             *eterm_size = buf_pos;
@@ -486,7 +491,11 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_siz
                 #error
             #endif
 
-            return 2 + size_in_terms;
+            if (copy) {
+                return 2 + size_in_terms;
+            } else {
+                return TERM_BOXED_REFC_BINARY_SIZE;
+            }
         }
 
         default:
