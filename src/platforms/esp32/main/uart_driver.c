@@ -98,6 +98,10 @@ void uart_interrupt_callback(EventListener *listener)
     if (uart_data->reader_process_pid != term_invalid_term()) {
         unsigned int count = uxQueueMessagesWaiting(uart_data->rxqueue);
 
+        if (count == 0) {
+            return;
+        }
+
         int ref_size = (sizeof(uint64_t) / sizeof(term)) + 1;
         int bin_size = term_binary_data_size_in_terms(count) + BINARY_HEADER_SIZE + ref_size;
         if (UNLIKELY(memory_ensure_free(uart_data->ctx, bin_size + ref_size + 3 + 3) != MEMORY_GC_OK)) {
@@ -108,8 +112,13 @@ void uart_interrupt_callback(EventListener *listener)
         uint8_t *bin_buf = (uint8_t *) term_binary_data(bin);
         for (unsigned int i = 0; i < count; i++) {
             uint8_t c;
-            xQueueReceive(uart_data->rxqueue, &c, 1);
-            bin_buf[i] = c;
+            if (xQueueReceive(uart_data->rxqueue, &c, 1) == pdTRUE) {
+                bin_buf[i] = c;
+            } else {
+                // it shouldn't happen
+                // TODO: log bug?
+                return;
+            }
         }
 
         Context *ctx = uart_data->ctx;
@@ -300,8 +309,13 @@ static void uart_driver_do_read(Context *ctx, term msg)
         uint8_t *bin_buf = (uint8_t *) term_binary_data(bin);
         for (unsigned int i = 0; i < count; i++) {
             uint8_t c;
-            xQueueReceive(uart_data->rxqueue, &c, 1);
-            bin_buf[i] = c;
+            if (LIKELY(xQueueReceive(uart_data->rxqueue, &c, 1) == pdTRUE)) {
+                bin_buf[i] = c;
+            } else {
+                // it shouldn't happen
+                // TODO: log bug?
+                return;
+            }
         }
 
         term ok_tuple = term_alloc_tuple(2, ctx);
@@ -312,7 +326,7 @@ static void uart_driver_do_read(Context *ctx, term msg)
         term_put_tuple_element(result_tuple, 0, ref);
         term_put_tuple_element(result_tuple, 1, ok_tuple);
 
-        send_message(uart_data->reader_process_pid, result_tuple, uart_data->ctx->global);
+        send_message(pid, result_tuple, uart_data->ctx->global);
 
     } else {
         uart_data->reader_process_pid = pid;
