@@ -24,7 +24,7 @@
 %% interface.
 %% @end
 %%-----------------------------------------------------------------------------
--module(avm_proplists).
+-module(proplists).
 
 -export([get_value/2, get_value/3]).
 

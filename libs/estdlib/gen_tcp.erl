@@ -37,7 +37,7 @@
 %% on all AtomVM platforms.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--module(avm_gen_tcp).
+-module(gen_tcp).
 
 -export([connect/3, send/2, recv/2, recv/3, close/1, listen/2, accept/1, accept/2]).
 
@@ -69,8 +69,8 @@
 %%          in order to receive data on the socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec connect(avm_inet:address(), avm_inet:port_number(), Options::avm_inet:opts()) ->
-    {ok, Socket::avm_inet:socket()} | {error, Reason::term()}.
+-spec connect(inet:address(), inet:port_number(), Options::inet:opts()) ->
+    {ok, Socket::inet:socket()} | {error, Reason::term()}.
 connect(Address, Port, Params0) ->
     Socket = open_port({spawn, "socket"}, []),
     Params = merge(Params0, ?DEFAULT_PARAMS),
@@ -86,7 +86,7 @@ connect(Address, Port, Params0) ->
 %%          otherwise, an error with a reason.
 %% @end
 %%-----------------------------------------------------------------------------
--spec send(avm_inet:socket(), avm_inet:packet()) -> ok | {error, Reason::term()}.
+-spec send(inet:socket(), inet:packet()) -> ok | {error, Reason::term()}.
 send(Socket, Packet) ->
     case call(Socket, {send, Packet}) of
         {ok, _Len} ->
@@ -100,8 +100,8 @@ send(Socket, Packet) ->
 %% @doc     Receive a packet over a TCP socket from a source address/port.
 %% @end
 %%-----------------------------------------------------------------------------
--spec recv(avm_inet:socket(), non_neg_integer()) ->
-    {ok,avm_inet:packet()} | {error, Reason::term()}.
+-spec recv(inet:socket(), non_neg_integer()) ->
+    {ok,inet:packet()} | {error, Reason::term()}.
 recv(Socket, Length) ->
     recv(Socket, Length, infinity).
 
@@ -124,8 +124,8 @@ recv(Socket, Length) ->
 %%          ignored.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec recv(avm_inet:socket(), non_neg_integer(), non_neg_integer()) ->
-    {ok,avm_inet:packet()} | {error, Reason::term()}.
+-spec recv(inet:socket(), non_neg_integer(), non_neg_integer()) ->
+    {ok,inet:packet()} | {error, Reason::term()}.
 recv(Socket, Length, Timeout) ->
     call(Socket, {recv, Length, Timeout}).
 
@@ -140,7 +140,7 @@ recv(Socket, Length, Timeout) ->
 %%          This function is currently unimplemented
 %% @end
 %%-----------------------------------------------------------------------------
--spec listen(Port::avm_inet:port_number(), Options::avm_inet:opts()) -> {ok, ListeningSocket::avm_inet:socket()} | {error, Reason::term()}.
+-spec listen(Port::inet:port_number(), Options::inet:opts()) -> {ok, ListeningSocket::inet:socket()} | {error, Reason::term()}.
 listen(Port, Options) ->
     Socket = open_port({spawn, "socket"}, []),
     Params = merge(Options, ?DEFAULT_PARAMS),
@@ -165,7 +165,7 @@ listen(Port, Options) ->
 %% @doc     Accept a connection on a listening socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec accept(avm_inet:socket()) -> {ok, Socket::avm_inet:socket()} | {error, Reason::term()}.
+-spec accept(inet:socket()) -> {ok, Socket::inet:socket()} | {error, Reason::term()}.
 accept(ListenSocket) ->
     accept(ListenSocket, infinity).
 
@@ -176,7 +176,7 @@ accept(ListenSocket) ->
 %% @doc     Accept a connection on a listening socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec accept(avm_inet:socket(), Timeout::non_neg_integer()) -> {ok, Socket::avm_inet:socket()} | {error, Reason::term()}.
+-spec accept(inet:socket(), Timeout::non_neg_integer()) -> {ok, Socket::inet:socket()} | {error, Reason::term()}.
 accept(ListenSocket, Timeout) ->
     case call(ListenSocket, {accept, Timeout}) of
         {ok, FD} when is_integer(FD) ->
@@ -207,9 +207,9 @@ accept(ListenSocket, Timeout) ->
 %% @doc     Close the socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec close(avm_inet:socket()) -> ok.
+-spec close(inet:socket()) -> ok.
 close(Socket) ->
-    avm_inet:close(Socket).
+    inet:close(Socket).
 
 
 

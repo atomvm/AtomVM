@@ -17,15 +17,15 @@
 %   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--define(CALENDAR,       avm_calendar).
+-define(CALENDAR,       calendar).
 -define(ERLANG,             erlang).
--define(GEN_SERVER,     avm_gen_server).
--define(GEN_STATEM,     avm_gen_statem).
--define(INET,           avm_inet).
--define(IO_LIB,         avm_io_lib).
--define(IO,             avm_io).
--define(GEN_UDP,        avm_gen_udp).
--define(GEN_TCP,        avm_gen_tcp).
--define(LISTS,          avm_lists).
--define(PROPLISTS,      avm_proplists).
--define(TIMER,          avm_timer).
+-define(GEN_SERVER,     gen_server).
+-define(GEN_STATEM,     gen_statem).
+-define(INET,           inet).
+-define(IO_LIB,         io_lib).
+-define(IO,             io).
+-define(GEN_UDP,        gen_udp).
+-define(GEN_TCP,        gen_tcp).
+-define(LISTS,          lists).
+-define(PROPLISTS,      proplists).
+-define(TIMER,          timer).

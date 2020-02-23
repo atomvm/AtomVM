@@ -11,7 +11,7 @@ start() ->
 loop(I2C) ->
     Val = read(I2C),
     erlang:display(Val),
-    avm_timer:sleep(10000),
+    timer:sleep(10000),
     loop(I2C).
 
 read(I2C) ->
@@ -33,7 +33,7 @@ float_hum(IntHum, S) ->
 
 read_sensor(I2C) ->
     send_command(I2C, ?SHT31_MEAS_HIGH_REP),
-    avm_timer:sleep(20),
+    timer:sleep(20),
     i2c:read_bytes(I2C, ?SHT31_BASE_ADDR, 6).
 
 send_command(I2C, Command) ->

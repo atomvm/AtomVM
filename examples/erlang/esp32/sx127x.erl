@@ -60,15 +60,15 @@
     ]).
 
 start() ->
-    {ok, P} = avm_gen_server:start(?MODULE, [], []),
-    avm_gen_server:call(P, init),
+    {ok, P} = gen_server:start(?MODULE, [], []),
+    gen_server:call(P, init),
     loop(P).
 
 loop(P) ->
-    avm_timer:sleep(1000),
+    timer:sleep(1000),
     TheList = "AVM",
-    avm_gen_server:call(P, {send, TheList}),
-    avm_io:format("Sending: ~s~n", [TheList]),
+    gen_server:call(P, {send, TheList}),
+    io:format("Sending: ~s~n", [TheList]),
     loop(P).
 
 init(_) ->
@@ -114,9 +114,9 @@ init_hw(GPIO, SPISettings) ->
 
     % Reset
     gpio:set_level(GPIO, 14, 0),
-    avm_timer:sleep(20),
+    timer:sleep(20),
     gpio:set_level(GPIO, 14, 1),
-    avm_timer:sleep(50),
+    timer:sleep(50),
 
     SPI = spi:open(SPISettings),
 
@@ -221,15 +221,15 @@ handle_irq(SPI) ->
             {ok, CurrentAddr} = read_register(SPI, ?REG_FIFO_RX_CURRENT_ADDR),
 
             write_register(SPI, ?REG_FIFO_ADDR_PTR, CurrentAddr),
-            avm_io:format("Received data: ~s~n", [read(SPI, PacketLength)]),
+            io:format("Received data: ~s~n", [read(SPI, PacketLength)]),
 
             write_register(SPI, ?REG_FIFO_ADDR_PTR, 0);
 
         (IRQFlags band ?IRQ_RX_DONE_MASK) /= 0 ->
-            avm_io:format("CRC error");
+            io:format("CRC error");
 
         true ->
-            avm_io:format("Unexpected IRQ")
+            io:format("Unexpected IRQ")
     end.
 
 read(_SPI, 0) ->

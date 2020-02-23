@@ -3,7 +3,7 @@ defmodule Access do
   @compile {:autoload, false}
 
   def fetch(list, key) when is_list(list) and is_atom(key) do
-    case :avm_lists.keyfind(key, 1, list) do
+    case :lists.keyfind(key, 1, list) do
       {_, value} -> {:ok, value}
       false -> :error
     end
@@ -26,7 +26,7 @@ defmodule Access do
   end
 
   def get(list, key, default) when is_list(list) and is_atom(key) do
-    case :avm_lists.keyfind(key, 1, list) do
+    case :lists.keyfind(key, 1, list) do
       {_, value} -> value
       false -> default
     end

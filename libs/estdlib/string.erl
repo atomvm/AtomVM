@@ -24,7 +24,7 @@
 %% interface.
 %% @end
 %%-----------------------------------------------------------------------------
--module(avm_string).
+-module(string).
 
 -export([to_upper/1]).
 

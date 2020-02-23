@@ -3,7 +3,7 @@ defmodule Enum do
   @compile {:autoload, false}
 
   def reduce(enumerable, acc, fun) when is_list(enumerable) do
-    :avm_lists.foldl(fun, acc, enumerable)
+    :lists.foldl(fun, acc, enumerable)
   end
 
   def all?(enumerable, fun) when is_list(enumerable) do
@@ -19,7 +19,7 @@ defmodule Enum do
   end
 
   def each(enumerable, fun) when is_list(enumerable) do
-    :avm_lists.foreach(fun, enumerable)
+    :lists.foreach(fun, enumerable)
     :ok
   end
 
@@ -40,11 +40,11 @@ defmodule Enum do
   end
 
   def map(enumerable, fun) when is_list(enumerable) do
-    :avm_lists.map(fun, enumerable)
+    :lists.map(fun, enumerable)
   end
 
   def member?(enumerable, element) when is_list(enumerable) do
-    :avm_lists.member(element, enumerable)
+    :lists.member(element, enumerable)
   end
 
   def reject(enumerable, fun) when is_list(enumerable) do

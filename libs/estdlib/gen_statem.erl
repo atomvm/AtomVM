@@ -39,7 +39,7 @@
 %% </ul>
 %% @end
 %%-----------------------------------------------------------------------------
--module(avm_gen_statem).
+-module(gen_statem).
 
 -export([start/3, start/4, stop/1, stop/3, call/2, call/3, cast/2, reply/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
