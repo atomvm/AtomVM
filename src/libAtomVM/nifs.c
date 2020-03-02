@@ -22,6 +22,7 @@
 #include "nifs.h"
 
 #include "atomshashtable.h"
+#include "avmpack.h"
 #include "context.h"
 #include "defaultatoms.h"
 #include "interop.h"
@@ -124,6 +125,7 @@ static term nif_erlang_throw(Context *ctx, int argc, term argv[]);
 static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[]);
+static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[]);
 
 static const struct Nif binary_at_nif =
 {
@@ -447,6 +449,12 @@ static const struct Nif fun_to_list_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_fun_to_list
+};
+
+static const struct Nif atomvm_read_priv_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_read_priv
 };
 
 //Ignore warning caused by gperf generated code
@@ -2320,4 +2328,59 @@ static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[])
         prev = term_list_prepend(term_from_int11(buf[i]), prev, ctx);
     }
     return prev;
+}
+
+// AtomVM extension
+static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term app_term = argv[0];
+    term path_term = argv[1];
+    VALIDATE_VALUE(app_term, term_is_atom);
+
+    GlobalContext *glb = ctx->global;
+
+    if (UNLIKELY(!glb->avmpack_data)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int atom_index = term_to_atom_index(app_term);
+    AtomString atom_string = (AtomString) valueshashtable_get_value(glb->atoms_ids_table,
+            atom_index, (unsigned long) NULL);
+
+    int app_len = atom_string_len(atom_string);
+    char *app = malloc(app_len + 1);
+    memcpy(app, (const char *) atom_string_data(atom_string), app_len);
+    app[app_len] = '\0';
+
+    int ok;
+    char *path = interop_term_to_string(path_term, &ok);
+    if (UNLIKELY(!ok)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (UNLIKELY(!path)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    int complete_path_len = app_len + strlen("/priv/") + strlen(path) + 1;
+    char *complete_path = malloc(complete_path_len);
+    snprintf(complete_path, complete_path_len, "%s/priv/%s", app, path);
+    free(app);
+    free(path);
+
+    const void *bin_data;
+    uint32_t size;
+    if (avmpack_find_section_by_name(glb->avmpack_data, complete_path, &bin_data, &size)) {
+        uint32_t file_size = READ_32_ALIGNED((uint32_t *) bin_data);
+        free(complete_path);
+        if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFC_BINARY_SIZE) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return term_from_const_binary(((uint8_t *) bin_data) + sizeof(uint32_t), file_size, ctx);
+
+    } else {
+        free(complete_path);
+        return UNDEFINED_ATOM;
+    }
 }
