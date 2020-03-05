@@ -938,6 +938,10 @@ static void do_send(Context *ctx, term msg)
 
     int ok;
     int buffer_size = interop_iolist_size(data, &ok);
+    if (UNLIKELY(!ok)) {
+        fprintf(stderr, "error: invalid iolist.\n");
+        return;
+    }
     void *buffer = malloc(buffer_size);
     interop_write_iolist(data, buffer);
     err_t status = netconn_write(tcp_data->socket_data.conn, buffer, buffer_size, NETCONN_NOCOPY);
