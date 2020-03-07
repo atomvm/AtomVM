@@ -26,7 +26,20 @@
 %%-----------------------------------------------------------------------------
 -module(lists).
 
--export([nth/2, member/2, delete/2, reverse/1, foreach/2, keydelete/3, keyfind/3, keymember/3, foldl/3, foldr/3, all/2, any/2, flatten/1]).
+-export([map/2, nth/2, member/2, delete/2, reverse/1, foreach/2, keydelete/3, keyfind/3, keymember/3, foldl/3, foldr/3, all/2, any/2, flatten/1]).
+
+%%-----------------------------------------------------------------------------
+%% @param   Fun the function to apply
+%% @param   List the list over which to map
+%% @returns the result of mapping over L
+%% @doc     Map a list of terms, applying Fun(E)
+%% @end
+%%-----------------------------------------------------------------------------
+-spec map(Fun::fun((Elem::term()) -> Out::term()), List::list()) -> OutList::term().
+map(F, [H | T]) ->
+    [F(H) | map(F, T)];
+map(F, []) when is_function(F, 1) ->
+    [].
 
 %%-----------------------------------------------------------------------------
 %% @param   N the index in the list to get
