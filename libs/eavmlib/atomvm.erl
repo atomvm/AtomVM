@@ -27,7 +27,8 @@
 
 -export([
     platform/0,
-    random/0, rand_bytes/1
+    random/0, rand_bytes/1,
+    read_priv/2
 ]).
 
 -type platform_name() ::
