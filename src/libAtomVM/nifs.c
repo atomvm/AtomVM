@@ -88,6 +88,7 @@ static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_existing_atom_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_display_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_error(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[]);
@@ -215,6 +216,12 @@ static const struct Nif display_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_display_1
+};
+
+static const struct Nif error_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_error
 };
 
 static const struct Nif insert_element_nif =
@@ -2328,6 +2335,15 @@ static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[])
         prev = term_list_prepend(term_from_int11(buf[i]), prev, ctx);
     }
     return prev;
+}
+
+static term nif_erlang_error(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term r = argv[0];
+
+    RAISE_ERROR(r);
 }
 
 // AtomVM extension
