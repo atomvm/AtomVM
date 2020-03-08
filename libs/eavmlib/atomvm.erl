@@ -69,3 +69,14 @@ random() ->
 -spec rand_bytes(Len::non_neg_integer()) -> binary().
 rand_bytes(_Len) ->
     throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   App application name.
+%% @param   Path path to the resource.
+%% @returns Binary containing the resource content.
+%% @doc     This function allows to fetch priv/ resources content.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec read_priv(App::atom(), Path::list()) -> binary().
+read_priv(_App, _Path) ->
+    throw(nif_error).
