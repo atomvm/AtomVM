@@ -388,6 +388,9 @@ struct Test tests[] =
 
     {"test_tuple_is_not_map.beam", 16},
 
+    {"try_error_nif.beam", 13},
+    {"try_error2_nif.beam", 13},
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}

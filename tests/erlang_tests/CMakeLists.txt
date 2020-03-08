@@ -346,6 +346,9 @@ compile_erlang(throwtest)
 
 compile_erlang(test_tuple_is_not_map)
 
+compile_erlang(try_error_nif)
+compile_erlang(try_error2_nif)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -684,4 +687,7 @@ add_custom_target(erlang_test_modules DEPENDS
     throwtest.beam
 
     test_tuple_is_not_map.beam
+
+    try_error_nif.beam
+    try_error2_nif.beam
 )
