@@ -38,7 +38,7 @@
 
 -spec start() -> {ok, Pid::pid()} | {error, Reason::term()}.
 start() ->
-    ?GEN_SERVER:start({local, ?SERVER_NAME}, ?MODULE, [], []).
+    gen_server:start({local, ?SERVER_NAME}, ?MODULE, [], []).
 
 %%-----------------------------------------------------------------------------
 %% @param   Time time in milliseconds after which to send the timeout message.
@@ -52,7 +52,7 @@ start() ->
 -spec start_timer(Time::non_neg_integer(), Dest::pid(), Msg::term()) -> TimerRef::reference().
 start_timer(Time, Dest, Msg) ->
     start(),
-    ?GEN_SERVER:call(?SERVER_NAME, {Time, Dest, Msg}).
+    gen_server:call(?SERVER_NAME, {Time, Dest, Msg}).
 
 %%-----------------------------------------------------------------------------
 %% @hidden
@@ -69,12 +69,12 @@ start_timer(Time, Dest, Msg) ->
 -spec cancel_timer(TimerRef::reference()) -> ok.
 cancel_timer(TimerRef) ->
     start(),
-    ?GEN_SERVER:call(?SERVER_NAME, {cancel, TimerRef}).
+    gen_server:call(?SERVER_NAME, {cancel, TimerRef}).
 
 -spec get_timer_refs() -> [reference()].
 get_timer_refs() ->
     start(),
-    ?GEN_SERVER:call(?SERVER_NAME, get_timer_refs).
+    gen_server:call(?SERVER_NAME, get_timer_refs).
 
 %%-----------------------------------------------------------------------------
 %% @param   Time time in milliseconds after which to send the message.
@@ -103,7 +103,7 @@ init([]) ->
 handle_call(get_timer_refs, _From, #state{timers=Timers} = State) ->
     {reply, [TimerRef || {TimerRef, _Pid} <- Timers], State};
 handle_call({cancel, TimerRef}, From, #state{timers=Timers} = State) ->
-    case ?LISTS:keyfind(TimerRef, 1, Timers) of
+    case lists:keyfind(TimerRef, 1, Timers) of
         false ->
             {reply, false, State};
         {TimerRef, Pid} ->
@@ -120,7 +120,7 @@ handle_cast(_Request, State) ->
 
 %% @hidden
 handle_info({finished, TimerRef}, #state{timers=Timers} = State) ->
-    {noreply, State#state{timers=?LISTS:keydelete(TimerRef, 1, Timers)}}.
+    {noreply, State#state{timers=lists:keydelete(TimerRef, 1, Timers)}}.
 
 %% @hidden
 terminate(_Reason, _State) ->
@@ -141,7 +141,7 @@ run_timer(MgrPid, Time, TimerRef, Dest, Msg) ->
     Start = erlang:timestamp(),
     receive
         {cancel, From} ->
-            ?GEN_SERVER:reply(From, Time - timestamp_util:delta_ms(erlang:timestamp(), Start))
+            gen_server:reply(From, Time - timestamp_util:delta_ms(erlang:timestamp(), Start))
     after Time ->
         Dest ! {timeout, TimerRef, Msg}
     end,

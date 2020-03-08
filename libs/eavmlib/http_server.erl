@@ -24,7 +24,7 @@
 -include("estdlib.hrl").
 
 start_server(Port, Router) ->
-    case ?GEN_TCP:listen(Port, []) of
+    case gen_tcp:listen(Port, []) of
         {ok, ListenSocket} ->
             spawn(fun() -> accept(ListenSocket, Router) end);
         Error ->
@@ -32,7 +32,7 @@ start_server(Port, Router) ->
     end.
 
 accept(ListenSocket, Router) ->
-    case ?GEN_TCP:accept(ListenSocket) of
+    case gen_tcp:accept(ListenSocket) of
         {ok, _Socket} ->
             spawn(fun() -> accept(ListenSocket, Router) end),
             loop(Router);
@@ -51,8 +51,8 @@ loop(Router, OldStateAndData) ->
             case parse_http(Packet, OldStateAndData) of
                 {got_request, RequestData} ->
                     Conn = [{socket, Socket} | RequestData],
-                    Method = ?PROPLISTS:get_value(method, Conn),
-                    PathTokens = ?PROPLISTS:get_value(uri, Conn),
+                    Method = proplists:get_value(method, Conn),
+                    PathTokens = proplists:get_value(uri, Conn),
                     {ok, Module} = find_route(Method, PathTokens, Router),
                     {ok, _UpdatedConn} = Module:handle_req(Method, split(PathTokens), Conn),
                     ok;
@@ -78,15 +78,15 @@ find_route(Method, Path, [{Target, Mod, _Opts} | T]) ->
     end.
 
 reply(StatusCode, Reply, Conn) ->
-    Socket = ?PROPLISTS:get_value(socket, Conn),
+    Socket = proplists:get_value(socket, Conn),
     FullReply = [
         <<"HTTP/1.1 ">>,
         code_to_status_string(StatusCode),
         "\r\nContent-Type: text/html\r\n\r\n",
         Reply
     ],
-    ?GEN_TCP:send(Socket, FullReply),
-    ?GEN_TCP:close(Socket),
+    gen_tcp:send(Socket, FullReply),
+    gen_tcp:close(Socket),
     ClosedConn = [{closed, true} | Conn],
     {ok, ClosedConn}.
 

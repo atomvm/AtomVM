@@ -121,9 +121,9 @@ wait_for_sta(Creds, Timeout) ->
 %%-----------------------------------------------------------------------------
 -spec start(Config::network_config()) -> ok | {error, Reason::term()}.
 start(Config) ->
-    case ?GEN_STATEM:start({local, ?MODULE}, ?MODULE, Config, []) of
+    case gen_statem:start({local, ?MODULE}, ?MODULE, Config, []) of
         {ok, Pid} ->
-            ?GEN_STATEM:call(Pid, start);
+            gen_statem:call(Pid, start);
         Error ->
             Error
     end.
@@ -136,7 +136,7 @@ start(Config) ->
 %%-----------------------------------------------------------------------------
 -spec stop() -> ok | {error, Reason::term()}.
 stop() ->
-    ?GEN_STATEM:stop(?SERVER).
+    gen_statem:stop(?SERVER).
 
 %%
 %% gen_statem callbacks
@@ -156,10 +156,10 @@ initial({call, From}, start, #data{config=Config} = Data) ->
     Ref = make_ref(),
     case start_network(Port, Ref, get_driver_config(Config)) of
         ok ->
-            ?GEN_STATEM:reply(From, ok),
+            gen_statem:reply(From, ok),
             {next_state, wait_for_sta_connected, Data#data{port=Port, ref=Ref}, get_timeout_actions(Config)};
         {error, Reason} ->
-            ?GEN_STATEM:reply(From, {error, Reason}),
+            gen_statem:reply(From, {error, Reason}),
             {stop, {start_failed, Reason}}
     end.
 
@@ -229,12 +229,12 @@ terminate(_Reason, _StateName, _Data) ->
 
 %% @private
 get_driver_config(Config) ->
-    Sta = case ?PROPLISTS:get_value(sta, Config) of
+    Sta = case proplists:get_value(sta, Config) of
         undefined -> [];
         StaConfig ->
             {sta, [{ssid, get_ssid(StaConfig)}, {psk, get_psk(StaConfig)}]}
     end,
-    [Sta | ?LISTS:keydelete(sta, 1, Config)].
+    [Sta | lists:keydelete(sta, 1, Config)].
 
 %% @private
 get_ssid(Config) ->
@@ -246,7 +246,7 @@ get_psk(Config) ->
 
 %% @private
 get_config_value(Config, Key, NVSKey) ->
-    case ?PROPLISTS:get_value(Key, Config) of
+    case proplists:get_value(Key, Config) of
         undefined ->
             esp:nvs_get_binary(?ATOMVM_NVS_NS, NVSKey, <<"">>);
         Value ->
@@ -255,7 +255,7 @@ get_config_value(Config, Key, NVSKey) ->
 
 
 get_timeout_actions(Config) ->
-    case ?PROPLISTS:get_value(timeout, Config) of
+    case proplists:get_value(timeout, Config) of
         undefined ->
             [];
         Timeout ->
@@ -263,19 +263,19 @@ get_timeout_actions(Config) ->
     end.
 
 maybe_sta_connected_callback(Config) ->
-    maybe_callback0(connected, ?PROPLISTS:get_value(sta, Config)).
+    maybe_callback0(connected, proplists:get_value(sta, Config)).
 
 maybe_sta_disconnected_callback(Config) ->
-    maybe_callback0(disconnected, ?PROPLISTS:get_value(sta, Config)).
+    maybe_callback0(disconnected, proplists:get_value(sta, Config)).
 
 maybe_sta_got_ip_callback(Config, IpInfo) ->
-    maybe_callback1({got_ip, IpInfo}, ?PROPLISTS:get_value(sta, Config)).
+    maybe_callback1({got_ip, IpInfo}, proplists:get_value(sta, Config)).
 
 
 maybe_callback0(_Key, undefined) ->
     ok;
 maybe_callback0(Key, Config) ->
-    case ?PROPLISTS:get_value(Key, Config) of
+    case proplists:get_value(Key, Config) of
         undefined ->    ok;
         Pid when is_pid(Pid) -> Pid ! Key;
         Fun ->          Fun()
@@ -284,7 +284,7 @@ maybe_callback0(Key, Config) ->
 maybe_callback1(_KeyArg, undefined) ->
     ok;
 maybe_callback1({Key, Arg} = Msg, Config) ->
-    case ?PROPLISTS:get_value(Key, Config) of
+    case proplists:get_value(Key, Config) of
         undefined ->    ok;
         Pid when is_pid(Pid) -> Pid ! Msg;
         Fun ->          Fun(Arg)

@@ -221,19 +221,19 @@ console_log(Request) ->
     {Location, Timestamp, Pid, Level, {Format, Args}} = Request,
     TimestampStr = make_timestamp(Timestamp),
     MFALStr = make_location(Location),
-    PidLevelStr = ?IO_LIB:format("~p ~p", [Pid, Level]),
-    MsgStr = ?IO_LIB:format(Format, Args),
-    ?IO:format(TimestampStr ++ " " ++ MFALStr ++ " " ++ PidLevelStr ++ ": " ++ MsgStr ++ "~n").
+    PidLevelStr = io_lib:format("~p ~p", [Pid, Level]),
+    MsgStr = io_lib:format(Format, Args),
+    io:format(TimestampStr ++ " " ++ MFALStr ++ " " ++ PidLevelStr ++ ": " ++ MsgStr ++ "~n").
 
 make_timestamp(Timestamp) ->
     {{Year, Month, Day}, {Hour, Minute, Second}} = Timestamp,
-    ?IO_LIB:format("~p:~p:~pT~p:~p:~p", [
+    io_lib:format("~p:~p:~pT~p:~p:~p", [
         Year, Month, Day, Hour, Minute, Second
     ]).
 
 make_location(Location) ->
     {Module, Function, Arity, Line} = Location,
-    ?IO_LIB:format("~p:~p/~p:~p", [
+    io_lib:format("~p:~p/~p:~p", [
         Module, Function, Arity, Line
     ]).
 
@@ -249,9 +249,9 @@ loop(#state{pid=StartingPid, config=Config} = State0) ->
             StartingPid ! started,
             State0#state{pid=undefined}
     end,
-    Levels = ?PROPLISTS:get_value(levels, Config, []),
-    Filter = ?PROPLISTS:get_value(filter, Config, []),
-    Sinks   = ?PROPLISTS:get_value(sinks, Config, []),
+    Levels = proplists:get_value(levels, Config, []),
+    Filter = proplists:get_value(filter, Config, []),
+    Sinks   = proplists:get_value(sinks, Config, []),
     receive
         {get_levels, Ref, Pid} ->
             Pid ! {Ref, Levels},
@@ -263,11 +263,11 @@ loop(#state{pid=StartingPid, config=Config} = State0) ->
             Pid ! {Ref, Sinks},
             loop(State);
         {set_levels, NewLevels} ->
-            loop(State#state{config=[{levels, NewLevels} | ?LISTS:keydelete(levels, 1, Config)]});
+            loop(State#state{config=[{levels, NewLevels} | lists:keydelete(levels, 1, Config)]});
         {set_filter, NewFilter} ->
-            loop(State#state{config=[{filter, NewFilter} | ?LISTS:keydelete(filter, 1, Config)]});
+            loop(State#state{config=[{filter, NewFilter} | lists:keydelete(filter, 1, Config)]});
         {set_sinks, NewSinks} ->
-            loop(State#state{config=[{sinks, NewSinks} | ?LISTS:keydelete(sinks, 1, Config)]});
+            loop(State#state{config=[{sinks, NewSinks} | lists:keydelete(sinks, 1, Config)]});
         {_Location, _Time, _Pid, Level, _MsgFormat} = Request ->
             maybe_do_log(Sinks, Request, Level, Levels, Filter),
             loop(State);
@@ -298,7 +298,7 @@ maybe_do_log(Sinks, {Location, _Time, _Pid, _Level, _MsgFormat} = Request, Level
 match_filter(_Location, []) ->
     true;
 match_filter({Module, _Function, _Arity, _Line}, Filter) ->
-    ?LISTS:member(Module, Filter).
+    lists:member(Module, Filter).
 
 do_log_sinks([], _Request, _Level, _Levels) ->
     ok;
@@ -308,13 +308,13 @@ do_log_sinks([Sink|Rest], Request, Level, Levels) ->
 
 %% @private
 do_log_sink({Module, Function} = _Sink, Request, Level, Levels) ->
-    case ?LISTS:member(Level, Levels) of
+    case lists:member(Level, Levels) of
         true ->
             try
                 Module:Function(Request)
             catch
                 _:_ ->
-                    ?IO:format(
+                    io:format(
                         "An error occurred attempting to log to sink ~p:~p/1.  request=~p~n",
                         [Module, Function, Request]
                     )
@@ -331,7 +331,7 @@ fill_defaults(Config, Defaults) ->
 fill_defaults(_Config, [], Accum) ->
     Accum;
 fill_defaults(Config, [{K,_V}=H|T], Accum) ->
-    case ?PROPLISTS:get_value(K, Config) of
+    case proplists:get_value(K, Config) of
         undefined ->
             fill_defaults(Config, T, [H|Accum]);
         Value ->
