@@ -41,8 +41,6 @@
 
 -export([connect/3, send/2, recv/2, recv/3, close/1, listen/2, accept/1, accept/2]).
 
--include("estdlib.hrl").
-
 -define(DEFAULT_PARAMS, [{active, true}, {buffer, 128}, binary, {timeout, infinity}]).
 
 %%-----------------------------------------------------------------------------
@@ -256,7 +254,7 @@ merge(Config, [H | T], Accum) ->
         {K, _V} -> K;
         K -> K
     end,
-    case ?PROPLISTS:get_value(Key, Config) of
+    case proplists:get_value(Key, Config) of
         undefined ->
             merge(Config, T, [H | Accum]);
         Value ->

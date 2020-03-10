@@ -26,8 +26,6 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -export([run_timer/5, send_after_timer/3]).
 
--include("estdlib.hrl").
-
 -record(state, {
     timers = [] :: [{reference(), pid()}]
 }).

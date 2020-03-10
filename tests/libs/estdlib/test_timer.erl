@@ -2,8 +2,6 @@
 
 -export([test/0]).
 
--include("estdlib.hrl").
-
 test() ->
     ok = test_timer(),
     ok.
@@ -14,7 +12,7 @@ test_timer() ->
     %% hack. until we can convert an erlang timestamp to a big integer
     %% this will fail if run when UNIX epoch divides 1m secs
     {_M0, S0, _Mi0} = erlang:timestamp(),
-    ok = ?TIMER:sleep(1001),
+    ok = timer:sleep(1001),
     {_M1, S1, _Mi1} = erlang:timestamp(),
     ok = etest:assert_true(S1 > S0),
     ok.

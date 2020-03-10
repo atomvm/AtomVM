@@ -1,8 +1,6 @@
 -module(esp_nvs).
 -export([start/0]).
 
--include("estdlib.hrl").
-
 -record(
     state, {
         count = 0,
@@ -24,5 +22,5 @@ start() ->
                     #state{}
             end
     end,
-    ?IO:format("Saving count ~p to NVS...~nReset device to increment.~n", [State#state.count]),
+    io:format("Saving count ~p to NVS...~nReset device to increment.~n", [State#state.count]),
     esp:nvs_set_binary(?MODULE, starts, erlang:term_to_binary(State)).

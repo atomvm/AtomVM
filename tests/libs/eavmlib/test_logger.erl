@@ -2,7 +2,6 @@
 
 -export([test/0, do_log/1, counter/1]).
 
--include("estdlib.hrl").
 -include("etest.hrl").
 -include("logger.hrl").
 
@@ -77,7 +76,7 @@ increment_counter(Level) ->
     Pid ! {increment, Level}.
 
 get_counter(Level) ->
-    ?TIMER:sleep(50),
+    timer:sleep(50),
     Pid = erlang:whereis(counter),
     Ref = erlang:make_ref(),
     Pid ! {self(), Ref, get_counter, Level},
@@ -88,10 +87,10 @@ get_counter(Level) ->
 counter(#state{counters=Counters} = State) ->
     NewState = receive
         {increment, Level} ->
-            Value = ?PROPLISTS:get_value(Level, Counters),
-            State#state{counters=[{Level, Value + 1} | ?LISTS:keydelete(Level, 1, Counters)]};
+            Value = proplists:get_value(Level, Counters),
+            State#state{counters=[{Level, Value + 1} | lists:keydelete(Level, 1, Counters)]};
         {Pid, Ref, get_counter, Level} ->
-            Pid ! {Ref, ?PROPLISTS:get_value(Level, Counters)},
+            Pid ! {Ref, proplists:get_value(Level, Counters)},
             State
     end,
     counter(NewState).

@@ -44,8 +44,6 @@
 -export([start/3, start/4, stop/1, stop/3, call/2, call/3, cast/2, reply/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
--include("estdlib.hrl").
-
 -record(state, {
     mod :: module(),
     current_state :: atom(),
@@ -75,7 +73,7 @@
 %%-----------------------------------------------------------------------------
 -spec start(ServerName::{local, Name::atom()}, Module::module(), Args::term(), Options::options()) -> {ok, pid()} | {error, Reason::term()}.
 start({local, Name} = ServerName, Module, Args, Options) when is_atom(Name) ->
-    ?GEN_SERVER:start(ServerName, ?MODULE, {Module, Args}, Options).
+    gen_server:start(ServerName, ?MODULE, {Module, Args}, Options).
 
 %%-----------------------------------------------------------------------------
 %% @param   Module the module in which the gen_statem callbacks are defined
@@ -91,7 +89,7 @@ start({local, Name} = ServerName, Module, Args, Options) when is_atom(Name) ->
 %%-----------------------------------------------------------------------------
 -spec start(Module::module(), Args::term(), Options::options()) -> {ok, pid()} | {error, Reason::term()}.
 start(Module, Args, Options) ->
-    ?GEN_SERVER:start(?MODULE, {Module, Args}, Options).
+    gen_server:start(?MODULE, {Module, Args}, Options).
 
 
 %%-----------------------------------------------------------------------------
@@ -101,7 +99,7 @@ start(Module, Args, Options) ->
 %%-----------------------------------------------------------------------------
 -spec stop(ServerRef::server_ref()) -> ok | {error, Reason::term()}.
 stop(ServerRef) ->
-    ?GEN_SERVER:stop(ServerRef).
+    gen_server:stop(ServerRef).
 
 %%-----------------------------------------------------------------------------
 %% @param   ServerRef a reference to the gen_statem acquired via start
@@ -115,7 +113,7 @@ stop(ServerRef) ->
 %%-----------------------------------------------------------------------------
 -spec stop(ServerRef::server_ref(), Reason::term(), Timeout::non_neg_integer() | infinity) -> ok | {error, Reason::term()}.
 stop(ServerRef, Reason, Timeout) ->
-    ?GEN_SERVER:stop(ServerRef, Reason, Timeout).
+    gen_server:stop(ServerRef, Reason, Timeout).
 
 %%-----------------------------------------------------------------------------
 %% @equiv   call(ServerRef, Request, infinity)
@@ -140,7 +138,7 @@ call(ServerRef, Request) ->
 %%-----------------------------------------------------------------------------
 -spec call(ServerRef::server_ref(), Request::term(), Timeout::timeout()) -> Reply::term() | {error, Reason::term()}.
 call(ServerRef, Request, Timeout) ->
-    ?GEN_SERVER:call(ServerRef, Request, Timeout).
+    gen_server:call(ServerRef, Request, Timeout).
 
 %%-----------------------------------------------------------------------------
 %% @param   ServerRef a reference to the gen_statem acquired via start
@@ -153,7 +151,7 @@ call(ServerRef, Request, Timeout) ->
 %% @end
 %%-----------------------------------------------------------------------------
 cast(ServerRef, Request) ->
-    ?GEN_SERVER:cast(ServerRef, Request).
+    gen_server:cast(ServerRef, Request).
 
 %%-----------------------------------------------------------------------------
 %% @param   Client the client to whom to send the reply
@@ -167,7 +165,7 @@ cast(ServerRef, Request) ->
 %% @end
 %%-----------------------------------------------------------------------------
 reply(Client, Reply) ->
-    ?GEN_SERVER:reply(Client, Reply).
+    gen_server:reply(Client, Reply).
 
 %%
 %% gen_statem callbacks
@@ -247,7 +245,7 @@ handle_actions([{reply, From, Reply} | T], Context) ->
     reply(From, Reply),
     handle_actions(T, Context);
 handle_actions([{state_timeout, Timeout, Msg} | T], Context) ->
-    timer_manager:start_timer(Timeout, self(), {state_timeout, ?PROPLISTS:get_value(next_state, Context), Msg}),
+    timer_manager:start_timer(Timeout, self(), {state_timeout, proplists:get_value(next_state, Context), Msg}),
     handle_actions(T, Context);
 handle_actions([_ | T], Context) ->
     handle_actions(T, Context).

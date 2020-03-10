@@ -2,8 +2,6 @@
 
 -export([start/0]).
 
--include("estdlib.hrl").
-
 start() ->
     Self = self(),
     Config = [

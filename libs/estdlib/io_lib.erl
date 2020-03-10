@@ -20,8 +20,6 @@
 
 -export([format/2]).
 
--include("estdlib.hrl").
-
 %%-----------------------------------------------------------------------------
 %% @param   Format format string
 %% @param   Args format argument
@@ -40,7 +38,7 @@ format(Format, Args) ->
         true ->
             StringifiedArgs = [to_string(Arg) || Arg <- Args],
             StringList = interleave(FormatTokens, StringifiedArgs, []),
-            ?LISTS:flatten(StringList);
+            lists:flatten(StringList);
         false ->
             throw(bad_format)
     end.
@@ -55,11 +53,11 @@ split(Format) ->
 
 %% @private
 split([], Cur, Accum) ->
-    ?LISTS:reverse([?LISTS:reverse(Cur)|Accum]);
+    lists:reverse([lists:reverse(Cur)|Accum]);
 split([$~, $p | Rest], Cur, Accum) ->
-    split(Rest, [], [?LISTS:reverse(Cur)|Accum]);
+    split(Rest, [], [lists:reverse(Cur)|Accum]);
 split([$~, $s | Rest], Cur, Accum) ->
-    split(Rest, [], [?LISTS:reverse(Cur)|Accum]);
+    split(Rest, [], [lists:reverse(Cur)|Accum]);
 split([$~, $n | Rest], Cur, Accum) ->
     split(Rest, [$\n|Cur], Accum);
 split([$~, $~ | Rest], Cur, Accum) ->
@@ -69,7 +67,7 @@ split([Char|Rest], Cur, Accum) ->
 
 %% @private
 interleave([LastToken], [], Accum) ->
-    ?LISTS:reverse([LastToken|Accum]);
+    lists:reverse([LastToken|Accum]);
 interleave([Token|Tokens], [Arg|Args], Accum) ->
     interleave(Tokens, Args, [Arg, Token | Accum]).
 
@@ -90,7 +88,7 @@ to_string(T) when is_list(T) ->
     case is_printable_ascii(T) of
         true -> [$"] ++ T ++ [$"];
         _ ->
-            ?LISTS:flatten(["[", join([to_string(E) || E <- T], ","), "]"])
+            lists:flatten(["[", join([to_string(E) || E <- T], ","), "]"])
     end;
 to_string(T) when is_binary(T) ->
     BinList = erlang:binary_to_list(T),
@@ -101,12 +99,12 @@ to_string(T) when is_binary(T) ->
     end,
     "<<" ++ Data ++ ">>";
 to_string(T) when is_tuple(T) ->
-    "{" ++ ?LISTS:flatten(join([to_string(E) || E <- erlang:tuple_to_list(T)], ",")) ++ "}";
+    "{" ++ lists:flatten(join([to_string(E) || E <- erlang:tuple_to_list(T)], ",")) ++ "}";
 to_string(_T) -> "unknown".
 
 %% @private
 list_elements_to_string([], Accum) ->
-    ?LISTS:reverse(Accum);
+    lists:reverse(Accum);
 list_elements_to_string([E|R], Accum) ->
     list_elements_to_string(R, [to_string(E) | Accum]).
 
@@ -122,7 +120,7 @@ join(L, Sep) ->
 
 %% @private
 join([], _Sep, Accum) ->
-    ?LISTS:reverse(Accum);
+    lists:reverse(Accum);
 join([E|R], Sep, []) ->
     join(R, Sep, [E]);
 join([E|R], Sep, Accum) ->

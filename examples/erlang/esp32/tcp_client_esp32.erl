@@ -2,8 +2,6 @@
 
 -export([start/0]).
 
--include("estdlib.hrl").
-
 start() ->
     Creds = [
         {ssid, esp:nvs_get_binary(atomvm, sta_ssid, <<"myssid">>)},
@@ -11,46 +9,46 @@ start() ->
     ],
     case network_fsm:wait_for_sta(Creds, 30000) of
         {ok, {Address, Netmask, Gateway}} ->
-            ?IO:format(
+            io:format(
                 "Acquired IP address: ~p Netmask: ~p Gateway: ~p~n",
                 [to_string(Address), to_string(Netmask), to_string(Gateway)]
             ),
             tcp_client_start();
         Error ->
-            ?IO:format("An error occurred starting network: ~p~n", [Error])
+            io:format("An error occurred starting network: ~p~n", [Error])
     end.
 
 tcp_client_start() ->
-    case ?GEN_TCP:connect("www.example.com", 80, [{active, true}]) of
+    case gen_tcp:connect("www.example.com", 80, [{active, true}]) of
         {ok, Socket} ->
-            ?IO:format("Connected to ~p from ~p~n", [peer_address(Socket), local_address(Socket)]),
-            case ?GEN_TCP:send(Socket, "GET / HTTP/1.0\r\n\r\n") of
+            io:format("Connected to ~p from ~p~n", [peer_address(Socket), local_address(Socket)]),
+            case gen_tcp:send(Socket, "GET / HTTP/1.0\r\n\r\n") of
                 ok ->
                     active_receive_data();
                 Error ->
-                    ?IO:format("An error occurred sending a packet: ~p~n", [Error])
+                    io:format("An error occurred sending a packet: ~p~n", [Error])
             end;
         Error ->
-            ?IO:format("An error occurred connecting: ~p~n", [Error])
+            io:format("An error occurred connecting: ~p~n", [Error])
     end.
 
 active_receive_data() ->
     receive
         {tcp_closed, _Socket} ->
-            ?IO:format("Connection closed.~n"),
+            io:format("Connection closed.~n"),
             ok;
         {tcp, Socket, Packet} ->
-            ?IO:format("Received ~p from ~p~n", [Packet, peer_address(Socket)]),
+            io:format("Received ~p from ~p~n", [Packet, peer_address(Socket)]),
             active_receive_data()
     end.
 
 local_address(Socket) ->
-    to_string(?INET:sockname(Socket)).
+    to_string(inet:sockname(Socket)).
 
 peer_address(Socket) ->
-    to_string(?INET:peername(Socket)).
+    to_string(inet:peername(Socket)).
 
 to_string({{A,B,C,D}, Port}) ->
-    ?IO_LIB:format("~p.~p.~p.~p:~p", [A,B,C,D, Port]);
+    io_lib:format("~p.~p.~p.~p:~p", [A,B,C,D, Port]);
 to_string({A,B,C,D}) ->
-    ?IO_LIB:format("~p.~p.~p.~p", [A,B,C,D]).
+    io_lib:format("~p.~p.~p.~p", [A,B,C,D]).

@@ -37,8 +37,6 @@
 ]).
 -export([loop/1, console_log/1]).
 
--include("estdlib.hrl").
-
 -record(state, {
     pid,
     config

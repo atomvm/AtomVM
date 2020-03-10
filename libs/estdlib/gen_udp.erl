@@ -46,8 +46,6 @@
 -type packet() :: string() | binary().
 -type reason() :: term().
 
--include("estdlib.hrl").
-
 -define(DEFAULT_PARAMS, [{active, false}, {buffer, 128}, {binary, true}, {timeout, infinity}]).
 
 %%-----------------------------------------------------------------------------
@@ -188,7 +186,7 @@ merge(Config, [H | T], Accum) ->
         {K, _V} -> K;
         K -> K
     end,
-    case ?PROPLISTS:get_value(Key, Config) of
+    case proplists:get_value(Key, Config) of
         undefined ->
             merge(Config, T, [H | Accum]);
         Value ->

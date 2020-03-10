@@ -21,8 +21,6 @@
 
 -export([start_server/2, reply/3, parse_query_string/1]).
 
--include("estdlib.hrl").
-
 start_server(Port, Router) ->
     case gen_tcp:listen(Port, []) of
         {ok, ListenSocket} ->

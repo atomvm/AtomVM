@@ -28,8 +28,6 @@
 -export([init/1, initial/3, wait_for_sta_connected/3, wait_for_sta_got_ip/3, sta_got_ip/3, terminate/3]).
 -export([simulation_loop/0]).
 
--include("estdlib.hrl").
-
 -define(ATOMVM_NVS_NS, atomvm).
 -define(ATOMVM_NVS_STA_SSID, sta_ssid).
 -define(ATOMVM_NVS_STA_PSK, sta_psk).

@@ -20,8 +20,6 @@
 
 -export([format/1, format/2]).
 
--include("estdlib.hrl").
-
 %%-----------------------------------------------------------------------------
 %% @doc     Equivalent to format(Format, []).
 %% @end
@@ -43,9 +41,9 @@ format(Format) when is_list(Format) ->
 format(Format, Args) when is_list(Format) andalso is_list(Args) ->
     Msg =
         try
-            ?IO_LIB:format(Format, Args)
+            io_lib:format(Format, Args)
         catch
             _:_ ->
-                ?IO_LIB:format("Bad format!  Format: ~p Args: ~p~n", [Format, Args])
+                io_lib:format("Bad format!  Format: ~p Args: ~p~n", [Format, Args])
         end,
     console:puts(Msg).

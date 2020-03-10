@@ -2,8 +2,6 @@
 
 -export([test/0]).
 
--include("estdlib.hrl").
-
 test() ->
     ok = test_start_timer(),
     ok = test_cancel_timer(),
