@@ -49,8 +49,6 @@
 -type mode_config() :: sta_config().
 -type network_config() :: [mode_config()].
 
--include("logger.hrl").
-
 -record(data, {
     config :: network_config(),
     port :: port(),

@@ -3,11 +3,11 @@
 ##
 project(libs)
 
-add_subdirectory(estdlib)
-add_subdirectory(eavmlib)
-add_subdirectory(etest)
+add_subdirectory(estdlib/src)
+add_subdirectory(eavmlib/src)
+add_subdirectory(etest/src)
 if (Elixir_FOUND)
-    add_subdirectory(exavmlib)
+    add_subdirectory(exavmlib/src)
 else()
     message("Unable to find elixirc -- skipping Elixir libs")
 endif()

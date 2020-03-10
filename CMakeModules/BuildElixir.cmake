@@ -49,7 +49,7 @@ macro(pack_runnable avm_name main)
     )
 
     foreach(archive_name ${ARGN})
-        set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/${archive_name}.avm)
+        set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
         set(ARCHIVE_TARGETS ${ARCHIVE_TARGETS} ${archive_name})
     endforeach()
 

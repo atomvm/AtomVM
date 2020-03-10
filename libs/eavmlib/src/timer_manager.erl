@@ -30,8 +30,6 @@
     timers = [] :: [{reference(), pid()}]
 }).
 
--include("logger.hrl").
-
 -define(SERVER_NAME, ?MODULE).
 
 -spec start() -> {ok, Pid::pid()} | {error, Reason::term()}.
