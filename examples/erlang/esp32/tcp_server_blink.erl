@@ -3,14 +3,13 @@
 -export([start/0]).
 
 -include("estdlib.hrl").
--include("atomvm.hrl").
 
 -define(PIN, 2).
 
 start() ->
     Creds = [
-        {ssid, esp:nvs_get_binary(?ATOMVM_NVS_NS, ?ATOMVM_NVS_STA_SSID, <<"myssid">>)},
-        {psk,  esp:nvs_get_binary(?ATOMVM_NVS_NS, ?ATOMVM_NVS_STA_PSK, <<"mypsk">>)}
+        {ssid, esp:nvs_get_binary(atomvm, sta_ssid, <<"myssid">>)},
+        {psk,  esp:nvs_get_binary(atomvm, sta_psk, <<"mypsk">>)}
     ],
     case network_fsm:wait_for_sta(Creds, 30000) of
         {ok, {Address, Netmask, Gateway}} ->

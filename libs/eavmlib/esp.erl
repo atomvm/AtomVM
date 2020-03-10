@@ -47,7 +47,7 @@
     esp_rst_brownout |
     esp_rst_sdio.
 
--include("atomvm.hrl").
+-define(ATOMVM_NVS_NS, atomvm).
 
 %%-----------------------------------------------------------------------------
 %% @doc     Restarts the ESP device

@@ -29,7 +29,10 @@
 -export([simulation_loop/0]).
 
 -include("estdlib.hrl").
--include("atomvm.hrl").
+
+-define(ATOMVM_NVS_NS, atomvm).
+-define(ATOMVM_NVS_STA_SSID, sta_ssid).
+-define(ATOMVM_NVS_STA_PSK, sta_psk).
 
 -define(SERVER, ?MODULE).
 
