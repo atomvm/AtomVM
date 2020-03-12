@@ -49,7 +49,11 @@ macro(pack_runnable avm_name main)
     )
 
     foreach(archive_name ${ARGN})
-        set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
+        if(${archive_name} STREQUAL "exavmlib")
+            set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/lib/${archive_name}.avm)
+        else()
+            set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
+        endif()
         set(ARCHIVE_TARGETS ${ARCHIVE_TARGETS} ${archive_name})
     endforeach()
 
