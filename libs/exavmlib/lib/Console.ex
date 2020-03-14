@@ -1,5 +1,4 @@
 defmodule Console do
-
   def puts(device \\ :stdio, item) do
     pid =
       case :erlang.whereis(device) do
@@ -22,12 +21,11 @@ defmodule Console do
   end
 
   defp write(console, string) do
-    send console, {self(), string}
+    send(console, {self(), string})
 
     receive do
       return_status ->
         return_status
     end
   end
-
 end

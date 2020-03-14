@@ -4,7 +4,8 @@ defmodule GPIO do
   end
 
   def set_direction(gpio, gpio_num, direction) do
-    send gpio, {self(), :set_direction, gpio_num, direction}
+    send(gpio, {self(), :set_direction, gpio_num, direction})
+
     receive do
       ret ->
         ret
@@ -12,7 +13,8 @@ defmodule GPIO do
   end
 
   def set_level(gpio, gpio_num, level) do
-    send gpio, {self(), :set_level, gpio_num, level}
+    send(gpio, {self(), :set_level, gpio_num, level})
+
     receive do
       ret ->
         ret

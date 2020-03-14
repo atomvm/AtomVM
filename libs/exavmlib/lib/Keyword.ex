@@ -45,5 +45,4 @@ defmodule Keyword do
   defp delete_key([{key, _} | tail], key), do: delete_key(tail, key)
   defp delete_key([{_, _} = pair | tail], key), do: [pair | delete_key(tail, key)]
   defp delete_key([], _key), do: []
-
 end

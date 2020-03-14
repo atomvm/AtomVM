@@ -48,6 +48,6 @@ defmodule Kernel do
   end
 
   defp inspect_join([h | t], last) do
-    [inspect(h), ?, , ?\s | inspect_join(t, last)]
+    [inspect(h), ?,, ?\s | inspect_join(t, last)]
   end
 end
