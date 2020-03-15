@@ -349,6 +349,9 @@ compile_erlang(test_tuple_is_not_map)
 compile_erlang(try_error_nif)
 compile_erlang(try_error2_nif)
 
+compile_erlang(is_fun_2_with_frozen)
+compile_erlang(is_fun_2_with_frozen2)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -690,4 +693,7 @@ add_custom_target(erlang_test_modules DEPENDS
 
     try_error_nif.beam
     try_error2_nif.beam
+
+    is_fun_2_with_frozen.beam
+    is_fun_2_with_frozen2.beam
 )

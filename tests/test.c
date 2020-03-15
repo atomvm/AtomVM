@@ -391,6 +391,9 @@ struct Test tests[] =
     {"try_error_nif.beam", 13},
     {"try_error2_nif.beam", 13},
 
+    {"is_fun_2_with_frozen.beam", 24},
+    {"is_fun_2_with_frozen2.beam", 24},
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}
