@@ -53,6 +53,7 @@
 #define TERM_BOXED_REFC_BINARY_SIZE 3
 
 #define BINARY_HEADER_SIZE 2
+#define FUNCTION_REFERENCE_SIZE 4
 #define BOXED_INT_SIZE (BOXED_TERMS_REQUIRED_FOR_INT + 1)
 #define BOXED_INT64_SIZE (BOXED_TERMS_REQUIRED_FOR_INT64 + 1)
 #define FLOAT_SIZE (sizeof(float_term_t) / sizeof(term) + 1)
@@ -1303,6 +1304,22 @@ static inline int term_list_member(term list, term e, Context *ctx)
         t = term_get_list_tail(t);
     }
     return 0;
+}
+
+
+static inline term term_make_function_reference(term m, term f, term a, Context *ctx)
+{
+    if (memory_ensure_free(ctx, FUNCTION_REFERENCE_SIZE) != MEMORY_GC_OK) {
+        return term_invalid_term();
+    }
+    term *boxed_func = memory_heap_alloc(ctx, FUNCTION_REFERENCE_SIZE);
+
+    boxed_func[0] = ((FUNCTION_REFERENCE_SIZE - 1) << 6) | TERM_BOXED_FUN;
+    boxed_func[1] = m;
+    boxed_func[2] = f;
+    boxed_func[3] = a;
+
+    return ((term) boxed_func) | TERM_BOXED_VALUE_TAG;
 }
 
 #endif
