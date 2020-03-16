@@ -39,6 +39,7 @@
 #define STRING_EXT 107
 #define LIST_EXT 108
 #define BINARY_EXT 109
+#define EXPORT_EXT 113
 
 static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx, int copy);
 static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_size, bool copy, Context *ctx);
@@ -395,6 +396,24 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
             }
         }
 
+        case EXPORT_EXT: {
+            int heap_usage = 1;
+            int buf_pos = 1;
+            int element_size;
+
+            term m = parse_external_terms(external_term_buf + buf_pos, &element_size, ctx, copy);
+            buf_pos += element_size;
+
+            term f = parse_external_terms(external_term_buf + buf_pos, &element_size, ctx, copy);
+            buf_pos += element_size;
+
+            term a = parse_external_terms(external_term_buf + buf_pos, &element_size, ctx, copy);
+            buf_pos += element_size;
+
+            *eterm_size = buf_pos;
+            return term_make_function_reference(m, f, a, ctx);
+        }
+
         default:
             fprintf(stderr, "Unknown term type: %i\n", (int) external_term_buf[0]);
             abort();
@@ -496,6 +515,19 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_siz
             } else {
                 return TERM_BOXED_REFC_BINARY_SIZE;
             }
+        }
+
+        case EXPORT_EXT: {
+            int heap_usage = 1;
+            int buf_pos = 1;
+            for (int i = 0; i < 3; i++) {
+                int element_size;
+                heap_usage += calculate_heap_usage(external_term_buf + buf_pos, &element_size, copy, ctx) + 1;
+                buf_pos += element_size;
+            }
+
+            *eterm_size = buf_pos;
+            return FUNCTION_REFERENCE_SIZE;
         }
 
         default:
