@@ -352,6 +352,8 @@ compile_erlang(try_error2_nif)
 compile_erlang(is_fun_2_with_frozen)
 compile_erlang(is_fun_2_with_frozen2)
 
+compile_erlang(function_reference_decode)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -696,4 +698,6 @@ add_custom_target(erlang_test_modules DEPENDS
 
     is_fun_2_with_frozen.beam
     is_fun_2_with_frozen2.beam
+
+    function_reference_decode.beam
 )
