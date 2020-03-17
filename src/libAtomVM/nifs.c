@@ -734,7 +734,14 @@ static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])
     const term *boxed_value = term_to_const_term_ptr(fun_term);
 
     Module *fun_module = (Module *) boxed_value[1];
-    uint32_t fun_index = boxed_value[2];
+    term index_or_module = boxed_value[2];
+    if (term_is_atom(index_or_module)) {
+        // it is not possible to spawn a function reference except for those having
+        // 0 arity, however right now they are not supported.
+        // TODO: implement for funs having arity 0.
+        abort();
+    }
+    uint32_t fun_index = term_to_int32(index_or_module);
 
     uint32_t label;
     uint32_t arity;
