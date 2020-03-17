@@ -555,7 +555,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
     boxed_func[0] = (size << 6) | TERM_BOXED_FUN;
     boxed_func[1] = (term) mod;
-    boxed_func[2] = fun_index;
+    boxed_func[2] = term_from_int(fun_index);
 
     for (uint32_t i = 3; i < n_freeze + 3; i++) {
         boxed_func[i] = ctx->x[i - 3];
@@ -2483,6 +2483,12 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 USED_BY_TRACE(args_count);
 
                 #ifdef IMPL_EXECUTE_LOOP
+                    remaining_reductions--;
+                    if (UNLIKELY(!remaining_reductions)) {
+                        SCHEDULE_NEXT(mod, INSTRUCTION_POINTER());
+                        continue;
+                    }
+
                     term fun = ctx->x[args_count];
 
                     if (UNLIKELY(!term_is_function(fun))) {
@@ -2502,19 +2508,54 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                         }
                     }
 
-                    const term *boxed_value = term_to_const_term_ptr(fun);
-
-                    Module *fun_module = (Module *) boxed_value[1];
-                    uint32_t fun_index = boxed_value[2];
-
-                    uint32_t label;
-                    uint32_t arity;
+                    Module *fun_module;
+                    int fun_arity;
                     uint32_t n_freeze;
-                    module_get_fun(fun_module, fun_index, &label, &arity, &n_freeze);
+                    uint32_t label;
 
-                    TRACE_CALL(ctx, mod, "call_fun", label, args_count);
+                    const term *boxed_value = term_to_const_term_ptr(fun);
+                    term index_or_function = boxed_value[2];
+                    if (term_is_atom(index_or_function)) {
+                        term module = boxed_value[1];
+                        fun_arity = term_to_int(boxed_value[3]);
 
-                    if (UNLIKELY(args_count != arity - n_freeze)) {
+                        AtomString module_name = globalcontext_atomstring_from_term(mod->global, module);
+                        AtomString function_name = globalcontext_atomstring_from_term(mod->global, index_or_function);
+
+                        struct Nif *nif = (struct Nif *) nifs_get(module_name, function_name, fun_arity);
+                        if (!IS_NULL_PTR(nif)) {
+                            term return_value = nif->nif_ptr(ctx, arity, ctx->x);
+                            if (UNLIKELY(term_is_invalid_term(return_value))) {
+                                RAISE_EXCEPTION();
+                            }
+                            ctx->x[0] = return_value;
+                            NEXT_INSTRUCTION(next_off);
+                            continue;
+
+                        } else {
+                            fun_module = globalcontext_get_module(ctx->global, module_name);
+                            if (IS_NULL_PTR(fun_module)) {
+                                RAISE_EXCEPTION();
+                            }
+                            label = module_search_exported_function(fun_module, function_name, arity);
+                            if (UNLIKELY(label == 0)) {
+                                RAISE_EXCEPTION();
+                            }
+                        }
+
+                    } else {
+                        fun_module = (Module *) boxed_value[1];
+                        uint32_t fun_index = term_to_int(index_or_function);
+
+                        uint32_t fun_arity_and_freeze;
+                        module_get_fun(fun_module, fun_index, &label, &fun_arity_and_freeze, &n_freeze);
+
+                        fun_arity = fun_arity_and_freeze - n_freeze;
+
+                        TRACE_CALL(ctx, mod, "call_fun", label, args_count);
+                    }
+
+                    if (UNLIKELY(args_count != fun_arity)) {
                         int target_label = get_catch_label_and_change_module(ctx, &mod);
                         if (target_label) {
                             ctx->x[0] = ERROR_ATOM;
@@ -2529,7 +2570,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     }
 
                     for (uint32_t i = 0; i < n_freeze; i++) {
-                        ctx->x[i + arity - n_freeze] = boxed_value[i + 3];
+                        ctx->x[i + fun_arity] = boxed_value[i + 3];
                     }
 
                     NEXT_INSTRUCTION(next_off);
@@ -2537,14 +2578,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
                     mod = fun_module;
                     code = mod->code->code;
-
-                    remaining_reductions--;
-                    if (LIKELY(remaining_reductions)) {
-                        JUMP_TO_ADDRESS(mod->labels[label]);
-                    } else {
-                        SCHEDULE_NEXT(mod, mod->labels[label]);
-                    }
-
+                    JUMP_TO_ADDRESS(mod->labels[label]);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -3762,15 +3796,25 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                         const term *boxed_value = term_to_const_term_ptr(arg1);
 
                         Module *fun_module = (Module *) boxed_value[1];
-                        uint32_t fun_index = boxed_value[2];
+                        term index_or_module = boxed_value[2];
 
-                        uint32_t fun_label;
                         uint32_t fun_arity;
-                        uint32_t fun_n_freeze;
 
-                        module_get_fun(fun_module, fun_index, &fun_label, &fun_arity, &fun_n_freeze);
+                        if (term_is_atom(index_or_module)) {
+                            fun_arity = term_to_int(boxed_value[3]);
 
-                        if (arity == fun_arity - fun_n_freeze) {
+                        } else {
+                            uint32_t fun_index = term_to_int32(index_or_module);
+
+                            uint32_t fun_label;
+                            uint32_t fun_arity_and_freeze;
+                            uint32_t fun_n_freeze;
+
+                            module_get_fun(fun_module, fun_index, &fun_label, &fun_arity_and_freeze, &fun_n_freeze);
+                            fun_arity = fun_arity_and_freeze - fun_n_freeze;
+                        }
+
+                        if (arity == fun_arity) {
                             NEXT_INSTRUCTION(next_off);
                         } else {
                             i = POINTER_TO_II(mod->labels[label]);
