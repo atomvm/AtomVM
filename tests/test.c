@@ -395,6 +395,7 @@ struct Test tests[] =
     {"is_fun_2_with_frozen2.beam", 24},
 
     {"function_reference_decode.beam", 5},
+    {"makefunref.beam", 3},
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
