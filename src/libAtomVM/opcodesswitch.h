@@ -3665,6 +3665,10 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 }
                 NEXT_INSTRUCTION(next_off);
 
+                if (UNLIKELY(!term_is_atom(module) || !term_is_atom(function))) {
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+
                 AtomString module_name = globalcontext_atomstring_from_term(mod->global, module);
                 AtomString function_name = globalcontext_atomstring_from_term(mod->global, function);
 
@@ -3718,6 +3722,10 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
                 ctx->cp = ctx->e[n_words];
                 ctx->e += (n_words + 1);
+
+                if (UNLIKELY(!term_is_atom(module) || !term_is_atom(function))) {
+                    RAISE_ERROR(BADARG_ATOM);
+                }
 
                 AtomString module_name = globalcontext_atomstring_from_term(mod->global, module);
                 AtomString function_name = globalcontext_atomstring_from_term(mod->global, function);
