@@ -396,6 +396,8 @@ struct Test tests[] =
 
     {"function_reference_decode.beam", 5},
     {"makefunref.beam", 3},
+    {"fail_apply.beam", 17},
+    {"fail_apply_last.beam", 17},
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 

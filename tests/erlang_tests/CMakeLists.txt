@@ -354,6 +354,8 @@ compile_erlang(is_fun_2_with_frozen2)
 
 compile_erlang(function_reference_decode)
 compile_erlang(makefunref)
+compile_erlang(fail_apply)
+compile_erlang(fail_apply_last)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -702,4 +704,6 @@ add_custom_target(erlang_test_modules DEPENDS
 
     function_reference_decode.beam
     makefunref.beam
+    fail_apply.beam
+    fail_apply_last.beam
 )
