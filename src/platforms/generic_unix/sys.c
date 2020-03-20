@@ -215,6 +215,8 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 
 term sys_get_info(Context *ctx, term key)
 {
+    UNUSED(ctx);
+    UNUSED(key);
     return UNDEFINED_ATOM;
 }
 
@@ -281,5 +283,6 @@ void sys_sleep(GlobalContext *glb)
 
 static void alarm_handler(int sig)
 {
+    UNUSED(sig);
     millis++;
 }
