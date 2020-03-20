@@ -229,12 +229,13 @@ static inline void module_get_fun(const Module *this_module, int fun_index, uint
     // ouniq
 }
 
-static inline uint8_t *module_get_str(Module *mod, size_t offset, size_t *remaining) {
+static inline const uint8_t *module_get_str(Module *mod, size_t offset, size_t *remaining)
+{
     if (offset >= mod->str_table_len) {
         return NULL;
     }
     *remaining = mod->str_table_len - offset;
-    return mod->str_table + 8 + offset;
+    return ((const uint8_t *) mod->str_table) + 8 + offset;
 }
 
 #endif
