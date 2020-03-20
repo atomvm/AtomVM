@@ -810,16 +810,16 @@ static inline term term_create_empty_binary(uint32_t size, Context *ctx)
 * In general, none of these conditions should apply, if this function is being
 * called in the context of generated bit syntax instructions.
 */
-static inline int term_bs_insert_integer(term t, avm_int_t offset, avm_int_t value, avm_int_t n, avm_int_t flags)
+static inline int term_bs_insert_integer(term t, avm_int_t offset, avm_int_t value, avm_int_t n)
 {
     if (!term_is_binary(t)) {
         return -1;
     }
-    if (n > sizeof(avm_int_t) * 8) {
+    if ((unsigned int) n > sizeof(avm_int_t) * 8) {
         return -2;
     }
-    size_t capacity = term_binary_size(t);
-    if (8 * capacity < (offset + n)) {
+    unsigned long capacity = term_binary_size(t);
+    if (8 * capacity < (unsigned long) (offset + n)) {
         return -3;
     }
     // TODO optimize by xor'ing by byte (or mask on boundaries)
@@ -852,13 +852,13 @@ static inline int term_bs_insert_integer(term t, avm_int_t offset, avm_int_t val
 * In general, none of these conditions should apply, if this function is being
 * called in the context of generated bit syntax instructions.
 */
-static inline int term_bs_extract_integer(avm_int_t *dst, term src, size_t offset, avm_int_t n, avm_int_t flags)
+static inline int term_bs_extract_integer(avm_int_t *dst, term src, size_t offset, avm_int_t n)
 {
     if (!term_is_binary(src)) {
         return -1;
     }
-    size_t capacity = term_binary_size(src);
-    if (8 * capacity - offset < n) {
+    unsigned long capacity = term_binary_size(src);
+    if (8 * capacity - offset < (unsigned long) n) {
         return -2;
     }
     *dst = 0;
@@ -909,8 +909,8 @@ static inline int term_bs_insert_binary(term t, int offset, term src, int n)
         fprintf(stderr, "Offset not aligned on a byte boundary\n");
         return -3;
     }
-    size_t capacity = term_binary_size(t);
-    if (capacity < (offset/8 + n)) {
+    unsigned long capacity = term_binary_size(t);
+    if (capacity < (unsigned long) (offset/8 + n)) {
         fprintf(stderr, "Insufficient capacity to write binary\n");
         return -4;
     }

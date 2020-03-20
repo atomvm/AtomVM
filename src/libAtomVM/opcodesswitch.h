@@ -3021,7 +3021,8 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
                     TRACE("bs_put_integer/5, fail=%i size=%li unit=%li flags=0x%lx src=%i\n", fail, size_value, unit, flags_value, (unsigned int) src_value);
 
-                    int result = term_bs_insert_integer(ctx->bs, ctx->bs_offset, src_value, size_value, flags_value);
+                    //TODO: add flags_value
+                    int result = term_bs_insert_integer(ctx->bs, ctx->bs_offset, src_value, size_value);
                     if (UNLIKELY(result)) {
                         TRACE("bs_put_integer: Failed to insert integer into binary: %i\n", result);
                         RAISE_ERROR(BADARG_ATOM);
@@ -3525,7 +3526,8 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
                     avm_int_t increment = size_val * unit;
                     avm_int_t value = 0;
-                    int status = term_bs_extract_integer(&value, src, ctx->bs_offset, increment, flags_value);
+                    //TODO: add flags_value
+                    int status = term_bs_extract_integer(&value, src, ctx->bs_offset, increment);
                     if (status != 0) {
                         TRACE("bs_get_integer2: error extracting integer: %i\n", status);
                         JUMP_TO_ADDRESS(mod->labels[fail]);
