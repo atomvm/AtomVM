@@ -2509,7 +2509,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     }
 
                     Module *fun_module;
-                    int fun_arity;
+                    unsigned int fun_arity;
                     uint32_t n_freeze;
                     uint32_t label;
 
@@ -3054,7 +3054,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_BINARY(src, "bs_put_binary");
                     VERIFY_IS_INTEGER(flags, "bs_put_binary");
-                    avm_int_t size_val = 0;
+                    unsigned long size_val = 0;
                     if (term_is_integer(size)) {
                         avm_int_t bit_size = term_to_int(size) * unit;
                         if (bit_size % 8 != 0) {
@@ -3118,7 +3118,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     }
 
                     size_t remaining = 0;
-                    uint8_t *str = module_get_str(mod, offset, &remaining);
+                    const uint8_t *str = module_get_str(mod, offset, &remaining);
                     if (UNLIKELY(IS_NULL_PTR(str))) {
                         TRACE("bs_put_binary: Bad offset in strings table.\n");
                         RAISE_ERROR(BADARG_ATOM);
@@ -3323,12 +3323,12 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     TRACE("bs_match_string/4, fail=%i src=0x%lx bits=%li offset=%li src=0x%lx\n", fail, src, bits, offset, src);
 
                     size_t remaining = 0;
-                    uint8_t *str = module_get_str(mod, offset, &remaining);
+                    const uint8_t *str = module_get_str(mod, offset, &remaining);
                     if (UNLIKELY(IS_NULL_PTR(str))) {
                         TRACE("bs_match_string: Bad offset in strings table.\n");
                         RAISE_ERROR(BADARG_ATOM);
                     }
-                    if (memcmp(term_binary_data(src) + byte_offset, str, MIN(remaining, bytes)) != 0) {
+                    if (memcmp(term_binary_data(src) + byte_offset, str, MIN(remaining, (unsigned int) bytes)) != 0) {
                         TRACE("bs_match_string: failed to match\n");
                         JUMP_TO_ADDRESS(mod->labels[fail]);
                     } else {
@@ -3363,7 +3363,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     } else if (pos == START_ATOM) {
                         pos_val = 0;
                     }
-                    if (pos_val < 0 || pos_val > term_binary_size(src) * 8) {
+                    if (pos_val < 0 || pos_val > (avm_int_t) term_binary_size(src) * 8) {
                         TRACE("bs_restore2: pos_val=%li out of range: src capacity: %li\n", pos_val, term_binary_size(src) * 8);
                         RAISE_ERROR(BADARG_ATOM);
                     }
@@ -3475,7 +3475,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
                     TRACE("bs_test_tail2/3, fail=%i src=0x%lx bits=0x%lx\n", fail, src, bits);
 
-                    if ((term_binary_size(src) * 8 - ctx->bs_offset) != bits) {
+                    if ((term_binary_size(src) * 8 - ctx->bs_offset) != (unsigned int) bits) {
                         TRACE("bs_test_tail2: Expected exactly %li bits remaining, but remaining=%li\n", bits, term_binary_size(src) * 8 - ctx->bs_offset);
                         JUMP_TO_ADDRESS(mod->labels[fail]);
                     } else {
