@@ -25,6 +25,8 @@ defmodule Access do
     end
   end
 
+  def get(container, key, default \\ nil)
+
   def get(list, key, default) when is_list(list) and is_atom(key) do
     case :lists.keyfind(key, 1, list) do
       {_, value} -> value
