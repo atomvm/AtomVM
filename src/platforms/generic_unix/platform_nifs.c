@@ -75,13 +75,9 @@ static term nif_openssl_rand_bytes(Context *ctx, int argc, term argv[])
     }
 
     int status = RAND_bytes((unsigned char *) buf, n);
-    if (status != 1) {
-        if (RAND_pseudo_bytes((unsigned char *) buf, n) != 1) {
-            free(buf);
-            RAISE_ERROR(LOW_ENTROPY_ATOM);
-        } else {
-            fprintf(stderr, "WARNING: Unable to generate cryptographically strong random bytes.  Generated pseudo-random bytes.\n");
-        }
+    if (UNLIKELY(status != 1)) {
+        free(buf);
+        RAISE_ERROR(LOW_ENTROPY_ATOM);
     }
 
     if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(n) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
@@ -125,6 +121,10 @@ static const struct Nif openssl_random_nif =
 
 static term nif_atomvm_platform(Context *ctx, int argc, term argv[])
 {
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
+
     return GENERIC_UNIX_ATOM;
 }
 
