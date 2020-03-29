@@ -286,6 +286,12 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
                     break;
                 }
 
+                case TERM_BOXED_BIN_MATCH_STATE: {
+                    TRACE("- Found bin match state.\n");
+                    ptr[1] = memory_shallow_copy_term(ptr[1], &new_heap, move);
+                    break;
+                }
+
                 case TERM_BOXED_POSITIVE_INTEGER:
                     TRACE("- Found boxed pos int.\n");
                     break;

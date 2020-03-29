@@ -43,6 +43,7 @@
 
 #define TERM_BOXED_TAG_MASK 0x3F
 #define TERM_BOXED_TUPLE 0x0
+#define TERM_BOXED_BIN_MATCH_STATE 0x4
 #define TERM_BOXED_POSITIVE_INTEGER 0x8
 #define TERM_BOXED_REF 0x10
 #define TERM_BOXED_FUN 0x14
@@ -51,6 +52,7 @@
 #define TERM_BOXED_HEAP_BINARY 0x24
 
 #define TERM_BOXED_REFC_BINARY_SIZE 3
+#define TERM_BOXED_BIN_MATCH_STATE_SIZE 4
 
 #define BINARY_HEADER_SIZE 2
 #define FUNCTION_REFERENCE_SIZE 4
@@ -1320,6 +1322,72 @@ static inline term term_make_function_reference(term m, term f, term a, Context 
     boxed_func[3] = a;
 
     return ((term) boxed_func) | TERM_BOXED_VALUE_TAG;
+}
+
+static inline int term_is_match_state(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        if ((boxed_value[0] & 0x3F) == TERM_BOXED_BIN_MATCH_STATE) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static inline term term_get_match_state_binary(term match_state)
+{
+    const term *boxed_value = term_to_const_term_ptr(match_state);
+    return boxed_value[1];
+}
+
+static inline avm_int_t term_get_match_state_offset(term match_state)
+{
+    const term *boxed_value = term_to_const_term_ptr(match_state);
+    return boxed_value[2];
+}
+
+static inline void term_set_match_state_offset(term match_state, avm_int_t offset)
+{
+    term *boxed_value = term_to_term_ptr(match_state);
+    boxed_value[2] = offset;
+}
+
+static inline int term_match_state_get_save_offset(term match_state, int index)
+{
+    term *boxed_value = term_to_term_ptr(match_state);
+    return boxed_value[3 + index];
+}
+
+static inline void term_match_state_save_offset(term match_state, int index)
+{
+    term *boxed_value = term_to_term_ptr(match_state);
+    boxed_value[3 + index] = boxed_value[2];
+}
+
+static inline void term_match_state_restore_offset(term match_state, int index)
+{
+    term *boxed_value = term_to_term_ptr(match_state);
+    boxed_value[2] = boxed_value[3 + index];
+}
+
+static inline term term_alloc_bin_match_state(term binary_or_state, Context *ctx)
+{
+    term *boxed_match_state = memory_heap_alloc(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE);
+
+    boxed_match_state[0] = ((TERM_BOXED_BIN_MATCH_STATE_SIZE - 1) << 6) | TERM_BOXED_BIN_MATCH_STATE;
+    if (term_is_match_state(binary_or_state)) {
+        boxed_match_state[1] = term_get_match_state_binary(binary_or_state);
+        boxed_match_state[2] = term_get_match_state_offset(binary_or_state);
+        boxed_match_state[3] = term_get_match_state_offset(binary_or_state);
+    } else {
+        boxed_match_state[1] = binary_or_state;
+        boxed_match_state[2] = 0;
+        boxed_match_state[3] = 0;
+    }
+
+    return ((term) boxed_match_state) | TERM_BOXED_VALUE_TAG;
 }
 
 #endif
