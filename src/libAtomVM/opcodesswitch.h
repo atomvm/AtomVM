@@ -314,6 +314,10 @@ typedef union
     }                                                                                                                   \
 }
 
+#define READ_DEST_REGISTER(dreg_type, dreg)                                                         \
+    *(*((dreg_type).ptr) + (dreg));
+
+
 #define WRITE_REGISTER(dreg_type, dreg, value)                                                      \
 {                                                                                                   \
     *(*((dreg_type).ptr) + (dreg)) = value;                                                         \
@@ -475,6 +479,19 @@ typedef union
     TRACE(opcode_name ": " #t " is not a binary\n"); \
     RAISE_ERROR(BADARG_ATOM); \
 }
+
+#define VERIFY_IS_MATCH_STATE(t, opcode_name) \
+    if (UNLIKELY(!term_is_match_state(t))) { \
+        TRACE(opcode_name ": " #t " is not a match context.\n"); \
+        RAISE_ERROR(BADARG_ATOM); \
+    }
+
+#define VERIFY_IS_MATCH_OR_BINARY(t, opcode_name) \
+    if (UNLIKELY(!(term_is_binary(t) || term_is_match_state(t)))) { \
+        TRACE(opcode_name ": " #t " is not a binary or match context.\n"); \
+        RAISE_ERROR(BADARG_ATOM); \
+    }
+
 
 #define MIN(X, Y) ((X) < (Y) ? (X) : (Y))
 
@@ -3135,27 +3152,42 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 int next_off = 1;
                 int fail;
                 DECODE_LABEL(fail, code, i, next_off, next_off)
+                #ifdef IMPL_EXECUTE_LOOP
+                    int next_off_back = next_off;
+                #endif
                 term src;
                 DECODE_COMPACT_TERM(src, code, i, next_off, next_off);
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, code, i, next_off, next_off);
-                term arg3;
-                DECODE_COMPACT_TERM(arg3, code, i, next_off, next_off);
+                term slots_term;
+                DECODE_COMPACT_TERM(slots_term, code, i, next_off, next_off);
                 dreg_t dreg;
                 dreg_type_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    int slots = term_to_int(slots_term);
+
+                    if (memory_ensure_free(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE + slots) != MEMORY_GC_OK) {
+                        abort();
+                    }
+
+                    DECODE_COMPACT_TERM(src, code, i, next_off_back, next_off_back);
+                #endif
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("bs_start_match2/5\n");
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_start_match2");
+                    // this is likely one of the only two mandatory VERIFY_*
+                    VERIFY_IS_MATCH_OR_BINARY(src, "bs_start_match2");
 
-                    TRACE("bs_start_match2/5, fail=%i src=0x%lx arg2=0x%lx arg3=0x%lx dreg=%c%i\n", fail, src, arg2, arg3, T_DEST_REG(dreg_type, dreg));
-                    ctx->bs = src;
-                    ctx->bs_offset = 0;
-                    WRITE_REGISTER(dreg_type, dreg, src);
+                    TRACE("bs_start_match2/5, fail=%i src=0x%lx arg2=0x%lx arg3=0x%lx dreg=%c%i\n", fail, src, arg2, slots_term, T_DEST_REG(dreg_type, dreg));
+
+                    term match_state = term_alloc_bin_match_state(src, ctx);
+
+                    WRITE_REGISTER(dreg_type, dreg, match_state);
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
@@ -3163,6 +3195,12 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
             }
 
             case OP_BS_START_MATCH3: {
+                #ifdef IMPL_EXECUTE_LOOP
+                    if (memory_ensure_free(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE) != MEMORY_GC_OK) {
+                        abort();
+                    }
+                #endif
+
                 int next_off = 1;
                 int fail;
                 DECODE_LABEL(fail, code, i, next_off, next_off)
@@ -3175,16 +3213,18 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_start_match2/5\n");
+                    TRACE("bs_start_match3/5\n");
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_start_match3");
+                    // this is likely one of the only two mandatory VERIFY_*
+                    VERIFY_IS_MATCH_OR_BINARY(src, "bs_start_match3");
 
                     TRACE("bs_start_match3/4, fail=%i src=0x%lx live=0x%lx dreg=%c%i\n", fail, src, live, T_DEST_REG(dreg_type, dreg));
-                    ctx->bs = src;
-                    ctx->bs_offset = 0;
-                    WRITE_REGISTER(dreg_type, dreg, src);
+
+                    term match_state = term_alloc_bin_match_state(src, ctx);
+
+                    WRITE_REGISTER(dreg_type, dreg, match_state);
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
@@ -3206,10 +3246,14 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_get_position");
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_position");
 
                     TRACE("bs_get_position/3 src=0x%lx dreg=%c%i live=0x%lx \n", src, T_DEST_REG(dreg_type, dreg), live);
-                    WRITE_REGISTER(dreg_type, dreg, term_from_int(ctx->bs_offset));
+
+                    avm_int_t offset = term_get_match_state_offset(src);
+                    term offset_term = term_from_int(offset);
+
+                    WRITE_REGISTER(dreg_type, dreg, offset_term);
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
@@ -3231,24 +3275,28 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_get_tail");
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_tail");
+
+                    avm_int_t bs_offset = term_get_match_state_offset(src);
+                    avm_int_t bs_bin = term_get_match_state_binary(src);
 
                     TRACE("bs_get_tail/3 src=0x%lx dreg=%c%i live=0x%lx \n", src, T_DEST_REG(dreg_type, dreg), live);
-                    if (ctx->bs_offset == 0) {
+                    if (bs_offset == 0) {
                         WRITE_REGISTER(dreg_type, dreg, src);
+
                     } else {
                         if (ctx->bs_offset % 8 != 0) {
                             TRACE("bs_get_tail: Unsupported alignment.\n");
                             RAISE_ERROR(UNSUPPORTED_ATOM);
                         } else {
                             size_t start_pos = ctx->bs_offset / 8;
-                            size_t src_size = term_binary_size(src);
+                            size_t src_size = term_binary_size(bs_bin);
                             size_t new_bin_size = src_size - start_pos;
                             uint8_t *src_buf = malloc(new_bin_size);
                             if (UNLIKELY(IS_NULL_PTR(src_buf))) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
-                            memcpy(src_buf + start_pos, term_binary_data(src), new_bin_size);
+                            memcpy(src_buf + start_pos, term_binary_data(bs_bin), new_bin_size);
 
                             if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(new_bin_size) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
                                 free(src_buf);
@@ -3280,12 +3328,12 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_set_position");
+                    VERIFY_IS_MATCH_STATE(src, "bs_set_position");
                     VERIFY_IS_INTEGER(pos, "bs_set_position");
 
                     avm_int_t pos_val = term_to_int(pos);
                     TRACE("bs_set_position/2 src=0x%lx pos=%li\n", src, pos_val);
-                    ctx->bs_offset = pos_val;
+                    term_set_match_state_offset(src,  pos_val);
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
@@ -3308,17 +3356,21 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_match_string");
+                    VERIFY_IS_MATCH_STATE(src, "bs_match_string");
+
                     if (bits % 8 != 0) {
                         TRACE("bs_match_string: Unsupported bits size (must be evenly divisible by 8). bits=%li\n", bits);
                         RAISE_ERROR(UNSUPPORTED_ATOM);
                     }
                     avm_int_t bytes = bits / 8;
-                    if (ctx->bs_offset % 8 != 0) {
-                        TRACE("bs_match_string: Unsupported offset (must be evenly divisible by 8). ctx->bs_offset=%li\n", ctx->bs_offset);
+                    avm_int_t bs_offset = term_get_match_state_offset(src);
+                    term bs_bin = term_get_match_state_binary(src);
+
+                    if (bs_offset % 8 != 0) {
+                        TRACE("bs_match_string: Unsupported offset (must be evenly divisible by 8). bs_offset=%li\n", bs_offset);
                         RAISE_ERROR(UNSUPPORTED_ATOM);
                     }
-                    avm_int_t byte_offset = ctx->bs_offset / 8;
+                    avm_int_t byte_offset = bs_offset / 8;
 
                     TRACE("bs_match_string/4, fail=%i src=0x%lx bits=%li offset=%li src=0x%lx\n", fail, src, bits, offset, src);
 
@@ -3328,11 +3380,11 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                         TRACE("bs_match_string: Bad offset in strings table.\n");
                         RAISE_ERROR(BADARG_ATOM);
                     }
-                    if (memcmp(term_binary_data(src) + byte_offset, str, MIN(remaining, (unsigned int) bytes)) != 0) {
+                    if (memcmp(term_binary_data(bs_bin) + byte_offset, str, MIN(remaining, (unsigned int) bytes)) != 0) {
                         TRACE("bs_match_string: failed to match\n");
                         JUMP_TO_ADDRESS(mod->labels[fail]);
                     } else {
-                        ctx->bs_offset += bits;
+                        term_set_match_state_offset(src, bs_offset + bits);
                         NEXT_INSTRUCTION(next_off);
                     }
                 #endif
@@ -3347,29 +3399,28 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 int next_off = 1;
                 term src;
                 DECODE_COMPACT_TERM(src, code, i, next_off, next_off);
-                term pos;
-                DECODE_COMPACT_TERM(pos, code, i, next_off, next_off);
+                term index;
+                DECODE_COMPACT_TERM(index, code, i, next_off, next_off);
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("bs_restore2/5\n");
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_restore2");
+                    VERIFY_IS_MATCH_STATE(src, "bs_restore2");
 
-                    avm_int_t pos_val = 0;
-                    if (term_is_integer(pos)) {
-                        pos_val = term_to_int(pos);
-                    } else if (pos == START_ATOM) {
-                        pos_val = 0;
-                    }
-                    if (pos_val < 0 || pos_val > (avm_int_t) term_binary_size(src) * 8) {
-                        TRACE("bs_restore2: pos_val=%li out of range: src capacity: %li\n", pos_val, term_binary_size(src) * 8);
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-                    ctx->bs_offset = pos_val;
+                    avm_int_t index_val;
+                    if (index == START_ATOM) {
+                        index_val = 0;
 
-                    TRACE("bs_restore2/2, src=0x%lx pos=%li\n", src, pos_val);
+                    } else if (term_is_integer(index)) {
+                        index_val = term_to_int(index);
+                    } else {
+                        abort();
+                    }
+                    term_match_state_restore_offset(src, index_val);
+
+                    TRACE("bs_restore2/2, src=0x%lx pos=%li\n", src, index_val);
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
@@ -3394,7 +3445,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_skip_bits2");
+                    VERIFY_IS_MATCH_STATE(src, "bs_skip_bits2");
                     VERIFY_IS_INTEGER(size, "bs_skip_bits2");
                     VERIFY_IS_INTEGER(flags, "bs_skip_bits2");
                     avm_int_t flags_value = term_to_int(flags);
@@ -3411,11 +3462,13 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     TRACE("bs_skip_bits2/5, fail=%i src=0x%lx size=0x%lx unit=0x%lx flags=0x%lx\n", fail, src, size, unit, flags);
 
                     size_t increment = size_val * unit;
-                    if ((ctx->bs_offset + increment) > term_binary_size(src) * 8) {
-                        TRACE("bs_skip_bits2: Insufficient capacity to skip bits\n");
+                    avm_int_t bs_offset = term_get_match_state_offset(src);
+                    term bs_bin = term_get_match_state_binary(src);
+                    if ((bs_offset + increment) > term_binary_size(bs_bin) * 8) {
+                        TRACE("bs_skip_bits2: Insufficient capacity to skip bits: %i, inc: %i\n", bs_offset, increment);
                         JUMP_TO_ADDRESS(mod->labels[fail]);
                     } else {
-                        ctx->bs_offset += increment;
+                        term_set_match_state_offset(src, bs_offset + increment);
                         NEXT_INSTRUCTION(next_off);
                     }
 
@@ -3440,11 +3493,12 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_test_unit");
+                    VERIFY_IS_MATCH_STATE(src, "bs_test_unit");
 
                     TRACE("bs_test_unit/3, fail=%i src=0x%lx unit=0x%lx\n", fail, src, unit);
 
-                    if ((term_binary_size(src) * 8 - ctx->bs_offset) % unit != 0) {
+                    avm_int_t bs_offset = term_get_match_state_offset(src);
+                    if ((term_binary_size(src) * 8 - bs_offset) % unit != 0) {
                         TRACE("bs_test_unit: Available bits in source not evenly divisible by unit");
                         JUMP_TO_ADDRESS(mod->labels[fail]);
                     } else {
@@ -3471,12 +3525,15 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_test_tail2");
+                    VERIFY_IS_MATCH_STATE(src, "bs_test_tail2");
 
                     TRACE("bs_test_tail2/3, fail=%i src=0x%lx bits=0x%lx\n", fail, src, bits);
 
-                    if ((term_binary_size(src) * 8 - ctx->bs_offset) != (unsigned int) bits) {
-                        TRACE("bs_test_tail2: Expected exactly %li bits remaining, but remaining=%li\n", bits, term_binary_size(src) * 8 - ctx->bs_offset);
+                    term bs_bin = term_get_match_state_binary(src);
+                    avm_int_t bs_offset = term_get_match_state_offset(src);
+
+                    if ((term_binary_size(bs_bin) * 8 - bs_offset) != (unsigned int) bits) {
+                        TRACE("bs_test_tail2: Expected exactly %li bits remaining, but remaining=%li\n", bits, term_binary_size(bs_bin) * 8 - bs_offset);
                         JUMP_TO_ADDRESS(mod->labels[fail]);
                     } else {
                         NEXT_INSTRUCTION(next_off);
@@ -3511,7 +3568,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src,       "bs_get_integer");
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_integer");
                     VERIFY_IS_INTEGER(size,     "bs_get_integer");
                     VERIFY_IS_INTEGER(flags,    "bs_get_integer");
 
@@ -3526,14 +3583,17 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
                     avm_int_t increment = size_val * unit;
                     avm_int_t value = 0;
+                    term bs_bin = term_get_match_state_binary(src);
+                    avm_int_t bs_offset = term_get_match_state_offset(src);
                     //TODO: add flags_value
-                    int status = term_bs_extract_integer(&value, src, ctx->bs_offset, increment);
+                    int status = term_bs_extract_integer(&value, bs_bin, bs_offset, increment);
                     if (status != 0) {
                         TRACE("bs_get_integer2: error extracting integer: %i\n", status);
                         JUMP_TO_ADDRESS(mod->labels[fail]);
                     } else {
+                        term_set_match_state_offset(src, bs_offset + increment);
+
                         term t = term_from_int(value);
-                        ctx->bs_offset += increment;
                         WRITE_REGISTER(dreg_type, dreg, t);
                         NEXT_INSTRUCTION(next_off);
                     }
@@ -3567,8 +3627,11 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src,       "bs_get_binary2");
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_binary2");
                     VERIFY_IS_INTEGER(flags,    "bs_get_binary2");
+
+                    term bs_bin = term_get_match_state_binary(src);
+                    avm_int_t bs_offset = term_get_match_state_offset(src);
 
                     if (unit != 8) {
                         TRACE("bs_get_binary2: Unsupported: unit must be 8.\n");
@@ -3578,12 +3641,12 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     if (term_is_integer(size)) {
                         size_val = term_to_int(size);
                     } else if (size == ALL_ATOM) {
-                        size_val = term_binary_size(src) - ctx->bs_offset / 8;
+                        size_val = term_binary_size(bs_bin) - bs_offset / 8;
                     } else {
                         TRACE("bs_get_binary2: size is neither an integer nor the atom `all`\n");
                         RAISE_ERROR(BADARG_ATOM);
                     }
-                    if (ctx->bs_offset % unit != 0) {
+                    if (bs_offset % unit != 0) {
                         TRACE("bs_get_binary2: Unsupported.  Offset on binary read must be alinged on byte boundaries.\n");
                         RAISE_ERROR(BADARG_ATOM);
                     }
@@ -3593,27 +3656,28 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                         RAISE_ERROR(UNSUPPORTED_ATOM);
                     }
 
-                    TRACE("bs_get_binary2/7, fail=%i src=0x%lx unit=%li\n", fail, src, unit);
+                    TRACE("bs_get_binary2/7, fail=%i src=0x%lx unit=%li\n", fail, bs_bin, unit);
 
-                if (ctx->bs_offset / unit + size_val > term_binary_size(src)) {
+                if ((unsigned int) (bs_offset / unit + size_val) > term_binary_size(bs_bin)) {
                     TRACE("bs_get_binary2: insufficient capacity\n");
                     JUMP_TO_ADDRESS(mod->labels[fail]);
                 } else {
-                    size_t src_size = term_binary_size(src);
+                    size_t src_size = term_binary_size(bs_bin);
                     uint8_t *src_buf = malloc(src_size);
                     if (UNLIKELY(IS_NULL_PTR(src_buf))) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    memcpy(src_buf, term_binary_data(src), src_size);
+                    memcpy(src_buf, term_binary_data(bs_bin), src_size);
                     // TODO what about ctx->bs?  Shouldn't that also be copied in case of GC?
+
+                    term_set_match_state_offset(src, bs_offset + size_val * unit);
 
                     if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(size_val) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
                         free(src_buf);
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
 
-                    term t = term_from_literal_binary(src_buf + ctx->bs_offset / unit, size_val, ctx);
-                    ctx->bs_offset += size_val * unit;
+                    term t = term_from_literal_binary(src_buf + bs_offset / unit, size_val, ctx);
 
                     free(src_buf);
                     WRITE_REGISTER(dreg_type, dreg, t);
@@ -3640,11 +3704,9 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_context_to_binary/1, dreg=%c%i\n", T_DEST_REG(dreg_type, dreg));
 
-                    if (UNLIKELY(!term_is_binary(ctx->bs))) {
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-
-                    WRITE_REGISTER(dreg_type, dreg, ctx->bs);
+                    term src = READ_DEST_REGISTER(dreg_type, dreg);
+                    term bin = term_get_match_state_binary(src);
+                    WRITE_REGISTER(dreg_type, dreg, bin);
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
