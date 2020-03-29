@@ -357,6 +357,11 @@ compile_erlang(makefunref)
 compile_erlang(fail_apply)
 compile_erlang(fail_apply_last)
 
+compile_erlang(count_char_bs)
+compile_erlang(count_char2_bs)
+compile_erlang(count_pairs)
+compile_erlang(decode_mqtt)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -706,4 +711,9 @@ add_custom_target(erlang_test_modules DEPENDS
     makefunref.beam
     fail_apply.beam
     fail_apply_last.beam
+
+    count_char_bs.beam
+    count_char2_bs.beam
+    count_pairs.beam
+    decode_mqtt.beam
 )

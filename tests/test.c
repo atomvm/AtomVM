@@ -399,6 +399,11 @@ struct Test tests[] =
     {"fail_apply.beam", 17},
     {"fail_apply_last.beam", 17},
 
+    {"count_char_bs.beam", 2},
+    {"count_char2_bs.beam", 1002},
+    {"count_pairs.beam", 3},
+    {"decode_mqtt.beam", 120948},
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}
