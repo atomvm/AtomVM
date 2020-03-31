@@ -401,6 +401,7 @@ struct Test tests[] =
 
     {"count_char_bs.beam", 2},
     {"count_char2_bs.beam", 1002},
+    {"count_char3_bs.beam", 1},
     {"count_pairs.beam", 3},
     {"decode_mqtt.beam", 120948},
 
