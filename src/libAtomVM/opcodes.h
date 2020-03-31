@@ -100,6 +100,7 @@
 #define OP_BS_GET_BINARY2 119
 #define OP_BS_SKIP_BITS2 120
 #define OP_BS_TEST_TAIL2 121
+#define OP_BS_SAVE2 122
 #define OP_BS_RESTORE2 123
 #define OP_GC_BIF1 124
 #define OP_GC_BIF2 125

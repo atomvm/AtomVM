@@ -3395,6 +3395,38 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 break;
             }
 
+            case OP_BS_SAVE2: {
+                int next_off = 1;
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off, next_off);
+                term index;
+                DECODE_COMPACT_TERM(index, code, i, next_off, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_save2/2\n");
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    VERIFY_IS_MATCH_STATE(src, "bs_save2");
+
+                    avm_int_t index_val;
+                    if (index == START_ATOM) {
+                        index_val = 0;
+
+                    } else if (term_is_integer(index)) {
+                        index_val = term_to_int(index);
+                    } else {
+                        abort();
+                    }
+                    term_match_state_save_offset(src, index_val);
+
+                    TRACE("bs_save2/2, src=0x%lx pos=%li\n", src, index_val);
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
             case OP_BS_RESTORE2: {
                 int next_off = 1;
                 term src;
