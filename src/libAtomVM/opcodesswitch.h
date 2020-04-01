@@ -3282,14 +3282,15 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
                     TRACE("bs_get_tail/3 src=0x%lx dreg=%c%i live=0x%lx \n", src, T_DEST_REG(dreg_type, dreg), live);
                     if (bs_offset == 0) {
-                        WRITE_REGISTER(dreg_type, dreg, src);
+
+                        WRITE_REGISTER(dreg_type, dreg, bs_bin);
 
                     } else {
-                        if (ctx->bs_offset % 8 != 0) {
+                        if (bs_offset % 8 != 0) {
                             TRACE("bs_get_tail: Unsupported alignment.\n");
                             RAISE_ERROR(UNSUPPORTED_ATOM);
                         } else {
-                            size_t start_pos = ctx->bs_offset / 8;
+                            size_t start_pos = bs_offset / 8;
                             size_t src_size = term_binary_size(bs_bin);
                             size_t new_bin_size = src_size - start_pos;
                             uint8_t *src_buf = malloc(new_bin_size);
