@@ -46,12 +46,11 @@ start() ->
     {$n, <<1,2,3,4>>, <<"">>} = test_match_clause(<<$n:8, 1,2,3,4>>),
     {$n, <<1,2,3,4>>, <<5,6>>} = test_match_clause(<<$n:8, 1,2,3,4,5,6>>),
 
-    %% TODO fix in OTP-22
-    % [<<"">>] = test_match_recursive(<<"">>, []),
-    % [<<"">>, 119] = test_match_recursive(<<119:32>>, []),
-    % [<<"">>, 119, 122] = test_match_recursive(<<122:8, 119:32>>, []),
-    % [<<"">>, 122, 122, 119, 119, 119, 122] = test_match_recursive(<<122:8, 119:32, 119:32, 119:32, 122:8, 122:8>>, []),
-    % nope = test_match_recursive(<<"foo">>, []),
+    [<<"">>] = test_match_recursive(<<"">>, []),
+    [<<"">>, 119] = test_match_recursive(<<119:32>>, []),
+    [<<"">>, 119, 122] = test_match_recursive(<<122:8, 119:32>>, []),
+    [<<"">>, 122, 122, 119, 119, 119, 122] = test_match_recursive(<<122:8, 119:32, 119:32, 119:32, 122:8, 122:8>>, []),
+    nope = test_match_recursive(<<"foo">>, []),
 
     BigBin = make_binary(1025),
     FirstPart = binary:part(BigBin, 0, 1024),
@@ -220,15 +219,14 @@ test_match_clause(
 test_match_clause(_) ->
     nope.
 
-%% TODO fix in OTP-22
-% test_match_recursive(<<"">> = Empty, Accum) ->
-%     [Empty|Accum];
-% test_match_recursive(<<122:8, Rest/binary>>, Accum) ->
-%     test_match_recursive(Rest, [122|Accum]);
-% test_match_recursive(<<119:32, Rest/binary>>, Accum) ->
-%     test_match_recursive(Rest, [119|Accum]);
-% test_match_recursive(_SoFar, _Accum) ->
-%     nope.
+test_match_recursive(<<"">> = Empty, Accum) ->
+    [Empty|Accum];
+test_match_recursive(<<122:8, Rest/binary>>, Accum) ->
+    test_match_recursive(Rest, [122|Accum]);
+test_match_recursive(<<119:32, Rest/binary>>, Accum) ->
+    test_match_recursive(Rest, [119|Accum]);
+test_match_recursive(_SoFar, _Accum) ->
+    nope.
 
 test_match_force_gc(<<ReallyBigBin:1024/binary, Rest/binary>>) ->
     {ReallyBigBin, Rest}.
