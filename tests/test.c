@@ -408,6 +408,10 @@ struct Test tests[] =
     {"count_char3_bs.beam", 1},
     {"count_pairs.beam", 3},
     {"decode_mqtt.beam", 120948},
+    {"decode_int24.beam", 725246},
+    {"decode_int32.beam", 289273},
+    {"decode_int48.beam", 858867},
+
     {"large_int_literal.beam", 5953},
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
