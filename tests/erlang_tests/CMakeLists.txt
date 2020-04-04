@@ -357,6 +357,8 @@ compile_erlang(makefunref)
 compile_erlang(fail_apply)
 compile_erlang(fail_apply_last)
 
+compile_erlang(pid_to_list_test)
+
 compile_erlang(count_char_bs)
 compile_erlang(count_char2_bs)
 compile_erlang(count_char3_bs)
@@ -712,6 +714,8 @@ add_custom_target(erlang_test_modules DEPENDS
     makefunref.beam
     fail_apply.beam
     fail_apply_last.beam
+
+    pid_to_list_test.beam
 
     count_char_bs.beam
     count_char2_bs.beam
