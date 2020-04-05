@@ -400,6 +400,8 @@ struct Test tests[] =
     {"fail_apply_last.beam", 17},
 
     {"pid_to_list_test.beam", 63},
+    {"ref_to_list_test.beam", 386},
+    {"test_binary_to_integer.beam", 99},
 
     {"count_char_bs.beam", 2},
     {"count_char2_bs.beam", 1002},
