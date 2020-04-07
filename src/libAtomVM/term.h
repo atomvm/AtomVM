@@ -669,6 +669,31 @@ static inline term term_make_boxed_int64(avm_int64_t large_int64, Context *ctx)
     return ((term) boxed_int) | TERM_BOXED_VALUE_TAG;
 }
 
+static inline term term_make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
+{
+    #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+        if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
+            if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
+                return term_invalid_term();
+            }
+
+            return term_make_boxed_int64(value, ctx);
+
+        }
+    #endif
+
+    if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
+        if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
+            return term_invalid_term();
+        }
+
+        return term_make_boxed_int(value, ctx);
+
+    } else {
+        return term_from_int(value);
+    }
+}
+
 static inline term term_from_catch_label(unsigned int module_index, unsigned int label)
 {
     return (term) ((module_index << 24) | (label << 6) | TERM_CATCH_TAG);
@@ -845,47 +870,6 @@ static inline int term_bs_insert_integer(term t, avm_int_t offset, avm_int_t val
             uint8_t *pos = (uint8_t *) (term_binary_data(t) + byte_pos);
             int shift = 7 - (bit_pos % 8);
             *pos ^= (0x01 << shift);
-        }
-    }
-    return 0;
-}
-
-/**
-* @brief Extract an integer from a binary (using bit syntax).
-*
-* @details Extract the next size * unit bits from src into dst, starting
-* at the bit position starting in offset.
-* @param dst the location of the integer value to write
-* @param src a term pointing to binary data. Fails if src is not a binary term.
-* @param n the number of low-order bits from value to read.
-* @return 0 on success; non-zero value if:
-*           src is not a binary term
-*           there is insufficient capacity in the binary to read the desired number of bits
-* In general, none of these conditions should apply, if this function is being
-* called in the context of generated bit syntax instructions.
-*/
-static inline int term_bs_extract_integer(avm_int_t *dst, term src, size_t offset, avm_int_t n)
-{
-    if (!term_is_binary(src)) {
-        return -1;
-    }
-    unsigned long capacity = term_binary_size(src);
-    if (8 * capacity - offset < (unsigned long) n) {
-        return -2;
-    }
-    *dst = 0;
-    // TODO optimize by xor'ing by byte (or mask on boundaries)
-    // TODO support big/little endian flags
-    // TODO support big/little sign flags
-    for (int i = 0;  i < n;  ++i) {
-        int bit_pos = offset + i;
-        int byte_pos = bit_pos / 8;
-        uint8_t *pos = (uint8_t *) (term_binary_data(src) + byte_pos);
-        int shift = 7 - (bit_pos % 8);
-
-        uint8_t bit_val = ((0x01 << shift) & *pos) >> shift;
-        if (bit_val) {
-            *dst |= 0x01 << (n - i - 1);
         }
     }
     return 0;

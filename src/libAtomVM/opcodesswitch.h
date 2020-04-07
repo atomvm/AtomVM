@@ -31,6 +31,7 @@
 #include "opcodes.h"
 
 #ifdef IMPL_EXECUTE_LOOP
+    #include "bitstring.h"
     #include "mailbox.h"
 #endif
 
@@ -3698,26 +3699,25 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
                     avm_int_t size_val = term_to_int(size);
                     avm_int_t flags_value = term_to_int(flags);
-                    if (flags_value != 0) {
-                        TRACE("bs_get_integer: neither signed nor native or little endian encoding supported.\n");
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
 
                     TRACE("bs_get_integer2/7, fail=%i src=0x%lx size=%li unit=%li flags=%li\n", fail, src, size_val, unit, flags);
 
                     avm_int_t increment = size_val * unit;
-                    avm_int_t value = 0;
+                    union maybe_unsigned_int64 value;
                     term bs_bin = term_get_match_state_binary(src);
                     avm_int_t bs_offset = term_get_match_state_offset(src);
-                    //TODO: add flags_value
-                    int status = term_bs_extract_integer(&value, bs_bin, bs_offset, increment);
-                    if (status != 0) {
-                        TRACE("bs_get_integer2: error extracting integer: %i\n", status);
+                    bool status = bitstring_extract_integer(bs_bin, bs_offset, increment, flags_value, &value);
+                    if (UNLIKELY(!status)) {
+                        TRACE("bs_get_integer2: error extracting integer.\n");
                         JUMP_TO_ADDRESS(mod->labels[fail]);
                     } else {
                         term_set_match_state_offset(src, bs_offset + increment);
 
-                        term t = term_from_int(value);
+                        term t = term_make_maybe_boxed_int64(ctx, value.s);
+                        if (UNLIKELY(term_is_invalid_term(t))) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        }
+
                         WRITE_REGISTER(dreg_type, dreg, t);
                         NEXT_INSTRUCTION(next_off);
                     }

@@ -8,6 +8,7 @@ set(HEADER_FILES
     atomshashtable.h
     avmpack.h
     bif.h
+    bitstring.h
     context.h
     ccontext.h
     debug.h
@@ -46,6 +47,7 @@ set(SOURCE_FILES
     atomshashtable.c
     avmpack.c
     bif.c
+    bitstring.c
     context.c
     debug.c
     defaultatoms.c
