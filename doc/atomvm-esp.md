@@ -38,3 +38,9 @@ The following functions are available:
 * `esp:reformat/0`
 
 > Note.  NVS entries are stored in plaintext and are not encrypted.  Applications should exercise caution if sensitive security information, such as account passwords, are stored in NVS storage.
+
+## Miscellaneous
+
+The `freq_hz` function can be used to retrieve the clock frequency of the chip.
+
+* `esp:freq_hz/0`

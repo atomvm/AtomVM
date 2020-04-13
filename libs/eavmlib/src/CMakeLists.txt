@@ -14,6 +14,7 @@ set(ERLANG_MODULES
     i2c
     http_server
     json_encoder
+    ledc
     logger
     network_fsm
     spi

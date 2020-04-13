@@ -31,21 +31,10 @@
 #include <nvs.h>
 #include <nvs_flash.h>
 #include <rom/md5_hash.h>
+#include <soc/soc.h>
 
 //#define ENABLE_TRACE
 #include "trace.h"
-
-#define VALIDATE_VALUE(value, verify_function) \
-    if (UNLIKELY(!verify_function((value)))) { \
-        argv[0] = ERROR_ATOM; \
-        argv[1] = BADARG_ATOM; \
-        return term_invalid_term(); \
-    }
-
-#define RAISE_ERROR(error_type_atom) \
-    ctx->x[0] = ERROR_ATOM; \
-    ctx->x[1] = (error_type_atom); \
-    return term_invalid_term();
 
 #define MAX_NVS_KEY_SIZE 15
 #define MD5_DIGEST_LENGTH 16
@@ -64,6 +53,8 @@ static const char *const esp_rst_sdio           = "\xC"  "esp_rst_sdio";
 //                                                        123456789ABCDEF01
 
 static int write_atom_c_string(Context *ctx, char *buf, size_t bufsize, term t);
+
+const struct Nif *ledc_nifs_get_nif(const char *nifname);
 
 //
 // NIFs
@@ -346,6 +337,14 @@ static term nif_esp_nvs_reformat(Context *ctx, int argc, term argv[])
     }
 }
 
+static term nif_esp_freq_hz(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    return term_from_int(APB_CLK_FREQ);
+}
+
 static term nif_rom_md5(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -417,6 +416,11 @@ static const struct Nif esp_nvs_reformat_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_nvs_reformat
 };
+static const struct Nif esp_freq_hz_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_freq_hz
+};
 static const struct Nif rom_md5_nif =
 {
     .base.type = NIFFunctionType,
@@ -466,6 +470,10 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_nvs_reformat_nif;
     }
+    if (strcmp("esp:freq_hz/0", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_freq_hz_nif;
+    }
     if (strcmp("erlang:md5/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &rom_md5_nif;
@@ -473,6 +481,10 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     if (strcmp("atomvm:platform/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &atomvm_platform_nif;
+    }
+    const struct Nif *nif = NULL;
+    if ((nif = ledc_nifs_get_nif(nifname)) != NULL) {
+        return nif;
     }
     return NULL;
 }
