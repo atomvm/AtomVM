@@ -1082,39 +1082,66 @@ term bif_erlang_trunc_1(Context *ctx, int live, term arg1)
     }
 }
 
-term bif_erlang_bor_2(Context *ctx, int live, term arg1, term arg2)
+typedef int64_t (*bitwise_op)(int64_t a, int64_t b);
+
+static inline term bitwise_helper(Context *ctx, int live, term arg1, term arg2, bitwise_op op)
 {
     UNUSED(live);
 
-    if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
-        return arg1 | arg2;
-
-    } else {
+    if (UNLIKELY(!term_is_any_integer(arg1) || !term_is_any_integer(arg2))) {
         RAISE_ERROR(BADARITH_ATOM);
     }
+
+    int64_t a = term_maybe_unbox_int64(arg1);
+    int64_t b = term_maybe_unbox_int64(arg2);
+    int64_t result = op(a, b);
+
+    #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+        return make_maybe_boxed_int64(ctx, result);
+    #else
+        return make_maybe_boxed_int(ctx, result);
+    #endif
+}
+
+static inline int64_t bor(int64_t a, int64_t b)
+{
+    return a | b;
+}
+
+term bif_erlang_bor_2(Context *ctx, int live, term arg1, term arg2)
+{
+    if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
+        return arg1 | arg2;
+    } else {
+        return bitwise_helper(ctx, live, arg1, arg2, bor);
+    }
+}
+
+static inline int64_t band(int64_t a, int64_t b)
+{
+    return a & b;
 }
 
 term bif_erlang_band_2(Context *ctx, int live, term arg1, term arg2)
 {
-    UNUSED(live);
-
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return arg1 & arg2;
-
     } else {
-        RAISE_ERROR(BADARITH_ATOM);
+        return bitwise_helper(ctx, live, arg1, arg2, band);
     }
+}
+
+static inline int64_t bxor(int64_t a, int64_t b)
+{
+    return a ^ b;
 }
 
 term bif_erlang_bxor_2(Context *ctx, int live, term arg1, term arg2)
 {
-    UNUSED(live);
-
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return (arg1 ^ arg2) | TERM_INTEGER_TAG;
-
     } else {
-        RAISE_ERROR(BADARITH_ATOM);
+        return bitwise_helper(ctx, live, arg1, arg2, bxor);
     }
 }
 
