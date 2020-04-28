@@ -289,9 +289,10 @@ typedef union
                     break;                                                                                              \
                                                                                                                         \
                 case COMPACT_NBITS_VALUE:                                                                               \
-                    dest_term = term_from_int64(                                                                        \
-                            large_integer_to_int64((code_chunk) + (base_index) + (off), &(next_operand_offset))         \
-                        );                                                                                              \
+                    dest_term = large_integer_to_term(ctx, (code_chunk) + (base_index) + (off), &(next_operand_offset));\
+                    if (UNLIKELY(term_is_invalid_term(dest_term))) {                                                    \
+                        RAISE_EXCEPTION();                                                                              \
+                    }                                                                                                   \
                     break;                                                                                              \
                                                                                                                         \
                 default:                                                                                                \
@@ -501,6 +502,21 @@ struct Int24
     int32_t val24 : 24;
 };
 
+struct Int40
+{
+    int64_t val40 : 40;
+};
+
+struct Int48
+{
+    int64_t val48 : 48;
+};
+
+struct Int56
+{
+    int64_t val56 : 56;
+};
+
 static int get_catch_label_and_change_module(Context *ctx, Module **mod)
 {
     term *ct = ctx->e;
@@ -529,7 +545,40 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
     return 0;
 }
 
-static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_offset)
+static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
+{
+#if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+    if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
+        term *fragment = memory_alloc_heap_fragment(ctx, BOXED_INT64_SIZE);
+        if (IS_NULL_PTR(fragment)) {
+            return term_invalid_term();
+        }
+        term_put_int64(fragment, value);
+        return ((term) fragment) | ((term) TERM_BOXED_VALUE_TAG);
+    } else
+#endif
+    if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
+        term *fragment = memory_alloc_heap_fragment(ctx, BOXED_INT_SIZE);
+        if (IS_NULL_PTR(fragment)) {
+            return term_invalid_term();
+        }
+        term_put_int(fragment, value);
+        return ((term) fragment) | TERM_BOXED_VALUE_TAG;
+    } else {
+        return term_from_int(value);
+    }
+}
+
+static inline term maybe_alloc_boxed_integer_fragment_helper(Context *ctx, avm_int64_t value, unsigned int bytes_count)
+{
+    if (bytes_count < sizeof(avm_int_t)) {
+        return term_from_int(value);
+    } else {
+        return maybe_alloc_boxed_integer_fragment(ctx, value);
+    }
+}
+
+static term large_integer_to_term(Context *ctx, uint8_t *compact_term, int *next_operand_offset)
 {
     int num_bytes = (*compact_term >> 5) + 2;
 
@@ -537,14 +586,14 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
         case 2: {
             *next_operand_offset += 3;
             int16_t ret_val16 = ((int16_t) compact_term[1]) << 8 | compact_term[2];
-            return ret_val16;
+            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val16, 2);
         }
 
         case 3: {
             *next_operand_offset += 4;
             struct Int24 ret_val24;
             ret_val24.val24 = ((int32_t) compact_term[1]) << 16 | ((int32_t) compact_term[2] << 8) | compact_term[3];
-            return ret_val24.val24;
+            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val24.val24, 3);
         }
 
         case 4: {
@@ -552,11 +601,53 @@ static int64_t large_integer_to_int64(uint8_t *compact_term, int *next_operand_o
             int32_t ret_val32;
             ret_val32 = ((int32_t) compact_term[1]) << 24 | ((int32_t) compact_term[2] << 16)
                 | ((int32_t) compact_term[3] << 8) | compact_term[4];
-            return ret_val32;
+            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val32, 4);
+        }
+
+        case 5: {
+            *next_operand_offset += 6;
+            struct Int40 ret_val40;
+            ret_val40.val40 = ((int64_t) compact_term[1]) << 32 | ((int64_t) compact_term[2] << 24)
+                | ((int64_t) compact_term[3] << 16) | ((int64_t) compact_term[4] << 8)
+                | (int64_t) compact_term[5];
+
+            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val40.val40, 5);
+        }
+
+        case 6: {
+            *next_operand_offset += 7;
+            struct Int48 ret_val48;
+            ret_val48.val48 = ((int64_t) compact_term[1]) << 40 | ((int64_t) compact_term[2] << 32)
+                | ((int64_t) compact_term[3] << 24) | ((int64_t) compact_term[4] << 16)
+                | ((int64_t) compact_term[5] << 8) | (int64_t) compact_term[6];
+
+            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val48.val48, 6);
+        }
+
+        case 7: {
+            *next_operand_offset += 8;
+            struct Int56 ret_val56;
+            ret_val56.val56 = ((int64_t) compact_term[1]) << 48 | ((int64_t) compact_term[2] << 40)
+                | ((int64_t) compact_term[3] << 32) | ((int64_t) compact_term[4] << 24)
+                | ((int64_t) compact_term[5] << 16) | ((int64_t) compact_term[6] << 8)
+                | (int64_t) compact_term[7];
+
+            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val56.val56, 7);
+        }
+
+        case 8: {
+            *next_operand_offset += 9;
+            int64_t ret_val64;
+            ret_val64 = ((int64_t) compact_term[1]) << 56 | ((int64_t) compact_term[2] << 48)
+                | ((int64_t) compact_term[3] << 40) | ((int64_t) compact_term[4] << 32)
+                | ((int64_t) compact_term[5] << 24) | ((int64_t) compact_term[6] << 16)
+                | ((int64_t) compact_term[7] << 8) | (int64_t) compact_term[8];
+
+            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val64, 8);
         }
 
         default:
-            abort();
+            return term_invalid_term();
     }
 }
 
