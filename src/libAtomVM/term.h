@@ -627,18 +627,22 @@ static inline avm_int64_t term_maybe_unbox_int64(term maybe_boxed_int)
     }
 }
 
+static inline void term_put_int(term *boxed_int, avm_int_t value)
+{
+    boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
+    boxed_int[1] = value;
+}
+
 static inline term term_make_boxed_int(avm_int_t value, Context *ctx)
 {
     term *boxed_int = memory_heap_alloc(ctx, 1 + BOXED_TERMS_REQUIRED_FOR_INT);
-    boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
-    boxed_int[1] = value;
+    term_put_int(boxed_int, value);
 
     return ((term) boxed_int) | TERM_BOXED_VALUE_TAG;
 }
 
-static inline term term_make_boxed_int64(avm_int64_t large_int64, Context *ctx)
+static inline void term_put_int64(term *boxed_int, avm_int64_t large_int64)
 {
-    term *boxed_int = memory_heap_alloc(ctx, 1 + BOXED_TERMS_REQUIRED_FOR_INT64);
     boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT64 << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
     #if BOXED_TERMS_REQUIRED_FOR_INT64 == 1
         boxed_int[1] = large_int64;
@@ -655,6 +659,12 @@ static inline term term_make_boxed_int64(avm_int64_t large_int64, Context *ctx)
     #else
         #error "unsupported configuration."
     #endif
+}
+
+static inline term term_make_boxed_int64(avm_int64_t large_int64, Context *ctx)
+{
+    term *boxed_int = memory_heap_alloc(ctx, 1 + BOXED_TERMS_REQUIRED_FOR_INT64);
+    term_put_int64(boxed_int, large_int64);
 
     return ((term) boxed_int) | TERM_BOXED_VALUE_TAG;
 }
