@@ -49,6 +49,8 @@ enum MemoryGCResult
  */
 MALLOC_LIKE term *memory_heap_alloc(Context *ctx, uint32_t size);
 
+MALLOC_LIKE term *memory_alloc_heap_fragment(Context *ctx, uint32_t size);
+
 /**
  * @brief allocates a new memory block and executes garbage collection
  *

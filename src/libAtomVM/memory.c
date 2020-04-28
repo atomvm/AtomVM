@@ -45,6 +45,17 @@ HOT_FUNC term *memory_heap_alloc(Context *c, uint32_t size)
     return allocated;
 }
 
+MALLOC_LIKE term *memory_alloc_heap_fragment(Context *ctx, uint32_t fragment_size)
+{
+    struct ListHead *heap_fragment = malloc(fragment_size * sizeof(term) + sizeof(struct ListHead));
+    if (IS_NULL_PTR(heap_fragment)) {
+        return NULL;
+    }
+    list_append(&ctx->heap_fragments, heap_fragment);
+    ctx->heap_fragments_size += fragment_size;
+    return (term *) (heap_fragment + 1);
+}
+
 enum MemoryGCResult memory_ensure_free(Context *c, uint32_t size)
 {
     size_t free_space = context_avail_free_memory(c);
