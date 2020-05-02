@@ -430,7 +430,7 @@ int test_modules_execution()
     int failed_tests = 0;
 
     do {
-        printf("-- EXECUTING TEST: %s\n", test->test_file);
+        fprintf(stderr, "-- EXECUTING TEST: %s\n", test->test_file);
         MappedFile *beam_file = mapped_file_open_beam(test->test_file);
         assert(beam_file != NULL);
 
@@ -477,7 +477,7 @@ int main(int argc, char **argv)
     UNUSED(argc)
 
     time_t seed = time(NULL);
-    printf("Seed is %li\n", seed);
+    fprintf(stderr, "Seed is %li\n", seed);
     srand(seed);
 
     chdir(dirname(argv[0]));
