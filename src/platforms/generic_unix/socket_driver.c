@@ -440,15 +440,20 @@ term socket_driver_sockname(Context *ctx)
         port_ensure_available(ctx, 3);
         return port_create_error_tuple(ctx, term_from_int(errno));
     } else {
-        port_ensure_available(ctx, 8);
+        port_ensure_available(ctx, 11);
         term addr_term = socket_tuple_from_addr(
             ctx, ntohl(addr.sin_addr.s_addr)
         );
         term port_term = term_from_int(ntohs(addr.sin_port));
-        return port_create_tuple2(
+        term addr_port = port_create_tuple2(
             ctx,
             addr_term,
             port_term
+        );
+        return port_create_tuple2(
+            ctx,
+            OK_ATOM,
+            addr_port
         );
     }
 }
@@ -464,15 +469,20 @@ term socket_driver_peername(Context *ctx)
         port_ensure_available(ctx, 3);
         return port_create_error_tuple(ctx, term_from_int(errno));
     } else {
-        port_ensure_available(ctx, 8);
+        port_ensure_available(ctx, 11);
         term addr_term = socket_tuple_from_addr(
             ctx, ntohl(addr.sin_addr.s_addr)
         );
         term port_term = term_from_int(ntohs(addr.sin_port));
-        return port_create_tuple2(
+        term addr_port = port_create_tuple2(
             ctx,
             addr_term,
             port_term
+        );
+        return port_create_tuple2(
+            ctx,
+            OK_ATOM,
+            addr_port
         );
     }
 }

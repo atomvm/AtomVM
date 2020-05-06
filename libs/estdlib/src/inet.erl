@@ -57,7 +57,7 @@ close(Socket) ->
 %%          This function should be called on a running socket instance.
 %% @end
 %%-----------------------------------------------------------------------------
--spec sockname(Socket::socket()) -> {address(), port_number()} | {error, Reason::term()}.
+-spec sockname(Socket::socket()) -> {ok, {address(), port_number()}} | {error, Reason::term()}.
 sockname(Socket) ->
     call(Socket, {sockname}).
 
@@ -68,7 +68,7 @@ sockname(Socket) ->
 %%          This function should be called on a running socket instance.
 %% @end
 %%-----------------------------------------------------------------------------
--spec peername(Socket::socket()) -> {address(), port_number()} | {error, Reason::term()}.
+-spec peername(Socket::socket()) -> {ok, {address(), port_number()}} | {error, Reason::term()}.
 peername(Socket) ->
     call(Socket, {peername}).
 
