@@ -10,6 +10,12 @@ if [ -z "${IDF_PATH}" ]; then
     exit -1
 fi
 
+filesize="$(ls -s -k ${1} | xargs | cut -d ' ' -f 1)"
+
+echo "%%"
+echo "%% Flashing ${1} (size=${filesize}k)"
+echo "%%"
+
 exec "${IDF_PATH}/components/esptool_py/esptool/esptool.py" \
     --chip esp32 \
     --port "${FLASH_SERIAL_PORT}" \
@@ -20,4 +26,4 @@ exec "${IDF_PATH}/components/esptool_py/esptool/esptool.py" \
     -u --flash_mode dio --flash_freq 40m \
     --flash_size detect \
     0x110000 \
-    "${@}"
+    "${1}"

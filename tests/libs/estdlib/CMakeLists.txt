@@ -12,6 +12,7 @@ set(ERLANG_MODULES
     test_gen_udp
     test_io_lib
     test_lists
+    test_string
     test_proplists
     test_timer
 )

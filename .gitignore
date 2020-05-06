@@ -5,3 +5,5 @@ build/**
 xcode/**
 src/platforms/esp32/build/**
 src/platforms/esp32/build/**/*.d
+.idea/**
+.vscode/**
