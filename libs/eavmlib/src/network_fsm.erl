@@ -39,12 +39,13 @@
 -type ipv4_info() :: {IPAddress::ipv4_address(), NetMask::ipv4_address(), Gateway::ipv4_address()}.
 -type ip_info() :: ipv4_info().
 
--type ssid_config() :: {ssid, string()}.
--type psk_config() :: {psk, string()}.
+-type ssid_config() :: {ssid, string()|binary()}.
+-type psk_config() :: {psk, string()|binary()}.
+-type dhcp_hostname_config() :: {dhcp_hostname, string()|binary()}.
 -type connected_config() :: {connected, fun(() -> term())}.
 -type disconnected_config() :: {disconnected, fun(() -> term())}.
 -type got_ip_config() :: {got_ip, fun((ip_info()) -> term())}.
--type sta_config_property() :: ssid_config() | psk_config() | connected_config() | disconnected_config() | got_ip_config().
+-type sta_config_property() :: ssid_config() | psk_config() | dhcp_hostname_config() | connected_config() | disconnected_config() | got_ip_config().
 -type sta_config() :: {sta, [sta_config_property()]}.
 -type mode_config() :: sta_config().
 -type network_config() :: [mode_config()].
@@ -67,16 +68,18 @@ wait_for_sta() ->
 
 
 %%-----------------------------------------------------------------------------
-%% @doc     Equivalent to wait_for_sta([], Timeout).
+%% @doc     Equivalent to wait_for_sta([], Timeout) or wait_for_sta(StaConfig, 15000).
 %% @end
 %%-----------------------------------------------------------------------------
--spec wait_for_sta(Timeout::non_neg_integer()) -> {ok, ip_info()} | {error, Reason::term()}.
-wait_for_sta(Timeout) ->
-    wait_for_sta([], Timeout).
+-spec wait_for_sta(TimeoutOrStaConfig::non_neg_integer() | [sta_config_property()]) -> {ok, ip_info()} | {error, Reason::term()}.
+wait_for_sta(Timeout) when is_integer(Timeout) ->
+    wait_for_sta([], Timeout);
+wait_for_sta(StaConfig) when is_list(StaConfig) ->
+    wait_for_sta(StaConfig, 15000).
 
 
 %%-----------------------------------------------------------------------------
-%% @param   Creds list containing ssid and psk for station mode
+%% @param   StaConfig The STA network configuration
 %% @param   Timeout amount of time in milliseconds to wait for a connection
 %% @returns {ok, IpInfo}, if the network_fsm was started, or {error, Reason} if
 %%          a failure occurred (e.g., due to malformed network configuration).
@@ -88,15 +91,16 @@ wait_for_sta(Timeout) ->
 %%          changes in the network.
 %% @end
 %%-----------------------------------------------------------------------------
--spec wait_for_sta(Creds::[ssid_config()|psk_config()], Timeout::non_neg_integer()) -> {ok, ip_info()} | {error, Reason::term()}.
-wait_for_sta(Creds, Timeout) ->
+-spec wait_for_sta(StaConfig::[sta_config_property()], Timeout::non_neg_integer()) -> {ok, ip_info()} | {error, Reason::term()}.
+wait_for_sta(StaConfig, Timeout) ->
     Self = self(),
-    StaConfig = Creds ++ [
+    NewStaConfig = [
         {connected, fun() -> Self ! connected end},
         {got_ip, fun(IpInfo) -> Self ! {ok, IpInfo} end},
         {disconnected, fun() -> Self ! disconnected end}
+        | StaConfig
     ],
-    Config = [{sta, StaConfig}],
+    Config = [{sta, NewStaConfig}],
     case network_fsm:start(Config) of
         ok ->
             wait_for_ip(Timeout);
@@ -228,12 +232,13 @@ terminate(_Reason, _StateName, _Data) ->
 
 %% @private
 get_driver_config(Config) ->
-    Sta = case proplists:get_value(sta, Config) of
-        undefined -> [];
+    case proplists:get_value(sta, Config) of
+        undefined ->
+            Config;
         StaConfig ->
-            {sta, [{ssid, get_ssid(StaConfig)}, {psk, get_psk(StaConfig)}]}
-    end,
-    [Sta | lists:keydelete(sta, 1, Config)].
+            NewStaConfig = [{ssid, get_ssid(StaConfig)}, {psk, get_psk(StaConfig)} | StaConfig],
+            [{sta, NewStaConfig} | lists:keydelete(sta, 1, Config)]
+    end.
 
 %% @private
 get_ssid(Config) ->
