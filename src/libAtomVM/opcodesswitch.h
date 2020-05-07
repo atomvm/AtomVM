@@ -77,7 +77,7 @@ typedef union
         JUMP_TO_ADDRESS(mod->labels[target_label]);                     \
         continue;                                                       \
     } else {                                                            \
-        abort();                                                        \
+        goto stacktrace;                                                \
     }
 #endif
 
@@ -466,8 +466,7 @@ typedef union
         JUMP_TO_ADDRESS(mod->labels[target_label]); \
         break; \
     } else { \
-        fprintf(stderr, "exception.\n"); \
-        abort(); \
+        goto stacktrace; \
     }
 
 #define VERIFY_IS_INTEGER(t, opcode_name) \
@@ -4508,6 +4507,15 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 abort();
                 return 1;
         }
+
+        continue;
+
+#ifdef IMPL_EXECUTE_LOOP
+stacktrace:
+        dump(ctx);
+        abort();
+        continue;
+#endif
     }
 }
 
