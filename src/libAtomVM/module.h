@@ -65,7 +65,6 @@ struct Module
     size_t str_table_len;
 
     union imported_func *imported_funcs;
-    void *local_labels;
 
     void **labels;
 
