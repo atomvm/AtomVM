@@ -546,6 +546,95 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
     return 0;
 }
 
+COLD_FUNC static void cp_to_mod_lbl_off(term cp, Context *ctx, Module **cp_mod, int *label, int *l_off)
+{
+    Module *mod = ctx->global->modules_by_index[cp >> 24];
+    long mod_offset = (cp & 0xFFFFFF) >> 2;
+
+    *cp_mod = mod;
+
+    uint8_t *code = &mod->code->code[0];
+    int labels_count = ENDIAN_SWAP_32(mod->code->labels);
+
+    int i = 1;
+    uint8_t *l = mod->labels[1];
+    while (mod_offset > l - code) {
+        i++;
+        if (i >= labels_count) {
+            // last label + 1 is reserved for end of module.
+            *label = i;
+            *l_off = 0;
+            return;
+        }
+        l = mod->labels[i];
+    }
+
+    *label = i - 1;
+    *l_off = mod_offset - ((uint8_t *) mod->labels[*label] - code);
+}
+
+COLD_FUNC static void dump(Context *ctx)
+{
+    fprintf(stderr, "CRASH \n======\n");
+
+    fprintf(stderr, "pid: ");
+    term_display(stderr, term_from_local_process_id(ctx->process_id), ctx);
+    fprintf(stderr, "\n");
+
+    {
+        Module *cp_mod;
+        int label;
+        int offset;
+        cp_to_mod_lbl_off(ctx->cp, ctx, &cp_mod, &label, &offset);
+        fprintf(stderr, "cp: #CP<module: %i, label: %i, offset: %i>\n\n",
+                cp_mod->module_index, label, offset);
+    }
+
+    fprintf(stderr, "x[0]: ");
+    term_display(stderr, ctx->x[0], ctx);
+    fprintf(stderr, "\nx[1]: ");
+    term_display(stderr, ctx->x[1], ctx);
+    fprintf(stderr, "\n\nStack \n------\n\n");
+
+    term *ct = ctx->e;
+
+    while (ct != ctx->stack_base) {
+        if (term_is_catch_label(*ct)) {
+            int target_module;
+            int target_label = term_to_catch_label_and_module(*ct, &target_module);
+            fprintf(stderr, "catch: %i:%i\n", target_label, target_module);
+
+        } else if (term_is_cp(*ct)) {
+            Module *cp_mod;
+            int label;
+            int offset;
+            cp_to_mod_lbl_off(*ct, ctx, &cp_mod, &label, &offset);
+            fprintf(stderr, "#CP<module: %i, label: %i, offset: %i>\n", cp_mod->module_index, label, offset);
+
+        } else {
+            term_display(stderr, *ct, ctx);
+            fprintf(stderr, "\n");
+        }
+
+        ct++;
+    }
+
+    fprintf(stderr, "\n\nRegisters\n----------");
+    for (int i = 0; i < 16; i++) {
+        fprintf(stderr, "\nx[%i]: ", i);
+        term_display(stderr, ctx->x[i], ctx);
+    }
+    fprintf(stderr, "\n");
+
+    fprintf(stderr, "\n\nMailbox\n--------\n");
+    struct ListHead *item;
+    LIST_FOR_EACH(item, &ctx->mailbox) {
+        Message *msg = GET_LIST_ENTRY(item, Message, mailbox_list_head);
+        term_display(stderr, msg->message, ctx);
+        fprintf(stderr, "\n");
+    }
+}
+
 static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 {
 #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
