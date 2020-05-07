@@ -967,25 +967,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
             #endif
 
             #ifdef IMPL_EXECUTE_LOOP
-                TRACE("-- Code execution finished for %i--\n", ctx->process_id);
-                if (ctx->leader) {
-                    return 0;
-                }
-                Context *scheduled_context = scheduler_wait(ctx->global, ctx);
-                if (UNLIKELY(scheduled_context == ctx)) {
-                    fprintf(stderr, "bug: scheduled a terminated process!\n");
-                    return 0;
-                }
-                scheduler_terminate(ctx);
-
-                ctx = scheduled_context;
-                x_regs = ctx->x;
-                mod = ctx->saved_module;
-                code = mod->code->code;
-                remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;
-                JUMP_TO_ADDRESS(scheduled_context->saved_ip);
-
-                break;
+                goto terminate_context;
             #endif
             }
 
@@ -4514,8 +4496,25 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 #ifdef IMPL_EXECUTE_LOOP
 stacktrace:
         dump(ctx);
-        abort();
-        continue;
+
+terminate_context:
+        TRACE("-- Code execution finished for %i--\n", ctx->process_id);
+        if (ctx->leader) {
+            return 0;
+        }
+        Context *scheduled_context = scheduler_wait(ctx->global, ctx);
+        if (UNLIKELY(scheduled_context == ctx)) {
+            fprintf(stderr, "bug: scheduled a terminated process!\n");
+            return 0;
+        }
+        scheduler_terminate(ctx);
+
+        ctx = scheduled_context;
+        x_regs = ctx->x;
+        mod = ctx->saved_module;
+        code = mod->code->code;
+        remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;
+        JUMP_TO_ADDRESS(scheduled_context->saved_ip);
 #endif
     }
 }
