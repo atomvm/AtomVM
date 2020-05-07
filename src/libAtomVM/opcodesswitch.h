@@ -941,16 +941,15 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 USED_BY_TRACE(arity);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    int target_label = get_catch_label_and_change_module(ctx, &mod);
+                    ctx->x[0] = ERROR_ATOM;
+                    ctx->x[1] = FUNCTION_CLAUSE_ATOM;
 
+                    int target_label = get_catch_label_and_change_module(ctx, &mod);
                     if (target_label) {
-                        ctx->x[0] = ERROR_ATOM;
-                        ctx->x[1] = FUNCTION_CLAUSE_ATOM;
                         code = mod->code->code;
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
-                        fprintf(stderr, "FUNC_INFO: No function clause for module %i atom %i arity %i.\n", module_atom, function_name_atom, arity);
-                        abort();
+                        goto stacktrace;
                     }
 
                 #endif
@@ -2582,19 +2581,19 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("badmatch/1, v=0x%lx\n", arg1);
 
-                    int target_label = get_catch_label_and_change_module(ctx, &mod);
+                    term new_error_tuple = term_alloc_tuple(2, ctx);
+                    //TODO: check alloc
+                    term_put_tuple_element(new_error_tuple, 0, BADMATCH_ATOM);
+                    term_put_tuple_element(new_error_tuple, 1, arg1);
+                    ctx->x[0] = ERROR_ATOM;
+                    ctx->x[1] = new_error_tuple;
 
+                    int target_label = get_catch_label_and_change_module(ctx, &mod);
                     if (target_label) {
-                        term new_error_tuple = term_alloc_tuple(2, ctx);
-                        term_put_tuple_element(new_error_tuple, 0, BADMATCH_ATOM);
-                        term_put_tuple_element(new_error_tuple, 1, arg1);
-                        ctx->x[0] = ERROR_ATOM;
-                        ctx->x[1] = new_error_tuple;
                         code = mod->code->code;
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
-                        fprintf(stderr, "No target label for OP_BADMATCH.  arg1=0x%lx\n", arg1);
-                        abort();
+                        goto stacktrace;
                     }
                 #endif
 
@@ -2609,16 +2608,15 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 TRACE("if_end/0\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    int target_label = get_catch_label_and_change_module(ctx, &mod);
+                    ctx->x[0] = ERROR_ATOM;
+                    ctx->x[1] = IF_CLAUSE_ATOM;
 
+                    int target_label = get_catch_label_and_change_module(ctx, &mod);
                     if (target_label) {
-                        ctx->x[0] = ERROR_ATOM;
-                        ctx->x[1] = IF_CLAUSE_ATOM;
                         code = mod->code->code;
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
-                        fprintf(stderr, "No target label for OP_IF_END\n");
-                        abort();
+                        goto stacktrace;
                     }
                 #endif
 
@@ -2648,19 +2646,19 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("case_end/1, v=0x%lx\n", arg1);
 
-                    int target_label = get_catch_label_and_change_module(ctx, &mod);
+                    term new_error_tuple = term_alloc_tuple(2, ctx);
+                    //TODO: reserve memory before
+                    term_put_tuple_element(new_error_tuple, 0, CASE_CLAUSE_ATOM);
+                    term_put_tuple_element(new_error_tuple, 1, arg1);
+                    ctx->x[0] = ERROR_ATOM;
+                    ctx->x[1] = new_error_tuple;
 
+                    int target_label = get_catch_label_and_change_module(ctx, &mod);
                     if (target_label) {
-                        term new_error_tuple = term_alloc_tuple(2, ctx);
-                        term_put_tuple_element(new_error_tuple, 0, CASE_CLAUSE_ATOM);
-                        term_put_tuple_element(new_error_tuple, 1, arg1);
-                        ctx->x[0] = ERROR_ATOM;
-                        ctx->x[1] = new_error_tuple;
                         code = mod->code->code;
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
-                        fprintf(stderr, "No target label for OP_CASE_END.  arg1=0x%lx\n", arg1);
-                        abort();
+                        goto stacktrace;
                     }
                 #endif
 
@@ -2689,19 +2687,20 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     term fun = ctx->x[args_count];
 
                     if (UNLIKELY(!term_is_function(fun))) {
+                        ctx->x[0] = ERROR_ATOM;
+                        term new_error_tuple = term_alloc_tuple(2, ctx);
+                        //TODO: ensure memory before
+                        term_put_tuple_element(new_error_tuple, 0, BADFUN_ATOM);
+                        term_put_tuple_element(new_error_tuple, 1, ctx->x[args_count]);
+                        ctx->x[1] = new_error_tuple;
+
                         int target_label = get_catch_label_and_change_module(ctx, &mod);
                         if (target_label) {
-                            ctx->x[0] = ERROR_ATOM;
-                            term new_error_tuple = term_alloc_tuple(2, ctx);
-                            term_put_tuple_element(new_error_tuple, 0, BADFUN_ATOM);
-                            term_put_tuple_element(new_error_tuple, 1, ctx->x[args_count]);
-                            ctx->x[1] = new_error_tuple;
                             code = mod->code->code;
                             JUMP_TO_ADDRESS(mod->labels[target_label]);
                             continue;
-
                         } else {
-                            abort();
+                            goto stacktrace;
                         }
                     }
 
@@ -2753,16 +2752,16 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     }
 
                     if (UNLIKELY(args_count != fun_arity)) {
+                        ctx->x[0] = ERROR_ATOM;
+                        ctx->x[1] = BADARITY_ATOM;
+
                         int target_label = get_catch_label_and_change_module(ctx, &mod);
                         if (target_label) {
-                            ctx->x[0] = ERROR_ATOM;
-                            ctx->x[1] = BADARITY_ATOM;
                             code = mod->code->code;
                             JUMP_TO_ADDRESS(mod->labels[target_label]);
                             continue;
-
                         } else {
-                            abort();
+                            goto stacktrace;
                         }
                     }
 
@@ -2968,16 +2967,18 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
                     int target_label = get_catch_label_and_change_module(ctx, &mod);
 
+                    term new_error_tuple = term_alloc_tuple(2, ctx);
+                    //TODO: ensure memory before
+                    term_put_tuple_element(new_error_tuple, 0, TRY_CLAUSE_ATOM);
+                    term_put_tuple_element(new_error_tuple, 1, arg1);
+                    ctx->x[0] = ERROR_ATOM;
+                    ctx->x[1] = new_error_tuple;
+
                     if (target_label) {
-                        term new_error_tuple = term_alloc_tuple(2, ctx);
-                        term_put_tuple_element(new_error_tuple, 0, TRY_CLAUSE_ATOM);
-                        term_put_tuple_element(new_error_tuple, 1, arg1);
-                        ctx->x[0] = ERROR_ATOM;
-                        ctx->x[1] = new_error_tuple;
                         code = mod->code->code;
                         JUMP_TO_ADDRESS(mod->labels[target_label]);
                     } else {
-                        abort();
+                        goto stacktrace;
                     }
                 #endif
 
