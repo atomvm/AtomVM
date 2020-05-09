@@ -1097,7 +1097,11 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     const struct ExportedFunction *func = mod->imported_funcs[index].func;
 
                     if (func->type == UnresolvedFunctionCall) {
-                        func = module_resolve_function(mod, index);
+                        const struct ExportedFunction *resolved_func = module_resolve_function(mod, index);
+                        if (IS_NULL_PTR(resolved_func)) {
+                            RAISE_ERROR(UNDEF_ATOM);
+                        }
+                        func = resolved_func;
                     }
 
                     switch (func->type) {
@@ -1159,7 +1163,11 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     const struct ExportedFunction *func = mod->imported_funcs[index].func;
 
                     if (func->type == UnresolvedFunctionCall) {
-                        func = module_resolve_function(mod, index);
+                        const struct ExportedFunction *resolved_func = module_resolve_function(mod, index);
+                        if (IS_NULL_PTR(resolved_func)) {
+                            RAISE_ERROR(UNDEF_ATOM);
+                        }
+                        func = resolved_func;
                     }
 
                     switch (func->type) {
@@ -2820,7 +2828,11 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     const struct ExportedFunction *func = mod->imported_funcs[index].func;
 
                     if (func->type == UnresolvedFunctionCall) {
-                        func = module_resolve_function(mod, index);
+                        const struct ExportedFunction *resolved_func = module_resolve_function(mod, index);
+                        if (IS_NULL_PTR(resolved_func)) {
+                            RAISE_ERROR(UNDEF_ATOM);
+                        }
+                        func = resolved_func;
                     }
 
                     switch (func->type) {
