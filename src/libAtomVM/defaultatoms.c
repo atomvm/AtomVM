@@ -48,6 +48,7 @@ static const char *const used_atom = "\x4" "used";
 static const char *const all_atom = "\x3" "all";
 static const char *const start_atom = "\x5" "start";
 
+static const char *const undef_atom = "\x5" "undef";
 
 void defaultatoms_init(GlobalContext *glb)
 {
@@ -99,6 +100,8 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, used_atom) == USED_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, all_atom) == ALL_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, start_atom) == START_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, undef_atom) == UNDEF_ATOM_INDEX;
 
     if (!ok) {
         abort();
