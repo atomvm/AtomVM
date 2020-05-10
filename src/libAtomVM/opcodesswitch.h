@@ -72,14 +72,7 @@ typedef union
 #define RAISE_ERROR(error_type_atom)                                    \
     ctx->x[0] = ERROR_ATOM;                                             \
     ctx->x[1] = error_type_atom;                                        \
-    int target_label = get_catch_label_and_change_module(ctx, &mod);    \
-    if (target_label) {                                                 \
-        code = mod->code->code;                                         \
-        JUMP_TO_ADDRESS(mod->labels[target_label]);                     \
-        continue;                                                       \
-    } else {                                                            \
-        goto stacktrace;                                                \
-    }
+    goto handle_error;
 #endif
 
 #ifdef IMPL_CODE_LOADER
@@ -461,14 +454,7 @@ typedef union
     (((uint8_t *) (instruction_pointer)) - code)
 
 #define RAISE_EXCEPTION() \
-    int target_label = get_catch_label_and_change_module(ctx, &mod); \
-    if (target_label) { \
-        code = mod->code->code; \
-        JUMP_TO_ADDRESS(mod->labels[target_label]); \
-        break; \
-    } else { \
-        goto stacktrace; \
-    }
+    goto handle_error;
 
 #define VERIFY_IS_INTEGER(t, opcode_name) \
     if (UNLIKELY(!term_is_integer(t))) { \
@@ -948,17 +934,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 USED_BY_TRACE(arity);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    ctx->x[0] = ERROR_ATOM;
-                    ctx->x[1] = FUNCTION_CLAUSE_ATOM;
-
-                    int target_label = get_catch_label_and_change_module(ctx, &mod);
-                    if (target_label) {
-                        code = mod->code->code;
-                        JUMP_TO_ADDRESS(mod->labels[target_label]);
-                    } else {
-                        goto stacktrace;
-                    }
-
+                    RAISE_ERROR(FUNCTION_CLAUSE_ATOM);
                 #endif
 
                 NEXT_INSTRUCTION(next_offset);
@@ -2582,16 +2558,8 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     //TODO: check alloc
                     term_put_tuple_element(new_error_tuple, 0, BADMATCH_ATOM);
                     term_put_tuple_element(new_error_tuple, 1, arg1);
-                    ctx->x[0] = ERROR_ATOM;
-                    ctx->x[1] = new_error_tuple;
 
-                    int target_label = get_catch_label_and_change_module(ctx, &mod);
-                    if (target_label) {
-                        code = mod->code->code;
-                        JUMP_TO_ADDRESS(mod->labels[target_label]);
-                    } else {
-                        goto stacktrace;
-                    }
+                    RAISE_ERROR(new_error_tuple);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -2608,13 +2576,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     ctx->x[0] = ERROR_ATOM;
                     ctx->x[1] = IF_CLAUSE_ATOM;
 
-                    int target_label = get_catch_label_and_change_module(ctx, &mod);
-                    if (target_label) {
-                        code = mod->code->code;
-                        JUMP_TO_ADDRESS(mod->labels[target_label]);
-                    } else {
-                        goto stacktrace;
-                    }
+                    RAISE_ERROR(IF_CLAUSE_ATOM);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -2647,16 +2609,8 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     //TODO: reserve memory before
                     term_put_tuple_element(new_error_tuple, 0, CASE_CLAUSE_ATOM);
                     term_put_tuple_element(new_error_tuple, 1, arg1);
-                    ctx->x[0] = ERROR_ATOM;
-                    ctx->x[1] = new_error_tuple;
 
-                    int target_label = get_catch_label_and_change_module(ctx, &mod);
-                    if (target_label) {
-                        code = mod->code->code;
-                        JUMP_TO_ADDRESS(mod->labels[target_label]);
-                    } else {
-                        goto stacktrace;
-                    }
+                    RAISE_ERROR(new_error_tuple);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -2684,21 +2638,12 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     term fun = ctx->x[args_count];
 
                     if (UNLIKELY(!term_is_function(fun))) {
-                        ctx->x[0] = ERROR_ATOM;
                         term new_error_tuple = term_alloc_tuple(2, ctx);
                         //TODO: ensure memory before
                         term_put_tuple_element(new_error_tuple, 0, BADFUN_ATOM);
                         term_put_tuple_element(new_error_tuple, 1, ctx->x[args_count]);
-                        ctx->x[1] = new_error_tuple;
 
-                        int target_label = get_catch_label_and_change_module(ctx, &mod);
-                        if (target_label) {
-                            code = mod->code->code;
-                            JUMP_TO_ADDRESS(mod->labels[target_label]);
-                            continue;
-                        } else {
-                            goto stacktrace;
-                        }
+                        RAISE_ERROR(new_error_tuple);
                     }
 
                     Module *fun_module;
@@ -2749,17 +2694,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     }
 
                     if (UNLIKELY(args_count != fun_arity)) {
-                        ctx->x[0] = ERROR_ATOM;
-                        ctx->x[1] = BADARITY_ATOM;
-
-                        int target_label = get_catch_label_and_change_module(ctx, &mod);
-                        if (target_label) {
-                            code = mod->code->code;
-                            JUMP_TO_ADDRESS(mod->labels[target_label]);
-                            continue;
-                        } else {
-                            goto stacktrace;
-                        }
+                        RAISE_ERROR(BADARITY_ATOM);
                     }
 
                     for (uint32_t i = 0; i < n_freeze; i++) {
@@ -2966,21 +2901,12 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("try_case_end/1, val=%lx\n", arg1);
 
-                    int target_label = get_catch_label_and_change_module(ctx, &mod);
-
                     term new_error_tuple = term_alloc_tuple(2, ctx);
                     //TODO: ensure memory before
                     term_put_tuple_element(new_error_tuple, 0, TRY_CLAUSE_ATOM);
                     term_put_tuple_element(new_error_tuple, 1, arg1);
-                    ctx->x[0] = ERROR_ATOM;
-                    ctx->x[1] = new_error_tuple;
 
-                    if (target_label) {
-                        code = mod->code->code;
-                        JUMP_TO_ADDRESS(mod->labels[target_label]);
-                    } else {
-                        goto stacktrace;
-                    }
+                    RAISE_ERROR(new_error_tuple);
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
@@ -4577,7 +4503,16 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
         continue;
 
 #ifdef IMPL_EXECUTE_LOOP
-stacktrace:
+handle_error:
+        {
+            int target_label = get_catch_label_and_change_module(ctx, &mod);
+            if (target_label) {
+                code = mod->code->code;
+                JUMP_TO_ADDRESS(mod->labels[target_label]);
+                continue;
+            }
+        }
+
         dump(ctx);
 
 terminate_context:
