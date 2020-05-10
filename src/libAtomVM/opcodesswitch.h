@@ -3344,7 +3344,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     int slots = term_to_int(slots_term);
 
                     if (memory_ensure_free(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE + slots) != MEMORY_GC_OK) {
-                        abort();
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
 
                     DECODE_COMPACT_TERM(src, code, i, next_off_back, next_off_back);
@@ -3372,7 +3372,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
             case OP_BS_START_MATCH3: {
                 #ifdef IMPL_EXECUTE_LOOP
                     if (memory_ensure_free(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE) != MEMORY_GC_OK) {
-                        abort();
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
 
