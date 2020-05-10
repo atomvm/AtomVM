@@ -69,10 +69,10 @@ typedef union
 
 #ifdef IMPL_EXECUTE_LOOP
 #define RAISE_ERROR(error_type_atom)                                    \
+    ctx->x[0] = ERROR_ATOM;                                             \
+    ctx->x[1] = error_type_atom;                                        \
     int target_label = get_catch_label_and_change_module(ctx, &mod);    \
     if (target_label) {                                                 \
-        ctx->x[0] = ERROR_ATOM;                                         \
-        ctx->x[1] = error_type_atom;                                    \
         code = mod->code->code;                                         \
         JUMP_TO_ADDRESS(mod->labels[target_label]);                     \
         continue;                                                       \
