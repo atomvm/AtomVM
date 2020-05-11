@@ -290,7 +290,7 @@ typedef union
                 case COMPACT_NBITS_VALUE:                                                                               \
                     dest_term = large_integer_to_term(ctx, (code_chunk) + (base_index) + (off), &(next_operand_offset));\
                     if (UNLIKELY(term_is_invalid_term(dest_term))) {                                                    \
-                        RAISE_EXCEPTION();                                                                              \
+                        HANDLE_ERROR();                                                                                 \
                     }                                                                                                   \
                     break;                                                                                              \
                                                                                                                         \
@@ -457,7 +457,7 @@ typedef union
 #define POINTER_TO_II(instruction_pointer) \
     (((uint8_t *) (instruction_pointer)) - code)
 
-#define RAISE_EXCEPTION() \
+#define HANDLE_ERROR() \
     goto handle_error;
 
 #define VERIFY_IS_INTEGER(t, opcode_name) \
@@ -1096,7 +1096,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                             const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
                             term return_value = nif->nif_ptr(ctx, arity, ctx->x);
                             if (UNLIKELY(term_is_invalid_term(return_value))) {
-                                RAISE_EXCEPTION();
+                                HANDLE_ERROR();
                             }
                             ctx->x[0] = return_value;
                             break;
@@ -1162,7 +1162,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                             const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
                             term return_value = nif->nif_ptr(ctx, arity, ctx->x);
                             if (UNLIKELY(term_is_invalid_term(return_value))) {
-                                RAISE_EXCEPTION();
+                                HANDLE_ERROR();
                             }
                             ctx->x[0] = return_value;
 
@@ -1243,7 +1243,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     DEBUG_FAIL_NULL(func);
                     term ret = func(ctx, arg1);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
-                        RAISE_EXCEPTION();
+                        HANDLE_ERROR();
                     }
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
@@ -1282,7 +1282,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     DEBUG_FAIL_NULL(func);
                     term ret = func(ctx, arg1, arg2);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
-                        RAISE_EXCEPTION();
+                        HANDLE_ERROR();
                     }
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
@@ -2668,7 +2668,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                         if (!IS_NULL_PTR(nif)) {
                             term return_value = nif->nif_ptr(ctx, arity, ctx->x);
                             if (UNLIKELY(term_is_invalid_term(return_value))) {
-                                RAISE_EXCEPTION();
+                                HANDLE_ERROR();
                             }
                             ctx->x[0] = return_value;
                             NEXT_INSTRUCTION(next_off);
@@ -2677,11 +2677,11 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                         } else {
                             fun_module = globalcontext_get_module(ctx->global, module_name);
                             if (IS_NULL_PTR(fun_module)) {
-                                RAISE_EXCEPTION();
+                                HANDLE_ERROR();
                             }
                             label = module_search_exported_function(fun_module, function_name, arity);
                             if (UNLIKELY(label == 0)) {
-                                RAISE_EXCEPTION();
+                                HANDLE_ERROR();
                             }
                         }
 
@@ -2786,7 +2786,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                             const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
                             term return_value = nif->nif_ptr(ctx, arity, ctx->x);
                             if (UNLIKELY(term_is_invalid_term(return_value))) {
-                                RAISE_EXCEPTION();
+                                HANDLE_ERROR();
                             }
                             ctx->x[0] = return_value;
                             if ((long) ctx->cp == -1) {
@@ -3886,17 +3886,17 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 if (!IS_NULL_PTR(nif)) {
                     term return_value = nif->nif_ptr(ctx, arity, ctx->x);
                     if (UNLIKELY(term_is_invalid_term(return_value))) {
-                        RAISE_EXCEPTION();
+                        HANDLE_ERROR();
                     }
                     ctx->x[0] = return_value;
                 } else {
                     Module *target_module = globalcontext_get_module(ctx->global, module_name);
                     if (IS_NULL_PTR(target_module)) {
-                        RAISE_EXCEPTION();
+                        HANDLE_ERROR();
                     }
                     int target_label = module_search_exported_function(target_module, function_name, arity);
                     if (target_label == 0) {
-                        RAISE_EXCEPTION();
+                        HANDLE_ERROR();
                     }
                     ctx->cp = module_address(mod->module_index, i);
                     mod = target_module;
@@ -3944,18 +3944,18 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 if (!IS_NULL_PTR(nif)) {
                     term return_value = nif->nif_ptr(ctx, arity, ctx->x);
                     if (UNLIKELY(term_is_invalid_term(return_value))) {
-                        RAISE_EXCEPTION();
+                        HANDLE_ERROR();
                     }
                     ctx->x[0] = return_value;
                     DO_RETURN();
                 } else {
                     Module *target_module = globalcontext_get_module(ctx->global, module_name);
                     if (IS_NULL_PTR(target_module)) {
-                        RAISE_EXCEPTION();
+                        HANDLE_ERROR();
                     }
                     int target_label = module_search_exported_function(target_module, function_name, arity);
                     if (target_label == 0) {
-                        RAISE_EXCEPTION();
+                        HANDLE_ERROR();
                     }
                     mod = target_module;
                     code = mod->code->code;
@@ -4070,7 +4070,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     GCBifImpl1 func = (GCBifImpl1) mod->imported_funcs[bif].bif;
                     term ret = func(ctx, live, arg1);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
-                        RAISE_EXCEPTION();
+                        HANDLE_ERROR();
                     }
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
@@ -4114,7 +4114,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     GCBifImpl2 func = (GCBifImpl2) mod->imported_funcs[bif].bif;
                     term ret = func(ctx, live, arg1, arg2);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
-                        RAISE_EXCEPTION();
+                        HANDLE_ERROR();
                     }
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
@@ -4188,7 +4188,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                     GCBifImpl3 func = (GCBifImpl3) mod->imported_funcs[bif].bif;
                     term ret = func(ctx, live, arg1, arg2, arg3);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
-                        RAISE_EXCEPTION();
+                        HANDLE_ERROR();
                     }
 
                     WRITE_REGISTER(dreg_type, dreg, ret);
