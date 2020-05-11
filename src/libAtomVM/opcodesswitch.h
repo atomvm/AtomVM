@@ -73,6 +73,10 @@ typedef union
     ctx->x[0] = ERROR_ATOM;                                             \
     ctx->x[1] = error_type_atom;                                        \
     goto handle_error;
+
+#define VM_ABORT() \
+    goto do_abort;
+
 #endif
 
 #ifdef IMPL_CODE_LOADER
@@ -249,7 +253,7 @@ typedef union
                         dest_term = module_load_literal(mod, index, ctx);                                               \
                         next_operand_offset += 3;                                                                       \
                     } else {                                                                                            \
-                        abort();                                                                                        \
+                        VM_ABORT();                                                                                     \
                     }                                                                                                   \
                     if (UNLIKELY(term_is_invalid_term(dest_term))) {                                                    \
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);                                                                \
@@ -258,7 +262,7 @@ typedef union
                     break;                                                                                              \
                 }                                                                                                       \
                 default:                                                                                                \
-                    abort();                                                                                            \
+                    VM_ABORT();                                                                                         \
                     break;                                                                                              \
             }                                                                                                           \
             break;                                                                                                      \
@@ -271,7 +275,7 @@ typedef union
                     break;                                                                                              \
                                                                                                                         \
                 default:                                                                                                \
-                    abort();                                                                                            \
+                    VM_ABORT();                                                                                         \
                     break;                                                                                              \
             }                                                                                                           \
             break;                                                                                                      \
@@ -291,7 +295,7 @@ typedef union
                     break;                                                                                              \
                                                                                                                         \
                 default:                                                                                                \
-                    abort();                                                                                            \
+                    VM_ABORT();                                                                                         \
                     break;                                                                                              \
             }                                                                                                           \
             break;                                                                                                      \
@@ -301,12 +305,12 @@ typedef union
                 dest_term = ctx->e[((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]];                  \
                 next_operand_offset += 2;                                                                               \
             } else {                                                                                                    \
-                abort();                                                                                                \
+                VM_ABORT();                                                                                             \
             }                                                                                                           \
             break;                                                                                                      \
                                                                                                                         \
         default:                                                                                                        \
-            abort();                                                                                                    \
+            VM_ABORT();                                                                                                 \
     }                                                                                                                   \
 }
 
@@ -341,11 +345,11 @@ typedef union
                 (dreg) = (((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]);                   \
                 next_operand_offset += 2;                                                                       \
             } else {                                                                                            \
-                abort();                                                                                        \
+                VM_ABORT();                                                                                     \
             }                                                                                                   \
             break;                                                                                              \
         default:                                                                                                \
-            abort();                                                                                            \
+            VM_ABORT();                                                                                         \
     }                                                                                                           \
 }
 #endif
@@ -4503,6 +4507,10 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
         continue;
 
 #ifdef IMPL_EXECUTE_LOOP
+do_abort:
+        ctx->x[0] = ERROR_ATOM;
+        ctx->x[1] = VM_ABORT_ATOM;
+
 handle_error:
         {
             int target_label = get_catch_label_and_change_module(ctx, &mod);
