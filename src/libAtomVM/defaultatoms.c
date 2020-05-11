@@ -49,6 +49,7 @@ static const char *const all_atom = "\x3" "all";
 static const char *const start_atom = "\x5" "start";
 
 static const char *const undef_atom = "\x5" "undef";
+static const char *const vm_abort_atom = "\x8" "vm_abort";
 
 void defaultatoms_init(GlobalContext *glb)
 {
@@ -102,6 +103,7 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, start_atom) == START_ATOM_INDEX;
 
     ok &= globalcontext_insert_atom(glb, undef_atom) == UNDEF_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, vm_abort_atom) == VM_ABORT_ATOM_INDEX;
 
     if (!ok) {
         abort();
