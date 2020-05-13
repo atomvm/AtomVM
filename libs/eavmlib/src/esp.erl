@@ -31,7 +31,8 @@
     nvs_set_binary/2, nvs_set_binary/3,
     nvs_erase_key/1, nvs_erase_key/2,
     nvs_erase_all/0, nvs_erase_all/1,
-    nvs_reformat/0
+    nvs_reformat/0,
+    freq_hz/0
 ]).
 
 -type esp_reset_reason() ::
@@ -174,4 +175,13 @@ nvs_erase_all(Namespace) when is_atom(Namespace) ->
 %%-----------------------------------------------------------------------------
 -spec nvs_reformat() -> ok.
 nvs_reformat() ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @returns Clock frequency (in hz)
+%% @doc     Return the clock frequency on the chip
+%% @end
+%%-----------------------------------------------------------------------------
+-spec freq_hz() -> non_neg_integer().
+freq_hz() ->
     throw(nif_error).
