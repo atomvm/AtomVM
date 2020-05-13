@@ -11,12 +11,15 @@ test() ->
     ok = test_delete(),
     ok = test_keyfind(),
     ok = test_keydelete(),
+    ok = test_keyreplace(),
     ok = test_foldl(),
     ok = test_foldr(),
     ok = test_all(),
     ok = test_any(),
     ok = test_list_match(),
     ok = test_flatten(),
+    ok = test_filter(),
+    ok = test_join(),
     ok.
 
 test_nth() ->
@@ -68,6 +71,14 @@ test_keydelete() ->
     ?ASSERT_MATCH(lists:keydelete(a, 1, [{a, x}, b, []]), [b, []]),
     ?ASSERT_MATCH(lists:keydelete(a, 1, [b, {a, x}, []]), [b, []]),
     ?ASSERT_MATCH(lists:keydelete(a, 1, [b, {a, x}, {a, x}, {a, x}, []]), [b, {a, x}, {a, x}, []]),
+    ok.
+
+test_keyreplace() ->
+    ?ASSERT_MATCH(lists:keyreplace(a, 1, [], {foo, bar}), []),
+    ?ASSERT_MATCH(lists:keyreplace(a, 1, [{a, x}, b, []], {1, 2} ), [{1, 2}, b, []]),
+    ?ASSERT_MATCH(lists:keyreplace(x, 2, [b, {a, x}, []], {1, 2}), [b, {1, 2}, []]),
+    ?ASSERT_MATCH(lists:keyreplace(a, 1, [b, {a, x}, {a, x}, {a, x}, []], {1, 2}), [b, {1, 2}, {a, x}, {a, x}, []]),
+    ?ASSERT_MATCH(lists:keyreplace(a, 3, [b, {a, x}, {a, x}, {a, x}, []], {1, 2}), [b, {a, x}, {a, x}, {a, x}, []]),
     ok.
 
 test_foldl() ->
@@ -123,6 +134,20 @@ test_flatten() ->
     ?ASSERT_MATCH(lists:flatten([[a],[b, [c]]]), [a,b,c]),
     ?ASSERT_MATCH(lists:flatten([[a],[b, {c, [d, [e, [f]]]}]]), [a,b,{c, [d, [e, [f]]]}]),
     ?ASSERT_MATCH(lists:flatten([[a,b,c],[d,e,f],[g,h,i]]), [a,b,c,d,e,f,g,h,i]),
+    ok.
+
+test_filter() ->
+    ?ASSERT_MATCH(lists:filter(fun(I) -> I rem 2 =:= 0 end, []), []),
+    ?ASSERT_MATCH(lists:filter(fun(I) -> I rem 2 =:= 0 end, [1,2,3,4,5]), [2, 4]),
+    ?ASSERT_MATCH(lists:filter(fun(_) -> true end, [1,2,3,4,5]), [1,2,3,4,5]),
+    ?ASSERT_MATCH(lists:filter(fun(_) -> false end, [1,2,3,4,5]), []),
+    ok.
+
+test_join() ->
+    ?ASSERT_MATCH(lists:join(",", []), []),
+    ?ASSERT_MATCH(lists:join(",", ["foo"]), ["foo"]),
+    ?ASSERT_MATCH(lists:join(",", ["foo", "bar"]), ["foo", ",", "bar"]),
+    ?ASSERT_MATCH(lists:join("", ["foo", "bar"]), ["foo", [], "bar"]),
     ok.
 
 id(X) -> X.

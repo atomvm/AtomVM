@@ -26,7 +26,14 @@
 %%-----------------------------------------------------------------------------
 -module(lists).
 
--export([map/2, nth/2, member/2, delete/2, reverse/1, foreach/2, keydelete/3, keyfind/3, keymember/3, foldl/3, foldr/3, all/2, any/2, flatten/1]).
+-export([
+    map/2, nth/2, member/2, delete/2, reverse/1, foreach/2,
+    keydelete/3, keyfind/3, keymember/3, keyreplace/4,
+    foldl/3, foldr/3,
+    all/2, any/2, flatten/1,
+    search/2, filter/2,
+    join/2
+]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun the function to apply
@@ -207,6 +214,36 @@ keymember(K, I, [_H|T]) ->
     keymember(K, I, T).
 
 %%-----------------------------------------------------------------------------
+%% @param   K the key to match
+%% @param   I the position in the tuple to compare (1..tuple_size)
+%% @param   L the list from which to find the element
+%% @returns result of replacing the first element in L who's Ith element matches K.
+%% @doc     Returns the result of replacing the first element in L who's Ith element matches K.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec keyreplace(K::term(), I::pos_integer(), L::list(tuple()), NewTuple::{NewKey::term(), Val::term()}) -> boolean().
+keyreplace(K, I, L, NewTuple) ->
+    keyreplace(K, I, L, L, NewTuple, []).
+
+%% @private
+keyreplace(_K, _I, [], OrigL, _NewTuple, _NewList) ->
+    OrigL;
+keyreplace(K, I, [H|T], L, NewTuple, NewList) when is_tuple(H) andalso is_tuple(NewTuple)  ->
+    case I =< tuple_size(H) of
+        true ->
+            case element(I, H) of
+                K ->
+                    reverse(NewList) ++ [NewTuple|T];
+                _ ->
+                    keyreplace(K, I, T, L, NewTuple, [H|NewList])
+            end;
+        false ->
+            keyreplace(K, I, T, L, NewTuple, [H|NewList])
+    end;
+keyreplace(K, I, [H|T], L, NewTuple, NewList) ->
+    keyreplace(K, I, T, L, NewTuple, [H|NewList]).
+
+%%-----------------------------------------------------------------------------
 %% @param   Fun the function to apply
 %% @param   Accum0 the initial accumulator
 %% @param   List the list over which to fold
@@ -282,3 +319,64 @@ flatten([H|T], Accum) ->
     FlattenedT = flatten(T, Accum),
     [H|FlattenedT].
 %% post: return is flattened
+
+%%-----------------------------------------------------------------------------
+%% @param   Pred the predicate to apply to elements in List
+%% @param   List search
+%% @returns teh first {value, Val}, if Pred(Val); false, otherwise.
+%% @doc     If there is a Value in List such that Pred(Value) returns true,
+%%          returns {value, Value} for the first such Value, otherwise returns false.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec search(Pred::fun((Elem::term()) -> boolean()), List::list()) -> {value, Value::term()} | false.
+search(_Pred, []) ->
+    false;
+search(Pred, [H|T]) ->
+    case Pred(H) of
+        true ->
+            {value, H};
+        _ ->
+            search(Pred, T)
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @param   Pred the predicate to apply to elements in List
+%% @param   List list
+%% @returns all values in L for which Pred is true.
+%% @doc     Filter a list by a predicate, returning the list of elements
+%%          for which the predicate is true.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec filter(Pred::fun((Elem::term()) -> boolean()), List::list()) -> list().
+filter(Pred, L) ->
+    filter(Pred, L, []).
+
+%% @private
+filter(_Pred, [], Accum) ->
+    reverse(Accum);
+filter(Pred, [H|T], Accum) ->
+    case Pred(H) of
+        true ->
+            filter(Pred, T, [H|Accum]);
+        _ ->
+            filter(Pred, T, Accum)
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @param   Sep the separator
+%% @param   List list
+%% @returns the result of inserting Sep between every element of List.
+%% @doc     Inserts Sep between every element of List.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec join(Sep::list(), List::list()) -> list().
+join(Sep, L) ->
+    join(L, Sep, []).
+
+%% @private
+join([], _Sep, Accum) ->
+    lists:reverse(Accum);
+join([E|R], Sep, []) ->
+    join(R, Sep, [E]);
+join([E|R], Sep, Accum) ->
+    join(R, Sep, [E, Sep|Accum]).

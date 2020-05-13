@@ -33,11 +33,10 @@
 %%-----------------------------------------------------------------------------
 -spec format(Format::string(), Args::list()) -> string().
 format(Format, Args) ->
-    FormatTokens = split(Format),
+    {FormatTokens, Instr} = split(Format),
     case length(FormatTokens) == length(Args) + 1 of
         true ->
-            StringifiedArgs = [to_string(Arg) || Arg <- Args],
-            StringList = interleave(FormatTokens, StringifiedArgs, []),
+            StringList = interleave(FormatTokens, Instr, Args, []),
             lists:flatten(StringList);
         false ->
             throw(bad_format)
@@ -49,79 +48,61 @@ format(Format, Args) ->
 
 %% @private
 split(Format) ->
-    split(Format, [], []).
+    split(Format, [], [], []).
 
 %% @private
-split([], Cur, Accum) ->
-    lists:reverse([lists:reverse(Cur)|Accum]);
-split([$~, $p | Rest], Cur, Accum) ->
-    split(Rest, [], [lists:reverse(Cur)|Accum]);
-split([$~, $s | Rest], Cur, Accum) ->
-    split(Rest, [], [lists:reverse(Cur)|Accum]);
-split([$~, $n | Rest], Cur, Accum) ->
-    split(Rest, [$\n|Cur], Accum);
-split([$~, $~ | Rest], Cur, Accum) ->
-    split(Rest, [$~|Cur], Accum);
-split([Char|Rest], Cur, Accum) ->
-    split(Rest, [Char|Cur], Accum).
+split([], Cur, Accum, Instr) ->
+    {lists:reverse([lists:reverse(Cur)|Accum]), lists:reverse(Instr)};
+split([$~, $p | Rest], Cur, Accum, Instr) ->
+    split(Rest, [], [lists:reverse(Cur)|Accum], [quote|Instr]);
+split([$~, $s | Rest], Cur, Accum, Instr) ->
+    split(Rest, [], [lists:reverse(Cur)|Accum], [literal|Instr]);
+split([$~, $n | Rest], Cur, Accum, Instr) ->
+    split(Rest, [$\n|Cur], Accum, Instr);
+split([$~, $~ | Rest], Cur, Accum, Instr) ->
+    split(Rest, [$~|Cur], Accum, Instr);
+split([Char|Rest], Cur, Accum, Instr) ->
+    split(Rest, [Char|Cur], Accum, Instr).
 
 %% @private
-interleave([LastToken], [], Accum) ->
+interleave([LastToken], _Instr, [], Accum) ->
     lists:reverse([LastToken|Accum]);
-interleave([Token|Tokens], [Arg|Args], Accum) ->
-    interleave(Tokens, Args, [Arg, Token | Accum]).
+interleave([Token|Tokens], [Q|Instr], [Arg|Args], Accum) ->
+    interleave(Tokens, Instr, Args, [to_string(Arg, Q), Token | Accum]).
 
 %% @private
-to_string(T) when is_atom(T) ->
+to_string(T, _Q) when is_atom(T) ->
     erlang:atom_to_list(T);
-to_string(T) when is_integer(T) ->
+to_string(T, _Q) when is_integer(T) ->
     erlang:integer_to_list(T);
-to_string(T) when is_float(T) ->
+to_string(T, _Q) when is_float(T) ->
     erlang:float_to_list(T);
-to_string(T) when is_pid(T) ->
+to_string(T, _Q) when is_pid(T) ->
     erlang:pid_to_list(T);
-to_string(T) when is_reference(T) ->
+to_string(T, _Q) when is_reference(T) ->
     erlang:ref_to_list(T);
-to_string(T) when is_function(T) ->
+to_string(T, _Q) when is_function(T) ->
     erlang:fun_to_list(T);
-to_string(T) when is_list(T) ->
+to_string(T, Q) when is_list(T) ->
     case is_printable_ascii(T) of
-        true -> [$"] ++ T ++ [$"];
+        true -> case Q of quote -> [$"] ++ T ++ [$"]; _ -> T end;
         _ ->
-            lists:flatten(["[", join([to_string(E) || E <- T], ","), "]"])
+            "[" ++ lists:join(",", [to_string(E, quote) || E <- T]) ++ "]"
     end;
-to_string(T) when is_binary(T) ->
+to_string(T, Q) when is_binary(T) ->
     BinList = erlang:binary_to_list(T),
     Data = case is_printable_ascii(BinList) of
-        true -> [$"] ++ BinList ++ [$"];
+        true -> case Q of quote ->[$"] ++ BinList ++ [$"]; _ -> BinList end;
         _ ->
-            join([erlang:integer_to_list(E) || E <- BinList], ",")
+            lists:join(",", [erlang:integer_to_list(E) || E <- BinList])
     end,
     "<<" ++ Data ++ ">>";
-to_string(T) when is_tuple(T) ->
-    "{" ++ lists:flatten(join([to_string(E) || E <- erlang:tuple_to_list(T)], ",")) ++ "}";
-to_string(_T) -> "unknown".
-
-%% @private
-list_elements_to_string([], Accum) ->
-    lists:reverse(Accum);
-list_elements_to_string([E|R], Accum) ->
-    list_elements_to_string(R, [to_string(E) | Accum]).
+to_string(T, _Q) when is_tuple(T) ->
+    "{" ++ lists:flatten(lists:join(",", [to_string(E, quote) || E <- erlang:tuple_to_list(T)])) ++ "}";
+to_string(_T, _Q) -> "unknown".
 
 %% @private
 is_printable_ascii([]) -> true;
 is_printable_ascii([E|R]) when is_integer(E) andalso 32 =< E andalso E < 127 ->
     is_printable_ascii(R);
 is_printable_ascii(_) -> false.
-
-%% @private
-join(L, Sep) ->
-    join(L, Sep, []).
-
-%% @private
-join([], _Sep, Accum) ->
-    lists:reverse(Accum);
-join([E|R], Sep, []) ->
-    join(R, Sep, [E]);
-join([E|R], Sep, Accum) ->
-    join(R, Sep, [E, Sep|Accum]).
