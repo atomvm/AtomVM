@@ -10,6 +10,7 @@ set(ERLANG_MODULES
     atomvm
     console
     esp
+    dht
     gpio
     i2c
     http_server
