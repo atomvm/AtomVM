@@ -44,6 +44,8 @@
 #include "sys.h"
 #include "esp32_sys.h"
 
+static const char *const gpio_atom = "\x4" "gpio";
+
 static Context *global_gpio_ctx = NULL;
 
 static void consume_gpio_mailbox(Context *ctx);
@@ -117,6 +119,11 @@ void gpiodriver_init(Context *ctx)
 
         ctx->native_handler = consume_gpio_mailbox;
         ctx->platform_data = NULL;
+
+        term reg_name_term = context_make_atom(ctx, gpio_atom);
+        int atom_index = term_to_atom_index(reg_name_term);
+
+        globalcontext_register_process(ctx->global, atom_index, ctx->process_id);
     } else {
         fprintf(stderr, "Only a single GPIO driver can be opened.\n");
         abort();
