@@ -35,6 +35,7 @@
 #include "globalcontext.h"
 #include "mailbox.h"
 #include "module.h"
+#include "nifs.h"
 #include "utils.h"
 #include "term.h"
 
@@ -53,6 +54,61 @@ struct GPIOListenerData
     Context *target_context;
     int gpio;
 };
+
+static inline term gpio_set_pin_mode(term gpio_num_term, term mode)
+{
+    int gpio_num = term_to_int(gpio_num_term);
+
+    esp_err_t result;
+    switch (mode) {
+        case INPUT_ATOM:
+            result = gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
+            break;
+
+        case OUTPUT_ATOM:
+            result = gpio_set_direction(gpio_num, GPIO_MODE_OUTPUT);
+            break;
+
+        default:
+            return ERROR_ATOM;
+    }
+
+    if (UNLIKELY(result != ESP_OK)) {
+        return ERROR_ATOM;
+    }
+
+    return OK_ATOM;
+}
+
+static inline term gpio_digital_write(term gpio_num_term, term level_term)
+{
+    int gpio_num = term_to_int(gpio_num_term);
+
+    esp_err_t result;
+    if ((level_term == LOW_ATOM) || (level_term == term_from_int(0))) {
+        result = gpio_set_level(gpio_num, 0);
+
+    } else if ((level_term == HIGH_ATOM) || (level_term == term_from_int(1))) {
+        result = gpio_set_level(gpio_num, 1);
+
+    } else {
+        return ERROR_ATOM;
+    }
+
+    if (UNLIKELY(result != ESP_OK)) {
+        return ERROR_ATOM;
+    }
+
+    return OK_ATOM;
+}
+
+static inline term gpio_digital_read(term gpio_num_term)
+{
+    avm_int_t gpio_num = term_to_int(gpio_num_term);
+    avm_int_t level = gpio_get_level(gpio_num);
+
+    return level ? HIGH_ATOM : LOW_ATOM;
+}
 
 void gpiodriver_init(Context *ctx)
 {
@@ -236,4 +292,69 @@ static void consume_gpio_mailbox(Context *ctx)
 static void IRAM_ATTR gpio_isr_handler(void *arg)
 {
     xQueueSendFromISR(event_queue, &arg, NULL);
+}
+
+static term nif_gpio_set_pin_mode(Context *ctx, int argc, term argv[])
+{
+    return gpio_set_pin_mode(argv[0], argv[1]);
+}
+
+static term nif_gpio_digital_write(Context *ctx, int argc, term argv[])
+{
+    return gpio_digital_write(argv[0], argv[1]);
+}
+
+static term nif_gpio_digital_read(Context *ctx, int argc, term argv[])
+{
+    return gpio_digital_read(argv[0]);
+}
+
+static const struct Nif gpio_set_pin_mode_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_gpio_set_pin_mode
+};
+
+static const struct Nif gpio_digital_write_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_gpio_digital_write
+};
+
+static const struct Nif gpio_digital_read_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_gpio_digital_read
+};
+
+const struct Nif *gpio_nifs_get_nif(const char *nifname)
+{
+    if (strcmp("gpio:set_pin_mode/2", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &gpio_set_pin_mode_nif;
+    }
+    if (strcmp("Elixir.GPIO:set_pin_mode/2", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &gpio_set_pin_mode_nif;
+    }
+
+    if (strcmp("gpio:digital_write/2", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &gpio_digital_write_nif;
+    }
+    if (strcmp("Elixir.GPIO:digital_write/2", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &gpio_digital_write_nif;
+    }
+
+    if (strcmp("gpio:digital_read/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &gpio_digital_read_nif;
+    }
+    if (strcmp("Elixir.GPIO:digital_read/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &gpio_digital_read_nif;
+    }
+
+    return NULL;
 }

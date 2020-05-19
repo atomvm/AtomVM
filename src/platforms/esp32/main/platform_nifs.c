@@ -55,6 +55,8 @@ static const char *const esp_rst_sdio           = "\xC"  "esp_rst_sdio";
 static int write_atom_c_string(Context *ctx, char *buf, size_t bufsize, term t);
 
 const struct Nif *ledc_nifs_get_nif(const char *nifname);
+const struct Nif *gpio_nifs_get_nif(const char *nifname);
+
 
 //
 // NIFs
@@ -484,6 +486,9 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     }
     const struct Nif *nif = NULL;
     if ((nif = ledc_nifs_get_nif(nifname)) != NULL) {
+        return nif;
+    }
+    if ((nif = gpio_nifs_get_nif(nifname)) != NULL) {
         return nif;
     }
     return NULL;
