@@ -20,4 +20,13 @@ defmodule GPIO do
         ret
     end
   end
+
+  def set_pin_mode(_gpio_num, _mode),
+    do: throw(:nif_error)
+
+  def digital_write(_gpio_num, _level),
+    do: throw(:nif_error)
+
+  def digital_read(_gpio_num),
+    do: throw(:nif_error)
 end

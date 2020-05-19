@@ -1,6 +1,7 @@
 -module(gpio).
 
 -export([open/0, read/2, set_direction/3, set_level/3, set_int/3]).
+-export([set_pin_mode/2, digital_write/2, digital_read/1]).
 
 open() ->
     open_port({spawn, "gpio"}, []).
@@ -32,3 +33,12 @@ set_int(GPIO, GPIONum, Trigger) ->
         Ret ->
             Ret
     end.
+
+set_pin_mode(_GPIONum, _Mode) ->
+    throw(nif_error).
+
+digital_write(_GPIONum, _Level) ->
+    throw(nif_error).
+
+digital_read(_GPIONum) ->
+    throw(nif_error).
