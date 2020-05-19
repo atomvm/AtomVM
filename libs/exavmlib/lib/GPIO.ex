@@ -1,6 +1,12 @@
 defmodule GPIO do
   def open() do
-    :erlang.open_port({:spawn, "gpio"}, [])
+    case :erlang.whereis(:gpio) do
+      :undefined ->
+        :erlang.open_port({:spawn, "gpio"}, [])
+
+      pid ->
+        pid
+    end
   end
 
   def set_direction(gpio, gpio_num, direction) do
@@ -21,6 +27,14 @@ defmodule GPIO do
     end
   end
 
+  def set_int(gpio, gpio_num, trigger) do
+    send(gpio, {self(), :set_int, gpio_num, trigger})
+
+    receive do
+      ret -> ret
+    end
+  end
+
   def set_pin_mode(_gpio_num, _mode),
     do: throw(:nif_error)
 
@@ -29,4 +43,7 @@ defmodule GPIO do
 
   def digital_read(_gpio_num),
     do: throw(:nif_error)
+
+  def attach_interrupt(gpio_num, mode),
+    do: set_int(open(), gpio_num, mode)
 end
