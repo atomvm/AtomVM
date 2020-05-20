@@ -640,6 +640,8 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
     if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
         term *fragment = memory_alloc_heap_fragment(ctx, BOXED_INT64_SIZE);
         if (IS_NULL_PTR(fragment)) {
+            ctx->x[0] = ERROR_ATOM;
+            ctx->x[1] = OUT_OF_MEMORY_ATOM;
             return term_invalid_term();
         }
         term_put_int64(fragment, value);
@@ -649,6 +651,8 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
     if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
         term *fragment = memory_alloc_heap_fragment(ctx, BOXED_INT_SIZE);
         if (IS_NULL_PTR(fragment)) {
+            ctx->x[0] = ERROR_ATOM;
+            ctx->x[1] = OUT_OF_MEMORY_ATOM;
             return term_invalid_term();
         }
         term_put_int(fragment, value);
@@ -736,6 +740,8 @@ static term large_integer_to_term(Context *ctx, uint8_t *compact_term, int *next
         }
 
         default:
+            ctx->x[0] = ERROR_ATOM;
+            ctx->x[1] = OVERFLOW_ATOM;
             return term_invalid_term();
     }
 }
