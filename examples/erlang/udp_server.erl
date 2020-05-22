@@ -20,7 +20,8 @@ active_loop() ->
     active_loop().
 
 local_address(Socket) ->
-    to_string(inet:sockname(Socket)).
+    {ok, SockName} = inet:sockname(Socket),
+    to_string(SockName).
 
 to_string({{A,B,C,D}, Port}) ->
     io_lib:format("~p.~p.~p.~p:~p", [A,B,C,D, Port]).
