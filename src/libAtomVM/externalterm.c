@@ -40,6 +40,7 @@
 #define LIST_EXT 108
 #define BINARY_EXT 109
 #define EXPORT_EXT 113
+#define SMALL_ATOM_UTF8_EXT 119
 
 static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx, int copy);
 static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_size, bool copy, Context *ctx);
@@ -414,6 +415,16 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
             return term_make_function_reference(m, f, a, ctx);
         }
 
+        case SMALL_ATOM_UTF8_EXT: {
+            uint8_t atom_len = *(external_term_buf + 1);
+
+            // AtomString first byte is the atom length
+            int global_atom_id = globalcontext_insert_atom_maybe_copy(ctx->global, (AtomString) (external_term_buf + 1), copy);
+
+            *eterm_size = 2 + atom_len;
+            return term_from_atom_index(global_atom_id);
+        }
+
         default:
             fprintf(stderr, "Unknown term type: %i\n", (int) external_term_buf[0]);
             abort();
@@ -528,6 +539,12 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_siz
 
             *eterm_size = buf_pos;
             return FUNCTION_REFERENCE_SIZE;
+        }
+
+        case SMALL_ATOM_UTF8_EXT: {
+            uint8_t atom_len = *(external_term_buf + 1);
+            *eterm_size = 2 + atom_len;
+            return 0;
         }
 
         default:
