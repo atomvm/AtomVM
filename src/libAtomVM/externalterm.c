@@ -276,7 +276,7 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
         return 5 + len;
 
     } else {
-        fprintf(stderr, "Unknown term type: %li\n", t);
+        fprintf(stderr, "Unknown external term type: %li\n", t);
         abort();
     }
 }
@@ -426,7 +426,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
         }
 
         default:
-            fprintf(stderr, "Unknown term type: %i\n", (int) external_term_buf[0]);
+            fprintf(stderr, "Unknown external term type: %i\n", (int) external_term_buf[0]);
             abort();
     }
 }
@@ -548,7 +548,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_siz
         }
 
         default:
-            fprintf(stderr, "Unknown term type: %i\n", (int) external_term_buf[0]);
+            fprintf(stderr, "Unknown external term type: %i\n", (int) external_term_buf[0]);
             abort();
     }
 }
