@@ -4523,6 +4523,45 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                 NEXT_INSTRUCTION(next_off);
                 break;
             }
+
+            case OP_BS_START_MATCH4: {
+                #ifdef IMPL_EXECUTE_LOOP
+                    if (memory_ensure_free(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE) != MEMORY_GC_OK) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+                #endif
+
+                int next_off = 1;
+                // fail since OTP 23 might be either 'no_fail', 'resume' or a fail label
+                // we are ignoring this right now, but we might use it for future optimizations.
+                term fail;
+                DECODE_COMPACT_TERM(fail, code, i, next_off, next_off);
+                term live;
+                DECODE_COMPACT_TERM(live, code, i, next_off, next_off);
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off, next_off);
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_start_match4/5\n");
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    // this is likely one of the only two mandatory VERIFY_*
+                    VERIFY_IS_MATCH_OR_BINARY(src, "bs_start_match4");
+
+                    TRACE("bs_start_match4/4, fail=%i live=0x%lx src=0x%lx dreg=%c%i\n", fail, live, src, T_DEST_REG(dreg_type, dreg));
+
+                    term match_state = term_alloc_bin_match_state(src, ctx);
+
+                    WRITE_REGISTER(dreg_type, dreg, match_state);
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
 #endif
 
             default:

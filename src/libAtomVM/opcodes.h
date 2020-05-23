@@ -125,5 +125,6 @@
 #define OP_BS_GET_POSITION 167
 #define OP_BS_SET_POSITION 168
 #define OP_SWAP 169
+#define OP_BS_START_MATCH4 170
 
 #endif
