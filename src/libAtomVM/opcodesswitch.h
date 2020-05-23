@@ -37,6 +37,7 @@
 
 #define ENABLE_OTP21
 #define ENABLE_OTP22
+#define ENABLE_OTP23
 
 //#define ENABLE_TRACE
 
@@ -4492,6 +4493,31 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     WRITE_REGISTER(dreg_type, dreg, t);
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+#endif
+
+#ifdef ENABLE_OTP23
+            case OP_SWAP: {
+                int next_off = 1;
+                dreg_t reg_a;
+                dreg_type_t reg_a_type;
+                DECODE_DEST_REGISTER(reg_a, reg_a_type, code, i, next_off, next_off);
+                dreg_t reg_b;
+                dreg_type_t reg_b_type;
+                DECODE_DEST_REGISTER(reg_b, reg_b_type, code, i, next_off, next_off);
+
+                TRACE("swap/2 a=%c%i, b=%c%i\n", T_DEST_REG(reg_a_type, reg_a), T_DEST_REG(reg_b_type, reg_b));
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    term a = READ_DEST_REGISTER(reg_a_type, reg_a);
+                    term b = READ_DEST_REGISTER(reg_b_type, reg_b);
+
+                    WRITE_REGISTER(reg_a_type, reg_a, b);
+                    WRITE_REGISTER(reg_b_type, reg_b, a);
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
