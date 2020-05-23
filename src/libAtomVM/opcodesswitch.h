@@ -3475,20 +3475,20 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
                             size_t start_pos = bs_offset / 8;
                             size_t src_size = term_binary_size(bs_bin);
                             size_t new_bin_size = src_size - start_pos;
-                            uint8_t *src_buf = malloc(new_bin_size);
-                            if (UNLIKELY(IS_NULL_PTR(src_buf))) {
+                            uint8_t *tmp_buf = malloc(new_bin_size);
+                            if (UNLIKELY(IS_NULL_PTR(tmp_buf))) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
-                            memcpy(src_buf + start_pos, term_binary_data(bs_bin), new_bin_size);
+                            memcpy(tmp_buf, term_binary_data(bs_bin) + start_pos, new_bin_size);
 
                             if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(new_bin_size) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
-                                free(src_buf);
+                                free(tmp_buf);
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
 
-                            term t = term_from_literal_binary(src_buf + start_pos, new_bin_size, ctx);
+                            term t = term_from_literal_binary(tmp_buf, new_bin_size, ctx);
 
-                            free(src_buf);
+                            free(tmp_buf);
                             WRITE_REGISTER(dreg_type, dreg, t);
 
                         }
