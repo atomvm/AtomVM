@@ -67,7 +67,6 @@ void sys_consume_pending_events(GlobalContext *glb)
     }
 
     EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
-    EventListener *last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
 
     EventListener *listener = listeners;
 
@@ -79,14 +78,13 @@ void sys_consume_pending_events(GlobalContext *glb)
             fds_count++;
         }
         listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-    } while (listeners != NULL && listener != last_listener);
+    } while (listeners != NULL && listener != listeners);
 
     if (fds_count == 0) {
         return;
     }
 
     listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
-    last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
 
     listener = listeners;
 
@@ -103,10 +101,9 @@ void sys_consume_pending_events(GlobalContext *glb)
             fd_index++;
         }
         listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-    } while (listeners != NULL && listener != last_listener);
+    } while (listeners != NULL && listener != listeners);
 
     listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
-    last_listener = GET_LIST_ENTRY(listeners_list->prev, EventListener, listeners_list_head);
 
     if (poll(fds, fd_index, 0) > 0) {
         for (int i = 0; i < fd_index; i++) {
@@ -130,7 +127,7 @@ void sys_consume_pending_events(GlobalContext *glb)
                     break;
                 }
                 listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-            } while (listeners != NULL && listener != last_listener);
+            } while (listeners != NULL && listener != listeners);
         }
     }
 
