@@ -151,40 +151,24 @@ void gpio_interrupt_callback(EventListener *listener)
 
 static term gpiodriver_set_level(term msg)
 {
-    int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
-    int32_t level = term_to_int32(term_get_tuple_element(msg, 3));
-    gpio_set_level(gpio_num, level != 0);
-    TRACE("gpio: set_level: %i %i\n", gpio_num, level != 0);
+    term gpio_num = term_get_tuple_element(msg, 2);
+    term level = term_get_tuple_element(msg, 3);
 
-    return OK_ATOM;
+    return gpio_digital_write(gpio_num, level);
 }
 
 static term gpiodriver_set_direction(term msg)
 {
-    int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
+    term gpio_num = term_get_tuple_element(msg, 2);
     term direction = term_get_tuple_element(msg, 3);
 
-    if (direction == INPUT_ATOM) {
-        gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
-        TRACE("gpio: set_direction: %i INPUT\n", gpio_num);
-        return OK_ATOM;
-
-    } else if (direction == OUTPUT_ATOM) {
-        gpio_set_direction(gpio_num, GPIO_MODE_OUTPUT);
-        TRACE("gpio: set_direction: %i OUTPUT\n", gpio_num);
-        return OK_ATOM;
-
-    } else {
-        TRACE("gpio: unrecognized direction\n");
-        return ERROR_ATOM;
-    }
+    return gpio_set_pin_mode(gpio_num, direction);
 }
 
 static term gpiodriver_read(term msg)
 {
-    int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
-    int level = gpio_get_level(gpio_num);
-    return term_from_int11(level);
+    term gpio_num = term_get_tuple_element(msg, 2);
+    return gpio_digital_read(gpio_num);
 }
 
 static term gpiodriver_set_int(Context *ctx, Context *target, term msg)
