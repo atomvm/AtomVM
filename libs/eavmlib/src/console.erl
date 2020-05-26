@@ -60,7 +60,7 @@ flush() ->
 -spec flush(pid()) -> ok.
 flush(Console) ->
     call(Console, flush).
-    
+
 %%-----------------------------------------------------------------------------
 %% @param   String the string data to write to the console
 %% @returns ok if the data was written, or {error, Reason}, if there was
