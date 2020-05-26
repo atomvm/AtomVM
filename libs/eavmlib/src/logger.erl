@@ -225,13 +225,13 @@ console_log(Request) ->
 
 make_timestamp(Timestamp) ->
     {{Year, Month, Day}, {Hour, Minute, Second}} = Timestamp,
-    io_lib:format("~p:~p:~pT~p:~p:~p", [
+    io:format("~p-~p-~pT~p:~p:~p.000", [
         Year, Month, Day, Hour, Minute, Second
     ]).
 
 make_location(Location) ->
     {Module, Function, Arity, Line} = Location,
-    io_lib:format("~p:~p/~p:~p", [
+    io:format("[~p:~p/~p:~p]", [
         Module, Function, Arity, Line
     ]).
 

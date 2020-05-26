@@ -128,6 +128,7 @@ static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[]);
+static term nif_console_print(Context *ctx, int argc, term argv[]);
 
 static const struct Nif binary_at_nif =
 {
@@ -469,6 +470,11 @@ static const struct Nif atomvm_read_priv_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_read_priv
+};
+static const struct Nif console_print_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_console_print
 };
 
 //Ignore warning caused by gperf generated code
@@ -2428,4 +2434,35 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
         free(complete_path);
         return UNDEFINED_ATOM;
     }
+}
+
+static term nif_console_print(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term t = argv[0];
+    if (term_is_binary(t)) {
+        const char *data = term_binary_data(t);
+        unsigned long n = term_binary_size(t);
+        fprintf(stdout, "%.*s", (int) n, data);
+    } else {
+        VALIDATE_VALUE(t, term_is_list);
+        int ok;
+        int size = interop_iolist_size(t, &ok);
+        if (!ok) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        char *buf = malloc(size);
+        if (IS_NULL_PTR(buf)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        if (UNLIKELY(!interop_write_iolist(t, buf))) {
+            free(buf);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        fprintf(stdout, "%.*s", size, buf);
+        fflush(stdout);
+        free(buf);
+    }
+    return OK_ATOM;
 }
