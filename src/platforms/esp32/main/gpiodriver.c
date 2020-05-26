@@ -19,6 +19,7 @@
 
 #include "gpio_driver.h"
 
+#include <stdbool.h>
 #include <string.h>
 
 #include <driver/gpio.h>
@@ -53,8 +54,15 @@ static void IRAM_ATTR gpio_isr_handler(void *arg);
 
 struct GPIOListenerData
 {
+    struct ListHead gpio_listener_list_head;
+    EventListener listener;
     Context *target_context;
     int gpio;
+};
+
+struct GPIOData
+{
+    struct ListHead gpio_listeners;
 };
 
 static inline term gpio_set_pin_mode(term gpio_num_term, term mode)
@@ -117,8 +125,11 @@ void gpiodriver_init(Context *ctx)
     if (LIKELY(!global_gpio_ctx)) {
         global_gpio_ctx = ctx;
 
+        struct GPIOData *gpio_data = malloc(sizeof(struct GPIOData));
+        list_init(&gpio_data->gpio_listeners);
+
         ctx->native_handler = consume_gpio_mailbox;
-        ctx->platform_data = NULL;
+        ctx->platform_data = gpio_data;
 
         term reg_name_term = context_make_atom(ctx, gpio_atom);
         int atom_index = term_to_atom_index(reg_name_term);
@@ -171,13 +182,31 @@ static term gpiodriver_read(term msg)
     return gpio_digital_read(gpio_num);
 }
 
+static bool gpiodriver_is_gpio_attached(struct GPIOData *gpio_data, int gpio_num)
+{
+    struct ListHead *item;
+    LIST_FOR_EACH(item, &gpio_data->gpio_listeners) {
+        struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
+        if (gpio_listener->gpio == gpio_num) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static term gpiodriver_set_int(Context *ctx, Context *target, term msg)
 {
     GlobalContext *glb = ctx->global;
     struct ESP32PlatformData *platform = glb->platform_data;
 
+    struct GPIOData *gpio_data = ctx->platform_data;
+
     int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
     term trigger = term_get_tuple_element(msg, 3);
+
+    if (gpiodriver_is_gpio_attached(gpio_data, gpio_num)) {
+        return ERROR_ATOM;
+    }
 
     gpio_int_type_t interrupt_type;
     switch (trigger) {
@@ -211,27 +240,23 @@ static term gpiodriver_set_int(Context *ctx, Context *target, term msg)
 
     TRACE("going to install interrupt for %i.\n", gpio_num);
 
-    //TODO: ugly workaround here, write a real implementation
-    gpio_install_isr_service(0);
-    TRACE("installed ISR service 0.\n");
+    if (list_is_empty(&gpio_data->gpio_listeners)) {
+        gpio_install_isr_service(0);
+        TRACE("installed ISR service 0.\n");
+    }
 
     struct GPIOListenerData *data = malloc(sizeof(struct GPIOListenerData));
     if (IS_NULL_PTR(data)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         abort();
     }
+    list_append(&gpio_data->gpio_listeners, &data->gpio_listener_list_head);
     data->gpio = gpio_num;
     data->target_context = target;
-
-    EventListener *listener = malloc(sizeof(EventListener));
-    if (IS_NULL_PTR(listener)) {
-        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        abort();
-    }
-    list_append(&platform->listeners, &listener->listeners_list_head);
-    listener->sender = data;
-    listener->data = data;
-    listener->handler = gpio_interrupt_callback;
+    list_append(&platform->listeners, &data->listener.listeners_list_head);
+    data->listener.sender = data;
+    data->listener.data = data;
+    data->listener.handler = gpio_interrupt_callback;
 
     gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
     gpio_set_intr_type(gpio_num, interrupt_type);
@@ -239,6 +264,35 @@ static term gpiodriver_set_int(Context *ctx, Context *target, term msg)
     gpio_isr_handler_add(gpio_num, gpio_isr_handler, data);
 
     return OK_ATOM;
+}
+
+static term gpiodriver_remove_int(Context *ctx, Context *target, term msg)
+{
+    struct GPIOData *gpio_data = ctx->platform_data;
+
+    int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
+
+    struct ListHead *item;
+    struct ListHead *tmp;
+    MUTABLE_LIST_FOR_EACH(item, tmp, &gpio_data->gpio_listeners) {
+        struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
+        if (gpio_listener->gpio == gpio_num) {
+            list_remove(&gpio_listener->gpio_listener_list_head);
+            list_remove(&gpio_listener->listener.listeners_list_head);
+            free(gpio_listener);
+
+            gpio_set_intr_type(gpio_num, GPIO_INTR_DISABLE);
+            gpio_isr_handler_remove(gpio_num);
+
+            if (list_is_empty(&gpio_data->gpio_listeners)) {
+                gpio_uninstall_isr_service();
+            }
+
+            return OK_ATOM;
+        }
+    }
+
+    return ERROR_ATOM;
 }
 
 static void consume_gpio_mailbox(Context *ctx)
@@ -268,6 +322,10 @@ static void consume_gpio_mailbox(Context *ctx)
 
         case SET_INT_ATOM:
             ret = gpiodriver_set_int(ctx, target, msg);
+            break;
+
+        case REMOVE_INT_ATOM:
+            ret = gpiodriver_remove_int(ctx, target, msg);
             break;
 
         default:
