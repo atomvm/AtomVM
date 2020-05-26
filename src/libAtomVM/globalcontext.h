@@ -64,8 +64,8 @@ typedef struct
     Module **modules_by_index;
     int loaded_modules_count;
 
-    const void *avmpack_data;
-    const void *avmpack_platform_data;
+    struct ListHead avmpack_data;
+    const void **avmpack_platform_data;
 
     struct TimerWheel *timer_wheel;
     uint32_t last_seen_millis;

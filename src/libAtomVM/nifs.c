@@ -2392,7 +2392,7 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
 
     GlobalContext *glb = ctx->global;
 
-    if (UNLIKELY(!glb->avmpack_data)) {
+    if (UNLIKELY(list_is_empty(&glb->avmpack_data))) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -2422,18 +2422,21 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
 
     const void *bin_data;
     uint32_t size;
-    if (avmpack_find_section_by_name(glb->avmpack_data, complete_path, &bin_data, &size)) {
-        uint32_t file_size = READ_32_ALIGNED((uint32_t *) bin_data);
-        free(complete_path);
-        if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFC_BINARY_SIZE) != MEMORY_GC_OK)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    struct ListHead *item;
+    LIST_FOR_EACH(item, &glb->avmpack_data) {
+        struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
+        if (avmpack_find_section_by_name(avmpack_data->data, complete_path, &bin_data, &size)) {
+            uint32_t file_size = READ_32_ALIGNED((uint32_t *) bin_data);
+            free(complete_path);
+            if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFC_BINARY_SIZE) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            return term_from_const_binary(((uint8_t *) bin_data) + sizeof(uint32_t), file_size, ctx);
         }
-        return term_from_const_binary(((uint8_t *) bin_data) + sizeof(uint32_t), file_size, ctx);
-
-    } else {
-        free(complete_path);
-        return UNDEFINED_ATOM;
     }
+
+    free(complete_path);
+    return UNDEFINED_ATOM;
 }
 
 static term nif_console_print(Context *ctx, int argc, term argv[])

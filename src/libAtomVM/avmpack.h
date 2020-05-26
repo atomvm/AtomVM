@@ -25,11 +25,17 @@
 #ifndef _AVMPACK_H_
 #define _AVMPACK_H_
 
+#include "list.h"
 #include <stdint.h>
 
 #define END_OF_FILE 0
 #define BEAM_START_FLAG 1
 #define BEAM_CODE_FLAG 2
+
+struct AVMPackData {
+    struct ListHead avmpack_head;
+    const void *data;
+};
 
 /**
  * @brief callback function for AVMPack section fold.

@@ -95,7 +95,16 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
     const void *beam_module = NULL;
     uint32_t beam_module_size = 0;
 
-    if (!(global->avmpack_data && avmpack_find_section_by_name(global->avmpack_data, module_name, &beam_module, &beam_module_size))) {
+    struct ListHead *item;
+    LIST_FOR_EACH(item, &global->avmpack_data)
+    {
+        struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
+        if (avmpack_find_section_by_name(avmpack_data->data, module_name, &beam_module, &beam_module_size)) {
+            break;
+        }
+    }
+
+    if (IS_NULL_PTR(beam_module)) {
         fprintf(stderr, "Failed to open module: %s\n", module_name);
         return NULL;
     }

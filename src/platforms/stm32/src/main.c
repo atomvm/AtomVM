@@ -121,7 +121,13 @@ int main()
         return 1;
     }
 
-    glb->avmpack_data = flashed_avm;
+    struct AVMPackData *avmpack_data = malloc(sizeof(struct AVMPackData));
+    if (IS_NULL_PTR(avmpack_data)) {
+        fprintf(stderr, "Memory error: Cannot allocate AVMPackData.\n");
+        return 1;
+    }
+    avmpack_data->data = flashed_avm;
+    list_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
     glb->avmpack_platform_data = NULL;
 
     Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
