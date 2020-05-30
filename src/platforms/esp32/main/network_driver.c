@@ -77,6 +77,7 @@ void network_driver_start(Context *ctx, term_ref pid, term_ref ref, term config)
         term ssid_value = interop_proplist_get_value(sta_config, SSID_ATOM);
         term pass_value = interop_proplist_get_value(sta_config, PSK_ATOM);
         term sntp_value = interop_proplist_get_value(config, SNTP_ATOM);
+        term dhcp_hostname_value = interop_proplist_get_value(sta_config, STA_DHCP_HOSTNAME_ATOM);
 
         int ok = 0;
         char *ssid = interop_term_to_string(ssid_value, &ok);
@@ -132,6 +133,28 @@ void network_driver_start(Context *ctx, term_ref pid, term_ref ref, term config)
         ESP_LOGI("NETWORK", "starting wifi: SSID: [%s], password: [XXXXXXXX].", wifi_config.sta.ssid);
         ESP_ERROR_CHECK(esp_wifi_start());
 
+        char dhcp_hostname[TCPIP_HOSTNAME_MAX_SIZE + 1];
+        if (!term_is_nil(dhcp_hostname_value)) {
+            int ok = 0;
+            char *tmp = interop_term_to_string(dhcp_hostname_value, &ok);
+            if (!ok || IS_NULL_PTR(tmp)) {
+                term reply = port_create_error_tuple(ctx, BADARG_ATOM);
+                port_send_reply(ctx, pid, ref, reply);
+                return;
+            } else {
+                strncpy(dhcp_hostname, tmp, TCPIP_HOSTNAME_MAX_SIZE);
+                dhcp_hostname[TCPIP_HOSTNAME_MAX_SIZE] = '\0';
+                free(tmp);
+            }
+        } else {
+            strncpy(dhcp_hostname, "atomvm", TCPIP_HOSTNAME_MAX_SIZE);
+        }
+        if (tcpip_adapter_set_hostname(WIFI_IF_STA, dhcp_hostname) == ESP_OK) {
+            ESP_LOGI("NETWORK", "DHCP hostname set to %s\n", dhcp_hostname);
+        } else {
+            fprintf(stderr, "Unable to set DHCP hostname to %s\n", dhcp_hostname);
+        }
+
         if (sntp_value != term_nil()) {
             int ok;
             char *sntp = interop_term_to_string(sntp_value, &ok);
@@ -140,6 +163,9 @@ void network_driver_start(Context *ctx, term_ref pid, term_ref ref, term config)
                 sntp_setoperatingmode(SNTP_OPMODE_POLL);
                 sntp_setservername(0, sntp);
                 sntp_init();
+                ESP_LOGI("NETWORK", "SNTP initialized with sntp host set to %s\n", sntp);
+            } else {
+                fprintf(stderr, "Unable to set sntp host to %s\n", sntp);
             }
         }
         port_send_reply(ctx, pid, ref, OK_ATOM);

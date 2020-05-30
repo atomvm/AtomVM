@@ -71,6 +71,7 @@ static const char *const sntp_atom = "\x4" "sntp";
 static const char *const sta_got_ip_atom = "\xA" "sta_got_ip";
 static const char *const sta_connected_atom = "\xD" "sta_connected";
 static const char *const sta_disconnected_atom = "\x10" "sta_disconnected";
+static const char *const sta_dhcp_hostname_atom = "\xD" "dhcp_hostname";
 
 //spidriver
 static const char *const bus_config_atom = "\xA" "bus_config";
@@ -163,6 +164,7 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, sta_got_ip_atom) == STA_GOT_IP_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, sta_connected_atom) == STA_CONNECTED_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, sta_disconnected_atom) == STA_DISCONNECTED_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, sta_dhcp_hostname_atom) == STA_DHCP_HOSTNAME_INDEX;
 
     //spidriver
     ok &= globalcontext_insert_atom(glb, bus_config_atom) == BUS_CONFIG_ATOM_INDEX;
