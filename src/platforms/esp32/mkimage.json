@@ -1,0 +1,24 @@
+{
+    "segments": [
+        {
+            "name": "bootloader",
+            "offset": "0x1000",
+            "path": "${ROOT_DIR}/src/platforms/esp32/build/bootloader/bootloader.bin"
+        },
+        {
+            "name": "partition-table",
+            "offset": "0x8000",
+            "path": "${ROOT_DIR}/src/platforms/esp32/build/partitions.bin"
+        },
+        {
+            "name": "AtomvVM Virtual Machine",
+            "offset": "0x10000",
+            "path": "${ROOT_DIR}/src/platforms/esp32/build/atomvvm-esp32.bin"
+        },
+        {
+            "name": "AtomvVM Core BEAM Library",
+            "offset": "0x110000",
+            "path": "${ROOT_DIR}/build/libs/atomvmlib.avm"
+        }
+    ]
+}

@@ -4,6 +4,7 @@ set -e
 
 : "${FLASH_BAUD_RATE:=115200}"
 : "${FLASH_SERIAL_PORT:=/dev/ttyUSB0}"
+: "${FLASH_OFFSET:=0x210000}"
 
 if [ -z "${IDF_PATH}" ]; then
     echo "ERROR!  IDF_PATH must be set to root of IDF-SDK to pick up esptool."
@@ -25,5 +26,5 @@ exec "${IDF_PATH}/components/esptool_py/esptool/esptool.py" \
     write_flash \
     -u --flash_mode dio --flash_freq 40m \
     --flash_size detect \
-    0x110000 \
+    ${FLASH_OFFSET} \
     "${1}"

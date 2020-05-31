@@ -32,7 +32,7 @@ Running BEAM code on ESP32
 * Packed BEAM module should be written to dedicated BEAM partition:
 
 ```
-$IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 115200 --before default_reset --after hard_reset write_flash -u --flash_mode dio --flash_freq 40m --flash_size detect  0x110000 packed.avm
+$IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 115200 --before default_reset --after hard_reset write_flash -u --flash_mode dio --flash_freq 40m --flash_size detect  0x210000 packed.avm
 ```
 
 Running Hello World
@@ -42,7 +42,7 @@ This example will print a Hello World message.
 
 ```
 # Flash the hello_world.avm to the device
-$ $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 115200 --before default_reset --after hard_reset write_flash -u --flash_mode dio --flash_freq 40m --flash_size detect  0x110000 build/examples/erlang/hello_world.avm
+$ $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 115200 --before default_reset --after hard_reset write_flash -u --flash_mode dio --flash_freq 40m --flash_size detect  0x210000 build/examples/erlang/hello_world.avm
 
 $ cd src/platforms/esp32
 
@@ -59,5 +59,5 @@ Flash blink example using following commands:
 
 ```
 # Flash the blink.avm to the device
-$ $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 115200 --before default_reset --after hard_reset write_flash -u --flash_mode dio --flash_freq 40m --flash_size detect  0x110000 build/examples/erlang/esp32/blink.avm
+$ $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 115200 --before default_reset --after hard_reset write_flash -u --flash_mode dio --flash_freq 40m --flash_size detect  0x210000 build/examples/erlang/esp32/blink.avm
 ```
