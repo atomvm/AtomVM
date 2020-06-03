@@ -35,6 +35,14 @@ defmodule GPIO do
     end
   end
 
+  def remove_int(gpio, gpio_num) do
+    send(gpio, {self(), :remove_int, gpio_num})
+
+    receive do
+      ret -> ret
+    end
+  end
+
   def set_pin_mode(_gpio_num, _mode),
     do: throw(:nif_error)
 
@@ -46,4 +54,7 @@ defmodule GPIO do
 
   def attach_interrupt(gpio_num, mode),
     do: set_int(open(), gpio_num, mode)
+
+  def detach_interrupt(gpio_num),
+    do: remove_int(open(), gpio_num)
 end
