@@ -9,6 +9,15 @@ defmodule GPIO do
     end
   end
 
+  def read(gpio, gpio_num) do
+    send(gpio, {self(), :read, gpio_num})
+
+    receive do
+      ret ->
+        ret
+    end
+  end
+
   def set_direction(gpio, gpio_num, direction) do
     send(gpio, {self(), :set_direction, gpio_num, direction})
 
