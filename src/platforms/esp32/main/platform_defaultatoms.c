@@ -74,6 +74,13 @@ static const char *const sta_got_ip_atom = "\xA" "sta_got_ip";
 static const char *const sta_connected_atom = "\xD" "sta_connected";
 static const char *const sta_disconnected_atom = "\x10" "sta_disconnected";
 static const char *const sta_dhcp_hostname_atom = "\xD" "dhcp_hostname";
+static const char *const ap_atom = "\x2" "ap";
+static const char *const ssid_hidden_atom = "\xB" "ssid_hidden";
+static const char *const max_connections_atom = "\xF" "max_connections";
+static const char *const ap_started_atom = "\xA" "ap_started";
+static const char *const ap_sta_connected_atom = "\x10" "ap_sta_connected";
+static const char *const ap_sta_disconnected_atom = "\x13" "ap_sta_disconnected";
+static const char *const ap_sta_ip_assigned_atom = "\x12" "ap_sta_ip_assigned";
 
 //spidriver
 static const char *const bus_config_atom = "\xA" "bus_config";
@@ -169,6 +176,13 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, sta_connected_atom) == STA_CONNECTED_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, sta_disconnected_atom) == STA_DISCONNECTED_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, sta_dhcp_hostname_atom) == STA_DHCP_HOSTNAME_INDEX;
+    ok &= globalcontext_insert_atom(glb, ap_atom) == AP_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, ssid_hidden_atom) == SSID_HIDDEN_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, max_connections_atom) == MAX_CONNECTIONS_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, ap_started_atom) == AP_STARTED_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, ap_sta_connected_atom) == AP_STA_CONNECTED_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, ap_sta_disconnected_atom) == AP_STA_DISCONNECTED_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, ap_sta_ip_assigned_atom) == AP_STA_IP_ASSIGNED_ATOM_INDEX;
 
     //spidriver
     ok &= globalcontext_insert_atom(glb, bus_config_atom) == BUS_CONFIG_ATOM_INDEX;

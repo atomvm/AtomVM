@@ -1,5 +1,5 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%   Copyright 2019 by Fred Dushin <fred@dushin.net>                       %
+%   Copyright 2020 by Fred Dushin <fred@dushin.net>                       %
 %                                                                         %
 %   This program is free software; you can redistribute it and/or modify  %
 %   it under the terms of the GNU Lesser General Public License as        %
@@ -17,20 +17,20 @@
 %   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%%
-%% @doc WARNING: Interfaces around management of networking are under
-%% revision and may change without notice.
-%%
 -module(network_fsm).
 
--export([wait_for_sta/0, wait_for_sta/1, wait_for_sta/2]).
+-export([
+    wait_for_sta/0, wait_for_sta/1, wait_for_sta/2,
+    wait_for_ap/0, wait_for_ap/1, wait_for_ap/2
+]).
 -export([start/1, stop/0]).
--export([init/1, initial/3, wait_for_sta_connected/3, wait_for_sta_got_ip/3, sta_got_ip/3, terminate/3]).
+-export([
+    init/1, initial/3,
+    wait_for_sta_connected/3, wait_for_sta_got_ip/3, sta_got_ip/3,
+    wait_for_ap_started/3, ap_started/3,
+    terminate/3
+]).
 -export([simulation_loop/0]).
-
--define(ATOMVM_NVS_NS, atomvm).
--define(ATOMVM_NVS_STA_SSID, sta_ssid).
--define(ATOMVM_NVS_STA_PSK, sta_psk).
 
 -define(SERVER, ?MODULE).
 
@@ -41,14 +41,39 @@
 
 -type ssid_config() :: {ssid, string()|binary()}.
 -type psk_config() :: {psk, string()|binary()}.
+
 -type dhcp_hostname_config() :: {dhcp_hostname, string()|binary()}.
--type connected_config() :: {connected, fun(() -> term())}.
--type disconnected_config() :: {disconnected, fun(() -> term())}.
--type got_ip_config() :: {got_ip, fun((ip_info()) -> term())}.
--type sta_config_property() :: ssid_config() | psk_config() | dhcp_hostname_config() | connected_config() | disconnected_config() | got_ip_config().
+-type sta_connected_config() :: {connected, fun(() -> term())}.
+-type sta_disconnected_config() :: {disconnected, fun(() -> term())}.
+-type sta_got_ip_config() :: {got_ip, fun((ip_info()) -> term())}.
+-type sta_config_property() ::
+      ssid_config()
+    | psk_config()
+    | dhcp_hostname_config()
+    | sta_connected_config()
+    | sta_disconnected_config()
+    | sta_got_ip_config().
 -type sta_config() :: {sta, [sta_config_property()]}.
--type mode_config() :: sta_config().
--type network_config() :: [mode_config()].
+
+-type mac() :: binary().
+-type ap_ssid_hidden_config() :: {ap_ssid_hidden, boolean()}.
+-type ap_max_connections_config() :: {ap_max_connections, non_neg_integer()}.
+-type ap_started_config() :: {ap_started, fun(() -> term())}.
+-type ap_sta_connected_config() :: {sta_connected, fun((mac()) -> term())}.
+-type ap_sta_disconnected_config() :: {sta_disconnected, fun((mac()) -> term())}.
+-type ap_sta_ip_assigned_config() :: {sta_ip_assigned, fun((ipv4_address()) -> term())}.
+-type ap_config_property() ::
+      ssid_config()
+    | psk_config()
+    | ap_ssid_hidden_config()
+    | ap_max_connections_config()
+    | ap_started_config()
+    | ap_sta_connected_config()
+    | ap_sta_disconnected_config()
+    | ap_sta_ip_assigned_config().
+-type ap_config() :: {sta, [ap_config_property()]}.
+
+-type network_config() :: [sta_config()|ap_config()].
 
 -record(data, {
     config :: network_config(),
@@ -85,7 +110,7 @@ wait_for_sta(StaConfig) when is_list(StaConfig) ->
 %%          a failure occurred (e.g., due to malformed network configuration).
 %% @doc     Start a network_fsm in station mode and wait for a connection to be established
 %%
-%%          This function will start a network_fsm instation mode, and will wait
+%%          This function will start a network_fsm in station mode, and will wait
 %%          for a connection to be established.  This is a convenience function,
 %%          for applications that do not need to be notified of connectivity
 %%          changes in the network.
@@ -104,6 +129,56 @@ wait_for_sta(StaConfig, Timeout) ->
     case network_fsm:start(Config) of
         ok ->
             wait_for_ip(Timeout);
+        Error ->
+            Error
+    end.
+
+
+%%-----------------------------------------------------------------------------
+%% @doc     Equivalent to wait_for_ap(15000).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec wait_for_ap() -> ok | {error, Reason::term()}.
+wait_for_ap() ->
+    wait_for_ap(15000).
+
+
+%%-----------------------------------------------------------------------------
+%% @doc     Equivalent to wait_for_ap([], Timeout) or wait_for_ap(StaConfig, 15000).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec wait_for_ap(TimeoutOrStaConfig::non_neg_integer() | [ap_config_property()]) -> ok | {error, Reason::term()}.
+wait_for_ap(Timeout) when is_integer(Timeout) ->
+    wait_for_ap([], Timeout);
+wait_for_ap(ApConfig) when is_list(ApConfig) ->
+    wait_for_ap(ApConfig, 15000).
+
+
+%%-----------------------------------------------------------------------------
+%% @param   ApConfig The AP network configuration
+%% @param   Timeout amount of time in milliseconds to wait for a connection
+%% @returns ok, when the nework_fsm has started the AP, or {error, Reason} if
+%%          a failure occurred (e.g., due to malformed network configuration).
+%% @doc     Start a network_fsm in access point mode and wait the AP to be
+%%          up and running
+%%
+%%          This function will start a network_fsm in AP mode, and will wait
+%%          until the network is up and ready to be connected.  This is a convenience function,
+%%          for applications that do not need to be notified of connectivity
+%%          changes in the network.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec wait_for_ap(ApConfig::[ap_config_property()], Timeout::non_neg_integer()) -> ok | {error, Reason::term()}.
+wait_for_ap(ApConfig, Timeout) ->
+    Self = self(),
+    NewApConfig = [
+        {ap_started, fun() -> Self ! ap_started end}
+        | ApConfig
+    ],
+    Config = [{ap, NewApConfig}],
+    case network_fsm:start(Config) of
+        ok ->
+            wait_for_ap_started(Timeout);
         Error ->
             Error
     end.
@@ -157,10 +232,16 @@ init(Config) ->
 initial({call, From}, start, #data{config=Config} = Data) ->
     Port = get_port(),
     Ref = make_ref(),
-    case start_network(Port, Ref, get_driver_config(Config)) of
+    DriverConfig = get_driver_config(Config),
+    case start_network(Port, Ref, DriverConfig) of
         ok ->
             gen_statem:reply(From, ok),
-            {next_state, wait_for_sta_connected, Data#data{port=Port, ref=Ref}, get_timeout_actions(Config)};
+            case proplists:get_value(sta, DriverConfig) of
+                undefined ->
+                    {next_state, wait_for_ap_started, Data#data{port=Port, ref=Ref}, get_timeout_actions(Config)};
+                _ ->
+                    {next_state, wait_for_sta_connected, Data#data{port=Port, ref=Ref}, get_timeout_actions(Config)}
+            end;
         {error, Reason} ->
             gen_statem:reply(From, {error, Reason}),
             {stop, {start_failed, Reason}}
@@ -221,6 +302,39 @@ sta_got_ip(info, {Ref, sta_disconnected} = _Msg, #data{ref=Ref, config=Config} =
 sta_got_ip(EventType, Msg, Data) ->
     {stop, {unexpected_msg, sta_got_ip, EventType, Msg}, Data}.
 
+%%-----------------------------------------------------------------------------
+%% wait_for_ap_started state
+%%-----------------------------------------------------------------------------
+
+wait_for_ap_started(info, {Ref, ap_started} = _Msg, #data{ref=Ref, config=Config} = Data) ->
+    maybe_ap_started_callback(Config),
+    {next_state, ap_started, Data};
+
+% catch-all
+wait_for_ap_started(EventType, Msg, Data) ->
+    {stop, {unexpected_msg, wait_for_ap_started, EventType, Msg}, Data}.
+
+%%-----------------------------------------------------------------------------
+%% ap_started state
+%%-----------------------------------------------------------------------------
+
+ap_started(info, {Ref, {ap_sta_connected, Mac}} = _Msg, #data{ref=Ref, config=Config} = Data) ->
+    maybe_ap_sta_connected_callback(Config, Mac),
+    {next_state, ap_started, Data};
+
+ap_started(info, {Ref, {ap_sta_disconnected, Mac}} = _Msg, #data{ref=Ref, config=Config} = Data) ->
+    maybe_ap_sta_disconnected_callback(Config, Mac),
+    {next_state, ap_started, Data};
+
+ap_started(info, {Ref, {ap_sta_ip_assigned, Address}} = _Msg, #data{ref=Ref, config=Config} = Data) ->
+    maybe_ap_sta_ip_assigned_callback(Config, Address),
+    {next_state, ap_started, Data};
+
+% catch-all
+ap_started(EventType, Msg, Data) ->
+    {stop, {unexpected_msg, wait_for_ap_started, EventType, Msg}, Data}.
+
+
 
 %% @hidden
 terminate(_Reason, _StateName, _Data) ->
@@ -232,32 +346,35 @@ terminate(_Reason, _StateName, _Data) ->
 
 %% @private
 get_driver_config(Config) ->
-    case proplists:get_value(sta, Config) of
+    Config1 = case proplists:get_value(sta, Config) of
         undefined ->
             Config;
         StaConfig ->
-            NewStaConfig = [{ssid, get_ssid(StaConfig)}, {psk, get_psk(StaConfig)} | StaConfig],
-            [{sta, NewStaConfig} | lists:keydelete(sta, 1, Config)]
-    end.
-
-%% @private
-get_ssid(Config) ->
-    get_config_value(Config, ssid, ?ATOMVM_NVS_STA_SSID).
-
-%% @private
-get_psk(Config) ->
-    get_config_value(Config, psk, ?ATOMVM_NVS_STA_PSK).
-
-%% @private
-get_config_value(Config, Key, NVSKey) ->
-    case proplists:get_value(Key, Config) of
+            NewStaConfig1 = maybe_add_nvs_entry(ssid, StaConfig,     sta_ssid),
+            NewStaConfig2 = maybe_add_nvs_entry(psk,  NewStaConfig1, sta_psk),
+            [{sta, NewStaConfig2} | lists:keydelete(sta, 1, Config)]
+    end,
+    case proplists:get_value(ap, Config1) of
         undefined ->
-            esp:nvs_get_binary(?ATOMVM_NVS_NS, NVSKey, <<"">>);
-        Value ->
-            Value
+            Config1;
+        ApConfig ->
+            NewApConfig1 = maybe_add_nvs_entry(ssid, ApConfig,     ap_ssid),
+            NewApConfig2 = maybe_add_nvs_entry(psk,  NewApConfig1, ap_psk),
+            [{ap, NewApConfig2} | lists:keydelete(ap, 1, Config1)]
     end.
 
+%% @private
+maybe_add_nvs_entry(Key, List, NVSKey) ->
+    case {proplists:get_value(Key, List), esp:nvs_get_binary(atomvm, NVSKey)} of
+        {undefined, undefined} ->
+            List;
+        {undefined, NVSValue} ->
+            [{Key, NVSValue} | List];
+        {_Value, _} ->
+            List
+    end.
 
+%% @private
 get_timeout_actions(Config) ->
     case proplists:get_value(timeout, Config) of
         undefined ->
@@ -266,16 +383,36 @@ get_timeout_actions(Config) ->
             [{state_timeout, Timeout, error}]
     end.
 
+%% @private
 maybe_sta_connected_callback(Config) ->
     maybe_callback0(connected, proplists:get_value(sta, Config)).
 
+%% @private
 maybe_sta_disconnected_callback(Config) ->
     maybe_callback0(disconnected, proplists:get_value(sta, Config)).
 
+%% @private
 maybe_sta_got_ip_callback(Config, IpInfo) ->
     maybe_callback1({got_ip, IpInfo}, proplists:get_value(sta, Config)).
 
+%% @private
+maybe_ap_started_callback(Config) ->
+    maybe_callback0(ap_started, proplists:get_value(ap, Config)).
 
+%% @private
+maybe_ap_sta_connected_callback(Config, Mac) ->
+    maybe_callback1({sta_connected, Mac}, proplists:get_value(ap, Config)).
+
+%% @private
+maybe_ap_sta_disconnected_callback(Config, Mac) ->
+    maybe_callback1({sta_disconnected, Mac}, proplists:get_value(ap, Config)).
+
+%% @private
+maybe_ap_sta_ip_assigned_callback(Config, Address) ->
+    maybe_callback1({sta_ip_assigned, Address}, proplists:get_value(ap, Config)).
+
+
+%% @private
 maybe_callback0(_Key, undefined) ->
     ok;
 maybe_callback0(Key, Config) ->
@@ -285,6 +422,7 @@ maybe_callback0(Key, Config) ->
         Fun ->          Fun()
     end.
 
+%% @private
 maybe_callback1(_KeyArg, undefined) ->
     ok;
 maybe_callback1({Key, Arg} = Msg, Config) ->
@@ -325,6 +463,15 @@ wait_for_ip(Timeout) ->
             Started;
         disconnected ->
             {error, disconnected}
+    after Timeout ->
+        {error, timeout}
+    end.
+
+%% @private
+wait_for_ap_started(Timeout) ->
+    receive
+        ap_started ->
+            ok
     after Timeout ->
         {error, timeout}
     end.
