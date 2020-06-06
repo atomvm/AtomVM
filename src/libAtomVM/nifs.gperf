@@ -74,3 +74,7 @@ erlang:!/2, &send_nif
 erts_debug:flat_size/1, &flat_size_nif
 atomvm:read_priv/2, &atomvm_read_priv_nif
 console:print/1, &console_print_nif
+base64:encode/1, &base64_encode_nif
+base64:decode/1, &base64_decode_nif
+base64:encode_to_string/1, &base64_encode_to_string_nif
+base64:decode_to_string/1, &base64_decode_to_string_nif

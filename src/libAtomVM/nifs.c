@@ -57,6 +57,7 @@
     return term_invalid_term();
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
+#define NOT_FOUND (0xFF)
 
 #ifdef ENABLE_ADVANCED_TRACE
 static const char *const trace_calls_atom = "\xB" "trace_calls";
@@ -129,6 +130,10 @@ static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[]);
 static term nif_console_print(Context *ctx, int argc, term argv[]);
+static term nif_base64_encode(Context *ctx, int argc, term argv[]);
+static term nif_base64_decode(Context *ctx, int argc, term argv[]);
+static term nif_base64_encode_to_string(Context *ctx, int argc, term argv[]);
+static term nif_base64_decode_to_string(Context *ctx, int argc, term argv[]);
 
 static const struct Nif binary_at_nif =
 {
@@ -475,6 +480,26 @@ static const struct Nif console_print_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_console_print
+};
+static const struct Nif base64_encode_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_base64_encode
+};
+static const struct Nif base64_decode_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_base64_decode
+};
+static const struct Nif base64_encode_to_string_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_base64_encode_to_string
+};
+static const struct Nif base64_decode_to_string_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_base64_decode_to_string
 };
 
 //Ignore warning caused by gperf generated code
@@ -2468,4 +2493,280 @@ static term nif_console_print(Context *ctx, int argc, term argv[])
         free(buf);
     }
     return OK_ATOM;
+}
+
+static char b64_table[64] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+// per https://tools.ietf.org/rfc/rfc4648.txt
+
+static term base64_encode(Context *ctx, int argc, term argv[], bool return_binary)
+{
+    UNUSED(argc);
+    term src = argv[0];
+
+    size_t src_size;
+    uint8_t *src_pos = NULL, *src_buf = NULL;
+    if (term_is_binary(src)) {
+        src_size = term_binary_size(src);
+        if (src_size == 0) {
+            return return_binary ? src : term_nil();
+        }
+    } else if (term_is_list(src)) {
+        int ok;
+        src_size = interop_iolist_size(src, &ok);
+        if (UNLIKELY(!ok)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        if (src_size == 0) {
+            if (return_binary) {
+                if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(0) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                return term_create_empty_binary(0, ctx);
+            } else {
+                return term_nil();
+            }
+        }
+        src_buf = malloc(src_size);
+        if (IS_NULL_PTR(src_buf)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        if (UNLIKELY(!interop_write_iolist(src, (char *) src_buf))) {
+            free(src_buf);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        src_pos = src_buf;
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    size_t dst_size = (4 * src_size) / 3;
+    size_t pad = 0;
+    switch (src_size % 3) {
+        case 0:
+            break;
+        case 1:
+            pad = 2;
+            dst_size++;
+            break;
+        case 2:
+            pad = 1;
+            dst_size++;
+            break;
+    }
+    size_t dst_size_with_pad = dst_size + pad;
+    size_t heap_free = return_binary ?
+        term_binary_data_size_in_terms(dst_size_with_pad) + BINARY_HEADER_SIZE
+        : 2*dst_size;
+    if (UNLIKELY(memory_ensure_free(ctx, heap_free) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    if (term_is_binary(argv[0])) {
+        src_pos = (uint8_t *) term_binary_data(argv[0]);
+    }
+    term dst;
+    uint8_t *dst_pos;
+    if (return_binary) {
+        dst = term_create_empty_binary(dst_size_with_pad, ctx);
+        dst_pos = (uint8_t *) term_binary_data(dst);
+    } else {
+        dst_pos = malloc(dst_size_with_pad);
+        if (IS_NULL_PTR(dst_pos)) {
+            free(src_buf);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+    }
+    for (size_t i = 0;  i < dst_size;  ++i) {
+        uint8_t accum = 0;
+        switch (i & 0x03) {
+            case 0:
+                dst_pos[i] = b64_table[(*src_pos) >> 2];
+                break;
+            case 1:
+                accum = ((*src_pos) & 0x03) << 4;
+                src_pos++;
+                if (i < dst_size - 1) {
+                    accum |= ((*src_pos) & 0xF0) >> 4;
+                }
+                dst_pos[i] = b64_table[accum];
+                break;
+            case 2:
+                accum = ((*src_pos) & 0x0F) << 2;
+                src_pos++;
+                if (i < dst_size - 1) {
+                    accum |= ((*src_pos) & 0xC0) >> 6;
+                }
+                dst_pos[i] = b64_table[accum];
+                break;
+            case 3:
+                dst_pos[i] = b64_table[(*src_pos) & 0x3F];
+                src_pos++;
+                break;
+        }
+    }
+    free(src_buf);
+    for (size_t i = 0;  i < pad;  ++i) {
+        dst_pos[dst_size + i] = '=';
+    }
+    if (!return_binary) {
+        dst = term_from_string(dst_pos, dst_size_with_pad, ctx);
+        free(dst_pos);
+    }
+    return dst;
+}
+
+static inline uint8_t find_index(uint8_t c)
+{
+    if ('A' <= c && c <= 'Z') {
+        return c - 'A';
+    } else if ('a' <= c && c <= 'z') {
+        return 26 + (c - 'a');
+    } else if ('0' <= c && c <= '9') {
+           return 52 + (c - '0');
+    } else if (c == '+') {
+        return 62;
+    } else if (c == '/') {
+        return 63;
+    } else {
+        return NOT_FOUND;
+    }
+}
+
+static term base64_decode(Context *ctx, int argc, term argv[], bool return_binary)
+{
+    UNUSED(argc);
+    term src = argv[0];
+
+    size_t src_size;
+    uint8_t *src_pos, *src_buf = NULL;
+    if (term_is_binary(src)) {
+        src_size = term_binary_size(src);
+        if (src_size == 0) {
+            return return_binary ? src : term_nil();
+        }
+        // for now, we only accept valid encodings (no whitespace)
+        if (src_size % 4 != 0) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        src_pos = (uint8_t *) term_binary_data(src);
+    } else if (term_is_list(src)) {
+        int ok;
+        src_size = interop_iolist_size(src, &ok);
+        if (UNLIKELY(!ok)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        if (src_size == 0) {
+            if (return_binary) {
+                if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(0) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                return term_create_empty_binary(0, ctx);
+            } else {
+                return term_nil();
+            }
+        }
+        // for now, we only accept valid encodings (no whitespace)
+        if (src_size % 4 != 0) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        src_buf = malloc(src_size);
+        if (IS_NULL_PTR(src_buf)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        if (UNLIKELY(!interop_write_iolist(src, (char *) src_buf))) {
+            free(src_buf);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        src_pos = src_buf;
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    size_t dst_size = (3 * src_size) / 4;
+    size_t pad = 0;
+    if (src_pos[src_size - 1] == '=') {
+        if (src_pos[src_size - 2] == '=') {
+            pad = 2;
+        } else {
+            pad = 1;
+        }
+    }
+    dst_size -= pad;
+    size_t heap_free = return_binary ?
+        term_binary_data_size_in_terms(dst_size) + BINARY_HEADER_SIZE
+        : 2*dst_size;
+    if (UNLIKELY(memory_ensure_free(ctx, heap_free) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term dst;
+    uint8_t *dst_pos, *dst_buf = NULL;
+    if (return_binary) {
+        dst = term_create_empty_binary(dst_size, ctx);
+        dst_pos = (uint8_t *) term_binary_data(dst);
+    } else {
+        dst_buf = malloc(dst_size);
+        if (IS_NULL_PTR(dst_buf)) {
+            free(src_buf);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        dst_pos = dst_buf;
+    }
+    if (term_is_binary(argv[0])) {
+        src_pos = (uint8_t *) term_binary_data(argv[0]);
+    }
+    size_t n = src_size - pad;
+    for (size_t i = 0;  i < n;  ++i) {
+        uint8_t octet = find_index(src_pos[i]);
+        if (octet == NOT_FOUND) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        switch (i & 0x03) {
+            case 0:
+                *dst_pos = octet << 2;
+                break;
+            case 1:
+                *dst_pos |= octet >> 4;
+                if ((pad != 2) || i < n - 1) {
+                    dst_pos++;
+                    *dst_pos = (octet & 0x0F) << 4;
+                }
+                break;
+            case 2:
+                *dst_pos |= (octet & 0xFC) >> 2;
+                if ((pad != 1) || i < n - 1) {
+                    dst_pos++;
+                    *dst_pos = (octet & 0x03) << 6;
+                }
+                break;
+            case 3:
+                *dst_pos |= octet;
+                dst_pos++;
+                break;
+        }
+    }
+    free(src_buf);
+    if (!return_binary) {
+        dst = term_from_string(dst_buf, dst_size, ctx);
+        free(dst_buf);
+    }
+    return dst;
+}
+
+static term nif_base64_encode(Context *ctx, int argc, term argv[])
+{
+    return base64_encode(ctx, argc, argv, true);
+}
+
+static term nif_base64_decode(Context *ctx, int argc, term argv[])
+{
+    return base64_decode(ctx, argc, argv, true);
+}
+
+static term nif_base64_encode_to_string(Context *ctx, int argc, term argv[])
+{
+    return base64_encode(ctx, argc, argv, false);
+}
+
+static term nif_base64_decode_to_string(Context *ctx, int argc, term argv[])
+{
+    return base64_decode(ctx, argc, argv, false);
 }

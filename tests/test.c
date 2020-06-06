@@ -414,6 +414,8 @@ struct Test tests[] =
 
     {"large_int_literal.beam", 5953},
 
+    {"test_base64.beam", 0},
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}

@@ -372,6 +372,8 @@ compile_erlang(decode_int48)
 
 compile_erlang(large_int_literal)
 
+compile_erlang(test_base64)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -736,4 +738,6 @@ add_custom_target(erlang_test_modules DEPENDS
     decode_int48.beam
 
     large_int_literal.beam
+
+    test_base64.beam
 )
