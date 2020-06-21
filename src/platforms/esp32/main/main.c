@@ -38,7 +38,7 @@
 #include "esp32_sys.h"
 #include "nvs_flash.h"
 
-const void *avm_partition(int *size);
+const void *avm_partition(const char *partition_name, int *size);
 
 void app_main()
 {
@@ -56,25 +56,44 @@ void app_main()
     ESP_ERROR_CHECK(err);
 
     int size;
-    const void *flashed_avm = avm_partition(&size);
+    const void *main_avm = avm_partition("main.avm", &size);
 
     uint32_t startup_beam_size;
     const void *startup_beam;
     const char *startup_module_name;
 
-    printf("Booting file mapped at: %p, size: %i\n", flashed_avm, size);
+    printf("Booting file mapped at: %p, size: %i\n", main_avm, size);
 
     GlobalContext *glb = globalcontext_new();
 
     socket_driver_init(glb);
 
-    if (!avmpack_is_valid(flashed_avm, size) || !avmpack_find_section_by_flag(flashed_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
+    if (!avmpack_is_valid(main_avm, size) || !avmpack_find_section_by_flag(main_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name))
+    {
         fprintf(stderr, "error: invalid AVM Pack\n");
         abort();
     }
-
-    glb->avmpack_data = flashed_avm;
+    struct AVMPackData *avmpack_data = malloc(sizeof(struct AVMPackData));
+    if (IS_NULL_PTR(avmpack_data)) {
+        fprintf(stderr, "Memory error: Cannot allocate AVMPackData.\n");
+        abort();
+    }
+    avmpack_data->data = main_avm;
+    list_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
     glb->avmpack_platform_data = NULL;
+
+    const void *lib_avm = avm_partition("lib.avm", &size);
+    if (!IS_NULL_PTR(lib_avm) && avmpack_is_valid(lib_avm, size)) {
+        avmpack_data = malloc(sizeof(struct AVMPackData));
+        if (IS_NULL_PTR(avmpack_data)) {
+            fprintf(stderr, "Memory error: Cannot allocate AVMPackData.\n");
+            abort();
+        }
+        avmpack_data->data = lib_avm;
+        list_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
+    } else {
+        fprintf(stderr, "Unable to mount lib.avm partition.  Ignoring...\n");
+    }
 
     Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
     globalcontext_insert_module_with_filename(glb, mod, startup_module_name);
@@ -97,9 +116,9 @@ void app_main()
     }
 }
 
-const void *avm_partition(int *size)
+const void *avm_partition(const char *partition_name, int *size)
 {
-    const esp_partition_t *partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "main.avm");
+    const esp_partition_t *partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, partition_name);
     if (!partition) {
         printf("AVM partition not found.\n");
         *size = 0;

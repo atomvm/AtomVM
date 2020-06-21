@@ -435,7 +435,6 @@ int test_modules_execution()
         assert(beam_file != NULL);
 
         GlobalContext *glb = globalcontext_new();
-        glb->avmpack_data = NULL;
         glb->avmpack_platform_data = NULL;
         Module *mod = module_new_from_iff_binary(glb, beam_file->mapped, beam_file->size);
         if (IS_NULL_PTR(mod)) {
