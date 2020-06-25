@@ -124,7 +124,9 @@ The AtomVM build will generate artifacts suitable for flashing to an ESP32 devic
 
 The `tools/release/esp32` directory contains the `mkimage.sh` script that can be used to create a single AtomVM image file, which can be distributed as a release, allowing application developers to develop AtomVM applications without having to build AtomVM from scratch.
 
-Running this script will generate a single `atomvm-<sha>.img` file, where `<sha>` is the git hash of the current checkout.  This contains the ESP32 bootloader, AtomVM executable, and the `eavmlib` and `estdlib` Erlang libraries in one file, which should then be flashed to address `0x1000`.
+> Note.  Before running the `mkimage.sh` script, you must have a complete build of both the esp32 project, as well as a full build of the core Erlang libraries in the `libs` directory.  The script configuration defaults to assuming that the core Erlang libraries will be written to the `build/libs` directory in the AtomVM source tree.  You should pass the `--build_dir <path>` option to the `mkimage.sh` script, with `<path>` pointing to your AtomVM build directory, if you  target a different build directory when running CMake.
+
+Running this script will generate a single `atomvm-<sha>.img` file in the `build` directory of the esp32 source tree, where `<sha>` is the git hash of the current checkout.  This image contains the ESP32 bootloader, AtomVM executable, and the `eavmlib` and `estdlib` Erlang libraries in one file, which can then be flashed to address `0x1000`.
 
 The `mkimage.sh` script is run as follows:
 
@@ -140,7 +142,7 @@ Users can then use the `esptool.py` directly to flash the entire image to the ES
 
 But first, it is a good idea to erase the flash, e.g.,
 
-    shell$ esptool.py  --chip esp32 --port /dev/ttyUSB0 erase_flash
+    shell$ esptool.py --chip esp32 --port /dev/ttyUSB0 erase_flash
     esptool.py v2.1
     Connecting........_
     Chip is ESP32D0WDQ6 (revision 1)
@@ -199,3 +201,5 @@ Finally, you can then flash your own application, e.g.,
     Hash of data verified.
     Leaving...
     Hard resetting via RTS pin...
+
+> Note.  Since the Erlang core libraries are flashed to the ESP32 device, it is not necessary to include core libraries in your application AVM files.  Users may be interested in using downstream development tools, such as the Elixir <a href="https://github.com/bettio/ExAtomVM">ExAtomVM Mix task</a>, or the Erlang <a href="https://github.com/fadushin/atomvm_rebar3_plugin">AtomVM Rebar3 Plugin</a> for doing day-to-day development of applications for the AtomVM platform.

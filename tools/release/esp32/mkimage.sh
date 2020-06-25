@@ -19,8 +19,8 @@
 THIS_DIR="$(cd $(dirname $0) && pwd)"
 ROOT_DIR="$(cd "${THIS_DIR}/../../.." && pwd)"
 
-python "${THIS_DIR}/mkimage.py" \
+escript "${THIS_DIR}/mkimage.erl" \
     --root_dir "${ROOT_DIR}" \
-    --config "${ROOT_DIR}/src/platforms/esp32/mkimage.json" \
+    --config "${ROOT_DIR}/src/platforms/esp32/mkimage.config" \
     --out "${ROOT_DIR}/src/platforms/esp32/build/atomvm-$(git rev-parse --short HEAD).img" \
     "$@"
