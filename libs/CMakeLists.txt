@@ -11,3 +11,5 @@ if (Elixir_FOUND)
 else()
     message("Unable to find elixirc -- skipping Elixir libs")
 endif()
+
+pack_lib(atomvmlib eavmlib estdlib)

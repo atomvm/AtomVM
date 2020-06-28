@@ -34,6 +34,24 @@ macro(pack_archive avm_name)
 endmacro()
 
 
+macro(pack_lib avm_name)
+
+    foreach(archive_name ${ARGN})
+        set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
+        set(ARCHIVE_TARGETS ${ARCHIVE_TARGETS} ${archive_name})
+    endforeach()
+
+    add_custom_target(
+        ${avm_name} ALL
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${avm_name}.avm ${ARCHIVES}
+        COMMENT "Packing runnable ${avm_name}.avm"
+        VERBATIM
+    )
+    add_dependencies(${avm_name} ${avm_name}_main ${ARCHIVE_TARGETS} PackBEAM)
+
+endmacro()
+
+
 macro(pack_runnable avm_name main)
 
     add_custom_command(
