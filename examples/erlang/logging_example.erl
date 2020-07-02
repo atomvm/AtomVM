@@ -1,7 +1,7 @@
 %
 % This file is part of AtomVM.
 %
-% Copyright 2019 Fred Dushin <fred@dushin.net>
+% Copyright 2023 Fred Dushin <fred@dushin.net>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -18,13 +18,27 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module(tests).
+-module(logging_example).
 
--export([start/0]).
+-export([start/0, log/2]).
+
+-include_lib("kernel/include/logger.hrl").
 
 start() ->
-    etest:test([
-        test_file,
-        test_port,
-        test_timer_manager
-    ]).
+    {ok, _Pid} = logger_manager:start_link(#{
+        log_level => info,
+        logger => [
+            {handler, my_handler, ?MODULE, #{config => #{foo => bar}}}
+        ]
+    }),
+
+    ?LOG_INFO("This is an info log message.", [], #{bar => tapas}),
+    ?LOG_INFO(#{this => is, a => report}),
+
+    logger_manager:stop(),
+
+    ok.
+
+%% log handler
+log(LogEvent, HandlerConfig) ->
+    io:format("Received log event: ~p with config ~p~n", [LogEvent, HandlerConfig]).

@@ -37,6 +37,8 @@ set(ERLANG_MODULES
     lists
     maps
     math
+    logger
+    logger_std_h
     proplists
     string
     timer

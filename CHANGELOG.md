@@ -52,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for `calendar:datetime_to_gregorian_seconds/1`
 - Added support for Raspberry Pi Pico
 - Added support for nodejs with Wasm
+- Added support for a subset of the OTP logger interface
 
 ### Fixed
 - Fixed issue with formatting integers with io:format() on STM32 platform
@@ -77,6 +78,7 @@ check the return value will need to be modified.
 returning the tuple `{ok, Binary}` when successful.
 - The return type of many `i2c` operations under error conditions has changed from
 `error` to `{error, Reason}`, for improved diagnostics.
+- The eavmlib logger interface has been removed
 
 ### Removed
 - ESP-IDF v3.x support.

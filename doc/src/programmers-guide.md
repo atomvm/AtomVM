@@ -328,6 +328,156 @@ Note that the `io_lib` module can be used to format string data, as well.
 
 > Note. Formatting parameters are currently limited to `~p`, `~s`, and `~n`.
 
+### Logging
+
+AtomVM supports a subset of the OTP logging facility, allowing users to send log event to log handlers (by default, the console), and to install handlers that handle log events.
+
+To log events, you are encouraged to use the logging macros from the OTP `kernel` application.  You can use these macros at compile time, and the generated code can be run in AtomVM.
+
+For example:
+
+    %% erlang
+    -include_lib("kernel/include/logger.hrl").
+    ...
+    ?LOG_NOTICE("Something happened that might require your attention: ~p", [TheThing])
+
+By default, this will result in a message displayed on the console, with a timestamp, log level, PID of the process that initiated the log message, the module, function, and function arity, together with the supplied log message:
+
+    2023-07-04T18:34:56.387 [notice] <0.1.0> test_logger:test_default_logger/0 Something happened that might require your attention: ThatThingThatHappened
+
+> Note that log messages need not (and generally should not) include newline separators (`~n`) in log format messages, unless necessary.
+
+Users may provide a format string, with an optional list of arguments.  Alternatively, users can provide a map encapsulating a "report" in lieu of a format string.  Reports provide a mechanism for supplying a set of structured data directly to log handlers (see below), without necessarily incurring the cost of formatting log messages.
+
+As with OTP, the following ordered log levels (from high to low) are supported:
+
+* `emergency`
+* `critical`
+* `alert`
+* `error`
+* `warning`
+* `notice`
+* `info`
+* `debug`
+
+By default, the logging facility drops any messages below `notice` level.  To set the default log level for the logging subsystem, see the `logger_manager` section, below.
+
+You can use the `logger` interface directly to log messages at different levels, but in general, the OTP logging macros are encouraged, as log events generated using the OTP macros include additional metadata (such as the location of the log event) you do not otherwise get using the functions in the `logger` module.
+
+For example, the expression
+
+    logger:notice("Something happened that might require your attention: ~p", [TheThing])
+
+may seem similar to using the `?LOG_NOTICE` macro, but less contextual information will be included in the log event.
+
+For more information about the OTP logging facility, see the Erlang/OTP [Logging](https://www.erlang.org/doc/apps/kernel/logger_chapter.html) chapter.
+
+> Note.  AtomVM does not currently support programmatic configuration of the logging subsystem.  All changes to default behavior should be done via the AtomVM `logger_manager` module (see below).
+
+#### The `logger_manager`
+
+In order to use the `logger` interface, you will need to first start the AtomVM `logger_manager` service.
+
+> Note.  Future versions of AtomVM may automatically start the logging subsystem as part of a kernel application, but currently, this service must be managed manually.
+
+To start the `logger_manager`, use the `logger_manager:start_link/1` function, passing in a configuration map for the logging subsystem.
+
+For example, the default logging framework can be started via:
+
+    %% erlang
+    {ok, _Pid} = logger_manager:start_link(#{})
+
+> Note.  The logger_manager is a registered process, so the returned Pid may be ignored.
+
+The configuration map supplied to the logger_manager may contain the following keys:
+
+| Key | Type | Default| Description |
+|-----|------|--------|-------------|
+| `log_level` | `log_level()` | `notice` | Primary log level |
+| `logger` | `logger_config()` | `{handler, default, logger_std_h, undefined}` | Log configuration |
+| `module_level` | `module_level()` | `undefined` | Log level specific to a set of modules |
+
+where `log_level()` is defined to be:
+
+    -type log_level() :: emergency | critical | alert | error | warning | notice | info | debug.
+
+and `logger_config()` is defined as follows:
+
+    -type handler_id() :: default | atom().
+    -type handler_config() :: #{
+        id => atom(),
+        module => module(),
+        level => logger:level() | all | none,
+        config => term()
+    }.
+    -type logger_config() :: [
+        {handler, default, undefined} |
+        {handler, HandlerId :: handler_id(), Handler :: module(), HandlerConfig :: handler_config()} |
+        {module_level, logger:level(), [module()]}
+    ].
+
+You can set the log level for all log handlers by setting the `log_level` in this configuration map.  Any messages that are logged at levels "higher" than or equal to the configured log level will be logged by all log handlers.
+
+The standard logger (`logger_std_h`) is included by default, if no default logger is specified (and if the default logger is not disabled -- see below).  The standard logger will output log events to the console.
+
+You can specify multiple log handlers in the `logger` configuration.  If a log entry is allowed for a given log level, then each log handler will handle the log message.  For example, you might have a log handler that sends messages over the network to a syslog daemon, or you might have another handler that writes log messages to a file.
+
+You can pass handler configuration int the `config` element of the `handler_config()` you specify when specifying a logger.  The value of the `config` element can be any term and is made available to log handlers when events are logged (see below).
+
+If the tuple `{handler, default, undefined}` is included in the logger configuration, the default logger will be disabled.
+
+At most one `default` logger can be specified.  If you want to replace the `default` logger (`logger_std_h`), then specify a logger with the handler id `default`.
+
+You can specify different log levels for specific modules.  For example, if you want to set the default log level for all handlers to be `notice` or higher, you can set the log level for a given module to `info`, and all `info` and higher messages will be logged for that module or set of modules.  Conversely, you can "quiet" a module if it is particularly noisy by setting its level to something relatively high.
+
+For more information about how to configure the logging subsystem, see the [Kernel Configuration Parameters](https://www.erlang.org/doc/apps/kernel/logger_chapter.html#kernel-configuration-parameters) section of the OTP Logging chapter.
+
+You can stop the `logger_manager` via the `logger_manager:stop/0` function:
+
+    %% erlang
+    ok = logger_manager:stop()
+
+#### Writing your own log handler
+
+Additional loggers can be enabled via handler specifications.  A handler module must implement and export the `log/2` function, which takes a log event and a term containing the configuration for the logger handler instance.
+
+For example:
+
+    %% erlang
+    -module(my_module).
+
+    -export([..., log/2, ...]).
+
+    log(LogEvent, HandlerConfig) ->
+        %% do something with the log event
+        %% return value is ignored
+
+You can specify this handler in the `logger_manager` configuration (see above) via a stanza such as:
+
+    {handler, my_id, my_module, HandlerConfig}
+
+A `LogEvent` is a map structure containing the following fields:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `timestamp` | `integer()` | The time (in microseconds since the UNIX epoch) at which the log event was generated |
+| `level` | `logger:level()` | The log level with which the log event was generated |
+| `pid` | `pid()` | The process id of the Erlang process in which the event was generated |
+| `msg`  | `string() \| {string(), list()}` | The message format and arguments passed when the event was generated |
+| `meta` | `map()` | Metadata passed when the event was generated. |
+
+If the log event was generated using a logging macro, then the `meta` map also contains a `location` field with the following fields:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `file` | `string()` | The path of the file in which the event was generated |
+| `line` | `non_neg_integer()` | The line number in the file in which the event was generated |
+| `mfa` | `{module(), function_name(), arity()}` | The MFA of the function in which the event was generated |
+
+The handler config is a map structure containing the id and module of the handler.
+
+an arbitrary term and is passed into the log handler via configuration of the `logger_manager` (see above).
+
 ### Process Management
 
 You can obtain a list of all processes in the system via `erlang:processes/0`:
