@@ -7,6 +7,7 @@ project(estdlib)
 include(BuildErlang)
 
 set(ERLANG_MODULES
+    base64
     calendar
     gen_server
     gen_statem
