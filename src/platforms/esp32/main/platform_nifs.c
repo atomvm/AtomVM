@@ -21,6 +21,7 @@
 
 #include "atom.h"
 #include "defaultatoms.h"
+#include "interop.h"
 #include "platform_defaultatoms.h"
 #include "nifs.h"
 #include "memory.h"
@@ -347,6 +348,79 @@ static term nif_esp_freq_hz(Context *ctx, int argc, term argv[])
     return term_from_int(APB_CLK_FREQ);
 }
 
+static const esp_partition_t *get_partition(term partition_name_term, bool *valid_string)
+{
+    int ok;
+    char *partition_name = interop_term_to_string(partition_name_term, &ok);
+    if (UNLIKELY(!ok)) {
+        *valid_string = false;
+        return NULL;
+    }
+    *valid_string = true;
+
+    const esp_partition_t *partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, partition_name);
+
+    free(partition_name);
+
+    return partition;
+}
+
+static term nif_esp_partition_erase_range(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    bool valid_partition_string;
+    const esp_partition_t *partition = get_partition(argv[0], &valid_partition_string);
+    if (UNLIKELY(!valid_partition_string)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (IS_NULL_PTR(partition)) {
+        return ERROR_ATOM;
+    }
+
+    VALIDATE_VALUE(argv[1], term_is_integer);
+    avm_int_t offset = term_to_int(argv[1]);
+
+    VALIDATE_VALUE(argv[2], term_is_integer);
+    avm_int_t size = term_to_int(argv[2]);
+
+    esp_err_t res = esp_partition_erase_range(partition, offset, size);
+    if (UNLIKELY(res != ESP_OK)) {
+        return ERROR_ATOM;
+    }
+
+    return OK_ATOM;
+}
+
+static term nif_esp_partition_write(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    bool valid_partition_string;
+    const esp_partition_t *partition = get_partition(argv[0], &valid_partition_string);
+    if (UNLIKELY(!valid_partition_string)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (IS_NULL_PTR(partition)) {
+        return ERROR_ATOM;
+    }
+
+    VALIDATE_VALUE(argv[1], term_is_integer);
+    avm_int_t offset = term_to_int(argv[1]);
+
+    term binary_term = argv[2];
+    VALIDATE_VALUE(binary_term, term_is_binary);
+    avm_int_t size = term_binary_size(binary_term);
+    const char *data = term_binary_data(binary_term);
+
+    esp_err_t res = esp_partition_write(partition, offset, data, size);
+    if (UNLIKELY(res != ESP_OK)) {
+        return ERROR_ATOM;
+    }
+
+    return OK_ATOM;
+}
+
 static term nif_rom_md5(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -423,6 +497,16 @@ static const struct Nif esp_freq_hz_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_freq_hz
 };
+static const struct Nif esp_partition_erase_range_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_partition_erase_range
+};
+static const struct Nif esp_partition_write_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_partition_write
+};
 static const struct Nif rom_md5_nif =
 {
     .base.type = NIFFunctionType,
@@ -475,6 +559,14 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     if (strcmp("esp:freq_hz/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_freq_hz_nif;
+    }
+    if (strcmp("esp:partition_erase_range/3", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_partition_erase_range_nif;
+    }
+    if (strcmp("esp:partition_write/3", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_partition_write_nif;
     }
     if (strcmp("erlang:md5/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
