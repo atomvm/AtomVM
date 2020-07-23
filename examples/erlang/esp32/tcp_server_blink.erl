@@ -9,7 +9,7 @@ start() ->
         {ssid, esp:nvs_get_binary(atomvm, sta_ssid, <<"myssid">>)},
         {psk,  esp:nvs_get_binary(atomvm, sta_psk, <<"mypsk">>)}
     ],
-    case network_fsm:wait_for_sta(Creds, 30000) of
+    case network:wait_for_sta(Creds, 30000) of
         {ok, {Address, Netmask, Gateway}} ->
             io:format(
                 "Acquired IP address: ~p Netmask: ~p Gateway: ~p~n",

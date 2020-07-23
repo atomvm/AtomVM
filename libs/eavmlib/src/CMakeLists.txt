@@ -16,6 +16,7 @@ set(ERLANG_MODULES
     json_encoder
     ledc
     logger
+    network
     network_fsm
     spi
     timer_manager

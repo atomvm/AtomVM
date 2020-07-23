@@ -118,7 +118,7 @@ typedef struct ClientData
 
 static wifi_config_t *get_sta_wifi_config(term sta_config)
 {
-    if (term_is_nil(sta_config)) {
+    if (term_is_invalid_term(sta_config)) {
         TRACE("No STA config\n");
         return NULL;
     }
@@ -203,7 +203,7 @@ static char *get_default_device_name()
 
 static wifi_config_t *get_ap_wifi_config(term ap_config)
 {
-    if (term_is_nil(ap_config)) {
+    if (term_is_invalid_term(ap_config)) {
         TRACE("No AP config\n");
         return NULL;
     }
@@ -284,20 +284,20 @@ static wifi_config_t *get_ap_wifi_config(term ap_config)
     return wifi_config;
 }
 
-static void maybe_set_sntp(term sntp_term)
+static void maybe_set_sntp(term sntp_config)
 {
 #if ESP_IDF_VERSION_MAJOR < 4
-    if (!term_is_nil(sntp_term)) {
+    if (!term_is_nil(sntp_config) && !term_is_nil(interop_proplist_get_value(sntp_config, HOST_ATOM))) {
         int ok;
-        char *sntp = interop_term_to_string(sntp_term, &ok);
+        char *host = interop_term_to_string(interop_proplist_get_value(sntp_config, HOST_ATOM), &ok);
         if (LIKELY(ok)) {
             // do not free(sntp)
             sntp_setoperatingmode(SNTP_OPMODE_POLL);
-            sntp_setservername(0, sntp);
+            sntp_setservername(0, host);
             sntp_init();
-            ESP_LOGI("NETWORK", "SNTP initialized with sntp host set to %s\n", sntp);
+            ESP_LOGI("NETWORK", "SNTP initialized with host set to %s", host);
         } else {
-            fprintf(stderr, "Unable to set sntp host to %s\n", sntp);
+            fprintf(stderr, "Unable to locate sntp host in configuration\n");
         }
     }
 #else
@@ -326,7 +326,7 @@ static void set_dhcp_hostname(term dhcp_hostname_term)
     }
     esp_err_t status = tcpip_adapter_set_hostname(WIFI_IF_STA, dhcp_hostname);
     if (status == ESP_OK) {
-        ESP_LOGI("NETWORK", "DHCP hostname set to %s\n", dhcp_hostname);
+        ESP_LOGI("NETWORK", "DHCP hostname set to %s", dhcp_hostname);
     } else {
         ESP_LOGW("NETWORK", "Unable to set DHCP hostname to %s.  status=%d", dhcp_hostname, status);
     }
@@ -338,9 +338,9 @@ static void network_driver_start(Context *ctx, term pid, term ref, term config)
     //
     // Get the STA and AP config, if set
     //
-    term sta_config = interop_proplist_get_value(config, STA_ATOM);
-    term ap_config = interop_proplist_get_value(config, AP_ATOM);
-    if (term_is_nil(sta_config) && term_is_nil(ap_config)) {
+    term sta_config = interop_proplist_get_value_default(config, STA_ATOM, term_invalid_term());
+    term ap_config = interop_proplist_get_value_default(config, AP_ATOM, term_invalid_term());
+    if (term_is_invalid_term(sta_config) && term_is_invalid_term(ap_config)) {
         fprintf(stderr, "Expected STA or AP configuration but got neither.\n");
         term reply = port_create_error_tuple(ctx, BADARG_ATOM);
         port_send_reply(ctx, pid, ref, reply);
