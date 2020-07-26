@@ -5,5 +5,7 @@ build/**
 xcode/**
 src/platforms/esp32/build/**
 src/platforms/esp32/build/**/*.d
+src/platforms/esp32/components/**
+!src/platforms/esp32/components/libatomvm/
 .idea/**
 .vscode/**

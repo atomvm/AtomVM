@@ -32,6 +32,31 @@ Once built, these binaries are "flashed" (i.e., uploaded, typically over the ser
 
 > Note that the AtomVM build will also build all of the "components" from the IDF SDK, which can sometimes take additional time to build on an initial run.  However, the Xtensa toolchain linker will only add code and symbols that are explicitly called from the AtomVM codebase, so the executable image size is typically less than the sum of the components that are compiled as part of the build.
 
+### Adding custom Nifs and third-party components
+
+You can create custom Nifs additional third-party components to your ESP32 build by adding them to the `components` directory, and the ESP32 build will compile them automatically.
+
+If you would like to create a new AtomVM Nif that is linked into the ESP32 image (but which is not part of the AtomVM distribution), you should create a "Nif component", which is an IDF SDK component, and which obeys certain naming and organizational conventions so that the AtomVM build can locate the required header files and functions needed to link the Nif driver into the AtomVM image.
+
+> For more information about building components for the IDF SDK, consult the [IDF SDK Build System](https://docs.espressif.com/projects/esp-idf/en/v3.3.2/api-guides/build-system.html#) documentation.
+
+Generally, this requires the following steps:
+
+* Create an IDF SDK component, as described in the IDF SDK documentation
+* Select a moniker that is unique to your nif, such as `my_great_driver`
+* Create a header file called `my_great_driver.h` that can be located by your build
+* The header file should contain a declaration of the `<moniker>_nifs_get_nif` Nif locator function, which takes a nif name and returns a const pointer to a `struct Nif`, e.g.,
+
+    const struct Nif *my_great_driver_nifs_get_nif(const char *nifname);
+
+* Create a `component_nifs.txt` file in the `main` directory of the AtomVM `esp32` build tree that contains your moniker on a single line, e.g.,
+
+    my_great_driver
+
+> Note.  You may include several such driver monikers in your `component_nifs.txt` file.  If the `component_nifs.txt` file is empty or does not exist, then no additional components or nifs will be linked into your AtomVM image.
+
+The AtomVM build will generate a new file, `component_nifs.c`, which will include your Nif driver header file and will call your Nif locator function.
+
 ## Flash Layout
 
 The AtomVM Flash memory is partitioned to include areas for the above binary artifacts created from the build, as well areas for runtime information used by the ESP32 and compiled Erlang/Elixire code.
