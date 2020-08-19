@@ -26,6 +26,7 @@
 #include "nifs.h"
 #include "memory.h"
 #include "term.h"
+#include "component_nifs.h"
 
 #include <stdlib.h>
 #include <esp_system.h>
@@ -581,6 +582,9 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         return nif;
     }
     if ((nif = gpio_nifs_get_nif(nifname)) != NULL) {
+        return nif;
+    }
+    if ((nif = component_nifs_get_nif(nifname)) != NULL) {
         return nif;
     }
     return NULL;
