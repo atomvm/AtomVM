@@ -72,6 +72,7 @@ int main(int argc, char **argv)
 
     if (argc == 2 && iff_is_valid_beam(mapped_file[0]->mapped)) {
         glb->avmpack_platform_data = NULL;
+        startup_module_name = argv[1];
         startup_beam = mapped_file[0]->mapped;
         startup_beam_size = mapped_file[0]->size;
     } else {
