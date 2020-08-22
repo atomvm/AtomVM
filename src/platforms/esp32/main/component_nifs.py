@@ -29,7 +29,7 @@ def insert(component_nif, component_nifs_txt) :
     buf += "#include <%s.h>\n" % component_nif
     components_pos = component_nifs_txt.find("// COMPONENTS")
     buf += component_nifs_txt[includes_pos:components_pos]
-    buf += "if ((nif = %s_nifs_get_nif(nifname)) != NULL) { return nif; }\n    " % component_nif
+    buf += "if ((nif = %s_get_nif(nifname)) != NULL) { return nif; }\n    " % component_nif
     buf += component_nifs_txt[components_pos:]
     return buf
 
