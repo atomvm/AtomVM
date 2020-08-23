@@ -171,7 +171,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
 
     Module *mod = malloc(sizeof(Module));
     if (IS_NULL_PTR(mod)) {
-        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        fprintf(stderr, "Error: Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         return NULL;
     }
     memset(mod, 0, sizeof(Module));
@@ -180,11 +180,13 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     mod->global = global;
 
     if (UNLIKELY(module_populate_atoms_table(mod, beam_file + offsets[AT8U]) != MODULE_LOAD_OK)) {
+        fprintf(stderr, "Error: Failed to populate atoms table: %s:%i.\n", __FILE__, __LINE__);
         module_destroy(mod);
         return NULL;
     }
 
     if (UNLIKELY(module_build_imported_functions_table(mod, beam_file + offsets[IMPT]) != MODULE_LOAD_OK)) {
+        fprintf(stderr, "Error: Failed to build imported functions table: %s:%i.\n", __FILE__, __LINE__);
         module_destroy(mod);
         return NULL;
     }
@@ -200,6 +202,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     mod->str_table_len = sizes[STRT];
     mod->labels = calloc(ENDIAN_SWAP_32(mod->code->labels), sizeof(void *));
     if (IS_NULL_PTR(mod->labels)) {
+        fprintf(stderr, "Error: Null module lables: %s:%i.\n", __FILE__, __LINE__);
         module_destroy(mod);
         return NULL;
     }
@@ -212,7 +215,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
                 return NULL;
             }
         #else
-            fprintf(stderr, "zlib required to uncompress literals.\n");
+            fprintf(stderr, "Error: zlib required to uncompress literals.\n");
             module_destroy(mod);
             return NULL;
         #endif
