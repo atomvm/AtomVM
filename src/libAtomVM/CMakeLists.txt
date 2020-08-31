@@ -13,6 +13,7 @@ set(HEADER_FILES
     ccontext.h
     debug.h
     defaultatoms.h
+    dictionary.h
     exportedfunction.h
     externalterm.h
     globalcontext.h
@@ -51,6 +52,7 @@ set(SOURCE_FILES
     context.c
     debug.c
     defaultatoms.c
+    dictionary.c
     externalterm.c
     globalcontext.c
     iff.c

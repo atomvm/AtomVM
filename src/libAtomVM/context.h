@@ -78,6 +78,8 @@ struct Context
 
     struct ListHead mailbox;
 
+    struct ListHead dictionary;
+
     GlobalContext *global;
 
     //Ports support

@@ -89,4 +89,6 @@ term bif_erlang_less_than_2(Context *ctx, term arg1, term arg2);
 term bif_erlang_less_than_or_equal_2(Context *ctx, term arg1, term arg2);
 term bif_erlang_greater_than_or_equal_2(Context *ctx, term arg1, term arg2);
 
+term bif_erlang_get_1(Context *ctx, term arg1);
+
 #endif

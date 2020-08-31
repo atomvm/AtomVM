@@ -19,6 +19,7 @@
 
 #include "context.h"
 
+#include "dictionary.h"
 #include "globalcontext.h"
 #include "list.h"
 #include "mailbox.h"
@@ -60,6 +61,7 @@ Context *context_new(GlobalContext *glb)
     list_append(&glb->ready_processes, &ctx->processes_list_head);
 
     list_init(&ctx->mailbox);
+    list_init(&ctx->dictionary);
 
     ctx->global = glb;
 
@@ -99,6 +101,8 @@ Context *context_new(GlobalContext *glb)
 void context_destroy(Context *ctx)
 {
     linkedlist_remove(&ctx->global->processes_table, &ctx->processes_table_head);
+
+    dictionary_destroy(&ctx->dictionary);
 
     free(ctx->heap_start);
     free(ctx);

@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include "context.h"
+#include "dictionary.h"
 #include "list.h"
 #include "debug.h"
 #include "memory.h"
@@ -129,6 +130,13 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
     for (int i = stack_size - 1; i >= 0; i--) {
         term new_root = memory_shallow_copy_term(stack[i], &heap_ptr, 1);
         push_to_stack(&stack_ptr, new_root);
+    }
+
+    struct ListHead *item;
+    LIST_FOR_EACH(item, &ctx->dictionary) {
+        struct DictEntry *entry = GET_LIST_ENTRY(item, struct DictEntry, head);
+        entry->key = memory_shallow_copy_term(entry->key, &heap_ptr, 1);
+        entry->value = memory_shallow_copy_term(entry->value, &heap_ptr, 1);
     }
 
     term *temp_start = new_heap;

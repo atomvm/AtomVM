@@ -27,6 +27,7 @@
 
 #include "atom.h"
 #include "defaultatoms.h"
+#include "dictionary.h"
 #include "overflow_helpers.h"
 #include "trace.h"
 #include "utils.h"
@@ -1342,4 +1343,9 @@ term bif_erlang_greater_than_or_equal_2(Context *ctx, term arg1, term arg2)
     } else {
         return FALSE_ATOM;
     }
+}
+
+term bif_erlang_get_1(Context *ctx, term arg1)
+{
+    return dictionary_get(&ctx->dictionary, ctx, arg1);
 }

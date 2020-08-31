@@ -25,6 +25,7 @@
 #include "avmpack.h"
 #include "context.h"
 #include "defaultatoms.h"
+#include "dictionary.h"
 #include "interop.h"
 #include "mailbox.h"
 #include "module.h"
@@ -89,6 +90,7 @@ static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_existing_atom_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_display_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_erase_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_error(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_fun_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[]);
@@ -121,6 +123,7 @@ static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[]);
 static term nif_erlang_process_flag(Context *ctx, int argc, term argv[]);
 static term nif_erlang_processes(Context *ctx, int argc, term argv[]);
 static term nif_erlang_process_info(Context *ctx, int argc, term argv[]);
+static term nif_erlang_put_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[]);
 static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[]);
@@ -223,6 +226,12 @@ static const struct Nif display_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_display_1
+};
+
+static const struct Nif erase_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_erase_1
 };
 
 static const struct Nif error_nif =
@@ -421,6 +430,12 @@ static const struct Nif process_info_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_process_info
+};
+
+static const struct Nif put_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_put_2
 };
 
 static const struct Nif system_info_nif =
@@ -2404,6 +2419,20 @@ static term nif_erlang_make_fun_3(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(arity_term, term_is_integer);
 
     return term_make_function_reference(module_term, function_term, arity_term, ctx);
+}
+
+static term nif_erlang_put_2(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    return dictionary_put(&ctx->dictionary, ctx, argv[0], argv[1]);
+}
+
+static term nif_erlang_erase_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    return dictionary_erase(&ctx->dictionary, ctx, argv[0]);
 }
 
 // AtomVM extension
