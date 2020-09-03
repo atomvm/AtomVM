@@ -415,6 +415,7 @@ struct Test tests[] =
     {"large_int_literal.beam", 5953},
 
     {"test_base64.beam", 0},
+    {"test_dict.beam", 2020},
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
