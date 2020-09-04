@@ -96,6 +96,10 @@ void app_main()
     }
 
     Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
+    if (IS_NULL_PTR(mod)) {
+        fprintf(stderr, "Error.  Unable to load startup module %s\n", startup_module_name);
+        abort();
+    }
     globalcontext_insert_module_with_filename(glb, mod, startup_module_name);
     Context *ctx = context_new(glb);
     ctx->leader = 1;
