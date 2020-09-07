@@ -51,7 +51,7 @@ int main(int argc, char **argv)
     }
 
     int num_mapped_files = argc - 1;
-    MappedFile **mapped_file = malloc(num_mapped_files);
+    MappedFile **mapped_file = malloc(num_mapped_files * sizeof(MappedFile *));
     if (UNLIKELY(IS_NULL_PTR(mapped_file))) {
         fprintf(stderr, "Memory error:  Unable to allocate space for %d mapped files\n", num_mapped_files);
         return EXIT_FAILURE;
