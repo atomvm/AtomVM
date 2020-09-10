@@ -45,9 +45,9 @@ Generally, this requires the following steps:
 * Create an IDF SDK component, as described in the IDF SDK documentation
 * Select a moniker that is unique to your nif, such as `my_nif`
 * Create a header file called `my_nif.h` that can be located by your component's build
-* The header file should contain a declaration of the `<moniker>_nifs_get_nif` Nif locator function, which takes a nif name and returns a const pointer to a `struct Nif`, e.g.,
+* The header file should contain a declaration of the `<moniker>_get_nif` Nif locator function, which takes a nif name and returns a const pointer to a `struct Nif`, e.g.,
 
-    const struct Nif *my_nif_nifs_get_nif(const char *nifname);
+    const struct Nif *my_nif_get_nif(const char *nifname);
 
 * Create a `component_nifs.txt` file in the `main` directory of the AtomVM `esp32` build tree that contains your moniker on a single line, e.g.,
 
