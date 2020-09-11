@@ -25,6 +25,7 @@
 -module(erlang).
 
 -export([
+    apply/3,
     start_timer/3, start_timer/4, cancel_timer/1, send_after/3,
     process_info/2, system_info/1,
     md5/1
@@ -158,3 +159,26 @@ system_info(_Key) ->
 -spec md5(Data::binary()) -> binary().
 md5(Data) when is_binary(Data) ->
     throw(nif_error).
+
+apply(Module, Function, Args) ->
+    case Args of
+        [] ->
+            Module:Function();
+        [Arg1] ->
+            Module:Function(Arg1);
+        [Arg1, Arg2] ->
+            Module:Function(Arg1, Arg2);
+        [Arg1, Arg2, Arg3] ->
+            Module:Function(Arg1, Arg2, Arg3);
+        [Arg1, Arg2, Arg3, Arg4] ->
+            Module:Function(Arg1, Arg2, Arg3, Arg4);
+        [Arg1, Arg2, Arg3, Arg4, Arg5] ->
+            Module:Function(Arg1, Arg2, Arg3, Arg4, Arg5);
+        [Arg1, Arg2, Arg3, Arg4, Arg5, Arg6] ->
+            Module:Function(Arg1, Arg2, Arg3, Arg4, Arg5, Arg6);
+        [Arg1, Arg2, Arg3, Arg4, Arg5, Arg6, Arg7] ->
+            Module:Function(Arg1, Arg2, Arg3, Arg4, Arg5, Arg6, Arg7);
+        [Arg1, Arg2, Arg3, Arg4, Arg5, Arg6, Arg7, Arg8] ->
+            Module:Function(Arg1, Arg2, Arg3, Arg4, Arg5, Arg6, Arg7, Arg8);
+        _ -> throw(badarg)
+    end.
