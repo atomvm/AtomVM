@@ -25,6 +25,8 @@
 #ifndef _BIF_H_
 #define _BIF_H_
 
+#include <stdbool.h>
+
 #include "atom.h"
 #include "context.h"
 #include "exportedfunction.h"
@@ -33,6 +35,8 @@
 #define MAX_BIF_NAME_LEN 260
 
 BifImpl bif_registry_get_handler(AtomString module, AtomString function, int arity);
+bool bif_registry_is_gc_bif(AtomString module, AtomString function, int arity);
+
 term bif_erlang_self_0(Context *ctx);
 term bif_erlang_byte_size_1(Context *ctx, int live, term arg1);
 term bif_erlang_bit_size_1(Context *ctx, int live, term arg1);
