@@ -163,9 +163,5 @@ fapply(Module, Function, Args) ->
             Module:Function(Arg1, Arg2, Arg3, Arg4, Arg5);
         [Arg1, Arg2, Arg3, Arg4, Arg5, Arg6] ->
             Module:Function(Arg1, Arg2, Arg3, Arg4, Arg5, Arg6);
-        [Arg1, Arg2, Arg3, Arg4, Arg5, Arg6, Arg7] ->
-            Module:Function(Arg1, Arg2, Arg3, Arg4, Arg5, Arg6, Arg7);
-        [Arg1, Arg2, Arg3, Arg4, Arg5, Arg6, Arg7, Arg8] ->
-            Module:Function(Arg1, Arg2, Arg3, Arg4, Arg5, Arg6, Arg7, Arg8);
         _ -> throw(badarg)
     end.
