@@ -375,6 +375,10 @@ compile_erlang(large_int_literal)
 compile_erlang(test_base64)
 compile_erlang(test_dict)
 
+compile_erlang(alisp)
+compile_erlang(sexp_parser)
+compile_erlang(sexp_lexer)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -742,4 +746,8 @@ add_custom_target(erlang_test_modules DEPENDS
 
     test_base64.beam
     test_dict.beam
+
+    alisp.beam
+    sexp_parser.beam
+    sexp_lexer.beam
 )

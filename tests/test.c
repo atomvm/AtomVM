@@ -417,6 +417,8 @@ struct Test tests[] =
     {"test_base64.beam", 0},
     {"test_dict.beam", 2020},
 
+    {"alisp.beam", 42},
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}
