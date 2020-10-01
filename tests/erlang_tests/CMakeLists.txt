@@ -379,6 +379,8 @@ compile_erlang(alisp)
 compile_erlang(sexp_parser)
 compile_erlang(sexp_lexer)
 
+compile_erlang(test_multidigit_arity)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -750,4 +752,6 @@ add_custom_target(erlang_test_modules DEPENDS
     alisp.beam
     sexp_parser.beam
     sexp_lexer.beam
+
+    test_multidigit_arity.beam
 )

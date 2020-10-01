@@ -419,6 +419,8 @@ struct Test tests[] =
 
     {"alisp.beam", 42},
 
+    {"test_multidigit_arity.beam", 3},
+
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
     {NULL, 0}

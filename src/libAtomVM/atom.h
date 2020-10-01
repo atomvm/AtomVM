@@ -30,7 +30,11 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-typedef const void * AtomString;
+typedef const void *AtomString;
+
+// Defines the maximum number of digits valid for a function arity
+#define MAX_ARITY_LENGTH 3
+#define MAX_ARITY_VALUE 255
 
 /**
  * @brief Gets a C string from an AtomString
@@ -61,7 +65,7 @@ int atom_are_equals(AtomString a, AtomString b);
  */
 static inline int atom_string_len(AtomString atom_str)
 {
-    return *((const uint8_t *) atom_str);
+    return *((const uint8_t *)atom_str);
 }
 
 /**
@@ -73,7 +77,7 @@ static inline int atom_string_len(AtomString atom_str)
  */
 static inline const void *atom_string_data(AtomString atom_str)
 {
-    return ((const uint8_t *) atom_str) + 1;
+    return ((const uint8_t *)atom_str) + 1;
 }
 
 /**
