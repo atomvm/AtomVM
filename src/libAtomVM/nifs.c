@@ -536,7 +536,6 @@ const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
 
     int function_name_len = atom_string_len(function);
     if (UNLIKELY((arity > 9) || (module_name_len + function_name_len + 4 > MAX_NIF_NAME_LEN))) {
-        fprintf(stderr, "function: %s\narity: %u\n", atom_string_data(function), arity);
         abort();
     }
     memcpy(nifname + module_name_len + 1, atom_string_data(function), function_name_len);
