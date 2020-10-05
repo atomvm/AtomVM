@@ -56,7 +56,7 @@ int atom_are_equals(AtomString a, AtomString b)
 void atom_write_mfa(char *buf, size_t buf_size, AtomString module, AtomString function, int arity)
 {
 
-    unsigned int arity_num_digits = 0;
+    char arity_num_digits = 0;
     // Simple calculation because we don't expect arities greater than 255
     if (arity < 10) {
         arity_num_digits = 1;
@@ -82,5 +82,34 @@ void atom_write_mfa(char *buf, size_t buf_size, AtomString module, AtomString fu
     // Calculate the offset so we can get the pointer to the following unfilled position in the buffer
     unsigned int offset = sizeof(char) * (module_name_len + function_name_len + 1);
     char *arity_offset_start = buf + offset;
-    snprintf(arity_offset_start, arity_num_digits + 2, "/%u", arity);
+    concat_arity(arity_offset_start, arity_num_digits+2, arity);
+}
+
+void concat_arity(char *arity_offset_start, char max_len, int arity) {
+    // set this to another variable so we can mutate it and calculate
+    // the digits as separate numbers
+    int n = arity;
+    char first_digit = n % 10;
+    n = n / 10;
+    char second_digit = n % 10;
+    n = n / 10;
+    char third_digit = n % 10;
+
+    char suffix[4] = {'/', '\0', '\0', '\0'};
+
+    // Since we always have at most 3 chars for the arity
+    // And most functions have < 10 chars, this logic is
+    // sufficient to handle the string conversion
+    if (arity < 10) {
+        suffix[1] = first_digit;
+    } else if (arity < 100) {
+        suffix[1] = second_digit;
+        suffix[2] = first_digit;
+    } else {
+        suffix[1] = third_digit;
+        suffix[2] = second_digit;
+        suffix[3] = first_digit;
+    }
+
+    memcpy(arity_offset_start, suffix, max_len);
 }
