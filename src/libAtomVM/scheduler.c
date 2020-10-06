@@ -55,6 +55,11 @@ Context *scheduler_wait(GlobalContext *global, Context *c)
     #endif
     scheduler_make_waiting(global, c);
 
+    return scheduler_do_wait(global);
+}
+
+Context *scheduler_do_wait(GlobalContext *global)
+{
     do {
         update_timer_wheel(global);
         sys_consume_pending_events(global);

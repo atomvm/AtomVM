@@ -42,6 +42,8 @@
  */
 Context *scheduler_wait(GlobalContext *global, Context *c);
 
+Context *scheduler_do_wait(GlobalContext *global);
+
 /**
  * @brief make sure a process is on the ready queue
  *

@@ -51,6 +51,13 @@ static const char *const start_atom = "\x5" "start";
 static const char *const undef_atom = "\x5" "undef";
 static const char *const vm_abort_atom = "\x8" "vm_abort";
 
+static const char *const link_atom = "\x4" "link";
+static const char *const monitor_atom = "\x7" "monitor";
+static const char *const normal_atom = "\x6" "normal";
+static const char *const down_atom = "\x4" "DOWN";
+static const char *const process_atom = "\x7" "process";
+static const char *const nocatch_atom = "\x7" "nocatch";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -104,6 +111,13 @@ void defaultatoms_init(GlobalContext *glb)
 
     ok &= globalcontext_insert_atom(glb, undef_atom) == UNDEF_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, vm_abort_atom) == VM_ABORT_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, link_atom) == LINK_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, monitor_atom) == MONITOR_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, normal_atom) == NORMAL_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, down_atom) == DOWN_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, process_atom) == PROCESS_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, nocatch_atom) == NOCATCH_ATOM_INDEX;
 
     if (!ok) {
         abort();

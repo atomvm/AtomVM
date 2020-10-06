@@ -624,6 +624,8 @@ COLD_FUNC static void dump(Context *ctx)
         term_display(stderr, msg->message, ctx);
         fprintf(stderr, "\n");
     }
+
+    fprintf(stderr, "\n\n**End Of Crash Report**\n");
 }
 
 static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
@@ -1010,6 +1012,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             #endif
 
             #ifdef IMPL_EXECUTE_LOOP
+                ctx->exit_reason = NORMAL_ATOM;
                 goto terminate_context;
             #endif
             }
@@ -4594,17 +4597,34 @@ handle_error:
 
         dump(ctx);
 
+        {
+            int exit_reason_tuple_size = TUPLE_SIZE(2) + TUPLE_SIZE(2);
+            if (memory_ensure_free(ctx, exit_reason_tuple_size) != MEMORY_GC_OK) {
+                ctx->exit_reason = OUT_OF_MEMORY_ATOM;
+            } else {
+                term error_tuple = term_alloc_tuple(2, ctx);
+                term_put_tuple_element(error_tuple, 0, NOCATCH_ATOM);
+                term_put_tuple_element(error_tuple, 1, ctx->x[1]);
+
+                term exit_reason_tuple = term_alloc_tuple(2, ctx);
+                term_put_tuple_element(exit_reason_tuple, 0, error_tuple);
+                term_put_tuple_element(exit_reason_tuple, 1, term_nil());
+                ctx->exit_reason = exit_reason_tuple;
+            }
+        }
+
 terminate_context:
         TRACE("-- Code execution finished for %i--\n", ctx->process_id);
         if (ctx->leader) {
             return 0;
         }
-        Context *scheduled_context = scheduler_wait(ctx->global, ctx);
+        GlobalContext *global = ctx->global;
+        scheduler_terminate(ctx);
+        Context *scheduled_context = scheduler_do_wait(global);
         if (UNLIKELY(scheduled_context == ctx)) {
             fprintf(stderr, "bug: scheduled a terminated process!\n");
             return 0;
         }
-        scheduler_terminate(ctx);
 
         ctx = scheduled_context;
         x_regs = ctx->x;

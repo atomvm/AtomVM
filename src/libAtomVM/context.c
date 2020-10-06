@@ -31,6 +31,21 @@
 #define DEFAULT_STACK_SIZE 8
 #define BYTES_PER_TERM (TERM_BITS / 8)
 
+struct Monitor
+{
+    struct ListHead monitor_list_head;
+
+    term monitor_pid;
+    uint64_t ref_ticks;
+
+    // this might be replaced with a handler function, this might be useful as a replacement
+    // to leader process field or for any other purposes.
+    // TODO: we might save useful bytes by assuming that ref_links == 0 means linked
+    bool linked : 1;
+};
+
+static void context_monitors_handle_terminate(Context *ctx);
+
 Context *context_new(GlobalContext *glb)
 {
     Context *ctx = malloc(sizeof(Context));
@@ -78,6 +93,8 @@ Context *context_new(GlobalContext *glb)
 
     timer_wheel_item_init(&ctx->timer_wheel_head, NULL, 0);
 
+    list_init(&ctx->monitors_head);
+
     #ifdef ENABLE_ADVANCED_TRACE
         ctx->trace_calls = 0;
         ctx->trace_call_args = 0;
@@ -96,6 +113,8 @@ Context *context_new(GlobalContext *glb)
     ctx->bs = term_invalid_term();
     ctx->bs_offset = 0;
 
+    ctx->exit_reason = NORMAL_ATOM;
+
     return ctx;
 }
 
@@ -104,6 +123,8 @@ void context_destroy(Context *ctx)
     linkedlist_remove(&ctx->global->processes_table, &ctx->processes_table_head);
 
     dictionary_destroy(&ctx->dictionary);
+
+    context_monitors_handle_terminate(ctx);
 
     free(ctx->heap_start);
     free(ctx);
@@ -135,4 +156,67 @@ size_t context_size(Context *ctx)
     return sizeof(Context)
         + messages_size
         + context_memory_size(ctx) * BYTES_PER_TERM;
+}
+
+static void context_monitors_handle_terminate(Context *ctx)
+{
+    struct ListHead *item;
+    struct ListHead *tmp;
+    MUTABLE_LIST_FOR_EACH(item, tmp, &ctx->monitors_head) {
+        struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
+        if (monitor->linked) {
+            int local_process_id = term_to_local_process_id(monitor->monitor_pid);
+            Context *target = globalcontext_get_process(ctx->global, local_process_id);
+
+            if (!IS_NULL_PTR(target)) {
+                target->exit_reason = memory_copy_term_tree(&ctx->heap_ptr, ctx->exit_reason);
+
+                // TODO: this cannot work on multicore systems
+                // target context should be marked as killed and terminated during next scheduling
+                scheduler_terminate(target);
+            }
+        } else {
+            int required_terms = REF_SIZE + TUPLE_SIZE(5);
+            if (UNLIKELY(memory_ensure_free(ctx, required_terms) != MEMORY_GC_OK)) {
+                //TODO: handle out of memory here
+                fprintf(stderr, "Cannot handle out of memory.\n");
+                abort();
+            }
+
+            // TODO: move it out of heap
+            term ref = term_from_ref_ticks(monitor->ref_ticks, ctx);
+
+            term info_tuple = term_alloc_tuple(5, ctx);
+            term_put_tuple_element(info_tuple, 0, DOWN_ATOM);
+            term_put_tuple_element(info_tuple, 1, ref);
+            term_put_tuple_element(info_tuple, 2, PROCESS_ATOM);
+            term_put_tuple_element(info_tuple, 3, term_from_local_process_id(ctx->process_id));
+            term_put_tuple_element(info_tuple, 4, ctx->exit_reason);
+
+            // TODO: we should scan for existing monitors when a context is destroyed
+            // otherwise memory might be wasted for long living processes
+            int local_process_id = term_to_local_process_id(monitor->monitor_pid);
+            Context *target = globalcontext_get_process(ctx->global, local_process_id);
+            if (!IS_NULL_PTR(target)) {
+                mailbox_send(target, info_tuple);
+            }
+        }
+        free(monitor);
+    }
+}
+
+uint64_t context_monitor(Context *ctx, term monitor_pid, bool linked)
+{
+    uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+
+    struct Monitor *monitor = malloc(sizeof(struct Monitor));
+    if (IS_NULL_PTR(monitor)) {
+        return 0;
+    }
+    monitor->monitor_pid = monitor_pid;
+    monitor->ref_ticks = ref_ticks;
+    monitor->linked = linked;
+    list_append(&ctx->monitors_head, &monitor->monitor_list_head);
+
+    return ref_ticks;
 }

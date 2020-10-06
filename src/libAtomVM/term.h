@@ -59,6 +59,8 @@
 #define BOXED_INT_SIZE (BOXED_TERMS_REQUIRED_FOR_INT + 1)
 #define BOXED_INT64_SIZE (BOXED_TERMS_REQUIRED_FOR_INT64 + 1)
 #define FLOAT_SIZE (sizeof(float_term_t) / sizeof(term) + 1)
+#define REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
+#define TUPLE_SIZE(elems) ((int) (elems + 1))
 
 #define TERM_DEBUG_ASSERT(...)
 
@@ -925,10 +927,8 @@ static inline int term_bs_insert_binary(term t, int offset, term src, int n)
  */
 static inline term term_from_ref_ticks(uint64_t ref_ticks, Context *ctx)
 {
-    int ref_size = (sizeof(uint64_t) / sizeof(term));
-
-    term *boxed_value = memory_heap_alloc(ctx, ref_size + 1);
-    boxed_value[0] = (ref_size << 6) | TERM_BOXED_REF;
+    term *boxed_value = memory_heap_alloc(ctx, REF_SIZE);
+    boxed_value[0] = ((REF_SIZE - 1) << 6) | TERM_BOXED_REF;
 
     #if TERM_BYTES == 8
         boxed_value[1] = (term) ref_ticks;

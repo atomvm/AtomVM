@@ -58,6 +58,8 @@ struct Context
 
     struct TimerWheelItem timer_wheel_head;
 
+    struct ListHead monitors_head;
+
     term x[16];
     int avail_registers;
 
@@ -110,6 +112,8 @@ struct Context
 
     term bs;
     size_t bs_offset;
+
+    term exit_reason;
 };
 
 #ifndef TYPEDEF_CONTEXT
@@ -259,5 +263,7 @@ size_t context_message_queue_len(Context *ctx);
  * @returns total amount of size (in byes) occuped by the process
  */
 size_t context_size(Context *ctx);
+
+uint64_t context_monitor(Context *ctx, term monitor_pid, bool linked);
 
 #endif
