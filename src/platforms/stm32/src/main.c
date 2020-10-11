@@ -18,13 +18,13 @@
  ***************************************************************************/
 
 #include <errno.h>
-#include <stdio.h>
-#include <unistd.h>
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/cm3/systick.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/usart.h>
+#include <stdio.h>
+#include <unistd.h>
 
 #include <avmpack.h>
 #include <context.h>
@@ -139,7 +139,8 @@ int main()
     context_execute_loop(ctx, mod, "start", 0);
     printf("Return value: %lx\n", (long) term_to_int32(ctx->x[0]));
 
-    while (1);
+    while (1)
+        ;
 
     return 0;
 }

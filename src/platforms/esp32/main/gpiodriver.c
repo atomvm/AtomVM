@@ -32,18 +32,18 @@
 #include "context.h"
 #include "debug.h"
 #include "defaultatoms.h"
-#include "platform_defaultatoms.h"
 #include "globalcontext.h"
 #include "mailbox.h"
 #include "module.h"
 #include "nifs.h"
-#include "utils.h"
+#include "platform_defaultatoms.h"
 #include "term.h"
+#include "utils.h"
 
 #include "trace.h"
 
-#include "sys.h"
 #include "esp32_sys.h"
+#include "sys.h"
 
 static const char *const gpio_atom = "\x4" "gpio";
 
@@ -185,7 +185,7 @@ static term gpiodriver_read(term msg)
 static bool gpiodriver_is_gpio_attached(struct GPIOData *gpio_data, int gpio_num)
 {
     struct ListHead *item;
-    LIST_FOR_EACH(item, &gpio_data->gpio_listeners) {
+    LIST_FOR_EACH (item, &gpio_data->gpio_listeners) {
         struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
         if (gpio_listener->gpio == gpio_num) {
             return true;
@@ -274,7 +274,7 @@ static term gpiodriver_remove_int(Context *ctx, Context *target, term msg)
 
     struct ListHead *item;
     struct ListHead *tmp;
-    MUTABLE_LIST_FOR_EACH(item, tmp, &gpio_data->gpio_listeners) {
+    MUTABLE_LIST_FOR_EACH (item, tmp, &gpio_data->gpio_listeners) {
         struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
         if (gpio_listener->gpio == gpio_num) {
             list_remove(&gpio_listener->gpio_listener_list_head);

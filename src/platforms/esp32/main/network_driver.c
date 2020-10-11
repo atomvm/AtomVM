@@ -29,13 +29,12 @@
 #include "globalcontext.h"
 #include "interop.h"
 #include "mailbox.h"
-#include "utils.h"
 #include "socket_driver.h"
 #include "term.h"
+#include "utils.h"
 
 #include "platform_defaultatoms.h"
 
-#include <esp_log.h>
 #include <esp_event_loop.h>
 #include <esp_log.h>
 #include <esp_wifi.h>
@@ -63,7 +62,8 @@ static esp_err_t wifi_event_handler(void *ctx, system_event_t *event);
 
 static EventGroupHandle_t wifi_event_group;
 
-typedef struct ClientData {
+typedef struct ClientData
+{
     Context *ctx;
     term pid;
     uint64_t ref_ticks;
@@ -115,7 +115,7 @@ static wifi_config_t *get_sta_wifi_config(term sta_config)
         free(psk);
         return NULL;
     }
-     if (UNLIKELY(strlen(psk) > sizeof(wifi_config->sta.password))) {
+    if (UNLIKELY(strlen(psk) > sizeof(wifi_config->sta.password))) {
         fprintf(stderr, "psk cannot be more than %d characters\n", sizeof(wifi_config->sta.password));
         free(ssid);
         free(psk);
@@ -127,7 +127,7 @@ static wifi_config_t *get_sta_wifi_config(term sta_config)
     memset(wifi_config, 0, sizeof(wifi_config_t));
     strcpy((char *) wifi_config->sta.ssid, ssid);
     if (!IS_NULL_PTR(psk)) {
-        strcpy((char *)wifi_config->sta.password, psk);
+        strcpy((char *) wifi_config->sta.password, psk);
         free(psk);
     }
     free(ssid);
@@ -137,7 +137,6 @@ static wifi_config_t *get_sta_wifi_config(term sta_config)
     ESP_LOGI("NETWORK", "STA ssid: %s", wifi_config->sta.ssid);
     return wifi_config;
 }
-
 
 static char *get_default_device_name()
 {
@@ -152,11 +151,9 @@ static char *get_default_device_name()
         abort();
     }
     snprintf(buf, prefix_len + 12,
-        "atomvm-%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
-    );
+        "atomvm-%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     return buf;
 }
-
 
 static wifi_config_t *get_ap_wifi_config(term ap_config)
 {
@@ -220,10 +217,10 @@ static wifi_config_t *get_ap_wifi_config(term ap_config)
     // Initialize the wifi_config structure
     //
     memset(wifi_config, 0, sizeof(wifi_config_t));
-    strcpy((char *)wifi_config->ap.ssid, ssid);
+    strcpy((char *) wifi_config->ap.ssid, ssid);
     free(ssid);
     if (!IS_NULL_PTR(psk)) {
-        strcpy((char *)wifi_config->ap.password, psk);
+        strcpy((char *) wifi_config->ap.password, psk);
         free(psk);
     }
     wifi_config->ap.authmode = IS_NULL_PTR(psk) ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA_WPA2_PSK;
@@ -311,7 +308,7 @@ void network_driver_start(Context *ctx, term_ref pid, term_ref ref, term config)
     // Initialize event loop with client information, so that any
     // asynchronous responses can be delivered back to client mailbox
     //
-    ClientData *data = (ClientData *)malloc(sizeof(ClientData));
+    ClientData *data = (ClientData *) malloc(sizeof(ClientData));
     if (IS_NULL_PTR(data)) {
         fprintf(stderr, "Failed to allocate ClientData %s:%d\n", __FILE__, __LINE__);
         abort();
@@ -426,7 +423,7 @@ static void send_got_ip(ClientData *data, tcpip_adapter_ip_info_t *info)
     TRACE("Sending got_ip back to AtomVM\n");
     Context *ctx = data->ctx;
 
-    port_ensure_available(ctx, ((4 + 1) * 3 + (2 + 1) + (2 + 1))*2);
+    port_ensure_available(ctx, ((4 + 1) * 3 + (2 + 1) + (2 + 1)) * 2);
     term ip = socket_tuple_from_addr(ctx, ntohl(info->ip.addr));
     term netmask = socket_tuple_from_addr(ctx, ntohl(info->netmask.addr));
     term gw = socket_tuple_from_addr(ctx, ntohl(info->gw.addr));
@@ -481,7 +478,7 @@ static void send_ap_sta_ip_acquired(ClientData *data, ip4_addr_t *ip)
 {
     TRACE("Sending ap_sta_ip_acquired back to AtomVM\n");
     Context *ctx = data->ctx;
-    port_ensure_available(ctx, ((4 + 1) + (2 + 1))*2);
+    port_ensure_available(ctx, ((4 + 1) + (2 + 1)) * 2);
     term ip_term = socket_tuple_from_addr(ctx, ntohl(ip->addr));
     term reply = port_create_tuple2(ctx, AP_STA_IP_ASSIGNED_ATOM, ip_term);
     send_term(data, reply);

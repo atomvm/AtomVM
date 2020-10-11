@@ -42,7 +42,7 @@ static COLD_FUNC void debug_display_type(term t, const Context *ctx)
 
 static COLD_FUNC void debug_dump_binary_mem(char *buf, term val, unsigned n)
 {
-    for (unsigned int i = 0; i < n;  ++i) {
+    for (unsigned int i = 0; i < n; ++i) {
         int bit_i = val >> i & 0x1;
         buf[(n - 1) - i] = bit_i ? '1' : '0';
     }
@@ -68,7 +68,7 @@ COLD_FUNC void debug_dump_memory(Context *ctx, term *start, term *end, const cha
     fprintf(stderr, "DEBUG: %s end:   0x%lx\n", region, (unsigned long) end);
     fprintf(stderr, "DEBUG: %s size:  %li words\n", region, size);
     term *pos = start;
-    for (unsigned i = 0; i < size;  ++i) {
+    for (unsigned i = 0; i < size; ++i) {
         debug_dump_term(ctx, pos, region, i);
         ++pos;
     }
@@ -96,7 +96,6 @@ COLD_FUNC void debug_dump_registers(Context *ctx)
 {
     debug_dump_memory(ctx, ctx->x, ctx->x + 16, "register");
 }
-
 
 COLD_FUNC void debug_print_processes_list(struct ListHead *processes)
 {

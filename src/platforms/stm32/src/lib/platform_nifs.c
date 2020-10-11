@@ -19,9 +19,9 @@
 
 #include "platform_nifs.h"
 #include "defaultatoms.h"
+#include "nifs.h"
 #include "platform_defaultatoms.h"
 #include "term.h"
-#include "nifs.h"
 
 //#define ENABLE_TRACE
 #include "trace.h"

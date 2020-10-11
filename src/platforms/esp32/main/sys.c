@@ -21,24 +21,24 @@
 #include "esp32_sys.h"
 
 #include "avmpack.h"
-#include "i2cdriver.h"
-#include "scheduler.h"
+#include "defaultatoms.h"
 #include "globalcontext.h"
 #include "gpio_driver.h"
-#include "spidriver.h"
+#include "i2cdriver.h"
 #include "network.h"
+#include "scheduler.h"
+#include "spidriver.h"
 #include "uart_driver.h"
-#include "defaultatoms.h"
 
 #include "trace.h"
 
-#include "freertos/FreeRTOS.h"
-#include "esp_system.h"
 #include "esp_event.h"
 #include "esp_event_loop.h"
+#include "esp_system.h"
+#include "freertos/FreeRTOS.h"
 #include <limits.h>
-#include <stdint.h>
 #include <posix/sys/socket.h>
+#include <stdint.h>
 
 #define EVENT_QUEUE_LEN 16
 
@@ -74,7 +74,7 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
         }
 
         struct ListHead *listener_lh;
-        LIST_FOR_EACH(listener_lh, &platform->listeners) {
+        LIST_FOR_EACH (listener_lh, &platform->listeners) {
             EventListener *listener = GET_LIST_ENTRY(listener_lh, EventListener, listeners_list_head);
             if (listener->sender == sender) {
                 TRACE("sys: handler found for: %p\n", (void *) sender);
@@ -140,7 +140,7 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
     uint32_t beam_module_size = 0;
 
     struct ListHead *item;
-    LIST_FOR_EACH(item, &global->avmpack_data) {
+    LIST_FOR_EACH (item, &global->avmpack_data) {
         struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
         if (avmpack_find_section_by_name(avmpack_data->data, module_name, &beam_module, &beam_module_size)) {
             break;
@@ -159,7 +159,7 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
 }
 
 // This function allows to use AtomVM as a component on ESP32 and customize it
-__attribute__ ((weak)) Context *sys_create_port_fallback(Context *new_ctx, const char *driver_name, term opts)
+__attribute__((weak)) Context *sys_create_port_fallback(Context *new_ctx, const char *driver_name, term opts)
 {
     UNUSED(driver_name);
     UNUSED(opts);

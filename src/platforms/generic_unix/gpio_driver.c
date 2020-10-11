@@ -19,7 +19,6 @@
 
 #include "gpio_driver.h"
 
-
 void gpiodriver_init(Context *ctx)
 {
     UNUSED(ctx);

@@ -26,7 +26,7 @@
 #include "list.h"
 
 struct TimerWheelItem;
-typedef void (timer_wheel_callback_t)(struct TimerWheelItem *);
+typedef void(timer_wheel_callback_t)(struct TimerWheelItem *);
 
 struct TimerWheel
 {

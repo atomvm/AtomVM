@@ -19,14 +19,14 @@
 
 #include "atom.h"
 #include "defaultatoms.h"
-#include "platform_defaultatoms.h"
-#include "nifs.h"
-#include "memory.h"
-#include "term.h"
 #include "interop.h"
+#include "memory.h"
+#include "nifs.h"
+#include "platform_defaultatoms.h"
+#include "term.h"
 
-#include <stdlib.h>
 #include <driver/ledc.h>
+#include <stdlib.h>
 
 //#define ENABLE_TRACE
 #include "trace.h"
@@ -41,7 +41,6 @@ static const char *const ledc_gpio_num          = "\x8"  "gpio_num";
 static const char *const ledc_hpoint            = "\x6"  "hpoint";
 static const char *const ledc_timer_sel         = "\x9"  "timer_sel";
 //                                                        123456789ABCDEF01
-
 
 static term nif_ledc_timer_config(Context *ctx, int argc, term argv[])
 {
@@ -153,8 +152,7 @@ static term nif_ledc_set_fade_with_time(Context *ctx, int argc, term argv[])
         term_to_int(speed_mode),
         term_to_int(channel),
         term_to_int(duty),
-        term_to_int(fade_time)
-    );
+        term_to_int(fade_time));
     if (UNLIKELY(err != ESP_OK)) {
         fprintf(stderr, "Unable to ledc_set_fade_with_time. err=%i\n", err);
         RAISE_ERROR(term_from_int(err));
@@ -183,8 +181,7 @@ static term nif_ledc_set_fade_with_step(Context *ctx, int argc, term argv[])
         term_to_int(channel),
         term_to_int(duty),
         term_to_int(scale),
-        term_to_int(cycle_num)
-    );
+        term_to_int(cycle_num));
     if (UNLIKELY(err != ESP_OK)) {
         fprintf(stderr, "Unable to ledc_set_fade_with_step. err=%i\n", err);
         RAISE_ERROR(term_from_int(err));
@@ -207,8 +204,7 @@ static term nif_ledc_fade_start(Context *ctx, int argc, term argv[])
     esp_err_t err = ledc_fade_start(
         term_to_int(speed_mode),
         term_to_int(channel),
-        term_to_int(fade_no_wait)
-    );
+        term_to_int(fade_no_wait));
     if (UNLIKELY(err != ESP_OK)) {
         fprintf(stderr, "Unable to ledc_fade_start. err=%i\n", err);
         RAISE_ERROR(term_from_int(err));
@@ -228,9 +224,8 @@ static term nif_ledc_get_duty(Context *ctx, int argc, term argv[])
 
     uint32_t duty = ledc_get_duty(
         term_to_int(speed_mode),
-        term_to_int(channel)
-    );
-    if (duty == LEDC_ERR_DUTY){
+        term_to_int(channel));
+    if (duty == LEDC_ERR_DUTY) {
         fprintf(stderr, "Unable to ledc_get_duty.\n");
         RAISE_ERROR(term_from_int(LEDC_ERR_DUTY));
     } else {
@@ -252,8 +247,7 @@ static term nif_ledc_set_duty(Context *ctx, int argc, term argv[])
     esp_err_t err = ledc_set_duty(
         term_to_int(speed_mode),
         term_to_int(channel),
-        term_to_int(duty)
-    );
+        term_to_int(duty));
     if (UNLIKELY(err != ESP_OK)) {
         fprintf(stderr, "Unable to ledc_set_duty. err=%i\n", err);
         RAISE_ERROR(term_from_int(err));
@@ -273,8 +267,7 @@ static term nif_ledc_update_duty(Context *ctx, int argc, term argv[])
 
     esp_err_t err = ledc_update_duty(
         term_to_int(speed_mode),
-        term_to_int(channel)
-    );
+        term_to_int(channel));
     if (UNLIKELY(err != ESP_OK)) {
         fprintf(stderr, "Unable to ledc_update_duty. err=%i\n", err);
         RAISE_ERROR(term_from_int(err));
@@ -294,8 +287,7 @@ static term nif_ledc_get_freq(Context *ctx, int argc, term argv[])
 
     uint32_t freq_hz = ledc_get_freq(
         term_to_int(speed_mode),
-        term_to_int(timer_num)
-    );
+        term_to_int(timer_num));
     if (freq_hz == 0) {
         fprintf(stderr, "Unable to ledc_get_freq.\n");
         RAISE_ERROR(term_from_int(0));
@@ -318,8 +310,7 @@ static term nif_ledc_set_freq(Context *ctx, int argc, term argv[])
     esp_err_t err = ledc_set_freq(
         term_to_int(speed_mode),
         term_to_int(timer_num),
-        term_to_int(freq_hz)
-    );
+        term_to_int(freq_hz));
     if (UNLIKELY(err != ESP_OK)) {
         fprintf(stderr, "Unable to ledc_set_freq. err=%i\n", err);
         RAISE_ERROR(term_from_int(err));
@@ -342,8 +333,7 @@ static term nif_ledc_stop(Context *ctx, int argc, term argv[])
     esp_err_t err = ledc_stop(
         term_to_int(speed_mode),
         term_to_int(channel),
-        term_to_int(idle_level)
-    );
+        term_to_int(idle_level));
     if (UNLIKELY(err != ESP_OK)) {
         fprintf(stderr, "Unable to ledc_stop. err=%i\n", err);
         RAISE_ERROR(term_from_int(err));

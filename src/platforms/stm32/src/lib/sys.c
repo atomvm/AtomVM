@@ -19,10 +19,10 @@
 
 #include <sys.h>
 
+#include "defaultatoms.h"
 #include <avmpack.h>
 #include <gpiodriver.h>
 #include <scheduler.h>
-#include "defaultatoms.h"
 
 // Monotonically increasing number of milliseconds from reset
 // Overflows every 49 days
@@ -40,7 +40,8 @@ static void msleep(uint32_t delay)
 {
     // TODO: use a smarter sleep instead of busy waiting
     uint32_t wake = system_millis + delay;
-    while (wake > system_millis);
+    while (wake > system_millis)
+        ;
 }
 
 static inline void sys_clock_gettime(struct timespec *t)
@@ -76,7 +77,6 @@ void sys_time(struct timespec *t)
     sys_clock_gettime(t);
 }
 
-
 uint32_t sys_millis()
 {
     return system_millis;
@@ -96,8 +96,7 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
     uint32_t beam_module_size = 0;
 
     struct ListHead *item;
-    LIST_FOR_EACH(item, &global->avmpack_data)
-    {
+    LIST_FOR_EACH (item, &global->avmpack_data) {
         struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
         if (avmpack_find_section_by_name(avmpack_data->data, module_name, &beam_module, &beam_module_size)) {
             break;

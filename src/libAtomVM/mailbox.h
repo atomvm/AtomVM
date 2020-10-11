@@ -27,9 +27,9 @@
 #ifndef _MAILBOX_H_
 #define _MAILBOX_H_
 
+#include "context.h"
 #include "list.h"
 #include "term.h"
-#include "context.h"
 
 typedef struct
 {

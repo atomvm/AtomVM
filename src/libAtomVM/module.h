@@ -30,9 +30,9 @@
 #include <stdint.h>
 
 #include "atom.h"
-#include "valueshashtable.h"
 #include "context.h"
 #include "globalcontext.h"
+#include "valueshashtable.h"
 
 typedef struct
 {

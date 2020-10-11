@@ -19,10 +19,9 @@
 
 #include "port.h"
 #include "context.h"
+#include "defaultatoms.h"
 #include "globalcontext.h"
 #include "mailbox.h"
-#include "defaultatoms.h"
-
 
 term port_create_tuple2(Context *ctx, term a, term b)
 {
@@ -47,7 +46,7 @@ term port_create_tuple_n(Context *ctx, size_t num_terms, term *terms)
 {
     term ret = term_alloc_tuple(num_terms, ctx);
 
-    for (size_t i = 0; i < num_terms;  ++i) {
+    for (size_t i = 0; i < num_terms; ++i) {
         term_put_tuple_element(ret, i, terms[i]);
     }
 

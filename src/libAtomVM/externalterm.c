@@ -160,7 +160,7 @@ term externalterm_to_binary(Context *ctx, term t)
     //
     // create and return the binary
     //
-    term binary = term_from_literal_binary((void *)buf, len, ctx);
+    term binary = term_from_literal_binary((void *) buf, len, ctx);
     free(buf);
     return binary;
 }
@@ -194,7 +194,7 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
             buf[0] = ATOM_EXT;
             WRITE_16_UNALIGNED(buf + 1, atom_len);
             int8_t *atom_data = (int8_t *) atom_string_data(atom_string);
-            for (size_t i = 3;  i < atom_len + 3;  ++i) {
+            for (size_t i = 3; i < atom_len + 3; ++i) {
                 buf[i] = (int8_t) atom_data[i - 3];
             }
         }
@@ -211,7 +211,7 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
             buf[1] = (int8_t) arity;
         }
         size_t k = 2;
-        for (size_t i = 0;  i < arity;  ++i) {
+        for (size_t i = 0; i < arity; ++i) {
             term e = term_get_tuple_element(t, i);
             k += serialize_term(ctx, IS_NULL_PTR(buf) ? NULL : buf + k, e);
         }
@@ -383,8 +383,8 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
                 buf_pos += tail_size;
             }
 
-             *eterm_size = buf_pos;
-             return list_begin;
+            *eterm_size = buf_pos;
+            return list_begin;
         }
 
         case BINARY_EXT: {

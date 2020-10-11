@@ -26,17 +26,17 @@
 #include "context.h"
 #include "defaultatoms.h"
 #include "dictionary.h"
+#include "externalterm.h"
 #include "interop.h"
 #include "mailbox.h"
 #include "module.h"
-#include "port.h"
 #include "platform_nifs.h"
+#include "port.h"
 #include "scheduler.h"
+#include "sys.h"
 #include "term.h"
 #include "utils.h"
-#include "sys.h"
 #include "version.h"
-#include "externalterm.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -524,7 +524,6 @@ static const struct Nif base64_decode_to_string_nif =
 #include "nifs_hash.h"
 #pragma GCC diagnostic pop
 
-
 const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
 {
     char nifname[MAX_NIF_NAME_LEN];
@@ -671,7 +670,6 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
     } else {
         scheduler_make_waiting(ctx->global, new_ctx);
         return term_from_local_process_id(new_ctx->process_id);
-
     }
 }
 
@@ -1152,7 +1150,6 @@ static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[])
 
     return new_tuple;
 }
-
 
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[])
 {
@@ -1947,7 +1944,8 @@ static void *nif_increment_port_count(Context *ctx, void *accum)
     }
 }
 
-struct ContextAccumulator {
+struct ContextAccumulator
+{
     Context *ctx;
     term result;
 };
@@ -2452,7 +2450,7 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
 
     int atom_index = term_to_atom_index(app_term);
     AtomString atom_string = (AtomString) valueshashtable_get_value(glb->atoms_ids_table,
-            atom_index, (unsigned long) NULL);
+        atom_index, (unsigned long) NULL);
 
     int app_len = atom_string_len(atom_string);
     char *app = malloc(app_len + 1);
@@ -2477,7 +2475,7 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
     const void *bin_data;
     uint32_t size;
     struct ListHead *item;
-    LIST_FOR_EACH(item, &glb->avmpack_data) {
+    LIST_FOR_EACH (item, &glb->avmpack_data) {
         struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
         if (avmpack_find_section_by_name(avmpack_data->data, complete_path, &bin_data, &size)) {
             uint32_t file_size = READ_32_ALIGNED((uint32_t *) bin_data);
@@ -2604,7 +2602,7 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
     }
-    for (size_t i = 0;  i < dst_size;  ++i) {
+    for (size_t i = 0; i < dst_size; ++i) {
         uint8_t accum = 0;
         switch (i & 0x03) {
             case 0:
@@ -2633,7 +2631,7 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
         }
     }
     free(src_buf);
-    for (size_t i = 0;  i < pad;  ++i) {
+    for (size_t i = 0; i < pad; ++i) {
         dst_pos[dst_size + i] = '=';
     }
     if (!return_binary) {
@@ -2650,7 +2648,7 @@ static inline uint8_t find_index(uint8_t c)
     } else if ('a' <= c && c <= 'z') {
         return 26 + (c - 'a');
     } else if ('0' <= c && c <= '9') {
-           return 52 + (c - '0');
+        return 52 + (c - '0');
     } else if (c == '+') {
         return 62;
     } else if (c == '/') {
@@ -2743,7 +2741,7 @@ static term base64_decode(Context *ctx, int argc, term argv[], bool return_binar
         src_pos = (uint8_t *) term_binary_data(argv[0]);
     }
     size_t n = src_size - pad;
-    for (size_t i = 0;  i < n;  ++i) {
+    for (size_t i = 0; i < n; ++i) {
         uint8_t octet = find_index(src_pos[i]);
         if (octet == NOT_FOUND) {
             RAISE_ERROR(BADARG_ATOM);

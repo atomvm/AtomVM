@@ -83,7 +83,7 @@
 
 #define UNDEFINED_ATOM term_from_atom_index(UNDEFINED_ATOM_INDEX)
 
-#define BADARG_ATOM  term_from_atom_index(BADARG_ATOM_INDEX)
+#define BADARG_ATOM term_from_atom_index(BADARG_ATOM_INDEX)
 #define BADARITH_ATOM term_from_atom_index(BADARITH_ATOM_INDEX)
 #define BADARITY_ATOM term_from_atom_index(BADARITY_ATOM_INDEX)
 #define BADFUN_ATOM term_from_atom_index(BADFUN_ATOM_INDEX)

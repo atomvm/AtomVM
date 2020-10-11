@@ -55,7 +55,6 @@
 #define FD_ATOM_INDEX (PLATFORM_ATOMS_BASE_INDEX + 26)
 #define GENERIC_UNIX_ATOM_INDEX (PLATFORM_ATOMS_BASE_INDEX + 27)
 
-
 #define PROTO_ATOM term_from_atom_index(PROTO_ATOM_INDEX)
 #define UDP_ATOM term_from_atom_index(UDP_ATOM_INDEX)
 #define TCP_ATOM term_from_atom_index(TCP_ATOM_INDEX)

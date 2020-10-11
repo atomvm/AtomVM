@@ -17,9 +17,9 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+#include "scheduler.h"
 #include "debug.h"
 #include "list.h"
-#include "scheduler.h"
 #include "sys.h"
 #include "utils.h"
 
@@ -92,7 +92,7 @@ Context *scheduler_next(GlobalContext *global, Context *c)
     //TODO: improve scheduling here
     struct ListHead *item;
     struct ListHead *tmp;
-    MUTABLE_LIST_FOR_EACH(item, tmp, &global->ready_processes) {
+    MUTABLE_LIST_FOR_EACH (item, tmp, &global->ready_processes) {
         Context *next_context = GET_LIST_ENTRY(item, Context, processes_list_head);
         if (next_context->native_handler) {
             scheduler_execute_native_handler(global, next_context);
@@ -174,7 +174,7 @@ static void scheduler_execute_native_handlers(GlobalContext *global)
 {
     struct ListHead *item;
     struct ListHead *tmp;
-    MUTABLE_LIST_FOR_EACH(item, tmp, &global->ready_processes) {
+    MUTABLE_LIST_FOR_EACH (item, tmp, &global->ready_processes) {
         Context *context = GET_LIST_ENTRY(item, Context, processes_list_head);
 
         if (context->native_handler) {

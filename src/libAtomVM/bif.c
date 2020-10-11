@@ -39,13 +39,13 @@
 #pragma GCC diagnostic pop
 
 #define RAISE_ERROR(error_type_atom) \
-    ctx->x[0] = ERROR_ATOM; \
-    ctx->x[1] = (error_type_atom); \
+    ctx->x[0] = ERROR_ATOM;          \
+    ctx->x[1] = (error_type_atom);   \
     return term_invalid_term();
 
 #define VALIDATE_VALUE(value, verify_function) \
     if (UNLIKELY(!verify_function((value)))) { \
-        RAISE_ERROR(BADARG_ATOM); \
+        RAISE_ERROR(BADARG_ATOM);              \
     }
 
 BifImpl bif_registry_get_handler(AtomString module, AtomString function, int arity)
@@ -214,7 +214,6 @@ static inline term make_boxed_int(Context *ctx, avm_int_t value)
     return term_make_boxed_int(value, ctx);
 }
 
-
 #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
 static inline term make_boxed_int64(Context *ctx, avm_int64_t value)
 {
@@ -235,7 +234,6 @@ static inline term make_maybe_boxed_int(Context *ctx, avm_int_t value)
         return term_from_int(value);
     }
 }
-
 
 #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
 static inline term make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
@@ -1311,7 +1309,6 @@ term bif_erlang_exactly_not_equal_to_2(Context *ctx, term arg1, term arg2)
         return FALSE_ATOM;
     }
 }
-
 
 term bif_erlang_greater_than_2(Context *ctx, term arg1, term arg2)
 {

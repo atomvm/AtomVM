@@ -32,8 +32,8 @@
 #include "iff.h"
 #include "module.h"
 #include "socket_driver.h"
-#include "utils.h"
 #include "term.h"
+#include "utils.h"
 
 #include "esp32_sys.h"
 #include "nvs_flash.h"
@@ -68,8 +68,7 @@ void app_main()
 
     socket_driver_init(glb);
 
-    if (!avmpack_is_valid(main_avm, size) || !avmpack_find_section_by_flag(main_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name))
-    {
+    if (!avmpack_is_valid(main_avm, size) || !avmpack_find_section_by_flag(main_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
         fprintf(stderr, "error: invalid AVM Pack\n");
         abort();
     }
@@ -113,7 +112,7 @@ void app_main()
     fprintf(stderr, "\n");
 
     fprintf(stderr, "going to sleep forever..\n");
-    while(1) {
+    while (1) {
         // avoid task_wdt: Task watchdog got triggered. The following tasks did not reset the watchdog in time
         // ..
         vTaskDelay(5000 / portTICK_PERIOD_MS);

@@ -20,10 +20,10 @@
 #ifndef _PORT_H_
 #define _PORT_H_
 
-#include "globalcontext.h"
 #include "context.h"
-#include "term.h"
 #include "defaultatoms.h"
+#include "globalcontext.h"
+#include "term.h"
 
 term port_create_tuple2(Context *ctx, term a, term b);
 term port_create_tuple3(Context *ctx, term a, term b, term c);

@@ -31,18 +31,18 @@
 #include "context.h"
 #include "debug.h"
 #include "defaultatoms.h"
-#include "platform_defaultatoms.h"
 #include "globalcontext.h"
 #include "interop.h"
 #include "mailbox.h"
 #include "module.h"
-#include "utils.h"
+#include "platform_defaultatoms.h"
 #include "term.h"
+#include "utils.h"
 
 #include "trace.h"
 
-#include "sys.h"
 #include "esp32_sys.h"
+#include "sys.h"
 
 static const char *const ealready_atom = "\x8" "ealready";
 static void uart_driver_consume_mailbox(Context *ctx);
@@ -71,10 +71,10 @@ static void IRAM_ATTR uart_isr_handler(void *arg)
 
     struct UARTData *uart_data = arg;
     while (rxfifo_len) {
-      uint8_t c;
-      c = UART0.fifo.rw_byte;
-      xQueueSendFromISR(uart_data->rxqueue, &c, NULL);
-      rxfifo_len--;
+        uint8_t c;
+        c = UART0.fifo.rw_byte;
+        xQueueSendFromISR(uart_data->rxqueue, &c, NULL);
+        rxfifo_len--;
     }
 
     uart_clear_intr_status(uart_data->uart_num, UART_RXFIFO_FULL_INT_CLR | UART_RXFIFO_TOUT_INT_CLR);
@@ -200,7 +200,6 @@ void uart_driver_init(Context *ctx, term opts)
             abort();
     }
 
-
     int flow_control;
     switch (flow_control_term) {
         case NONE_ATOM:
@@ -232,7 +231,7 @@ void uart_driver_init(Context *ctx, term opts)
     uart_config_t uart_config = {
         .baud_rate = uart_speed,
         .data_bits = data_bits,
-        .parity    = parity,
+        .parity = parity,
         .stop_bits = stop_bits,
         .flow_ctrl = flow_control
     };

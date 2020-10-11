@@ -28,7 +28,7 @@
 static struct DictEntry *dictionary_find(struct ListHead *dictionary, Context *ctx, term key)
 {
     struct ListHead *item;
-    LIST_FOR_EACH(item, dictionary) {
+    LIST_FOR_EACH (item, dictionary) {
         struct DictEntry *entry = GET_LIST_ENTRY(item, struct DictEntry, head);
         if (term_compare(entry->key, key, ctx) == 0) {
             return entry;
@@ -76,12 +76,11 @@ term dictionary_erase(struct ListHead *dict, Context *ctx, term key)
     return old;
 }
 
-
 void dictionary_destroy(struct ListHead *dict)
 {
     struct ListHead *entry;
     struct ListHead *tmp;
-    MUTABLE_LIST_FOR_EACH(entry, tmp, dict) {
+    MUTABLE_LIST_FOR_EACH (entry, tmp, dict) {
         free(entry);
     }
 }

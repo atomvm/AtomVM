@@ -30,7 +30,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-typedef const void * AtomString;
+typedef const void *AtomString;
 
 /**
  * @brief Gets a C string from an AtomString

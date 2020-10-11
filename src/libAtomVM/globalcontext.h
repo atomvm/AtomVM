@@ -30,8 +30,8 @@
 #include <stdint.h>
 
 #include "atom.h"
-#include "term.h"
 #include "linkedlist.h"
+#include "term.h"
 
 struct Context;
 

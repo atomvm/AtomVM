@@ -31,18 +31,18 @@
 #include "context.h"
 #include "debug.h"
 #include "defaultatoms.h"
-#include "platform_defaultatoms.h"
 #include "globalcontext.h"
 #include "interop.h"
 #include "mailbox.h"
 #include "module.h"
-#include "utils.h"
+#include "platform_defaultatoms.h"
 #include "term.h"
+#include "utils.h"
 
 #include "trace.h"
 
-#include "sys.h"
 #include "esp32_sys.h"
+#include "sys.h"
 
 static void spidriver_consume_mailbox(Context *ctx);
 

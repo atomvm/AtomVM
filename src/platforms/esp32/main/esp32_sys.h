@@ -31,7 +31,8 @@ typedef struct EventListener EventListener;
 
 typedef void (*event_handler_t)(EventListener *listener);
 
-struct EventListener {
+struct EventListener
+{
     struct ListHead listeners_list_head;
 
     event_handler_t handler;

@@ -49,7 +49,6 @@
 /** Str table section */
 #define STRT 8
 
-
 /** Required size for offsets array */
 #define MAX_OFFS 9
 /** Required size for sizes array */

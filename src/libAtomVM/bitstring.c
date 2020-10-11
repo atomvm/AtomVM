@@ -8,7 +8,7 @@ static inline uint64_t from_le64(uint64_t value)
 }
 
 bool extract_any_integer(const uint8_t *src, size_t offset, avm_int_t n,
-        enum BitstringFlags bs_flags, union maybe_unsigned_int64 *dst)
+    enum BitstringFlags bs_flags, union maybe_unsigned_int64 *dst)
 {
     uint64_t out = 0;
 

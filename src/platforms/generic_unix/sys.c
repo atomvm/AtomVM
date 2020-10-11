@@ -21,17 +21,17 @@
 #include "generic_unix_sys.h"
 
 #include "avmpack.h"
+#include "defaultatoms.h"
+#include "gpio_driver.h"
 #include "iff.h"
 #include "mapped_file.h"
-#include "scheduler.h"
-#include "gpio_driver.h"
 #include "network.h"
+#include "scheduler.h"
 #include "utils.h"
-#include "defaultatoms.h"
 
 #include <limits.h>
-#include <signal.h>
 #include <poll.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/time.h>
@@ -152,7 +152,7 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
     MappedFile *beam_file = NULL;
 
     struct ListHead *item;
-    LIST_FOR_EACH(item, &global->avmpack_data) {
+    LIST_FOR_EACH (item, &global->avmpack_data) {
         struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
         if (avmpack_find_section_by_name(avmpack_data->data, module_name, &beam_module, &beam_module_size)) {
             break;

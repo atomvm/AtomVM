@@ -32,7 +32,8 @@
 #define BEAM_START_FLAG 1
 #define BEAM_CODE_FLAG 2
 
-struct AVMPackData {
+struct AVMPackData
+{
     struct ListHead avmpack_head;
     const void *data;
 };

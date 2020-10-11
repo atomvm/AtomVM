@@ -20,20 +20,20 @@
 #define _GNU_SOURCE
 
 #include "atom.h"
+#include "component_nifs.h"
 #include "defaultatoms.h"
 #include "interop.h"
-#include "platform_defaultatoms.h"
-#include "nifs.h"
 #include "memory.h"
+#include "nifs.h"
+#include "platform_defaultatoms.h"
 #include "term.h"
-#include "component_nifs.h"
 
-#include <stdlib.h>
 #include <esp_system.h>
 #include <nvs.h>
 #include <nvs_flash.h>
 #include <rom/md5_hash.h>
 #include <soc/soc.h>
+#include <stdlib.h>
 
 //#define ENABLE_TRACE
 #include "trace.h"
@@ -58,7 +58,6 @@ static int write_atom_c_string(Context *ctx, char *buf, size_t bufsize, term t);
 
 const struct Nif *ledc_nifs_get_nif(const char *nifname);
 const struct Nif *gpio_nifs_get_nif(const char *nifname);
-
 
 //
 // NIFs

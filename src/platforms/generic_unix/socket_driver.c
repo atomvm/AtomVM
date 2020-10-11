@@ -19,27 +19,27 @@
  ***************************************************************************/
 
 #include "socket_driver.h"
-#include "port.h"
-#include <string.h>
 #include "atom.h"
 #include "context.h"
 #include "generic_unix_sys.h"
 #include "globalcontext.h"
 #include "interop.h"
 #include "mailbox.h"
-#include "utils.h"
+#include "port.h"
 #include "term.h"
+#include "utils.h"
+#include <string.h>
 
-#include <sys/types.h>
-#include <sys/socket.h>
+#include "platform_defaultatoms.h"
+#include "sys.h"
+#include <errno.h>
+#include <fcntl.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/udp.h>
-#include <netdb.h>
-#include <errno.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include "sys.h"
-#include "platform_defaultatoms.h"
 
 // #define ENABLE_TRACE
 #include "trace.h"
@@ -66,9 +66,9 @@ static void passive_recvfrom_callback(EventListener *listener);
 uint32_t socket_tuple_to_addr(term addr_tuple)
 {
     return ((term_to_int32(term_get_tuple_element(addr_tuple, 0)) & 0xFF) << 24)
-    | ((term_to_int32(term_get_tuple_element(addr_tuple, 1)) & 0xFF) << 16)
-    | ((term_to_int32(term_get_tuple_element(addr_tuple, 2)) & 0xFF) << 8)
-    | (term_to_int32(term_get_tuple_element(addr_tuple, 3)) & 0xFF);
+        | ((term_to_int32(term_get_tuple_element(addr_tuple, 1)) & 0xFF) << 16)
+        | ((term_to_int32(term_get_tuple_element(addr_tuple, 2)) & 0xFF) << 8)
+        | (term_to_int32(term_get_tuple_element(addr_tuple, 3)) & 0xFF);
 }
 
 term socket_tuple_from_addr(Context *ctx, uint32_t addr)
@@ -76,8 +76,8 @@ term socket_tuple_from_addr(Context *ctx, uint32_t addr)
     term terms[4];
     terms[0] = term_from_int32((addr >> 24) & 0xFF);
     terms[1] = term_from_int32((addr >> 16) & 0xFF);
-    terms[2] = term_from_int32((addr >>  8) & 0xFF);
-    terms[3] = term_from_int32( addr        & 0xFF);
+    terms[2] = term_from_int32((addr >> 8) & 0xFF);
+    terms[3] = term_from_int32(addr & 0xFF);
 
     return port_create_tuple_n(ctx, 4, terms);
 }
@@ -85,7 +85,7 @@ term socket_tuple_from_addr(Context *ctx, uint32_t addr)
 term socket_create_packet_term(Context *ctx, const char *buf, ssize_t len, int is_binary)
 {
     if (is_binary) {
-        return term_from_literal_binary((void *)buf, len, ctx);
+        return term_from_literal_binary((void *) buf, len, ctx);
     } else {
         return term_from_string((const uint8_t *) buf, len, ctx);
     }
@@ -161,7 +161,7 @@ static term init_udp_socket(Context *ctx, SocketDriverData *socket_data, term pa
     if (ret != OK_ATOM) {
         close(sockfd);
     } else {
-        if (fcntl(socket_data->sockfd, F_SETFL, O_NONBLOCK) == -1){
+        if (fcntl(socket_data->sockfd, F_SETFL, O_NONBLOCK) == -1) {
             return port_create_sys_error_tuple(ctx, FCNTL_ATOM, errno);
         }
         if (active == TRUE_ATOM) {
@@ -212,7 +212,7 @@ static term do_connect(SocketDriverData *socket_data, Context *ctx, term address
 
     struct sockaddr *addr = NULL;
     size_t addr_len = 0;
-    for (struct addrinfo *p = server_info; p != NULL;  p = p->ai_next) {
+    for (struct addrinfo *p = server_info; p != NULL; p = p->ai_next) {
         addr = p->ai_addr;
         addr_len = p->ai_addrlen;
         break;
@@ -442,19 +442,16 @@ term socket_driver_sockname(Context *ctx)
     } else {
         port_ensure_available(ctx, 11);
         term addr_term = socket_tuple_from_addr(
-            ctx, ntohl(addr.sin_addr.s_addr)
-        );
+            ctx, ntohl(addr.sin_addr.s_addr));
         term port_term = term_from_int(ntohs(addr.sin_port));
         term addr_port = port_create_tuple2(
             ctx,
             addr_term,
-            port_term
-        );
+            port_term);
         return port_create_tuple2(
             ctx,
             OK_ATOM,
-            addr_port
-        );
+            addr_port);
     }
 }
 
@@ -471,19 +468,16 @@ term socket_driver_peername(Context *ctx)
     } else {
         port_ensure_available(ctx, 11);
         term addr_term = socket_tuple_from_addr(
-            ctx, ntohl(addr.sin_addr.s_addr)
-        );
+            ctx, ntohl(addr.sin_addr.s_addr));
         term port_term = term_from_int(ntohs(addr.sin_port));
         term addr_port = port_create_tuple2(
             ctx,
             addr_term,
-            port_term
-        );
+            port_term);
         return port_create_tuple2(
             ctx,
             OK_ATOM,
-            addr_port
-        );
+            addr_port);
     }
 }
 
@@ -573,7 +567,8 @@ term socket_driver_do_sendto(Context *ctx, term dest_address, term dest_port, te
 // receive operations
 //
 
-typedef struct RecvFromData {
+typedef struct RecvFromData
+{
     Context *ctx;
     term pid;
     term length;
@@ -601,7 +596,7 @@ static void active_recv_callback(EventListener *listener)
         // {tcp, Socket, {error, {SysCall, Errno}}}
         port_ensure_available(ctx, 12);
         term pid = socket_data->controlling_process;
-        term msgs[2] = {TCP_CLOSED_ATOM, term_from_local_process_id(ctx->process_id)};
+        term msgs[2] = { TCP_CLOSED_ATOM, term_from_local_process_id(ctx->process_id) };
         term msg = port_create_tuple_n(ctx, 2, msgs);
         port_send_message(ctx, pid, msg);
         socket_driver_do_close(ctx);
@@ -620,7 +615,7 @@ static void active_recv_callback(EventListener *listener)
         port_ensure_available(ctx, 20 + ensure_packet_avail);
         term pid = socket_data->controlling_process;
         term packet = socket_create_packet_term(ctx, buf, len, binary);
-        term msgs[3] = {TCP_ATOM, term_from_local_process_id(ctx->process_id), packet};
+        term msgs[3] = { TCP_ATOM, term_from_local_process_id(ctx->process_id), packet };
         term msg = port_create_tuple_n(ctx, 3, msgs);
         port_send_message(ctx, pid, msg);
     }
@@ -703,7 +698,7 @@ static void active_recvfrom_callback(EventListener *listener)
         // {udp, Socket, {error, {SysCall, Errno}}}
         port_ensure_available(ctx, 12);
         term pid = socket_data->controlling_process;
-        term msgs[3] = {UDP_ATOM, term_from_local_process_id(ctx->process_id), port_create_sys_error_tuple(ctx, RECVFROM_ATOM, errno)};
+        term msgs[3] = { UDP_ATOM, term_from_local_process_id(ctx->process_id), port_create_sys_error_tuple(ctx, RECVFROM_ATOM, errno) };
         term msg = port_create_tuple_n(ctx, 3, msgs);
         port_send_message(ctx, pid, msg);
     } else {
@@ -719,7 +714,7 @@ static void active_recvfrom_callback(EventListener *listener)
         term addr = socket_tuple_from_addr(ctx, htonl(clientaddr.sin_addr.s_addr));
         term port = term_from_int32(htons(clientaddr.sin_port));
         term packet = socket_create_packet_term(ctx, buf, len, socket_data->binary == TRUE_ATOM);
-        term msgs[5] = {UDP_ATOM, term_from_local_process_id(ctx->process_id), addr, port, packet};
+        term msgs[5] = { UDP_ATOM, term_from_local_process_id(ctx->process_id), addr, port, packet };
         term msg = port_create_tuple_n(ctx, 5, msgs);
         port_send_message(ctx, pid, msg);
     }
@@ -934,10 +929,10 @@ static void socket_consume_mailbox(Context *ctx)
     port_ensure_available(ctx, 16);
 
     Message *message = mailbox_dequeue(ctx);
-    term     msg = message->message;
-    term     pid = term_get_tuple_element(msg, 0);
-    term     ref = term_get_tuple_element(msg, 1);
-    term     cmd = term_get_tuple_element(msg, 2);
+    term msg = message->message;
+    term pid = term_get_tuple_element(msg, 0);
+    term ref = term_get_tuple_element(msg, 1);
+    term cmd = term_get_tuple_element(msg, 2);
 
     term cmd_name = term_get_tuple_element(cmd, 0);
     if (cmd_name == context_make_atom(ctx, init_a)) {

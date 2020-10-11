@@ -21,27 +21,27 @@
 #include "socket_driver.h"
 #include "port.h"
 
-#include <string.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "atom.h"
 #include "context.h"
 #include "globalcontext.h"
-#include "mailbox.h"
 #include "interop.h"
-#include "utils.h"
+#include "mailbox.h"
 #include "scheduler.h"
 #include "sys.h"
 #include "term.h"
+#include "utils.h"
 
 #include "esp32_sys.h"
 #include "platform_defaultatoms.h"
 
 #include <esp_log.h>
 
-#include <lwip/ip_addr.h>
-#include <lwip/inet.h>
 #include <lwip/api.h>
+#include <lwip/inet.h>
+#include <lwip/ip_addr.h>
 
 //#define ENABLE_TRACE 1
 #include "trace.h"
@@ -56,9 +56,9 @@ static const char *const ealready_atom = "\x8" "ealready";
 uint32_t socket_tuple_to_addr(term addr_tuple)
 {
     return ((term_to_int32(term_get_tuple_element(addr_tuple, 0)) & 0xFF) << 24)
-    | ((term_to_int32(term_get_tuple_element(addr_tuple, 1)) & 0xFF) << 16)
-    | ((term_to_int32(term_get_tuple_element(addr_tuple, 2)) & 0xFF) << 8)
-    | (term_to_int32(term_get_tuple_element(addr_tuple, 3)) & 0xFF);
+        | ((term_to_int32(term_get_tuple_element(addr_tuple, 1)) & 0xFF) << 16)
+        | ((term_to_int32(term_get_tuple_element(addr_tuple, 2)) & 0xFF) << 8)
+        | (term_to_int32(term_get_tuple_element(addr_tuple, 3)) & 0xFF);
 }
 
 term socket_tuple_from_addr(Context *ctx, uint32_t addr)
@@ -66,8 +66,8 @@ term socket_tuple_from_addr(Context *ctx, uint32_t addr)
     term terms[4];
     terms[0] = term_from_int32((addr >> 24) & 0xFF);
     terms[1] = term_from_int32((addr >> 16) & 0xFF);
-    terms[2] = term_from_int32((addr >>  8) & 0xFF);
-    terms[3] = term_from_int32( addr        & 0xFF);
+    terms[2] = term_from_int32((addr >> 8) & 0xFF);
+    terms[3] = term_from_int32(addr & 0xFF);
 
     return port_create_tuple_n(ctx, 4, terms);
 }
@@ -185,7 +185,7 @@ void socket_events_handler(EventListener *listener)
 
         struct SocketData *socket = NULL;
         struct ListHead *socket_head;
-        LIST_FOR_EACH(socket_head, &platform->sockets_list_head) {
+        LIST_FOR_EACH (socket_head, &platform->sockets_list_head) {
             struct SocketData *current_socket = GET_LIST_ENTRY(socket_head, struct SocketData, sockets_head);
             if (current_socket->conn == netconn) {
                 socket = current_socket;
@@ -250,7 +250,7 @@ void socket_driver_init(GlobalContext *glb)
 }
 
 static void socket_data_init(struct SocketData *data, Context *ctx, struct netconn *conn,
-        enum socket_type type, struct ESP32PlatformData *platform)
+    enum socket_type type, struct ESP32PlatformData *platform)
 {
     data->type = type;
     data->conn = conn;
@@ -271,7 +271,7 @@ static void socket_data_init(struct SocketData *data, Context *ctx, struct netco
 }
 
 static struct TCPServerSocketData *tcp_server_socket_data_new(Context *ctx, struct netconn *conn,
-        struct ESP32PlatformData *platform)
+    struct ESP32PlatformData *platform)
 {
     struct TCPServerSocketData *tcp_data = malloc(sizeof(struct TCPServerSocketData));
     if (IS_NULL_PTR(tcp_data)) {
@@ -285,7 +285,7 @@ static struct TCPServerSocketData *tcp_server_socket_data_new(Context *ctx, stru
 }
 
 static struct TCPClientSocketData *tcp_client_socket_data_new(Context *ctx, struct netconn *conn,
-        struct ESP32PlatformData *platform, term controlling_process_pid)
+    struct ESP32PlatformData *platform, term controlling_process_pid)
 {
     struct TCPClientSocketData *tcp_data = malloc(sizeof(struct TCPClientSocketData));
     if (IS_NULL_PTR(tcp_data)) {
@@ -298,7 +298,7 @@ static struct TCPClientSocketData *tcp_client_socket_data_new(Context *ctx, stru
 }
 
 static struct UDPSocketData *udp_socket_data_new(Context *ctx, struct netconn *conn,
-        struct ESP32PlatformData *platform, term controlling_process_pid)
+    struct ESP32PlatformData *platform, term controlling_process_pid)
 {
     struct UDPSocketData *udp_data = malloc(sizeof(struct UDPSocketData));
     if (IS_NULL_PTR(udp_data)) {
@@ -340,52 +340,52 @@ void ESP_IRAM_ATTR socket_callback(struct netconn *netconn, enum netconn_evt evt
 
 void accept_conn(struct TCPServerAccepter *accepter, Context *ctx)
 {
-        TRACE("Going to accept a TCP connection\n");
+    TRACE("Going to accept a TCP connection\n");
 
-        struct TCPServerSocketData *tcp_data = ctx->platform_data;
-        GlobalContext *glb = ctx->global;
-        struct ESP32PlatformData *platform = glb->platform_data;
+    struct TCPServerSocketData *tcp_data = ctx->platform_data;
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
 
-        struct netconn *accepted_conn;
-        err_t status = netconn_accept(tcp_data->socket_data.conn, &accepted_conn);
-        if (UNLIKELY(status != ERR_OK)) {
-            //TODO
-            fprintf(stderr, "accept error: %i on %p\n", status, (void *) tcp_data->socket_data.conn);
-            return;
-        }
-
-        term pid = accepter->accepting_process_pid;
-
-        TRACE("accepted conn: %p\n", accepted_conn);
-
-        Context *new_ctx = context_new(glb);
-        new_ctx->native_handler = socket_consume_mailbox;
-        scheduler_make_waiting(glb, new_ctx);
-
-        term socket_pid = term_from_local_process_id(new_ctx->process_id);
-
-        struct TCPClientSocketData *new_tcp_data = tcp_client_socket_data_new(new_ctx, accepted_conn, platform, pid);
-        if (IS_NULL_PTR(new_tcp_data)) {
-            abort();
-        }
-
+    struct netconn *accepted_conn;
+    err_t status = netconn_accept(tcp_data->socket_data.conn, &accepted_conn);
+    if (UNLIKELY(status != ERR_OK)) {
         //TODO
-        if (UNLIKELY(memory_ensure_free(ctx, 128) != MEMORY_GC_OK)) {
-            abort();
-        }
-        term ref = term_from_ref_ticks(accepter->ref_ticks, ctx);
-        term return_tuple = term_alloc_tuple(2, ctx);
+        fprintf(stderr, "accept error: %i on %p\n", status, (void *) tcp_data->socket_data.conn);
+        return;
+    }
 
-        free(accepter);
+    term pid = accepter->accepting_process_pid;
 
-        term result_tuple = term_alloc_tuple(2, ctx);
-        term_put_tuple_element(result_tuple, 0, OK_ATOM);
-        term_put_tuple_element(result_tuple, 1, socket_pid);
+    TRACE("accepted conn: %p\n", accepted_conn);
 
-        term_put_tuple_element(return_tuple, 0, ref);
-        term_put_tuple_element(return_tuple, 1, result_tuple);
+    Context *new_ctx = context_new(glb);
+    new_ctx->native_handler = socket_consume_mailbox;
+    scheduler_make_waiting(glb, new_ctx);
 
-        send_message(pid, return_tuple, glb);
+    term socket_pid = term_from_local_process_id(new_ctx->process_id);
+
+    struct TCPClientSocketData *new_tcp_data = tcp_client_socket_data_new(new_ctx, accepted_conn, platform, pid);
+    if (IS_NULL_PTR(new_tcp_data)) {
+        abort();
+    }
+
+    //TODO
+    if (UNLIKELY(memory_ensure_free(ctx, 128) != MEMORY_GC_OK)) {
+        abort();
+    }
+    term ref = term_from_ref_ticks(accepter->ref_ticks, ctx);
+    term return_tuple = term_alloc_tuple(2, ctx);
+
+    free(accepter);
+
+    term result_tuple = term_alloc_tuple(2, ctx);
+    term_put_tuple_element(result_tuple, 0, OK_ATOM);
+    term_put_tuple_element(result_tuple, 1, socket_pid);
+
+    term_put_tuple_element(return_tuple, 0, ref);
+    term_put_tuple_element(return_tuple, 1, result_tuple);
+
+    send_message(pid, return_tuple, glb);
 }
 
 static void do_accept(Context *ctx, term msg)
@@ -400,14 +400,13 @@ static void do_accept(Context *ctx, term msg)
     accepter->ref_ticks = term_to_ref_ticks(ref);
     list_append(&tcp_data->accepters_list_head, &accepter->accepter_head);
 
-
     if (tcp_data->ready_connections) {
         TRACE("accepting existing connections.\n");
 
         struct ListHead *accepter_head;
         struct ListHead *tmp;
         struct TCPServerAccepter *accepter = NULL;
-        MUTABLE_LIST_FOR_EACH(accepter_head, tmp, &tcp_data->accepters_list_head) {
+        MUTABLE_LIST_FOR_EACH (accepter_head, tmp, &tcp_data->accepters_list_head) {
             //TODO: check if is alive here
             if (1) {
                 accepter = GET_LIST_ENTRY(accepter_head, struct TCPServerAccepter, accepter_head);
@@ -536,7 +535,7 @@ static void tcp_server_handler(Context *ctx)
     struct ListHead *accepter_head;
     struct ListHead *tmp;
     struct TCPServerAccepter *accepter = NULL;
-    MUTABLE_LIST_FOR_EACH(accepter_head, tmp, &tcp_data->accepters_list_head) {
+    MUTABLE_LIST_FOR_EACH (accepter_head, tmp, &tcp_data->accepters_list_head) {
         //TODO: is alive here
         if (1) {
             accepter = GET_LIST_ENTRY(accepter_head, struct TCPServerAccepter, accepter_head);
@@ -952,7 +951,6 @@ static void do_send(Context *ctx, term msg)
 
     free(buffer);
 
-
     if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
         abort();
     }
@@ -1252,7 +1250,6 @@ static void do_peername(Context *ctx, term msg)
     term_put_tuple_element(result_tuple, 1, return_msg);
     send_message(pid, result_tuple, glb);
 }
-
 
 static void socket_consume_mailbox(Context *ctx)
 {

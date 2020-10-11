@@ -28,8 +28,8 @@
 #define _TERM_H_
 
 #include <stdint.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "memory.h"
@@ -861,7 +861,7 @@ static inline int term_bs_insert_integer(term t, avm_int_t offset, avm_int_t val
     }
     // TODO optimize by xor'ing by byte (or mask on boundaries)
     // TODO support big/little endian flags
-    for (int i = 0;  i < n;  ++i) {
+    for (int i = 0; i < n; ++i) {
         int k = (n - 1) - i;
         int bit_val = (value & (0x01 << k)) >> k;
         if (bit_val) {
@@ -906,11 +906,11 @@ static inline int term_bs_insert_binary(term t, int offset, term src, int n)
         return -3;
     }
     unsigned long capacity = term_binary_size(t);
-    if (capacity < (unsigned long) (offset/8 + n)) {
+    if (capacity < (unsigned long) (offset / 8 + n)) {
         fprintf(stderr, "Insufficient capacity to write binary\n");
         return -4;
     }
-    uint8_t *dst_pos = (uint8_t *) term_binary_data(t) + offset/8;
+    uint8_t *dst_pos = (uint8_t *) term_binary_data(t) + offset / 8;
     uint8_t *src_pos = (uint8_t *) term_binary_data(src);
     memcpy(dst_pos, src_pos, n);
     return 0;
@@ -1301,7 +1301,6 @@ static inline int term_list_member(term list, term e, Context *ctx)
     }
     return 0;
 }
-
 
 static inline term term_make_function_reference(term m, term f, term a, Context *ctx)
 {

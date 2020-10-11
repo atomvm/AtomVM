@@ -21,9 +21,9 @@
 #include <string.h>
 
 #include "context.h"
+#include "debug.h"
 #include "dictionary.h"
 #include "list.h"
-#include "debug.h"
 #include "memory.h"
 #include "tempstack.h"
 
@@ -133,7 +133,7 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
     }
 
     struct ListHead *item;
-    LIST_FOR_EACH(item, &ctx->dictionary) {
+    LIST_FOR_EACH (item, &ctx->dictionary) {
         struct DictEntry *entry = GET_LIST_ENTRY(item, struct DictEntry, head);
         entry->key = memory_shallow_copy_term(entry->key, &heap_ptr, 1);
         entry->value = memory_shallow_copy_term(entry->value, &heap_ptr, 1);
@@ -154,7 +154,7 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
 
     struct ListHead *fragment;
     struct ListHead *tmp;
-    MUTABLE_LIST_FOR_EACH(fragment, tmp, &ctx->heap_fragments) {
+    MUTABLE_LIST_FOR_EACH (fragment, tmp, &ctx->heap_fragments) {
         free(fragment);
     }
     list_init(&ctx->heap_fragments);
@@ -166,7 +166,6 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
 
     return MEMORY_GC_OK;
 }
-
 
 static inline int memory_is_moved_marker(term *t)
 {

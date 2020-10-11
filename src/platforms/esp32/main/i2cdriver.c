@@ -30,18 +30,18 @@
 #include "context.h"
 #include "debug.h"
 #include "defaultatoms.h"
-#include "platform_defaultatoms.h"
 #include "globalcontext.h"
 #include "interop.h"
 #include "mailbox.h"
 #include "module.h"
-#include "utils.h"
+#include "platform_defaultatoms.h"
 #include "term.h"
+#include "utils.h"
 
 #include "trace.h"
 
-#include "sys.h"
 #include "esp32_sys.h"
+#include "sys.h"
 
 static term i2cdriver_begin_transmission(Context *ctx, term pid, term req);
 static term i2cdriver_end_transmission(Context *ctx, term pid);

@@ -18,16 +18,16 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#include "context.h"
-#include "port.h"
 #include "network.h"
+#include "context.h"
 #include "network_driver.h"
+#include "port.h"
 
 #include "context.h"
 #include "globalcontext.h"
 #include "mailbox.h"
-#include "utils.h"
 #include "term.h"
+#include "utils.h"
 
 static const char *const start_a = "\x5" "start";
 static const char *const ifconfig_a = "\x8" "ifconfig";
@@ -65,11 +65,9 @@ static void network_consume_mailbox(Context *ctx)
     free(message);
 }
 
-
 void network_init(Context *ctx, term opts)
 {
     UNUSED(opts);
     ctx->native_handler = network_consume_mailbox;
     ctx->platform_data = NULL;
 }
-

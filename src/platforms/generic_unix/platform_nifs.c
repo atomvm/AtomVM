@@ -21,9 +21,9 @@
 
 #include "atom.h"
 #include "defaultatoms.h"
-#include "platform_defaultatoms.h"
-#include "nifs.h"
 #include "memory.h"
+#include "nifs.h"
+#include "platform_defaultatoms.h"
 #include "term.h"
 #include <stdlib.h>
 
@@ -36,15 +36,15 @@
 #include "trace.h"
 
 #define VALIDATE_VALUE(value, verify_function) \
-if (UNLIKELY(!verify_function((value)))) { \
-    argv[0] = ERROR_ATOM; \
-    argv[1] = BADARG_ATOM; \
-    return term_invalid_term(); \
-}
+    if (UNLIKELY(!verify_function((value)))) { \
+        argv[0] = ERROR_ATOM;                  \
+        argv[1] = BADARG_ATOM;                 \
+        return term_invalid_term();            \
+    }
 
 #define RAISE_ERROR(error_type_atom) \
-    ctx->x[0] = ERROR_ATOM; \
-    ctx->x[1] = (error_type_atom); \
+    ctx->x[0] = ERROR_ATOM;          \
+    ctx->x[1] = (error_type_atom);   \
     return term_invalid_term();
 
 #if defined ATOMVM_HAS_OPENSSL
@@ -93,7 +93,7 @@ static term nif_openssl_random(Context *ctx, int argc, term argv[])
     UNUSED(ctx);
     UNUSED(argc);
     UNUSED(argv);
-    term ra[1] = {term_from_int(4)};
+    term ra[1] = { term_from_int(4) };
     term t = nif_openssl_rand_bytes(ctx, 1, ra);
     if (term_is_invalid_term(t)) {
         return t;

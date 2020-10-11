@@ -37,7 +37,6 @@ enum ExternalTermResult
     EXTERNAL_TERM_HEAP_ALLOC = 3
 };
 
-
 /**
  * @brief Gets a term from external term data.
  *

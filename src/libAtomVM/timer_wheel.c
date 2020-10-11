@@ -41,7 +41,7 @@ void timer_wheel_tick(struct TimerWheel *tw)
 
     struct ListHead *item;
     struct ListHead *tmp;
-    MUTABLE_LIST_FOR_EACH(item, tmp, &tw->slots[pos]) {
+    MUTABLE_LIST_FOR_EACH (item, tmp, &tw->slots[pos]) {
         struct TimerWheelItem *ti = GET_LIST_ENTRY(item, struct TimerWheelItem, head);
         if (ti->expiry_time <= monotonic_time) {
             tw->timers--;

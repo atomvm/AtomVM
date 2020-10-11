@@ -23,12 +23,12 @@
 #include "globalcontext.h"
 
 #include "atomshashtable.h"
+#include "context.h"
 #include "defaultatoms.h"
 #include "list.h"
+#include "sys.h"
 #include "utils.h"
 #include "valueshashtable.h"
-#include "sys.h"
-#include "context.h"
 
 struct RegisteredProcess
 {
@@ -166,7 +166,7 @@ int globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_str
     unsigned long atom_index = atomshashtable_get_value(htable, atom_string, ULONG_MAX);
     if (atom_index == ULONG_MAX) {
         if (copy) {
-            uint8_t len = *((uint8_t *)atom_string);
+            uint8_t len = *((uint8_t *) atom_string);
             uint8_t *buf = malloc(1 + len);
             if (UNLIKELY(IS_NULL_PTR(buf))) {
                 fprintf(stderr, "Unable to allocate memory for atom string\n");

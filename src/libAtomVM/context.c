@@ -29,7 +29,7 @@
 #undef IMPL_EXECUTE_LOOP
 
 #define DEFAULT_STACK_SIZE 8
-#define BYTES_PER_TERM (TERM_BITS/8)
+#define BYTES_PER_TERM (TERM_BITS / 8)
 
 Context *context_new(GlobalContext *glb)
 {
@@ -113,7 +113,7 @@ size_t context_message_queue_len(Context *ctx)
     size_t num_messages = 0;
 
     struct ListHead *item;
-    LIST_FOR_EACH(item, &ctx->mailbox) {
+    LIST_FOR_EACH (item, &ctx->mailbox) {
         num_messages++;
     }
 
@@ -125,7 +125,7 @@ size_t context_size(Context *ctx)
     size_t messages_size = 0;
 
     struct ListHead *item;
-    LIST_FOR_EACH(item, &ctx->mailbox) {
+    LIST_FOR_EACH (item, &ctx->mailbox) {
         Message *msg = GET_LIST_ENTRY(item, Message, mailbox_list_head);
         messages_size += sizeof(Message) + msg->msg_memory_size;
     }
