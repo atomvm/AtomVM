@@ -37,7 +37,12 @@ $ cd build
 $ cmake ..
 $ make
 $ ./src/AtomVM ./examples/erlang/hello_world.avm
+# To run the unit tests
+$ ./tests/test-erlang
 ```
+
+Note: floating point support isn't stable yet. To skip the related tests,
+instead of `cmake ..` in the snippet above, you can run `cmake -DAVM_DISABLE_FP=on`.
 
 Project Status
 ==============
