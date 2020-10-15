@@ -41,7 +41,6 @@
 -type microsecs() :: integer().
 -type timestamp() :: {megasecs(), secs(), microsecs()}.
 
-
 %%-----------------------------------------------------------------------------
 %% @param   TS2 a timestamp
 %% @param   TS1 a timestamp
@@ -60,13 +59,12 @@ delta_ms(TS2, TS1) ->
 %% @doc     Computes the difference between TS2 and TS1, as a timestamp.
 %% @end
 %%-----------------------------------------------------------------------------
--spec delta(TS2::timestamp(), TS1::timestamp()) -> timestamp().
+-spec delta(TS2 :: timestamp(), TS1 :: timestamp()) -> timestamp().
 delta({Mega2, Sec2, Micro2}, {Mega1, Sec1, Micro1}) ->
     {SDelta, Micros} = minus(Micro2, Micro1, 1000000),
     {MegaDelta, Secs} = minus(Sec2 + SDelta, Sec1, 1000000),
     Megas = (Mega2 + MegaDelta) - Mega1,
     {Megas, Secs, Micros}.
-
 
 %%
 %% Internal operations

@@ -1,4 +1,5 @@
--module (test_echo_driver).
+-module(test_echo_driver).
+
 -export([start/0, do_open_port/2]).
 
 start() ->

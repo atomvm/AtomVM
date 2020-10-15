@@ -1,4 +1,5 @@
--module (if_test).
+-module(if_test).
+
 -export([start/0, f/2, g/1]).
 
 start() ->

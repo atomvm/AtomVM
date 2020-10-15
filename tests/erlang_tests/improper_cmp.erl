@@ -1,10 +1,11 @@
 -module(improper_cmp).
+
 -export([start/0, id/1, add/2]).
 
 start() ->
-    L1 = id([ id(add(id(1), id(0))), id(add(id(1), id(1))) | id(add(id(1), id(2)))]),
-    L2 = id([ id(add(id(1), id(0))), id(add(id(1), id(1))) | id(add(id(1), id(3)))]),
-    L3 = id([ id(add(id(1), id(0))), id(add(id(1), id(1))) | id(<<"test">>) ]),
+    L1 = id([id(add(id(1), id(0))), id(add(id(1), id(1))) | id(add(id(1), id(2)))]),
+    L2 = id([id(add(id(1), id(0))), id(add(id(1), id(1))) | id(add(id(1), id(3)))]),
+    L3 = id([id(add(id(1), id(0))), id(add(id(1), id(1))) | id(<<"test">>)]),
     cmp(L1, L2) + cmp(L1, L3) * 2.
 
 id(I) ->

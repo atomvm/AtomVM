@@ -1,4 +1,5 @@
--module (catch_noifmatch).
+-module(catch_noifmatch).
+
 -export([start/0, f/1, do_noifmatch/1]).
 
 start() ->

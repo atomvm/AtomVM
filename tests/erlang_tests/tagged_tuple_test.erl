@@ -1,4 +1,5 @@
 -module(tagged_tuple_test).
+
 -export([start/0, test_func/1, call_test_func/1, some_value/1]).
 
 start() ->

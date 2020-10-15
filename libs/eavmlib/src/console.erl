@@ -73,7 +73,6 @@ flush(Console) ->
 print(String) ->
     throw(nif_error).
 
-
 %% Internal operations
 
 %% @private

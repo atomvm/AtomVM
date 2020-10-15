@@ -1,4 +1,5 @@
--module (state_test2_sender).
+-module(state_test2_sender).
+
 -export([send_msgs/1]).
 
 send_msgs(Pid) ->

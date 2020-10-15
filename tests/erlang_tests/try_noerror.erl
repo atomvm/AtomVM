@@ -1,4 +1,5 @@
--module (try_noerror).
+-module(try_noerror).
+
 -export([start/0, f/1]).
 
 start() ->

@@ -3,7 +3,6 @@
 -export([start/0]).
 
 start() ->
-
     %% simple tests (easy to debug)
     verify_b64(<<"">>, <<"">>),
     verify_b64(<<1,2,3>>, <<"AQID">>),
@@ -49,13 +48,12 @@ start() ->
     expect_error(fun() -> base64:decode(<<"A ID">>) end, badarg),
 
     % it turns out we actually support iolists, which is kind of nice
-    <<"AQIDBAUG">> = base64:encode([<<1,2>>,<<3,4,5>>,<<6>>]),
-    <<"AQIDBAUG">> = base64:encode([<<1,2>>,<<3,4,5>>,6]),
-    <<1,2,3,4,5,6>> = base64:decode(["AQ","ID","BAUG"]),
-    <<1,2,3,4,5,6>> = base64:decode(["AQ","ID",<<"BAUG">>]),
+    <<"AQIDBAUG">> = base64:encode([<<1, 2>>, <<3, 4, 5>>, <<6>>]),
+    <<"AQIDBAUG">> = base64:encode([<<1, 2>>, <<3, 4, 5>>, 6]),
+    <<1, 2, 3, 4, 5, 6>> = base64:decode(["AQ", "ID", "BAUG"]),
+    <<1, 2, 3, 4, 5, 6>> = base64:decode(["AQ", "ID", <<"BAUG">>]),
 
     0.
-
 
 verify_b64(Input, ExpectedEncoding) ->
     %erlang:display({Input, ExpectedEncoding}),
@@ -78,14 +76,16 @@ verify_value(Value, ExpectedValue) ->
     Value = ExpectedValue.
 
 expect_error(F, _Reason) ->
-    error = try
-        F(), ok
-    catch
-        _E:_R ->
-            %% TODO E doesn't seem to match error and R doesn't seem to match Reason
-            %% even through they display the same
-            %% erlang:display({E, R}),
-            %% E = error,
-            %% R = Reason,
-            error
-    end.
+    error =
+        try
+            F(),
+            ok
+        catch
+            _E:_R ->
+                %% TODO E doesn't seem to match error and R doesn't seem to match Reason
+                %% even through they display the same
+                %% erlang:display({E, R}),
+                %% E = error,
+                %% R = Reason,
+                error
+        end.

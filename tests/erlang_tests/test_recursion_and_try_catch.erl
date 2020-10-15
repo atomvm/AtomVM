@@ -1,4 +1,5 @@
 -module(test_recursion_and_try_catch).
+
 -export([start/0, id/1, f/1, h/1, g/1]).
 
 start() ->
@@ -13,10 +14,8 @@ id(X) ->
 
 f(A) when A < 1 ->
     10 div A;
-
 f(A) when A > 3 andalso A < 6 ->
     f(A - 1) * A;
-
 f(A) ->
     Tmp = g(A),
     try id(f(id(A - 1))) * A + h(Tmp) of
@@ -31,6 +30,5 @@ g(A) ->
 
 h(A) when A < 4 ->
     0;
-
 h(A) when A > 4 ->
     A.

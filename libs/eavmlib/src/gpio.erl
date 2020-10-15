@@ -37,8 +37,8 @@ set_int(GPIO, GPIONum, Trigger) ->
 remove_int(GPIO, GPIONum) ->
     GPIO ! {self(), remove_int, GPIONum},
     receive
-      Ret ->
-        Ret
+        Ret ->
+            Ret
     end.
 
 set_pin_mode(_GPIONum, _Mode) ->

@@ -1,4 +1,5 @@
--module (prime).
+-module(prime).
+
 -export([start/0, is_prime/1, calculate_list/2]).
 
 start() ->
@@ -6,10 +7,10 @@ start() ->
     spawn(prime, calculate_list, num_range(100, 400)),
     spawn(prime, calculate_list, num_range(500, 1500)),
     all_primes_test(2000) -
-    all_primes_test(2000) +
-    all_primes_test(2000) -
-    all_primes_test(2000) +
-    all_primes_test(2000).
+        all_primes_test(2000) +
+        all_primes_test(2000) -
+        all_primes_test(2000) +
+        all_primes_test(2000).
 
 num_range(A, Size) ->
     [A, A + Size].
@@ -19,11 +20,10 @@ is_prime(Num) ->
 
 test_prime(Num, I) when Num == I ->
     true;
-test_prime(Num, I)  ->
+test_prime(Num, I) ->
     if
         Num rem I == 0 ->
             false;
-
         true ->
             test_prime(Num, I + 1)
     end.
@@ -37,7 +37,6 @@ do_all_primes_test(N, UpTo, Last) ->
     case is_prime(N) of
         true ->
             do_all_primes_test(N + 1, UpTo, N);
-
         false ->
             do_all_primes_test(N + 1, UpTo, Last)
     end.

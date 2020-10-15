@@ -55,7 +55,6 @@
 -type options() :: list({atom(), term()}).
 -type server_ref() :: atom() | pid().
 
-
 %%-----------------------------------------------------------------------------
 %% @param   ServerName the name with which to register the gen_statem
 %% @param   Module the module in which the gen_statem callbacks are defined
@@ -71,7 +70,12 @@
 %%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec start(ServerName::{local, Name::atom()}, Module::module(), Args::term(), Options::options()) -> {ok, pid()} | {error, Reason::term()}.
+-spec start(
+    ServerName :: {local, Name :: atom()},
+    Module :: module(),
+    Args :: term(),
+    Options :: options()
+) -> {ok, pid()} | {error, Reason :: term()}.
 start({local, Name} = ServerName, Module, Args, Options) when is_atom(Name) ->
     gen_server:start(ServerName, ?MODULE, {Module, Args}, Options).
 
@@ -87,17 +91,17 @@ start({local, Name} = ServerName, Module, Args, Options) when is_atom(Name) ->
 %%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec start(Module::module(), Args::term(), Options::options()) -> {ok, pid()} | {error, Reason::term()}.
+-spec start(Module :: module(), Args :: term(), Options :: options()) ->
+    {ok, pid()} | {error, Reason :: term()}.
 start(Module, Args, Options) ->
     gen_server:start(?MODULE, {Module, Args}, Options).
-
 
 %%-----------------------------------------------------------------------------
 %% @equiv   stop(ServerRef, normal, infinity)
 %% @doc     Stop a previously started gen_statem.
 %% @end
 %%-----------------------------------------------------------------------------
--spec stop(ServerRef::server_ref()) -> ok | {error, Reason::term()}.
+-spec stop(ServerRef :: server_ref()) -> ok | {error, Reason :: term()}.
 stop(ServerRef) ->
     gen_server:stop(ServerRef).
 
@@ -111,7 +115,8 @@ stop(ServerRef) ->
 %%          a named gen_statem, then the gen_statem name may be used to stop the gen_statem.
 %% @end
 %%-----------------------------------------------------------------------------
--spec stop(ServerRef::server_ref(), Reason::term(), Timeout::non_neg_integer() | infinity) -> ok | {error, Reason::term()}.
+-spec stop(ServerRef :: server_ref(), Reason :: term(), Timeout :: non_neg_integer() | infinity) ->
+    ok | {error, Reason :: term()}.
 stop(ServerRef, Reason, Timeout) ->
     gen_server:stop(ServerRef, Reason, Timeout).
 
@@ -120,7 +125,8 @@ stop(ServerRef, Reason, Timeout) ->
 %% @doc     Send a request to a gen_statem instance, and wait for a reply.
 %% @end
 %%-----------------------------------------------------------------------------
--spec call(ServerRef::server_ref(), Request::term) -> Reply::term() | {error, Reason::term()}.
+-spec call(ServerRef :: server_ref(), Request :: term) ->
+    Reply :: term() | {error, Reason :: term()}.
 call(ServerRef, Request) ->
     call(ServerRef, Request, 5000).
 
@@ -136,7 +142,8 @@ call(ServerRef, Request) ->
 %%          reply from the gen_statem.
 %% @end
 %%-----------------------------------------------------------------------------
--spec call(ServerRef::server_ref(), Request::term(), Timeout::timeout()) -> Reply::term() | {error, Reason::term()}.
+-spec call(ServerRef :: server_ref(), Request :: term(), Timeout :: timeout()) ->
+    Reply :: term() | {error, Reason :: term()}.
 call(ServerRef, Request, Timeout) ->
     gen_server:call(ServerRef, Request, Timeout).
 
@@ -175,40 +182,40 @@ reply(Client, Reply) ->
 init({Module, Args}) ->
     case Module:init(Args) of
         {ok, NextState, Data} ->
-            {ok, #state{mod=Module, current_state=NextState, data=Data}};
+            {ok, #state{mod = Module, current_state = NextState, data = Data}};
         {ok, NextState, Data, Actions} ->
             handle_actions(Actions, [{next_state, NextState}]),
-            {ok, #state{mod=Module, current_state=NextState, data=Data}};
+            {ok, #state{mod = Module, current_state = NextState, data = Data}};
         {stop, Reason} ->
             {stop, Reason};
         _ ->
             {stop, {error, undefined}}
     end.
 
-
 %% @hidden
 handle_call(Request, From, State) ->
     do_handle_state({call, From}, Request, State).
-
 
 %% @hidden
 handle_cast(Request, State) ->
     do_handle_state(cast, Request, State).
 
-
 %% @hidden
-handle_info({timeout, _TimerRef, {state_timeout, State, Msg}}, #state{current_state=CurrentState} = State) ->
+handle_info(
+    {timeout, _TimerRef, {state_timeout, State, Msg}},
+    #state{current_state = CurrentState} = State
+) ->
     case State of
         CurrentState ->
             do_handle_state(state_timeout, Msg, State);
-        _ -> ok
+        _ ->
+            ok
     end;
 handle_info(Request, State) ->
     do_handle_state(info, Request, State).
 
-
 %% @hidden
-terminate(Reason, #state{mod=Module, current_state=CurrentState, data=Data} = _State) ->
+terminate(Reason, #state{mod = Module, current_state = CurrentState, data = Data} = _State) ->
     Module:terminate(Reason, CurrentState, Data),
     ok.
 
@@ -217,23 +224,27 @@ terminate(Reason, #state{mod=Module, current_state=CurrentState, data=Data} = _S
 %%
 
 %% @private
-do_handle_state(EventType, Request, #state{mod=Module, current_state=CurrentState, data=Data} = State) ->
+do_handle_state(
+    EventType,
+    Request,
+    #state{mod = Module, current_state = CurrentState, data = Data} = State
+) ->
     case Module:CurrentState(EventType, Request, Data) of
         {next_state, NextState, NewData} ->
-            {noreply, State#state{current_state=NextState, data=NewData}};
+            {noreply, State#state{current_state = NextState, data = NewData}};
         {next_state, NextState, NewData, Actions} ->
             handle_actions(Actions, [{current_state, CurrentState}, {next_state, NextState}]),
-            {noreply, State#state{current_state=NextState, data=NewData}};
+            {noreply, State#state{current_state = NextState, data = NewData}};
         {stop, Reason} ->
             {stop, Reason, State};
         {stop, Reason, NewData} ->
-            {stop, Reason, State#state{data=NewData}};
+            {stop, Reason, State#state{data = NewData}};
         {stop_and_reply, Reason, Replies} ->
             handle_actions(Replies, []),
             {stop, Reason, State};
         {stop_and_reply, Reason, Replies, NewData} ->
             handle_actions(Replies, []),
-            {stop, Reason, State#state{data=NewData}};
+            {stop, Reason, State#state{data = NewData}};
         Reply ->
             {error, {unexpected_reply, Reply}}
     end.
@@ -245,7 +256,11 @@ handle_actions([{reply, From, Reply} | T], Context) ->
     reply(From, Reply),
     handle_actions(T, Context);
 handle_actions([{state_timeout, Timeout, Msg} | T], Context) ->
-    timer_manager:start_timer(Timeout, self(), {state_timeout, proplists:get_value(next_state, Context), Msg}),
+    timer_manager:start_timer(
+        Timeout,
+        self(),
+        {state_timeout, proplists:get_value(next_state, Context), Msg}
+    ),
     handle_actions(T, Context);
 handle_actions([_ | T], Context) ->
     handle_actions(T, Context).

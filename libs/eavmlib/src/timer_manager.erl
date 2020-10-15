@@ -32,7 +32,7 @@
 
 -define(SERVER_NAME, ?MODULE).
 
--spec start() -> {ok, Pid::pid()} | {error, Reason::term()}.
+-spec start() -> {ok, Pid :: pid()} | {error, Reason :: term()}.
 start() ->
     gen_server:start({local, ?SERVER_NAME}, ?MODULE, [], []).
 
@@ -45,7 +45,8 @@ start() ->
 %%          Time ms, where TimerRef is the reference returned from this function.
 %% @end
 %%-----------------------------------------------------------------------------
--spec start_timer(Time::non_neg_integer(), Dest::pid(), Msg::term()) -> TimerRef::reference().
+-spec start_timer(Time :: non_neg_integer(), Dest :: pid(), Msg :: term()) ->
+    TimerRef :: reference().
 start_timer(Time, Dest, Msg) ->
     start(),
     gen_server:call(?SERVER_NAME, {Time, Dest, Msg}).
@@ -62,7 +63,7 @@ start_timer(Time, Dest, Msg) ->
 %%
 %%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
 %%-----------------------------------------------------------------------------
--spec cancel_timer(TimerRef::reference()) -> ok.
+-spec cancel_timer(TimerRef :: reference()) -> ok.
 cancel_timer(TimerRef) ->
     start(),
     gen_server:call(?SERVER_NAME, {cancel, TimerRef}).
@@ -86,7 +87,6 @@ send_after(Time, Dest, Msg) ->
     spawn(?MODULE, send_after_timer, [Time, Dest, Msg]),
     TimerRef.
 
-
 %%
 %% ?GEN_SERVER callbacks
 %%
@@ -96,9 +96,9 @@ init([]) ->
     {ok, #state{}}.
 
 %% @hidden
-handle_call(get_timer_refs, _From, #state{timers=Timers} = State) ->
+handle_call(get_timer_refs, _From, #state{timers = Timers} = State) ->
     {reply, [TimerRef || {TimerRef, _Pid} <- Timers], State};
-handle_call({cancel, TimerRef}, From, #state{timers=Timers} = State) ->
+handle_call({cancel, TimerRef}, From, #state{timers = Timers} = State) ->
     case lists:keyfind(TimerRef, 1, Timers) of
         false ->
             {reply, false, State};
@@ -106,22 +106,21 @@ handle_call({cancel, TimerRef}, From, #state{timers=Timers} = State) ->
             Pid ! {cancel, From},
             {noreply, State}
     end;
-handle_call({Time, Dest, Msg}, _From, #state{timers=Timers} = State) ->
+handle_call({Time, Dest, Msg}, _From, #state{timers = Timers} = State) ->
     {TimerRef, Pid} = do_start_timer(Time, Dest, Msg),
-    {reply, TimerRef, State#state{timers=[{TimerRef, Pid} | Timers]}}.
+    {reply, TimerRef, State#state{timers = [{TimerRef, Pid} | Timers]}}.
 
 %% @hidden
 handle_cast(_Request, State) ->
     {noreply, State}.
 
 %% @hidden
-handle_info({finished, TimerRef}, #state{timers=Timers} = State) ->
-    {noreply, State#state{timers=lists:keydelete(TimerRef, 1, Timers)}}.
+handle_info({finished, TimerRef}, #state{timers = Timers} = State) ->
+    {noreply, State#state{timers = lists:keydelete(TimerRef, 1, Timers)}}.
 
 %% @hidden
 terminate(_Reason, _State) ->
     ok.
-
 
 %%=============================================================================
 %% internal functions
@@ -138,8 +137,7 @@ run_timer(MgrPid, Time, TimerRef, Dest, Msg) ->
     receive
         {cancel, From} ->
             gen_server:reply(From, Time - timestamp_util:delta_ms(erlang:timestamp(), Start))
-    after Time ->
-        Dest ! {timeout, TimerRef, Msg}
+    after Time -> Dest ! {timeout, TimerRef, Msg}
     end,
     MgrPid ! {finished, TimerRef}.
 

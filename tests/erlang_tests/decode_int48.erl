@@ -4,9 +4,9 @@
 
 start() ->
     ((decode48(bin(b, u, [16#CA, 16#FE, 16#BA, 16#BE, 16#DE, 16#AD])) * 11) bxor
-     (decode48(bin(b, s, [16#CA, 16#FE, 16#BA, 16#BE, 16#DE, 16#AD])) * -3) bxor
-    (decode48(bin(l, u, [16#CA, 16#FE, 16#BA, 16#BE, 16#DE, 16#AD])) * 5) bxor
-    (decode48(bin(l, s, [16#CA, 16#FE, 16#BA, 16#BE, 16#DE, 16#AD])) * -7)) rem 876113.
+        (decode48(bin(b, s, [16#CA, 16#FE, 16#BA, 16#BE, 16#DE, 16#AD])) * -3) bxor
+        (decode48(bin(l, u, [16#CA, 16#FE, 16#BA, 16#BE, 16#DE, 16#AD])) * 5) bxor
+        (decode48(bin(l, s, [16#CA, 16#FE, 16#BA, 16#BE, 16#DE, 16#AD])) * -7)) rem 876113.
 
 decode48(<<0, U48B:48/integer-unsigned-big, 0>>) ->
     U48B;

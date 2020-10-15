@@ -1,4 +1,5 @@
 -module(test_list_to_binary).
+
 -export([start/0, concat/2, concat2/2, compare_bin/3]).
 
 start() ->
@@ -26,7 +27,6 @@ compare_bin(Bin1, Bin2) ->
 
 compare_bin(_Bin1, _Bin2, -1) ->
     1;
-
 compare_bin(Bin1, Bin2, Index) ->
     B1 = binary:at(Bin1, Index),
     case binary:at(Bin2, Index) of

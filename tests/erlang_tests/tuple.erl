@@ -1,5 +1,6 @@
 -module(tuple).
--export([start/0,maketuple/3,sumtuple/1]).
+
+-export([start/0, maketuple/3, sumtuple/1]).
 
 start() -> sumtuple(maketuple(1, 2, 3)).
 

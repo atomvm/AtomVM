@@ -1,24 +1,49 @@
 -module(make_garbage2).
--export([start/0, compute/1, compute_tree/1, a/1, b/0, c/0, ac/1, d/1, e/0, de/1, f/1, g/1, h/0, i/1, j/1, k/2, l/1, kl/2, m/2, n/2, o/2, p/1, q/1, r/1, s/1, t/3, u/0]).
+
+-export([
+    start/0,
+    compute/1,
+    compute_tree/1,
+    a/1,
+    b/0,
+    c/0,
+    ac/1,
+    d/1,
+    e/0,
+    de/1,
+    f/1,
+    g/1,
+    h/0,
+    i/1,
+    j/1,
+    k/2,
+    l/1,
+    kl/2,
+    m/2,
+    n/2,
+    o/2,
+    p/1,
+    q/1,
+    r/1,
+    s/1,
+    t/3,
+    u/0
+]).
 
 start() ->
     compute(u()).
 
 compute(A) when is_tuple(A) ->
     compute(compute_tree(A));
-
 compute(A) when is_number(A) ->
     A.
 
 compute_tree({Op, A}) when is_tuple(A) ->
     {Op, compute_tree(A)};
-
 compute_tree({Op, A, B}) when is_tuple(A) and is_number(B) ->
     {Op, compute_tree(A), B};
-
 compute_tree({Op, A, B}) when is_number(A) and is_tuple(B) ->
     {Op, A, compute_tree(B)};
-
 compute_tree({Op, A, B}) when is_tuple(A) and is_tuple(B) ->
     {Op, compute_tree(A), B};
 % The following line also works, but it makes less iterations.
@@ -26,117 +51,129 @@ compute_tree({Op, A, B}) when is_tuple(A) and is_tuple(B) ->
 
 compute_tree({'!', A}) when is_number(A) ->
     fact(A);
-
 compute_tree({'-', A}) when is_number(A) ->
     -A;
-
 compute_tree({'+', A, B}) when is_number(A) and is_number(B) ->
     A + B;
-
 compute_tree({'-', A, B}) when is_number(A) and is_number(B) ->
     A - B;
-
 compute_tree({'*', A, B}) when is_number(A) and is_number(B) ->
     A * B;
-
 compute_tree({'div', A, B}) when is_number(A) and is_number(B) ->
     A div B;
-
 compute_tree({'.', A, B}) when is_list(A) and is_list(B) ->
     dot(A, B, 0);
-
 compute_tree({'+', A}) when is_list(A) ->
     sum_list(A, 0);
-
 compute_tree(A) when is_number(A) ->
     A.
 
 fact(0) ->
     1;
-
 fact(A) ->
     A * fact(A - 1).
 
 dot([], [], Acc) ->
     Acc;
-
-dot([HA|TA], [HB|TB], Acc) ->
+dot([HA | TA], [HB | TB], Acc) ->
     dot(TA, TB, Acc + HA * HB).
 
 sum_list([], Acc) ->
     Acc;
-
-sum_list([H|T], Acc) ->
+sum_list([H | T], Acc) ->
     sum_list(T, H + Acc).
 
 a(A) ->
-    A. % 4
+    % 4
+    A.
 
 b() ->
-    {'div', 5, 3}. % 1
+    % 1
+    {'div', 5, 3}.
 
 c() ->
-    {'-', 4, b()}. % 3
+    % 3
+    {'-', 4, b()}.
 
 ac(A) ->
-    {'*', a(A), c()}. %12
+    %12
+    {'*', a(A), c()}.
 
 d(A) ->
-    {'-', ac(A), 13}. % -1
+    % -1
+    {'-', ac(A), 13}.
 
 e() ->
-    {'!', 3}. % 6
+    % 6
+    {'!', 3}.
 
 de(A) ->
-    {'*', d(A), e()}. % -6
+    % -6
+    {'*', d(A), e()}.
 
 f(A) ->
-    A. % 4
+    % 4
+    A.
 
 g(A) ->
-    {'+', f(A), h()}. % 12
+    % 12
+    {'+', f(A), h()}.
 
 h() ->
-    {'*', 4, 2}. % 8
+    % 8
+    {'*', 4, 2}.
 
 i(A) ->
-    {'+', de(A), g(A)}. % 6
+    % 6
+    {'+', de(A), g(A)}.
 
 j(L) ->
-    {'.', L, [10, 20, 30]}. % 140
+    % 140
+    {'.', L, [10, 20, 30]}.
 
 k(L, A) ->
-    {'-', j(L), i(A)}. % 134
+    % 134
+    {'-', j(L), i(A)}.
 
 l(L) ->
-    {'+', L}. % 15
+    % 15
+    {'+', L}.
 
 kl(L, A) ->
-    {'-', k(L, A), l(L)}. % 119
+    % 119
+    {'-', k(L, A), l(L)}.
 
 m(L, A) ->
-    {'-', kl(L, A)}. % - 119
+    % - 119
+    {'-', kl(L, A)}.
 
 n(L, A) ->
-    {'-', m(L, A)}. % 119
+    % 119
+    {'-', m(L, A)}.
 
 o(L, A) ->
-    {'-', n(L, A)}. % - 119
+    % - 119
+    {'-', n(L, A)}.
 
 p(R) ->
-    R. % 5
+    % 5
+    R.
 
 q(R) ->
-    {'+', 15, r(R)}. % 20
+    % 20
+    {'+', 15, r(R)}.
 
 r(R) ->
-    R. % 5
+    % 5
+    R.
 
 s(R) ->
-    {'*', p(R), q(R)}. % 100
+    % 100
+    {'*', p(R), q(R)}.
 
 t(L, A, R) ->
-    {'+', o(L, A), s(R)}. % -19
+    % -19
+    {'+', o(L, A), s(R)}.
 
 u() ->
     L = [1, 2, 3],

@@ -1,4 +1,5 @@
--module (test_regecho_driver).
+-module(test_regecho_driver).
+
 -export([start/0, do_open_port/2, echo/1]).
 
 start() ->

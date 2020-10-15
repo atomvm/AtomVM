@@ -30,19 +30,15 @@ init(_) ->
 handle_call({pub, Topic, Term}, {FromPid, _Ref}, Table) ->
     Sub = broadcast_subscribers(Table, Topic, FromPid, Term),
     {reply, {ok, Sub}, Table};
-
 handle_call({sub, Topic}, {FromPid, _Ref}, Table) ->
     NewTable = add_subscriber(Table, FromPid, Topic),
     {reply, ok, NewTable};
-
 handle_call({sub, Topic, Subscriber}, _From, Table) ->
     NewTable = add_subscriber(Table, Subscriber, Topic),
     {reply, ok, NewTable};
-
 handle_call({unsub, Topic}, {FromPid, _Ref}, Table) ->
     NewTable = remove_subscriber(Table, FromPid, Topic),
     {reply, ok, NewTable};
-
 handle_call({unsub, Topic, Subscriber}, _From, Table) ->
     NewTable = remove_subscriber(Table, Subscriber, Topic),
     {reply, ok, NewTable}.
@@ -84,7 +80,6 @@ find_subscribers(Table, Topic) ->
 
 find_subscribers([], _Topic, Acc) ->
     Acc;
-
 find_subscribers([{Subscribers, SubscribePattern} | T], Topic, Acc) ->
     case match_topic(SubscribePattern, Topic) of
         true -> find_subscribers(T, Topic, Subscribers ++ Acc);
@@ -93,15 +88,11 @@ find_subscribers([{Subscribers, SubscribePattern} | T], Topic, Acc) ->
 
 match_topic([H | PatternT], [H | TopicT]) ->
     match_topic(PatternT, TopicT);
-
-match_topic(['+'| PatternT], [_H | TopicT]) ->
+match_topic(['+' | PatternT], [_H | TopicT]) ->
     match_topic(PatternT, TopicT);
-
 match_topic(['#'], [_H | _T]) ->
     true;
-
 match_topic([], []) ->
     true;
-
 match_topic(_, _) ->
     false.

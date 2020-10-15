@@ -1,4 +1,5 @@
 -module(spawn_fun2).
+
 -export([start/0]).
 
 start() ->

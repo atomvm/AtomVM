@@ -1,4 +1,5 @@
 -module(test_list_to_existing_atom).
+
 -export([start/0, f/1, g/1, h/1, i/1, j/0]).
 
 start() ->
@@ -6,19 +7,14 @@ start() ->
 
 f(missing_atom) ->
     0;
-
 f(hello) ->
     1;
-
 f(world) ->
     2;
-
 f(test) ->
     4;
-
 f(AnyAtom) when is_atom(AnyAtom) ->
     8;
-
 f(_Any) ->
     16.
 
@@ -27,19 +23,15 @@ g(N) ->
 
 h(0) ->
     "hello";
-
 h(4) ->
     "this_will_be_a_new_atom";
-
 h(9) ->
     "a_missing_atom";
-
 h(_) ->
     [].
 
 i(A) when not is_list(A) ->
     error;
-
 i(A) ->
     try list_to_existing_atom(A) of
         AnyExisting -> AnyExisting

@@ -1,4 +1,5 @@
--module (catch_nocasematch).
+-module(catch_nocasematch).
+
 -export([start/0, f/1, do_nocasematch/1]).
 
 start() ->

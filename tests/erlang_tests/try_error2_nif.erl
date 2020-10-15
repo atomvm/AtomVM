@@ -1,4 +1,5 @@
--module (try_error2_nif).
+-module(try_error2_nif).
+
 -export([start/0, f/1, g/1, h/1, factorial/1]).
 
 start() ->

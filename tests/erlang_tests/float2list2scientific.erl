@@ -1,4 +1,5 @@
 -module(float2list2scientific).
+
 -export([start/0, add/2, compare_list/2, id/1, float_to_list_badarg/2]).
 
 start() ->
@@ -11,10 +12,10 @@ start() ->
     F4 = id(add(id(F2), id(F3))),
     L4 = id(erlang:float_to_list(id(F4), [{scientific, 0}, compact])),
     compare_list(L1, id("1.50e+00")) +
-    compare_list(L2, id("1.0e+00")) * 2 +
-    compare_list(L3, id("-1.000e+00")) * 4 +
-    compare_list(L4, id("0e+00")) * 8 +
-    float_to_list_badarg([1], [{scientific, 0}, compact]) * 16.
+        compare_list(L2, id("1.0e+00")) * 2 +
+        compare_list(L3, id("-1.000e+00")) * 4 +
+        compare_list(L4, id("0e+00")) * 8 +
+        float_to_list_badarg([1], [{scientific, 0}, compact]) * 16.
 
 add(A, B) when is_float(A) and is_float(B) ->
     id(id(A) + id(B)).

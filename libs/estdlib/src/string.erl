@@ -30,13 +30,11 @@
 
 to_upper(S) when is_list(S) ->
     [upper_char(C) || C <- S];
-
 to_upper(C) when is_integer(C) ->
     upper_char(C).
 
 upper_char(C) when is_integer(C) andalso C >= $a andalso C =< $z ->
     C - 32;
-
 upper_char(C) when is_integer(C) ->
     C.
 
@@ -48,7 +46,7 @@ split(String, Pattern, Where) ->
 
 %% @private
 split([], _Pattern, _Where, Token, Accum) ->
-    lists:reverse([lists:reverse(Token)|Accum]);
+    lists:reverse([lists:reverse(Token) | Accum]);
 split(String, Pattern, Where, Token, Accum) ->
     case prefix_match(String, Pattern) of
         {ok, Rest} ->
@@ -56,17 +54,17 @@ split(String, Pattern, Where, Token, Accum) ->
                 leading ->
                     [lists:reverse(Token), Rest];
                 all ->
-                    split(Rest, Pattern, Where, [], [lists:reverse(Token)|Accum])
+                    split(Rest, Pattern, Where, [], [lists:reverse(Token) | Accum])
             end;
         no ->
-            [Char|Rest] = String,
-            split(Rest, Pattern, Where, [Char|Token], Accum)
+            [Char | Rest] = String,
+            split(Rest, Pattern, Where, [Char | Token], Accum)
     end.
 
 %% @private
 prefix_match(Rest, []) ->
     {ok, Rest};
-prefix_match([Char|Rest], [Char|PRest]) ->
+prefix_match([Char | Rest], [Char | PRest]) ->
     prefix_match(Rest, PRest);
 prefix_match(_String, _Pattern) ->
     no.
@@ -82,7 +80,7 @@ trim(String, both) ->
     lists:reverse(triml(lists:reverse(triml(String)))).
 
 %% @private
-triml([$\s|R]) ->
+triml([$\s | R]) ->
     triml(R);
 triml(R) ->
     R.

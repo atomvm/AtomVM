@@ -29,12 +29,17 @@
 -module(logger).
 
 -export([
-    start/0, start/1, log/3,
-    get_levels/0, set_levels/1,
-    get_filter/0, set_filter/1,
-    get_sinks/0, set_sinks/1,
+    start/0, start/1,
+    log/3,
+    get_levels/0,
+    set_levels/1,
+    get_filter/0,
+    set_filter/1,
+    get_sinks/0,
+    set_sinks/1,
     stop/0
 ]).
+
 -export([loop/1, console_log/1]).
 
 -record(state, {
@@ -43,8 +48,12 @@
 }).
 
 -type location() :: {
-    Module::module(), Function::atom(), Arity::non_neg_integer(), Line::non_neg_integer()
+    Module :: module(),
+    Function :: atom(),
+    Arity :: non_neg_integer(),
+    Line :: non_neg_integer()
 }.
+
 -type level() :: debug | info | warning | error.
 -type sink() :: {atom(), atom()}.
 -type year() :: integer().
@@ -60,7 +69,11 @@
 -type config_item() :: {levels, [level()]}.
 -type config() :: [config_item()].
 
--define(DEFAULT_CONFIG, [{levels, [info, warning, error]}, {filter, []}, {sinks, [{?MODULE, console_log}]}]).
+-define(DEFAULT_CONFIG, [
+    {levels, [info, warning, error]},
+    {filter, []},
+    {sinks, [{?MODULE, console_log}]}
+]).
 
 %%-----------------------------------------------------------------------------
 %% @equiv   start([{levels, [info, warning, error]}])
@@ -79,21 +92,23 @@ start() ->
 %%          This function will start the logger with the specified configuration.
 %% @end
 %%-----------------------------------------------------------------------------
--spec start(Config::config()) -> {ok, pid()}.
+-spec start(Config :: config()) -> {ok, pid()}.
 start(Config0) ->
     Config = fill_defaults(Config0, ?DEFAULT_CONFIG),
-    LoggerPid = case whereis(?MODULE) of
-        undefined ->
-            State = #state{pid=self(), config=Config},
-            Pid = spawn(?MODULE, loop, [State]),
-            receive
-                started ->
-                    ok
-            end,
-            erlang:register(?MODULE, Pid),
-            Pid;
-        Pid -> Pid
-    end,
+    LoggerPid =
+        case whereis(?MODULE) of
+            undefined ->
+                State = #state{pid = self(), config = Config},
+                Pid = spawn(?MODULE, loop, [State]),
+                receive
+                    started ->
+                        ok
+                end,
+                erlang:register(?MODULE, Pid),
+                Pid;
+            Pid ->
+                Pid
+        end,
     {ok, LoggerPid}.
 
 %%-----------------------------------------------------------------------------
@@ -116,7 +131,11 @@ stop() ->
 %%          calling this function directly.
 %% @end
 %%-----------------------------------------------------------------------------
--spec log(Location::location(), Level::level(), MsgFormat::{Format::string(), Args::list(term())}) -> ok.
+-spec log(
+    Location :: location(),
+    Level :: level(),
+    MsgFormat :: {Format :: string(), Args :: list(term())}
+) -> ok.
 log(Location, Level, MsgFormat) ->
     {ok, Pid} = maybe_start(whereis(?MODULE)),
     Pid ! {Location, erlang:universaltime(), self(), Level, MsgFormat},
@@ -128,7 +147,7 @@ log(Location, Level, MsgFormat) ->
 %% @doc     Set the levels in the logger.
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_levels(Levels::[level()]) -> ok.
+-spec set_levels(Levels :: [level()]) -> ok.
 set_levels(Levels) ->
     {ok, Pid} = maybe_start(whereis(?MODULE)),
     Pid ! {set_levels, Levels},
@@ -139,7 +158,7 @@ set_levels(Levels) ->
 %% @doc     Get the current levels in the logger.
 %% @end
 %%-----------------------------------------------------------------------------
--spec get_levels() -> {ok, Levels::[level()]} | {error, timeout}.
+-spec get_levels() -> {ok, Levels :: [level()]} | {error, timeout}.
 get_levels() ->
     {ok, Pid} = maybe_start(whereis(?MODULE)),
     Ref = erlang:make_ref(),
@@ -147,8 +166,7 @@ get_levels() ->
     receive
         {Ref, Levels} ->
             {ok, Levels}
-    after 5000 ->
-        {error, timeout}
+    after 5000 -> {error, timeout}
     end.
 
 %%-----------------------------------------------------------------------------
@@ -161,7 +179,7 @@ get_levels() ->
 %%          empty, then the log will be triggered (if the level matches, as well)
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_filter(Filter::[module()]) -> ok.
+-spec set_filter(Filter :: [module()]) -> ok.
 set_filter(Filter) ->
     {ok, Pid} = maybe_start(whereis(?MODULE)),
     Pid ! {set_filter, Filter},
@@ -172,7 +190,7 @@ set_filter(Filter) ->
 %% @doc     Get the current filter in the logger.
 %% @end
 %%-----------------------------------------------------------------------------
--spec get_filter() -> {ok, Filter::[module()]} | {error, timeout}.
+-spec get_filter() -> {ok, Filter :: [module()]} | {error, timeout}.
 get_filter() ->
     {ok, Pid} = maybe_start(whereis(?MODULE)),
     Ref = erlang:make_ref(),
@@ -180,8 +198,7 @@ get_filter() ->
     receive
         {Ref, Filter} ->
             {ok, Filter}
-    after 5000 ->
-        {error, timeout}
+    after 5000 -> {error, timeout}
     end.
 
 %%-----------------------------------------------------------------------------
@@ -190,7 +207,7 @@ get_filter() ->
 %% @doc     Set the sinks in the logger.
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_sinks(Sinks::[sink()]) -> ok.
+-spec set_sinks(Sinks :: [sink()]) -> ok.
 set_sinks(Sinks) ->
     {ok, Pid} = maybe_start(whereis(?MODULE)),
     Pid ! {set_sinks, Sinks},
@@ -201,7 +218,7 @@ set_sinks(Sinks) ->
 %% @doc     Get the current sinks in the logger.
 %% @end
 %%-----------------------------------------------------------------------------
--spec get_sinks() -> {ok, Sinks::[sink()]} | {error, timeout}.
+-spec get_sinks() -> {ok, Sinks :: [sink()]} | {error, timeout}.
 get_sinks() ->
     {ok, Pid} = maybe_start(whereis(?MODULE)),
     Ref = erlang:make_ref(),
@@ -209,12 +226,11 @@ get_sinks() ->
     receive
         {Ref, Sinks} ->
             {ok, Sinks}
-    after 5000 ->
-        {error, timeout}
+    after 5000 -> {error, timeout}
     end.
 
 %% @hidden
--spec console_log(Request::log_request()) -> ok.
+-spec console_log(Request :: log_request()) -> ok.
 console_log(Request) ->
     {Location, Timestamp, Pid, Level, {Format, Args}} = Request,
     TimestampStr = make_timestamp(Timestamp),
@@ -226,13 +242,21 @@ console_log(Request) ->
 make_timestamp(Timestamp) ->
     {{Year, Month, Day}, {Hour, Minute, Second}} = Timestamp,
     io:format("~p-~p-~pT~p:~p:~p.000", [
-        Year, Month, Day, Hour, Minute, Second
+        Year,
+        Month,
+        Day,
+        Hour,
+        Minute,
+        Second
     ]).
 
 make_location(Location) ->
     {Module, Function, Arity, Line} = Location,
     io:format("[~p:~p/~p:~p]", [
-        Module, Function, Arity, Line
+        Module,
+        Function,
+        Arity,
+        Line
     ]).
 
 %%
@@ -240,16 +264,18 @@ make_location(Location) ->
 %%
 
 %% @private
-loop(#state{pid=StartingPid, config=Config} = State0) ->
-    State = case StartingPid of
-        undefined -> State0;
-        _ ->
-            StartingPid ! started,
-            State0#state{pid=undefined}
-    end,
+loop(#state{pid = StartingPid, config = Config} = State0) ->
+    State =
+        case StartingPid of
+            undefined ->
+                State0;
+            _ ->
+                StartingPid ! started,
+                State0#state{pid = undefined}
+        end,
     Levels = proplists:get_value(levels, Config, []),
     Filter = proplists:get_value(filter, Config, []),
-    Sinks   = proplists:get_value(sinks, Config, []),
+    Sinks = proplists:get_value(sinks, Config, []),
     receive
         {get_levels, Ref, Pid} ->
             Pid ! {Ref, Levels},
@@ -261,11 +287,11 @@ loop(#state{pid=StartingPid, config=Config} = State0) ->
             Pid ! {Ref, Sinks},
             loop(State);
         {set_levels, NewLevels} ->
-            loop(State#state{config=[{levels, NewLevels} | lists:keydelete(levels, 1, Config)]});
+            loop(State#state{config = [{levels, NewLevels} | lists:keydelete(levels, 1, Config)]});
         {set_filter, NewFilter} ->
-            loop(State#state{config=[{filter, NewFilter} | lists:keydelete(filter, 1, Config)]});
+            loop(State#state{config = [{filter, NewFilter} | lists:keydelete(filter, 1, Config)]});
         {set_sinks, NewSinks} ->
-            loop(State#state{config=[{sinks, NewSinks} | lists:keydelete(sinks, 1, Config)]});
+            loop(State#state{config = [{sinks, NewSinks} | lists:keydelete(sinks, 1, Config)]});
         {_Location, _Time, _Pid, Level, _MsgFormat} = Request ->
             maybe_do_log(Sinks, Request, Level, Levels, Filter),
             loop(State);
@@ -300,7 +326,7 @@ match_filter({Module, _Function, _Arity, _Line}, Filter) ->
 
 do_log_sinks([], _Request, _Level, _Levels) ->
     ok;
-do_log_sinks([Sink|Rest], Request, Level, Levels) ->
+do_log_sinks([Sink | Rest], Request, Level, Levels) ->
     do_log_sink(Sink, Request, Level, Levels),
     do_log_sinks(Rest, Request, Level, Levels).
 
@@ -328,10 +354,10 @@ fill_defaults(Config, Defaults) ->
 %% @private
 fill_defaults(_Config, [], Accum) ->
     Accum;
-fill_defaults(Config, [{K,_V}=H|T], Accum) ->
+fill_defaults(Config, [{K, _V} = H | T], Accum) ->
     case proplists:get_value(K, Config) of
         undefined ->
-            fill_defaults(Config, T, [H|Accum]);
+            fill_defaults(Config, T, [H | Accum]);
         Value ->
-            fill_defaults(Config, T, [{K,Value}|Accum])
+            fill_defaults(Config, T, [{K, Value} | Accum])
     end.

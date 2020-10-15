@@ -1,4 +1,5 @@
 -module(test_try_case_end).
+
 -export([start/0, id/1, add_handle_badarith/2, try_add_plus_2/2, try_add/2]).
 
 start() ->
@@ -12,7 +13,7 @@ add_handle_badarith(A, B) ->
         Result -> Result
     catch
         error:badarith -> -16;
-        error:{try_clause,N} -> 256 - N;
+        error:{try_clause, N} -> 256 - N;
         _:_ -> 2048
     end.
 

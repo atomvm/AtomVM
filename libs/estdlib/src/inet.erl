@@ -36,7 +36,7 @@
 %%          operating system.
 %% @end
 %%-----------------------------------------------------------------------------
--spec port(Socket::socket()) -> port_number().
+-spec port(Socket :: socket()) -> port_number().
 port(Socket) ->
     call(Socket, {get_port}).
 
@@ -46,7 +46,7 @@ port(Socket) ->
 %% @doc     Close the socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec close(Socket::socket()) -> ok.
+-spec close(Socket :: socket()) -> ok.
 close(Socket) ->
     call(Socket, {close}).
 
@@ -57,7 +57,7 @@ close(Socket) ->
 %%          This function should be called on a running socket instance.
 %% @end
 %%-----------------------------------------------------------------------------
--spec sockname(Socket::socket()) -> {ok, {address(), port_number()}} | {error, Reason::term()}.
+-spec sockname(Socket :: socket()) -> {ok, {address(), port_number()}} | {error, Reason :: term()}.
 sockname(Socket) ->
     call(Socket, {sockname}).
 
@@ -68,7 +68,7 @@ sockname(Socket) ->
 %%          This function should be called on a running socket instance.
 %% @end
 %%-----------------------------------------------------------------------------
--spec peername(Socket::socket()) -> {ok, {address(), port_number()}} | {error, Reason::term()}.
+-spec peername(Socket :: socket()) -> {ok, {address(), port_number()}} | {error, Reason :: term()}.
 peername(Socket) ->
     call(Socket, {peername}).
 

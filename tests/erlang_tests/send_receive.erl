@@ -1,4 +1,5 @@
--module (send_receive).
+-module(send_receive).
+
 -export([start/0, send_test/2]).
 
 start() ->

@@ -1,4 +1,5 @@
--module (test_send_nif_and_echo).
+-module(test_send_nif_and_echo).
+
 -export([start/0, do_open_port/2, echo/1]).
 
 start() ->
@@ -9,7 +10,7 @@ do_open_port(PortName, Param) ->
     open_port({spawn, PortName}, Param).
 
 echo(SendValue) ->
-    erlang:send(whereis(echo),{self(), SendValue}),
+    erlang:send(whereis(echo), {self(), SendValue}),
     receive
         Value ->
             Value

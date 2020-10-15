@@ -1,4 +1,5 @@
--module (make_ref_test).
+-module(make_ref_test).
+
 -export([start/0, compare/2, do_make_ref/0, to_tuple/1]).
 
 start() ->

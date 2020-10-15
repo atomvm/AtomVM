@@ -1,5 +1,34 @@
 -module(copy_terms9).
--export([start/0, loop/0, compute/1, compute_tree/1, a/0, b/0, c/0, ac/0, d/0, e/0, de/0, f/0, g/0, h/0, i/0, j/0, k/0, l/0, kl/0, m/0, n/0, o/0, p/0, q/0, r/0, s/0, t/0]).
+
+-export([
+    start/0,
+    loop/0,
+    compute/1,
+    compute_tree/1,
+    a/0,
+    b/0,
+    c/0,
+    ac/0,
+    d/0,
+    e/0,
+    de/0,
+    f/0,
+    g/0,
+    h/0,
+    i/0,
+    j/0,
+    k/0,
+    l/0,
+    kl/0,
+    m/0,
+    n/0,
+    o/0,
+    p/0,
+    q/0,
+    r/0,
+    s/0,
+    t/0
+]).
 
 start() ->
     Pid = spawn(?MODULE, loop, []),
@@ -15,7 +44,6 @@ loop() ->
     case handle_request() of
         terminate ->
             terminate;
-
         ok ->
             loop()
     end.
@@ -25,26 +53,21 @@ handle_request() ->
         {Pid, Tree} ->
             Pid ! compute(Tree),
             ok;
-
         terminate ->
             terminate
     end.
 
 compute(A) when is_tuple(A) ->
     compute(compute_tree(A));
-
 compute(A) when is_number(A) ->
     A.
 
 compute_tree({Op, A}) when is_tuple(A) ->
     {Op, compute_tree(A)};
-
 compute_tree({Op, A, B}) when is_tuple(A) and is_number(B) ->
     {Op, compute_tree(A), B};
-
 compute_tree({Op, A, B}) when is_number(A) and is_tuple(B) ->
     {Op, A, compute_tree(B)};
-
 compute_tree({Op, A, B}) when is_tuple(A) and is_tuple(B) ->
     {Op, compute_tree(A), B};
 % The following line also works, but it makes less iterations.
@@ -52,114 +75,126 @@ compute_tree({Op, A, B}) when is_tuple(A) and is_tuple(B) ->
 
 compute_tree({'!', A}) when is_number(A) ->
     fact(A);
-
 compute_tree({'-', A}) when is_number(A) ->
     -A;
-
 compute_tree({'+', A, B}) when is_number(A) and is_number(B) ->
     A + B;
-
 compute_tree({'-', A, B}) when is_number(A) and is_number(B) ->
     A - B;
-
 compute_tree({'*', A, B}) when is_number(A) and is_number(B) ->
     A * B;
-
 compute_tree({'div', A, B}) when is_number(A) and is_number(B) ->
     A div B;
-
 compute_tree({'.', A, B}) when is_list(A) and is_list(B) ->
     dot(A, B, 0);
-
 compute_tree({'+', A}) when is_list(A) ->
     sum_list(A, 0);
-
 compute_tree(A) when is_number(A) ->
     A.
 
 fact(0) ->
     1;
-
 fact(A) ->
     A * fact(A - 1).
 
 dot([], [], Acc) ->
     Acc;
-
-dot([HA|TA], [HB|TB], Acc) ->
+dot([HA | TA], [HB | TB], Acc) ->
     dot(TA, TB, Acc + HA * HB).
 
 sum_list([], Acc) ->
     Acc;
-
-sum_list([H|T], Acc) ->
+sum_list([H | T], Acc) ->
     sum_list(T, H + Acc).
 
 a() ->
-    {'+', 1, 3}. % 4
+    % 4
+    {'+', 1, 3}.
 
 b() ->
-    {'div', 5, 3}. % 1
+    % 1
+    {'div', 5, 3}.
 
 c() ->
-    {'-', 4, b()}. % 3
+    % 3
+    {'-', 4, b()}.
 
 ac() ->
-    {'*', a(), c()}. %12
+    %12
+    {'*', a(), c()}.
 
 d() ->
-    {'-', ac(), 13}. % -1
+    % -1
+    {'-', ac(), 13}.
 
 e() ->
-    {'!', 3}. % 6
+    % 6
+    {'!', 3}.
 
 de() ->
-    {'*', d(), e()}. % -6
+    % -6
+    {'*', d(), e()}.
 
 f() ->
-    {'*', 2, 2}. % 4
+    % 4
+    {'*', 2, 2}.
 
 g() ->
-    {'+', f(), h()}. % 12
+    % 12
+    {'+', f(), h()}.
 
 h() ->
-    {'*', 4, 2}. % 8
+    % 8
+    {'*', 4, 2}.
 
 i() ->
-    {'+', de(), g()}. % 6
+    % 6
+    {'+', de(), g()}.
 
 j() ->
-    {'.', [1, 2, 3], [10, 20, 30]}. % 140
+    % 140
+    {'.', [1, 2, 3], [10, 20, 30]}.
 
 k() ->
-    {'-', j(), i()}. % 134 - AtomVM crashes here
+    % 134 - AtomVM crashes here
+    {'-', j(), i()}.
 
 l() ->
-    {'+', [0, 7, 8]}. % 15
+    % 15
+    {'+', [0, 7, 8]}.
 
 kl() ->
-    {'-', k(), l()}. % 119
+    % 119
+    {'-', k(), l()}.
 
 m() ->
-    {'-', kl()}. % - 119
+    % - 119
+    {'-', kl()}.
 
 n() ->
-    {'-', m()}. % 119
+    % 119
+    {'-', m()}.
 
 o() ->
-    {'-', n()}. % - 119
+    % - 119
+    {'-', n()}.
 
 p() ->
-    {'+', 3, 2}. % 5
+    % 5
+    {'+', 3, 2}.
 
 q() ->
-    {'+', 15, r()}. % 20
+    % 20
+    {'+', 15, r()}.
 
 r() ->
-    {'+', 1, 4}. % 5
+    % 5
+    {'+', 1, 4}.
 
 s() ->
-    {'*', p(), q()}. % 100
+    % 100
+    {'*', p(), q()}.
 
 t() ->
-    {'+', o(), s()}. % -19
+    % -19
+    {'+', o(), s()}.

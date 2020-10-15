@@ -27,11 +27,23 @@
 -module(lists).
 
 -export([
-    map/2, nth/2, member/2, delete/2, reverse/1, foreach/2,
-    keydelete/3, keyfind/3, keymember/3, keyreplace/4,
-    foldl/3, foldr/3,
-    all/2, any/2, flatten/1,
-    search/2, filter/2,
+    map/2,
+    nth/2,
+    member/2,
+    delete/2,
+    reverse/1,
+    foreach/2,
+    keydelete/3,
+    keyfind/3,
+    keymember/3,
+    keyreplace/4,
+    foldl/3,
+    foldr/3,
+    all/2,
+    any/2,
+    flatten/1,
+    search/2,
+    filter/2,
     join/2
 ]).
 
@@ -42,7 +54,7 @@
 %% @doc     Map a list of terms, applying Fun(E)
 %% @end
 %%-----------------------------------------------------------------------------
--spec map(Fun::fun((Elem::term()) -> Out::term()), List::list()) -> OutList::term().
+-spec map(Fun :: fun((Elem :: term()) -> Out :: term()), List :: list()) -> OutList :: term().
 map(F, [H | T]) ->
     [F(H) | map(F, T)];
 map(F, []) when is_function(F, 1) ->
@@ -59,7 +71,7 @@ map(F, []) when is_function(F, 1) ->
 %%          {1..length(L)}.
 %% @end
 %%-----------------------------------------------------------------------------
--spec nth(N::non_neg_integer(), L::list()) -> term().
+-spec nth(N :: non_neg_integer(), L :: list()) -> term().
 nth(1, [H | _T]) ->
     H;
 nth(Index, [_H | T]) when Index > 1 ->
@@ -72,7 +84,7 @@ nth(Index, [_H | T]) when Index > 1 ->
 %% @doc     Determine whether a term is a member of a list.
 %% @end
 %%-----------------------------------------------------------------------------
--spec member(E::term(), L::list()) -> boolean().
+-spec member(E :: term(), L :: list()) -> boolean().
 member(_, []) ->
     false;
 member(E, [E | _]) ->
@@ -87,17 +99,17 @@ member(E, [_ | T]) ->
 %% @doc     Remove E from L
 %% @end
 %%-----------------------------------------------------------------------------
--spec delete(E::term(), L::list()) -> Result::list().
+-spec delete(E :: term(), L :: list()) -> Result :: list().
 delete(E, L) ->
     delete(E, L, []).
 
 %% @private
 delete(_, [], Accum) ->
     reverse(Accum);
-delete(E, [E|T], Accum) ->
+delete(E, [E | T], Accum) ->
     reverse(Accum) ++ T;
-delete(E, [H|T], Accum) ->
-    delete(E, T, [H|Accum]).
+delete(E, [H | T], Accum) ->
+    delete(E, T, [H | Accum]).
 
 %%-----------------------------------------------------------------------------
 %% @param   L the list to reverse
@@ -113,8 +125,8 @@ reverse(L) ->
 %% @private
 reverse([], Accum) ->
     Accum;
-reverse([H|T], Accum) ->
-    reverse(T, [H|Accum]).
+reverse([H | T], Accum) ->
+    reverse(T, [H | Accum]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun the predicate to evaluate
@@ -123,10 +135,10 @@ reverse([H|T], Accum) ->
 %% @doc     Applies given fun to each list element
 %% @end
 %%-----------------------------------------------------------------------------
--spec foreach(Fun::fun((Elem::term()) -> term()), List::list()) -> ok.
+-spec foreach(Fun :: fun((Elem :: term()) -> term()), List :: list()) -> ok.
 foreach(_Fun, []) ->
     ok;
-foreach(Fun, [H|T]) ->
+foreach(Fun, [H | T]) ->
     Fun(H),
     foreach(Fun, T).
 
@@ -138,28 +150,27 @@ foreach(Fun, [H|T]) ->
 %% @doc     Delete the entry in L whose Ith element matches K.
 %% @end
 %%-----------------------------------------------------------------------------
--spec keydelete(K::term(), I::pos_integer(), L::list()) -> list().
+-spec keydelete(K :: term(), I :: pos_integer(), L :: list()) -> list().
 keydelete(K, I, L) ->
     keydelete(K, I, L, []).
 
 %% @private
 keydelete(_K, _I, [], L) ->
     reverse(L);
-keydelete(K, I, [H|T], L2) when is_tuple(H) ->
+keydelete(K, I, [H | T], L2) when is_tuple(H) ->
     case I =< tuple_size(H) of
         true ->
             case element(I, H) of
                 K ->
                     reverse(L2) ++ T;
                 _ ->
-                    keydelete(K, I, T, [H|L2])
+                    keydelete(K, I, T, [H | L2])
             end;
         false ->
-            keydelete(K, I, T, [H|L2])
+            keydelete(K, I, T, [H | L2])
     end;
-keydelete(K, I, [H|T], L2) ->
-    keydelete(K, I, T, [H|L2]).
-
+keydelete(K, I, [H | T], L2) ->
+    keydelete(K, I, T, [H | L2]).
 
 %%-----------------------------------------------------------------------------
 %% @param   K the key to match
@@ -169,10 +180,10 @@ keydelete(K, I, [H|T], L2) ->
 %% @doc     Find the entry in L whose Ith element matches K.
 %% @end
 %%-----------------------------------------------------------------------------
--spec keyfind(K::term(), I::pos_integer(), L::list(tuple())) -> tuple() | false.
+-spec keyfind(K :: term(), I :: pos_integer(), L :: list(tuple())) -> tuple() | false.
 keyfind(_K, _I, []) ->
     false;
-keyfind(K, I, [H|T]) when is_tuple(H) ->
+keyfind(K, I, [H | T]) when is_tuple(H) ->
     case I =< tuple_size(H) of
         true ->
             case element(I, H) of
@@ -184,7 +195,7 @@ keyfind(K, I, [H|T]) when is_tuple(H) ->
         false ->
             keyfind(K, I, T)
     end;
-keyfind(K, I, [_H|T]) ->
+keyfind(K, I, [_H | T]) ->
     keyfind(K, I, T).
 
 %%-----------------------------------------------------------------------------
@@ -195,10 +206,10 @@ keyfind(K, I, [_H|T]) ->
 %% @doc     Returns true if a Ith element matches K.
 %% @end
 %%-----------------------------------------------------------------------------
--spec keymember(K::term(), I::pos_integer(), L::list(tuple())) -> boolean().
+-spec keymember(K :: term(), I :: pos_integer(), L :: list(tuple())) -> boolean().
 keymember(_K, _I, []) ->
     false;
-keymember(K, I, [H|T]) when is_tuple(H) ->
+keymember(K, I, [H | T]) when is_tuple(H) ->
     case I =< tuple_size(H) of
         true ->
             case element(I, H) of
@@ -210,7 +221,7 @@ keymember(K, I, [H|T]) when is_tuple(H) ->
         false ->
             keymember(K, I, T)
     end;
-keymember(K, I, [_H|T]) ->
+keymember(K, I, [_H | T]) ->
     keymember(K, I, T).
 
 %%-----------------------------------------------------------------------------
@@ -221,27 +232,32 @@ keymember(K, I, [_H|T]) ->
 %% @doc     Returns the result of replacing the first element in L who's Ith element matches K.
 %% @end
 %%-----------------------------------------------------------------------------
--spec keyreplace(K::term(), I::pos_integer(), L::list(tuple()), NewTuple::{NewKey::term(), Val::term()}) -> boolean().
+-spec keyreplace(
+    K :: term(),
+    I :: pos_integer(),
+    L :: list(tuple()),
+    NewTuple :: {NewKey :: term(), Val :: term()}
+) -> boolean().
 keyreplace(K, I, L, NewTuple) ->
     keyreplace(K, I, L, L, NewTuple, []).
 
 %% @private
 keyreplace(_K, _I, [], OrigL, _NewTuple, _NewList) ->
     OrigL;
-keyreplace(K, I, [H|T], L, NewTuple, NewList) when is_tuple(H) andalso is_tuple(NewTuple)  ->
+keyreplace(K, I, [H | T], L, NewTuple, NewList) when is_tuple(H) andalso is_tuple(NewTuple) ->
     case I =< tuple_size(H) of
         true ->
             case element(I, H) of
                 K ->
-                    reverse(NewList) ++ [NewTuple|T];
+                    reverse(NewList) ++ [NewTuple | T];
                 _ ->
-                    keyreplace(K, I, T, L, NewTuple, [H|NewList])
+                    keyreplace(K, I, T, L, NewTuple, [H | NewList])
             end;
         false ->
-            keyreplace(K, I, T, L, NewTuple, [H|NewList])
+            keyreplace(K, I, T, L, NewTuple, [H | NewList])
     end;
-keyreplace(K, I, [H|T], L, NewTuple, NewList) ->
-    keyreplace(K, I, T, L, NewTuple, [H|NewList]).
+keyreplace(K, I, [H | T], L, NewTuple, NewList) ->
+    keyreplace(K, I, T, L, NewTuple, [H | NewList]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun the function to apply
@@ -252,10 +268,14 @@ keyreplace(K, I, [H|T], L, NewTuple, NewList) ->
 %%          to each successive element in List
 %% @end
 %%-----------------------------------------------------------------------------
--spec foldl(Fun::fun((Elem::term(), AccIn::term()) -> AccOut::term()), Acc0::term(), List::list()) -> Acc1::term().
+-spec foldl(
+    Fun :: fun((Elem :: term(), AccIn :: term()) -> AccOut :: term()),
+    Acc0 :: term(),
+    List :: list()
+) -> Acc1 :: term().
 foldl(_Fun, Acc0, []) ->
     Acc0;
-foldl(Fun, Acc0, [H|T]) ->
+foldl(Fun, Acc0, [H | T]) ->
     Acc1 = Fun(H, Acc0),
     foldl(Fun, Acc1, T).
 
@@ -265,7 +285,11 @@ foldl(Fun, Acc0, [H|T]) ->
 %%          to each successive element in List
 %% @end
 %%-----------------------------------------------------------------------------
--spec foldr(Fun::fun((Elem::term(), AccIn::term()) -> AccOut::term()), Acc0::term(), List::list()) -> Acc1::term().
+-spec foldr(
+    Fun :: fun((Elem :: term(), AccIn :: term()) -> AccOut :: term()),
+    Acc0 :: term(),
+    List :: list()
+) -> Acc1 :: term().
 foldr(Fun, Acc0, List) ->
     foldl(Fun, Acc0, reverse(List)).
 
@@ -276,10 +300,10 @@ foldr(Fun, Acc0, List) ->
 %% @doc     Evaluates to true iff Fun(E) =:= true, for all E in List
 %% @end
 %%-----------------------------------------------------------------------------
--spec all(Fun::fun((Elem::term()) -> boolean()), List::list()) -> boolean().
+-spec all(Fun :: fun((Elem :: term()) -> boolean()), List :: list()) -> boolean().
 all(_Fun, []) ->
     true;
-all(Fun, [H|T]) ->
+all(Fun, [H | T]) ->
     case Fun(H) of
         true ->
             all(Fun, T);
@@ -294,7 +318,7 @@ all(Fun, [H|T]) ->
 %% @doc     Evaluates to true iff Fun(E) =:= true, for some E in List
 %% @end
 %%-----------------------------------------------------------------------------
--spec any(Fun::fun((Elem::term()) -> boolean()), List::list()) -> boolean().
+-spec any(Fun :: fun((Elem :: term()) -> boolean()), List :: list()) -> boolean().
 any(Fun, L) ->
     not all(fun(E) -> not Fun(E) end, L).
 
@@ -304,7 +328,7 @@ any(Fun, L) ->
 %% @doc     recursively flattens elements of L into a single list
 %% @end
 %%-----------------------------------------------------------------------------
--spec flatten(L::list()) -> list().
+-spec flatten(L :: list()) -> list().
 flatten(L) when is_list(L) ->
     flatten(L, []).
 
@@ -312,12 +336,13 @@ flatten(L) when is_list(L) ->
 %% pre: Accum is flattened
 flatten([], Accum) ->
     Accum;
-flatten([H|T], Accum) when is_list(H) ->
+flatten([H | T], Accum) when is_list(H) ->
     FlattenedT = flatten(T, Accum),
     flatten(H, FlattenedT);
-flatten([H|T], Accum) ->
+flatten([H | T], Accum) ->
     FlattenedT = flatten(T, Accum),
-    [H|FlattenedT].
+    [H | FlattenedT].
+
 %% post: return is flattened
 
 %%-----------------------------------------------------------------------------
@@ -328,10 +353,11 @@ flatten([H|T], Accum) ->
 %%          returns {value, Value} for the first such Value, otherwise returns false.
 %% @end
 %%-----------------------------------------------------------------------------
--spec search(Pred::fun((Elem::term()) -> boolean()), List::list()) -> {value, Value::term()} | false.
+-spec search(Pred :: fun((Elem :: term()) -> boolean()), List :: list()) ->
+    {value, Value :: term()} | false.
 search(_Pred, []) ->
     false;
-search(Pred, [H|T]) ->
+search(Pred, [H | T]) ->
     case Pred(H) of
         true ->
             {value, H};
@@ -347,17 +373,17 @@ search(Pred, [H|T]) ->
 %%          for which the predicate is true.
 %% @end
 %%-----------------------------------------------------------------------------
--spec filter(Pred::fun((Elem::term()) -> boolean()), List::list()) -> list().
+-spec filter(Pred :: fun((Elem :: term()) -> boolean()), List :: list()) -> list().
 filter(Pred, L) ->
     filter(Pred, L, []).
 
 %% @private
 filter(_Pred, [], Accum) ->
     reverse(Accum);
-filter(Pred, [H|T], Accum) ->
+filter(Pred, [H | T], Accum) ->
     case Pred(H) of
         true ->
-            filter(Pred, T, [H|Accum]);
+            filter(Pred, T, [H | Accum]);
         _ ->
             filter(Pred, T, Accum)
     end.
@@ -369,14 +395,14 @@ filter(Pred, [H|T], Accum) ->
 %% @doc     Inserts Sep between every element of List.
 %% @end
 %%-----------------------------------------------------------------------------
--spec join(Sep::list(), List::list()) -> list().
+-spec join(Sep :: list(), List :: list()) -> list().
 join(Sep, L) ->
     join(L, Sep, []).
 
 %% @private
 join([], _Sep, Accum) ->
     lists:reverse(Accum);
-join([E|R], Sep, []) ->
+join([E | R], Sep, []) ->
     join(R, Sep, [E]);
-join([E|R], Sep, Accum) ->
-    join(R, Sep, [E, Sep|Accum]).
+join([E | R], Sep, Accum) ->
+    join(R, Sep, [E, Sep | Accum]).

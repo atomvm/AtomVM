@@ -1,4 +1,5 @@
 -module(test_tuple_list_eq).
+
 -export([start/0, id/1, make_tuple/1, factorial/1]).
 
 start() ->
@@ -21,15 +22,15 @@ start() ->
 
 make_tuple(N) ->
     {
-     [factorial(N), 1, test, 2],
-     [1, factorial(N + 1), test, 2],
-     [1, test, 2, factorial(N + 2)],
-     [1, test, {factorial(N + 3)}, 2],
-     [1, test, {[{factorial(N + 4)}], test}, 2]
+        [factorial(N), 1, test, 2],
+        [1, factorial(N + 1), test, 2],
+        [1, test, 2, factorial(N + 2)],
+        [1, test, {factorial(N + 3)}, 2],
+        [1, test, {[{factorial(N + 4)}], test}, 2]
     }.
 
 factorial(0) -> 1;
-factorial(N) -> N * factorial(N-1).
+factorial(N) -> N * factorial(N - 1).
 
 id(N) ->
     N.

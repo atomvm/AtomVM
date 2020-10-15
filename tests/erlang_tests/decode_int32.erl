@@ -4,9 +4,9 @@
 
 start() ->
     ((decode32(bin(b, u, [16#CA, 16#FE, 16#BA, 16#BE])) * 11) bxor
-     (decode32(bin(b, s, [16#CA, 16#FE, 16#BA, 16#BE])) * -3) bxor
-    (decode32(bin(l, u, [16#CA, 16#FE, 16#BA, 16#BE])) * 5) bxor
-    (decode32(bin(l, s, [16#CA, 16#FE, 16#BA, 16#BE])) * -7)) rem 876113.
+        (decode32(bin(b, s, [16#CA, 16#FE, 16#BA, 16#BE])) * -3) bxor
+        (decode32(bin(l, u, [16#CA, 16#FE, 16#BA, 16#BE])) * 5) bxor
+        (decode32(bin(l, s, [16#CA, 16#FE, 16#BA, 16#BE])) * -7)) rem 876113.
 
 decode32(<<0, U32B:32/integer-unsigned-big, 0>>) ->
     U32B;

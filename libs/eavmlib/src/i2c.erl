@@ -1,4 +1,5 @@
 -module(i2c).
+
 -export([open/1, begin_transmission/2, write_byte/2, end_transmission/1, read_bytes/3]).
 
 open(Param) ->

@@ -1,4 +1,5 @@
--module (catch_badmatch).
+-module(catch_badmatch).
+
 -export([start/0, f/1, do_badmatch/1]).
 
 start() ->
@@ -12,7 +13,7 @@ f(Value) ->
     end.
 
 do_badmatch(V) ->
-    4 = V*2.
+    4 = V * 2.
 
 is_error(error) ->
     1;

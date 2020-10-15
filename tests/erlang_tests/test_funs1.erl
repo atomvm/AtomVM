@@ -5,7 +5,7 @@
 start() ->
     C = f("1", "2"),
     plus5(fun() -> C end) +
-    plus5(fun() -> 0 end) * 100.
+        plus5(fun() -> 0 end) * 100.
 
 plus5(F) ->
     F() + 5.

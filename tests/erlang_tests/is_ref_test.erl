@@ -1,4 +1,5 @@
--module (is_ref_test).
+-module(is_ref_test).
+
 -export([start/0, func/2]).
 
 start() ->

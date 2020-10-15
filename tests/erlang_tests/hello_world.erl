@@ -1,4 +1,5 @@
--module (hello_world).
+-module(hello_world).
+
 -export([start/0, do_open_port/2, write/2]).
 
 start() ->

@@ -8,7 +8,6 @@ start() ->
 firstp10(Bin) ->
     binary:first(Bin) + 10.
 
-
 firstp10safe(Bin) ->
     try firstp10(Bin) of
         _Any -> 1

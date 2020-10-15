@@ -1,4 +1,5 @@
--module (state_test3).
+-module(state_test3).
+
 -export([start/0]).
 
 start() ->

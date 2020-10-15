@@ -1,4 +1,5 @@
 -module(complex_struct_size1).
+
 -export([start/0, abcdefg/0]).
 
 start() ->
@@ -24,7 +25,6 @@ f() ->
 
 g() ->
     {g, 6}.
-
 
 ab() ->
     {a(), b()}.

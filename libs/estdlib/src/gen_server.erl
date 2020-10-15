@@ -54,7 +54,6 @@
 -type options() :: list({atom(), term()}).
 -type server_ref() :: atom() | pid().
 
-
 %%-----------------------------------------------------------------------------
 %% @param   ServerName the name with which to register the gen_server
 %% @param   Module the module in which the gen_server callbacks are defined
@@ -70,7 +69,12 @@
 %%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec start(ServerName::{local, Name::atom()}, Module::module(), Args::term(), Options::options()) -> {ok, pid()} | {error, Reason::term()}.
+-spec start(
+    ServerName :: {local, Name :: atom()},
+    Module :: module(),
+    Args :: term(),
+    Options :: options()
+) -> {ok, pid()} | {error, Reason :: term()}.
 start({local, Name}, Module, Args, Options) when is_atom(Name) ->
     case erlang:whereis(Name) of
         undefined ->
@@ -79,7 +83,8 @@ start({local, Name}, Module, Args, Options) when is_atom(Name) ->
                 {ok, Pid} ->
                     erlang:register(Name, Pid),
                     ok;
-                _ -> ok
+                _ ->
+                    ok
             end,
             Response;
         _Pid ->
@@ -98,7 +103,8 @@ start({local, Name}, Module, Args, Options) when is_atom(Name) ->
 %%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec start(Module::module(), Args::term(), Options::options()) -> {ok, pid()} | {error, Reason::term()}.
+-spec start(Module :: module(), Args :: term(), Options :: options()) ->
+    {ok, pid()} | {error, Reason :: term()}.
 start(Module, Args, Options) ->
     case Module:init(Args) of
         {ok, ModState} ->
@@ -115,13 +121,12 @@ start(Module, Args, Options) ->
             {error, unexpected_reply_from_init}
     end.
 
-
 %%-----------------------------------------------------------------------------
 %% @equiv   stop(ServerRef, normal, infinity)
 %% @doc     Stop a previously started gen_server instance.
 %% @end
 %%-----------------------------------------------------------------------------
--spec stop(ServerRef::server_ref()) -> ok | {error, Reason::term()}.
+-spec stop(ServerRef :: server_ref()) -> ok | {error, Reason :: term()}.
 stop(ServerRef) ->
     stop(ServerRef, normal, infinity).
 
@@ -136,7 +141,8 @@ stop(ServerRef) ->
 %%          to stop the gen_server.
 %% @end
 %%-----------------------------------------------------------------------------
--spec stop(ServerRef::server_ref(), Reason::term(), Timeout::non_neg_integer() | infinity) -> ok | {error, Reason::term()}.
+-spec stop(ServerRef :: server_ref(), Reason :: term(), Timeout :: non_neg_integer() | infinity) ->
+    ok | {error, Reason :: term()}.
 stop(Name, Reason, Timeout) when is_atom(Name) ->
     case erlang:whereis(Name) of
         undefined ->
@@ -153,7 +159,8 @@ stop(Pid, Reason, Timeout) when is_pid(Pid) ->
 %% @doc     Send a request to a gen_server instance, and wait for a reply.
 %% @end
 %%-----------------------------------------------------------------------------
--spec call(ServerRef::server_ref(), Request::term) -> Reply::term() | {error, Reason::term()}.
+-spec call(ServerRef :: server_ref(), Request :: term) ->
+    Reply :: term() | {error, Reason :: term()}.
 call(ServerRef, Request) ->
     call(ServerRef, Request, 5000).
 
@@ -169,7 +176,8 @@ call(ServerRef, Request) ->
 %%          reply from the gen_server.
 %% @end
 %%-----------------------------------------------------------------------------
--spec call(ServerRef::server_ref(), Request::term(), Timeout::timeout()) -> Reply::term() | {error, Reason::term()}.
+-spec call(ServerRef :: server_ref(), Request :: term(), Timeout :: timeout()) ->
+    Reply :: term() | {error, Reason :: term()}.
 call(Name, Request, Timeout) when is_atom(Name) ->
     case erlang:whereis(Name) of
         undefined ->
@@ -191,7 +199,7 @@ call(Pid, Request, Timeout) when is_pid(Pid) ->
 %%          gen_server instance, but will not wait for a reply.
 %% @end
 %%-----------------------------------------------------------------------------
--spec cast(ServerRef::server_ref(), Request::term()) -> ok | {error, Reason::term()}.
+-spec cast(ServerRef :: server_ref(), Request :: term()) -> ok | {error, Reason :: term()}.
 cast(Name, Request) when is_atom(Name) ->
     case erlang:whereis(Name) of
         undefined ->
@@ -214,10 +222,10 @@ cast(Pid, Request) when is_pid(Pid) ->
 %%          function can be safely ignored.
 %% @end
 %%-----------------------------------------------------------------------------
--spec reply(Client::term(), Reply::term) -> term().
+-spec reply(Client :: term(), Reply :: term) -> term().
 reply({Pid, Ref} = _Client, Reply) ->
-    Pid ! {Ref, Reply}, ok.
-
+    Pid ! {Ref, Reply},
+    ok.
 
 %%
 %% Internal operations
@@ -228,25 +236,25 @@ call_internal(Pid, Ref, Msg, Timeout) ->
     Pid ! Msg,
     receive
         {Ref, Reply} ->
-        Reply
+            Reply
     after Timeout ->
         %% throw(timeout)
         {error, timeout}
     end.
 
 %% @private
-loop(#state{mod=Mod, mod_state=ModState} = State) ->
+loop(#state{mod = Mod, mod_state = ModState} = State) ->
     receive
         {'$call', Pid, Ref, Request} ->
             case Mod:handle_call(Request, {Pid, Ref}, ModState) of
                 {reply, Reply, NewModState} ->
                     Pid ! {Ref, Reply},
-                    loop(State#state{mod_state=NewModState});
+                    loop(State#state{mod_state = NewModState});
                 {noreply, NewModState} ->
-                    loop(State#state{mod_state=NewModState});
+                    loop(State#state{mod_state = NewModState});
                 {stop, Reason, Reply, NewModState} ->
-                     Pid ! {Ref, Reply},
-                     do_terminate(State, Reason, NewModState);
+                    Pid ! {Ref, Reply},
+                    do_terminate(State, Reason, NewModState);
                 {stop, Reason, NewModState} ->
                     do_terminate(State, Reason, NewModState);
                 _ ->
@@ -255,7 +263,7 @@ loop(#state{mod=Mod, mod_state=ModState} = State) ->
         {'$cast', Request} ->
             case Mod:handle_cast(Request, ModState) of
                 {noreply, NewModState} ->
-                    loop(State#state{mod_state=NewModState});
+                    loop(State#state{mod_state = NewModState});
                 {stop, Reason, NewModState} ->
                     do_terminate(State, Reason, NewModState);
                 _ ->
@@ -267,7 +275,7 @@ loop(#state{mod=Mod, mod_state=ModState} = State) ->
         Info ->
             case Mod:handle_info(Info, ModState) of
                 {noreply, NewModState} ->
-                    loop(State#state{mod_state=NewModState});
+                    loop(State#state{mod_state = NewModState});
                 {stop, Reason, NewModState} ->
                     do_terminate(State, Reason, NewModState);
                 _ ->
@@ -276,10 +284,11 @@ loop(#state{mod=Mod, mod_state=ModState} = State) ->
     end.
 
 %% @private
-do_terminate(#state{mod=Mod, name=Name} = _State, Reason, ModState) ->
+do_terminate(#state{mod = Mod, name = Name} = _State, Reason, ModState) ->
     case Name of
         undefined -> ok;
-        _Pid -> ok %% TODO unregister
+        %% TODO unregister
+        _Pid -> ok
     end,
     Mod:terminate(Reason, ModState),
     ok.

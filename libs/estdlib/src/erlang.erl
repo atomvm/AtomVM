@@ -26,11 +26,13 @@
 
 -export([
     apply/3,
-    start_timer/3, start_timer/4, cancel_timer/1, send_after/3,
-    process_info/2, system_info/1,
+    start_timer/3, start_timer/4,
+    cancel_timer/1,
+    send_after/3,
+    process_info/2,
+    system_info/1,
     md5/1
 ]).
-
 
 %%-----------------------------------------------------------------------------
 %% @param   Time time in milliseconds after which to send the timeout message.
@@ -44,7 +46,6 @@
 -spec start_timer(non_neg_integer(), pid() | atom(), term()) -> reference().
 start_timer(Time, Dest, Msg) ->
     start_timer(Time, Dest, Msg, []).
-
 
 %%-----------------------------------------------------------------------------
 %% @hidden
@@ -62,7 +63,6 @@ start_timer(Time, Dest, Msg) ->
 start_timer(Time, Dest, Msg, _Options) ->
     timer_manager:start_timer(Time, Dest, Msg).
 
-
 %%-----------------------------------------------------------------------------
 %% @hidden
 %% @param   Time time in milliseconds after which to send the timeout message.
@@ -75,7 +75,7 @@ start_timer(Time, Dest, Msg, _Options) ->
 %%
 %%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
 %%-----------------------------------------------------------------------------
--spec cancel_timer(TimerRef::reference()) -> ok.
+-spec cancel_timer(TimerRef :: reference()) -> ok.
 cancel_timer(TimerRef) ->
     timer_manager:cancel_timer(TimerRef).
 
@@ -111,7 +111,7 @@ send_after(Time, Dest, Msg) ->
 %%
 %% @end
 %%-----------------------------------------------------------------------------
--spec process_info(Pid::pid(), Key::atom()) -> term().
+-spec process_info(Pid :: pid(), Key :: atom()) -> term().
 process_info(_Pid, _Key) ->
     throw(nif_error).
 
@@ -145,7 +145,7 @@ process_info(_Pid, _Key) ->
 %%
 %% @end
 %%-----------------------------------------------------------------------------
--spec system_info(Key::atom()) -> term().
+-spec system_info(Key :: atom()) -> term().
 system_info(_Key) ->
     throw(nif_error).
 
@@ -156,7 +156,7 @@ system_info(_Key) ->
 %%          https://www.ietf.org/rfc/rfc1321.txt
 %% @end
 %%-----------------------------------------------------------------------------
--spec md5(Data::binary()) -> binary().
+-spec md5(Data :: binary()) -> binary().
 md5(Data) when is_binary(Data) ->
     throw(nif_error).
 
@@ -176,5 +176,6 @@ apply(Module, Function, Args) ->
             Module:Function(Arg1, Arg2, Arg3, Arg4, Arg5);
         [Arg1, Arg2, Arg3, Arg4, Arg5, Arg6] ->
             Module:Function(Arg1, Arg2, Arg3, Arg4, Arg5, Arg6);
-        _ -> throw(badarg)
+        _ ->
+            throw(badarg)
     end.

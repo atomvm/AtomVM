@@ -24,7 +24,7 @@
 %% @doc     Equivalent to format(Format, []).
 %% @end
 %%-----------------------------------------------------------------------------
--spec format(Format::string()) -> string().
+-spec format(Format :: string()) -> string().
 format(Format) when is_list(Format) ->
     format(Format, []).
 
@@ -37,7 +37,7 @@ format(Format) when is_list(Format) ->
 %%          formatting capabilities.
 %% @end
 %%-----------------------------------------------------------------------------
--spec format(Format::string(), Args::list()) -> string().
+-spec format(Format :: string(), Args :: list()) -> string().
 format(Format, Args) when is_list(Format) andalso is_list(Args) ->
     Msg =
         try

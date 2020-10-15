@@ -1,4 +1,5 @@
--module (match).
+-module(match).
+
 -export([start/0, f/1, g/1]).
 
 start() ->

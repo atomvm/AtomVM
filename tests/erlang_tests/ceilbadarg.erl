@@ -1,4 +1,5 @@
 -module(ceilbadarg).
+
 -export([start/0, id/1, to_int/1]).
 
 start() ->

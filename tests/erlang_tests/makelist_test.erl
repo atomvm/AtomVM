@@ -1,5 +1,6 @@
--module (makelist_test).
--export([start/0,makelist/2,sumlist/2]).
+-module(makelist_test).
+
+-export([start/0, makelist/2, sumlist/2]).
 
 start() ->
     makelist("hello", []).
@@ -13,4 +14,3 @@ sumlist([H | T], Acc) ->
     sumlist(T, Acc + H);
 sumlist([], Acc) ->
     Acc.
-

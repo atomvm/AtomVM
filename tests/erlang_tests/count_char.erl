@@ -1,5 +1,6 @@
--module (count_char).
--export([start/0,count/2]).
+-module(count_char).
+
+-export([start/0, count/2]).
 
 start() ->
     count("hello", hd("l")).

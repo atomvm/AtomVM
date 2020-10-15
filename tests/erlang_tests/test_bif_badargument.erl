@@ -1,11 +1,13 @@
 -module(test_bif_badargument).
+
 -export([start/0, id/1, byte_size1/1]).
 
 start() ->
-    byte_size1(id([])) + length1(id(not_a_list)) + hd1(id(not_a_list)) + tl1(id(not_a_list))
-    + element2(id(2), id([1, 2, 3])) + tuple_size1(id([1, 2, 3])) + element2(id(nan), id({1, 2, 3})) * 16
-    + element2(id(3), id({1, 2})) * 64 + element2(-1, {1, 2}) * 256 + element2(0, {}) * 1024
-    + hd1(id([])) * 65536 + tl1(id([])) * 65536.
+    byte_size1(id([])) + length1(id(not_a_list)) + hd1(id(not_a_list)) + tl1(id(not_a_list)) +
+        element2(id(2), id([1, 2, 3])) + tuple_size1(id([1, 2, 3])) +
+        element2(id(nan), id({1, 2, 3})) * 16 +
+        element2(id(3), id({1, 2})) * 64 + element2(-1, {1, 2}) * 256 + element2(0, {}) * 1024 +
+        hd1(id([])) * 65536 + tl1(id([])) * 65536.
 
 id(X) ->
     X.

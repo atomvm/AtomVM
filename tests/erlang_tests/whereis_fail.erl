@@ -1,4 +1,5 @@
--module (whereis_fail).
+-module(whereis_fail).
+
 -export([start/0]).
 
 start() ->

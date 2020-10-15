@@ -1,6 +1,18 @@
 -module(gen_server_like_test).
+
 -behaviour(gen_server).
--export([start/0, start_link/0, handle_call/3, handle_cast/2, init/1, loop/1, push/2, pop/1, initial_state/0]).
+
+-export([
+    start/0,
+    start_link/0,
+    handle_call/3,
+    handle_cast/2,
+    init/1,
+    loop/1,
+    push/2,
+    pop/1,
+    initial_state/0
+]).
 
 start() ->
     Pid = fake_start(),
@@ -51,7 +63,6 @@ init(Initial) ->
 
 handle_call(pop, _From, []) ->
     {reply, empty_stack, initial_state()};
-
 handle_call(pop, _From, State) ->
     [Head | NextState] = State,
     {reply, Head, NextState}.
@@ -64,12 +75,10 @@ loop(State) ->
         {'$gen_cast', Request} ->
             {noreply, NextState} = handle_cast(Request, State),
             loop(NextState);
-
         {'$gen_call', {Pid, Reference}, Request} ->
             {reply, TheReply, NextState} = handle_call(Request, Pid, State),
             Pid ! {Reference, TheReply},
             loop(NextState);
-
         terminate ->
             ok
-        end.
+    end.

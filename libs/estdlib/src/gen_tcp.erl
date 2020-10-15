@@ -67,8 +67,8 @@
 %%          in order to receive data on the socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec connect(inet:address(), inet:port_number(), Options::inet:opts()) ->
-    {ok, Socket::inet:socket()} | {error, Reason::term()}.
+-spec connect(inet:address(), inet:port_number(), Options :: inet:opts()) ->
+    {ok, Socket :: inet:socket()} | {error, Reason :: term()}.
 connect(Address, Port, Params0) ->
     Socket = open_port({spawn, "socket"}, []),
     Params = merge(Params0, ?DEFAULT_PARAMS),
@@ -84,22 +84,21 @@ connect(Address, Port, Params0) ->
 %%          otherwise, an error with a reason.
 %% @end
 %%-----------------------------------------------------------------------------
--spec send(inet:socket(), inet:packet()) -> ok | {error, Reason::term()}.
+-spec send(inet:socket(), inet:packet()) -> ok | {error, Reason :: term()}.
 send(Socket, Packet) ->
     case call(Socket, {send, Packet}) of
         {ok, _Len} ->
             ok;
-        Error -> Error
+        Error ->
+            Error
     end.
-
 
 %%-----------------------------------------------------------------------------
 %% @equiv   recv(Socket, Length, infinity)
 %% @doc     Receive a packet over a TCP socket from a source address/port.
 %% @end
 %%-----------------------------------------------------------------------------
--spec recv(inet:socket(), non_neg_integer()) ->
-    {ok,inet:packet()} | {error, Reason::term()}.
+-spec recv(inet:socket(), non_neg_integer()) -> {ok, inet:packet()} | {error, Reason :: term()}.
 recv(Socket, Length) ->
     recv(Socket, Length, infinity).
 
@@ -123,7 +122,7 @@ recv(Socket, Length) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec recv(inet:socket(), non_neg_integer(), non_neg_integer()) ->
-    {ok,inet:packet()} | {error, Reason::term()}.
+    {ok, inet:packet()} | {error, Reason :: term()}.
 recv(Socket, Length, Timeout) ->
     call(Socket, {recv, Length, Timeout}).
 
@@ -138,7 +137,8 @@ recv(Socket, Length, Timeout) ->
 %%          This function is currently unimplemented
 %% @end
 %%-----------------------------------------------------------------------------
--spec listen(Port::inet:port_number(), Options::inet:opts()) -> {ok, ListeningSocket::inet:socket()} | {error, Reason::term()}.
+-spec listen(Port :: inet:port_number(), Options :: inet:opts()) ->
+    {ok, ListeningSocket :: inet:socket()} | {error, Reason :: term()}.
 listen(Port, Options) ->
     Socket = open_port({spawn, "socket"}, []),
     Params = merge(Options, ?DEFAULT_PARAMS),
@@ -151,7 +151,8 @@ listen(Port, Options) ->
         | Params
     ],
     case call(Socket, {init, InitParams}) of
-        ok -> {ok, Socket};
+        ok ->
+            {ok, Socket};
         ErrorReason ->
             %% TODO close port
             ErrorReason
@@ -163,7 +164,7 @@ listen(Port, Options) ->
 %% @doc     Accept a connection on a listening socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec accept(inet:socket()) -> {ok, Socket::inet:socket()} | {error, Reason::term()}.
+-spec accept(inet:socket()) -> {ok, Socket :: inet:socket()} | {error, Reason :: term()}.
 accept(ListenSocket) ->
     accept(ListenSocket, infinity).
 
@@ -174,7 +175,8 @@ accept(ListenSocket) ->
 %% @doc     Accept a connection on a listening socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec accept(inet:socket(), Timeout::non_neg_integer()) -> {ok, Socket::inet:socket()} | {error, Reason::term()}.
+-spec accept(inet:socket(), Timeout :: non_neg_integer()) ->
+    {ok, Socket :: inet:socket()} | {error, Reason :: term()}.
 accept(ListenSocket, Timeout) ->
     case call(ListenSocket, {accept, Timeout}) of
         {ok, FD} when is_integer(FD) ->
@@ -187,7 +189,8 @@ accept(ListenSocket, Timeout) ->
                 | ?DEFAULT_PARAMS
             ],
             case call(Socket, {init, InitParams}) of
-                ok -> {ok, Socket};
+                ok ->
+                    {ok, Socket};
                 ErrorReason ->
                     %% TODO close port
                     ErrorReason
@@ -209,9 +212,6 @@ accept(ListenSocket, Timeout) ->
 close(Socket) ->
     inet:close(Socket).
 
-
-
-
 %% internal operations
 
 %% @private
@@ -225,7 +225,8 @@ connect(DriverPid, Address, Port, Params) ->
         | Params
     ],
     case call(DriverPid, {init, InitParams}) of
-        ok -> {ok, DriverPid};
+        ok ->
+            {ok, DriverPid};
         ErrorReason ->
             %% TODO close port
             ErrorReason
@@ -250,23 +251,31 @@ merge(Config, Defaults) ->
 merge(_Config, [], Accum) ->
     Accum;
 merge(Config, [H | T], Accum) ->
-    Key = case H of
-        {K, _V} -> K;
-        K -> K
-    end,
+    Key =
+        case H of
+            {K, _V} -> K;
+            K -> K
+        end,
     case proplists:get_value(Key, Config) of
         undefined ->
             merge(Config, T, [H | Accum]);
         Value ->
-            merge(Config, T, [{Key, Value}|Accum])
+            merge(Config, T, [{Key, Value} | Accum])
     end.
 
 %% @private
-normalize_address(loopback) -> "127.0.0.1";
-normalize_address(Address) when is_list(Address) -> Address;
-normalize_address({A,B,C,D}) when is_integer(A) and is_integer(B) and is_integer(C) and is_integer(D) ->
-              integer_to_list(A)
-    ++ "." ++ integer_to_list(B)
-    ++ "." ++ integer_to_list(C)
-    ++ "." ++ integer_to_list(D).
+normalize_address(loopback) ->
+    "127.0.0.1";
+normalize_address(Address) when is_list(Address) ->
+    Address;
+normalize_address({A, B, C, D}) when
+    is_integer(A) and is_integer(B) and is_integer(C) and is_integer(D)
+->
+    integer_to_list(A) ++
+        "." ++
+        integer_to_list(B) ++
+        "." ++
+        integer_to_list(C) ++
+        "." ++ integer_to_list(D).
+
 %% TODO IPv6

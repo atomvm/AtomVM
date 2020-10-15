@@ -1,4 +1,5 @@
 -module(send_to_dead_process).
+
 -export([start/0, double_and_terminate/0]).
 
 start() ->
@@ -11,7 +12,6 @@ start() ->
     case Pid ! ping of
         ping ->
             Result;
-
         _Other ->
             0
     end.

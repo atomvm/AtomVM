@@ -1,11 +1,18 @@
 -module(test_process_info).
+
 -export([start/0, loop/2]).
 
 start() ->
     Self = self(),
-    Pid = spawn(?MODULE, loop, [Self, []]), receive ok -> ok end,
+    Pid = spawn(?MODULE, loop, [Self, []]),
+    receive
+        ok -> ok
+    end,
     test_message_queue_len(Pid, Self),
-    Pid ! {Self, stop}, receive X -> 0 end.
+    Pid ! {Self, stop},
+    receive
+        X -> 0
+    end.
 
 test_message_queue_len(Pid, Self) ->
     {message_queue_len, MessageQueueLen} = process_info(Pid, message_queue_len),
@@ -16,7 +23,10 @@ test_message_queue_len(Pid, Self) ->
     Pid ! incr,
     {message_queue_len, MessageQueueLen2} = process_info(Pid, message_queue_len),
     {memory, Memory2} = process_info(Pid, memory),
-    Pid ! {Self, ping}, receive pong -> ok end,
+    Pid ! {Self, ping},
+    receive
+        pong -> ok
+    end,
     {heap_size, HeapSize2} = process_info(Pid, heap_size),
     assert(MessageQueueLen < MessageQueueLen2),
     assert(Memory < Memory2),

@@ -1,4 +1,5 @@
 -module(test_tuple_to_list).
+
 -export([start/0, f/2, g/1]).
 
 start() ->
@@ -12,6 +13,5 @@ g(L) ->
 
 g([], _I, Acc) ->
     Acc;
-
 g([H | T], I, Acc) ->
     g(T, I + 1, H * I + Acc).

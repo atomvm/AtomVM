@@ -11,7 +11,7 @@ diff1500(A) ->
 double(0) ->
     0;
 double(I) ->
-    id(I)*2.
+    id(I) * 2.
 
 id(0) ->
     0;
@@ -24,4 +24,4 @@ willnotbecalled(I) ->
     2000 div I.
 
 willnotbecalled(A, B) ->
-    (A - B)*2 + 2047.
+    (A - B) * 2 + 2047.

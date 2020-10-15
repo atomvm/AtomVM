@@ -36,21 +36,18 @@ test_reverse(T, Interop) ->
     %% erlang:display(X),
     X = T.
 
-
 test_catentate_and_split(L) ->
     Bins = [erlang:term_to_binary(E) || E <- L],
     Bin = erlang:iolist_to_binary(Bins),
     L2 = split(Bin, []),
     L = L2.
 
-
 split(<<"">>, Accum) ->
     reverse(Accum, []);
 split(Bin, Accum) ->
     {T, Used} = erlang:binary_to_term(Bin, [used]),
     Bin2 = binary:part(Bin, Used, erlang:byte_size(Bin) - Used),
-    split(Bin2, [T|Accum]).
+    split(Bin2, [T | Accum]).
 
 reverse([], Accum) -> Accum;
-reverse([H|T], Accum) ->
-    reverse(T, [H|Accum]).
+reverse([H | T], Accum) -> reverse(T, [H | Accum]).

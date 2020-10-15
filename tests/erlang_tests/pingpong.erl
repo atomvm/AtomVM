@@ -16,7 +16,6 @@ ping(Echo, Pong) ->
 
 ping(_Echo, Pong, 10000) ->
     Pong ! exit;
-
 ping(Echo, Pong, N) ->
     Pong ! {self(), ping, f(N, N)},
     receive
@@ -37,6 +36,5 @@ pong(Echo, Main) ->
 
 f(N, M) when N < 1 ->
     M;
-
 f(N, M) ->
     f((N - 1) rem 16, M).

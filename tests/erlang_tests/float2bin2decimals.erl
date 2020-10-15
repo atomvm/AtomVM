@@ -1,4 +1,5 @@
 -module(float2bin2decimals).
+
 -export([start/0, add/2, compare_bin/2, id/1, float_to_bin_badarg/2]).
 
 start() ->
@@ -11,13 +12,13 @@ start() ->
     F4 = id(add(id(F2), id(F3))),
     Bin4 = id(erlang:float_to_binary(id(F4), [{decimals, 0}, compact])),
     compare_bin(Bin1, id(<<"1.5">>)) +
-    compare_bin(Bin2, id(<<"1.0">>)) * 2 +
-    compare_bin(Bin3, id(<<"-1.0">>)) * 4 +
-    compare_bin(Bin4, id(<<"0">>)) * 8 +
-    float_to_bin_badarg({1}, [{decimals, 0}, compact]) * 16 +
-    float_to_bin_badarg(F4, [{invalid, 0}, compact]) * 32 +
-    float_to_bin_badarg(F4, [{decimals, 0}, invalid]) * 64 +
-    float_to_bin_badarg(F4, [{decimals, invalid}, compact]) * 128.
+        compare_bin(Bin2, id(<<"1.0">>)) * 2 +
+        compare_bin(Bin3, id(<<"-1.0">>)) * 4 +
+        compare_bin(Bin4, id(<<"0">>)) * 8 +
+        float_to_bin_badarg({1}, [{decimals, 0}, compact]) * 16 +
+        float_to_bin_badarg(F4, [{invalid, 0}, compact]) * 32 +
+        float_to_bin_badarg(F4, [{decimals, 0}, invalid]) * 64 +
+        float_to_bin_badarg(F4, [{decimals, invalid}, compact]) * 128.
 
 add(A, B) when is_float(A) and is_float(B) ->
     id(id(A) + id(B)).
@@ -29,7 +30,6 @@ compare_bin(_Bin1, _Bin2) ->
 
 compare_bin(_Bin1, _Bin2, -1) ->
     1;
-
 compare_bin(Bin1, Bin2, Index) ->
     B1 = binary:at(Bin1, Index),
     case binary:at(Bin2, Index) of

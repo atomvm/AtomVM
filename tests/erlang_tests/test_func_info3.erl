@@ -1,4 +1,5 @@
 -module(test_func_info3).
+
 -export([start/0, id/1, f/1]).
 
 start() ->

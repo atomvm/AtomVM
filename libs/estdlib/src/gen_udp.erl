@@ -54,7 +54,7 @@
 %%          send or receive UDP messages.
 %% @end
 %%-----------------------------------------------------------------------------
--spec open(inet:port_number()) -> {ok, inet:socket()} | {error, Reason::reason()}.
+-spec open(inet:port_number()) -> {ok, inet:socket()} | {error, Reason :: reason()}.
 open(PortNum) ->
     open(PortNum, []).
 
@@ -74,7 +74,7 @@ open(PortNum) ->
 %%          <em><b>Note.</b>  The Params argument is currently ignored.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec open(inet:port_number(), proplist()) -> {ok, inet:socket()} | {error, Reason::reason()}.
+-spec open(inet:port_number(), proplist()) -> {ok, inet:socket()} | {error, Reason :: reason()}.
 open(PortNum, Params0) ->
     DriverPid = open_port({spawn, "socket"}, []),
     Params = merge(Params0, ?DEFAULT_PARAMS),
@@ -96,9 +96,9 @@ send(Socket, Address, PortNum, Packet) ->
     case call(Socket, {sendto, Address, PortNum, Packet}) of
         {ok, _Sent} ->
             ok;
-        Else -> Else
+        Else ->
+            Else
     end.
-
 
 %%-----------------------------------------------------------------------------
 %% @equiv   recv(Socket, Length, infinity)
@@ -109,7 +109,6 @@ send(Socket, Address, PortNum, Packet) ->
     {ok, {inet:address(), inet:port_number(), packet()}} | {error, reason()}.
 recv(Socket, Length) ->
     recv(Socket, Length, infinity).
-
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket over which to receive a packet
@@ -133,7 +132,6 @@ recv(Socket, Length) ->
 recv(Socket, Length, Timeout) ->
     call(Socket, {recvfrom, Length, Timeout}).
 
-
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket to close
 %% @returns ok, if closing the socket succeeded, or {error, Reason}, if
@@ -141,10 +139,9 @@ recv(Socket, Length, Timeout) ->
 %% @doc     Close the socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec close(inet:socket()) -> ok | {error, Reason::reason()}.
+-spec close(inet:socket()) -> ok | {error, Reason :: reason()}.
 close(Socket) ->
     call(Socket, {close}).
-
 
 %% internal operations
 
@@ -153,10 +150,12 @@ init(DriverPid, PortNum, Params) ->
     InitParams = [
         {proto, udp},
         {port, PortNum},
-        {controlling_process, self()} | Params
+        {controlling_process, self()}
+        | Params
     ],
     case call(DriverPid, {init, InitParams}) of
-        ok -> {ok, DriverPid};
+        ok ->
+            {ok, DriverPid};
         ErrorReason ->
             %% TODO close port
             ErrorReason
@@ -171,7 +170,6 @@ call(DriverPid, Msg) ->
             Ret
     end.
 
-
 %% TODO implement this in lists
 
 %% @private
@@ -182,13 +180,14 @@ merge(Config, Defaults) ->
 merge(_Config, [], Accum) ->
     Accum;
 merge(Config, [H | T], Accum) ->
-    Key = case H of
-        {K, _V} -> K;
-        K -> K
-    end,
+    Key =
+        case H of
+            {K, _V} -> K;
+            K -> K
+        end,
     case proplists:get_value(Key, Config) of
         undefined ->
             merge(Config, T, [H | Accum]);
         Value ->
-            merge(Config, T, [{Key, Value}|Accum])
+            merge(Config, T, [{Key, Value} | Accum])
     end.

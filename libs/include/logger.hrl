@@ -17,7 +17,18 @@
 %   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--define(LOG_INFO(Format, Args),      logger:log({?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, info,     {Format, Args})).
--define(LOG_WARNING(Format, Args),   logger:log({?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, warning,  {Format, Args})).
--define(LOG_ERROR(Format, Args),     logger:log({?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, error,    {Format, Args})).
--define(LOG_DEBUG(Format, Args),     logger:log({?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, debug,    {Format, Args})).
+-define(LOG_INFO(Format, Args),
+    logger:log({?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, info, {Format, Args})
+).
+
+-define(LOG_WARNING(Format, Args),
+    logger:log({?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, warning, {Format, Args})
+).
+
+-define(LOG_ERROR(Format, Args),
+    logger:log({?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, error, {Format, Args})
+).
+
+-define(LOG_DEBUG(Format, Args),
+    logger:log({?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, debug, {Format, Args})
+).

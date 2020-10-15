@@ -1,15 +1,16 @@
 -module(literal_test1).
+
 -export([start/0, id/1, f/2]).
 
 start() ->
     length(id(f(id([]), 1))) +
-    length(id(f(id([]), 2))) +
-    length(id(f(id([]), 3))) +
-    length(id(f(id([]), 4))) +
-    length(id(f(id([]), 5))) +
-    length(id(f(id([]), 10))) +
-    length(id(f(id([]), 127))) +
-    length(id(f(id([]), 128))).
+        length(id(f(id([]), 2))) +
+        length(id(f(id([]), 3))) +
+        length(id(f(id([]), 4))) +
+        length(id(f(id([]), 5))) +
+        length(id(f(id([]), 10))) +
+        length(id(f(id([]), 127))) +
+        length(id(f(id([]), 128))).
 
 f(L, 0) ->
     L;

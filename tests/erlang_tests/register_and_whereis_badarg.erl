@@ -1,4 +1,5 @@
--module (register_and_whereis_badarg).
+-module(register_and_whereis_badarg).
+
 -export([start/0, f/1, do_register/2, do_whereis/1]).
 
 start() ->
@@ -6,10 +7,8 @@ start() ->
 
 f(Pid) when is_pid(Pid) ->
     Pid;
-
 f(fail) ->
     5;
-
 f(good) ->
     good.
 
