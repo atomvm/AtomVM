@@ -29,6 +29,13 @@
 
 #include "term.h"
 
+struct Module;
+
+#ifndef TYPEDEF_MODULE
+#define TYPEDEF_MODULE
+typedef struct Module Module;
+#endif
+
 typedef term (*BifImpl)();
 typedef term (*BifImpl0)(Context *ctx);
 typedef term (*BifImpl1)(Context *ctx, term arg1);
