@@ -1862,7 +1862,7 @@ static term nif_erlang_display_1(Context *ctx, int argc, term argv[])
     term_display(stdout, argv[0], ctx);
     printf("\n");
 
-    return term_nil();
+    return TRUE_ATOM;
 }
 
 static term nif_erlang_process_flag(Context *ctx, int argc, term argv[])
