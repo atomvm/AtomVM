@@ -18,6 +18,8 @@
  ***************************************************************************/
 
 #include "interop.h"
+
+#include "defaultatoms.h"
 #include "tempstack.h"
 
 char *interop_term_to_string(term t, int *ok)
@@ -109,6 +111,11 @@ term interop_proplist_get_value_default(term list, term key, term default_value)
                 break;
             }
             return term_get_tuple_element(head, 1);
+
+        } else if (term_is_atom(head)) {
+            if (head == key) {
+                return TRUE_ATOM;
+            }
         }
 
         t = *t_ptr;
