@@ -378,7 +378,7 @@ Const binaries are stored in the same manner as Reference Counted binaries, with
 
 This heap structure has the following representation:
 
-                                |< 6  >|
+                              |< 6  >|
     +=========================+======+
     |    boxed-size (5)       |100000| boxed[0]
     +-------------------------+------+
@@ -409,7 +409,7 @@ Like a reference counted binary, a match binary includes a trailing cons cell, w
     some
     binary                            |< 6  >|
     ^       +=========================+======+
-    |       |    boxed-size (5)       |000100| boxed[0]
+    |       |    boxed-size (5)       |100100| boxed[0]
     |       +-------------------------+------+
     |       |      match-or-binary-ref       | boxed[1]
     |       +--------------------------------+
@@ -424,6 +424,32 @@ Like a reference counted binary, a match binary includes a trailing cons cell, w
             |<---------- word-size --------->|
 
 A reference to a reference-counted binary counts as a reference, in which case the creation or copying of a match binary results in the increment of the reference-counted binary's reference count, and the garbage collection of a match binary results in a decrement (and possible `free`ing) of a reference-counted binary.  The trailing cons cell becomes an element of the context (or message) MSO list, and plays a critical role in garbage collection.  See the garbage collection section below for more information about the role of this structure.
+
+#### Sub-Binaries
+
+Sub-binaries are represented as boxed terms containing a boxed header (`boxed[0]`), a type tag of `0x28` (`001000b`)
+
+A sub-binary is a boxed term that points to a reference-counted binary, recording the offset into the binary and the length (in bytes) of the sub-binary.  An invariant for this term is that the `offset + length` is always less than or equal to the length of the referenced binary.
+
+        some
+        refc
+        binary                            |< 6  >|
+        ^       +=========================+======+
+        |       |    boxed-size (3)       |001000| boxed[0]
+        |       +-------------------------+------+
+        |       |              len               | boxed[1]
+        |       +--------------------------------+
+        |       |             offset             | boxed[2]
+        |       +--------------------------------+
+        +----------------< binary-ref            | boxed[3]
+                +================================+
+                |<---------- word-size --------->|
+
+Note than when a sub-binary is copied between processes (e.g., via `erlang:send`, or `!`), the sub-binary boxed term, as well as the boxed-term that manages the reference-counted binary is copied, as well.  Thus, sending a sub-binary to another process will result in an increment of the reference count on the referenced binary, and similarly, garbage collection of the sub-binary will result in a decrement of the referenced binary's reference count.
+
+A sub-binary may be created from both const (literal) and non-const reference-counted binaries.  For performance reasons, sub-binaries do not reference heap binaries.
+
+Sub-binaries are created via the `binary:part/3` and `binary:split/2` Nifs, as well as via the `/binary` bit syntax specifier.
 
 ## Lists
 

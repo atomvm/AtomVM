@@ -398,6 +398,7 @@ compile_erlang(unlink_error)
 compile_erlang(trap_exit_flag)
 
 compile_erlang(test_refc_binaries)
+compile_erlang(test_sub_binaries)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -777,6 +778,7 @@ add_custom_target(erlang_test_modules DEPENDS
     sexp_lexer.beam
 
     test_refc_binaries.beam
+    test_sub_binaries.beam
     test_function_exported.beam
     test_list_to_tuple.beam
 

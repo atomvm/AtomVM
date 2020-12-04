@@ -3536,12 +3536,14 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                             size_t start_pos = bs_offset / 8;
                             size_t src_size = term_binary_size(bs_bin);
                             size_t new_bin_size = src_size - start_pos;
+                            size_t heap_size = term_sub_binary_heap_size(bs_bin, src_size - start_pos);
 
-                            if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(new_bin_size) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+
+                            if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
                             DECODE_COMPACT_TERM(src, code, i, src_off, src_off);
-                            term t = term_from_literal_binary(term_binary_data(bs_bin) + start_pos, new_bin_size, ctx);
+                            term t = term_maybe_create_sub_binary(bs_bin, start_pos, new_bin_size, ctx);
                             WRITE_REGISTER(dreg_type, dreg, t);
 
                         }
@@ -3876,6 +3878,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 int fail;
                 DECODE_LABEL(fail, code, i, next_off, next_off)
                 term src;
+                int src_offset = next_off;
                 DECODE_COMPACT_TERM(src, code, i, next_off, next_off);
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, code, i, next_off, next_off);
@@ -3929,24 +3932,18 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     TRACE("bs_get_binary2: insufficient capacity\n");
                     JUMP_TO_ADDRESS(mod->labels[fail]);
                 } else {
-                    size_t src_size = term_binary_size(bs_bin);
-                    uint8_t *src_buf = malloc(src_size);
-                    if (UNLIKELY(IS_NULL_PTR(src_buf))) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                    memcpy(src_buf, term_binary_data(bs_bin), src_size);
-                    // TODO what about ctx->bs?  Shouldn't that also be copied in case of GC?
-
                     term_set_match_state_offset(src, bs_offset + size_val * unit);
 
-                    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(size_val) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
-                        free(src_buf);
+                    size_t heap_size = term_sub_binary_heap_size(bs_bin, size_val);
+                    if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
+                    // re-compute src
+                    DECODE_COMPACT_TERM(src, code, i, src_offset, src_offset);
+                    bs_bin = term_get_match_state_binary(src);
 
-                    term t = term_from_literal_binary(src_buf + bs_offset / unit, size_val, ctx);
+                    term t = term_maybe_create_sub_binary(bs_bin, bs_offset / unit, size_val, ctx);
 
-                    free(src_buf);
                     WRITE_REGISTER(dreg_type, dreg, t);
                     NEXT_INSTRUCTION(next_off);
                 }

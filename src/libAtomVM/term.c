@@ -446,3 +446,29 @@ term term_alloc_refc_binary(Context *ctx, size_t size, bool is_const)
     }
     return ret;
 }
+
+static term find_binary(term binary_or_state)
+{
+    term t = binary_or_state;
+    while (term_is_match_state(t) || term_is_sub_binary(t)) {
+        if (term_is_match_state(t)) {
+            t = term_get_match_state_binary(t);
+        } else { // term_is_sub_binary
+            t = term_get_sub_binary_ref(t);
+        }
+    }
+    return t;
+}
+
+term term_alloc_sub_binary(term binary_or_state, size_t offset, size_t len, Context *ctx)
+{
+    term *boxed = memory_heap_alloc(ctx, TERM_BOXED_SUB_BINARY_SIZE);
+    term binary = find_binary(binary_or_state);
+
+    boxed[0] = ((TERM_BOXED_SUB_BINARY_SIZE - 1) << 6) | TERM_BOXED_SUB_BINARY;
+    boxed[1] = (term) len;
+    boxed[2] = (term) offset;
+    boxed[3] = binary;
+
+    return ((term) boxed) | TERM_BOXED_VALUE_TAG;
+}
