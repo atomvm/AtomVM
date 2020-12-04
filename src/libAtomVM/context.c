@@ -114,6 +114,7 @@ Context *context_new(GlobalContext *glb)
     ctx->bs_offset = 0;
 
     ctx->exit_reason = NORMAL_ATOM;
+    ctx->mso_list = term_nil();
 
     return ctx;
 }
@@ -122,6 +123,7 @@ void context_destroy(Context *ctx)
 {
     linkedlist_remove(&ctx->global->processes_table, &ctx->processes_table_head);
 
+    memory_sweep_mso_list(ctx->mso_list);
     dictionary_destroy(&ctx->dictionary);
 
     context_monitors_handle_terminate(ctx);
@@ -169,7 +171,7 @@ static void context_monitors_handle_terminate(Context *ctx)
             Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
             if (!IS_NULL_PTR(target)) {
-                target->exit_reason = memory_copy_term_tree(&ctx->heap_ptr, ctx->exit_reason);
+                target->exit_reason = memory_copy_term_tree(&ctx->heap_ptr, ctx->exit_reason, &ctx->mso_list);
 
                 // TODO: this cannot work on multicore systems
                 // target context should be marked as killed and terminated during next scheduling

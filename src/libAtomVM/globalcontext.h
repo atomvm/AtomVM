@@ -53,6 +53,7 @@ typedef struct
 {
     struct ListHead ready_processes;
     struct ListHead waiting_processes;
+    struct ListHead refc_binaries;
     struct ListHead *processes_table;
     struct ListHead *registered_processes;
 

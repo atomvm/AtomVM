@@ -379,3 +379,29 @@ int term_compare(term t, term other, Context *ctx)
 
     return result;
 }
+
+term term_alloc_refc_binary(Context *ctx, size_t size, bool is_const)
+{
+    term *boxed_value = memory_heap_alloc(ctx, TERM_BOXED_REFC_BINARY_SIZE);
+    boxed_value[0] = ((TERM_BOXED_REFC_BINARY_SIZE - 1) << 6) | TERM_BOXED_REFC_BINARY;
+    boxed_value[1] = (term) size;
+    boxed_value[2] = (term) is_const ? RefcBinaryIsConst : RefcNoFlags;
+    term ret = ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+    if (is_const) {
+        boxed_value[3] = (term) NULL;
+        // TODO Consider making const refc binaries 4 words instead of 6
+        boxed_value[4] = term_nil(); // mso_list is not used
+        boxed_value[5] = term_nil(); // for const binaries
+    } else {
+        struct RefcBinary *refc = refc_binary_create_refc(size);
+        if (IS_NULL_PTR(refc)) {
+            // TODO propagate error to callers of this function, e.g., as an invalid term
+            fprintf(stderr, "memory_create_refc_binary: Unable to allocate %zu bytes for refc_binary.\n", size);
+            abort();
+        }
+        boxed_value[3] = (term) refc;
+        ctx->mso_list = term_list_init_prepend(boxed_value + 4, ret, ctx->mso_list);
+        list_append(&ctx->global->refc_binaries, (struct ListHead *) refc);
+    }
+    return ret;
+}

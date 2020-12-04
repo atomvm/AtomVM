@@ -770,7 +770,7 @@ static void process_console_mailbox(Context *ctx)
         fprintf(stderr, "WARNING: Invalid port command.  Unable to send reply");
     }
 
-    free(message);
+    mailbox_destroy_message(message);
 }
 
 static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])
@@ -818,7 +818,7 @@ static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])
         abort();
     }
     for (uint32_t i = 0; i < n_freeze; i++) {
-        new_ctx->x[i + arity - n_freeze] = memory_copy_term_tree(&new_ctx->heap_ptr, boxed_value[i + 3]);
+        new_ctx->x[i + arity - n_freeze] = memory_copy_term_tree(&new_ctx->heap_ptr, boxed_value[i + 3], &ctx->mso_list);
     }
 
     new_ctx->saved_module = fun_module;
@@ -930,7 +930,7 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
         abort();
     }
     while (term_is_nonempty_list(t)) {
-        new_ctx->x[reg_index] = memory_copy_term_tree(&new_ctx->heap_ptr, term_get_list_head(t));
+        new_ctx->x[reg_index] = memory_copy_term_tree(&new_ctx->heap_ptr, term_get_list_head(t), &new_ctx->mso_list);
         reg_index++;
 
         t = term_get_list_tail(t);
@@ -2122,6 +2122,13 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         return term_from_literal_binary((const uint8_t *) buf, len, ctx);
+    }
+    if (key == REFC_BINARY_INFO_ATOM) {
+        term ret = refc_binary_create_binary_info(ctx);
+        if (ret == term_invalid_term()) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return ret;
     }
     return sys_get_info(ctx, key);
 }

@@ -241,7 +241,7 @@ static void i2cdriver_consume_mailbox(Context *ctx)
             ret = ERROR_ATOM;
     }
 
-    free(message);
+    mailbox_destroy_message(message);
 
     UNUSED(ref);
     mailbox_send(target, ret);

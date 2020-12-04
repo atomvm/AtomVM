@@ -984,7 +984,7 @@ static void socket_consume_mailbox(Context *ctx)
         port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
     }
 
-    free(message);
+    mailbox_destroy_message(message);
     TRACE("END socket_consume_mailbox\n");
 }
 

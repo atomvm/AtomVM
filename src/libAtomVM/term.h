@@ -27,12 +27,14 @@
 #ifndef _TERM_H_
 #define _TERM_H_
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "memory.h"
+#include "refc_binary.h"
 #include "utils.h"
 
 #include "term_typedef.h"
@@ -51,7 +53,7 @@
 #define TERM_BOXED_REFC_BINARY 0x20
 #define TERM_BOXED_HEAP_BINARY 0x24
 
-#define TERM_BOXED_REFC_BINARY_SIZE 3
+#define TERM_BOXED_REFC_BINARY_SIZE 6
 #define TERM_BOXED_BIN_MATCH_STATE_SIZE 4
 
 #define BINARY_HEADER_SIZE 2
@@ -61,10 +63,17 @@
 #define FLOAT_SIZE (sizeof(float_term_t) / sizeof(term) + 1)
 #define REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
 #define TUPLE_SIZE(elems) ((int) (elems + 1))
+#define REFC_BINARY_CONS_OFFET  4
 
 #define TERM_DEBUG_ASSERT(...)
 
 #define TERM_FROM_ATOM_INDEX(atom_index) ((atom_index << 6) | 0xB)
+
+enum RefcBinaryFlags
+{
+    RefcNoFlags = 0,
+    RefcBinaryIsConst
+};
 
 /**
  * @brief All empty tuples will reference this
@@ -80,6 +89,23 @@ extern const term empty_tuple;
  * @return 0 when given terms are equals, otherwise -1 when t < other, or 1 when t > other.
  */
 int term_compare(term t, term other, Context *ctx);
+
+/**
+ * @brief Create a reference-counted binary on the heap
+ *
+ * @details This function will create a reference-counted binary on the heap.  If the data
+ * supplied is "const" (e.g., read from a literal in a BEAM file), then the returned term
+ * will point directly to the supplied data, and will not technically be reference-counted.
+ * Otherwise, a block of memory will be allocated to contain a copy of the data, in addition
+ * to a reference counter, so that the block can be free'd when no other terms reference
+ * the created object.  (The reference count will be initialized to 1).  If the data is
+ * non-NULL, it will be copied into the newly allocated block of memory.
+ * @param ctx the context in which to allocate memory in the heap
+ * @param size the size (in bytes) of the data to allocate
+ * @param is_const designates whether the data pointed to is "const", such as a term literal
+ * @return a term (reference) pointing to the newly allocated binary in the process heap.
+ */
+term term_alloc_refc_binary(Context *ctx, size_t size, bool is_const);
 
 /**
  * @brief Gets a pointer to a term stored on the heap
@@ -258,6 +284,31 @@ static inline int term_is_binary(term t)
     }
 
     return 0;
+}
+
+/**
+ * @brief Checks if a term is a binary
+ *
+ * @details Returns 1 if a term is a binary stored on the heap, otherwise 0.
+ * @param t the term that will be checked.
+ * @return 1 if check succedes, 0 otherwise.
+ */
+static inline bool term_is_refc_binary(term t)
+{
+    /* boxed: 10 */
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        int masked_value = boxed_value[0] & 0x3F;
+        return masked_value == TERM_BOXED_REFC_BINARY;
+    }
+
+    return false;
+}
+
+static inline bool term_refc_binary_is_const(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return boxed_value[2] & RefcBinaryIsConst;
 }
 
 /**
@@ -722,6 +773,7 @@ static inline term term_from_local_process_id(uint32_t local_process_id)
  */
 static inline int term_binary_data_size_in_terms(uint32_t size)
 {
+    if (size < REFC_BINARY_MIN) {
 #if TERM_BYTES == 4
     return ((size + 4 - 1) >> 2) + 1;
 #elif TERM_BYTES == 8
@@ -729,59 +781,9 @@ static inline int term_binary_data_size_in_terms(uint32_t size)
 #else
     #error
 #endif
-}
-
-/**
- * @brief Term from binary data
- *
- * @details Allocates a binary on the heap, and returns a term pointing to it.
- * @param data binary data.
- * @param size size of binary data buffer.
- * @param ctx the context that owns the memory that will be allocated.
- * @return a term pointing to the boxed binary pointer.
- */
-static inline term term_from_literal_binary(const void *data, uint32_t size, Context *ctx)
-{
-    int size_in_terms = term_binary_data_size_in_terms(size);
-
-    term *boxed_value = memory_heap_alloc(ctx, size_in_terms + 1);
-    boxed_value[0] = (size_in_terms << 6) | 0x24; // heap binary
-    boxed_value[1] = size;
-
-    memcpy(boxed_value + 2, data, size);
-
-    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
-}
-
-static inline term term_from_const_binary(const void *data, uint32_t size, Context *ctx)
-{
-    term *boxed_value = memory_heap_alloc(ctx, TERM_BOXED_REFC_BINARY_SIZE);
-    boxed_value[0] = (2 << 6) | TERM_BOXED_REFC_BINARY;
-    boxed_value[1] = size;
-    boxed_value[2] = (term) data;
-
-    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
-}
-
-/**
-* @brief Create an unititialized binary.
-*
-* @details Allocates a binary on the heap, and returns a term pointing to it.
-* Note that the data in teh binary is unitialized and could contain any garbage.
-* Make sure to initialize before use, if needed (e.g., via memset).
-* @param size size of binary data buffer.
-* @param ctx the context that owns the memory that will be allocated.
-* @return a term pointing to the boxed binary pointer.
-*/
-static inline term term_create_uninitialized_binary(uint32_t size, Context *ctx)
-{
-    int size_in_terms = term_binary_data_size_in_terms(size);
-
-    term *boxed_value = memory_heap_alloc(ctx, size_in_terms + 1);
-    boxed_value[0] = (size_in_terms << 6) | 0x24; // heap binary
-    boxed_value[1] = size;
-
-    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+    } else {
+        return TERM_BOXED_REFC_BINARY_SIZE;
+    }
 }
 
 /**
@@ -800,6 +802,20 @@ static inline unsigned long term_binary_size(term t)
 }
 
 /**
+ * @brief Get the pointer off heap refc binary.
+ *
+ * @details Returns address
+ * @return offset (in words).
+ */
+static inline void *term_refc_binary_ptr(term refc_binary)
+{
+    TERM_DEBUG_ASSERT(term_is_refc_binary(refc_binary));
+
+    term *boxed_value = term_to_term_ptr(refc_binary);
+    return (void *) boxed_value[3];
+}
+
+/**
  * @brief Gets binary data
  *
  * @details Returns a pointer to stored binary data.
@@ -811,11 +827,68 @@ static inline const char *term_binary_data(term t)
     TERM_DEBUG_ASSERT(term_is_binary(t));
 
     const term *boxed_value = term_to_const_term_ptr(t);
-    if (boxed_value[0] & 0x4) {
+    if (!term_is_refc_binary(t)) {
         return (const char *) (boxed_value + 2);
+    } else if (term_refc_binary_is_const(t)) {
+        return (const char *) boxed_value[3];
     } else {
-        return ((const char *) boxed_value[2]);
+        return (const char *) refc_binary_get_data((struct RefcBinary *) boxed_value[3]);
     }
+}
+
+/**
+* @brief Create an unititialized binary.
+*
+* @details Allocates a binary on the heap, and returns a term pointing to it.
+* Note that the data in teh binary is unitialized and could contain any garbage.
+* Make sure to initialize before use, if needed (e.g., via memset).
+* @param size size of binary data buffer.
+* @param ctx the context that owns the memory that will be allocated.
+* @return a term pointing to the boxed binary pointer.
+*/
+static inline term term_create_uninitialized_binary(uint32_t size, Context *ctx)
+{
+    if (size < REFC_BINARY_MIN) {
+        int size_in_terms = term_binary_data_size_in_terms(size);
+
+        term *boxed_value = memory_heap_alloc(ctx, size_in_terms + 1);
+        boxed_value[0] = (size_in_terms << 6) | TERM_BOXED_HEAP_BINARY;
+        boxed_value[1] = size;
+
+        return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+    } else {
+        return term_alloc_refc_binary(ctx, size, false);
+    }
+}
+
+/**
+ * @brief Term from binary data
+ *
+ * @details Allocates a binary on the heap, and returns a term pointing to it.
+ * @param data binary data.
+ * @param size size of binary data buffer.
+ * @param ctx the context that owns the memory that will be allocated.
+ * @return a term pointing to the boxed binary pointer.
+ */
+static inline term term_from_literal_binary(const void *data, uint32_t size, Context *ctx)
+{
+    term binary = term_create_uninitialized_binary(size, ctx);
+    memcpy((void *) term_binary_data(binary), data, size);
+    return binary;
+}
+
+static inline void term_set_refc_binary_data(term t, const char *data)
+{
+    TERM_DEBUG_ASSERT(term_is_refc_binary(t));
+    term *boxed_value = term_to_term_ptr(t);
+    boxed_value[3] = (term) data;
+}
+
+static inline term term_from_const_binary(const void *data, uint32_t size, Context *ctx)
+{
+    term binary = term_alloc_refc_binary(ctx, size, true);
+    term_set_refc_binary_data(binary, data);
+    return binary;
 }
 
 /**

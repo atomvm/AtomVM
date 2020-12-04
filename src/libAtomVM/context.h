@@ -114,6 +114,7 @@ struct Context
     size_t bs_offset;
 
     term exit_reason;
+    term mso_list;
 };
 
 #ifndef TYPEDEF_CONTEXT

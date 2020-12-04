@@ -1323,7 +1323,7 @@ static void socket_consume_mailbox(Context *ctx)
                 break;
         }
 
-        free(message);
+        mailbox_destroy_message(message);
     }
 }
 
