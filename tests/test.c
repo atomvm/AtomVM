@@ -326,6 +326,7 @@ struct Test tests[] =
     {"test_ordering_1.beam", 1},
     {"test_binary_to_term.beam", 0},
     {"test_bs.beam", 0},
+    {"test_gc.beam", 0 },
 
     {"ceilint.beam", 1},
     {"ceilbadarg.beam", -1},
