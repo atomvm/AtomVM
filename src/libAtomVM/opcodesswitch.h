@@ -1600,25 +1600,37 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         scheduler_cancel_timeout(ctx);
                     }
                     mailbox_remove(ctx);
+
+                    struct ListHead *item;
+                    struct ListHead *tmp;
+                    MUTABLE_LIST_FOR_EACH(item, tmp, &ctx->save_queue) {
+                        list_prepend(&ctx->mailbox, item);
+                    }
+                    list_init(&ctx->save_queue);
                 #endif
 
                 NEXT_INSTRUCTION(1);
                 break;
             }
 
-            //TODO: implement timeout/0
             case OP_TIMEOUT: {
                 TRACE("timeout/0\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
                     ctx->flags &= ~WaitingTimeoutExpired;
+
+                    struct ListHead *item;
+                    struct ListHead *tmp;
+                    MUTABLE_LIST_FOR_EACH(item, tmp, &ctx->save_queue) {
+                        list_prepend(&ctx->mailbox, item);
+                    }
+                    list_init(&ctx->save_queue);
                 #endif
 
                 NEXT_INSTRUCTION(1);
                 break;
             }
 
-            //TODO: implemente loop_rec/2
             case OP_LOOP_REC: {
                 int next_off = 1;
                 int label;
@@ -1649,7 +1661,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 break;
             }
 
-            //TODO: stub, implement loop_rec_end/1
             case OP_LOOP_REC_END: {
                 int next_offset = 1;
                 int label;
@@ -1658,7 +1669,15 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 TRACE("loop_rec_end/1 label=%i\n", label);
                 USED_BY_TRACE(label);
 
+#ifdef IMPL_EXECUTE_LOOP
+                struct ListHead *msg = list_first(&ctx->mailbox);
+                list_remove(msg);
+                list_prepend(&ctx->save_queue, msg);
+
+                i = POINTER_TO_II(mod->labels[label]);
+#else
                 NEXT_INSTRUCTION(next_offset);
+#endif
                 break;
             }
 
