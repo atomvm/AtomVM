@@ -32,30 +32,57 @@ Once built, these binaries are "flashed" (i.e., uploaded, typically over the ser
 
 > Note that the AtomVM build will also build all of the "components" from the IDF SDK, which can sometimes take additional time to build on an initial run.  However, the Xtensa toolchain linker will only add code and symbols that are explicitly called from the AtomVM codebase, so the executable image size is typically less than the sum of the components that are compiled as part of the build.
 
-### Adding custom Nifs and third-party components
+### Adding custom Nifs, Ports, and third-party components
 
-You can add custom Nifs and additional third-party components to your ESP32 build by adding them to the `components` directory, and the ESP32 build will compile them automatically.
-
-If you would like to create a new AtomVM Nif that is linked into the ESP32 image (but which is not part of the AtomVM distribution), you should create a "Nif component", which is an IDF SDK component, but which obeys certain naming and organizational conventions so that the AtomVM build can locate the required header files and functions needed to link the Nif driver into the AtomVM image.
+AtomVM Nifs are stateless functions implemented in C.  AtomVM ports are stateful VM processes, also implemented in C.  You can add your own custom Nifs, ports, and additional third-party components to your ESP32 build by adding them to the `components` directory, and the ESP32 build will compile them automatically.
 
 > For more information about building components for the IDF SDK, consult the [IDF SDK Build System](https://docs.espressif.com/projects/esp-idf/en/v3.3.2/api-guides/build-system.html#) documentation.
 
-Generally, this requires the following steps:
+The instructions for adding custom Nifs and ports differ in slight detail, but are otherwise quite similar.
 
-* Create an IDF SDK component, as described in the IDF SDK documentation
-* Select a moniker that is unique to your nif, such as `my_nif`
-* Create a header file called `my_nif.h` that can be located by your component's build
-* The header file should contain a declaration of the `<moniker>_get_nif` Nif locator function, which takes a nif name and returns a const pointer to a `struct Nif`, e.g.,
+### Writing a custom AtomVM Nif
 
+To write support for a new peripheral or protocol using custom AtomVM Nif, you need to do the following:
+
+* Choose a name for your nif (e.g, "my_nif").  Call this `<moniker>`.
+* In your source code, implement the following two functions:
+    * `void <moniker>_nif_init(GlobalContext *global);`
+        * This function will be called once, when the application is started.
+    * `const struct Nif *<moniker>_nif_get_nif(const char *nifname);`
+        * This function will be called to locate the Nif during a function call.
+
+Example:
+
+    void my_nif_init(GlobalContext *global);
     const struct Nif *my_nif_get_nif(const char *nifname);
 
-* Create a `component_nifs.txt` file in the `main` directory of the AtomVM `esp32` build tree that contains your moniker on a single line, e.g.,
+> Note. Instructions for implementing Nifs is outside of the scope of this document.
 
-    my_nif
+* Add your `<moniker>` to the `main/component_nifs.txt` file in the `src/platforms/esp32` directory.
 
-> Note.  You may include several such driver monikers in your `component_nifs.txt` file on separate lines.  Blank lines are ignored.  If the `component_nifs.txt` file is empty or does not exist, then no additional components or nifs will be linked into your AtomVM image.
+> Note.  The `main/component_nifs.txt` file will not exist until after the first clean build.
 
-The AtomVM build will generate a new file in the build tree, `component_nifs.h`, which will include your Nif driver header file and will call your Nif locator function.
+### Writing a custom AtomVM Port
+
+To write support for a new peripheral or protocol using an AtomVM port, you need to do the following:
+
+* Choose a name for your port (e.g, "my_port").  Call this `<moniker>`.
+* In your source code, implement the following two functions:
+    * `void <moniker>_init(GlobalContext *global);`
+        * This function will be called once, when the application is started.
+    * `Context *<moniker>_create_port(GlobalContext *global, term opts);`
+        * This function will be called to locate the Nif during a function call.
+
+Example:
+
+    void my_port_init(GlobalContext *global);
+    Context *my_port_create_port(GlobalContext *global, term opts);
+
+> Note. Instructions for implementing Ports is outside of the scope of this document.
+
+* Add your `<moniker>` to the `main/component_ports.txt` file in the `src/platforms/esp32` directory.
+
+> Note.  The `main/component_ports.txt` file will not exist until after the first clean build.
 
 ## Flash Layout
 

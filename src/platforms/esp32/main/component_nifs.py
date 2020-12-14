@@ -24,14 +24,30 @@ def load(path) :
         return f.read()
 
 def insert(component_nif, component_nifs_txt) :
-    includes_pos = component_nifs_txt.find("// INCLUDES")
-    buf = component_nifs_txt[:includes_pos]
-    buf += "#include <%s.h>\n" % component_nif
-    components_pos = component_nifs_txt.find("// COMPONENTS")
-    buf += component_nifs_txt[includes_pos:components_pos]
+
+    prev_pos = component_nifs_txt.find("// DECLARATIONS")
+    buf = component_nifs_txt[:prev_pos]
+    buf += "void %s_init(GlobalContext *global);\n" % component_nif
+    buf += "const struct Nif *%s_get_nif(const char *nifname);\n" % component_nif
+
+    next_pos = component_nifs_txt.find("// INIT")
+    buf += component_nifs_txt[prev_pos:next_pos]
+    buf += "%s_init(global);\n    " % component_nif
+    prev_pos = next_pos
+
+    next_pos = component_nifs_txt.find("// GET_NIF")
+    buf += component_nifs_txt[prev_pos:next_pos]
     buf += "if ((nif = %s_get_nif(nifname)) != NULL) { return nif; }\n    " % component_nif
-    buf += component_nifs_txt[components_pos:]
+    prev_pos = next_pos
+
+    buf += component_nifs_txt[prev_pos:]
     return buf
+
+def strip_line(line) :
+    idx = line.find('#')
+    if idx != -1 :
+        line = line[:idx]
+    return line.strip()
 
 def main(argv):
     if len(argv) != 3 :
@@ -42,7 +58,7 @@ def main(argv):
         component_nifs_txt = load(argv[2]) if os.path.exists(argv[2]) else ""
         work = component_nifs_in
         for component_nif in component_nifs_txt.splitlines() :
-            component_nif = component_nif.strip()
+            component_nif = strip_line(component_nif)
             if len(component_nif) > 0 :
                 work = insert(component_nif, work)
         print(work)

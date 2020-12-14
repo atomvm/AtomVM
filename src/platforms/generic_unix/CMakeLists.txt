@@ -10,10 +10,8 @@ set(HEADER_FILES
 )
 
 set(SOURCE_FILES
-    gpio_driver.c
     sys.c
     mapped_file.c
-    network_driver.c
     platform_defaultatoms.c
     platform_nifs.c
     socket_driver.c

@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright 2018 by Fred Dushin <fred@dushin.net>                       *
+ *   Copyright 2018 by Davide Bettio <davide@uninstall.it>                 *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU Lesser General Public License as        *
@@ -17,12 +17,14 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#include "gpio_driver.h"
+#ifndef _GPIODRIVER_H_
+#define _GPIODRIVER_H_
 
-void gpiodriver_init(Context *ctx)
-{
-    UNUSED(ctx);
+#include "context.h"
+#include "globalcontext.h"
+#include "term.h"
 
-    fprintf(stderr, "Unsupported driver on this platform: gpiodriver\n");
-    abort();
-}
+void gpio_driver_init(GlobalContext *global);
+Context *gpio_driver_create_port(GlobalContext *global, term opts);
+
+#endif

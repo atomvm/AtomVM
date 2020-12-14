@@ -17,7 +17,7 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#include "spidriver.h"
+#include "spi_driver.h"
 
 #include <string.h>
 
@@ -54,8 +54,15 @@ struct SPIData
     spi_transaction_t transaction;
 };
 
-void spidriver_init(Context *ctx, term opts)
+void spi_driver_init(GlobalContext *global)
 {
+    // no-op
+}
+
+Context *spi_driver_create_port(GlobalContext *global, term opts)
+{
+    Context *ctx = context_new(global);
+
     struct SPIData *spi_data = calloc(1, sizeof(struct SPIData));
 
     ctx->native_handler = spidriver_consume_mailbox;
@@ -103,6 +110,8 @@ void spidriver_init(Context *ctx, term opts)
     } else {
         TRACE("spi_bus_add_device return code: %i\n", ret);
     }
+
+    return ctx;
 }
 
 static uint32_t spidriver_transfer_at(Context *ctx, uint64_t address, int data_len, uint32_t data, bool *ok)

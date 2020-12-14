@@ -22,38 +22,26 @@
 #include "esp_system.h"
 #include "esp_event.h"
 #include "esp_event_loop.h"
-#include "nvs_flash.h"
 
 #include "atom.h"
 #include "avmpack.h"
 #include "bif.h"
+#include "component_ports.h"
+#include "component_nifs.h"
 #include "context.h"
 #include "globalcontext.h"
 #include "iff.h"
 #include "module.h"
-#include "socket_driver.h"
 #include "term.h"
 #include "utils.h"
 
 #include "esp32_sys.h"
-#include "nvs_flash.h"
 
 const void *avm_partition(const char *partition_name, int *size);
 
 void app_main()
 {
-    nvs_flash_init();
-    tcpip_adapter_init();
-
     esp32_sys_queue_init();
-
-    esp_err_t err = nvs_flash_init();
-    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        fprintf(stderr, "Warning: Erasing flash...\n");
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        err = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(err);
 
     int size;
     const void *main_avm = avm_partition("main.avm", &size);
@@ -66,7 +54,8 @@ void app_main()
 
     GlobalContext *glb = globalcontext_new();
 
-    socket_driver_init(glb);
+    component_ports_init(glb);
+    component_nifs_init(glb);
 
     if (!avmpack_is_valid(main_avm, size) || !avmpack_find_section_by_flag(main_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
         fprintf(stderr, "error: invalid AVM Pack\n");

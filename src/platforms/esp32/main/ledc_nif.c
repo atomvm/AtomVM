@@ -17,19 +17,20 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#include "atom.h"
-#include "defaultatoms.h"
-#include "interop.h"
-#include "memory.h"
-#include "nifs.h"
-#include "platform_defaultatoms.h"
-#include "term.h"
+#include <atom.h>
+#include <defaultatoms.h>
+#include <interop.h>
+#include <memory.h>
+#include <nifs.h>
+#include <term.h>
 
 #include <driver/ledc.h>
 #include <stdlib.h>
 
 //#define ENABLE_TRACE
 #include "trace.h"
+
+#include "ledc_nif.h"
 
 static const char *const ledc_duty_resolution   = "\xF"  "duty_resolution";
 static const char *const ledc_freq_hz           = "\x7"  "freq_hz";
@@ -409,7 +410,12 @@ static const struct Nif ledc_stop_nif =
     .nif_ptr = nif_ledc_stop
 };
 
-const struct Nif *ledc_nifs_get_nif(const char *nifname)
+void ledc_nif_init(GlobalContext *gloabl)
+{
+    // no-op
+}
+
+const struct Nif *ledc_nif_get_nif(const char *nifname)
 {
     if (strcmp("ledc:timer_config/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);

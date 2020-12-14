@@ -21,14 +21,10 @@
 #include "esp32_sys.h"
 
 #include "avmpack.h"
+#include "component_ports.h"
 #include "defaultatoms.h"
 #include "globalcontext.h"
-#include "gpio_driver.h"
-#include "i2cdriver.h"
-#include "network.h"
 #include "scheduler.h"
-#include "spidriver.h"
-#include "uart_driver.h"
 
 #include "trace.h"
 
@@ -159,35 +155,23 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
 }
 
 // This function allows to use AtomVM as a component on ESP32 and customize it
-__attribute__((weak)) Context *sys_create_port_fallback(Context *new_ctx, const char *driver_name, term opts)
+__attribute__((weak)) Context *sys_create_port_fallback(Context *new_ctx, const char *port_name, term opts)
 {
-    UNUSED(driver_name);
+    UNUSED(new_ctx);
     UNUSED(opts);
 
-    context_destroy(new_ctx);
+    fprintf(stderr, "Failed to load port \"%s\".  Ensure the port is configured properly in the build.\n", port_name);
+
     return NULL;
 }
 
-Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
+
+Context *sys_create_port(GlobalContext *glb, const char *port_name, term opts)
 {
-    Context *new_ctx = context_new(glb);
-
-    if (!strcmp(driver_name, "socket")) {
-        socket_init(new_ctx, opts);
-    } else if (!strcmp(driver_name, "network")) {
-        network_init(new_ctx, opts);
-    } else if (!strcmp(driver_name, "gpio")) {
-        gpiodriver_init(new_ctx);
-    } else if (!strcmp(driver_name, "spi")) {
-        spidriver_init(new_ctx, opts);
-    } else if (!strcmp(driver_name, "i2c")) {
-        i2cdriver_init(new_ctx, opts);
-    } else if (!strcmp(driver_name, "uart")) {
-        uart_driver_init(new_ctx, opts);
-    } else {
-        return sys_create_port_fallback(new_ctx, driver_name, opts);
+    Context *new_ctx = component_ports_create_port(port_name, glb, opts);
+    if (IS_NULL_PTR(new_ctx)) {
+        return sys_create_port_fallback(new_ctx, port_name, opts);
     }
-
     return new_ctx;
 }
 

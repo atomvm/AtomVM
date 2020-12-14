@@ -18,12 +18,14 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#ifndef _NETWORK_H_
-#define _NETWORK_H_
+#ifndef _NETWORK_DRIVER_H_
+#define _NETWORK_DRIVER_H_
 
 #include "context.h"
+#include "globalcontext.h"
 #include "term.h"
 
-void network_init(Context *ctx, term opts);
+void network_driver_init(GlobalContext *global);
+Context *network_driver_create_driver(GlobalContext *global, term opts);
 
 #endif

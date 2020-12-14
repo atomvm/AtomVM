@@ -27,8 +27,6 @@ set(HEADER_FILES
     opcodes.h
     opcodesswitch.h
     overflow_helpers.h
-    network.h
-    network_driver.h
     nifs.h
     platform_nifs.h
     port.h
@@ -61,7 +59,6 @@ set(SOURCE_FILES
     mailbox.c
     memory.c
     module.c
-    network.c
     nifs.c
     port.c
     refc_binary.c
