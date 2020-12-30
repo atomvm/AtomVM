@@ -421,6 +421,37 @@ static term nif_esp_partition_write(Context *ctx, int argc, term argv[])
     return OK_ATOM;
 }
 
+static term nif_esp_deep_sleep(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    VALIDATE_VALUE(argv[0], term_is_integer);
+    avm_int_t msecs = term_to_int(argv[0]);
+
+    esp_deep_sleep(msecs * 1000);
+
+    // technically, this function does not return
+    return OK_ATOM;
+}
+static const char *const sleep_wakeup_timer_atom = "\x12" "sleep_wakeup_timer";
+
+static term nif_esp_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+
+    switch (cause) {
+        case ESP_SLEEP_WAKEUP_UNDEFINED:
+            return UNDEFINED_ATOM;
+        case ESP_SLEEP_WAKEUP_TIMER:
+            return context_make_atom(ctx, sleep_wakeup_timer_atom);
+        default:
+            return ERROR_ATOM;
+    }
+}
+
 static term nif_rom_md5(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -507,6 +538,16 @@ static const struct Nif esp_partition_write_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_partition_write
 };
+static const struct Nif esp_deep_sleep_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_deep_sleep
+};
+static const struct Nif esp_sleep_get_wakeup_cause_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_sleep_get_wakeup_cause
+};
 static const struct Nif rom_md5_nif =
 {
     .base.type = NIFFunctionType,
@@ -567,6 +608,14 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     if (strcmp("esp:partition_write/3", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_partition_write_nif;
+    }
+    if (strcmp("esp:deep_sleep/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_deep_sleep_nif;
+    }
+    if (strcmp("esp:sleep_get_wakeup_cause/0", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_sleep_get_wakeup_cause_nif;
     }
     if (strcmp("erlang:md5/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
