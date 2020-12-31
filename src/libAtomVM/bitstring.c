@@ -28,7 +28,7 @@ static inline uint64_t from_le64(uint64_t value)
          (((value) & 0xFF000000000000) >> 40) | (((value) & 0xFF00000000000000) >> 56));
 }
 
-bool extract_any_integer(const uint8_t *src, size_t offset, avm_int_t n,
+bool bitstring_extract_any_integer(const uint8_t *src, size_t offset, avm_int_t n,
     enum BitstringFlags bs_flags, union maybe_unsigned_int64 *dst)
 {
     uint64_t out = 0;
@@ -54,5 +54,25 @@ bool extract_any_integer(const uint8_t *src, size_t offset, avm_int_t n,
         dst->u = out;
     }
 
+    return true;
+}
+
+bool bitstring_insert_any_integer(uint8_t *dst, avm_int_t offset, avm_int64_t value, size_t n, enum BitstringFlags bs_flags)
+{
+    // TODO support big/little endian signedness flags
+    if (bs_flags != 0) {
+        return false;
+    }
+    for (int i = 0; i < n; ++i) {
+        int k = (n - 1) - i;
+        int bit_val = (value & (0x01 << k)) >> k;
+        if (bit_val) {
+            int bit_pos = offset + i;
+            int byte_pos = bit_pos >> 3; // div 8
+            uint8_t *pos = (uint8_t *) (dst + byte_pos);
+            int shift = 7 - (bit_pos & 7); // mod 8
+            *pos ^= (0x01 << shift);
+        }
+    }
     return true;
 }

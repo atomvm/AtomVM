@@ -468,6 +468,12 @@ typedef union
     RAISE_ERROR(BADARG_ATOM); \
 }
 
+#define VERIFY_IS_ANY_INTEGER(t, opcode_name) \
+    if (UNLIKELY(!term_is_any_integer(t))) { \
+    TRACE(opcode_name ": " #t " is not any integer\n"); \
+    RAISE_ERROR(BADARG_ATOM); \
+}
+
 #define VERIFY_IS_BINARY(t, opcode_name) \
     if (UNLIKELY(!term_is_binary(t))) { \
     TRACE(opcode_name ": " #t " is not a binary\n"); \
@@ -3338,27 +3344,22 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(src,  "bs_put_integer");
+                    VERIFY_IS_ANY_INTEGER(src, "bs_put_integer");
                     VERIFY_IS_INTEGER(size, "bs_put_integer");
                     VERIFY_IS_INTEGER(flags, "bs_put_integer");
 
-                    avm_int_t src_value = term_to_int(src);
+                    avm_int64_t src_value = term_maybe_unbox_int64(src);
                     avm_int_t size_value = term_to_int(size);
                     avm_int_t flags_value = term_to_int(flags);
                     if (unit != 1) {
                         TRACE("bs_put_integer: unit is not 1\n");
                         RAISE_ERROR(UNSUPPORTED_ATOM);
                     }
-                    if (flags_value != 0) {
-                        TRACE("bs_put_integer: neither signed nor native or little endian encoding supported.\n");
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
 
                     TRACE("bs_put_integer/5, fail=%i size=%li unit=%li flags=0x%lx src=%i\n", fail, size_value, unit, flags_value, (unsigned int) src_value);
 
-                    //TODO: add flags_value
-                    int result = term_bs_insert_integer(ctx->bs, ctx->bs_offset, src_value, size_value);
-                    if (UNLIKELY(result)) {
+                    bool result = bitstring_insert_integer(ctx->bs, ctx->bs_offset, src_value, size_value, flags_value);
+                    if (UNLIKELY(!result)) {
                         TRACE("bs_put_integer: Failed to insert integer into binary: %i\n", result);
                         RAISE_ERROR(BADARG_ATOM);
                     }
