@@ -1156,28 +1156,47 @@ term bif_erlang_bxor_2(Context *ctx, int live, term arg1, term arg2)
     }
 }
 
-term bif_erlang_bsl_2(Context *ctx, int live, term arg1, term arg2)
+typedef int64_t (*bitshift_op)(int64_t a, avm_int_t b);
+
+static inline term bitshift_helper(Context *ctx, int live, term arg1, term arg2, bitshift_op op)
 {
     UNUSED(live);
 
-    if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
-        return term_from_int32(term_to_int32(arg1) << term_to_int32(arg2));
-
-    } else {
+    if (UNLIKELY(!term_is_any_integer(arg1) || !term_is_integer(arg2))) {
         RAISE_ERROR(BADARITH_ATOM);
     }
+
+    int64_t a = term_maybe_unbox_int64(arg1);
+    avm_int_t b = term_to_int(arg2);
+    int64_t result = op(a, b);
+
+    #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+        return make_maybe_boxed_int64(ctx, result);
+    #else
+        return make_maybe_boxed_int(ctx, result);
+    #endif
+}
+
+static inline int64_t bsl(int64_t a, avm_int_t b)
+{
+    // TODO check for overflow
+    return a << b;
+}
+
+term bif_erlang_bsl_2(Context *ctx, int live, term arg1, term arg2)
+{
+    return bitshift_helper(ctx, live, arg1, arg2, bsl);
+}
+
+static inline int64_t bsr(int64_t a, avm_int_t b)
+{
+    // TODO check for underflow
+    return a >> b;
 }
 
 term bif_erlang_bsr_2(Context *ctx, int live, term arg1, term arg2)
 {
-    UNUSED(live);
-
-    if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
-        return term_from_int32(term_to_int32(arg1) >> term_to_int32(arg2));
-
-    } else {
-        RAISE_ERROR(BADARITH_ATOM);
-    }
+    return bitshift_helper(ctx, live, arg1, arg2, bsr);
 }
 
 term bif_erlang_bnot_1(Context *ctx, int live, term arg1)
