@@ -39,6 +39,15 @@ The following functions are available:
 
 > Note.  NVS entries are stored in plaintext and are not encrypted.  Applications should exercise caution if sensitive security information, such as account passwords, are stored in NVS storage.
 
+## Deep Sleep
+
+The `esp:deep_sleep/1` function can be used to put the ESP device into deep sleep for a specified number of milliseconds.  Be sure to safely shut down any critical processes running before this function is called, as it will cause an immediate shutdown of the device.
+
+The `esp:sleep_get_wakeup_cause/0` function can be used to inspect the reason for a wakeup.  Currently, the only supported return value is the atom `undefined` or ``sleep_wakeup_timer`.
+
+* `esp:deep_sleep/1`
+* `esp:sleep_get_wakeup_cause/0`
+
 ## Miscellaneous
 
 The `freq_hz` function can be used to retrieve the clock frequency of the chip.
