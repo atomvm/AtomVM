@@ -77,6 +77,7 @@ struct Context
     const void *jump_to_on_restore;
 
     struct ListHead mailbox;
+    struct ListHead save_queue;
 
     struct ListHead dictionary;
 
