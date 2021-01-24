@@ -75,6 +75,7 @@ compile_erlang(negatives2)
 compile_erlang(datetime)
 compile_erlang(timestamp)
 compile_erlang(is_type)
+compile_erlang(test_bitshift)
 compile_erlang(test_bitwise)
 compile_erlang(test_bitwise2)
 compile_erlang(test_gt_and_le)
@@ -446,6 +447,7 @@ add_custom_target(erlang_test_modules DEPENDS
     datetime.beam
     timestamp.beam
     is_type.beam
+    test_bitshift.beam
     test_bitwise.beam
     test_bitwise2.beam
     test_gt_and_le.beam
