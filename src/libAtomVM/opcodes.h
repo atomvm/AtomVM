@@ -89,6 +89,7 @@
 #define OP_TRY_END 105
 #define OP_TRY_CASE 106
 #define OP_TRY_CASE_END 107
+#define OP_RAISE 108
 #define OP_BS_INIT2 109
 #define OP_BS_ADD 111
 #define OP_APPLY 112

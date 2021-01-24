@@ -2951,7 +2951,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 break;
             }
 
-            //TODO: implement
             case OP_TRY_CASE: {
                 int next_off = 1;
                 dreg_t dreg;
@@ -2959,6 +2958,11 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 TRACE("try_case/1, reg=%c%i\n", T_DEST_REG(dreg_type, dreg));
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    // clears the catch value on stack
+                    WRITE_REGISTER(dreg_type, dreg, term_nil());
+                #endif
 
                 NEXT_INSTRUCTION(next_off);
                 break;
@@ -2989,6 +2993,30 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     term_put_tuple_element(new_error_tuple, 1, arg1);
 
                     RAISE_ERROR(new_error_tuple);
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_RAISE: {
+                uint8_t *pos = code + i;
+                int next_off = 1;
+                term stacktrace;
+                DECODE_COMPACT_TERM(stacktrace, code, i, next_off, next_off);
+                UNUSED(stacktrace);
+                term exc_value;
+                DECODE_COMPACT_TERM(exc_value, code, i, next_off, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("raise/2\n");
+                    UNUSED(exc_value);
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("raise/2 stacktrace=0x%lx exc_value=0x%lx\n", stacktrace, exc_value);
+
+                    RAISE_ERROR(exc_value);
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
