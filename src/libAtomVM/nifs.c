@@ -131,6 +131,7 @@ static term nif_erlang_throw(Context *ctx, int argc, term argv[]);
 static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[]);
+static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[]);
 static term nif_console_print(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode(Context *ctx, int argc, term argv[]);
@@ -478,6 +479,12 @@ static const struct Nif fun_to_list_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_fun_to_list
+};
+
+static const struct Nif garbage_collect_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_garbage_collect
 };
 
 static const struct Nif make_fun_nif =
@@ -2393,6 +2400,33 @@ static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[])
         prev = term_list_prepend(term_from_int11(buf[i]), prev, ctx);
     }
     return prev;
+}
+
+static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[])
+{
+    Context *c = ctx;
+    if (argc == 1) {
+        term t = argv[0];
+        VALIDATE_VALUE(t, term_is_pid);
+        int pid = term_to_local_process_id(pid);
+        c = globalcontext_get_process(ctx->global, pid);
+        if (IS_NULL_PTR(c)) {
+            return FALSE_ATOM;
+        }
+    }
+    size_t memory_size = context_memory_size(c);
+    if (UNLIKELY(memory_gc(c, memory_size + MIN_FREE_SPACE_SIZE) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    size_t free_space = context_avail_free_memory(c);
+    size_t minimum_free_space = 2 * MIN_FREE_SPACE_SIZE;
+    if (free_space > minimum_free_space) {
+        memory_size = context_memory_size(c);
+        if (UNLIKELY(memory_gc(c, (memory_size - free_space) + minimum_free_space) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+    }
+    return TRUE_ATOM;
 }
 
 static term nif_erlang_error(Context *ctx, int argc, term argv[])

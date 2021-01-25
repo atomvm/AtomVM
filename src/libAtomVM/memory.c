@@ -31,8 +31,6 @@
 
 #include "trace.h"
 
-#define MIN_FREE_SPACE_SIZE 16
-
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **new_heap_pos, int move);
