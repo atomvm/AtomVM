@@ -116,7 +116,11 @@
 #define OP_RECV_SET 151
 #define OP_GC_BIF3 152
 #define OP_LINE 153
+#define OP_PUT_MAP_ASSOC 154
+#define OP_PUT_MAP_EXACT 155
 #define OP_IS_MAP 156
+#define OP_HAS_MAP_FIELDS 157
+#define OP_GET_MAP_ELEMENTS 158
 #define OP_IS_TAGGED_TUPLE 159
 #define OP_GET_HD 162
 #define OP_GET_TL 163

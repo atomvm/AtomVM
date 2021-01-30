@@ -40,6 +40,7 @@
 #define LIST_EXT 108
 #define BINARY_EXT 109
 #define EXPORT_EXT 113
+#define MAP_EXT 116
 #define SMALL_ATOM_UTF8_EXT 119
 
 static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx, int copy);
@@ -275,6 +276,21 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
         }
         return 5 + len;
 
+    } else if (term_is_map(t)) {
+        size_t size = term_get_map_size(t);
+        if (!IS_NULL_PTR(buf)) {
+            buf[0] = MAP_EXT;
+            WRITE_32_UNALIGNED(buf + 1, size);
+        }
+        size_t k = 5;
+        for (size_t i = 0; i < size; ++i) {
+            term key = term_get_map_key(t, i);
+            k += serialize_term(ctx, IS_NULL_PTR(buf) ? NULL : buf + k, key);
+            term value = term_get_map_value(t, i);
+            k += serialize_term(ctx, IS_NULL_PTR(buf) ? NULL : buf + k, value);
+        }
+        return k;
+
     } else {
         fprintf(stderr, "Unknown external term type: %li\n", t);
         abort();
@@ -398,7 +414,6 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
         }
 
         case EXPORT_EXT: {
-            int heap_usage = 1;
             int buf_pos = 1;
             int element_size;
 
@@ -413,6 +428,25 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
 
             *eterm_size = buf_pos;
             return term_make_function_reference(m, f, a, ctx);
+        }
+
+        case MAP_EXT: {
+            uint32_t size = READ_32_UNALIGNED(external_term_buf + 1);
+            term map = term_alloc_map(ctx, size);
+            int buf_pos = 5;
+            for (uint32_t i = 0;  i < size;  ++i) {
+                int key_size;
+                term key = parse_external_terms(external_term_buf + buf_pos, &key_size, ctx, copy);
+                buf_pos += key_size;
+
+                int value_size;
+                term value = parse_external_terms(external_term_buf + buf_pos, &value_size, ctx, copy);
+                buf_pos += value_size;
+
+                term_set_map_assoc(map, i, key, value);
+            }
+            *eterm_size = buf_pos;
+            return map;
         }
 
         case SMALL_ATOM_UTF8_EXT: {
@@ -539,6 +573,22 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_siz
 
             *eterm_size = buf_pos;
             return FUNCTION_REFERENCE_SIZE;
+        }
+
+        case MAP_EXT: {
+            uint32_t size = READ_32_UNALIGNED(external_term_buf + 1);
+            int heap_usage = 1;
+            int buf_pos = 5;
+            for (uint32_t i = 0;  i < size;  ++i) {
+                int key_size;
+                heap_usage += calculate_heap_usage(external_term_buf + buf_pos, &key_size, copy, ctx) + 1;
+                buf_pos += key_size;
+                int value_size;
+                heap_usage += calculate_heap_usage(external_term_buf + buf_pos, &value_size, copy, ctx) + 1;
+                buf_pos += value_size;
+            }
+            *eterm_size = buf_pos;
+            return heap_usage + 2 + 1; // keys tuple header and size (2 words) + tuple_ptr (1 word)
         }
 
         case SMALL_ATOM_UTF8_EXT: {

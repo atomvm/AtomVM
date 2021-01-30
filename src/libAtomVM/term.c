@@ -115,6 +115,21 @@ void term_display(FILE *fd, term t, const Context *ctx)
 
         fputc('}', fd);
 
+    } else if (term_is_map(t)) {
+        fprintf(fd, "#{");
+
+        int map_size = term_get_map_size(t);
+        for (int i = 0; i < map_size; i++) {
+            if (i != 0) {
+                fputc(',', fd);
+            }
+            term_display(fd, term_get_map_key(t, i), ctx);
+            fprintf(fd, "=>");
+            term_display(fd, term_get_map_value(t, i), ctx);
+        }
+
+        fputc('}', fd);
+
     } else if (term_is_binary(t)) {
         int len = term_binary_size(t);
         const char *binary_data = term_binary_data(t);
@@ -215,6 +230,9 @@ static int term_type_to_index(term t)
     } else if (term_is_binary(t)) {
         return 10;
 
+    } else if (term_is_map(t)) {
+        return 11;
+
     } else {
         abort();
     }
@@ -312,6 +330,31 @@ int term_compare(term t, term other, Context *ctx)
             } else {
                 result = (memcmp_result > 0) ? 1 : -1;
                 break;
+            }
+
+        } else if (term_is_map(t) && term_is_map(other)) {
+            int t_size = term_get_map_size(t);
+            int other_size = term_get_map_size(other);
+
+            if (t_size != other_size) {
+                result = (t_size > other_size) ? 1 : -1;
+                break;
+            }
+            if (t_size > 0) {
+                for (int i = 1; i < t_size; i++) {
+                    temp_stack_push(&temp_stack, term_get_map_value(t, i));
+                    temp_stack_push(&temp_stack, term_get_map_value(other, i));
+                    temp_stack_push(&temp_stack, term_get_map_key(t, i));
+                    temp_stack_push(&temp_stack, term_get_map_key(other, i));
+                }
+                t = term_get_map_key(t, 0);
+                other = term_get_map_key(other, 0);
+
+            } else {
+                temp_stack_push(&temp_stack, term_get_map_value(t, 0));
+                temp_stack_push(&temp_stack, term_get_map_value(other, 0));
+                other = temp_stack_pop(&temp_stack);
+                t = temp_stack_pop(&temp_stack);
             }
 
         } else if (term_is_any_integer(t) && term_is_any_integer(other)) {

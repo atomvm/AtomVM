@@ -248,6 +248,46 @@ Tuples are represented as boxed terms containing a boxed header (`boxed[0]`), a 
     |                                |
     |<---------- word-size --------->|
 
+
+### Maps
+
+Maps are represented as boxed terms containing a boxed header (`boxed[0]`), a type tag of `0x3C` (`111100b`), followed by:
+
+* a term pointer to a tuple of arity `n` containing the keys in the map;
+* a sequence of `n`-many words, containing the values of the map corresponding (in order) to the keys in the reference tuple.
+
+The keys and values are single word terms, i.e., either immediates or pointers to boxed terms or lists.
+
+            +=========================+======+
+    +-----> |    boxed-tuple (n)      |000000|
+    |       +-------------------------+------+
+    |       |             key-1              |
+    |       +--------------------------------+
+    |       |             key-2              |
+    |       +--------------------------------+
+    |       |               ...              |
+    |       +--------------------------------+
+    |       |             key-n              |
+    |       +================================+
+    |       |                                |
+    |                       ...
+    |       |                         |< 6  >|
+    |       +=========================+======+
+    |       |    boxed-size (n)       |111100| boxed[0]
+    |       +-------------------------+------+
+    +-----------------<   keys               | boxed[1]
+            +--------------------------------+
+            |             value-1            | boxed[2]
+            +--------------------------------+
+            |               ...              | ...
+            +--------------------------------+
+            |             value-n            | boxed[2 + n]
+            +================================+
+            |                                |
+            |<---------- word-size --------->|
+
+The tuple of keys may or may not be contiguous with the boxed term holding the map itself (and in general will not be, after garbage collection).
+
 ### Binaries
 
 Binaries are stored in several different ways, depending on their size and the kinds of data to which they refer.

@@ -4362,6 +4362,153 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 break;
             }
 
+            case OP_PUT_MAP_ASSOC: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                term src;
+                int src_offset = next_off;
+                DECODE_COMPACT_TERM(src, code, i, next_off, next_off);
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
+                int live;
+                DECODE_INTEGER(live, code, i, next_off, next_off);
+
+                TRACE("put_map_assoc/5: label: %i src: 0x%lx dest=%c%i live: %i\n", label, src, T_DEST_REG(dreg_type, dreg), live);
+
+                next_off++; //skip extended list tag {z, 1}
+                int list_len;
+                DECODE_INTEGER(list_len, code, i, next_off, next_off);
+                int list_off = next_off;
+                int num_elements = list_len / 2;
+                //
+                // Count how many of the entries in list(...) are not already in src
+                //
+                unsigned new_entries = 0;
+                for (int j = 0;  j < num_elements;  ++j) {
+                    term key, value;
+                    DECODE_COMPACT_TERM(key, code, i, next_off, next_off);
+                    DECODE_COMPACT_TERM(value, code, i, next_off, next_off);
+
+                    #ifdef IMPL_EXECUTE_LOOP
+                        if (term_find_map_pos(ctx, src, key) == -1) {
+                            new_entries++;
+                        }
+                    #endif
+                }
+                #ifdef IMPL_EXECUTE_LOOP
+                    //
+                    // Maybe GC, and reset the src term in case it changed
+                    //
+                    size_t src_size = term_get_map_size(src);
+                    size_t new_map_size = src_size + new_entries;
+                    size_t heap_needed = term_map_size_in_terms(new_map_size);
+                    if (memory_ensure_free(ctx, heap_needed) != MEMORY_GC_OK) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+                    DECODE_COMPACT_TERM(src, code, i, src_offset, src_offset);
+                    //
+                    // Create a new map of the requested size and populate with entries from src
+                    //
+                    term map = term_alloc_map(ctx, new_map_size);
+                    for (int j = 0;  j < src_size;  ++j) {
+                        term key = term_get_map_key(src, j);
+                        term value = term_get_map_value(src, j);
+                        term_set_map_assoc(map, j, key, value);
+                    }
+                    //
+                    // Copy the new terms into the new map, in situ or appended
+                    //
+                    int k = src_size;
+                    for (int j = 0;  j < num_elements;  ++j) {
+                        term key, value;
+                        DECODE_COMPACT_TERM(key, code, i, list_off, list_off);
+                        DECODE_COMPACT_TERM(value, code, i, list_off, list_off);
+                        int pos = term_find_map_pos(ctx, src, key);
+                        if (pos == -1) {
+                            term_set_map_assoc(map, k, key, value);
+                            ++k;
+                        } else {
+                            term_set_map_assoc(map, pos, key, value);
+                        }
+                    }
+                    WRITE_REGISTER(dreg_type, dreg, map);
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+
+                break;
+            }
+
+            case OP_PUT_MAP_EXACT: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                term src;
+                int src_offset = next_off;
+                DECODE_COMPACT_TERM(src, code, i, next_off, next_off);
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
+                int live;
+                DECODE_INTEGER(live, code, i, next_off, next_off);
+
+                TRACE("put_map_exact/5: label: %i src: 0x%lx dest=%c%i live: %i\n", label, src, T_DEST_REG(dreg_type, dreg), live);
+
+                next_off++; //skip extended list tag {z, 1}
+                int list_len;
+                DECODE_INTEGER(list_len, code, i, next_off, next_off);
+                int list_off = next_off;
+                int num_elements = list_len / 2;
+                //
+                // Make sure every key from list is in src
+                //
+                for (int j = 0;  j < num_elements;  ++j) {
+                    term key, value;
+                    DECODE_COMPACT_TERM(key, code, i, next_off, next_off);
+                    DECODE_COMPACT_TERM(value, code, i, next_off, next_off);
+
+                    #ifdef IMPL_EXECUTE_LOOP
+                        if (term_find_map_pos(ctx, src, key) == -1) {
+                            RAISE_ERROR(BADARG_ATOM);
+                        }
+                    #endif
+                }
+                #ifdef IMPL_EXECUTE_LOOP
+                    //
+                    // Maybe GC, and reset the src term in case it changed
+                    //
+                    size_t src_size = term_get_map_size(src);
+                    if (memory_ensure_free(ctx, term_map_size_in_terms(src_size)) != MEMORY_GC_OK) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+                    DECODE_COMPACT_TERM(src, code, i, src_offset, src_offset);
+                    //
+                    // Create a new map of the same size as src and populate with entries from src
+                    //
+                    term map = term_alloc_map(ctx, src_size);
+                    for (int j = 0;  j < src_size;  ++j) {
+                        term_set_map_assoc(map, j, term_get_map_key(src, j), term_get_map_value(src, j));
+                    }
+                    //
+                    // Copy the new terms into the new map, in situ only
+                    //
+                    for (int j = 0;  j < num_elements;  ++j) {
+                        term key, value;
+                        DECODE_COMPACT_TERM(key, code, i, list_off, list_off);
+                        DECODE_COMPACT_TERM(value, code, i, list_off, list_off);
+                        int pos = term_find_map_pos(ctx, src, key);
+                        term_set_map_assoc(map, pos, key, value);
+                    }
+                    WRITE_REGISTER(dreg_type, dreg, map);
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+
+                break;
+            }
+
             case OP_IS_MAP: {
                 int next_off = 1;
                 int label;
@@ -4372,8 +4519,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_map/2, label=%i, arg1=%lx\n", label, arg1);
 
-                    // TODO: implement is_map
-                    if (0) {
+                    if (term_is_map(arg1)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
@@ -4387,6 +4533,74 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     NEXT_INSTRUCTION(next_off);
                 #endif
 
+                break;
+            }
+
+            case OP_HAS_MAP_FIELDS: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off, next_off);
+
+                TRACE("has_map_fields/3: label: %i src: 0x%lx\n", label, src);
+
+                next_off++; //skip extended list tag {z, 1}
+                int list_len;
+                DECODE_INTEGER(list_len, code, i, next_off, next_off);
+                int fail = 0;
+                for (int j = 0;  j < list_len && !fail;  ++j) {
+                    term key, value;
+                    DECODE_COMPACT_TERM(key, code, i, next_off, next_off);
+
+                    #ifdef IMPL_EXECUTE_LOOP
+                        int pos = term_find_map_pos(ctx, src, key);
+                        if (pos == -1) {
+                            i = POINTER_TO_II(mod->labels[label]);
+                            fail = 1;
+                        }
+                    #endif
+                }
+                if (!fail) {
+                    NEXT_INSTRUCTION(next_off);
+                }
+                break;
+            }
+
+            case OP_GET_MAP_ELEMENTS: {
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off, next_off);
+                TRACE("get_map_elements/3: label: %i src: 0x%lx\n", label, src);
+
+                next_off++; //skip extended list tag {z, 1}
+                int list_len;
+                DECODE_INTEGER(list_len, code, i, next_off, next_off);
+                int num_elements = list_len / 2;
+                int fail = 0;
+                for (int j = 0;  j < num_elements && !fail;  ++j) {
+                    term key, value;
+                    DECODE_COMPACT_TERM(key, code, i, next_off, next_off);
+                    dreg_t dreg;
+                    dreg_type_t dreg_type;
+                    DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
+
+                    #ifdef IMPL_EXECUTE_LOOP
+                        int pos = term_find_map_pos(ctx, src, key);
+                        if (pos == -1) {
+                            i = POINTER_TO_II(mod->labels[label]);
+                            fail = 1;
+                        } else {
+                            term value = term_get_map_value(src, pos);
+                            WRITE_REGISTER(dreg_type, dreg, value);
+                        }
+                    #endif
+                }
+                if (!fail) {
+                    NEXT_INSTRUCTION(next_off);
+                }
                 break;
             }
 

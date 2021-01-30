@@ -52,6 +52,7 @@
 #define TERM_BOXED_FLOAT 0x18
 #define TERM_BOXED_REFC_BINARY 0x20
 #define TERM_BOXED_HEAP_BINARY 0x24
+#define TERM_BOXED_MAP 0x3C
 
 #define TERM_BOXED_REFC_BINARY_SIZE 6
 #define TERM_BOXED_BIN_MATCH_STATE_SIZE 4
@@ -1468,6 +1469,90 @@ static inline term term_alloc_bin_match_state(term binary_or_state, Context *ctx
     }
 
     return ((term) boxed_match_state) | TERM_BOXED_VALUE_TAG;
+}
+
+static inline int term_is_map(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        if ((boxed_value[0] & 0x3F) == TERM_BOXED_MAP) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static inline size_t term_get_map_keys_offset()
+{
+    return 1;
+}
+
+static inline size_t term_get_map_value_offset()
+{
+    return 2;
+}
+
+static inline int term_map_size_in_terms(size_t num_entries)
+{
+    return 2 + (1 + num_entries) + num_entries;
+}
+
+
+static inline term term_alloc_map(Context *ctx, avm_uint_t size)
+{
+    term keys = term_alloc_tuple(size, ctx);
+    term *boxed_value = memory_heap_alloc(ctx, 2 + size);
+    boxed_value[0] = ((1 + size) << 6) | TERM_BOXED_MAP;
+    boxed_value[term_get_map_keys_offset()] = keys;
+
+    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+}
+
+static inline term term_get_map_keys(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_map(t));
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return boxed_value[term_get_map_keys_offset()];
+}
+
+static inline int term_get_map_size(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_map(t));
+
+    return term_get_tuple_arity(term_get_map_keys(t));
+}
+
+static inline void term_set_map_assoc(term map, avm_uint_t pos, term key, term value)
+{
+    term_put_tuple_element(term_get_map_keys(map), pos, key);
+    term *boxed_value = term_to_term_ptr(map);
+    boxed_value[term_get_map_value_offset() + pos] = value;
+}
+
+static inline term term_get_map_key(term map, avm_uint_t pos)
+{
+    return term_get_tuple_element(term_get_map_keys(map), pos);
+}
+
+static inline term term_get_map_value(term map, avm_uint_t pos)
+{
+    term *boxed_value = term_to_term_ptr(map);
+    return boxed_value[term_get_map_value_offset() + pos];
+}
+
+static inline int term_find_map_pos(Context *ctx, term map, term key)
+{
+    term *boxed_value = term_to_term_ptr(map);
+    term keys = term_get_map_keys(map);
+    int arity = term_get_tuple_arity(keys);
+    for (int i = 0;  i < arity; ++i) {
+        term k = term_get_tuple_element(keys, i);
+        if (term_equals(key, k, ctx)) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 #endif
