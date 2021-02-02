@@ -382,6 +382,11 @@ compile_erlang(alisp)
 compile_erlang(sexp_parser)
 compile_erlang(sexp_lexer)
 
+compile_erlang(spawn_opt_monitor_normal)
+compile_erlang(spawn_opt_monitor_throw)
+compile_erlang(spawn_opt_link_normal)
+compile_erlang(spawn_opt_link_throw)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -756,4 +761,9 @@ add_custom_target(erlang_test_modules DEPENDS
     alisp.beam
     sexp_parser.beam
     sexp_lexer.beam
+
+    spawn_opt_monitor_normal.beam
+    spawn_opt_monitor_throw.beam
+    spawn_opt_link_normal.beam
+    spawn_opt_link_throw.beam
 )
