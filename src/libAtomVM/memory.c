@@ -25,6 +25,7 @@
 #include "dictionary.h"
 #include "list.h"
 #include "memory.h"
+#include "refc_binary.h"
 #include "tempstack.h"
 
 //#define ENABLE_TRACE
@@ -33,7 +34,7 @@
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
-static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **new_heap_pos, int move);
+static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **new_heap_pos, term *mso_list, int move);
 static term memory_shallow_copy_term(term t, term **new_heap, int move);
 
 HOT_FUNC term *memory_heap_alloc(Context *c, uint32_t size)
@@ -98,7 +99,7 @@ static inline void push_to_stack(term **stack, term value)
 
 enum MemoryGCResult memory_gc(Context *ctx, int new_size)
 {
-    TRACE("Going to perform gc\n");
+    TRACE("Going to perform gc on process %i\n", ctx->process_id);
 
     new_size += ctx->heap_fragments_size;
     ctx->heap_fragments_size = 0;
@@ -111,6 +112,7 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
     if (IS_NULL_PTR(new_heap)) {
         return MEMORY_GC_ERROR_FAILED_ALLOCATION;
     }
+    TRACE("- Allocated %i words for new heap\n", new_size);
     term *new_stack = new_heap + new_size;
 
     term *heap_ptr = new_heap;
@@ -139,14 +141,17 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
 
     term *temp_start = new_heap;
     term *temp_end = heap_ptr;
+    term new_mso_list = term_nil();
     do {
         term *next_end = temp_end;
-        memory_scan_and_copy(temp_start, temp_end, &next_end, 1);
+        memory_scan_and_copy(temp_start, temp_end, &next_end, &new_mso_list, 1);
         temp_start = temp_end;
         temp_end = next_end;
     } while (temp_start != temp_end);
 
     heap_ptr = temp_end;
+    memory_sweep_mso_list(ctx->mso_list);
+    ctx->mso_list = new_mso_list;
 
     free(ctx->heap_start);
 
@@ -182,7 +187,7 @@ static inline term memory_dereference_moved_marker(const term *moved_marker)
     return moved_marker[1];
 }
 
-term memory_copy_term_tree(term **new_heap, term t)
+term memory_copy_term_tree(term **new_heap, term t, term *mso_list)
 {
     TRACE("Copy term tree: 0x%lx, heap: 0x%p\n", t, *new_heap);
 
@@ -192,7 +197,7 @@ term memory_copy_term_tree(term **new_heap, term t)
 
     do {
         term *next_end = temp_end;
-        memory_scan_and_copy(temp_start, temp_end, &next_end, 0);
+        memory_scan_and_copy(temp_start, temp_end, &next_end, mso_list, 0);
         temp_start = temp_end;
         temp_end = next_end;
     } while (temp_start != temp_end);
@@ -263,7 +268,7 @@ unsigned long memory_estimate_usage(term t)
     return acc;
 }
 
-static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **new_heap_pos, int move)
+static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **new_heap_pos, term *mso_list, int move)
 {
     term *ptr = mem_start;
     term *new_heap = *new_heap_pos;
@@ -333,8 +338,13 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
                     TRACE("- Found float.\n");
                     break;
 
-                case TERM_BOXED_REFC_BINARY:
-                    TRACE("- Found binary.\n");
+                case TERM_BOXED_REFC_BINARY: {
+                    TRACE("- Found refc binary.\n");
+                    term ref = ((term) ptr) | TERM_BOXED_VALUE_TAG;
+                    if (!term_refc_binary_is_const(ref)) {
+                        *mso_list = term_list_init_prepend(ptr + REFC_BINARY_CONS_OFFET, ref, *mso_list);
+                    }
+                }
                     break;
 
                 case TERM_BOXED_HEAP_BINARY:
@@ -416,6 +426,10 @@ HOT_FUNC static term memory_shallow_copy_term(term t, term **new_heap, int move)
 
         if (move) {
             memory_replace_with_moved_marker(boxed_value, new_term);
+        } else if (term_is_refc_binary(t)) { // copy, not a move; increment refcount
+            if (!term_refc_binary_is_const(t)) {
+                refc_binary_increment_refcount((struct RefcBinary *) term_refc_binary_ptr(t));
+            }
         }
 
         return new_term;
@@ -443,5 +457,24 @@ HOT_FUNC static term memory_shallow_copy_term(term t, term **new_heap, int move)
     } else {
         fprintf(stderr, "Unexpected term. Term is: %lx\n", t);
         abort();
+    }
+}
+
+void memory_sweep_mso_list(term mso_list)
+{
+    term new_list = term_nil();
+    term l = mso_list;
+    while (l != term_nil()) {
+        term h = term_get_list_head(l);
+        // the mso list only contains boxed values; each refc is unique
+        TERM_DEBUG_ASSERT(term_is_boxed(h))
+        term *boxed_value = term_to_term_ptr(h);
+        if (memory_is_moved_marker(boxed_value)) {
+            // it has been moved, so it is referenced
+        } else if (term_is_refc_binary(h) && !term_refc_binary_is_const(h)) {
+            // unreferenced binary; decrement reference count
+            refc_binary_decrement_refcount((struct RefcBinary *) term_refc_binary_ptr(h));
+        }
+        l = term_get_list_tail(l);
     }
 }

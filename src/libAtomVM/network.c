@@ -62,7 +62,7 @@ static void network_consume_mailbox(Context *ctx)
         fprintf(stderr, "WARNING: Invalid port command.  Unable to send reply");
     }
 
-    free(message);
+    mailbox_destroy_message(message);
 }
 
 void network_init(Context *ctx, term opts)

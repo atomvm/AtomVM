@@ -35,7 +35,8 @@ typedef struct
 {
     struct ListHead mailbox_list_head;
     int msg_memory_size;
-    term message;
+    term mso_list;
+    term message; // must be declared last
 } Message;
 
 /**
@@ -81,5 +82,15 @@ term mailbox_peek(Context *c);
  * @param c the process or driver context.
  */
 void mailbox_remove(Context *c);
+
+/**
+ * @brief Free memory associated with a mailbox message.
+ *
+ * @details The supplied message will be free'd, and
+ * to any references to shared memory will decrement
+ * reference counts.
+ * @param m the message to free.
+ */
+void mailbox_destroy_message(Message *m);
 
 #endif

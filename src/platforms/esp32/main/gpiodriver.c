@@ -333,7 +333,7 @@ static void consume_gpio_mailbox(Context *ctx)
             ret = ERROR_ATOM;
     }
 
-    free(message);
+    mailbox_destroy_message(message);
 
     mailbox_send(target, ret);
 }

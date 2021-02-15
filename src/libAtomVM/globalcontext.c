@@ -47,6 +47,7 @@ GlobalContext *globalcontext_new()
     list_init(&glb->ready_processes);
     list_init(&glb->waiting_processes);
     list_init(&glb->avmpack_data);
+    list_init(&glb->refc_binaries);
     glb->processes_table = NULL;
     glb->registered_processes = NULL;
 

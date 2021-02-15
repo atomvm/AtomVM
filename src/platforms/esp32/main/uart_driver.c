@@ -389,6 +389,6 @@ static void uart_driver_consume_mailbox(Context *ctx)
                 TRACE("uart: error: unrecognized command.\n");
         }
 
-        free(message);
+        mailbox_destroy_message(message);
     }
 }

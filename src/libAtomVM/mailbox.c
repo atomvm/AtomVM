@@ -40,9 +40,10 @@ void mailbox_send(Context *c, term t)
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         return;
     }
+    m->mso_list = term_nil();
 
     term *heap_pos = mailbox_message_memory(m);
-    m->message = memory_copy_term_tree(&heap_pos, t);
+    m->message = memory_copy_term_tree(&heap_pos, t, &m->mso_list);
     m->msg_memory_size = estimated_mem_usage;
 
     list_append(&c->mailbox, &m->mailbox_list_head);
@@ -52,28 +53,6 @@ void mailbox_send(Context *c, term t)
         c->jump_to_on_restore = NULL;
     }
     scheduler_make_ready(c->global, c);
-}
-
-term mailbox_receive(Context *c)
-{
-    Message *m = GET_LIST_ENTRY(list_first(&c->mailbox), Message, mailbox_list_head);
-    list_remove(&m->mailbox_list_head);
-
-    if (c->e - c->heap_ptr < m->msg_memory_size) {
-        //ADDITIONAL_PROCESSING_MEMORY_SIZE: ensure some additional memory for message processing, so there is
-        //no need to run GC again.
-        if (UNLIKELY(memory_gc(c, context_memory_size(c) + m->msg_memory_size + ADDITIONAL_PROCESSING_MEMORY_SIZE) != MEMORY_GC_OK)) {
-            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        }
-    }
-
-    term rt = memory_copy_term_tree(&c->heap_ptr, m->message);
-
-    free(m);
-
-    TRACE("Pid %i is receiving 0x%lx.\n", c->process_id, rt);
-
-    return rt;
 }
 
 Message *mailbox_dequeue(Context *c)
@@ -100,7 +79,7 @@ term mailbox_peek(Context *c)
         }
     }
 
-    term rt = memory_copy_term_tree(&c->heap_ptr, m->message);
+    term rt = memory_copy_term_tree(&c->heap_ptr, m->message, &c->mso_list);
 
     return rt;
 }
@@ -115,7 +94,12 @@ void mailbox_remove(Context *c)
     Message *m = GET_LIST_ENTRY(list_first(&c->mailbox), Message, mailbox_list_head);
     list_remove(&m->mailbox_list_head);
 
-    TRACE("Pid %i is removing a message.\n", c->process_id);
+    mailbox_destroy_message(m);
+}
 
+
+void mailbox_destroy_message(Message *m)
+{
+    memory_sweep_mso_list(m->mso_list);
     free(m);
 }

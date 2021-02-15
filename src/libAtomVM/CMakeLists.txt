@@ -32,6 +32,7 @@ set(HEADER_FILES
     nifs.h
     platform_nifs.h
     port.h
+    refc_binary.h
     scheduler.h
     sys.h
     term_typedef.h
@@ -63,6 +64,7 @@ set(SOURCE_FILES
     network.c
     nifs.c
     port.c
+    refc_binary.c
     scheduler.c
     term.c
     timer_wheel.c
