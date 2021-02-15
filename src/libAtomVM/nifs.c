@@ -912,6 +912,14 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
             fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
             abort();
         }
+        // This is a really simple hack to get the parent - child linking
+        // I don't really like how it is implemented but it works nicely.
+        // I think it should be implemented adding a parent field to Context.
+        res = context_monitor(ctx, term_from_local_process_id(new_ctx->process_id), true);
+        if (UNLIKELY(res == 0)) {
+            fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
+            abort();
+        }
     } else if (monitor_term == TRUE_ATOM) {
         ref_ticks = context_monitor(new_ctx, term_from_local_process_id(ctx->process_id), false);
         if (UNLIKELY(ref_ticks == 0)) {
