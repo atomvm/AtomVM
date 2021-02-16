@@ -462,7 +462,6 @@ HOT_FUNC static term memory_shallow_copy_term(term t, term **new_heap, int move)
 
 void memory_sweep_mso_list(term mso_list)
 {
-    term new_list = term_nil();
     term l = mso_list;
     while (l != term_nil()) {
         term h = term_get_list_head(l);
