@@ -132,6 +132,7 @@ static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[]);
+static term nif_erlang_monitor(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[]);
 static term nif_console_print(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode(Context *ctx, int argc, term argv[]);
@@ -491,6 +492,12 @@ static const struct Nif make_fun_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_make_fun_3
+};
+
+static const struct Nif monitor_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_monitor
 };
 
 static const struct Nif atomvm_read_priv_nif =
@@ -2518,6 +2525,32 @@ static term nif_erlang_erase_1(Context *ctx, int argc, term argv[])
     UNUSED(argc);
 
     return dictionary_erase(&ctx->dictionary, ctx, argv[0]);
+}
+
+static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term target_pid = argv[1];
+
+    if (argv[0] != PROCESS_ATOM) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    VALIDATE_VALUE(target_pid, term_is_pid);
+
+    int local_process_id = term_to_local_process_id(target_pid);
+    Context *target = globalcontext_get_process(ctx->global, local_process_id);
+
+    term callee_pid = term_from_local_process_id(ctx->process_id);
+
+    uint64_t ref_ticks = context_monitor(target, callee_pid, false);
+
+    if (UNLIKELY(memory_ensure_free(ctx, REF_SIZE) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return term_from_ref_ticks(ref_ticks, ctx);
 }
 
 // AtomVM extension
