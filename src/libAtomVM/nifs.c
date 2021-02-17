@@ -2140,7 +2140,7 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
     }
     if (key == REFC_BINARY_INFO_ATOM) {
         term ret = refc_binary_create_binary_info(ctx);
-        if (ret == term_invalid_term()) {
+        if (term_is_invalid_term(ret)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         return ret;
