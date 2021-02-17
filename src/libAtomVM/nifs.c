@@ -2465,19 +2465,24 @@ static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[])
 static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[])
 {
     Context *c = ctx;
+
     if (argc == 1) {
         term t = argv[0];
         VALIDATE_VALUE(t, term_is_pid);
-        int pid = term_to_local_process_id(pid);
-        c = globalcontext_get_process(ctx->global, pid);
+
+        int local_id = term_to_local_process_id(t);
+        c = globalcontext_get_process(ctx->global, local_id);
+
         if (IS_NULL_PTR(c)) {
             return FALSE_ATOM;
         }
     }
+
     size_t memory_size = context_memory_size(c);
     if (UNLIKELY(memory_gc(c, memory_size + MIN_FREE_SPACE_SIZE) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
+
     size_t free_space = context_avail_free_memory(c);
     size_t minimum_free_space = 2 * MIN_FREE_SPACE_SIZE;
     if (free_space > minimum_free_space) {
@@ -2486,6 +2491,7 @@ static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[])
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
     }
+
     return TRUE_ATOM;
 }
 
