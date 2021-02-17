@@ -384,6 +384,7 @@ compile_erlang(sexp_lexer)
 
 compile_erlang(spawn_opt_monitor_normal)
 compile_erlang(spawn_opt_monitor_throw)
+compile_erlang(spawn_opt_demonitor_normal)
 compile_erlang(spawn_opt_link_normal)
 compile_erlang(spawn_opt_link_throw)
 compile_erlang(link_kill_parent)
@@ -767,6 +768,7 @@ add_custom_target(erlang_test_modules DEPENDS
 
     spawn_opt_monitor_normal.beam
     spawn_opt_monitor_throw.beam
+    spawn_opt_demonitor_normal.beam
     spawn_opt_link_normal.beam
     spawn_opt_link_throw.beam
     link_kill_parent.beam
