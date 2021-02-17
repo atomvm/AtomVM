@@ -122,6 +122,19 @@ struct Context
 typedef struct Context Context;
 #endif
 
+struct Monitor
+{
+    struct ListHead monitor_list_head;
+
+    term monitor_pid;
+    uint64_t ref_ticks;
+
+    // this might be replaced with a handler function, this might be useful as a replacement
+    // to leader process field or for any other purposes.
+    // TODO: we might save useful bytes by assuming that ref_links == 0 means linked
+    bool linked : 1;
+};
+
 /**
  * @brief Creates a new context
  *

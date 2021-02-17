@@ -31,19 +31,6 @@
 #define DEFAULT_STACK_SIZE 8
 #define BYTES_PER_TERM (TERM_BITS / 8)
 
-struct Monitor
-{
-    struct ListHead monitor_list_head;
-
-    term monitor_pid;
-    uint64_t ref_ticks;
-
-    // this might be replaced with a handler function, this might be useful as a replacement
-    // to leader process field or for any other purposes.
-    // TODO: we might save useful bytes by assuming that ref_links == 0 means linked
-    bool linked : 1;
-};
-
 static void context_monitors_handle_terminate(Context *ctx);
 
 Context *context_new(GlobalContext *glb)

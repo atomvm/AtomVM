@@ -133,6 +133,7 @@ static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[]);
 static term nif_erlang_monitor(Context *ctx, int argc, term argv[]);
+static term nif_erlang_demonitor(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[]);
 static term nif_console_print(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode(Context *ctx, int argc, term argv[]);
@@ -498,6 +499,12 @@ static const struct Nif monitor_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_monitor
+};
+
+static const struct Nif demonitor_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_demonitor
 };
 
 static const struct Nif atomvm_read_priv_nif =
@@ -2557,6 +2564,18 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     }
 
     return term_from_ref_ticks(ref_ticks, ctx);
+}
+
+static term nif_erlang_demonitor(Context *ctx, int argc, term argv[])
+{
+    term ref = argv[0];
+
+    VALIDATE_VALUE(ref, term_is_reference);
+    uint64_t ref_ticks = term_to_ref_ticks(ref);
+
+    globalcontext_demonitor(ctx->global, ref_ticks);
+
+    return TRUE_ATOM;
 }
 
 // AtomVM extension

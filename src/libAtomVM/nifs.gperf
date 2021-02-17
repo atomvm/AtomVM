@@ -47,6 +47,7 @@ erlang:make_fun/3, &make_fun_nif
 erlang:make_ref/0, &make_ref_nif
 erlang:make_tuple/2, &make_tuple_nif
 erlang:monitor/2, &monitor_nif
+erlang:demonitor/1, &demonitor_nif
 erlang:is_process_alive/1, &is_process_alive_nif
 erlang:register/2, &register_nif
 erlang:send/2, &send_nif

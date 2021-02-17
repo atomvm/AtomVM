@@ -277,3 +277,23 @@ Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_a
 
     return found_module;
 }
+
+void globalcontext_demonitor(GlobalContext *global, uint64_t ref_ticks)
+{
+    Context *processes = GET_LIST_ENTRY(global->processes_table, Context, processes_table_head);
+
+    Context *p = processes;
+    do {
+        struct ListHead *item;
+        LIST_FOR_EACH (item, &p->monitors_head) {
+            struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
+            if (monitor->ref_ticks == ref_ticks) {
+                list_remove(&monitor->monitor_list_head);
+                free(monitor);
+                return;
+            }
+        }
+
+        p = GET_LIST_ENTRY(p->processes_table_head.next, Context, processes_table_head);
+    } while (processes != p);
+}

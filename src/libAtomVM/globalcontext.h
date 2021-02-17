@@ -194,6 +194,8 @@ int globalcontext_insert_module(GlobalContext *global, Module *module, AtomStrin
  */
 Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_atom);
 
+void globalcontext_demonitor(GlobalContext *global, uint64_t ref_ticks);
+
 static inline uint64_t globalcontext_get_ref_ticks(GlobalContext *global)
 {
     return ++global->ref_ticks;
