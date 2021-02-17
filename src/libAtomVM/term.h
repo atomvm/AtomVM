@@ -446,7 +446,7 @@ static inline int term_is_cp(term t)
  * @details Returns always an invalid term.
  * @return invalid term.
  */
-static inline int term_invalid_term()
+static inline term term_invalid_term()
 {
     return 0;
 }
