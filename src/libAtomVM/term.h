@@ -55,6 +55,7 @@
 
 #define TERM_BOXED_REFC_BINARY_SIZE 6
 #define TERM_BOXED_BIN_MATCH_STATE_SIZE 4
+#define REFC_BINARY_MIN 64
 
 #define BINARY_HEADER_SIZE 2
 #define FUNCTION_REFERENCE_SIZE 4
@@ -765,6 +766,19 @@ static inline term term_from_local_process_id(uint32_t local_process_id)
 }
 
 /**
+ * @brief Determine whether a binary should be a heap binary or not
+ *
+ * @details Returns true if a binary of the specified size should be allocated
+ *          in the process heap (as opposed to being a refc binary)
+ * @param size the intended binary size
+ * @return true if the binary should be allocated in the process heap; false, otherwise.
+ */
+static inline bool term_binary_size_is_heap_binary(uint32_t size)
+{
+    return size < REFC_BINARY_MIN;
+}
+
+/**
  * @brief The count of terms needed to store the given amount of bytes
  *
  * @details Returns the count of terms needed to store the given size in bytes.
@@ -773,7 +787,7 @@ static inline term term_from_local_process_id(uint32_t local_process_id)
  */
 static inline int term_binary_data_size_in_terms(uint32_t size)
 {
-    if (size < REFC_BINARY_MIN) {
+    if (term_binary_size_is_heap_binary(size)) {
 #if TERM_BYTES == 4
     return ((size + 4 - 1) >> 2) + 1;
 #elif TERM_BYTES == 8
@@ -848,7 +862,7 @@ static inline const char *term_binary_data(term t)
 */
 static inline term term_create_uninitialized_binary(uint32_t size, Context *ctx)
 {
-    if (size < REFC_BINARY_MIN) {
+    if (term_binary_size_is_heap_binary(size)) {
         int size_in_terms = term_binary_data_size_in_terms(size);
 
         term *boxed_value = memory_heap_alloc(ctx, size_in_terms + 1);

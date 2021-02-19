@@ -818,7 +818,7 @@ static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])
         abort();
     }
     for (uint32_t i = 0; i < n_freeze; i++) {
-        new_ctx->x[i + arity - n_freeze] = memory_copy_term_tree(&new_ctx->heap_ptr, boxed_value[i + 3], &ctx->mso_list);
+        new_ctx->x[i + arity - n_freeze] = memory_copy_term_tree(&new_ctx->heap_ptr, boxed_value[i + 3], &new_ctx->mso_list);
     }
 
     new_ctx->saved_module = fun_module;

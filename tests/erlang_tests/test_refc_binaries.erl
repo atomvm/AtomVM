@@ -1,6 +1,6 @@
 -module(test_refc_binaries).
 
--export([start/0]).
+-export([start/0, loop/1]).
 
 -define(LITERAL_BIN,
     <<"0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789">>
@@ -14,7 +14,9 @@ start() ->
     ok = run_test(fun() -> test_heap_binary() end),
     ok = run_test(fun() -> test_const_binary() end),
     ok = run_test(fun() -> test_non_const_binary() end),
-    ok = run_test(fun() -> test_shared() end),
+    ok = run_test(fun() -> test_send() end),
+    ok = run_test(fun() -> test_spawn() end),
+    ok = run_test(fun() -> test_spawn_fun() end),
     0.
 
 test_heap_binary() ->
@@ -43,7 +45,7 @@ test_non_const_binary() ->
     id(String), id(Bin),
     ok.
 
-test_shared() ->
+test_send() ->
     Bin = create_binary(1024),
     Pid = erlang:spawn(fun() -> loop(#state{}) end),
     PidHeapSize0 = get_heap_size(Pid),
@@ -64,6 +66,47 @@ test_shared() ->
     ok = send(Pid, free),
     PidHeapSize2 = get_heap_size(Pid),
     true = PidHeapSize2 < PidHeapSize1,
+    ok = send(Pid, halt),
+    ok.
+
+test_spawn() ->
+    Bin = create_binary(1024),
+    %%
+    %% Spawn a function, passing a refc binary through the args
+    %%
+    Pid = erlang:spawn(?MODULE, loop, [#state{bin=Bin}]),
+    PidHeapSize0 = get_heap_size(Pid),
+    %%
+    %% Make sure we can get what we spawned
+    %%
+    Bin = send(Pid, get),
+    %%
+    %% Free the refc binary; heap should decrease
+    %%
+    ok = send(Pid, free),
+    PidHeapSize2 = get_heap_size(Pid),
+    true = PidHeapSize2 < PidHeapSize0,
+    ok = send(Pid, halt),
+    ok.
+
+test_spawn_fun() ->
+    Bin = create_binary(1024),
+    %%
+    %% Spawn a function, passing a refc binary through the args
+    %%
+    Pid = erlang:spawn(fun() -> loop(#state{bin=Bin}) end),
+    PidHeapSize0 = get_heap_size(Pid),
+    %%
+    %% Make sure we can get what we spawned
+    %%
+    Bin = send(Pid, get),
+    %%
+    %% Free the refc binary; heap should decrease
+    %%
+    ok = send(Pid, free),
+    PidHeapSize2 = get_heap_size(Pid),
+    true = PidHeapSize2 < PidHeapSize0,
+    ok = send(Pid, halt),
     ok.
 
 get_heap_size() ->

@@ -57,7 +57,7 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t);
  * @param   bytes_read      the number of bytes read off external_term in order to yeild a term
  * @return  the parsed term
  */
-static term externalterm_to_term_internal(const void *external_term, Context *ctx, int use_heap_fragment, size_t *bytes_read)
+static term externalterm_to_term_internal(const void *external_term, Context *ctx, int use_heap_fragment, size_t *bytes_read, bool copy)
 {
     const uint8_t *external_term_buf = (const uint8_t *) external_term;
 
@@ -67,7 +67,7 @@ static term externalterm_to_term_internal(const void *external_term, Context *ct
     }
 
     int eterm_size;
-    int heap_usage = calculate_heap_usage(external_term_buf + 1, &eterm_size, false, ctx);
+    int heap_usage = calculate_heap_usage(external_term_buf + 1, &eterm_size, copy, ctx);
 
     if (use_heap_fragment) {
         struct ListHead *heap_fragment = malloc(heap_usage * sizeof(term) + sizeof(struct ListHead));
@@ -101,7 +101,7 @@ static term externalterm_to_term_internal(const void *external_term, Context *ct
 term externalterm_to_term(const void *external_term, Context *ctx, int use_heap_fragment)
 {
     size_t bytes_read = 0;
-    return externalterm_to_term_internal(external_term, ctx, use_heap_fragment, &bytes_read);
+    return externalterm_to_term_internal(external_term, ctx, use_heap_fragment, &bytes_read, false);
 }
 
 enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term binary, size_t *bytes_read, size_t num_extra_terms)
@@ -123,7 +123,7 @@ enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term b
     //
     // convert
     //
-    *dst = externalterm_to_term_internal(buf, ctx, 0, bytes_read);
+    *dst = externalterm_to_term_internal(buf, ctx, 0, bytes_read, true);
     free(buf);
     return EXTERNAL_TERM_OK;
 }
@@ -521,7 +521,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_siz
                 #error
             #endif
 
-            if (copy) {
+            if (copy && term_binary_size_is_heap_binary(binary_size)) {
                 return 2 + size_in_terms;
             } else {
                 return TERM_BOXED_REFC_BINARY_SIZE;
