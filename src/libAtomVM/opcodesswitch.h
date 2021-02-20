@@ -3137,6 +3137,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 avm_int_t unit;
                 DECODE_INTEGER(unit, code, i, next_off, next_off);
                 term src;
+                int src_off = next_off;
                 DECODE_COMPACT_TERM(src, code, i, next_off, next_off)
                 term flags;
                 UNUSED(flags);
@@ -3157,7 +3158,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     avm_int_t extra_val = term_to_int(extra);
 
                     if (size_val % 8 != 0) {
-                        TRACE("bs_init_bits: size_val (%li) is not evenly divisible by 8\n", size_val);
+                        TRACE("bs_append: size_val (%li) is not evenly divisible by 8\n", size_val);
                         RAISE_ERROR(UNSUPPORTED_ATOM);
                     }
                     if (unit != 8) {
@@ -3168,19 +3169,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     TRACE("bs_append/7, fail=%i size=%li unit=%li src=0x%lx dreg=%c%i\n", fail, size_val, unit, src, T_DEST_REG(dreg_type, dreg));
 
                     size_t src_size = term_binary_size(src);
-                    uint8_t *buf = malloc(src_size);
-                    if (UNLIKELY(IS_NULL_PTR(buf))) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                    memcpy(buf, term_binary_data(src), src_size);
-
                     if (UNLIKELY(memory_ensure_free(ctx, src_size + term_binary_data_size_in_terms(size_val / 8) + extra_val + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
-                        free(buf);
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
+                    DECODE_COMPACT_TERM(src, code, i, src_off, src_off)
                     term t = term_create_empty_binary(src_size + size_val / 8 + extra_val, ctx);
-                    memcpy((void *) term_binary_data(t), buf, src_size);
-                    free(buf);
+                    memcpy((void *) term_binary_data(t), (void *) term_binary_data(src), src_size);
 
                     ctx->bs = t;
                     ctx->bs_offset = src_size * 8;
@@ -3453,6 +3447,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             case OP_BS_GET_TAIL: {
                 int next_off = 1;
                 term src;
+                int src_off = next_off;
                 DECODE_COMPACT_TERM(src, code, i, next_off, next_off);
                 dreg_t dreg;
                 dreg_type_t dreg_type;
@@ -3483,20 +3478,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                             size_t start_pos = bs_offset / 8;
                             size_t src_size = term_binary_size(bs_bin);
                             size_t new_bin_size = src_size - start_pos;
-                            uint8_t *tmp_buf = malloc(new_bin_size);
-                            if (UNLIKELY(IS_NULL_PTR(tmp_buf))) {
-                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                            }
-                            memcpy(tmp_buf, term_binary_data(bs_bin) + start_pos, new_bin_size);
 
                             if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(new_bin_size) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
-                                free(tmp_buf);
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
-
-                            term t = term_from_literal_binary(tmp_buf, new_bin_size, ctx);
-
-                            free(tmp_buf);
+                            DECODE_COMPACT_TERM(src, code, i, src_off, src_off);
+                            term t = term_from_literal_binary(term_binary_data(bs_bin) + start_pos, new_bin_size, ctx);
                             WRITE_REGISTER(dreg_type, dreg, t);
 
                         }
