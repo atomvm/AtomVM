@@ -96,6 +96,7 @@ GlobalContext *globalcontext_new()
 
 COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
 {
+    sys_stop_millis_timer();
     free(glb);
 }
 

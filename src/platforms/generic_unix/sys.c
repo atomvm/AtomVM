@@ -228,6 +228,10 @@ term sys_get_info(Context *ctx, term key)
 
 void sys_init_platform(GlobalContext *global)
 {
+    // this is required since GlobalContext might be re-created again (which is what happens while
+    // executing tests).
+    millis = 0;
+
     struct GenericUnixPlatformData *platform = malloc(sizeof(struct GenericUnixPlatformData));
     if (UNLIKELY(!platform)) {
         abort();
