@@ -112,7 +112,7 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
     if (IS_NULL_PTR(new_heap)) {
         return MEMORY_GC_ERROR_FAILED_ALLOCATION;
     }
-    TRACE("- Allocated %i words for new heap\n", new_size);
+    TRACE("- Allocated %i words for new heap at address 0x%x\n", new_size, (int) new_heap);
     term *new_stack = new_heap + new_size;
 
     term *heap_ptr = new_heap;
@@ -133,6 +133,7 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
     }
 
     struct ListHead *item;
+    TRACE("- Running copy GC on process dictionary\n");
     LIST_FOR_EACH (item, &ctx->dictionary) {
         struct DictEntry *entry = GET_LIST_ENTRY(item, struct DictEntry, head);
         entry->key = memory_shallow_copy_term(entry->key, &heap_ptr, 1);
@@ -144,6 +145,7 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
     term new_mso_list = term_nil();
     do {
         term *next_end = temp_end;
+        TRACE("- Running scan and copy GC from 0x%lx to 0x%x\n", (int) temp_start, (int) temp_end);
         memory_scan_and_copy(temp_start, temp_end, &next_end, &new_mso_list, 1);
         temp_start = temp_end;
         temp_end = next_end;

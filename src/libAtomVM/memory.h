@@ -26,7 +26,6 @@
 #include <stdint.h>
 
 #define HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF 64
-#define REFC_BINARY_MIN 64
 #define MIN_FREE_SPACE_SIZE 16
 
 #ifndef TYPEDEF_CONTEXT
