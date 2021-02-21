@@ -3,22 +3,25 @@
 
 start() ->
     {Pid, Ref} = spawn_opt(?MODULE, start2, [], [monitor]),
-    Pid ! {self(), sum},
     CM =
         receive
             N2 -> N2
+        after 200 ->
+            exit
         end,
     case CM of
-        {'DOWN',Ref,process,Pid,normal} when is_reference(Ref) andalso is_pid(Pid) ->
+        exit ->
             1;
-        {'DOWN',_,process,_,normal} ->
+        {'DOWN',Ref,process,Pid,normal} when is_reference(Ref) andalso is_pid(Pid) ->
             2;
-        {'DOWN',_,process,_,_} ->
+        {'DOWN',_,process,_,normal} ->
             3;
-        T when is_tuple(T) ->
+        {'DOWN',_,process,_,_} ->
             4;
+        T when is_tuple(T) ->
+            5;
         _ ->
-            5
+            6
     end.
 
 start2() ->

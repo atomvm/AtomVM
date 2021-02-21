@@ -153,7 +153,7 @@ static void context_monitors_handle_terminate(Context *ctx)
     struct ListHead *tmp;
     MUTABLE_LIST_FOR_EACH(item, tmp, &ctx->monitors_head) {
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
-        if (monitor->linked) {
+        if (monitor->linked && ctx->exit_reason != NORMAL_ATOM) {
             int local_process_id = term_to_local_process_id(monitor->monitor_pid);
             Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
@@ -164,7 +164,7 @@ static void context_monitors_handle_terminate(Context *ctx)
                 // target context should be marked as killed and terminated during next scheduling
                 scheduler_terminate(target);
             }
-        } else {
+        } else if (!monitor->linked) {
             int required_terms = REF_SIZE + TUPLE_SIZE(5);
             if (UNLIKELY(memory_ensure_free(ctx, required_terms) != MEMORY_GC_OK)) {
                 //TODO: handle out of memory here
