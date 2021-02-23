@@ -140,6 +140,9 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
         entry->value = memory_shallow_copy_term(entry->value, &heap_ptr, 1);
     }
 
+    TRACE("- Running copy GC on exit reason\n");
+    ctx->exit_reason = memory_shallow_copy_term(ctx->exit_reason, &heap_ptr, 1);
+
     term *temp_start = new_heap;
     term *temp_end = heap_ptr;
     term new_mso_list = term_nil();
