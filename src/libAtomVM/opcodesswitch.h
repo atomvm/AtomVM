@@ -4585,16 +4585,23 @@ handle_error:
         dump(ctx);
 
         {
-            int exit_reason_tuple_size = TUPLE_SIZE(2) + TUPLE_SIZE(2);
+            bool throw = ctx->x[0] == THROW_ATOM;
+
+            int exit_reason_tuple_size = (throw ? TUPLE_SIZE(2) : 0) + TUPLE_SIZE(2);
             if (memory_ensure_free(ctx, exit_reason_tuple_size) != MEMORY_GC_OK) {
                 ctx->exit_reason = OUT_OF_MEMORY_ATOM;
             } else {
-                term error_tuple = term_alloc_tuple(2, ctx);
-                term_put_tuple_element(error_tuple, 0, NOCATCH_ATOM);
-                term_put_tuple_element(error_tuple, 1, ctx->x[1]);
+                term error_term;
+                if (throw) {
+                    error_term = term_alloc_tuple(2, ctx);
+                    term_put_tuple_element(error_term, 0, NOCATCH_ATOM);
+                    term_put_tuple_element(error_term, 1, ctx->x[1]);
+                } else {
+                    error_term = ctx->x[1];
+                }
 
                 term exit_reason_tuple = term_alloc_tuple(2, ctx);
-                term_put_tuple_element(exit_reason_tuple, 0, error_tuple);
+                term_put_tuple_element(exit_reason_tuple, 0, error_term);
                 term_put_tuple_element(exit_reason_tuple, 1, term_nil());
                 ctx->exit_reason = exit_reason_tuple;
             }
