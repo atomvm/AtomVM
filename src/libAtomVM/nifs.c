@@ -2554,6 +2554,9 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
 
     int local_process_id = term_to_local_process_id(target_pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
+    if (IS_NULL_PTR(target)) {
+        return nif_erlang_make_ref_0(ctx, argc, argv);
+    }
 
     term callee_pid = term_from_local_process_id(ctx->process_id);
 
