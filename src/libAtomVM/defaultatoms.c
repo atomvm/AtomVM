@@ -58,6 +58,7 @@ static const char *const down_atom = "\x4" "DOWN";
 static const char *const process_atom = "\x7" "process";
 static const char *const nocatch_atom = "\x7" "nocatch";
 static const char *const refc_binary_info_atom = "\x10" "refc_binary_info";
+static const char *const noproc_atom = "\x6" "noproc";
 
 void defaultatoms_init(GlobalContext *glb)
 {
@@ -120,6 +121,8 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, process_atom) == PROCESS_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, nocatch_atom) == NOCATCH_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, refc_binary_info_atom) == REFC_BINARY_INFO_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, noproc_atom) == NOPROC_ATOM_INDEX;
 
     if (!ok) {
         abort();
