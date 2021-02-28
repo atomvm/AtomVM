@@ -389,6 +389,7 @@ compile_erlang(spawn_opt_link_normal)
 compile_erlang(spawn_opt_link_throw)
 compile_erlang(spawn_opt_monitor_error)
 compile_erlang(link_kill_parent)
+compile_erlang(link_throw)
 
 compile_erlang(test_refc_binaries)
 
@@ -774,6 +775,7 @@ add_custom_target(erlang_test_modules DEPENDS
     spawn_opt_link_throw.beam
     spawn_opt_monitor_error.beam
     link_kill_parent.beam
+    link_throw.beam
 
     test_refc_binaries.beam
 )

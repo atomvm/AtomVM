@@ -430,6 +430,7 @@ struct Test tests[] =
     {"spawn_opt_link_throw.beam", 1},
     {"spawn_opt_monitor_error.beam", 1},
     {"link_kill_parent.beam", 1},
+    {"link_throw.beam", 1},
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
