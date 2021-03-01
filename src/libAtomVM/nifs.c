@@ -135,6 +135,7 @@ static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[]);
 static term nif_erlang_monitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[]);
+static term nif_erlang_unlink(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[]);
 static term nif_console_print(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode(Context *ctx, int argc, term argv[]);
@@ -512,6 +513,12 @@ static const struct Nif link_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_link
+};
+
+static const struct Nif unlink_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_unlink
 };
 
 static const struct Nif atomvm_read_priv_nif =
@@ -2614,6 +2621,26 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
         // TODO: remove the other monitor
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
+
+    return TRUE_ATOM;
+}
+
+static term nif_erlang_unlink(Context *ctx, int argc, term argv[])
+{
+    term target_pid = argv[0];
+
+    VALIDATE_VALUE(target_pid, term_is_pid);
+
+    int local_process_id = term_to_local_process_id(target_pid);
+    Context *target = globalcontext_get_process(ctx->global, local_process_id);
+    if (IS_NULL_PTR(target)) {
+        return TRUE_ATOM;
+    }
+
+    term callee_pid = term_from_local_process_id(ctx->process_id);
+
+    context_demonitor(target, callee_pid, true);
+    context_demonitor(ctx, term_from_local_process_id(target->process_id), true);
 
     return TRUE_ATOM;
 }

@@ -209,3 +209,16 @@ uint64_t context_monitor(Context *ctx, term monitor_pid, bool linked)
 
     return ref_ticks;
 }
+
+void context_demonitor(Context *ctx, term monitor_pid, bool linked)
+{
+    struct ListHead *item;
+    LIST_FOR_EACH (item, &ctx->monitors_head) {
+        struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
+        if ((monitor->monitor_pid == monitor_pid) && (monitor->linked == linked)) {
+            list_remove(&monitor->monitor_list_head);
+            free(monitor);
+            return;
+        }
+    }
+}

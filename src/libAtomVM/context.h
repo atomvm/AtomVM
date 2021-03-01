@@ -279,5 +279,6 @@ size_t context_message_queue_len(Context *ctx);
 size_t context_size(Context *ctx);
 
 uint64_t context_monitor(Context *ctx, term monitor_pid, bool linked);
+void context_demonitor(Context *ctx, term monitor_pid, bool linked);
 
 #endif
