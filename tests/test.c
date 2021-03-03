@@ -432,6 +432,7 @@ struct Test tests[] =
     {"link_kill_parent.beam", 1},
     {"link_throw.beam", 1},
     {"unlink_error.beam", 1},
+    {"trap_exit_flag.beam", 1},
 
     //TEST CRASHES HERE: {"memlimit.beam", 0},
 
