@@ -82,6 +82,7 @@ Context *context_new(GlobalContext *glb)
 
     list_init(&ctx->monitors_head);
 
+    ctx->trap_exit = false;
     #ifdef ENABLE_ADVANCED_TRACE
         ctx->trace_calls = 0;
         ctx->trace_call_args = 0;
@@ -158,11 +159,33 @@ static void context_monitors_handle_terminate(Context *ctx)
             Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
             if (!IS_NULL_PTR(target)) {
-                target->exit_reason = memory_copy_term_tree(&ctx->heap_ptr, ctx->exit_reason, &ctx->mso_list);
+                if (target->trap_exit) {
+                    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
+                        //TODO: handle out of memory here
+                        fprintf(stderr, "Cannot handle out of memory.\n");
+                        abort();
+                    }
 
-                // TODO: this cannot work on multicore systems
-                // target context should be marked as killed and terminated during next scheduling
-                scheduler_terminate(target);
+                    // TODO: move it out of heap
+                    term info_tuple = term_alloc_tuple(3, ctx);
+                    term_put_tuple_element(info_tuple, 0, EXIT_ATOM);
+                    term_put_tuple_element(info_tuple, 1, term_from_local_process_id(ctx->process_id));
+                    term_put_tuple_element(info_tuple, 2, ctx->exit_reason);
+
+                    // TODO: we should scan for existing monitors when a context is destroyed
+                    // otherwise memory might be wasted for long living processes
+                    int local_process_id = term_to_local_process_id(monitor->monitor_pid);
+                    Context *target = globalcontext_get_process(ctx->global, local_process_id);
+                    if (!IS_NULL_PTR(target)) {
+                        mailbox_send(target, info_tuple);
+                    }
+                } else {
+                    target->exit_reason = memory_copy_term_tree(&ctx->heap_ptr, ctx->exit_reason, &ctx->mso_list);
+
+                    // TODO: this cannot work on multicore systems
+                    // target context should be marked as killed and terminated during next scheduling
+                    scheduler_terminate(target);
+                }
             }
         } else if (!monitor->linked) {
             int required_terms = REF_SIZE + TUPLE_SIZE(5);

@@ -1950,14 +1950,47 @@ static term nif_erlang_process_flag(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
+    Context *target;
+    term flag;
+    term value;
+
+    if (argc == 2) {
+        flag = argv[0];
+        value = argv[1];
+        target = ctx;
+
+    // TODO: check erlang:process_flag/3 implementation
+    } else if (argc == 3) {
+        term pid = argv[0];
+        flag = argv[1];
+        value = argv[2];
+
+        VALIDATE_VALUE(pid, term_is_pid);
+        int local_process_id = term_to_local_process_id(pid);
+        target = globalcontext_get_process(ctx->global, local_process_id);
+        if (IS_NULL_PTR(target) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
+
+    switch (flag) {
+        case TRAP_EXIT_ATOM: {
+            term prev = ctx->trap_exit ? TRUE_ATOM : FALSE_ATOM;
+            switch (value) {
+                case FALSE_ATOM:
+                    ctx->trap_exit = false;
+                    break;
+                case TRUE_ATOM:
+                    ctx->trap_exit = true;
+                    break;
+                default:
+                    RAISE_ERROR(BADARG_ATOM);
+            }
+            return prev;
+        }
+    }
+
 #ifdef ENABLE_ADVANCED_TRACE
-    term pid = argv[0];
-    term flag = argv[1];
-    term value = argv[2];
-
-    int local_process_id = term_to_local_process_id(pid);
-    Context *target = globalcontext_get_process(ctx->global, local_process_id);
-
     if (flag == context_make_atom(target, trace_calls_atom)) {
         if (value == TRUE_ATOM) {
             target->trace_calls = 1;
@@ -1999,9 +2032,6 @@ static term nif_erlang_process_flag(Context *ctx, int argc, term argv[])
             return OK_ATOM;
         }
     }
-#else
-    UNUSED(ctx);
-    UNUSED(argv);
 #endif
 
     RAISE_ERROR(BADARG_ATOM);

@@ -94,6 +94,7 @@ struct Context
     unsigned int has_min_heap_size : 1;
     unsigned int has_max_heap_size : 1;
 
+    bool trap_exit : 1;
     #ifdef ENABLE_ADVANCED_TRACE
         unsigned int trace_calls : 1;
         unsigned int trace_call_args : 1;

@@ -64,6 +64,7 @@ erlang:system_time/1, &system_time_nif
 erlang:tuple_to_list/1, &tuple_to_list_nif
 erlang:universaltime/0, &universaltime_nif
 erlang:timestamp/0, &timestamp_nif
+erlang:process_flag/2, &process_flag_nif
 erlang:process_flag/3, &process_flag_nif
 erlang:processes/0, &processes_nif
 erlang:process_info/2, &process_info_nif
