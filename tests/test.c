@@ -329,6 +329,7 @@ struct Test tests[] =
     {"test_selective_receive.beam", 0},
     {"test_bs.beam", 0},
     {"test_gc.beam", 0 },
+    {"test_raise.beam", 7},
 
     {"ceilint.beam", 1},
     {"ceilbadarg.beam", -1},

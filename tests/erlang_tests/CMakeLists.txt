@@ -290,6 +290,7 @@ compile_erlang(test_ordering_0)
 compile_erlang(test_ordering_1)
 compile_erlang(test_bs)
 compile_erlang(test_gc)
+compile_erlang(test_raise)
 
 compile_erlang(ceilint)
 compile_erlang(ceilbadarg)
@@ -678,6 +679,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_ordering_1.beam
     test_bs.beam
     test_gc.beam
+    test_raise.beam
 
     ceilint.beam
     ceilbadarg.beam
