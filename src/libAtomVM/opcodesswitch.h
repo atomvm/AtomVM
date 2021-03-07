@@ -3000,7 +3000,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             }
 
             case OP_RAISE: {
-                uint8_t *pos = code + i;
                 int next_off = 1;
                 term stacktrace;
                 DECODE_COMPACT_TERM(stacktrace, code, i, next_off, next_off);
