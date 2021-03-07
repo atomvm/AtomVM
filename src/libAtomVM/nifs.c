@@ -1968,7 +1968,7 @@ static term nif_erlang_process_flag(Context *ctx, int argc, term argv[])
         VALIDATE_VALUE(pid, term_is_pid);
         int local_process_id = term_to_local_process_id(pid);
         target = globalcontext_get_process(ctx->global, local_process_id);
-        if (IS_NULL_PTR(target) {
+        if (IS_NULL_PTR(target)) {
             RAISE_ERROR(BADARG_ATOM);
         }
     }
