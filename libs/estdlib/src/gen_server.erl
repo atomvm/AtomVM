@@ -29,7 +29,6 @@
 %%
 %% Caveats:
 %% <ul>
-%%     <li>No support for start_link</li>
 %%     <li>Support only for locally named procs</li>
 %%     <li>No support for abcast</li>
 %%     <li>No support for enter_loop</li>
@@ -40,7 +39,15 @@
 %%-----------------------------------------------------------------------------
 -module(gen_server).
 
--export([start/3, start/4, stop/1, stop/3, call/2, call/3, cast/2, reply/2]).
+-export([
+    start/3, start/4,
+    start_link/3, start_link/4,
+    stop/1, stop/3,
+    call/2, call/3,
+    cast/2,
+    reply/2
+]).
+
 -export([loop/1]).
 
 -record(state, {
@@ -115,6 +122,66 @@ start(Module, Args, Options) ->
             {error, unexpected_reply_from_init}
     end.
 
+%%-----------------------------------------------------------------------------
+%% @param   ServerName the name with which to register the gen_server
+%% @param   Module the module in which the gen_server callbacks are defined
+%% @param   Args the arguments to pass to the module's init callback
+%% @param   Options the options used to create the gen_server
+%% @returns the gen_server pid, if successful; {error, Reason}, otherwise.
+%% @doc     Start and link a named gen_server.
+%%
+%%          This function will start a gen_server instance and register the
+%%          newly created process with the process registry.  Subsequent calls
+%%          may use the gen_server name, in lieu of the process id.
+%%
+%%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
+%% @end
+%%-----------------------------------------------------------------------------
+-spec start_link(ServerName::{local, Name::atom()}, Module::module(), Args::term(), Options::options()) -> {ok, pid()} | {error, Reason::term()}.
+start_link({local, Name}, Module, Args, Options) when is_atom(Name) ->
+    case erlang:whereis(Name) of
+        undefined ->
+            Response = start_link(Module, Args, [{name, Name} | Options]),
+            case Response of
+                {ok, Pid} ->
+                    erlang:register(Name, Pid),
+                    ok;
+                _ ->
+                    ok
+            end,
+            Response;
+        _Pid ->
+            {error, already_started}
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @param   Module the module in which the gen_server callbacks are defined
+%% @param   Args the arguments to pass to the module's init callback
+%% @param   Options the options used to create the gen_server
+%% @returns the gen_server pid, if successful; {error, Reason}, otherwise.
+%% @doc     Start and link an un-named gen_server.
+%%
+%%          This function will start a gen_server instance.
+%%
+%%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
+%% @end
+%%-----------------------------------------------------------------------------
+-spec start_link(Module::module(), Args::term(), Options::options()) -> {ok, pid()} | {error, Reason::term()}.
+start_link(Module, Args, Options) ->
+    case Module:init(Args) of
+        {ok, ModState} ->
+            State = #state{
+                name = proplists:get_value(name, Options),
+                mod = Module,
+                mod_state = ModState
+            },
+            Pid = spawn_opt(?MODULE, loop, [State], [link]),
+            {ok, Pid};
+        {stop, Reason} ->
+            {error, {init_stopped, Reason}};
+        _ ->
+            {error, unexpected_reply_from_init}
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @equiv   stop(ServerRef, normal, infinity)

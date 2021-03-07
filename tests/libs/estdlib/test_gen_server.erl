@@ -12,6 +12,7 @@ test() ->
     ok = test_call(),
     ok = test_cast(),
     ok = test_info(),
+    ok = test_start_link(),
     ok.
 
 test_call() ->
@@ -23,6 +24,18 @@ test_call() ->
 
     gen_server:stop(Pid),
     ok.
+
+test_start_link() ->
+    {ok, Pid} = gen_server:start_link(?MODULE, [], []),
+
+    pong = gen_server:call(Pid, ping),
+    pong = gen_server:call(Pid, reply_ping),
+    erlang:process_flag(trap_exit, true),
+    ok = gen_server:cast(Pid, crash),
+    receive
+        {'EXIT', Pid, _Reason} -> ok
+    after 1000 -> error
+    end.
 
 test_cast() ->
     {ok, Pid} = gen_server:start(?MODULE, [], []),
@@ -75,6 +88,8 @@ handle_call(get_num_infos, From, #state{num_infos=NumInfos} = State) ->
     gen_server:reply(From, NumInfos),
     {noreply, State#state{num_infos=0}}.
 
+handle_cast(crash, _State) ->
+    throw(test_crash);
 handle_cast(ping, #state{num_casts=NumCasts} = State) ->
     {noreply, State#state{num_casts=NumCasts + 1}};
 handle_cast(_Request, State) ->
