@@ -11,4 +11,5 @@ start() ->
         , test_io_lib
         , test_proplists
         , test_timer
+        , test_supervisor
     ]).
