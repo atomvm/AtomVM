@@ -13,6 +13,7 @@ set(ERLANG_MODULES
     gen_statem
     gen_udp
     gen_tcp
+    supervisor
     inet
     io_lib
     io
