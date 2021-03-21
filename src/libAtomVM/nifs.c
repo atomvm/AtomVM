@@ -898,6 +898,9 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
     }
     int label = module_search_exported_function(found_module, function_string, args_len);
     //TODO: fail here if no function has been found
+    if (UNLIKELY(label == 0)) {
+        abort();
+    }
     new_ctx->saved_module = found_module;
     new_ctx->saved_ip = found_module->labels[label];
     new_ctx->cp = module_address(found_module->module_index, found_module->end_instruction_ii);
