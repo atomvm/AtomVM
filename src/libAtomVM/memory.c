@@ -253,6 +253,21 @@ unsigned long memory_estimate_usage(term t)
                 t = term_nil();
             }
 
+        } else if (term_is_map(t)) {
+            int map_size = term_get_map_size(t);
+            acc += term_map_size_in_terms(map_size);
+            if (map_size > 0) {
+                for (int i = 1; i < map_size; i++) {
+                    temp_stack_push(&temp_stack, term_get_map_key(t, i));
+                    temp_stack_push(&temp_stack, term_get_map_value(t, i));
+                }
+                temp_stack_push(&temp_stack, term_get_map_value(t, 0));
+                t = term_get_map_key(t, 0);
+
+            } else {
+                t = term_nil();
+            }
+
         } else if (term_is_boxed(t)) {
             acc += term_boxed_size(t) + 1;
             t = temp_stack_pop(&temp_stack);
@@ -354,6 +369,20 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
 
                 case TERM_BOXED_HEAP_BINARY:
                     TRACE("- Found binary.\n");
+                    break;
+
+                case TERM_BOXED_MAP: {
+                    TRACE("- Found map.\n");
+                    size_t map_size = term_get_size_from_boxed_header(t) - 1;
+                    size_t keys_offset = term_get_map_keys_offset();
+                    size_t value_offset = term_get_map_value_offset();
+                    TRACE("-- Map keys: %lx\n", ptr[keys_offset]);
+                    ptr[keys_offset] = memory_shallow_copy_term(ptr[keys_offset], &new_heap, move);
+                    for (size_t i = value_offset; i < value_offset + map_size;  ++i) {
+                        TRACE("-- Map Value: %lx\n", ptr[i]);
+                        ptr[i] = memory_shallow_copy_term(ptr[i], &new_heap, move);
+                    }
+                }
                     break;
 
                 default:
