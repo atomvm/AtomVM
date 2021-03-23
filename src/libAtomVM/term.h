@@ -1543,7 +1543,6 @@ static inline term term_get_map_value(term map, avm_uint_t pos)
 
 static inline int term_find_map_pos(Context *ctx, term map, term key)
 {
-    term *boxed_value = term_to_term_ptr(map);
     term keys = term_get_map_keys(map);
     int arity = term_get_tuple_arity(keys);
     for (int i = 0;  i < arity; ++i) {
