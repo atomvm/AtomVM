@@ -132,6 +132,7 @@ static term nif_erlang_throw(Context *ctx, int argc, term argv[]);
 static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[]);
+static term nif_erlang_function_exported(Context *ctx, int argc, term argv[]);
 static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[]);
 static term nif_erlang_monitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[]);
@@ -483,6 +484,12 @@ static const struct Nif fun_to_list_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_fun_to_list
+};
+
+static const struct Nif function_exported_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_function_exported
 };
 
 static const struct Nif garbage_collect_nif =
@@ -2514,6 +2521,38 @@ static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[])
         prev = term_list_prepend(term_from_int11(buf[i]), prev, ctx);
     }
     return prev;
+}
+
+static term nif_erlang_function_exported(Context *ctx, int argc, term argv[])
+{
+    term module = argv[0];
+    term function = argv[1];
+    term arity_term = argv[2];
+
+    VALIDATE_VALUE(module, term_is_atom);
+    VALIDATE_VALUE(function, term_is_atom);
+    VALIDATE_VALUE(arity_term, term_is_integer);
+
+    AtomString module_name = globalcontext_atomstring_from_term(ctx->global, module);
+    AtomString function_name = globalcontext_atomstring_from_term(ctx->global, function);
+    avm_int_t arity = term_to_int(arity_term);
+
+    struct Nif *nif = (struct Nif *) nifs_get(module_name, function_name, arity);
+    if (nif) {
+        return TRUE_ATOM;
+    }
+
+    Module *target_module = globalcontext_get_module(ctx->global, module_name);
+    if (IS_NULL_PTR(target_module)) {
+        return FALSE_ATOM;
+    }
+
+    int target_label = module_search_exported_function(target_module, function_name, arity);
+    if (target_label == 0) {
+        return FALSE_ATOM;
+    }
+
+    return TRUE_ATOM;
 }
 
 static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[])
