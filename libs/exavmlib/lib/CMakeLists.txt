@@ -7,11 +7,13 @@ project(exavmlib)
 include(BuildElixir)
 
 set(ELIXIR_MODULES
+    Code
     Console
     GPIO
     Access
     Enum
     List
+    Module
     Keyword
     Kernel
     Process
