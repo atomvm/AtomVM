@@ -423,6 +423,7 @@ struct Test tests[] =
     {"test_dict.beam", 2020},
 
     {"alisp.beam", 42},
+    {"test_function_exported.beam", 7},
 
     // noisy tests, keep them at the end
     {"spawn_opt_monitor_normal.beam", 1},

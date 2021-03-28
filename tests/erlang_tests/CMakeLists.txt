@@ -383,6 +383,7 @@ compile_erlang(test_dict)
 compile_erlang(alisp)
 compile_erlang(sexp_parser)
 compile_erlang(sexp_lexer)
+compile_erlang(test_function_exported)
 
 compile_erlang(spawn_opt_monitor_normal)
 compile_erlang(spawn_opt_monitor_throw)
@@ -774,6 +775,9 @@ add_custom_target(erlang_test_modules DEPENDS
     sexp_parser.beam
     sexp_lexer.beam
 
+    test_refc_binaries.beam
+    test_function_exported.beam
+
     spawn_opt_monitor_normal.beam
     spawn_opt_monitor_throw.beam
     spawn_opt_demonitor_normal.beam
@@ -784,6 +788,4 @@ add_custom_target(erlang_test_modules DEPENDS
     link_throw.beam
     unlink_error.beam
     trap_exit_flag.beam
-
-    test_refc_binaries.beam
 )
