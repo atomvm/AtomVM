@@ -171,6 +171,7 @@ term bif_erlang_is_map_key_2(Context *ctx, term arg1, term arg2)
         }
         term err = term_alloc_tuple(2, ctx);
         term_put_tuple_element(err, 0, BADMAP_ATOM);
+        // TODO elt(2) of err term is supposed to be arg2 but may be invalidated by GC
         term_put_tuple_element(err, 1, UNSUPPORTED_ATOM);
 
         RAISE_ERROR(err);
@@ -229,14 +230,17 @@ term bif_erlang_tuple_size_1(Context *ctx, term arg1)
     return term_from_int32(term_get_tuple_arity(arg1));
 }
 
-term bif_erlang_map_size_1(Context *ctx, int _live, term arg1)
+term bif_erlang_map_size_1(Context *ctx, int live, term arg1)
 {
+    UNUSED(live);
+
     if (!UNLIKELY(term_is_map(arg1))) {
         if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         term err = term_alloc_tuple(2, ctx);
         term_put_tuple_element(err, 0, BADMAP_ATOM);
+        // TODO elt(2) of err term is supposed to be arg1 but may be invalidated by GC
         term_put_tuple_element(err, 1, UNSUPPORTED_ATOM);
 
         RAISE_ERROR(err);
@@ -255,6 +259,7 @@ term bif_erlang_map_get_2(Context *ctx, term arg1, term arg2)
         }
         term err = term_alloc_tuple(2, ctx);
         term_put_tuple_element(err, 0, BADMAP_ATOM);
+        // TODO elt(2) of err term is supposed to be arg2 but may be invalidated by GC
         term_put_tuple_element(err, 1, UNSUPPORTED_ATOM);
 
         RAISE_ERROR(err);
@@ -267,6 +272,7 @@ term bif_erlang_map_get_2(Context *ctx, term arg1, term arg2)
         }
         term err = term_alloc_tuple(2, ctx);
         term_put_tuple_element(err, 0, BADKEY_ATOM);
+        // TODO elt(2) of err term is supposed to be arg1 but may be invalidated by GC
         term_put_tuple_element(err, 1, UNSUPPORTED_ATOM);
 
         RAISE_ERROR(err);

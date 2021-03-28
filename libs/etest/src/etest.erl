@@ -25,7 +25,7 @@
 -module(etest).
 
 -export([test/1]).
--export([assert_match/2, assert_true/1, assert_failure/2]).
+-export([assert_match/2, assert_equals/2, assert_true/1, assert_failure/2]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Tests a list of test modules
@@ -59,6 +59,19 @@ assert_match(_, _) -> fail.
 
 %%-----------------------------------------------------------------------------
 %% @param   X a term
+%% @param   Y a term
+%% @returns ok if X and Y are equal; fail otherwise.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec assert_equals(term(), term()) -> ok | fail.
+assert_equals(X, Y) ->
+    case X == Y of
+        true -> ok;
+        _ -> fail
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @param   X a term
 %% @returns ok if X is true; fail otherwise.
 %% @end
 %%-----------------------------------------------------------------------------
@@ -72,7 +85,7 @@ assert_true(_) -> fail.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec assert_failure(fun(), Error::atom()) -> ok | fail.
-assert_failure(F, _E) ->
+assert_failure(F, E) ->
     try
         F(),
         fail
@@ -93,9 +106,9 @@ run_test(Test) ->
         console:puts("+"), console:flush(),
         Result
     catch
-        _:_ ->
+        _:E ->
             console:puts("-"), console:flush(),
-            exception
+            {exception, E}
     end.
 
 %% @private

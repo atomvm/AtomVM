@@ -28,9 +28,9 @@
     apply/3,
     start_timer/3, start_timer/4, cancel_timer/1, send_after/3,
     process_info/2, system_info/1,
-    md5/1
+    md5/1,
+    is_map/1, map_size/1, map_get/2, map_is_key/2
 ]).
-
 
 %%-----------------------------------------------------------------------------
 %% @param   Time time in milliseconds after which to send the timeout message.
@@ -178,3 +178,63 @@ apply(Module, Function, Args) ->
             Module:Function(Arg1, Arg2, Arg3, Arg4, Arg5, Arg6);
         _ -> throw(badarg)
     end.
+
+%%-----------------------------------------------------------------------------
+%% @param   Map     the map to test
+%% @returns `true' if `Map' is a map; `false', otherwise.
+%% @doc     Return `true' if `Map' is a map; `false', otherwise.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_map(Map::map()) -> boolean().
+is_map(_Map) ->
+    throw(bif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Map the map
+%% @returns the size of the map
+%% @throws {badmap, Map}
+%% @doc Returns the size of (i.e., the number of entries in) the map
+%%
+%% This function throws a `{badmap, Map}' exception if `Map' is not a map.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec map_size(Map::map()) -> non_neg_integer().
+map_size(_Map) ->
+    throw(bif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Key     the key to get
+%% @param   Map     the map from which to get the value
+%% @returns the value in `Map' associated with `Key', if it exists.
+%% @throws  {badkey, Key} | {badmap, Map}
+%% @doc     Get the value in `Map' associated with `Key', if it exists.
+%%
+%% This function throws a `{badkey, Key}' exception if 'Key' does not occur in `Map' or
+%% a `{badmap, Map}' if `Map' is not a map.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec map_get(Key::term(), Map::map()) -> Value::term().
+map_get(_Key, _Map) ->
+    throw(bif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Key     the key
+%% @param   Map     the map
+%% @returns `true' if `Key' is associated with a value in `Map'; `false', otherwise.
+%% @throws  {badmap, Map}
+%% @doc     Return `true' if `Key' is associated with a value in `Map'; `false', otherwise.
+%%
+%% This function throws a `{badmap, Map}' exception if `Map' is not a map.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec map_is_key(Key::term(), Map::map()) -> boolean().
+map_is_key(_Key, _Map) ->
+    throw(bif_error).

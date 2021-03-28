@@ -143,6 +143,7 @@ static term nif_base64_encode(Context *ctx, int argc, term argv[]);
 static term nif_base64_decode(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode_to_string(Context *ctx, int argc, term argv[]);
 static term nif_base64_decode_to_string(Context *ctx, int argc, term argv[]);
+static term nif_maps_next(Context *ctx, int argc, term argv[]);
 
 static const struct Nif binary_at_nif =
 {
@@ -557,6 +558,11 @@ static const struct Nif base64_decode_to_string_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_base64_decode_to_string
+};
+static const struct Nif maps_next_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_maps_next
 };
 
 //Ignore warning caused by gperf generated code
@@ -3079,4 +3085,46 @@ static term nif_base64_encode_to_string(Context *ctx, int argc, term argv[])
 static term nif_base64_decode_to_string(Context *ctx, int argc, term argv[])
 {
     return base64_decode(ctx, argc, argv, false);
+}
+
+static term nif_maps_next(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    if (argv[0] == NONE_ATOM) {
+        return NONE_ATOM;
+    }
+
+    term iterator = argv[0];
+    VALIDATE_VALUE(iterator, term_is_nonempty_list);
+
+    term post = term_get_list_head(iterator);
+    VALIDATE_VALUE(post, term_is_integer);
+
+    term map = term_get_list_tail(iterator);
+    VALIDATE_VALUE(map, term_is_map);
+
+    int size = term_get_map_size(map);
+    int pos = term_to_int(post);
+    if (pos >= size) {
+        return NONE_ATOM;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, 6) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    // recompute all the terms we need (after possible GC)
+    iterator = argv[0];
+    map = term_get_list_tail(iterator);
+    term key = term_get_map_key(map, pos);
+    term value = term_get_map_value(map, pos);
+
+    term next_iterator = term_list_prepend(term_from_int(pos + 1), map, ctx);
+    term ret = term_alloc_tuple(3, ctx);
+    term_put_tuple_element(ret, 0, key);
+    term_put_tuple_element(ret, 1, value);
+    term_put_tuple_element(ret, 2, next_iterator);
+
+    return ret;
 }

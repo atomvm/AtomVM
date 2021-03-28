@@ -88,3 +88,4 @@ base64:encode/1, &base64_encode_nif
 base64:decode/1, &base64_decode_nif
 base64:encode_to_string/1, &base64_encode_to_string_nif
 base64:decode_to_string/1, &base64_decode_to_string_nif
+maps:next/1, &maps_next_nif

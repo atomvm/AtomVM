@@ -18,6 +18,7 @@ set(ERLANG_MODULES
     io_lib
     io
     lists
+    maps
     proplists
     string
     timer
