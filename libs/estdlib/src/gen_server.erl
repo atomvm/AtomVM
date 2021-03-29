@@ -48,7 +48,7 @@
     reply/2
 ]).
 
--export([loop/1]).
+-export([loop/1, init_it/4]).
 
 -record(state, {
     name = undefined :: atom(),
@@ -61,6 +61,30 @@
 -type options() :: list({atom(), term()}).
 -type server_ref() :: atom() | pid().
 
+init_it(Starter, Module, Args, Options) ->
+    case Module:init(Args) of
+        {ok, ModState} ->
+            init_ack(Starter, ok),
+            State = #state{
+                name = proplists:get_value(name, Options),
+                mod = Module,
+                mod_state = ModState
+            },
+            loop(State);
+        {stop, Reason} ->
+            init_ack(Starter, {error, {init_stopped, Reason}});
+        _ ->
+            init_ack(Starter, {error, unexpected_reply_from_init})
+    end.
+
+init_ack(Parent, Return) ->
+    Parent ! {ack, self(), Return},
+    ok.
+
+wait_ack(Pid) ->
+    receive
+        {ack, Pid, Return} -> Return
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   ServerName the name with which to register the gen_server
@@ -107,19 +131,10 @@ start({local, Name}, Module, Args, Options) when is_atom(Name) ->
 %%-----------------------------------------------------------------------------
 -spec start(Module::module(), Args::term(), Options::options()) -> {ok, pid()} | {error, Reason::term()}.
 start(Module, Args, Options) ->
-    case Module:init(Args) of
-        {ok, ModState} ->
-            State = #state{
-                name = proplists:get_value(name, Options),
-                mod = Module,
-                mod_state = ModState
-            },
-            Pid = spawn(?MODULE, loop, [State]),
-            {ok, Pid};
-        {stop, Reason} ->
-            {error, {init_stopped, Reason}};
-        _ ->
-            {error, unexpected_reply_from_init}
+    Pid = spawn(?MODULE, init_it, [self(), Module, Args, Options]),
+    case wait_ack(Pid) of
+        ok -> {ok, Pid};
+        {error, Reason} -> {error, Reason}
     end.
 
 %%-----------------------------------------------------------------------------
@@ -168,19 +183,10 @@ start_link({local, Name}, Module, Args, Options) when is_atom(Name) ->
 %%-----------------------------------------------------------------------------
 -spec start_link(Module::module(), Args::term(), Options::options()) -> {ok, pid()} | {error, Reason::term()}.
 start_link(Module, Args, Options) ->
-    case Module:init(Args) of
-        {ok, ModState} ->
-            State = #state{
-                name = proplists:get_value(name, Options),
-                mod = Module,
-                mod_state = ModState
-            },
-            Pid = spawn_opt(?MODULE, loop, [State], [link]),
-            {ok, Pid};
-        {stop, Reason} ->
-            {error, {init_stopped, Reason}};
-        _ ->
-            {error, unexpected_reply_from_init}
+    Pid = spawn_opt(?MODULE, init_it, [self(), Module, Args, Options], [link]),
+    case wait_ack(Pid) of
+        ok -> {ok, Pid};
+        {error, Reason} -> {error, Reason}
     end.
 
 %%-----------------------------------------------------------------------------
