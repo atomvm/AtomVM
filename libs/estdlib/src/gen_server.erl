@@ -354,5 +354,9 @@ do_terminate(#state{mod=Mod, name=Name} = _State, Reason, ModState) ->
         undefined -> ok;
         _Pid -> ok %% TODO unregister
     end,
-    Mod:terminate(Reason, ModState),
-    ok.
+    case erlang:function_exported(Mod, terminate, 2) of
+        true ->
+            Mod:terminate(Reason, ModState);
+        false ->
+            ok
+    end.
