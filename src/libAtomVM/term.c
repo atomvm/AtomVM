@@ -351,8 +351,6 @@ int term_compare(term t, term other, Context *ctx)
                 other = term_get_map_key(other, 0);
 
             } else {
-                temp_stack_push(&temp_stack, term_get_map_value(t, 0));
-                temp_stack_push(&temp_stack, term_get_map_value(other, 0));
                 other = temp_stack_pop(&temp_stack);
                 t = temp_stack_pop(&temp_stack);
             }

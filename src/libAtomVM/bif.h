@@ -50,12 +50,17 @@ term bif_erlang_is_number_1(Context *ctx, term arg1);
 term bif_erlang_is_pid_1(Context *ctx, term arg1);
 term bif_erlang_is_reference_1(Context *ctx, term arg1);
 term bif_erlang_is_tuple_1(Context *ctx, term arg1);
+term bif_erlang_is_map_1(Context *ctx, term arg1);
+term bif_erlang_is_map_key_2(Context *ctx, term arg1, term arg2);
 
 term bif_erlang_hd_1(Context *ctx, term arg1);
 term bif_erlang_tl_1(Context *ctx, term arg1);
 
 term bif_erlang_element_2(Context *ctx, term arg1, term arg2);
 term bif_erlang_tuple_size_1(Context *ctx, term arg1);
+
+term bif_erlang_map_size_1(Context *ctx, int live, term arg1);
+term bif_erlang_map_get_2(Context *ctx, term arg1, term arg2);
 
 term bif_erlang_add_2(Context *ctx, int live, term arg1, term arg2);
 term bif_erlang_sub_2(Context *ctx, int live, term arg1, term arg2);

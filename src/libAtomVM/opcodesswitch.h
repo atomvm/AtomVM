@@ -509,6 +509,39 @@ struct Int56
     int64_t val56 : 56;
 };
 
+#define SWAP_KV_PAIR(I, J) { \
+    struct kv_pair tmp = kv[(I)]; \
+    kv[(I)] = kv[(J)]; \
+    kv[(J)] = tmp; \
+}
+
+struct kv_pair
+{
+    term key;
+    term value;
+};
+
+static void sort_kv_pairs(Context *ctx, struct kv_pair *kv, int size)
+{
+    int k = size;
+    while (1 < k) {
+        int max_pos = 0;
+        for (int i = 1;  i < k;  i++) {
+            term t_max = kv[max_pos].key;
+            term t = kv[i].key;
+            int c = term_compare(t, t_max, ctx);
+            if (0 < c) {
+                max_pos = i;
+            }
+        }
+        if (max_pos != k - 1) {
+            SWAP_KV_PAIR(k - 1, max_pos);
+        }
+        k--;
+        // kv[k..size] sorted
+    }
+}
+
 static int get_catch_label_and_change_module(Context *ctx, Module **mod)
 {
     term *ct = ctx->e;
@@ -4409,30 +4442,60 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     }
                     DECODE_COMPACT_TERM(src, code, i, src_offset, src_offset);
                     //
-                    // Create a new map of the requested size and populate with entries from src
                     //
-                    term map = term_alloc_map(ctx, new_map_size);
-                    for (int j = 0;  j < src_size;  ++j) {
-                        term key = term_get_map_key(src, j);
-                        term value = term_get_map_value(src, j);
-                        term_set_map_assoc(map, j, key, value);
+                    //
+                    struct kv_pair *kv = malloc(num_elements * sizeof(struct kv_pair));
+                    if (IS_NULL_PTR(kv)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    //
-                    // Copy the new terms into the new map, in situ or appended
-                    //
-                    int k = src_size;
                     for (int j = 0;  j < num_elements;  ++j) {
                         term key, value;
                         DECODE_COMPACT_TERM(key, code, i, list_off, list_off);
                         DECODE_COMPACT_TERM(value, code, i, list_off, list_off);
-                        int pos = term_find_map_pos(ctx, src, key);
-                        if (pos == -1) {
-                            term_set_map_assoc(map, k, key, value);
-                            ++k;
+                        kv[j].key = key;
+                        kv[j].value = value;
+                    }
+                    sort_kv_pairs(ctx, kv, num_elements);
+                    //
+                    // Create a new map of the requested size and stitch src
+                    // and kv together into new map.  Both src and kv are sorted.
+                    //
+                    term map = term_alloc_map(ctx, new_map_size);
+                    int src_pos = 0;
+                    int kv_pos = 0;
+                    for (int j = 0;  j < new_map_size;  ++j) {
+                        if (src_pos >= src_size) {
+                            term new_key = kv[kv_pos].key;
+                            term new_value = kv[kv_pos].value;
+                            term_set_map_assoc(map, j, new_key, new_value);
+                            kv_pos++;
+                        } else if (kv_pos >= num_elements) {
+                            term src_key = term_get_map_key(src, src_pos);
+                            term src_value = term_get_map_value(src, src_pos);
+                            term_set_map_assoc(map, j, src_key, src_value);
+                            src_pos++;
                         } else {
-                            term_set_map_assoc(map, pos, key, value);
+                            term src_key = term_get_map_key(src, src_pos);
+                            term new_key = kv[kv_pos].key;
+                            int c = term_compare(src_key, new_key, ctx);
+                            if (c < 0) {
+                                term src_value = term_get_map_value(src, src_pos);
+                                term_set_map_assoc(map, j, src_key, src_value);
+                                src_pos++;
+                            } else if (0 < c) {
+                                term new_value = kv[kv_pos].value;
+                                term_set_map_assoc(map, j, new_key, new_value);
+                                kv_pos++;
+                            } else { // keys are the same
+                                term new_value = kv[kv_pos].value;
+                                term_set_map_assoc(map, j, src_key, new_value);
+                                src_pos++;
+                                kv_pos++;
+                            }
                         }
                     }
+                    free(kv);
+
                     WRITE_REGISTER(dreg_type, dreg, map);
                 #endif
 

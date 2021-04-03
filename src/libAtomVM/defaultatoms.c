@@ -62,6 +62,10 @@ static const char *const noproc_atom = "\x6" "noproc";
 static const char *const trap_exit_atom = "\x9" "trap_exit";
 static const char *const exit_atom = "\x4" "EXIT";
 
+static const char *const badmap_atom = "\x6" "badmap";
+static const char *const badkey_atom = "\x6" "badkey";
+static const char *const none_atom = "\x4" "none";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -127,6 +131,10 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, noproc_atom) == NOPROC_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, trap_exit_atom) == TRAP_EXIT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, exit_atom) == EXIT_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, badmap_atom) == BADMAP_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, badkey_atom) == BADKEY_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, none_atom) == NONE_ATOM_INDEX;
 
     if (!ok) {
         abort();

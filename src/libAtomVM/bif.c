@@ -154,6 +154,30 @@ term bif_erlang_is_tuple_1(Context *ctx, term arg1)
     return term_is_tuple(arg1) ? TRUE_ATOM : FALSE_ATOM;
 }
 
+term bif_erlang_is_map_1(Context *ctx, term arg1)
+{
+    UNUSED(ctx);
+
+    return term_is_map(arg1) ? TRUE_ATOM : FALSE_ATOM;
+}
+
+term bif_erlang_is_map_key_2(Context *ctx, term arg1, term arg2)
+{
+    UNUSED(ctx);
+
+    if (UNLIKELY(!term_is_map(arg2))) {
+        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term err = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(err, 0, BADMAP_ATOM);
+        term_put_tuple_element(err, 1, UNSUPPORTED_ATOM);
+
+        RAISE_ERROR(err);
+    }
+    return (term_find_map_pos(ctx, arg2, arg1) != -1) ? TRUE_ATOM : FALSE_ATOM;
+}
+
 term bif_erlang_length_1(Context *ctx, int live, term arg1)
 {
     UNUSED(live);
@@ -203,6 +227,51 @@ term bif_erlang_tuple_size_1(Context *ctx, term arg1)
     VALIDATE_VALUE(arg1, term_is_tuple);
 
     return term_from_int32(term_get_tuple_arity(arg1));
+}
+
+term bif_erlang_map_size_1(Context *ctx, int _live, term arg1)
+{
+    if (!UNLIKELY(term_is_map(arg1))) {
+        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term err = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(err, 0, BADMAP_ATOM);
+        term_put_tuple_element(err, 1, UNSUPPORTED_ATOM);
+
+        RAISE_ERROR(err);
+    }
+
+    return term_from_int32(term_get_map_size(arg1));
+}
+
+term bif_erlang_map_get_2(Context *ctx, term arg1, term arg2)
+{
+    UNUSED(ctx);
+
+    if (!UNLIKELY(term_is_map(arg2))) {
+        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term err = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(err, 0, BADMAP_ATOM);
+        term_put_tuple_element(err, 1, UNSUPPORTED_ATOM);
+
+        RAISE_ERROR(err);
+    }
+
+    int pos = term_find_map_pos(ctx, arg2, arg1);
+    if (pos == -1) {
+        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term err = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(err, 0, BADKEY_ATOM);
+        term_put_tuple_element(err, 1, UNSUPPORTED_ATOM);
+
+        RAISE_ERROR(err);
+    }
+    return term_get_map_value(arg2, pos);
 }
 
 static inline term make_boxed_int(Context *ctx, avm_int_t value)
