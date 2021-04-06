@@ -526,7 +526,7 @@ static void sort_kv_pairs(Context *ctx, struct kv_pair *kv, int size)
     int k = size;
     while (1 < k) {
         int max_pos = 0;
-        for (int i = 1;  i < k;  i++) {
+        for (int i = 1; i < k; i++) {
             term t_max = kv[max_pos].key;
             term t = kv[i].key;
             int c = term_compare(t, t_max, ctx);
@@ -4448,7 +4448,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     if (IS_NULL_PTR(kv)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    for (int j = 0;  j < num_elements;  ++j) {
+                    for (int j = 0; j < num_elements; j++) {
                         term key, value;
                         DECODE_COMPACT_TERM(key, code, i, list_off, list_off);
                         DECODE_COMPACT_TERM(value, code, i, list_off, list_off);
@@ -4463,7 +4463,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     term map = term_alloc_map(ctx, new_map_size);
                     int src_pos = 0;
                     int kv_pos = 0;
-                    for (int j = 0;  j < new_map_size;  ++j) {
+                    for (int j = 0; j < new_map_size; j++) {
                         if (src_pos >= src_size) {
                             term new_key = kv[kv_pos].key;
                             term new_value = kv[kv_pos].value;
