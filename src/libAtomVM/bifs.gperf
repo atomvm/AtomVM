@@ -25,6 +25,8 @@ erlang:is_number/1, bif_erlang_is_number_1, false
 erlang:is_pid/1, bif_erlang_is_pid_1, false
 erlang:is_reference/1, bif_erlang_is_reference_1, false
 erlang:is_tuple/1, bif_erlang_is_tuple_1, false
+erlang:is_map/1, bif_erlang_is_map_1, false
+erlang:is_map_key/2, bif_erlang_is_map_key_2, false
 erlang:not/1, bif_erlang_not_1, false
 erlang:and/2, bif_erlang_and_2, false
 erlang:or/2, bif_erlang_or_2, false
@@ -58,3 +60,5 @@ erlang:hd/1, bif_erlang_hd_1, false
 erlang:tl/1, bif_erlang_tl_1, false
 erlang:element/2, bif_erlang_element_2, false
 erlang:tuple_size/1, bif_erlang_tuple_size_1, false
+erlang:map_size/1, bif_erlang_map_size_1, true
+erlang:map_get/2, bif_erlang_map_get_2, false

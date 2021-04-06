@@ -3,6 +3,10 @@
 -export([start/0]).
 
 start() ->
+    ok = test_is_map_bif(),
+    ok = test_map_size_bif(),
+    ok = test_is_map_key_bif(),
+    ok = test_map_get_bif(),
     ok = test_literal_map(),
     ok = test_extend_map(),
     ok = test_exact_map(),
@@ -12,6 +16,91 @@ start() ->
     ok = test_match_clause(),
     ok = test_external_terms(),
     0.
+
+test_is_map_bif() ->
+    ok = case id(#{a => 1, b => 2}) of
+        X when is_map(X) ->
+            true = is_map(X),
+            ok;
+        _ -> fail
+    end,
+    ok = case id(foo) of
+        Y when is_map(Y) ->
+            fail;
+        _ -> ok
+    end.
+
+test_map_size_bif() ->
+    ok = case id(#{a => 1, b => 2}) of
+        X when map_size(X) > 0 ->
+            2 = map_size(X),
+            ok;
+        _ ->
+            fail
+    end,
+    ok = case id(#{}) of
+        Y when map_size(Y) > 0 ->
+            0 = map_size(Y),
+            fail;
+        _ ->
+            ok
+    end,
+    ok = try
+        map_size(foo),
+        fail
+    catch
+        _:{badmap, _} ->
+            ok
+    end.
+
+-ifdef(OTP_RELEASE). %% OTP 21 or later
+test_is_map_key_bif() ->
+    ok = case id(#{a => 1, b => 2}) of
+        X when is_map_key(b, X) ->
+            true = is_map_key(a, X),
+            true = is_map_key(b, X),
+            false = is_map_key(c, X),
+            ok;
+        _ ->
+            fail
+    end,
+    ok = try
+        is_map_key(b, foo),
+        fail
+    catch
+        _:{badmap, _} ->
+            ok
+    end.
+
+test_map_get_bif() ->
+    ok = case id(#{a => 1, b => 2}) of
+        X when map_get(b, X) =:= 2 ->
+            1 = map_get(a, X),
+            2 = map_get(b, X),
+            false = is_map_key(c, X),
+            try
+                _ = map_get(c, X),
+                fail
+            catch
+                _:{badkey, _} ->
+                    ok;
+                _:_ ->
+                    fail_catch
+            end;
+        _ ->
+            fail
+    end,
+    ok = try
+        map_get(b, foo),
+        fail
+    catch
+        _:{badmap, _} ->
+            ok
+    end.
+-else.
+test_is_map_key_bif() -> ok.
+test_map_get_bif() -> ok.
+-endif.
 
 test_literal_map() ->
     Map = #{a => 1, b => 2},
@@ -130,6 +219,8 @@ test_compare() ->
     true = #{a => id(1), b => id(2)} < #{a => id(1), b => id(tapas)},
     true = #{a => id(1), b => id(2)} < #{foo => id(bar), bar => id(tapas)},
     true = #{a => id(1), b => id(2)} < #{a => id(1), b => id(3)},
+    true = create_test_map([{a, 1}, {b, 2}, {c, 3}]) == create_test_map([{a, 1}, {b, 2}, {c, 3}]),
+    true = create_test_map([{b, 2}, {a, 1}, {c, 3}]) == create_test_map([{a, 1}, {c, 3}, {b, 2}]),
     ok.
 
 test_external_terms() ->
@@ -227,5 +318,13 @@ reverse([], A) ->
     A;
 reverse([H|T], Accum) ->
     reverse(T, [H|Accum]).
+
+create_test_map(List) ->
+    create_test_map(List, #{}).
+
+create_test_map([], Accum) ->
+    Accum;
+create_test_map([{K, V}| T], Accum) ->
+    create_test_map(T, Accum#{K => V}).
 
 id(X) -> X.
