@@ -154,38 +154,36 @@ static void context_monitors_handle_terminate(Context *ctx)
     struct ListHead *tmp;
     MUTABLE_LIST_FOR_EACH(item, tmp, &ctx->monitors_head) {
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
-        if (monitor->linked && ctx->exit_reason != NORMAL_ATOM) {
-            int local_process_id = term_to_local_process_id(monitor->monitor_pid);
-            Context *target = globalcontext_get_process(ctx->global, local_process_id);
+        int local_process_id = term_to_local_process_id(monitor->monitor_pid);
+        Context *target = globalcontext_get_process(ctx->global, local_process_id);
+        if (IS_NULL_PTR(target)) {
+            // TODO: we should scan for existing monitors when a context is destroyed
+            // otherwise memory might be wasted for long living processes
+            free(monitor);
+            continue;
+        }
 
-            if (!IS_NULL_PTR(target)) {
-                if (target->trap_exit) {
-                    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
-                        //TODO: handle out of memory here
-                        fprintf(stderr, "Cannot handle out of memory.\n");
-                        abort();
-                    }
-
-                    // TODO: move it out of heap
-                    term info_tuple = term_alloc_tuple(3, ctx);
-                    term_put_tuple_element(info_tuple, 0, EXIT_ATOM);
-                    term_put_tuple_element(info_tuple, 1, term_from_local_process_id(ctx->process_id));
-                    term_put_tuple_element(info_tuple, 2, ctx->exit_reason);
-
-                    // TODO: we should scan for existing monitors when a context is destroyed
-                    // otherwise memory might be wasted for long living processes
-                    int local_process_id = term_to_local_process_id(monitor->monitor_pid);
-                    Context *target = globalcontext_get_process(ctx->global, local_process_id);
-                    if (!IS_NULL_PTR(target)) {
-                        mailbox_send(target, info_tuple);
-                    }
-                } else {
-                    target->exit_reason = memory_copy_term_tree(&ctx->heap_ptr, ctx->exit_reason, &ctx->mso_list);
-
-                    // TODO: this cannot work on multicore systems
-                    // target context should be marked as killed and terminated during next scheduling
-                    scheduler_terminate(target);
+        if (monitor->linked && (ctx->exit_reason != NORMAL_ATOM || target->trap_exit)) {
+            if (target->trap_exit) {
+                if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
+                    //TODO: handle out of memory here
+                    fprintf(stderr, "Cannot handle out of memory.\n");
+                    abort();
                 }
+
+                // TODO: move it out of heap
+                term info_tuple = term_alloc_tuple(3, ctx);
+                term_put_tuple_element(info_tuple, 0, EXIT_ATOM);
+                term_put_tuple_element(info_tuple, 1, term_from_local_process_id(ctx->process_id));
+                term_put_tuple_element(info_tuple, 2, ctx->exit_reason);
+
+                mailbox_send(target, info_tuple);
+            } else {
+                target->exit_reason = memory_copy_term_tree(&ctx->heap_ptr, ctx->exit_reason, &ctx->mso_list);
+
+                // TODO: this cannot work on multicore systems
+                // target context should be marked as killed and terminated during next scheduling
+                scheduler_terminate(target);
             }
         } else if (!monitor->linked) {
             int required_terms = REF_SIZE + TUPLE_SIZE(5);
@@ -205,13 +203,7 @@ static void context_monitors_handle_terminate(Context *ctx)
             term_put_tuple_element(info_tuple, 3, term_from_local_process_id(ctx->process_id));
             term_put_tuple_element(info_tuple, 4, ctx->exit_reason);
 
-            // TODO: we should scan for existing monitors when a context is destroyed
-            // otherwise memory might be wasted for long living processes
-            int local_process_id = term_to_local_process_id(monitor->monitor_pid);
-            Context *target = globalcontext_get_process(ctx->global, local_process_id);
-            if (!IS_NULL_PTR(target)) {
-                mailbox_send(target, info_tuple);
-            }
+            mailbox_send(target, info_tuple);
         }
         free(monitor);
     }
