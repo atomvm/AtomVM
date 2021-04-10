@@ -69,7 +69,7 @@ Context *context_new(GlobalContext *glb)
     ctx->global = glb;
 
     ctx->process_id = globalcontext_get_new_process_id(glb);
-    linkedlist_append(&glb->processes_table, &ctx->processes_table_head);
+    list_append(&glb->processes_table, &ctx->processes_table_head);
 
     ctx->native_handler = NULL;
 
@@ -109,7 +109,7 @@ Context *context_new(GlobalContext *glb)
 
 void context_destroy(Context *ctx)
 {
-    linkedlist_remove(&ctx->global->processes_table, &ctx->processes_table_head);
+    list_remove(&ctx->processes_table_head);
 
     memory_sweep_mso_list(ctx->mso_list);
     dictionary_destroy(&ctx->dictionary);

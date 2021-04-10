@@ -48,7 +48,7 @@ GlobalContext *globalcontext_new()
     list_init(&glb->waiting_processes);
     list_init(&glb->avmpack_data);
     list_init(&glb->refc_binaries);
-    glb->processes_table = NULL;
+    list_init(&glb->processes_table);
     glb->registered_processes = NULL;
 
     glb->last_process_id = 0;
@@ -102,16 +102,14 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
 
 Context *globalcontext_get_process(GlobalContext *glb, int32_t process_id)
 {
-    Context *processes = GET_LIST_ENTRY(glb->processes_table, Context, processes_table_head);
+    struct ListHead *item;
+    LIST_FOR_EACH(item, &glb->processes_table) {
+        Context *p = GET_LIST_ENTRY(item, Context, processes_table_head);
 
-    Context *p = processes;
-    do {
         if (p->process_id == process_id) {
             return p;
         }
-
-        p = GET_LIST_ENTRY(p->processes_table_head.next, Context, processes_table_head);
-    } while (processes != p);
+    }
 
     return NULL;
 }
@@ -281,10 +279,10 @@ Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_a
 
 void globalcontext_demonitor(GlobalContext *global, uint64_t ref_ticks)
 {
-    Context *processes = GET_LIST_ENTRY(global->processes_table, Context, processes_table_head);
+    struct ListHead *pitem;
+    LIST_FOR_EACH(pitem, &global->processes_table) {
+        Context *p = GET_LIST_ENTRY(pitem, Context, processes_table_head);
 
-    Context *p = processes;
-    do {
         struct ListHead *item;
         LIST_FOR_EACH (item, &p->monitors_head) {
             struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
@@ -294,7 +292,5 @@ void globalcontext_demonitor(GlobalContext *global, uint64_t ref_ticks)
                 return;
             }
         }
-
-        p = GET_LIST_ENTRY(p->processes_table_head.next, Context, processes_table_head);
-    } while (processes != p);
+    }
 }

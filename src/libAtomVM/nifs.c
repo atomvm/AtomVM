@@ -2080,12 +2080,11 @@ static void *nif_cons_context(Context *ctx, void *p)
 
 static void *nif_iterate_processes(GlobalContext *glb, context_iterator fun, void *accum)
 {
-    Context *processes = GET_LIST_ENTRY(glb->processes_table, Context, processes_table_head);
-    Context *p = processes;
-    do {
+    struct ListHead *item;
+    LIST_FOR_EACH(item, &glb->processes_table) {
+        Context *p = GET_LIST_ENTRY(item, Context, processes_table_head);
         accum = fun(p, accum);
-        p = GET_LIST_ENTRY(p->processes_table_head.next, Context, processes_table_head);
-    } while (processes != p);
+    }
     return accum;
 }
 

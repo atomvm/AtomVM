@@ -190,18 +190,12 @@ static void scheduler_execute_native_handlers(GlobalContext *global)
 
 int schudule_processes_count(GlobalContext *global)
 {
-    if (!global->processes_table) {
-        return 0;
-    }
-
     int count = 0;
 
-    Context *contexts = GET_LIST_ENTRY(global->processes_table, Context, processes_list_head);
-    Context *context = contexts;
-    do {
-        context = GET_LIST_ENTRY(context->processes_list_head.next, Context, processes_list_head);
+    struct ListHead *item;
+    LIST_FOR_EACH(item, &global->processes_table) {
         count++;
-    } while (context != contexts);
+    }
 
     return count;
 }
