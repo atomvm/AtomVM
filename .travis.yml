@@ -2,7 +2,7 @@ language: c
 
 matrix:
   include:
-    - name: "GCC 7 (with -Os) on Trusty with OTP 20"
+    - name: "GCC 7 (with -Os) on Trusty with OTP 21"
       os: linux
       dist: trusty
       sudo: true
@@ -16,7 +16,7 @@ matrix:
             - g++-7
             - gperf
             - valgrind
-            - esl-erlang=1:20.2.2
+            - esl-erlang=1:21.0
       env:
         - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
       script:
@@ -37,7 +37,7 @@ matrix:
       before_install:
         - eval "${MATRIX_EVAL}"
 
-    - name: "GCC 7 (with -O2) on Trusty with OTP 20"
+    - name: "GCC 7 (with -O2) on Trusty with OTP 21"
       os: linux
       dist: trusty
       sudo: true
@@ -51,7 +51,7 @@ matrix:
             - g++-7
             - gperf
             - valgrind
-            - esl-erlang=1:20.2.2
+            - esl-erlang=1:21.0
       env:
         - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
       script:
@@ -72,7 +72,7 @@ matrix:
       before_install:
         - eval "${MATRIX_EVAL}"
 
-    - name: "GCC 7 (with -O3) on Trusty with OTP 20"
+    - name: "GCC 7 (with -O3) on Trusty with OTP 21"
       os: linux
       dist: trusty
       sudo: true
@@ -86,7 +86,7 @@ matrix:
             - g++-7
             - gperf
             - valgrind
-            - esl-erlang=1:20.2.2
+            - esl-erlang=1:21.0
       env:
         - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
       script:
@@ -107,7 +107,7 @@ matrix:
       before_install:
         - eval "${MATRIX_EVAL}"
 
-    - name: "GCC 6 (with -O2) on Trusty with OTP 20"
+    - name: "GCC 6 (with -O2) on Trusty with OTP 21"
       os: linux
       dist: trusty
       sudo: true
@@ -121,7 +121,7 @@ matrix:
             - g++-6
             - gperf
             - valgrind
-            - esl-erlang=1:20.2.2
+            - esl-erlang=1:21.0
       env:
         - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
       script:
@@ -142,7 +142,7 @@ matrix:
       before_install:
         - eval "${MATRIX_EVAL}"
 
-    - name: "GCC 5 (with -O2) on Trusty with OTP 20"
+    - name: "GCC 5 (with -O2) on Trusty with OTP 21"
       os: linux
       dist: trusty
       sudo: true
@@ -156,7 +156,7 @@ matrix:
             - g++-5
             - gperf
             - valgrind
-            - esl-erlang=1:20.2.2
+            - esl-erlang=1:21.0
       env:
         - MATRIX_EVAL="CC=gcc-5 && CXX=g++-5"
       script:
@@ -177,7 +177,7 @@ matrix:
       before_install:
         - eval "${MATRIX_EVAL}"
 
-    - name: "GCC 4.8 (with -O2) on Trusty with OTP 20"
+    - name: "GCC 4.8 (with -O2) on Trusty with OTP 21"
       os: linux
       dist: trusty
       sudo: true
@@ -190,7 +190,7 @@ matrix:
             - g++
             - gperf
             - valgrind
-            - esl-erlang=1:20.2.2
+            - esl-erlang=1:21.0
       script:
         - mkdir -p build
         - cd build
@@ -205,7 +205,7 @@ matrix:
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 
-    - name: "GCC 4.8 (with -O2, 32 bit) on Trusty with OTP 20"
+    - name: "GCC 4.8 (with -O2, 32 bit) on Trusty with OTP 21"
       os: linux
       dist: trusty
       sudo: true
@@ -223,7 +223,7 @@ matrix:
             - zlib1g-dev:i386
             - gperf
             - valgrind
-            - esl-erlang=1:20.2.2
+            - esl-erlang=1:21.0
             - libssl-dev:i386
       script:
         - mkdir -p build
@@ -237,7 +237,7 @@ matrix:
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 
-    - name: "clang 5 (with -O2) on Trusty with OTP 20"
+    - name: "clang 5 (with -O2) on Trusty with OTP 21"
       os: linux
       dist: trusty
       sudo: true
@@ -250,7 +250,7 @@ matrix:
           packages:
             - gperf
             - valgrind
-            - esl-erlang=1:20.2.2
+            - esl-erlang=1:21.0
       script:
         - export CFLAGS="-O2"
         - export CXXFLAGS="-O2"
@@ -341,7 +341,7 @@ matrix:
       before_install:
         - eval "${MATRIX_EVAL}"
 
-    - name: "GCC 7 on Trusty with OTP 21"
+    - name: "GCC 7 on Trusty with OTP 20"
       os: linux
       dist: trusty
       sudo: true
@@ -355,7 +355,7 @@ matrix:
             - g++-7
             - gperf
             - valgrind
-            - esl-erlang=1:21.0
+            - esl-erlang=1:20.2.2
       env:
         - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
       script:
@@ -491,9 +491,9 @@ matrix:
         mkdir build && cd build
         cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/arm-toolchain.cmake -DLIBOPENCM3_DIR=$LIBOPENCM3_DIR .. && make -j4'
 
-    - name: "GCC 7 (with -O2) on Bionic/arm64 with OTP 20"
+    - name: "GCC 7 (with -O2) on Bionic/arm64 with OTP 22"
       os: linux
-      dist: bionic
+      dist: focal
       arch: arm64
       compiler: gcc
       sudo: true
@@ -510,15 +510,17 @@ matrix:
         - mkdir -p build
         - cd build
         - cc --version
-        - cmake ..
+        # Disable FP tests when building code with OTP 22 erlang compiler
+        # TODO: enable FP when fmove instruction will be supported
+        - cmake -DAVM_DISABLE_FP=on ..
         - make
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 
-    - name: "GCC 7 (with -O2) on Bionic/ppc64le with OTP 20"
+    - name: "GCC 7 (with -O2) on Bionic/ppc64le with OTP 22"
       os: linux
-      dist: bionic
+      dist: focal
       arch: ppc64le
       compiler: gcc
       sudo: true
@@ -536,7 +538,9 @@ matrix:
         - mkdir -p build
         - cd build
         - cc --version
-        - cmake ..
+        # Disable FP tests when building code with OTP 22 erlang compiler
+        # TODO: enable FP when fmove instruction will be supported
+        - cmake -DAVM_DISABLE_FP=on ..
         - make
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
