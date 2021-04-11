@@ -6,6 +6,10 @@ defmodule Enum do
     :lists.foldl(fun, acc, enumerable)
   end
 
+  def reduce(%{} = enumerable, acc, fun) do
+    :maps.fold(fn k, v, acc -> fun.({k, v}, acc) end, acc, enumerable)
+  end
+
   def all?(enumerable, fun) when is_list(enumerable) do
     all_list(enumerable, fun)
   end
