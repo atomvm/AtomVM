@@ -65,7 +65,7 @@ test_is_map_key_bif() ->
             fail
     end,
     ok = try
-        is_map_key(b, foo),
+        _ = is_map_key(b, id(foo)),
         fail
     catch
         _:{badmap, _} ->
@@ -91,7 +91,7 @@ test_map_get_bif() ->
             fail
     end,
     ok = try
-        map_get(b, foo),
+        _ = map_get(b, id(foo)),
         fail
     catch
         _:{badmap, _} ->
