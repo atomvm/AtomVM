@@ -13,6 +13,7 @@ set(ELIXIR_MODULES
     Access
     Enum
     List
+    Map
     Module
     Keyword
     Kernel
