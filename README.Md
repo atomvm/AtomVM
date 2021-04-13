@@ -59,6 +59,5 @@ Known limitations
 This project is a work in progress, so there are several known limitations, that will prevent to run unmodified software, some of them are:
 * There is a minimal standard library, so several standard functions are missing.
 * Several instructions are not yet implemented.
-* Binaries are still poorly supported.
 
 All of these limitations are going to be fixed in a reasonable amount of time.
