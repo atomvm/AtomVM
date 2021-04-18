@@ -8,7 +8,7 @@
 
 Make sure to understand the license and the contribution guidelines before contributing and last but not least be kind.
 
-## Git Recommended Practises
+## Git Recommended Practices
 
 * Commit messages should have a [summary and a description](https://github.com/erlang/otp/wiki/writing-good-commit-messages)
 * Avoid trailing white spaces

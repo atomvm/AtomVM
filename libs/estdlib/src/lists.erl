@@ -409,7 +409,7 @@ join([E|R], Sep, Accum) ->
 %% @returns list of integers from [From..To]
 %% @doc     Returns a sequence of integers in a specified range.
 %%
-%%          This function is equivalent to `lists:seq(From, To, 1)`.
+%%          This function is equivalent to `lists:seq(From, To, 1)'.
 %% @end
 %%-----------------------------------------------------------------------------
 seq(From, To) ->
@@ -419,7 +419,7 @@ seq(From, To) ->
 %% @param   From from integer
 %% @param   To to Integer
 %% @param   Incr increment value
-%% @returns list of integers `[From, From+Incr, ..., N]', where `N' is the largest integer <= `To' incremented by `Incr'
+%% @returns list of integers `[From, From+Incr, ..., N]', where `N' is the largest integer `<=' `To' incremented by `Incr'
 %% @doc     Returns a sequence of integers in a specified range incremented by a specified value.
 %%
 %%

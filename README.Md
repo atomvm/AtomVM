@@ -82,7 +82,7 @@ All of these limitations are going to be fixed in a reasonable amount of time.
 
 About This Project
 ==================
-This project has been created by [Davide Bettio](https://github.com/bettio/), and now is developed
+This project has been created by [Davide Bettio](https://github.com/atomvm/), and now is developed
 from a growing number of contributors.
 
 How to Contribute

@@ -1,0 +1,54 @@
+//
+// Copyright 2019-2020 Fred Dushin <fred@dushin.net>
+//
+// SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+//
+digraph g {
+
+    graph [
+        rankdir = "LR"
+    ];
+
+    node [
+        fontname = "courier"
+        fontsize = "16"
+        shape = "ellipse"
+    ];
+
+    edge [];
+
+    "GlobalContext" [
+        label = "<f0> GlobalContext | ... | {{processes_table|waiting_processes|ready_processes}|{{{<pt_prev>prev|<pt_next>next}}|{{<wp_prev>prev|<wp_next>next}}|{{<rp_prev>prev|<rp_next>next}}}} | ... "
+        shape = "Mrecord"
+    ];
+    "Context0" [
+        label = "<f0> Context | {prev|<next0>next} | {prev|<next1>next} | id = 0 | ..."
+        shape = "Mrecord"
+    ];
+    "Context1" [
+        label = "<f0> Context | {prev|<next0>next} | {prev|<next1>next} | id = 1 | ..."
+        shape = "Mrecord"
+    ];
+    "ContextEllipsis" [
+        label = "..."
+        shape = "plaintext"
+    ];
+    "ContextN" [
+        label = "<f0> Context | {prev|next} | {prev|<next1>next} | id = n | ..."
+        shape = "Mrecord"
+    ];
+
+
+
+
+
+
+    "GlobalContext":pt_next -> "Context0":f0;
+    "GlobalContext":wp_next -> "Context0":wp_prev;
+    "GlobalContext":rp_next -> "Context1":rp_prev;
+    "Context0":next0 -> "Context1":f0;
+    "Context1":next0 -> "ContextEllipsis";
+    "ContextEllipsis" -> "ContextN":f0;
+    "Context0":next1 -> "ContextN":f0;
+
+}

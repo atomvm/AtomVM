@@ -51,7 +51,7 @@ defmodule Exavmlib.MixProject do
       ],
       description: "AtomVM Elixir library",
       licenses: ["Apache-2.0"],
-      links: %{"GitHub" => "https://github.com/bettio/AtomVM"}
+      links: %{"GitHub" => "https://github.com/atomvm/AtomVM"}
     ]
   end
 end

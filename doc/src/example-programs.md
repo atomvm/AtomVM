@@ -3,7 +3,7 @@
  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 -->
 
-# AtomVM Examples
+# Example Programs
 
 AtomVM includes a collection of useful examples for getting started.  This section describes what these examples do, and how to run them, for example, on an ESP32 device.
 

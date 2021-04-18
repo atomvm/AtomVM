@@ -1,10 +1,10 @@
 <!--
- Copyright 2020 Fred Dushin <fred@dushin.net>
+ Copyright 2020-2022 Fred Dushin <fred@dushin.net>
 
  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 -->
 
-# AtomVM Packbeam Format
+# Packbeam Format
 
 AtomVM makes use of the packbeam format for aggregating beam and other file types into a single file that is used as the code base for an AtomVM application.  Typically, on an embedded device, packbeam files are uploaded (e.g., via serial connection) to a specific location on flash media.  The AtomVM runtime will locate the entrypoint into the application, and use the beam and other files flashed to the local media to run the uploaded application.
 

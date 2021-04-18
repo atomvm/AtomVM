@@ -1,0 +1,37 @@
+//
+// Copyright 2019-2020 Fred Dushin <fred@dushin.net>
+//
+// SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+//
+digraph g {
+
+    graph [
+        rankdir = "LR"
+    ];
+
+    node [
+        fontname = "courier"
+        fontsize = "16"
+        shape = "ellipse"
+    ];
+
+    edge [];
+
+    "GlobalContext" [
+        label = "<f0> GlobalContext | ... | <at>atoms_table | <ait>atoms_id_table | ..."
+        shape = "Mrecord"
+    ];
+
+    "AtomsTable" [
+        label = "<f0> AtomsHashtable | {{AtomString | \\x2ok | \\x5error| ...}|{atom_id | 0 | 1 | ...}}"
+        shape = "Mrecord"
+    ];
+
+    "AtomsIDTable" [
+        label = "<f0> ValuesHashtable | { {atom_id | 0 | 1 | ...} | {AtomString | \\x2ok | \\x5error| ...}}"
+        shape = "Mrecord"
+    ];
+
+    "GlobalContext":at -> "AtomsTable":f0;
+    "GlobalContext":ait -> "AtomsIDTable":f0;
+}

@@ -31,5 +31,5 @@
 
   {maintainers, []},
   {licenses, ["Apache 2.0"]},
-  {links, [{"GitHub", "https://github.com/bettio/AtomVM/"}]}
+  {links, [{"GitHub", "https://github.com/atomvm/AtomVM/"}]}
  ]}.
