@@ -37,7 +37,7 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include <limits.h>
-#include <posix/sys/socket.h>
+#include <sys/socket.h>
 #include <stdint.h>
 
 #define EVENT_QUEUE_LEN 16

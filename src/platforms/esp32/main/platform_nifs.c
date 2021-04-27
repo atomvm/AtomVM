@@ -28,6 +28,7 @@
 #include "platform_defaultatoms.h"
 #include "term.h"
 
+#include <esp_sleep.h>
 #include <esp_system.h>
 #include <nvs.h>
 #include <nvs_flash.h>
@@ -87,7 +88,7 @@ static term nif_esp_random_bytes(Context *ctx, int argc, term argv[])
         if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(0) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        term binary = term_from_literal_binary(NULL, len, ctx);
+        term binary = term_create_empty_binary(0, ctx);
         return binary;
     } else {
         uint8_t *buf = malloc(len);

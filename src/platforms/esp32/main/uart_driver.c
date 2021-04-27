@@ -23,6 +23,12 @@
 
 #include <driver/uart.h>
 
+#if CONFIG_IDF_TARGET_ESP32
+    #include "esp32/rom/uart.h"
+#elif CONFIG_IDF_TARGET_ESP32S2
+    #include "esp32s2/rom/uart.h"
+#endif
+
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -67,6 +73,7 @@ static void IRAM_ATTR uart_isr_handler(void *arg)
     interrupt_status = UART0.int_st.val;
     UNUSED(interrupt_status);
 
+    //TODO: REG_GET_FIELD(UART_STATUS_REG(0), UART_RXFIFO_CNT);
     rxfifo_len = UART0.status.rxfifo_cnt;
 
     struct UARTData *uart_data = arg;

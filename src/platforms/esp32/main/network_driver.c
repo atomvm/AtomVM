@@ -43,7 +43,13 @@
 
 #include <lwip/inet.h>
 
+#if ESP_IDF_VERSION_MAJOR < 4
 #include <apps/sntp/sntp.h>
+#endif
+
+#if ESP_IDF_VERSION_MAJOR >= 4
+#define TCPIP_HOSTNAME_MAX_SIZE 255
+#endif
 
 //#define ENABLE_TRACE 1
 
@@ -143,14 +149,13 @@ static char *get_default_device_name()
     uint8_t mac[6];
     esp_efuse_mac_get_default(mac);
 
-    char *prefix = "atomvm-";
-    size_t prefix_len = strlen(prefix);
-    char *buf = malloc(prefix_len + 12 + 1);
+    size_t buf_size = strlen("atomvm-") + 12 + 1;
+    char *buf = malloc(buf_size);
     if (IS_NULL_PTR(buf)) {
         fprintf(stderr, "Failed to allocate buf %s:%d\n", __FILE__, __LINE__);
         abort();
     }
-    snprintf(buf, prefix_len + 12,
+    snprintf(buf, buf_size,
         "atomvm-%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     return buf;
 }
@@ -240,6 +245,7 @@ static wifi_config_t *get_ap_wifi_config(term ap_config)
 
 static void maybe_set_sntp(term sntp_term)
 {
+#if ESP_IDF_VERSION_MAJOR < 4
     if (!term_is_nil(sntp_term)) {
         int ok;
         char *sntp = interop_term_to_string(sntp_term, &ok);
@@ -253,6 +259,9 @@ static void maybe_set_sntp(term sntp_term)
             fprintf(stderr, "Unable to set sntp host to %s\n", sntp);
         }
     }
+#else
+    fprintf(stderr, "SNTP not yet supported on esp-idf 4.x\n");
+#endif
 }
 
 static void set_dhcp_hostname(term dhcp_hostname_term)
