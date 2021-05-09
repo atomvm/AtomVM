@@ -111,6 +111,8 @@ struct Context
 
     void *platform_data;
 
+    term group_leader;
+
     term bs;
     size_t bs_offset;
 

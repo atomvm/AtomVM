@@ -134,6 +134,7 @@ static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_function_exported(Context *ctx, int argc, term argv[]);
 static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[]);
+static term nif_erlang_group_leader(Context *ctx, int argc, term argv[]);
 static term nif_erlang_monitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_unlink(Context *ctx, int argc, term argv[]);
@@ -529,6 +530,12 @@ static const struct Nif unlink_nif =
     .nif_ptr = nif_erlang_unlink
 };
 
+static const struct Nif group_leader_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_group_leader
+};
+
 static const struct Nif atomvm_read_priv_nif =
 {
     .base.type = NIFFunctionType,
@@ -829,6 +836,7 @@ static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])
     }
 
     Context *new_ctx = context_new(ctx->global);
+    new_ctx->group_leader = ctx;
 
     const term *boxed_value = term_to_const_term_ptr(fun_term);
 
@@ -895,6 +903,7 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
     }
 
     Context *new_ctx = context_new(ctx->global);
+    new_ctx->group_leader = ctx;
 
     AtomString module_string = globalcontext_atomstring_from_term(ctx->global, argv[0]);
     AtomString function_string = globalcontext_atomstring_from_term(ctx->global, argv[1]);
@@ -2720,6 +2729,28 @@ static term nif_erlang_unlink(Context *ctx, int argc, term argv[])
     context_demonitor(ctx, term_from_local_process_id(target->process_id), true);
 
     return TRUE_ATOM;
+}
+
+static term nif_erlang_group_leader(Context *ctx, int argc, term argv[])
+{
+    if (argc == 0) {
+        return ctx->group_leader;
+
+    } else {
+        term leader = argv[0];
+        term pid = argv[1];
+        VALIDATE_VALUE(pid, term_is_pid);
+        VALIDATE_VALUE(leader, term_is_pid);
+
+        int local_process_id = term_to_local_process_id(pid);
+        Context *target = globalcontext_get_process(ctx->global, local_process_id);
+        if (IS_NULL_PTR(target)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+
+        target->group_leader = leader;
+        return TRUE_ATOM;
+    }
 }
 
 // AtomVM extension
