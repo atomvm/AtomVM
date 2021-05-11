@@ -18,7 +18,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -module(io).
 
--export([format/1, format/2]).
+-export([format/1, format/2, get_line/1, put_chars/1]).
 
 %%-----------------------------------------------------------------------------
 %% @doc     Equivalent to format(Format, []).
@@ -46,4 +46,24 @@ format(Format, Args) when is_list(Format) andalso is_list(Args) ->
             _:_ ->
                 io_lib:format("Bad format!  Format: ~p Args: ~p~n", [Format, Args])
         end,
-    console:print(Msg).
+    put_chars(Msg).
+
+get_line(Prompt) ->
+    Self = self(),
+    case erlang:group_leader() of
+        Self ->
+            erlang:throw(no_group_leader);
+        Leader ->
+            Ref = make_ref(),
+            Leader ! {io_request, self(), Ref, {get_line, unicode, Prompt}},
+            receive
+                {io_reply, Ref, Line} -> Line
+            end
+    end.
+
+put_chars(Chars) ->
+    Self = self(),
+    case erlang:group_leader() of
+        Self -> console:print(Chars);
+        Leader -> Leader ! {io_request, self(), make_ref(), {put_chars, unicode, Chars}}
+    end.
