@@ -778,14 +778,41 @@ static void process_echo_mailbox(Context *ctx)
     free(msg);
 }
 
-static void process_console_mailbox(Context *ctx)
+static bool is_tagged_tuple(term t, term tag, int size)
 {
-    Message *message = mailbox_dequeue(ctx);
-    term msg = message->message;
+    return term_is_tuple(t) && term_get_tuple_arity(t) == size && term_get_tuple_element(t, 0) == tag;
+}
 
+static void process_console_message(Context *ctx, term msg)
+{
     port_ensure_available(ctx, 12);
 
-    if (port_is_standard_port_command(msg)) {
+    if (is_tagged_tuple(msg, IO_REQUEST_ATOM, 4)) {
+        term pid = term_get_tuple_element(msg, 1);
+        term ref = term_get_tuple_element(msg, 2);
+        term req = term_get_tuple_element(msg, 3);
+        uint64_t ref_ticks = term_to_ref_ticks(ref);
+
+        if (is_tagged_tuple(req, PUT_CHARS_ATOM, 3)) {
+            term chars = term_get_tuple_element(req, 2);
+            int ok;
+            char *str = interop_term_to_string(chars, &ok);
+            if (ok) {
+                printf("%s", str);
+                free(str);
+
+                term refcopy = term_from_ref_ticks(ref_ticks, ctx);
+
+                term reply = term_alloc_tuple(3, ctx);
+                term_put_tuple_element(reply, 0, IO_REPLY_ATOM);
+                term_put_tuple_element(reply, 1, refcopy);
+                term_put_tuple_element(reply, 2, OK_ATOM);
+
+                port_send_message(ctx, pid, reply);
+            }
+        }
+
+    } else if (port_is_standard_port_command(msg)) {
 
         term pid = term_get_tuple_element(msg, 0);
         term ref = term_get_tuple_element(msg, 1);
@@ -817,8 +844,18 @@ static void process_console_mailbox(Context *ctx)
     } else {
         fprintf(stderr, "WARNING: Invalid port command.  Unable to send reply");
     }
+}
 
-    mailbox_destroy_message(message);
+static void process_console_mailbox(Context *ctx)
+{
+    while (!list_is_empty(&ctx->mailbox)) {
+        Message *message = mailbox_dequeue(ctx);
+        term msg = message->message;
+
+        process_console_message(ctx, msg);
+
+        mailbox_destroy_message(message);
+    }
 }
 
 static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])

@@ -66,6 +66,10 @@ static const char *const badmap_atom = "\x6" "badmap";
 static const char *const badkey_atom = "\x6" "badkey";
 static const char *const none_atom = "\x4" "none";
 
+static const char *const io_request_atom = "\xA" "io_request";
+static const char *const io_reply_atom = "\x8" "io_reply";
+static const char *const put_chars_atom = "\x9" "put_chars";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -135,6 +139,10 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, badmap_atom) == BADMAP_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, badkey_atom) == BADKEY_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, none_atom) == NONE_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, io_request_atom) == IO_REQUEST_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, io_reply_atom) == IO_REPLY_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, put_chars_atom) == PUT_CHARS_ATOM_INDEX;
 
     if (!ok) {
         abort();
