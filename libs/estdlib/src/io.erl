@@ -65,5 +65,10 @@ put_chars(Chars) ->
     Self = self(),
     case erlang:group_leader() of
         Self -> console:print(Chars);
-        Leader -> Leader ! {io_request, self(), make_ref(), {put_chars, unicode, Chars}}
+        Leader ->
+            Ref = make_ref(),
+            Leader ! {io_request, self(), Ref, {put_chars, unicode, Chars}},
+            receive
+                {io_reply, Ref, Line} -> Line
+            end
     end.
