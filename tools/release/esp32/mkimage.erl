@@ -38,7 +38,8 @@ do_main(Argv) ->
                         mkimage(RootDir, get_build_dir(Opts, RootDir), maps:get(out, Opts, "atomvm.img"), maps:get(segments, Config)),
                         0
                     catch
-                        _:Exception ->
+                        _:Exception:Stacktrace ->
+                            io:format("Stacktrace: ~p~n", [Stacktrace]),
                             print_help(io_lib:format("~s", [to_string(Exception)])),
                             255
                     end
@@ -122,15 +123,27 @@ mkimage(RootDir, BuildDir, OutputFile, Segments) ->
                     case PrevOffset of
                         undefined -> no_padding;
                         _ ->
-                            Padding = [16#FF || _ <- lists:seq(1, SegmentOffset - PrevOffset)],
-                            file:write(Fout, Padding)
+                            case SegmentOffset > PrevOffset of
+                                true ->
+                                    Padding = [16#FF || _ <- lists:seq(1, SegmentOffset - PrevOffset)],
+                                    io:format("Padding ~p bytes~n", [SegmentOffset - PrevOffset]),
+                                    file:write(Fout, Padding);
+                                false ->
+                                    throw(
+                                        io_lib:format(
+                                            "Error: insufficient space for segment ~p.  Over by: ~p bytes~n", [
+                                                maps:get(name, Segment), PrevOffset - SegmentOffset
+                                            ]
+                                        )
+                                    )
+                            end
                     end,
                     SegmentPath = replace("BUILD_DIR", BuildDir, replace("ROOT_DIR", RootDir, maps:get(path, Segment))),
                     case file:read_file(SegmentPath) of
                         {ok, Data} ->
                             file:write(Fout, Data),
-                            io:format("Wrote ~s at offset ~s (~p)~n", [
-                                maps:get(name, Segment), maps:get(offset, Segment), SegmentOffset
+                            io:format("Wrote ~s (~p bytes) at offset ~s (~p)~n", [
+                                maps:get(name, Segment), byte_size(Data), maps:get(offset, Segment), SegmentOffset
                             ]),
                             SegmentOffset + byte_size(Data);
                         {error, Reason} ->
