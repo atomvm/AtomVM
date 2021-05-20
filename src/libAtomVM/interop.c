@@ -213,3 +213,18 @@ int interop_write_iolist(term t, char *p)
     temp_stack_destory(&temp_stack);
     return 1;
 }
+
+term interop_map_get_value(Context *ctx, term map, term key)
+{
+    return interop_map_get_value_default(ctx, map, key, term_nil());
+}
+
+term interop_map_get_value_default(Context *ctx, term map, term key, term default_value)
+{
+    int pos = term_find_map_pos(ctx, map, key);
+    if (pos == -1) {
+        return default_value;
+    } else {
+        return term_get_map_value(map, pos);
+    }
+}

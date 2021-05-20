@@ -20,6 +20,7 @@
 #ifndef _INTEROP_H_
 #define _INTEROP_H_
 
+#include "context.h"
 #include "term.h"
 
 char *interop_term_to_string(term t, int *ok);
@@ -27,6 +28,8 @@ char *interop_binary_to_string(term binary);
 char *interop_list_to_string(term list, int *ok);
 term interop_proplist_get_value(term list, term key);
 term interop_proplist_get_value_default(term list, term key, term default_value);
+term interop_map_get_value(Context *ctx, term map, term key);
+term interop_map_get_value_default(Context *ctx, term map, term key, term default_value);
 
 int interop_iolist_size(term t, int *ok);
 int interop_write_iolist(term t, char *p);

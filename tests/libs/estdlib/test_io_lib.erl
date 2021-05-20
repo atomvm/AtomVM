@@ -21,6 +21,12 @@ test() ->
     ?ASSERT_MATCH(io_lib:format("foo: ~p~n", [<<1, 2, 3>>]), "foo: <<1,2,3>>\n"),
     ?ASSERT_MATCH(io_lib:format("foo: ~p~n", [{bar, tapas}]), "foo: {bar,tapas}\n"),
     ?ASSERT_MATCH(io_lib:format("foo: ~p~n", [{bar, "tapas"}]), "foo: {bar,\"tapas\"}\n"),
+    ?ASSERT_MATCH(io_lib:format("foo: ~p~n", [#{}]), "foo: #{}\n"),
+    ?ASSERT_MATCH(io_lib:format("foo: ~p~n", [#{a => 1}]), "foo: #{a => 1}\n"),
+    ?ASSERT_MATCH(io_lib:format("foo: ~p", [#{a => 1, b => 2}]), "foo: #{a => 1,b => 2}"),
+    ?ASSERT_MATCH(io_lib:format("foo: ~p", [#{b => 2, a => 1}]), "foo: #{a => 1,b => 2}"),
+    ?ASSERT_MATCH(io_lib:format("foo: ~p", [#{{x, y} => z}]), "foo: #{{x,y} => z}"),
+    ?ASSERT_MATCH(io_lib:format("foo: ~p", [#{"foo" => "bar"}]), "foo: #{\"foo\" => \"bar\"}"),
 
     ?ASSERT_MATCH(io_lib:format("~p", [foo]), "foo"),
     ?ASSERT_MATCH(io_lib:format("\t~p", [bar]), "\tbar"),

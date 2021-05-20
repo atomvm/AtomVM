@@ -99,6 +99,8 @@ to_string(T, Q) when is_binary(T) ->
     "<<" ++ Data ++ ">>";
 to_string(T, _Q) when is_tuple(T) ->
     "{" ++ lists:flatten(lists:join(",", [to_string(E, quote) || E <- erlang:tuple_to_list(T)])) ++ "}";
+to_string(T, _Q) when is_map(T) ->
+    "#{" ++ lists:flatten(lists:join(",", [to_string(K, quote) ++ " => " ++ to_string(V, quote) || {K, V} <- maps:to_list(T)])) ++ "}";
 to_string(_T, _Q) -> "unknown".
 
 %% @private
