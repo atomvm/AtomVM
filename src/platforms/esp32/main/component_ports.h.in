@@ -1,0 +1,16 @@
+// Generated file; DO NOT EDIT
+
+#include "context.h"
+
+// DECLARATIONS
+
+static inline void component_ports_init(GlobalContext *global)
+{
+    // INIT
+}
+
+static inline Context *component_ports_create_port(const char *port_name, GlobalContext *global, term opts)
+{
+    // CREATE_PORT
+    return NULL;
+}

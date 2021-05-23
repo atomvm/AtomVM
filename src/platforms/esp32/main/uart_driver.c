@@ -23,10 +23,12 @@
 
 #include <driver/uart.h>
 
+#if ESP_IDF_VERSION_MAJOR > 3
 #if CONFIG_IDF_TARGET_ESP32
     #include "esp32/rom/uart.h"
 #elif CONFIG_IDF_TARGET_ESP32S2
     #include "esp32s2/rom/uart.h"
+#endif
 #endif
 
 #include <freertos/FreeRTOS.h>
@@ -147,8 +149,15 @@ void uart_interrupt_callback(EventListener *listener)
     }
 }
 
-void uart_driver_init(Context *ctx, term opts)
+void uart_driver_init(GlobalContext *global)
 {
+    // no-op
+}
+
+Context *uart_driver_create_port(GlobalContext *global, term opts)
+{
+    Context *ctx = context_new(global);
+
     term uart_name_term = interop_proplist_get_value(opts, NAME_ATOM);
     term uart_speed_term = interop_proplist_get_value_default(opts, SPEED_ATOM, term_from_int(115200));
 
@@ -272,6 +281,8 @@ void uart_driver_init(Context *ctx, term opts)
     uart_isr_register(uart_num, uart_isr_handler, uart_data, ESP_INTR_FLAG_IRAM, &isr_handle);
 
     uart_enable_rx_intr(uart_num);
+
+    return ctx;
 }
 
 static void uart_driver_do_read(Context *ctx, term msg)

@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright 2018 by Davide Bettio <davide@uninstall.it>                 *
+ *   Copyright 2019 by Davide Bettio <davide@uninstall.it>                 *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU Lesser General Public License as        *
@@ -17,11 +17,14 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#ifndef _GPIODRIVER_H_
-#define _GPIODRIVER_H_
+#ifndef _SPIDRIVER_H_
+#define _SPIDRIVER_H_
 
 #include "context.h"
+#include "globalcontext.h"
+#include "term.h"
 
-void gpiodriver_init(Context *ctx);
+void spi_driver_init(GlobalContext *global);
+Context *spi_driver_create_driver(GlobalContext *global, term opts);
 
 #endif

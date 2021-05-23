@@ -22,10 +22,8 @@
 
 #include "avmpack.h"
 #include "defaultatoms.h"
-#include "gpio_driver.h"
 #include "iff.h"
 #include "mapped_file.h"
-#include "network.h"
 #include "scheduler.h"
 #include "utils.h"
 
@@ -186,10 +184,6 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 
     if (!strcmp(driver_name, "socket")) {
         socket_init(new_ctx, opts);
-    } else if (!strcmp(driver_name, "network")) {
-        network_init(new_ctx, opts);
-    } else if (!strcmp(driver_name, "gpio")) {
-        gpiodriver_init(new_ctx);
     } else {
 #ifdef DYNLOAD_PORT_DRIVERS
         void *handle;

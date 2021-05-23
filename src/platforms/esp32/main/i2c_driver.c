@@ -17,7 +17,7 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#include "i2cdriver.h"
+#include "i2c_driver.h"
 
 #include <string.h>
 
@@ -54,8 +54,15 @@ struct I2CData
     term transmitting_pid;
 };
 
-void i2cdriver_init(Context *ctx, term opts)
+void i2c_driver_init(GlobalContext *global)
 {
+    // no-op
+}
+
+Context *i2c_driver_create_port(GlobalContext *global, term opts)
+{
+    Context *ctx = context_new(global);
+
     struct I2CData *i2c_data = calloc(1, sizeof(struct I2CData));
     i2c_data->transmitting_pid = term_invalid_term();
 
@@ -79,14 +86,16 @@ void i2cdriver_init(Context *ctx, term opts)
     if (UNLIKELY(ret != ESP_OK)) {
         TRACE("i2cdriver: failed config, return value: %i\n", ret);
         //TODO: return error
-        return;
+        return NULL;
     }
 
     ret = i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0);
     if (UNLIKELY(ret != ESP_OK)) {
         TRACE("i2cdriver: failed install, return vale: %i\n", ret);
         //TODO: return error
+        return NULL;
     }
+    return ctx;
 }
 
 static term i2cdriver_begin_transmission(Context *ctx, term pid, term req)

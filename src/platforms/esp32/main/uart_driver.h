@@ -21,8 +21,10 @@
 #define _UART_DRIVER_H_
 
 #include "context.h"
+#include "globalcontext.h"
 #include "term.h"
 
-void uart_driver_init(Context *ctx, term opts);
+void uart_driver_init(GlobalContext *global);
+Context *uart_driver_create_port(GlobalContext *global, term opts);
 
 #endif

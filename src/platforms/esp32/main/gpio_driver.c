@@ -18,6 +18,7 @@
  ***************************************************************************/
 
 #include "gpio_driver.h"
+#include "gpio_nif.h"
 
 #include <stdbool.h>
 #include <string.h>
@@ -120,8 +121,15 @@ static inline term gpio_digital_read(term gpio_num_term)
     return level ? HIGH_ATOM : LOW_ATOM;
 }
 
-void gpiodriver_init(Context *ctx)
+void gpio_driver_init(GlobalContext *global)
 {
+    // no-op
+}
+
+Context *gpio_driver_create_port(GlobalContext *global, term opts)
+{
+    Context *ctx = context_new(global);
+
     if (LIKELY(!global_gpio_ctx)) {
         global_gpio_ctx = ctx;
 
@@ -139,6 +147,7 @@ void gpiodriver_init(Context *ctx)
         fprintf(stderr, "Only a single GPIO driver can be opened.\n");
         abort();
     }
+    return ctx;
 }
 
 void gpio_interrupt_callback(EventListener *listener)
@@ -370,13 +379,17 @@ static const struct Nif gpio_digital_write_nif =
     .nif_ptr = nif_gpio_digital_write
 };
 
-static const struct Nif gpio_digital_read_nif =
-{
+static const struct Nif gpio_digital_read_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_gpio_digital_read
 };
 
-const struct Nif *gpio_nifs_get_nif(const char *nifname)
+void gpio_nif_init(GlobalContext *global)
+{
+    // no-op
+}
+
+const struct Nif *gpio_nif_get_nif(const char *nifname)
 {
     if (strcmp("gpio:set_pin_mode/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);

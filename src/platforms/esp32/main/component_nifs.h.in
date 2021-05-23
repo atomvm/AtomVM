@@ -1,11 +1,18 @@
 // Generated file; DO NOT EDIT
 
 #include "nifs.h"
-// INCLUDES
+#include "globalcontext.h"
+
+// DECLARATIONS
+
+static inline void component_nifs_init(GlobalContext *global)
+{
+    // INIT
+}
 
 static inline const struct Nif *component_nifs_get_nif(const char *nifname)
 {
     const struct Nif *nif = NULL;
-    // COMPONENTS
-    return nif;
+    // GET_NIF
+    return NULL;
 }

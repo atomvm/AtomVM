@@ -42,6 +42,7 @@
 #include <lwip/api.h>
 #include <lwip/inet.h>
 #include <lwip/ip_addr.h>
+#include <tcpip_adapter.h>
 
 //#define ENABLE_TRACE 1
 #include "trace.h"
@@ -1327,9 +1328,13 @@ static void socket_consume_mailbox(Context *ctx)
     }
 }
 
-void socket_init(Context *ctx, term opts)
+Context *socket_driver_create_port(GlobalContext *global, term opts)
 {
     UNUSED(opts);
+
+    socket_driver_init(global);
+    Context *ctx = context_new(global);
     ctx->native_handler = socket_consume_mailbox;
     ctx->platform_data = NULL;
+    return ctx;
 }

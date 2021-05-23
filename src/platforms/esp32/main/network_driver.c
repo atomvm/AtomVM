@@ -32,12 +32,14 @@
 #include "socket_driver.h"
 #include "term.h"
 #include "utils.h"
+#include "port.h"
 
 #include "platform_defaultatoms.h"
 
 #include <esp_event_loop.h>
 #include <esp_log.h>
 #include <esp_wifi.h>
+#include <tcpip_adapter.h>
 
 #include <freertos/event_groups.h>
 
@@ -62,6 +64,45 @@
 #endif
 
 #define CONNECTED_BIT BIT0
+
+static void network_driver_start(Context *ctx, term pid, term ref, term config);
+static term network_driver_ifconfig(Context *ctx);
+
+static const char *const start_a = "\x5" "start";
+static const char *const ifconfig_a = "\x8" "ifconfig";
+
+static void network_consume_mailbox(Context *ctx)
+{
+    Message *message = mailbox_dequeue(ctx);
+    term msg = message->message;
+
+    if (port_is_standard_port_command(msg)) {
+        port_ensure_available(ctx, 32);
+
+        term pid = term_get_tuple_element(msg, 0);
+        term ref = term_get_tuple_element(msg, 1);
+        term cmd = term_get_tuple_element(msg, 2);
+
+        if (term_is_atom(cmd) && cmd == context_make_atom(ctx, ifconfig_a)) {
+            term reply = network_driver_ifconfig(ctx);
+            port_send_reply(ctx, pid, ref, reply);
+        } else if (term_is_tuple(cmd) && term_get_tuple_arity(cmd) == 2) {
+            term cmd_name = term_get_tuple_element(cmd, 0);
+            term config = term_get_tuple_element(cmd, 1);
+            if (cmd_name == context_make_atom(ctx, start_a)) {
+                network_driver_start(ctx, pid, ref, config);
+            } else {
+                port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
+            }
+        } else {
+            port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
+        }
+    } else {
+        fprintf(stderr, "WARNING: Invalid port command.  Unable to send reply");
+    }
+
+    free(message);
+}
 
 // TODO Move to new event handler APIs when we move to IDF SDK 4.x or later
 static esp_err_t wifi_event_handler(void *ctx, system_event_t *event);
@@ -291,7 +332,7 @@ static void set_dhcp_hostname(term dhcp_hostname_term)
     }
 }
 
-void network_driver_start(Context *ctx, term_ref pid, term_ref ref, term config)
+static void network_driver_start(Context *ctx, term pid, term ref, term config)
 {
     TRACE("network_driver_start");
     //
@@ -408,7 +449,7 @@ void network_driver_start(Context *ctx, term_ref pid, term_ref ref, term config)
     port_send_reply(ctx, pid, ref, OK_ATOM);
 }
 
-term network_driver_ifconfig(Context *ctx)
+static term network_driver_ifconfig(Context *ctx)
 {
     return port_create_error_tuple(ctx, UNDEFINED_ATOM);
 }
@@ -547,4 +588,19 @@ static esp_err_t wifi_event_handler(void *ctx, system_event_t *event)
     }
 
     return ESP_OK;
+}
+
+void network_driver_init(GlobalContext *global)
+{
+    tcpip_adapter_init();
+}
+
+Context *network_driver_create_port(GlobalContext *global, term opts)
+{
+    UNUSED(opts);
+
+    Context *ctx = context_new(global);
+    ctx->native_handler = network_consume_mailbox;
+    ctx->platform_data = NULL;
+    return ctx;
 }

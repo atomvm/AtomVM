@@ -1,6 +1,5 @@
 /***************************************************************************
- *   Copyright 2018 by Davide Bettio <davide@uninstall.it>                 *
- *   Copyright 2018 by Fred Dushin <fred@dushin.nt>                        *
+ *   Copyright 2019 by Davide Bettio <davide@uninstall.it>                 *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU Lesser General Public License as        *
@@ -18,13 +17,14 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#ifndef _NETWORK_DRIVER_H_
-#define _NETWORK_DRIVER_H_
+#ifndef _I2CDRIVER_H_
+#define _I2CDRIVER_H_
 
-#include "ccontext.h"
+#include "context.h"
+#include "globalcontext.h"
 #include "term.h"
 
-void network_driver_start(Context *ctx, term pid, term_ref ref, term config);
-term network_driver_ifconfig(Context *ctx);
+void i2c_driver_init(GlobalContext *global);
+Context *i2c_driver_create_port(GlobalContext *global, term opts);
 
 #endif
