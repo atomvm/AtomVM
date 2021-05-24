@@ -2,8 +2,19 @@
 
 -export([sleep/1]).
 
--spec sleep(non_neg_integer()) -> ok.
+-define(MAX_INT, 4294967295).
+
+-spec sleep(non_neg_integer() | infinity) -> ok.
+sleep(infinity) ->
+    receive
+        '$atomvm_timer_interrupt' ->
+            {error, unexpected_interrupt}
+    after ?MAX_INT ->
+        sleep(infinity)
+    end;
 sleep(MSecs) ->
     receive
-        after MSecs -> ok
+        '$atomvm_timer_interrupt' ->
+            {error, unexpected_interrupt}
+    after MSecs -> ok
     end.

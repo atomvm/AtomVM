@@ -1766,6 +1766,8 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         needs_to_wait = 1;
                     } else if ((ctx->flags & WaitingTimeout) == 0) {
                         needs_to_wait = 1;
+                    } else if (!list_is_empty(&ctx->save_queue)) {
+                        needs_to_wait = 1;
                     }
 
                     if (needs_to_wait) {
