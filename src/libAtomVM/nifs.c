@@ -873,7 +873,7 @@ static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])
     }
 
     Context *new_ctx = context_new(ctx->global);
-    new_ctx->group_leader = ctx;
+    new_ctx->group_leader = ctx->group_leader;
 
     const term *boxed_value = term_to_const_term_ptr(fun_term);
 
@@ -940,7 +940,7 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
     }
 
     Context *new_ctx = context_new(ctx->global);
-    new_ctx->group_leader = ctx;
+    new_ctx->group_leader = ctx->group_leader;
 
     AtomString module_string = globalcontext_atomstring_from_term(ctx->global, argv[0]);
     AtomString function_string = globalcontext_atomstring_from_term(ctx->global, argv[1]);
