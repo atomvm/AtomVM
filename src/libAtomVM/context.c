@@ -98,7 +98,7 @@ Context *context_new(GlobalContext *glb)
 
     ctx->platform_data = NULL;
 
-    ctx->group_leader = term_from_local_process_id(ctx->process_id);
+    ctx->group_leader = term_from_local_process_id(INVALID_PROCESS_ID);
 
     ctx->bs = term_invalid_term();
     ctx->bs_offset = 0;

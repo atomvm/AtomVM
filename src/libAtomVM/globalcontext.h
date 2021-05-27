@@ -33,6 +33,8 @@
 #include "linkedlist.h"
 #include "term.h"
 
+#define INVALID_PROCESS_ID 0
+
 struct Context;
 
 #ifndef TYPEDEF_CONTEXT

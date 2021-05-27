@@ -2771,7 +2771,13 @@ static term nif_erlang_unlink(Context *ctx, int argc, term argv[])
 static term nif_erlang_group_leader(Context *ctx, int argc, term argv[])
 {
     if (argc == 0) {
-        return ctx->group_leader;
+        // Hack: group leader is not mandatory in AtomVM, so self is returned when it is not set.
+        // self PID is recognized from libraries as "no group leader set".
+        if (ctx->group_leader == term_from_local_process_id(INVALID_PROCESS_ID)) {
+            return term_from_local_process_id(ctx->process_id);
+        } else {
+            return ctx->group_leader;
+        }
 
     } else {
         term leader = argv[0];
