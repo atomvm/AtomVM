@@ -34,6 +34,7 @@ matrix:
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+        - ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
       before_install:
         - eval "${MATRIX_EVAL}"
 
@@ -69,6 +70,7 @@ matrix:
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+        - ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
       before_install:
         - eval "${MATRIX_EVAL}"
 
@@ -104,6 +106,7 @@ matrix:
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+        - ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
       before_install:
         - eval "${MATRIX_EVAL}"
 
@@ -139,6 +142,7 @@ matrix:
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+        - ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
       before_install:
         - eval "${MATRIX_EVAL}"
 
@@ -174,6 +178,7 @@ matrix:
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+        - ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
       before_install:
         - eval "${MATRIX_EVAL}"
 
@@ -204,6 +209,7 @@ matrix:
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+        - ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
 
     - name: "GCC 4.8 (with -O2, 32 bit) on Trusty with OTP 21"
       os: linux
@@ -236,6 +242,7 @@ matrix:
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+        - ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
 
     - name: "clang 5 (with -O2) on Trusty with OTP 21"
       os: linux
@@ -262,6 +269,7 @@ matrix:
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+        - ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
       env:
         - MATRIX_EVAL="CC=clang && CXX=clang++"
       before_install:
@@ -295,6 +303,7 @@ matrix:
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+        - ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
       env:
         - MATRIX_EVAL="CC=clang-8 && CXX=clang++-8"
       before_install:
@@ -336,6 +345,7 @@ matrix:
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+        - ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
       env:
         - MATRIX_EVAL="CC=gcc-8 && CXX=g++-8"
       before_install:
@@ -372,6 +382,7 @@ matrix:
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+        - ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
       before_install:
         - eval "${MATRIX_EVAL}"
 
@@ -406,6 +417,7 @@ matrix:
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+        - ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
       before_install:
         - eval "${MATRIX_EVAL}"
 
@@ -440,6 +452,7 @@ matrix:
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+        - ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
       before_install:
         - eval "${MATRIX_EVAL}"
 
@@ -464,6 +477,7 @@ matrix:
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+        - ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
       env:
         - MATRIX_EVAL="CC=clang && CXX=clang++"
       before_install:
@@ -518,6 +532,7 @@ matrix:
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+        - ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
 
     - name: "GCC 7 (with -O2) on Bionic/ppc64le with OTP 22"
       os: linux
@@ -546,6 +561,7 @@ matrix:
         - ./tests/test-erlang
         - ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         - ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+        - ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
 
     - name: "GCC 4.6 (with -O2) on Wheezy (armv4t build) using OTP 20 .BEAM files"
       services:
@@ -594,4 +610,5 @@ matrix:
         ./tests/test-erlang
         ./src/AtomVM ../build_tests/tests/libs/estdlib/test_estdlib.avm
         ./src/AtomVM ../build_tests/tests/libs/eavmlib/test_eavmlib.avm
+        ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
         '
