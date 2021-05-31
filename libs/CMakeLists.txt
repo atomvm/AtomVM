@@ -5,6 +5,7 @@ project(libs)
 
 add_subdirectory(estdlib/src)
 add_subdirectory(eavmlib/src)
+add_subdirectory(alisp/src)
 add_subdirectory(etest/src)
 if (Elixir_FOUND)
     add_subdirectory(exavmlib/lib)
