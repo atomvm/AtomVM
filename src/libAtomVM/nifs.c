@@ -2588,6 +2588,11 @@ static term nif_erlang_function_exported(Context *ctx, int argc, term argv[])
     AtomString function_name = globalcontext_atomstring_from_term(ctx->global, function);
     avm_int_t arity = term_to_int(arity_term);
 
+    struct BifImpl *bif = (struct Nif *) bif_registry_get_handler(module_name, function_name, arity);
+    if (bif) {
+        return TRUE_ATOM;
+    }
+
     struct Nif *nif = (struct Nif *) nifs_get(module_name, function_name, arity);
     if (nif) {
         return TRUE_ATOM;
