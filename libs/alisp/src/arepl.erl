@@ -22,22 +22,54 @@
 start() ->
     % HACK: workaround missing code load
     alisp_stdlib:car([[hack]]),
-    loop([], 0).
+    io:put_chars("AtomVM LISP REPL\n\n"),
+    loop([], 0, 0).
 
-loop(PrevTokens, Count) ->
-    Line = io:get_line("> "),
-    Tokens = sexp_lexer:string(Line),
-    NewCount = check_balance(Tokens, Count),
-    NewTokens = PrevTokens ++ Tokens,
-    if
-        NewCount == 0 ->
-            Parsed = sexp_parser:parse(NewTokens),
-            Result = alisp:eval(Parsed),
-            println(Result),
-            loop([], 0);
-        true ->
-            loop(NewTokens, NewCount)
+loop(PrevTokens, Count, SuccessCount) ->
+    Line = io:get_line(prompt(Count, SuccessCount)),
+    case sexp_lexer:string(Line) of
+        [] ->
+            loop(PrevTokens, Count, SuccessCount);
+        Tokens ->
+            NewCount = check_balance(Tokens, Count),
+            NewTokens = PrevTokens ++ Tokens,
+            if
+                NewCount == 0 ->
+                    Parsed = sexp_parser:parse(NewTokens),
+                    NewSuccessCount = do_eval(Parsed, SuccessCount),
+                    loop([], 0, NewSuccessCount);
+                true ->
+                    loop(NewTokens, NewCount, SuccessCount)
+            end
     end.
+
+do_eval(Parsed, SuccessCount) ->
+    try alisp:eval(Parsed) of
+        Result ->
+            try println(Result) of
+                _Any ->
+                    SuccessCount + 1
+            catch
+                C:E ->
+                    println({'catch-failed-print', C, E}),
+                    SuccessCount
+            end
+    catch
+        C:E ->
+            println({'catch', C, E}),
+            SuccessCount
+    end.
+
+prompt(PCount, SuccessCount) ->
+    case PCount of
+        0 -> "arepl(" ++ integer_to_list(SuccessCount) ++ ")> ";
+        NotZero -> dots(NotZero, []) ++ "(" ++ integer_to_list(SuccessCount) ++ ")> "
+    end.
+
+dots(0, Acc) ->
+    Acc;
+dots(N, Acc) ->
+    dots(N - 1, [$. | Acc]).
 
 check_balance([], Count) ->
     Count;
