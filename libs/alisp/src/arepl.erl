@@ -27,20 +27,45 @@ start() ->
 
 loop(PrevTokens, Count, SuccessCount) ->
     Line = io:get_line(prompt(Count, SuccessCount)),
-    case sexp_lexer:string(Line) of
+    case tokenize(Line) of
+        {'syntax-error', _C, _E} = SErr ->
+            println(SErr),
+            loop(PrevTokens, Count, SuccessCount);
         [] ->
             loop(PrevTokens, Count, SuccessCount);
         Tokens ->
             NewCount = check_balance(Tokens, Count),
             NewTokens = PrevTokens ++ Tokens,
-            if
-                NewCount == 0 ->
-                    Parsed = sexp_parser:parse(NewTokens),
-                    NewSuccessCount = do_eval(Parsed, SuccessCount),
-                    loop([], 0, NewSuccessCount);
-                true ->
+            case NewCount of
+                0 ->
+                    case parse(NewTokens) of
+                        {'parse-error', _C, _E} = PErr ->
+                            println(PErr),
+                            loop(PrevTokens, Count, SuccessCount);
+                        Parsed ->
+                            NewSuccessCount = do_eval(Parsed, SuccessCount),
+                            loop([], 0, NewSuccessCount)
+                    end;
+                Negative when Negative < 0 ->
+                    println({'syntax-error'}),
+                    loop(PrevTokens, Count, SuccessCount);
+                _Positive ->
                     loop(NewTokens, NewCount, SuccessCount)
             end
+    end.
+
+parse(Tokens) ->
+    try sexp_parser:parse(Tokens) of
+        Result -> Result
+    catch
+        C:E -> {'parse-error', C, E}
+    end.
+
+tokenize(Line) ->
+    try sexp_lexer:string(Line) of
+        Result -> Result
+    catch
+        C:E -> {'syntax-error', C, E}
     end.
 
 do_eval(Parsed, SuccessCount) ->
