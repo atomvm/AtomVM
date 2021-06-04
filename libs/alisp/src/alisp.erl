@@ -60,6 +60,9 @@ eval(['defun', Name, Args | Expr]) ->
     Val = make_fun(Args, Expr),
     put({'fun', Name}, Val),
     Name;
+eval([[symbol_pair, Module, Fn] | Args]) when is_atom(Module) andalso is_atom(Fn) ->
+    EvaluatedArgs = eval_args(Args),
+    fapply(Module, Fn, EvaluatedArgs);
 eval([Fn | Args]) when is_atom(Fn) ->
     EvaluatedArgs = eval_args(Args),
     func_eval(Fn, EvaluatedArgs).

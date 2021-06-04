@@ -85,6 +85,8 @@ symbol([$\t | T], Acc, Line) ->
     make_symbol(T, Acc, Line);
 symbol([$\n | T], Acc, Line) ->
     make_symbol(T, Acc, Line);
+symbol([$: | T], Acc, Line) ->
+    make_symbol_prefix(T, Acc, Line);
 symbol([$( | _T] = L, Acc, Line) ->
     make_symbol(L, Acc, Line);
 symbol([$) | _T] = L, Acc, Line) ->
@@ -95,6 +97,10 @@ symbol([C | T], Acc, Line) ->
 make_symbol(T, Acc, Line) ->
     Symbol = reverse(Acc),
     [{symbol, Line, Symbol} | string(T, Line)].
+
+make_symbol_prefix(T, Acc, Line) ->
+    Symbol = reverse(Acc),
+    [{symbol_prefix, Line, Symbol} | string(T, Line)].
 
 reverse(L) ->
     reverse(L, "").
