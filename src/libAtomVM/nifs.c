@@ -57,6 +57,11 @@
     ctx->x[1] = (error_type_atom); \
     return term_invalid_term();
 
+#define RAISE(a, b) \
+    ctx->x[0] = (a); \
+    ctx->x[1] = (b); \
+    return term_invalid_term();
+
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define NOT_FOUND (0xFF)
 
@@ -92,6 +97,7 @@ static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_display_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_erase_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_error(Context *ctx, int argc, term argv[]);
+static term nif_erlang_exit(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_fun_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[]);
@@ -246,6 +252,12 @@ static const struct Nif error_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_error
+};
+
+static const struct Nif exit_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_exit
 };
 
 static const struct Nif insert_element_nif =
@@ -2651,6 +2663,13 @@ static term nif_erlang_error(Context *ctx, int argc, term argv[])
     term r = argv[0];
 
     RAISE_ERROR(r);
+}
+
+static term nif_erlang_exit(Context *ctx, int argc, term argv[])
+{
+    term reason = argv[0];
+    ctx->exit_reason = reason;
+    RAISE(LOWERCASE_EXIT_ATOM, reason);
 }
 
 static term nif_erlang_make_fun_3(Context *ctx, int argc, term argv[])

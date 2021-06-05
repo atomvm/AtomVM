@@ -70,6 +70,8 @@ static const char *const io_request_atom = "\xA" "io_request";
 static const char *const io_reply_atom = "\x8" "io_reply";
 static const char *const put_chars_atom = "\x9" "put_chars";
 
+static const char *const lowercase_exit_atom = "\x4" "exit";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -143,6 +145,8 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, io_request_atom) == IO_REQUEST_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, io_reply_atom) == IO_REPLY_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, put_chars_atom) == PUT_CHARS_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, lowercase_exit_atom) == LOWERCASE_EXIT_ATOM_INDEX;
 
     if (!ok) {
         abort();
