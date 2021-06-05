@@ -794,55 +794,53 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
     return ((term) boxed_func) | TERM_BOXED_VALUE_TAG;
 }
 
-static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString function_name, int arity)
+static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString function_name, int arity,
+        term *return_value)
 {
     BifImpl bif = bif_registry_get_handler(module_name, function_name, arity);
     if (bif) {
-        term return_value;
         if (bif_registry_is_gc_bif(module_name, function_name, arity)) {
             switch (arity) {
                 case 1: {
                     GCBifImpl1 gcbif1 = (GCBifImpl1) bif;
-                    return_value = gcbif1(ctx, 0, ctx->x[0]);
-                    break;
+                    *return_value = gcbif1(ctx, 0, ctx->x[0]);
+                    return true;
                 }
                 case 2: {
                     GCBifImpl2 gcbif2 = (GCBifImpl2) bif;
-                    return_value = gcbif2(ctx, 0, ctx->x[0], ctx->x[1]);
-                    break;
+                    *return_value = gcbif2(ctx, 0, ctx->x[0], ctx->x[1]);
+                    return true;
                 }
                 case 3: {
                     GCBifImpl3 gcbif3 = (GCBifImpl3) bif;
-                    return_value = gcbif3(ctx, 0, ctx->x[0], ctx->x[1], ctx->x[2]);
-                    break;
+                    *return_value = gcbif3(ctx, 0, ctx->x[0], ctx->x[1], ctx->x[2]);
+                    return true;
                 }
             }
         } else {
             switch (arity) {
                 case 0: {
                     BifImpl0 bif0 = (BifImpl0) bif;
-                    return_value = bif0(ctx);
-                    break;
+                    *return_value = bif0(ctx);
+                    return true;
                 }
                 case 1: {
                     BifImpl1 bif1 = (BifImpl1) bif;
-                    return_value = bif1(ctx, ctx->x[0]);
-                    break;
+                    *return_value = bif1(ctx, ctx->x[0]);
+                    return true;
                 }
                 case 2: {
                     BifImpl2 bif2 = (BifImpl2) bif;
-                    return_value = bif2(ctx, ctx->x[0], ctx->x[1]);
-                    break;
+                    *return_value = bif2(ctx, ctx->x[0], ctx->x[1]);
+                    return true;
                 }
             }
         }
-        ctx->x[0] = return_value;
-        return true;
     }
 
     struct Nif *nif = (struct Nif *) nifs_get(module_name, function_name, arity);
     if (nif) {
-        ctx->x[0] = nif->nif_ptr(ctx, arity, ctx->x);
+        *return_value = nif->nif_ptr(ctx, arity, ctx->x);
         return true;
     }
 
@@ -4007,10 +4005,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 TRACE_APPLY(ctx, "apply", module_name, function_name, arity);
 
-                if (maybe_call_native(ctx, module_name, function_name, arity)) {
-                    if (UNLIKELY(term_is_invalid_term(ctx->x[0]))) {
+                term native_return;
+                if (maybe_call_native(ctx, module_name, function_name, arity, &native_return)) {
+                    if (UNLIKELY(term_is_invalid_term(native_return))) {
                         HANDLE_ERROR();
                     }
+                    ctx->x[0] = native_return;
 
                 } else {
                     Module *target_module = globalcontext_get_module(ctx->global, module_name);
@@ -4063,10 +4063,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 TRACE_APPLY(ctx, "apply_last", module_name, function_name, arity);
 
-                if (maybe_call_native(ctx, module_name, function_name, arity)) {
-                    if (UNLIKELY(term_is_invalid_term(ctx->x[0]))) {
+                term native_return;
+                if (maybe_call_native(ctx, module_name, function_name, arity, &native_return)) {
+                    if (UNLIKELY(term_is_invalid_term(native_return))) {
                         HANDLE_ERROR();
                     }
+                    ctx->x[0] = native_return;
                     DO_RETURN();
 
                 } else {
