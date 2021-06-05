@@ -131,6 +131,7 @@ test_merge() ->
     ?ASSERT_EQUALS(maps:merge(maps:new(), maps:new()), #{}),
     ?ASSERT_EQUALS(maps:merge(#{a => 1, b => 2, c => 3}, maps:new()), #{a => 1, b => 2, c => 3}),
     ?ASSERT_EQUALS(maps:merge(maps:new(), #{a => 1, b => 2, c => 3}), #{a => 1, b => 2, c => 3}),
+    ?ASSERT_EQUALS(maps:merge(#{a => 1, b => 2, c => 3}, #{b => z, d => 4}), #{a => 1, b => z, c => 3, d => 4}),
     ok = check_bad_map(fun() -> maps:merge(maps:new(), id(not_a_map)) end),
     ok = check_bad_map(fun() -> maps:merge(id(not_a_map), maps:new()) end),
     ok.
