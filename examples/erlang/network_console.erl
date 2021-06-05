@@ -33,11 +33,11 @@ loop(State) ->
     receive
         {tcp_closed, _Socket} ->
             io:format("Connection closed.~n"),
-            ok;
+            erlang:exit(connection_closed);
         {tcp, _Socket, <<255,244,255,253,6>>} ->
             io:format("Break.~n"),
             gen_tcp:close(State#nc_state.socket),
-            ok;
+            erlang:exit(break);
         {tcp, _Socket, Packet} ->
             Reply = {io_reply, State#nc_state.pending_ref, Packet},
             State#nc_state.pending_pid ! Reply,
