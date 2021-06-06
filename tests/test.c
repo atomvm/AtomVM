@@ -424,6 +424,7 @@ struct Test tests[] =
 
     {"alisp.beam", 42},
     {"test_function_exported.beam", 7},
+    {"test_list_to_tuple.beam", 69},
 
     // noisy tests, keep them at the end
     {"spawn_opt_monitor_normal.beam", 1},

@@ -384,6 +384,7 @@ compile_erlang(alisp)
 compile_erlang(sexp_parser)
 compile_erlang(sexp_lexer)
 compile_erlang(test_function_exported)
+compile_erlang(test_list_to_tuple)
 
 compile_erlang(spawn_opt_monitor_normal)
 compile_erlang(spawn_opt_monitor_throw)
@@ -777,6 +778,7 @@ add_custom_target(erlang_test_modules DEPENDS
 
     test_refc_binaries.beam
     test_function_exported.beam
+    test_list_to_tuple.beam
 
     spawn_opt_monitor_normal.beam
     spawn_opt_monitor_throw.beam
