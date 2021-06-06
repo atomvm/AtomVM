@@ -70,7 +70,7 @@ static inline struct ListHead *list_first(struct ListHead *head)
 
 static inline struct ListHead *list_last(struct ListHead *head)
 {
-    return head->next;
+    return head->prev;
 }
 
 #endif
