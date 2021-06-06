@@ -42,6 +42,7 @@ erlang:link/1, &link_nif
 erlang:list_to_binary/1, &list_to_binary_nif
 erlang:list_to_integer/1, &list_to_integer_nif
 erlang:list_to_float/1, &list_to_float_nif
+erlang:list_to_tuple/1, &list_to_tuple_nif
 erlang:iolist_size/1, &iolist_size_nif
 erlang:iolist_to_binary/1, &iolist_to_binary_nif
 erlang:open_port/2, &open_port_nif

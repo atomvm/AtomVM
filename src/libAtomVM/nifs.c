@@ -124,6 +124,7 @@ static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[]);
 static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_time_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_tuple_to_list_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_list_to_tuple_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_timestamp_0(Context *ctx, int argc, term argv[]);
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[]);
@@ -324,6 +325,12 @@ static const struct Nif list_to_float_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_list_to_float_1
+};
+
+static const struct Nif list_to_tuple_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_list_to_tuple_1
 };
 
 static const struct Nif iolist_size_nif =
@@ -1393,6 +1400,33 @@ static term nif_erlang_tuple_to_list_1(Context *ctx, int argc, term argv[])
     }
 
     return prev;
+}
+
+static term nif_erlang_list_to_tuple_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    VALIDATE_VALUE(argv[0], term_is_list);
+
+    int proper;
+    avm_int_t len = term_list_length(argv[0], &proper);
+    if (UNLIKELY(!proper)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(len)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term tuple = term_alloc_tuple(len, ctx);
+
+    term l = argv[0];
+    for (int i = 0; i < len; i++) {
+        term element = term_get_list_head(l);
+        term_put_tuple_element(tuple, i, element);
+        l = term_get_list_tail(l);
+    }
+
+    return tuple;
 }
 
 static term nif_erlang_binary_to_atom_2(Context *ctx, int argc, term argv[])
