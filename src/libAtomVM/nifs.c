@@ -23,6 +23,7 @@
 
 #include "atomshashtable.h"
 #include "avmpack.h"
+#include "bif.h"
 #include "context.h"
 #include "defaultatoms.h"
 #include "dictionary.h"
