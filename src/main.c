@@ -21,6 +21,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <libgen.h>
 
 #include "atom.h"
 #include "avmpack.h"
@@ -111,7 +112,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "Cannot load startup module: %s\n", startup_module_name);
         return EXIT_FAILURE;
     }
-    globalcontext_insert_module_with_filename(glb, mod, startup_module_name);
+    globalcontext_insert_module_with_filename(glb, mod, basename(startup_module_name));
     mod->module_platform_data = NULL;
     Context *ctx = context_new(glb);
     ctx->leader = 1;
