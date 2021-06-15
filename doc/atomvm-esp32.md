@@ -90,12 +90,12 @@ The AtomVM Flash memory is partitioned to include areas for the above binary art
 
 The flash layout is roughly as follows:
 
-    0x00       0x1000           0x8000  0x9000         0xF000     0x10000                0x110000               0x210000
+    0x00       0x1000           0x8000  0x9000         0xF000     0x10000                0x1D0000               0x210000
     +----------+-------- -------+-------+------- ------+----------+---------  -----------+----------  ----------+----------  ----------+
     |          |                |       |              |          |                      |                      |                      |
     +----------+-------- -------+-------+------- ------+----------+---------  -----------+----------  ----------+----------  ----------+
     |<-------->|<------- ------>|<----->|<------ ----->|<-------->|<--------  ---------->|<---------  --------->|<---------  --------->|
-        4kB           28kB         3kB         24kB         4kB             1mB                     1mB                    1mB
+        4kB           28kB         3kB         24kB         4kB            1.75mB                    256k                    1mB
       Secure      Bootloader    Partition      NVS       PHY_INIT          AtomVM                  lib.avm               main.avm
        Boot                       Table                                virtual machine
 
@@ -108,8 +108,8 @@ The following table summarizes the partitions created on the ESP32 when deployin
 | Partition Table | 0x8000 | 3kB | The AtomVM-defined partition table. |
 | NVS | 0x9000 | 24kB | Space for non-volatile storage. |
 | PHY_INIT | 0xF000 | 4kB | Initialization data for physical layer radio signal data. |
-| AtomVM virtual machine | 0x10000 | 1mB | The AtomVM virtual machine (compiled from C code). |
-| lib.avm | 0x110000 | 1mB | The AtomVM BEAM library, compiled from Erlang and Elixir files in the AtomVM source tree. |
+| AtomVM virtual machine | 0x10000 | 1.75mB | The AtomVM virtual machine (compiled from C code). |
+| lib.avm | 0x1D0000 | 256k | The AtomVM BEAM library, compiled from Erlang and Elixir files in the AtomVM source tree. |
 | main.avm | 0x210000 | 1mB | The user application.  This is where users flash their compiled Erlang/Elixir code |
 
 ### The `lib.avm` and `main.avm` partitions
