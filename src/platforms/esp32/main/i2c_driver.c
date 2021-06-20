@@ -38,6 +38,7 @@
 #include "term.h"
 #include "utils.h"
 
+//#define ENABLE_TRACE
 #include "trace.h"
 
 #include "esp32_sys.h"
@@ -84,14 +85,14 @@ Context *i2c_driver_create_port(GlobalContext *global, term opts)
     esp_err_t ret = i2c_param_config(I2C_NUM_0, &conf);
 
     if (UNLIKELY(ret != ESP_OK)) {
-        TRACE("i2cdriver: failed config, return value: %i\n", ret);
+        TRACE("i2cdriver_init: failed config, return value: %i\n", ret);
         //TODO: return error
         return NULL;
     }
 
     ret = i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0);
     if (UNLIKELY(ret != ESP_OK)) {
-        TRACE("i2cdriver: failed install, return vale: %i\n", ret);
+        TRACE("i2cdriver_init: failed install, return vale: %i\n", ret);
         //TODO: return error
         return NULL;
     }
@@ -104,6 +105,7 @@ static term i2cdriver_begin_transmission(Context *ctx, term pid, term req)
 
     if (UNLIKELY(i2c_data->transmitting_pid != term_invalid_term())) {
         // another process is already transmitting
+        TRACE("i2cdriver_begin_transmission: Another process is already transmitting\n");
         return ERROR_ATOM;
     }
 
@@ -125,6 +127,7 @@ static term i2cdriver_end_transmission(Context *ctx, term pid)
 
     if (UNLIKELY(i2c_data->transmitting_pid != pid)) {
         // transaction owned from a different pid
+        TRACE("i2cdriver_end_transmission: Another process is already transmitting\n");
         return ERROR_ATOM;
     }
 
@@ -135,7 +138,7 @@ static term i2cdriver_end_transmission(Context *ctx, term pid)
     i2c_data->transmitting_pid = term_invalid_term();
 
     if (UNLIKELY(result != ESP_OK)) {
-        TRACE("i2cdriver end_transmission error: result was: %i.\n", result);
+        TRACE("i2cdriver_end_transmission i2c_master_cmd_begin error: result was: %i.\n", result);
         return ERROR_ATOM;
     }
 
@@ -148,6 +151,7 @@ static term i2cdriver_write_byte(Context *ctx, term pid, term req)
 
     if (UNLIKELY(i2c_data->transmitting_pid != pid)) {
         // transaction owned from a different pid
+        TRACE("i2cdriver_write_byte: Another process is already transmitting\n");
         return ERROR_ATOM;
     }
 
@@ -156,7 +160,7 @@ static term i2cdriver_write_byte(Context *ctx, term pid, term req)
     esp_err_t result = i2c_master_write_byte(i2c_data->cmd, (uint8_t) data, true);
 
     if (UNLIKELY(result != ESP_OK)) {
-        TRACE("i2cdriver write_byte error: result was: %i.\n", result);
+        TRACE("i2cdriver_write_byte: i2c_master_write_byte error: result was: %i.\n", result);
         return ERROR_ATOM;
     }
 
@@ -168,15 +172,24 @@ static term i2cdriver_read_bytes(Context *ctx, term pid, term req)
     struct I2CData *i2c_data = ctx->platform_data;
 
     if (UNLIKELY(i2c_data->transmitting_pid != term_invalid_term())) {
-        // another process is already transmitting
+        TRACE("i2cdriver_read_bytes: Another process is already transmitting\n");
         return ERROR_ATOM;
     }
+
+    int arity = term_get_tuple_arity(req);
 
     term address_term = term_get_tuple_element(req, 1);
     uint8_t address = term_to_int32(address_term);
 
     term read_bytes_term = term_get_tuple_element(req, 2);
     avm_int_t read_count = term_to_int32(read_bytes_term);
+
+    term register_term = term_invalid_term();
+    uint8_t register_address;
+    if (arity == 4) {
+        register_term = term_get_tuple_element(req, 3);
+        register_address = term_to_int32(register_term);
+    }
 
     if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
         return ERROR_ATOM;
@@ -186,16 +199,22 @@ static term i2cdriver_read_bytes(Context *ctx, term pid, term req)
 
     i2c_data->cmd = i2c_cmd_link_create();
     i2c_master_start(i2c_data->cmd);
+
+    if (!term_is_invalid_term(register_term)) {
+        i2c_master_write_byte(i2c_data->cmd, (address << 1) | I2C_MASTER_WRITE, 0x1);
+        i2c_master_write_byte(i2c_data->cmd, register_address, 0x1);
+        i2c_master_start(i2c_data->cmd);
+    }
     esp_err_t result = i2c_master_write_byte(i2c_data->cmd, (address << 1) | I2C_MASTER_READ, true);
 
     if (UNLIKELY(result != ESP_OK)) {
-        TRACE("i2cdriver read_bytes error: result was: %i.\n", result);
+        TRACE("i2cdriver_read_bytes: i2c_master_write_byte error: result was: %i.\n", result);
         return ERROR_ATOM;
     }
 
     result = i2c_master_read(i2c_data->cmd, data, read_count, I2C_MASTER_LAST_NACK);
     if (UNLIKELY(result != ESP_OK)) {
-        TRACE("i2cdriver read_bytes error: result was: %i.\n", result);
+        TRACE("i2cdriver_read_bytes: i2c_master_read error: result was: %i.\n", result);
         return ERROR_ATOM;
     }
 
@@ -206,11 +225,78 @@ static term i2cdriver_read_bytes(Context *ctx, term pid, term req)
     i2c_data->transmitting_pid = term_invalid_term();
 
     if (UNLIKELY(result != ESP_OK)) {
-        TRACE("i2cdriver write_byte error: result was: %i.\n", result);
+        TRACE("i2cdriver_read_bytes: i2c_master_cmd_begin error: result was: %i.\n", result);
         return ERROR_ATOM;
     }
 
     return data_term;
+}
+
+static term i2cdriver_write_bytes(Context *ctx, term pid, term req)
+{
+    struct I2CData *i2c_data = ctx->platform_data;
+
+    if (UNLIKELY(i2c_data->transmitting_pid != term_invalid_term())) {
+        TRACE("i2cdriver_write_bytes: Another process is already transmitting\n");
+        return ERROR_ATOM;
+    }
+
+    int arity = term_get_tuple_arity(req);
+
+    term address_term = term_get_tuple_element(req, 1);
+    uint8_t address = term_to_int32(address_term);
+
+    term data_term = term_get_tuple_element(req, 2);
+    uint8_t datum;
+    uint8_t *data;
+    size_t data_len;
+    if (term_is_binary(data_term)) {
+        data = (uint8_t *) term_binary_data(data_term);
+        data_len = term_binary_size(data_term);
+    } else {
+        datum = term_to_int32(data_term);
+        data = &datum;
+        data_len = 1;
+    }
+
+    term register_term = term_invalid_term();
+    uint8_t register_address;
+    if (arity == 4) {
+        register_term = term_get_tuple_element(req, 3);
+        register_address = term_to_int32(register_term);
+    }
+
+    i2c_data->cmd = i2c_cmd_link_create();
+    i2c_master_start(i2c_data->cmd);
+
+    esp_err_t result = i2c_master_write_byte(i2c_data->cmd, (address << 1) | I2C_MASTER_WRITE, 0x01);
+    if (UNLIKELY(result != ESP_OK)) {
+        TRACE("i2cdriver_write_bytes i2c_master_write_byte error: result was: %i.\n", result);
+        return ERROR_ATOM;
+    }
+
+    if (!term_is_invalid_term(register_term)) {
+        i2c_master_write_byte(i2c_data->cmd, register_address, 0x1);
+    }
+
+    result = i2c_master_write(i2c_data->cmd, data, data_len, 0x01);
+    if (UNLIKELY(result != ESP_OK)) {
+        TRACE("i2cdriver_write_bytes i2c_master_write error: result was: %i.\n", result);
+        return ERROR_ATOM;
+    }
+
+    i2c_master_stop(i2c_data->cmd);
+    result = i2c_master_cmd_begin(I2C_NUM_0, i2c_data->cmd, portMAX_DELAY);
+    i2c_cmd_link_delete(i2c_data->cmd);
+
+    i2c_data->transmitting_pid = term_invalid_term();
+
+    if (UNLIKELY(result != ESP_OK)) {
+        TRACE("i2cdriver_write_bytes: i2c_master_cmd_begin error: result was: %i.\n", result);
+        return ERROR_ATOM;
+    }
+
+    return OK_ATOM;
 }
 
 static void i2cdriver_consume_mailbox(Context *ctx)
@@ -245,8 +331,12 @@ static void i2cdriver_consume_mailbox(Context *ctx)
             ret = i2cdriver_read_bytes(ctx, pid, req);
             break;
 
+        case WRITE_BYTES_ATOM:
+            ret = i2cdriver_write_bytes(ctx, pid, req);
+            break;
+
         default:
-            TRACE("i2c: error: unrecognized command: %lx\n", cmd);
+            TRACE("i2c: error: unrecognized command: %x\n", cmd);
             ret = ERROR_ATOM;
     }
 
