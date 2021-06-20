@@ -13,7 +13,7 @@ start() ->
             {disconnected, fun() -> Self ! disconnected end}
         ]}
     ],
-    case network_fsm:start(Config) of
+    case network:start(Config) of
         ok ->
             wait_for_message();
         Error ->

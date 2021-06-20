@@ -80,6 +80,7 @@ static const char *const ap_started_atom = "\xA" "ap_started";
 static const char *const ap_sta_connected_atom = "\x10" "ap_sta_connected";
 static const char *const ap_sta_disconnected_atom = "\x13" "ap_sta_disconnected";
 static const char *const ap_sta_ip_assigned_atom = "\x12" "ap_sta_ip_assigned";
+static const char *const host_atom = "\x4" "host";
 
 //spidriver
 static const char *const bus_config_atom = "\xA" "bus_config";
@@ -182,6 +183,7 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, ap_sta_connected_atom) == AP_STA_CONNECTED_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, ap_sta_disconnected_atom) == AP_STA_DISCONNECTED_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, ap_sta_ip_assigned_atom) == AP_STA_IP_ASSIGNED_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, host_atom) == HOST_ATOM_INDEX;
 
     //spidriver
     ok &= globalcontext_insert_atom(glb, bus_config_atom) == BUS_CONFIG_ATOM_INDEX;

@@ -1,4 +1,4 @@
--module(ap_network).
+-module(ap_sta_network).
 
 -export([start/0]).
 
@@ -16,9 +16,17 @@ start() ->
             {sta_connected, fun sta_connected/1},
             {sta_ip_assigned, fun sta_ip_assigned/1},
             {sta_disconnected, fun sta_disconnected/1}
-        ]}
+        ]},
+        {sta, [
+            {ssid, esp:nvs_get_binary(atomvm, sta_ssid, <<"myssid">>)},
+            {psk,  esp:nvs_get_binary(atomvm, sta_psk, <<"mypsk">>)},
+            {connected, fun connected/0},
+            {got_ip, fun got_ip/1},
+            {disconnected, fun disconnected/0}
+        ]},
+        {sntp, [{endpoint, "pool.ntp.org"}]}
     ],
-    case network_fsm:start(Config) of
+    case network:start(Config) of
         ok ->
             sleep_forever();
         Error ->
@@ -37,6 +45,18 @@ sta_disconnected(Mac) ->
 
 sta_ip_assigned(Address) ->
     io:format("STA assigned address ~p~n", [Address]).
+
+
+
+connected() ->
+    io:format("STA connected.~n").
+
+got_ip(IpInfo) ->
+    io:format("Got IP: ~p.~n", [IpInfo]).
+
+disconnected() ->
+    io:format("STA disconnected.~n").
+
 
 sleep_forever() ->
     timer:sleep(10000),
