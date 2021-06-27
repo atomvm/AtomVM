@@ -32,7 +32,8 @@
     foldl/3, foldr/3,
     all/2, any/2, flatten/1,
     search/2, filter/2,
-    join/2
+    join/2, seq/2, seq/3,
+    sort/1, sort/2
 ]).
 
 %%-----------------------------------------------------------------------------
@@ -380,3 +381,78 @@ join([E|R], Sep, []) ->
     join(R, Sep, [E]);
 join([E|R], Sep, Accum) ->
     join(R, Sep, [E, Sep|Accum]).
+
+%%-----------------------------------------------------------------------------
+%% @param   From from integer
+%% @param   To to Integer
+%% @returns list of integers from [From..To]
+%% @doc     Returns a sequence of integers in a specified range.
+%%
+%%          This function is equivalent to `lists:seq(From, To, 1)`.
+%% @end
+%%-----------------------------------------------------------------------------
+seq(From, To) ->
+    seq(From, To, 1).
+
+%%-----------------------------------------------------------------------------
+%% @param   From from integer
+%% @param   To to Integer
+%% @param   Incr increment value
+%% @returns list of integers `[From, From+Incr, ..., N]', where `N' is the largest integer <= `To' incremented by `Incr'
+%% @doc     Returns a sequence of integers in a specified range incremented by a specified value.
+%%
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+seq(From, To, Incr) when
+                    (not is_integer(From) orelse not is_integer(To) orelse not is_integer(Incr))
+                    orelse (To < (From - Incr) andalso Incr > 0)
+                    orelse (To > (From - Incr) andalso Incr < 0)
+                    orelse (Incr =:= 0 andalso From =/= To) ->
+    throw(badarg);
+seq(To, To, 0) ->
+    [To];
+seq(From, To, Incr) ->
+    seq(From, To, Incr, []).
+
+%% @private
+seq(From, To, Incr, Accum) when
+                    (Incr > 0 andalso From > To)
+                    orelse (Incr < 0 andalso To > From) ->
+    reverse(Accum);
+seq(From, To, Incr, Accum) ->
+    seq(From + Incr, To, Incr, [From|Accum]).
+
+
+%%-----------------------------------------------------------------------------
+%% @param   List a list
+%% @returns Sorted list, ordered by `<'
+%% @doc     Returns a sorted list, using `<' operator to determine sort order.
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+sort(List) when is_list(List) ->
+    sort(fun lt/2, List).
+
+%%-----------------------------------------------------------------------------
+%% @param   Fun sort function
+%% @param   List a list
+%% @returns Sorted list, ordered by Fun(A, B) : boolean() such that A "less than" B.
+%% @doc     Returns a sorted list, using Fun(A, B) to determine sort order.
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+sort(Fun, List) when is_function(Fun), is_list(List) ->
+    quick_sort(Fun, List).
+
+
+%% Attribution: https://erlang.org/doc/programming_examples/list_comprehensions.html#quick-sort
+%% @private
+quick_sort(Fun, [Pivot|T]) ->
+    quick_sort(Fun, [ X || X <- T, Fun(X, Pivot)]) ++
+    [Pivot] ++
+    quick_sort(Fun, [ X || X <- T, not Fun(X, Pivot)]);
+quick_sort(_Fun, []) -> [].
+
+%% @private
+lt(A, B) -> A < B.

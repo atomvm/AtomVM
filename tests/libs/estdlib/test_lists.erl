@@ -20,6 +20,8 @@ test() ->
     ok = test_flatten(),
     ok = test_filter(),
     ok = test_join(),
+    ok = test_seq(),
+    ok = test_sort(),
     ok.
 
 test_nth() ->
@@ -148,6 +150,41 @@ test_join() ->
     ?ASSERT_MATCH(lists:join(",", ["foo"]), ["foo"]),
     ?ASSERT_MATCH(lists:join(",", ["foo", "bar"]), ["foo", ",", "bar"]),
     ?ASSERT_MATCH(lists:join("", ["foo", "bar"]), ["foo", [], "bar"]),
+    ok.
+
+test_seq() ->
+    ?ASSERT_MATCH(lists:seq(1,5), [1,2,3,4,5]),
+    ?ASSERT_MATCH(lists:seq(1,5,2), [1,3,5]),
+    ?ASSERT_MATCH(lists:seq(1,5,3), [1,4]),
+    ?ASSERT_MATCH(lists:seq(1,2,3), [1]),
+    ?ASSERT_MATCH(lists:seq(-1,2,3), [-1,2]),
+    ?ASSERT_MATCH(lists:seq(5,1,-1), [5,4,3,2,1]),
+    ?ASSERT_MATCH(lists:seq(1,1,0), [1]),
+
+    ?ASSERT_FAILURE(lists:seq(foo, 1), badarg),
+    ?ASSERT_FAILURE(lists:seq(1, bar), badarg),
+    ?ASSERT_FAILURE(lists:seq(foo, bar), badarg),
+    ?ASSERT_FAILURE(lists:seq(1, 2, tapas), badarg),
+    ?ASSERT_FAILURE(lists:seq(1, -1), badarg),
+    ?ASSERT_FAILURE(lists:seq(-1, 1, -1), badarg),
+    ?ASSERT_FAILURE(lists:seq(1, -1, 1), badarg),
+    ?ASSERT_FAILURE(lists:seq(1, 2, 0), badarg),
+
+    ok.
+
+test_sort() ->
+    ?ASSERT_MATCH(lists:sort([]), []),
+    ?ASSERT_MATCH(lists:sort([1]), [1]),
+    ?ASSERT_MATCH(lists:sort([1,3,5,2,4]), [1,2,3,4,5]),
+    ?ASSERT_MATCH(lists:sort([c,a,b,d]), [a,b,c,d]),
+    ?ASSERT_MATCH(lists:sort([#{}, z]), [z, #{}]),
+
+    ?ASSERT_MATCH(lists:sort(fun(A, B) -> A > B end, [1,2,3,4,5]), [5,4,3,2,1]),
+
+    ?ASSERT_FAILURE(lists:sort(1), function_clause),
+    ?ASSERT_FAILURE(lists:sort(fun(A, B) -> A > B end, 1), function_clause),
+    ?ASSERT_FAILURE(lists:sort(1, [1]), function_clause),
+
     ok.
 
 id(X) -> X.
