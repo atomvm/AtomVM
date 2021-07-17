@@ -33,6 +33,7 @@
 #include "context.h"
 #include "debug.h"
 #include "defaultatoms.h"
+#include "dictionary.h"
 #include "globalcontext.h"
 #include "mailbox.h"
 #include "module.h"
@@ -43,8 +44,11 @@
 
 #include "trace.h"
 
+#include "esp_log.h"
 #include "esp32_sys.h"
 #include "sys.h"
+
+#define TAG "gpio_driver"
 
 static const char *const gpio_atom = "\x4" "gpio";
 
@@ -52,6 +56,9 @@ static Context *global_gpio_ctx = NULL;
 
 static void consume_gpio_mailbox(Context *ctx);
 static void IRAM_ATTR gpio_isr_handler(void *arg);
+
+static const char *const gpio_driver_atom = "\xB" "gpio_driver";
+static term gpio_driver;
 
 struct GPIOListenerData
 {
@@ -123,7 +130,8 @@ static inline term gpio_digital_read(term gpio_num_term)
 
 void gpio_driver_init(GlobalContext *global)
 {
-    // no-op
+    int index = globalcontext_insert_atom(global, gpio_driver_atom);
+    gpio_driver = term_from_atom_index(index);
 }
 
 Context *gpio_driver_create_port(GlobalContext *global, term opts)
@@ -144,8 +152,8 @@ Context *gpio_driver_create_port(GlobalContext *global, term opts)
 
         globalcontext_register_process(ctx->global, atom_index, ctx->process_id);
     } else {
-        fprintf(stderr, "Only a single GPIO driver can be opened.\n");
-        abort();
+        ESP_LOGE(TAG, "Only a single GPIO driver can be opened.");
+        return NULL;
     }
     return ctx;
 }
@@ -159,6 +167,7 @@ void gpio_interrupt_callback(EventListener *listener)
     // 1 header + 2 elements
     if (UNLIKELY(memory_ensure_free(global_gpio_ctx, 3) != MEMORY_GC_OK)) {
         //TODO: it must not fail
+        ESP_LOGE(TAG, "gpio_interrupt_callback: Failed to ensure free heap space.");
         abort();
     }
 
@@ -169,25 +178,25 @@ void gpio_interrupt_callback(EventListener *listener)
     mailbox_send(listening_ctx, int_msg);
 }
 
-static term gpiodriver_set_level(term msg)
+static term gpiodriver_set_level(term cmd)
 {
-    term gpio_num = term_get_tuple_element(msg, 2);
-    term level = term_get_tuple_element(msg, 3);
+    term gpio_num = term_get_tuple_element(cmd, 1);
+    term level = term_get_tuple_element(cmd, 2);
 
     return gpio_digital_write(gpio_num, level);
 }
 
-static term gpiodriver_set_direction(term msg)
+static term gpiodriver_set_direction(term cmd)
 {
-    term gpio_num = term_get_tuple_element(msg, 2);
-    term direction = term_get_tuple_element(msg, 3);
+    term gpio_num = term_get_tuple_element(cmd, 1);
+    term direction = term_get_tuple_element(cmd, 2);
 
     return gpio_set_pin_mode(gpio_num, direction);
 }
 
-static term gpiodriver_read(term msg)
+static term gpiodriver_read(term cmd)
 {
-    term gpio_num = term_get_tuple_element(msg, 2);
+    term gpio_num = term_get_tuple_element(cmd, 1);
     return gpio_digital_read(gpio_num);
 }
 
@@ -203,15 +212,15 @@ static bool gpiodriver_is_gpio_attached(struct GPIOData *gpio_data, int gpio_num
     return false;
 }
 
-static term gpiodriver_set_int(Context *ctx, Context *target, term msg)
+static term gpiodriver_set_int(Context *ctx, Context *target, term cmd)
 {
     GlobalContext *glb = ctx->global;
     struct ESP32PlatformData *platform = glb->platform_data;
 
     struct GPIOData *gpio_data = ctx->platform_data;
 
-    int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
-    term trigger = term_get_tuple_element(msg, 3);
+    int32_t gpio_num = term_to_int32(term_get_tuple_element(cmd, 1));
+    term trigger = term_get_tuple_element(cmd, 2);
 
     if (gpiodriver_is_gpio_attached(gpio_data, gpio_num)) {
         return ERROR_ATOM;
@@ -256,7 +265,7 @@ static term gpiodriver_set_int(Context *ctx, Context *target, term msg)
 
     struct GPIOListenerData *data = malloc(sizeof(struct GPIOListenerData));
     if (IS_NULL_PTR(data)) {
-        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        ESP_LOGE(TAG, "gpiodriver_set_int: Failed to ensure free heap space.");
         abort();
     }
     list_append(&gpio_data->gpio_listeners, &data->gpio_listener_list_head);
@@ -275,11 +284,11 @@ static term gpiodriver_set_int(Context *ctx, Context *target, term msg)
     return OK_ATOM;
 }
 
-static term gpiodriver_remove_int(Context *ctx, Context *target, term msg)
+static term gpiodriver_remove_int(Context *ctx, Context *target, term cmd)
 {
     struct GPIOData *gpio_data = ctx->platform_data;
 
-    int32_t gpio_num = term_to_int32(term_get_tuple_element(msg, 2));
+    int32_t gpio_num = term_to_int32(term_get_tuple_element(cmd, 1));
 
     struct ListHead *item;
     struct ListHead *tmp;
@@ -304,53 +313,77 @@ static term gpiodriver_remove_int(Context *ctx, Context *target, term msg)
     return ERROR_ATOM;
 }
 
+static term create_pair(Context *ctx, term term1, term term2)
+{
+    term ret = term_alloc_tuple(2, ctx);
+    term_put_tuple_element(ret, 0, term1);
+    term_put_tuple_element(ret, 1, term2);
+
+    return ret;
+}
+
 static void consume_gpio_mailbox(Context *ctx)
 {
     Message *message = mailbox_dequeue(ctx);
     term msg = message->message;
     term pid = term_get_tuple_element(msg, 0);
-    term cmd = term_get_tuple_element(msg, 1);
+    term cmd = term_get_tuple_element(msg, 2);
+    term cmd_name = term_get_tuple_element(cmd, 0);
 
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
     term ret;
 
-    switch (cmd) {
+    switch (cmd_name) {
         case SET_LEVEL_ATOM:
-            ret = gpiodriver_set_level(msg);
+            ret = gpiodriver_set_level(cmd);
             break;
 
         case SET_DIRECTION_ATOM:
-            ret = gpiodriver_set_direction(msg);
+            ret = gpiodriver_set_direction(cmd);
             break;
 
         case READ_ATOM:
-            ret = gpiodriver_read(msg);
+            ret = gpiodriver_read(cmd);
             break;
 
         case SET_INT_ATOM:
-            ret = gpiodriver_set_int(ctx, target, msg);
+            ret = gpiodriver_set_int(ctx, target, cmd);
             break;
 
         case REMOVE_INT_ATOM:
-            ret = gpiodriver_remove_int(ctx, target, msg);
+            ret = gpiodriver_remove_int(ctx, target, cmd);
             break;
 
         default:
-            TRACE("gpio: unrecognized command\n");
+            ESP_LOGW(TAG, "Unrecognized command");
             ret = ERROR_ATOM;
     }
 
-    mailbox_destroy_message(message);
+    dictionary_put(&ctx->dictionary, ctx, gpio_driver, ret);
+    term ret_msg;
+    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+        ret_msg = OUT_OF_MEMORY_ATOM;
+    } else {
+        ret = dictionary_get(&ctx->dictionary, ctx, gpio_driver);
+        term ref = term_get_tuple_element(msg, 1);
+        ret_msg = create_pair(ctx, ref, ret);
+    }
+    dictionary_erase(&ctx->dictionary, ctx, gpio_driver);
 
-    mailbox_send(target, ret);
+    mailbox_send(target, ret_msg);
+    mailbox_destroy_message(message);
 }
 
 static void IRAM_ATTR gpio_isr_handler(void *arg)
 {
     xQueueSendFromISR(event_queue, &arg, NULL);
 }
+
+//
+// Nif implementation
+//
 
 static term nif_gpio_set_pin_mode(Context *ctx, int argc, term argv[])
 {
