@@ -30,6 +30,7 @@
 #include "context.h"
 #include "debug.h"
 #include "defaultatoms.h"
+#include "dictionary.h"
 #include "globalcontext.h"
 #include "interop.h"
 #include "mailbox.h"
@@ -49,6 +50,9 @@ static term i2cdriver_end_transmission(Context *ctx, term pid);
 static term i2cdriver_write_byte(Context *ctx, term pid, term req);
 static void i2cdriver_consume_mailbox(Context *ctx);
 
+static const char *const i2c_driver_atom = "\xA" "i2c_driver";
+static term i2c_driver;
+
 struct I2CData
 {
     i2c_cmd_handle_t cmd;
@@ -57,7 +61,8 @@ struct I2CData
 
 void i2c_driver_init(GlobalContext *global)
 {
-    // no-op
+    int index = globalcontext_insert_atom(global, i2c_driver_atom);
+    i2c_driver = term_from_atom_index(index);
 }
 
 Context *i2c_driver_create_port(GlobalContext *global, term opts)
@@ -299,12 +304,20 @@ static term i2cdriver_write_bytes(Context *ctx, term pid, term req)
     return OK_ATOM;
 }
 
+static term create_pair(Context *ctx, term term1, term term2)
+{
+    term ret = term_alloc_tuple(2, ctx);
+    term_put_tuple_element(ret, 0, term1);
+    term_put_tuple_element(ret, 1, term2);
+
+    return ret;
+}
+
 static void i2cdriver_consume_mailbox(Context *ctx)
 {
     Message *message = mailbox_dequeue(ctx);
     term msg = message->message;
     term pid = term_get_tuple_element(msg, 0);
-    term ref = term_get_tuple_element(msg, 1);
     term req = term_get_tuple_element(msg, 2);
 
     term cmd = term_get_tuple_element(req, 0);
@@ -340,8 +353,17 @@ static void i2cdriver_consume_mailbox(Context *ctx)
             ret = ERROR_ATOM;
     }
 
-    mailbox_destroy_message(message);
+    dictionary_put(&ctx->dictionary, ctx, i2c_driver, ret);
+    term ret_msg;
+    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+        ret_msg = OUT_OF_MEMORY_ATOM;
+    } else {
+        ret = dictionary_get(&ctx->dictionary, ctx, i2c_driver);
+        term ref = term_get_tuple_element(msg, 1);
+        ret_msg = create_pair(ctx, ref, ret);
+    }
+    dictionary_erase(&ctx->dictionary, ctx, i2c_driver);
 
-    UNUSED(ref);
-    mailbox_send(target, ret);
+    mailbox_send(target, ret_msg);
+    mailbox_destroy_message(message);
 }
