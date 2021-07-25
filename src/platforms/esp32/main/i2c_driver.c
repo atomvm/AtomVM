@@ -172,6 +172,28 @@ static term i2cdriver_write_byte(Context *ctx, term pid, term req)
     return OK_ATOM;
 }
 
+static term i2cdriver_qwrite_bytes(Context *ctx, term pid, term req)
+{
+    struct I2CData *i2c_data = ctx->platform_data;
+
+    if (UNLIKELY(i2c_data->transmitting_pid != pid)) {
+        // transaction owned from a different pid
+        TRACE("i2cdriver_qwrite_bytes: Another process is already transmitting\n");
+        return ERROR_ATOM;
+    }
+
+    term data_term = term_get_tuple_element(req, 1);
+    uint8_t data = term_to_int32(data_term);
+    esp_err_t result = i2c_master_write(i2c_data->cmd, (unsigned char *) term_binary_data(data), term_binary_size(data), true);
+
+    if (UNLIKELY(result != ESP_OK)) {
+        TRACE("i2cdriver_qwrite_bytes: i2c_master_write_byte error: result was: %i.\n", result);
+        return ERROR_ATOM;
+    }
+
+    return OK_ATOM;
+}
+
 static term i2cdriver_read_bytes(Context *ctx, term pid, term req)
 {
     struct I2CData *i2c_data = ctx->platform_data;
@@ -345,7 +367,11 @@ static void i2cdriver_consume_mailbox(Context *ctx)
             break;
 
         case WRITE_BYTES_ATOM:
-            ret = i2cdriver_write_bytes(ctx, pid, req);
+            if (term_get_tuple_arity(req) == 2) {
+                ret = i2cdriver_qwrite_bytes(ctx, pid, req);
+            } else {
+                ret = i2cdriver_write_bytes(ctx, pid, req);
+            }
             break;
 
         default:
