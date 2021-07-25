@@ -244,6 +244,7 @@ compile_erlang(bigfact3)
 compile_erlang(boxedabs)
 compile_erlang(boxedneg)
 compile_erlang(boxedmul)
+compile_erlang(boxedlit)
 compile_erlang(pow32)
 compile_erlang(pow64)
 compile_erlang(pow32_is_integer)
@@ -635,6 +636,7 @@ add_custom_target(erlang_test_modules DEPENDS
     boxedabs.beam
     boxedneg.beam
     boxedmul.beam
+    boxedlit.beam
     pow32.beam
     pow64.beam
 
