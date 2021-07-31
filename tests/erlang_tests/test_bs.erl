@@ -60,6 +60,8 @@ start() ->
     test_put_match_string(<<"foo">>, <<"bar">>),
     test_skip_bits(),
 
+    test_match_case_type(),
+
     0.
 
 test_pack_small_ints({A, B, C}, Expect) ->
@@ -255,5 +257,21 @@ test_skip_bits() ->
 skip_bits(Len, Bin) ->
     <<_First:Len, Rest/binary>> = Bin,
     Rest.
+
+test_match_case_type() ->
+    foo = match_case_type([foo,bar]),
+    $a = match_case_type(<<"abc">>),
+    something_else_entirely = match_case_type(blahblah),
+    ok.
+
+match_case_type(Term) ->
+    case Term of
+        [H|_T] ->
+            H;
+        <<H:8, _/binary>> ->
+            H;
+        _ ->
+            something_else_entirely
+    end.
 
 id(X) -> X.
