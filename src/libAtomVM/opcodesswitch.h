@@ -3422,17 +3422,21 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    // this is likely one of the only two mandatory VERIFY_*
-                    VERIFY_IS_MATCH_OR_BINARY(src, "bs_start_match2");
-
                     TRACE("bs_start_match2/5, fail=%i src=0x%lx arg2=0x%lx arg3=0x%lx dreg=%c%i\n", fail, src, arg2, slots_term, T_DEST_REG(dreg_type, dreg));
+                    if (!(term_is_binary(src) || term_is_match_state(src))) {
+                        WRITE_REGISTER(dreg_type, dreg, src);
+                        i = POINTER_TO_II(mod->labels[fail]);
+                    } else {
+                        term match_state = term_alloc_bin_match_state(src, ctx);
 
-                    term match_state = term_alloc_bin_match_state(src, ctx);
-
-                    WRITE_REGISTER(dreg_type, dreg, match_state);
+                        WRITE_REGISTER(dreg_type, dreg, match_state);
+                        NEXT_INSTRUCTION(next_off);
+                    }
                 #endif
 
-                NEXT_INSTRUCTION(next_off);
+                #ifdef IMPL_CODE_LOADER
+                    NEXT_INSTRUCTION(next_off);
+                #endif
                 break;
             }
 
@@ -3455,21 +3459,25 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_start_match3/5\n");
+                    TRACE("bs_start_match3/4\n");
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    // this is likely one of the only two mandatory VERIFY_*
-                    VERIFY_IS_MATCH_OR_BINARY(src, "bs_start_match3");
-
                     TRACE("bs_start_match3/4, fail=%i src=0x%lx live=0x%lx dreg=%c%i\n", fail, src, live, T_DEST_REG(dreg_type, dreg));
+                    if (!(term_is_binary(src) || term_is_match_state(src))) {
+                        WRITE_REGISTER(dreg_type, dreg, src);
+                        i = POINTER_TO_II(mod->labels[fail]);
+                    } else {
+                        term match_state = term_alloc_bin_match_state(src, ctx);
 
-                    term match_state = term_alloc_bin_match_state(src, ctx);
-
-                    WRITE_REGISTER(dreg_type, dreg, match_state);
+                        WRITE_REGISTER(dreg_type, dreg, match_state);
+                        NEXT_INSTRUCTION(next_off);
+                    }
                 #endif
 
-                NEXT_INSTRUCTION(next_off);
+                #ifdef IMPL_CODE_LOADER
+                    NEXT_INSTRUCTION(next_off);
+                #endif
                 break;
             }
 
@@ -3972,7 +3980,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     TRACE("bs_context_to_binary/1, dreg=%c%i\n", T_DEST_REG(dreg_type, dreg));
 
                     term src = READ_DEST_REGISTER(dreg_type, dreg);
-                    term bin = term_get_match_state_binary(src);
+                    term bin;
+                    if (term_is_match_state(src)) {
+                        bin = term_get_match_state_binary(src);
+                    } else {
+                        bin = src;
+                    }
                     WRITE_REGISTER(dreg_type, dreg, bin);
                 #endif
 
@@ -4842,21 +4855,26 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_start_match4/5\n");
+                    TRACE("bs_start_match4/4\n");
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    // this is likely one of the only two mandatory VERIFY_*
-                    VERIFY_IS_MATCH_OR_BINARY(src, "bs_start_match4");
-
                     TRACE("bs_start_match4/4, fail=%i live=0x%lx src=0x%lx dreg=%c%i\n", fail, live, src, T_DEST_REG(dreg_type, dreg));
 
-                    term match_state = term_alloc_bin_match_state(src, ctx);
+                    if (!(term_is_binary(src) || term_is_match_state(src))) {
+                        WRITE_REGISTER(dreg_type, dreg, src);
+                        i = POINTER_TO_II(mod->labels[fail]);
+                    } else {
+                        term match_state = term_alloc_bin_match_state(src, ctx);
 
-                    WRITE_REGISTER(dreg_type, dreg, match_state);
+                        WRITE_REGISTER(dreg_type, dreg, match_state);
+                        NEXT_INSTRUCTION(next_off);
+                    }
                 #endif
 
-                NEXT_INSTRUCTION(next_off);
+                #ifdef IMPL_CODE_LOADER
+                    NEXT_INSTRUCTION(next_off);
+                #endif
                 break;
             }
 #endif
