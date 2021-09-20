@@ -2441,13 +2441,11 @@ static term nif_binary_part_3(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    // + 2, which is the binary header size
-    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+    size_t size = term_sub_binary_heap_size(bin_term, len);
+    if (UNLIKELY(memory_ensure_free(ctx, size) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-
-    const char *bin_data = term_binary_data(argv[0]);
-    return term_from_literal_binary(bin_data + pos, len, ctx);
+    return term_maybe_create_sub_binary(argv[0], pos, len, ctx);
 }
 
 static term nif_binary_split_2(Context *ctx, int argc, term argv[])
@@ -2476,22 +2474,19 @@ static term nif_binary_split_2(Context *ctx, int argc, term argv[])
 
     if (found) {
         int tok_size = offset;
-        // + 2, which is the binary header size
-        int tok_size_in_terms = term_binary_data_size_in_terms(tok_size) + BINARY_HEADER_SIZE;
+        size_t tok_size_in_terms = term_sub_binary_heap_size(bin_term, tok_size);
 
         int rest_size = bin_size - offset - pattern_size;
-        // + 2, which is the binary header size
-        int rest_size_in_terms = term_binary_data_size_in_terms(rest_size) + BINARY_HEADER_SIZE;
+        size_t rest_size_in_terms = term_sub_binary_heap_size(bin_term, rest_size);
 
         // + 2 which is the result cons
         if (UNLIKELY(memory_ensure_free(ctx, tok_size_in_terms + rest_size_in_terms + 2) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 
-        const char *bin_data = term_binary_data(argv[0]);
-
-        term tok = term_from_literal_binary(bin_data, tok_size, ctx);
-        term rest = term_from_literal_binary(bin_data + offset + pattern_size, rest_size, ctx);
+        bin_term = argv[0];
+        term tok = term_maybe_create_sub_binary(bin_term, 0, tok_size, ctx);
+        term rest = term_maybe_create_sub_binary(bin_term, offset + pattern_size, rest_size, ctx);
 
         term result_list = term_list_prepend(rest, term_nil(), ctx);
         result_list = term_list_prepend(tok, result_list, ctx);

@@ -331,6 +331,8 @@ struct Test tests[] =
     {"test_gc.beam", 0 },
     {"test_raise.beam", 7},
     {"test_map.beam", 0},
+    {"test_refc_binaries.beam", 0},
+    {"test_sub_binaries.beam", 0},
 
     {"ceilint.beam", 1},
     {"ceilbadarg.beam", -1},

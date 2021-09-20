@@ -53,10 +53,20 @@
 #define TERM_BOXED_REFC_BINARY 0x20
 #define TERM_BOXED_HEAP_BINARY 0x24
 #define TERM_BOXED_MAP 0x3C
+#define TERM_BOXED_SUB_BINARY 0x28
 
 #define TERM_BOXED_REFC_BINARY_SIZE 6
 #define TERM_BOXED_BIN_MATCH_STATE_SIZE 4
-#define REFC_BINARY_MIN 64
+#define TERM_BOXED_SUB_BINARY_SIZE 4
+#if TERM_BYTES == 8
+    #define REFC_BINARY_MIN 64
+    #define SUB_BINARY_MIN 16
+#elif TERM_BYTES == 4
+    #define REFC_BINARY_MIN 32
+    #define SUB_BINARY_MIN 8
+#else
+    #error
+#endif
 
 #define BINARY_HEADER_SIZE 2
 #define FUNCTION_REFERENCE_SIZE 4
@@ -108,6 +118,20 @@ int term_compare(term t, term other, Context *ctx);
  * @return a term (reference) pointing to the newly allocated binary in the process heap.
  */
 term term_alloc_refc_binary(Context *ctx, size_t size, bool is_const);
+
+/**
+ * @brief Create a sub-binary
+ *
+ * @details This function will create a sub-binary on the heap, using the supplied binary,
+ * offset into the binary, and length of the sub-binary.  This function assumes the length
+ * of the referenced binary is greater or equal to offset + len.
+ * @param binary the referenced binary
+ * @param offset the offset into the referenced binary to start the sub-binary
+ * @param len the length (in bytes) of the sub-binary
+ * @param ctx the context in which to allocate memory in the heap
+ * @return a term (reference) pointing to the newly allocated sub-binary in the process heap.
+ */
+term term_alloc_sub_binary(term binary, size_t offset, size_t len, Context *ctx);
 
 /**
  * @brief Gets a pointer to a term stored on the heap
@@ -222,7 +246,7 @@ static inline int term_is_movable_boxed(term t)
     /* boxed: 10 */
     if ((t & 0x3) == 0x2) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        switch (boxed_value[0] & 0x3F) {
+        switch (boxed_value[0] & TERM_BOXED_TAG_MASK) {
             case 0x10:
                 return 1;
 
@@ -275,10 +299,11 @@ static inline int term_is_binary(term t)
     /* boxed: 10 */
     if ((t & 0x3) == 0x2) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        int masked_value = boxed_value[0] & 0x3F;
+        int masked_value = boxed_value[0] & TERM_BOXED_TAG_MASK;
         switch (masked_value) {
             case TERM_BOXED_REFC_BINARY:
             case TERM_BOXED_HEAP_BINARY:
+            case TERM_BOXED_SUB_BINARY:
                 return 1;
             default:
                 return 0;
@@ -300,7 +325,7 @@ static inline bool term_is_refc_binary(term t)
     /* boxed: 10 */
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        int masked_value = boxed_value[0] & 0x3F;
+        int masked_value = boxed_value[0] & TERM_BOXED_TAG_MASK;
         return masked_value == TERM_BOXED_REFC_BINARY;
     }
 
@@ -311,6 +336,24 @@ static inline bool term_refc_binary_is_const(term t)
 {
     const term *boxed_value = term_to_const_term_ptr(t);
     return boxed_value[2] & RefcBinaryIsConst;
+}
+
+/**
+ * @brief Checks if a term is a sub-binary
+ *
+ * @details Returns true if a term is a sub-binary; false, otherwise.
+ * @param t the term that will be checked.
+ * @return true if check succeeds; false, otherwise.
+ */
+static inline bool term_is_sub_binary(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        int masked_value = boxed_value[0] & TERM_BOXED_TAG_MASK;
+        return masked_value == TERM_BOXED_SUB_BINARY;
+    }
+
+    return false;
 }
 
 /**
@@ -342,7 +385,7 @@ static inline int term_is_boxed_integer(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == TERM_BOXED_POSITIVE_INTEGER) {
+        if ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_POSITIVE_INTEGER) {
             return 1;
         }
     }
@@ -842,13 +885,17 @@ static inline const char *term_binary_data(term t)
     TERM_DEBUG_ASSERT(term_is_binary(t));
 
     const term *boxed_value = term_to_const_term_ptr(t);
-    if (!term_is_refc_binary(t)) {
-        return (const char *) (boxed_value + 2);
-    } else if (term_refc_binary_is_const(t)) {
-        return (const char *) boxed_value[3];
-    } else {
-        return (const char *) refc_binary_get_data((struct RefcBinary *) boxed_value[3]);
+    if (term_is_refc_binary(t)) {
+        if (term_refc_binary_is_const(t)) {
+            return (const char *) boxed_value[3];
+        } else {
+            return (const char *) refc_binary_get_data((struct RefcBinary *) boxed_value[3]);
+        }
     }
+    if (term_is_sub_binary(t)) {
+        return term_binary_data(boxed_value[3]) + boxed_value[2]; // offset
+    }
+    return (const char *) (boxed_value + 2);
 }
 
 /**
@@ -890,6 +937,46 @@ static inline term term_from_literal_binary(const void *data, uint32_t size, Con
     term binary = term_create_uninitialized_binary(size, ctx);
     memcpy((void *) term_binary_data(binary), data, size);
     return binary;
+}
+
+/**
+ * @brief Get the number of words in the heap to allocate for a sub-binary.
+ *
+ * @details This function is used to compute the number of words needed on the heap
+ * to allocate for a sub-binary.  This function is typically used in conjunction with
+ *term_maybe_create_sub_binary
+ * @param binary source binary
+ * @param len desired length of the sub-binary
+ * @return the number of words needed to allocate on the process heap for the desired sub-binary
+ */
+static inline size_t term_sub_binary_heap_size(term binary, size_t len)
+{
+    if (term_is_refc_binary(binary) && len >= SUB_BINARY_MIN) {
+        return TERM_BOXED_SUB_BINARY_SIZE;
+    } else {
+        return term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
+    }
+}
+
+/**
+ * @brief (Maybe) create a sub-binary -- if not, create a heap binary.
+ *
+ * @details Allocates a sub-binary if the source binary is reference-counted
+ * binary and if the length of the sub-binary is sufficiently large.
+ * @param binary source binary
+ * @param offset offset into the source binary marking the start of the sub-binary
+ * @param len desired length of the sub-binary
+ * @param ctx the context that owns the memory that will be allocated.
+ * @return a term pointing to the boxed binary pointer.
+ */
+static inline term term_maybe_create_sub_binary(term binary, size_t offset, size_t len, Context *ctx)
+{
+    if (term_is_refc_binary(binary) && len >= SUB_BINARY_MIN) {
+        return term_alloc_sub_binary(binary, offset, len, ctx);
+    } else {
+        const char *data = term_binary_data(binary);
+        return term_from_literal_binary(data + offset, len, ctx);
+    }
 }
 
 static inline void term_set_refc_binary_data(term t, const char *data)
@@ -1475,7 +1562,7 @@ static inline int term_is_map(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == TERM_BOXED_MAP) {
+        if ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_MAP) {
             return 1;
         }
     }
@@ -1552,6 +1639,12 @@ static inline int term_find_map_pos(Context *ctx, term map, term key)
         }
     }
     return -1;
+}
+
+static inline term term_get_sub_binary_ref(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return boxed_value[3];
 }
 
 #endif

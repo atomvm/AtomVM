@@ -270,7 +270,11 @@ unsigned long memory_estimate_usage(term t)
 
         } else if (term_is_boxed(t)) {
             acc += term_boxed_size(t) + 1;
-            t = temp_stack_pop(&temp_stack);
+            if (term_is_sub_binary(t)) {
+                t = term_get_sub_binary_ref(t);
+            } else {
+                t = temp_stack_pop(&temp_stack);
+            }
 
         } else {
             fprintf(stderr, "bug: found unknown term type: 0x%lx\n", t);
@@ -364,8 +368,14 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
                     if (!term_refc_binary_is_const(ref)) {
                         *mso_list = term_list_init_prepend(ptr + REFC_BINARY_CONS_OFFET, ref, *mso_list);
                     }
-                }
                     break;
+                }
+
+                case TERM_BOXED_SUB_BINARY: {
+                    TRACE("- Found sub binary.\n");
+                    ptr[3] = memory_shallow_copy_term(ptr[3], &new_heap, move);
+                    break;
+                }
 
                 case TERM_BOXED_HEAP_BINARY:
                     TRACE("- Found binary.\n");
