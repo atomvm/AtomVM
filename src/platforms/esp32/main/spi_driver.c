@@ -31,6 +31,7 @@
 #include "context.h"
 #include "debug.h"
 #include "defaultatoms.h"
+#include "dictionary.h"
 #include "globalcontext.h"
 #include "interop.h"
 #include "mailbox.h"
@@ -39,6 +40,7 @@
 #include "term.h"
 #include "utils.h"
 
+// #define ENABLE_TRACE
 #include "trace.h"
 
 #include "esp32_sys.h"
@@ -48,6 +50,9 @@ static void spidriver_consume_mailbox(Context *ctx);
 
 static uint32_t spidriver_transfer_at(Context *ctx, uint64_t address, int data_len, uint32_t data, bool *ok);
 
+static const char *const spi_driver_atom = "\xA" "spi_driver";
+static term spi_driver;
+
 struct SPIData
 {
     spi_device_handle_t handle;
@@ -56,7 +61,8 @@ struct SPIData
 
 void spi_driver_init(GlobalContext *global)
 {
-    // no-op
+    int index = globalcontext_insert_atom(global, spi_driver_atom);
+    spi_driver = term_from_atom_index(index);
 }
 
 Context *spi_driver_create_port(GlobalContext *global, term opts)
@@ -218,6 +224,15 @@ static term spidriver_write_at(Context *ctx, term req)
     return make_read_result_tuple(read_value, ctx);
 }
 
+static term create_pair(Context *ctx, term term1, term term2)
+{
+    term ret = term_alloc_tuple(2, ctx);
+    term_put_tuple_element(ret, 0, term1);
+    term_put_tuple_element(ret, 1, term2);
+
+    return ret;
+}
+
 static void spidriver_consume_mailbox(Context *ctx)
 {
     Message *message = mailbox_dequeue(ctx);
@@ -249,8 +264,17 @@ static void spidriver_consume_mailbox(Context *ctx)
             ret = ERROR_ATOM;
     }
 
-    mailbox_destroy_message(message);
+    dictionary_put(&ctx->dictionary, ctx, spi_driver, ret);
+    term ret_msg;
+    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+        ret_msg = OUT_OF_MEMORY_ATOM;
+    } else {
+        ret = dictionary_get(&ctx->dictionary, ctx, spi_driver);
+        ref = term_get_tuple_element(msg, 1);
+        ret_msg = create_pair(ctx, ref, ret);
+    }
+    dictionary_erase(&ctx->dictionary, ctx, spi_driver);
 
-    UNUSED(ref);
-    mailbox_send(target, ret);
+    mailbox_send(target, ret_msg);
+    mailbox_destroy_message(message);
 }

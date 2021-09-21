@@ -18,6 +18,7 @@ set(ERLANG_MODULES
     logger
     network
     network_fsm
+    port
     spi
     timer_manager
     timestamp_util
