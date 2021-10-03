@@ -4448,7 +4448,8 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     //
                     size_t src_size = term_get_map_size(src);
                     size_t new_map_size = src_size + new_entries;
-                    size_t heap_needed = term_map_size_in_terms(new_map_size);
+                    bool is_shared = new_entries == 0;
+                    size_t heap_needed = term_map_size_in_terms_maybe_shared(new_map_size, is_shared);
                     if (memory_ensure_free(ctx, heap_needed) != MEMORY_GC_OK) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
@@ -4472,7 +4473,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     // Create a new map of the requested size and stitch src
                     // and kv together into new map.  Both src and kv are sorted.
                     //
-                    term map = term_alloc_map(ctx, new_map_size);
+                    term map = term_alloc_map_maybe_shared(ctx, new_map_size, is_shared ? term_get_map_keys(src) : term_invalid_term());
                     int src_pos = 0;
                     int kv_pos = 0;
                     for (int j = 0; j < new_map_size; j++) {
@@ -4555,14 +4556,14 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     // Maybe GC, and reset the src term in case it changed
                     //
                     size_t src_size = term_get_map_size(src);
-                    if (memory_ensure_free(ctx, term_map_size_in_terms(src_size)) != MEMORY_GC_OK) {
+                    if (memory_ensure_free(ctx, term_map_size_in_terms_maybe_shared(src_size, true)) != MEMORY_GC_OK) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     DECODE_COMPACT_TERM(src, code, i, src_offset, src_offset);
                     //
                     // Create a new map of the same size as src and populate with entries from src
                     //
-                    term map = term_alloc_map(ctx, src_size);
+                    term map = term_alloc_map_maybe_shared(ctx, src_size, term_get_map_keys(src));
                     for (int j = 0;  j < src_size;  ++j) {
                         term_set_map_assoc(map, j, term_get_map_key(src, j), term_get_map_value(src, j));
                     }
