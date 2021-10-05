@@ -1580,20 +1580,29 @@ static inline size_t term_get_map_value_offset()
     return 2;
 }
 
-static inline int term_map_size_in_terms(size_t num_entries)
+static inline int term_map_size_in_terms_maybe_shared(size_t num_entries, bool is_shared)
 {
-    return 2 + (1 + num_entries) + num_entries;
+    return 2 + (is_shared ? 0 : (1 + num_entries)) + num_entries;
 }
 
-
-static inline term term_alloc_map(Context *ctx, avm_uint_t size)
+static inline int term_map_size_in_terms(size_t num_entries)
 {
-    term keys = term_alloc_tuple(size, ctx);
+    return term_map_size_in_terms_maybe_shared(num_entries, false);
+}
+
+static inline term term_alloc_map_maybe_shared(Context *ctx, avm_uint_t size, term keys)
+{
+    keys = term_is_invalid_term(keys) ? term_alloc_tuple(size, ctx) : keys;
     term *boxed_value = memory_heap_alloc(ctx, 2 + size);
     boxed_value[0] = ((1 + size) << 6) | TERM_BOXED_MAP;
     boxed_value[term_get_map_keys_offset()] = keys;
 
     return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+}
+
+static inline term term_alloc_map(Context *ctx, avm_uint_t size)
+{
+    return term_alloc_map_maybe_shared(ctx, size, term_invalid_term());
 }
 
 static inline term term_get_map_keys(term t)
