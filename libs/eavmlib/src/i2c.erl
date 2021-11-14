@@ -49,7 +49,7 @@ open(Param) ->
 %%-----------------------------------------------------------------------------
 -spec begin_transmission(I2c::i2c(), Address::address()) -> ok | error.
 begin_transmission(I2C, Address) ->
-    call(I2C, begin_transmission, Address).
+    port:call(I2C, {begin_transmission, Address}).
 
 %%-----------------------------------------------------------------------------
 %% @param   I2C I2C instance created via `open/1'
@@ -63,7 +63,7 @@ begin_transmission(I2C, Address) ->
 %%-----------------------------------------------------------------------------
 -spec write_byte(I2c::i2c(), Byte::byte()) -> ok | error.
 write_byte(I2C, Byte) ->
-    call(I2C, write_byte, Byte).
+    port:call(I2C, {write_byte, Byte}).
 
 %%-----------------------------------------------------------------------------
 %% @param   I2C I2C instance created via `open/1'
@@ -77,7 +77,7 @@ write_byte(I2C, Byte) ->
 %%-----------------------------------------------------------------------------
 -spec end_transmission(I2c::i2c()) -> ok | error.
 end_transmission(I2C) ->
-    call(I2C, end_transmission).
+    port:call(I2C, {end_transmission}).
 
 %%-----------------------------------------------------------------------------
 %% @param   I2C I2C instance created via `open/1'
@@ -92,7 +92,7 @@ end_transmission(I2C) ->
 %%-----------------------------------------------------------------------------
 -spec read_bytes(I2c::i2c(), Address::address(), Count:: non_neg_integer()) -> error | binary().
 read_bytes(I2C, Address, Count) ->
-    call(I2C, read_bytes, Address, Count).
+    port:call(I2C, {read_bytes, Address, Count}).
 
 %%-----------------------------------------------------------------------------
 %% @param   I2C I2C instance created via `open/1'
@@ -109,7 +109,7 @@ read_bytes(I2C, Address, Count) ->
 %%-----------------------------------------------------------------------------
 -spec read_bytes(I2c::i2c(), Address::address(), Register::register(), Count:: non_neg_integer()) -> error | binary().
 read_bytes(I2C, Address, Register, Count) ->
-    call(I2C, read_bytes, Address, Count, Register).
+    port:call(I2C, {read_bytes, Address, Count, Register}).
 
 %%-----------------------------------------------------------------------------
 %% @param   I2C I2C instance created via `open/1'
@@ -124,7 +124,7 @@ read_bytes(I2C, Address, Register, Count) ->
 %%-----------------------------------------------------------------------------
 -spec write_bytes(I2c::i2c(), Address::address(), BinOrInt :: binary() | byte()) -> ok | error.
 write_bytes(I2C, Address, BinOrInt) ->
-    call(I2C, write_bytes, Address, BinOrInt).
+    port:call(I2C, {write_bytes, Address, BinOrInt}).
 
 %%-----------------------------------------------------------------------------
 %% @param   I2C I2C instance created via `open/1'
@@ -141,40 +141,4 @@ write_bytes(I2C, Address, BinOrInt) ->
 %%-----------------------------------------------------------------------------
 -spec write_bytes(I2c::i2c(), Address::address(), Register::register(), BinOrInt :: binary() | integer()) -> ok | error.
 write_bytes(I2C, Address, Register, BinOrInt) ->
-    call(I2C, write_bytes, Address, BinOrInt, Register).
-
-%%
-%% Internal functions
-%%
-
-%% @private
-call(I2C, Call) ->
-    I2C ! {self(), make_ref(), {Call}},
-    receive
-        Ret ->
-            Ret
-    end.
-
-%% @private
-call(I2C, Call, A) ->
-    I2C ! {self(), make_ref(), {Call, A}},
-    receive
-        Ret ->
-            Ret
-    end.
-
-%% @private
-call(I2C, Call, A, B) ->
-    I2C ! {self(), make_ref(), {Call, A, B}},
-    receive
-        Ret ->
-            Ret
-    end.
-
-%% @private
-call(I2C, Call, A, B, C) ->
-    I2C ! {self(), make_ref(), {Call, A, B, C}},
-    receive
-        Ret ->
-            Ret
-    end.
+    port:call(I2C, {write_bytes, Address, BinOrInt, Register}).
