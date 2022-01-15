@@ -1532,15 +1532,19 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 USED_BY_TRACE(live_registers);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (context_avail_free_memory(ctx) < heap_need) {
+                    size_t heap_free = context_avail_free_memory(ctx);
+                    // if we need more heap space than is currently free, then try to GC the needed space
+                    if (heap_free < heap_need) {
                         context_clean_registers(ctx, live_registers);
                         if (UNLIKELY(memory_ensure_free(ctx, heap_need) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
-                    } else if (context_avail_free_memory(ctx) > heap_need * HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF) {
+                    // otherwise, there is enough space for the needed heap, but there might
+                    // more more than necessary.  In that case, try to shrink the heap.
+                    } else if (heap_free > heap_need * HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF) {
                         context_clean_registers(ctx, live_registers);
-                        int used_size = context_memory_size(ctx) - context_avail_free_memory(ctx);
-                        if (UNLIKELY(memory_ensure_free(ctx, used_size + heap_need * (HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF / 2)) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free(ctx, heap_need * (HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF / 2)) != MEMORY_GC_OK)) {
+                            TRACE("Unable to ensure free memory.  heap_need=%i\n", heap_need);
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     }
