@@ -14,7 +14,7 @@
 -module(i2c).
 -export([
     open/1, begin_transmission/2, write_byte/2, end_transmission/1,
-    read_bytes/3, read_bytes/4, write_bytes/3, write_bytes/4
+    read_bytes/3, read_bytes/4, write_bytes/2, write_bytes/3, write_bytes/4
 ]).
 
 -type pin() :: non_neg_integer().
@@ -64,6 +64,20 @@ begin_transmission(I2C, Address) ->
 -spec write_byte(I2c::i2c(), Byte::byte()) -> ok | error.
 write_byte(I2C, Byte) ->
     port:call(I2C, {write_byte, Byte}).
+
+%%-----------------------------------------------------------------------------
+%% @param   I2C I2C instance created via `open/1'
+%% @param   Byte value to write
+%% @returns `ok' or `error'
+%% @doc     Write a sequence of bytes to the device.
+%%
+%%          This command must be wrapped in a `begin_transmission/2'
+%%          and `end_transmission/1' call.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec write_bytes(I2c::i2c(), Bytes::binary()) -> ok | error.
+write_bytes(I2C, Bytes) ->
+    port:call(I2C, {write_bytes, Bytes}).
 
 %%-----------------------------------------------------------------------------
 %% @param   I2C I2C instance created via `open/1'
