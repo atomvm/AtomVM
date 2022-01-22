@@ -792,6 +792,15 @@ static inline term term_make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
     }
 }
 
+static inline size_t term_boxed_integer_size(avm_int64_t value)
+{
+     if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
+         return BOXED_INT_SIZE;
+     } else {
+         return 0;
+     }
+}
+
 static inline term term_from_catch_label(unsigned int module_index, unsigned int label)
 {
     return (term) ((module_index << 24) | (label << 6) | TERM_CATCH_TAG);

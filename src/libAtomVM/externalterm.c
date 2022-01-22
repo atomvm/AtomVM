@@ -325,7 +325,8 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
             int32_t value = READ_32_UNALIGNED(external_term_buf + 1);
 
             *eterm_size = 5;
-            return term_from_int32(value);
+
+            return term_make_maybe_boxed_int64(ctx, value);
         }
 
         case ATOM_EXT: {
@@ -484,8 +485,9 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_siz
         }
 
         case INTEGER_EXT: {
+            int32_t value = READ_32_UNALIGNED(external_term_buf + 1);
             *eterm_size = 5;
-            return 0;
+            return term_boxed_integer_size(value);
         }
 
         case ATOM_EXT: {

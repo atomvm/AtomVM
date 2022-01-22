@@ -280,6 +280,7 @@ struct Test tests[] =
     {"boxedabs.beam", 15},
     {"boxedneg.beam", 15},
     {"boxedmul.beam", 15},
+    {"boxedlit.beam", 1073741824},
     {"pow32.beam", 528},
     {"pow64.beam", 1794},
     {"pow32_is_integer.beam", 528},
