@@ -1,3 +1,9 @@
+<!--
+ Copyright 2019-2020 Fred Dushin <fred@dushin.net>
+
+ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+-->
+
 # AtomVM ESP Programming Manual
 
 AtomVM provides ESP-specific APIs for programming on the ESP platform.  This document provides a description of these APIs.

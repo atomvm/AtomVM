@@ -1,5 +1,5 @@
-#
-# Copyright (c) 2019 Riccardo Binetti <rbino@gmx.com>
+# Copyright 2019 Riccardo Binetti <rbino@gmx.com>
+# SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 # This builds a docker image that is able to build ESP32 and STM32 AtomVM platforms
 #

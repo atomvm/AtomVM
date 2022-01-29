@@ -1,3 +1,9 @@
+<!--
+ Copyright 2020 Fred Dushin <fred@dushin.net>
+
+ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+-->
+
 # LED Control API
 
 The LED Control API can be used to drive LEDs, as well as generate PWM signals on GPIO pins.

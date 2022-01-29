@@ -1,3 +1,9 @@
+<!--
+ Copyright 2018-2019 Riccardo Binetti <rbino@gmx.com>
+
+ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+-->
+
 # STM32F4Discovery example
 
 This example will blink the 4 LEDs present on the STM32F4Discovery with

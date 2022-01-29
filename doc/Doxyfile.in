@@ -1,3 +1,7 @@
+# Copyright 2018 Davide Bettio <davide@uninstall.it>
+# Copyright 2018-2020 Fred Dushin <fred@dushin.net>
+# SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+
 # Doxyfile 1.8.15
 
 # This file describes the settings to be used by the documentation system

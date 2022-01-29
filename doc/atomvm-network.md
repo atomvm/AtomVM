@@ -1,3 +1,9 @@
+<!--
+ Copyright 2020 Fred Dushin <fred@dushin.net>
+
+ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+-->
+
 # AtomVM Network Programming Manual
 
 One of the exciting features of the ESP32 is its support for WiFi networking, allowing ESP32 micro-controllers to communicate with the outside world over common IP networking protocols, such as TCP or IDP.  The ESP32 and ISF SDK supports configuring an ESP32 in station mode (STA), whereby the device connects to an existing access point, as well as "softAP" mode (AP), whereby it functions as an access point, to which other stations can connect.   The ESP32 also supports a combined STA+softAP mode, which allows the device to function in both STA and softAP mode simultaneously.

@@ -1,3 +1,9 @@
+<!--
+ Copyright 2018 Riccardo Binetti <rbino@gmx.com>
+
+ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+-->
+
 # AtomVM for STM32
 
 ## Prerequisites

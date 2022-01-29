@@ -1,3 +1,8 @@
+<!---
+  Copyright 2020 Fred Dushin <fred@dushin.net>
+
+  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+-->
 
 This document provides internal implementation details about the build system for AtomVM on the ESP32.  You should read this document if you are doing maintenance or adding features (such as support for peripherals or protocols) to the ESP32 port of AtomVM.
 

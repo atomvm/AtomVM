@@ -1,3 +1,9 @@
+<!--
+ Copyright 2020-2021 Fred Dushin <fred@dushin.net>
+
+ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+-->
+
 # AtomVM on the ESP32
 
 These notes describe special considerations about the implementation of AtomVM on the <a href="https://www.espressif.com/en/products/socs/esp32/overview">ESP32</a> platform.

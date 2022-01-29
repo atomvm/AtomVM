@@ -1,3 +1,9 @@
+<!--
+ Copyright 2018-2022 Fred Dushin <fred@dushin.net>
+
+ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+-->
+
 # AtomVM {#mainpage}
 
 The `AtomVM` project provides a ground-up implementation of the "Bogdan Erlang Abstract Machine" (BEAM), the underlying runtime for the Erlang and Elixer (among other) BEAM-targeted programming environments.  `AtomVM` is intended to execute Erlang or Elixer programs that have ben compiled down to the BEAM instruction set.
