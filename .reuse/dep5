@@ -1,0 +1,19 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: AtomVM
+Source: https://github.com/bettio/AtomVM
+
+Files: src/platforms/esp32/sdkconfig
+Copyright: AtomVM Contributors
+License: Apache-2.0
+
+Files: libs/*/rebar.lock
+Copyright: AtomVM Contributors
+License: CC0-1.0
+
+Files: libs/*/mix.lock
+Copyright: AtomVM Contributors
+License: CC0-1.0
+
+Files: .github/pull_request_template.md
+Copyright: Davide Bettio <davide@uninstall.it>
+License: CC0-1.0
