@@ -4,38 +4,45 @@
   SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 -->
 
-:アトムＶＭ
+AtomVM
 ===========
 
-Brings meme languages ＡＥＳＴＨＥＴＩＣＳ to really small systems.
+Brings [Erlang](https://www.erlang.org/), [Elixir](https://elixir-lang.org/) and other functional
+languages to really small systems.
 
 AtomVM implements from scratch a minimal Erlang VM that supports a subset of ErlangVM features and that is able to run unmodified BEAM binaries on really small systems like MCUs.
-
-Dependencies
-============
-
-* CMake ([CMake build system](https://cmake.org/)) is required to build AtomVM.
-* gperf ([GNU Perfect Hash Function Generator](https://www.gnu.org/software/gperf/manual/gperf.html)) is required to build AtomVM.
-* erlc ([erlang compiler](https://www.erlang.org/)) is required to build AtomVM
-* zlib ([zlib compression and decompression library](https://zlib.net/)) is optionally needed to run standard BEAM files (without uncompressed literals extension).
-
-* gcov and lcov are optionally required to generate coverage report (make coverage).
-* doxygen is optionally required to generate documentation (make doc).
 
 Supported Platforms
 ===================
 
-* Linux
-* Darwin (MacOS)
-* FreeBSD
-* ESP32 SoC (with IDF and FreeRTOS software platforms, see [README.ESP32.Md](README.ESP32.Md))
+* Linux, macOS, FreeBSD ([generic unix](src/platforms/generic_unix))
+* ESP32 SoC (with IDF/FreeRTOS, see [README.ESP32.Md](README.ESP32.Md))
 * STM32 MCUs (with LibOpenCM3, see [README.STM32.Md](README.STM32.Md))
 
-AtomVM aims to be easily portable to a new platform with a minimum effort, so more platforms might be supported in a near future.
+AtomVM aims to be easily portable to new platforms with a minimum effort, so additional platforms
+might be supported in a near future.
 
-Getting Started (on Linux)
-==========================
+Getting Started
+===============
 
+Dependencies
+------------
+
+Required for building:
+* CMake ([CMake build system](https://cmake.org/))
+* gperf ([GNU Perfect Hash Function Generator](https://www.gnu.org/software/gperf/manual/gperf.html))
+* erlc ([erlang compiler](https://www.erlang.org/))
+
+Optional:
+* zlib ([zlib compression and decompression library](https://zlib.net/)) is optionally needed to run
+  standard BEAM files (without uncompressed literals extension).
+
+Documentation and Coverage:
+* gcov and lcov are optionally required to generate coverage report (`make coverage`).
+* doxygen is optionally required to generate documentation (`make doc`).
+
+Step-by-Step Build Instructions (generic unix platform)
+-------------------------------------------------------
 
 ```
 $ mkdir build
@@ -45,14 +52,17 @@ $ make
 $ ./src/AtomVM ./examples/erlang/hello_world.avm
 ```
 
+See also [README.ESP32.Md](README.ESP32.Md) and [README.STM32.Md](README.STM32.Md) for platform
+specific build instructions.
+
 Project Status
 ==============
 
 [![Build Status](https://travis-ci.com/bettio/AtomVM.svg?branch=master)](https://travis-ci.com/bettio/AtomVM)
 
-Right now only binaries compiled with OTP 20-23 are supported.
+AtomVM is still in its early stages, but it can run simple applications similar to those available
+in [examples](examples/) and [tests](tests/).
 
-AtomVM is still in its early stages, but it can run simple applications similar to those available in examples and tests.
 AtomVM might crash with a similar message:
 ```
 Undecoded opcode: 15
@@ -60,10 +70,27 @@ Aborted (core dumped)
 ```
 This basically means that an instruction has not been implemented yet, or that an outdated version has been used. Please, make sure to always run AtomVM using latest version.
 
-Known limitations
+**Right now only binaries compiled with OTP 20-23 are supported.**
+
+Known Limitations
 -----------------
 This project is a work in progress, so there are several known limitations, that will prevent to run unmodified software, some of them are:
 * There is a minimal standard library, so several standard functions are missing.
 * Several instructions are not yet implemented.
 
 All of these limitations are going to be fixed in a reasonable amount of time.
+
+About This Project
+==================
+This project has been created by [Davide Bettio](https://github.com/bettio/), and now is developed
+from a growing number of contributors.
+
+How to Contribute
+-----------------
+Any kind of [contribution](CONTRIBUTING.md) is welcome, you can either contribute to this repository
+by improving the virtual machine, the core libraries or the documentation or by contributing to any
+of the [organization](https://github.com/atomvm) repositories.
+
+License
+-------
+This project is under the terms of the Apache 2.0 license.
