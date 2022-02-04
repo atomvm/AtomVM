@@ -1,0 +1,215 @@
+#
+#  Copyright 2017-2022 Davide Bettio <davide@uninstall.it>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: Build and Test
+
+on: [push, pull_request]
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: ["ubuntu-18.04", "ubuntu-20.04"]
+        cc: ["gcc-4.8", "gcc-5", "gcc-6", "gcc-7", "gcc-8", "gcc-9", "gcc-10", "clang-3.9",
+        "clang-10"]
+        cflags: ["-Os", "-O2", "-O3"]
+        otp: ["21.0", "22.0", "23.0"]
+
+        exclude:
+        - os: "ubuntu-18.04"
+          cc: "gcc-7"
+        - os: "ubuntu-18.04"
+          cc: "gcc-8"
+        - os: "ubuntu-18.04"
+          cc: "gcc-9"
+        - os: "ubuntu-18.04"
+          cc: "clang-10"
+        - os: "ubuntu-18.04"
+          cc: "gcc-10"
+
+        - os: "ubuntu-20.04"
+          cc: "gcc-4.8"
+        - os: "ubuntu-20.04"
+          cc: "gcc-5"
+        - os: "ubuntu-20.04"
+          cc: "gcc-6"
+        - os: "ubuntu-20.04"
+          cc: "clang-3.9"
+
+        - cc: "gcc-5"
+          cflags: "-Os"
+        - cc: "gcc-6"
+          cflags: "-Os"
+        - cc: "gcc-7"
+          cflags: "-Os"
+        - cc: "gcc-8"
+          cflags: "-Os"
+        - cc: "gcc-9"
+          cflags: "-Os"
+
+        - cc: "gcc-5"
+          cflags: "-O3"
+        - cc: "gcc-6"
+          cflags: "-O3"
+        - cc: "gcc-7"
+          cflags: "-O3"
+        - cc: "gcc-8"
+          cflags: "-O3"
+        - cc: "gcc-9"
+          cflags: "-O3"
+
+        include:
+        - cc: "gcc-4.8"
+          cxx: "g++-4.8"
+          compiler_pkgs: "gcc-4.8 g++-4.8"
+        - cc: "gcc-5"
+          cxx: "g++-5"
+          compiler_pkgs: "gcc-5 g++-5"
+        - cc: "gcc-6"
+          cxx: "g++-6"
+          compiler_pkgs: "gcc-6 g++-6"
+        - cc: "gcc-7"
+          cxx: "g++-7"
+          compiler_pkgs: "gcc-7 g++-7"
+        - cc: "gcc-8"
+          cxx: "g++-8"
+          compiler_pkgs: "gcc-8 g++-8"
+        - cc: "gcc-9"
+          cxx: "g++-9"
+          compiler_pkgs: "gcc-9 g++-9"
+        - cc: "gcc-10"
+          cxx: "g++-10"
+          compiler_pkgs: "gcc-10 g++-10"
+        - cc: "clang-3.9"
+          cxx: "clang++-3.9"
+          compiler_pkgs: "clang-3.9"
+        - cc: "clang-10"
+          cxx: "clang++-10"
+          compiler_pkgs: "clang-10"
+
+        - otp: "21.0"
+          elixir_version: "1.7"
+          cmake_opts: ""
+
+        - otp: "22.0"
+          elixir_version: "1.8"
+          cmake_opts: "-DAVM_DISABLE_FP=on"
+
+        - otp: "23.0"
+          elixir_version: "1.9"
+          cmake_opts: "-DAVM_DISABLE_FP=on"
+
+        - os: "ubuntu-18.04"
+          cc: "gcc-4.8"
+          cxx: "g++-4.8"
+          cflags: "-m32 -O2"
+          otp: "21.0"
+          elixir_version: "1.7"
+          cmake_opts: "-DOPENSSL_CRYPTO_LIBRARY=/usr/lib/i386-linux-gnu/libcrypto.so"
+          arch: "i386"
+          compiler_pkgs: "gcc-4.8 g++-4.8 gcc-4.8-multilib g++-4.8-multilib libc6-dev-i386
+          libc6-dbg:i386 zlib1g-dev:i386 libssl-dev:i386"
+
+        - os: "ubuntu-20.04"
+          cc: "gcc-10"
+          cxx: "g++-10"
+          cflags: "-m32 -O3"
+          otp: "23.0"
+          elixir_version: "1.9"
+          cmake_opts: "-DOPENSSL_CRYPTO_LIBRARY=/usr/lib/i386-linux-gnu/libcrypto.so
+          -DAVM_DISABLE_FP=on"
+          arch: "i386"
+          compiler_pkgs: "gcc-10 g++-10 gcc-10-multilib g++-10-multilib libc6-dev-i386
+          libc6-dbg:i386 zlib1g-dev:i386 libssl-dev:i386"
+
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+      CFLAGS: ${{ matrix.cflags }}
+      CXXFLAGS: ${{ matrix.cflags }}
+
+    steps:
+    # Setup
+    - name: "Checkout repo"
+      uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+
+    - uses: erlef/setup-beam@v1.10.0
+      with:
+        otp-version: ${{ matrix.otp }}
+        elixir-version: ${{ matrix.elixir_version }}
+
+    - name: "Add i386 architecture"
+      if: matrix.arch == 'i386'
+      run: sudo dpkg --add-architecture i386
+
+    - name: "APT update"
+      run: sudo apt update -y
+
+    - name: "Install deps"
+      run: sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen valgrind
+
+    # Builder info
+    - name: "System info"
+      run: |
+        echo "**uname:**"
+        uname -a
+        echo "**libc version:**"
+        ldd --version
+        echo "**C Compiler version:**"
+        $CC --version
+        $CXX --version
+        echo "**Linker version:**"
+        ld --version
+        echo "**CMake version:**"
+        cmake --version
+        echo "**OTP version:**"
+        cat $(dirname $(which erlc))/../releases/RELEASES || true
+
+    # Build
+    - name: "Build: create build dir"
+      run: mkdir build
+
+    - name: "Build: run cmake"
+      working-directory: build
+      run: cmake ${{ matrix.cmake_opts }} ..
+
+    - name: "Build: run make"
+      working-directory: build
+      run: make
+
+    # Test
+    - name: "Test: test-erlang"
+      working-directory: build
+      run: |
+        ./tests/test-erlang
+        valgrind ./tests/test-erlang
+
+    - name: "Test: test-structs"
+      working-directory: build
+      run: |
+        ./tests/test-structs
+        valgrind ./tests/test-structs
+
+    - name: "Test: test_estdlib.avm"
+      working-directory: build
+      run: |
+        ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+        valgrind ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+
+    - name: "Test: test_eavmlib.avm"
+      working-directory: build
+      run: |
+        ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+        valgrind ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+
+    - name: "Test: test_alisp.avm"
+      working-directory: build
+      run: |
+        ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
+        valgrind ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
