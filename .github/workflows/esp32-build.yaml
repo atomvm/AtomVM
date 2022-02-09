@@ -16,8 +16,8 @@ jobs:
       uses: actions/checkout@v2
       with:
         submodules: 'recursive'
-    - name: Build: customized esp-idf container
+    - name: "Build: customized esp-idf container"
       run: docker build -t atomvm/ci-idf:v3.3.2 -f esp32-dockerfile .
       working-directory: .github/workflows
-    - name: Build: AtomVM (ESP32 platform)
+    - name: "Build: AtomVM (ESP32 platform)"
       run: docker run --rm -v $PWD:/atomvm -w /atomvm atomvm/ci-idf:v3.3.2 src/platforms/esp32
