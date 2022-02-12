@@ -33,6 +33,9 @@ test() ->
     ok = test_cast(),
     ok = test_info(),
     ok = test_start_link(),
+    ok = test_init_exception(),
+    ok = test_late_reply(),
+    ok = test_concurrent_clients(),
     ok.
 
 test_call() ->
@@ -40,7 +43,7 @@ test_call() ->
 
     pong = gen_server:call(Pid, ping),
     pong = gen_server:call(Pid, reply_ping),
-    %pong = gen_server:call(Pid, async_ping),
+    pong = gen_server:call(Pid, async_ping),
 
     gen_server:stop(Pid),
     ok.
@@ -86,10 +89,73 @@ test_info() ->
     ok.
 
 
+ test_init_exception() ->
+     try
+        case gen_server:start(?MODULE, throwme, []) of
+            {ok, _Pid} ->
+                expected_error_on_exception;
+            {error, _Reason} ->
+                ok
+        end
+    catch
+        _:E ->
+            {did_not_expect_an_exception, E}
+    end.
+
+
+test_late_reply() ->
+    {ok, Pid} = gen_server:start(?MODULE, [], []),
+    %%
+    %% just check to make sure messages make it back before the timeout
+    %%
+    ok = gen_server:call(Pid, {reply_after, 0, ok}),
+    ok = gen_server:call(Pid, {reply_after, 100, ok}, 200),
+    %%
+    %% this one should time out
+    %%
+    {error, timeout} = gen_server:call(Pid, {reply_after, 300, ok}, 200),
+    %%
+    %% flush the late message in the mailbox
+    %%
+    timer:sleep(150),
+    {message_queue_len, 1} = erlang:process_info(self(), message_queue_len),
+    ok = gen_server:call(Pid, {reply_after, 0, ok}),
+    {message_queue_len, 0} = erlang:process_info(self(), message_queue_len),
+    %%
+    gen_server:stop(Pid),
+    ok.
+
+test_concurrent_clients() ->
+    {ok, Pid} = gen_server:start(?MODULE, [], []),
+    Self = self(),
+    P1 = spawn(fun() -> make_requests(Pid, Self, 1,  1000) end),
+    P2 = spawn(fun() -> make_requests(Pid, Self, 10, 100) end),
+    P3 = spawn(fun() -> make_requests(Pid, Self, 20, 50) end),
+    wait_for(P1),
+    wait_for(P2),
+    wait_for(P3),
+    %%
+    gen_server:stop(Pid),
+    ok.
+
+make_requests(_Pid, Waiting, _ReplyAfter, 0) ->
+    Waiting ! self();
+make_requests(Pid, Waiting, ReplyAfter, I) ->
+    Ref = erlang:make_ref(),
+    Ref = gen_server:call(Pid, {reply_after, ReplyAfter, Ref}),
+    make_requests(Pid, Waiting, ReplyAfter, I - 1).
+
+wait_for(P) ->
+    receive
+        P -> ok
+    end.
+
 %%
 %% callbacks
 %%
 
+init(throwme) ->
+    throw(throwme);
 init(_) ->
     {ok, #state{}}.
 
@@ -99,7 +165,10 @@ handle_call(reply_ping, From, State) ->
     gen_server:reply(From, pong),
     {noreply, State};
 handle_call(async_ping, From, State) ->
-    erlang:spawn(gen_server, reply, [{From, pong}]),
+    erlang:spawn(gen_server, reply, [From, pong]),
+    {noreply, State};
+handle_call({reply_after, Ms, Reply}, From, State) ->
+    spawn(fun() -> timer:sleep(Ms), gen_server:reply(From, Reply) end),
     {noreply, State};
 handle_call(get_num_casts, From, #state{num_casts=NumCasts} = State) ->
     gen_server:reply(From, NumCasts),

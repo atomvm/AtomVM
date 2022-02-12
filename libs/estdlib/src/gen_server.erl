@@ -81,22 +81,31 @@
 
 -type options() :: list({atom(), term()}).
 -type server_ref() :: atom() | pid().
+-type from() :: any().
 
 init_it(Starter, Module, Args, Options) ->
-    case Module:init(Args) of
-        {ok, ModState} ->
-            init_ack(Starter, ok),
-            State = #state{
-                name = proplists:get_value(name, Options),
-                mod = Module,
-                mod_state = ModState
-            },
-            loop(State);
-        {stop, Reason} ->
-            init_ack(Starter, {error, {init_stopped, Reason}});
-        _ ->
-            init_ack(Starter, {error, unexpected_reply_from_init})
-    end.
+    State = try
+        case Module:init(Args) of
+            {ok, ModState} ->
+                init_ack(Starter, ok),
+                #state{
+                    name = proplists:get_value(name, Options),
+                    mod = Module,
+                    mod_state = ModState
+                };
+            {stop, Reason} ->
+                init_ack(Starter, {error, {init_stopped, Reason}}),
+                undefined;
+            Reply ->
+                init_ack(Starter, {error, {unexpected_reply_from_init, Reply}}),
+                undefined
+        end
+    catch
+        _:E ->
+            init_ack(Starter, {error, {bad_return_value, E}}),
+                undefined
+    end,
+    loop(State).
 
 init_ack(Parent, Return) ->
     Parent ! {ack, self(), Return},
@@ -240,7 +249,7 @@ stop(Name, Reason, Timeout) when is_atom(Name) ->
     end;
 stop(Pid, Reason, Timeout) when is_pid(Pid) ->
     Ref = erlang:make_ref(),
-    call_internal(Pid, Ref, {'$stop', self(), Ref, Reason}, Timeout).
+    call_internal(Pid, {'$stop', {self(), Ref}, Reason}, Timeout).
 
 %%-----------------------------------------------------------------------------
 %% @equiv   call(ServerRef, Request, 5000)
@@ -263,17 +272,17 @@ call(ServerRef, Request) ->
 %%          reply from the gen_server.
 %% @end
 %%-----------------------------------------------------------------------------
--spec call(ServerRef::server_ref(), Request::term(), Timeout::timeout()) -> Reply::term() | {error, Reason::term()}.
-call(Name, Request, Timeout) when is_atom(Name) ->
+-spec call(ServerRef::server_ref(), Request::term(), TimeoutMs::timeout()) -> Reply::term() | {error, Reason::term()}.
+call(Name, Request, TimeoutMs) when is_atom(Name) ->
     case erlang:whereis(Name) of
         undefined ->
             {error, undefined};
         Pid when is_pid(Pid) ->
-            call(Pid, Request, Timeout)
+            call(Pid, Request, TimeoutMs)
     end;
-call(Pid, Request, Timeout) when is_pid(Pid) ->
+call(Pid, Request, TimeoutMs) when is_pid(Pid) ->
     Ref = erlang:make_ref(),
-    call_internal(Pid, Ref, {'$call', self(), Ref, Request}, Timeout).
+    call_internal(Pid, {'$call', {self(), Ref}, Request}, TimeoutMs).
 
 %%-----------------------------------------------------------------------------
 %% @param   ServerRef a reference to the gen_server acquired via start
@@ -298,7 +307,7 @@ cast(Pid, Request) when is_pid(Pid) ->
     ok.
 
 %%-----------------------------------------------------------------------------
-%% @param   Client the client to whom to send the reply
+%% @param   From the client to whom to send the reply
 %% @param   Reply the reply to send to the client
 %% @returns an arbitrary term, that should be ignored
 %% @doc     Send a reply to a calling client.
@@ -308,9 +317,10 @@ cast(Pid, Request) when is_pid(Pid) ->
 %%          function can be safely ignored.
 %% @end
 %%-----------------------------------------------------------------------------
--spec reply(Client::term(), Reply::term) -> term().
-reply({Pid, Ref} = _Client, Reply) ->
-    Pid ! {Ref, Reply}, ok.
+-spec reply(From::from(), Reply::term) -> term().
+reply({Pid, _Ref} = From, Reply) ->
+    Pid ! {'$reply', From, Reply},
+    ok.
 
 
 %%
@@ -318,28 +328,39 @@ reply({Pid, Ref} = _Client, Reply) ->
 %%
 
 %% @private
-call_internal(Pid, Ref, Msg, Timeout) ->
+call_internal(Pid, {_Tag, From, _Msg} = Msg, TimeoutMs) ->
     Pid ! Msg,
+    wait_reply(From, TimeoutMs).
+
+wait_reply(_From, TimeoutMs) when TimeoutMs =< 0 ->
+    {error, timeout};
+wait_reply({Self, _Ref} = From, TimeoutMs) ->
+    StartMs = erlang:system_time(millisecond),
     receive
-        {Ref, Reply} ->
-        Reply
-    after Timeout ->
-        %% throw(timeout)
+        {'$reply', From, Reply} ->
+            Reply;
+        {'$reply', {Self, _AnotherRef}, _Reply} ->
+            ElapsedMs = erlang:system_time(millisecond) - StartMs,
+            NewTimeoutMs = TimeoutMs - ElapsedMs,
+            wait_reply(From, NewTimeoutMs)
+    after TimeoutMs ->
         {error, timeout}
     end.
 
 %% @private
+loop(undefined) ->
+    ok;
 loop(#state{mod=Mod, mod_state=ModState} = State) ->
     receive
-        {'$call', Pid, Ref, Request} ->
-            case Mod:handle_call(Request, {Pid, Ref}, ModState) of
+        {'$call', {_Pid, _Ref} = From, Request} ->
+            case Mod:handle_call(Request, From, ModState) of
                 {reply, Reply, NewModState} ->
-                    Pid ! {Ref, Reply},
+                    ok = reply(From, Reply),
                     loop(State#state{mod_state=NewModState});
                 {noreply, NewModState} ->
                     loop(State#state{mod_state=NewModState});
                 {stop, Reason, Reply, NewModState} ->
-                     Pid ! {Ref, Reply},
+                     ok = reply(From, Reply),
                      do_terminate(State, Reason, NewModState);
                 {stop, Reason, NewModState} ->
                     do_terminate(State, Reason, NewModState);
@@ -355,9 +376,9 @@ loop(#state{mod=Mod, mod_state=ModState} = State) ->
                 _ ->
                     do_terminate(State, {error, unexpected_reply}, ModState)
             end;
-        {'$stop', Pid, Ref, Reason} ->
+        {'$stop', {_Pid, _Ref} = From, Reason} ->
             do_terminate(State, Reason, ModState),
-            Pid ! {Ref, ok};
+            ok = reply(From, ok);
         Info ->
             case Mod:handle_info(Info, ModState) of
                 {noreply, NewModState} ->
