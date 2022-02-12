@@ -33,6 +33,7 @@ static const char *const both_atom = "\x4" "both";
 static const char *const low_atom = "\x3" "low";
 static const char *const high_atom = "\x4" "high";
 static const char *const remove_int_atom = "\xA" "remove_int";
+static const char *const output_od_atom = "\x9" "output_od";
 
 static const char *const esp32_atom = "\x5" "esp32";
 
@@ -136,6 +137,7 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, low_atom) == LOW_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, high_atom) == HIGH_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, remove_int_atom) == REMOVE_INT_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, output_od_atom) == OUTPUT_OD_ATOM_INDEX;
 
     ok &= globalcontext_insert_atom(glb, esp32_atom) == ESP32_ATOM_INDEX;
 

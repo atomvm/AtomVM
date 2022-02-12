@@ -40,16 +40,29 @@
 
 -module(gpio).
 
--export([open/0, read/2, set_direction/3, set_level/3, set_int/3, remove_int/2]).
--export([set_pin_mode/2, digital_write/2, digital_read/1, attach_interrupt/2, detach_interrupt/1]).
+-export([start/0, open/0, read/2, set_direction/3, set_level/3, set_int/3, remove_int/2]).
+-export([
+    set_pin_mode/2, set_pin_pull/2, hold_en/1, hold_dis/1, deep_sleep_hold_en/0, deep_sleep_hold_dis/0,
+    digital_write/2, digital_read/1, attach_interrupt/2, detach_interrupt/1
+]).
 
 -type gpio() :: pid().
 -type pin() :: non_neg_integer().
--type direction() :: input | output.
+-type direction() :: input | output | output_od.
+-type pull() :: up | down | up_down | floating.
 -type low_level() :: low | 0.
 -type high_level() :: high | 1.
 -type level() :: low_level() | high_level().
 -type trigger() :: none | rising | falling | both | low | high.
+
+-spec start() -> gpio().
+start() ->
+    case whereis(gpio) of
+        undefined ->
+            open();
+        GPIO ->
+            GPIO
+    end.
 
 -spec open() -> gpio().
 open() ->
@@ -77,6 +90,26 @@ remove_int(GPIO, GPIONum) ->
 
 -spec set_pin_mode(GPIONum::pin(), Direction::direction()) -> ok | error.
 set_pin_mode(_GPIONum, _Mode) ->
+    throw(nif_error).
+
+-spec set_pin_pull(GPIONum::pin(), Pull::pull()) -> ok | error.
+set_pin_pull(_GPIONum, _Pull) ->
+    throw(nif_error).
+
+-spec hold_en(GPIONum::pin()) -> ok | error.
+hold_en(_GPIONum) ->
+    throw(nif_error).
+
+-spec hold_dis(GPIONum::pin()) -> ok | error.
+hold_dis(_GPIONum) ->
+    throw(nif_error).
+
+-spec deep_sleep_hold_en() -> ok.
+deep_sleep_hold_en() ->
+    throw(nif_error).
+
+-spec deep_sleep_hold_dis() -> ok.
+deep_sleep_hold_dis() ->
     throw(nif_error).
 
 -spec digital_write(GPIONum::pin(), Level::level()) -> ok | error.
