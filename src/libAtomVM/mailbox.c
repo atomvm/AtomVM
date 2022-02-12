@@ -98,7 +98,6 @@ void mailbox_remove(Context *c)
     mailbox_destroy_message(m);
 }
 
-
 void mailbox_destroy_message(Message *m)
 {
     memory_sweep_mso_list(m->mso_list);

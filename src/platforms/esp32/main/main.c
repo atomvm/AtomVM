@@ -18,17 +18,17 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#include "freertos/FreeRTOS.h"
-#include "esp_partition.h"
-#include "esp_system.h"
 #include "esp_event.h"
 #include "esp_event_loop.h"
+#include "esp_partition.h"
+#include "esp_system.h"
+#include "freertos/FreeRTOS.h"
 
 #include "atom.h"
 #include "avmpack.h"
 #include "bif.h"
-#include "component_ports.h"
 #include "component_nifs.h"
+#include "component_ports.h"
 #include "context.h"
 #include "globalcontext.h"
 #include "iff.h"
