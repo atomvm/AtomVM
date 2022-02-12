@@ -1,0 +1,41 @@
+#
+#  Copyright 2022 Davide Bettio <davide@uninstall.it>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: "Check formatting"
+
+on: [push, pull_request]
+
+jobs:
+  clang-format-check:
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v2
+
+    - uses: erlef/setup-beam@v1.10.0
+      with:
+        otp-version: 23.0
+        elixir-version: 1.9
+
+    - name: "Install run-clang-format"
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang-format
+        curl -sSfL https://raw.githubusercontent.com/Sarcasm/run-clang-format/master/run-clang-format.py -o run-clang-format
+        chmod +x run-clang-format
+
+    - name: "Check formatting with clang-format"
+      run: |
+        ./run-clang-format --style=file -r src/ tests/
+
+    - name: "Check formatting with Erlang fmt"
+      run: |
+        cd libs/alisp/src/
+        rebar3 fmt -c -- *.erl
+
+    - name: "Check formatting with Elixir mix format"
+      run: |
+        cd libs/exavmlib/
+        mix format --check-formatted
