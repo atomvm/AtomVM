@@ -246,13 +246,13 @@ console_log(Request) ->
 
 make_timestamp(Timestamp) ->
     {{Year, Month, Day}, {Hour, Minute, Second}} = Timestamp,
-    io:format("~p-~p-~pT~p:~p:~p.000", [
+    io_lib:format("~p-~p-~pT~p:~p:~p.000", [
         Year, Month, Day, Hour, Minute, Second
     ]).
 
 make_location(Location) ->
     {Module, Function, Arity, Line} = Location,
-    io:format("[~p:~p/~p:~p]", [
+    io_lib:format("[~p:~p/~p:~p]", [
         Module, Function, Arity, Line
     ]).
 
@@ -332,10 +332,10 @@ do_log_sink({Module, Function} = _Sink, Request, Level, Levels) ->
             try
                 Module:Function(Request)
             catch
-                _:_ ->
+                _:E ->
                     io:format(
-                        "An error occurred attempting to log to sink ~p:~p/1.  request=~p~n",
-                        [Module, Function, Request]
+                        "An error occurred attempting to log to sink ~p:~p/1.  request=~pError=~p~n",
+                        [Module, Function, Request, E]
                     )
             end;
         _ ->
