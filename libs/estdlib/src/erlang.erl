@@ -50,7 +50,8 @@
     start_timer/3, start_timer/4, cancel_timer/1, send_after/3,
     process_info/2, system_info/1,
     md5/1,
-    is_map/1, map_size/1, map_get/2, map_is_key/2
+    is_map/1, map_size/1, map_get/2, map_is_key/2,
+    min/2, max/2
 ]).
 
 %%-----------------------------------------------------------------------------
@@ -259,3 +260,30 @@ map_get(_Key, _Map) ->
 -spec map_is_key(Key::term(), Map::map()) -> boolean().
 map_is_key(_Key, _Map) ->
     throw(bif_error).
+
+
+%%-----------------------------------------------------------------------------
+%% @param   A   any term
+%% @param   B   any term
+%% @returns `A' if `A < B'; `B', otherwise.
+%% @doc     Return the minimum value of two terms
+%%
+%% Terms are compared using `<' and follow the ordering principles defined in
+%% https://www.erlang.org/doc/reference_manual/expressions.html#term-comparisons
+%% @end
+%%-----------------------------------------------------------------------------
+min(A, B) when A < B -> A;
+min(_A, B) -> B.
+
+%%-----------------------------------------------------------------------------
+%% @param   A   any term
+%% @param   B   any term
+%% @returns `A' if `A > B'; `B', otherwise.
+%% @doc     Return the minimum value of two terms
+%%
+%% Terms are compared using `>' and follow the ordering principles defined in
+%% https://www.erlang.org/doc/reference_manual/expressions.html#term-comparisons
+%% @end
+%%-----------------------------------------------------------------------------
+max(A, B) when A > B -> A;
+max(_A, B) -> B.

@@ -1,0 +1,48 @@
+#
+#  Copyright 2022 Davide Bettio <davide@uninstall.it>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+# We have a number of existing files that are quite "re-format unfriendly"
+# Let's ignore all of them
+src/libAtomVM/bif.c
+src/libAtomVM/bitstring.c
+src/libAtomVM/bitstring.h
+src/libAtomVM/context.c
+src/libAtomVM/context.h
+src/libAtomVM/debug.h
+src/libAtomVM/defaultatoms.c
+src/libAtomVM/externalterm.c
+src/libAtomVM/memory.c
+src/libAtomVM/module.c
+src/libAtomVM/module.h
+src/libAtomVM/nifs.c
+src/libAtomVM/opcodesswitch.h
+src/libAtomVM/overflow_helpers.h
+src/libAtomVM/scheduler.c
+src/libAtomVM/term.c
+src/libAtomVM/term.h
+src/libAtomVM/term_typedef.h
+src/libAtomVM/trace.h
+src/libAtomVM/utils.h
+src/main.c
+src/platforms/esp32/main/gpio_driver.c
+src/platforms/esp32/main/i2c_driver.c
+src/platforms/esp32/main/ledc_nif.c
+src/platforms/esp32/main/network_driver.c
+src/platforms/esp32/main/nvs_nif.c
+src/platforms/esp32/main/platform_defaultatoms.c
+src/platforms/esp32/main/platform_nifs.c
+src/platforms/esp32/main/socket_driver.c
+src/platforms/esp32/main/spi_driver.c
+src/platforms/esp32/main/sys.c
+src/platforms/esp32/main/uart_driver.c
+src/platforms/generic_unix/platform_defaultatoms.c
+src/platforms/generic_unix/platform_nifs.c
+src/platforms/generic_unix/socket_driver.c
+src/platforms/generic_unix/sys.c
+src/platforms/stm32/src/lib/platform_defaultatoms.c
+src/platforms/stm32/src/lib/platform_nifs.c
+tests/test-structs.c
+tests/test.c

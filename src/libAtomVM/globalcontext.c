@@ -104,7 +104,7 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
 Context *globalcontext_get_process(GlobalContext *glb, int32_t process_id)
 {
     struct ListHead *item;
-    LIST_FOR_EACH(item, &glb->processes_table) {
+    LIST_FOR_EACH (item, &glb->processes_table) {
         Context *p = GET_LIST_ENTRY(item, Context, processes_table_head);
 
         if (p->process_id == process_id) {
@@ -281,7 +281,7 @@ Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_a
 void globalcontext_demonitor(GlobalContext *global, uint64_t ref_ticks)
 {
     struct ListHead *pitem;
-    LIST_FOR_EACH(pitem, &global->processes_table) {
+    LIST_FOR_EACH (pitem, &global->processes_table) {
         Context *p = GET_LIST_ENTRY(pitem, Context, processes_table_head);
 
         struct ListHead *item;

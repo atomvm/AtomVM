@@ -21,9 +21,9 @@
 #ifndef _REFC_BINARY_H_
 #define _REFC_BINARY_H_
 
+#include "list.h"
 #include <stdbool.h>
 #include <stdlib.h>
-#include "list.h"
 
 struct RefcBinary
 {

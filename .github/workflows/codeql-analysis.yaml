@@ -1,0 +1,50 @@
+#
+#  Copyright 2022 Davide Bettio <davide@uninstall.it>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: "CodeQL"
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '45 18 * * 5'
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'cpp' ]
+
+    steps:
+    - name: "APT update"
+      run: sudo apt update -y
+
+    - name: "Install deps"
+      run: sudo apt install -y cmake gperf zlib1g-dev doxygen valgrind
+
+    - name: "Checkout repository"
+      uses: actions/checkout@v2
+
+    - name: "Initialize CodeQL"
+      uses: github/codeql-action/init@v1
+      with:
+        languages: ${{ matrix.language }}
+
+    - name: "Build"
+      run: |
+        cmake .
+        make
+
+    - name: "Perform CodeQL Analysis"
+      uses: github/codeql-action/analyze@v1

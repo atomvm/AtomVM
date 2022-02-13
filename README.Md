@@ -58,7 +58,7 @@ specific build instructions.
 Project Status
 ==============
 
-[![Build Status](https://travis-ci.com/bettio/AtomVM.svg?branch=master)](https://travis-ci.com/bettio/AtomVM)
+[![Build and Test](https://github.com/atomvm/AtomVM/actions/workflows/build-and-test.yaml/badge.svg?branch=master)](https://github.com/atomvm/AtomVM/actions/workflows/build-and-test.yaml)
 
 AtomVM is still in its early stages, but it can run simple applications similar to those available
 in [examples](examples/) and [tests](tests/).

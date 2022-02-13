@@ -1,0 +1,23 @@
+#
+#  Copyright 2022 Davide Bettio <davide@uninstall.it>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: ESP32 Build
+
+on: [push, pull_request]
+
+jobs:
+  esp32-build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+    - name: "Build: customized esp-idf container"
+      run: docker build -t atomvm/ci-idf:v3.3.2 -f esp32-dockerfile .
+      working-directory: .github/workflows
+    - name: "Build: AtomVM (ESP32 platform)"
+      run: docker run --rm -v $PWD:/atomvm -w /atomvm atomvm/ci-idf:v3.3.2 src/platforms/esp32
