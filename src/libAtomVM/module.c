@@ -310,7 +310,12 @@ static void const* *module_build_literals_table(const void *literalsBuf)
 
 term module_load_literal(Module *mod, int index, Context *ctx)
 {
-    return externalterm_to_term(mod->literals_table[index], ctx, 1);
+    term t = externalterm_to_term(mod->literals_table[index], ctx, 1);
+    if (term_is_invalid_term(t)) {
+        fprintf(stderr, "Invalid term reading literals_table[%i] from module\n", index);
+        abort();
+    }
+    return t;
 }
 
 const struct ExportedFunction *module_resolve_function(Module *mod, int import_table_index)
