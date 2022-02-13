@@ -25,15 +25,15 @@
 #include "module.h"
 
 /**
-* @brief    Returns the Nif assocatiated with a nif name.
-*
-* @details  This function is used to locate platform-specific Nifs.
-*           Each platform must include an implementation of this function,
-*           even if it just returns NULL.
-* @param    nifname a null-terminated module:function/arity name
-* @return   the Nif structure associated with the supplied nif name, or
-*           NULL, if there is no such Nif.
-*/
+ * @brief    Returns the Nif assocatiated with a nif name.
+ *
+ * @details  This function is used to locate platform-specific Nifs.
+ *           Each platform must include an implementation of this function,
+ *           even if it just returns NULL.
+ * @param    nifname a null-terminated module:function/arity name
+ * @return   the Nif structure associated with the supplied nif name, or
+ *           NULL, if there is no such Nif.
+ */
 const struct Nif *platform_nifs_get_nif(const char *nifname);
 
 #endif

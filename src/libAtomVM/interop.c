@@ -34,7 +34,7 @@ char *interop_term_to_string(term t, int *ok)
         return str;
 
     } else {
-        //TODO: implement also for other types?
+        // TODO: implement also for other types?
         *ok = 0;
         return NULL;
     }
