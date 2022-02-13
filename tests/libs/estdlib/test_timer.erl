@@ -31,10 +31,10 @@ test() ->
 -include("etest.hrl").
 
 test_timer() ->
-    T0 = erlang:timestamp(),
+    T0 = erlang:system_time(millisecond),
     ok = timer:sleep(101),
-    T1 = erlang:timestamp(),
-    ok = etest:assert_true((to_ms(T1) - to_ms(T0)) >= 101),
+    T1 = erlang:system_time(millisecond),
+    ok = ?ASSERT_TRUE((T1 - T0) >= 101),
     ok.
 
 test_timer_interrupt() ->
@@ -46,7 +46,7 @@ test_timer_interrupt() ->
     Pid ! try_to_interrupt,
 
     Pid ! '$atomvm_timer_interrupt',
-    ?ASSERT_MATCH(pop_mailbox(), ok),
+    ok = ?ASSERT_MATCH(pop_mailbox(), ok),
     ok.
 
 pop_mailbox() ->
@@ -71,11 +71,8 @@ test_timer_loop() ->
 timer_loop(0) ->
     ok;
 timer_loop(I) ->
-    T0 = erlang:timestamp(),
+    T0 = erlang:system_time(millisecond),
     ok = timer:sleep(101),
-    T1 = erlang:timestamp(),
-    ok = etest:assert_true((to_ms(T1) - to_ms(T0)) >= 101),
+    T1 = erlang:system_time(millisecond),
+    ok = ?ASSERT_TRUE((T1 - T0) >= 101),
     timer_loop(I - 1).
-
-to_ms({MegaSecs, Secs, MicroSecs}) ->
-    ((MegaSecs * 1000000 + Secs) * 1000 + MicroSecs div 1000).
