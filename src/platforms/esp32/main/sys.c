@@ -31,6 +31,7 @@
 
 #include "esp_event.h"
 #include "esp_event_loop.h"
+#include "esp_heap_caps.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include <limits.h>
@@ -40,6 +41,8 @@
 #define EVENT_QUEUE_LEN 16
 
 static const char *const esp_free_heap_size_atom = "\x14" "esp32_free_heap_size";
+static const char *const esp_largest_free_block_atom = "\x18" "esp32_largest_free_block";
+static const char *const esp_get_minimum_free_size_atom = "\x17" "esp32_minimum_free_size";
 static const char *const esp_chip_info_atom = "\xF" "esp32_chip_info";
 static const char *const esp_idf_version_atom = "\xF" "esp_idf_version";
 static const char *const esp32_atom = "\x5" "esp32";
@@ -180,6 +183,12 @@ term sys_get_info(Context *ctx, term key)
 {
     if (key == context_make_atom(ctx, esp_free_heap_size_atom)) {
         return term_from_int32(esp_get_free_heap_size());
+    }
+    if (key == context_make_atom(ctx, esp_largest_free_block_atom)) {
+        return term_from_int32(heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+    }
+    if (key == context_make_atom(ctx, esp_get_minimum_free_size_atom)) {
+        return term_from_int32(esp_get_minimum_free_heap_size());
     }
     if (key == context_make_atom(ctx, esp_chip_info_atom)) {
         esp_chip_info_t info;
