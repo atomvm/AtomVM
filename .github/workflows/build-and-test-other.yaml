@@ -43,6 +43,11 @@ jobs:
         #  cflags: "-std=gnu99 -Os"
 
     steps:
+    - name: Checkout repo
+      uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+
     - uses: erlef/setup-beam@v1.10.0
       with:
         otp-version: ${{ env.otp_version }}
@@ -54,24 +59,25 @@ jobs:
     - name: Set up QEMU
       run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
 
+    - uses: actions/cache@v2
+      id: cache
+      with:
+        path: debian-${{ matrix.arch }}.tar
+        key: ${{ matrix.arch}}-${{ matrix.distro }}-${{ hashFiles('.github/workflows/build-and-test-other.yaml') }}
+
     - name: Bootrap Debian filesystem
+      if: steps.cache.outputs.cache-hit != 'true'
       run: |
         sudo mkdir debian
         sudo debootstrap --no-check-gpg --arch ${{ matrix.arch }} \
           --include=file,gcc,g++,binutils,cmake,make,doxygen,gperf,zlib1g-dev,libssl-dev \
           ${{ matrix.distro }} debian ${{ matrix.base_url }}
-        sudo tar -C debian -c . | docker import - debian-${{ matrix.arch }}
+        sudo tar -C debian -c . > debian-${{ matrix.arch }}.tar
         sudo rm -fr debian-${{ matrix.arch }}
 
-    # https://github.com/actions/checkout/issues/211
-    - name: Cleanup
+    - name: Import docker container image
       run: |
-        sudo chown -R $USER:$USER $GITHUB_WORKSPACE
-
-    - name: Checkout repo
-      uses: actions/checkout@v2
-      with:
-        submodules: 'recursive'
+        sudo docker import debian-${{ matrix.arch }}.tar debian-${{ matrix.arch }}
 
     - name: "Build: Tests"
       run: |
