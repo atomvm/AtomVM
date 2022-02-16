@@ -69,6 +69,8 @@
 #define OP_SELECT_VAL 59
 #define OP_SELECT_TUPLE_ARITY 60
 #define OP_JUMP 61
+#define OP_CATCH 62
+#define OP_CATCH_END 63
 #define OP_MOVE 64
 #define OP_GET_LIST 65
 #define OP_GET_TUPLE_ELEMENT 66

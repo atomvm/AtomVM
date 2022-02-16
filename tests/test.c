@@ -330,6 +330,7 @@ struct Test tests[] =
     {"test_binary_to_term.beam", 0},
     {"test_selective_receive.beam", 0},
     {"test_bs.beam", 0},
+    {"test_catch.beam", 0},
     {"test_gc.beam", 0 },
     {"test_raise.beam", 7},
     {"test_map.beam", 0},
