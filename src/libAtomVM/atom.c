@@ -68,7 +68,7 @@ void atom_write_mfa(char *buf, size_t buf_size, AtomString module, AtomString fu
     }
     memcpy(buf + module_name_len + 1, atom_string_data(function), function_name_len);
 
-    //TODO: handle functions with more than 9 parameters
+    // TODO: handle functions with more than 9 parameters
     buf[module_name_len + function_name_len + 1] = '/';
     buf[module_name_len + function_name_len + 2] = '0' + arity;
     buf[module_name_len + function_name_len + 3] = 0;

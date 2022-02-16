@@ -70,17 +70,17 @@ term externalterm_to_term(const void *external_term, Context *ctx, int use_heap_
 enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term binary, size_t *bytes_read, size_t num_extra_terms);
 
 /**
-* @brief Create a binary from a term.
-*
-* @details Serialize a term in Erlang external term format, and store the result in
-* a binary term.  The heap from the context will be used to allocate the hydrated
-* terms.  This function is the complement of externalterm_to_binary.
-* WARNING: This function may call the GC, which may render the input binary invalid.
-* @param ctx the context that owns the memory that will be allocated.
-* @param binary the binary
-* @returns the term deserialized from the input term, or an invalid term, if
-* deserialization fails.
-*/
+ * @brief Create a binary from a term.
+ *
+ * @details Serialize a term in Erlang external term format, and store the result in
+ * a binary term.  The heap from the context will be used to allocate the hydrated
+ * terms.  This function is the complement of externalterm_to_binary.
+ * WARNING: This function may call the GC, which may render the input binary invalid.
+ * @param ctx the context that owns the memory that will be allocated.
+ * @param binary the binary
+ * @returns the term deserialized from the input term, or an invalid term, if
+ * deserialization fails.
+ */
 term externalterm_to_binary(Context *ctx, term t);
 
 #endif
