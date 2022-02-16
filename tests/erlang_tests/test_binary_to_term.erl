@@ -52,6 +52,7 @@ start() ->
 
     {32768, 6} = erlang:binary_to_term(<<131,98,0,0,128,0, 127>>, [used]),
     test_catentate_and_split([foo, bar, 128, {foo, bar}, [a,b,c, {d}]]),
+    ok = test_invalid_term_encoding(),
     0.
 
 test_reverse(T, Interop) ->
@@ -82,3 +83,21 @@ split(Bin, Accum) ->
 reverse([], Accum) -> Accum;
 reverse([H|T], Accum) ->
     reverse(T, [H|Accum]).
+
+
+test_invalid_term_encoding() ->
+    ok = expect_badarg(
+        fun() ->
+            binary_to_term(<<"garbage">>)
+        end
+    ),
+    ok.
+
+expect_badarg(Fun) ->
+    try
+        Fun(),
+        fail
+    catch
+        _:badarg ->
+            ok
+    end.
