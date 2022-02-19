@@ -93,6 +93,12 @@ static const char *const put_chars_atom = "\x9" "put_chars";
 static const char *const lowercase_exit_atom = "\x4" "exit";
 static const char *const atomvm_version_atom = "\xE" "atomvm_version";
 
+static const char *const min_free_space_atom = "\xE" "min_free_space";
+static const char *const shrink_free_space_factor_atom = "\x18" "shrink_free_space_factor";
+static const char *const available_free_memory_atom = "\x15" "available_free_memory";
+static const char *const num_gcs_atom = "\x7" "num_gcs";
+static const char *const num_gc_shrinks_atom = "\xE" "num_gc_shrinks";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -169,6 +175,11 @@ void defaultatoms_init(GlobalContext *glb)
 
     ok &= globalcontext_insert_atom(glb, lowercase_exit_atom) == LOWERCASE_EXIT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, atomvm_version_atom) == ATOMVM_VERSION_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, min_free_space_atom) == MIN_FREE_SPACE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, shrink_free_space_factor_atom) == SHRINK_FREE_SPACE_FACTOR_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, available_free_memory_atom) == AVAILABLE_FREE_MEMORY_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, num_gcs_atom) == NUM_GCS_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, num_gc_shrinks_atom) == NUM_GC_SHRINKS_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();

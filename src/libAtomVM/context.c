@@ -107,6 +107,12 @@ Context *context_new(GlobalContext *glb)
     ctx->exit_reason = NORMAL_ATOM;
     ctx->mso_list = term_nil();
 
+    ctx->min_free_space = MIN_FREE_SPACE_SIZE;
+    ctx->shrink_free_space_factor = 2;
+
+    ctx->num_gcs = 0;
+    ctx->num_gc_shrinks = 0;
+
     return ctx;
 }
 

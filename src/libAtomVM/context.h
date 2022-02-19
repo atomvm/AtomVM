@@ -119,6 +119,12 @@ struct Context
 
     term exit_reason;
     term mso_list;
+
+    size_t min_free_space;
+    uint32_t shrink_free_space_factor;
+
+    unsigned num_gcs;
+    unsigned num_gc_shrinks;
 };
 
 #ifndef TYPEDEF_CONTEXT

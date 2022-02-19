@@ -268,6 +268,43 @@ In addition AtomVM provides limited implementations of standard Elixir modules, 
 
 For detailed information about these functions, please consult the [API reference documentation](api-reference-documentation.md).  These modules provide a strict subset of functionality from their Erlang/OTP counterparts.  However, they aim to be API-compatible with the Erlang/OTP interfaces, at least for the subset of provided functionality.
 
+### Spawning Processes
+
+AtomVM supports the actor concurrency model that is pioneered in the Erlang/OTP runtime.  As such, users can spawn processes, send messages to and receive message from processes, and can link or monitor processes to be notified if they have crashed.
+
+To spawn a process using a defined or anonymous function, pass the function to the `spawn/1` function:
+
+    %% erlang
+    Pid = spawn(fun run_some_code/0),
+
+The function you pass may admit closures, so for example you can pass variables defined outside of the scope of the function to the anonymous function to pass into `spawn/1`:
+
+    %% erlang
+    Args = ...
+    Pid = spawn(fun() -> run_some_code_with_args(Args) end),
+
+Alternatively, you can pass a module, function name, and list of arguments to the `spawn/3` function:
+
+    %% erlang
+    Args = ...
+    Pid = spawn(?MODULE, run_some_code_with_args, [Args]),
+
+The `spawn_opt/2,4` functions can be be used to spawn a function with additional options that control the behavior of the spawned processs, e.g.,
+
+    %% erlang
+    Pid = spawn_opt(fun run_some_code/0, [{min_heap_size, 1342}]),
+
+The options argument is a properties list containing optionally the following entries:
+
+| Key | Value Type | Default Value | Description |
+|-----|------------|---------------|-------------|
+| `min_heap_size` | `non_neg_integer()` | none | Minimum heap size of the process.  The heap will shrink no smaller than this size. |
+| `max_heap_size` | `non_neg_integer()` | unbounded | Maximum heap size of the process.  The heap will grow no larger than this size. |
+| `link` | `boolean()` | false | Whether to link the spawned process to the spawning process. |
+| `monitor` | `boolean()` | false | Whether to link the spawning process should monitor the spawned process. |
+| `min_free_space` | `non_neg_integer()` | 8 | The minimum amount of free space (in machine words) that should be allowed after garbage collection. |
+| `shrink_free_space_factor` | `non_neg_integer()` | 2 | The factor used to determine whether to shrink free space, if garbage collection has reclaimed too much space.  If the amount of free space in the heap exceeds the requested free space times this factor, then an additional garbage collection will occur that will shrink the heap to an optimal size.  |
+
 ### Console Output
 
 There are several mechanisms for writing data to the console.
@@ -295,12 +332,28 @@ You can obtain a list of all processes in the system via `erlang:processes/0`:
     %% erlang
     Pids = erlang:processes().
 
-And for each process, you can get detailed process information via the `erlang:process_info/1` function:
+And for each process, you can get detailed process information via the `erlang:process_info/2` function:
 
     %% erlang
-    [io:format("Process info for Pid ~p: ~p~n", [Pid, erlang:process_info(Pid)]) || Pid <- Pids].
+    [io:format("Process info for Pid ~p: ~p~n", [Pid, erlang:process_info(Pid, heap_size)]) || Pid <- Pids].
 
-The return value is a property list containing values for `heap_size`, `stack_size`, `message_queue_len`,and `memory` consumed by the process.
+The `process_info/2` function takes a process id representing the process, together with an atom designating the information to retrieve.
+
+The following atoms and information are supported:
+
+| Key | Return Type | Description |
+|-----|-------------|-------------|
+| `heap_size` | `non_neg_integer()` | Amount of memory (in machine words) occupied by the process heap. |
+| `stack_size` | `non_neg_integer()` | Amount of memory (in machine words) occupied by the process stack. |
+| `available_free_memory` | `non_neg_integer()` | Amount of memory (in machine words) free for use by the process heap or process stack. |
+| `message_queue_len` | `non_neg_integer()` | Number of messages in the process mailbox. |
+| `memory` | `non_neg_integer()` | Amount of memory (in bytes) occupied by the process. |
+| `num_gcs` | `non_neg_integer()` | Number of times the garbage collector has been called by this process. |
+| `num_gc_shrinks` | `non_neg_integer()` | Number of times the garbage collector for this process has shrunk memory because too much free space has become available. |
+
+The return value from this function is a tuple containing the property name and the property value, e.g,
+
+    {heap_size, 12}
 
 ### System APIs
 

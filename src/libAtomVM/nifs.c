@@ -940,6 +940,18 @@ static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])
         new_ctx->max_heap_size = term_to_int(max_heap_size_term);
     }
 
+    term min_free_space = interop_proplist_get_value(opts_term, MIN_FREE_SPACE_ATOM);
+    if (min_free_space != term_nil()) {
+        //TODO: check type, make sure value is an int32
+        new_ctx->min_free_space = term_to_int(min_free_space);
+    }
+
+    term shrink_free_space_factor = interop_proplist_get_value(opts_term, SHRINK_FREE_SPACE_FACTOR_ATOM);
+    if (shrink_free_space_factor != term_nil()) {
+        //TODO: check type, make sure value is an int8
+        new_ctx->shrink_free_space_factor = term_to_int(shrink_free_space_factor);
+    }
+
     return term_from_local_process_id(new_ctx->process_id);
 }
 
@@ -1008,6 +1020,17 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
         }
         new_ctx->has_max_heap_size = 1;
         new_ctx->max_heap_size = term_to_int(max_heap_size_term);
+    }
+    term min_free_space = interop_proplist_get_value(opts_term, MIN_FREE_SPACE_ATOM);
+    if (min_free_space != term_nil()) {
+        //TODO: check type, make sure value is an int32
+        new_ctx->min_free_space = term_to_int(min_free_space);
+    }
+
+    term shrink_free_space_factor = interop_proplist_get_value(opts_term, SHRINK_FREE_SPACE_FACTOR_ATOM);
+    if (shrink_free_space_factor != term_nil()) {
+        //TODO: check type, make sure value is an int8
+        new_ctx->shrink_free_space_factor = term_to_int(shrink_free_space_factor);
     }
 
     if (new_ctx->has_min_heap_size && new_ctx->has_max_heap_size) {
@@ -2258,6 +2281,21 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
     } else if (item == MESSAGE_QUEUE_LEN_ATOM) {
         term_put_tuple_element(ret, 0, MESSAGE_QUEUE_LEN_ATOM);
         term_put_tuple_element(ret, 1, term_from_int32(context_message_queue_len(target)));
+
+    // available_free_memory unallocated memory in heap, in words, of the process
+    } else if (item == AVAILABLE_FREE_MEMORY_ATOM) {
+        term_put_tuple_element(ret, 0, AVAILABLE_FREE_MEMORY_ATOM);
+        term_put_tuple_element(ret, 1, term_from_int32(context_avail_free_memory(target)));
+
+    // num_gcs number of garbage collections that have occurred in the process
+    } else if (item == NUM_GCS_ATOM) {
+        term_put_tuple_element(ret, 0, NUM_GCS_ATOM);
+        term_put_tuple_element(ret, 1, term_from_int(ctx->num_gcs));
+
+    // num_gcs number of garbage collections that have occurred in the process
+    } else if (item == NUM_GC_SHRINKS_ATOM) {
+        term_put_tuple_element(ret, 0, NUM_GC_SHRINKS_ATOM);
+        term_put_tuple_element(ret, 1, term_from_int(ctx->num_gc_shrinks));
 
     // memory size in bytes of the process. This includes call stack, heap, and internal structures.
     } else if (item == MEMORY_ATOM) {

@@ -57,24 +57,29 @@ MALLOC_LIKE term *memory_alloc_heap_fragment(Context *ctx, uint32_t fragment_siz
     return (term *) (heap_fragment + 1);
 }
 
+// size is in term units (i.e., sizeof(int))
 enum MemoryGCResult memory_ensure_free(Context *c, uint32_t size)
 {
+    size_t requested_free_space = size + c->min_free_space;
     size_t free_space = context_avail_free_memory(c);
-    if (free_space < size + MIN_FREE_SPACE_SIZE) {
+    if (free_space < requested_free_space) {
         size_t memory_size = context_memory_size(c);
-        if (UNLIKELY(memory_gc(c, memory_size + size + MIN_FREE_SPACE_SIZE) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_gc(c, memory_size + requested_free_space) != MEMORY_GC_OK)) {
             //TODO: handle this more gracefully
-            TRACE("Unable to allocate memory for GC.  memory_size=%zu size=%u\n", memory_size, size);
+            TRACE("Unable to allocate memory for GC.  memory_size=%zu size=%u min_free_space_size=%u\n", memory_size, size, c->min_free_space_size);
             return MEMORY_GC_ERROR_FAILED_ALLOCATION;
         }
+        c->num_gcs++;
         size_t new_free_space = context_avail_free_memory(c);
-        size_t new_minimum_free_space = 2 * (size + MIN_FREE_SPACE_SIZE);
-        if (new_free_space > new_minimum_free_space) {
+        size_t requested_free_space_max_threshold = c->shrink_free_space_factor * requested_free_space;
+        if (new_free_space > requested_free_space_max_threshold) {
             size_t new_memory_size = context_memory_size(c);
-            if (UNLIKELY(memory_gc(c, (new_memory_size - new_free_space) + new_minimum_free_space) != MEMORY_GC_OK)) {
+            size_t new_used_size = new_memory_size - new_free_space;
+            if (UNLIKELY(memory_gc(c, new_used_size + requested_free_space_max_threshold) != MEMORY_GC_OK)) {
                 TRACE("Unable to allocate memory for GC shrink.  new_memory_size=%zu new_free_space=%zu new_minimum_free_space=%zu size=%u\n", new_memory_size, new_free_space, new_minimum_free_space, size);
                 return MEMORY_GC_ERROR_FAILED_ALLOCATION;
             }
+            c->num_gc_shrinks++;
         }
     }
 

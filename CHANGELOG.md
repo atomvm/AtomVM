@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for `controlling_process/2` in `gen_udp` and `gen_tcp` modules.
 - Added ability to get the atomvm version via `erlang:system_info`.
 - Added erlang:is_boolean/1 Bif.
+- Added ability to tune aspects of the garbage collector and retrieve statistics about GC events.
 
 ### Breaking Changes
 
