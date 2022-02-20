@@ -64,7 +64,7 @@ enum MemoryGCResult memory_ensure_free(Context *c, uint32_t size)
         size_t memory_size = context_memory_size(c);
         if (UNLIKELY(memory_gc(c, memory_size + size + MIN_FREE_SPACE_SIZE) != MEMORY_GC_OK)) {
             //TODO: handle this more gracefully
-            TRACE("Unable to allocate memory for GC\n");
+            TRACE("Unable to allocate memory for GC.  memory_size=%zu size=%u\n", memory_size, size);
             return MEMORY_GC_ERROR_FAILED_ALLOCATION;
         }
         size_t new_free_space = context_avail_free_memory(c);
@@ -72,7 +72,7 @@ enum MemoryGCResult memory_ensure_free(Context *c, uint32_t size)
         if (new_free_space > new_minimum_free_space) {
             size_t new_memory_size = context_memory_size(c);
             if (UNLIKELY(memory_gc(c, (new_memory_size - new_free_space) + new_minimum_free_space) != MEMORY_GC_OK)) {
-                TRACE("Unable to allocate memory for GC shrink\n");
+                TRACE("Unable to allocate memory for GC shrink.  new_memory_size=%zu new_free_space=%zu new_minimum_free_space=%zu size=%u\n", new_memory_size, new_free_space, new_minimum_free_space, size);
                 return MEMORY_GC_ERROR_FAILED_ALLOCATION;
             }
         }
