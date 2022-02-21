@@ -63,7 +63,7 @@ uint32_t socket_tuple_to_addr(term addr_tuple)
         | (term_to_int32(term_get_tuple_element(addr_tuple, 3)) & 0xFF);
 }
 
-term socket_tuple_from_addr(Context *ctx, uint32_t addr)
+static term socket_tuple_from_addr(Context *ctx, uint32_t addr)
 {
     term terms[4];
     terms[0] = term_from_int32((addr >> 24) & 0xFF);
@@ -423,6 +423,31 @@ static void do_accept(Context *ctx, term msg)
     }
 }
 
+static void close_tcp_socket(Context *ctx, struct TCPClientSocketData *tcp_data)
+{
+    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+        abort();
+    }
+    term pid = tcp_data->socket_data.controlling_process_pid;
+    term msg = term_alloc_tuple(2, ctx);
+    term_put_tuple_element(msg, 0, TCP_CLOSED_ATOM);
+    term_put_tuple_element(msg, 1, term_from_local_process_id(pid));
+
+    err_t res = netconn_delete(tcp_data->socket_data.conn);
+    if (res != ERR_OK) {
+        TRACE("close_tcp_socket: netconn_delete failed");
+    }
+    tcp_data->socket_data.conn = NULL;
+    list_remove(&tcp_data->socket_data.sockets_head);
+
+    free(tcp_data);
+
+    send_message(pid, msg, ctx->global);
+    scheduler_terminate(ctx);
+
+    return;
+}
+
 static void tcp_client_handler(Context *ctx)
 {
     TRACE("tcp_client_handler\n");
@@ -431,19 +456,23 @@ static void tcp_client_handler(Context *ctx)
     GlobalContext *glb = ctx->global;
 
     if (!tcp_data->socket_data.active) {
+        TRACE("tcp_client_handler: Not active socket.  Ignoring.\n");
         return;
     }
 
     if (!tcp_data->socket_data.avail_bytes) {
-        TRACE("No bytes to receive.\n");
+        TRACE("tcp_client_handler: No bytes to receive.\n");
+        // NB. When the connection peer closes a connection, then no avail_bytes
+        // are reported.  We verify that this is the expected behavior.
+        close_tcp_socket(ctx, tcp_data);
         return;
     }
 
     struct netbuf *buf = NULL;
     err_t status = netconn_recv(tcp_data->socket_data.conn, &buf);
     if (UNLIKELY(status != ERR_OK)) {
-        //TODO
-        fprintf(stderr, "tcp_client_handler error: %i\n", status);
+        TRACE("tcp_client_handler: netconn_recv error: %i\n", status);
+        close_tcp_socket(ctx, tcp_data);
         return;
     }
 
@@ -451,8 +480,8 @@ static void tcp_client_handler(Context *ctx)
     u16_t data_len;
     status = netbuf_data(buf, &data, &data_len);
     if (UNLIKELY(status != ERR_OK)) {
-        //TODO
-        fprintf(stderr, "netbuf_data error: %i\n", status);
+        TRACE("tcp_client_handler: netbuf_data error: %i\n", status);
+        close_tcp_socket(ctx, tcp_data);
         return;
     }
 
@@ -1081,7 +1110,7 @@ static void do_recvfrom(Context *ctx, term msg)
         err_t status = netconn_recv(socket_data->conn, &buf);
         if (UNLIKELY(status != ERR_OK)) {
             //TODO
-            fprintf(stderr, "tcp_client_handler error: %i\n", status);
+            fprintf(stderr, "do_recvfrom: netconn_recv error: %i\n", status);
             return;
         }
 
@@ -1090,7 +1119,7 @@ static void do_recvfrom(Context *ctx, term msg)
         status = netbuf_data(buf, &data, &data_len);
         if (UNLIKELY(status != ERR_OK)) {
             //TODO
-            fprintf(stderr, "netbuf_data error: %i\n", status);
+            fprintf(stderr, "do_recvfrom: netbuf_data error: %i\n", status);
             return;
         }
 
@@ -1333,7 +1362,6 @@ Context *socket_driver_create_port(GlobalContext *global, term opts)
 {
     UNUSED(opts);
 
-    socket_driver_init(global);
     Context *ctx = context_new(global);
     ctx->native_handler = socket_consume_mailbox;
     ctx->platform_data = NULL;

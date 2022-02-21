@@ -28,6 +28,7 @@ start() ->
         , test_gen_server
         , test_gen_statem
         , test_gen_udp
+        , test_gen_tcp
         , test_io_lib
         , test_maps
         , test_proplists

@@ -283,6 +283,7 @@ merge(Config, [H | T], Accum) ->
     end.
 
 %% @private
+normalize_address(localhost) -> "127.0.0.1";
 normalize_address(loopback) -> "127.0.0.1";
 normalize_address(Address) when is_list(Address) -> Address;
 normalize_address({A,B,C,D}) when is_integer(A) and is_integer(B) and is_integer(C) and is_integer(D) ->

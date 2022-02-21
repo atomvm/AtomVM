@@ -455,6 +455,17 @@ static term network_driver_ifconfig(Context *ctx)
     return port_create_error_tuple(ctx, UNDEFINED_ATOM);
 }
 
+static term tuple_from_addr(Context *ctx, uint32_t addr)
+{
+    term terms[4];
+    terms[0] = term_from_int32((addr >> 24) & 0xFF);
+    terms[1] = term_from_int32((addr >> 16) & 0xFF);
+    terms[2] = term_from_int32((addr >> 8) & 0xFF);
+    terms[3] = term_from_int32(addr & 0xFF);
+
+    return port_create_tuple_n(ctx, 4, terms);
+}
+
 //
 // Event handlers
 //
@@ -475,9 +486,9 @@ static void send_got_ip(ClientData *data, tcpip_adapter_ip_info_t *info)
     Context *ctx = data->ctx;
 
     port_ensure_available(ctx, ((4 + 1) * 3 + (2 + 1) + (2 + 1)) * 2);
-    term ip = socket_tuple_from_addr(ctx, ntohl(info->ip.addr));
-    term netmask = socket_tuple_from_addr(ctx, ntohl(info->netmask.addr));
-    term gw = socket_tuple_from_addr(ctx, ntohl(info->gw.addr));
+    term ip = tuple_from_addr(ctx, ntohl(info->ip.addr));
+    term netmask = tuple_from_addr(ctx, ntohl(info->netmask.addr));
+    term gw = tuple_from_addr(ctx, ntohl(info->gw.addr));
 
     term ip_info = port_create_tuple3(ctx, ip, netmask, gw);
     term reply = port_create_tuple2(ctx, STA_GOT_IP_ATOM, ip_info);
@@ -530,7 +541,7 @@ static void send_ap_sta_ip_acquired(ClientData *data, ip4_addr_t *ip)
     TRACE("Sending ap_sta_ip_acquired back to AtomVM\n");
     Context *ctx = data->ctx;
     port_ensure_available(ctx, ((4 + 1) + (2 + 1)) * 2);
-    term ip_term = socket_tuple_from_addr(ctx, ntohl(ip->addr));
+    term ip_term = tuple_from_addr(ctx, ntohl(ip->addr));
     term reply = port_create_tuple2(ctx, AP_STA_IP_ASSIGNED_ATOM, ip_term);
     send_term(data, reply);
 }
