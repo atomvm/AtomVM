@@ -90,6 +90,8 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
 
 void sys_consume_pending_events(GlobalContext *glb)
 {
+    // delay 1 tick in order to allow this task to respond to the IDF task watchdog timer
+    vTaskDelay(1);
     receive_events(glb, 0);
 }
 
