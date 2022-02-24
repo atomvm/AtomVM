@@ -59,6 +59,11 @@ static void consume_gpio_mailbox(Context *ctx);
 static void IRAM_ATTR gpio_isr_handler(void *arg);
 
 static const char *const gpio_driver_atom = "\xB" "gpio_driver";
+static const char *const up_atom = "\x2" "up";
+static const char *const down_atom = "\x4" "down";
+static const char *const up_down_atom = "\x7" "up_down";
+static const char *const floating_atom = "\x8" "floating";
+
 static term gpio_driver;
 
 struct GPIOListenerData
@@ -88,6 +93,10 @@ static inline term gpio_set_pin_mode(term gpio_num_term, term mode)
             result = gpio_set_direction(gpio_num, GPIO_MODE_OUTPUT);
             break;
 
+        case OUTPUT_OD_ATOM:
+            result = gpio_set_direction(gpio_num, GPIO_MODE_OUTPUT_OD);
+            break;
+
         default:
             return ERROR_ATOM;
     }
@@ -96,6 +105,53 @@ static inline term gpio_set_pin_mode(term gpio_num_term, term mode)
         return ERROR_ATOM;
     }
 
+    return OK_ATOM;
+}
+
+static gpio_pull_mode_t get_pull_mode(Context *ctx, term pull)
+{
+    if (pull == context_make_atom(ctx, up_atom)) {
+        return GPIO_PULLUP_ONLY;
+    } else if (pull == context_make_atom(ctx, down_atom)) {
+        return GPIO_PULLDOWN_ONLY;
+    } else if (pull == context_make_atom(ctx, up_down_atom)) {
+        return GPIO_PULLUP_PULLDOWN;
+    } else if (pull == context_make_atom(ctx, floating_atom)) {
+        return GPIO_FLOATING;
+    } else {
+        ESP_LOGW(TAG, "Unrecognized pull mode.  Defaulting to GPIO_FLOATING");
+        return GPIO_FLOATING;
+    }
+}
+
+static inline term set_pin_pull_mode(Context *ctx, term gpio_num_term, term pull)
+{
+    avm_int_t gpio_num = term_to_int(gpio_num_term);
+    gpio_pull_mode_t pull_mode = get_pull_mode(ctx, pull);
+    esp_err_t result = gpio_set_pull_mode(gpio_num, pull_mode);
+    if (UNLIKELY(result != ESP_OK)) {
+        return ERROR_ATOM;
+    }
+    return OK_ATOM;
+}
+
+static inline term hold_en(term gpio_num_term)
+{
+    int gpio_num = term_to_int(gpio_num_term);
+    esp_err_t result = gpio_hold_en(gpio_num);
+    if (UNLIKELY(result != ESP_OK)) {
+        return ERROR_ATOM;
+    }
+    return OK_ATOM;
+}
+
+static inline term hold_dis(term gpio_num_term)
+{
+    int gpio_num = term_to_int(gpio_num_term);
+    esp_err_t result = gpio_hold_dis(gpio_num);
+    if (UNLIKELY(result != ESP_OK)) {
+        return ERROR_ATOM;
+    }
     return OK_ATOM;
 }
 
@@ -391,6 +447,49 @@ static term nif_gpio_set_pin_mode(Context *ctx, int argc, term argv[])
     return gpio_set_pin_mode(argv[0], argv[1]);
 }
 
+static term nif_gpio_set_pin_pull(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    return set_pin_pull_mode(ctx, argv[0], argv[1]);
+}
+
+static term nif_gpio_hold_en(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+
+    return hold_en(argv[0]);
+}
+
+static term nif_gpio_hold_dis(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+
+    return hold_dis(argv[0]);
+}
+
+static term nif_gpio_deep_sleep_hold_en(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
+
+    gpio_deep_sleep_hold_en();
+    return OK_ATOM;
+}
+
+static term nif_gpio_deep_sleep_hold_dis(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
+
+    gpio_deep_sleep_hold_dis();
+    return OK_ATOM;
+}
+
 static term nif_gpio_digital_write(Context *ctx, int argc, term argv[])
 {
     return gpio_digital_write(argv[0], argv[1]);
@@ -405,6 +504,36 @@ static const struct Nif gpio_set_pin_mode_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_gpio_set_pin_mode
+};
+
+static const struct Nif gpio_set_pin_pull_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_gpio_set_pin_pull
+};
+
+static const struct Nif gpio_hold_en_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_gpio_hold_en
+};
+
+static const struct Nif gpio_hold_dis_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_gpio_hold_dis
+};
+
+static const struct Nif gpio_deep_sleep_hold_en_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_gpio_deep_sleep_hold_en
+};
+
+static const struct Nif gpio_deep_sleep_hold_dis_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_gpio_deep_sleep_hold_dis
 };
 
 static const struct Nif gpio_digital_write_nif =
@@ -432,6 +561,31 @@ const struct Nif *gpio_nif_get_nif(const char *nifname)
     if (strcmp("Elixir.GPIO:set_pin_mode/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &gpio_set_pin_mode_nif;
+    }
+
+    if (strcmp("gpio:set_pin_pull/2", nifname) == 0 || strcmp("Elixir.GPIO:set_pin_pull/2", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &gpio_set_pin_pull_nif;
+    }
+
+    if (strcmp("gpio:hold_en/1", nifname) == 0 || strcmp("Elixir.GPIO:hold_en/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &gpio_hold_en_nif;
+    }
+
+    if (strcmp("gpio:hold_dis/1", nifname) == 0 || strcmp("Elixir.GPIO:hold_dis/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &gpio_hold_dis_nif;
+    }
+
+    if (strcmp("gpio:deep_sleep_hold_en/0", nifname) == 0 || strcmp("Elixir.GPIO:deep_sleep_hold_en/0", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &gpio_deep_sleep_hold_en_nif;
+    }
+
+    if (strcmp("gpio:deep_sleep_hold_dis/0", nifname) == 0 || strcmp("Elixir.GPIO:deep_sleep_hold_dis/0", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &gpio_deep_sleep_hold_dis_nif;
     }
 
     if (strcmp("gpio:digital_write/2", nifname) == 0) {
