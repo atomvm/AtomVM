@@ -3536,7 +3536,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     VERIFY_IS_MATCH_STATE(src, "bs_get_tail");
 
                     avm_int_t bs_offset = term_get_match_state_offset(src);
-                    avm_int_t bs_bin = term_get_match_state_binary(src);
+                    term bs_bin = term_get_match_state_binary(src);
 
                     TRACE("bs_get_tail/3 src=0x%lx dreg=%c%i live=0x%lx \n", src, T_DEST_REG(dreg_type, dreg), live);
                     if (bs_offset == 0) {
@@ -3558,6 +3558,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
                             DECODE_COMPACT_TERM(src, code, i, src_off, src_off);
+                            bs_bin = term_get_match_state_binary(src);
                             term t = term_maybe_create_sub_binary(bs_bin, start_pos, new_bin_size, ctx);
                             WRITE_REGISTER(dreg_type, dreg, t);
 

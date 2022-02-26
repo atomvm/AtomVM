@@ -82,6 +82,8 @@ start() ->
 
     test_match_case_type(),
 
+    ok = test_iterate_binary(),
+
     0.
 
 test_pack_small_ints({A, B, C}, Expect) ->
@@ -293,5 +295,17 @@ match_case_type(Term) ->
         _ ->
             something_else_entirely
     end.
+
+-define(TEST_BINARY_DATA, <<241,131,104,2,100,0,4,99,97,108,108,104,2,104,3,100,0,3,106,111,101,100,0,6,114,111,98,101,114,116,97,0,104,2,100,0,5,104,101,108,108,111,97,1>>).
+-define(TEST_LIST_DATA,    [241,131,104,2,100,0,4,99,97,108,108,104,2,104,3,100,0,3,106,111,101,100,0,6,114,111,98,101,114,116,97,0,104,2,100,0,5,104,101,108,108,111,97,1]).
+
+test_iterate_binary() ->
+    ?TEST_LIST_DATA = traverse(id(?TEST_BINARY_DATA), []),
+    ok.
+
+traverse(<<"">>, Accum) -> Accum;
+traverse(<<H:8, T/binary>>, Accum) ->
+    traverse(T, Accum ++ [H]).
+
 
 id(X) -> X.
