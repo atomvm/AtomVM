@@ -21,13 +21,10 @@
 #ifndef _SOCKET_DRIVER_H_
 #define _SOCKET_DRIVER_H_
 
-#include "context.h"
 #include "globalcontext.h"
 #include "term.h"
 
 void socket_driver_init(GlobalContext *global);
 Context *socket_driver_create_port(GlobalContext *global, term opts);
-
-term socket_tuple_from_addr(Context *ctx, uint32_t addr);
 
 #endif

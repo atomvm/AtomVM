@@ -30,8 +30,10 @@
 #include "term.h"
 #include "utils.h"
 #include <string.h>
+#include <netinet/tcp.h>
 
 #include "platform_defaultatoms.h"
+#include "scheduler.h"
 #include "sys.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -288,6 +290,18 @@ static term init_server_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
     }
     socket_data->sockfd = sockfd;
 
+    //
+    // set socket options:
+    //      reuse-address
+    //      disable linger
+    //
+    int flag = 1;
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *) &flag, sizeof(int));
+    struct linger sl;
+    sl.l_onoff = 1;
+    sl.l_linger = 0;
+    setsockopt(sockfd, SOL_SOCKET, SO_LINGER, &sl, sizeof(sl));
+
     if (fcntl(socket_data->sockfd, F_SETFL, O_NONBLOCK) == -1) {
         close(sockfd);
         return port_create_sys_error_tuple(ctx, FCNTL_ATOM, errno);
@@ -410,13 +424,19 @@ void socket_driver_do_close(Context *ctx)
 
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     if (socket_data->active == TRUE_ATOM) {
-        linkedlist_remove(&platform->listeners, &socket_data->active_listener->listeners_list_head);
+        // If this socket is a listening socket, it may already have been removed from the
+        // listeners list during an accept.  Check here to make sure that the active listener
+        // has not already been removed.
+        if (linkedlist_length(&socket_data->active_listener->listeners_list_head) != 0) {
+            linkedlist_remove(&platform->listeners, &socket_data->active_listener->listeners_list_head);
+        }
     }
     if (close(socket_data->sockfd) == -1) {
         TRACE("socket: close failed");
     } else {
         TRACE("socket_driver: closed socket\n");
     }
+    scheduler_terminate(ctx);
 }
 
 //
@@ -651,6 +671,7 @@ static void passive_recv_callback(EventListener *listener)
         term pid = recvfrom_data->pid;
         term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
         port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, RECV_ATOM, errno));
+        socket_driver_do_close(ctx);
     } else {
         TRACE("socket_driver: passive received data of len: %li\n", len);
         int ensure_packet_avail;
