@@ -38,10 +38,11 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
+// FreeBSD 12 bug, sys/types must be included before netinet headers
+#include <sys/types.h>
 #include <netinet/in.h>
 #include <netinet/udp.h>
 #include <sys/socket.h>
-#include <sys/types.h>
 #include <unistd.h>
 
 // #define ENABLE_TRACE
