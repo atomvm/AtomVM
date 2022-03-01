@@ -310,6 +310,7 @@ compile_erlang(test_match)
 compile_erlang(test_ordering_0)
 compile_erlang(test_ordering_1)
 compile_erlang(test_bs)
+compile_erlang(test_catch)
 compile_erlang(test_gc)
 compile_erlang(test_raise)
 compile_erlang(test_map)
@@ -704,6 +705,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_ordering_0.beam
     test_ordering_1.beam
     test_bs.beam
+    test_catch.beam
     test_gc.beam
     test_raise.beam
     test_map.beam

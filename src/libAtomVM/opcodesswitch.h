@@ -3060,6 +3060,75 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 break;
             }
 
+            case OP_CATCH: {
+                int next_off = 1;
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
+
+                TRACE("catch/2, label=%i, reg=%c%i\n", label, T_DEST_REG(dreg_type, dreg));
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    term catch_term = term_from_catch_label(mod->module_index, label);
+                    // TODO: here just write to y registers is enough
+                    WRITE_REGISTER(dreg_type, dreg, catch_term);
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_CATCH_END: {
+                int next_off = 1;
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
+
+                TRACE("catch_end/1, reg=%c%i\n", T_DEST_REG(dreg_type, dreg));
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    // TODO: here just write to y registers is enough
+                    WRITE_REGISTER(dreg_type, dreg, term_nil());
+                    // C.f. https://www.erlang.org/doc/reference_manual/expressions.html#catch-and-throw
+                    switch (term_to_atom_index(ctx->x[0])) {
+                        case THROW_ATOM_INDEX:
+                            ctx->x[0] = ctx->x[1];
+                            break;
+
+                        case ERROR_ATOM_INDEX: {
+                            if (UNLIKELY(memory_ensure_free(ctx, 6) != MEMORY_GC_OK)) {
+                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                            }
+                            term reason_tuple = term_alloc_tuple(2, ctx);
+                            term_put_tuple_element(reason_tuple, 0, ctx->x[1]);
+                            // TODO add stacktrace
+                            term_put_tuple_element(reason_tuple, 1, UNDEFINED_ATOM);
+                            term exit_tuple = term_alloc_tuple(2, ctx);
+                            term_put_tuple_element(exit_tuple, 0, EXIT_ATOM);
+                            term_put_tuple_element(exit_tuple, 1, reason_tuple);
+                            ctx->x[0] = exit_tuple;
+
+                            break;
+                        }
+                        case LOWERCASE_EXIT_ATOM_INDEX: {
+                            if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                            }
+                            term exit_tuple = term_alloc_tuple(2, ctx);
+                            term_put_tuple_element(exit_tuple, 0, EXIT_ATOM);
+                            term_put_tuple_element(exit_tuple, 1, ctx->x[1]);
+                            ctx->x[0] = exit_tuple;
+
+                            break;
+                        }
+                    }
+#endif
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
             case OP_BS_ADD: {
                 int next_off = 1;
                 int fail;
