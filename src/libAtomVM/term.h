@@ -912,7 +912,7 @@ static inline const char *term_binary_data(term t)
 * @brief Create an unititialized binary.
 *
 * @details Allocates a binary on the heap, and returns a term pointing to it.
-* Note that the data in teh binary is unitialized and could contain any garbage.
+* Note that the data in teh binary is uninitialized and could contain any garbage.
 * Make sure to initialize before use, if needed (e.g., via memset).
 * @param size size of binary data buffer.
 * @param ctx the context that owns the memory that will be allocated.
@@ -1149,7 +1149,7 @@ static inline uint64_t term_to_ref_ticks(term rt)
 /**
  * @brief Allocates a tuple on the heap
  *
- * @details Allocates an unitialized tuple on the heap with given arity.
+ * @details Allocates an uninitialized tuple on the heap with given arity.
  * @param size tuple arity (count of tuple elements).
  * @param ctx the context that owns the memory that will be allocated.
  * @return a term pointing on an empty tuple allocated on the heap.
@@ -1290,7 +1290,7 @@ static inline term term_get_list_tail(term t)
 }
 
 /**
- * @brief Allocate unitialized memory for a list item
+ * @brief Allocate uninitialized memory for a list item
  *
  * @details Allocates a memory area that will be used to store a list item.
  * @param ctx the context that owns the memory that will be allocated.
