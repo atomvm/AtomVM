@@ -2,6 +2,10 @@ Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: AtomVM
 Source: https://github.com/atomvm/AtomVM
 
+Files: CHANGELOG.md
+Copyright: AtomVM Contributors
+License: CC0-1.0
+
 Files: src/platforms/esp32/sdkconfig
 Copyright: AtomVM Contributors
 License: Apache-2.0
