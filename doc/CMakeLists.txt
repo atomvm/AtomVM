@@ -20,28 +20,108 @@
 
 project(doc)
 
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html)
+
+##
+## Erlang API documentation
+##
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/apidocs/erlang)
+foreach(ERLANG_LIB estdlib eavmlib alisp etest)
+    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/apidocs/erlang/${ERLANG_LIB})
+    add_custom_target(edoc-${ERLANG_LIB}
+        COMMAND escript ${CMAKE_SOURCE_DIR}/tools/doc/gendoc.erl ${ERLANG_LIB} ${CMAKE_SOURCE_DIR}/libs/${ERLANG_LIB}/src ${CMAKE_CURRENT_BINARY_DIR}/html/apidocs/erlang/${ERLANG_LIB}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMENT "Generating edoc for ${ERLANG_LIB}"
+        VERBATIM
+    )
+    set(ERLANG_EDOC_TARGETS ${ERLANG_EDOC_TARGETS} edoc-${ERLANG_LIB})
+endforeach(ERLANG_LIB)
+
+## TODO Uncomment when we incorporate Graphviz DOT files into documentation
+# ##
+# ## SVG files (from Graphviz dot files)
+# ##
+# set(DOT_FILES
+#     globalcontext-processes
+#     globalcontext-atoms
+#     globalcontext-modules
+# )
+# find_package(Graphviz)
+# if(GRAPHVIZ_FOUND)
+#     message("Graphiz found")
+#     file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/svg)
+#     foreach(DOT_FILE ${DOT_FILES})
+#         add_custom_command(
+#             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/html/svg/${DOT_FILE}.svg
+#             COMMAND dot -Tsvg ${CMAKE_CURRENT_SOURCE_DIR}/graphviz/${DOT_FILE}.dot > ${CMAKE_CURRENT_BINARY_DIR}/html/svg/${DOT_FILE}.svg
+#             DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/graphviz/${DOT_FILE}.dot
+#             WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+#             COMMENT "Generating SVG for ${DOT_FILE}.dot"
+#             VERBATIM
+#         )
+#         set(ERLANG_DOTFILE_TARGETS ${ERLANG_DOTFILE_TARGETS} ${CMAKE_CURRENT_BINARY_DIR}/html/svg/${DOT_FILE}.svg)
+#     endforeach()
+# else()
+#     message("WARNING: Graphviz not found.  Some images may be missing in generated documentation.")
+# endif()
+
+##
+## Doxygen (C) API documentation
+##
 find_package(Doxygen)
-
 if(DOXYGEN_FOUND)
-
-    foreach(ERLANG_LIB estdlib eavmlib etest)
-        file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/ref/${ERLANG_LIB})
-        add_custom_target(edoc-${ERLANG_LIB}
-            COMMAND escript ${CMAKE_SOURCE_DIR}/tools/doc/gendoc.erl ${ERLANG_LIB} ${CMAKE_SOURCE_DIR}/libs/${ERLANG_LIB}/src ${CMAKE_CURRENT_BINARY_DIR}/html/ref/${ERLANG_LIB}
-            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-            COMMENT "Generating edoc for ${ERLANG_LIB}"
-            VERBATIM
-        )
-        set(ERLANG_EDOC_TARGETS ${ERLANG_EDOC_TARGETS} edoc-${ERLANG_LIB})
-    endforeach(ERLANG_LIB)
-
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY)
-    add_custom_target(doc # ALL
+    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/apidocs/atomvmlib)
+    add_custom_target(doxygen-html # ALL
         ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Generating documentation" VERBATIM
-        DEPENDS ${ERLANG_EDOC_TARGETS}
+        DEPENDS ${ERLANG_EDOC_TARGETS} ${ERLANG_DOTFILE_TARGETS}
     )
 else()
     message("Unable to find doxygen -- no documentation will be generated")
 endif()
+
+##
+## Sphinx documentation
+##
+find_package(Sphinx)
+if(SPHINX_FOUND)
+
+    set(ATOMVM_DOC_GIT_REVISION "latest")
+    execute_process(
+        COMMAND git rev-parse --short HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE ATOMVM_DOC_GIT_REVISION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    message("Sphinx found: ${SPHINX_BUILD_EXECUTABLE}")
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/conf.py.in ${CMAKE_CURRENT_BINARY_DIR}/conf.py @ONLY)
+    add_custom_target(sphinx-html
+        ${SPHINX_BUILD_EXECUTABLE} -b html -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR}/html
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMENT "Generating Sphinx HTML documentation" VERBATIM
+        DEPENDS ${ERLANG_DOTFILE_TARGETS}
+    )
+
+    add_custom_target(sphinx-pdf
+        ${SPHINX_BUILD_EXECUTABLE} -b rinoh -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR}/html/pdf
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMENT "Generating Sphinx PDF documentation" VERBATIM
+        DEPENDS ${ERLANG_DOTFILE_TARGETS} ${CMAKE_CURRENT_BINARY_DIR}/conf.py
+    )
+
+    add_custom_target(sphinx-epub
+        ${SPHINX_BUILD_EXECUTABLE} -b epub -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR}/html/epub
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMENT "Generating Sphinx PDF documentation" VERBATIM
+        DEPENDS ${ERLANG_DOTFILE_TARGETS}
+    )
+else()
+    message("Unable to find Sphinx -- no Sphinx documentation will be generated")
+endif()
+
+
+add_custom_target(doc #ALL
+    DEPENDS ${ERLANG_EDOC_TARGETS} doxygen-html sphinx-html sphinx-pdf sphinx-epub
+)

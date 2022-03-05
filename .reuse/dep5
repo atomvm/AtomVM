@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: AtomVM
-Source: https://github.com/bettio/AtomVM
+Source: https://github.com/atomvm/AtomVM
 
 Files: src/platforms/esp32/sdkconfig
 Copyright: AtomVM Contributors

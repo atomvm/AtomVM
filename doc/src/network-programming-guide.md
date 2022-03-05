@@ -1,10 +1,10 @@
 <!--
- Copyright 2020 Fred Dushin <fred@dushin.net>
+ Copyright 2020-2022 Fred Dushin <fred@dushin.net>
 
  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 -->
 
-# AtomVM Network Programming Manual
+# Network Programming Guide
 
 One of the exciting features of the ESP32 is its support for WiFi networking, allowing ESP32 micro-controllers to communicate with the outside world over common IP networking protocols, such as TCP or IDP.  The ESP32 and ISF SDK supports configuring an ESP32 in station mode (STA), whereby the device connects to an existing access point, as well as "softAP" mode (AP), whereby it functions as an access point, to which other stations can connect.   The ESP32 also supports a combined STA+softAP mode, which allows the device to function in both STA and softAP mode simultaneously.
 
@@ -16,15 +16,7 @@ The AtomVM networking API leverages callback functions, allowing applications to
 
 This document describes the basic design of the AtomVM network interfaces, and how to interact programmatically with it.
 
-## Getting Started
-
-The `examples/erlang/esp32/network_example.erl` sample program provides an example of how to connect to an existing WiFi network,
-
-In this program, the WiFi network is initialized using the `network:start/1` function, which will instantiate the AtomVM network module, depending on the configuration.
-
-The input parameter to this function is a nested properties list structure, which may contain configuration for the device in STA mode, as well as configuration for the device in AP mode.  The requirements for this input data structure are described in more detail below, depending on the mode in which the device is being configured.
-
-### Station (STA) mode
+## Station (STA) mode
 
 In STA mode, the ESP32 connects to an existing WiFi network.
 
@@ -85,7 +77,26 @@ The following callback functions will be called when the corresponding events oc
 
 In a typical application, the network should be configured and an IP address should be acquired first, before starting clients or services that have a dependency on the network.
 
-### AP mode
+### Convenience Functions
+
+The `network` module supports the `network:wait_for_sta/1,2` convenience functions for applications that do not need robust connection management.  These functions are synchronous and will wait until the device is connected to the specified AP.  Supply the properties list specified in the `{sta, [...]}` component of the above configuration, in addition to an optional timeout (in milliseconds).
+
+For example:
+
+    %% erlang
+    Config = [
+        {ssid, <<"myssid">>},
+        {psk,  <<"mypsk">>},
+        {dhcp_hostname, <<"mydevice">>}
+    ],
+    case network:wait_for_sta(Config, 15000) of
+        {ok, {Address, _Netmask, _Gateway}} ->
+            io:format("Acquired IP address: ~p~n", [Address]);
+        {error, Reason} ->
+            io:format("Network initialization failed: ~p~n", [Reason])
+    end
+
+## AP mode
 
 In AP mode, the ESP32 starts a WiFi network to which other devices (laptops, mobile devices, other ESP32 devices, etc) can connect.  The ESP32 will create an IPv4 network, and will assign itself the address `192.168.4.1`.  Devices that attach to the ESP32 in AP mode will be assigned sequential addresses in the `192.168.4.0/24` range, e.g., `192.168.4.2`, `192.168.4.3`, etc.
 
@@ -155,7 +166,25 @@ The following callback functions will be called when the corresponding events oc
 
 In a typical application, the network should be configured and the application should wait for the AP to report that it has started, before starting clients or services that have a dependency on the network.
 
-### STA+AP mode
+### Convenience Functions
+
+The `network` module supports the `network:wait_for_ap/1,2` convenience functions for applications that do not need robust connection management.  These functions are synchronous and will wait until the device is successfully starts an AP.  Supply the properties list specified in the `{ap, [...]}` component of the above configuration, in addition to an optional timeout (in milliseconds).
+
+For example:
+
+    %% erlang
+    Config = [
+        {psk,  <<"mypsk">>}
+    ],
+    case network:wait_for_ap(Config, 15000) of
+        ok ->
+            io:format("AP network started at 192.168.4.1~n");
+        {error, Reason} ->
+            io:format("Network initialization failed: ~p~n", [Reason])
+    end
+
+
+## STA+AP mode
 
 The `network` module can be started in both STA and AP mode.  In this case, the ESP32 device will both connect to an access point in its STA mode, and will simultaneously serve as an access point in its role in AP mode.
 
@@ -179,10 +208,10 @@ You may instead store an STA or AP SSID and PSK in non-volatile storage (NVS) on
 
 | namespace | mode |   key    |  type  | value |
 |-----------|------|----------|--------|-------|
-| `atomvm`  | STA  | sta_ssid | binary | Station ID |
-| `atomvm`  | STA  | sta_psk  | binary | Station password (if applicable) |
-| `atomvm`  | AP   | ap_ssid  | binary | Access Point ID |
-| `atomvm`  | AP   | ap_psk   | binary | Access Point password (if applicable) |
+| `atomvm`  | STA  | `sta_ssid` | `binary()` | Station ID |
+| `atomvm`  | STA  | `sta_psk`  | `binary()` | Station password (if applicable) |
+| `atomvm`  | AP   | `ap_ssid`  | `binary()` | Access Point ID |
+| `atomvm`  | AP   | `ap_psk`   | `binary()` | Access Point password (if applicable) |
 
 If set in NVS storage, you may remove the corresponding `ssid` and `psk` parameters from the configuration used to initialize the network, and the SSID and PSK configured in NVS will be used, instead.  An SSID or PSK defined explicitly in configuration will override any values in NVS.
 

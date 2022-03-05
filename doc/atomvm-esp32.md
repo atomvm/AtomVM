@@ -12,7 +12,7 @@ The ESP32 port of AtomVM makes use of the ESP <a href="https://docs.espressif.co
 
 ## Source Code
 
-Platform-specific code for the ESP32 platform can be found under <a href="https://github.com/bettio/AtomVM/tree/master/src/platforms/esp32">`src/platforms/esp32`</a> in the AtomVM source tree.
+Platform-specific code for the ESP32 platform can be found under <a href="https://github.com/atomvm/AtomVM/tree/master/src/platforms/esp32">`src/platforms/esp32`</a> in the AtomVM source tree.
 
 The ESP32-specific parts of the source code include implementations of:
 
@@ -260,4 +260,4 @@ Finally, you can then flash your own application, e.g.,
     Leaving...
     Hard resetting via RTS pin...
 
-> Note.  Since the Erlang core libraries are flashed to the ESP32 device, it is not necessary to include core libraries in your application AVM files.  Users may be interested in using downstream development tools, such as the Elixir <a href="https://github.com/bettio/ExAtomVM">ExAtomVM Mix task</a>, or the Erlang <a href="https://github.com/fadushin/atomvm_rebar3_plugin">AtomVM Rebar3 Plugin</a> for doing day-to-day development of applications for the AtomVM platform.
+> Note.  Since the Erlang core libraries are flashed to the ESP32 device, it is not necessary to include core libraries in your application AVM files.  Users may be interested in using downstream development tools, such as the Elixir <a href="https://github.com/atomvm/ExAtomVM">ExAtomVM Mix task</a>, or the Erlang <a href="https://github.com/fadushin/atomvm_rebar3_plugin">AtomVM Rebar3 Plugin</a> for doing day-to-day development of applications for the AtomVM platform.

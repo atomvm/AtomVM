@@ -65,7 +65,7 @@ At present, AtomVM is only available via a checkout of the AtomVM github reposit
 
 > Note.  Downloading the AtomVM github repository requires the installtion of the `git` program.  Consult your local OS documentation for installtion of the `git` package.
 
-	shell$ git clone https://github.com/bettio/AtomVM
+	shell$ git clone https://github.com/atomvm/AtomVM
 	TODO
 	shell$ cd AtomVM
 

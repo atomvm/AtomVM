@@ -1,10 +1,10 @@
 <!--
- Copyright 2019-2020 Fred Dushin <fred@dushin.net>
+ Copyright 2019-2022 Fred Dushin <fred@dushin.net>
 
  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 -->
 
-# AtomVM Memory Management
+# Memory Management
 
 Like most managed execution environments, AtomVM provides automated memory management for compiled Erlang/Elixir applications that run on the platform, allowing developers to focus on the logic of application programs, instead of the minutiae of managing the allocation and disposal of memory in the process heap of the program.
 
@@ -18,7 +18,9 @@ The fundamental unit of memory that occupies space in the stack, heap, and regis
 
 This document describes the memory layout for each execution context (i.e., Erlang/Elixir process), how memory is allocated and used, how terms are represented internally, and how AtomVM makes room for more terms, as memory usage increases and as terms go out of scope and are no longer used by the application, and can hence be garbage collected.
 
-## Heap and Stack
+## The Context structure
+
+### The Heap and Stack
 
 The heap and stack for each AtomVM process are stored in a single allocated block of memory (e.g., via the `malloc` C function) in the heap space of the AtomVM program, and the AtomVM runtime manages the allocation of portions of this memory during the execution of a program.  The heap starts at the bottom of the block of memory, and grows incrementally towards the top of the allocated block, as memory is allocated in the program.  Each word in the heap and stack (or in some cases, a sequence of words) represent a term that has been allocated.
 
@@ -34,37 +36,37 @@ The region between the stack and heap is the free space available to the Erlang/
 
 The following diagram illustrates an allocated block of memory that stores terms (or term pointers) in the heap and stack:
 
-    +================================+ <- heap_start -------------        | increasing
-    |             word[0]            |                ^         ^         | memory
-    +--------------------------------+                |         |         | address
-    |             word[1]            |                |         |         v
-    +--------------------------------+                |         |
-    |             word[2]            |                | heap    |
-    +--------------------------------+                |         |
-    |               ...              |                |         |
-    +--------------------------------+                |         |
-    |                                |                v         | allocated
-    +--------------------------------+ <- heap_ptr -----        | memory
-    |                                |                ^         |
-    |                                |                |         |
-    |                                |                |         |
-    |                                |                | free    |
-    |                                |                |         |
-    |                                |                |         |
-    |                                |                v         |
-    +--------------------------------+ <- e ------------        |
-    |                                |                ^         |
-    +--------------------------------+                |         |
-    |                                |                |         |
-    +--------------------------------+                | stack   |
-    |                                |                |         |
-    +--------------------------------+                |         |
-    |           word[n-1]            |                v         v
-    +================================+ <- stack_base -------------
+    +================================+ <- heap_start --
+    |             word[0]            |      ^      ^
+    +--------------------------------+      |      |
+    |             word[1]            |      |      |
+    +--------------------------------+      |      |
+    |             word[2]            |      | heap |
+    +--------------------------------+      |      |
+    |               ...              |      |      |
+    +--------------------------------+      |      |
+    |                                |      v      |
+    +--------------------------------+ <- heap_ptr |
+    |                                |      ^      |
+    |                                |      |      |
+    |                                |      |      |
+    |                                |      | free |
+    |                                |      |      |
+    |                                |      |      |
+    |                                |      v      |
+    +--------------------------------+ <- e ----   |
+    |                                |      ^      |
+    +--------------------------------+      |      |
+    |                                |      |      |
+    +--------------------------------+      | stack|
+    |                                |      |      |
+    +--------------------------------+      |      |
+    |           word[n-1]            |      v      v
+    +================================+ <- stack_base --
 
 The initial size of the allocated block for the stack and heap in AtomVM is 8 words.  As heap and stack allocations grow, eventually, the amount of free space will decrease to the point where a garbage collection is required.  In this case, a new but larger (typically by 2x) block of memory is allocated by the AtomVM OS process, and terms are copied from the old stack and heap to the new stack and heap.  Garbage collection is described in more detail below.
 
-## Registers
+### Registers
 
 Registered are allocated in an array of 16 terms (words) and are referenced by the `x` field in the Context data structure:
 
@@ -76,23 +78,23 @@ Like terms in the stack, terms in registers are either single-word terms, i.e., 
 
 Registers are used as part of the BEAM instruction set to store and retrieve values that are passed between BEAM instruction opcodes.
 
-## Process Dictionary
+### Process Dictionary
 
 AtomVM processes support a process dictionary, or map of process-specific data, as supported via the `erlang:put/2` and `erlang:get/1` functions.
 
 The Process Dictionary contains a list of key-value pairs, where each key and value is a single-word term, either a simple term like an atom or pid, or a reference to an allocated object in the process heap. (see below)
 
-## Heap Fragments
+### Heap Fragments
 
 AtomVM makes use of heap fragments in some edge cases, such as loading external terms from the literals table in a BEAM file.  Heap fragments are individually allocated blocks of memory that contain may contain multi-word term structures.  The data in heap fragments are copied into the heap during a garbage collection event, and then deleted, so heap fragments are generally short lived.  However, during execution of a program, there may be references to term structures in such fragments from the stack, registers, the process dictionary, or from nested terms in the process heap.
 
-## Mailbox
+### Mailbox
 
 Each Erlang process contains a process mailbox, which is a linked-list structure of messages.  Each message in this list contains a term structure, which is a copy of a term sent to it, e.g., via the `erlang:send/2` operation, or `!` operator.
 
 The representation of terms in a message is identical to that in the heap and heap fragments, with the exception that messages in the process mailbox are not garbage collected, in the way that the process heap is.  Instead, messages in the process mailbox are copied to the process heap when the message is read off the mailbox (e.g., via `receive ... end`).  Messages (and their term contents) are then destroyed once they are no longer needed, and after being copied into the heap.
 
-## Memory Graph
+### Memory Graph
 
 Memory is allocated in the execution context heap, and structured types, such as tuples and lists, generally include references to the blocks of memory that have beenn previously allocated.
 
@@ -102,27 +104,28 @@ For example, if we look at the memory allocated for the term
 
 we would generally see something like the following in the execution context heap:
 
-                                            |           ...             |
-                                            |                           |
-                                    ------- +---------------------------+
-                                     ^      |          tuple            |<--+
-                                     |      +---------------------------+   |
-                    {bar, self()}    |      |          bar              |   |
-                                     |      +---------------------------+   |
-                                     v      |          <0.1.0>          |   |
-                                    ------- +---------------------------+   |
-                                     ^      |          []               |<- | --+
-                 [{bar, self()}]     |      +---------------------------+   |   |
-                                     v      |          tuple ptr        |---+   |
-                                    ------- +---------------------------+       |
-                                     ^      |          tuple            |       |
-                                     |      +---------------------------+       |
-           {foo, [{bar, self()}]}    |      |          foo              |       |
-                                     |      +---------------------------+       |
-                                     v      |          list ptr         |-------+
-                                    ------- +---------------------------+
-                                            |                           |
-                                            |           ...             |
+    |           ...             |
+    |                           |
+    +---------------------------+
+    |          tuple            |<--+
+    +---------------------------+   |
+    |          bar              |   |
+    +---------------------------+   |
+    |          <0.1.0>          |   |
+    +---------------------------+   |
+    |          []               |<- | --+
+    +---------------------------+   |   |
+    |          tuple ptr        |---+   |
+    +---------------------------+       |
+    |          tuple            |       |
+    +---------------------------+       |
+    |          foo              |       |
+    +---------------------------+       |
+    |          list ptr         |-------+
+    +---------------------------+
+    |                           |
+    |           ...             |
+    01234567890123456789012345678901234567890123456789
 
 The tuple `{bar, self()}` is allocated in a block, and the list `[{bar, self()}]` (or, technically, `[{bar, self()} | []]`) contains elements that _point_ to it elements (in this case, `[]` and `{bar, self()}` -- note that in general, in AtomVM, the address of the tail of a list occupies the first byte in the list -- more details on that below).  Finally, the tuple `{foo, [{bar, self()}]}` contains the atom `foo` and a _pointer_ to the list it contains.
 
@@ -132,15 +135,13 @@ The stack, registers, and process dictionary contain pointers to terms in the he
 
 Note that the values in the stack and register root nodes change over time as the result of the execution of Erlang opcodes, and are dependent on the BEAM output of the Erlang compiler, along with inputs to the program being executed.  Thus, a term in the process heap may become garbage, once it is no longer reachable from the root set.  But once garbage, the termill will always remain garbage, at least until it is reclaimed during a garbage collection event.  For more information about how the garbage collector works, see the Garbage Collection section, below.
 
-# Terms
+## Simple Terms
 
 The fundamental unit of memory in AtomVM is the `term` object, which is designed to fit either into a single machine work (single-word terms), or into multiple words (so called "boxed terms" and lists).
 
 This section enumerates the AtomVM term types, and how they are represented in memory.
 
 > Note.  The term type is overloaded in some cases to store raw pointers to memory addresses, but this is rare and well controlled.
-
-## Single-word terms ("immediates")
 
 The following term types take up a single word, referred to as "immediates" in the BEAM documentation[1].  The low-order bits of the word are used to represent the type of the term, and the high order bits represent the term contents, in a manner described in the following sections.
 
@@ -292,7 +293,7 @@ The keys and values are single word terms, i.e., either immediates or pointers t
             |                                |
             |<---------- word-size --------->|
 
-The tuple of keys may or may not be contiguous with the boxed term holding the map itself (and in general will not be, after garbage collection).
+The tuple of keys may or may not be contiguous with the boxed term holding the map itself (and in general will not be, after garbage collection).  In addition, maps that are modified [sic] via the `:=` operator (or via `=>`, when the key already exists in the source map) share the keys tuple, for space efficiency.
 
 ### Binaries
 
@@ -348,27 +349,27 @@ All of the above data is allocated in a single block, so that it can be easily `
 
 The reference count is initialized to 1, under the principle that that reference count is incremented for any occurrence of boxed terms that reference the same data in any heap space, including process heaps, mailbox messages, heap fragments, and so forth.  Decrementing reference counts and `free`'ing data in off-heap storage is discussed in more detail below, in the Garbage Collection section.
 
-                                      |< 6  >|
-    +-----> +=========================+======+
-    |       |    boxed-size (5)       |100000| boxed[0]
-    |       +-------------------------+------+
-    |       |         size (in bytes)        | boxed[1]
-    |       +--------------------------------+
-    |       |             flags             0| boxed[2]
-    |       +--------------------------------+                                  off-heap storage
-    |       |              ptr >-------------- boxed[3] ------------------> +----------------------+ ------
-    |       +--------------------------------+ ---------------              |         prev         |     ^
-    |       |              cdr               | boxed[4]     ^               +----------------------+     | ListHead
-    |       +--------------------------------+              | cons cell     |         next         |     v
-    +--------------------< car               | boxed[5]     v               +----------------------+ ------
-            +================================+ ---------------              |   reference-count    |
-            |<---------- word-size --------->|                              +----------------------+
-                                                                            |         size         |
-                                                                            +----------------------+
-                                                                            |         data         |
-                                                                                       ...
-                                                                            |                      |
-                                                                            +----------------------+
+                                   |< 6  >|
+    +--> +=========================+======+
+    |    |    boxed-size (5)       |100000| boxed[0]
+    |    +-------------------------+------+
+    |    |         size (in bytes)        | boxed[1]
+    |    +--------------------------------+
+    |    |             flags             0| boxed[2]
+    |    +--------------------------------+                   off-heap storage
+    |    |              ptr >-------------- boxed[3] ---> +----------------------+ ------
+    |    +--------------------------------+               |         prev         |     ^
+    |    |              cdr               | boxed[4]      +----------------------+     | ListHead
+    |    +--------------------------------+               |         next         |     v
+    +-----------------< car               | boxed[5]      +----------------------+ ------
+         +================================+               |   reference-count    |
+         |<---------- word-size --------->|               +----------------------+
+                                                          |         size         |
+                                                          +----------------------+
+                                                          |         data         |
+                                                                     ...
+                                                          |                      |
+                                                          +----------------------+
 
 > Note. The size of a reference counted binary is stored both in the process heap (in the boxed term), as well as in the off-heap storage.  The size count in the off-heap storage is needed in order to report the amount of data in use by binaries (e.g., via `erlang:memory/0,1`).
 
@@ -391,13 +392,13 @@ This heap structure has the following representation:
     |         size (in bytes)        | boxed[1]
     +--------------------------------+
     |             flags             1| boxed[2]
-    +--------------------------------+                                          static storage
-    |              ptr >-------------- boxed[3] --------------------------> +----------------------+
-    +--------------------------------+ ---------------                      |          data        |
-    |             unused             | boxed[4]     ^                       |                      |
-    +--------------------------------+              | cons cell                        ...
-    |             unused             | boxed[5]     v                       |                      |
-    +================================+ ---------------                      +----------------------+
+    +--------------------------------+                       static storage
+    |              ptr >-------------- boxed[3] -------> +----------------------+
+    +--------------------------------+                   |          data        |
+    |             unused             | boxed[4]          |                      |
+    +--------------------------------+                               ...
+    |             unused             | boxed[5]          |                      |
+    +================================+                   +----------------------+
     |<---------- word-size --------->|
 
 #### Match Binaries
@@ -422,11 +423,11 @@ Like a reference counted binary, a match binary includes a trailing cons cell, w
     |       |             offset             | boxed[2]
     |       +--------------------------------+
     |       |             saved              | boxed[3]
-    |       +--------------------------------+ ---------------
-    |       |              cdr               | boxed[4]     ^
-    |       +--------------------------------+              | cons cell
-    +--------------------< car               | boxed[5]     v
-            +================================+ ---------------
+    |       +--------------------------------+
+    |       |              cdr               | boxed[4]
+    |       +--------------------------------+
+    +--------------------< car               | boxed[5]
+            +================================+
             |<---------- word-size --------->|
 
 A reference to a reference-counted binary counts as a reference, in which case the creation or copying of a match binary results in the increment of the reference-counted binary's reference count, and the garbage collection of a match binary results in a decrement (and possible `free`ing) of a reference-counted binary.  The trailing cons cell becomes an element of the context (or message) MSO list, and plays a critical role in garbage collection.  See the garbage collection section below for more information about the role of this structure.
@@ -519,13 +520,13 @@ In addition, if there are any terms that are used outside of the scope of the fu
     |         module address         | boxed[1]
     +--------------------------------+
     |         function index         | boxed[2]
-    +--------------------------------+ ---------------
-    |            closure_1           | boxed[3]     ^
-    +- - - - - - - - - - - - - - - - +              |
-    |               ...              |              | closure
-    +- - - - - - - - - - - - - - - - +              |
-    |            closure_k           | boxed[n-1]   v
-    += = = = = = = = = = = = = = = = + ---------------
+    +--------------------------------+
+    |            closure_1           | boxed[3]
+    +- - - - - - - - - - - - - - - - +
+    |               ...              |
+    +- - - - - - - - - - - - - - - - +
+    |            closure_k           | boxed[n-1]
+    += = = = = = = = = = = = = = = = +
     |                                |
     |<---------- word-size --------->|
 
@@ -554,41 +555,48 @@ A catch label is used to indicate a position in code to which to jump in a try-c
 
 Module and catch label indices are stored outside of the process heap and are outside of the scope of this document.
 
-# Garbage Collection
+## Garbage Collection
 
 Garbage collection refers to the process of removing no-longer referenced term data stored in the heap, making room for new storage, as the program requires.  AtomVM implements [Tracing Garbage Collection](https://en.wikipedia.org/wiki/Tracing_garbage_collection), as does [Erlang Garbage Collection](https://erlang.org/doc/apps/erts/GarbageCollection.html).  Unlike some garbage collection systems (e.g., as implemented by the Java Virtual Machine), garbage collection in Erlang-based systems, is performed independently on the heap allocated for each active Erlang process; there is no single shared heap for all running Erlang processes.
 
 A given process heap and stack occupy a single region of malloc'd memory, and it is the job of the Erlang VM to manage memory within the allocated regions.  Because this region is fixed, every allocation in the heap or stack results in less free space for the Erlang process.  When free space reaches a limit, AtomVM will run a garbage collection event, which will allocate a new block of memory to hold the new heap and stack (typically, enough to allocate a requested object, plus a little extra), and then copy terms from the old heap and stack to the new heap and stack.  Any terms that no longer have references from term pointers in the old stack or registers are not copied to the new stack, and are therefore "collected" as garbage.  In addition, any objects in the old heap that reference objects in shared memory (see reference counted binaries, above) are also managed as part of this process, in a manner described below.
 
-                                                    +-------------------+ ------
-                                                    |        new        |    ^
-                                                    |        heap       |    |
-                                                    +-------------------+    |
-           ---- +-------------------+               |                   |    |
-            ^   |                   |               |                   |    |
-            |   |        old        |               |                   |    |  new
-    old     |   |        heap       |               |                   |    |  malloc'd
-    malloc'd|   |                   |    ===>       |                   |    |  region
-    region  |   +===================+     gc        |        free       |    |
-            |   |        old        |               |                   |    |
-            v   |        stack      |               |                   |    |
-           ---- +-------------------+               |                   |    |
-                                                    +-------------------+    |
-                                                    |        new        |    |
-                                                    |        stack      |    v
-                                                    +-------------------+ -----
+                                  +---------+ ------
+                                  |   new   |    ^
+                                  |   heap  |    |
+                                  +---------+    |
+           ---- +----------+      |         |    |
+            ^   |          |      |         |    |
+            |   |   old    |      |         |    |  new
+    old     |   |   heap   |      |         |    |  malloc'd
+    malloc'd|   |          | ===> |         |    |  region
+    region  |   +==========+  gc  |  free   |    |
+            |   |   old    |      |         |    |
+            v   |   stack  |      |         |    |
+           ---- +----------+      |         |    |
+                                  +---------+    |
+                                  |   new   |    |
+                                  |   stack |    v
+                                  +---------+ -----
 
-                                                                        process dictionary
-                    +---+---+---+-------------------+---+               +--------+--------+
-                    | 0 | 1 | 2 |                   | 15|               |   k1   |   v1   |
-                    +---+---+---+-------------------+---+               +--------+--------+
-                    registers                                           |   k2   |   v2   |
-                                                                        +--------+--------+
-                                                                        |       ...       |
+
+    +---+---+---+-------------------+---+
+    | 0 | 1 | 2 |                   | 15|
+    +---+---+---+-------------------+---+
+    registers
+
+
+    process dictionary
+    +--------+--------+
+    |   k1   |   v1   |
+    +--------+--------+
+    |   k2   |   v2   |
+    +--------+--------+
+    |       ...       |
 
 Terms stored in the stack, registers, and process dictionary are either single-word terms (like atoms or pids) or term references, i.e., single-word terms that point to boxed terms or list cells in the heap.  These terms consitute the "roots" of the memory graph of all "reachable" terms in the process.
 
-## When does garbage collection happen?
+### When does garbage collection happen?
 
 Garbage collection typically occurs as the result of a request for an allocation of a multi-word term in the heap (e.g., a tuple, list, or binary, among other types), and when there is currently insufficient space in the free space between the current heap and the current stack to accomodate the allocation.
 
@@ -596,7 +604,7 @@ Garbage collection is a _synchronous_ operation in each Context (Erlang process)
 
 > Note.  Currently, AtomVM does not support symmetric multi-processing, or execution of multiple processes in parallel on separate machine cores.
 
-## Garbage Collection Steps
+### Garbage Collection Steps
 
 Garbage collection in AtomVM can be broken down into the following phases:
 
@@ -608,13 +616,13 @@ Garbage collection in AtomVM can be broken down into the following phases:
 
 The following subsections describe these phases in more detail.
 
-### Allocation
+#### Allocation
 
 Garbage collection typically occurs as the result of a request for space on an Erlang process's heap.  The amount of space requested is dependent on the kind of term being allocated, but in general, AtomVM will check the amount of free space in the heap, and if it is below the amount of requested space plus some extra (currently, 16 words), then a garbage collection will occur, with the requested allocation space being the current size of the heap, plus the requested size, plus an extra 16 words.
 
 Allocation is a straightforward `malloc` in the (operating system) process heap of the requested set of words.  This block of storage will become the "new heap", as opposed to the existing, or "old heap".
 
-### Shallow Copy
+#### Shallow Copy
 
 The garbage collector starts by traversing the current root set, i.e., the terms contained in the stack, registers, and keys and values in the process dictionary, and performs a "shallow copy" of the terms that are in or referenced from these root terms from the old heap to the new heap, while at the same time updating the values in the root set, as some of these values may be pointers into the old heap, and therefore need to be updated to pointers in the new heap.
 
@@ -632,59 +640,60 @@ This process is best illustrated with a motivating example:
 
 Suppose this term resides in the old heap, and some `register[i]` is a root term pointer to this tuple in the heap:
 
-        +-> |                           |                       |                           |           |
-        |   |                           |                       |                           |           |
-        |   |                           |                       |                           |           |
-        |   |                           |                       |                           |           |
-                        ...                                                 ...                         | used
-        |   |                           |                       |                           |           v
-        |   +---------------------------+                       +===========================+ <----------- new heap_ptr
-        |   |           tuple           |<----------+           |                           |           ^
-        |   +---------------------------+           |           |                           |           |
-        |   |         atom foo          |           |           |                           |           |
-        |   +---------------------------+           |           |                           |           |
-        +----< pointer to refc binary   |           |           |                           |           | free
-            +---------------------------+           |           |                           |           |
-            |                           |           |           |                           |           |
-            |           ...             |           |           |           ...             |           |
-            |                           |           |           |                           |           |
-                    old heap                        |                     new heap
-                                                    |
-                                        ---+----------------+---
-                                       ... |     old-ptr    | ...
-                                        ---+----------------+---
-                                              register[i]
+    +-> |              |        |             |
+    |   |              |        |             |
+    |   |              |        |             |  USED
+    |   |              |        |             |
+              ...                     ...
+    |   |              |        |             |
+    |   +--------------+        +=============+ <-- heap
+    |   |     tuple    |<---+   |             |     addr
+    |   +--------------+    |   |             |
+    |   |   atom foo   |    |   |             |
+    |   +--------------+    |   |             |
+    +----< refc binary |    |   |             |  FREE
+        +--------------+    |   |             |
+        |              |    |   |             |
+        |     ...      |    |   |     ...     |
+        |              |    |   |             |
+            old heap        |       new heap
+                            |
+                ---+----------------+---
+               ... |     old-ptr    | ...
+                ---+----------------+---
+                      register[i]
 
 The boxed term is copied to the new heap, overwritten with the marked header `0x2b`, along with a pointer to the new term, and the root term is updated with the same address:
 
-        +-> |                           | <-----------------+   |                           |           |
-        |   |                           |                   |   |                           |           |
-        |   |                           |                   |   |                           |           |
-        |   |                           |                   |   |                           |           |
-                        ...                                                 ...                         |
-        |   |                           |                   |   |                           |           |
-        |   +---------------------------+ >>>>>>>>>>>>>>>>>>|>> +---------------------------+           |
-        |   |           0x2b            |     +-----+-------|-> |           tuple           |           | used
-        |   +---------------------------+     |     |       |   +---------------------------+           |
-        |   |     ptr to new term ------------+     |       |   |          atom foo         |           |
-        |   +---------------------------+           |       |   +---------------------------+           |
-        +----< pointer to refc binary   |           |       +----< pointer to refc binary   |           v
-            +---------------------------+ >>>>>>>>>>|>>>>>>>>>> +===========================+ <----------- new heap_ptr
-            |                           |           | COPY      |                           |           ^
-            |           ...             |           |           |            ...            |           | free
-            |                           |           |           |                           |           |
-                    old heap                        |                     new heap
-                                                    |
-                                        ---+----------------+---
-                                       ... |     new-ptr    | ...
-                                        ---+----------------+---
-                                              register[i]
+    +-> |              | <--------+   |             |
+    |   |              |          |   |             |
+    |   |              |          |   |             |
+    |   |              |          |   |             |
+               ...                          ...
+    |   |              |          |   |             |
+    |   +--------------+ >>>>>>>>>|>> +-------------+
+    |   |     0x2b     |   +--+---|-> |   tuple     | USED
+    |   +--------------+   |  |   |   +-------------+
+    |   |     ptr  --------+  |   |   |  atom foo   |
+    |   +--------------+      |   |   +-------------+
+    +----< refc binary |      |   +----< refc binary|
+        +--------------+ >>>>>|>>>>>>>+=============+ <-- new
+        |              |      | COPY  |             |   heap
+        |     ...      |      |       |             |   addr
+             old heap         |       |             |
+                              |       |             | FREE
+                              |
+                              |
+                  ---+----------------+---
+                 ... |     new-ptr    | ...
+                  ---+----------------+---
+                        register[i]
 
 Note that the first term of the tuple (atom `foo`) is copied to the new heap, but the pointer to the refc binary is out of date -- it still points to a value in the old heap.  This will be corrected in the iterative scan and copy phase, below.
 
 After a shallow copy of the root set, all terms immediately reachable from the root set have been copied to the new heap, and any boxed terms they reference have been marked as being moved.  The new heap consists of a set of contiguous copied boxed terms from the old heap, starting from the base address of the heap, to some higher address in the heap, but less than or equal to the maximum heap size on the new heap.
 
-### Iterative Scan and Copy
+#### Iterative Scan and Copy
 
 The iterative scan and copy phase works as follows:
 
@@ -696,25 +705,44 @@ The iterative scan and copy phase works as follows:
 
 The following sequence of iterative additions to the new heap illustrates this process:
 
-    +---------------+   ===>    +---------------+  ===>   +- - - - - - - -+  ===>   +- - - - - - - -+  ===>   +- - - - - - - -+
-    |   scan&copy   |           |    complete   |         |    complete   |         |    complete   |         |    complete   |
-    |   region      |           |    region     |              region                    region                    region
-    |               |           |               |         |               |         |               |         |               |
-    |               |           |               |
-    |               |           |               |         |               |         |               |         |               |
-    |               |           |               |
-    |               |           |               |         |               |         |               |         |               |
-    +---------------+           +---------------+         +---------------+
-                                |     newly     |         |   scan&copy   |         |               |         |               |
-                                |    copied     |         |   region      |
-                                |     terms     |         |               |         |               |         |               |
-                                +---------------+         +---------------+         +---------------+
-                                                          |newlycpiedterms|         |  scan&copy    |         |               |
-                                                          +---------------+         +---------------+         +- - - - - - - -+
+    +---------------+ ===> +---------------+ ===> +---------------+ ...
+    |   scan&copy   |      |    complete   |      |    complete   |
+    |   region      |      |    region     |      |    region     |
+    |               |      |               |      |               |
+    |               |      |               |      |               |
+    |               |      |               |      |               |
+    |               |      |               |      |               |
+    |               |      |               |      |               |
+    +---------------+      +---------------+      +---------------+
+                           |     newly     |      |   scan&copy   |
+                           |    copied     |      |   region      |
+                           |     terms     |      |               |
+                           +---------------+      +---------------+
+                                                  |newlycpiedterms|
+                                                  +---------------+
+
+
+
+     ... ===> +---------------+ ===> +---------------+
+              |    complete   |      |    complete   |
+              |    region     |      |    region     |
+              |               |      |               |
+              |               |      |               |
+              |               |      |               |
+              |               |      |               |
+              |               |      |               |
+              |               |      |               |
+              |               |      |               |
+              |               |      |               |
+              |               |      |               |
+              +---------------+      |               |
+              |  scan&copy    |      |               |
+              +---------------+      +---------------+
+
 
 At the end of the iterative scan and copy, all reachable terms in the old heap will be copied to the new heap, and no boxed terms in the old heap will contain pointers to terms in the old heap.  Any terms that have not been copied to the new heap are "garbage", as there are no longer any paths to them from the root set, and can therefore be destroyed,
 
-### MSO Sweep
+#### MSO Sweep
 
 As mentioned in the section above on binaries, AtomVM supports refrence-counted binaries, whereby binaries of a sufficiently large size (>64 bytes) are allocated outside of the process heap, and are instead referenced from boxed terms in the heap.  This way, binaries, which are immutable objects, can be shared between processes without incurring the time and space cost of a large data copy.
 
@@ -724,42 +752,42 @@ The MSO list is formed via the cons cells that are appended to reference counted
 
 The following diagram illustrates a set of two reference counted binaries in a process heap:
 
-                        |                   |
-                +-----> +-------------------+
-                |       |       refc        |
-                |       |      binary       |
-                |       |                   |
-                |       |                   |
-                |       +-------------------+ <----+
-                |       |        nil        |      |
-                |       +-------------------+      |
-                +---------------< car       |      |
-                        +-------------------+      |
-                        |                   |      |
-                                ...
-                        |                   |      |
-                +-----> +-------------------+      |
-                |       |       refc        |      |
-                |       |      binary       |      |
-                |       |                   |      |
-                |       |                   |      |
-                |       +-------------------+ <----|------------+
-                |       |        cdr >-------------+            |
-                |       +-------------------+                   |
-                +--------------< car        |                   |
-                        +-------------------+                   |
-                        |                   |                   |
-                        |                   |                   |
-                                 ...                            |
-                                                                |
-                                                        +-------^--------+
-                                                        |   mso_list     |
-                                                        +----------------+
+            |                   |
+    +-----> +-------------------+
+    |       |       refc        |
+    |       |      binary       |
+    |       |                   |
+    |       |                   |
+    |       +-------------------+ <----+
+    |       |        nil        |      |
+    |       +-------------------+      |
+    +---------------< car       |      |
+            +-------------------+      |
+            |                   |      |
+                    ...
+            |                   |      |
+    +-----> +-------------------+      |
+    |       |       refc        |      |
+    |       |      binary       |      |
+    |       |                   |      |
+    |       |                   |      |
+    |       +-------------------+ <----|-------+
+    |       |        cdr >-------------+       |
+    |       +-------------------+              |
+    +--------------< car        |              |
+            +-------------------+              |
+            |                   |              |
+            |                   |              |
+                     ...                       |
+                                               |
+                                       +-------^--------+
+                                       |   mso_list     |
+                                       +----------------+
 
 After the new heap has been scanned and copied, as described above, the MSO list is traversed to determine if any reference-counted binaries are no longer referenced from the process heap.  If any reference counted binaries in the heap have not been marked as moved from the old heap, they are, effectively, no longer referenced from the root set, and the reference count on the corresponding off-heap binary can be decremented.  Furthermore, when the reference count reaches 0, the binaries can then be deleted.
 
 > Note.  Const binaries, while they have slots for entry into the MSO list, nonetheless are never "stitched" into the MSO list, as the binary data they poont to is const, endures fro the lifecyle of the program, and is never deleted.  Match binaries, on the other hand, do count as references, and can therefore be stitched into the MSO list.  However, when they are, the reference counted binaries they point to are the actual binaries in the process heap, not the match binaries, as with the case of refc binaries on the process heap.
 
-### Deletion
+#### Deletion
 
 Once all terms have been copied from the old heap to the new heap, and once the MSO list has been swept for unreachable references, the old heap is simply discared via the `free` function.
