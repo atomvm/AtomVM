@@ -1019,50 +1019,6 @@ static inline term term_create_empty_binary(uint32_t size, Context *ctx)
 }
 
 /**
-* @brief Insert an integer into a binary (using bit syntax).
-*
-* @details Insert the low order n bits on value into the binary stored in t, starting
-* at the bit position starting in offset.
-* @param t a term pointing to binary data. Fails if t is not a binary term.
-* @param offset the bitwise offset in t at which to start writing the integer value
-* @param value the integer value to write
-* @param n the number of low-order bits from value to write.
-* @return 0 on success; non-zero value if:
-*           t is not a binary term
-*           n is greater than the number of bits in an integer
-*           there is insufficient capacity in the binary to write these bits
-* In general, none of these conditions should apply, if this function is being
-* called in the context of generated bit syntax instructions.
-*/
-static inline int term_bs_insert_integer(term t, avm_int_t offset, avm_int_t value, avm_int_t n)
-{
-    if (!term_is_binary(t)) {
-        return -1;
-    }
-    if ((unsigned int) n > sizeof(avm_int_t) * 8) {
-        return -2;
-    }
-    unsigned long capacity = term_binary_size(t);
-    if (8 * capacity < (unsigned long) (offset + n)) {
-        return -3;
-    }
-    // TODO optimize by xor'ing by byte (or mask on boundaries)
-    // TODO support big/little endian flags
-    for (int i = 0; i < n; ++i) {
-        int k = (n - 1) - i;
-        int bit_val = (value & (0x01 << k)) >> k;
-        if (bit_val) {
-            int bit_pos = offset + i;
-            int byte_pos = bit_pos / 8;
-            uint8_t *pos = (uint8_t *) (term_binary_data(t) + byte_pos);
-            int shift = 7 - (bit_pos % 8);
-            *pos ^= (0x01 << shift);
-        }
-    }
-    return 0;
-}
-
-/**
 * @brief Insert an binary into a binary (using bit syntax).
 *
 * @details Insert the data from the input binary, starting

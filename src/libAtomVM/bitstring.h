@@ -31,26 +31,56 @@
     #define READ_16LE_UNALIGNED(ptr) \
         ( (((uint8_t *)(ptr))[1] << 8) | ((uint8_t *)(ptr))[0] )
 
+    #define WRITE_16LE_UNALIGNED(t, ptr, val) \
+        *((t *) (ptr)) = ( (((uint8_t *)(&val))[1] << 8) | ((uint8_t *)(&val))[0] )
+
     #define READ_32LE_UNALIGNED(ptr) \
         ( (((uint8_t *)(ptr))[3] << 24) | (((uint8_t *) (ptr))[2] << 16) | (((uint8_t *)(ptr))[1] << 8) | ((uint8_t *)(ptr))[0] )
+
+    #define WRITE_32LE_UNALIGNED(t, ptr, val) \
+        *((t *) (ptr)) = ( (((uint8_t *)(&val))[3] << 24) | (((uint8_t *) (&val))[2] << 16) | (((uint8_t *)(&val))[1] << 8) | ((uint8_t *)(&val))[0] )
 
     #define READ_64LE_UNALIGNED(ptr) \
         ( (((uint64_t) ((uint8_t *)(ptr))[7]) << 56) | (((uint64_t) ((uint8_t *) (ptr))[6]) << 48) | \
             (((uint64_t) ((uint8_t *)(ptr))[5]) << 40) | (((uint64_t) ((uint8_t *) (ptr))[4]) << 32) | \
             (((uint64_t) ((uint8_t *)(ptr))[3]) << 24) | (((uint64_t) ((uint8_t *) (ptr))[2]) << 16) | \
             (((uint64_t) ((uint8_t *)(ptr))[1]) << 8) | (((uint64_t) ((uint8_t *) (ptr))[0])) )
+
+    #define WRITE_64LE_UNALIGNED(t, ptr, val) \
+        *((t *) (ptr)) = ( \
+            ((t) ((uint8_t *)(&val))[7] << 56) | ((t) ((uint8_t *) (&val))[6] << 48) | \
+            ((t) ((uint8_t *)(&val))[5] << 40) | ((t) ((uint8_t *) (&val))[4] << 32) | \
+            ((t) ((uint8_t *)(&val))[3] << 24) | ((t) ((uint8_t *) (&val))[2] << 16) | \
+            ((t) ((uint8_t *)(&val))[1] <<  8) | (     (uint8_t *) (&val))[0] \
+        )
+
+
 #else
     #define READ_16LE_UNALIGNED(ptr) \
         ( (((uint8_t *)(ptr))[0] << 8) | ((uint8_t *)(ptr))[1] )
 
+    #define WRITE_16LE_UNALIGNED(t, ptr, val) \
+        *((t *) (ptr)) = ( (((uint8_t *)(&val))[0] << 8) | ((uint8_t *)(&val))[1] )
+
     #define READ_32LE_UNALIGNED(ptr) \
         ( (((uint8_t *)(ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) | (((uint8_t *)(ptr))[2] << 8) | ((uint8_t *)(ptr))[3] )
+
+    #define WRITE_32LE_UNALIGNED(t, ptr, val) \
+        *((t *) (ptr)) = ( (((uint8_t *)(&val))[0] << 24) | (((uint8_t *) (&val))[1] << 16) | (((uint8_t *)(&val))[2] << 8) | ((uint8_t *)(&val))[3] )
 
     #define READ_64LE_UNALIGNED(ptr) \
         ( (((uint64_t) ((uint8_t *)(ptr))[0]) << 56) | (((uint64_t) ((uint8_t *) (ptr))[1]) << 48) | \
             (((uint64_t) ((uint8_t *)(ptr))[2]) << 40) | (((uint64_t) ((uint8_t *) (ptr))[3]) << 32) | \
             (((uint64_t) ((uint8_t *)(ptr))[4]) << 24) | (((uint64_t) ((uint8_t *) (ptr))[5]) << 16) | \
             (((uint64_t) ((uint8_t *)(ptr))[6]) << 8) | (((uint64_t) ((uint8_t *) (ptr))[7])) )
+
+    #define WRITE_64LE_UNALIGNED(t, ptr, val) \
+        *((t *) (ptr)) = ( \
+            ((t) ((uint8_t *)(&val))[0] << 56) | ((t) ((uint8_t *) (&val))[1] << 48) | \
+            ((t) ((uint8_t *)(&val))[2] << 40) | ((t) ((uint8_t *) (&val))[3] << 32) | \
+            ((t) ((uint8_t *)(&val))[4] << 24) | ((t) ((uint8_t *) (&val))[5] << 16) | \
+            ((t) ((uint8_t *)(&val))[6] <<  8) | (     (uint8_t *) (&val))[7] \
+        )
 #endif
 
 enum BitstringFlags
@@ -83,8 +113,10 @@ union maybe_unsigned_int64
     int64_t s;
 };
 
-bool extract_any_integer(const uint8_t *src, size_t offset, avm_int_t n,
+bool bitstring_extract_any_integer(const uint8_t *src, size_t offset, avm_int_t n,
         enum BitstringFlags bs_flags, union maybe_unsigned_int64 *dst);
+
+bool bitstring_insert_any_integer(uint8_t *dst, avm_int_t offset, avm_int64_t value, size_t n, enum BitstringFlags bs_flags);
 
 static inline bool bitstring_extract_integer(term src_bin, size_t offset, avm_int_t n,
         enum BitstringFlags bs_flags, union maybe_unsigned_int64 *dst)
@@ -163,11 +195,100 @@ static inline bool bitstring_extract_integer(term src_bin, size_t offset, avm_in
             }
 
             default:
-                return extract_any_integer(src, 0, n, bs_flags, dst);
+                return bitstring_extract_any_integer(src, 0, n, bs_flags, dst);
         }
     }
 
     return false;
+}
+
+
+static inline bool bitstring_insert_integer(term dst_bin, size_t offset, avm_int64_t value, size_t n, enum BitstringFlags bs_flags)
+{
+    unsigned long capacity = term_binary_size(dst_bin);
+    if (8 * capacity - offset < (unsigned long) n) {
+        return false;
+    }
+
+    if ((offset & 0x7) == 0) {
+        int byte_offset = offset >> 3;
+        uint8_t *dst = (uint8_t *) term_binary_data(dst_bin) + byte_offset;
+
+        switch (n) {
+            case 8: {
+                *dst = value & 0xFF;
+                return true;
+            }
+
+            case 16: {
+                if (bs_flags & LittleEndianInteger) {
+                    if (bs_flags & SignedInteger) {
+                        int16_t signed_value = (int16_t) value;
+                        WRITE_16LE_UNALIGNED(int16_t, dst, signed_value);
+                    } else {
+                        uint16_t unsigned_value = (uint16_t) value;
+                        WRITE_16LE_UNALIGNED(uint16_t, dst, unsigned_value);
+                    }
+                } else {
+                    if (bs_flags & SignedInteger) {
+                        int16_t signed_value = (int16_t) value;
+                        WRITE_16_UNALIGNED(dst, signed_value);
+                    } else {
+                        uint16_t unsigned_value = (uint16_t) value;
+                        WRITE_16_UNALIGNED(dst, unsigned_value);
+                    }
+                }
+                return true;
+            }
+
+            case 32: {
+                if (bs_flags & LittleEndianInteger) {
+                    if (bs_flags & SignedInteger) {
+                        int32_t signed_value = (int32_t) value;
+                        WRITE_32LE_UNALIGNED(int32_t, dst, signed_value);
+                    } else {
+                        uint32_t unsigned_value = (uint32_t) value;
+                        WRITE_32LE_UNALIGNED(uint32_t, dst, unsigned_value);
+                    }
+                } else {
+                    if (bs_flags & SignedInteger) {
+                        int32_t signed_value = (int32_t) value;
+                        WRITE_32_UNALIGNED(dst, signed_value);
+                    } else {
+                        uint32_t unsigned_value = (uint32_t) value;
+                        WRITE_32_UNALIGNED(dst, unsigned_value);
+                    }
+                }
+                return true;
+            }
+
+            case 64: {
+                if (bs_flags & LittleEndianInteger) {
+                    if (bs_flags & SignedInteger) {
+                        avm_int64_t signed_value = value;
+                        WRITE_64LE_UNALIGNED(avm_int64_t, dst, signed_value);
+                    } else {
+                        uint64_t unsigned_value = (uint64_t) value;
+                        WRITE_64LE_UNALIGNED(avm_int64_t, dst, unsigned_value);
+                    }
+                } else {
+                    if (bs_flags & SignedInteger) {
+                        int64_t signed_value = value;
+                        WRITE_64_UNALIGNED(dst, signed_value);
+                    } else {
+                        uint64_t unsigned_value = (uint64_t) value;
+                        WRITE_64_UNALIGNED(dst, unsigned_value);
+                    }
+                }
+                return true;
+            }
+
+            default:
+                return bitstring_insert_any_integer(dst, offset, value, n, bs_flags);
+        }
+    }
+
+    return bitstring_insert_any_integer((uint8_t *) term_binary_data(dst_bin), offset, value, n, bs_flags);
 }
 
 #endif

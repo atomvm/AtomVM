@@ -41,6 +41,9 @@
         #define READ_64_UNALIGNED(ptr) \
             __builtin_bswap64(*((uint64_t *) (ptr)))
 
+        #define WRITE_64_UNALIGNED(ptr, val) \
+            *((uint64_t *) (ptr)) = __builtin_bswap64(val)
+
         #define READ_32_UNALIGNED(ptr) \
             __builtin_bswap32(*((uint32_t *) (ptr)))
 
@@ -59,6 +62,14 @@
               (((uint64_t) ((uint8_t *)(ptr))[2]) << 40) | (((uint64_t) ((uint8_t *) (ptr))[3]) << 32) | \
               (((uint64_t) ((uint8_t *)(ptr))[4]) << 24) | (((uint64_t) ((uint8_t *) (ptr))[5]) << 16) | \
               (((uint64_t) ((uint8_t *)(ptr))[6]) << 8) | (((uint64_t) ((uint8_t *) (ptr))[7])) )
+
+        #define WRITE_64_UNALIGNED(ptr, val) \
+            *((uint64_t *) (ptr)) = ( \
+                ((uint64_t) ((uint8_t *)(&val))[0] << 56) | ((uint64_t) ((uint8_t *) (&val))[1] << 48) | \
+                ((uint64_t) ((uint8_t *)(&val))[2] << 40) | ((uint64_t) ((uint8_t *) (&val))[3] << 32) | \
+                ((uint64_t) ((uint8_t *)(&val))[4] << 24) | ((uint64_t) ((uint8_t *) (&val))[5] << 16) | \
+                ((uint64_t) ((uint8_t *)(&val))[6] <<  8) | (            (uint8_t *) (&val))[7] \
+            )
 
         #define READ_32_UNALIGNED(ptr) \
             ( (((uint8_t *)(ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) | (((uint8_t *)(ptr))[2] << 8) | ((uint8_t *)(ptr))[3] )

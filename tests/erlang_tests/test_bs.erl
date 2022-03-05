@@ -32,8 +32,8 @@ start() ->
     error = test_create_with_invalid_int_size(),
     error = test_create_with_unsupported_int_unit(),
     error = test_create_with_unaligned_int_size(),
-    error = test_create_with_int_little_endian(),
-    error = test_create_with_int_signed(),
+    ok = test_create_with_int_little_endian(),
+    ok = test_create_with_int_signed(),
     error = test_create_with_invalid_binary_value(),
     error = test_create_with_invalid_binary_size(),
     error = test_create_with_binary_size_out_of_range(),
@@ -46,8 +46,8 @@ start() ->
     error = test_get_with_invalid_int_value(),
     error = test_get_with_invalid_int_size(),
     error = test_get_with_unsupported_int_unit(),
-    error = test_get_with_int_little_endian(),
-    error = test_get_with_int_signed(),
+    ok = test_get_with_int_little_endian(),
+    ok = test_get_with_int_signed(),
     error = test_get_with_invalid_binary_value(),
     error = test_get_with_invalid_binary_size(),
     error = test_get_with_unaligned_binary(),
@@ -122,10 +122,14 @@ test_create_with_unaligned_int_size() ->
     expect_error(fun() -> create_int_binary(16#FFFF, id(28)) end, unsupported).
 
 test_create_with_int_little_endian() ->
-    expect_error(fun() -> create_int_binary_little_endian(16#FFFF, id(32)) end, unsupported).
+    ok = expect_equals(<<255,255,0,0>>, create_int_binary_little_endian(16#FFFF, 32)),
+    ok = expect_equals(<<0,4,0,0>>, create_int_binary_little_endian(1024, 32)),
+    ok = expect_equals(<<0>>, create_int_binary_little_endian(1024, 8)),
+    ok.
 
 test_create_with_int_signed() ->
-    expect_error(fun() -> create_int_binary_signed(16#FFFF, id(32)) end, unsupported).
+    ok = expect_equals(<<0,0,255,255>>, create_int_binary_signed(16#FFFF, 32)),
+    ok.
 
 test_create_with_invalid_binary_value() ->
     expect_error(fun() -> create_binary_binary(foo, id(32)) end, badarg).
@@ -151,10 +155,10 @@ test_get_with_unsupported_int_unit() ->
     expect_error(fun() -> get_integer_big_unsigned_unit_3(16#F, id(32)) end, unsupported).
 
 test_get_with_int_little_endian() ->
-    expect_error(fun() -> get_integer_little_unsigned(16#FFFF, id(32)) end, unsupported).
+    expect_equals(1024, get_integer_little_unsigned(<<0,4,0,0>>, 32)).
 
 test_get_with_int_signed() ->
-    expect_error(fun() -> get_integer_big_signed(16#FFFF, id(32)) end, unsupported).
+    expect_equals(-1024, get_integer_big_signed(<<255,255,252,0>>, 32)).
 
 test_get_with_invalid_binary_value() ->
     expect_error(fun() -> get_binary_binary(foo, id(32)) end, badarg).
@@ -208,6 +212,11 @@ get_binary_binary(Bin, Size) ->
 get_int_then_binary(Bin, IntSize, BinSize) ->
     <<IntValue:IntSize/integer, BinValue:BinSize/binary, _Rest/binary>> = Bin,
     {IntValue, BinValue}.
+
+expect_equals(A, A) ->
+    ok;
+expect_equals(A, B) ->
+    throw({not_equal, A, B}).
 
 expect_error(F, _Reason) ->
     error = try
