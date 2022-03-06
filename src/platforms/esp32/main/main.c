@@ -67,7 +67,7 @@ void app_main()
     esp32_sys_queue_init();
 
     fprintf(stdout, "%s", ATOMVM_BANNER);
-    ESP_LOGI(TAG, "Starting AtomVM revision " ATOMVM_GIT_REVISION);
+    ESP_LOGI(TAG, "Starting AtomVM revision " ATOMVM_VERSION);
 
     int size;
     const void *main_avm = avm_partition("main.avm", &size);
