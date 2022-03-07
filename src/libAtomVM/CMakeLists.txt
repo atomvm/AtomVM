@@ -121,8 +121,7 @@ gperf_generate(${CMAKE_CURRENT_SOURCE_DIR}/nifs.gperf nifs_hash.h)
 add_custom_target(generated DEPENDS bifs_hash.h)
 add_custom_target(generated-nifs-hash DEPENDS nifs_hash.h)
 
-set(ATOMVM_BASE_VERSION "0.5.0-dev")
-set(ATOMVM_DEV TRUE)
+include(version.cmake)
 
 if (ATOMVM_DEV)
     set(ATOMVM_GIT_REVISION "<unknown>")
