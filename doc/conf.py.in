@@ -41,8 +41,8 @@ import sphinx_rtd_theme
 project = 'AtomVM'
 copyright = '2017-2022, AtomVM'
 author = 'github.com/atomvm'
-version = 'latest'
-release = '@ATOMVM_DOC_GIT_REVISION@'
+version = '@ATOMVM_BASE_VERSION@'
+release = '@ATOMVM_VERSION@'
 
 
 # -- General configuration ---------------------------------------------------
