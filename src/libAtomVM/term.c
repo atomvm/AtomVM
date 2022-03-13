@@ -195,7 +195,7 @@ void term_display(FILE *fd, term t, const Context *ctx)
 #endif
 
     } else {
-        fprintf(fd, "Unknown term type: %li", t);
+        fprintf(fd, "Unknown term type: %u", t);
     }
 }
 
