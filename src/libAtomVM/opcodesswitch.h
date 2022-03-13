@@ -4552,9 +4552,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     // and kv together into new map.  Both src and kv are sorted.
                     //
                     term map = term_alloc_map_maybe_shared(ctx, new_map_size, is_shared ? term_get_map_keys(src) : term_invalid_term());
-                    int src_pos = 0;
+                    uint8_t src_pos = 0;
                     int kv_pos = 0;
-                    for (int j = 0; j < new_map_size; j++) {
+                    for (uint8_t j = 0; j < new_map_size; j++) {
                         if (src_pos >= src_size) {
                             term new_key = kv[kv_pos].key;
                             term new_value = kv[kv_pos].value;
@@ -4642,7 +4642,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     // Create a new map of the same size as src and populate with entries from src
                     //
                     term map = term_alloc_map_maybe_shared(ctx, src_size, term_get_map_keys(src));
-                    for (int j = 0;  j < src_size;  ++j) {
+                    for (uint8_t j = 0;  j < src_size;  ++j) {
                         term_set_map_assoc(map, j, term_get_map_key(src, j), term_get_map_value(src, j));
                     }
                     //

@@ -63,7 +63,7 @@ bool bitstring_insert_any_integer(uint8_t *dst, avm_int_t offset, avm_int64_t va
     if (bs_flags != 0) {
         return false;
     }
-    for (int i = 0; i < n; ++i) {
+    for (uint8_t i = 0; i < n; ++i) {
         int k = (n - 1) - i;
         int bit_val = (value & (0x01 << k)) >> k;
         if (bit_val) {
