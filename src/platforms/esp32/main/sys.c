@@ -161,22 +161,21 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
 }
 
 // This function allows to use AtomVM as a component on ESP32 and customize it
-__attribute__((weak)) Context *sys_create_port_fallback(Context *new_ctx, const char *port_name, term opts)
+__attribute__((weak)) Context *sys_create_port_fallback(const char *driver_name, GlobalContext *global, term opts)
 {
-    UNUSED(new_ctx);
+    UNUSED(global);
     UNUSED(opts);
 
-    fprintf(stderr, "Failed to load port \"%s\".  Ensure the port is configured properly in the build.\n", port_name);
+    fprintf(stderr, "Failed to load port \"%s\".  Ensure the port is configured properly in the build.\n", driver_name);
 
     return NULL;
 }
-
 
 Context *sys_create_port(GlobalContext *glb, const char *port_name, term opts)
 {
     Context *new_ctx = component_ports_create_port(port_name, glb, opts);
     if (IS_NULL_PTR(new_ctx)) {
-        return sys_create_port_fallback(new_ctx, port_name, opts);
+        return sys_create_port_fallback(port_name, glb, opts);
     }
     return new_ctx;
 }
