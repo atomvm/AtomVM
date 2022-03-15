@@ -113,7 +113,13 @@ test_late_reply() ->
     %%
     %% this one should time out
     %%
-    {error, timeout} = gen_server:call(Pid, {reply_after, 300, ok}, 200),
+    timeout =
+        try gen_server:call(Pid, {reply_after, 300, ok}, 200) of
+            unexpected -> unexpected
+        catch
+            exit:timeout -> timeout;
+            _A:_B -> unexpected
+        end,
     %%
     %% flush the late message in the mailbox
     %%

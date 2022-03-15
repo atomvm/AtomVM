@@ -344,7 +344,7 @@ wait_reply({Self, _Ref} = From, TimeoutMs) ->
             NewTimeoutMs = TimeoutMs - ElapsedMs,
             wait_reply(From, NewTimeoutMs)
     after TimeoutMs ->
-        {error, timeout}
+        exit(timeout)
     end.
 
 %% @private
