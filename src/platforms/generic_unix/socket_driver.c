@@ -1011,10 +1011,14 @@ static void socket_consume_mailbox(Context *ctx)
     TRACE("END socket_consume_mailbox\n");
 }
 
-void socket_init(Context *ctx, term opts)
+Context *socket_init(GlobalContext *glb, term opts)
 {
     UNUSED(opts);
+
+    Context *ctx = context_new(glb);
     void *data = socket_driver_create_data();
     ctx->native_handler = socket_consume_mailbox;
     ctx->platform_data = data;
+
+    return ctx;
 }

@@ -40,7 +40,7 @@
 #ifdef DYNLOAD_PORT_DRIVERS
     #include <dlfcn.h>
 
-    typedef int (*port_driver_init_t)(Context *, term);
+    typedef Context *(*create_port_t)(GlobalContext *global, term opts);
 #endif
 
 #include "trace.h"
@@ -181,37 +181,30 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
 
 Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 {
-    Context *new_ctx = context_new(glb);
-
     if (!strcmp(driver_name, "socket")) {
-        socket_init(new_ctx, opts);
+        return socket_init(glb, opts);
     } else {
 #ifdef DYNLOAD_PORT_DRIVERS
         void *handle;
         {
-            char port_driver_name[83];
-            snprintf(port_driver_name, 83, "./avm_%s_port_driver.so", driver_name);
+            char port_driver_name[64 + strlen("avm_" "_port_driver.so") + 1];
+            snprintf(port_driver_name, sizeof(port_driver_name), "./avm_%s_port_driver.so", driver_name);
             handle = dlopen(port_driver_name, RTLD_NOW);
             if (!handle) {
-                context_destroy(new_ctx);
                 return NULL;
             }
         }
-        char port_driver_func_name[81];
-        snprintf(port_driver_func_name, 81, "%s_port_driver_init", driver_name);
-        port_driver_init_t port_driver_init = dlsym(handle, port_driver_func_name);
-        if (!port_driver_init) {
-            context_destroy(new_ctx);
+        char port_driver_func_name[64 + strlen("_create_port") + 1];
+        snprintf(port_driver_func_name, sizeof(port_driver_func_name), "%s_create_port", driver_name);
+        create_port_t create_port = (create_port_t) dlsym(handle, port_driver_func_name);
+        if (IS_NULL_PTR(create_port)) {
             return NULL;
         }
-        port_driver_init(new_ctx, opts);
+        return create_port(glb, opts);
 #else
-        context_destroy(new_ctx);
         return NULL;
 #endif
     }
-
-    return new_ctx;
 }
 
 term sys_get_info(Context *ctx, term key)
