@@ -28,7 +28,7 @@ That being said, many of the features of the BEAM are supported and provide a ri
 
 ## Design Philosophy
 
-AtomVM is designed to make use of the existing toolchain from the Erlang and Elixer ecosystems.  This includes the Erlang and Elixer compilers, which will compile Erlang and Eliver source code to BEAM bytecode, but as AtomVM matures, will also include using Erlang and Elixer tools for managing software that runs on devices, such as (in the future) the `disterl` protocol.  Where possible, AtomVM makes use of existing tool chains to reduce the amount of unecessary features in AtomVM, thus reducing complexity, as well as the amount of system resources in use by the runtime.  AtiomVM is designed to be as small and lean as possible, providing as many resources to user applications, as possible.
+AtomVM is designed to make use of the existing toolchain from the Erlang and Elixer ecosystems.  This includes the Erlang and Elixer compilers, which will compile Erlang and Eliver source code to BEAM bytecode, but as AtomVM matures, will also include using Erlang and Elixer tools for managing software that runs on devices, such as (in the future) the `disterl` protocol.  Where possible, AtomVM makes use of existing tool chains to reduce the amount of unnecessary features in AtomVM, thus reducing complexity, as well as the amount of system resources in use by the runtime.  AtiomVM is designed to be as small and lean as possible, providing as many resources to user applications, as possible.
 
 AtomVM is designed from the start to run on small, cheap embedded devices, where system resources (memory, cpu, storage) are tightly constrained.  The smallest environment in which AtomVM runs has around 256k of addressable RAM, some of which is used by the underlying runtime (FreeRTOS), and some of which is used by the AtomVM system, itself, leaving even less RAM for your own applications.
 
@@ -63,7 +63,7 @@ In the case of embedded devices (ESP32 and STM32), toolchains from open source a
 
 At present, AtomVM is only available via a checkout of the AtomVM github repository.
 
-> Note.  Downloading the AtomVM github repository requires the installtion of the `git` program.  Consult your local OS documentation for installtion of the `git` package.
+> Note.  Downloading the AtomVM github repository requires the installation of the `git` program.  Consult your local OS documentation for installation of the `git` package.
 
 	shell$ git clone https://github.com/atomvm/AtomVM
 	TODO

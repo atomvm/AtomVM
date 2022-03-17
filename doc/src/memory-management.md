@@ -28,7 +28,7 @@ The heap contains all of the allocated terms in an execution context.  In some c
 
 The heap grows incrementally, as memory is allocated, and terms are allocated sequentially, in increasing memory addresses.  There is, therefore, no memory fragmentation, properly speaking, at least insofar as a portion of memory might be in use and then freed.  However, it is possible that previously allocated blocks of memory in the context heap are no longer referenced by the program.  In this case, the allocated blocks are "garbage", and are reclaimed at the next garbage collection.
 
-> Note. It is possible for the AtomVM heap, as provided by the underlying operating system, to become fragmented, as the execution context stack and heap are allocted via `malloc` or equiv.  But that is a different kind of fragmentation that does not refer to the allocated block used by an individual AtomVM process.
+> Note. It is possible for the AtomVM heap, as provided by the underlying operating system, to become fragmented, as the execution context stack and heap are allocated via `malloc` or equiv.  But that is a different kind of fragmentation that does not refer to the allocated block used by an individual AtomVM process.
 
 The stack grows from the top of the allocated block toward the heap in decreasing addresses.  Terms in the stack, as opposed to the heap, are either single-word terms, i.e., simple terms like small integers, process ids, etc, or _pointers_ to terms in the heap.  In either case, they only occupy one word of memory.
 
@@ -147,7 +147,7 @@ The following term types take up a single word, referred to as "immediates" in t
 
 ### Atoms
 
-An atom is representated as a single word, with the low-order 6 bits having the value `0xB` (`001011b`).  The high order word-size-6 bits are used to represent the index of the atom in the global atom table:
+An atom is represented as a single word, with the low-order 6 bits having the value `0xB` (`001011b`).  The high order word-size-6 bits are used to represent the index of the atom in the global atom table:
 
                               |< 6  >|
     +=========================+======+
@@ -162,7 +162,7 @@ There may therefore only be `2^{word-size-6}` atoms in an AtomVM program (e.g., 
 
 ### Integers
 
-An integer is representated as a single word, with the low-order 4 bits having the value `0xF` (`1111b`).  The high order word-size-6 bits are used to represent the integer value:
+An integer is represented as a single word, with the low-order 4 bits having the value `0xF` (`1111b`).  The high order word-size-6 bits are used to represent the integer value:
 
                                 |< 4>|
     +===========================+====+
@@ -203,11 +203,11 @@ There may therefore only be `2^{word-size - 4}` Pids in an AtomVM program (e.g.,
 
 ## Boxed terms
 
-Some term types cannot fit in a single word, and must therfore used a sequence of contiguous words to represent the term contents.  These terms are called "Boxed" terms.  Boxed terms use the low-order 6 bits of the first byte (`boxed[0]`) to represent the term type, and the high order `word-size - 6` bits to represent the remaining size (in words) of the boxed term, not including the first word.
+Some term types cannot fit in a single word, and must therefore used a sequence of contiguous words to represent the term contents.  These terms are called "Boxed" terms.  Boxed terms use the low-order 6 bits of the first byte (`boxed[0]`) to represent the term type, and the high order `word-size - 6` bits to represent the remaining size (in words) of the boxed term, not including the first word.
 
 ### Boxed term pointers
 
-Before discussing the different types of boxed terms in detail, let us first see how boxed terms are referenced from the stack, registers, prcess dictionary, and from embedded terms in the heap.  We call such references to boxed terms boxed term pointers.
+Before discussing the different types of boxed terms in detail, let us first see how boxed terms are referenced from the stack, registers, process dictionary, and from embedded terms in the heap.  We call such references to boxed terms boxed term pointers.
 
 A boxed term pointer is a single-word term that contains the address of the referenced term in the high-order `word-size - 2` bits, and `0x2` (`10b`) in the low-order 2 bits.
 
@@ -340,7 +340,7 @@ Currently, only the low-order bit of the flags field is used.  A `0` value of in
 
 The off-heap data is a block of allocated data, containing:
 
-* a ListHead structure, used to maintain a list of dynamically allocated data (mostly for bookeeping purposes);
+* a ListHead structure, used to maintain a list of dynamically allocated data (mostly for bookkeeping purposes);
 * a reference count (unsigned integer);
 * the size of the stored data;
 * the stored data, itself.
@@ -594,11 +594,11 @@ A given process heap and stack occupy a single region of malloc'd memory, and it
     +--------+--------+
     |       ...       |
 
-Terms stored in the stack, registers, and process dictionary are either single-word terms (like atoms or pids) or term references, i.e., single-word terms that point to boxed terms or list cells in the heap.  These terms consitute the "roots" of the memory graph of all "reachable" terms in the process.
+Terms stored in the stack, registers, and process dictionary are either single-word terms (like atoms or pids) or term references, i.e., single-word terms that point to boxed terms or list cells in the heap.  These terms constitute the "roots" of the memory graph of all "reachable" terms in the process.
 
 ### When does garbage collection happen?
 
-Garbage collection typically occurs as the result of a request for an allocation of a multi-word term in the heap (e.g., a tuple, list, or binary, among other types), and when there is currently insufficient space in the free space between the current heap and the current stack to accomodate the allocation.
+Garbage collection typically occurs as the result of a request for an allocation of a multi-word term in the heap (e.g., a tuple, list, or binary, among other types), and when there is currently insufficient space in the free space between the current heap and the current stack to accommodate the allocation.
 
 Garbage collection is a _synchronous_ operation in each Context (Erlang process), but conceptually no other execution contexts are impacted (i.e., no global locks, other than those required for memory allocation in the OS process heap).
 
@@ -699,7 +699,7 @@ The iterative scan and copy phase works as follows:
 
 * Starting with the newly created region used in the shallow copy phase in the new heap, iterate over every term in the region  (call this the "scan&copy" region);
 * If any term in this region is a reference to a term on the old heap that has _not_ been marked as copied, perform a shallow copy of it (as described above) to the new heap, but starting at the next free address below the region being iterated over;
-* Note that after iterating over all such terms in teh scan and copy region, all terms are "complete", in that there are no references to boxed terms in the old heap in that region.  We have, however, created a new region which may have references to boxed terms in the old heap;
+* Note that after iterating over all such terms in the scan and copy region, all terms are "complete", in that there are no references to boxed terms in the old heap in that region.  We have, however, created a new region which may have references to boxed terms in the old heap;
 * So we repeat the process on the new region, which will complete the current scan&copy requion, but which in turn may create a new region of copied terms;
 * The process is repeated until no new reqions have been introduced.
 
@@ -786,8 +786,8 @@ The following diagram illustrates a set of two reference counted binaries in a p
 
 After the new heap has been scanned and copied, as described above, the MSO list is traversed to determine if any reference-counted binaries are no longer referenced from the process heap.  If any reference counted binaries in the heap have not been marked as moved from the old heap, they are, effectively, no longer referenced from the root set, and the reference count on the corresponding off-heap binary can be decremented.  Furthermore, when the reference count reaches 0, the binaries can then be deleted.
 
-> Note.  Const binaries, while they have slots for entry into the MSO list, nonetheless are never "stitched" into the MSO list, as the binary data they poont to is const, endures fro the lifecyle of the program, and is never deleted.  Match binaries, on the other hand, do count as references, and can therefore be stitched into the MSO list.  However, when they are, the reference counted binaries they point to are the actual binaries in the process heap, not the match binaries, as with the case of refc binaries on the process heap.
+> Note.  Const binaries, while they have slots for entry into the MSO list, nonetheless are never "stitched" into the MSO list, as the binary data they poont to is const, endures for the lifecycle of the program, and is never deleted.  Match binaries, on the other hand, do count as references, and can therefore be stitched into the MSO list.  However, when they are, the reference counted binaries they point to are the actual binaries in the process heap, not the match binaries, as with the case of refc binaries on the process heap.
 
 #### Deletion
 
-Once all terms have been copied from the old heap to the new heap, and once the MSO list has been swept for unreachable references, the old heap is simply discared via the `free` function.
+Once all terms have been copied from the old heap to the new heap, and once the MSO list has been swept for unreachable references, the old heap is simply discarded via the `free` function.

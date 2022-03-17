@@ -22,7 +22,7 @@ Archive AVM files are typically used to create AtomVM "libraries", which can the
 When creating an AVM file, you must specify:
 
 * Name name of the output AVM file, first in the list, followed by
-* a sequence of compiled BEAM files (as compiled by the `erlc` compiler), or previsouly created AVM files.
+* a sequence of compiled BEAM files (as compiled by the `erlc` compiler), or previously created AVM files.
     * If you are creating a runnable AVM, the first file in this sequence must either be a BEAM file that contain an exported `start/0` function or an AVM file whose first module contain an exported `start/0` function.
 
 When listing modules in an AVM file, just specify the AVM file to list its included modules.

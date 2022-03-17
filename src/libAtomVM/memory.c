@@ -454,7 +454,7 @@ HOT_FUNC static term memory_shallow_copy_term(term t, term **new_heap, int move)
         int boxed_size = term_boxed_size(t) + 1;
 
         // It must be an empty tuple, so we are not going to use moved markers.
-        // Emtpy tuples memory is too small to store moved markers.
+        // Empty tuples memory is too small to store moved markers.
         // However it is also required to avoid boxed terms duplication.
         // So instead all empty tuples will reference the same boxed term.
         if (boxed_size == 1) {

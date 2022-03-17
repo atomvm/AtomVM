@@ -20,9 +20,9 @@
 
 /**
  * @file globalcontext.h
- * @brief GlobalContext struct and releated management functions
+ * @brief GlobalContext struct and related management functions
  *
- * @details GlobalContext keeps the state of an AtomVM instance, multiple instances can run simultanously.
+ * @details GlobalContext keeps the state of an AtomVM instance, multiple instances can run simultaneously.
  */
 
 #ifndef _GLOBALCONTEXT_H_

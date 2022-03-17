@@ -78,7 +78,7 @@
 %%          <ul>
 %%              <li><b>active</b> Active mode (default: true)</li>
 %%              <li><b>buffer</b> Size of the receive buffer to use in active mode (default: 128)</li>
-%%              <li><b>binary</b> If true, receive data as binaries, as opposed to strings (defult: true)</li>
+%%              <li><b>binary</b> If true, receive data as binaries, as opposed to strings (default: true)</li>
 %%          </ul>
 %%
 %%          If the socket is connected in active mode, then the calling process
@@ -133,7 +133,7 @@ recv(Socket, Length) ->
 %%
 %%          This function is used when the socket is not created in active mode.
 %%          The received packet data returned from this call, and should be of
-%%          length no greated than the specified length.  This function will return
+%%          length no greater than the specified length.  This function will return
 %%          {error, closed} if the server gracefully terminates the server side
 %%          of the connection.
 %%

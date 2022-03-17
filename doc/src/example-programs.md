@@ -172,9 +172,9 @@ In order to run the ESP32 examples, you will need to flash the example AVM files
 
 In the remainder of this document, we assume the `flash.sh` script, located in the `tools/dev` directory of the AtomVM source tree.
 
-> Note. You must set the `ESP_IDF` environment varibale to the root directory of the ESP IDF SDK installation on your development machine.
+> Note. You must set the `ESP_IDF` environment variable to the root directory of the ESP IDF SDK installation on your development machine.
 
-You can control the serial port and baud rate via the `FLASH_SERIAL_PORT` and `FLASH_BAUD_RATE` enviornment variables, e.g.,
+You can control the serial port and baud rate via the `FLASH_SERIAL_PORT` and `FLASH_BAUD_RATE` environment variables, e.g.,
 
     shell$ export FLASH_SERIAL_PORT="/dev/tty.SLAB_USBtoUART"
     shell$ export FLASH_BAUD_RATE=921600
@@ -359,7 +359,7 @@ You should see the following output when monitoring the ESP32 output (truncated 
     I (220) wifi: wifi driver task: 3ffc3b54, prio:23, stack:3584, core=0
     I (220) wifi: wifi firmware version: d5da5a5
     I (220) wifi: config NVS flash: enabled
-    I (220) wifi: config nano formating: disabled
+    I (220) wifi: config nano formatting: disabled
     I (230) system_api: Base MAC address is not set, read default base MAC address from BLK0 of EFUSE
     I (240) system_api: Base MAC address is not set, read default base MAC address from BLK0 of EFUSE
     I (270) wifi: Init dynamic tx buffer num: 32
@@ -411,7 +411,7 @@ You should see the following output when monitoring the ESP32 output (truncated 
     I (222) wifi: wifi driver task: 3ffc3de8, prio:23, stack:3584, core=0
     I (222) wifi: wifi firmware version: d5da5a5
     I (222) wifi: config NVS flash: enabled
-    I (232) wifi: config nano formating: disabled
+    I (232) wifi: config nano formatting: disabled
     I (232) system_api: Base MAC address is not set, read default base MAC address from BLK0 of EFUSE
     I (242) system_api: Base MAC address is not set, read default base MAC address from BLK0 of EFUSE
     I (312) wifi: Init dynamic tx buffer num: 32
@@ -473,7 +473,7 @@ You should see the following output when monitoring the ESP32 output (truncated 
     I (296) wifi: wifi driver task: 3ffc650c, prio:23, stack:3584, core=0
     I (296) wifi: wifi firmware version: 9415913
     I (296) wifi: config NVS flash: enabled
-    I (296) wifi: config nano formating: disabled
+    I (296) wifi: config nano formatting: disabled
     I (296) system_api: Base MAC address is not set, read default base MAC address from BLK0 of EFUSE
     I (306) system_api: Base MAC address is not set, read default base MAC address from BLK0 of EFUSE
     I (346) wifi: Init dynamic tx buffer num: 32

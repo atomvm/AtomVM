@@ -163,7 +163,7 @@ static inline const term *term_to_const_term_ptr(term t)
  *
  * @details Returns 1 if a term is an atom, otherwise 0.
  * @param t the term that will be checked.
- * @return 1 if check succedes, 0 otherwise.
+ * @return 1 if check succeeds, 0 otherwise.
  */
 static inline int term_is_atom(term t)
 {
@@ -176,7 +176,7 @@ static inline int term_is_atom(term t)
  *
  * @details Returns 1 if a term is an invalid term, otherwise 0 is returned.
  * @param t the term that will be checked.
- * @return 1 if check succedes, 0 otherwise.
+ * @return 1 if check succeeds, 0 otherwise.
  */
 static inline int term_is_invalid_term(term t)
 {
@@ -188,7 +188,7 @@ static inline int term_is_invalid_term(term t)
  *
  * @details Returns 1 if a term is nil, otherwise 0.
  * @param t the term that will be checked.
- * @return 1 if check succedes, 0 otherwise.
+ * @return 1 if check succeeds, 0 otherwise.
  */
 static inline int term_is_nil(term t)
 {
@@ -201,7 +201,7 @@ static inline int term_is_nil(term t)
  *
  * @details Returns 1 if a term is a non empty list (cons), otherwise 0.
  * @param t the term that will be checked.
- * @return 1 if check succedes, 0 otherwise.
+ * @return 1 if check succeeds, 0 otherwise.
  */
 static inline int term_is_nonempty_list(term t)
 {
@@ -214,7 +214,7 @@ static inline int term_is_nonempty_list(term t)
  *
  * @details Returns 1 if a term is a list (cons) or an empty list (nil term), otherwise 0.
  * @param t the term that will be checked.
- * @return 1 if check succedes, 0 otherwise.
+ * @return 1 if check succeeds, 0 otherwise.
  */
 static inline int term_is_list(term t)
 {
@@ -227,7 +227,7 @@ static inline int term_is_list(term t)
  *
  * @details Returns 1 if a term is a boxed value stored on the heap, such as a tuple, otherwise 0.
  * @param t the term that will be checked.
- * @return 1 if check succedes, 0 otherwise.
+ * @return 1 if check succeeds, 0 otherwise.
  */
 static inline int term_is_boxed(term t)
 {
@@ -240,7 +240,7 @@ static inline int term_is_boxed(term t)
  *
  * @details Returns 1 if a term is a boxed value that can be safely copied with memcpy.
  * @param t the term that will checked.
- * @return 1 if check succedes, 0 otherwise.
+ * @return 1 if check succeeds, 0 otherwise.
  */
 static inline int term_is_movable_boxed(term t)
 {
@@ -293,7 +293,7 @@ static inline int term_boxed_size(term t)
  *
  * @details Returns 1 if a term is a binary stored on the heap, otherwise 0.
  * @param t the term that will be checked.
- * @return 1 if check succedes, 0 otherwise.
+ * @return 1 if check succeeds, 0 otherwise.
  */
 static inline int term_is_binary(term t)
 {
@@ -319,7 +319,7 @@ static inline int term_is_binary(term t)
  *
  * @details Returns 1 if a term is a binary stored on the heap, otherwise 0.
  * @param t the term that will be checked.
- * @return 1 if check succedes, 0 otherwise.
+ * @return 1 if check succeeds, 0 otherwise.
  */
 static inline bool term_is_refc_binary(term t)
 {
@@ -362,7 +362,7 @@ static inline bool term_is_sub_binary(term t)
  *
  * @details Returns 1 if a term is an integer value, otherwise 0.
  * @param t the term that will be checked.
- * @return 1 if check succedes, 0 otherwise.
+ * @return 1 if check succeeds, 0 otherwise.
  */
 static inline int term_is_integer(term t)
 {
@@ -375,7 +375,7 @@ static inline int term_is_integer(term t)
  *
  * @details Returns 1 if a term is an integer value in the [0, 255] range, otherwise 0.
  * @param t the term that will be checked.
- * @return 1 if check succedes, 0 otherwise.
+ * @return 1 if check succeeds, 0 otherwise.
  */
 static inline uint8_t term_is_uint8(term t)
 {
@@ -409,7 +409,7 @@ static inline int term_is_catch_label(term t)
  *
  * @details Returns 1 if a term is a process id, otherwise 0.
  * @param t the term that will be checked.
- * @return 1 if check succedes, 0 otherwise.
+ * @return 1 if check succeeds, 0 otherwise.
  */
 static inline int term_is_pid(term t)
 {
@@ -422,7 +422,7 @@ static inline int term_is_pid(term t)
  *
  * @details Returns 1 if a term is a tuple, otherwise 0.
  * @param t the term that will be checked.
- * @return 1 if check succedes, 0 otherwise.
+ * @return 1 if check succeeds, 0 otherwise.
  */
 static inline int term_is_tuple(term t)
 {
@@ -441,7 +441,7 @@ static inline int term_is_tuple(term t)
  *
  * @details Returns 1 if a term is a reference, otherwise 0.
  * @param t the term that will be checked.
- * @return 1 if check succedes, 0 otherwise.
+ * @return 1 if check succeeds, 0 otherwise.
  */
 static inline int term_is_reference(term t)
 {
@@ -460,7 +460,7 @@ static inline int term_is_reference(term t)
  *
  * @details Returns 1 if a term is a fun, otherwise 0.
  * @param t the term that will be checked.
- * @return 1 if check succedes, 0 otherwise.
+ * @return 1 if check succeeds, 0 otherwise.
  */
 static inline int term_is_function(term t)
 {
@@ -479,7 +479,7 @@ static inline int term_is_function(term t)
  *
  * @details Returns 1 if a term is a saved continuation pointer, otherwise 0.
  * @param t the term that will be checked.
- * @return 1 if check succedes, 0 otherwise.
+ * @return 1 if check succeeds, 0 otherwise.
  */
 static inline int term_is_cp(term t)
 {
@@ -697,7 +697,7 @@ static inline avm_int64_t term_unbox_int64(term boxed_long)
         #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
             return (avm_int64_t) ((avm_uint64_t) boxed_value[1] << 32) | (avm_uint64_t) boxed_value[2];
         #else
-            #error "unsupported endianess."
+            #error "unsupported endianness."
         #endif
     #else
         #error "unsupported configuration."
@@ -753,7 +753,7 @@ static inline void term_put_int64(term *boxed_int, avm_int64_t large_int64)
             boxed_int[2] = large_int64;
             boxed_int[1] = large_int64 >> 32;
         #else
-            #error "unsupported endianess."
+            #error "unsupported endianness."
         #endif
     #else
         #error "unsupported configuration."
@@ -909,10 +909,10 @@ static inline const char *term_binary_data(term t)
 }
 
 /**
-* @brief Create an unititialized binary.
+* @brief Create an uninitialized binary.
 *
 * @details Allocates a binary on the heap, and returns a term pointing to it.
-* Note that the data in teh binary is uninitialized and could contain any garbage.
+* Note that the data in the binary is uninitialized and could contain any garbage.
 * Make sure to initialize before use, if needed (e.g., via memset).
 * @param size size of binary data buffer.
 * @param ctx the context that owns the memory that will be allocated.
@@ -1212,7 +1212,7 @@ static inline term *term_get_list_ptr(term t)
  * @brief Gets list term from pointer
  *
  * @details Return given list term from a list element pointer.
- * @param list_element a pointer to a list elment.
+ * @param list_element a pointer to a list element.
  * @return a list term
  */
 static inline term term_list_from_list_ptr(term *list_elem)
@@ -1408,7 +1408,7 @@ void term_display(FILE *fd, term t, const Context *ctx);
  * @details Returns 1 if a term is a proper (nil-terminated) list of characters
  * or an empty list (nil term), otherwise 0.
  * @param t the term that will be checked.
- * @return 1 if check succedes, 0 otherwise.
+ * @return 1 if check succeeds, 0 otherwise.
  */
 static inline int term_is_string(term t)
 {

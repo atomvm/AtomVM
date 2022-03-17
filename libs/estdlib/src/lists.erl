@@ -123,7 +123,7 @@ delete(E, [H|T], Accum) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   L the list to reverse
-%% @returns the elments of L in reverse order
+%% @returns the elements of L in reverse order
 %% @doc     Reverse the elements of L.
 %% @end
 %%-----------------------------------------------------------------------------
@@ -345,7 +345,7 @@ flatten([H|T], Accum) ->
 %%-----------------------------------------------------------------------------
 %% @param   Pred the predicate to apply to elements in List
 %% @param   List search
-%% @returns teh first {value, Val}, if Pred(Val); false, otherwise.
+%% @returns the first {value, Val}, if Pred(Val); false, otherwise.
 %% @doc     If there is a Value in List such that Pred(Value) returns true,
 %%          returns {value, Value} for the first such Value, otherwise returns false.
 %% @end

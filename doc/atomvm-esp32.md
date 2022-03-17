@@ -138,7 +138,7 @@ The ESP32 supports WIFI networking on both Station (STA) mode and Access Point (
 
 The AtomVM API provides interfaces for initializing the WIFI network and is described in more detail in the `atomvm-network_fsm` documentation.
 
-Credentials for connecting to a an access point in STA mode (SSID and password) can be specified programatically.  Alternatively, they may be set in non-volatile storage once, and then used for subsequent messages.
+Credentials for connecting to a an access point in STA mode (SSID and password) can be specified programmatically.  Alternatively, they may be set in non-volatile storage once, and then used for subsequent messages.
 
 > Note.  The ESP32 also supports Bluetooth 4.0 networking.; however, AtomVM does not currently support Bluetooth networking.
 
@@ -150,7 +150,7 @@ AtomVM also supports UDP and TCP/IP networking and provides access to these prot
 
 The ESP32 supports create, read, update, and delete (CRUD) operations on entries in non-volatile storage.  Entries in non-volatile storage survive ESP32 device restarts, so can be useful for storing configuration information that may change at run-time.  Note, however, that Flash storage on ESP32 devices is sensitive to write operations, and may degrade with a large number of writes.
 
-Non-colatile storage is a simple key-value store, with support for mutiple data types under a string key.  Keys can be namespaced with an additional namespace parameter.
+Non-colatile storage is a simple key-value store, with support for multiple data types under a string key.  Keys can be namespaced with an additional namespace parameter.
 
 AtomVM provides an API for creating, reading, updating, and deleting entries, but limits the namespace and key types to Erlang atoms and the value types to Erlang binaries.  Using `term_to_binary/1` and `binary_to_term/1`, applications can store virtually any data type in non-volatile storage.
 

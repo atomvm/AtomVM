@@ -42,11 +42,11 @@ enum MemoryGCResult
 };
 
 /**
- * @brief allocates space for a certain ammount of terms on the heap
+ * @brief allocates space for a certain amount of terms on the heap
  *
- * @details allocates space for a certain ammount of terms on the heap, GC will be performed when needed, any existing term might be invalid after this call.
+ * @details allocates space for a certain amount of terms on the heap, GC will be performed when needed, any existing term might be invalid after this call.
  * @param ctx the context that owns the heap.
- * @param size the ammount of terms that will be allocated.
+ * @param size the amount of terms that will be allocated.
  * @returns a pointer to the newly allocated memory block.
  */
 MALLOC_LIKE term *memory_heap_alloc(Context *ctx, uint32_t size);
@@ -85,7 +85,7 @@ enum MemoryGCResult memory_ensure_free(Context *ctx, uint32_t size) MUST_CHECK;
 /**
  * @brief runs a garbage collection and shrinks used memory
  *
- * @details runs a garbage collection and shrinks used memory, a new heap will be allocted, any existing term might be invalid after this call.
+ * @details runs a garbage collection and shrinks used memory, a new heap will be allocated, any existing term might be invalid after this call.
  * @param ctx the context on which the garbage collection will be performed.
  */
 enum MemoryGCResult memory_gc_and_shrink(Context *ctx) MUST_CHECK;
@@ -109,7 +109,7 @@ unsigned long memory_estimate_usage(term t);
  * the reference count of any elements that have not been marked for move
  * (e.g., into a new heap).  If the reference count reaches 0, then memory associated
  * with the referenced binary will be freed.In a typical GC event, the terms in this list are
- * wither in the old heap or potentially in a heap fragment.  However, this
+ * within in the old heap or potentially in a heap fragment.  However, this
  * function may be called in a copy even, such as in a process spawn, or in
  * the copy of a term to or from a process mailbox.
  * @param mso_list the list of mark-sweep object in a heap "space"
