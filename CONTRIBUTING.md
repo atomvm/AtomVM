@@ -8,24 +8,26 @@
 
 AtomVM is open to any contribution.
 
-[Pull requests](https://github.com/atomvm/AtomVM/pulls), [bug reports and feature
-requests](https://github.com/atomvm/AtomVM/issues) are welcome.
+[Pull requests](https://github.com/atomvm/AtomVM/pulls),
+[bug reports and feature requests](https://github.com/atomvm/AtomVM/issues) are welcome.
 
 However before contributing, please read carefully our [Code of Conduct](CODE_OF_CONDUCT.md) and
 the following contribution guidelines.
 
-Please, also make sure to understand the [Apache 2.0 license](LICENSE.md) and the [Developer
-Certificate of Origin](https://developercertificate.org/).
+Please, also make sure to understand the [Apache 2.0 license](LICENSE.md) and the
+[Developer Certificate of Origin](https://developercertificate.org/).
 
 Last but not least, **do not use GitHub issues for vulnerability reports**, read instead the
 [security policy](SECURITY.md) for instructions.
 
 ## Git Recommended Practises
 
-* Commit messages should have a [summary and a description](https://github.com/erlang/otp/wiki/writing-good-commit-messages)
+* Commit messages should have a
+* [summary and a description](https://github.com/erlang/otp/wiki/writing-good-commit-messages)
 * Avoid trailing white spaces
 * Always `git pull --rebase`
-* [Clean up your branch history](https://git-scm.com/book/id/v2/Git-Tools-Rewriting-History) with `git rebase -i`
+* [Clean up your branch history](https://git-scm.com/book/id/v2/Git-Tools-Rewriting-History) with
+`git rebase -i`
 * All your intermediate commits should build
 
 ## Coding Style
@@ -68,7 +70,8 @@ void f(int reverse) {
 * Always prefix function names (e.g. term_is_nil, term_is_integer, context_new, context_destroy)
 
 #### Other Coding Conventions
-* Pointer * should be with the variable name rather than with the type (e.g. `char *name`, not `char* name`)
+* Pointer * should be with the variable name rather than with the type (e.g. `char *name`, not
+`char* name`)
 * Avoid long lines, use intermediate variables with meaningful names.
 
 ### Elixir Code
