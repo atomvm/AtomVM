@@ -45,7 +45,7 @@
 %% timestamps without running the risk of integer overflow.
 %%
 %% Note that the functions in this module may be obsoleted in
-%% future versions of AtomVM, as support for arbitary sized integers
+%% future versions of AtomVM, as support for arbitrary sized integers
 %% is added; however, the functions may still be useful in their own right.
 %% @end
 %%-----------------------------------------------------------------------------

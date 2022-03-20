@@ -37,7 +37,7 @@ loop(Socket) ->
         ok ->
             io:format("Sent ~p~n", [Packet]);
         Error ->
-            io:format("An error ocurred sending a packet: ~p~n", [Error])
+            io:format("An error occurred sending a packet: ~p~n", [Error])
     end,
     timer:sleep(1000),
     loop(Socket).

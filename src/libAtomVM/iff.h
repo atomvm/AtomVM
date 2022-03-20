@@ -61,7 +61,7 @@
 /**
  * @brief parse a BEAM/IFF file and build a sections offsets table
  *
- * @details Read a buffer contaning a BEAM module file and set all found IFF sections into offsets array.
+ * @details Read a buffer containing a BEAM module file and set all found IFF sections into offsets array.
  * @param data is BEAM module data.
  * @param file_size is the BEAM module size in bytes.
  * @param offsets all the relative offsets, each entry will be set to the offset of a different IFF section.

@@ -180,7 +180,7 @@ nvs_erase_all() ->
 %%-----------------------------------------------------------------------------
 %% @param   Namespace NVS namespace
 %% @returns ok
-%% @doc     Erase all values in the specificed namespace.
+%% @doc     Erase all values in the specified namespace.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec nvs_erase_all(Namespace::atom()) -> ok.

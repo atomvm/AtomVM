@@ -37,7 +37,7 @@ Deployment of AtomVM applications requires the following components:
 
 The ES32 AtomVM virtual machine is an IDF application that runs on the ESP32 platform.  As an IDF application, it provides the object code to boot the ESP device and execute the AtomVM virtual machine code, which in turn is responsible for execution of an Erlang/Elixir application.
 
-The AtomVM virtual machine is implemented in C, and the AtomVM binary image contains the binary object code compiled from C source files, as well as the ESP boot loader and partition map, which tells the ESP32 how the flash module is layed out.
+The AtomVM virtual machine is implemented in C, and the AtomVM binary image contains the binary object code compiled from C source files, as well as the ESP boot loader and partition map, which tells the ESP32 how the flash module is laid out.
 
 AtomVM developers will typically write their applications in Erlang or Elixir.  These source files are compiled into BEAM bytecode, which is then assembled into AtomVM "packbeam" (`.avm`) files.  This packbeam file is flashed onto the ESP32 device, starting at the data partition address `0x210000`.  When AtomVM starts, it will look in this partition for the first occurrence of a BEAM module that exports a `start/0` function.  Once that module is located, execution of the BEAM bytecode will commence at that point.
 

@@ -24,7 +24,7 @@ defmodule List do
   @compile {:autoload, false}
 
   @moduledoc """
-  Linked lists hold zero, one, or more elements in the choosen order.
+  Linked lists hold zero, one, or more elements in the chosen order.
 
   Lists in Elixir are specified between square brackets:
 

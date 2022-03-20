@@ -16,7 +16,7 @@ This document describes the packbeam format, so that both AtomVM and upstream/do
 
 Packbeam files are binary-encoded aggregations of BEAM and plain data files.  At a high level, a packbeam file consists of a packbeam header, followed by a sequence of files (beam or otherwise), each of which is prefixed with a header, including data about the file (name, size, flags, etc).
 
-All binary integer values are 32-bit, in network order (big-endian).  Headers and encoded files are padded when necessary and alinged on 4-byte boundaries.
+All binary integer values are 32-bit, in network order (big-endian).  Headers and encoded files are padded when necessary and aligned on 4-byte boundaries.
 
 At present, the AtomVM runtime treats data in packbeam files as _read-only_ data.  There is no support for modifying the contents on an AtomVM file by the runtime.
 
@@ -102,7 +102,7 @@ The AtomVM runtime provides access to data files via the `atomvm:read_priv/2` NI
 
     atomvm:read_priv(mylib, "sample.txt")
 
-yeilds a `binary` containing the contents of `mylib/priv/sample.txt`, if it exists, in the AtomVM packbeam file.
+yields a `binary` containing the contents of `mylib/priv/sample.txt`, if it exists, in the AtomVM packbeam file.
 
 As a consequence, normal files should be included in packbeam files using module names that obey the above patterns.
 

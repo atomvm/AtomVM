@@ -70,7 +70,7 @@
 -define(DEFAULT_PARAMS, [{active, false}, {buffer, 128}, {binary, true}, {timeout, infinity}]).
 
 %%-----------------------------------------------------------------------------
-%% @doc     Create a UDP socket.  This function will instatiate a UDP socket
+%% @doc     Create a UDP socket.  This function will instantiate a UDP socket
 %%          that may be used to
 %%          send or receive UDP messages.
 %% @end
@@ -87,7 +87,7 @@ open(PortNum) ->
 %% @returns an opaque reference to the socket instance, used in subsequent
 %%          commands.
 %% @throws  bad_arg
-%% @doc     Create a UDP socket.  This function will instatiate a UDP socket
+%% @doc     Create a UDP socket.  This function will instantiate a UDP socket
 %%          that may be used to send or receive UDP messages.
 %%          This function will raise an exception with the bad_arg atom if
 %%          there is no socket driver supported for the target platform.

@@ -203,7 +203,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     mod->str_table_len = sizes[STRT];
     mod->labels = calloc(ENDIAN_SWAP_32(mod->code->labels), sizeof(void *));
     if (IS_NULL_PTR(mod->labels)) {
-        fprintf(stderr, "Error: Null module lables: %s:%i.\n", __FILE__, __LINE__);
+        fprintf(stderr, "Error: Null module labels: %s:%i.\n", __FILE__, __LINE__);
         module_destroy(mod);
         return NULL;
     }

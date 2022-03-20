@@ -51,7 +51,7 @@ wait_for_message() ->
             io:format("Acquired IP address: ~p~n", [IpInfo]),
             http_server:start_server(8080, Router);
         disconnected ->
-            io:format("Disonnected~n")
+            io:format("Disconnected~n")
     after 15000 ->
         ok
     end,

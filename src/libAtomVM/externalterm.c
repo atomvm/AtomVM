@@ -55,9 +55,9 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t);
  * @brief
  * @param   external_term   buffer containing external term
  * @param   ctx             current context in which terms may be stored
- * @param   use_heap_fragment whether to store parsed terms in a heap fragement.  If 0, terms
+ * @param   use_heap_fragment whether to store parsed terms in a heap fragment.  If 0, terms
  *                          are stored in the context heap.
- * @param   bytes_read      the number of bytes read off external_term in order to yeild a term
+ * @param   bytes_read      the number of bytes read off external_term in order to yield a term
  * @return  the parsed term
  */
 static term externalterm_to_term_internal(const void *external_term, Context *ctx, int use_heap_fragment, size_t *bytes_read, bool copy)

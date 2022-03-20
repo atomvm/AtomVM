@@ -865,7 +865,7 @@ With a reference to a UDP `Socket`, you can send messages to a target UDP endpoi
         ok ->
             io:format("Sent ~p~n", [Packet]);
         Error ->
-            io:format("An error ocurred sending a packet: ~p~n", [Error])
+            io:format("An error occurred sending a packet: ~p~n", [Error])
     end
 
 > Note.  IPv6 networking is not currently supported in AtomVM.

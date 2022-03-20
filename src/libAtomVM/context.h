@@ -20,7 +20,7 @@
 
 /**
  * @file context.h
- * @brief Context struct and releated management functions
+ * @brief Context struct and related management functions
  *
  * @details A context represent the state of a running erlang process or port.
  */
@@ -149,7 +149,7 @@ struct Monitor
 Context *context_new(GlobalContext *glb);
 
 /**
- * @brief Destorys a context
+ * @brief Destroys a context
  *
  * @details Frees context resources and memory and removes it from the processes table.
  * @param c the context that will be destroyed.
@@ -160,15 +160,15 @@ void context_destroy(Context *c);
  * @brief Starts executing a function
  *
  * @details Start executing bytecode for the specified function, this function will block until it terminates. The outcome is saved to x[0] register.
- * @param ctx the context that will be used to run the specificed functions, x registers must be set to function arguments.
+ * @param ctx the context that will be used to run the specified functions, x registers must be set to function arguments.
  * @param function_name the function name C string.
  * @param the function arity (number of arguments that are required).
- * @returns 1 if an error occoured, otherwise 0 is always returned.
+ * @returns 1 if an error occurred, otherwise 0 is always returned.
  */
 int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity);
 
 /**
- * @brief Retuns 1 if the context is a port driver
+ * @brief Returns 1 if the context is a port driver
  *
  * @details Checks if the given context has a native_handler or not.
  * @param ctx a valid context
@@ -240,7 +240,7 @@ static inline unsigned long context_stack_size(const Context *ctx)
 }
 
 /**
- * @brief Checks if a contex is waiting a timeout.
+ * @brief Checks if a context is waiting a timeout.
  *
  * @details Check if given context has a timeout timestamp set, regardless current timestamp.
  * @param ctx a valid context.
@@ -275,10 +275,10 @@ static inline term context_make_atom(Context *ctx, AtomString string)
 size_t context_message_queue_len(Context *ctx);
 
 /**
- * @brief Returns total amount of size (in byes) occuped by the process.
+ * @brief Returns total amount of size (in byes) occupied by the process.
  *
  * @param ctx a valid context.
- * @returns total amount of size (in byes) occuped by the process
+ * @returns total amount of size (in byes) occupied by the process
  */
 size_t context_size(Context *ctx);
 

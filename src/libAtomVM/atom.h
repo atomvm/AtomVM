@@ -36,7 +36,7 @@ typedef const void *AtomString;
 /**
  * @brief Gets a C string from an AtomString
  *
- * @details Copies the atom string data to a bufffer and makes it null terminated.
+ * @details Copies the atom string data to a buffer and makes it null terminated.
  * @param atom_string that will be converted to a C string.
  * @param buf the buffer where the C string will be written.
  * @param bufsize available buf size.

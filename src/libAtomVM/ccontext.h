@@ -123,7 +123,7 @@ static inline void ccontext_kill_term_ref(struct CContext *ccontext, term_ref tr
 /*
  * @brief Gets the term referenced by a certain term reference
  *
- * @details Returns a term that will be valid until a garabe collection occours, after a garbage collection this function should be used again.
+ * @details Returns a term that will be valid until a garabe collection occurs, after a garbage collection this function should be used again.
  * @param ccontext the current CContext.
  * @param tref a reference to a term.
  */

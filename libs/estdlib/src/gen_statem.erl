@@ -82,7 +82,7 @@
 %% @param   Module the module in which the gen_statem callbacks are defined
 %% @param   Args the arguments to pass to the module's init callback
 %% @param   Options the options used to create the gen_statem
-%% @returns the gen_statem pid, if successfule; {error, Reason}, otherwise.
+%% @returns the gen_statem pid, if successful; {error, Reason}, otherwise.
 %% @doc     Start a named gen_statem.
 %%
 %%          This function will start a gen_statem instance and register the
@@ -100,7 +100,7 @@ start({local, Name} = ServerName, Module, Args, Options) when is_atom(Name) ->
 %% @param   Module the module in which the gen_statem callbacks are defined
 %% @param   Args the arguments to pass to the module's init callback
 %% @param   Options the options used to create the gen_statem
-%% @returns the gen_statem pid, if successfule; {error, Reason}, otherwise.
+%% @returns the gen_statem pid, if successful; {error, Reason}, otherwise.
 %% @doc     Start an un-named gen_statem.
 %%
 %%          This function will start a gen_statem instance.

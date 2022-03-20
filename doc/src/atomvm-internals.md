@@ -34,7 +34,7 @@ This section describes AtomVM internal data structures that are used to manage t
 
 ### The GlobalContext
 
-We start with the top level data structure, the `GlobalContext` struct.  This object is a singleton object (currently, and for the forseeable future), and represents the root of all data structures in the virtual machine.  It is in essence in 1..1 correspondence with instances of the virtual machine.
+We start with the top level data structure, the `GlobalContext` struct.  This object is a singleton object (currently, and for the foreseeable future), and represents the root of all data structures in the virtual machine.  It is in essence in 1..1 correspondence with instances of the virtual machine.
 
 > Note. Given the design of the system, it is theoretically possible to run multiple instances of the AtomVM in one process space.  However, no current deployments make use of this capability.
 

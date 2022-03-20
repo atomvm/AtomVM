@@ -4003,7 +4003,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         RAISE_ERROR(BADARG_ATOM);
                     }
                     if (bs_offset % unit != 0) {
-                        TRACE("bs_get_binary2: Unsupported.  Offset on binary read must be alinged on byte boundaries.\n");
+                        TRACE("bs_get_binary2: Unsupported.  Offset on binary read must be aligned on byte boundaries.\n");
                         RAISE_ERROR(BADARG_ATOM);
                     }
                     avm_int_t flags_value = term_to_int(flags);

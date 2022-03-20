@@ -119,7 +119,7 @@ uint32_t module_search_exported_function(Module *this_module, AtomString func_na
 /***
  * @brief Destoys an existing Module
  *
- * @details Destorys a module and free Module resources.
+ * @details Destroys a module and free Module resources.
  * @param module the module that will be freed.
  */
 void module_destroy(Module *module);

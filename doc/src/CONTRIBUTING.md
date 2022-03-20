@@ -20,11 +20,11 @@ Make sure to understand the license and the contribution guidelines before contr
 
 ### C Code
 
-#### Identation
+#### Indentation
 
-* [K&R identation and braces style](https://en.wikipedia.org/wiki/Indentation_style#K&R_style)
+* [K&R indentation and braces style](https://en.wikipedia.org/wiki/Indentation_style#K&R_style)
 * [Mandatory braces](https://en.wikipedia.org/wiki/Indentation_style#Variant:_mandatory_braces)
-* 4 spaces identation
+* 4 spaces indentation
 
 Good:
 ```

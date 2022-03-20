@@ -361,7 +361,7 @@ map(_Fun, _Map) ->
 %% @param   Map2  a mpa
 %% @returns the result of merging entries from `Map1' and `Map2'.
 %% @throws {badmap, Map}
-%% @doc Merge two maps to yeild a new map.
+%% @doc Merge two maps to yield a new map.
 %%
 %% If `Map1' and `Map2' contain the same key, then the value from `Map2' will be used.
 %%

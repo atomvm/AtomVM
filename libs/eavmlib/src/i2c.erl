@@ -105,7 +105,7 @@ write_bytes(I2C, Bytes) ->
 %% @returns `ok' or `error'
 %% @doc     End a transimission of I2C commands
 %%
-%%          This command is typically preceeded by a call to `begin_transmission/2'
+%%          This command is typically preceded by a call to `begin_transmission/2'
 %%          and one or more calls to `write_byte/2'.
 %% @end
 %%-----------------------------------------------------------------------------
