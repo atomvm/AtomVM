@@ -24,8 +24,8 @@
 -export([init/1, initial/3, terminate/3]).
 
 -record(data, {
-    num_casts=0,
-    num_infos=0
+    num_casts = 0,
+    num_infos = 0
 }).
 
 test() ->
@@ -33,7 +33,6 @@ test() ->
     ok = test_cast(),
     ok = test_info(),
     ok.
-
 
 test_call() ->
     {ok, Pid} = gen_statem:start(?MODULE, [], []),
@@ -78,14 +77,14 @@ init(_) ->
 
 initial({call, From}, ping, Data) ->
     {next_state, initial, Data, [{reply, From, pong}]};
-initial(cast, ping, #data{num_casts=NumCasts} = Data) ->
-    {next_state, initial, Data#data{num_casts=NumCasts+1}};
-initial(info, ping, #data{num_infos=NumInfos} = Data) ->
-    {next_state, initial, Data#data{num_infos=NumInfos+1}};
-initial({call, From}, get_num_casts, #data{num_casts=NumCasts} = Data) ->
-    {next_state, initial, Data#data{num_casts=0}, [{reply, From, NumCasts}]};
-initial({call, From}, get_num_infos, #data{num_infos=NumInfos} = Data) ->
-    {next_state, initial, Data#data{num_infos=0}, [{reply, From, NumInfos}]}.
+initial(cast, ping, #data{num_casts = NumCasts} = Data) ->
+    {next_state, initial, Data#data{num_casts = NumCasts + 1}};
+initial(info, ping, #data{num_infos = NumInfos} = Data) ->
+    {next_state, initial, Data#data{num_infos = NumInfos + 1}};
+initial({call, From}, get_num_casts, #data{num_casts = NumCasts} = Data) ->
+    {next_state, initial, Data#data{num_casts = 0}, [{reply, From, NumCasts}]};
+initial({call, From}, get_num_infos, #data{num_infos = NumInfos} = Data) ->
+    {next_state, initial, Data#data{num_infos = 0}, [{reply, From, NumInfos}]}.
 
 terminate(_Reason, _StateName, _Data) ->
     ok.

@@ -24,8 +24,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -record(state, {
-    num_casts=0,
-    num_infos=0
+    num_casts = 0,
+    num_infos = 0
 }).
 
 test() ->
@@ -88,9 +88,8 @@ test_info() ->
     gen_server:stop(Pid),
     ok.
 
-
- test_init_exception() ->
-     try
+test_init_exception() ->
+    try
         case gen_server:start(?MODULE, throwme, []) of
             {ok, _Pid} ->
                 expected_error_on_exception;
@@ -101,7 +100,6 @@ test_info() ->
         _:E ->
             {did_not_expect_an_exception, E}
     end.
-
 
 test_late_reply() ->
     {ok, Pid} = gen_server:start(?MODULE, [], []),
@@ -134,7 +132,7 @@ test_late_reply() ->
 test_concurrent_clients() ->
     {ok, Pid} = gen_server:start(?MODULE, [], []),
     Self = self(),
-    P1 = spawn(fun() -> make_requests(Pid, Self, 1,  1000) end),
+    P1 = spawn(fun() -> make_requests(Pid, Self, 1, 1000) end),
     P2 = spawn(fun() -> make_requests(Pid, Self, 10, 100) end),
     P3 = spawn(fun() -> make_requests(Pid, Self, 20, 50) end),
     wait_for(P1),
@@ -174,24 +172,27 @@ handle_call(async_ping, From, State) ->
     erlang:spawn(gen_server, reply, [From, pong]),
     {noreply, State};
 handle_call({reply_after, Ms, Reply}, From, State) ->
-    spawn(fun() -> timer:sleep(Ms), gen_server:reply(From, Reply) end),
+    spawn(fun() ->
+        timer:sleep(Ms),
+        gen_server:reply(From, Reply)
+    end),
     {noreply, State};
-handle_call(get_num_casts, From, #state{num_casts=NumCasts} = State) ->
+handle_call(get_num_casts, From, #state{num_casts = NumCasts} = State) ->
     gen_server:reply(From, NumCasts),
-    {noreply, State#state{num_casts=0}};
-handle_call(get_num_infos, From, #state{num_infos=NumInfos} = State) ->
+    {noreply, State#state{num_casts = 0}};
+handle_call(get_num_infos, From, #state{num_infos = NumInfos} = State) ->
     gen_server:reply(From, NumInfos),
-    {noreply, State#state{num_infos=0}}.
+    {noreply, State#state{num_infos = 0}}.
 
 handle_cast(crash, _State) ->
     throw(test_crash);
-handle_cast(ping, #state{num_casts=NumCasts} = State) ->
-    {noreply, State#state{num_casts=NumCasts + 1}};
+handle_cast(ping, #state{num_casts = NumCasts} = State) ->
+    {noreply, State#state{num_casts = NumCasts + 1}};
 handle_cast(_Request, State) ->
     {noreply, State}.
 
-handle_info(ping, #state{num_infos=NumInfos} = State) ->
-    {noreply, State#state{num_infos=NumInfos + 1}};
+handle_info(ping, #state{num_infos = NumInfos} = State) ->
+    {noreply, State#state{num_infos = NumInfos + 1}};
 handle_info(_Info, State) ->
     {noreply, State}.
 

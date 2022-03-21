@@ -24,14 +24,14 @@
 
 start() ->
     etest:test([
-        test_lists
-        , test_gen_server
-        , test_gen_statem
-        , test_gen_udp
-        , test_gen_tcp
-        , test_io_lib
-        , test_maps
-        , test_proplists
+        test_lists,
+        test_gen_server,
+        test_gen_statem,
+        test_gen_udp,
+        test_gen_tcp,
+        test_io_lib,
+        test_maps,
+        test_proplists,
         % , test_timer TODO: enable it again, once we try a way to make it less ﬂaky
-        , test_supervisor
+        test_supervisor
     ]).

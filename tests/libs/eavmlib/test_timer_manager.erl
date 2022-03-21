@@ -47,13 +47,11 @@ test_send_after() ->
     timer_manager:send_after(100, self(), ping),
     pong = wait_for_timeout(ping, 5000).
 
-
 wait_for_timeout(Msg, Timeout) ->
     receive
         {timeout, _TimerRef, Msg} ->
             ok;
         Msg ->
             pong
-    after Timeout ->
-        fail
+    after Timeout -> fail
     end.

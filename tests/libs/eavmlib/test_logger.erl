@@ -73,10 +73,8 @@ test() ->
 
     ok.
 
-
 do_log({_Location, _Time, _Pid, Level, _Msg} = _LogRequest) ->
     increment_counter(Level).
-
 
 -record(state, {
     counters = [
@@ -104,13 +102,14 @@ get_counter(Level) ->
         {Ref, Counter} -> Counter
     end.
 
-counter(#state{counters=Counters} = State) ->
-    NewState = receive
-        {increment, Level} ->
-            Value = proplists:get_value(Level, Counters),
-            State#state{counters=[{Level, Value + 1} | lists:keydelete(Level, 1, Counters)]};
-        {Pid, Ref, get_counter, Level} ->
-            Pid ! {Ref, proplists:get_value(Level, Counters)},
-            State
-    end,
+counter(#state{counters = Counters} = State) ->
+    NewState =
+        receive
+            {increment, Level} ->
+                Value = proplists:get_value(Level, Counters),
+                State#state{counters = [{Level, Value + 1} | lists:keydelete(Level, 1, Counters)]};
+            {Pid, Ref, get_counter, Level} ->
+                Pid ! {Ref, proplists:get_value(Level, Counters)},
+                State
+        end,
     counter(NewState).

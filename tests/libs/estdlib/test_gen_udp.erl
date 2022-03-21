@@ -39,7 +39,6 @@ test_send_receive_active() ->
     ok = gen_udp:close(Socket),
     ok.
 
-
 make_messages(0) ->
     [];
 make_messages(N) ->
@@ -47,14 +46,15 @@ make_messages(N) ->
 
 start_sender(Socket, Port, Msgs) ->
     send(Socket, Port, Msgs),
-    receive stop ->
-        ok
+    receive
+        stop ->
+            ok
     end.
 
 send(_Socket, _Port, []) ->
     ok;
 send(Socket, Port, [Msg | Rest]) ->
-    gen_udp:send(Socket, {127,0,0,1}, Port, Msg),
+    gen_udp:send(Socket, {127, 0, 0, 1}, Port, Msg),
     send(Socket, Port, Rest).
 
 count_received() ->
@@ -64,6 +64,5 @@ count_received(I) ->
     receive
         _Msg ->
             count_received(I + 1)
-    after 100 ->
-        I
+    after 100 -> I
     end.

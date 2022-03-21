@@ -40,7 +40,9 @@ test_timer() ->
 test_timer_interrupt() ->
     Self = self(),
     Pid = spawn(fun() -> do_test_interrupt(Self) end),
-    receive ready -> ok end,
+    receive
+        ready -> ok
+    end,
 
     %% this message should not interrupt the timer
     Pid ! try_to_interrupt,
@@ -65,7 +67,10 @@ do_test_interrupt(Pid) ->
 
 test_timer_loop() ->
     Self = self(),
-    spawn(fun() -> timer:sleep(220), Self ! ping end),
+    spawn(fun() ->
+        timer:sleep(220),
+        Self ! ping
+    end),
     ok = timer_loop(5).
 
 timer_loop(0) ->

@@ -34,7 +34,10 @@ test_echo_server() ->
     {ok, {_Address, Port}} = inet:sockname(ListenSocket),
 
     Self = self(),
-    spawn(fun() -> Self ! ready, accept(Self, ListenSocket) end),
+    spawn(fun() ->
+        Self ! ready,
+        accept(Self, ListenSocket)
+    end),
     receive
         ready ->
             ok
@@ -47,7 +50,6 @@ test_echo_server() ->
 
     ok.
 
-
 accept(Pid, ListenSocket) ->
     case gen_tcp:accept(ListenSocket) of
         {ok, Socket} ->
@@ -56,7 +58,6 @@ accept(Pid, ListenSocket) ->
         {error, closed} ->
             ok
     end.
-
 
 echo(Pid, Socket) ->
     receive
@@ -68,7 +69,6 @@ echo(Pid, Socket) ->
             echo(Pid, Socket)
     end.
 
-
 test_send_receive(Port, N) ->
     {ok, Socket} = gen_tcp:connect(localhost, Port, [{active, true}]),
 
@@ -77,10 +77,8 @@ test_send_receive(Port, N) ->
     gen_tcp:close(Socket),
     receive
         server_closed -> ok
-    after 1000 ->
-        throw(timeout)
+    after 1000 -> throw(timeout)
     end.
-
 
 loop(_Socket, 0) ->
     ok;

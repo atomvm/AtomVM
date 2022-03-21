@@ -51,7 +51,10 @@ test() ->
     ?ASSERT_MATCH(io_lib:format("~p", [foo]), "foo"),
     ?ASSERT_MATCH(io_lib:format("\t~p", [bar]), "\tbar"),
 
-    ?ASSERT_MATCH(io_lib:format("a ~p ~p of ~p patterns", [small, number, interesting]), "a small number of interesting patterns"),
+    ?ASSERT_MATCH(
+        io_lib:format("a ~p ~p of ~p patterns", [small, number, interesting]),
+        "a small number of interesting patterns"
+    ),
     ?ASSERT_MATCH(io_lib:format("escape ~~p~n", []), "escape ~p\n"),
 
     ?ASSERT_FAILURE(io_lib:format("no pattern", [foo]), bad_format),

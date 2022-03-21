@@ -60,5 +60,4 @@ test_trim() ->
     ?ASSERT_MATCH(string:trim("      foo bar      ", both), "foo bar"),
     ok.
 
-
 id(X) -> X.
