@@ -18,7 +18,8 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module (sleep).
+-module(sleep).
+
 -export([start/0, sleep_1/1, sleep_2/1, sleep_3/1, sleep_4/1]).
 
 start() ->
@@ -67,5 +68,5 @@ sleep_4(ParentPid) ->
 
 sleep(T) ->
     receive
-        after T -> ok
+    after T -> ok
     end.

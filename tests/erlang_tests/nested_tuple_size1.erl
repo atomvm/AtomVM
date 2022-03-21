@@ -19,6 +19,7 @@
 %
 
 -module(nested_tuple_size1).
+
 -export([start/0, make_nested_tuple/0]).
 
 start() ->

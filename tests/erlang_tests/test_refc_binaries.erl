@@ -62,7 +62,8 @@ test_non_const_binary() ->
     HeapSize2 = get_heap_size(),
     true = HeapSize1 < HeapSize2,
     true = HeapSize2 < (HeapSize1 + erlang:byte_size(Bin)),
-    id(String), id(Bin),
+    id(String),
+    id(Bin),
     ok.
 
 test_send() ->
@@ -94,7 +95,7 @@ test_spawn() ->
     %%
     %% Spawn a function, passing a refc binary through the args
     %%
-    Pid = erlang:spawn(?MODULE, loop, [#state{bin=Bin}]),
+    Pid = erlang:spawn(?MODULE, loop, [#state{bin = Bin}]),
     PidHeapSize0 = get_heap_size(Pid),
     %%
     %% Make sure we can get what we spawned
@@ -114,7 +115,7 @@ test_spawn_fun() ->
     %%
     %% Spawn a function, passing a refc binary through the args
     %%
-    Pid = erlang:spawn(fun() -> loop(#state{bin=Bin}) end),
+    Pid = erlang:spawn(fun() -> loop(#state{bin = Bin}) end),
     PidHeapSize0 = get_heap_size(Pid),
     %%
     %% Make sure we can get what we spawned
@@ -151,10 +152,10 @@ loop(State) ->
             loop(State);
         {Pid, Ref, free} ->
             Pid ! {Ref, ok},
-            loop(State#state{bin=undefined});
+            loop(State#state{bin = undefined});
         {Pid, Ref, {ref, Bin}} ->
             Pid ! {Ref, ok},
-            loop(State#state{bin=Bin});
+            loop(State#state{bin = Bin});
         {Pid, Ref, halt} ->
             Pid ! {Ref, ok}
     end.
@@ -172,7 +173,6 @@ create_string(0, Accum) ->
 create_string(N, Accum) ->
     create_string(N - 1, [N rem 256 | Accum]).
 
-
 run_test(Fun) ->
     Self = self(),
     _Pid = spawn(fun() -> execute(Self, Fun) end),
@@ -184,12 +184,14 @@ run_test(Fun) ->
     end.
 
 execute(Pid, Fun) ->
-    Result = try
-        Fun(), ok
-    catch
-        _:Error ->
-            {error, Error}
-    end,
+    Result =
+        try
+            Fun(),
+            ok
+        catch
+            _:Error ->
+                {error, Error}
+        end,
     Pid ! Result.
 
 id(X) -> X.

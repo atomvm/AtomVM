@@ -18,7 +18,8 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module (call_with_ref_test).
+-module(call_with_ref_test).
+
 -export([start/0, loop/1]).
 
 start() ->
@@ -55,7 +56,6 @@ loop(State) ->
     case handle_request(State) of
         nil ->
             ok;
-
         Value ->
             loop(Value)
     end.
@@ -66,14 +66,11 @@ handle_request(State) ->
             NextState = [Item] ++ State,
             Sender ! {Ref, ok},
             NextState;
-
         {Sender, Ref, get} ->
             Sender ! {Ref, State},
             State;
-
         terminate ->
             nil;
-
         _Any ->
             State
     end.

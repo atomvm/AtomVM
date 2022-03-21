@@ -19,12 +19,13 @@
 %
 
 -module(patternmatchfunc).
+
 -export([start/0, test_func/1]).
 
 start() ->
     test_func([10, 20, 30, 3]) + test_func(false).
 
-test_func([_|T]) ->
+test_func([_ | T]) ->
     test_func(T);
 test_func([]) ->
     0;

@@ -19,6 +19,7 @@
 %
 
 -module(make_garbage5).
+
 -export([start/0, det/1]).
 
 start() ->
@@ -26,6 +27,5 @@ start() ->
 
 det({{A, B}, {C, D}}) ->
     A * D - B * C;
-
 det({{A, B, C}, {D, E, F}, {G, H, I}}) ->
     A * det({{E, F}, {H, I}}) - B * det({{D, F}, {G, I}}) + C * det({{D, E}, {G, H}}).

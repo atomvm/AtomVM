@@ -33,11 +33,15 @@ test_selective_receive() ->
         Self ! three
     end),
     spawn(fun() ->
-        receive after 250 -> ok end,
+        receive
+        after 250 -> ok
+        end,
         Self ! two
     end),
     spawn(fun() ->
-        receive after 500 -> ok end,
+        receive
+        after 500 -> ok
+        end,
         Self ! one
     end),
     receive
@@ -59,15 +63,17 @@ test_selective_receive_with_timeout() ->
         Self ! two
     end),
     spawn(fun() ->
-        receive after 500 -> ok end,
+        receive
+        after 500 -> ok
+        end,
         Self ! one
     end),
-    ok = receive
-        one ->
-            expected_timeout
-    after 250 ->
-        ok
-    end,
+    ok =
+        receive
+            one ->
+                expected_timeout
+        after 250 -> ok
+        end,
     receive
         two ->
             ok

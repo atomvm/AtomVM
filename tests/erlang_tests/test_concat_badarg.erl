@@ -19,6 +19,7 @@
 %
 
 -module(test_concat_badarg).
+
 -export([start/0, f/2]).
 
 start() ->

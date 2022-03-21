@@ -19,6 +19,7 @@
 %
 
 -module(binary_is_iolist).
+
 -export([start/0, id/1, try_size/1, try_to_bin/1]).
 
 start() ->
@@ -28,10 +29,8 @@ start() ->
 
 bool_to_int(true) ->
     1;
-
 bool_to_int(false) ->
     0;
-
 bool_to_int(_) ->
     -1.
 

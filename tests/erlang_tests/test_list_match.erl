@@ -50,7 +50,6 @@ start() ->
         end,
     Res1 + Res2 + Res3 + Res4 + Res5.
 
-
 f(X) when is_atom(X) -> id(X);
 f(X) when is_integer(X) -> id(X);
 f(X) when is_tuple(X) -> id(X);

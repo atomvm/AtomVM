@@ -19,11 +19,13 @@
 %
 
 -module(test_badarith2).
+
 -export([start/0, id/1, add2/2, mul2/2, div2/2, rem2/2, abs1/1, neg1/1]).
 
 start() ->
-    add2(id(nan), id(8)) + sub2(id(nan), id(8)) + mul2(id(-1), id(nan)) + div2(id(nan), id(5))
-    + rem2(id([]), id(2)) + abs1(id([])) + neg1(id([])) + div2(id([]), id(0)) * 256 + rem2(id([]), id(0)) * 256.
+    add2(id(nan), id(8)) + sub2(id(nan), id(8)) + mul2(id(-1), id(nan)) + div2(id(nan), id(5)) +
+        rem2(id([]), id(2)) + abs1(id([])) + neg1(id([])) + div2(id([]), id(0)) * 256 +
+        rem2(id([]), id(0)) * 256.
 
 id(X) ->
     X.

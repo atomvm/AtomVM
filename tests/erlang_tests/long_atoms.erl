@@ -19,6 +19,7 @@
 %
 
 -module(long_atoms).
+
 -export([start/0, make_long_list/1, f/1]).
 
 start() ->

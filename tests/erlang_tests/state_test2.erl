@@ -18,7 +18,8 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module (state_test2).
+-module(state_test2).
+
 -export([start/0, loop/1]).
 
 start() ->
@@ -32,7 +33,6 @@ loop(State) ->
     case handle_request(State) of
         nil ->
             ok;
-
         Value ->
             loop(Value)
     end.
@@ -41,14 +41,11 @@ handle_request(State) ->
     receive
         {put, Item} ->
             [Item] ++ State;
-
         {get, Pid} ->
             Pid ! State,
             State;
-
         terminate ->
             nil;
-
         _Any ->
             State
     end.

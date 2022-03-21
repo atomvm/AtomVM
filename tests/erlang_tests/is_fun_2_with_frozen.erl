@@ -35,7 +35,7 @@ id(X) ->
 factorial(0) ->
     1;
 factorial(N) ->
-    N * factorial(N-1).
+    N * factorial(N - 1).
 
 g(X) when is_function(X, 1) ->
     -1;

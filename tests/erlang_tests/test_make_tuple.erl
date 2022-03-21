@@ -19,6 +19,7 @@
 %
 
 -module(test_make_tuple).
+
 -export([start/0, f/1, g/1]).
 
 start() ->
@@ -29,12 +30,9 @@ f(N) ->
 
 g({}) ->
     1;
-
 g({hello}) ->
     2;
-
 g({hello, hello}) ->
     3;
-
 g(_) ->
     100.

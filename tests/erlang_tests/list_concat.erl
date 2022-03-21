@@ -18,7 +18,8 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module (list_concat).
+-module(list_concat).
+
 -export([start/0, concat/2]).
 
 start() ->
@@ -35,6 +36,5 @@ sum_list(List) ->
 
 sum_list_w(Acc, [Head | Tail], [WHead | WTail]) ->
     sum_list_w(Acc + Head * WHead, Tail, WTail);
-
 sum_list_w(Acc, [], _W) ->
     Acc.

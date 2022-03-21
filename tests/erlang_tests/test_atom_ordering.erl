@@ -19,20 +19,20 @@
 %
 
 -module(test_atom_ordering).
+
 -export([start/0, sort/1, insert/2, check/1, pow/2]).
 
 start() ->
     Sorted = sort([aaa, aa, b, a, z, c, d, dd, test_atom_ordering, start, sort, erlang]),
     check(Sorted) +
-    bool_to_n(Sorted < [zzzzz]) * 2 +
-    bool_to_n(Sorted > {zzzzz}) * 4.
+        bool_to_n(Sorted < [zzzzz]) * 2 +
+        bool_to_n(Sorted > {zzzzz}) * 4.
 
 sort(L) ->
     sort(L, []).
 
 sort([], Sorted) ->
     Sorted;
-
 sort([H | Unsorted], Sorted) ->
     NextSorted = insert(Sorted, H),
     sort(Unsorted, NextSorted).
@@ -42,10 +42,8 @@ insert(L, I) ->
 
 insert([], HL, I) ->
     HL ++ [I];
-
 insert([H | T], HL, I) when I < H ->
     HL ++ [I, H | T];
-
 insert([H | T], HL, I) ->
     insert(T, HL ++ [H], I).
 

@@ -19,6 +19,7 @@
 %
 
 -module(float2list2).
+
 -export([start/0, add/2, compare_list/2, id/1, float_to_bin_badarg/1]).
 
 start() ->
@@ -31,10 +32,10 @@ start() ->
     F4 = id(add(id(F2), id(F3))),
     Bin4 = id(erlang:float_to_list(id(F4), [{decimals, 0}, compact])),
     compare_list(Bin1, id("1.5")) +
-    compare_list(Bin2, id("1.0")) * 2 +
-    compare_list(Bin3, id("-1.0")) * 4 +
-    compare_list(Bin4, id("0")) * 8 +
-    float_to_bin_badarg({1}) * 16.
+        compare_list(Bin2, id("1.0")) * 2 +
+        compare_list(Bin3, id("-1.0")) * 4 +
+        compare_list(Bin4, id("0")) * 8 +
+        float_to_bin_badarg({1}) * 16.
 
 add(A, B) when is_float(A) and is_float(B) ->
     id(id(A) + id(B)).

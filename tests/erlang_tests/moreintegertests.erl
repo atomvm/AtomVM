@@ -20,7 +20,17 @@
 
 -module(moreintegertests).
 
--export([start/0, func5_test/5, square/1, not_used1/4, not_used2/1, not_used3/2, not_used4/4, not_used5/1, not_used6/0]).
+-export([
+    start/0,
+    func5_test/5,
+    square/1,
+    not_used1/4,
+    not_used2/1,
+    not_used3/2,
+    not_used4/4,
+    not_used5/1,
+    not_used6/0
+]).
 
 start() ->
     minus1000(func5_test(2000, 1000, 2, 4, 1999)).

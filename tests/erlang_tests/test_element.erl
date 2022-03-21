@@ -19,6 +19,7 @@
 %
 
 -module(test_element).
+
 -export([start/0, f/2, g/1]).
 
 start() ->
@@ -29,6 +30,5 @@ f(X, N) ->
 
 g(0) ->
     1;
-
 g(N) ->
     g(N - 1) * N.

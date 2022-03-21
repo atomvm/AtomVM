@@ -19,6 +19,7 @@
 %
 
 -module(throwtest).
+
 -export([start/0, t/2, id/1]).
 
 start() ->
@@ -34,6 +35,5 @@ t(A, B) ->
 
 id(0) ->
     throw(test_throw);
-
 id(I) ->
     I.

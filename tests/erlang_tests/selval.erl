@@ -19,7 +19,8 @@
 %
 
 -module(selval).
--export([start/0,selval/1]).
+
+-export([start/0, selval/1]).
 
 start() -> selval(2).
 

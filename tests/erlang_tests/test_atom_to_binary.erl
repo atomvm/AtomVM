@@ -19,6 +19,7 @@
 %
 
 -module(test_atom_to_binary).
+
 -export([start/0, f/1, h/1, compare_bin/2]).
 
 start() ->
@@ -26,7 +27,6 @@ start() ->
 
 f(A) when is_binary(A) ->
     binaries_not_ok;
-
 f(A) ->
     atom_to_binary(A, latin1).
 
@@ -38,7 +38,6 @@ compare_bin(Bin1, Bin2) ->
 
 compare_bin(_Bin1, _Bin2, -1) ->
     1;
-
 compare_bin(Bin1, Bin2, Index) ->
     B1 = binary:at(Bin1, Index),
     case binary:at(Bin2, Index) of
@@ -63,4 +62,3 @@ i(A) ->
         error:badarg -> 0;
         _:_ -> -1024
     end.
-

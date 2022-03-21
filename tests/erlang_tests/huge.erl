@@ -19,18 +19,19 @@
 %
 
 -module(huge).
+
 -export([start/0, test_func/1]).
 
 start() ->
     (test_func(501) - 41) +
-    (last_char(test_func(1), 0) - 48) * 2 +
-    (last_char(test_func(500), 0) - 47) * 4 +
-    (last_char(test_func(263), 0) - 50) * 8 +
-    (last_char(test_func(12), 0) - 49) * 16.
+        (last_char(test_func(1), 0) - 48) * 2 +
+        (last_char(test_func(500), 0) - 47) * 4 +
+        (last_char(test_func(263), 0) - 50) * 8 +
+        (last_char(test_func(12), 0) - 49) * 16.
 
 last_char([], T) ->
     T;
-last_char([H|T], _) ->
+last_char([H | T], _) ->
     last_char(T, H).
 
 test_func(1) ->

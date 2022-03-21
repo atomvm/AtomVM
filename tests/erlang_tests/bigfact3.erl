@@ -26,4 +26,4 @@ start() ->
     (factorial(20) - factorial(19)) rem (factorial(10) + 1).
 
 factorial(0) -> 1;
-factorial(N) -> N * factorial(N-1).
+factorial(N) -> N * factorial(N - 1).

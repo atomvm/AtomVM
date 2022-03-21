@@ -18,18 +18,26 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module (prime_ext).
--export([start/0, is_prime/1, calculate_list/2, test_prime/2, all_primes_test/1, do_all_primes_test/3]).
+-module(prime_ext).
+
+-export([
+    start/0,
+    is_prime/1,
+    calculate_list/2,
+    test_prime/2,
+    all_primes_test/1,
+    do_all_primes_test/3
+]).
 
 start() ->
     spawn(?MODULE, calculate_list, num_range(2, 100)),
     spawn(?MODULE, calculate_list, num_range(100, 400)),
     spawn(?MODULE, calculate_list, num_range(500, 1500)),
     ?MODULE:all_primes_test(2000) -
-    ?MODULE:all_primes_test(2000) +
-    ?MODULE:all_primes_test(2000) -
-    ?MODULE:all_primes_test(2000) +
-    ?MODULE:all_primes_test(2000).
+        ?MODULE:all_primes_test(2000) +
+        ?MODULE:all_primes_test(2000) -
+        ?MODULE:all_primes_test(2000) +
+        ?MODULE:all_primes_test(2000).
 
 num_range(A, Size) ->
     [A, A + Size].
@@ -39,11 +47,10 @@ is_prime(Num) ->
 
 test_prime(Num, I) when Num == I ->
     true;
-test_prime(Num, I)  ->
+test_prime(Num, I) ->
     if
         Num rem I == 0 ->
             false;
-
         true ->
             ?MODULE:test_prime(Num, I + 1)
     end.
@@ -57,7 +64,6 @@ do_all_primes_test(N, UpTo, Last) ->
     case ?MODULE:is_prime(N) of
         true ->
             ?MODULE:do_all_primes_test(N + 1, UpTo, N);
-
         false ->
             ?MODULE:do_all_primes_test(N + 1, UpTo, Last)
     end.

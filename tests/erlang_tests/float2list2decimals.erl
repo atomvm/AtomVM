@@ -19,6 +19,7 @@
 %
 
 -module(float2list2decimals).
+
 -export([start/0, add/2, compare_list/2, id/1, float_to_list_badarg/2]).
 
 start() ->
@@ -37,13 +38,13 @@ start() ->
     F7 = id((add(id(1002.5), id(-1.5)))),
     L7 = id(erlang:float_to_list(id(F7), [{decimals, 5}, compact])),
     compare_list(L1, id("1.5")) +
-    compare_list(L2, id("1.0")) * 2 +
-    compare_list(L3, id("-1.000")) * 4 +
-    compare_list(L4, id("0")) * 8 +
-    compare_list(L5, id("2")) * 16 +
-    compare_list(L6, id("1001.5")) * 32 +
-    compare_list(L7, id("1001.0")) * 64 +
-    float_to_list_badarg({1}, [{scientific, 0}, compact]) * 128.
+        compare_list(L2, id("1.0")) * 2 +
+        compare_list(L3, id("-1.000")) * 4 +
+        compare_list(L4, id("0")) * 8 +
+        compare_list(L5, id("2")) * 16 +
+        compare_list(L6, id("1001.5")) * 32 +
+        compare_list(L7, id("1001.0")) * 64 +
+        float_to_list_badarg({1}, [{scientific, 0}, compact]) * 128.
 
 add(A, B) when is_float(A) and is_float(B) ->
     id(id(A) + id(B)).

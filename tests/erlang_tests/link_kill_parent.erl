@@ -19,6 +19,7 @@
 %
 
 -module(link_kill_parent).
+
 -export([start/0, start2/0, sum/1, proc/1]).
 
 start() ->
@@ -27,7 +28,7 @@ start() ->
     CP =
         receive
             N2 -> N2
-    end,
+        end,
     CPRef = erlang:monitor(process, CP),
     Pid ! go,
     CM =
@@ -35,11 +36,11 @@ start() ->
             Smth -> Smth
         end,
     case CM of
-        {'DOWN',CPRef,process,CP,{{nocatch,test}, EL}} when is_list(EL) ->
+        {'DOWN', CPRef, process, CP, {{nocatch, test}, EL}} when is_list(EL) ->
             1;
-        {'DOWN',Ref,process,Pid,normal} when is_reference(Ref) andalso is_pid(Pid) ->
+        {'DOWN', Ref, process, Pid, normal} when is_reference(Ref) andalso is_pid(Pid) ->
             2;
-        {'DOWN',_,process,_,_} ->
+        {'DOWN', _, process, _, _} ->
             3;
         T when is_tuple(T) ->
             4;
@@ -74,6 +75,5 @@ l() ->
 
 sum([]) ->
     0;
-
 sum([H | T]) ->
     H + sum(T).

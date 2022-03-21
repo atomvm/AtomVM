@@ -19,6 +19,7 @@
 %
 
 -module(ceilint).
+
 -export([start/0, id/1]).
 
 start() ->

@@ -19,6 +19,7 @@
 %
 
 -module(external_proplist_test).
+
 -export([start/0, get_value/2]).
 
 start() ->
@@ -27,9 +28,7 @@ start() ->
 
 get_value([], _N) ->
     not_found;
-
 get_value([{PN, PV} | _Tail], N) when PN == N ->
     PV;
-
 get_value([_Head | Tail], N) ->
     get_value(Tail, N).

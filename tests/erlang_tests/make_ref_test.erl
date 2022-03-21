@@ -18,7 +18,8 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module (make_ref_test).
+-module(make_ref_test).
+
 -export([start/0, compare/2, do_make_ref/0, to_tuple/1]).
 
 start() ->

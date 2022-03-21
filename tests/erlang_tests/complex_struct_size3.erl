@@ -19,6 +19,7 @@
 %
 
 -module(complex_struct_size3).
+
 -export([start/0, a/0, b/0, c/0]).
 
 start() ->

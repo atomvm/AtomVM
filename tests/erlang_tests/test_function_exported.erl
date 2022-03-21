@@ -19,6 +19,7 @@
 %
 
 -module(test_function_exported).
+
 -export([start/0, c/2, fail/3]).
 
 start() ->

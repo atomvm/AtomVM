@@ -19,6 +19,7 @@
 %
 
 -module(improper_literal).
+
 -export([start/0, id/1, add/2, check/3]).
 
 start() ->
@@ -34,7 +35,6 @@ add(A, B) ->
 
 check(T, Last, 1) when not is_list(T) ->
     T > Last;
-
 check([H | T], Last, N) ->
     if
         H > Last -> check(T, H, N - 1);

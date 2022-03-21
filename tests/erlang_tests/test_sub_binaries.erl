@@ -30,7 +30,12 @@
     bin
 }).
 
--define(VERIFY(X), case X of true -> ok; _ -> throw({assertion_failure, ??X, ?MODULE, ?FUNCTION_NAME, ?LINE}) end).
+-define(VERIFY(X),
+    case X of
+        true -> ok;
+        _ -> throw({assertion_failure, ??X, ?MODULE, ?FUNCTION_NAME, ?LINE})
+    end
+).
 
 start() ->
     ok = run_test(fun() -> test_heap_sub_binary() end),
@@ -56,7 +61,9 @@ test_heap_sub_binary() ->
     ?VERIFY(HeapSize1 < HeapSize2),
     ?VERIFY((HeapSize2 - HeapSize1) >= 8),
 
-    id(Bin), id(SubBin), ok.
+    id(Bin),
+    id(SubBin),
+    ok.
 
 test_const_sub_binary() ->
     HeapSize0 = get_heap_size(),
@@ -72,7 +79,9 @@ test_const_sub_binary() ->
     HeapSize2 = get_heap_size(),
     ?VERIFY(HeapSize2 < HeapSize1 + erlang:byte_size(LargeSubBin)),
 
-    id(SmallSubBin), id(LargeSubBin), ok.
+    id(SmallSubBin),
+    id(LargeSubBin),
+    ok.
 
 test_non_const_sub_binary() ->
     HeapSize0 = get_heap_size(),
@@ -89,7 +98,9 @@ test_non_const_sub_binary() ->
     HeapSize3 = get_heap_size(),
     ?VERIFY(HeapSize3 < HeapSize2 + erlang:byte_size(LargeSubBin)),
 
-    id(String), id(Bin), id(LargeSubBin),
+    id(String),
+    id(Bin),
+    id(LargeSubBin),
     ok.
 
 test_send_sub_binary() ->
@@ -125,7 +136,7 @@ test_spawn_sub_binary() ->
     %% Spawn a function, passing a refc binary through the args
     %%
     LargeSubBin = binary:part(Bin, 1, BinarySize - 1),
-    Pid = erlang:spawn(?MODULE, loop, [#state{bin=LargeSubBin}]),
+    Pid = erlang:spawn(?MODULE, loop, [#state{bin = LargeSubBin}]),
     PidHeapSize0 = get_heap_size(Pid),
     %%
     %% Make sure we can get what we spawned
@@ -147,7 +158,7 @@ test_spawn_fun_sub_binary() ->
     %% Spawn a function, passing a refc binary through the args
     %%
     LargeSubBin = binary:part(Bin, 1, BinarySize - 1),
-    Pid = erlang:spawn(fun() -> loop(#state{bin=LargeSubBin}) end),
+    Pid = erlang:spawn(fun() -> loop(#state{bin = LargeSubBin}) end),
     PidHeapSize0 = get_heap_size(Pid),
     %%
     %% Make sure we can get what we spawned
@@ -165,13 +176,15 @@ test_spawn_fun_sub_binary() ->
 test_split_sub_binary() ->
     HeapSize0 = get_heap_size(),
     Bin = create_binary(1024),
-    [SmallSubBin, LargeSubBin] = binary:split(Bin, <<4,5,6>>),
+    [SmallSubBin, LargeSubBin] = binary:split(Bin, <<4, 5, 6>>),
     HeapSize1 = get_heap_size(),
 
     ?VERIFY(erlang:byte_size(SmallSubBin) < (HeapSize1 - HeapSize0)),
     ?VERIFY((HeapSize1 - HeapSize0) < erlang:byte_size(LargeSubBin)),
 
-    id(SmallSubBin), id(LargeSubBin), ok.
+    id(SmallSubBin),
+    id(LargeSubBin),
+    ok.
 
 test_bit_syntax_tail() ->
     _HeapSize0 = get_heap_size(),
@@ -185,7 +198,9 @@ test_bit_syntax_tail() ->
 
     ?VERIFY((HeapSize2 - HeapSize1) < erlang:byte_size(LargeSubBin)),
 
-    id(Bin), id(LargeSubBin), ok.
+    id(Bin),
+    id(LargeSubBin),
+    ok.
 
 match_rest(<<_:8, Rest/binary>>) ->
     Rest.
@@ -201,11 +216,12 @@ test_bit_syntax_get_binary() ->
 
     ?VERIFY((HeapSize2 - HeapSize1) < erlang:byte_size(LargeSubBin)),
 
-    id(Bin), id(LargeSubBin), ok.
+    id(Bin),
+    id(LargeSubBin),
+    ok.
 
 match_binary(<<Initial:512/binary, _Rest/binary>>) ->
     Initial.
-
 
 test_count_binary() ->
     Bin = create_binary(1024),
@@ -216,7 +232,6 @@ count_binary(<<"">>, Accum) ->
     Accum;
 count_binary(<<_Byte:8, Rest/binary>>, Accum) ->
     count_binary(Rest, Accum + 1).
-
 
 %%
 %% helper functions
@@ -245,10 +260,10 @@ loop(State) ->
             loop(State);
         {Pid, Ref, free} ->
             Pid ! {Ref, ok},
-            loop(State#state{bin=undefined});
+            loop(State#state{bin = undefined});
         {Pid, Ref, {ref, Bin}} ->
             Pid ! {Ref, ok},
-            loop(State#state{bin=Bin});
+            loop(State#state{bin = Bin});
         {Pid, Ref, halt} ->
             Pid ! {Ref, ok}
     end.
@@ -266,7 +281,6 @@ create_string(0, Accum) ->
 create_string(N, Accum) ->
     create_string(N - 1, [N rem 256 | Accum]).
 
-
 run_test(Fun) ->
     Self = self(),
     _Pid = spawn(fun() -> execute(Self, Fun) end),
@@ -278,12 +292,14 @@ run_test(Fun) ->
     end.
 
 execute(Pid, Fun) ->
-    Result = try
-        Fun(), ok
-    catch
-        _:Error ->
-            {error, Error}
-    end,
+    Result =
+        try
+            Fun(),
+            ok
+        catch
+            _:Error ->
+                {error, Error}
+        end,
     Pid ! Result.
 
 id(X) -> X.

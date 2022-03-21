@@ -38,87 +38,100 @@ start() ->
     0.
 
 test_is_map_bif() ->
-    ok = case id(#{a => 1, b => 2}) of
-        X when is_map(X) ->
-            true = is_map(X),
-            ok;
-        _ -> fail
-    end,
-    ok = case id(foo) of
-        Y when is_map(Y) ->
-            fail;
-        _ -> ok
-    end.
+    ok =
+        case id(#{a => 1, b => 2}) of
+            X when is_map(X) ->
+                true = is_map(X),
+                ok;
+            _ ->
+                fail
+        end,
+    ok =
+        case id(foo) of
+            Y when is_map(Y) ->
+                fail;
+            _ ->
+                ok
+        end.
 
 test_map_size_bif() ->
-    ok = case id(#{a => 1, b => 2}) of
-        X when map_size(X) > 0 ->
-            2 = map_size(X),
-            ok;
-        _ ->
+    ok =
+        case id(#{a => 1, b => 2}) of
+            X when map_size(X) > 0 ->
+                2 = map_size(X),
+                ok;
+            _ ->
+                fail
+        end,
+    ok =
+        case id(#{}) of
+            Y when map_size(Y) > 0 ->
+                0 = map_size(Y),
+                fail;
+            _ ->
+                ok
+        end,
+    ok =
+        try
+            map_size(foo),
             fail
-    end,
-    ok = case id(#{}) of
-        Y when map_size(Y) > 0 ->
-            0 = map_size(Y),
-            fail;
-        _ ->
-            ok
-    end,
-    ok = try
-        map_size(foo),
-        fail
-    catch
-        _:{badmap, _} ->
-            ok
-    end.
+        catch
+            _:{badmap, _} ->
+                ok
+        end.
 
--ifdef(OTP_RELEASE). %% OTP 21 or later
+%% OTP 21 or later
+-ifdef(OTP_RELEASE).
 test_is_map_key_bif() ->
-    ok = case id(#{a => 1, b => 2}) of
-        X when is_map_key(b, X) ->
-            true = is_map_key(a, X),
-            true = is_map_key(b, X),
-            false = is_map_key(c, X),
-            ok;
-        _ ->
+    ok =
+        case id(#{a => 1, b => 2}) of
+            X when is_map_key(b, X) ->
+                true = is_map_key(a, X),
+                true = is_map_key(b, X),
+                false = is_map_key(c, X),
+                ok;
+            _ ->
+                fail
+        end,
+    ok =
+        try
+            _ = is_map_key(b, id(foo)),
             fail
-    end,
-    ok = try
-        _ = is_map_key(b, id(foo)),
-        fail
-    catch
-        _:{badmap, _} ->
-            ok
-    end.
+        catch
+            _:{badmap, _} ->
+                ok
+        end.
 
 test_map_get_bif() ->
-    ok = case id(#{a => 1, b => 2}) of
-        X when map_get(b, X) =:= 2 ->
-            1 = map_get(a, X),
-            2 = map_get(b, X),
-            false = is_map_key(c, X),
-            try
-                _ = map_get(c, X),
+    ok =
+        case id(#{a => 1, b => 2}) of
+            X when map_get(b, X) =:= 2 ->
+                1 = map_get(a, X),
+                2 = map_get(b, X),
+                false = is_map_key(c, X),
+                try
+                    _ = map_get(c, X),
+                    fail
+                catch
+                    _:{badkey, _} ->
+                        ok;
+                    _:_ ->
+                        fail_catch
+                end;
+            _ ->
                 fail
-            catch
-                _:{badkey, _} ->
-                    ok;
-                _:_ ->
-                    fail_catch
-            end;
-        _ ->
+        end,
+    ok =
+        try
+            _ = map_get(b, id(foo)),
             fail
-    end,
-    ok = try
-        _ = map_get(b, id(foo)),
-        fail
-    catch
-        _:{badmap, _} ->
-            ok
-    end.
+        catch
+            _:{badmap, _} ->
+                ok
+        end.
 -else.
 test_is_map_key_bif() -> ok.
+
 test_map_get_bif() -> ok.
 -endif.
 
@@ -129,7 +142,8 @@ test_literal_map() ->
     B = 2,
     %% No such c
     try
-        #{c := _C} = Map, fail
+        #{c := _C} = Map,
+        fail
     catch
         _:_E ->
             ok
@@ -149,7 +163,8 @@ test_extend_map() ->
     D3 = tapas,
     %% No such c
     try
-        #{e := _} = Map3, fail
+        #{e := _} = Map3,
+        fail
     catch
         _:_E ->
             ok
@@ -165,7 +180,8 @@ test_exact_map() ->
     A2 = foo,
     %% No such c
     try
-        _ = id(Map2#{id(c) := id(bar)}), fail
+        _ = id(Map2#{id(c) := id(bar)}),
+        fail
     catch
         _:_E ->
             ok
@@ -173,7 +189,7 @@ test_exact_map() ->
 
 test_generate_map() ->
     ok = test_entries([]),
-    ok = test_entries([{a,1}, {b,2}, {c,3}]),
+    ok = test_entries([{a, 1}, {b, 2}, {c, 3}]),
     ok = test_entries([{[foo, bar], {tapas, gnu}}, {gnu, #{gnat => top}}]),
     ok = test_entries(generate_random_entries(32)).
 
@@ -183,10 +199,11 @@ test_entries(KVList) ->
 
 test_entries(_Map, []) ->
     ok;
-test_entries(Map, [{K,V}|T]) ->
+test_entries(Map, [{K, V} | T]) ->
     #{K := V1} = Map,
     case V1 of
-        V -> ok;
+        V ->
+            ok;
         SomethingElse ->
             erlang:display({expected, V, got, SomethingElse}),
             true = id(false)
@@ -196,21 +213,26 @@ test_entries(Map, [{K,V}|T]) ->
 test_match_case() ->
     Map1 = #{a => id(1), b => id(2), c => id(3)},
     Map2 = #{a => id(1), b => id(2), c => id(3)},
-    ok = case Map1 of
-        Map2 -> ok;
-        _ -> fail
-    end,
+    ok =
+        case Map1 of
+            Map2 -> ok;
+            _ -> fail
+        end,
     Map3 = #{foo => id(bar), bar => id(tapas), tapas => id(yum)},
-    ok = case Map3 of
-        #{foo := bar} ->
-            ok;
-        _ -> fail
-    end,
-    ok = case Map3 of
-        #{foo := baz} ->
-            fail;
-        _ -> ok
-    end.
+    ok =
+        case Map3 of
+            #{foo := bar} ->
+                ok;
+            _ ->
+                fail
+        end,
+    ok =
+        case Map3 of
+            #{foo := baz} ->
+                fail;
+            _ ->
+                ok
+        end.
 
 test_match_clause() ->
     ok = match_clause(#{a => id(1), b => id(2), c => id(3)}),
@@ -255,7 +277,7 @@ build_map(KVList) ->
 
 build_map([], Accum) ->
     Accum;
-build_map([{K,V}|T], Accum) ->
+build_map([{K, V} | T], Accum) ->
     NewAccum = Accum#{K => V},
     build_map(T, NewAccum).
 
@@ -265,7 +287,7 @@ generate_random_entries(Size) ->
 generate_random_entries(0, Accum) ->
     Accum;
 generate_random_entries(N, Accum) ->
-    generate_random_entries(N - 1, [generate_random_entry()|Accum]).
+    generate_random_entries(N - 1, [generate_random_entry() | Accum]).
 
 generate_random_entry() ->
     {random_term(), random_term()}.
@@ -319,32 +341,31 @@ remove_duplicates(KVList) ->
 
 remove_duplicates([], Accum) ->
     Accum;
-remove_duplicates([{K,_V}=E|T], Accum) ->
+remove_duplicates([{K, _V} = E | T], Accum) ->
     case has_key(Accum, K) of
         true ->
             remove_duplicates(T, Accum);
         _ ->
-            remove_duplicates(T, [E|Accum])
+            remove_duplicates(T, [E | Accum])
     end.
 
 has_key([], _K) -> false;
-has_key([{K, _V}|_], K) -> true;
-has_key([_|T], K) ->
-    has_key(T, K).
+has_key([{K, _V} | _], K) -> true;
+has_key([_ | T], K) -> has_key(T, K).
 
 reverse(L) -> reverse(L, []).
 
 reverse([], A) ->
     A;
-reverse([H|T], Accum) ->
-    reverse(T, [H|Accum]).
+reverse([H | T], Accum) ->
+    reverse(T, [H | Accum]).
 
 create_test_map(List) ->
     create_test_map(List, #{}).
 
 create_test_map([], Accum) ->
     Accum;
-create_test_map([{K, V}| T], Accum) ->
+create_test_map([{K, V} | T], Accum) ->
     create_test_map(T, Accum#{K => V}).
 
 id(X) -> X.

@@ -19,12 +19,23 @@
 %
 
 -module(test_tuple_nifs_badargs).
--export([start/0, make_tuple2/2, insert_element3/3, delete_element2/2, setelement3/3, tuple_to_list1/1]).
+
+-export([
+    start/0,
+    make_tuple2/2,
+    insert_element3/3,
+    delete_element2/2,
+    setelement3/3,
+    tuple_to_list1/1
+]).
 
 start() ->
-    make_tuple2([], []) + insert_element3(0, {1, 2}, element) + insert_element3(1, <<"test">>, element) * 4 + insert_element3(4, {1, 2}, element) * 16
-    + delete_element2(0, {1, 2}) + delete_element2(1, <<"test">>) * 4 + setelement3(0, {1, 2}, element) + setelement3(1, <<"test">>, element) * 4
-    + setelement3(3, {1, 2}, element) * 16 + tuple_to_list1(<<"test">>) + make_tuple2(-1, test) * 1048576.
+    make_tuple2([], []) + insert_element3(0, {1, 2}, element) +
+        insert_element3(1, <<"test">>, element) * 4 + insert_element3(4, {1, 2}, element) * 16 +
+        delete_element2(0, {1, 2}) + delete_element2(1, <<"test">>) * 4 +
+        setelement3(0, {1, 2}, element) + setelement3(1, <<"test">>, element) * 4 +
+        setelement3(3, {1, 2}, element) * 16 + tuple_to_list1(<<"test">>) +
+        make_tuple2(-1, test) * 1048576.
 
 make_tuple2(A, B) ->
     try erlang:make_tuple(A, B) of

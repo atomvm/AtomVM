@@ -18,7 +18,8 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module (catch_noifmatch).
+-module(catch_noifmatch).
+
 -export([start/0, f/1, do_noifmatch/1]).
 
 start() ->

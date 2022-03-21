@@ -19,6 +19,7 @@
 %
 
 -module(test_binary_to_list).
+
 -export([start/0, id/1, concat_bin/2, safelen/1, compare_list/2]).
 
 start() ->
@@ -41,10 +42,8 @@ concat_bin(Bin1, Bin2) ->
 
 compare_list([], []) ->
     1;
-
 compare_list([H_A | T_A], [H_B | T_B]) when H_A == H_B ->
     compare_list(T_A, T_B);
-
 compare_list(_A, _B) ->
     0.
 

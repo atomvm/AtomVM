@@ -18,13 +18,15 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module (test_list_to_tuple).
+-module(test_list_to_tuple).
+
 -export([start/0, is_prime/1, calculate_list/2]).
 
 start() ->
     L = calculate_list(2, 10),
     [_A, _B, _C, _D | Empty] = L,
-    try_checksum(L) + try_checksum(Empty) + try_checksum(calculate_list(2, 7)) + try_checksum(foo(Empty)).
+    try_checksum(L) + try_checksum(Empty) + try_checksum(calculate_list(2, 7)) +
+        try_checksum(foo(Empty)).
 
 checksum({A, B, C, D}) ->
     1 + A * 2 + B * 4 + C * 8 + D * 16;
@@ -49,11 +51,10 @@ is_prime(Num) ->
 
 test_prime(Num, I) when Num == I ->
     true;
-test_prime(Num, I)  ->
+test_prime(Num, I) ->
     if
         Num rem I == 0 ->
             false;
-
         true ->
             test_prime(Num, I + 1)
     end.

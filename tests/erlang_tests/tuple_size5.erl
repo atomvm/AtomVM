@@ -19,6 +19,7 @@
 %
 
 -module(tuple_size5).
+
 -export([start/0, make_tuple/0]).
 
 start() ->

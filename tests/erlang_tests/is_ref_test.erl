@@ -18,7 +18,8 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module (is_ref_test).
+-module(is_ref_test).
+
 -export([start/0, func/2]).
 
 start() ->

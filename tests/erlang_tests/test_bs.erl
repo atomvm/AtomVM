@@ -23,9 +23,15 @@
 -export([start/0]).
 
 start() ->
-    test_pack_small_ints({2, 61, 20}, <<23,180>>),
-    test_pack_integer_big_endian(1024, 32, <<0,0,4,0>>),
-    IntegersAndBinaries = test_pack_integers_and_binaries(16#F, 16#2, <<"fubar">>, <<"Haddock's Eyes">>, <<0,0,0,15,0,2,102,117,98,97,114,72,97,100>>),
+    test_pack_small_ints({2, 61, 20}, <<23, 180>>),
+    test_pack_integer_big_endian(1024, 32, <<0, 0, 4, 0>>),
+    IntegersAndBinaries = test_pack_integers_and_binaries(
+        16#F,
+        16#2,
+        <<"fubar">>,
+        <<"Haddock's Eyes">>,
+        <<0, 0, 0, 15, 0, 2, 102, 117, 98, 97, 114, 72, 97, 100>>
+    ),
     test_unpack_integers_and_binaries(IntegersAndBinaries, 16#F, 16#2, <<"fubar">>, <<"Had">>),
 
     error = test_create_with_invalid_int_value(),
@@ -41,7 +47,7 @@ start() ->
 
     15 = get_integer_big_unsigned(<<16#F>>, 8),
     128 = get_integer_big_unsigned(<<16#80>>, 8),
-    4404 = get_integer_big_unsigned(<<0,0,17,52>>, 32),
+    4404 = get_integer_big_unsigned(<<0, 0, 17, 52>>, 32),
 
     error = test_get_with_invalid_int_value(),
     error = test_get_with_invalid_int_size(),
@@ -53,23 +59,26 @@ start() ->
     error = test_get_with_unaligned_binary(),
 
     <<"">> = test_match_first_integer(<<16#FF>>),
-    <<1,2,3>> = test_match_first_integer(<<16#FF, 1,2,3>>),
-    <<1,2,3>> = test_match_first_integer(<<16#AB, 16#CD, 1,2,3>>),
-    nope = test_match_first_integer(<<16#00, 1,2,3>>),
+    <<1, 2, 3>> = test_match_first_integer(<<16#FF, 1, 2, 3>>),
+    <<1, 2, 3>> = test_match_first_integer(<<16#AB, 16#CD, 1, 2, 3>>),
+    nope = test_match_first_integer(<<16#00, 1, 2, 3>>),
 
-    <<1,2,3,1,2,3,4,5,6>> = test_bs_append(<<1,2,3>>, <<1,2,3,4,5,6>>),
+    <<1, 2, 3, 1, 2, 3, 4, 5, 6>> = test_bs_append(<<1, 2, 3>>, <<1, 2, 3, 4, 5, 6>>),
 
     nope = test_match_clause(<<"">>),
     nope = test_match_clause(<<16#FF>>),
     nope = test_match_clause(<<$n:8>>),
-    nope = test_match_clause(<<$n:8, 1,2,3>>),
-    {$n, <<1,2,3,4>>, <<"">>} = test_match_clause(<<$n:8, 1,2,3,4>>),
-    {$n, <<1,2,3,4>>, <<5,6>>} = test_match_clause(<<$n:8, 1,2,3,4,5,6>>),
+    nope = test_match_clause(<<$n:8, 1, 2, 3>>),
+    {$n, <<1, 2, 3, 4>>, <<"">>} = test_match_clause(<<$n:8, 1, 2, 3, 4>>),
+    {$n, <<1, 2, 3, 4>>, <<5, 6>>} = test_match_clause(<<$n:8, 1, 2, 3, 4, 5, 6>>),
 
     [<<"">>] = test_match_recursive(<<"">>, []),
     [<<"">>, 119] = test_match_recursive(<<119:32>>, []),
     [<<"">>, 119, 122] = test_match_recursive(<<122:8, 119:32>>, []),
-    [<<"">>, 122, 122, 119, 119, 119, 122] = test_match_recursive(<<122:8, 119:32, 119:32, 119:32, 122:8, 122:8>>, []),
+    [<<"">>, 122, 122, 119, 119, 119, 122] = test_match_recursive(
+        <<122:8, 119:32, 119:32, 119:32, 122:8, 122:8>>,
+        []
+    ),
     nope = test_match_recursive(<<"foo">>, []),
 
     BigBin = make_binary(1025),
@@ -95,7 +104,7 @@ test_pack_integer_big_endian(Int, Size, Expect) ->
     Expect.
 
 test_pack_integers_and_binaries(Int1, Int2, Bin1, Bin2, Expect) ->
-    Bin = <<Int1:32/big, Int2:16, Bin1/binary, Bin2:3/binary >>,
+    Bin = <<Int1:32/big, Int2:16, Bin1/binary, Bin2:3/binary>>,
     %% erlang:display(Bin),
     Expect = Bin,
     Expect.
@@ -107,7 +116,6 @@ test_unpack_integers_and_binaries(Bin, Int1, Int2, Bin1, Bin2) ->
     C = Bin1,
     D = Bin2,
     Bin.
-
 
 test_create_with_invalid_int_value() ->
     expect_error(fun() -> create_int_binary(foo, id(32)) end, badarg).
@@ -122,13 +130,13 @@ test_create_with_unaligned_int_size() ->
     expect_error(fun() -> create_int_binary(16#FFFF, id(28)) end, unsupported).
 
 test_create_with_int_little_endian() ->
-    ok = expect_equals(<<255,255,0,0>>, create_int_binary_little_endian(16#FFFF, 32)),
-    ok = expect_equals(<<0,4,0,0>>, create_int_binary_little_endian(1024, 32)),
+    ok = expect_equals(<<255, 255, 0, 0>>, create_int_binary_little_endian(16#FFFF, 32)),
+    ok = expect_equals(<<0, 4, 0, 0>>, create_int_binary_little_endian(1024, 32)),
     ok = expect_equals(<<0>>, create_int_binary_little_endian(1024, 8)),
     ok.
 
 test_create_with_int_signed() ->
-    ok = expect_equals(<<0,0,255,255>>, create_int_binary_signed(16#FFFF, 32)),
+    ok = expect_equals(<<0, 0, 255, 255>>, create_int_binary_signed(16#FFFF, 32)),
     ok.
 
 test_create_with_invalid_binary_value() ->
@@ -143,8 +151,6 @@ test_create_with_binary_size_out_of_range() ->
 test_create_with_invalid_binary_unit() ->
     expect_error(fun() -> create_binary_binary_unit_3(<<"foo">>, id(3)) end, unsupported).
 
-
-
 test_get_with_invalid_int_value() ->
     expect_error(fun() -> get_integer_big_unsigned(foo, id(32)) end, badarg).
 
@@ -155,10 +161,10 @@ test_get_with_unsupported_int_unit() ->
     expect_error(fun() -> get_integer_big_unsigned_unit_3(16#F, id(32)) end, unsupported).
 
 test_get_with_int_little_endian() ->
-    expect_equals(1024, get_integer_little_unsigned(<<0,4,0,0>>, 32)).
+    expect_equals(1024, get_integer_little_unsigned(<<0, 4, 0, 0>>, 32)).
 
 test_get_with_int_signed() ->
-    expect_equals(-1024, get_integer_big_signed(<<255,255,252,0>>, 32)).
+    expect_equals(-1024, get_integer_big_signed(<<255, 255, 252, 0>>, 32)).
 
 test_get_with_invalid_binary_value() ->
     expect_error(fun() -> get_binary_binary(foo, id(32)) end, badarg).
@@ -167,8 +173,7 @@ test_get_with_invalid_binary_size() ->
     expect_error(fun() -> get_binary_binary(<<"foo">>, id(bar)) end, badarg).
 
 test_get_with_unaligned_binary() ->
-    expect_error(fun() -> get_int_then_binary(<<1,2,3,4>>, id(4), id(1)) end, badarg).
-
+    expect_error(fun() -> get_int_then_binary(<<1, 2, 3, 4>>, id(4), id(1)) end, badarg).
 
 create_int_binary_unit_3(Value, Size) ->
     <<Value:Size/integer-big-unit:3>>.
@@ -187,7 +192,6 @@ create_binary_binary(Value, Size) ->
 
 create_binary_binary_unit_3(Value, Size) ->
     <<Value:Size/binary-unit:3>>.
-
 
 get_integer_big_unsigned(Bin, Size) ->
     <<Value:Size, _Rest/binary>> = Bin,
@@ -219,17 +223,19 @@ expect_equals(A, B) ->
     throw({not_equal, A, B}).
 
 expect_error(F, _Reason) ->
-    error = try
-        F(), ok
-    catch
-        _E:_R ->
-            %% TODO E doesn't seem to match error and R doesn't seem to match Reason
-            %% even through they display the same
-            %% erlang:display({E, R}),
-            %% E = error,
-            %% R = Reason,
-            error
-    end.
+    error =
+        try
+            F(),
+            ok
+        catch
+            _E:_R ->
+                %% TODO E doesn't seem to match error and R doesn't seem to match Reason
+                %% even through they display the same
+                %% erlang:display({E, R}),
+                %% E = error,
+                %% R = Reason,
+                error
+        end.
 
 test_match_first_integer(<<16#FF:8, Rest/binary>>) ->
     Rest;
@@ -253,11 +259,11 @@ test_match_clause(_) ->
     nope.
 
 test_match_recursive(<<"">> = Empty, Accum) ->
-    [Empty|Accum];
+    [Empty | Accum];
 test_match_recursive(<<122:8, Rest/binary>>, Accum) ->
-    test_match_recursive(Rest, [122|Accum]);
+    test_match_recursive(Rest, [122 | Accum]);
 test_match_recursive(<<119:32, Rest/binary>>, Accum) ->
-    test_match_recursive(Rest, [119|Accum]);
+    test_match_recursive(Rest, [119 | Accum]);
 test_match_recursive(_SoFar, _Accum) ->
     nope.
 
@@ -290,14 +296,14 @@ skip_bits(Len, Bin) ->
     Rest.
 
 test_match_case_type() ->
-    foo = match_case_type([foo,bar]),
+    foo = match_case_type([foo, bar]),
     $a = match_case_type(<<"abc">>),
     something_else_entirely = match_case_type(blahblah),
     ok.
 
 match_case_type(Term) ->
     case Term of
-        [H|_T] ->
+        [H | _T] ->
             H;
         <<H:8, _/binary>> ->
             H;
@@ -305,16 +311,24 @@ match_case_type(Term) ->
             something_else_entirely
     end.
 
--define(TEST_BINARY_DATA, <<241,131,104,2,100,0,4,99,97,108,108,104,2,104,3,100,0,3,106,111,101,100,0,6,114,111,98,101,114,116,97,0,104,2,100,0,5,104,101,108,108,111,97,1>>).
--define(TEST_LIST_DATA,    [241,131,104,2,100,0,4,99,97,108,108,104,2,104,3,100,0,3,106,111,101,100,0,6,114,111,98,101,114,116,97,0,104,2,100,0,5,104,101,108,108,111,97,1]).
+-define(TEST_BINARY_DATA,
+    <<241, 131, 104, 2, 100, 0, 4, 99, 97, 108, 108, 104, 2, 104, 3, 100, 0, 3, 106, 111, 101, 100,
+        0, 6, 114, 111, 98, 101, 114, 116, 97, 0, 104, 2, 100, 0, 5, 104, 101, 108, 108, 111, 97,
+        1>>
+).
+
+%% erlfmt-ignore
+-define(TEST_LIST_DATA,
+    [241, 131, 104, 2, 100, 0, 4, 99, 97, 108, 108, 104, 2, 104, 3, 100, 0, 3, 106, 111, 101,100,
+        0, 6, 114, 111, 98, 101, 114, 116, 97, 0, 104, 2, 100, 0, 5, 104, 101, 108, 108, 111, 97,
+        1]
+).
 
 test_iterate_binary() ->
     ?TEST_LIST_DATA = traverse(id(?TEST_BINARY_DATA), []),
     ok.
 
 traverse(<<"">>, Accum) -> Accum;
-traverse(<<H:8, T/binary>>, Accum) ->
-    traverse(T, Accum ++ [H]).
-
+traverse(<<H:8, T/binary>>, Accum) -> traverse(T, Accum ++ [H]).
 
 id(X) -> X.

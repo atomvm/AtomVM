@@ -19,6 +19,7 @@
 %
 
 -module(test_bif_badargument3).
+
 -export([start/0, id/1, and2/2]).
 
 start() ->

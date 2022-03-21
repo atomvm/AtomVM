@@ -19,6 +19,7 @@
 %
 
 -module(simple_list_size0).
+
 -export([start/0, make_simple_list/0]).
 
 start() ->

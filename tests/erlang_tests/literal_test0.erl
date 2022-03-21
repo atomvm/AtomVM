@@ -19,8 +19,10 @@
 %
 
 -module(literal_test0).
+
 -export([start/0, factorial/1, id/1, t/5]).
 
+%% erlfmt-ignore
 start() ->
     N0 = factorial(0),
     N1 = factorial(1),
@@ -39,7 +41,7 @@ start() ->
     t(id(D), id(A), id(C), id(B), id(D)).
 
 factorial(0) -> 1;
-factorial(N) -> N * factorial(N-1).
+factorial(N) -> N * factorial(N - 1).
 
 id(I) when is_tuple(I) orelse is_list(I) ->
     I;

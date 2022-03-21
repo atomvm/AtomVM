@@ -19,6 +19,7 @@
 %
 
 -module(test_raise).
+
 -export([start/0]).
 
 start() ->
@@ -54,7 +55,7 @@ start() ->
                 letitpass,
                 fun() -> bar end,
                 Tick
-        )
+            )
         end,
         passit,
         fun() -> caughtit end,
@@ -67,14 +68,16 @@ start() ->
                 passit,
                 fun() -> throw(throwfromcatch) end,
                 Tick
-        )
+            )
         end,
         throwfromcatch,
         fun() -> caughtit end,
         Tick
     ),
     Pid ! {self(), stop},
-    receive X -> X end.
+    receive
+        X -> X
+    end.
 
 tryit(DoTry, CatchTerm, DoCatch, DoAfter) ->
     try

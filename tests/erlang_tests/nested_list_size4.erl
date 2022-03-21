@@ -19,11 +19,13 @@
 %
 
 -module(nested_list_size4).
+
 -export([start/0]).
 
 start() ->
     erts_debug:flat_size(make_nested()).
 
+%% erlfmt-ignore
 make_nested() ->
     [
      [

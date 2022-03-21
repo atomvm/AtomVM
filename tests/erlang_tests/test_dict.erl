@@ -19,6 +19,7 @@
 %
 
 -module(test_dict).
+
 -export([start/0, put_int/1, stringize/1, factorial/1, id/1, the_get/1, the_erase/1]).
 
 start() ->
@@ -47,30 +48,25 @@ put_int(N) ->
 
 stringize(I) when is_integer(I) ->
     erlang:integer_to_list(I) ++ "0";
-
 stringize(_I) ->
     "".
 
 factorial(0) ->
     1;
-
 factorial(N) ->
     N * factorial(N - 1).
 
 id(X) when is_integer(X) ->
     X;
-
 id(_X) ->
     0.
 
 the_get(L) when is_list(L) ->
     get(L);
-
 the_get(_X) ->
     "-1".
 
 the_erase(N) when is_integer(N) ->
     erase(N);
-
 the_erase(_X) ->
     "0".

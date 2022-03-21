@@ -19,8 +19,10 @@
 %
 
 -module(test_bigint_eq).
+
 -export([start/0, id/1, make_list/1, pow/2]).
 
+%% erlfmt-ignore
 start() ->
     N = factorial(id(0)) + 62,
     bool_to_n(make_list(N) == [pow(-2, 62),
@@ -41,11 +43,11 @@ start() ->
 
 make_list(N) ->
     [
-     pow(-2, N - 1),
-     {5, pow(-2, N)},
-     [1, test],
-     [{}, []],
-     [5, {}]
+        pow(-2, N - 1),
+        {5, pow(-2, N)},
+        [1, test],
+        [{}, []],
+        [5, {}]
     ].
 
 pow(_N, 0) ->
@@ -54,7 +56,7 @@ pow(N, M) ->
     N * pow(N, M - 1).
 
 factorial(0) -> 1;
-factorial(N) -> N * factorial(N-1).
+factorial(N) -> N * factorial(N - 1).
 
 id(N) ->
     N.

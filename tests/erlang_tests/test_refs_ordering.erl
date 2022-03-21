@@ -19,6 +19,7 @@
 %
 
 -module(test_refs_ordering).
+
 -export([start/0, sort/1, insert/2, check/2, get_ref/2]).
 
 start() ->
@@ -29,15 +30,14 @@ start() ->
     E = get_ref(4, []),
     Sorted = sort([E, C, D, A, B]),
     check(Sorted, [A, B, C, D, E]) +
-    bool_to_n(Sorted < [make_ref()]) * 2 +
-    bool_to_n(Sorted > {make_ref()}) * 4.
+        bool_to_n(Sorted < [make_ref()]) * 2 +
+        bool_to_n(Sorted > {make_ref()}) * 4.
 
 sort(L) ->
     sort(L, []).
 
 sort([], Sorted) ->
     Sorted;
-
 sort([H | Unsorted], Sorted) ->
     NextSorted = insert(Sorted, H),
     sort(Unsorted, NextSorted).
@@ -47,10 +47,8 @@ insert(L, I) ->
 
 insert([], HL, I) ->
     HL ++ [I];
-
 insert([H | T], HL, I) when I < H ->
     HL ++ [I, H | T];
-
 insert([H | T], HL, I) ->
     insert(T, HL ++ [H], I).
 

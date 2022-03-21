@@ -19,6 +19,7 @@
 %
 
 -module(copy_terms8).
+
 -export([start/0, loop/0]).
 
 start() ->
@@ -35,7 +36,6 @@ loop() ->
     case handle_request() of
         terminate ->
             terminate;
-
         ok ->
             loop()
     end.
@@ -45,7 +45,6 @@ handle_request() ->
         {test, Pid, N} ->
             Pid ! N * 2,
             ok;
-
         terminate ->
             terminate
     end.

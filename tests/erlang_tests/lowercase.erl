@@ -19,13 +19,14 @@
 %
 
 -module(lowercase).
+
 -export([start/0, lowercase/1]).
 
 start() ->
     (hd(lowercase("N")) - 109) +
-    (hd(lowercase("Z")) - 121) * 2 +
-    (hd(lowercase("A")) - 96) * 4 +
-    (hd(lowercase("d")) - 99) * 8.
+        (hd(lowercase("Z")) - 121) * 2 +
+        (hd(lowercase("A")) - 96) * 4 +
+        (hd(lowercase("d")) - 99) * 8.
 
 lowercase("A") ->
     "a";

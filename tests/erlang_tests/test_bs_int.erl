@@ -25,20 +25,21 @@
 start() ->
     Binaries = generate_binaries(10, 64, []),
 
-    [test_bs_ints(Binaries, Size, Endianness, Signedness) ||
-        Size <- [32, 16, 8],
-        Endianness <- [big, little],
-        Signedness <- [unsigned, signed]
+    [
+        test_bs_ints(Binaries, Size, Endianness, Signedness)
+        || Size <- [32, 16, 8],
+           Endianness <- [big, little],
+           Signedness <- [unsigned, signed]
     ],
 
-    [test_bs_ints(Binaries, Size, Endianness, Signedness) ||
-        Size <- [64],
-        Endianness <- [big, little],
-        Signedness <- [unsigned]
+    [
+        test_bs_ints(Binaries, Size, Endianness, Signedness)
+        || Size <- [64],
+           Endianness <- [big, little],
+           Signedness <- [unsigned]
     ],
 
     0.
-
 
 generate_binaries(0, _Size, Accum) ->
     Accum;
@@ -49,9 +50,12 @@ generate_binary(_I, 0, Accum) ->
     list_to_binary(Accum);
 generate_binary(I, Size, Accum) ->
     %% semi-random numbers to ensure a distribution of values
-    NextI = case I rem 2 of 0 -> I * 7; _ -> I rem 3 end,
+    NextI =
+        case I rem 2 of
+            0 -> I * 7;
+            _ -> I rem 3
+        end,
     generate_binary(NextI, Size - 8, [I rem 256 | Accum]).
-
 
 test_bs_ints(Binaries, Size, Endianness, Signedness) ->
     [test_bs_int(Binary, Size, Endianness, Signedness) || Binary <- Binaries].
@@ -68,24 +72,28 @@ test_bs_int(Binary, Size, Endianness, Signedness) ->
                 ChoppedBinary ->
                     {Binary, Size, Endianness, Signedness, IntValue, PutBinary};
                 _ ->
-                    throw({error_failed_put, [
-                        {binary, Binary},
-                        {size, Size},
-                        {endianness, Endianness},
-                        {signedness, Signedness},
-                        {chopped_binary, ChoppedBinary},
-                        {put_binary, PutBinary}
-                    ]})
+                    throw(
+                        {error_failed_put, [
+                            {binary, Binary},
+                            {size, Size},
+                            {endianness, Endianness},
+                            {signedness, Signedness},
+                            {chopped_binary, ChoppedBinary},
+                            {put_binary, PutBinary}
+                        ]}
+                    )
             end;
         _ ->
-            throw({error_failed_get, [
-                {binary, Binary},
-                {size, Size},
-                {endianness, Endianness},
-                {signedness, Signedness},
-                {int_value, IntValue},
-                {compute_value, ComputeValue}
-            ]})
+            throw(
+                {error_failed_get, [
+                    {binary, Binary},
+                    {size, Size},
+                    {endianness, Endianness},
+                    {signedness, Signedness},
+                    {int_value, IntValue},
+                    {compute_value, ComputeValue}
+                ]}
+            )
     end.
 
 get_int_value(Binary, Size, big, unsigned) ->
@@ -110,17 +118,17 @@ put_int_value(Val, Size, little, unsigned) ->
 put_int_value(Val, Size, little, signed) ->
     <<Val:Size/integer-little-signed>>.
 
-
 compute_value(Bin, Size, Endianness, Signedness) when Size rem 8 =:= 0 ->
     Bytes = Size div 8,
     <<Data:Bytes/binary, _/binary>> = Bin,
     ByteList = binary_to_list(Data),
-    NewByteList = case Endianness of
-        big ->
-            reverse(ByteList);
-        little ->
-            ByteList
-    end,
+    NewByteList =
+        case Endianness of
+            big ->
+                reverse(ByteList);
+            little ->
+                ByteList
+        end,
     get_value(Signedness, accumulate(NewByteList, 0, 0), Size).
 
 get_value(signed, Value, Size) ->
@@ -144,13 +152,17 @@ ones(N) ->
 ones(0, Accum) ->
     Accum bor 1;
 ones(N, Accum) ->
-    ones(N - 1, Accum bor (1 bsl (N-1))).
+    ones(N - 1, Accum bor (1 bsl (N - 1))).
 
 accumulate([], _I, Accum) ->
     Accum;
-accumulate([H|T], I, Accum) ->
+accumulate([H | T], I, Accum) ->
     %% NB. AtomVM treats H as a signed value, so we need to remove the signedness for this accumulator
-    IntValue = case H < 0 of true -> (H band 16#7F) bor 16#80; _ -> H end,
+    IntValue =
+        case H < 0 of
+            true -> (H band 16#7F) bor 16#80;
+            _ -> H
+        end,
     Addend = (IntValue bsl (I * 8)),
     accumulate(T, I + 1, Accum + Addend).
 
@@ -159,5 +171,5 @@ reverse(List) ->
 
 reverse([], Accum) ->
     Accum;
-reverse([H|T], Accum) ->
-    reverse(T, [H|Accum]).
+reverse([H | T], Accum) ->
+    reverse(T, [H | Accum]).

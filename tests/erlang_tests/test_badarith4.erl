@@ -19,11 +19,12 @@
 %
 
 -module(test_badarith4).
+
 -export([start/0, id/1, bor2/2]).
 
 start() ->
     bor2(id([]), id(1000)) + band2(id([]), id(0)) + bxor2(id([]), id(500)) +
-    bsl2(id([]), id(0)) + bsr2(id([]), id(1)) + bnot1(id(true)).
+        bsl2(id([]), id(0)) + bsr2(id([]), id(1)) + bnot1(id(true)).
 
 id(X) ->
     X.

@@ -19,6 +19,7 @@
 %
 
 -module(nested_list_size2).
+
 -export([start/0]).
 
 start() ->

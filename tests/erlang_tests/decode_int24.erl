@@ -23,8 +23,10 @@
 -export([start/0, decode24/1, bin/3, g/1]).
 
 start() ->
-    ((decode24(bin(b, u, [16#CA, 16#FE, 16#BA])) * 11) bxor (decode24(bin(b, s, [16#CA, 16#FE, 16#BA])) * -3) bxor
-    (decode24(bin(l, u, [16#CA, 16#FE, 16#BA])) * 5) bxor (decode24(bin(l, s, [16#CA, 16#FE, 16#BA])) * -7)) rem 876113.
+    ((decode24(bin(b, u, [16#CA, 16#FE, 16#BA])) * 11) bxor
+        (decode24(bin(b, s, [16#CA, 16#FE, 16#BA])) * -3) bxor
+        (decode24(bin(l, u, [16#CA, 16#FE, 16#BA])) * 5) bxor
+        (decode24(bin(l, s, [16#CA, 16#FE, 16#BA])) * -7)) rem 876113.
 
 decode24(<<0, U24B:24/integer-unsigned-big, 0>>) ->
     U24B;

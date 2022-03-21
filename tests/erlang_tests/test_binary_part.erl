@@ -19,6 +19,7 @@
 %
 
 -module(test_binary_part).
+
 -export([start/0, id/1, some_part/1, first_part/1, empty_part/1, compare_bin/2]).
 
 start() ->
@@ -29,9 +30,10 @@ start() ->
     B5 = first_part(id(<<"01234">>)),
     B6 = not_fail2(1, -1),
 
-    compare_bin(B1, <<"Test">>) + compare_bin(B2, <<"First">>) + compare_bin(B3, <<"Last">>)
-    + byte_size(B4) + compare_bin(B5, <<"01234">>) + fail1(<<":(">>) + fail1({0, 1, 2, 3, 4})
-    + fail2(-1, 0) + fail2(0, -1) + compare_bin(<<":">>, B6) + fail2(-1, 2) + fail2(1, fail) + fail2(fail, 1).
+    compare_bin(B1, <<"Test">>) + compare_bin(B2, <<"First">>) + compare_bin(B3, <<"Last">>) +
+        byte_size(B4) + compare_bin(B5, <<"01234">>) + fail1(<<":(">>) + fail1({0, 1, 2, 3, 4}) +
+        fail2(-1, 0) + fail2(0, -1) + compare_bin(<<":">>, B6) + fail2(-1, 2) + fail2(1, fail) +
+        fail2(fail, 1).
 
 empty_part(Bin1) ->
     binary:part(id(Bin1), 0, 0).
@@ -74,7 +76,6 @@ compare_bin(Bin1, Bin2) ->
 
 compare_bin(_Bin1, _Bin2, -1) ->
     1;
-
 compare_bin(Bin1, Bin2, Index) ->
     B1 = binary:at(Bin1, Index),
     case binary:at(Bin2, Index) of

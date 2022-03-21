@@ -18,7 +18,8 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module (send_receive).
+-module(send_receive).
+
 -export([start/0, send_test/2]).
 
 start() ->

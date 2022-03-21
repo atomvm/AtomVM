@@ -23,7 +23,7 @@
 -export([start/0, id/1, atp10/1]).
 
 start() ->
-    atp10(id(<<"HelloWorld">>)) + atp10safe(id(<<"">>)) + atp10safe(42) .
+    atp10(id(<<"HelloWorld">>)) + atp10safe(id(<<"">>)) + atp10safe(42).
 
 atp10(Bin) ->
     binary:at(Bin, 4) + 10.
