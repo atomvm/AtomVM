@@ -105,7 +105,7 @@ assert_true(_) -> fail.
 %% @returns ok if evaluating F results in Error being thrown; fail, otherwise
 %% @end
 %%-----------------------------------------------------------------------------
--spec assert_failure(fun(), Error::atom()) -> ok | fail.
+-spec assert_failure(fun(), Error :: atom()) -> ok | fail.
 assert_failure(F, E) ->
     try
         F(),
@@ -124,11 +124,13 @@ assert_failure(F, E) ->
 run_test(Test) ->
     try
         Result = Test:test(),
-        console:puts("+"), console:flush(),
+        console:puts("+"),
+        console:flush(),
         Result
     catch
         _:E ->
-            console:puts("-"), console:flush(),
+            console:puts("-"),
+            console:flush(),
             {exception, E}
     end.
 
@@ -139,6 +141,5 @@ check_results([{_Test, ok} | T]) ->
     check_results(T);
 check_results(_) ->
     fail.
-
 
 id(X) -> X.
