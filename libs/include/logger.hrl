@@ -18,13 +18,25 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--define(LOG_INFO(Format, Args),      logger:log({?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, info,     {Format, Args})).
--define(LOG_WARNING(Format, Args),   logger:log({?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, warning,  {Format, Args})).
--define(LOG_ERROR(Format, Args),     logger:log({?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, error,    {Format, Args})).
--define(LOG_DEBUG(Format, Args),     logger:log({?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, debug,    {Format, Args})).
+-define(LOG_INFO(Format, Args),
+    logger:log({?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, info, {Format, Args})
+).
+-define(LOG_WARNING(Format, Args),
+    logger:log({?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, warning, {Format, Args})
+).
+-define(LOG_ERROR(Format, Args),
+    logger:log({?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, error, {Format, Args})
+).
+-define(LOG_DEBUG(Format, Args),
+    logger:log({?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, debug, {Format, Args})
+).
 
 -ifdef(TRACE_ENABLED).
--define(TRACE(Format, Args), io:format("TRACE>> ~p ~p:~p/~p:~p ~p " ++  Format ++ "~n", [erlang:universaltime(), ?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE, self() | Args])).
+-define(TRACE(Format, Args),
+    io:format("TRACE>> ~p ~p:~p/~p:~p ~p " ++ Format ++ "~n", [
+        erlang:universaltime(), ?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE, self() | Args
+    ])
+).
 -define(TRACE_VAR(Tag, Var), io:format("TRACE_VAR>> "), erlang:display({Tag, Var})).
 -else.
 -define(TRACE(Format, Args), ok).
