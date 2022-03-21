@@ -56,7 +56,7 @@
 %% @doc     Get a value from a property list.
 %% @end
 %%-----------------------------------------------------------------------------
--spec get_value(Key::term(), List::list(property())) -> term() | true | undefined.
+-spec get_value(Key :: term(), List :: list(property())) -> term() | true | undefined.
 get_value(Key, List) ->
     get_value(Key, List, undefined).
 
@@ -74,7 +74,7 @@ get_value(Key, List) ->
 %%          function returns the atom true.
 %% @end
 %%-----------------------------------------------------------------------------
--spec get_value(Key::term(), list(property()), Default::term()) -> term().
+-spec get_value(Key :: term(), list(property()), Default :: term()) -> term().
 get_value(_Key, [], Default) ->
     Default;
 get_value(Key, [{Key, Value} | _T], _Default) ->

@@ -47,11 +47,18 @@
 
 -export([
     apply/3,
-    start_timer/3, start_timer/4, cancel_timer/1, send_after/3,
-    process_info/2, system_info/1,
+    start_timer/3, start_timer/4,
+    cancel_timer/1,
+    send_after/3,
+    process_info/2,
+    system_info/1,
     md5/1,
-    is_map/1, map_size/1, map_get/2, map_is_key/2,
-    min/2, max/2
+    is_map/1,
+    map_size/1,
+    map_get/2,
+    map_is_key/2,
+    min/2,
+    max/2
 ]).
 
 %%-----------------------------------------------------------------------------
@@ -66,7 +73,6 @@
 -spec start_timer(non_neg_integer(), pid() | atom(), term()) -> reference().
 start_timer(Time, Dest, Msg) ->
     start_timer(Time, Dest, Msg, []).
-
 
 %%-----------------------------------------------------------------------------
 %% @hidden
@@ -84,7 +90,6 @@ start_timer(Time, Dest, Msg) ->
 start_timer(Time, Dest, Msg, _Options) ->
     timer_manager:start_timer(Time, Dest, Msg).
 
-
 %%-----------------------------------------------------------------------------
 %% @hidden
 %% @param   Time time in milliseconds after which to send the timeout message.
@@ -97,7 +102,7 @@ start_timer(Time, Dest, Msg, _Options) ->
 %%
 %%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
 %%-----------------------------------------------------------------------------
--spec cancel_timer(TimerRef::reference()) -> ok.
+-spec cancel_timer(TimerRef :: reference()) -> ok.
 cancel_timer(TimerRef) ->
     timer_manager:cancel_timer(TimerRef).
 
@@ -133,7 +138,7 @@ send_after(Time, Dest, Msg) ->
 %%
 %% @end
 %%-----------------------------------------------------------------------------
--spec process_info(Pid::pid(), Key::atom()) -> term().
+-spec process_info(Pid :: pid(), Key :: atom()) -> term().
 process_info(_Pid, _Key) ->
     throw(nif_error).
 
@@ -167,7 +172,7 @@ process_info(_Pid, _Key) ->
 %%
 %% @end
 %%-----------------------------------------------------------------------------
--spec system_info(Key::atom()) -> term().
+-spec system_info(Key :: atom()) -> term().
 system_info(_Key) ->
     throw(nif_error).
 
@@ -178,7 +183,7 @@ system_info(_Key) ->
 %%          https://www.ietf.org/rfc/rfc1321.txt
 %% @end
 %%-----------------------------------------------------------------------------
--spec md5(Data::binary()) -> binary().
+-spec md5(Data :: binary()) -> binary().
 md5(Data) when is_binary(Data) ->
     throw(nif_error).
 
@@ -198,7 +203,8 @@ apply(Module, Function, Args) ->
             Module:Function(Arg1, Arg2, Arg3, Arg4, Arg5);
         [Arg1, Arg2, Arg3, Arg4, Arg5, Arg6] ->
             Module:Function(Arg1, Arg2, Arg3, Arg4, Arg5, Arg6);
-        _ -> throw(badarg)
+        _ ->
+            throw(badarg)
     end.
 
 %%-----------------------------------------------------------------------------
@@ -209,7 +215,7 @@ apply(Module, Function, Args) ->
 %% This function may be used in a guard expression.
 %% @end
 %%-----------------------------------------------------------------------------
--spec is_map(Map::map()) -> boolean().
+-spec is_map(Map :: map()) -> boolean().
 is_map(_Map) ->
     throw(bif_error).
 
@@ -224,7 +230,7 @@ is_map(_Map) ->
 %% This function may be used in a guard expression.
 %% @end
 %%-----------------------------------------------------------------------------
--spec map_size(Map::map()) -> non_neg_integer().
+-spec map_size(Map :: map()) -> non_neg_integer().
 map_size(_Map) ->
     throw(bif_error).
 
@@ -241,7 +247,7 @@ map_size(_Map) ->
 %% This function may be used in a guard expression.
 %% @end
 %%-----------------------------------------------------------------------------
--spec map_get(Key::term(), Map::map()) -> Value::term().
+-spec map_get(Key :: term(), Map :: map()) -> Value :: term().
 map_get(_Key, _Map) ->
     throw(bif_error).
 
@@ -257,10 +263,9 @@ map_get(_Key, _Map) ->
 %% This function may be used in a guard expression.
 %% @end
 %%-----------------------------------------------------------------------------
--spec map_is_key(Key::term(), Map::map()) -> boolean().
+-spec map_is_key(Key :: term(), Map :: map()) -> boolean().
 map_is_key(_Key, _Map) ->
     throw(bif_error).
-
 
 %%-----------------------------------------------------------------------------
 %% @param   A   any term

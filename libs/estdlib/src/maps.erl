@@ -53,13 +53,31 @@
 -module(maps).
 
 -export([
-    get/2, get/3, is_key/2, put/3, iterator/1, next/1, new/0, keys/1, values/1, to_list/1, from_list/1,
-    size/1, find/2, filter/2, fold/3, map/2, merge/2, remove/2, update/3
+    get/2, get/3,
+    is_key/2,
+    put/3,
+    iterator/1,
+    next/1,
+    new/0,
+    keys/1,
+    values/1,
+    to_list/1,
+    from_list/1,
+    size/1,
+    find/2,
+    filter/2,
+    fold/3,
+    map/2,
+    merge/2,
+    remove/2,
+    update/3
 ]).
 
 -type key() :: term().
 -type value() :: term().
--type iterator() :: {key(), value(), iterator()} | none | nonempty_improper_list(non_neg_integer(), map()).
+-type iterator() ::
+    {key(), value(), iterator()} | none | nonempty_improper_list(non_neg_integer(), map()).
+
 -type map_or_iterator() :: map() | iterator().
 
 %%-----------------------------------------------------------------------------
@@ -73,7 +91,7 @@
 %% a `{badmap, Map}' if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec get(Key::key(), Map::map()) -> Value::value().
+-spec get(Key :: key(), Map :: map()) -> Value :: value().
 get(Key, Map) ->
     erlang:map_get(Key, Map).
 
@@ -90,7 +108,7 @@ get(Key, Map) ->
 %% This function throws a `{badmap, Map}' exception if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec get(Key::key(), Map::map(), Default::term()) -> Value::value().
+-spec get(Key :: key(), Map :: map(), Default :: term()) -> Value :: value().
 get(Key, Map, Default) ->
     try
         ?MODULE:get(Key, Map)
@@ -109,7 +127,7 @@ get(Key, Map, Default) ->
 %% This function throws a `{badmap, Map}' exception if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec is_key(Key::key(), Map::map()) -> boolean().
+-spec is_key(Key :: key(), Map :: map()) -> boolean().
 is_key(Key, Map) ->
     erlang:is_map_key(Key, Map).
 
@@ -127,10 +145,10 @@ is_key(Key, Map) ->
 %% This function throws a `{badmap, Map}' exception if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec put(Key::key(), Value::value(), Map::map()) -> map().
+-spec put(Key :: key(), Value :: value(), Map :: map()) -> map().
 put(Key, Value, Map) when is_map(Map) ->
     Map#{Key => Value};
-put(_Key, _Value, Map) when not is_map(Map )->
+put(_Key, _Value, Map) when not is_map(Map) ->
     throw({badmap, Map}).
 
 %%-----------------------------------------------------------------------------
@@ -148,7 +166,7 @@ put(_Key, _Value, Map) when not is_map(Map )->
 %% This function throws a `{badmap, Map}' exception if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec iterator(Map::map()) -> iterator().
+-spec iterator(Map :: map()) -> iterator().
 iterator(Map) when is_map(Map) ->
     [0 | Map];
 iterator(Map) ->
@@ -167,7 +185,8 @@ iterator(Map) ->
 %% in this module.
 %% @end
 %%-----------------------------------------------------------------------------
--spec next(Iterator::iterator()) -> {Key::key(), Value::value(), NextIterator::iterator()} | none.
+-spec next(Iterator :: iterator()) ->
+    {Key :: key(), Value :: value(), NextIterator :: iterator()} | none.
 next([_Pos | _Map] = _Iterator) ->
     throw(nif_error).
 
@@ -191,7 +210,7 @@ new() ->
 %% This function throws a `{badmap, Map}' exception if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec keys(Map::map()) -> [key()].
+-spec keys(Map :: map()) -> [key()].
 keys(Map) when is_map(Map) ->
     iterate_keys(maps:next(maps:iterator(Map)), []);
 keys(Map) ->
@@ -208,7 +227,7 @@ keys(Map) ->
 %% This function throws a `{badmap, Map}' exception if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec values(Map::map()) -> [key()].
+-spec values(Map :: map()) -> [key()].
 values(Map) when is_map(Map) ->
     iterate_values(maps:next(maps:iterator(Map)), []);
 values(Map) ->
@@ -224,7 +243,7 @@ values(Map) ->
 %% This function throws a `{badmap, Map}' exception if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec to_list(Map::map()) -> [key()].
+-spec to_list(Map :: map()) -> [key()].
 to_list(Map) when is_map(Map) ->
     iterate_entries(maps:next(maps:iterator(Map)), []);
 to_list(Map) ->
@@ -243,7 +262,7 @@ to_list(Map) ->
 %% list or contains an element that is not a key-value pair.
 %% @end
 %%-----------------------------------------------------------------------------
--spec from_list(List::[{Key::key(), Value::value()}]) -> map().
+-spec from_list(List :: [{Key :: key(), Value :: value()}]) -> map().
 from_list(List) when is_list(List) ->
     iterate_from_list(List, ?MODULE:new());
 from_list(_List) ->
@@ -258,7 +277,7 @@ from_list(_List) ->
 %% This function throws a `{badmap, Map}' exception if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec size(Map::map()) -> non_neg_integer().
+-spec size(Map :: map()) -> non_neg_integer().
 size(Map) when is_map(Map) ->
     erlang:map_size(Map);
 size(Map) ->
@@ -274,7 +293,7 @@ size(Map) ->
 %% This function throws a `{badmap, Map}' exception if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec find(Key::key(), Map::map()) -> {ok, Value::value()} | error.
+-spec find(Key :: key(), Map :: map()) -> {ok, Value :: value()} | error.
 find(Key, Map) ->
     try
         {ok, ?MODULE:get(Key, Map)}
@@ -299,10 +318,15 @@ find(Key, Map) ->
 %% and a `badarg' exception if the input predicate is not a function.
 %% @end
 %%-----------------------------------------------------------------------------
--spec filter(Pred::fun((Key::key(), Value::value()) -> boolean()), MapOrIterator::map_or_iterator()) -> map().
+-spec filter(
+    Pred :: fun((Key :: key(), Value :: value()) -> boolean()),
+    MapOrIterator :: map_or_iterator()
+) -> map().
 filter(Pred, Map) when is_function(Pred, 2) andalso is_map(Map) ->
     iterate_filter(Pred, maps:next(maps:iterator(Map)), ?MODULE:new());
-filter(Pred, [Pos|Map] = Iterator) when is_function(Pred, 2) andalso is_integer(Pos) andalso is_map(Map) ->
+filter(Pred, [Pos | Map] = Iterator) when
+    is_function(Pred, 2) andalso is_integer(Pos) andalso is_map(Map)
+->
     iterate_filter(Pred, maps:next(Iterator), ?MODULE:new());
 filter(_Pred, Map) when not is_map(Map) ->
     throw({badmap, Map});
@@ -325,10 +349,16 @@ filter(_Pred, _Map) ->
 %% and a `badarg' exception if the input function is not a function.
 %% @end
 %%-----------------------------------------------------------------------------
--spec fold(Fun::fun((Key::key(), Value::value(), Accum::term()) -> term()), Init::term(), MapOrIterator::map_or_iterator()) -> term().
+-spec fold(
+    Fun :: fun((Key :: key(), Value :: value(), Accum :: term()) -> term()),
+    Init :: term(),
+    MapOrIterator :: map_or_iterator()
+) -> term().
 fold(Fun, Init, Map) when is_function(Fun, 3) andalso is_map(Map) ->
     iterate_fold(Fun, maps:next(maps:iterator(Map)), Init);
-fold(Fun, Init, [Pos|Map] = Iterator) when is_function(Fun, 3) andalso is_integer(Pos) andalso is_map(Map) ->
+fold(Fun, Init, [Pos | Map] = Iterator) when
+    is_function(Fun, 3) andalso is_integer(Pos) andalso is_map(Map)
+->
     iterate_fold(Fun, maps:next(Iterator), Init);
 fold(_Fun, _Init, Map) when not is_map(Map) ->
     throw({badmap, Map});
@@ -346,10 +376,13 @@ fold(_Fun, _Init, _Map) ->
 %% and a `badarg' exception if the input function is not a function.
 %% @end
 %%-----------------------------------------------------------------------------
--spec map(Fun::fun((Key::key(), Value::value()) -> value()), Map::map_or_iterator()) -> map().
+-spec map(Fun :: fun((Key :: key(), Value :: value()) -> value()), Map :: map_or_iterator()) ->
+    map().
 map(Fun, Map) when is_function(Fun, 2) andalso is_map(Map) ->
     iterate_map(Fun, maps:next(maps:iterator(Map)), ?MODULE:new());
-map(Fun, [Pos|Map] = Iterator) when is_function(Fun, 2) andalso is_integer(Pos) andalso is_map(Map) ->
+map(Fun, [Pos | Map] = Iterator) when
+    is_function(Fun, 2) andalso is_integer(Pos) andalso is_map(Map)
+->
     iterate_map(Fun, maps:next(Iterator), ?MODULE:new());
 map(_Fun, Map) when not is_map(Map) ->
     throw({badmap, Map});
@@ -368,7 +401,7 @@ map(_Fun, _Map) ->
 %% This function throws a `badmap' exception if neither `Map1' nor `Map2' is a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec merge(Map1::map(), Map2::map()) -> map().
+-spec merge(Map1 :: map(), Map2 :: map()) -> map().
 merge(Map1, Map2) when is_map(Map1) andalso is_map(Map2) ->
     iterate_merge(maps:next(maps:iterator(Map2)), Map1);
 merge(Map1, _Map2) when not is_map(Map1) ->
@@ -392,7 +425,7 @@ merge(_Map1, Map2) when not is_map(Map2) ->
 %% This function throws a `badmap' exception if `Map' is not a map or map iterator.
 %% @end
 %%-----------------------------------------------------------------------------
--spec remove(Key::key(), MapOrIterator::map_or_iterator()) -> map().
+-spec remove(Key :: key(), MapOrIterator :: map_or_iterator()) -> map().
 remove(Key, Map) when is_map(Map) ->
     case ?MODULE:is_key(Key, Map) of
         true ->
@@ -400,7 +433,7 @@ remove(Key, Map) when is_map(Map) ->
         _ ->
             Map
     end;
-remove(Key, [Pos|Map] = Iterator) when is_integer(Pos) andalso is_map(Map) ->
+remove(Key, [Pos | Map] = Iterator) when is_integer(Pos) andalso is_map(Map) ->
     iterate_remove(Key, maps:next(Iterator), ?MODULE:new());
 remove(_Key, Map) when not is_map(Map) ->
     throw({badmap, Map}).
@@ -416,12 +449,11 @@ remove(_Key, Map) when not is_map(Map) ->
 %% This function throws a `badmap' exception if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec update(Key::key(), Value::value(), Map::map()) -> map().
+-spec update(Key :: key(), Value :: value(), Map :: map()) -> map().
 update(Key, Value, Map) when is_map(Map) ->
     Map#{Key => Value};
 update(_Key, _Value, Map) when not is_map(Map) ->
     throw({badmap, Map}).
-
 
 %%
 %% Internal functions
@@ -431,19 +463,19 @@ update(_Key, _Value, Map) when not is_map(Map) ->
 iterate_keys(none, Accum) ->
     lists:reverse(Accum);
 iterate_keys({Key, _Value, Iterator}, Accum) ->
-    iterate_keys(maps:next(Iterator), [Key|Accum]).
+    iterate_keys(maps:next(Iterator), [Key | Accum]).
 
 %% @private
 iterate_values(none, Accum) ->
     lists:reverse(Accum);
 iterate_values({_Key, Value, Iterator}, Accum) ->
-    iterate_values(maps:next(Iterator), [Value|Accum]).
+    iterate_values(maps:next(Iterator), [Value | Accum]).
 
 %% @private
 iterate_entries(none, Accum) ->
     lists:reverse(Accum);
 iterate_entries({Key, Value, Iterator}, Accum) ->
-    iterate_entries(maps:next(Iterator), [{Key, Value}|Accum]).
+    iterate_entries(maps:next(Iterator), [{Key, Value} | Accum]).
 
 %% @private
 iterate_filter(_Pred, none, Accum) ->
@@ -489,7 +521,7 @@ iterate_remove(Key, {OtherKey, Value, Iterator}, Accum) ->
 %% @private
 iterate_from_list([], Accum) ->
     Accum;
-iterate_from_list([{Key, Value}|T], Accum) ->
+iterate_from_list([{Key, Value} | T], Accum) ->
     iterate_from_list(T, Accum#{Key => Value});
 iterate_from_list(_List, _Accum) ->
     throw(badarg).

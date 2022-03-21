@@ -57,7 +57,7 @@
 %% @doc     Base-64 encode a binary or string, outputting a binary.
 %% @end
 %%-----------------------------------------------------------------------------
--spec encode(binary()|iolist()) -> binary().
+-spec encode(binary() | iolist()) -> binary().
 encode(Data) when is_binary(Data) orelse is_list(Data) ->
     throw(nif_error).
 
@@ -67,7 +67,7 @@ encode(Data) when is_binary(Data) orelse is_list(Data) ->
 %% @doc     Base-64 encode a binary or string, outputting a string.
 %% @end
 %%-----------------------------------------------------------------------------
--spec encode_to_string(binary()|iolist()) -> string().
+-spec encode_to_string(binary() | iolist()) -> string().
 encode_to_string(Data) when is_binary(Data) ->
     throw(nif_error).
 
@@ -80,7 +80,7 @@ encode_to_string(Data) when is_binary(Data) ->
 %%          data is not valid base64-encoded data.
 %% @end
 %%-----------------------------------------------------------------------------
--spec decode(binary()|iolist()) -> binary().
+-spec decode(binary() | iolist()) -> binary().
 decode(Data) when is_binary(Data) orelse is_list(Data) ->
     throw(nif_error).
 
@@ -93,6 +93,6 @@ decode(Data) when is_binary(Data) orelse is_list(Data) ->
 %%          data is not valid base64-encoded data.
 %% @end
 %%-----------------------------------------------------------------------------
--spec decode_to_string(binary()|iolist()) -> string().
+-spec decode_to_string(binary() | iolist()) -> string().
 decode_to_string(Data) when is_binary(Data) ->
     throw(nif_error).

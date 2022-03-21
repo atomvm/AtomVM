@@ -29,8 +29,7 @@ sleep(infinity) ->
     receive
         '$atomvm_timer_interrupt' ->
             {error, unexpected_interrupt}
-    after ?MAX_INT ->
-        sleep(infinity)
+    after ?MAX_INT -> sleep(infinity)
     end;
 sleep(MSecs) ->
     receive

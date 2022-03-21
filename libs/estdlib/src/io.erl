@@ -27,7 +27,7 @@
 %% @doc     Equivalent to format(Format, []).
 %% @end
 %%-----------------------------------------------------------------------------
--spec format(Format::string()) -> string().
+-spec format(Format :: string()) -> string().
 format(Format) when is_list(Format) ->
     format(Format, []).
 
@@ -40,7 +40,7 @@ format(Format) when is_list(Format) ->
 %%          formatting capabilities.
 %% @end
 %%-----------------------------------------------------------------------------
--spec format(Format::string(), Args::list()) -> string().
+-spec format(Format :: string(), Args :: list()) -> string().
 format(Format, Args) when is_list(Format) andalso is_list(Args) ->
     Msg =
         try
@@ -67,7 +67,8 @@ get_line(Prompt) ->
 put_chars(Chars) ->
     Self = self(),
     case erlang:group_leader() of
-        Self -> console:print(Chars);
+        Self ->
+            console:print(Chars);
         Leader ->
             Ref = make_ref(),
             Leader ! {io_request, self(), Ref, {put_chars, unicode, Chars}},
