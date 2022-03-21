@@ -76,7 +76,9 @@
 -type timer_num() :: non_neg_integer().
 -type timer_num_cfg() :: {timer_num, timer_num()}.
 
--type timer_config() :: [duty_resolution_cfg() | freq_hz_cfg() | speed_mode_cfg() | timer_num_cfg()].
+-type timer_config() :: [
+    duty_resolution_cfg() | freq_hz_cfg() | speed_mode_cfg() | timer_num_cfg()
+].
 
 -type channel() :: non_neg_integer().
 -type channel_cfg() :: {channel, channel()}.
@@ -89,7 +91,9 @@
 -type timer_sel() :: non_neg_integer().
 -type timer_sel_cfg() :: {timer_sel, timer_sel()}.
 
--type channel_config() :: [channel_cfg() | duty_cfg() | gpio_num_cfg() | speed_mode_cfg() | hpoint_cfg() | timer_sel_cfg()].
+-type channel_config() :: [
+    channel_cfg() | duty_cfg() | gpio_num_cfg() | speed_mode_cfg() | hpoint_cfg() | timer_sel_cfg()
+].
 
 -type ledc_error_code() :: non_neg_integer().
 -type fade_mode() :: non_neg_integer().
@@ -102,7 +106,7 @@
 %%          Configure LEDC timer with the given source timer/frequency(Hz)/duty_resolution.
 %% @end
 %%-----------------------------------------------------------------------------
--spec channel_config(Config::channel_config()) -> ok | {error, ledc_error_code()}.
+-spec channel_config(Config :: channel_config()) -> ok | {error, ledc_error_code()}.
 channel_config(_Config) ->
     throw(nif_error).
 
@@ -114,7 +118,7 @@ channel_config(_Config) ->
 %%          Configure LEDC timer with the given source timer/frequency(Hz)/duty_resolution.
 %% @end
 %%-----------------------------------------------------------------------------
--spec timer_config(Config::timer_config()) -> ok | {error, ledc_error_code()}.
+-spec timer_config(Config :: timer_config()) -> ok | {error, ledc_error_code()}.
 timer_config(_Config) ->
     throw(nif_error).
 
@@ -127,7 +131,7 @@ timer_config(_Config) ->
 %%          This function will occupy interrupt of LEDC module.
 %% @end
 %%-----------------------------------------------------------------------------
--spec fade_func_install(Flags::non_neg_integer()) -> ok | {error, ledc_error_code()}.
+-spec fade_func_install(Flags :: non_neg_integer()) -> ok | {error, ledc_error_code()}.
 fade_func_install(_Flags) ->
     throw(nif_error).
 
@@ -153,7 +157,12 @@ fade_func_uninstall() ->
 %%          Call ledc:fade_start() after this to start fading.
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_fade_with_time(SpeedMode::speed_mode(), Channel::channel(), TargetDuty::non_neg_integer(), MaxFadeTimeMs::non_neg_integer()) ->
+-spec set_fade_with_time(
+    SpeedMode :: speed_mode(),
+    Channel :: channel(),
+    TargetDuty :: non_neg_integer(),
+    MaxFadeTimeMs :: non_neg_integer()
+) ->
     ok | {error, ledc_error_code()}.
 set_fade_with_time(_SpeedMode, _Channel, _TargetDuty, _MaxFadeTimeMs) ->
     throw(nif_error).
@@ -172,9 +181,13 @@ set_fade_with_time(_SpeedMode, _Channel, _TargetDuty, _MaxFadeTimeMs) ->
 %%          Call ledc:fade_start() after this to start fading.
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_fade_with_step(SpeedMode::speed_mode(), Channel::channel(),
-    TargetDuty::non_neg_integer(), Scale::non_neg_integer(), CycleNum::non_neg_integer()
-    ) -> ok | {error, ledc_error_code()}.
+-spec set_fade_with_step(
+    SpeedMode :: speed_mode(),
+    Channel :: channel(),
+    TargetDuty :: non_neg_integer(),
+    Scale :: non_neg_integer(),
+    CycleNum :: non_neg_integer()
+) -> ok | {error, ledc_error_code()}.
 set_fade_with_step(_SpeedMode, _Channel, _TargetDuty, _Scale, _CycleNum) ->
     throw(nif_error).
 
@@ -190,7 +203,7 @@ set_fade_with_step(_SpeedMode, _Channel, _TargetDuty, _Scale, _CycleNum) ->
 %%          Call ledc:fade_start() after this to start fading.
 %% @end
 %%-----------------------------------------------------------------------------
--spec fade_start(SpeedMode::speed_mode(), Channel::channel(), FadeMode::fade_mode()) ->
+-spec fade_start(SpeedMode :: speed_mode(), Channel :: channel(), FadeMode :: fade_mode()) ->
     ok | {error, ledc_error_code()}.
 fade_start(_SpeedMode, _Channel, _FadeMode) ->
     throw(nif_error).
@@ -203,7 +216,7 @@ fade_start(_SpeedMode, _Channel, _FadeMode) ->
 %% @doc     LEDC get duty.
 %% @end
 %%-----------------------------------------------------------------------------
--spec get_duty(SpeedMode::speed_mode(), Channel::channel()) -> ok | {error, ledc_error_code()}.
+-spec get_duty(SpeedMode :: speed_mode(), Channel :: channel()) -> ok | {error, ledc_error_code()}.
 get_duty(_SpeedMode, _Channel) ->
     throw(nif_error).
 
@@ -216,7 +229,8 @@ get_duty(_SpeedMode, _Channel) ->
 %% @doc     LEDC set duty.
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_duty(SpeedMode::speed_mode(), Channel::channel(), Duty::non_neg_integer()) -> ok | {error, ledc_error_code()}.
+-spec set_duty(SpeedMode :: speed_mode(), Channel :: channel(), Duty :: non_neg_integer()) ->
+    ok | {error, ledc_error_code()}.
 set_duty(_SpeedMode, _Channel, _Duty) ->
     throw(nif_error).
 
@@ -228,7 +242,8 @@ set_duty(_SpeedMode, _Channel, _Duty) ->
 %% @doc     LEDC update channel parameters.
 %% @end
 %%-----------------------------------------------------------------------------
--spec update_duty(SpeedMode::speed_mode(), Channel::channel()) -> ok | {error, ledc_error_code()}.
+-spec update_duty(SpeedMode :: speed_mode(), Channel :: channel()) ->
+    ok | {error, ledc_error_code()}.
 update_duty(_SpeedMode, _Channel) ->
     throw(nif_error).
 
@@ -239,7 +254,8 @@ update_duty(_SpeedMode, _Channel) ->
 %% @doc     LEDC get channel frequency (Hz)
 %% @end
 %%-----------------------------------------------------------------------------
--spec get_freq(SpeedMode::speed_mode(), TimerNum::timer_num()) -> ok | {error, ledc_error_code()}.
+-spec get_freq(SpeedMode :: speed_mode(), TimerNum :: timer_num()) ->
+    ok | {error, ledc_error_code()}.
 get_freq(_SpeedMode, _TimerNum) ->
     throw(nif_error).
 
@@ -250,7 +266,8 @@ get_freq(_SpeedMode, _TimerNum) ->
 %% @doc     LEDC get channel frequency (Hz)
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_freq(SpeedMode::speed_mode(), TimerNum::timer_num(), FreqHz::non_neg_integer()) -> ok | {error, ledc_error_code()}.
+-spec set_freq(SpeedMode :: speed_mode(), TimerNum :: timer_num(), FreqHz :: non_neg_integer()) ->
+    ok | {error, ledc_error_code()}.
 set_freq(_SpeedMode, _TimerNum, _FreqHz) ->
     throw(nif_error).
 
@@ -263,6 +280,7 @@ set_freq(_SpeedMode, _TimerNum, _FreqHz) ->
 %% @doc     LEDC stop. Disable LEDC output, and set idle level.
 %% @end
 %%-----------------------------------------------------------------------------
--spec stop(SpeedMode::speed_mode(), Channel::channel(), IdleLevel::non_neg_integer()) -> ok | {error, ledc_error_code()}.
+-spec stop(SpeedMode :: speed_mode(), Channel :: channel(), IdleLevel :: non_neg_integer()) ->
+    ok | {error, ledc_error_code()}.
 stop(_SpeedMode, _Channel, _IdleLevel) ->
     throw(nif_error).

@@ -47,33 +47,49 @@
 -export([start/1, stop/0]).
 
 wait_for_sta() ->
-    io:format("WARNING: The network_fsm module is deprecated.  Use the network interface, instead.~n"),
+    io:format(
+        "WARNING: The network_fsm module is deprecated.  Use the network interface, instead.~n"
+    ),
     network:wait_for_sta().
 
 wait_for_sta(StaConfig) ->
-    io:format("WARNING: The network_fsm module is deprecated.  Use the network interface, instead.~n"),
+    io:format(
+        "WARNING: The network_fsm module is deprecated.  Use the network interface, instead.~n"
+    ),
     network:wait_for_sta(StaConfig).
 
 wait_for_sta(StaConfig, Timeout) ->
-    io:format("WARNING: The network_fsm module is deprecated.  Use the network interface, instead.~n"),
+    io:format(
+        "WARNING: The network_fsm module is deprecated.  Use the network interface, instead.~n"
+    ),
     network:wait_for_sta(StaConfig, Timeout).
 
 wait_for_ap() ->
-    io:format("WARNING: The network_fsm module is deprecated.  Use the network interface, instead.~n"),
+    io:format(
+        "WARNING: The network_fsm module is deprecated.  Use the network interface, instead.~n"
+    ),
     network:wait_for_ap().
 
 wait_for_ap(ApConfig) ->
-    io:format("WARNING: The network_fsm module is deprecated.  Use the network interface, instead.~n"),
+    io:format(
+        "WARNING: The network_fsm module is deprecated.  Use the network interface, instead.~n"
+    ),
     network:wait_for_ap(ApConfig).
 
 wait_for_ap(ApConfig, Timeout) ->
-    io:format("WARNING: The network_fsm module is deprecated.  Use the network interface, instead.~n"),
+    io:format(
+        "WARNING: The network_fsm module is deprecated.  Use the network interface, instead.~n"
+    ),
     network:wait_for_ap(ApConfig, Timeout).
 
 start(Config) ->
-    io:format("WARNING: The network_fsm module is deprecated.  Use the network interface, instead.~n"),
+    io:format(
+        "WARNING: The network_fsm module is deprecated.  Use the network interface, instead.~n"
+    ),
     network:start(Config).
 
 stop() ->
-    io:format("WARNING: The network_fsm module is deprecated.  Use the network interface, instead.~n"),
+    io:format(
+        "WARNING: The network_fsm module is deprecated.  Use the network interface, instead.~n"
+    ),
     network:stop().

@@ -47,7 +47,8 @@
 -module(esp).
 
 -export([
-    restart/0, reset_reason/0,
+    restart/0,
+    reset_reason/0,
     nvs_get_binary/1, nvs_get_binary/2, nvs_get_binary/3,
     nvs_set_binary/2, nvs_set_binary/3,
     nvs_erase_key/1, nvs_erase_key/2,
@@ -57,17 +58,17 @@
 ]).
 
 -type esp_reset_reason() ::
-    esp_rst_unknown |
-    esp_rst_poweron |
-    esp_rst_ext |
-    esp_rst_sw |
-    esp_rst_panic |
-    esp_rst_int_wdt |
-    esp_rst_task_wdt |
-    esp_rst_wdt |
-    esp_rst_deepsleep |
-    esp_rst_brownout |
-    esp_rst_sdio.
+    esp_rst_unknown
+    | esp_rst_poweron
+    | esp_rst_ext
+    | esp_rst_sw
+    | esp_rst_panic
+    | esp_rst_int_wdt
+    | esp_rst_task_wdt
+    | esp_rst_wdt
+    | esp_rst_deepsleep
+    | esp_rst_brownout
+    | esp_rst_sdio.
 
 -define(ATOMVM_NVS_NS, atomvm).
 
@@ -92,7 +93,7 @@ reset_reason() ->
 %% @doc Equivalent to nvs_get_binary(?ATOMVM_NVS_NS, Key).
 %% @end
 %%-----------------------------------------------------------------------------
--spec nvs_get_binary(Key::atom()) -> binary() | undefined.
+-spec nvs_get_binary(Key :: atom()) -> binary() | undefined.
 nvs_get_binary(Key) when is_atom(Key) ->
     esp:nvs_get_binary(?ATOMVM_NVS_NS, Key).
 
@@ -105,7 +106,7 @@ nvs_get_binary(Key) when is_atom(Key) ->
 %%          there is no value associated with this key.
 %% @end
 %%-----------------------------------------------------------------------------
--spec nvs_get_binary(Namespace::atom(), Key::atom()) -> binary() | undefined.
+-spec nvs_get_binary(Namespace :: atom(), Key :: atom()) -> binary() | undefined.
 nvs_get_binary(Namespace, Key) when is_atom(Namespace) andalso is_atom(Key) ->
     throw(nif_error).
 
@@ -119,8 +120,11 @@ nvs_get_binary(Namespace, Key) when is_atom(Namespace) andalso is_atom(Key) ->
 %%          there is no value associated with this key.
 %% @end
 %%-----------------------------------------------------------------------------
--spec nvs_get_binary(Namespace::atom(), Key::atom(), Default::binary()) -> binary() | undefined.
-nvs_get_binary(Namespace, Key, Default) when is_atom(Namespace) andalso is_atom(Key) andalso is_binary(Default) ->
+-spec nvs_get_binary(Namespace :: atom(), Key :: atom(), Default :: binary()) ->
+    binary() | undefined.
+nvs_get_binary(Namespace, Key, Default) when
+    is_atom(Namespace) andalso is_atom(Key) andalso is_binary(Default)
+->
     case esp:nvs_get_binary(Namespace, Key) of
         undefined ->
             Default;
@@ -132,7 +136,7 @@ nvs_get_binary(Namespace, Key, Default) when is_atom(Namespace) andalso is_atom(
 %% @doc Equivalent to nvs_set_binary(?ATOMVM_NVS_NS, Key, Value).
 %% @end
 %%-----------------------------------------------------------------------------
--spec nvs_set_binary(Key::atom(), Value::binary()) -> ok.
+-spec nvs_set_binary(Key :: atom(), Value :: binary()) -> ok.
 nvs_set_binary(Key, Value) when is_atom(Key) andalso is_binary(Value) ->
     esp:nvs_set_binary(?ATOMVM_NVS_NS, Key, Value).
 
@@ -145,15 +149,17 @@ nvs_set_binary(Key, Value) when is_atom(Key) andalso is_binary(Value) ->
 %%          for the specified key, it is over-written.
 %% @end
 %%-----------------------------------------------------------------------------
--spec nvs_set_binary(Namespace::atom(), Key::atom(), Value::binary()) -> ok.
-nvs_set_binary(Namespace, Key, Value) when is_atom(Namespace) andalso is_atom(Key) andalso is_binary(Value) ->
+-spec nvs_set_binary(Namespace :: atom(), Key :: atom(), Value :: binary()) -> ok.
+nvs_set_binary(Namespace, Key, Value) when
+    is_atom(Namespace) andalso is_atom(Key) andalso is_binary(Value)
+->
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------
 %% @doc Equivalent to nvs_erase_key(?ATOMVM_NVS_NS, Key).
 %% @end
 %%-----------------------------------------------------------------------------
--spec nvs_erase_key(Key::atom()) -> ok.
+-spec nvs_erase_key(Key :: atom()) -> ok.
 nvs_erase_key(Key) when is_atom(Key) ->
     esp:nvs_erase_key(?ATOMVM_NVS_NS, Key).
 
@@ -165,7 +171,7 @@ nvs_erase_key(Key) when is_atom(Key) ->
 %%          for the specified key, no action is performed.
 %% @end
 %%-----------------------------------------------------------------------------
--spec nvs_erase_key(Namespace::atom(), Key::atom()) -> ok.
+-spec nvs_erase_key(Namespace :: atom(), Key :: atom()) -> ok.
 nvs_erase_key(Namespace, Key) when is_atom(Namespace) andalso is_atom(Key) ->
     throw(nif_error).
 
@@ -183,7 +189,7 @@ nvs_erase_all() ->
 %% @doc     Erase all values in the specified namespace.
 %% @end
 %%-----------------------------------------------------------------------------
--spec nvs_erase_all(Namespace::atom()) -> ok.
+-spec nvs_erase_all(Namespace :: atom()) -> ok.
 nvs_erase_all(Namespace) when is_atom(Namespace) ->
     throw(nif_error).
 

@@ -48,14 +48,15 @@
 
 -export([
     platform/0,
-    random/0, rand_bytes/1,
+    random/0,
+    rand_bytes/1,
     read_priv/2
 ]).
 
 -type platform_name() ::
-    generic_unix |
-    esp32 |
-    stm32.
+    generic_unix
+    | esp32
+    | stm32.
 
 %%-----------------------------------------------------------------------------
 %% @returns The platform name.
@@ -88,7 +89,7 @@ random() ->
 %%          Otherwise, the random value is generated using a PRNG.
 %% @end
 %%-----------------------------------------------------------------------------
--spec rand_bytes(Len::non_neg_integer()) -> binary().
+-spec rand_bytes(Len :: non_neg_integer()) -> binary().
 rand_bytes(_Len) ->
     throw(nif_error).
 
@@ -99,6 +100,6 @@ rand_bytes(_Len) ->
 %% @doc     This function allows to fetch priv/ resources content.
 %% @end
 %%-----------------------------------------------------------------------------
--spec read_priv(App::atom(), Path::list()) -> binary().
+-spec read_priv(App :: atom(), Path :: list()) -> binary().
 read_priv(_App, _Path) ->
     throw(nif_error).

@@ -42,7 +42,7 @@
 
 -export([call/2, call/3]).
 
--spec call(pid(), Message::term()) -> term().
+-spec call(pid(), Message :: term()) -> term().
 call(Pid, Message) ->
     Ref = erlang:make_ref(),
     Pid ! {self(), Ref, Message},
@@ -50,14 +50,13 @@ call(Pid, Message) ->
         {Ref, Reply} -> Reply
     end.
 
--spec call(pid(), Message::term(), TimeoutMs::non_neg_integer()) -> term() | {error, timeout}.
+-spec call(pid(), Message :: term(), TimeoutMs :: non_neg_integer()) -> term() | {error, timeout}.
 call(Pid, Message, TimeoutMs) ->
     Ref = erlang:make_ref(),
     Pid ! {self(), Ref, Message},
     receive
         out_of_memory -> out_of_memory;
         {Ref, Reply} -> Reply
-    after
-        TimeoutMs ->
-            {error, timeout}
+    after TimeoutMs ->
+        {error, timeout}
     end.

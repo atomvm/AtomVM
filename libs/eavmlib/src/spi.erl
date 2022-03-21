@@ -42,15 +42,15 @@
 -export([open/1, read_at/3, write_at/4]).
 
 -type bus_config() :: [
-    {miso_io_num, non_neg_integer()} |
-    {mosi_io_num, non_neg_integer()} |
-    {sclk_io_num, non_neg_integer()}
+    {miso_io_num, non_neg_integer()}
+    | {mosi_io_num, non_neg_integer()}
+    | {sclk_io_num, non_neg_integer()}
 ].
 -type device_config() :: [
-    {clock_speed_hz, non_neg_integer()} |
-    {mode, non_neg_integer()} |
-    {spi_cs_io_num, non_neg_integer()} |
-    {address_len_bits, non_neg_integer()}
+    {clock_speed_hz, non_neg_integer()}
+    | {mode, non_neg_integer()}
+    | {spi_cs_io_num, non_neg_integer()}
+    | {address_len_bits, non_neg_integer()}
 ].
 -type param() :: {bus_config, bus_config()} | {device_config, device_config()}.
 -type params() :: [param()].
@@ -65,7 +65,7 @@
 %%          This function will open a connection to the SPI driver.
 %% @end
 %%-----------------------------------------------------------------------------
--spec open(Params::params()) -> spi().
+-spec open(Params :: params()) -> spi().
 open(Params) ->
     open_port({spawn, "spi"}, Params).
 
@@ -76,7 +76,8 @@ open(Params) ->
 %% @doc     Read a value from and address on the device.
 %% @end
 %%-----------------------------------------------------------------------------
--spec read_at(SPI::spi(), Address::address(), Len::non_neg_integer()) -> {ok, integer()} | error.
+-spec read_at(SPI :: spi(), Address :: address(), Len :: non_neg_integer()) ->
+    {ok, integer()} | error.
 read_at(SPI, Address, Len) ->
     port:call(SPI, {read_at, Address, Len}).
 
@@ -91,6 +92,7 @@ read_at(SPI, Address, Len) ->
 %%          values from this function.
 %% @end
 %%-----------------------------------------------------------------------------
--spec write_at(SPI::spi(), Address::address(), Len::non_neg_integer(), Data::integer()) -> {ok, integer()} | error.
+-spec write_at(SPI :: spi(), Address :: address(), Len :: non_neg_integer(), Data :: integer()) ->
+    {ok, integer()} | error.
 write_at(SPI, Address, Len, Data) ->
     port:call(SPI, {write_at, Address bor 16#80, Len, Data}).

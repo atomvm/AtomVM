@@ -49,7 +49,9 @@
 -export([start/1, stop/0]).
 -export([
     init/1,
-    handle_call/3, handle_cast/2, handle_info/2,
+    handle_call/3,
+    handle_cast/2,
+    handle_info/2,
     terminate/2
 ]).
 
@@ -57,18 +59,20 @@
 
 -type octet() :: 0..255.
 -type ipv4_address() :: {octet(), octet(), octet(), octet()}.
--type ipv4_info() :: {IPAddress::ipv4_address(), NetMask::ipv4_address(), Gateway::ipv4_address()}.
+-type ipv4_info() :: {
+    IPAddress :: ipv4_address(), NetMask :: ipv4_address(), Gateway :: ipv4_address()
+}.
 -type ip_info() :: ipv4_info().
 
--type ssid_config() :: {ssid, string()|binary()}.
--type psk_config() :: {psk, string()|binary()}.
+-type ssid_config() :: {ssid, string() | binary()}.
+-type psk_config() :: {psk, string() | binary()}.
 
--type dhcp_hostname_config() :: {dhcp_hostname, string()|binary()}.
+-type dhcp_hostname_config() :: {dhcp_hostname, string() | binary()}.
 -type sta_connected_config() :: {connected, fun(() -> term())}.
 -type sta_disconnected_config() :: {disconnected, fun(() -> term())}.
 -type sta_got_ip_config() :: {got_ip, fun((ip_info()) -> term())}.
 -type sta_config_property() ::
-      ssid_config()
+    ssid_config()
     | psk_config()
     | dhcp_hostname_config()
     | sta_connected_config()
@@ -84,7 +88,7 @@
 -type ap_sta_disconnected_config() :: {sta_disconnected, fun((mac()) -> term())}.
 -type ap_sta_ip_assigned_config() :: {sta_ip_assigned, fun((ipv4_address()) -> term())}.
 -type ap_config_property() ::
-      ssid_config()
+    ssid_config()
     | psk_config()
     | ap_ssid_hidden_config()
     | ap_max_connections_config()
@@ -94,10 +98,10 @@
     | ap_sta_ip_assigned_config().
 -type ap_config() :: {sta, [ap_config_property()]}.
 
--type sntp_config_property() :: {host, string()|binary()}.
+-type sntp_config_property() :: {host, string() | binary()}.
 -type sntp_config() :: {sntp, [sntp_config_property()]}.
 
--type network_config() :: [sta_config()|ap_config()|sntp_config()].
+-type network_config() :: [sta_config() | ap_config() | sntp_config()].
 
 -record(state, {
     config :: network_config(),
@@ -106,26 +110,24 @@
     sta_ip_info :: ip_info()
 }).
 
-
 %%-----------------------------------------------------------------------------
 %% @doc     Equivalent to wait_for_sta(15000).
 %% @end
 %%-----------------------------------------------------------------------------
--spec wait_for_sta() -> {ok, ip_info()} | {error, Reason::term()}.
+-spec wait_for_sta() -> {ok, ip_info()} | {error, Reason :: term()}.
 wait_for_sta() ->
     wait_for_sta(15000).
-
 
 %%-----------------------------------------------------------------------------
 %% @doc     Equivalent to wait_for_sta([], Timeout) or wait_for_sta(StaConfig, 15000).
 %% @end
 %%-----------------------------------------------------------------------------
--spec wait_for_sta(TimeoutOrStaConfig::non_neg_integer() | [sta_config_property()]) -> {ok, ip_info()} | {error, Reason::term()}.
+-spec wait_for_sta(TimeoutOrStaConfig :: non_neg_integer() | [sta_config_property()]) ->
+    {ok, ip_info()} | {error, Reason :: term()}.
 wait_for_sta(Timeout) when is_integer(Timeout) ->
     wait_for_sta([], Timeout);
 wait_for_sta(StaConfig) when is_list(StaConfig) ->
     wait_for_sta(StaConfig, 15000).
-
 
 %%-----------------------------------------------------------------------------
 %% @param   StaConfig The STA network configuration
@@ -140,7 +142,8 @@ wait_for_sta(StaConfig) when is_list(StaConfig) ->
 %%          changes in the network.
 %% @end
 %%-----------------------------------------------------------------------------
--spec wait_for_sta(StaConfig::[sta_config_property()], Timeout::non_neg_integer()) -> {ok, ip_info()} | {error, Reason::term()}.
+-spec wait_for_sta(StaConfig :: [sta_config_property()], Timeout :: non_neg_integer()) ->
+    {ok, ip_info()} | {error, Reason :: term()}.
 wait_for_sta(StaConfig, Timeout) ->
     Self = self(),
     NewStaConfig = [
@@ -157,26 +160,24 @@ wait_for_sta(StaConfig, Timeout) ->
             Error
     end.
 
-
 %%-----------------------------------------------------------------------------
 %% @doc     Equivalent to wait_for_ap(15000).
 %% @end
 %%-----------------------------------------------------------------------------
--spec wait_for_ap() -> ok | {error, Reason::term()}.
+-spec wait_for_ap() -> ok | {error, Reason :: term()}.
 wait_for_ap() ->
     wait_for_ap(15000).
-
 
 %%-----------------------------------------------------------------------------
 %% @doc     Equivalent to wait_for_ap([], Timeout) or wait_for_ap(StaConfig, 15000).
 %% @end
 %%-----------------------------------------------------------------------------
--spec wait_for_ap(TimeoutOrStaConfig::non_neg_integer() | [ap_config_property()]) -> ok | {error, Reason::term()}.
+-spec wait_for_ap(TimeoutOrStaConfig :: non_neg_integer() | [ap_config_property()]) ->
+    ok | {error, Reason :: term()}.
 wait_for_ap(Timeout) when is_integer(Timeout) ->
     wait_for_ap([], Timeout);
 wait_for_ap(ApConfig) when is_list(ApConfig) ->
     wait_for_ap(ApConfig, 15000).
-
 
 %%-----------------------------------------------------------------------------
 %% @param   ApConfig The AP network configuration
@@ -192,7 +193,8 @@ wait_for_ap(ApConfig) when is_list(ApConfig) ->
 %%          changes in the network.
 %% @end
 %%-----------------------------------------------------------------------------
--spec wait_for_ap(ApConfig::[ap_config_property()], Timeout::non_neg_integer()) -> ok | {error, Reason::term()}.
+-spec wait_for_ap(ApConfig :: [ap_config_property()], Timeout :: non_neg_integer()) ->
+    ok | {error, Reason :: term()}.
 wait_for_ap(ApConfig, Timeout) ->
     Self = self(),
     NewApConfig = [
@@ -207,7 +209,6 @@ wait_for_ap(ApConfig, Timeout) ->
             Error
     end.
 
-
 %%-----------------------------------------------------------------------------
 %% @param   Config The network configuration
 %% @returns ok, if the network_fsm was started, or {error, Reason} if
@@ -221,7 +222,7 @@ wait_for_ap(ApConfig, Timeout) ->
 %%          FSM Programming Manual for more information.
 %% @end
 %%-----------------------------------------------------------------------------
--spec start(Config::network_config()) -> ok | {error, Reason::term()}.
+-spec start(Config :: network_config()) -> ok | {error, Reason :: term()}.
 start(Config) ->
     case gen_server:start({local, ?MODULE}, ?MODULE, Config, []) of
         {ok, Pid} ->
@@ -236,7 +237,7 @@ start(Config) ->
 %% @doc     Stop a network_fsm.
 %% @end
 %%-----------------------------------------------------------------------------
--spec stop() -> ok | {error, Reason::term()}.
+-spec stop() -> ok | {error, Reason :: term()}.
 stop() ->
     gen_server:stop(?SERVER).
 
@@ -246,11 +247,10 @@ stop() ->
 
 %% @hidden
 init(Config) ->
-   {ok, #state{config=Config}}.
-
+    {ok, #state{config = Config}}.
 
 %% @hidden
-handle_call(start, From, #state{config=Config} = State) ->
+handle_call(start, From, #state{config = Config} = State) ->
     Port = get_port(),
     Ref = make_ref(),
     DriverConfig = get_driver_config(Config),
@@ -264,37 +264,38 @@ wait_start_reply(Ref, From, Port, State) ->
     receive
         {Ref, ok} ->
             gen_server:reply(From, ok),
-            {noreply, State#state{port=Port, ref=Ref}};
+            {noreply, State#state{port = Port, ref = Ref}};
         {Ref, {error, Reason} = ER} ->
             gen_server:reply(From, {error, Reason}),
             {stop, {start_failed, Reason}, ER, State}
     end.
-
 
 %% @hidden
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
 %% @hidden
-handle_info({Ref, sta_connected} = _Msg, #state{ref=Ref, config=Config} = State) ->
+handle_info({Ref, sta_connected} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_sta_connected_callback(Config),
     {noreply, State};
-handle_info({Ref, sta_disconnected} = _Msg, #state{ref=Ref, config=Config} = State) ->
+handle_info({Ref, sta_disconnected} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_sta_disconnected_callback(Config),
     {noreply, State};
-handle_info({Ref, {sta_got_ip, IpInfo}} = _Msg, #state{ref=Ref, config=Config} = State) ->
+handle_info({Ref, {sta_got_ip, IpInfo}} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_sta_got_ip_callback(Config, IpInfo),
-    {noreply, State#state{sta_ip_info=IpInfo}};
-handle_info({Ref, ap_started} = _Msg, #state{ref=Ref, config=Config} = State) ->
+    {noreply, State#state{sta_ip_info = IpInfo}};
+handle_info({Ref, ap_started} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_ap_started_callback(Config),
     {noreply, State};
-handle_info({Ref, {ap_sta_connected, Mac}} = _Msg, #state{ref=Ref, config=Config} = State) ->
+handle_info({Ref, {ap_sta_connected, Mac}} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_ap_sta_connected_callback(Config, Mac),
     {noreply, State};
-handle_info({Ref, {ap_sta_disconnected, Mac}} = _Msg, #state{ref=Ref, config=Config} = State) ->
+handle_info({Ref, {ap_sta_disconnected, Mac}} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_ap_sta_disconnected_callback(Config, Mac),
     {noreply, State};
-handle_info({Ref, {ap_sta_ip_assigned, Address}} = _Msg, #state{ref=Ref, config=Config} = State) ->
+handle_info(
+    {Ref, {ap_sta_ip_assigned, Address}} = _Msg, #state{ref = Ref, config = Config} = State
+) ->
     maybe_ap_sta_ip_assigned_callback(Config, Address),
     {noreply, State};
 handle_info(_Msg, State) ->
@@ -310,22 +311,24 @@ terminate(_Reason, _State) ->
 
 %% @private
 get_driver_config(Config) ->
-    Config1 = case proplists:get_value(sta, Config) of
-        undefined ->
-            Config;
-        StaConfig ->
-            NewStaConfig1 = maybe_add_nvs_entry(ssid, StaConfig,     sta_ssid),
-            NewStaConfig2 = maybe_add_nvs_entry(psk,  NewStaConfig1, sta_psk),
-            [{sta, NewStaConfig2} | lists:keydelete(sta, 1, Config)]
-    end,
-    Config2 = case proplists:get_value(ap, Config1) of
-        undefined ->
-            Config1;
-        ApConfig ->
-            NewApConfig1 = maybe_add_nvs_entry(ssid, ApConfig,     ap_ssid),
-            NewApConfig2 = maybe_add_nvs_entry(psk,  NewApConfig1, ap_psk),
-            [{ap, NewApConfig2} | lists:keydelete(ap, 1, Config1)]
-    end,
+    Config1 =
+        case proplists:get_value(sta, Config) of
+            undefined ->
+                Config;
+            StaConfig ->
+                NewStaConfig1 = maybe_add_nvs_entry(ssid, StaConfig, sta_ssid),
+                NewStaConfig2 = maybe_add_nvs_entry(psk, NewStaConfig1, sta_psk),
+                [{sta, NewStaConfig2} | lists:keydelete(sta, 1, Config)]
+        end,
+    Config2 =
+        case proplists:get_value(ap, Config1) of
+            undefined ->
+                Config1;
+            ApConfig ->
+                NewApConfig1 = maybe_add_nvs_entry(ssid, ApConfig, ap_ssid),
+                NewApConfig2 = maybe_add_nvs_entry(psk, NewApConfig1, ap_psk),
+                [{ap, NewApConfig2} | lists:keydelete(ap, 1, Config1)]
+        end,
     Config2.
 
 %% @private
@@ -367,15 +370,14 @@ maybe_ap_sta_disconnected_callback(Config, Mac) ->
 maybe_ap_sta_ip_assigned_callback(Config, Address) ->
     maybe_callback1({sta_ip_assigned, Address}, proplists:get_value(ap, Config)).
 
-
 %% @private
 maybe_callback0(_Key, undefined) ->
     ok;
 maybe_callback0(Key, Config) ->
     case proplists:get_value(Key, Config) of
-        undefined ->    ok;
+        undefined -> ok;
         Pid when is_pid(Pid) -> Pid ! Key;
-        Fun ->          Fun()
+        Fun -> Fun()
     end.
 
 %% @private
@@ -383,9 +385,9 @@ maybe_callback1(_KeyArg, undefined) ->
     ok;
 maybe_callback1({Key, Arg} = Msg, Config) ->
     case proplists:get_value(Key, Config) of
-        undefined ->    ok;
+        undefined -> ok;
         Pid when is_pid(Pid) -> Pid ! Msg;
-        Fun ->          Fun(Arg)
+        Fun -> Fun(Arg)
     end.
 
 %% @private
@@ -393,7 +395,8 @@ get_port() ->
     case whereis(network_port) of
         undefined ->
             open_port();
-        Pid -> Pid
+        Pid ->
+            Pid
     end.
 
 %% @private

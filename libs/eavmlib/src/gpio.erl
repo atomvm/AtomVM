@@ -42,8 +42,16 @@
 
 -export([start/0, open/0, read/2, set_direction/3, set_level/3, set_int/3, remove_int/2]).
 -export([
-    set_pin_mode/2, set_pin_pull/2, hold_en/1, hold_dis/1, deep_sleep_hold_en/0, deep_sleep_hold_dis/0,
-    digital_write/2, digital_read/1, attach_interrupt/2, detach_interrupt/1
+    set_pin_mode/2,
+    set_pin_pull/2,
+    hold_en/1,
+    hold_dis/1,
+    deep_sleep_hold_en/0,
+    deep_sleep_hold_dis/0,
+    digital_write/2,
+    digital_read/1,
+    attach_interrupt/2,
+    detach_interrupt/1
 ]).
 
 -type gpio() :: pid().
@@ -68,39 +76,39 @@ start() ->
 open() ->
     open_port({spawn, "gpio"}, []).
 
--spec read(GPIO::gpio(), GPIONum::pin()) -> high | low.
+-spec read(GPIO :: gpio(), GPIONum :: pin()) -> high | low.
 read(GPIO, GPIONum) ->
     port:call(GPIO, {read, GPIONum}).
 
--spec set_direction(GPIO::gpio(), GPIONum::pin(), Direction::direction()) -> ok | error.
+-spec set_direction(GPIO :: gpio(), GPIONum :: pin(), Direction :: direction()) -> ok | error.
 set_direction(GPIO, GPIONum, Direction) ->
     port:call(GPIO, {set_direction, GPIONum, Direction}).
 
--spec set_level(GPIO::gpio(), GPIONum::pin(), Level::level()) -> ok | error.
+-spec set_level(GPIO :: gpio(), GPIONum :: pin(), Level :: level()) -> ok | error.
 set_level(GPIO, GPIONum, Level) ->
     port:call(GPIO, {set_level, GPIONum, Level}).
 
--spec set_int(GPIO::gpio(), GPIONum::pin(), Trigger::trigger()) -> ok | error.
+-spec set_int(GPIO :: gpio(), GPIONum :: pin(), Trigger :: trigger()) -> ok | error.
 set_int(GPIO, GPIONum, Trigger) ->
     port:call(GPIO, {set_int, GPIONum, Trigger}).
 
--spec remove_int(GPIO::gpio(), GPIONum::pin()) -> ok | error.
+-spec remove_int(GPIO :: gpio(), GPIONum :: pin()) -> ok | error.
 remove_int(GPIO, GPIONum) ->
     port:call(GPIO, {remove_int, GPIONum}).
 
--spec set_pin_mode(GPIONum::pin(), Direction::direction()) -> ok | error.
+-spec set_pin_mode(GPIONum :: pin(), Direction :: direction()) -> ok | error.
 set_pin_mode(_GPIONum, _Mode) ->
     throw(nif_error).
 
--spec set_pin_pull(GPIONum::pin(), Pull::pull()) -> ok | error.
+-spec set_pin_pull(GPIONum :: pin(), Pull :: pull()) -> ok | error.
 set_pin_pull(_GPIONum, _Pull) ->
     throw(nif_error).
 
--spec hold_en(GPIONum::pin()) -> ok | error.
+-spec hold_en(GPIONum :: pin()) -> ok | error.
 hold_en(_GPIONum) ->
     throw(nif_error).
 
--spec hold_dis(GPIONum::pin()) -> ok | error.
+-spec hold_dis(GPIONum :: pin()) -> ok | error.
 hold_dis(_GPIONum) ->
     throw(nif_error).
 
@@ -112,11 +120,11 @@ deep_sleep_hold_en() ->
 deep_sleep_hold_dis() ->
     throw(nif_error).
 
--spec digital_write(GPIONum::pin(), Level::level()) -> ok | error.
+-spec digital_write(GPIONum :: pin(), Level :: level()) -> ok | error.
 digital_write(_GPIONum, _Level) ->
     throw(nif_error).
 
--spec digital_read(GPIONum::pin()) -> high | low.
+-spec digital_read(GPIONum :: pin()) -> high | low.
 digital_read(_GPIONum) ->
     throw(nif_error).
 
