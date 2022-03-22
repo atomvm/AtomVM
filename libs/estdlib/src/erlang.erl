@@ -41,6 +41,13 @@
     max/2
 ]).
 
+%%
+%% TODO Correct the following bugs
+%% * cancel_timer should be renamed cancel, per the OTP documentation
+%% * return value needs to be {ok, cancel} or {error, Reason}
+%% * review API documentation for timer functions in this module
+%%
+
 %%-----------------------------------------------------------------------------
 %% @param   Time time in milliseconds after which to send the timeout message.
 %% @param   Dest Pid or server name to which to send the timeout message.
