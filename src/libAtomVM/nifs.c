@@ -49,17 +49,17 @@
 
 #define VALIDATE_VALUE(value, verify_function) \
     if (UNLIKELY(!verify_function((value)))) { \
-        argv[0] = ERROR_ATOM; \
-        argv[1] = BADARG_ATOM; \
-        return term_invalid_term(); \
-    } \
+        argv[0] = ERROR_ATOM;                  \
+        argv[1] = BADARG_ATOM;                 \
+        return term_invalid_term();            \
+    }
 
 #define RAISE_ERROR(error_type_atom) \
-    ctx->x[0] = ERROR_ATOM; \
-    ctx->x[1] = (error_type_atom); \
+    ctx->x[0] = ERROR_ATOM;          \
+    ctx->x[1] = (error_type_atom);   \
     return term_invalid_term();
 
-#define RAISE(a, b) \
+#define RAISE(a, b)  \
     ctx->x[0] = (a); \
     ctx->x[1] = (b); \
     return term_invalid_term();
@@ -74,7 +74,6 @@ static const char *const trace_returns_atom = "\xD" "trace_returns";
 static const char *const trace_send_atom = "\xA" "trace_send";
 static const char *const trace_receive_atom = "\xD" "trace_receive";
 #endif
-
 
 static void process_echo_mailbox(Context *ctx);
 static void process_console_mailbox(Context *ctx);
@@ -2181,7 +2180,7 @@ static void *nif_cons_context(Context *ctx, void *p)
 static void *nif_iterate_processes(GlobalContext *glb, context_iterator fun, void *accum)
 {
     struct ListHead *item;
-    LIST_FOR_EACH(item, &glb->processes_table) {
+    LIST_FOR_EACH (item, &glb->processes_table) {
         Context *p = GET_LIST_ENTRY(item, Context, processes_table_head);
         accum = fun(p, accum);
     }

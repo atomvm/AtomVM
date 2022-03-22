@@ -27,10 +27,10 @@
 #include "debug.h"
 #include "defaultatoms.h"
 #include "exportedfunction.h"
-#include "utils.h"
-#include "scheduler.h"
 #include "nifs.h"
 #include "opcodes.h"
+#include "scheduler.h"
+#include "utils.h"
 
 #ifdef IMPL_EXECUTE_LOOP
     #include "bitstring.h"
@@ -71,9 +71,9 @@ typedef union
 } dreg_type_t;
 
 #ifdef IMPL_EXECUTE_LOOP
-#define RAISE_ERROR(error_type_atom)                                    \
-    ctx->x[0] = ERROR_ATOM;                                             \
-    ctx->x[1] = error_type_atom;                                        \
+#define RAISE_ERROR(error_type_atom) \
+    ctx->x[0] = ERROR_ATOM;          \
+    ctx->x[1] = error_type_atom;     \
     goto handle_error;
 
 #define VM_ABORT() \
@@ -316,7 +316,7 @@ typedef union
     }                                                                                                                   \
 }
 
-#define READ_DEST_REGISTER(dreg_type, dreg)                                                         \
+#define READ_DEST_REGISTER(dreg_type, dreg) \
     *(*((dreg_type).ptr) + (dreg));
 
 
@@ -451,9 +451,9 @@ typedef union
 #define INSTRUCTION_POINTER() \
     ((const void *) &code[i])
 
-#define DO_RETURN() \
+#define DO_RETURN()                                     \
     mod = mod->global->modules_by_index[ctx->cp >> 24]; \
-    code = mod->code->code; \
+    code = mod->code->code;                             \
     i = (ctx->cp & 0xFFFFFF) >> 2;
 
 #define POINTER_TO_II(instruction_pointer) \
@@ -462,36 +462,35 @@ typedef union
 #define HANDLE_ERROR() \
     goto handle_error;
 
-#define VERIFY_IS_INTEGER(t, opcode_name) \
-    if (UNLIKELY(!term_is_integer(t))) { \
-    TRACE(opcode_name ": " #t " is not an integer\n"); \
-    RAISE_ERROR(BADARG_ATOM); \
-}
+#define VERIFY_IS_INTEGER(t, opcode_name)                  \
+    if (UNLIKELY(!term_is_integer(t))) {                   \
+        TRACE(opcode_name ": " #t " is not an integer\n"); \
+        RAISE_ERROR(BADARG_ATOM);                          \
+    }
 
-#define VERIFY_IS_ANY_INTEGER(t, opcode_name) \
-    if (UNLIKELY(!term_is_any_integer(t))) { \
-    TRACE(opcode_name ": " #t " is not any integer\n"); \
-    RAISE_ERROR(BADARG_ATOM); \
-}
+#define VERIFY_IS_ANY_INTEGER(t, opcode_name)               \
+    if (UNLIKELY(!term_is_any_integer(t))) {                \
+        TRACE(opcode_name ": " #t " is not any integer\n"); \
+        RAISE_ERROR(BADARG_ATOM);                           \
+    }
 
-#define VERIFY_IS_BINARY(t, opcode_name) \
-    if (UNLIKELY(!term_is_binary(t))) { \
-    TRACE(opcode_name ": " #t " is not a binary\n"); \
-    RAISE_ERROR(BADARG_ATOM); \
-}
+#define VERIFY_IS_BINARY(t, opcode_name)                 \
+    if (UNLIKELY(!term_is_binary(t))) {                  \
+        TRACE(opcode_name ": " #t " is not a binary\n"); \
+        RAISE_ERROR(BADARG_ATOM);                        \
+    }
 
-#define VERIFY_IS_MATCH_STATE(t, opcode_name) \
-    if (UNLIKELY(!term_is_match_state(t))) { \
+#define VERIFY_IS_MATCH_STATE(t, opcode_name)                    \
+    if (UNLIKELY(!term_is_match_state(t))) {                     \
         TRACE(opcode_name ": " #t " is not a match context.\n"); \
-        RAISE_ERROR(BADARG_ATOM); \
+        RAISE_ERROR(BADARG_ATOM);                                \
     }
 
-#define VERIFY_IS_MATCH_OR_BINARY(t, opcode_name) \
-    if (UNLIKELY(!(term_is_binary(t) || term_is_match_state(t)))) { \
+#define VERIFY_IS_MATCH_OR_BINARY(t, opcode_name)                          \
+    if (UNLIKELY(!(term_is_binary(t) || term_is_match_state(t)))) {        \
         TRACE(opcode_name ": " #t " is not a binary or match context.\n"); \
-        RAISE_ERROR(BADARG_ATOM); \
+        RAISE_ERROR(BADARG_ATOM);                                          \
     }
-
 
 #define MIN(X, Y) ((X) < (Y) ? (X) : (Y))
 
@@ -516,11 +515,12 @@ struct Int56
     int64_t val56 : 56;
 };
 
-#define SWAP_KV_PAIR(I, J) { \
-    struct kv_pair tmp = kv[(I)]; \
-    kv[(I)] = kv[(J)]; \
-    kv[(J)] = tmp; \
-}
+#define SWAP_KV_PAIR(I, J)            \
+    {                                 \
+        struct kv_pair tmp = kv[(I)]; \
+        kv[(I)] = kv[(J)];            \
+        kv[(J)] = tmp;                \
+    }
 
 struct kv_pair
 {
@@ -618,7 +618,7 @@ COLD_FUNC static void dump(Context *ctx)
         int offset;
         cp_to_mod_lbl_off(ctx->cp, ctx, &cp_mod, &label, &offset);
         fprintf(stderr, "cp: #CP<module: %i, label: %i, offset: %i>\n\n",
-                cp_mod->module_index, label, offset);
+            cp_mod->module_index, label, offset);
     }
 
     fprintf(stderr, "x[0]: ");
@@ -659,7 +659,7 @@ COLD_FUNC static void dump(Context *ctx)
 
     fprintf(stderr, "\n\nMailbox\n--------\n");
     struct ListHead *item;
-    LIST_FOR_EACH(item, &ctx->mailbox) {
+    LIST_FOR_EACH (item, &ctx->mailbox) {
         Message *msg = GET_LIST_ENTRY(item, Message, mailbox_list_head);
         term_display(stderr, msg->message, ctx);
         fprintf(stderr, "\n");
@@ -802,7 +802,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 }
 
 static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString function_name, int arity,
-        term *return_value)
+    term *return_value)
 {
     BifImpl bif = bif_registry_get_handler(module_name, function_name, arity);
     if (bif) {
@@ -999,7 +999,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
         int remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;
     #endif
 
-    while(1) {
+    while (1) {
 
         switch (code[i]) {
             case OP_LABEL: {
@@ -1802,7 +1802,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 break;
             }
 
-
             case OP_IS_LT: {
                 int next_off = 1;
                 int label;
@@ -1978,9 +1977,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #endif
 
                 break;
-           }
+            }
 
-           case OP_IS_INTEGER: {
+            case OP_IS_INTEGER: {
                 int next_off = 1;
                 int label;
                 DECODE_LABEL(label, code, i, next_off, next_off)
@@ -2006,7 +2005,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 break;
             }
-
 
             case OP_IS_FLOAT: {
                 int next_off = 1;
@@ -2281,9 +2279,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #endif
 
                 break;
-           }
+            }
 
-           case OP_IS_TUPLE: {
+            case OP_IS_TUPLE: {
                 int next_off = 1;
                 int label;
                 DECODE_LABEL(label, code, i, next_off, next_off)
@@ -2310,7 +2308,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 break;
             }
 
-           case OP_TEST_ARITY: {
+            case OP_TEST_ARITY: {
                 int next_off = 1;
                 int label;
                 DECODE_LABEL(label, code, i, next_off, next_off);
@@ -2955,7 +2953,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 NEXT_INSTRUCTION(next_off);
                 break;
-
             }
 
             case OP_TRY: {
@@ -4074,7 +4071,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_INTEGER(arity, code, i, next_off, next_off)
 #ifdef IMPL_EXECUTE_LOOP
                 term module = ctx->x[arity];
-                term function = ctx->x[arity+1];
+                term function = ctx->x[arity + 1];
                 TRACE("apply/1, module=%lu, function=%lu arity=%i\n", module, function, arity);
 
                 remaining_reductions--;
@@ -4130,7 +4127,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_INTEGER(n_words, code, i, next_off, next_off);
 #ifdef IMPL_EXECUTE_LOOP
                 term module = ctx->x[arity];
-                term function = ctx->x[arity+1];
+                term function = ctx->x[arity + 1];
                 TRACE("apply_last/1, module=%lu, function=%lu arity=%i deallocate=%i\n", module, function, arity, n_words);
 
                 remaining_reductions--;

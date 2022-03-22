@@ -18,11 +18,11 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#include <stdio.h>
+#include <libgen.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <libgen.h>
 
 #include "atom.h"
 #include "avmpack.h"
@@ -30,10 +30,10 @@
 #include "context.h"
 #include "globalcontext.h"
 #include "iff.h"
-#include "platforms/generic_unix/mapped_file.h"
 #include "module.h"
-#include "utils.h"
+#include "platforms/generic_unix/mapped_file.h"
 #include "term.h"
+#include "utils.h"
 
 static const char *ok_a = "\x2" "ok";
 
@@ -79,7 +79,7 @@ int main(int argc, char **argv)
         startup_beam_size = mapped_file[0]->size;
     } else {
         glb->avmpack_platform_data = (const void **) mapped_file;
-        for (int i = 0;  i < num_mapped_files;  ++i) {
+        for (int i = 0; i < num_mapped_files; ++i) {
             if (avmpack_is_valid(mapped_file[i]->mapped, mapped_file[i]->size)) {
                 struct AVMPackData *avmpack_data = malloc(sizeof(struct AVMPackData));
                 if (IS_NULL_PTR(avmpack_data)) {

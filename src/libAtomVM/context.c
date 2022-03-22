@@ -155,7 +155,7 @@ static void context_monitors_handle_terminate(Context *ctx)
 {
     struct ListHead *item;
     struct ListHead *tmp;
-    MUTABLE_LIST_FOR_EACH(item, tmp, &ctx->monitors_head) {
+    MUTABLE_LIST_FOR_EACH (item, tmp, &ctx->monitors_head) {
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
         int local_process_id = term_to_local_process_id(monitor->monitor_pid);
         Context *target = globalcontext_get_process(ctx->global, local_process_id);

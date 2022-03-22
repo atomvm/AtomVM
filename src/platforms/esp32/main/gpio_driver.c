@@ -45,8 +45,8 @@
 
 #include "trace.h"
 
-#include "esp_log.h"
 #include "esp32_sys.h"
+#include "esp_log.h"
 #include "sys.h"
 
 #define TAG "gpio_driver"

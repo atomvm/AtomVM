@@ -25,8 +25,8 @@
 #include <nifs.h>
 #include <nvs.h>
 #include <nvs_flash.h>
-#include <term.h>
 #include <stdlib.h>
+#include <term.h>
 
 //#define ENABLE_TRACE
 #include "trace.h"

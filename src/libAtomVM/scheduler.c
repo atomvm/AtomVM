@@ -194,7 +194,7 @@ int schudule_processes_count(GlobalContext *global)
     int count = 0;
 
     struct ListHead *item;
-    LIST_FOR_EACH(item, &global->processes_table) {
+    LIST_FOR_EACH (item, &global->processes_table) {
         count++;
     }
 

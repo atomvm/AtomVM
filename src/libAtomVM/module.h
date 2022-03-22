@@ -70,7 +70,7 @@ struct Module
     void **labels;
 
     void *literals_data;
-    void const* *literals_table;
+    void const **literals_table;
 
     int *local_atoms_to_global_table;
 

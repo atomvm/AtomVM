@@ -22,8 +22,8 @@
 #include <stdlib.h>
 
 #include "atomshashtable.h"
-#include "valueshashtable.h"
 #include "utils.h"
+#include "valueshashtable.h"
 
 void test_atomshashtable()
 {

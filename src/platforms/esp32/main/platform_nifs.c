@@ -29,8 +29,8 @@
 #include "platform_defaultatoms.h"
 #include "term.h"
 
-#include <esp_sleep.h>
 #include <esp_partition.h>
+#include <esp_sleep.h>
 #include <esp_system.h>
 #include <rom/md5_hash.h>
 #include <soc/soc.h>

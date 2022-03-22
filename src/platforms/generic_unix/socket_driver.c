@@ -29,8 +29,8 @@
 #include "port.h"
 #include "term.h"
 #include "utils.h"
-#include <string.h>
 #include <netinet/tcp.h>
+#include <string.h>
 
 #include "platform_defaultatoms.h"
 #include "scheduler.h"
@@ -39,10 +39,10 @@
 #include <fcntl.h>
 #include <netdb.h>
 // FreeBSD 12 bug, sys/types must be included before netinet headers
-#include <sys/types.h>
 #include <netinet/in.h>
 #include <netinet/udp.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 // #define ENABLE_TRACE
@@ -926,7 +926,6 @@ void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
     listener->handler = accept_callback;
     listener->data = data;
     linkedlist_append(&platform->listeners, &listener->listeners_list_head);
-
 }
 
 // TODO define in defaultatoms

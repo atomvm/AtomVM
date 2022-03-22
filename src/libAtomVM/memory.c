@@ -389,7 +389,7 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
                     size_t value_offset = term_get_map_value_offset();
                     TRACE("-- Map keys: %lx\n", ptr[keys_offset]);
                     ptr[keys_offset] = memory_shallow_copy_term(ptr[keys_offset], &new_heap, move);
-                    for (size_t i = value_offset; i < value_offset + map_size;  ++i) {
+                    for (size_t i = value_offset; i < value_offset + map_size; ++i) {
                         TRACE("-- Map Value: %lx\n", ptr[i]);
                         ptr[i] = memory_shallow_copy_term(ptr[i], &new_heap, move);
                     }

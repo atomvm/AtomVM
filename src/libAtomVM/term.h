@@ -76,7 +76,7 @@
 #define FLOAT_SIZE (sizeof(float_term_t) / sizeof(term) + 1)
 #define REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
 #define TUPLE_SIZE(elems) ((int) (elems + 1))
-#define REFC_BINARY_CONS_OFFET  4
+#define REFC_BINARY_CONS_OFFET 4
 
 #define TERM_DEBUG_ASSERT(...)
 
@@ -795,11 +795,11 @@ static inline term term_make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
 
 static inline size_t term_boxed_integer_size(avm_int64_t value)
 {
-     if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
-         return BOXED_INT_SIZE;
-     } else {
-         return 0;
-     }
+    if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
+        return BOXED_INT_SIZE;
+    } else {
+        return 0;
+    }
 }
 
 static inline term term_from_catch_label(unsigned int module_index, unsigned int label)
@@ -1607,7 +1607,7 @@ static inline int term_find_map_pos(Context *ctx, term map, term key)
 {
     term keys = term_get_map_keys(map);
     int arity = term_get_tuple_arity(keys);
-    for (int i = 0;  i < arity; ++i) {
+    for (int i = 0; i < arity; ++i) {
         term k = term_get_tuple_element(keys, i);
         if (term_equals(key, k, ctx)) {
             return i;

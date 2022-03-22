@@ -114,12 +114,12 @@ union maybe_unsigned_int64
 };
 
 bool bitstring_extract_any_integer(const uint8_t *src, size_t offset, avm_int_t n,
-        enum BitstringFlags bs_flags, union maybe_unsigned_int64 *dst);
+    enum BitstringFlags bs_flags, union maybe_unsigned_int64 *dst);
 
 bool bitstring_insert_any_integer(uint8_t *dst, avm_int_t offset, avm_int64_t value, size_t n, enum BitstringFlags bs_flags);
 
 static inline bool bitstring_extract_integer(term src_bin, size_t offset, avm_int_t n,
-        enum BitstringFlags bs_flags, union maybe_unsigned_int64 *dst)
+    enum BitstringFlags bs_flags, union maybe_unsigned_int64 *dst)
 {
     unsigned long capacity = term_binary_size(src_bin);
     if (8 * capacity - offset < (unsigned long) n) {
@@ -201,7 +201,6 @@ static inline bool bitstring_extract_integer(term src_bin, size_t offset, avm_in
 
     return false;
 }
-
 
 static inline bool bitstring_insert_integer(term dst_bin, size_t offset, avm_int64_t value, size_t n, enum BitstringFlags bs_flags)
 {

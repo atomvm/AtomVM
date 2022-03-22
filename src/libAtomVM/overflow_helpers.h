@@ -60,8 +60,8 @@
 #define BUILTIN_ADD_OVERFLOW_INT atomvm_add_overflow_int
 #define BUILTIN_ADD_OVERFLOW_INT64 atomvm_add_overflow_int64
 
-#include <stdint.h>
 #include "term.h"
+#include <stdint.h>
 
 static inline int atomvm_add_overflow(avm_int_t a, avm_int_t b, avm_int_t *res)
 {
@@ -120,8 +120,8 @@ static inline int atomvm_sub_overflow_int64(avm_int64_t a, avm_int64_t b, avm_in
 #define BUILTIN_MUL_OVERFLOW_INT atomvm_mul_overflow_int
 #define BUILTIN_MUL_OVERFLOW_INT64 atomvm_mul_overflow_int64
 
-#include <stdint.h>
 #include "term.h"
+#include <stdint.h>
 
 static inline int atomvm_mul_overflow_int(avm_int_t a, avm_int_t b, avm_int_t *res)
 {

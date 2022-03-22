@@ -30,10 +30,10 @@
 #include "globalcontext.h"
 #include "interop.h"
 #include "mailbox.h"
+#include "port.h"
 #include "socket_driver.h"
 #include "term.h"
 #include "utils.h"
-#include "port.h"
 
 #include "platform_defaultatoms.h"
 

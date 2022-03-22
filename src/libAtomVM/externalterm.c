@@ -452,7 +452,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
             uint32_t size = READ_32_UNALIGNED(external_term_buf + 1);
             term map = term_alloc_map(ctx, size);
             int buf_pos = 5;
-            for (uint32_t i = 0;  i < size;  ++i) {
+            for (uint32_t i = 0; i < size; ++i) {
                 int key_size;
                 term key = parse_external_terms(external_term_buf + buf_pos, &key_size, ctx, copy);
                 if (term_is_invalid_term(key)) {
@@ -487,7 +487,6 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
             return term_invalid_term();
     }
 }
-
 
 static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_size, bool copy, Context *ctx)
 {
@@ -619,7 +618,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_siz
             uint32_t size = READ_32_UNALIGNED(external_term_buf + 1);
             int heap_usage = 1;
             int buf_pos = 5;
-            for (uint32_t i = 0;  i < size;  ++i) {
+            for (uint32_t i = 0; i < size; ++i) {
                 int key_size;
                 int u = calculate_heap_usage(external_term_buf + buf_pos, &key_size, copy, ctx) + 1;
                 if (u == INVALID_TERM_SIZE) {
