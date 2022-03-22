@@ -154,10 +154,10 @@ do_start_timer(Time, Dest, Msg) ->
 
 %% @private
 run_timer(MgrPid, Time, TimerRef, Dest, Msg) ->
-    Start = erlang:timestamp(),
+    Start = erlang:system_time(millisecond),
     receive
         {cancel, From} ->
-            gen_server:reply(From, Time - timestamp_util:delta_ms(erlang:timestamp(), Start))
+            gen_server:reply(From, Time - (erlang:system_time(millisecond) - Start))
     after Time ->
         Dest ! {timeout, TimerRef, Msg}
     end,
