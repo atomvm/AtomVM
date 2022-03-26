@@ -225,7 +225,7 @@ void gpio_interrupt_callback(EventListener *listener)
     if (UNLIKELY(memory_ensure_free(global_gpio_ctx, 3) != MEMORY_GC_OK)) {
         //TODO: it must not fail
         ESP_LOGE(TAG, "gpio_interrupt_callback: Failed to ensure free heap space.");
-        abort();
+        AVM_ABORT();
     }
 
     term int_msg = term_alloc_tuple(2, global_gpio_ctx);
@@ -323,7 +323,7 @@ static term gpiodriver_set_int(Context *ctx, Context *target, term cmd)
     struct GPIOListenerData *data = malloc(sizeof(struct GPIOListenerData));
     if (IS_NULL_PTR(data)) {
         ESP_LOGE(TAG, "gpiodriver_set_int: Failed to ensure free heap space.");
-        abort();
+        AVM_ABORT();
     }
     list_append(&gpio_data->gpio_listeners, &data->gpio_listener_list_head);
     data->gpio = gpio_num;

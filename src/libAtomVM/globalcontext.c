@@ -127,7 +127,7 @@ void globalcontext_register_process(GlobalContext *glb, int atom_index, int loca
     struct RegisteredProcess *registered_process = malloc(sizeof(struct RegisteredProcess));
     if (IS_NULL_PTR(registered_process)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        abort();
+        AVM_ABORT();
     }
     registered_process->atom_index = atom_index;
     registered_process->local_process_id = local_process_id;
@@ -171,7 +171,7 @@ int globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_str
             uint8_t *buf = malloc(1 + len);
             if (UNLIKELY(IS_NULL_PTR(buf))) {
                 fprintf(stderr, "Unable to allocate memory for atom string\n");
-                abort();
+                AVM_ABORT();
             }
             memcpy(buf, atom_string, 1 + len);
             atom_string = buf;
@@ -191,7 +191,7 @@ int globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_str
 AtomString globalcontext_atomstring_from_term(GlobalContext *glb, term t)
 {
     if (!term_is_atom(t)) {
-        abort();
+        AVM_ABORT();
     }
     unsigned long atom_index = term_to_atom_index(t);
     unsigned long ret = valueshashtable_get_value(glb->atoms_ids_table, atom_index, ULONG_MAX);
@@ -212,7 +212,7 @@ int globalcontext_insert_module(GlobalContext *global, Module *module, AtomStrin
     Module **new_modules_by_index = calloc(module_index + 1, sizeof(Module *));
     if (IS_NULL_PTR(new_modules_by_index)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        abort();
+        AVM_ABORT();
     }
     if (global->modules_by_index) {
         for (int i = 0; i < module_index; i++) {
@@ -237,19 +237,19 @@ void globalcontext_insert_module_with_filename(GlobalContext *glb, Module *modul
 
     if (strcmp(filename + len_without_ext, ".beam") != 0) {
         printf("File isn't a .beam file\n");
-        abort();
+        AVM_ABORT();
     }
 
     char *atom_string = malloc(len_without_ext + 1);
     if (IS_NULL_PTR(atom_string)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        abort();
+        AVM_ABORT();
     }
     memcpy(atom_string + 1, filename, len_without_ext);
     atom_string[0] = len_without_ext;
 
     if (UNLIKELY(globalcontext_insert_module(glb, module, atom_string) < 0)) {
-        abort();
+        AVM_ABORT();
     }
 }
 

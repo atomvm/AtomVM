@@ -610,7 +610,7 @@ const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
 
     int function_name_len = atom_string_len(function);
     if (UNLIKELY((arity > 9) || (module_name_len + function_name_len + 4 > MAX_NIF_NAME_LEN))) {
-        abort();
+        AVM_ABORT();
     }
     memcpy(nifname + module_name_len + 1, atom_string_data(function), function_name_len);
 
@@ -905,7 +905,7 @@ static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])
         // it is not possible to spawn a function reference except for those having
         // 0 arity, however right now they are not supported.
         // TODO: implement for funs having arity 0.
-        abort();
+        AVM_ABORT();
     }
     uint32_t fun_index = term_to_int32(index_or_module);
 
@@ -923,7 +923,7 @@ static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])
     if (UNLIKELY(memory_ensure_free(new_ctx, size) != MEMORY_GC_OK)) {
         //TODO: new process should be terminated, however a new pid is returned anyway
         fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
-        abort();
+        AVM_ABORT();
     }
     for (uint32_t i = 0; i < n_freeze; i++) {
         new_ctx->x[i + arity - n_freeze] = memory_copy_term_tree(&new_ctx->heap_ptr, boxed_value[i + 3], &new_ctx->mso_list);
@@ -980,7 +980,7 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
     int label = module_search_exported_function(found_module, function_string, args_len);
     //TODO: fail here if no function has been found
     if (UNLIKELY(label == 0)) {
-        abort();
+        AVM_ABORT();
     }
     new_ctx->saved_module = found_module;
     new_ctx->saved_ip = found_module->labels[label];
@@ -994,7 +994,7 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
     if (min_heap_size_term != term_nil()) {
         if (UNLIKELY(!term_is_integer(min_heap_size_term))) {
             //TODO: gracefully handle this error
-            abort();
+            AVM_ABORT();
         }
         new_ctx->has_min_heap_size = 1;
         new_ctx->min_heap_size = term_to_int(min_heap_size_term);
@@ -1004,7 +1004,7 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
     if (max_heap_size_term != term_nil()) {
         if (UNLIKELY(!term_is_integer(max_heap_size_term))) {
             //TODO: gracefully handle this error
-            abort();
+            AVM_ABORT();
         }
         new_ctx->has_max_heap_size = 1;
         new_ctx->max_heap_size = term_to_int(max_heap_size_term);
@@ -1022,7 +1022,7 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
         int res = context_monitor(new_ctx, term_from_local_process_id(ctx->process_id), true);
         if (UNLIKELY(res == 0)) {
             fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
-            abort();
+            AVM_ABORT();
         }
         // This is a really simple hack to get the parent - child linking
         // I don't really like how it is implemented but it works nicely.
@@ -1030,13 +1030,13 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
         res = context_monitor(ctx, term_from_local_process_id(new_ctx->process_id), true);
         if (UNLIKELY(res == 0)) {
             fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
-            abort();
+            AVM_ABORT();
         }
     } else if (monitor_term == TRUE_ATOM) {
         ref_ticks = context_monitor(new_ctx, term_from_local_process_id(ctx->process_id), false);
         if (UNLIKELY(ref_ticks == 0)) {
             fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
-            abort();
+            AVM_ABORT();
         }
     }
 
@@ -1047,7 +1047,7 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
     if (UNLIKELY(memory_ensure_free(new_ctx, size) != MEMORY_GC_OK)) {
         //TODO: new process should be terminated, however a new pid is returned anyway
         fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
-        abort();
+        AVM_ABORT();
     }
     while (term_is_nonempty_list(t)) {
         new_ctx->x[reg_index] = memory_copy_term_tree(&new_ctx->heap_ptr, term_get_list_head(t), &new_ctx->mso_list);
@@ -1066,7 +1066,7 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
         if (UNLIKELY(memory_ensure_free(ctx, res_size) != MEMORY_GC_OK)) {
             //TODO: new process should be terminated, however a new pid is returned anyway
             fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
-            abort();
+            AVM_ABORT();
         }
 
         term ref = term_from_ref_ticks(ref_ticks, ctx);
@@ -1615,7 +1615,7 @@ static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
     char *atom_string = interop_binary_to_string(a_binary);
     if (IS_NULL_PTR(atom_string)) {
         fprintf(stderr, "Failed to alloc temporary string\n");
-        abort();
+        AVM_ABORT();
     }
     int atom_string_len = strlen(atom_string);
     if (UNLIKELY(atom_string_len > 255)) {
@@ -1665,7 +1665,7 @@ term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
     char *atom_string = interop_list_to_string(a_list, &ok);
     if (UNLIKELY(!ok)) {
         fprintf(stderr, "Failed to alloc temporary string\n");
-        abort();
+        AVM_ABORT();
     }
     int atom_string_len = strlen(atom_string);
     if (UNLIKELY(atom_string_len > 255)) {

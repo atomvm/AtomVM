@@ -155,7 +155,7 @@ static wifi_config_t *get_sta_wifi_config(term sta_config)
     wifi_config_t *wifi_config = malloc(sizeof(wifi_config_t));
     if (IS_NULL_PTR(wifi_config)) {
         fprintf(stderr, "Failed to allocate wifi_config_t %s:%d\n", __FILE__, __LINE__);
-        abort();
+        AVM_ABORT();
     }
     if (UNLIKELY(strlen(ssid) > sizeof(wifi_config->sta.ssid))) {
         fprintf(stderr, "ssid cannot be more than %d characters\n", sizeof(wifi_config->sta.ssid));
@@ -195,7 +195,7 @@ static char *get_default_device_name()
     char *buf = malloc(buf_size);
     if (IS_NULL_PTR(buf)) {
         fprintf(stderr, "Failed to allocate buf %s:%d\n", __FILE__, __LINE__);
-        abort();
+        AVM_ABORT();
     }
     snprintf(buf, buf_size,
         "atomvm-%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
@@ -246,7 +246,7 @@ static wifi_config_t *get_ap_wifi_config(term ap_config)
     wifi_config_t *wifi_config = malloc(sizeof(wifi_config_t));
     if (IS_NULL_PTR(wifi_config)) {
         fprintf(stderr, "Failed to allocate wifi_config_t %s:%d\n", __FILE__, __LINE__);
-        abort();
+        AVM_ABORT();
     }
     if (UNLIKELY(strlen(ssid) > sizeof(wifi_config->ap.ssid))) {
         fprintf(stderr, "ssid cannot be more than %d characters\n", sizeof(wifi_config->ap.ssid));
@@ -362,7 +362,7 @@ static void network_driver_start(Context *ctx, term pid, term ref, term config)
     ClientData *data = (ClientData *) malloc(sizeof(ClientData));
     if (IS_NULL_PTR(data)) {
         fprintf(stderr, "Failed to allocate ClientData %s:%d\n", __FILE__, __LINE__);
-        abort();
+        AVM_ABORT();
     }
     data->ctx = ctx;
     data->pid = pid;

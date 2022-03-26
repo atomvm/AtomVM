@@ -115,7 +115,7 @@ void uart_interrupt_callback(EventListener *listener)
         int ref_size = (sizeof(uint64_t) / sizeof(term)) + 1;
         int bin_size = term_binary_data_size_in_terms(count) + BINARY_HEADER_SIZE + ref_size;
         if (UNLIKELY(memory_ensure_free(uart_data->ctx, bin_size + ref_size + 3 + 3) != MEMORY_GC_OK)) {
-            abort();
+            AVM_ABORT();
         }
 
         term bin = term_create_uninitialized_binary(count, uart_data->ctx);
@@ -170,7 +170,7 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
     int ok;
     char *uart_name = interop_term_to_string(uart_name_term, &ok);
     if (!uart_name || !ok) {
-        abort();
+        AVM_ABORT();
     }
 
     uint8_t uart_num;
@@ -181,7 +181,7 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
     } else if (!strcmp(uart_name, "UART2")) {
         uart_num = UART_NUM_2;
     } else {
-        abort();
+        AVM_ABORT();
     }
     free(uart_name);
 
@@ -202,7 +202,7 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
             data_bits = UART_DATA_5_BITS;
             break;
         default:
-            abort();
+            AVM_ABORT();
     }
 
     int stop_bits;
@@ -214,7 +214,7 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
             stop_bits = UART_STOP_BITS_2;
             break;
         default:
-            abort();
+            AVM_ABORT();
     }
 
     int flow_control;
@@ -227,7 +227,7 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
             break;
         case SOFTWARE_ATOM:
         default:
-            abort();
+            AVM_ABORT();
     }
 
     int parity;
@@ -242,7 +242,7 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
             parity = UART_PARITY_ODD;
             break;
         default:
-            abort();
+            AVM_ABORT();
     }
 
     uart_config_t uart_config = {
@@ -262,7 +262,7 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
     struct UARTData *uart_data = malloc(sizeof(struct UARTData));
     if (IS_NULL_PTR(uart_data)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        abort();
+        AVM_ABORT();
     }
     uart_data->listener.sender = uart_data;
     uart_data->listener.data = uart_data;
@@ -297,7 +297,7 @@ static void uart_driver_do_read(Context *ctx, term msg)
     if (uart_data->reader_process_pid != term_invalid_term()) {
         // 3 (error_tuple) + 3 (result_tuple)
         if (UNLIKELY(memory_ensure_free(ctx, 3 + 3) != MEMORY_GC_OK)) {
-            abort();
+            AVM_ABORT();
         }
 
         term ealready = context_make_atom(ctx, ealready_atom);
@@ -320,7 +320,7 @@ static void uart_driver_do_read(Context *ctx, term msg)
     if (count > 0) {
         int bin_size = term_binary_data_size_in_terms(count) + BINARY_HEADER_SIZE;
         if (UNLIKELY(memory_ensure_free(uart_data->ctx, bin_size + 3 + 3) != MEMORY_GC_OK)) {
-            abort();
+            AVM_ABORT();
         }
 
         term bin = term_create_uninitialized_binary(count, uart_data->ctx);
@@ -374,7 +374,7 @@ static void uart_driver_do_write(Context *ctx, term msg)
     free(buffer);
 
     if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-        abort();
+        AVM_ABORT();
     }
 
     term result_tuple = term_alloc_tuple(2, ctx);

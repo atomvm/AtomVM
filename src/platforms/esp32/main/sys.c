@@ -108,7 +108,7 @@ void sys_time(struct timespec *t)
     struct timeval tv;
     if (UNLIKELY(gettimeofday(&tv, NULL))) {
         fprintf(stderr, "Failed gettimeofday.\n");
-        abort();
+        AVM_ABORT();
     }
 
     t->tv_sec = tv.tv_sec;

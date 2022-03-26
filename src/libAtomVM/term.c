@@ -185,7 +185,7 @@ void term_display(FILE *fd, term t, const Context *ctx)
 #endif
 
             default:
-                abort();
+                AVM_ABORT();
         }
 
 #ifndef AVM_NO_FP
@@ -235,7 +235,7 @@ static int term_type_to_index(term t)
         return 11;
 
     } else {
-        abort();
+        AVM_ABORT();
     }
 }
 
@@ -439,7 +439,7 @@ term term_alloc_refc_binary(Context *ctx, size_t size, bool is_const)
         if (IS_NULL_PTR(refc)) {
             // TODO propagate error to callers of this function, e.g., as an invalid term
             fprintf(stderr, "memory_create_refc_binary: Unable to allocate %zu bytes for refc_binary.\n", size);
-            abort();
+            AVM_ABORT();
         }
         boxed_value[3] = (term) refc;
         ctx->mso_list = term_list_init_prepend(boxed_value + 4, ret, ctx->mso_list);

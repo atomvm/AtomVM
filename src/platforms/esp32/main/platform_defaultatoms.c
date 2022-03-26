@@ -231,6 +231,6 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, odd_atom) == ODD_ATOM_INDEX;
 
     if (!ok) {
-        abort();
+        AVM_ABORT();
     }
 }

@@ -137,7 +137,7 @@ void sys_time(struct timespec *t)
 {
     if (UNLIKELY(clock_gettime(CLOCK_REALTIME, t))) {
         fprintf(stderr, "Failed clock_gettime.\n");
-        abort();
+        AVM_ABORT();
     }
 }
 
@@ -222,7 +222,7 @@ void sys_init_platform(GlobalContext *global)
 
     struct GenericUnixPlatformData *platform = malloc(sizeof(struct GenericUnixPlatformData));
     if (UNLIKELY(!platform)) {
-        abort();
+        AVM_ABORT();
     }
     platform->listeners = 0;
     global->platform_data = platform;

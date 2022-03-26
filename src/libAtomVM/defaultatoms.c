@@ -169,7 +169,7 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, lowercase_exit_atom) == LOWERCASE_EXIT_ATOM_INDEX;
 
     if (!ok) {
-        abort();
+        AVM_ABORT();
     }
 
     platform_defaultatoms_init(glb);

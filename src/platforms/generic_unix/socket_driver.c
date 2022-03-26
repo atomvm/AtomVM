@@ -172,7 +172,7 @@ static term init_udp_socket(Context *ctx, SocketDriverData *socket_data, term pa
             EventListener *listener = malloc(sizeof(EventListener));
             if (IS_NULL_PTR(listener)) {
                 fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-                abort();
+                AVM_ABORT();
             }
             listener->fd = socket_data->sockfd;
             listener->data = ctx;
@@ -257,7 +257,7 @@ static term init_client_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
             EventListener *listener = malloc(sizeof(EventListener));
             if (IS_NULL_PTR(listener)) {
                 fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-                abort();
+                AVM_ABORT();
             }
             listener->fd = socket_data->sockfd;
             listener->data = ctx;
@@ -334,7 +334,7 @@ static term init_accepting_socket(Context *ctx, SocketDriverData *socket_data, t
         EventListener *listener = malloc(sizeof(EventListener));
         if (IS_NULL_PTR(listener)) {
             fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-            abort();
+            AVM_ABORT();
         }
         listener->fd = socket_data->sockfd;
         listener->data = ctx;
@@ -608,7 +608,7 @@ static void active_recv_callback(EventListener *listener)
     char *buf = malloc(buf_size);
     if (IS_NULL_PTR(buf)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        abort();
+        AVM_ABORT();
     }
     //
     // receive the data
@@ -660,7 +660,7 @@ static void passive_recv_callback(EventListener *listener)
     char *buf = malloc(buf_size);
     if (IS_NULL_PTR(buf)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        abort();
+        AVM_ABORT();
     }
     //
     // receive the data
@@ -709,7 +709,7 @@ static void active_recvfrom_callback(EventListener *listener)
     char *buf = malloc(buf_size);
     if (IS_NULL_PTR(buf)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        abort();
+        AVM_ABORT();
     }
     //
     // receive the data
@@ -760,7 +760,7 @@ static void passive_recvfrom_callback(EventListener *listener)
     char *buf = malloc(buf_size);
     if (IS_NULL_PTR(buf)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        abort();
+        AVM_ABORT();
     }
     //
     // receive the data
@@ -823,7 +823,7 @@ static void do_recv(Context *ctx, term pid, term ref, term length, term timeout,
     RecvFromData *data = (RecvFromData *) malloc(sizeof(RecvFromData));
     if (IS_NULL_PTR(data)) {
         fprintf(stderr, "Unable to allocate space for RecvFromData: %s:%i\n", __FILE__, __LINE__);
-        abort();
+        AVM_ABORT();
     }
     data->ctx = ctx;
     data->pid = pid;
@@ -835,7 +835,7 @@ static void do_recv(Context *ctx, term pid, term ref, term length, term timeout,
     EventListener *listener = malloc(sizeof(EventListener));
     if (IS_NULL_PTR(listener)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        abort();
+        AVM_ABORT();
     }
     listener->fd = socket_data->sockfd;
     listener->handler = handler;
@@ -908,7 +908,7 @@ void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
     RecvFromData *data = (RecvFromData *) malloc(sizeof(RecvFromData));
     if (IS_NULL_PTR(data)) {
         fprintf(stderr, "Unable to allocate space for RecvFromData: %s:%i\n", __FILE__, __LINE__);
-        abort();
+        AVM_ABORT();
     }
     data->ctx = ctx;
     data->pid = pid;
@@ -920,7 +920,7 @@ void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
     EventListener *listener = malloc(sizeof(EventListener));
     if (IS_NULL_PTR(listener)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        abort();
+        AVM_ABORT();
     }
     listener->fd = socket_data->sockfd;
     listener->handler = accept_callback;
@@ -945,7 +945,7 @@ static void socket_consume_mailbox(Context *ctx)
 {
     TRACE("START socket_consume_mailbox\n");
     if (UNLIKELY(ctx->native_handler != socket_consume_mailbox)) {
-        abort();
+        AVM_ABORT();
     }
 
     port_ensure_available(ctx, 16);

@@ -164,4 +164,15 @@ static inline void *rand_fail_calloc(int n, unsigned long alloc_size)
 
 #endif
 
+#ifdef AVM_BERBOSE_ABORT
+#include <stdio.h>
+#define AVM_ABORT()                                                       \
+{                                                                         \
+    fprintf(stderr, "Abort in file %s at line %i\n", __FILE__, __LINE__); \
+    abort();                                                              \
+}
+#else
+#define AVM_ABORT() abort()
+#endif
+
 #endif

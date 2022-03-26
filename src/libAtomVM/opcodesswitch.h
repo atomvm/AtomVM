@@ -106,7 +106,7 @@ typedef union
                                                                                         \
                 default:                                                                \
                     fprintf(stderr, "Operand not literal: %x, or unsupported encoding\n", (first_byte)); \
-                    abort();                                                            \
+                    AVM_ABORT();                                                        \
                     break;                                                              \
             }                                                                           \
             break;                                                                      \
@@ -127,13 +127,13 @@ typedef union
                     }else if (ext == 0x8) {                                             \
                         next_operand_offset += 3;                                       \
                     } else {                                                            \
-                        abort();                                                        \
+                        AVM_ABORT();                                                    \
                     }                                                                   \
                     break;                                                              \
                 }                                                                       \
                 default:                                                                \
                     printf("Unexpected %i\n", (int) first_byte);                        \
-                    abort();                                                            \
+                    AVM_ABORT();                                                        \
                     break;                                                              \
             }                                                                           \
             break;                                                                      \
@@ -162,7 +162,7 @@ typedef union
                                                                                         \
         default:                                                                        \
             fprintf(stderr, "unknown compect term type: %i\n", ((first_byte) & 0xF));   \
-            abort();                                                                    \
+            AVM_ABORT();                                                                \
             break;                                                                      \
     }                                                                                   \
 }
@@ -183,7 +183,7 @@ typedef union
             next_operand_offset += 2;                                                               \
             break;                                                                                  \
         default:                                                                                    \
-            abort();                                                                                \
+            AVM_ABORT();                                                                            \
     }                                                                                               \
 }
 #endif
@@ -213,7 +213,7 @@ typedef union
                                                                                                                         \
                 default:                                                                                                \
                     fprintf(stderr, "Operand not a literal: %x, or unsupported encoding\n", (first_byte));              \
-                    abort();                                                                                            \
+                    AVM_ABORT();                                                                                        \
                     break;                                                                                              \
             }                                                                                                           \
             break;                                                                                                      \
@@ -373,7 +373,7 @@ typedef union
                                                                                                     \
         default:                                                                                    \
             fprintf(stderr, "Operand not a label: %x, or unsupported encoding\n", (first_byte));    \
-            abort();                                                                                \
+            AVM_ABORT();                                                                            \
             break;                                                                                  \
     }                                                                                               \
 }
@@ -395,7 +395,7 @@ typedef union
                                                                                                     \
         default:                                                                                    \
             fprintf(stderr, "Operand not a label: %x, or unsupported encoding\n", (first_byte));    \
-            abort();                                                                                \
+            AVM_ABORT();                                                                            \
             break;                                                                                  \
     }                                                                                               \
 }
@@ -417,7 +417,7 @@ typedef union
                                                                                                     \
         default:                                                                                    \
             fprintf(stderr, "Operand not an integer: %x, or unsupported encoding\n", (first_byte)); \
-            abort();                                                                                \
+            AVM_ABORT();                                                                            \
             break;                                                                                  \
     }                                                                                               \
 }
@@ -1210,7 +1210,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         }
                         default: {
                             fprintf(stderr, "Invalid function type %i at index: %i\n", func->type, index);
-                            abort();
+                            AVM_ABORT();
                         }
                     }
                 #endif
@@ -1278,7 +1278,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         }
                         default: {
                             fprintf(stderr, "Invalid function type %i at index: %i\n", func->type, index);
-                            abort();
+                            AVM_ABORT();
                         }
                     }
                 #endif
@@ -1402,7 +1402,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     if (live > ctx->avail_registers) {
                         fprintf(stderr, "Cannot use more than 16 registers.");
-                        abort();
+                        AVM_ABORT();
                     }
 
                     context_clean_registers(ctx, live);
@@ -1436,7 +1436,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     if (live > ctx->avail_registers) {
                         fprintf(stderr, "Cannot use more than 16 registers.");
-                        abort();
+                        AVM_ABORT();
                     }
 
                     context_clean_registers(ctx, live);
@@ -1467,7 +1467,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     if (live > ctx->avail_registers) {
                         fprintf(stderr, "Cannot use more than 16 registers.");
-                        abort();
+                        AVM_ABORT();
                     }
 
                     context_clean_registers(ctx, live);
@@ -1505,7 +1505,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     if (live > ctx->avail_registers) {
                         fprintf(stderr, "Cannot use more than 16 registers.");
-                        abort();
+                        AVM_ABORT();
                     }
 
                     context_clean_registers(ctx, live);
@@ -2546,7 +2546,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 #ifdef IMPL_EXECUTE_LOOP
                     if (UNLIKELY(!term_is_tuple(src_value) || (element < 0) || (element >= term_get_tuple_arity(src_value)))) {
-                        abort();
+                        AVM_ABORT();
                     }
 
                     term t = term_get_tuple_element(src_value, element);
@@ -2574,7 +2574,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
 #ifdef IMPL_EXECUTE_LOOP
                 if (UNLIKELY(!term_is_tuple(tuple) || (position < 0) || (position >= term_get_tuple_arity(tuple)))) {
-                    abort();
+                    AVM_ABORT();
                 }
 
                 term_put_tuple_element(tuple, position, new_element);
@@ -2639,7 +2639,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 for (int j = 0; j < size; j++) {
                     if (code[i + next_off] != OP_PUT) {
                         fprintf(stderr, "Expected put, got opcode: %i\n", code[i + next_off]);
-                        abort();
+                        AVM_ABORT();
                     }
                     next_off++;
                     term put_value;
@@ -2928,7 +2928,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                             break;
                         }
                         default: {
-                            abort();
+                            AVM_ABORT();
                         }
                     }
                 #endif
@@ -3737,7 +3737,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     } else if (term_is_integer(index)) {
                         index_val = term_to_int(index);
                     } else {
-                        abort();
+                        AVM_ABORT();
                     }
                     term_match_state_save_offset(src, index_val);
 
@@ -3769,7 +3769,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     } else if (term_is_integer(index)) {
                         index_val = term_to_int(index);
                     } else {
-                        abort();
+                        AVM_ABORT();
                     }
                     term_match_state_restore_offset(src, index_val);
 
@@ -4958,7 +4958,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     fprintf(stderr, "failed at %i\n", i);
                 #endif
 
-                abort();
+                AVM_ABORT();
                 return 1;
         }
 

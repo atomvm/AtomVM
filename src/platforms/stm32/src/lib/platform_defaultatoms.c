@@ -53,6 +53,6 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, stm32_atom) == STM32_ATOM_INDEX;
 
     if (!ok) {
-        abort();
+        AVM_ABORT();
     }
 }
