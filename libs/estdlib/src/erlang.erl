@@ -142,6 +142,8 @@ process_info(_Pid, _Key) ->
 %% The following keys are supported on the ESP32 platform:
 %% <ul>
 %%      <li><b>esp32_free_heap_size</b> the number of (noncontiguous) free bytes in the ESP32 heap (integer)</li>
+%%      <li><b>esp_largest_free_block</b> the number of the largest contiguous free bytes in the ESP32 heap (integer)</li>
+%%      <li><b>esp_get_minimum_free_size</b> the smallest number of free bytes in the ESP32 heap since boot (integer)</li>
 %% </ul>
 %%
 %% Additional keys may be supported on some platforms that are not documented here.
