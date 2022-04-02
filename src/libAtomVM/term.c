@@ -473,3 +473,12 @@ term term_alloc_sub_binary(term binary_or_state, size_t offset, size_t len, Cont
 
     return ((term) boxed) | TERM_BOXED_VALUE_TAG;
 }
+
+term term_get_map_assoc(Context *ctx, term map, term key)
+{
+    int pos = term_find_map_pos(ctx, map, key);
+    if (pos == -1) {
+        return term_invalid_term();
+    }
+    return term_get_map_value(map, pos);
+}

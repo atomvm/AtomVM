@@ -22,6 +22,7 @@
 
 #include "defaultatoms.h"
 #include "tempstack.h"
+#include "valueshashtable.h"
 
 char *interop_term_to_string(term t, int *ok)
 {
@@ -91,6 +92,21 @@ char *interop_list_to_string(term list, int *ok)
     str[len] = 0;
 
     *ok = 1;
+    return str;
+}
+
+char *interop_atom_to_string(Context *ctx, term atom)
+{
+    int atom_index = term_to_atom_index(atom);
+    AtomString atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table, atom_index, (unsigned long) NULL);
+    int len = atom_string_len(atom_string);
+
+    char *str = malloc(len + 1);
+    if (IS_NULL_PTR(str)) {
+        return NULL;
+    }
+    atom_string_to_c(atom_string, str, len + 1);
+
     return str;
 }
 

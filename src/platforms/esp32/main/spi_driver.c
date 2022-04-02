@@ -24,6 +24,7 @@
 
 #include <driver/spi_master.h>
 
+#include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -47,18 +48,76 @@
 #include "esp32_sys.h"
 #include "sys.h"
 
-static void spidriver_consume_mailbox(Context *ctx);
+#define TAG "spi_driver"
 
-static uint32_t spidriver_transfer_at(Context *ctx, uint64_t address, int data_len, uint32_t data, bool *ok);
-
-static const char *const spi_driver_atom = "\xA" "spi_driver";
-static term spi_driver;
+struct SPIDevice
+{
+    struct ListHead list_head;
+    term device_name;
+    spi_device_handle_t handle;
+};
 
 struct SPIData
 {
-    spi_device_handle_t handle;
-    spi_transaction_t transaction;
+    struct ListHead devices;
+    spi_host_device_t host_device;
 };
+
+static void spidriver_consume_mailbox(Context *ctx);
+static uint32_t spidriver_transfer_at(struct SPIDevice *device, uint64_t address, int data_len, uint32_t data, bool *ok);
+static term create_pair(Context *ctx, term term1, term term2);
+
+static const char *const spi_driver_atom = "\xA" "spi_driver";
+static const char *const device_not_found_atom = "\x10" "device_not_found";
+static term spi_driver;
+
+static spi_host_device_t get_spi_host_device(term spi_peripheral)
+{
+    switch (spi_peripheral) {
+        case HSPI_ATOM:
+            return HSPI_HOST;
+        case VSPI_ATOM:
+            return VSPI_HOST;
+        default:
+            ESP_LOGW(TAG, "Unrecognized SPI peripheral.  Must be either hspi or vspi.  Defaulting to hspi.");
+            return HSPI_HOST;
+    }
+}
+
+static struct SPIDevice *get_spi_device(struct SPIData *spi_data, term device_term)
+{
+    struct ListHead *item;
+    LIST_FOR_EACH (item, &spi_data->devices) {
+        struct SPIDevice *device = GET_LIST_ENTRY(item, struct SPIDevice, list_head);
+        if (device->device_name == device_term) {
+            return device;
+        }
+    }
+    return NULL;
+}
+
+static void debug_buscfg(spi_bus_config_t *buscfg)
+{
+    TRACE("Bus Config\n");
+    TRACE("==========\n");
+    TRACE("    miso_io_num: %i\n", buscfg->miso_io_num);
+    TRACE("    mosi_io_num: %i\n", buscfg->mosi_io_num);
+    TRACE("    sclk_io_num: %i\n", buscfg->sclk_io_num);
+    TRACE("    miso_io_num: %i\n", buscfg->miso_io_num);
+    TRACE("    quadwp_io_num: %i\n", buscfg->quadwp_io_num);
+    TRACE("    quadhd_io_num: %i\n", buscfg->quadhd_io_num);
+}
+
+static void debug_devcfg(spi_device_interface_config_t *devcfg)
+{
+    TRACE("Device Config\n");
+    TRACE("==========\n");
+    TRACE("    clock_speed_hz: %i\n", devcfg->clock_speed_hz);
+    TRACE("    mode: %i\n", devcfg->mode);
+    TRACE("    spics_io_num: %i\n", devcfg->spics_io_num);
+    TRACE("    queue_size: %i\n", devcfg->queue_size);
+    TRACE("    address_bits: %i\n", devcfg->address_bits);
+}
 
 void spi_driver_init(GlobalContext *global)
 {
@@ -68,80 +127,103 @@ void spi_driver_init(GlobalContext *global)
 
 Context *spi_driver_create_port(GlobalContext *global, term opts)
 {
+    TRACE("spi_driver_create_port\n");
     Context *ctx = context_new(global);
 
-    struct SPIData *spi_data = calloc(1, sizeof(struct SPIData));
+    term bus_config = term_get_map_assoc(ctx, opts, BUS_CONFIG_ATOM);
+    term miso_io_num_term = term_get_map_assoc(ctx, bus_config, MISO_IO_NUM_ATOM);
+    term mosi_io_num_term = term_get_map_assoc(ctx, bus_config, MOSI_IO_NUM_ATOM);
+    term sclk_io_num_term = term_get_map_assoc(ctx, bus_config, SCLK_IO_NUM_ATOM);
+    term spi_peripheral_term = term_get_map_assoc_default(ctx, bus_config, SPI_PERIPHERAL_ATOM, HSPI_ATOM);
+    spi_host_device_t host_device = get_spi_host_device(spi_peripheral_term);
 
-    ctx->native_handler = spidriver_consume_mailbox;
-    ctx->platform_data = spi_data;
-
-    term bus_config = interop_proplist_get_value(opts, BUS_CONFIG_ATOM);
-    term miso_io_num_term = interop_proplist_get_value(bus_config, MISO_IO_NUM_ATOM);
-    term mosi_io_num_term = interop_proplist_get_value(bus_config, MOSI_IO_NUM_ATOM);
-    term sclk_io_num_term = interop_proplist_get_value(bus_config, SCLK_IO_NUM_ATOM);
-
-    spi_bus_config_t buscfg;
-    memset(&buscfg, 0, sizeof(spi_bus_config_t));
+    spi_bus_config_t buscfg = { 0 };
     buscfg.miso_io_num = term_to_int32(miso_io_num_term);
     buscfg.mosi_io_num = term_to_int32(mosi_io_num_term);
     buscfg.sclk_io_num = term_to_int32(sclk_io_num_term);
     buscfg.quadwp_io_num = -1;
     buscfg.quadhd_io_num = -1;
 
-    term device_config = interop_proplist_get_value(opts, DEVICE_CONFIG_ATOM);
-    term clock_speed_hz_term = interop_proplist_get_value(device_config, SPI_CLOCK_HZ_ATOM);
-    term mode_term = interop_proplist_get_value(device_config, SPI_MODE_ATOM);
-    term spics_io_num_term = interop_proplist_get_value(device_config, SPI_CS_IO_NUM_ATOM);
-    term address_bits_term = interop_proplist_get_value(device_config, ADDRESS_LEN_BITS_ATOM);
+    debug_buscfg(&buscfg);
 
-    spi_device_interface_config_t devcfg;
-    memset(&devcfg, 0, sizeof(spi_device_interface_config_t));
-    devcfg.clock_speed_hz = term_to_int32(clock_speed_hz_term);
-    devcfg.mode = term_to_int32(mode_term);
-    devcfg.spics_io_num = term_to_int32(spics_io_num_term);
-    devcfg.queue_size = 4;
-    devcfg.address_bits = term_to_int32(address_bits_term);
-
-    int ret = spi_bus_initialize(HSPI_HOST, &buscfg, 1);
-
-    if (ret == ESP_OK) {
-        TRACE("initialized SPI\n");
+    esp_err_t err = spi_bus_initialize(host_device, &buscfg, 1);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "SPI Bus initialization failed with error=%i", err);
+        context_destroy(ctx);
+        return NULL;
     } else {
-        TRACE("spi_bus_initialize return code: %i\n", ret);
+        ESP_LOGI(TAG, "SPI Bus initialized.");
     }
 
-    ret = spi_bus_add_device(HSPI_HOST, &devcfg, &spi_data->handle);
+    struct SPIData *spi_data = calloc(1, sizeof(struct SPIData));
+    list_init(&spi_data->devices);
+    // TODO handle out of memory errors
+    spi_data->host_device = host_device;
 
-    if (ret == ESP_OK) {
-        TRACE("initialized SPI device\n");
-    } else {
-        TRACE("spi_bus_add_device return code: %i\n", ret);
+    term device_map = term_get_map_assoc(ctx, opts, DEVICE_CONFIG_ATOM);
+    term device_names = term_get_map_keys(device_map);
+
+    int n = term_get_map_size(device_map);
+    for (int i = 0; i < n; ++i) {
+        term device_name = term_get_tuple_element(device_names, i);
+        term device_config = term_get_map_assoc(ctx, device_map, device_name);
+
+        term clock_speed_hz_term = term_get_map_assoc(ctx, device_config, SPI_CLOCK_HZ_ATOM);
+        term mode_term = term_get_map_assoc(ctx, device_config, SPI_MODE_ATOM);
+        term spics_io_num_term = term_get_map_assoc(ctx, device_config, SPI_CS_IO_NUM_ATOM);
+        term address_bits_term = term_get_map_assoc(ctx, device_config, ADDRESS_LEN_BITS_ATOM);
+
+        spi_device_interface_config_t devcfg = { 0 };
+        devcfg.clock_speed_hz = term_to_int32(clock_speed_hz_term);
+        devcfg.mode = term_to_int32(mode_term);
+        devcfg.spics_io_num = term_to_int32(spics_io_num_term);
+        devcfg.queue_size = 4;
+        devcfg.address_bits = term_to_int32(address_bits_term);
+
+        spi_device_handle_t handle;
+        err = spi_bus_add_device(host_device, &devcfg, &handle);
+        if (err != ESP_OK) {
+            // TODO cleanup and previously created devices
+            context_destroy(ctx);
+            ESP_LOGE(TAG, "Failed to add SPI device. error=%i", err);
+            return NULL;
+        } else {
+            debug_devcfg(&devcfg);
+            struct SPIDevice *spi_device = malloc(sizeof(struct SPIDevice));
+            // TODO handle out of memory errors
+            spi_device->device_name = device_name;
+            spi_device->handle = handle;
+            list_append(&spi_data->devices, (struct ListHead *) spi_device);
+            char *str = interop_atom_to_string(ctx, device_name);
+            ESP_LOGI(TAG, "SPI device %s added.", str);
+            free(str);
+        }
     }
+
+    ctx->native_handler = spidriver_consume_mailbox;
+    ctx->platform_data = spi_data;
 
     return ctx;
 }
 
-static uint32_t spidriver_transfer_at(Context *ctx, uint64_t address, int data_len, uint32_t data, bool *ok)
+static uint32_t spidriver_transfer_at(struct SPIDevice *device, uint64_t address, int data_len, uint32_t data, bool *ok)
 {
     TRACE("--- SPI transfer ---\n");
     TRACE("spi: address: %x, tx: %x\n", (int) address, (int) data);
 
-    struct SPIData *spi_data = ctx->platform_data;
-
-    memset(&spi_data->transaction, 0, sizeof(spi_transaction_t));
-
     uint32_t tx_data = SPI_SWAP_DATA_TX(data, data_len);
 
-    spi_data->transaction.flags = SPI_TRANS_USE_TXDATA | SPI_TRANS_USE_RXDATA;
-    spi_data->transaction.length = data_len;
-    spi_data->transaction.addr = address;
-    spi_data->transaction.tx_data[0] = tx_data;
-    spi_data->transaction.tx_data[1] = (tx_data >> 8) & 0xFF;
-    spi_data->transaction.tx_data[2] = (tx_data >> 16) & 0xFF;
-    spi_data->transaction.tx_data[3] = (tx_data >> 24) & 0xFF;
+    struct spi_transaction_t transaction = { 0 };
+    transaction.flags = SPI_TRANS_USE_TXDATA | SPI_TRANS_USE_RXDATA;
+    transaction.length = data_len;
+    transaction.addr = address;
+    transaction.tx_data[0] = tx_data;
+    transaction.tx_data[1] = (tx_data >> 8) & 0xFF;
+    transaction.tx_data[2] = (tx_data >> 16) & 0xFF;
+    transaction.tx_data[3] = (tx_data >> 24) & 0xFF;
 
-    //TODO: int ret = spi_device_queue_trans(spi_data->handle, &spi_data->transaction, portMAX_DELAY);
-    int ret = spi_device_polling_transmit(spi_data->handle, &spi_data->transaction);
+    //TODO: int ret = spi_device_queue_trans(device->handle, &transaction, portMAX_DELAY);
+    int ret = spi_device_polling_transmit(device->handle, &transaction);
     if (UNLIKELY(ret != ESP_OK)) {
         *ok = false;
         return 0;
@@ -149,10 +231,10 @@ static uint32_t spidriver_transfer_at(Context *ctx, uint64_t address, int data_l
 
     //TODO check return code
 
-    uint32_t rx_data = ((uint32_t) spi_data->transaction.rx_data[0]) |
-        ((uint32_t) spi_data->transaction.rx_data[1] << 8) |
-        ((uint32_t) spi_data->transaction.rx_data[2] << 16) |
-        ((uint32_t) spi_data->transaction.rx_data[3] << 24);
+    uint32_t rx_data = ((uint32_t) transaction.rx_data[0]) |
+        ((uint32_t) transaction.rx_data[1] << 8) |
+        ((uint32_t) transaction.rx_data[2] << 16) |
+        ((uint32_t) transaction.rx_data[3] << 24);
 
     TRACE("spi: ret: %x\n", (int) ret);
     TRACE("spi: rx: %x\n", (int) rx_data);
@@ -189,15 +271,27 @@ static inline term make_read_result_tuple(uint32_t read_value, Context *ctx)
 
 static term spidriver_read_at(Context *ctx, term req)
 {
-    //cmd is at index 0
-    term address_term = term_get_tuple_element(req, 1);
-    term len_term = term_get_tuple_element(req, 2);
+    TRACE("spidriver_read_at\n");
+    struct SPIData *spi_data = ctx->platform_data;
+
+    // cmd is at index 0
+    term device_term = term_get_tuple_element(req, 1);
+    term address_term = term_get_tuple_element(req, 2);
+    term len_term = term_get_tuple_element(req, 3);
+
+    struct SPIDevice *device = get_spi_device(spi_data, device_term);
+    if (IS_NULL_PTR(device)) {
+        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+            return OUT_OF_MEMORY_ATOM;
+        }
+        return create_pair(ctx, ERROR_ATOM, context_make_atom(ctx, device_not_found_atom));
+    }
 
     avm_int64_t address = term_maybe_unbox_int64(address_term);
     avm_int_t data_len = term_to_int(len_term);
 
     bool ok;
-    uint32_t read_value = spidriver_transfer_at(ctx, address, data_len, 0, &ok);
+    uint32_t read_value = spidriver_transfer_at(device, address, data_len, 0, &ok);
     if (UNLIKELY(!ok)) {
         return ERROR_ATOM;
     }
@@ -207,17 +301,29 @@ static term spidriver_read_at(Context *ctx, term req)
 
 static term spidriver_write_at(Context *ctx, term req)
 {
-    //cmd is at index 0
-    term address_term = term_get_tuple_element(req, 1);
-    term len_term = term_get_tuple_element(req, 2);
-    term data_term = term_get_tuple_element(req, 3);
+    TRACE("spidriver_write_at\n");
+    struct SPIData *spi_data = ctx->platform_data;
+
+    // cmd is at index 0
+    term device_term = term_get_tuple_element(req, 1);
+    term address_term = term_get_tuple_element(req, 2);
+    term len_term = term_get_tuple_element(req, 3);
+    term data_term = term_get_tuple_element(req, 4);
+
+    struct SPIDevice *device = get_spi_device(spi_data, device_term);
+    if (IS_NULL_PTR(device)) {
+        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+            return OUT_OF_MEMORY_ATOM;
+        }
+        return create_pair(ctx, ERROR_ATOM, context_make_atom(ctx, device_not_found_atom));
+    }
 
     uint64_t address = term_maybe_unbox_int64(address_term);
     avm_int_t data_len = term_to_int(len_term);
     avm_int_t data = term_maybe_unbox_int(data_term);
 
     bool ok;
-    uint32_t read_value = spidriver_transfer_at(ctx, address, data_len, data, &ok);
+    uint32_t read_value = spidriver_transfer_at(device, address, data_len, data, &ok);
     if (UNLIKELY(!ok)) {
         return ERROR_ATOM;
     }

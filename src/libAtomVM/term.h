@@ -1613,7 +1613,19 @@ static inline int term_find_map_pos(Context *ctx, term map, term key)
             return i;
         }
     }
+    // TODO define a mnemonic (MAP_NOT_FOUND) in place of -1
     return -1;
+}
+
+term term_get_map_assoc(Context *ctx, term map, term key);
+
+static inline term term_get_map_assoc_default(Context *ctx, term map, term key, term default_value)
+{
+    term ret = term_get_map_assoc(ctx, map, key);
+    if (term_is_invalid_term(ret)) {
+        return default_value;
+    }
+    return ret;
 }
 
 static inline term term_get_sub_binary_ref(term t)
