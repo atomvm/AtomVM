@@ -39,6 +39,7 @@
 #include "mailbox.h"
 #include "module.h"
 #include "platform_defaultatoms.h"
+#include "scheduler.h"
 #include "term.h"
 #include "utils.h"
 
@@ -206,6 +207,36 @@ Context *spi_driver_create_port(GlobalContext *global, term opts)
     return ctx;
 }
 
+static term spidriver_close(Context *ctx)
+{
+    TRACE("spidriver_close\n");
+    struct SPIData *spi_data = ctx->platform_data;
+
+    struct ListHead *item;
+    struct ListHead *tmp;
+    MUTABLE_LIST_FOR_EACH (item, tmp, &spi_data->devices) {
+        struct SPIDevice *device = GET_LIST_ENTRY(item, struct SPIDevice, list_head);
+        esp_err_t err = spi_bus_remove_device(device->handle);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Error removing device.  err=%i", err);
+        } else {
+            ESP_LOGI(TAG, "Removed SPI device.");
+        }
+        list_remove(item);
+        free(device);
+    }
+
+    esp_err_t err = spi_bus_free(spi_data->host_device);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Error freeing bus.  err=%i", err);
+    } else {
+        ESP_LOGI(TAG, "Stopped SPI Bus.");
+    }
+    free(spi_data);
+
+    return OK_ATOM;
+}
+
 static uint32_t spidriver_transfer_at(struct SPIDevice *device, uint64_t address, int data_len, uint32_t data, bool *ok)
 {
     TRACE("--- SPI transfer ---\n");
@@ -366,6 +397,10 @@ static void spidriver_consume_mailbox(Context *ctx)
             ret = spidriver_write_at(ctx, req);
             break;
 
+        case CLOSE_ATOM:
+            ret = spidriver_close(ctx);
+            break;
+
         default:
             TRACE("spi: error: unrecognized command.\n");
             ret = ERROR_ATOM;
@@ -384,4 +419,8 @@ static void spidriver_consume_mailbox(Context *ctx)
 
     mailbox_send(target, ret_msg);
     mailbox_destroy_message(message);
+
+    if (cmd == CLOSE_ATOM) {
+        scheduler_terminate(ctx);
+    }
 }
