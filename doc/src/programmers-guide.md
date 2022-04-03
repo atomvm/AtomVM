@@ -610,6 +610,7 @@ Each device configuration is a properties list containing the following entries:
 | `spi_mode` | `0..3` | yes | SPI mode, indicating clock polarity (`CPOL`) and clock phase (`CPHA`).  Consult the SPI specification and data sheet for your device, for more information about how to control the behavior of the SPI clock. |
 | `spi_cs_io_num` | `integer()` | yes | SPI chip select pin (CS) |
 | `address_len_bits` | `0..64` | yes | number of bits in the address field of a read/write operation (for example, 8, if the transaction address field is a single byte) |
+| `command_len_bits` | `0..16` | default: 0 | number of bits in the command field of a read/write operation (for example, 8, if the transaction command field is a single byte) |
 
 For example,
 
@@ -630,7 +631,7 @@ For example,
             {my_device_2, [
                 {spi_clock_hz, 1000000},
                 {spi_mode, 0},
-                {spi_cs_io_num, 15}
+                {spi_cs_io_num, 15},
                 {address_len_bits, 8}
             ]}
         ]}
@@ -656,11 +657,45 @@ To write a byte at a given address on the device, use the `spi_write_at/5` funct
 
 Consult your local device data sheet for information about various device addresses to read from or write to, and their semantics.
 
+The above functions are optimized for small reads and writes to an SPI device, typically one byte at a time.
+
+The SPI interface also supports a more generic way to read and write from an SPI device, supporting arbitrary-length reads and writes, as well as a number of different "phases" of writes, per the SPI specification.
+
+These phases include:
+
+* Command phase -- write of an up-to 16-bit command to the SPI device
+* Address Phase -- write of an up-to 64-bit address to the SPI device
+* Data Phase -- read or write of an arbitrary amount of of data to and from the device.
+
+Any one of these phases may be included or omitted in any given SPI transaction.
+
+In order to achieve this level of flexibility, these functions allow users to specify the SPI transaction through a map structure, which includes fields that specify the behavior of an SPI transaction.
+
+The following table enumerates the permissible fields in this structure:
+
+| Key | Value Type | Description |
+|-----|------------|-------------|
+| `command` | `integer()` (16-bit) | (Optional) SPI command.  The low-order `command_len_bits` are written to the device. |
+| `address` | `integer()` (64-bit) | (Optional) Device address.  The low-order `address_len_bits` are written to the device. |
+| `write_data` | `binary()` | (Optional) Data to write |
+| `write_bits` | `non_neg_integer()` | Number of bits to write from `write_data'.  If not included,then all bits will be written.
+| `read_bits` | `non_neg_integer()` | Number of bits to read from the SPI device.  If not included, then the same number of bits will be read as were written.|
+
+To write a blob of data to the SPI device, for example, you would use:
+
+    WriteData = <<"some binary data">>,
+    ok = spi:write(SPI, DeviceName, #{write_data => WriteData})
+
+To write and simultaneously read back a blob of data to the SPI device, you would use:
+
+    {ok, ReadData} = spi:write_read(SPI, DeviceName, #{write_data => WriteData})
+
+The size of the returned data is the same as the size of the written data, unless otherwise specified by the `read_bits` field.
+
 Use the `spi:close/1` function to close the SPI driver and free any resources in use by it, supplying a reference to a previously opened SPI driver instance.  Any references to the closed SPI instance are no longer valid after a successful call to this function.
 
     %% erlang
     ok = spi:close(SPI).
-
 
 ### UART
 
