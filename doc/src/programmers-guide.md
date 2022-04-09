@@ -394,7 +394,9 @@ As noted above, the `erlang:system_info/1` function can be used to obtain system
 
 You can request ESP32-specific information using using the following input atoms:
 
-* `esp_free_heap_size` Returns the available free space in the ESP32 heap
+* `esp_free_heap_size` Returns the available free space in the ESP32 heap.
+* `esp_largest_free_block` Returns the size of the largest free continuous block in the ESP32 heap.
+* `esp_get_minimum_free_size` Returns the smallest ever free space available in the ESP32 heap since boot, this will tell you how close you have come to running out of free memory.
 * `esp_chip_info` Returns 4-tuple of the form `{esp32, Features, Cores, Revision}`, where `Features` is a bit mask of features enabled in the chip, `Cores` is the number of CPU cores on the chip, and `Revision` is the chip version.
 * `esp_idf_version` Return the IDF SDK version, as a string.
 
