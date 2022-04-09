@@ -708,7 +708,9 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
     term port_name_tuple = argv[0];
     VALIDATE_VALUE(port_name_tuple, term_is_tuple);
     term opts = argv[1];
-    VALIDATE_VALUE(opts, term_is_list);
+    if (UNLIKELY(!term_is_list(opts) && !term_is_map(opts))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
 
     if (UNLIKELY(term_get_tuple_arity(port_name_tuple) != 2)) {
         RAISE_ERROR(BADARG_ATOM);

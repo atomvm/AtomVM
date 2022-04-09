@@ -67,17 +67,19 @@
 
 -define (SPISettings, [
     {bus_config, [
-            {miso_io_num, 19},
-            {mosi_io_num, 27},
-            {sclk_io_num, 5}
-        ]},
-        {device_config, [
+        {miso_io_num, 19},
+        {mosi_io_num, 27},
+        {sclk_io_num, 5}
+    ]},
+    {device_config, [
+        {my_device, [
             {spi_clock_hz, 1000000},
             {spi_mode, 0},
             {spi_cs_io_num, 18},
             {address_len_bits, 8}
         ]}
-    ]).
+    ]}
+]).
 
 start() ->
     {ok, P} = gen_server:start(?MODULE, [], []),
@@ -270,7 +272,7 @@ wait_flags(_SPI, _Register, _Mask, _NotZero) ->
     ok.
 
 read_register(SPI, Address) ->
-    spi:read_at(SPI, Address, 8).
+    spi:read_at(SPI, my_device, Address, 8).
 
 write_register(SPI, Address, Data) ->
-    spi:write_at(SPI, Address, 8, Data).
+    spi:write_at(SPI, my_device, Address, 8, Data).

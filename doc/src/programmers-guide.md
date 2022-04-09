@@ -590,7 +590,7 @@ The `spi` module encapsulates functionality associated with the 4-wire Serial Pe
 The AtomVM SPI implementation uses the AtomVM Port mechanism and must be initialized using the `spi:open/1` function.  The single parameter to this function is a properties list containing two elements:
 
 * `bus_config` -- a properties list containing entries for the SPI bus
-* `device_config` -- a properties list containing entries for the device
+* `device_config` -- a properties list containing entries for each device attached to the SPI Bus
 
 The `bus_config` properties list contains the following entries:
 
@@ -600,48 +600,59 @@ The `bus_config` properties list contains the following entries:
 | `mosi_io_num` | `integer()` | yes | SPI leader-out, follower-in pin (MISO) |
 | `sclk_io_num` | `integer()` | yes | SPI clock pin (SCLK) |
 
-The `device_config` -- a properties list containing entries for the device
-properties list contains the following entries:
+The `device_config` entry is a properties list containing entries for each device attached to the SPI Bus.  Each entry in this list contains the user-selected name (as an atom) of the device, followed by configuration for the named device.
+
+Each device configuration is a properties list containing the following entries:
 
 | Key | Value Type | Required | Description |
 |-----|------------|----------|---|
 | `spi_clock_hz` | `integer()` | yes | SPI clock frequency (in hertz) |
-| `spi_mode` | `integer()` | yes | SPI mode |
+| `spi_mode` | `0..3` | yes | SPI mode, indicating clock polarity (`CPOL`) and clock phase (`CPHA`).  Consult the SPI specification and data sheet for your device, for more information about how to control the behavior of the SPI clock. |
 | `spi_cs_io_num` | `integer()` | yes | SPI chip select pin (CS) |
-| `address_len_bits` | `integer()` | yes | number of bits in a read/write operation (for example, 8, to read and write single bytes at a time) |
+| `address_len_bits` | `0..64` | yes | number of bits in the address field of a read/write operation (for example, 8, if the transaction address field is a single byte) |
 
 For example,
 
     %% erlang
     SPIConfig = [
         {bus_config, [
-            {miso_io_num, 12},
-            {mosi_io_num, 13},
-            {sclk_io_num, 14}
+            {miso_io_num, 19},
+            {mosi_io_num, 27},
+            {sclk_io_num, 5}
         ]},
         {device_config, [
-            {spi_clock_hz, 1000000},
-            {spi_mode, 0},
-            {spi_cs_io_num, 18},
-            {address_len_bits, 8}
+            {my_device_1, [
+                {spi_clock_hz, 1000000},
+                {spi_mode, 0},
+                {spi_cs_io_num, 18},
+                {address_len_bits, 8}
+            ]}
+            {my_device_2, [
+                {spi_clock_hz, 1000000},
+                {spi_mode, 0},
+                {spi_cs_io_num, 15}
+                {address_len_bits, 8}
+            ]}
         ]}
     ],
     SPI = spi:open(SPIConfig),
     ...
 
-Once the port is opened, you can use the returned `SPI` instance to read and write bytes to the attached device.
+In the above example, there are two SPI devices, one using pin 18 chip select (named `my_device_1`), and once using pin 15 chip select (named `my_device_2`).
 
-To read a byte at a given address on the device, use the `spi:read_at/3` function:
+Once the port is opened, you can use the returned `SPI` instance, along with the selected device name, to read and write bytes to the attached device.
 
-    %% erlang
-    {ok, Byte} = spi:read_at(SPI, Address, 8)
-
-To write a byte at a given address on the device, use the `spi_write_at/4` function:
+To read a byte at a given address on the device, use the `spi:read_at/4` function:
 
     %% erlang
-    write_at(SPI, Address, 8, Byte)
+    {ok, Byte} = spi:read_at(SPI, DeviceName, Address, 8)
 
-> Note.  The `spi:write_at/4` takes integer values as inputs and the `spi:read_at/3` returns integer values. You may read and write up to 32-bit integer values via these functions.
+To write a byte at a given address on the device, use the `spi_write_at/5` function:
+
+    %% erlang
+    write_at(SPI, DeviceName, Address, 8, Byte)
+
+> Note.  The `spi:write_at/5` takes integer values as inputs and the `spi:read_at/4` returns integer values. You may read and write up to 32-bit integer values via these functions.
 
 Consult your local device data sheet for information about various device addresses to read from or write to, and their semantics.
 
