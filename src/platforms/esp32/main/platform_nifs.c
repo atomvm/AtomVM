@@ -32,9 +32,18 @@
 #include <esp_partition.h>
 #include <esp_sleep.h>
 #include <esp_system.h>
-#include <rom/md5_hash.h>
 #include <soc/soc.h>
 #include <stdlib.h>
+#if defined __has_include
+#  if __has_include (<esp_idf_version.h>)
+#    include <esp_idf_version.h>
+#  endif
+#endif
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 3, 0)
+#include <esp_rom_md5.h>
+#else
+#include <rom/md5_hash.h>
+#endif
 
 //#define ENABLE_TRACE
 #include "trace.h"
@@ -261,9 +270,16 @@ static term nif_rom_md5(Context *ctx, int argc, term argv[])
 
     unsigned char digest[MD5_DIGEST_LENGTH];
     struct MD5Context md5;
+    #if __has_include (<esp_idf_version.h>) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 3, 0)
+    esp_rom_md5_init(&md5);
+    esp_rom_md5_update(&md5, (const unsigned char *) term_binary_data(data), term_binary_size(data));
+    esp_rom_md5_final(digest, &md5);
+    #else
     MD5Init(&md5);
     MD5Update(&md5, (const unsigned char *) term_binary_data(data), term_binary_size(data));
     MD5Final(digest, &md5);
+    #endif
+
     return term_from_literal_binary(digest, MD5_DIGEST_LENGTH, ctx);
 }
 
