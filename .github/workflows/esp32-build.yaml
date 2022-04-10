@@ -4,12 +4,12 @@
 #  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-name: ESP32 Build with ESP-IDF v4.x
+name: ESP32 Builds
 
 on: [push, pull_request]
 
 jobs:
-  Build with esp-idf:
+  esp-idf:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
