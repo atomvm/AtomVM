@@ -4,20 +4,24 @@
 #  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-name: ESP32 Build
+name: ESP32 Build with ESP-IDF v4.x
 
 on: [push, pull_request]
 
 jobs:
-  esp32-build:
+  Build with esp-idf:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        idf: [v3.3.6, v4.1.2, v4.2.3]
     steps:
     - name: Checkout repo
       uses: actions/checkout@v2
       with:
         submodules: 'recursive'
-    - name: "Build: customized esp-idf container"
-      run: docker build -t atomvm/ci-idf:v3.3.2 -f esp32-dockerfile .
+    - name: "Build: customized esp-idf-${{matrix.idf}} container"
+      run: docker build -t atomvm/ci-idf:${{matrix.idf}} -f esp-idf-${{matrix.idf}}-dockerfile .
       working-directory: .github/workflows
-    - name: "Build: AtomVM (ESP32 platform)"
-      run: docker run --rm -v $PWD:/atomvm -w /atomvm atomvm/ci-idf:v3.3.2 src/platforms/esp32
+    - name: "Build: AtomVM (ESP32 platform IDF-${{matrix.idf}})"
+      run: docker run --rm -v $PWD:/atomvm -w /atomvm atomvm/ci-idf:${{matrix.idf}} src/platforms/esp32
