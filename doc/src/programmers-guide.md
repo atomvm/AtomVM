@@ -656,6 +656,11 @@ To write a byte at a given address on the device, use the `spi_write_at/5` funct
 
 Consult your local device data sheet for information about various device addresses to read from or write to, and their semantics.
 
+Use the `spi:close/1` function to close the SPI driver and free any resources in use by it, supplying a reference to a previously opened SPI driver instance.  Any references to the closed SPI instance are no longer valid after a successful call to this function.
+
+    %% erlang
+    ok = spi:close(SPI).
+
 
 ### UART
 

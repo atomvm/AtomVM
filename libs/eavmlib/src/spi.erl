@@ -40,7 +40,7 @@
 %%
 -module(spi).
 
--export([open/1, read_at/4, write_at/5]).
+-export([open/1, close/1, read_at/4, write_at/5]).
 
 -type spi_peripheral() :: hspi | vspi.
 -type bus_config() :: [
@@ -129,6 +129,19 @@
 -spec open(Params :: params()) -> spi().
 open(Params) ->
     open_port({spawn, "spi"}, validate_params(Params)).
+
+%%-----------------------------------------------------------------------------
+%% @param   SPI SPI instance created via `open/1'
+%% @doc     Close the SPI driver.
+%%
+%% Close the SPI driver and free any resources in use by the driver.
+%%
+%% The SPI instance will no longer be valid and usable after this function has been called.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec close(SPI::spi()) -> ok.
+close(SPI) ->
+    port:call(SPI, {close}).
 
 %%-----------------------------------------------------------------------------
 %% @param   SPI SPI instance created via `open/1'
