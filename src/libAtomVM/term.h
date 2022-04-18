@@ -625,7 +625,7 @@ static inline term term_from_int32(int32_t value)
     if (UNLIKELY((value > 268435455) || (value < -268435455))) {
         //TODO: unimplemented on heap integer value
         fprintf(stderr, "term_from_int32: unimplemented: term should be moved to heap.");
-        abort();
+        AVM_ABORT();
 
     } else {
         return (value << 4) | 0xF;
@@ -646,7 +646,7 @@ static inline term term_from_int64(int64_t value)
     if (UNLIKELY((value > 268435455) || (value < -268435455))) {
         //TODO: unimplemented on heap integer value
         fprintf(stderr, "term_from_int64: unimplemented: term should be moved to heap.");
-        abort();
+        AVM_ABORT();
 
     } else {
         return (value << 4) | 0xF;
@@ -657,7 +657,7 @@ static inline term term_from_int64(int64_t value)
     if (UNLIKELY((value > 1152921504606846975) || (value < -1152921504606846975))) {
         //TODO: unimplemented on heap integer value
         fprintf(stderr, "unimplemented: term should be moved to heap.");
-        abort();
+        AVM_ABORT();
 
     } else {
         return (value << 4) | 0xF;

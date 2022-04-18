@@ -64,7 +64,7 @@ void atom_write_mfa(char *buf, size_t buf_size, AtomString module, AtomString fu
     unsigned int function_name_len = atom_string_len(function);
     if (UNLIKELY((arity > 9) || (module_name_len + function_name_len + 4 > buf_size))) {
         fprintf(stderr, "Insufficient room to write mfa.\n");
-        abort();
+        AVM_ABORT();
     }
     memcpy(buf + module_name_len + 1, atom_string_data(function), function_name_len);
 

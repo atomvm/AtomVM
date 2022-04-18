@@ -92,11 +92,11 @@ void port_ensure_available(Context *ctx, size_t size)
             case MEMORY_GC_ERROR_FAILED_ALLOCATION:
                 // TODO Improve error handling
                 fprintf(stderr, "Failed to allocate additional heap storage: [%s:%i]\n", __FILE__, __LINE__);
-                abort();
+                AVM_ABORT();
             case MEMORY_GC_DENIED_ALLOCATION:
                 // TODO Improve error handling
                 fprintf(stderr, "Not permitted to allocate additional heap storage: [%s:%i]\n", __FILE__, __LINE__);
-                abort();
+                AVM_ABORT();
         }
     }
 }

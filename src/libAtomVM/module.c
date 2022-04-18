@@ -131,7 +131,7 @@ void module_get_imported_function_module_and_name(const Module *this_module, int
     int functions_count = READ_32_ALIGNED(table_data + 8);
 
     if (UNLIKELY(index > functions_count)) {
-        abort();
+        AVM_ABORT();
     }
     int local_module_atom_index = READ_32_ALIGNED(table_data + index * 12 + 12);
     int local_function_atom_index = READ_32_ALIGNED(table_data + index * 12 + 4 + 12);
@@ -313,7 +313,7 @@ term module_load_literal(Module *mod, int index, Context *ctx)
     term t = externalterm_to_term(mod->literals_table[index], ctx, 1);
     if (term_is_invalid_term(t)) {
         fprintf(stderr, "Invalid term reading literals_table[%i] from module\n", index);
-        abort();
+        AVM_ABORT();
     }
     return t;
 }

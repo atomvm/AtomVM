@@ -385,7 +385,7 @@ static term add_boxed_helper(Context *ctx, term arg1, term arg2)
     switch (size) {
         case 0: {
             //BUG
-            abort();
+            AVM_ABORT();
         }
 
         case 1: {
@@ -502,7 +502,7 @@ static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
     switch (size) {
         case 0: {
             //BUG
-            abort();
+            AVM_ABORT();
         }
 
         case 1: {
@@ -633,7 +633,7 @@ static term mul_boxed_helper(Context *ctx, term arg1, term arg2)
     switch (size) {
         case 0: {
             //BUG
-            abort();
+            AVM_ABORT();
         }
 
         case 1: {
@@ -715,7 +715,7 @@ static term div_boxed_helper(Context *ctx, term arg1, term arg2)
     switch (size) {
         case 0: {
             //BUG
-            abort();
+            AVM_ABORT();
         }
 
         case 1: {
@@ -804,7 +804,7 @@ static term neg_boxed_helper(Context *ctx, term arg1)
         switch (term_boxed_size(arg1)) {
             case 0:
                 //BUG
-                abort();
+                AVM_ABORT();
 
             case 1: {
                 avm_int_t val = term_unbox_int(arg1);
@@ -893,7 +893,7 @@ static term abs_boxed_helper(Context *ctx, term arg1)
         switch (term_boxed_size(arg1)) {
             case 0:
                 //BUG
-                abort();
+                AVM_ABORT();
 
             case 1: {
                 avm_int_t val = term_unbox_int(arg1);
@@ -984,7 +984,7 @@ static term rem_boxed_helper(Context *ctx, term arg1, term arg2)
     switch (size) {
         case 0: {
             //BUG
-            abort();
+            AVM_ABORT();
         }
 
         case 1: {

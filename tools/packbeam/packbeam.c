@@ -391,7 +391,7 @@ static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompre
     uint8_t *outBuf = malloc(required_buf_size);
     if (!outBuf) {
         fprintf(stderr, "Cannot allocate temporary buffer (size = %u)", required_buf_size);
-        abort();
+        AVM_ABORT();
     }
 
     z_stream infstream;
@@ -406,12 +406,12 @@ static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompre
     int ret = inflateInit(&infstream);
     if (ret != Z_OK) {
         fprintf(stderr, "Failed inflateInit\n");
-        abort();
+        AVM_ABORT();
     }
     ret = inflate(&infstream, Z_NO_FLUSH);
     if (ret != Z_OK) {
         fprintf(stderr, "Failed inflate\n");
-        abort();
+        AVM_ABORT();
     }
     inflateEnd(&infstream);
 

@@ -199,7 +199,7 @@ static inline uint32_t module_get_fun_freeze(const Module *this_module, int fun_
     int funs_count = READ_32_ALIGNED(table_data + 8);
 
     if (UNLIKELY(fun_index >= funs_count)) {
-        abort();
+        AVM_ABORT();
     }
 
     // fun atom index
@@ -218,7 +218,7 @@ static inline void module_get_fun(const Module *this_module, int fun_index, uint
     int funs_count = READ_32_ALIGNED(table_data + 8);
 
     if (UNLIKELY(fun_index >= funs_count)) {
-        abort();
+        AVM_ABORT();
     }
 
     // fun atom index

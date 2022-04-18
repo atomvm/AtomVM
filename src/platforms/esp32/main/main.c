@@ -83,17 +83,17 @@ void app_main()
 
     if (!avmpack_is_valid(main_avm, size)) {
         ESP_LOGE(TAG, "Invalid main.avm packbeam.  size=%u", size);
-        abort();
+        AVM_ABORT();
     }
     if (!avmpack_find_section_by_flag(main_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
         ESP_LOGE(TAG, "Error: Failed to locate start module in main.avm packbeam.  (Did you flash a library by mistake?)");
-        abort();
+        AVM_ABORT();
     }
     ESP_LOGI(TAG, "Found startup beam %s", startup_module_name);
     struct AVMPackData *avmpack_data = malloc(sizeof(struct AVMPackData));
     if (IS_NULL_PTR(avmpack_data)) {
         ESP_LOGE(TAG, "Memory error: Cannot allocate AVMPackData for main.avm.");
-        abort();
+        AVM_ABORT();
     }
     avmpack_data->data = main_avm;
     list_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
@@ -104,7 +104,7 @@ void app_main()
         avmpack_data = malloc(sizeof(struct AVMPackData));
         if (IS_NULL_PTR(avmpack_data)) {
             ESP_LOGE(TAG, "Memory error: Cannot allocate AVMPackData for lib.avm.");
-            abort();
+            AVM_ABORT();
         }
         avmpack_data->data = lib_avm;
         list_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
@@ -115,7 +115,7 @@ void app_main()
     Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
     if (IS_NULL_PTR(mod)) {
         ESP_LOGE(TAG, "Error!  Unable to load startup module %s", startup_module_name);
-        abort();
+        AVM_ABORT();
     }
     globalcontext_insert_module_with_filename(glb, mod, startup_module_name);
     Context *ctx = context_new(glb);
@@ -166,7 +166,7 @@ const void *avm_partition(const char *partition_name, int *size)
     spi_flash_mmap_handle_t unmap_handle;
     if (esp_partition_mmap(partition, 0, partition->size, SPI_FLASH_MMAP_DATA, &mapped_memory, &unmap_handle) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to map BEAM partition for %s", partition_name);
-        abort();
+        AVM_ABORT();
         return NULL;
     }
     ESP_LOGI(TAG, "Loaded BEAM partition %s at address 0x%x (size=%i bytes)", partition_name, partition->address, partition->size);

@@ -284,7 +284,7 @@ unsigned long memory_estimate_usage(term t)
                 int boxed_size = term_boxed_size(t) + 1;
                 fprintf(stderr, "boxed header: 0x%lx, size: %i\n", boxed_value[0], boxed_size);
             }
-            abort();
+            AVM_ABORT();
         }
     }
 
@@ -398,7 +398,7 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
 
                 default:
                     fprintf(stderr, "- Found unknown boxed type: %lx\n", (t >> 2) & 0xF);
-                    abort();
+                    AVM_ABORT();
             }
 
             ptr += term_get_size_from_boxed_header(t) + 1;
@@ -415,7 +415,7 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
 
         } else {
             fprintf(stderr, "bug: found unknown term type: 0x%lx\n", t);
-            abort();
+            AVM_ABORT();
         }
     }
 
@@ -501,7 +501,7 @@ HOT_FUNC static term memory_shallow_copy_term(term t, term **new_heap, int move)
 
     } else {
         fprintf(stderr, "Unexpected term. Term is: %lx\n", t);
-        abort();
+        AVM_ABORT();
     }
 }
 

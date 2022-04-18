@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added the ability to specify the HSPI or VSPI ESP32 hardware interfaces when initializing the SPI
   Bus.
 - Added support for the `spi:close/1` function.
+- Added AVM_VERBOSE_ABORT CMake define, which when set to on, will print the C module and line
+  number when a VM abort occurs.  This define is off by default.
 
 ### Changed
 

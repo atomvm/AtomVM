@@ -368,12 +368,12 @@ void accept_conn(struct TCPServerAccepter *accepter, Context *ctx)
 
     struct TCPClientSocketData *new_tcp_data = tcp_client_socket_data_new(new_ctx, accepted_conn, platform, pid);
     if (IS_NULL_PTR(new_tcp_data)) {
-        abort();
+        AVM_ABORT();
     }
 
     //TODO
     if (UNLIKELY(memory_ensure_free(ctx, 128) != MEMORY_GC_OK)) {
-        abort();
+        AVM_ABORT();
     }
     term ref = term_from_ref_ticks(accepter->ref_ticks, ctx);
     term return_tuple = term_alloc_tuple(2, ctx);
@@ -426,7 +426,7 @@ static void do_accept(Context *ctx, term msg)
 static void close_tcp_socket(Context *ctx, struct TCPClientSocketData *tcp_data)
 {
     if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-        abort();
+        AVM_ABORT();
     }
     term pid = tcp_data->socket_data.controlling_process_pid;
     term msg = term_alloc_tuple(2, ctx);
@@ -507,7 +507,7 @@ static void tcp_client_handler(Context *ctx)
         tuples_size = 3 + 3;
     }
     if (UNLIKELY(memory_ensure_free(ctx, tuples_size + recv_terms_size) != MEMORY_GC_OK)) {
-        abort();
+        AVM_ABORT();
     }
 
     term recv_data;
@@ -638,7 +638,7 @@ static void udp_handler(Context *ctx)
         tuples_size = 4 + 5 + 3 + 3;
     }
     if (UNLIKELY(memory_ensure_free(ctx, tuples_size + recv_terms_size) != MEMORY_GC_OK)) {
-        abort();
+        AVM_ABORT();
     }
 
     term recv_data;
@@ -732,18 +732,18 @@ static void do_connect(Context *ctx, term msg)
     int ok_int;
     char *address_string = interop_term_to_string(address_term, &ok_int);
     if (UNLIKELY(!ok_int)) {
-        abort();
+        AVM_ABORT();
     }
 
     avm_int_t port = term_to_int(port_term);
     bool ok;
     bool active = bool_term_to_bool(active_term, &ok);
     if (UNLIKELY(!ok)) {
-        abort();
+        AVM_ABORT();
     }
     bool binary = bool_term_to_bool(binary_term, &ok);
     if (UNLIKELY(!ok)) {
-        abort();
+        AVM_ABORT();
     }
 
     TRACE("tcp: connecting to: %s\n", address_string);
@@ -763,7 +763,7 @@ static void do_connect(Context *ctx, term msg)
 
     struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_TCP, 0, socket_callback);
     if (IS_NULL_PTR(conn)) {
-        abort();
+        AVM_ABORT();
     }
 
     status = netconn_connect(conn, &remote_ip, port);
@@ -776,12 +776,12 @@ static void do_connect(Context *ctx, term msg)
 
     struct TCPClientSocketData *tcp_data = tcp_client_socket_data_new(ctx, conn, platform, controlling_process_term);
     if (IS_NULL_PTR(tcp_data)) {
-        abort();
+        AVM_ABORT();
     }
     tcp_data->socket_data.active = active;
     tcp_data->socket_data.binary = binary;
     if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-        abort();
+        AVM_ABORT();
     }
     term return_tuple = term_alloc_tuple(2, ctx);
 
@@ -812,11 +812,11 @@ static void do_listen(Context *ctx, term msg)
     bool ok;
     bool active = bool_term_to_bool(active_term, &ok);
     if (UNLIKELY(!ok)) {
-        abort();
+        AVM_ABORT();
     }
     bool binary = bool_term_to_bool(binary_term, &ok);
     if (UNLIKELY(!ok)) {
-        abort();
+        AVM_ABORT();
     }
 
     struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_TCP, 0, socket_callback);
@@ -846,13 +846,13 @@ static void do_listen(Context *ctx, term msg)
 
     struct TCPServerSocketData *tcp_data = tcp_server_socket_data_new(ctx, conn, platform);
     if (IS_NULL_PTR(tcp_data)) {
-        abort();
+        AVM_ABORT();
     }
     tcp_data->socket_data.port = nport;
     tcp_data->socket_data.active = active;
     tcp_data->socket_data.binary = binary;
     if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-        abort();
+        AVM_ABORT();
     }
     term return_tuple = term_alloc_tuple(2, ctx);
 
@@ -882,22 +882,22 @@ void do_udp_open(Context *ctx, term msg)
     bool ok;
     bool active = bool_term_to_bool(active_term, &ok);
     if (UNLIKELY(!ok)) {
-        abort();
+        AVM_ABORT();
     }
     bool binary = bool_term_to_bool(binary_term, &ok);
     if (UNLIKELY(!ok)) {
-        abort();
+        AVM_ABORT();
     }
 
     struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_UDP, 0, socket_callback);
     if (IS_NULL_PTR(conn)) {
         fprintf(stderr, "failed to open conn\n");
-        abort();
+        AVM_ABORT();
     }
 
     struct UDPSocketData *udp_data = udp_socket_data_new(ctx, conn, platform, controlling_process);
     if (IS_NULL_PTR(udp_data)) {
-        abort();
+        AVM_ABORT();
     }
     udp_data->socket_data.active = active;
     udp_data->socket_data.binary = binary;
@@ -921,7 +921,7 @@ void do_udp_open(Context *ctx, term msg)
     udp_data->socket_data.port = nport;
 
     if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-        abort();
+        AVM_ABORT();
     }
     term return_tuple = term_alloc_tuple(2, ctx);
 
@@ -983,7 +983,7 @@ static void do_send(Context *ctx, term msg)
     free(buffer);
 
     if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-        abort();
+        AVM_ABORT();
     }
     term return_tuple = term_alloc_tuple(2, ctx);
 
@@ -1035,7 +1035,7 @@ static void do_sendto(Context *ctx, term msg)
     free(buffer);
 
     if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-        abort();
+        AVM_ABORT();
     }
     term return_tuple = term_alloc_tuple(2, ctx);
 
@@ -1063,7 +1063,7 @@ static void do_close(Context *ctx, term msg)
     list_remove(&tcp_data->socket_data.sockets_head);
 
     if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-        abort();
+        AVM_ABORT();
     }
     term return_tuple = term_alloc_tuple(2, ctx);
 
@@ -1087,7 +1087,7 @@ static void do_recvfrom(Context *ctx, term msg)
     if (socket_data->passive_receiver_process_pid != term_invalid_term()) {
         // 3 (error_tuple) + 3 (result_tuple)
         if (UNLIKELY(memory_ensure_free(ctx, 3 + 3) != MEMORY_GC_OK)) {
-            abort();
+            AVM_ABORT();
         }
 
         term ealready = context_make_atom(ctx, ealready_atom);
@@ -1138,7 +1138,7 @@ static void do_recvfrom(Context *ctx, term msg)
 
         // 4 (recv_ret size) + 3 (ok_tuple size) + 3 (result_tuple size) + recv_terms_size
         if (UNLIKELY(memory_ensure_free(ctx, 4 + 3 + 3 + recv_terms_size) != MEMORY_GC_OK)) {
-            abort();
+            AVM_ABORT();
         }
 
         term recv_data;
@@ -1185,7 +1185,7 @@ static void do_get_port(Context *ctx, term msg)
 
     // 3 (error_ok_tuple) + 3 (result_tuple)
     if (UNLIKELY(memory_ensure_free(ctx, 3 + 3) != MEMORY_GC_OK)) {
-        abort();
+        AVM_ABORT();
     }
 
     term error_ok_tuple = term_alloc_tuple(2, ctx);
@@ -1218,14 +1218,14 @@ static void do_sockname(Context *ctx, term msg)
     term return_msg;
     if (result != ERR_OK) {
         if (UNLIKELY(memory_ensure_free(ctx, 3 + 3) != MEMORY_GC_OK)) {
-            abort();
+            AVM_ABORT();
         }
         return_msg = term_alloc_tuple(2, ctx);
         term_put_tuple_element(return_msg, 0, ERROR_ATOM);
         term_put_tuple_element(return_msg, 1, term_from_int(result));
     } else {
         if (UNLIKELY(memory_ensure_free(ctx, 3 + 3 + 8) != MEMORY_GC_OK)) {
-            abort();
+            AVM_ABORT();
         }
         return_msg = term_alloc_tuple(2, ctx);
         term addr_term = socket_addr_to_tuple(ctx, &addr);
@@ -1257,14 +1257,14 @@ static void do_peername(Context *ctx, term msg)
     term return_msg;
     if (result != ERR_OK) {
         if (UNLIKELY(memory_ensure_free(ctx, 3 + 3) != MEMORY_GC_OK)) {
-            abort();
+            AVM_ABORT();
         }
         return_msg = term_alloc_tuple(2, ctx);
         term_put_tuple_element(return_msg, 0, ERROR_ATOM);
         term_put_tuple_element(return_msg, 1, term_from_int(result));
     } else {
         if (UNLIKELY(memory_ensure_free(ctx, 3 + 3 + 8) != MEMORY_GC_OK)) {
-            abort();
+            AVM_ABORT();
         }
         return_msg = term_alloc_tuple(2, ctx);
         term addr_term = socket_addr_to_tuple(ctx, &addr);

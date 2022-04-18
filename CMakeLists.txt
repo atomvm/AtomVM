@@ -35,6 +35,11 @@ if (AVM_USE_32BIT_FLOAT)
     add_definitions(-DAVM_USE_SINGLE_PRECISION)
 endif()
 
+option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
+if (AVM_VERBOSE_ABORT)
+    add_definitions(-DAVM_VERBOSE_ABORT)
+endif()
+
 add_subdirectory(src)
 add_subdirectory(tests)
 add_subdirectory(tools/packbeam)

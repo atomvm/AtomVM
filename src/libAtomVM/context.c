@@ -171,7 +171,7 @@ static void context_monitors_handle_terminate(Context *ctx)
                 if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
                     //TODO: handle out of memory here
                     fprintf(stderr, "Cannot handle out of memory.\n");
-                    abort();
+                    AVM_ABORT();
                 }
 
                 // TODO: move it out of heap
@@ -193,7 +193,7 @@ static void context_monitors_handle_terminate(Context *ctx)
             if (UNLIKELY(memory_ensure_free(ctx, required_terms) != MEMORY_GC_OK)) {
                 //TODO: handle out of memory here
                 fprintf(stderr, "Cannot handle out of memory.\n");
-                abort();
+                AVM_ABORT();
             }
 
             // TODO: move it out of heap

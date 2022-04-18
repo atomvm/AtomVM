@@ -144,7 +144,7 @@ static int externalterm_from_term(Context *ctx, uint8_t **buf, size_t *len, term
     *buf = malloc(*len);
     if (UNLIKELY(IS_NULL_PTR(*buf))) {
         fprintf(stderr, "Unable to allocate %zu bytes for externalized term.\n", *len);
-        abort();
+        AVM_ABORT();
     }
     size_t k = serialize_term(ctx, *buf + 1, t);
     *buf[0] = EXTERNAL_TERM_TAG;
@@ -214,7 +214,7 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
         size_t arity = term_get_tuple_arity(t);
         if (arity > 255) {
             fprintf(stderr, "Tuple arity greater than 255: %zu\n", arity);
-            abort();
+            AVM_ABORT();
         }
         if (!IS_NULL_PTR(buf)) {
             buf[0] = SMALL_TUPLE_EXT;
@@ -302,7 +302,7 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
 
     } else {
         fprintf(stderr, "Unknown external term type: %li\n", t);
-        abort();
+        AVM_ABORT();
     }
 }
 

@@ -153,7 +153,7 @@ void scheduler_set_timeout(Context *ctx, uint32_t timeout)
 
     struct TimerWheelItem *twi = &ctx->timer_wheel_head;
     if (UNLIKELY(twi->callback)) {
-        abort();
+        AVM_ABORT();
     }
 
     uint64_t expiry = timer_wheel_expiry_to_monotonic(tw, timeout);
