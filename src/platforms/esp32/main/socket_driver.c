@@ -43,7 +43,7 @@
 #include <lwip/api.h>
 #include <lwip/inet.h>
 #include <lwip/ip_addr.h>
-#include <tcpip_adapter.h>
+#include <esp_netif.h>
 
 //#define ENABLE_TRACE 1
 #include "trace.h"

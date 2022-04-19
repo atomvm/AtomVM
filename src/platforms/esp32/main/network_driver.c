@@ -40,7 +40,7 @@
 #include <esp_event_loop.h>
 #include <esp_log.h>
 #include <esp_wifi.h>
-#include <tcpip_adapter.h>
+#include <esp_netif.h>
 
 #include <freertos/event_groups.h>
 
@@ -480,7 +480,7 @@ static void send_term(ClientData *data, term t)
     port_send_reply(ctx, pid, ref, t);
 }
 
-static void send_got_ip(ClientData *data, tcpip_adapter_ip_info_t *info)
+static void send_got_ip(ClientData *data, esp_netif_ip_info_t *info)
 {
     TRACE("Sending got_ip back to AtomVM\n");
     Context *ctx = data->ctx;
@@ -604,7 +604,7 @@ static esp_err_t wifi_event_handler(void *ctx, system_event_t *event)
 
 void network_driver_init(GlobalContext *global)
 {
-    tcpip_adapter_init();
+    esp_netif_init();
 }
 
 Context *network_driver_create_port(GlobalContext *global, term opts)
