@@ -31,7 +31,8 @@ Dependencies
 Required for building:
 * CMake ([CMake build system](https://cmake.org/))
 * gperf ([GNU Perfect Hash Function Generator](https://www.gnu.org/software/gperf/manual/gperf.html))
-* erlc ([erlang compiler](https://www.erlang.org/))
+* erlc ([erlang compiler](https://www.erlang.org/)) for OTP 21, 22 or 23
+* elixirc ([elixir compiler](https://elixir-lang.org))
 
 Optional:
 * zlib ([zlib compression and decompression library](https://zlib.net/)) is optionally needed to run
@@ -50,6 +51,25 @@ $ cd build
 $ cmake ..
 $ make
 $ ./src/AtomVM ./examples/erlang/hello_world.avm
+```
+
+If you are using OTP 22 or 23, you need to disable FP opcodes with:
+
+```
+$ mkdir build
+$ cd build
+$ cmake -DAVM_DISABLE_FP=on ..
+$ make
+$ ./src/AtomVM ./examples/erlang/hello_world.avm
+```
+
+Run tests within build directory with:
+```
+$ ./tests/test-erlang
+$ ./tests/test-structs
+$ ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+$ ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+$ ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
 ```
 
 See also [README.ESP32.Md](README.ESP32.Md) and [README.STM32.Md](README.STM32.Md) for platform
