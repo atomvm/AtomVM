@@ -70,6 +70,12 @@ static term create_pair(Context *ctx, term term1, term term2);
 
 static const char *const spi_driver_atom = "\xA" "spi_driver";
 static const char *const device_not_found_atom = "\x10" "device_not_found";
+static const char *const command_atom = "\x7" "command";
+static const char *const address_atom = "\x7" "address";
+static const char *const write_data_atom = "\xA" "write_data";
+static const char *const write_bits_atom = "\xA" "write_bits";
+static const char *const read_bits_atom = "\x9" "read_bits";
+
 static term spi_driver;
 
 static spi_host_device_t get_spi_host_device(term spi_peripheral)
@@ -173,6 +179,7 @@ Context *spi_driver_create_port(GlobalContext *global, term opts)
         term mode_term = term_get_map_assoc(ctx, device_config, SPI_MODE_ATOM);
         term spics_io_num_term = term_get_map_assoc(ctx, device_config, SPI_CS_IO_NUM_ATOM);
         term address_bits_term = term_get_map_assoc(ctx, device_config, ADDRESS_LEN_BITS_ATOM);
+        term command_bits_term = term_get_map_assoc(ctx, device_config, COMMAND_LEN_BITS_ATOM);
 
         spi_device_interface_config_t devcfg = { 0 };
         devcfg.clock_speed_hz = term_to_int32(clock_speed_hz_term);
@@ -180,6 +187,7 @@ Context *spi_driver_create_port(GlobalContext *global, term opts)
         devcfg.spics_io_num = term_to_int32(spics_io_num_term);
         devcfg.queue_size = 4;
         devcfg.address_bits = term_to_int32(address_bits_term);
+        devcfg.command_bits = term_to_int32(command_bits_term);
 
         spi_device_handle_t handle;
         err = spi_bus_add_device(host_device, &devcfg, &handle);
@@ -205,6 +213,14 @@ Context *spi_driver_create_port(GlobalContext *global, term opts)
     ctx->platform_data = spi_data;
 
     return ctx;
+}
+
+static term device_not_found_error(Context *ctx)
+{
+    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+        return OUT_OF_MEMORY_ATOM;
+    }
+    return create_pair(ctx, ERROR_ATOM, context_make_atom(ctx, device_not_found_atom));
 }
 
 static term spidriver_close(Context *ctx)
@@ -312,10 +328,7 @@ static term spidriver_read_at(Context *ctx, term req)
 
     struct SPIDevice *device = get_spi_device(spi_data, device_term);
     if (IS_NULL_PTR(device)) {
-        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-            return OUT_OF_MEMORY_ATOM;
-        }
-        return create_pair(ctx, ERROR_ATOM, context_make_atom(ctx, device_not_found_atom));
+        return device_not_found_error(ctx);
     }
 
     avm_int64_t address = term_maybe_unbox_int64(address_term);
@@ -343,10 +356,7 @@ static term spidriver_write_at(Context *ctx, term req)
 
     struct SPIDevice *device = get_spi_device(spi_data, device_term);
     if (IS_NULL_PTR(device)) {
-        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-            return OUT_OF_MEMORY_ATOM;
-        }
-        return create_pair(ctx, ERROR_ATOM, context_make_atom(ctx, device_not_found_atom));
+        return device_not_found_error(ctx);
     }
 
     uint64_t address = term_maybe_unbox_int64(address_term);
@@ -360,6 +370,152 @@ static term spidriver_write_at(Context *ctx, term req)
     }
 
     return make_read_result_tuple(read_value, ctx);
+}
+
+static term populate_transaction(Context *ctx, struct spi_transaction_t *transaction, term transaction_term, bool write_only, size_t *output_size)
+{
+    term zero_term = term_from_int(0);
+
+    term command_term = term_get_map_assoc_default(ctx, transaction_term, context_make_atom(ctx, command_atom), zero_term);
+    if (!term_is_integer(command_term)) {
+        ESP_LOGE(TAG, "command transaction entry is not an integer");
+        return BADARG_ATOM;
+    }
+    avm_int_t command_value = term_to_int(command_term);
+    if (command_value < 0 || command_value > UINT16_MAX) {
+        ESP_LOGE(TAG, "command transaction entry is not an integer between 0 and 2^16");
+        return BADARG_ATOM;
+    }
+    transaction->cmd = (uint16_t) command_value;
+
+    term address_term = term_get_map_assoc_default(ctx, transaction_term, context_make_atom(ctx, address_atom), zero_term);
+    if (!term_is_any_integer(address_term)) {
+        ESP_LOGE(TAG, "address transaction entry is not an integer");
+        return BADARG_ATOM;
+    }
+    transaction->addr = (uint64_t) term_maybe_unbox_int(address_term);
+
+    term write_data_term = term_get_map_assoc_default(ctx, transaction_term, context_make_atom(ctx, write_data_atom), UNDEFINED_ATOM);
+    term binary_bits_term = zero_term;
+    if (write_data_term != UNDEFINED_ATOM) {
+        if (!term_is_binary(write_data_term)) {
+            ESP_LOGE(TAG, "write_data transaction entry is not a binary");
+            return BADARG_ATOM;
+        }
+        transaction->tx_buffer = (const uint8_t *) term_binary_data(write_data_term);
+
+        size_t binary_bits = term_binary_size(write_data_term) * 8;
+        binary_bits_term = term_from_int(binary_bits);
+        term write_bits_term = term_get_map_assoc_default(ctx, transaction_term, context_make_atom(ctx, write_bits_atom), binary_bits_term);
+        if (!term_is_integer(write_bits_term)) {
+            ESP_LOGE(TAG, "write_bits transaction entry is not an integer");
+            return BADARG_ATOM;
+        }
+        size_t write_bits = (size_t) term_to_int(write_bits_term);
+        if (write_bits > binary_bits) {
+            ESP_LOGE(TAG, "More write bits specified (%u) than are available (%u)", write_bits, binary_bits);
+            return BADARG_ATOM;
+        }
+        transaction->length = write_bits;
+    }
+
+    if (!write_only) {
+        term read_bits_term = term_get_map_assoc_default(ctx, transaction_term, context_make_atom(ctx, read_bits_atom), binary_bits_term);
+        if (!term_is_integer(read_bits_term)) {
+            ESP_LOGE(TAG, "read_bits transaction entry is not an integer");
+            return BADARG_ATOM;
+        }
+        size_t read_bits = (size_t) term_to_int(read_bits_term);
+        transaction->rxlength = read_bits;
+        *output_size = (read_bits % 8) == 0 ? (read_bits / 8) : ((read_bits / 8) + 1);
+    }
+
+    return OK_ATOM;
+}
+
+//
+// write operations
+//
+
+static term spidriver_write(Context *ctx, term req)
+{
+    TRACE("spidriver_write\n");
+    struct SPIData *spi_data = ctx->platform_data;
+
+    // cmd is at index 0
+    term device_term = term_get_tuple_element(req, 1);
+    term transaction_term = term_get_tuple_element(req, 2);
+
+    struct SPIDevice *device = get_spi_device(spi_data, device_term);
+    if (IS_NULL_PTR(device)) {
+        return device_not_found_error(ctx);
+    }
+
+    struct spi_transaction_t transaction = { 0 };
+    size_t output_size = 0;
+    term err_term = populate_transaction(ctx, &transaction, transaction_term, true, &output_size);
+    if (err_term != OK_ATOM) {
+        ESP_LOGE(TAG, "Invalid transaction");
+        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+            return OUT_OF_MEMORY_ATOM;
+        }
+        return create_pair(ctx, ERROR_ATOM, err_term);
+    }
+
+    // TODO replace spi_device_polling_transmit with a interrupt-based mechanism
+    esp_err_t err = spi_device_polling_transmit(device->handle, &transaction);
+    if (UNLIKELY(err != ESP_OK)) {
+        ESP_LOGE(TAG, "spidriver_write failed with err=%i", err);
+        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+            return OUT_OF_MEMORY_ATOM;
+        }
+        return create_pair(ctx, ERROR_ATOM, term_from_int(err));
+    }
+    return OK_ATOM;
+}
+
+//
+// write_read operations
+//
+
+static term spidriver_write_read(Context *ctx, term req)
+{
+    TRACE("spidriver_write_read\n");
+    struct SPIData *spi_data = ctx->platform_data;
+
+    // cmd is at index 0
+    term device_term = term_get_tuple_element(req, 1);
+    term transaction_term = term_get_tuple_element(req, 2);
+
+    struct SPIDevice *device = get_spi_device(spi_data, device_term);
+    if (IS_NULL_PTR(device)) {
+        return device_not_found_error(ctx);
+    }
+
+    struct spi_transaction_t transaction = { 0 };
+    size_t output_size = 0;
+    term err_term = populate_transaction(ctx, &transaction, transaction_term, false, &output_size);
+    if (err_term != OK_ATOM) {
+        ESP_LOGE(TAG, "Invalid transaction");
+        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+            return OUT_OF_MEMORY_ATOM;
+        }
+        return create_pair(ctx, ERROR_ATOM, err_term);
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(output_size) + BINARY_HEADER_SIZE + 3) != MEMORY_GC_OK)) {
+        return OUT_OF_MEMORY_ATOM;
+    }
+    term output_data_term = term_create_empty_binary(output_size, ctx);
+    transaction.rx_buffer = (uint8_t *) term_binary_data(output_data_term);
+
+    // TODO replace spi_device_polling_transmit with a interrupt-based mechanism
+    esp_err_t err = spi_device_polling_transmit(device->handle, &transaction);
+    if (UNLIKELY(err != ESP_OK)) {
+        ESP_LOGE(TAG, "spidriver_write_read failed with err=%i", err);
+        return create_pair(ctx, ERROR_ATOM, term_from_int(err));
+    }
+    return create_pair(ctx, OK_ATOM, output_data_term);
 }
 
 static term create_pair(Context *ctx, term term1, term term2)
@@ -395,6 +551,16 @@ static void spidriver_consume_mailbox(Context *ctx)
         case WRITE_AT_ATOM:
             TRACE("spi: write at.\n");
             ret = spidriver_write_at(ctx, req);
+            break;
+
+        case WRITE_ATOM:
+            TRACE("spi: write.\n");
+            ret = spidriver_write(ctx, req);
+            break;
+
+        case WRITE_READ_ATOM:
+            TRACE("spi: write_read.\n");
+            ret = spidriver_write_read(ctx, req);
             break;
 
         case CLOSE_ATOM:

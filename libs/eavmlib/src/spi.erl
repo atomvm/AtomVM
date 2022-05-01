@@ -40,7 +40,7 @@
 %%
 -module(spi).
 
--export([open/1, close/1, read_at/4, write_at/5]).
+-export([open/1, close/1, read_at/4, write_at/5, write/3, write_read/3]).
 
 -type spi_peripheral() :: hspi | vspi.
 -type bus_config() :: [
@@ -53,7 +53,8 @@
     {clock_speed_hz, non_neg_integer()} |
     {mode, 0..3} |
     {spi_cs_io_num, non_neg_integer()} |
-    {address_len_bits, non_neg_integer()}
+    {address_len_bits, 0..64} |
+    {command_len_bits, 0..16}
 ].
 -type device_name() :: atom().
 -type params() :: [
@@ -64,6 +65,13 @@
 -type spi() :: pid().
 -type address() :: non_neg_integer().
 
+-type transaction() :: #{
+    command => integer(),
+    address => non_neg_integer(),
+    write_data => binary(),
+    write_bits => non_neg_integer(),
+    read_bits => non_neg_integer()
+}.
 
 %%-----------------------------------------------------------------------------
 %% @param   Params Initialization parameters
@@ -124,6 +132,25 @@
 %%
 %% This function raises an Erlang exception with a `badarg' reason, if initialization of the
 %% SPI Bus or any device fails.
+%%
+%% The `write/3' and `write_read/3' functions in this module are designed to provide the maximum mount of
+%% flexibility when interfacing with the SPI device.  The both make use of a map structure to encapsulate an SPI transaction.
+%%
+%% An SPI transaction may contain a command, and address, and/or a blob of data, each of which is optional and
+%% each of which depends on how users interact with the device.  Consult the data sheet for your SPI device to
+%% understand which fields should be used with your device.
+%%
+%% The fields of a transaction map are as follows:
+%%
+%% <table>
+%%  <tr><th>Key</th><th>Value Type</th><th>Description</th></tr>
+%%  <tr><td>`command'</td><td>`integer()' (16-bit)</td><td>SPI command.  The low-order `command_len_bits' are written to the device.</td></tr>
+%%  <tr><td>`address'</td><td>`integer()' (64-bit)</td><td>Device address.  The low-order `address_len_bits' are written to the device.</td></tr>
+%%  <tr><td>`write_data'</td><td>`binary()'</td><td>Data to write</td></tr>
+%%  <tr><td>`write_bits'</td><td>`non_neg_integer()'</td><td>Number of bits to write from `write_data'.  If not included, then all bits will be written.</td></tr>
+%%  <tr><td>`read_bits'</td><td>`non_neg_integer()'</td><td>Number of bits to read from the SPI device.  If not included, then the same number of bits will be read as were written.</td></tr>
+%% </table>
+%%
 %% @end
 %%-----------------------------------------------------------------------------
 -spec open(Params :: params()) -> spi().
@@ -170,6 +197,67 @@ read_at(SPI, DeviceName, Address, Len) ->
     {ok, integer()} | error.
 write_at(SPI, DeviceName, Address, Len, Data) ->
     port:call(SPI, {write_at, DeviceName, Address bor 16#80, Len, Data}).
+
+%%-----------------------------------------------------------------------------
+%% @param   SPI SPI instance created via `open/1'
+%% @param   DeviceName SPI device name (use key in `device_config')
+%% @param   Transaction transaction map.
+%% @returns `ok' or `{error, Reason}', if an error occurred.
+%% @doc     Write data to the SPI device, using the intructions encoded in the supplied transaction.
+%%
+%% The supplied `Transaction' encodes information about how data is to be written to the selected SPI device.
+%% See the description above for the fields that may be specified in this map.
+%%
+%% When a binary is supplied in the `write_data' field, the data is written to the
+%% SPI device in the natural order of the binary.  For example, if the
+%% input binary is `<<16#57, 16#BA>>', then the first
+%% byte is `0x57' and the second byte is `0xBA'.
+%%
+%% The value of the `write_bits' field, if specified, must be less than or equal to `8 * byte_size(write_data)'.
+%% If `write_bits' is less than `8 * byte_size(write_data)', only the first `write_bits' bits from `write_data' will be written.
+%%
+%% This function will return a tuple containing the `error' atom if an error occurred
+%% writing to the SPI device at the specified address.
+%% The returned reason term is implementation-defined.
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-spec write(SPI :: spi(), DeviceName :: device_name(), Transaction :: transaction()) -> ok | {error, Reason :: term()}.
+write(SPI, DeviceName, Transaction) when is_pid(SPI) andalso is_atom(DeviceName) andalso is_map(Transaction) ->
+    port:call(SPI, {write, DeviceName, Transaction}).
+
+%%-----------------------------------------------------------------------------
+%% @param   SPI SPI instance created via `open/1'
+%% @param   DeviceName SPI device name (use key in `device_config')
+%% @param   Transaction transaction.
+%% @returns `{ok, binary()}' or `{error, Reason}', if an error occurred.
+%% @doc     Write data to the SPI device, using the intructions encoded in the supplied transaction.
+%% device, and simultaneously read data back from the device, returning the read data in a binary.
+%%
+%% The supplied `Transaction' encodes information about how data is to be written to the selected SPI device.
+%% See the description above for the fields that may be specified in this map.
+%%
+%% When a binary is supplied in the `write_data' field, the data is written to the
+%% SPI device in the natural order of the binary.  For example, if the
+%% input binary is `<<16#57, 16#BA>>', then the first
+%% byte is `0x57' and the second byte is `0xBA'.
+%%
+%% The value of the `write_bits' field, if specified, must be less than or equal to `8 * byte_size(write_data)'.
+%% If `write_bits' is less than `8 * byte_size(write_data)', only the first `write_bits' bits from `write_data' will be written.
+%%
+%% The return value contains a sequence of bytes that have been read from the SPI device.  The number of
+%% bytes returned will be `ceil(read_bits / 8)'.  Only the first `read_bits' will be populated.
+%%
+%% This function will return a tuple containing the `error' atom if an error occurred
+%% writing to the SPI device at the specified address.
+%% The returned reason term is implementation-defined.
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-spec write_read(SPI :: spi(), DeviceName :: device_name(), Transaction :: transaction()) -> {ok, ReadData :: binary()} | error.
+write_read(SPI, DeviceName, Transaction) when is_pid(SPI) andalso is_atom(DeviceName) andalso is_map(Transaction) ->
+    port:call(SPI, {write_read, DeviceName, Transaction}).
+
 
 %%
 %% Internal operations
@@ -259,7 +347,8 @@ validate_device_config_entries(Entries) when is_map(Entries) orelse is_list(Entr
         spi_clock_hz => validate_integer_entry(spi_clock_hz, Entries),
         mode => validate_mode(get_value(mode, Entries, undefined)),
         spi_cs_io_num => validate_integer_entry(spi_cs_io_num, Entries, undefined),
-        address_len_bits => validate_address_len_bits(get_value(address_len_bits, Entries, undefined))
+        address_len_bits => validate_address_len_bits(get_value(address_len_bits, Entries, undefined)),
+        command_len_bits => validate_command_len_bits(get_value(command_len_bits, Entries, 0))
     };
 validate_device_config_entries(Entries) ->
     throw({bardarg, {not_a_map_or_list, Entries}}).
@@ -275,6 +364,12 @@ validate_address_len_bits(Len) when is_integer(Len) andalso 0 =< Len andalso Len
     Len;
 validate_address_len_bits(Len) ->
     throw({bardarg, {address_len_bits, Len}}).
+
+%% @private
+validate_command_len_bits(Len) when is_integer(Len) andalso 0 =< Len andalso Len =< 16 ->
+    Len;
+validate_command_len_bits(Len) ->
+    throw({bardarg, {command_len_bits, Len}}).
 
 %% @private
 get_value(Key, Map, DefaultValue) when is_map(Map) ->
