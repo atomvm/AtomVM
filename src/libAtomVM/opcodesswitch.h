@@ -4054,7 +4054,21 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     term src = READ_DEST_REGISTER(dreg_type, dreg);
                     term bin;
                     if (term_is_match_state(src)) {
-                        bin = term_get_match_state_binary(src);
+                        avm_int_t offset = term_get_match_state_offset(src);
+                        if (offset == 0) {
+                            bin = term_get_match_state_binary(src);
+                        } else {
+                            term src_bin = term_get_match_state_binary(src);
+                            int len = term_binary_size(src_bin) - offset / 8;
+                            size_t heap_size = term_sub_binary_heap_size(src_bin, len);
+                            if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                            }
+                            // src might be invalid after a GC
+                            src = READ_DEST_REGISTER(dreg_type, dreg);
+                            src_bin = term_get_match_state_binary(src);
+                            bin = term_maybe_create_sub_binary(src_bin, offset / 8, len, ctx);
+                        }
                     } else {
                         bin = src;
                     }
