@@ -36,4 +36,3 @@ if (Elixir_FOUND)
 else()
     pack_lib(atomvmlib eavmlib estdlib alisp)
 endif()
-
