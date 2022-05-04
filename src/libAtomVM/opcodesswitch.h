@@ -4044,6 +4044,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 dreg_type_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
+                // Do not check if dreg is a binary or not
+                // In case it is not a binary or a match state, dreg will not be changed.
+
                 #ifdef IMPL_CODE_LOADER
                     TRACE("bs_context_to_binary/1\n");
                 #endif
