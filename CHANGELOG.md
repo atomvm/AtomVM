@@ -11,5 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - Fix `gen_statem`: Cancel outstanding timers during state transitions in
    order to prevent spurious timeout messages from being sent to `gen_statem`
    process.
+- Fix missing Elixir libraries: examvlib was not packed into atomvmlib.avm
 
 ## [0.5.0] - 2022-03-22

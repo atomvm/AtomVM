@@ -24,10 +24,16 @@ add_subdirectory(estdlib/src)
 add_subdirectory(eavmlib/src)
 add_subdirectory(alisp/src)
 add_subdirectory(etest/src)
+
 if (Elixir_FOUND)
     add_subdirectory(exavmlib/lib)
 else()
     message("Unable to find elixirc -- skipping Elixir libs")
 endif()
 
-pack_lib(atomvmlib eavmlib estdlib alisp)
+if (Elixir_FOUND)
+    pack_lib(atomvmlib eavmlib estdlib alisp exavmlib)
+else()
+    pack_lib(atomvmlib eavmlib estdlib alisp)
+endif()
+
