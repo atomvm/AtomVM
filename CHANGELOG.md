@@ -14,5 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix missing Elixir libraries: examvlib was not packed into atomvmlib.avm
 - Fix `bs_context_to_binary`: match offset wasn't used, leading in certain situations to infinite loops
   while matching binaries.
+- Fix how `start` option was handled from `bs_restore2` instruction: last saved match offset was
+  used instead of match starting offset, causing some bytes being skipped.
 
 ## [0.5.0] - 2022-03-22

@@ -3732,14 +3732,14 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                     avm_int_t index_val;
                     if (index == START_ATOM) {
-                        index_val = 0;
-
+                        // TODO: not sure if 'start' is used anytime in generated code
+                        term_match_state_save_start_offset(src);
                     } else if (term_is_integer(index)) {
                         index_val = term_to_int(index);
+                        term_match_state_save_offset(src, index_val);
                     } else {
                         abort();
                     }
-                    term_match_state_save_offset(src, index_val);
 
                     TRACE("bs_save2/2, src=0x%lx pos=%li\n", src, index_val);
                 #endif
@@ -3764,14 +3764,13 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                     avm_int_t index_val;
                     if (index == START_ATOM) {
-                        index_val = 0;
-
+                        term_match_state_restore_start_offset(src);
                     } else if (term_is_integer(index)) {
                         index_val = term_to_int(index);
+                        term_match_state_restore_offset(src, index_val);
                     } else {
                         abort();
                     }
-                    term_match_state_restore_offset(src, index_val);
 
                     TRACE("bs_restore2/2, src=0x%lx pos=%li\n", src, index_val);
                 #endif

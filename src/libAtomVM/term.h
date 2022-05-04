@@ -57,7 +57,7 @@
 #define TERM_BOXED_SUB_BINARY 0x28
 
 #define TERM_BOXED_REFC_BINARY_SIZE 6
-#define TERM_BOXED_BIN_MATCH_STATE_SIZE 4
+#define TERM_BOXED_BIN_MATCH_STATE_SIZE 5
 #define TERM_BOXED_SUB_BINARY_SIZE 4
 #if TERM_BYTES == 8
     #define REFC_BINARY_MIN 64
@@ -1491,19 +1491,32 @@ static inline void term_set_match_state_offset(term match_state, avm_int_t offse
 static inline int term_match_state_get_save_offset(term match_state, int index)
 {
     term *boxed_value = term_to_term_ptr(match_state);
-    return boxed_value[3 + index];
+    return boxed_value[4 + index];
 }
 
 static inline void term_match_state_save_offset(term match_state, int index)
 {
     term *boxed_value = term_to_term_ptr(match_state);
-    boxed_value[3 + index] = boxed_value[2];
+    boxed_value[4 + index] = boxed_value[2];
+}
+
+// TODO: not sure we really need this function
+static inline void term_match_state_save_start_offset(term match_state)
+{
+    term *boxed_value = term_to_term_ptr(match_state);
+    boxed_value[3] = boxed_value[2];
+}
+
+static inline void term_match_state_restore_start_offset(term match_state)
+{
+    term *boxed_value = term_to_term_ptr(match_state);
+    boxed_value[2] = boxed_value[3];
 }
 
 static inline void term_match_state_restore_offset(term match_state, int index)
 {
     term *boxed_value = term_to_term_ptr(match_state);
-    boxed_value[2] = boxed_value[3 + index];
+    boxed_value[2] = boxed_value[4 + index];
 }
 
 static inline term term_alloc_bin_match_state(term binary_or_state, Context *ctx)
@@ -1514,11 +1527,15 @@ static inline term term_alloc_bin_match_state(term binary_or_state, Context *ctx
     if (term_is_match_state(binary_or_state)) {
         boxed_match_state[1] = term_get_match_state_binary(binary_or_state);
         boxed_match_state[2] = term_get_match_state_offset(binary_or_state);
+        // TODO: not sure about the following
         boxed_match_state[3] = term_get_match_state_offset(binary_or_state);
+        boxed_match_state[4] = term_get_match_state_offset(binary_or_state);
     } else {
         boxed_match_state[1] = binary_or_state;
+        // TODO: initialize them with term_from_int(0)
         boxed_match_state[2] = 0;
         boxed_match_state[3] = 0;
+        boxed_match_state[4] = 0;
     }
 
     return ((term) boxed_match_state) | TERM_BOXED_VALUE_TAG;
