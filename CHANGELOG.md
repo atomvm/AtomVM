@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   number when a VM abort occurs.  This define is off by default.
 - Added `spi:write/3` and `spi:write_read/3` functions to support generalized SPI transactions
   and arbitrary-length reads and writes from SPI devices.
+- Added support for building ESP32 port with all currently supported versions of Espressif ESP-IDF,
+  version 4.1.x through 4.4.x.
 
 ### Changed
 
