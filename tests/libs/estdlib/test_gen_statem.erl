@@ -21,17 +21,19 @@
 -module(test_gen_statem).
 
 -export([test/0]).
--export([init/1, initial/3, terminate/3]).
+-export([init/1, initial/3, jail/3, free/3, terminate/3]).
 
 -record(data, {
     num_casts = 0,
-    num_infos = 0
+    num_infos = 0,
+    num_spurious_timeouts = 0
 }).
 
 test() ->
     ok = test_call(),
     ok = test_cast(),
     ok = test_info(),
+    ok = test_timeout(),
     ok.
 
 test_call() ->
@@ -68,6 +70,24 @@ test_info() ->
     gen_statem:stop(Pid),
     ok.
 
+test_timeout() ->
+    {ok, Pid} = gen_statem:start(?MODULE, [], []),
+
+    ok = gen_statem:call(Pid, {go_to_jail, 250}),
+    no = gen_statem:call(Pid, are_you_free),
+    timer:sleep(251),
+    yes = gen_statem:call(Pid, are_you_free),
+
+    ok = gen_statem:call(Pid, {go_to_jail, 250}),
+    no = gen_statem:call(Pid, are_you_free),
+    ok = gen_statem:cast(Pid, escape),
+    yes = gen_statem:call(Pid, are_you_free),
+    timer:sleep(251),
+    0 = gen_statem:call(Pid, get_num_spurious_timeouts),
+
+    gen_statem:stop(Pid),
+    ok.
+
 %%
 %% callbacks
 %%
@@ -84,7 +104,26 @@ initial(info, ping, #data{num_infos = NumInfos} = Data) ->
 initial({call, From}, get_num_casts, #data{num_casts = NumCasts} = Data) ->
     {next_state, initial, Data#data{num_casts = 0}, [{reply, From, NumCasts}]};
 initial({call, From}, get_num_infos, #data{num_infos = NumInfos} = Data) ->
-    {next_state, initial, Data#data{num_infos = 0}, [{reply, From, NumInfos}]}.
+    {next_state, initial, Data#data{num_infos = 0}, [{reply, From, NumInfos}]};
+initial({call, From}, {go_to_jail, Ms}, Data) ->
+    {next_state, jail, Data, [{reply, From, ok}, {state_timeout, Ms, you_are_free}]}.
+
+jail({call, From}, are_you_free, Data) ->
+    {next_state, jail, Data, [{reply, From, no}]};
+jail(cast, escape, Data) ->
+    {next_state, free, Data};
+jail(state_timeout, you_are_free, Data) ->
+    {next_state, free, Data}.
+
+free({call, From}, {go_to_jail, Ms}, Data) ->
+    {next_state, jail, Data, [{reply, From, ok}, {state_timeout, Ms, you_are_free}]};
+free({call, From}, are_you_free, Data) ->
+    {next_state, free, Data, [{reply, From, yes}]};
+%% we should never receive a timeout message, because the timer set in jail should be cancelled as the result of the escape
+free(state_timeout, _Msg, #data{num_spurious_timeouts = NumSpuriousTimeouts} = Data) ->
+    {next_state, free, Data#data{num_spurious_timeouts = NumSpuriousTimeouts + 1}};
+free({call, From}, get_num_spurious_timeouts, #data{num_spurious_timeouts = NumSpuriousTimeouts} = Data) ->
+    {next_state, free, Data, [{reply, From, NumSpuriousTimeouts}]}.
 
 terminate(_Reason, _StateName, _Data) ->
     ok.

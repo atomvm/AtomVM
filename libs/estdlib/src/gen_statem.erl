@@ -18,26 +18,6 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
-%
-% This file is part of AtomVM.
-%
-% Copyright 2019 Fred Dushin <fred@dushin.net>
-%
-% Licensed under the Apache License, Version 2.0 (the "License");
-% you may not use this file except in compliance with the License.
-% You may obtain a copy of the License at
-%
-%    http://www.apache.org/licenses/LICENSE-2.0
-%
-% Unless required by applicable law or agreed to in writing, software
-% distributed under the License is distributed on an "AS IS" BASIS,
-% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-% See the License for the specific language governing permissions and
-% limitations under the License.
-%
-% SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
-%
-
 %%-----------------------------------------------------------------------------
 %% @doc An implementation of the Erlang/OTP gen_statem interface.
 %%
@@ -68,7 +48,8 @@
 -record(state, {
     mod :: module(),
     current_state :: atom(),
-    data :: term()
+    data :: term(),
+    timer_map = #{} :: map()
 }).
 
 -include("logger.hrl").
@@ -223,15 +204,10 @@ handle_cast(Request, State) ->
 
 %% @hidden
 handle_info(
-    {timeout, _TimerRef, {state_timeout, State, Msg}},
+    {timeout, _TimerRef, {state_timeout, CurrentState, Msg}},
     #state{current_state = CurrentState} = State
 ) ->
-    case State of
-        CurrentState ->
-            do_handle_state(state_timeout, Msg, State);
-        _ ->
-            ok
-    end;
+    do_handle_state(state_timeout, Msg, State);
 handle_info(Request, State) ->
     do_handle_state(info, Request, State).
 
@@ -245,25 +221,47 @@ terminate(Reason, #state{mod = Module, current_state = CurrentState, data = Data
 %%
 
 %% @private
-do_handle_state(
-    EventType,
-    Request,
-    #state{mod = Module, current_state = CurrentState, data = Data} = State
-) ->
+do_handle_state(EventType, Request, State) ->
+    #state{
+        mod = Module,
+        current_state = CurrentState,
+        data = Data,
+        timer_map = TimerMap
+    } = State,
     case Module:CurrentState(EventType, Request, Data) of
+        {next_state, CurrentState, NewData} ->
+            {noreply, State#state{data = NewData}};
+        {next_state, CurrentState, NewData, Actions} ->
+            TimerRefs = handle_actions(Actions, [{next_state, CurrentState}]),
+            {noreply, State#state{data = NewData, timer_map = maps:merge(TimerMap, TimerRefs)}};
+        %%
+        %% if we are transitioning to a new state, cancel any timers associated with this state
+        %%
         {next_state, NextState, NewData} ->
-            {noreply, State#state{current_state = NextState, data = NewData}};
+            NewTimerMap = maybe_cancel_timer(CurrentState, TimerMap),
+            {noreply, State#state{
+                current_state = NextState, data = NewData, timer_map = NewTimerMap
+            }};
         {next_state, NextState, NewData, Actions} ->
-            handle_actions(Actions, [{current_state, CurrentState}, {next_state, NextState}]),
-            {noreply, State#state{current_state = NextState, data = NewData}};
+            NewTimerMap = maybe_cancel_timer(CurrentState, TimerMap),
+            TimerRefs = handle_actions(Actions, [{next_state, NextState}]),
+            {noreply, State#state{
+                current_state = NextState,
+                data = NewData,
+                timer_map = maps:merge(TimerMap, TimerRefs)
+            }};
         {stop, Reason} ->
+            maybe_cancel_timer(CurrentState, TimerMap),
             {stop, Reason, State};
         {stop, Reason, NewData} ->
+            maybe_cancel_timer(CurrentState, TimerMap),
             {stop, Reason, State#state{data = NewData}};
         {stop_and_reply, Reason, Replies} ->
+            maybe_cancel_timer(CurrentState, TimerMap),
             handle_actions(Replies, []),
             {stop, Reason, State};
         {stop_and_reply, Reason, Replies, NewData} ->
+            maybe_cancel_timer(CurrentState, TimerMap),
             handle_actions(Replies, []),
             {stop, Reason, State#state{data = NewData}};
         Reply ->
@@ -271,17 +269,27 @@ do_handle_state(
     end.
 
 %% @private
-handle_actions([], _Context) ->
-    ok;
-handle_actions([{reply, From, Reply} | T], Context) ->
+handle_actions(Actions, Context) ->
+    handle_actions(Actions, Context, #{}).
+
+%% @private
+handle_actions([], _Context, Accum) ->
+    Accum;
+handle_actions([{reply, From, Reply} | T], Context, Accum) ->
     reply(From, Reply),
-    handle_actions(T, Context);
-handle_actions([{state_timeout, Timeout, Msg} | T], Context) ->
-    timer_manager:start_timer(
-        Timeout,
-        self(),
-        {state_timeout, proplists:get_value(next_state, Context), Msg}
-    ),
-    handle_actions(T, Context);
-handle_actions([_ | T], Context) ->
-    handle_actions(T, Context).
+    handle_actions(T, Context, Accum);
+handle_actions([{state_timeout, Timeout, Msg} | T], Context, Accum) ->
+    NextState = proplists:get_value(next_state, Context),
+    TimerRef = erlang:start_timer(Timeout, self(), {state_timeout, NextState, Msg}),
+    handle_actions(T, Context, Accum#{NextState => TimerRef});
+handle_actions([_ | T], Context, Accum) ->
+    handle_actions(T, Context, Accum).
+
+maybe_cancel_timer(CurrentState, TimerMap) ->
+    case maps:find(CurrentState, TimerMap) of
+        {ok, TimerRef} ->
+            erlang:cancel_timer(TimerRef),
+            maps:remove(CurrentState, TimerMap);
+        _ ->
+            TimerMap
+    end.

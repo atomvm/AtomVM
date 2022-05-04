@@ -38,6 +38,7 @@ test_cancel_timer() ->
     ?ASSERT_MATCH(timer_manager:get_timer_refs(), []),
     TimerRef = timer_manager:start_timer(60000, self(), test_cancel_timer),
     ?ASSERT_MATCH(timer_manager:get_timer_refs(), [TimerRef]),
+    %% TODO check return value
     timer_manager:cancel_timer(TimerRef),
     %?TIMER:sleep(100),
     ?ASSERT_MATCH(timer_manager:get_timer_refs(), []),
