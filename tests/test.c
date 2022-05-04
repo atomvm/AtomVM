@@ -432,6 +432,8 @@ struct Test tests[] =
     {"test_function_exported.beam", 7},
     {"test_list_to_tuple.beam", 69},
 
+    {"bs_context_to_binary_with_offset.beam", 42},
+
     // noisy tests, keep them at the end
     {"spawn_opt_monitor_normal.beam", 1},
     {"spawn_opt_link_normal.beam", 1},
