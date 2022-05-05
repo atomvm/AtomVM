@@ -410,6 +410,8 @@ compile_erlang(test_function_exported)
 compile_erlang(test_list_to_tuple)
 
 compile_erlang(bs_context_to_binary_with_offset)
+compile_erlang(bs_restore2_start_offset)
+compile_erlang(bs_restore2_start_offset_no_fp)
 compile_erlang(test_refc_binaries)
 compile_erlang(test_sub_binaries)
 
@@ -810,6 +812,8 @@ add_custom_target(erlang_test_modules DEPENDS
     test_list_to_tuple.beam
 
     bs_context_to_binary_with_offset.beam
+    bs_restore2_start_offset.beam
+    bs_restore2_start_offset_no_fp.beam
 
     spawn_opt_monitor_normal.beam
     spawn_opt_monitor_throw.beam
