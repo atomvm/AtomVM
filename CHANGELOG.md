@@ -16,5 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   while matching binaries.
 - Fix how `start` option was handled from `bs_restore2` instruction: last saved match offset was
   used instead of match starting offset, causing some bytes being skipped.
+- Fix another potential bug when doing pattern matching using code compiled with OTP 21.
 
 ## [0.5.0] - 2022-03-22

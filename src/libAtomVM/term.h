@@ -57,7 +57,7 @@
 #define TERM_BOXED_SUB_BINARY 0x28
 
 #define TERM_BOXED_REFC_BINARY_SIZE 6
-#define TERM_BOXED_BIN_MATCH_STATE_SIZE 5
+#define TERM_BOXED_BIN_MATCH_STATE_SIZE 4
 #define TERM_BOXED_SUB_BINARY_SIZE 4
 #if TERM_BYTES == 8
     #define REFC_BINARY_MIN 64
@@ -1519,23 +1519,28 @@ static inline void term_match_state_restore_offset(term match_state, int index)
     boxed_value[2] = boxed_value[4 + index];
 }
 
-static inline term term_alloc_bin_match_state(term binary_or_state, Context *ctx)
+static inline term term_alloc_bin_match_state(term binary_or_state, int slots, Context *ctx)
 {
-    term *boxed_match_state = memory_heap_alloc(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE);
+    term *boxed_match_state = memory_heap_alloc(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE + slots);
 
-    boxed_match_state[0] = ((TERM_BOXED_BIN_MATCH_STATE_SIZE - 1) << 6) | TERM_BOXED_BIN_MATCH_STATE;
+    boxed_match_state[0] = (((TERM_BOXED_BIN_MATCH_STATE_SIZE + slots) - 1) << 6) | TERM_BOXED_BIN_MATCH_STATE;
     if (term_is_match_state(binary_or_state)) {
         boxed_match_state[1] = term_get_match_state_binary(binary_or_state);
-        boxed_match_state[2] = term_get_match_state_offset(binary_or_state);
+        term offset = (term) term_get_match_state_offset(binary_or_state);
+        boxed_match_state[2] = offset;
         // TODO: not sure about the following
-        boxed_match_state[3] = term_get_match_state_offset(binary_or_state);
-        boxed_match_state[4] = term_get_match_state_offset(binary_or_state);
+        boxed_match_state[3] = offset;
+        for (int i = 0; i < slots; i++) {
+            boxed_match_state[4 + i] = offset;
+        }
     } else {
         boxed_match_state[1] = binary_or_state;
         // TODO: initialize them with term_from_int(0)
         boxed_match_state[2] = 0;
         boxed_match_state[3] = 0;
-        boxed_match_state[4] = 0;
+        for (int i = 0; i < slots; i++) {
+            boxed_match_state[4 + i] = 0;
+        }
     }
 
     return ((term) boxed_match_state) | TERM_BOXED_VALUE_TAG;

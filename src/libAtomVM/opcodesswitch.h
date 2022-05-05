@@ -3501,7 +3501,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         WRITE_REGISTER(dreg_type, dreg, src);
                         i = POINTER_TO_II(mod->labels[fail]);
                     } else {
-                        term match_state = term_alloc_bin_match_state(src, ctx);
+                        term match_state = term_alloc_bin_match_state(src, slots, ctx);
 
                         WRITE_REGISTER(dreg_type, dreg, match_state);
                         NEXT_INSTRUCTION(next_off);
@@ -3542,7 +3542,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         WRITE_REGISTER(dreg_type, dreg, src);
                         i = POINTER_TO_II(mod->labels[fail]);
                     } else {
-                        term match_state = term_alloc_bin_match_state(src, ctx);
+                        term match_state = term_alloc_bin_match_state(src, 0, ctx);
 
                         WRITE_REGISTER(dreg_type, dreg, match_state);
                         NEXT_INSTRUCTION(next_off);
@@ -4954,7 +4954,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         WRITE_REGISTER(dreg_type, dreg, src);
                         i = POINTER_TO_II(mod->labels[fail]);
                     } else {
-                        term match_state = term_alloc_bin_match_state(src, ctx);
+                        term match_state = term_alloc_bin_match_state(src, 0, ctx);
 
                         WRITE_REGISTER(dreg_type, dreg, match_state);
                         NEXT_INSTRUCTION(next_off);
