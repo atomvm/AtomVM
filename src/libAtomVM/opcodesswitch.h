@@ -3501,7 +3501,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         WRITE_REGISTER(dreg_type, dreg, src);
                         i = POINTER_TO_II(mod->labels[fail]);
                     } else {
-                        term match_state = term_alloc_bin_match_state(src, ctx);
+                        term match_state = term_alloc_bin_match_state(src, slots, ctx);
 
                         WRITE_REGISTER(dreg_type, dreg, match_state);
                         NEXT_INSTRUCTION(next_off);
@@ -3542,7 +3542,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         WRITE_REGISTER(dreg_type, dreg, src);
                         i = POINTER_TO_II(mod->labels[fail]);
                     } else {
-                        term match_state = term_alloc_bin_match_state(src, ctx);
+                        term match_state = term_alloc_bin_match_state(src, 0, ctx);
 
                         WRITE_REGISTER(dreg_type, dreg, match_state);
                         NEXT_INSTRUCTION(next_off);
@@ -3732,14 +3732,14 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                     avm_int_t index_val;
                     if (index == START_ATOM) {
-                        index_val = 0;
-
+                        // TODO: not sure if 'start' is used anytime in generated code
+                        term_match_state_save_start_offset(src);
                     } else if (term_is_integer(index)) {
                         index_val = term_to_int(index);
+                        term_match_state_save_offset(src, index_val);
                     } else {
                         AVM_ABORT();
                     }
-                    term_match_state_save_offset(src, index_val);
 
                     TRACE("bs_save2/2, src=0x%lx pos=%li\n", src, index_val);
                 #endif
@@ -3764,14 +3764,13 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                     avm_int_t index_val;
                     if (index == START_ATOM) {
-                        index_val = 0;
-
+                        term_match_state_restore_start_offset(src);
                     } else if (term_is_integer(index)) {
                         index_val = term_to_int(index);
+                        term_match_state_restore_offset(src, index_val);
                     } else {
                         AVM_ABORT();
                     }
-                    term_match_state_restore_offset(src, index_val);
 
                     TRACE("bs_restore2/2, src=0x%lx pos=%li\n", src, index_val);
                 #endif
@@ -4044,6 +4043,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 dreg_type_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
+                // Do not check if dreg is a binary or not
+                // In case it is not a binary or a match state, dreg will not be changed.
+
                 #ifdef IMPL_CODE_LOADER
                     TRACE("bs_context_to_binary/1\n");
                 #endif
@@ -4054,7 +4056,21 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     term src = READ_DEST_REGISTER(dreg_type, dreg);
                     term bin;
                     if (term_is_match_state(src)) {
-                        bin = term_get_match_state_binary(src);
+                        avm_int_t offset = term_get_match_state_offset(src);
+                        if (offset == 0) {
+                            bin = term_get_match_state_binary(src);
+                        } else {
+                            term src_bin = term_get_match_state_binary(src);
+                            int len = term_binary_size(src_bin) - offset / 8;
+                            size_t heap_size = term_sub_binary_heap_size(src_bin, len);
+                            if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                            }
+                            // src might be invalid after a GC
+                            src = READ_DEST_REGISTER(dreg_type, dreg);
+                            src_bin = term_get_match_state_binary(src);
+                            bin = term_maybe_create_sub_binary(src_bin, offset / 8, len, ctx);
+                        }
                     } else {
                         bin = src;
                     }
@@ -4938,7 +4954,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         WRITE_REGISTER(dreg_type, dreg, src);
                         i = POINTER_TO_II(mod->labels[fail]);
                     } else {
-                        term match_state = term_alloc_bin_match_state(src, ctx);
+                        term match_state = term_alloc_bin_match_state(src, 0, ctx);
 
                         WRITE_REGISTER(dreg_type, dreg, match_state);
                         NEXT_INSTRUCTION(next_off);

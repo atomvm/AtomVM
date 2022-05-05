@@ -41,6 +41,13 @@
     max/2
 ]).
 
+%%
+%% TODO Correct the following bugs
+%% * cancel_timer should be renamed cancel, per the OTP documentation
+%% * return value needs to be {ok, cancel} or {error, Reason}
+%% * review API documentation for timer functions in this module
+%%
+
 %%-----------------------------------------------------------------------------
 %% @param   Time time in milliseconds after which to send the timeout message.
 %% @param   Dest Pid or server name to which to send the timeout message.
@@ -142,6 +149,8 @@ process_info(_Pid, _Key) ->
 %% The following keys are supported on the ESP32 platform:
 %% <ul>
 %%      <li><b>esp32_free_heap_size</b> the number of (noncontiguous) free bytes in the ESP32 heap (integer)</li>
+%%      <li><b>esp_largest_free_block</b> the number of the largest contiguous free bytes in the ESP32 heap (integer)</li>
+%%      <li><b>esp_get_minimum_free_size</b> the smallest number of free bytes in the ESP32 heap since boot (integer)</li>
 %% </ul>
 %%
 %% Additional keys may be supported on some platforms that are not documented here.

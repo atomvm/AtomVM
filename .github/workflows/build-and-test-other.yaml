@@ -53,6 +53,9 @@ jobs:
         otp-version: ${{ env.otp_version }}
         elixir-version: ${{ env.elixir_version }}
 
+    - name: apt update
+      run: sudo apt update
+
     - name: Install required packages
       run: sudo apt install debootstrap gperf cmake
 

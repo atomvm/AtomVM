@@ -409,6 +409,12 @@ compile_erlang(sexp_lexer)
 compile_erlang(test_function_exported)
 compile_erlang(test_list_to_tuple)
 
+compile_erlang(bs_context_to_binary_with_offset)
+compile_erlang(bs_restore2_start_offset)
+compile_erlang(bs_restore2_start_offset_no_fp)
+compile_erlang(test_refc_binaries)
+compile_erlang(test_sub_binaries)
+
 compile_erlang(spawn_opt_monitor_normal)
 compile_erlang(spawn_opt_monitor_throw)
 compile_erlang(spawn_opt_demonitor_normal)
@@ -419,9 +425,6 @@ compile_erlang(link_kill_parent)
 compile_erlang(link_throw)
 compile_erlang(unlink_error)
 compile_erlang(trap_exit_flag)
-
-compile_erlang(test_refc_binaries)
-compile_erlang(test_sub_binaries)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -807,6 +810,10 @@ add_custom_target(erlang_test_modules DEPENDS
     test_sub_binaries.beam
     test_function_exported.beam
     test_list_to_tuple.beam
+
+    bs_context_to_binary_with_offset.beam
+    bs_restore2_start_offset.beam
+    bs_restore2_start_offset_no_fp.beam
 
     spawn_opt_monitor_normal.beam
     spawn_opt_monitor_throw.beam
