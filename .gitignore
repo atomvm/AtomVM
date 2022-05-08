@@ -14,5 +14,6 @@ src/platforms/esp32/components/**
 src/platforms/esp32/main/component_nifs.txt
 src/platforms/esp32/main/component_ports.txt
 !src/platforms/esp32/components/libatomvm/
+!src/platforms/esp32/components/libatomvm/**
 .idea/**
 .vscode/**
