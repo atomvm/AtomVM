@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and arbitrary-length reads and writes from SPI devices.
 - Added support for building ESP32 port with all currently supported versions of Espressif ESP-IDF,
   version 4.1.x through 4.4.x.
+- Added support for `controlling_process/2` in `gen_udp` and `gen_tcp` modules.
 
 ### Changed
 

@@ -18,26 +18,6 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
-%
-% This file is part of AtomVM.
-%
-% Copyright 2018 Fred Dushin <fred@dushin.net>
-%
-% Licensed under the Apache License, Version 2.0 (the "License");
-% you may not use this file except in compliance with the License.
-% You may obtain a copy of the License at
-%
-%    http://www.apache.org/licenses/LICENSE-2.0
-%
-% Unless required by applicable law or agreed to in writing, software
-% distributed under the License is distributed on an "AS IS" BASIS,
-% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-% See the License for the specific language governing permissions and
-% limitations under the License.
-%
-% SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
-%
-
 %%-----------------------------------------------------------------------------
 %% @doc An implementation of the Erlang/OTP gen_udp interface.
 %%
@@ -61,7 +41,7 @@
 %%-----------------------------------------------------------------------------
 -module(gen_udp).
 
--export([open/1, open/2, send/4, recv/2, recv/3, close/1]).
+-export([open/1, open/2, send/4, recv/2, recv/3, close/1, controlling_process/2]).
 
 -type proplist() :: [{atom(), any()}].
 -type packet() :: string() | binary().
@@ -163,6 +143,23 @@ recv(Socket, Length, Timeout) ->
 -spec close(inet:socket()) -> ok | {error, Reason :: reason()}.
 close(Socket) ->
     call(Socket, {close}).
+
+%%-----------------------------------------------------------------------------
+%% @param   Socket the socket to which to assign the pid
+%% @param   Pid Pid to which to send messages
+%% @returns ok | {error, Reason}.
+%% @doc     Assign a controlling process to the socket.  The controlling
+%% process will receive messages from the socket.
+%%
+%% This function will return `{error, not_owner}' if the calling process
+%% is not the current controlling proces.
+%%
+%% By default, the controlling process is the process associated with
+%% the creation of the Socket.
+%% @end
+%%-----------------------------------------------------------------------------
+controlling_process(Socket, Pid) ->
+    call(Socket, {controlling_process, Pid}).
 
 %% internal operations
 

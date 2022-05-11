@@ -1,7 +1,7 @@
 %
 % This file is part of AtomVM.
 %
-% Copyright 2022 Fred Dushin <fred@dushin.net>
+% Copyright 2019-2022 Fred Dushin <fred@dushin.net>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -27,34 +27,44 @@
 test() ->
     ok = test_echo_server(),
     ok = test_echo_server(),
+    ok = test_echo_server(true),
     ok.
 
 test_echo_server() ->
+    test_echo_server(false).
+
+test_echo_server(SpawnControllingProcess) ->
     {ok, ListenSocket} = gen_tcp:listen(0, []),
     {ok, {_Address, Port}} = inet:sockname(ListenSocket),
 
     Self = self(),
     spawn(fun() ->
         Self ! ready,
-        accept(Self, ListenSocket)
+        accept(Self, ListenSocket, SpawnControllingProcess)
     end),
     receive
         ready ->
             ok
     end,
 
-    test_send_receive(Port, 100),
+    test_send_receive(Port, 100, SpawnControllingProcess),
 
     %% TODO bug closing listening socket
     % gen_tcp:close(ListenSocket),
 
     ok.
 
-accept(Pid, ListenSocket) ->
+accept(Pid, ListenSocket, SpawnControllingProcess) ->
     case gen_tcp:accept(ListenSocket) of
         {ok, Socket} ->
-            spawn(fun() -> accept(Pid, ListenSocket) end),
-            echo(Pid, Socket);
+            spawn(fun() -> accept(Pid, ListenSocket, SpawnControllingProcess) end),
+            case SpawnControllingProcess of
+                false ->
+                    echo(Pid, Socket);
+                true ->
+                    NewPid = spawn(fun() -> echo(Pid, Socket) end),
+                    ok = gen_tcp:controlling_process(Socket, NewPid)
+            end;
         {error, closed} ->
             ok
     end.
@@ -69,10 +79,18 @@ echo(Pid, Socket) ->
             echo(Pid, Socket)
     end.
 
-test_send_receive(Port, N) ->
+test_send_receive(Port, N, SpawnControllingProcess) ->
     {ok, Socket} = gen_tcp:connect(localhost, Port, [{active, true}]),
 
-    loop(Socket, N),
+    sleep(100),
+
+    case SpawnControllingProcess of
+        false ->
+            loop(Socket, N);
+        true ->
+            Pid = spawn(fun() -> sleep(100), loop(Socket, N) end),
+            gen_tcp:controlling_process(Socket, Pid)
+    end,
 
     gen_tcp:close(Socket),
     receive
@@ -92,3 +110,6 @@ loop(Socket, I) ->
             loop(Socket, I - 1)
     end,
     ok.
+
+sleep(Ms) ->
+    receive after Ms -> ok end.

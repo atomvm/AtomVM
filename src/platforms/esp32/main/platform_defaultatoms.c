@@ -66,6 +66,7 @@ static const char *const close_atom = "\x5" "close";
 static const char *const get_port_atom = "\x8" "get_port";
 static const char *const sockname_atom = "\x8" "sockname";
 static const char *const peername_atom = "\x8" "peername";
+static const char *const not_owner_atom = "\x9" "not_owner";
 
 static const char *const sta_atom = "\x3" "sta";
 static const char *const ssid_atom = "\x4" "ssid";
@@ -175,6 +176,7 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, get_port_atom) == GET_PORT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, sockname_atom) == SOCKNAME_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, peername_atom) == PEERNAME_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, not_owner_atom) == NOT_OWNER_ATOM_INDEX;
 
     ok &= globalcontext_insert_atom(glb, sta_atom) == STA_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, ssid_atom) == SSID_ATOM_INDEX;

@@ -1,7 +1,7 @@
 %
 % This file is part of AtomVM.
 %
-% Copyright 2019-2020 Fred Dushin <fred@dushin.net>
+% Copyright 2019-2022 Fred Dushin <fred@dushin.net>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -25,16 +25,52 @@
 -include("etest.hrl").
 
 test() ->
-    ok = test_send_receive_active(),
+    ok = test_send_receive_active(false),
+    ok = test_send_receive_active(true),
     ok.
 
-test_send_receive_active() ->
+test_send_receive_active(SpawnControllingProcess) ->
     {ok, Socket} = gen_udp:open(0, [{active, true}]),
     {ok, Port} = inet:port(Socket),
+
+    Self = self(),
+    F = fun() ->
+        case SpawnControllingProcess of true -> Self ! ready; _ -> ok end,
+        NumReceived = count_received(),
+        case SpawnControllingProcess of
+            true ->
+                case SpawnControllingProcess of true -> Self ! {done, NumReceived}; _ -> ok end;
+            false ->
+                ok
+        end,
+        NumReceived
+    end,
+
+    case SpawnControllingProcess of
+        true ->
+            Pid = spawn(F),
+            gen_udp:controlling_process(Socket, Pid),
+            receive
+                ready -> ok
+            end;
+        false ->
+            ok
+        end,
+
     NumToSend = 10,
     Sender = erlang:spawn(?MODULE, start_sender, [Socket, Port, make_messages(NumToSend)]),
-    NumReceived = count_received(),
+
+    NumReceived = case SpawnControllingProcess of
+        true ->
+            receive
+                {done, Received} ->
+                    Received
+            end;
+        false ->
+            F()
+        end,
     Sender ! stop,
+
     ?ASSERT_TRUE((0 < NumReceived) and (NumReceived =< NumToSend)),
     ok = gen_udp:close(Socket),
     ok.
@@ -62,7 +98,7 @@ count_received() ->
 
 count_received(I) ->
     receive
-        _Msg ->
+        {udp, _Pid, _Address, _Port, <<"foo">>} ->
             count_received(I + 1)
-    after 100 -> I
+    after 500 -> I
     end.
