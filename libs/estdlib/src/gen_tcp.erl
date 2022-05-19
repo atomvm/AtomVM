@@ -18,26 +18,6 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
-%
-% This file is part of AtomVM.
-%
-% Copyright 2019 Fred Dushin <fred@dushin.net>
-%
-% Licensed under the Apache License, Version 2.0 (the "License");
-% you may not use this file except in compliance with the License.
-% You may obtain a copy of the License at
-%
-%    http://www.apache.org/licenses/LICENSE-2.0
-%
-% Unless required by applicable law or agreed to in writing, software
-% distributed under the License is distributed on an "AS IS" BASIS,
-% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-% See the License for the specific language governing permissions and
-% limitations under the License.
-%
-% SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
-%
-
 %%-----------------------------------------------------------------------------
 %% @doc A partial implementation of the Erlang/OTP gen_tcp interface.
 %%
@@ -60,7 +40,7 @@
 %%-----------------------------------------------------------------------------
 -module(gen_tcp).
 
--export([connect/3, send/2, recv/2, recv/3, close/1, listen/2, accept/1, accept/2]).
+-export([connect/3, send/2, recv/2, recv/3, close/1, listen/2, accept/1, accept/2, controlling_process/2]).
 
 -define(DEFAULT_PARAMS, [{active, true}, {buffer, 128}, binary, {timeout, infinity}]).
 
@@ -232,6 +212,23 @@ accept(ListenSocket, Timeout) ->
 -spec close(inet:socket()) -> ok.
 close(Socket) ->
     inet:close(Socket).
+
+%%-----------------------------------------------------------------------------
+%% @param   Socket the socket to which to assign the pid
+%% @param   Pid Pid to which to send messages
+%% @returns ok | {error, Reason}.
+%% @doc     Assign a controlling process to the socket.  The controlling
+%% process will receive messages from the socket.
+%%
+%% This function will return `{error, not_owner}' if the calling process
+%% is not the current controlling proces.
+%%
+%% By default, the controlling process is the process associated with
+%% the creation of the Socket.
+%% @end
+%%-----------------------------------------------------------------------------
+controlling_process(Socket, Pid) ->
+    call(Socket, {controlling_process, Pid}).
 
 %% internal operations
 

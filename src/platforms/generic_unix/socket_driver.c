@@ -62,6 +62,21 @@ typedef struct SocketDriverData
     EventListener *active_listener;
 } SocketDriverData;
 
+// TODO define in defaultatoms
+const char *const send_a = "\x4" "send";
+const char *const sendto_a = "\x6" "sendto";
+const char *const init_a = "\x4" "init";
+const char *const bind_a = "\x4" "bind";
+const char *const recvfrom_a = "\x8" "recvfrom";
+const char *const recv_a = "\x4" "recv";
+const char *const close_a = "\x5" "close";
+const char *const get_port_a = "\x8" "get_port";
+const char *const accept_a = "\x6" "accept";
+const char *const sockname_a = "\x8" "sockname";
+const char *const peername_a = "\x8" "peername";
+const char *const controlling_process_a = "\x13" "controlling_process";
+const char *const not_owner_a = "\x9" "not_owner";
+
 static void active_recv_callback(EventListener *listener);
 static void passive_recv_callback(EventListener *listener);
 static void active_recvfrom_callback(EventListener *listener);
@@ -438,6 +453,33 @@ void socket_driver_do_close(Context *ctx)
         TRACE("socket_driver: closed socket\n");
     }
     scheduler_terminate(ctx);
+}
+
+static term socket_driver_controlling_process(Context *ctx, term pid, term new_pid_term)
+{
+    GlobalContext *glb = ctx->global;
+    struct SocketDriverData *socket_data = ctx->platform_data;
+
+    if (UNLIKELY(!term_is_pid(new_pid_term))) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            AVM_ABORT();
+        }
+        term error = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(error, 0, ERROR_ATOM);
+        term_put_tuple_element(error, 1, BADARG_ATOM);
+        return error;
+    } else if (UNLIKELY(pid != socket_data->controlling_process)) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            AVM_ABORT();
+        }
+        term error = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(error, 0, ERROR_ATOM);
+        term_put_tuple_element(error, 1, context_make_atom(ctx, not_owner_a));
+        return error;
+    } else {
+        socket_data->controlling_process = new_pid_term;
+        return OK_ATOM;
+    }
 }
 
 //
@@ -928,19 +970,6 @@ void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
     linkedlist_append(&platform->listeners, &listener->listeners_list_head);
 }
 
-// TODO define in defaultatoms
-const char *const send_a = "\x4" "send";
-const char *const sendto_a = "\x6" "sendto";
-const char *const init_a = "\x4" "init";
-const char *const bind_a = "\x4" "bind";
-const char *const recvfrom_a = "\x8" "recvfrom";
-const char *const recv_a = "\x4" "recv";
-const char *const close_a = "\x5" "close";
-const char *const get_port_a = "\x8" "get_port";
-const char *const accept_a = "\x6" "accept";
-const char *const sockname_a = "\x8" "sockname";
-const char *const peername_a = "\x8" "peername";
-
 static void socket_consume_mailbox(Context *ctx)
 {
     TRACE("START socket_consume_mailbox\n");
@@ -958,6 +987,7 @@ static void socket_consume_mailbox(Context *ctx)
 
     term cmd_name = term_get_tuple_element(cmd, 0);
     if (cmd_name == context_make_atom(ctx, init_a)) {
+        TRACE("init\n");
         term params = term_get_tuple_element(cmd, 1);
         term reply = socket_driver_do_init(ctx, params);
         port_send_reply(ctx, pid, ref, reply);
@@ -967,42 +997,57 @@ static void socket_consume_mailbox(Context *ctx)
             // context_destroy(ctx);
         }
     } else if (cmd_name == context_make_atom(ctx, sendto_a)) {
+        TRACE("sendto\n");
         term dest_address = term_get_tuple_element(cmd, 1);
         term dest_port = term_get_tuple_element(cmd, 2);
         term buffer = term_get_tuple_element(cmd, 3);
         term reply = socket_driver_do_sendto(ctx, dest_address, dest_port, buffer);
         port_send_reply(ctx, pid, ref, reply);
     } else if (cmd_name == context_make_atom(ctx, send_a)) {
+        TRACE("send\n");
         term buffer = term_get_tuple_element(cmd, 1);
         term reply = socket_driver_do_send(ctx, buffer);
         port_send_reply(ctx, pid, ref, reply);
     } else if (cmd_name == context_make_atom(ctx, recvfrom_a)) {
+        TRACE("recvfrom\n");
         term length = term_get_tuple_element(cmd, 1);
         term timeout = term_get_tuple_element(cmd, 2);
         socket_driver_do_recvfrom(ctx, pid, ref, length, timeout);
     } else if (cmd_name == context_make_atom(ctx, recv_a)) {
+        TRACE("recv\n");
         term length = term_get_tuple_element(cmd, 1);
         term timeout = term_get_tuple_element(cmd, 2);
         socket_driver_do_recv(ctx, pid, ref, length, timeout);
     } else if (cmd_name == context_make_atom(ctx, accept_a)) {
+        TRACE("accept\n");
         term timeout = term_get_tuple_element(cmd, 1);
         socket_driver_do_accept(ctx, pid, ref, timeout);
     } else if (cmd_name == context_make_atom(ctx, close_a)) {
+        TRACE("close\n");
         socket_driver_do_close(ctx);
         port_send_reply(ctx, pid, ref, OK_ATOM);
         // TODO handle shutdown
         // socket_driver_delete_data(ctx->platform_data);
         // context_destroy(ctx);
     } else if (cmd_name == context_make_atom(ctx, sockname_a)) {
+        TRACE("sockname\n");
         term reply = socket_driver_sockname(ctx);
         port_send_reply(ctx, pid, ref, reply);
     } else if (cmd_name == context_make_atom(ctx, peername_a)) {
+        TRACE("peername\n");
         term reply = socket_driver_peername(ctx);
         port_send_reply(ctx, pid, ref, reply);
     } else if (cmd_name == context_make_atom(ctx, get_port_a)) {
+        TRACE("get_port\n");
         term reply = socket_driver_get_port(ctx);
         port_send_reply(ctx, pid, ref, reply);
+    } else if (cmd_name == context_make_atom(ctx, controlling_process_a)) {
+        TRACE("controlling_process\n");
+        term new_pid = term_get_tuple_element(cmd, 1);
+        term reply = socket_driver_controlling_process(ctx, pid, new_pid);
+        port_send_reply(ctx, pid, ref, reply);
     } else {
+        TRACE("unknown cmd\n");
         port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
     }
 

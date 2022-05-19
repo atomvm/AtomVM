@@ -1282,6 +1282,41 @@ static void do_peername(Context *ctx, term msg)
     send_message(pid, result_tuple, glb);
 }
 
+static void do_controlling_process(Context *ctx, term msg)
+{
+    GlobalContext *glb = ctx->global;
+    struct SocketData *socket_data = ctx->platform_data;
+
+    term pid = term_get_tuple_element(msg, 0);
+    term ref = term_get_tuple_element(msg, 1);
+    term cmd = term_get_tuple_element(msg, 2);
+
+    term new_pid_term = term_get_tuple_element(cmd, 1);
+    term return_msg;
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        AVM_ABORT();
+    }
+
+    if (UNLIKELY(!term_is_pid(new_pid_term))) {
+        return_msg = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(return_msg, 0, ERROR_ATOM);
+        term_put_tuple_element(return_msg, 1, BADARG_ATOM);
+    } else if (UNLIKELY(pid != socket_data->controlling_process_pid)) {
+        return_msg = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(return_msg, 0, ERROR_ATOM);
+        term_put_tuple_element(return_msg, 1, NOT_OWNER_ATOM);
+    } else {
+        socket_data->controlling_process_pid = new_pid_term;
+        return_msg = OK_ATOM;
+    }
+
+    term result_tuple = term_alloc_tuple(2, ctx);
+    term_put_tuple_element(result_tuple, 0, ref);
+    term_put_tuple_element(result_tuple, 1, return_msg);
+    send_message(pid, result_tuple, glb);
+}
+
 static void socket_consume_mailbox(Context *ctx)
 {
     while (!list_is_empty(&ctx->mailbox)) {
@@ -1347,6 +1382,11 @@ static void socket_consume_mailbox(Context *ctx)
             case PEERNAME_ATOM:
                 TRACE("peername\n");
                 do_peername(ctx, msg);
+                break;
+
+            case CONTROLLING_PROCESS_ATOM:
+                TRACE("controlling_process\n");
+                do_controlling_process(ctx, msg);
                 break;
 
             default:
