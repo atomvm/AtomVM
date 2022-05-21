@@ -309,6 +309,7 @@ You can obtain system information about the AtomVM virtual machine via the `erla
 * `port_count` The number of ports running in the system.
 * `atom_count` The number of atoms allocated in the system.
 * `word_size` The word size (in bytes) on the current platform (typically 4 or 8).
+* `atomvm_version` The version of AtomVM currently running (as a binary).
 
 For example,
 
