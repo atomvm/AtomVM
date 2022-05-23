@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changed the return value from `erlang:system_info(esp32_chip_info)` from a tuple to a map, with
 additional information.
 
+### Fixed
+
+- Fixed a bug in gen_tcp that prevents an accepting socket from inheriting settings on the listening socket.
+
 ## [0.5.1] - Unreleased
 ### Fixed
 - Fix `gen_statem`: Cancel outstanding timers during state transitions in
