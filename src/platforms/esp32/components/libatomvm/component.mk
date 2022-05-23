@@ -27,7 +27,7 @@ CPPFLAGS := -Og -ggdb -ffunction-sections -fdata-sections -fstrict-volatile-bitf
 
 INCLUDE_FIXUP_DIR := $(IDF_PATH)/components/lwip/include/lwip/posix
 
-COMPONENT_ADD_INCLUDEDIRS := ../../../../libAtomVM
+COMPONENT_ADD_INCLUDEDIRS := ../../../../libAtomVM $(COMPONENT_PATH)/../../build/libatomvm
 
 COMPONENT_ADD_LDFLAGS := $(LIBRARY)
 

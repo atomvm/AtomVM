@@ -49,3 +49,6 @@ component_ports.h: $(COMPONENT_PATH)/component_ports.h.in $(if $(wildcard $(COMP
 default_component_ports:
 	@echo "# GENERATED FILE -- EDIT TO ADD OR REMOVE COMPONENT DRIVERS" > $(COMPONENT_PATH)/component_ports.txt
 	for i in $$(echo $(DEFAULT_COMPONENT_PORTS)); do echo "$${i}_driver" >> $(COMPONENT_PATH)/component_ports.txt; done
+
+## Add the libatomvm build component to the include path for generated headers (e.g., version.h)
+COMPONENT_INCLUDES += $(COMPONENT_PATH)/../build/libatomvm
