@@ -91,6 +91,7 @@ static const char *const io_reply_atom = "\x8" "io_reply";
 static const char *const put_chars_atom = "\x9" "put_chars";
 
 static const char *const lowercase_exit_atom = "\x4" "exit";
+static const char *const atomvm_version_atom = "\xE" "atomvm_version";
 
 void defaultatoms_init(GlobalContext *glb)
 {
@@ -167,6 +168,7 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, put_chars_atom) == PUT_CHARS_ATOM_INDEX;
 
     ok &= globalcontext_insert_atom(glb, lowercase_exit_atom) == LOWERCASE_EXIT_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, atomvm_version_atom) == ATOMVM_VERSION_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();

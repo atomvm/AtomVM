@@ -2299,6 +2299,9 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
         }
         return term_from_literal_binary((const uint8_t *) buf, len, ctx);
     }
+    if (key == ATOMVM_VERSION_ATOM) {
+        return term_from_literal_binary((const uint8_t *) ATOMVM_VERSION, strlen(ATOMVM_VERSION), ctx);
+    }
     if (key == REFC_BINARY_INFO_ATOM) {
         term ret = refc_binary_create_binary_info(ctx);
         if (term_is_invalid_term(ret)) {
