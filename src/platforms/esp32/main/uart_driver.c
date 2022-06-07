@@ -24,14 +24,6 @@
 
 #include <driver/uart.h>
 
-#if ESP_IDF_VERSION_MAJOR > 3
-#if CONFIG_IDF_TARGET_ESP32
-    #include "esp32/rom/uart.h"
-#elif CONFIG_IDF_TARGET_ESP32S2
-    #include "esp32s2/rom/uart.h"
-#endif
-#endif
-
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -68,30 +60,6 @@ struct UARTData
     uint8_t uart_num;
 };
 
-static void IRAM_ATTR uart_isr_handler(void *arg)
-{
-    uint16_t rxfifo_len;
-    volatile uint16_t interrupt_status;
-
-    interrupt_status = UART0.int_st.val;
-    UNUSED(interrupt_status);
-
-    //TODO: REG_GET_FIELD(UART_STATUS_REG(0), UART_RXFIFO_CNT);
-    rxfifo_len = UART0.status.rxfifo_cnt;
-
-    struct UARTData *uart_data = arg;
-    while (rxfifo_len) {
-        uint8_t c;
-        c = UART0.fifo.rw_byte;
-        xQueueSendFromISR(uart_data->rxqueue, &c, NULL);
-        rxfifo_len--;
-    }
-
-    uart_clear_intr_status(uart_data->uart_num, UART_RXFIFO_FULL_INT_CLR | UART_RXFIFO_TOUT_INT_CLR);
-
-    xQueueSendFromISR(event_queue, &arg, NULL);
-}
-
 static void send_message(term pid, term message, GlobalContext *global)
 {
     int local_process_id = term_to_local_process_id(pid);
@@ -105,48 +73,54 @@ void uart_interrupt_callback(EventListener *listener)
 {
     struct UARTData *uart_data = listener->data;
 
-    if (uart_data->reader_process_pid != term_invalid_term()) {
-        unsigned int count = uxQueueMessagesWaiting(uart_data->rxqueue);
+    uart_event_t event;
+    if (xQueueReceive(uart_data->rxqueue, (void *) &event, (portTickType) portMAX_DELAY)) {
+        switch (event.type) {
+            case UART_DATA:
+                if (uart_data->reader_process_pid != term_invalid_term()) {
+                    int ref_size = (sizeof(uint64_t) / sizeof(term)) + 1;
+                    int bin_size = term_binary_data_size_in_terms(event.size) + BINARY_HEADER_SIZE + ref_size;
+                    if (UNLIKELY(memory_ensure_free(uart_data->ctx, bin_size + ref_size + 3 + 3) != MEMORY_GC_OK)) {
+                        abort();
+                    }
 
-        if (count == 0) {
-            return;
+                    term bin = term_create_uninitialized_binary(event.size, uart_data->ctx);
+                    uint8_t *bin_buf = (uint8_t *) term_binary_data(bin);
+                    uart_read_bytes(uart_data->uart_num, bin_buf, event.size, portMAX_DELAY);
+
+                    Context *ctx = uart_data->ctx;
+
+                    term ok_tuple = term_alloc_tuple(2, ctx);
+                    term_put_tuple_element(ok_tuple, 0, OK_ATOM);
+                    term_put_tuple_element(ok_tuple, 1, bin);
+
+                    term ref = term_from_ref_ticks(uart_data->reader_ref_ticks, ctx);
+
+                    term result_tuple = term_alloc_tuple(2, ctx);
+                    term_put_tuple_element(result_tuple, 0, ref);
+                    term_put_tuple_element(result_tuple, 1, ok_tuple);
+
+                    send_message(uart_data->reader_process_pid, result_tuple, ctx->global);
+
+                    uart_data->reader_process_pid = term_invalid_term();
+                    uart_data->reader_ref_ticks = 0;
+                }
+                break;
+            case UART_FIFO_OVF:
+                break;
+            case UART_BUFFER_FULL:
+                break;
+            case UART_BREAK:
+                break;
+            case UART_PARITY_ERR:
+                break;
+            case UART_FRAME_ERR:
+                break;
+            case UART_PATTERN_DET:
+                break;
+            default:
+                break;
         }
-
-        int ref_size = (sizeof(uint64_t) / sizeof(term)) + 1;
-        int bin_size = term_binary_data_size_in_terms(count) + BINARY_HEADER_SIZE + ref_size;
-        if (UNLIKELY(memory_ensure_free(uart_data->ctx, bin_size + ref_size + 3 + 3) != MEMORY_GC_OK)) {
-            abort();
-        }
-
-        term bin = term_create_uninitialized_binary(count, uart_data->ctx);
-        uint8_t *bin_buf = (uint8_t *) term_binary_data(bin);
-        for (unsigned int i = 0; i < count; i++) {
-            uint8_t c;
-            if (xQueueReceive(uart_data->rxqueue, &c, 1) == pdTRUE) {
-                bin_buf[i] = c;
-            } else {
-                // it shouldn't happen
-                // TODO: log bug?
-                return;
-            }
-        }
-
-        Context *ctx = uart_data->ctx;
-
-        term ok_tuple = term_alloc_tuple(2, ctx);
-        term_put_tuple_element(ok_tuple, 0, OK_ATOM);
-        term_put_tuple_element(ok_tuple, 1, bin);
-
-        term ref = term_from_ref_ticks(uart_data->reader_ref_ticks, ctx);
-
-        term result_tuple = term_alloc_tuple(2, ctx);
-        term_put_tuple_element(result_tuple, 0, ref);
-        term_put_tuple_element(result_tuple, 1, ok_tuple);
-
-        send_message(uart_data->reader_process_pid, result_tuple, ctx->global);
-
-        uart_data->reader_process_pid = term_invalid_term();
-        uart_data->reader_ref_ticks = 0;
     }
 }
 
@@ -185,6 +159,13 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
     term rx_pin = get_uart_pin_opt(opts, RX_PIN_ATOM);
     term rts_pin = get_uart_pin_opt(opts, RTS_PIN_ATOM);
     term cts_pin = get_uart_pin_opt(opts, CTS_PIN_ATOM);
+
+    term event_queue_len_term = interop_proplist_get_value_default(opts, EVENT_QUEUE_LEN_ATOM, term_from_int(16));
+    if (!term_is_integer(event_queue_len_term)) {
+        fprintf(stderr, "abort() at %s:%i.\n", __FILE__, __LINE__);
+        abort();
+    }
+    int event_queue_len = term_to_int(event_queue_len_term);
 
     int ok;
     char *uart_name = interop_term_to_string(uart_name_term, &ok);
@@ -274,7 +255,6 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
     uart_param_config(uart_num, &uart_config);
 
     uart_set_pin(uart_num, tx_pin, rx_pin, rts_pin, cts_pin);
-    uart_driver_install(uart_num, UART_BUF_SIZE, 0, 0, NULL, 0);
 
     GlobalContext *glb = ctx->global;
     struct ESP32PlatformData *platform = glb->platform_data;
@@ -284,11 +264,9 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         abort();
     }
-    uart_data->listener.sender = uart_data;
     uart_data->listener.data = uart_data;
     uart_data->listener.handler = uart_interrupt_callback;
     list_append(&platform->listeners, &uart_data->listener.listeners_list_head);
-    uart_data->rxqueue = xQueueCreate(UART_BUF_SIZE, sizeof(uint8_t));
     uart_data->reader_process_pid = term_invalid_term();
     uart_data->reader_ref_ticks = 0;
     uart_data->ctx = ctx;
@@ -296,12 +274,15 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
     ctx->native_handler = uart_driver_consume_mailbox;
     ctx->platform_data = uart_data;
 
-    uart_isr_free(uart_num);
-
-    uart_isr_handle_t isr_handle;
-    uart_isr_register(uart_num, uart_isr_handler, uart_data, ESP_INTR_FLAG_IRAM, &isr_handle);
-
-    uart_enable_rx_intr(uart_num);
+    if (uart_driver_install(uart_num, UART_BUF_SIZE, 0, event_queue_len, &uart_data->rxqueue, 0) != ESP_OK) {
+        fprintf(stderr, "abort() at %s:%i.\n", __FILE__, __LINE__);
+        abort();
+    }
+    uart_data->listener.sender = uart_data->rxqueue;
+    if (xQueueAddToSet(uart_data->rxqueue, event_set) != pdPASS) {
+        fprintf(stderr, "abort() at %s:%i.\n", __FILE__, __LINE__);
+        abort();
+    }
 
     return ctx;
 }
@@ -335,7 +316,8 @@ static void uart_driver_do_read(Context *ctx, term msg)
         return;
     }
 
-    unsigned int count = uxQueueMessagesWaiting(uart_data->rxqueue);
+    size_t count;
+    uart_get_buffered_data_len(uart_data->uart_num, &count);
 
     if (count > 0) {
         int bin_size = term_binary_data_size_in_terms(count) + BINARY_HEADER_SIZE;
@@ -345,16 +327,7 @@ static void uart_driver_do_read(Context *ctx, term msg)
 
         term bin = term_create_uninitialized_binary(count, uart_data->ctx);
         uint8_t *bin_buf = (uint8_t *) term_binary_data(bin);
-        for (unsigned int i = 0; i < count; i++) {
-            uint8_t c;
-            if (LIKELY(xQueueReceive(uart_data->rxqueue, &c, 1) == pdTRUE)) {
-                bin_buf[i] = c;
-            } else {
-                // it shouldn't happen
-                // TODO: log bug?
-                return;
-            }
-        }
+        uart_read_bytes(uart_data->uart_num, bin_buf, count, portMAX_DELAY);
 
         term ok_tuple = term_alloc_tuple(2, ctx);
         term_put_tuple_element(ok_tuple, 0, OK_ATOM);

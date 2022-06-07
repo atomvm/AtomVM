@@ -18,5 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   used instead of match starting offset, causing some bytes being skipped.
 - Fix another potential bug when doing pattern matching using code compiled with OTP 21.
 - [ESP32] [UART]: Allow using different pins for rx, tx, cts and rts.
+- [ESP32] [UART]: Replace custom UART handling with esp-idf UART event queues, hence other UARTs
+  than UART0 are supported, with better performances and stability.
 
 ## [0.5.0] - 2022-03-22
