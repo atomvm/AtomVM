@@ -1,7 +1,7 @@
 /*
  * This file is part of AtomVM.
  *
- * Copyright 2020 Davide Bettio <davide@uninstall.it>
+ * Copyright 2020-2022 Davide Bettio <davide@uninstall.it>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -155,6 +155,20 @@ void uart_driver_init(GlobalContext *global)
     // no-op
 }
 
+static int get_uart_pin_opt(term opts, term pin_name)
+{
+    term value = interop_proplist_get_value_default(opts, pin_name, DEFAULT_ATOM);
+    if (value == DEFAULT_ATOM) {
+        return UART_PIN_NO_CHANGE;
+    } else if (!term_is_integer(value)) {
+        // TODO: let's return -2;
+        fprintf(stderr, "abort() at %s:%i.\n", __FILE__, __LINE__);
+        abort();
+    } else {
+        return term_to_int(value);
+    }
+}
+
 Context *uart_driver_create_port(GlobalContext *global, term opts)
 {
     Context *ctx = context_new(global);
@@ -166,6 +180,11 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
     term stop_bits_term = interop_proplist_get_value_default(opts, STOP_BITS_ATOM, term_from_int(1));
     term flow_control_term = interop_proplist_get_value_default(opts, FLOW_CONTROL_ATOM, NONE_ATOM);
     term parity_term = interop_proplist_get_value_default(opts, PARITY_ATOM, NONE_ATOM);
+
+    term tx_pin = get_uart_pin_opt(opts, TX_PIN_ATOM);
+    term rx_pin = get_uart_pin_opt(opts, RX_PIN_ATOM);
+    term rts_pin = get_uart_pin_opt(opts, RTS_PIN_ATOM);
+    term cts_pin = get_uart_pin_opt(opts, CTS_PIN_ATOM);
 
     int ok;
     char *uart_name = interop_term_to_string(uart_name_term, &ok);
@@ -254,6 +273,7 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
     };
     uart_param_config(uart_num, &uart_config);
 
+    uart_set_pin(uart_num, tx_pin, rx_pin, rts_pin, cts_pin);
     uart_driver_install(uart_num, UART_BUF_SIZE, 0, 0, NULL, 0);
 
     GlobalContext *glb = ctx->global;
