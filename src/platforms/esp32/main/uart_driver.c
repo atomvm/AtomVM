@@ -78,9 +78,8 @@ void uart_interrupt_callback(EventListener *listener)
         switch (event.type) {
             case UART_DATA:
                 if (uart_data->reader_process_pid != term_invalid_term()) {
-                    int ref_size = (sizeof(uint64_t) / sizeof(term)) + 1;
-                    int bin_size = term_binary_data_size_in_terms(event.size) + BINARY_HEADER_SIZE + ref_size;
-                    if (UNLIKELY(memory_ensure_free(uart_data->ctx, bin_size + ref_size + 3 + 3) != MEMORY_GC_OK)) {
+                    int bin_size = term_binary_data_size_in_terms(event.size) + BINARY_HEADER_SIZE;
+                    if (UNLIKELY(memory_ensure_free(uart_data->ctx, bin_size + REF_SIZE + TUPLE_SIZE(2) * 2) != MEMORY_GC_OK)) {
                         abort();
                     }
 
@@ -296,8 +295,7 @@ static void uart_driver_do_read(Context *ctx, term msg)
     term ref = term_get_tuple_element(msg, 1);
 
     if (uart_data->reader_process_pid != term_invalid_term()) {
-        // 3 (error_tuple) + 3 (result_tuple)
-        if (UNLIKELY(memory_ensure_free(ctx, 3 + 3) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2) != MEMORY_GC_OK)) {
             abort();
         }
 
@@ -321,7 +319,7 @@ static void uart_driver_do_read(Context *ctx, term msg)
 
     if (count > 0) {
         int bin_size = term_binary_data_size_in_terms(count) + BINARY_HEADER_SIZE;
-        if (UNLIKELY(memory_ensure_free(uart_data->ctx, bin_size + 3 + 3) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free(uart_data->ctx, bin_size + TUPLE_SIZE(2) * 2) != MEMORY_GC_OK)) {
             abort();
         }
 
