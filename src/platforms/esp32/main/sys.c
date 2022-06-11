@@ -27,11 +27,13 @@
 #include "globalcontext.h"
 #include "scheduler.h"
 
+// #define ENABLE_TRACE
 #include "trace.h"
 
 #include "esp_event.h"
 #include "esp_event_loop.h"
 #include "esp_heap_caps.h"
+#include "esp_idf_version.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include <limits.h>
@@ -45,7 +47,20 @@ static const char *const esp_largest_free_block_atom = "\x18" "esp32_largest_fre
 static const char *const esp_get_minimum_free_size_atom = "\x17" "esp32_minimum_free_size";
 static const char *const esp_chip_info_atom = "\xF" "esp32_chip_info";
 static const char *const esp_idf_version_atom = "\xF" "esp_idf_version";
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 3, 2)
 static const char *const esp32_atom = "\x5" "esp32";
+static const char *const esp32_s2_atom = "\x8" "esp32_s2";
+static const char *const esp32_s3_atom = "\x8" "esp32_s3";
+static const char *const esp32_c3_atom = "\x8" "esp32_c3";
+#endif
+static const char *const emb_flash_atom = "\x9" "emb_flash";
+static const char *const bgn_atom = "\x3" "bgn";
+static const char *const ble_atom = "\x3" "ble";
+static const char *const bt_atom = "\x2" "bt";
+static const char *const cores_atom = "\x5" "cores";
+static const char *const features_atom = "\x8" "features";
+static const char *const model_atom = "\x5" "model";
+static const char *const revision_atom = "\x8" "revision";
 
 xQueueHandle event_queue = NULL;
 QueueSetHandle_t event_set = NULL;
@@ -191,6 +206,46 @@ Context *sys_create_port(GlobalContext *glb, const char *port_name, term opts)
     return new_ctx;
 }
 
+static term get_model(Context *ctx, esp_chip_model_t model)
+{
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 3, 2)
+    switch (model) {
+        case CHIP_ESP32:
+            return context_make_atom(ctx, esp32_atom);
+        case CHIP_ESP32S2:
+            return context_make_atom(ctx, esp32_s2_atom);
+        case CHIP_ESP32S3:
+            return context_make_atom(ctx, esp32_s3_atom);
+        case CHIP_ESP32C3:
+            return context_make_atom(ctx, esp32_c3_atom);
+        default:
+            return UNDEFINED_ATOM;
+    }
+#else
+    return UNDEFINED_ATOM;
+#endif
+}
+
+static term get_features(Context *ctx, uint32_t features)
+{
+    term ret = term_nil();
+
+    if (features & CHIP_FEATURE_EMB_FLASH) {
+        ret = term_list_prepend(context_make_atom(ctx, emb_flash_atom), ret, ctx);
+    }
+    if (features & CHIP_FEATURE_WIFI_BGN) {
+        ret = term_list_prepend(context_make_atom(ctx, bgn_atom), ret, ctx);
+    }
+    if (features & CHIP_FEATURE_BLE) {
+        ret = term_list_prepend(context_make_atom(ctx, ble_atom), ret, ctx);
+    }
+    if (features & CHIP_FEATURE_BT) {
+        ret = term_list_prepend(context_make_atom(ctx, bt_atom), ret, ctx);
+    }
+
+    return ret;
+}
+
 term sys_get_info(Context *ctx, term key)
 {
     if (key == context_make_atom(ctx, esp_free_heap_size_atom)) {
@@ -205,14 +260,14 @@ term sys_get_info(Context *ctx, term key)
     if (key == context_make_atom(ctx, esp_chip_info_atom)) {
         esp_chip_info_t info;
         esp_chip_info(&info);
-        if (memory_ensure_free(ctx, 5) != MEMORY_GC_OK) {
+        if (memory_ensure_free(ctx, term_map_size_in_terms(4) + 4 * 2) != MEMORY_GC_OK) {
             return OUT_OF_MEMORY_ATOM;
         }
-        term ret = term_alloc_tuple(4, ctx);
-        term_put_tuple_element(ret, 0, context_make_atom(ctx, esp32_atom));
-        term_put_tuple_element(ret, 1, term_from_int32(info.features));
-        term_put_tuple_element(ret, 2, term_from_int32(info.cores));
-        term_put_tuple_element(ret, 3, term_from_int32(info.revision));
+        term ret = term_alloc_map(ctx, 4);
+        term_set_map_assoc(ret, 0, context_make_atom(ctx, cores_atom), term_from_int32(info.cores));
+        term_set_map_assoc(ret, 1, context_make_atom(ctx, features_atom), get_features(ctx, info.features));
+        term_set_map_assoc(ret, 2, context_make_atom(ctx, model_atom), get_model(ctx, info.model));
+        term_set_map_assoc(ret, 3, context_make_atom(ctx, revision_atom), term_from_int32(info.revision));
         return ret;
     }
     if (key == context_make_atom(ctx, esp_idf_version_atom)) {
