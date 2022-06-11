@@ -1,7 +1,7 @@
 /*
  * This file is part of AtomVM.
  *
- * Copyright 2017 Davide Bettio <davide@uninstall.it>
+ * Copyright 2017-2022 Davide Bettio <davide@uninstall.it>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,10 +48,13 @@ static const char *const esp_idf_version_atom = "\xF" "esp_idf_version";
 static const char *const esp32_atom = "\x5" "esp32";
 
 xQueueHandle event_queue = NULL;
+QueueSetHandle_t event_set = NULL;
 
 void esp32_sys_queue_init()
 {
+    event_set = xQueueCreateSet(EVENT_QUEUE_LEN * 4);
     event_queue = xQueueCreate(EVENT_QUEUE_LEN, sizeof(void *));
+    xQueueAddToSet(event_queue, event_set);
 }
 
 static inline void sys_clock_gettime(struct timespec *t)
@@ -66,11 +69,19 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
     struct ESP32PlatformData *platform = glb->platform_data;
 
     void *sender = NULL;
-    while (xQueueReceive(event_queue, &sender, wait_ticks) == pdTRUE) {
-
+    QueueSetMemberHandle_t event_source;
+    while ((event_source = xQueueSelectFromSet(event_set, wait_ticks))) {
         if (UNLIKELY(list_is_empty(&platform->listeners))) {
             fprintf(stderr, "warning: no listeners.\n");
             return;
+        }
+
+        if (event_source == event_queue) {
+            if (xQueueReceive(event_queue, &sender, wait_ticks) == pdFALSE) {
+                continue;
+            }
+        } else {
+            sender = event_source;
         }
 
         struct ListHead *listener_lh;
