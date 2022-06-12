@@ -1,7 +1,7 @@
 /*
  * This file is part of AtomVM.
  *
- * Copyright 2019 Davide Bettio <davide@uninstall.it>
+ * Copyright 2019-2022 Davide Bettio <davide@uninstall.it>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,6 +47,7 @@ struct ESP32PlatformData
     struct ListHead sockets_list_head;
 };
 
+extern QueueSetHandle_t event_set;
 extern xQueueHandle event_queue;
 void esp32_sys_queue_init();
 

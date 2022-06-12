@@ -125,6 +125,12 @@ static const char *const software_atom = "\x8" "software";
 static const char *const parity_atom = "\x6" "parity";
 static const char *const even_atom = "\x4" "even";
 static const char *const odd_atom = "\x3" "odd";
+static const char *const rx_pin_atom = "\x6" "rx_pin";
+static const char *const tx_pin_atom = "\x6" "tx_pin";
+static const char *const rts_pin_atom = "\x7" "rts_pin";
+static const char *const cts_pin_atom = "\x7" "cts_pin";
+static const char *const default_atom = "\x7" "default";
+static const char *const event_queue_len_atom = "\xF" "event_queue_len";
 
 void platform_defaultatoms_init(GlobalContext *glb)
 {
@@ -235,6 +241,12 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, parity_atom) == PARITY_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, even_atom) == EVEN_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, odd_atom) == ODD_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, tx_pin_atom) == TX_PIN_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, rx_pin_atom) == RX_PIN_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, rts_pin_atom) == RTS_PIN_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, cts_pin_atom) == CTS_PIN_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, default_atom) == DEFAULT_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, event_queue_len_atom) == EVENT_QUEUE_LEN_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();
