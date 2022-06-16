@@ -153,6 +153,36 @@ int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string);
 int globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_string, int copy);
 
 /**
+ * @brief Compares an atom table index with an AtomString.
+ *
+ * @details Checks if the given atom table index and the given AtomString refers to the same atom.
+ * @param glb the global context.
+ * @param atom_index_a an atom table index.
+ * @param AtomString an atom string, which is the atom length followed by atom characters.
+ * @returns true if they both refer to the same atom, otherwise false.
+ */
+bool globalcontext_is_atom_index_equal_to_atom_string(GlobalContext *glb, int atom_index_a, AtomString atom_string_b);
+
+/**
+ * @brief Compares a term with an AtomString.
+ *
+ * @details Checks if the given term and the given AtomString refers to the same atom.
+ * @param glb the global context.
+ * @param atom_a any term of any type, when it is not an atom false is always returned.
+ * @param AtomString an atom string, which is the atom length followed by atom characters.
+ * @returns true if they both refer to the same atom, otherwise false.
+ */
+static inline bool globalcontext_is_term_equal_to_atom_string(GlobalContext *global, term atom_a, AtomString atom_string_b)
+{
+    if (!term_is_atom(atom_a)) {
+        return false;
+    }
+
+    int atom_index_a = term_to_atom_index(atom_a);
+    return globalcontext_is_atom_index_equal_to_atom_string(global, atom_index_a, atom_string_b);
+}
+
+/**
  * @brief   Returns the AtomString value of a term.
  *
  * @details This function fetches the AtomString value of the atom associated

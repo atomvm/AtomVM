@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ## [0.5.1] - Unreleased
+### Added
+- New function for atom comparison, useful when writing 3rd party components.
+
 ### Fixed
 - Fix `gen_statem`: Cancel outstanding timers during state transitions in
   order to prevent spurious timeout messages from being sent to `gen_statem`
