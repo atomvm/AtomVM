@@ -24,6 +24,24 @@
 #include "context.h"
 #include "term.h"
 
+/**
+ * An idiomatic macro for marking an AtomStringIntPair table entry as a
+ * interop_atom_term_select_int default.
+ */
+#define SELECT_INT_DEFAULT(i_val) \
+    {                             \
+        .as_val = NULL, i_val     \
+    }
+
+/**
+ * A structure to represent atom strings and int pairs. Such as {"\x8" "universe", 42}.
+ */
+typedef struct
+{
+    AtomString as_val;
+    int i_val;
+} AtomStringIntPair;
+
 char *interop_term_to_string(term t, int *ok);
 char *interop_binary_to_string(term binary);
 char *interop_list_to_string(term list, int *ok);
@@ -34,5 +52,19 @@ term interop_map_get_value_default(Context *ctx, term map, term key, term defaul
 
 int interop_iolist_size(term t, int *ok);
 int interop_write_iolist(term t, char *p);
+
+/**
+ * @brief Finds on a table the first matching atom string.
+ *
+ * @details Allows to quickly translate atoms to any integer constant. This function is useful for
+ * creating switch statements for atom values.
+ * A linear search is performed, so table entries should be sorted by frequency.
+ * @param glb the global context.
+ * @param table an array AtomStringIntPair structs, teminated with a default entry marked with
+ * SELECT_INT_DEFAULT macro.
+ * @param atom the atom used for comparison.
+ * @returns the found int value which corresponds to the given atom.
+ */
+int interop_atom_term_select_int(GlobalContext *global, const AtomStringIntPair *table, term atom);
 
 #endif
