@@ -26,6 +26,23 @@
 
 #include <time.h>
 
+#define REGISTER_PORT_DRIVER(NAME, INIT_CB, CREATE_CB)                \
+    struct PortDriverDef NAME##_port_driver_def = {                   \
+        .port_driver_name = #NAME,                                    \
+        .port_driver_init_cb = INIT_CB,                               \
+        .port_driver_create_port_cb = CREATE_CB                       \
+    };                                                                \
+                                                                      \
+    struct PortDriverDefListItem NAME##_port_driver_def_list_item = { \
+        .def = &NAME##_port_driver_def                                \
+    };                                                                \
+                                                                      \
+    __attribute__((constructor)) void NAME##register_port_driver()    \
+    {                                                                 \
+        NAME##_port_driver_def_list_item.next = port_driver_list;     \
+        port_driver_list = &NAME##_port_driver_def_list_item;         \
+    }
+
 #define EVENT_DESCRIPTORS_COUNT 16
 
 typedef struct EventListener EventListener;
@@ -47,6 +64,24 @@ struct ESP32PlatformData
     struct ListHead sockets_list_head;
 };
 
+typedef void (*port_driver_init_t)(GlobalContext *global);
+typedef Context *(*port_driver_create_port_t)(GlobalContext *global, term opts);
+
+struct PortDriverDef
+{
+    const char *port_driver_name;
+    const port_driver_init_t port_driver_init_cb;
+    const port_driver_create_port_t port_driver_create_port_cb;
+};
+
+struct PortDriverDefListItem
+{
+    struct PortDriverDefListItem *next;
+    const struct PortDriverDef *const def;
+};
+
+extern struct PortDriverDefListItem *port_driver_list;
+
 extern QueueSetHandle_t event_set;
 extern xQueueHandle event_queue;
 void esp32_sys_queue_init();
@@ -54,5 +89,7 @@ void esp32_sys_queue_init();
 void sys_event_listener_init(EventListener *listener, void *sender, event_handler_t handler, void *data);
 
 void socket_init(Context *ctx, term opts);
+
+void port_driver_init_all(GlobalContext *global);
 
 #endif

@@ -79,6 +79,7 @@ void app_main()
     GlobalContext *glb = globalcontext_new();
 
     component_ports_init(glb);
+    port_driver_init_all(glb);
     component_nifs_init(glb);
 
     if (!avmpack_is_valid(main_avm, size)) {
