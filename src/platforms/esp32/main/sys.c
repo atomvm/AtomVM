@@ -50,6 +50,7 @@ static const char *const esp_idf_version_atom = "\xF" "esp_idf_version";
 static const char *const esp32_atom = "\x5" "esp32";
 
 struct PortDriverDefListItem *port_driver_list;
+struct NifCollectionDefListItem *nif_collection_list;
 
 xQueueHandle event_queue = NULL;
 QueueSetHandle_t event_set = NULL;
@@ -254,6 +255,27 @@ static Context *port_driver_create_port(const char *port_name, GlobalContext *gl
     for (struct PortDriverDefListItem *item = port_driver_list; item != NULL; item = item->next) {
         if (strcmp(port_name, item->def->port_driver_name) == 0) {
             return item->def->port_driver_create_port_cb(global, opts);
+        }
+    }
+
+    return NULL;
+}
+
+void nif_collection_init_all(GlobalContext *global)
+{
+    for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
+        if (item->def->nif_collection_init_cb) {
+            item->def->nif_collection_init_cb(global);
+        }
+    }
+}
+
+const struct Nif *nif_collection_resolve_nif(const char *name)
+{
+    for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
+        const struct Nif *res = item->def->nif_collection_resove_nif_cb(name);
+        if (res) {
+            return res;
         }
     }
 

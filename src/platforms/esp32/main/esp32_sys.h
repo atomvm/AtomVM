@@ -43,6 +43,22 @@
         port_driver_list = &NAME##_port_driver_def_list_item;         \
     }
 
+#define REGISTER_NIF_COLLECTION(NAME, INIT_CB, RESOLVE_NIF_CB)              \
+    struct NifCollectionDef NAME##_nif_collection_def = {                   \
+        .nif_collection_init_cb = INIT_CB,                                  \
+        .nif_collection_resove_nif_cb = RESOLVE_NIF_CB                      \
+    };                                                                      \
+                                                                            \
+    struct NifCollectionDefListItem NAME##_nif_collection_def_list_item = { \
+        .def = &NAME##_nif_collection_def                                   \
+    };                                                                      \
+                                                                            \
+    __attribute__((constructor)) void NAME##register_port_driver()          \
+    {                                                                       \
+        NAME##_nif_collection_def_list_item.next = nif_collection_list;     \
+        nif_collection_list = &NAME##_nif_collection_def_list_item;         \
+    }
+
 #define EVENT_DESCRIPTORS_COUNT 16
 
 typedef struct EventListener EventListener;
@@ -80,7 +96,23 @@ struct PortDriverDefListItem
     const struct PortDriverDef *const def;
 };
 
+typedef void (*nif_collection_init_t)(GlobalContext *global);
+typedef const struct Nif *(*nif_collection_resolve_nif_t)(const char *name);
+
+struct NifCollectionDef
+{
+    const nif_collection_init_t nif_collection_init_cb;
+    const nif_collection_resolve_nif_t nif_collection_resove_nif_cb;
+};
+
+struct NifCollectionDefListItem
+{
+    struct NifCollectionDefListItem *next;
+    const struct NifCollectionDef *const def;
+};
+
 extern struct PortDriverDefListItem *port_driver_list;
+extern struct NifCollectionDefListItem *nif_collection_list;
 
 extern QueueSetHandle_t event_set;
 extern xQueueHandle event_queue;
@@ -91,5 +123,7 @@ void sys_event_listener_init(EventListener *listener, void *sender, event_handle
 void socket_init(Context *ctx, term opts);
 
 void port_driver_init_all(GlobalContext *global);
+void nif_collection_init_all(GlobalContext *global);
+const struct Nif *nif_collection_resolve_nif(const char *name);
 
 #endif

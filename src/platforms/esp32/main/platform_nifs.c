@@ -23,6 +23,7 @@
 #include "atom.h"
 #include "component_nifs.h"
 #include "defaultatoms.h"
+#include "esp32_sys.h"
 #include "interop.h"
 #include "memory.h"
 #include "nifs.h"
@@ -383,6 +384,9 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     }
     const struct Nif *nif = NULL;
     if ((nif = component_nifs_get_nif(nifname)) != NULL) {
+        return nif;
+    }
+    if ((nif = nif_collection_resolve_nif(nifname)) != NULL) {
         return nif;
     }
     return NULL;

@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New no-op `ATOM_STR(...)` macro for avoiding issues with clang-format.
 - [ESP32] `REGISTER_PORT_DRIVER` for registering additional port drivers without editing any
   source file. This allows adding new components by just copying them to the components directory.
+- [ESP32] `REGISTER_NIF_COLLECTION` for registering additional NIFs sets without editing any
+  source file. This allows adding new NIFs by just copying them to the components directory.
 
 ### Fixed
 - Fix `gen_statem`: Cancel outstanding timers during state transitions in
