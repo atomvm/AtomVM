@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New function for atom comparison, useful when writing 3rd party components.
 - New function for translating an atom term to an int value, according to a given translation table.
   This function can be used for translating an atom term to an enum const before doing a switch.
+- New no-op `ATOM_STR(...)` macro for avoiding issues with clang-format.
 
 ### Fixed
 - Fix `gen_statem`: Cancel outstanding timers during state transitions in
