@@ -414,6 +414,7 @@ compile_erlang(bs_restore2_start_offset)
 compile_erlang(bs_restore2_start_offset_no_fp)
 compile_erlang(test_refc_binaries)
 compile_erlang(test_sub_binaries)
+compile_erlang(bs_append_extra_words)
 
 compile_erlang(spawn_opt_monitor_normal)
 compile_erlang(spawn_opt_monitor_throw)
@@ -814,6 +815,7 @@ add_custom_target(erlang_test_modules DEPENDS
     bs_context_to_binary_with_offset.beam
     bs_restore2_start_offset.beam
     bs_restore2_start_offset_no_fp.beam
+    bs_append_extra_words.beam
 
     spawn_opt_monitor_normal.beam
     spawn_opt_monitor_throw.beam
