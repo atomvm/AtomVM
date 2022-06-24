@@ -20,11 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for `controlling_process/2` in `gen_udp` and `gen_tcp` modules.
 - Added ability to get the atomvm version via `erlang:system_info`.
 
-### Changed
+### Breaking Changes
+
+> IMPORTANT: These changes are incompatible with previous releases of AtomVM.
 
 - Changed the configuration model of the SPI driver, in order to allow for multiple "follower"
-  devices to be attached to the same SPI Bus. IMPORTANT: These changes are source-incompatible with
-  previous releases of AtomVM.
+  devices to be attached to the same SPI Bus.
+- Changed the return value from `erlang:system_info(esp32_chip_info)` from a tuple to a map, with
+additional information.
 
 ## [0.5.1] - Unreleased
 ### Fixed
