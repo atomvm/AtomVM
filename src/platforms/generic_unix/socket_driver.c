@@ -66,6 +66,7 @@ static void active_recv_callback(EventListener *listener);
 static void passive_recv_callback(EventListener *listener);
 static void active_recvfrom_callback(EventListener *listener);
 static void passive_recvfrom_callback(EventListener *listener);
+static void socket_consume_mailbox(Context *ctx);
 
 uint32_t socket_tuple_to_addr(term addr_tuple)
 {
@@ -135,7 +136,7 @@ static term do_bind(Context *ctx, term address, term port)
     if (bind(socket_data->sockfd, (struct sockaddr *) &serveraddr, address_len) == -1) {
         return port_create_sys_error_tuple(ctx, BIND_ATOM, errno);
     } else {
-        TRACE("socket_driver: bound to %ld\n", p);
+        TRACE("socket_driver|do_bind: bound to %ld\n", p);
         if (getsockname(socket_data->sockfd, (struct sockaddr *) &serveraddr, &address_len) == -1) {
             return port_create_sys_error_tuple(ctx, GETSOCKNAME_ATOM, errno);
         } else {
@@ -203,7 +204,7 @@ static term do_connect(SocketDriverData *socket_data, Context *ctx, term address
     }
     char port_str[32];
     snprintf(port_str, 32, "%u", (unsigned short) term_to_int(port));
-    TRACE("socket_driver: resolving to %s:%s over socket fd %i\n", addr_str, port_str, term_to_int32(socket_data->sockfd));
+    TRACE("socket_driver:do_connect: resolving to %s:%s over socket fd %i\n", addr_str, port_str, term_to_int32(socket_data->sockfd));
 
     struct addrinfo *server_info;
     int status = getaddrinfo(addr_str, port_str, &hints, &server_info);
@@ -232,7 +233,7 @@ static term do_connect(SocketDriverData *socket_data, Context *ctx, term address
     if (status == -1) {
         return port_create_sys_error_tuple(ctx, CONNECT_ATOM, errno);
     } else {
-        TRACE("socket_driver: connected.\n");
+        TRACE("socket_driver|do_connect: connected.\n");
         return OK_ATOM;
     }
 }
@@ -317,32 +318,43 @@ static term init_server_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
         if (ret != OK_ATOM) {
             close(sockfd);
         } else {
-            TRACE("socket_driver: listening on port %u\n", (unsigned) term_to_int(port));
+            TRACE("socket_driver|init_server_tcp_socket: listening on port %u\n", (unsigned) term_to_int(port));
         }
     }
     return ret;
 }
 
-static term init_accepting_socket(Context *ctx, SocketDriverData *socket_data, term fd, term active)
+static Context *create_accepting_socket(GlobalContext *glb, SocketDriverData *socket_data, int fd, term controlling_process)
 {
-    GlobalContext *glb = ctx->global;
     struct GenericUnixPlatformData *platform = glb->platform_data;
 
-    socket_data->sockfd = term_to_int(fd);
+    Context *new_ctx = context_new(glb);
+    new_ctx->native_handler = socket_consume_mailbox;
+    scheduler_make_waiting(glb, new_ctx);
 
-    if (active == TRUE_ATOM) {
+    SocketDriverData *new_socket_data = socket_driver_create_data();
+    new_socket_data->sockfd = fd;
+    new_socket_data->proto = socket_data->proto;
+    new_socket_data->active = socket_data->active;
+    new_socket_data->binary = socket_data->binary;
+    new_socket_data->buffer = socket_data->buffer;
+    new_socket_data->controlling_process = controlling_process;
+
+    new_ctx->platform_data = new_socket_data;
+
+    if (new_socket_data->active == TRUE_ATOM) {
         EventListener *listener = malloc(sizeof(EventListener));
         if (IS_NULL_PTR(listener)) {
             fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
             abort();
         }
-        listener->fd = socket_data->sockfd;
-        listener->data = ctx;
+        listener->fd = new_socket_data->sockfd;
+        listener->data = new_ctx;
         listener->handler = active_recv_callback;
         linkedlist_append(&platform->listeners, &listener->listeners_list_head);
-        socket_data->active_listener = listener;
+        new_socket_data->active_listener = listener;
     }
-    return OK_ATOM;
+    return new_ctx;
 }
 
 term socket_driver_do_init(Context *ctx, term params)
@@ -400,17 +412,7 @@ term socket_driver_do_init(Context *ctx, term params)
             if (listen == TRUE_ATOM) {
                 return init_server_tcp_socket(ctx, socket_data, params);
             } else {
-                term accept = interop_proplist_get_value_default(params, ACCEPT_ATOM, FALSE_ATOM);
-                if (accept == TRUE_ATOM) {
-                    term fd = interop_proplist_get_value(params, FD_ATOM);
-                    if (!term_is_integer(fd)) {
-                        return port_create_error_tuple(ctx, BADARG_ATOM);
-                    } else {
-                        return init_accepting_socket(ctx, socket_data, fd, active);
-                    }
-                } else {
-                    return port_create_error_tuple(ctx, BADARG_ATOM);
-                }
+                return port_create_error_tuple(ctx, BADARG_ATOM);
             }
         }
     } else {
@@ -433,9 +435,9 @@ void socket_driver_do_close(Context *ctx)
         }
     }
     if (close(socket_data->sockfd) == -1) {
-        TRACE("socket: close failed");
+        TRACE("socket_driver|socket_driver_do_close: close failed");
     } else {
-        TRACE("socket_driver: closed socket\n");
+        TRACE("socket_driver|socket_driver_do_close: closed socket\n");
     }
     scheduler_terminate(ctx);
 }
@@ -539,7 +541,7 @@ term socket_driver_do_send(Context *ctx, term buffer)
     if (sent_data == -1) {
         return port_create_sys_error_tuple(ctx, SEND_ATOM, errno);
     } else {
-        TRACE("socket_driver: sent data with len: %li\n", len);
+        TRACE("socket_driver_do_send: sent data with len %li to fd %i\n", len, socket_data->sockfd);
         term sent_atom = term_from_int(sent_data);
         return port_create_ok_tuple(ctx, sent_atom);
     }
@@ -579,7 +581,7 @@ term socket_driver_do_sendto(Context *ctx, term dest_address, term dest_port, te
     if (sent_data == -1) {
         return port_create_sys_error_tuple(ctx, SENDTO_ATOM, errno);
     } else {
-        TRACE("socket_driver: sent data with len: %li, to: %i, port: %i\n", len, ntohl(addr.sin_addr.s_addr), ntohs(addr.sin_port));
+        TRACE("socket_driver_do_sendto: sent data with len: %li, to: %i, port: %i\n", len, ntohl(addr.sin_addr.s_addr), ntohs(addr.sin_port));
         term sent_atom = term_from_int32(sent_data);
         return port_create_ok_tuple(ctx, sent_atom);
     }
@@ -594,6 +596,7 @@ typedef struct RecvFromData
     Context *ctx;
     term pid;
     term length;
+    term controlling_process;
     uint64_t ref_ticks;
 } RecvFromData;
 
@@ -623,7 +626,7 @@ static void active_recv_callback(EventListener *listener)
         port_send_message(ctx, pid, msg);
         socket_driver_do_close(ctx);
     } else {
-        TRACE("socket_driver: received data of len: %li\n", len);
+        TRACE("socket_driver|active_recv_callback: received data of len %li from fd %i\n", len, socket_data->sockfd);
         int ensure_packet_avail;
         int binary;
         if (socket_data->binary == TRUE_ATOM) {
@@ -674,7 +677,7 @@ static void passive_recv_callback(EventListener *listener)
         port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, RECV_ATOM, errno));
         socket_driver_do_close(ctx);
     } else {
-        TRACE("socket_driver: passive received data of len: %li\n", len);
+        TRACE("socket_driver|passive_recv_callback: passive received data of len: %li\n", len);
         int ensure_packet_avail;
         if (socket_data->binary == TRUE_ATOM) {
             ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
@@ -879,11 +882,16 @@ static void accept_callback(EventListener *listener)
         term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
         port_send_reply(ctx, pid, ref, port_create_sys_error_tuple(ctx, ACCEPT_ATOM, errno));
     } else {
-        // {Ref, {ok, Fd::int()}}
-        port_ensure_available(ctx, 10);
+        TRACE("socket_driver|accept_callback: accepted connection.  fd: %i\n", fd);
+
         term pid = recvfrom_data->pid;
+        Context *new_ctx = create_accepting_socket(glb, socket_data, fd, pid);
+
+        // {Ref, Socket}
+        term socket_pid = term_from_local_process_id(new_ctx->process_id);
+        port_ensure_available(ctx, 10);
         term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
-        term reply = port_create_ok_tuple(ctx, term_from_int(fd));
+        term reply = port_create_ok_tuple(ctx, socket_pid);
         port_send_reply(ctx, pid, ref, reply);
     }
     //
@@ -1000,6 +1008,9 @@ static void socket_consume_mailbox(Context *ctx)
         term reply = socket_driver_peername(ctx);
         port_send_reply(ctx, pid, ref, reply);
     } else if (cmd_name == context_make_atom(ctx, get_port_a)) {
+        // TODO This function is not supported in the gen_tcp or gen_udp APIs.
+        // It should be removed.  (Use inet:peername and inet:sockname instead)
+        TRACE("get_port\n");
         term reply = socket_driver_get_port(ctx);
         port_send_reply(ctx, pid, ref, reply);
     } else {
