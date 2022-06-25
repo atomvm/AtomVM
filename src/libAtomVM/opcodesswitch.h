@@ -3807,10 +3807,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         RAISE_ERROR(UNSUPPORTED_ATOM);
                     }
                     avm_int_t size_val = term_to_int(size);
-                    if ((size_val * unit) % 8 != 0) {
-                        TRACE("bs_skip_bits2: Unsupported unit (must be evenly divisible by 8). unit=%li\n", unit);
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
 
                     TRACE("bs_skip_bits2/5, fail=%i src=0x%lx size=0x%lx unit=0x%lx flags=0x%lx\n", fail, src, size, unit, flags);
 
