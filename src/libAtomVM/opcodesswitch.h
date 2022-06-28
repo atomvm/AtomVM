@@ -3306,11 +3306,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     TRACE("bs_append/7, fail=%i size=%li unit=%li src=0x%lx dreg=%c%i\n", fail, size_val, unit, src, T_DEST_REG(dreg_type, dreg));
 
                     size_t src_size = term_binary_size(src);
+                    // TODO: further investigate extra_val
                     if (UNLIKELY(memory_ensure_free(ctx, src_size + term_binary_data_size_in_terms(size_val / 8) + extra_val + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     DECODE_COMPACT_TERM(src, code, i, src_off, src_off)
-                    term t = term_create_empty_binary(src_size + size_val / 8 + extra_val, ctx);
+                    term t = term_create_empty_binary(src_size + size_val / 8, ctx);
                     memcpy((void *) term_binary_data(t), (void *) term_binary_data(src), src_size);
 
                     ctx->bs = t;
