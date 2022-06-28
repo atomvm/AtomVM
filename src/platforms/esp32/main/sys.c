@@ -42,6 +42,8 @@
 
 #define EVENT_QUEUE_LEN 16
 
+static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts);
+
 static const char *const esp_free_heap_size_atom = "\x14" "esp32_free_heap_size";
 static const char *const esp_largest_free_block_atom = "\x18" "esp32_largest_free_block";
 static const char *const esp_get_minimum_free_size_atom = "\x17" "esp32_minimum_free_size";
@@ -61,6 +63,9 @@ static const char *const cores_atom = "\x5" "cores";
 static const char *const features_atom = "\x8" "features";
 static const char *const model_atom = "\x5" "model";
 static const char *const revision_atom = "\x8" "revision";
+
+struct PortDriverDefListItem *port_driver_list;
+struct NifCollectionDefListItem *nif_collection_list;
 
 xQueueHandle event_queue = NULL;
 QueueSetHandle_t event_set = NULL;
@@ -201,7 +206,10 @@ Context *sys_create_port(GlobalContext *glb, const char *port_name, term opts)
 {
     Context *new_ctx = component_ports_create_port(port_name, glb, opts);
     if (IS_NULL_PTR(new_ctx)) {
-        return sys_create_port_fallback(port_name, glb, opts);
+        new_ctx = port_driver_create_port(port_name, glb, opts);
+    }
+    if (IS_NULL_PTR(new_ctx)) {
+        new_ctx = sys_create_port_fallback(port_name, glb, opts);
     }
     return new_ctx;
 }
@@ -286,4 +294,45 @@ void sys_sleep(GlobalContext *glb)
     UNUSED(glb);
 
     vTaskDelay(1);
+}
+
+void port_driver_init_all(GlobalContext *global)
+{
+    for (struct PortDriverDefListItem *item = port_driver_list; item != NULL; item = item->next) {
+        if (item->def->port_driver_init_cb) {
+            item->def->port_driver_init_cb(global);
+        }
+    }
+}
+
+static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts)
+{
+    for (struct PortDriverDefListItem *item = port_driver_list; item != NULL; item = item->next) {
+        if (strcmp(port_name, item->def->port_driver_name) == 0) {
+            return item->def->port_driver_create_port_cb(global, opts);
+        }
+    }
+
+    return NULL;
+}
+
+void nif_collection_init_all(GlobalContext *global)
+{
+    for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
+        if (item->def->nif_collection_init_cb) {
+            item->def->nif_collection_init_cb(global);
+        }
+    }
+}
+
+const struct Nif *nif_collection_resolve_nif(const char *name)
+{
+    for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
+        const struct Nif *res = item->def->nif_collection_resove_nif_cb(name);
+        if (res) {
+            return res;
+        }
+    }
+
+    return NULL;
 }

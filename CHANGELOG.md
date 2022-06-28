@@ -30,6 +30,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 additional information.
 
 ## [0.5.1] - Unreleased
+### Added
+- New function for atom comparison, useful when writing 3rd party components.
+- New function for translating an atom term to an int value, according to a given translation table.
+  This function can be used for translating an atom term to an enum const before doing a switch.
+- New no-op `ATOM_STR(...)` macro for avoiding issues with clang-format.
+- [ESP32] `REGISTER_PORT_DRIVER` for registering additional port drivers without editing any
+  source file. This allows adding new components by just copying them to the components directory.
+- [ESP32] `REGISTER_NIF_COLLECTION` for registering additional NIFs sets without editing any
+  source file. This allows adding new NIFs by just copying them to the components directory.
+
 ### Fixed
 - Fix `gen_statem`: Cancel outstanding timers during state transitions in
   order to prevent spurious timeout messages from being sent to `gen_statem`
@@ -43,5 +53,7 @@ additional information.
 - [ESP32] [UART]: Allow using different pins for rx, tx, cts and rts.
 - [ESP32] [UART]: Replace custom UART handling with esp-idf UART event queues, hence other UARTs
   than UART0 are supported, with better performances and stability.
+- Fix binaries concat (`bs_append` instruction) that was adding some extra zeroes at the end of
+  built binaries.
 
 ## [0.5.0] - 2022-03-22

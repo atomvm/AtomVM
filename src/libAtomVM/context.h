@@ -267,6 +267,21 @@ static inline term context_make_atom(Context *ctx, AtomString string)
 }
 
 /**
+ * @brief Compares a term with an AtomString.
+ *
+ * @details Checks if the given term and the given AtomString refers to the same atom.
+ * This function is just a shortcut that uses the corresponding funtion from globalcontext.
+ * @param ctx the current Context.
+ * @param atom_a any term of any type, when it is not an atom false is always returned.
+ * @param AtomString an atom string, which is the atom length followed by atom characters.
+ * @returns true if they both refer to the same atom, otherwise false.
+ */
+static inline bool context_is_term_equal_to_atom_string(Context *ctx, term atom_a, AtomString atom_string_b)
+{
+    return globalcontext_is_term_equal_to_atom_string(ctx->global, atom_a, atom_string_b);
+}
+
+/**
  * @brief Returns number of messages in the process's mailbox
  *
  * @param ctx a valid context.

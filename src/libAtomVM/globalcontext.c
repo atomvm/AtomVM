@@ -188,6 +188,12 @@ int globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_str
     return (int) atom_index;
 }
 
+bool globalcontext_is_atom_index_equal_to_atom_string(GlobalContext *glb, int atom_index_a, AtomString atom_string_b)
+{
+    AtomString atom_string_a = (AtomString) valueshashtable_get_value(glb->atoms_ids_table, atom_index_a, NULL);
+    return atom_are_equals(atom_string_a, atom_string_b);
+}
+
 AtomString globalcontext_atomstring_from_term(GlobalContext *glb, term t)
 {
     if (!term_is_atom(t)) {

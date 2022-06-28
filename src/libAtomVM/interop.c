@@ -245,3 +245,14 @@ term interop_map_get_value_default(Context *ctx, term map, term key, term defaul
         return term_get_map_value(map, pos);
     }
 }
+
+int interop_atom_term_select_int(GlobalContext *global, const AtomStringIntPair *table, term atom)
+{
+    int i;
+    for (i = 0; table[i].as_val != NULL; i++) {
+        if (globalcontext_is_term_equal_to_atom_string(global, atom, table[i].as_val)) {
+            return table[i].i_val;
+        }
+    }
+    return table[i].i_val;
+}
