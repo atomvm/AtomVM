@@ -27,6 +27,7 @@
 test() ->
     ok = test_echo_server(),
     ok = test_echo_server(),
+    ok = test_accept_parameters(),
     ok.
 
 test_echo_server() ->
@@ -77,7 +78,7 @@ test_send_receive(Port, N) ->
     gen_tcp:close(Socket),
     receive
         server_closed -> ok
-    after 1000 -> throw(timeout)
+    after 1000 -> throw({timeout, waiting, recv, server_closed})
     end.
 
 loop(_Socket, 0) ->
@@ -86,9 +87,59 @@ loop(Socket, I) ->
     Packet = list_to_binary(pid_to_list(self()) ++ ":" ++ integer_to_list(I)),
     ok = gen_tcp:send(Socket, Packet),
     receive
-        {tcp_closed, _Socket} ->
+        {tcp_closed, _OtherSocket} ->
             ok;
-        {tcp, _Socket, Packet} ->
+        {tcp, _OtherSocket, _OtherPacket} ->
             loop(Socket, I - 1)
+    end,
+    ok.
+
+sleep(Ms) ->
+    receive after Ms -> ok end.
+
+
+test_accept_parameters() ->
+    {ok, ListenSocket} = gen_tcp:listen(0, [{binary, false}, {buffer, 10}]),
+    {ok, {_Address, Port}} = inet:sockname(ListenSocket),
+
+    Self = self(),
+    spawn(fun() ->
+        Self ! ready,
+        accept(Self, ListenSocket)
+    end),
+    receive
+        ready ->
+            ok
+    end,
+
+    {ok, Socket} = gen_tcp:connect(localhost, Port, [{active, true}]),
+
+    sleep(100),
+
+    ok = test_accept_parameters_loop(Socket, 10),
+
+    gen_tcp:close(Socket),
+    receive
+        server_closed -> ok
+    after 1000 -> throw({timeout, waiting, recv, server_closed})
+    end,
+
+    ok.
+
+test_accept_parameters_loop(_Socket, 0) ->
+    ok;
+test_accept_parameters_loop(Socket, I) ->
+    Packet = list_to_binary(pid_to_list(self()) ++ ":" ++ integer_to_list(I)),
+    ok = gen_tcp:send(Socket, Packet),
+    receive
+        {tcp_closed, _OtherSocket} ->
+            ok;
+        {tcp, _OtherSocket, OtherPacket} ->
+            case is_binary(OtherPacket) of
+                true ->
+                    {error, expected_binary_packet};
+                false ->
+                    loop(Socket, I - 1)
+            end
     end,
     ok.
