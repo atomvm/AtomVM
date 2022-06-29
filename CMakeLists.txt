@@ -32,6 +32,8 @@ option(AVM_RELEASE "Build an AtomVM release" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 option(COVERAGE "Build for code coverage" OFF)
 
+set(AVM_PLATFORM "generic_unix")
+
 if((${CMAKE_SYSTEM_NAME} STREQUAL "Darwin") OR
    (${CMAKE_SYSTEM_NAME} STREQUAL "Linux") OR
    (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD"))

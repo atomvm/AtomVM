@@ -22,12 +22,14 @@ cmake_minimum_required (VERSION 3.13)
 project (libAtomVMPlatformGenericUnix)
 
 set(HEADER_FILES
+    otp_socket_platform.h
     generic_unix_sys.h
     mapped_file.h
     platform_defaultatoms.h
 )
 
 set(SOURCE_FILES
+    otp_socket_platform.c
     sys.c
     mapped_file.c
     platform_defaultatoms.c

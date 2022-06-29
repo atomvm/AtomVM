@@ -45,7 +45,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-// #define ENABLE_TRACE
+//#define ENABLE_TRACE
 #include "trace.h"
 
 #define BUFSIZE 128
@@ -191,7 +191,7 @@ static term init_udp_socket(Context *ctx, SocketDriverData *socket_data, term pa
             listener->fd = socket_data->sockfd;
             listener->data = ctx;
             listener->handler = active_recvfrom_callback;
-            linkedlist_append(&platform->listeners, &listener->listeners_list_head);
+            list_append(&platform->listeners, &listener->listeners_list_head);
             socket_data->active_listener = listener;
         }
     }
@@ -276,7 +276,7 @@ static term init_client_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
             listener->fd = socket_data->sockfd;
             listener->data = ctx;
             listener->handler = active_recv_callback;
-            linkedlist_append(&platform->listeners, &listener->listeners_list_head);
+            list_append(&platform->listeners, &listener->listeners_list_head);
             socket_data->active_listener = listener;
         }
     }
@@ -364,7 +364,7 @@ static Context *create_accepting_socket(GlobalContext *glb, SocketDriverData *so
         listener->fd = new_socket_data->sockfd;
         listener->data = new_ctx;
         listener->handler = active_recv_callback;
-        linkedlist_append(&platform->listeners, &listener->listeners_list_head);
+        list_append(&platform->listeners, &listener->listeners_list_head);
         new_socket_data->active_listener = listener;
     }
     return new_ctx;
@@ -443,8 +443,8 @@ void socket_driver_do_close(Context *ctx)
         // If this socket is a listening socket, it may already have been removed from the
         // listeners list during an accept.  Check here to make sure that the active listener
         // has not already been removed.
-        if (linkedlist_length(&socket_data->active_listener->listeners_list_head) != 0) {
-            linkedlist_remove(&platform->listeners, &socket_data->active_listener->listeners_list_head);
+        if (list_length(&socket_data->active_listener->listeners_list_head) != 0) {
+            list_remove(&socket_data->active_listener->listeners_list_head);
         }
     }
     if (close(socket_data->sockfd) == -1) {
@@ -764,7 +764,7 @@ static void passive_recv_callback(EventListener *listener)
     //
     // remove the EventListener from the global list and clean up
     //
-    linkedlist_remove(&platform->listeners, &listener->listeners_list_head);
+    list_remove(&listener->listeners_list_head);
     free(listener);
     free(recvfrom_data);
     free(buf);
@@ -867,7 +867,7 @@ static void passive_recvfrom_callback(EventListener *listener)
     //
     // remove the EventListener from the global list and clean up
     //
-    linkedlist_remove(&platform->listeners, &listener->listeners_list_head);
+    list_remove(&listener->listeners_list_head);
     free(listener);
     free(recvfrom_data);
     free(buf);
@@ -912,7 +912,7 @@ static void do_recv(Context *ctx, term pid, term ref, term length, term timeout,
     listener->fd = socket_data->sockfd;
     listener->handler = handler;
     listener->data = data;
-    linkedlist_append(&platform->listeners, &listener->listeners_list_head);
+    list_append(&platform->listeners, &listener->listeners_list_head);
 }
 
 void socket_driver_do_recvfrom(Context *ctx, term pid, term ref, term length, term timeout)
@@ -966,7 +966,7 @@ static void accept_callback(EventListener *listener)
     //
     // remove the EventListener from the global list and clean up
     //
-    linkedlist_remove(&platform->listeners, &listener->listeners_list_head);
+    list_remove(&listener->listeners_list_head);
     free(listener);
     free(recvfrom_data);
 }
@@ -1002,7 +1002,7 @@ void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
     listener->fd = socket_data->sockfd;
     listener->handler = accept_callback;
     listener->data = data;
-    linkedlist_append(&platform->listeners, &listener->listeners_list_head);
+    list_append(&platform->listeners, &listener->listeners_list_head);
 }
 
 static void socket_consume_mailbox(Context *ctx)

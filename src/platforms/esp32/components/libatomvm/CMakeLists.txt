@@ -20,6 +20,8 @@
 
 idf_component_register(INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../../../../libAtomVM")
 
+set(AVM_PLATFORM "esp32")
+
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../../libAtomVM" "libAtomVM")
 
 target_link_libraries(${COMPONENT_LIB}

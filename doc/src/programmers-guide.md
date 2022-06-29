@@ -1218,3 +1218,148 @@ Once a connection is established, you can use a combination of
     end.
 
 For more information about the `gen_tcp` client interface, consults the AtomVM API documentation.
+
+## Socket Programming
+
+AtomVM supports a subset of the OTP [`socket`](https://www.erlang.org/doc/man/socket.html) interface, giving users more fine-grained control in socket programming.
+
+The following types are relevant to this interface and are referenced in the remainder of this section:
+
+    -type socket_domain() :: inet.
+    -type socket_type() :: stream.
+    -type socket() :: term().
+    -type sockaddr() :: sockaddr_in().
+    -type sockaddr_in() :: #{
+        family := inet,
+        port := port_num(),
+        addr := addr()
+    }.
+    -type addr() :: any | loopback | address_v4().
+    -type address_v4() :: {octet(), octet(), octet(), octet()}.
+    -type octet() :: 0..255.
+    -type port_num() :: 0..65535.
+
+Create a socket using the `socket:open/3` function, providing a domain, type, and protocol.  Currently, AtomVM supports the `inet` domain, `stream` type, and `tcp` protocol.
+
+For example:
+
+    %% erlang
+    {ok, Socket} = socket:open(inet, stream, tcp),
+
+### Server-side TCP Socket Programming
+
+To program using sockets on the server side, you can bind an opened socket to an address and port number using the `socket:bind/2` function, supplying a map that specifies the address and port number.
+
+This map may contain the following entries:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `family` | `inet` | | The address family.  (Currently, only `inet` is supported) |
+|  `addr` | `addr()` | `any` | The address to which to bind.  The `any` value will bind the socket to all interfaces on the device.  The `loopback` value will bind the socket to the loopback interface on the device. |
+|  `port` | `port_num()` |  | The port to which to bind the socket.  If no port is specified, the operating system will choose an ephermeral port for the user. |
+
+For example:
+
+    %% erlang
+    PortNumber = 8080,
+    ok = socket:bind(Socket, #{family => inet, addr => any, port => PortNumber}),
+
+To listen for connections, use the `socket:listen/1` function:
+
+    %% erlang
+    ok = socket:listen(Socket),
+
+Once your socket is listening on an interface and port, you can wait to accept a connection from an incoming client using the `socket/accept/1` function.
+
+This function will block the current execution context (i.e., Erlang process) until a client establishes a TCP connection with the server:
+
+    %% erlang
+    {ok, ConnectedSocket} = socket:accept(Socket),
+
+> Note.  Many applications will spawn processes to listen for socket connections, so that the main execution context of your application is not blocked.
+
+#### Sending and Receiving Data
+
+Once you have a connected socket, you can send and receive data on that socket using the `socket:send/2` and `socket:recv/1` functions.  Like the  `socket/accept/1` function, these functions will block until data is sent to a connected peer (or until the data is written to operating system buffers) or received from a connected peer.
+
+For example,
+
+    %% erlang
+    case socket:recv(ConnectedSocket) of
+        {ok, Data} ->
+            {ok, _Rest} = socket:send(ConnectedSocket, Data);
+        {error, closed} ->
+            io:format("Client closed connection.~n");
+        Error ->
+            io:format("An error occurred waiting on a connected socket: ~p~n", [Error])
+    end.
+
+### Client-side TCP Socket Programming
+
+To program using sockets on the client side, you can connect an opened socket to an address and port number using the `socket:connect/2` function, supplying a map that specifies the address and port number.
+
+This map may contain the following entries:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `family` | `inet` | | The address family.  (Currently, only `inet` is supported) |
+|  `addr` | `addr()` | | The address to which to bind. The `loopback` value will bind the socket to the loopback interface on the device. |
+|  `port` | `port_num()` |  | The port to which to bind the socket. |
+
+    %% erlang
+    ok = socket:connect(Socket, #{family => inet, addr => loopback, port => 44404})
+
+#### Sending and Receiving Data
+
+Once you have a connected socket, you can send and receive data on that socket using the `socket:send/2` and `socket:recv/1` functions.
+
+For example:
+
+    %% erlang
+    case socket:send(ConnectedSocket, <<"ping">>) of
+        {ok, _Rest} ->
+            case socket:recv(ConnectedSocket) of
+                {ok, Data} ->
+                    loop(ConnectedSocket);
+                Error ->
+                    io:format("Error on recv: ~p~n", [Error])
+            end;
+        {error, closed} ->
+            io:format("Client closed connection.~n");
+        Error ->
+            io:format("An error occurred sending data through a connected socket: ~p~n", [Error])
+    end.
+
+### Getting Information about Connected Sockets
+
+You can ontain information about connected sockets using the `socket:sockname/1` and `socket:peername/1` functions.  Supply the connected socket as a paramater.  The address and port are returned in a map structure
+
+For example:
+
+    %% erlang
+    {ok, #{addr := LocalAddress, port := LocalPort}} = socket:sockname(ConnectedSocket),
+    {ok, #{addr := PeerAddress, port := PeerPort}} = socket:peername(ConnectedSocket),
+
+### Closing Sockets
+
+Use the `socket:close/1` function to close a connected socket:
+
+    %% erlang
+    ok = socket:close(ConnectedSocket),
+
+### Setting Socket Options
+
+You can set options on a socket using the `socket:setopt/3` function.  This function takes an opened socket, a key, and a value, and returns `ok` if setting the option succeeded.
+
+Currently, the following options are supported:
+
+| Option Key | Option Value | Description |
+|------------|--------------|-------------|
+| `{socket, reuseaddr}` | `boolean()` | Sets `SO_REUSEADDR` on the socket. |
+| `{socket, linger}` | `#{onoff => boolean(), linger => non_neg_integer()}` | Sets `SO_LINGER` on the socekt. |
+
+For example:
+
+    %% erlang
+    ok = socket:setopt(Socket, {socket, reuseaddr}, true),
+    ok = socket:setopt(Socket, {socket, linger}, #{onoff => true, linger => 0}),

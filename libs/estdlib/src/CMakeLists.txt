@@ -38,6 +38,7 @@ set(ERLANG_MODULES
     maps
     math
     proplists
+    socket
     string
     timer
     erlang

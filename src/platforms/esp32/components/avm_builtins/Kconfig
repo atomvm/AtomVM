@@ -56,4 +56,8 @@ config AVM_ENABLE_UART_PORT_DRIVER
     bool "Enable UART port driver"
     default y
 
+config AVM_ENABLE_OTP_SOCKET_PORT_DRIVER
+    bool "Enable OTP Socket port driver"
+    default y
+
 endmenu

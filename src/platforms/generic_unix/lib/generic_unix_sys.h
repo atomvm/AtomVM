@@ -21,6 +21,9 @@
 #ifndef _GENERIC_UNIX_SYS_H_
 #define _GENERIC_UNIX_SYS_H_
 
+#include <globalcontext.h>
+#include <list.h>
+#include <term.h>
 #include <time.h>
 
 typedef struct EventListener EventListener;
@@ -38,7 +41,7 @@ struct EventListener
 
 struct GenericUnixPlatformData
 {
-    struct ListHead *listeners;
+    struct ListHead listeners;
 };
 
 Context *socket_init(GlobalContext *global, term opts);

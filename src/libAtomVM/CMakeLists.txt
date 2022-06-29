@@ -88,6 +88,19 @@ set(SOURCE_FILES
     valueshashtable.c
 )
 
+# # otp_socket only supported on unix and ESP32
+if((${AVM_PLATFORM} STREQUAL "generic_unix") OR
+    (${AVM_PLATFORM} STREQUAL "esp32"))
+    set(SOURCE_FILES otp_socket.c ${SOURCE_FILES})
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+
+    if(${AVM_PLATFORM} STREQUAL "esp32")
+        include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../platforms/esp32/components/avm_sys/include)
+    else()
+        include_directories(${CMAKE_SOURCE_DIR}/src/platforms/generic_unix/lib)
+    endif()
+endif()
+
 add_library(libAtomVM ${SOURCE_FILES} ${HEADER_FILES})
 target_include_directories(libAtomVM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(libAtomVM PUBLIC c_std_11)
@@ -126,6 +139,22 @@ endif()
 
 if(AVM_CREATE_STACKTRACES)
     target_compile_definitions(libAtomVM PUBLIC AVM_CREATE_STACKTRACES)
+endif()
+
+## bsd_socket only supported on unix and ESP32
+if((${CMAKE_SYSTEM_NAME} STREQUAL "Darwin") OR
+    (${CMAKE_SYSTEM_NAME} STREQUAL "Linux") OR
+    (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD") OR
+    (${CMAKE_SYSTEM_NAME} STREQUAL "ESP_IDF") OR
+    (${CMAKE_SYSTEM_NAME} STREQUAL "Generic"))
+    set(SOURCE_FILES bsd_socket.c ${SOURCE_FILES})
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+
+    if((${CMAKE_SYSTEM_NAME} STREQUAL "ESP_IDF") OR (${CMAKE_SYSTEM_NAME} STREQUAL "Generic"))
+        include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../platforms/esp32/components/avm_sys/include)
+    else()
+        include_directories(${CMAKE_SOURCE_DIR}/src/platforms/generic_unix/lib)
+    endif()
 endif()
 
 # Automatically use zlib if present to load .beam files

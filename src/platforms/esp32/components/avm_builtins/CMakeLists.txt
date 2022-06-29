@@ -19,6 +19,7 @@
 #
 
 set(AVM_BUILTIN_COMPONENT_SRCS
+    "otp_socket_platform.c"
     "gpio_driver.c"
     "i2c_driver.c"
     "ledc_nif.c"

@@ -24,6 +24,7 @@
 #include "avmpack.h"
 #include "defaultatoms.h"
 #include "iff.h"
+#include "list.h"
 #include "mapped_file.h"
 #include "scheduler.h"
 #include "utils.h"
@@ -43,6 +44,7 @@
     typedef Context *(*create_port_t)(GlobalContext *global, term opts);
 #endif
 
+//#define ENABLE_TRACE
 #include "trace.h"
 
 static volatile uint32_t millis;
@@ -50,59 +52,47 @@ static bool has_signal_handler;
 
 static void alarm_handler(int sig);
 
-//#define USE_SELECT
-#ifdef USE_SELECT
-#include <socket.h>
-#else
-#endif
-
 void sys_consume_pending_events(GlobalContext *glb)
 {
     struct GenericUnixPlatformData *platform = glb->platform_data;
-    struct ListHead *listeners_list = platform->listeners;
+    struct ListHead *listeners_list = &platform->listeners;
 
-    if (!platform->listeners) {
+    if (list_is_empty(listeners_list)) {
         return;
     }
 
-    EventListener *listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
-
-    EventListener *listener = listeners;
-
     int fds_count = 0;
-
-    do {
+    struct ListHead *elt;
+    LIST_FOR_EACH(elt, listeners_list) {
+        EventListener *listener = GET_LIST_ENTRY(elt, EventListener, listeners_list_head);
         int listener_fd = listener->fd;
         if (listener_fd >= 0) {
+            TRACE("listener_fd: %i\n", listener_fd);
             fds_count++;
         }
-        listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-    } while (listeners != NULL && listener != listeners);
+    }
 
     if (fds_count == 0) {
         return;
     }
-
-    listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
-
-    listener = listeners;
+    TRACE("fds_count: %i\n", fds_count);
 
     struct pollfd *fds = malloc(fds_count * sizeof(struct pollfd));
+    EventListener **fd_listeners = malloc(fds_count * sizeof(EventListener *));
     int fd_index = 0;
 
-    do {
+    LIST_FOR_EACH(elt, listeners_list) {
+        EventListener *listener = GET_LIST_ENTRY(elt, EventListener, listeners_list_head);
         int listener_fd = listener->fd;
         if (listener_fd >= 0) {
             fds[fd_index].fd = listener_fd;
             fds[fd_index].events = POLLIN;
             fds[fd_index].revents = 0;
+            fd_listeners[fd_index] = listener;
 
             fd_index++;
         }
-        listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-    } while (listeners != NULL && listener != listeners);
-
-    listeners = GET_LIST_ENTRY(listeners_list, EventListener, listeners_list_head);
+    }
 
     if (poll(fds, fd_index, 0) > 0) {
         for (int i = 0; i < fd_index; i++) {
@@ -110,27 +100,13 @@ void sys_consume_pending_events(GlobalContext *glb)
                 continue;
             }
 
-            int current_fd = fds[i].fd;
-
-            EventListener *listener = listeners;
-
-            if (!listener) {
-                fprintf(stderr, "warning: no listeners.\n");
-                free(fds);
-                return;
-            }
-
-            do {
-                if (listener->fd == current_fd) {
-                    listener->handler(listener);
-                    break;
-                }
-                listener = GET_LIST_ENTRY(listener->listeners_list_head.next, EventListener, listeners_list_head);
-            } while (listeners != NULL && listener != listeners);
+            EventListener *listener = fd_listeners[i];
+            listener->handler(listener);
         }
     }
 
     free(fds);
+    free(fd_listeners);
 }
 
 void sys_time(struct timespec *t)
@@ -187,10 +163,14 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
     return new_module;
 }
 
+Context *otp_socket_create_port(GlobalContext *global, term opts);
+
 Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 {
     if (!strcmp(driver_name, "socket")) {
         return socket_init(glb, opts);
+    } else if (!strcmp(driver_name, "otp_socket")) {
+        return otp_socket_create_port(glb, opts);
     } else {
 #ifdef DYNLOAD_PORT_DRIVERS
         void *handle;
@@ -232,7 +212,7 @@ void sys_init_platform(GlobalContext *global)
     if (UNLIKELY(!platform)) {
         AVM_ABORT();
     }
-    platform->listeners = 0;
+    list_init(&platform->listeners);
     global->platform_data = platform;
 }
 

@@ -21,9 +21,11 @@
 #ifndef _ESP32_SYS_H_
 #define _ESP32_SYS_H_
 
-#include "freertos/FreeRTOS.h"
+#include <context.h>
+#include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
-
+#include <globalcontext.h>
+#include <list.h>
 #include <time.h>
 
 #define REGISTER_PORT_DRIVER(NAME, INIT_CB, CREATE_CB)                \

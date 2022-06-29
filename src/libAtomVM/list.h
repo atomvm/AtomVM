@@ -74,4 +74,14 @@ static inline struct ListHead *list_last(struct ListHead *head)
     return head->prev;
 }
 
+static inline unsigned list_length(struct ListHead *list)
+{
+    struct ListHead *elt;
+    unsigned count = 0;
+    LIST_FOR_EACH (elt, list) {
+        count++;
+    }
+    return count;
+}
+
 #endif
