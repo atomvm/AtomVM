@@ -53,7 +53,7 @@
         .def = &NAME##_nif_collection_def                                   \
     };                                                                      \
                                                                             \
-    __attribute__((constructor)) void NAME##register_port_driver()          \
+    __attribute__((constructor)) void NAME##register_nif_collection()       \
     {                                                                       \
         NAME##_nif_collection_def_list_item.next = nif_collection_list;     \
         nif_collection_list = &NAME##_nif_collection_def_list_item;         \
