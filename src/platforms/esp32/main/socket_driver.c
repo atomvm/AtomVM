@@ -19,6 +19,9 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#include <sdkconfig.h>
+#ifdef CONFIG_AVM_ENABLE_SOCKET_PORT_DRIVER
+
 #include "socket_driver.h"
 #include "port.h"
 
@@ -1417,3 +1420,5 @@ Context *socket_driver_create_port(GlobalContext *global, term opts)
 }
 
 REGISTER_PORT_DRIVER(socket, socket_driver_init, socket_driver_create_port)
+
+#endif

@@ -18,6 +18,9 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#include <sdkconfig.h>
+#ifdef CONFIG_AVM_ENABLE_SPI_PORT_DRIVER
+
 #include "spi_driver.h"
 
 #include <string.h>
@@ -592,3 +595,5 @@ static void spidriver_consume_mailbox(Context *ctx)
 }
 
 REGISTER_PORT_DRIVER(spi, spi_driver_init, spi_driver_create_port)
+
+#endif

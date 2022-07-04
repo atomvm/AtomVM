@@ -18,6 +18,9 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#include <sdkconfig.h>
+#ifdef CONFIG_AVM_ENABLE_LEDC_NIFS
+
 #include <atom.h>
 #include <defaultatoms.h>
 #include <interop.h>
@@ -471,3 +474,5 @@ const struct Nif *ledc_nif_get_nif(const char *nifname)
 }
 
 REGISTER_NIF_COLLECTION(ledc, NULL, ledc_nif_get_nif)
+
+#endif

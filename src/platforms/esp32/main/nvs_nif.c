@@ -18,6 +18,9 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#include <sdkconfig.h>
+#ifdef CONFIG_AVM_ENABLE_NVS_NIFS
+
 #include <atom.h>
 #include <defaultatoms.h>
 #include <interop.h>
@@ -305,3 +308,5 @@ static int write_atom_c_string(Context *ctx, char *buf, size_t bufsize, term t)
 }
 
 REGISTER_NIF_COLLECTION(nvs, nvs_nif_init, nvs_nif_get_nif)
+
+#endif
