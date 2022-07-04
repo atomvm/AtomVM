@@ -52,6 +52,7 @@ In addition, several features are supported specifically for integration with mi
 While the list of supported features is long and growing, the currently unsupported Erlang/OTP and BEAM features include (but are not limited to):
 
 * Bingnums.  Integer values are restricted to 64-bit values.
+* Bit Syntax.  While packing and unpacking of arbitrary (but less than 64-) bit values is support, packing and unpacking of integer values at the start of end of a binary, or bordering binary packing or extraction must align on 8-bit boundaries.  Arbitrary-bitlength binaries are not currently supported.
 * SMP support.  The AtomVM VM is currently a single-threaded process.
 * The `epmd` and the `disterl` protocols are not supported.
 * There is no support for code hot swapping.

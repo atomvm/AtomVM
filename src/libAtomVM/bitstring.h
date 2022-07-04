@@ -197,9 +197,11 @@ static inline bool bitstring_extract_integer(term src_bin, size_t offset, avm_in
             default:
                 return bitstring_extract_any_integer(src, 0, n, bs_flags, dst);
         }
+    } else {
+        int byte_offset = offset / 8;
+        const uint8_t *src = (const uint8_t *) term_binary_data(src_bin) + byte_offset;
+        return bitstring_extract_any_integer(src, offset - (byte_offset * 8), n, bs_flags, dst);
     }
-
-    return false;
 }
 
 static inline bool bitstring_insert_integer(term dst_bin, size_t offset, avm_int64_t value, size_t n, enum BitstringFlags bs_flags)
@@ -283,7 +285,7 @@ static inline bool bitstring_insert_integer(term dst_bin, size_t offset, avm_int
             }
 
             default:
-                return bitstring_insert_any_integer(dst, offset, value, n, bs_flags);
+                return bitstring_insert_any_integer(dst, offset - (byte_offset * 8), value, n, bs_flags);
         }
     }
 
