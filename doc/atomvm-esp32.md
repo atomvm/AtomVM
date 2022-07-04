@@ -50,23 +50,12 @@ The instructions for adding custom Nifs and ports differ in slight detail, but a
 
 To write support for a new peripheral or protocol using custom AtomVM Nif, you need to do the following:
 
-* Choose a name for your nif (e.g, "my_nif").  Call this `<moniker>`.
-* In your source code, implement the following two functions:
-    * `void <moniker>_nif_init(GlobalContext *global);`
-        * This function will be called once, when the application is started.
-    * `const struct Nif *<moniker>_nif_get_nif(const char *nifname);`
-        * This function will be called to locate the Nif during a function call.
-
-Example:
-
-    void my_nif_init(GlobalContext *global);
-    const struct Nif *my_nif_get_nif(const char *nifname);
-
-> Note. Instructions for implementing Nifs is outside of the scope of this document.
-
-* Add your `<moniker>` to the `main/component_nifs.txt` file in the `src/platforms/esp32` directory.
-
-> Note.  The `main/component_nifs.txt` file will not exist until after the first clean build.
+* An optional init function: `void my_nif_collection_init(GlobalContext *global);` which will be
+  called once, when the application is started.
+* A resolve function `const struct Nif *my_nif_collection_get_nif(const char *nifname);` which will
+  be called to locate the Nif.
+* To register the collection using:
+  `REGISTER_NIF_COLLECTION(my_nif_collection, my_nif_collection_init, my_nif_collection_get_nif)`.
 
 ### Writing a custom AtomVM Port
 
