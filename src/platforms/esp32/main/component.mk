@@ -18,6 +18,9 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
+CFLAGS += -fno-function-sections -fno-data-sections
+COMPONENT_ADD_LDFLAGS = -Wl,--whole-archive -l$(COMPONENT_NAME) -Wl,--no-whole-archive
+
 DEFAULT_COMPONENT_NIFS := "gpio nvs ledc"
 DEFAULT_COMPONENT_PORTS := "gpio network socket uart spi i2c"
 
