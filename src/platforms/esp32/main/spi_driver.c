@@ -590,3 +590,5 @@ static void spidriver_consume_mailbox(Context *ctx)
         scheduler_terminate(ctx);
     }
 }
+
+REGISTER_PORT_DRIVER(spi, spi_driver_init, spi_driver_create_port)

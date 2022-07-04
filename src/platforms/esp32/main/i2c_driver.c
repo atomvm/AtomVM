@@ -394,3 +394,5 @@ static void i2cdriver_consume_mailbox(Context *ctx)
     mailbox_send(target, ret_msg);
     mailbox_destroy_message(message);
 }
+
+REGISTER_PORT_DRIVER(i2c, i2c_driver_init, i2c_driver_create_port)

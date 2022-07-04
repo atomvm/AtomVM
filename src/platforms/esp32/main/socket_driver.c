@@ -1415,3 +1415,5 @@ Context *socket_driver_create_port(GlobalContext *global, term opts)
     ctx->platform_data = NULL;
     return ctx;
 }
+
+REGISTER_PORT_DRIVER(socket, socket_driver_init, socket_driver_create_port)

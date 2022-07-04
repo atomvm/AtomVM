@@ -22,7 +22,7 @@ CFLAGS += -fno-function-sections -fno-data-sections
 COMPONENT_ADD_LDFLAGS = -Wl,--whole-archive -l$(COMPONENT_NAME) -Wl,--no-whole-archive
 
 DEFAULT_COMPONENT_NIFS := "gpio nvs ledc"
-DEFAULT_COMPONENT_PORTS := "gpio network socket uart spi i2c"
+DEFAULT_COMPONENT_PORTS := ""
 
 COMPONENT_NIF_FILE := $(COMPONENT_PATH)/component_nifs.txt
 COMPONENT_EXTRA_CLEAN := component_nifs.h

@@ -35,6 +35,8 @@
 #include "term.h"
 #include "utils.h"
 
+#include "esp32_sys.h"
+
 #include "platform_defaultatoms.h"
 
 #include <esp_event_loop.h>
@@ -616,3 +618,5 @@ Context *network_driver_create_port(GlobalContext *global, term opts)
     ctx->platform_data = NULL;
     return ctx;
 }
+
+REGISTER_PORT_DRIVER(network, network_driver_init, network_driver_create_port)

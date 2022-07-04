@@ -123,11 +123,6 @@ void uart_interrupt_callback(EventListener *listener)
     }
 }
 
-void uart_driver_init(GlobalContext *global)
-{
-    // no-op
-}
-
 static int get_uart_pin_opt(term opts, term pin_name)
 {
     term value = interop_proplist_get_value_default(opts, pin_name, DEFAULT_ATOM);
@@ -402,3 +397,5 @@ static void uart_driver_consume_mailbox(Context *ctx)
         mailbox_destroy_message(message);
     }
 }
+
+REGISTER_PORT_DRIVER(uart, NULL, uart_driver_create_port)
