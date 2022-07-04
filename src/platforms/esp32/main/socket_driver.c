@@ -132,6 +132,7 @@ struct SocketData
 
     uint16_t port;
 
+    size_t buffer;
     bool active : 1;
     bool binary : 1;
 };
@@ -260,7 +261,8 @@ static void socket_data_init(struct SocketData *data, Context *ctx, struct netco
     data->controlling_process_pid = term_invalid_term();
     data->port = 0;
     data->active = true;
-    data->binary = false;
+    data->binary = true;
+    data->buffer = 512;
 
     list_append(&platform->sockets_list_head, &data->sockets_head);
 
@@ -370,8 +372,11 @@ void accept_conn(struct TCPServerAccepter *accepter, Context *ctx)
     if (IS_NULL_PTR(new_tcp_data)) {
         AVM_ABORT();
     }
+    new_tcp_data->socket_data.active = tcp_data->socket_data.active;
+    new_tcp_data->socket_data.binary = tcp_data->socket_data.binary;
+    new_tcp_data->socket_data.buffer = tcp_data->socket_data.buffer;
 
-    //TODO
+    // TODO
     if (UNLIKELY(memory_ensure_free(ctx, 128) != MEMORY_GC_OK)) {
         AVM_ABORT();
     }
@@ -806,6 +811,7 @@ static void do_listen(Context *ctx, term msg)
     term backlog_term = interop_proplist_get_value(params, BACKLOG_ATOM);
     term binary_term = interop_proplist_get_value(params, BINARY_ATOM);
     term active_term = interop_proplist_get_value(params, ACTIVE_ATOM);
+    term buffer_term = interop_proplist_get_value(params, BUFFER_ATOM);
 
     avm_int_t port = term_to_int(port_term);
     avm_int_t backlog = term_to_int(backlog_term);
@@ -818,6 +824,7 @@ static void do_listen(Context *ctx, term msg)
     if (UNLIKELY(!ok)) {
         AVM_ABORT();
     }
+    avm_int_t buffer = term_to_int(buffer_term);
 
     struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_TCP, 0, socket_callback);
 
@@ -851,6 +858,7 @@ static void do_listen(Context *ctx, term msg)
     tcp_data->socket_data.port = nport;
     tcp_data->socket_data.active = active;
     tcp_data->socket_data.binary = binary;
+    tcp_data->socket_data.buffer = buffer;
     if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
         AVM_ABORT();
     }

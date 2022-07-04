@@ -55,5 +55,6 @@ additional information.
   than UART0 are supported, with better performances and stability.
 - Fix binaries concat (`bs_append` instruction) that was adding some extra zeroes at the end of
   built binaries.
+- Fixed a bug in gen_tcp that prevents an accepting socket from inheriting settings on the listening socket.
 
 ## [0.5.0] - 2022-03-22

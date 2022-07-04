@@ -42,7 +42,7 @@
 
 -export([connect/3, send/2, recv/2, recv/3, close/1, listen/2, accept/1, accept/2, controlling_process/2]).
 
--define(DEFAULT_PARAMS, [{active, true}, {buffer, 128}, binary, {timeout, infinity}]).
+-define(DEFAULT_PARAMS, [{active, true}, {buffer, 512}, {binary, true}, {timeout, infinity}]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Address the address to which to connect
@@ -180,23 +180,7 @@ accept(ListenSocket) ->
     {ok, Socket :: inet:socket()} | {error, Reason :: term()}.
 accept(ListenSocket, Timeout) ->
     case call(ListenSocket, {accept, Timeout}) of
-        {ok, FD} when is_integer(FD) ->
-            Socket = open_port({spawn, "socket"}, []),
-            InitParams = [
-                {proto, tcp},
-                {accept, true},
-                {controlling_process, self()},
-                {fd, FD}
-                | ?DEFAULT_PARAMS
-            ],
-            case call(Socket, {init, InitParams}) of
-                ok ->
-                    {ok, Socket};
-                ErrorReason ->
-                    %% TODO close port
-                    ErrorReason
-            end;
-        {ok, Socket} ->
+        {ok, Socket} when is_pid(Socket) ->
             {ok, Socket};
         ErrorReason ->
             %% TODO close port
