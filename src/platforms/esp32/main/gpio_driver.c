@@ -547,11 +547,6 @@ static const struct Nif gpio_digital_read_nif = {
     .nif_ptr = nif_gpio_digital_read
 };
 
-void gpio_nif_init(GlobalContext *global)
-{
-    // no-op
-}
-
 const struct Nif *gpio_nif_get_nif(const char *nifname)
 {
     if (strcmp("gpio:set_pin_mode/2", nifname) == 0) {
@@ -610,3 +605,4 @@ const struct Nif *gpio_nif_get_nif(const char *nifname)
 }
 
 REGISTER_PORT_DRIVER(gpio, gpio_driver_init, gpio_driver_create_port)
+REGISTER_NIF_COLLECTION(gpio, NULL, gpio_nif_get_nif)

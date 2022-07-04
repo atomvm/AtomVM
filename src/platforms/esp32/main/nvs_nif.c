@@ -28,6 +28,8 @@
 #include <stdlib.h>
 #include <term.h>
 
+#include "esp32_sys.h"
+
 //#define ENABLE_TRACE
 #include "trace.h"
 
@@ -301,3 +303,5 @@ static int write_atom_c_string(Context *ctx, char *buf, size_t bufsize, term t)
     atom_string_to_c(atom_string, buf, bufsize);
     return 0;
 }
+
+REGISTER_NIF_COLLECTION(nvs, nvs_nif_init, nvs_nif_get_nif)

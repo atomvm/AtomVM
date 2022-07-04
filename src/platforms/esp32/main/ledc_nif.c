@@ -25,6 +25,8 @@
 #include <nifs.h>
 #include <term.h>
 
+#include "esp32_sys.h"
+
 #include <driver/ledc.h>
 #include <stdlib.h>
 
@@ -411,11 +413,6 @@ static const struct Nif ledc_stop_nif =
     .nif_ptr = nif_ledc_stop
 };
 
-void ledc_nif_init(GlobalContext *gloabl)
-{
-    // no-op
-}
-
 const struct Nif *ledc_nif_get_nif(const char *nifname)
 {
     if (strcmp("ledc:timer_config/1", nifname) == 0) {
@@ -472,3 +469,5 @@ const struct Nif *ledc_nif_get_nif(const char *nifname)
     }
     return NULL;
 }
+
+REGISTER_NIF_COLLECTION(ledc, NULL, ledc_nif_get_nif)
