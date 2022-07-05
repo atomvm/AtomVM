@@ -39,7 +39,6 @@
 #include <utils.h>
 #include <version.h>
 
-#include "component_ports.h"
 #include "esp32_sys.h"
 
 #define TAG "AtomVM"
@@ -77,7 +76,6 @@ void app_main()
 
     GlobalContext *glb = globalcontext_new();
 
-    component_ports_init(glb);
     port_driver_init_all(glb);
     nif_collection_init_all(glb);
 

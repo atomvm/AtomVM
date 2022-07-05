@@ -59,25 +59,15 @@ To write support for a new peripheral or protocol using custom AtomVM Nif, you n
 
 ### Writing a custom AtomVM Port
 
-To write support for a new peripheral or protocol using an AtomVM port, you need to do the following:
+To write support for a new peripheral or protocol using custom AtomVM port driver, you need to do
+the following:
 
-* Choose a name for your port (e.g, "my_port").  Call this `<moniker>`.
-* In your source code, implement the following two functions:
-    * `void <moniker>_init(GlobalContext *global);`
-        * This function will be called once, when the application is started.
-    * `Context *<moniker>_create_port(GlobalContext *global, term opts);`
-        * This function will be called to locate the Nif during a function call.
-
-Example:
-
-    void my_port_init(GlobalContext *global);
-    Context *my_port_create_port(GlobalContext *global, term opts);
-
-> Note. Instructions for implementing Ports is outside of the scope of this document.
-
-* Add your `<moniker>` to the `main/component_ports.txt` file in the `src/platforms/esp32` directory.
-
-> Note.  The `main/component_ports.txt` file will not exist until after the first clean build.
+* An optional init function: `void my_driver_init(GlobalContext *global);` which will be
+  called once, when the application is started.
+* A create function `Context *my_driver_create_port(GlobalContext *global, term opts);` which will
+  be called to instantiate the port driver.
+* To register the port driver using:
+  `REGISTER_PORT_DRIVER(my_driver, my_driver_init, my_driver_create_port)`.
 
 ## Flash Layout
 

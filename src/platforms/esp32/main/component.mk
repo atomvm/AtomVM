@@ -21,21 +21,5 @@
 CFLAGS += -fno-function-sections -fno-data-sections
 COMPONENT_ADD_LDFLAGS = -Wl,--whole-archive -l$(COMPONENT_NAME) -Wl,--no-whole-archive
 
-DEFAULT_COMPONENT_PORTS := ""
-
-COMPONENT_PORT_FILE := $(COMPONENT_PATH)/component_ports.txt
-COMPONENT_EXTRA_CLEAN := component_ports.h
-
-sys.o main.o : component_ports.h
-
-component_ports.h: $(COMPONENT_PATH)/component_ports.h.in $(if $(wildcard $(COMPONENT_PORT_FILE)),$(COMPONENT_PORT_FILE),default_component_ports)
-	@echo "Generating component_ports.h ..."
-	@python $(COMPONENT_PATH)/component_ports.py $(COMPONENT_PATH)/component_ports.h.in $(COMPONENT_PORT_FILE) > $@
-
-.PHONY: default_component_ports
-default_component_ports:
-	@echo "# GENERATED FILE -- EDIT TO ADD OR REMOVE COMPONENT DRIVERS" > $(COMPONENT_PATH)/component_ports.txt
-	for i in $$(echo $(DEFAULT_COMPONENT_PORTS)); do echo "$${i}_driver" >> $(COMPONENT_PATH)/component_ports.txt; done
-
 ## Add the libatomvm build component to the include path for generated headers (e.g., version.h)
 COMPONENT_INCLUDES += $(COMPONENT_PATH)/../build/libatomvm
