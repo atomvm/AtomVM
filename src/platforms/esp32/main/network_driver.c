@@ -22,7 +22,6 @@
 #include <sdkconfig.h>
 #ifdef CONFIG_AVM_ENABLE_NETWORK_PORT_DRIVER
 
-#include "network_driver.h"
 #include "port.h"
 
 #include <string.h>
@@ -34,7 +33,6 @@
 #include "interop.h"
 #include "mailbox.h"
 #include "port.h"
-#include "socket_driver.h"
 #include "term.h"
 #include "utils.h"
 
@@ -70,6 +68,8 @@
 #endif
 
 #define CONNECTED_BIT BIT0
+
+static void network_driver_init(GlobalContext *global);
 
 static void network_driver_start(Context *ctx, term pid, term ref, term config);
 static term network_driver_ifconfig(Context *ctx);

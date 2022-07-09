@@ -36,9 +36,10 @@
 //#define ENABLE_TRACE
 #include "trace.h"
 
-#include "nvs_nif.h"
-
 #define MAX_NVS_KEY_SIZE 15
+
+static void nvs_nif_init(GlobalContext *global);
+static const struct Nif *nvs_nif_get_nif(const char *nifname);
 
 static int write_atom_c_string(Context *ctx, char *buf, size_t bufsize, term t);
 

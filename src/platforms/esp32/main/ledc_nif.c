@@ -36,8 +36,6 @@
 //#define ENABLE_TRACE
 #include "trace.h"
 
-#include "ledc_nif.h"
-
 static const char *const ledc_duty_resolution   = "\xF"  "duty_resolution";
 static const char *const ledc_freq_hz           = "\x7"  "freq_hz";
 static const char *const ledc_speed_mode        = "\xA"  "speed_mode";
@@ -48,6 +46,8 @@ static const char *const ledc_gpio_num          = "\x8"  "gpio_num";
 static const char *const ledc_hpoint            = "\x6"  "hpoint";
 static const char *const ledc_timer_sel         = "\x9"  "timer_sel";
 //                                                        123456789ABCDEF01
+
+static const struct Nif *ledc_nif_get_nif(const char *nifname);
 
 static term nif_ledc_timer_config(Context *ctx, int argc, term argv[])
 {

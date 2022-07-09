@@ -21,8 +21,6 @@
 #include <sdkconfig.h>
 #ifdef CONFIG_AVM_ENABLE_I2C_PORT_DRIVER
 
-#include "i2c_driver.h"
-
 #include <string.h>
 
 #include <driver/i2c.h>
@@ -48,6 +46,9 @@
 
 #include "esp32_sys.h"
 #include "sys.h"
+
+static void i2c_driver_init(GlobalContext *global);
+static Context *i2c_driver_create_port(GlobalContext *global, term opts);
 
 static term i2cdriver_begin_transmission(Context *ctx, term pid, term req);
 static term i2cdriver_end_transmission(Context *ctx, term pid);

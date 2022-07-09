@@ -22,7 +22,6 @@
 #include <sdkconfig.h>
 #ifdef CONFIG_AVM_ENABLE_SOCKET_PORT_DRIVER
 
-#include "socket_driver.h"
 #include "port.h"
 
 #include <stdbool.h>
@@ -50,6 +49,9 @@
 
 //#define ENABLE_TRACE 1
 #include "trace.h"
+
+static void socket_driver_init(GlobalContext *global);
+static Context *socket_driver_create_port(GlobalContext *global, term opts);
 
 static void tcp_server_handler(Context *ctx);
 static void tcp_client_handler(Context *ctx);

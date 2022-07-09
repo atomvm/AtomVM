@@ -21,8 +21,6 @@
 #include <sdkconfig.h>
 #ifdef CONFIG_AVM_ENABLE_SPI_PORT_DRIVER
 
-#include "spi_driver.h"
-
 #include <string.h>
 
 #include <driver/spi_master.h>
@@ -80,6 +78,8 @@ static const char *const write_bits_atom = "\xA" "write_bits";
 static const char *const read_bits_atom = "\x9" "read_bits";
 
 static term spi_driver;
+
+static void spi_driver_init(GlobalContext *global);
 
 static spi_host_device_t get_spi_host_device(term spi_peripheral)
 {

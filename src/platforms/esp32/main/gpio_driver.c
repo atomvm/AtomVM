@@ -21,9 +21,6 @@
 #include <sdkconfig.h>
 #if defined(CONFIG_AVM_ENABLE_GPIO_PORT_DRIVER) || defined(CONFIG_AVM_ENABLE_GPIO_NIFS)
 
-#include "gpio_driver.h"
-#include "gpio_nif.h"
-
 #include <stdbool.h>
 #include <string.h>
 
@@ -56,11 +53,19 @@
 
 static const char *const gpio_atom = "\x4" "gpio";
 
+#ifdef CONFIG_AVM_ENABLE_GPIO_NIFS
+static const struct Nif *gpio_nif_get_nif(const char *nifname);
+#endif
+
+static void gpio_driver_init(GlobalContext *global);
+
 #ifdef CONFIG_AVM_ENABLE_GPIO_PORT_DRIVER
 static Context *global_gpio_ctx = NULL;
 
 static void consume_gpio_mailbox(Context *ctx);
 static void IRAM_ATTR gpio_isr_handler(void *arg);
+
+static Context *gpio_driver_create_port(GlobalContext *global, term opts);
 #endif
 
 static const char *const gpio_driver_atom = "\xB" "gpio_driver";
