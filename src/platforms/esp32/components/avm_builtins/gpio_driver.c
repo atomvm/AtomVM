@@ -36,6 +36,7 @@
 #include "defaultatoms.h"
 #include "dictionary.h"
 #include "globalcontext.h"
+#include "interop.h"
 #include "mailbox.h"
 #include "module.h"
 #include "nifs.h"
@@ -69,10 +70,53 @@ static Context *gpio_driver_create_port(GlobalContext *global, term opts);
 #endif
 
 static const char *const gpio_driver_atom = "\xB" "gpio_driver";
-static const char *const up_atom = "\x2" "up";
-static const char *const down_atom = "\x4" "down";
-static const char *const up_down_atom = "\x7" "up_down";
-static const char *const floating_atom = "\x8" "floating";
+
+static const AtomStringIntPair pin_mode_table[] = {
+    { ATOM_STR("\x5", "input"), GPIO_MODE_INPUT },
+    { ATOM_STR("\x6", "output"), GPIO_MODE_OUTPUT },
+    { ATOM_STR("\x9", "output_od"), GPIO_MODE_OUTPUT_OD },
+    SELECT_INT_DEFAULT(-1)
+};
+
+static const AtomStringIntPair pull_mode_table[] = {
+    { ATOM_STR("\x2", "up"), GPIO_PULLUP_ONLY },
+    { ATOM_STR("\x4", "down"), GPIO_PULLDOWN_ONLY },
+    { ATOM_STR("\x7", "up_down"), GPIO_PULLUP_PULLDOWN },
+    { ATOM_STR("\x8", "floating"), GPIO_FLOATING },
+    SELECT_INT_DEFAULT(GPIO_FLOATING)
+};
+
+enum gpio_pin_level
+{
+    GPIOPinInvalid = -1,
+    GPIOPinLow = 0,
+    GPIOPinHigh = 1
+};
+
+static const AtomStringIntPair pin_level_table[] = {
+    { ATOM_STR("\x3", "low"), GPIOPinLow },
+    { ATOM_STR("\x4", "high"), GPIOPinHigh },
+    SELECT_INT_DEFAULT(GPIOPinInvalid)
+};
+
+enum gpio_cmd
+{
+    GPIOInvalidCmd = 0,
+    GPIOSetLevelCmd,
+    GPIOReadCmd,
+    GPIOSetDirectionCmd,
+    GPIOSetIntCmd,
+    GPIORemoveIntCmd
+};
+
+static const AtomStringIntPair gpio_cmd_table[] = {
+    { ATOM_STR("\x9", "set_level"), GPIOSetLevelCmd },
+    { ATOM_STR("\x4", "read"), GPIOReadCmd },
+    { ATOM_STR("\xD", "set_direction"), GPIOSetDirectionCmd },
+    { ATOM_STR("\x7", "set_int"), GPIOSetIntCmd },
+    { ATOM_STR("\xA", "remove_int"), GPIORemoveIntCmd },
+    SELECT_INT_DEFAULT(GPIOInvalidCmd)
+};
 
 static term gpio_driver;
 
@@ -89,27 +133,15 @@ struct GPIOData
     struct ListHead gpio_listeners;
 };
 
-static inline term gpio_set_pin_mode(term gpio_num_term, term mode)
+static inline term gpio_set_pin_mode(Context *ctx, term gpio_num_term, term mode_term)
 {
     int gpio_num = term_to_int(gpio_num_term);
 
-    esp_err_t result;
-    switch (mode) {
-        case INPUT_ATOM:
-            result = gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
-            break;
-
-        case OUTPUT_ATOM:
-            result = gpio_set_direction(gpio_num, GPIO_MODE_OUTPUT);
-            break;
-
-        case OUTPUT_OD_ATOM:
-            result = gpio_set_direction(gpio_num, GPIO_MODE_OUTPUT_OD);
-            break;
-
-        default:
-            return ERROR_ATOM;
+    gpio_mode_t mode = interop_atom_term_select_int(ctx->global, pin_mode_table, mode_term);
+    if (UNLIKELY(mode < 0)) {
+        return ERROR_ATOM;
     }
+    esp_err_t result = gpio_set_direction(gpio_num, mode);
 
     if (UNLIKELY(result != ESP_OK)) {
         return ERROR_ATOM;
@@ -120,18 +152,7 @@ static inline term gpio_set_pin_mode(term gpio_num_term, term mode)
 
 static gpio_pull_mode_t get_pull_mode(Context *ctx, term pull)
 {
-    if (pull == context_make_atom(ctx, up_atom)) {
-        return GPIO_PULLUP_ONLY;
-    } else if (pull == context_make_atom(ctx, down_atom)) {
-        return GPIO_PULLDOWN_ONLY;
-    } else if (pull == context_make_atom(ctx, up_down_atom)) {
-        return GPIO_PULLUP_PULLDOWN;
-    } else if (pull == context_make_atom(ctx, floating_atom)) {
-        return GPIO_FLOATING;
-    } else {
-        ESP_LOGW(TAG, "Unrecognized pull mode.  Defaulting to GPIO_FLOATING");
-        return GPIO_FLOATING;
-    }
+    return interop_atom_term_select_int(ctx->global, pull_mode_table, pull);
 }
 
 static inline term set_pin_pull_mode(Context *ctx, term gpio_num_term, term pull)
@@ -165,21 +186,24 @@ static inline term hold_dis(term gpio_num_term)
     return OK_ATOM;
 }
 
-static inline term gpio_digital_write(term gpio_num_term, term level_term)
+static inline term gpio_digital_write(Context *ctx, term gpio_num_term, term level_term)
 {
     int gpio_num = term_to_int(gpio_num_term);
 
-    esp_err_t result;
-    if ((level_term == LOW_ATOM) || (level_term == term_from_int(0))) {
-        result = gpio_set_level(gpio_num, 0);
-
-    } else if ((level_term == HIGH_ATOM) || (level_term == term_from_int(1))) {
-        result = gpio_set_level(gpio_num, 1);
-
+    int level;
+    if (term_is_integer(level_term)) {
+        level = term_from_int(level_term);
+        if (UNLIKELY((level != 0) && (level != 1))) {
+            return ERROR_ATOM;
+        }
     } else {
-        return ERROR_ATOM;
+        level = interop_atom_term_select_int(ctx->global, pin_level_table, level_term);
+        if (UNLIKELY(level < 0)) {
+            return ERROR_ATOM;
+        }
     }
 
+    esp_err_t result = gpio_set_level(gpio_num, level);
     if (UNLIKELY(result != ESP_OK)) {
         return ERROR_ATOM;
     }
@@ -247,20 +271,20 @@ void gpio_interrupt_callback(EventListener *listener)
     mailbox_send(listening_ctx, int_msg);
 }
 
-static term gpiodriver_set_level(term cmd)
+static term gpiodriver_set_level(Context *ctx, term cmd)
 {
     term gpio_num = term_get_tuple_element(cmd, 1);
     term level = term_get_tuple_element(cmd, 2);
 
-    return gpio_digital_write(gpio_num, level);
+    return gpio_digital_write(ctx, gpio_num, level);
 }
 
-static term gpiodriver_set_direction(term cmd)
+static term gpiodriver_set_direction(Context *ctx, term cmd)
 {
     term gpio_num = term_get_tuple_element(cmd, 1);
     term direction = term_get_tuple_element(cmd, 2);
 
-    return gpio_set_pin_mode(gpio_num, direction);
+    return gpio_set_pin_mode(ctx, gpio_num, direction);
 }
 
 static term gpiodriver_read(term cmd)
@@ -399,33 +423,34 @@ static void consume_gpio_mailbox(Context *ctx)
     Message *message = mailbox_dequeue(ctx);
     term msg = message->message;
     term pid = term_get_tuple_element(msg, 0);
-    term cmd = term_get_tuple_element(msg, 2);
-    term cmd_name = term_get_tuple_element(cmd, 0);
+    term req = term_get_tuple_element(msg, 2);
+    term cmd_term = term_get_tuple_element(req, 0);
 
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
     term ret;
 
-    switch (cmd_name) {
-        case SET_LEVEL_ATOM:
-            ret = gpiodriver_set_level(cmd);
+    enum gpio_cmd cmd = interop_atom_term_select_int(ctx->global, gpio_cmd_table, cmd_term);
+    switch (cmd) {
+        case GPIOSetLevelCmd:
+            ret = gpiodriver_set_level(ctx, req);
             break;
 
-        case SET_DIRECTION_ATOM:
-            ret = gpiodriver_set_direction(cmd);
+        case GPIOSetDirectionCmd:
+            ret = gpiodriver_set_direction(ctx, req);
             break;
 
-        case READ_ATOM:
-            ret = gpiodriver_read(cmd);
+        case GPIOReadCmd:
+            ret = gpiodriver_read(req);
             break;
 
-        case SET_INT_ATOM:
-            ret = gpiodriver_set_int(ctx, target, cmd);
+        case GPIOSetIntCmd:
+            ret = gpiodriver_set_int(ctx, target, req);
             break;
 
-        case REMOVE_INT_ATOM:
-            ret = gpiodriver_remove_int(ctx, target, cmd);
+        case GPIORemoveIntCmd:
+            ret = gpiodriver_remove_int(ctx, target, req);
             break;
 
         default:
@@ -465,7 +490,7 @@ REGISTER_PORT_DRIVER(gpio, gpio_driver_init, gpio_driver_create_port)
 
 static term nif_gpio_set_pin_mode(Context *ctx, int argc, term argv[])
 {
-    return gpio_set_pin_mode(argv[0], argv[1]);
+    return gpio_set_pin_mode(ctx, argv[0], argv[1]);
 }
 
 static term nif_gpio_set_pin_pull(Context *ctx, int argc, term argv[])
@@ -513,7 +538,7 @@ static term nif_gpio_deep_sleep_hold_dis(Context *ctx, int argc, term argv[])
 
 static term nif_gpio_digital_write(Context *ctx, int argc, term argv[])
 {
-    return gpio_digital_write(argv[0], argv[1]);
+    return gpio_digital_write(ctx, argv[0], argv[1]);
 }
 
 static term nif_gpio_digital_read(Context *ctx, int argc, term argv[])
