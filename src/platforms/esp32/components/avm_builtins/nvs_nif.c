@@ -18,6 +18,9 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#include <sdkconfig.h>
+#ifdef CONFIG_AVM_ENABLE_NVS_NIFS
+
 #include <atom.h>
 #include <defaultatoms.h>
 #include <interop.h>
@@ -28,12 +31,15 @@
 #include <stdlib.h>
 #include <term.h>
 
+#include "esp32_sys.h"
+
 //#define ENABLE_TRACE
 #include "trace.h"
 
-#include "nvs_nif.h"
-
 #define MAX_NVS_KEY_SIZE 15
+
+static void nvs_nif_init(GlobalContext *global);
+static const struct Nif *nvs_nif_get_nif(const char *nifname);
 
 static int write_atom_c_string(Context *ctx, char *buf, size_t bufsize, term t);
 
@@ -301,3 +307,7 @@ static int write_atom_c_string(Context *ctx, char *buf, size_t bufsize, term t)
     atom_string_to_c(atom_string, buf, bufsize);
     return 0;
 }
+
+REGISTER_NIF_COLLECTION(nvs, nvs_nif_init, nvs_nif_get_nif)
+
+#endif

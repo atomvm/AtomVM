@@ -39,8 +39,6 @@
 #include <utils.h>
 #include <version.h>
 
-#include "component_nifs.h"
-#include "component_ports.h"
 #include "esp32_sys.h"
 
 #define TAG "AtomVM"
@@ -78,9 +76,7 @@ void app_main()
 
     GlobalContext *glb = globalcontext_new();
 
-    component_ports_init(glb);
     port_driver_init_all(glb);
-    component_nifs_init(glb);
     nif_collection_init_all(glb);
 
     if (!avmpack_is_valid(main_avm, size)) {

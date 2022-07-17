@@ -19,7 +19,9 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#include "network_driver.h"
+#include <sdkconfig.h>
+#ifdef CONFIG_AVM_ENABLE_NETWORK_PORT_DRIVER
+
 #include "port.h"
 
 #include <string.h>
@@ -31,9 +33,10 @@
 #include "interop.h"
 #include "mailbox.h"
 #include "port.h"
-#include "socket_driver.h"
 #include "term.h"
 #include "utils.h"
+
+#include "esp32_sys.h"
 
 #include "platform_defaultatoms.h"
 
@@ -65,6 +68,8 @@
 #endif
 
 #define CONNECTED_BIT BIT0
+
+static void network_driver_init(GlobalContext *global);
 
 static void network_driver_start(Context *ctx, term pid, term ref, term config);
 static term network_driver_ifconfig(Context *ctx);
@@ -616,3 +621,7 @@ Context *network_driver_create_port(GlobalContext *global, term opts)
     ctx->platform_data = NULL;
     return ctx;
 }
+
+REGISTER_PORT_DRIVER(network, network_driver_init, network_driver_create_port)
+
+#endif

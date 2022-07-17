@@ -19,7 +19,9 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#include "socket_driver.h"
+#include <sdkconfig.h>
+#ifdef CONFIG_AVM_ENABLE_SOCKET_PORT_DRIVER
+
 #include "port.h"
 
 #include <stdbool.h>
@@ -47,6 +49,9 @@
 
 //#define ENABLE_TRACE 1
 #include "trace.h"
+
+static void socket_driver_init(GlobalContext *global);
+static Context *socket_driver_create_port(GlobalContext *global, term opts);
 
 static void tcp_server_handler(Context *ctx);
 static void tcp_client_handler(Context *ctx);
@@ -1415,3 +1420,7 @@ Context *socket_driver_create_port(GlobalContext *global, term opts)
     ctx->platform_data = NULL;
     return ctx;
 }
+
+REGISTER_PORT_DRIVER(socket, socket_driver_init, socket_driver_create_port)
+
+#endif

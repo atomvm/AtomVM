@@ -21,7 +21,6 @@
 #define _GNU_SOURCE
 
 #include "atom.h"
-#include "component_nifs.h"
 #include "defaultatoms.h"
 #include "esp32_sys.h"
 #include "interop.h"
@@ -398,11 +397,8 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &atomvm_platform_nif;
     }
-    const struct Nif *nif = NULL;
-    if ((nif = component_nifs_get_nif(nifname)) != NULL) {
-        return nif;
-    }
-    if ((nif = nif_collection_resolve_nif(nifname)) != NULL) {
+    const struct Nif *nif = nif_collection_resolve_nif(nifname);
+    if (nif) {
         return nif;
     }
     return NULL;

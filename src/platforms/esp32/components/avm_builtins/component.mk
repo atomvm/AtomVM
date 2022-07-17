@@ -18,5 +18,8 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
+CFLAGS += -fno-function-sections -fno-data-sections
+COMPONENT_ADD_LDFLAGS = -Wl,--whole-archive -l$(COMPONENT_NAME) -Wl,--no-whole-archive
+
 ## Add the libatomvm build component to the include path for generated headers (e.g., version.h)
-COMPONENT_INCLUDES += $(COMPONENT_PATH)/../build/libatomvm
+COMPONENT_INCLUDES += $(COMPONENT_PATH)/../../build/libatomvm

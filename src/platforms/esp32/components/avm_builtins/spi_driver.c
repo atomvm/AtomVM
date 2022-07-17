@@ -18,7 +18,8 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#include "spi_driver.h"
+#include <sdkconfig.h>
+#ifdef CONFIG_AVM_ENABLE_SPI_PORT_DRIVER
 
 #include <string.h>
 
@@ -77,6 +78,8 @@ static const char *const write_bits_atom = "\xA" "write_bits";
 static const char *const read_bits_atom = "\x9" "read_bits";
 
 static term spi_driver;
+
+static void spi_driver_init(GlobalContext *global);
 
 static spi_host_device_t get_spi_host_device(term spi_peripheral)
 {
@@ -590,3 +593,7 @@ static void spidriver_consume_mailbox(Context *ctx)
         scheduler_terminate(ctx);
     }
 }
+
+REGISTER_PORT_DRIVER(spi, spi_driver_init, spi_driver_create_port)
+
+#endif

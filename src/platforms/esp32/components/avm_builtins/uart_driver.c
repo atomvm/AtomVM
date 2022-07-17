@@ -18,7 +18,8 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#include "uart_driver.h"
+#include <sdkconfig.h>
+#ifdef CONFIG_AVM_ENABLE_UART_PORT_DRIVER
 
 #include <string.h>
 
@@ -44,6 +45,9 @@
 
 #include "esp32_sys.h"
 #include "sys.h"
+
+static void uart_driver_init(GlobalContext *global);
+static Context *uart_driver_create_port(GlobalContext *global, term opts);
 
 static const char *const ealready_atom = "\x8" "ealready";
 static void uart_driver_consume_mailbox(Context *ctx);
@@ -121,11 +125,6 @@ void uart_interrupt_callback(EventListener *listener)
                 break;
         }
     }
-}
-
-void uart_driver_init(GlobalContext *global)
-{
-    // no-op
 }
 
 static int get_uart_pin_opt(term opts, term pin_name)
@@ -402,3 +401,7 @@ static void uart_driver_consume_mailbox(Context *ctx)
         mailbox_destroy_message(message);
     }
 }
+
+REGISTER_PORT_DRIVER(uart, NULL, uart_driver_create_port)
+
+#endif

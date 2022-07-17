@@ -22,7 +22,6 @@
 #include "esp32_sys.h"
 
 #include "avmpack.h"
-#include "component_ports.h"
 #include "defaultatoms.h"
 #include "globalcontext.h"
 #include "scheduler.h"
@@ -204,10 +203,7 @@ __attribute__((weak)) Context *sys_create_port_fallback(const char *driver_name,
 
 Context *sys_create_port(GlobalContext *glb, const char *port_name, term opts)
 {
-    Context *new_ctx = component_ports_create_port(port_name, glb, opts);
-    if (IS_NULL_PTR(new_ctx)) {
-        new_ctx = port_driver_create_port(port_name, glb, opts);
-    }
+    Context *new_ctx = port_driver_create_port(port_name, glb, opts);
     if (IS_NULL_PTR(new_ctx)) {
         new_ctx = sys_create_port_fallback(port_name, glb, opts);
     }

@@ -18,7 +18,8 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#include "i2c_driver.h"
+#include <sdkconfig.h>
+#ifdef CONFIG_AVM_ENABLE_I2C_PORT_DRIVER
 
 #include <string.h>
 
@@ -45,6 +46,9 @@
 
 #include "esp32_sys.h"
 #include "sys.h"
+
+static void i2c_driver_init(GlobalContext *global);
+static Context *i2c_driver_create_port(GlobalContext *global, term opts);
 
 static term i2cdriver_begin_transmission(Context *ctx, term pid, term req);
 static term i2cdriver_end_transmission(Context *ctx, term pid);
@@ -394,3 +398,7 @@ static void i2cdriver_consume_mailbox(Context *ctx)
     mailbox_send(target, ret_msg);
     mailbox_destroy_message(message);
 }
+
+REGISTER_PORT_DRIVER(i2c, i2c_driver_init, i2c_driver_create_port)
+
+#endif

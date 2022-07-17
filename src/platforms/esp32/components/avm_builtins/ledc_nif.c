@@ -18,6 +18,9 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#include <sdkconfig.h>
+#ifdef CONFIG_AVM_ENABLE_LEDC_NIFS
+
 #include <atom.h>
 #include <defaultatoms.h>
 #include <interop.h>
@@ -25,13 +28,13 @@
 #include <nifs.h>
 #include <term.h>
 
+#include "esp32_sys.h"
+
 #include <driver/ledc.h>
 #include <stdlib.h>
 
 //#define ENABLE_TRACE
 #include "trace.h"
-
-#include "ledc_nif.h"
 
 static const char *const ledc_duty_resolution   = "\xF"  "duty_resolution";
 static const char *const ledc_freq_hz           = "\x7"  "freq_hz";
@@ -43,6 +46,8 @@ static const char *const ledc_gpio_num          = "\x8"  "gpio_num";
 static const char *const ledc_hpoint            = "\x6"  "hpoint";
 static const char *const ledc_timer_sel         = "\x9"  "timer_sel";
 //                                                        123456789ABCDEF01
+
+static const struct Nif *ledc_nif_get_nif(const char *nifname);
 
 static term nif_ledc_timer_config(Context *ctx, int argc, term argv[])
 {
@@ -411,11 +416,6 @@ static const struct Nif ledc_stop_nif =
     .nif_ptr = nif_ledc_stop
 };
 
-void ledc_nif_init(GlobalContext *gloabl)
-{
-    // no-op
-}
-
 const struct Nif *ledc_nif_get_nif(const char *nifname)
 {
     if (strcmp("ledc:timer_config/1", nifname) == 0) {
@@ -472,3 +472,7 @@ const struct Nif *ledc_nif_get_nif(const char *nifname)
     }
     return NULL;
 }
+
+REGISTER_NIF_COLLECTION(ledc, NULL, ledc_nif_get_nif)
+
+#endif

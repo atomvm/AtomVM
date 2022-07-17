@@ -18,8 +18,8 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#include "gpio_driver.h"
-#include "gpio_nif.h"
+#include <sdkconfig.h>
+#if defined(CONFIG_AVM_ENABLE_GPIO_PORT_DRIVER) || defined(CONFIG_AVM_ENABLE_GPIO_NIFS)
 
 #include <stdbool.h>
 #include <string.h>
@@ -53,10 +53,20 @@
 
 static const char *const gpio_atom = "\x4" "gpio";
 
+#ifdef CONFIG_AVM_ENABLE_GPIO_NIFS
+static const struct Nif *gpio_nif_get_nif(const char *nifname);
+#endif
+
+static void gpio_driver_init(GlobalContext *global);
+
+#ifdef CONFIG_AVM_ENABLE_GPIO_PORT_DRIVER
 static Context *global_gpio_ctx = NULL;
 
 static void consume_gpio_mailbox(Context *ctx);
 static void IRAM_ATTR gpio_isr_handler(void *arg);
+
+static Context *gpio_driver_create_port(GlobalContext *global, term opts);
+#endif
 
 static const char *const gpio_driver_atom = "\xB" "gpio_driver";
 static const char *const up_atom = "\x2" "up";
@@ -184,6 +194,8 @@ static inline term gpio_digital_read(term gpio_num_term)
 
     return level ? HIGH_ATOM : LOW_ATOM;
 }
+
+#ifdef CONFIG_AVM_ENABLE_GPIO_PORT_DRIVER
 
 void gpio_driver_init(GlobalContext *global)
 {
@@ -438,9 +450,15 @@ static void IRAM_ATTR gpio_isr_handler(void *arg)
     xQueueSendFromISR(event_queue, &arg, NULL);
 }
 
+REGISTER_PORT_DRIVER(gpio, gpio_driver_init, gpio_driver_create_port)
+
+#endif
+
 //
 // Nif implementation
 //
+
+#ifdef CONFIG_AVM_ENABLE_GPIO_NIFS
 
 static term nif_gpio_set_pin_mode(Context *ctx, int argc, term argv[])
 {
@@ -547,11 +565,6 @@ static const struct Nif gpio_digital_read_nif = {
     .nif_ptr = nif_gpio_digital_read
 };
 
-void gpio_nif_init(GlobalContext *global)
-{
-    // no-op
-}
-
 const struct Nif *gpio_nif_get_nif(const char *nifname)
 {
     if (strcmp("gpio:set_pin_mode/2", nifname) == 0) {
@@ -608,3 +621,8 @@ const struct Nif *gpio_nif_get_nif(const char *nifname)
 
     return NULL;
 }
+
+REGISTER_NIF_COLLECTION(gpio, NULL, gpio_nif_get_nif)
+#endif
+
+#endif
