@@ -12,5 +12,7 @@ src/platforms/esp32/build/**
 src/platforms/esp32/build/**/*.d
 src/platforms/esp32/components/**
 !src/platforms/esp32/components/libatomvm/
+!src/platforms/esp32/components/avm_builtins/
+!src/platforms/esp32/components/avm_builtins/**
 .idea/**
 .vscode/**
