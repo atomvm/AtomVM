@@ -112,6 +112,13 @@ term bif_erlang_is_binary_1(Context *ctx, term arg1)
     return term_is_binary(arg1) ? TRUE_ATOM : FALSE_ATOM;
 }
 
+term bif_erlang_is_boolean_1(Context *ctx, term arg1)
+{
+    UNUSED(ctx);
+
+    return (arg1 == TRUE_ATOM || arg1 == FALSE_ATOM) ? TRUE_ATOM : FALSE_ATOM;
+}
+
 term bif_erlang_is_integer_1(Context *ctx, term arg1)
 {
     UNUSED(ctx);
