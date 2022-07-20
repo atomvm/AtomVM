@@ -35,5 +35,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed a bug in gen_tcp that prevents an accepting socket from inheriting settings on the listening socket.
 - Fixed a bug in packing and unpacking integers into and from binaries when the
   bit length is not a multiple of 8.
+- Fixed a bug that could cause processes to hang indefinitely when calling ports that have terminated.
 
 ## [0.5.0] - 2022-03-22
