@@ -301,7 +301,7 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
         return k;
 
     } else {
-        fprintf(stderr, "Unknown external term type: %li\n", t);
+        fprintf(stderr, "Unknown external term type: %" TERM_U_FMT "\n", t);
         AVM_ABORT();
     }
 }
