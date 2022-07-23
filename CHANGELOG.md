@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New gpio driver for STM32 with nif and port support for read and write functions.
 - Added support for interrupts to STM32 GPIO port driver.
 - Added suppoprt for PicoW extra gpio pins (led) to the gpio driver.
+- Added support for `net:getaddrinfo/1,2`
 
 ## [0.6.0-alpha.1] - 2023-10-09
 

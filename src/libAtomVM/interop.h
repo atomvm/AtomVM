@@ -74,6 +74,7 @@ term interop_proplist_get_value(term list, term key);
 term interop_proplist_get_value_default(term list, term key, term default_value);
 term interop_map_get_value(GlobalContext *glb, term map, term key);
 term interop_map_get_value_default(GlobalContext *glb, term map, term key, term default_value);
+term interop_chars_to_list(const char *chars, size_t len, Heap *heap);
 
 NO_DISCARD InteropFunctionResult interop_iolist_size(term t, size_t *size);
 NO_DISCARD InteropFunctionResult interop_write_iolist(term t, char *p);
@@ -95,13 +96,27 @@ NO_DISCARD enum UnicodeConversionResult interop_chardata_to_bytes(term t, uint8_
  * @details Allows to quickly translate atoms to any integer constant. This function is useful for
  * creating switch statements for atom values.
  * A linear search is performed, so table entries should be sorted by frequency.
- * @param table an array AtomStringIntPair structs, teminated with a default entry marked with
+ * @param table an array AtomStringIntPair structs, terminated with a default entry marked with
  * SELECT_INT_DEFAULT macro.
  * @param atom the atom used for comparison.
  * @param global the global context.
  * @returns the found int value which corresponds to the given atom.
  */
 int interop_atom_term_select_int(const AtomStringIntPair *table, term atom, GlobalContext *global);
+
+/**
+ * @brief Finds the first matching atom in an atoms table .
+ *
+ * @details Allows to quickly translate integer constants to an atom in an atoms table.
+ * This function is the inverse of interop_atom_term_select_int.
+ * @param table an array AtomStringIntPair structs, terminated with a default entry marked with
+ * SELECT_INT_DEFAULT macro.
+ * @param value the in value used for comparison.
+ * @param global the global context.
+ * @returns the found atom which corresponds to the given int value, or the invalid term, if
+ * there is no such value in the table.
+ */
+term interop_atom_term_select_atom(const AtomStringIntPair *table, int value, GlobalContext *global);
 
 /**
  * @brief Get a value given a key (as AtomString) from any proplist or map
