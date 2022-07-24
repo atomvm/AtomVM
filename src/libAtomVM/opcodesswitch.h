@@ -2772,7 +2772,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                     Module *fun_module;
                     unsigned int fun_arity;
-                    uint32_t n_freeze;
+                    uint32_t n_freeze = 0;
                     uint32_t label;
 
                     const term *boxed_value = term_to_const_term_ptr(fun);
