@@ -3721,7 +3721,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 int next_off = 1;
                 term src;
                 DECODE_COMPACT_TERM(src, code, i, next_off, next_off);
-                term index;
+                term index = 0;
                 DECODE_COMPACT_TERM(index, code, i, next_off, next_off);
 
                 #ifdef IMPL_CODE_LOADER
@@ -3753,7 +3753,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 int next_off = 1;
                 term src;
                 DECODE_COMPACT_TERM(src, code, i, next_off, next_off);
-                term index;
+                term index = 0;
                 DECODE_COMPACT_TERM(index, code, i, next_off, next_off);
 
                 #ifdef IMPL_CODE_LOADER
