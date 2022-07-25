@@ -11,17 +11,60 @@ on: [push, pull_request]
 jobs:
   esp-idf:
     runs-on: ubuntu-latest
+    container: espressif/idf:v${{ matrix.idf-version }}
+
     strategy:
       fail-fast: false
+
       matrix:
-        idf: [v3.3.6, v4.1.2, v4.2.3, v4.3.2, v4.4]
+        idf-version:
+        - 3.3.6
+        - 4.0.4
+        - 4.2.3
+        - 4.4.1
+        build-system:
+        - make
+        - idf
+        exclude:
+          # Exclude old idf with idf.py build, not supported
+          - idf-version: 3.3.6
+            build-system: idf
+          # Newer esp-idf versions with make are not really interesting
+          - idf-version: 4.2.3
+            build-system: make
+          # Newer esp-idf versions with make are not really interesting
+          - idf-version: 4.4.1
+            build-system: make
+
     steps:
     - name: Checkout repo
       uses: actions/checkout@v2
-      with:
-        submodules: 'recursive'
-    - name: "Build: customized esp-idf-${{matrix.idf}} container"
-      run: docker build -t atomvm/ci-idf:${{matrix.idf}} -f esp-idf-${{matrix.idf}}-dockerfile .
-      working-directory: .github/workflows
-    - name: "Build: AtomVM (ESP32 platform IDF-${{matrix.idf}})"
-      run: docker run --rm -v $PWD:/atomvm -w /atomvm atomvm/ci-idf:${{matrix.idf}} src/platforms/esp32
+
+    - name: Remove config for all versions except 3.3.6
+      if: matrix.idf-version != '3.3.6'
+      run: rm ./src/platforms/esp32/sdkconfig
+
+    - name: Build with make
+      if: matrix.build-system == 'make'
+      shell: bash
+      working-directory: ./src/platforms/esp32/
+      run: |
+        . $IDF_PATH/export.sh
+        # sdkconfig is specific to a certain version
+        # so run defconfig as first step.
+        make defconfig
+        # Don't use any -j value
+        make
+        # Print component size info
+        make size-components
+
+    - name: Build with idf.py
+      if: matrix.build-system == 'idf'
+      shell: bash
+      working-directory: ./src/platforms/esp32/
+      run: |
+        . $IDF_PATH/export.sh
+        idf.py reconfigure
+        idf.py build
+        # Print component size info
+        idf.py size-components
