@@ -143,14 +143,18 @@ endif()
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_BINARY_DIR}/version.h)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-set(
-    PLATFORM_LIB_SUFFIX
-    ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
-)
+if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Generic")
+    set(
+        ATOMVM_PLATFORM_LIB
+        libAtomVM${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
+    )
+else()
+    set(ATOMVM_PLATFORM_LIB "")
+endif()
 
 add_library(libAtomVM ${SOURCE_FILES} ${HEADER_FILES})
 add_dependencies(libAtomVM generated generated-nifs-hash)
-target_link_libraries(libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX} ${ZLIB_LIBRARIES} ${MATH_LIB})
+target_link_libraries(libAtomVM ${ATOMVM_PLATFORM_LIB} ${ZLIB_LIBRARIES} ${MATH_LIB})
 set_property(TARGET libAtomVM PROPERTY C_STANDARD 99)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Coverage")

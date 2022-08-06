@@ -2772,7 +2772,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                     Module *fun_module;
                     unsigned int fun_arity;
-                    uint32_t n_freeze;
+                    uint32_t n_freeze = 0;
                     uint32_t label;
 
                     const term *boxed_value = term_to_const_term_ptr(fun);
@@ -3721,7 +3721,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 int next_off = 1;
                 term src;
                 DECODE_COMPACT_TERM(src, code, i, next_off, next_off);
-                term index;
+                term index = 0;
                 DECODE_COMPACT_TERM(index, code, i, next_off, next_off);
 
                 #ifdef IMPL_CODE_LOADER
@@ -3753,7 +3753,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 int next_off = 1;
                 term src;
                 DECODE_COMPACT_TERM(src, code, i, next_off, next_off);
-                term index;
+                term index = 0;
                 DECODE_COMPACT_TERM(index, code, i, next_off, next_off);
 
                 #ifdef IMPL_CODE_LOADER

@@ -2082,6 +2082,8 @@ static term nif_erlang_process_flag(Context *ctx, int argc, term argv[])
         if (IS_NULL_PTR(target)) {
             RAISE_ERROR(BADARG_ATOM);
         }
+    } else {
+        AVM_ABORT();
     }
 
     switch (flag) {
@@ -3020,6 +3022,7 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
         dst = term_create_empty_binary(dst_size_with_pad, ctx);
         dst_pos = (uint8_t *) term_binary_data(dst);
     } else {
+        dst = term_invalid_term();
         dst_pos = malloc(dst_size_with_pad);
         if (IS_NULL_PTR(dst_pos)) {
             free(src_buf);

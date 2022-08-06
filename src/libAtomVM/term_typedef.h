@@ -30,11 +30,15 @@
 
 #include <limits.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 /**
  * A value of any data type, types bigger than a machine word will require some additional space on heap.
  */
 typedef uintptr_t term;
+
+#define TERM_U_FMT PRIuPTR
+#define TERM_X_FMT PRIXPTR
 
 #if ( (UINT32_MAX != 4294967295ULL) || (UINT64_MAX != 18446744073709551615ULL) \
     || (INT32_MAX != 2147483647LL) || (INT64_MAX != 9223372036854775807LL))
