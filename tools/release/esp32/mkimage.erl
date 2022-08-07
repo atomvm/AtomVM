@@ -142,8 +142,8 @@ mkimage(RootDir, BuildDir, OutputFile, Segments) ->
                                     )
                             end
                     end,
-                    SegmentPath = replace("BUILD_DIR", BuildDir, replace("ROOT_DIR", RootDir, maps:get(path, Segment))),
-                    case file:read_file(SegmentPath) of
+                    SegmentPaths = [replace("BUILD_DIR", BuildDir, replace("ROOT_DIR", RootDir, SegmentPath)) || SegmentPath <- maps:get(path, Segment)],
+                    case try_read(SegmentPaths) of
                         {ok, Data} ->
                             file:write(Fout, Data),
                             io:format("Wrote ~s (~p bytes) at offset ~s (~p)~n", [
@@ -151,9 +151,9 @@ mkimage(RootDir, BuildDir, OutputFile, Segments) ->
                             ]),
                             SegmentOffset + byte_size(Data);
                         {error, Reason} ->
-                            Fmt = "Failed to read file ~s  Reason: ~p."
+                            Fmt = "Failed to read file ~p  Reason: ~p."
                                   "  Note that a full build is required before running this command.",
-                            throw(io_lib:format(Fmt, [SegmentPath, Reason]))
+                            throw(io_lib:format(Fmt, [SegmentPaths, Reason]))
                     end
                 end,
                 undefined,
@@ -162,6 +162,18 @@ mkimage(RootDir, BuildDir, OutputFile, Segments) ->
         {error, Reason} ->
             throw(io_lib:format("Failed to open ~s for writing.  Reason: ~p", [OutputFile, Reason]))
     end.
+
+%% @private
+try_read([]) ->
+    {error, not_found};
+try_read([Path | Rest]) ->
+    case file:read_file(Path) of
+        {ok, Data} ->
+            {ok, Data};
+        {error, _Reason} ->
+            try_read(Rest)
+    end.
+
 
 %% @private
 from_hex([$0, $x | Bits]) ->
