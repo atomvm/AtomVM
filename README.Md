@@ -24,6 +24,7 @@ might be supported in a near future.
 
 Getting Started
 ===============
+There is much more information, including a more complete "Getting Started Guide," extensive documentation, examples, and contact information available on the [AtomVM](https://atomvm.net) project website.
 
 Dependencies
 ------------

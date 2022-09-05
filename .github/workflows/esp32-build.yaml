@@ -42,7 +42,7 @@ jobs:
 
     - name: Remove config for all versions except 3.3.6
       if: matrix.idf-version != '3.3.6'
-      run: rm ./src/platforms/esp32/sdkconfig
+      run: rm -f ./src/platforms/esp32/sdkconfig
 
     - name: Build with make
       if: matrix.build-system == 'make'
