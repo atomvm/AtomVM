@@ -34,6 +34,11 @@ Last but not least, **do not use GitHub issues for vulnerability reports**, read
 
 ### C Code
 
+Style is enforced with clang-format-13. To automatically fix a file, run:
+```
+clang-format-13 --style=file -i file.c
+```
+
 #### Identation
 
 * [K&R identation and braces style](https://en.wikipedia.org/wiki/Indentation_style#K&R_style)
