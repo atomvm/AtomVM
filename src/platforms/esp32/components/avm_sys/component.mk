@@ -1,7 +1,7 @@
 #
 # This file is part of AtomVM.
 #
-# Copyright 2022 Davide Bettio <davide@uninstall.it>
+# Copyright 2017-2020 Davide Bettio <davide@uninstall.it>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,10 +18,5 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-set(MAIN_COMPONENT_SRCS
-    "main.c"
-)
-
-idf_component_register(SRCS ${MAIN_COMPONENT_SRCS}
-                       REQUIRES "spi_flash"
-                       PRIV_REQUIRES "libatomvm" "avm_sys")
+## Add the libatomvm build component to the include path for generated headers (e.g., version.h)
+COMPONENT_INCLUDES += $(COMPONENT_PATH)/../../build/libatomvm

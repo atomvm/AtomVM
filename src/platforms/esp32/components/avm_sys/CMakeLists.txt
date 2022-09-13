@@ -18,10 +18,15 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-set(MAIN_COMPONENT_SRCS
-    "main.c"
+set(AVM_SYS_COMPONENT_SRCS
+    "sys.c"
+    "platform_nifs.c"
+    "platform_defaultatoms.c"
 )
 
-idf_component_register(SRCS ${MAIN_COMPONENT_SRCS}
-                       REQUIRES "spi_flash"
-                       PRIV_REQUIRES "libatomvm" "avm_sys")
+idf_component_register(
+    SRCS ${AVM_SYS_COMPONENT_SRCS}
+    INCLUDE_DIRS "include"
+    REQUIRES "spi_flash"
+    PRIV_REQUIRES "libatomvm"
+)
