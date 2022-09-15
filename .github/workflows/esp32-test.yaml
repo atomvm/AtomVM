@@ -1,0 +1,47 @@
+#
+#  Copyright 2022 Davide Bettio <davide@uninstall.it>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: ESP32 Test
+
+on: [push, pull_request]
+
+jobs:
+  esp32-test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v2
+
+    - uses: actions/cache@v2
+      id: cache
+      with:
+        path: esp32-test.tar
+        key: ${{ hashFiles('.github/workflows/esp32-test-dockerfile') }}
+
+    - name: "Load cached docker image"
+      if: steps.cache.outputs.cache-hit == 'true'
+      run: |
+        sudo docker load -i esp32-test.tar
+
+    - name: "Build: customized esp-idf-v4.3 container"
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: docker build -t atomvm/esp32-test -f esp32-test-dockerfile .
+      working-directory: .github/workflows
+
+    - name: "Save custom docker image"
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: docker save -o esp32-test.tar atomvm/esp32-test
+
+    - name: "Run ESP32 tests using qemu-system-xtensa on Docker"
+      run: |
+        docker run --rm -v $PWD:/atomvm -w /atomvm/src/platforms/esp32/test atomvm/esp32-test /bin/bash -c '
+        idf.py build
+        pytest --embedded-services=idf,qemu -s
+        '
