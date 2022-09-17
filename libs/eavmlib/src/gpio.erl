@@ -128,10 +128,10 @@ digital_write(_GPIONum, _Level) ->
 digital_read(_GPIONum) ->
     throw(nif_error).
 
-%% TODO should we deprecate?  It looks like a memory leak
+-spec attach_interrupt(GPIONum :: pin(), Mode :: direction()) -> ok | error.
 attach_interrupt(GPIONum, Mode) ->
-    set_int(open(), GPIONum, Mode).
+    set_int(start(), GPIONum, Mode).
 
-%% TODO should we deprecate?  It looks like a memory leak
+-spec detach_interrupt(GPIONum :: pin()) -> ok | error.
 detach_interrupt(GPIONum) ->
-    remove_int(open(), GPIONum).
+    remove_int(whereis(gpio), GPIONum).
