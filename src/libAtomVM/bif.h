@@ -45,6 +45,7 @@ term bif_erlang_length_1(Context *ctx, int live, term arg1);
 
 term bif_erlang_is_atom_1(Context *ctx, term arg1);
 term bif_erlang_is_binary_1(Context *ctx, term arg1);
+term bif_erlang_is_boolean_1(Context *ctx, term arg1);
 term bif_erlang_is_integer_1(Context *ctx, term arg1);
 term bif_erlang_is_list_1(Context *ctx, term arg1);
 term bif_erlang_is_number_1(Context *ctx, term arg1);
