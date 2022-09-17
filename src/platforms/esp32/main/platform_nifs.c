@@ -235,10 +235,10 @@ static term nif_esp_deep_sleep(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-    VALIDATE_VALUE(argv[0], term_is_integer);
-    avm_int_t msecs = term_to_int(argv[0]);
+    VALIDATE_VALUE(argv[0], term_is_any_integer);
+    avm_int64_t msecs = term_maybe_unbox_int64(argv[0]);
 
-    esp_deep_sleep(msecs * 1000);
+    esp_deep_sleep(msecs * 1000ULL);
 
     // technically, this function does not return
     return OK_ATOM;

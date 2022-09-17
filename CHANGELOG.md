@@ -58,5 +58,6 @@ additional information.
 - Fixed a bug in gen_tcp that prevents an accepting socket from inheriting settings on the listening socket.
 - Fixed a bug in packing and unpacking integers into and from binaries when the
   bit length is not a multiple of 8.
+- Fixed `esp:deep_sleep/1` that did not accept values above 31 minutes.
 
 ## [0.5.0] - 2022-03-22
