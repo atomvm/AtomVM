@@ -22,11 +22,23 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "avmpack.h"
-#include "nifs.h"
-#include "platform_defaultatoms.h"
+#include <avmpack.h>
+#include <context.h>
+#include <globalcontext.h>
+#include <module.h>
+#include <nifs.h>
+#include <platform_defaultatoms.h>
 
-#include "esp32_sys.h"
+#include <esp32_sys.h>
+
+#include <esp_log.h>
+
+// test_avm_otp21.h contains an .avm file encoded as C array
+// in order to generate it, erl sources in test_erl_sources must be compiled and the BEAM files
+// must be packed together.
+#include "test_avm_otp21.h"
+
+#define TAG "AtomVM"
 
 const struct Nif *platform_nifs_get_nif(const char *nifname);
 
@@ -40,6 +52,54 @@ TEST_CASE("atomvm_missing_0", "[platform_nifs]")
 {
     const struct Nif *nif = platform_nifs_get_nif("atomvm:missing/0");
     TEST_ASSERT(nif == NULL);
+}
+
+TEST_CASE("test_timers_and_messages", "[test_run]")
+{
+    esp32_sys_queue_init();
+
+    int size = sizeof(test_avm_otp21);
+    const void *main_avm = test_avm_otp21;
+
+    uint32_t startup_beam_size;
+    const void *startup_beam;
+    const char *startup_module_name;
+
+    GlobalContext *glb = globalcontext_new();
+    TEST_ASSERT(glb != NULL);
+
+    port_driver_init_all(glb);
+    nif_collection_init_all(glb);
+
+    TEST_ASSERT(avmpack_is_valid(main_avm, size) != 0);
+    TEST_ASSERT(avmpack_find_section_by_flag(main_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name) != 0);
+
+    struct AVMPackData *avmpack_data = malloc(sizeof(struct AVMPackData));
+    TEST_ASSERT(avmpack_data != NULL);
+
+    avmpack_data->data = main_avm;
+    list_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
+    glb->avmpack_platform_data = NULL;
+
+    Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
+    TEST_ASSERT(mod != NULL);
+
+    globalcontext_insert_module_with_filename(glb, mod, startup_module_name);
+
+    Context *ctx = context_new(glb);
+    TEST_ASSERT(ctx != NULL);
+    ctx->leader = 1;
+
+    ESP_LOGI(TAG, "Starting %s...\n", startup_module_name);
+
+    context_execute_loop(ctx, mod, "start", 0);
+    term ret_value = ctx->x[0];
+
+    fprintf(stdout, "AtomVM finished with return value: ");
+    term_display(stdout, ret_value, ctx);
+    fprintf(stdout, "\n");
+
+    TEST_ASSERT(term_to_int(ret_value) == 6);
 }
 
 void app_main(void)
