@@ -28,11 +28,19 @@ start() ->
     receive
         ok -> ok
     end,
+    receive
+    after 100 ->
+        ok
+    end,
     {memory, Pid1MemorySize} = process_info(Pid1, memory),
     assert(Pid1MemorySize < 1024),
     Pid2 = spawn_opt(?MODULE, loop, [Self], [{min_heap_size, 1024}]),
     receive
         ok -> ok
+    end,
+    receive
+    after 100 ->
+        ok
     end,
     {memory, Pid2MemorySize} = process_info(Pid2, memory),
     assert(1024 =< Pid2MemorySize),
@@ -50,6 +58,9 @@ loop(undefined) ->
     receive
         {Pid, stop} ->
             Pid ! ok
+    after 10 ->
+        erlang:garbage_collect(),
+        loop(undefined)
     end;
 loop(Pid) ->
     Pid ! ok,
