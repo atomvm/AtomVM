@@ -61,5 +61,6 @@ additional information.
 - Fixed a bug in packing and unpacking integers into and from binaries when the
   bit length is not a multiple of 8.
 - Fixed `esp:deep_sleep/1` that did not accept values above 31 minutes.
+- Fixed the enforcement of `min_free_space` process option.
 
 ## [0.5.0] - 2022-03-22

@@ -101,6 +101,8 @@ static inline void push_to_stack(term **stack, term value)
 enum MemoryGCResult memory_gc(Context *ctx, int new_size)
 {
     TRACE("Going to perform gc on process %i\n", ctx->process_id);
+    avm_int_t min_heap_size = ctx->has_min_heap_size ? ctx->min_heap_size : 0;
+    new_size = MAX(new_size, min_heap_size);
 
     new_size += ctx->heap_fragments_size;
     ctx->heap_fragments_size = 0;
