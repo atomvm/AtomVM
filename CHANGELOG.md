@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for `controlling_process/2` in `gen_udp` and `gen_tcp` modules.
 - Added ability to get the atomvm version via `erlang:system_info`.
 - Added erlang:is_boolean/1 Bif.
+- Added support for esp:partition_erase_range/2
 
 ### Breaking Changes
 
