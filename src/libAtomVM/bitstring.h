@@ -22,6 +22,10 @@
 #ifndef _BITSTRING_H_
 #define _BITSTRING_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "term.h"
 
 #include <stdbool.h>
@@ -291,5 +295,9 @@ static inline bool bitstring_insert_integer(term dst_bin, size_t offset, avm_int
 
     return bitstring_insert_any_integer((uint8_t *) term_binary_data(dst_bin), offset, value, n, bs_flags);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

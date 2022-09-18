@@ -21,6 +21,10 @@
 #ifndef _INTEROP_H_
 #define _INTEROP_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "context.h"
 #include "term.h"
 
@@ -67,5 +71,9 @@ int interop_write_iolist(term t, char *p);
  * @returns the found int value which corresponds to the given atom.
  */
 int interop_atom_term_select_int(GlobalContext *global, const AtomStringIntPair *table, term atom);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -28,9 +28,13 @@
 #ifndef _TERM_TYPEDEF_H_
 #define _TERM_TYPEDEF_H_
 
+#ifdef __cplusplus
+#include <climits>
+#else
 #include <limits.h>
-#include <stdint.h>
+#endif
 #include <inttypes.h>
+#include <stdint.h>
 
 /**
  * A value of any data type, types bigger than a machine word will require some additional space on heap.

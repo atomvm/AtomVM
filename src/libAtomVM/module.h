@@ -28,6 +28,10 @@
 #ifndef _MODULE_H_
 #define _MODULE_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 
 #include "atom.h"
@@ -237,5 +241,9 @@ static inline const uint8_t *module_get_str(Module *mod, size_t offset, size_t *
     *remaining = mod->str_table_len - offset;
     return ((const uint8_t *) mod->str_table) + 8 + offset;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
