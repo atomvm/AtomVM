@@ -26,4 +26,9 @@ menu "AtomVM configuration"
         help
             Reboot the ESP32 device if the start/0 entrypoint does not return the `ok` atom.
 
+    config RESET_BOOT_PARTITION_ON_NOT_OK
+        bool  "Reset the boot partition on not ok return value from start/0"
+        default n
+        help
+            Reset the boot partition to the default if the start/0 entrypoint does not return the `ok` atom.
 endmenu
