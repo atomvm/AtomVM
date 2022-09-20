@@ -21,6 +21,10 @@
 #ifndef _PLATFORM_NIFS_H_
 #define _PLATFORM_NIFS_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "exportedfunction.h"
 #include "module.h"
 
@@ -35,5 +39,9 @@
  *           NULL, if there is no such Nif.
  */
 const struct Nif *platform_nifs_get_nif(const char *nifname);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

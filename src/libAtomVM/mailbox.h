@@ -28,6 +28,10 @@
 #ifndef _MAILBOX_H_
 #define _MAILBOX_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "context.h"
 #include "list.h"
 #include "term.h"
@@ -93,5 +97,9 @@ void mailbox_remove(Context *c);
  * @param m the message to free.
  */
 void mailbox_destroy_message(Message *m);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

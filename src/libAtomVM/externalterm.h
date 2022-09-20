@@ -28,6 +28,10 @@
 #ifndef _EXTERNALTERM_H_
 #define _EXTERNALTERM_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "term.h"
 
 enum ExternalTermResult
@@ -82,5 +86,9 @@ enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term b
  * deserialization fails.
  */
 term externalterm_to_binary(Context *ctx, term t);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

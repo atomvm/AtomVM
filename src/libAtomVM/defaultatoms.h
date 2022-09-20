@@ -21,6 +21,10 @@
 #ifndef _DEFAULTATOMS_H_
 #define _DEFAULTATOMS_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "globalcontext.h"
 
 #define FALSE_ATOM_INDEX 0
@@ -178,5 +182,9 @@
 void defaultatoms_init(GlobalContext *glb);
 
 void platform_defaultatoms_init(GlobalContext *glb);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

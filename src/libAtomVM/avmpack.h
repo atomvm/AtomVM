@@ -26,6 +26,10 @@
 #ifndef _AVMPACK_H_
 #define _AVMPACK_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "list.h"
 #include <stdint.h>
 
@@ -98,5 +102,9 @@ int avmpack_is_valid(const void *avmpack_binary, uint32_t size);
  * @param fold_fun function that will be called for each AVM section.
  */
 void *avmpack_fold(void *accum, const void *avmpack_binary, avmpack_fold_fun fold_fun);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

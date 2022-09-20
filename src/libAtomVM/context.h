@@ -28,6 +28,10 @@
 #ifndef _CONTEXT_H_
 #define _CONTEXT_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "globalcontext.h"
 #include "linkedlist.h"
 #include "term.h"
@@ -40,7 +44,7 @@ struct Module;
 typedef struct Module Module;
 #endif
 
-typedef void (*native_handler)(Context *ctx);
+typedef void (*native_handler_f)(Context *ctx);
 
 enum ContextFlags
 {
@@ -86,8 +90,8 @@ struct Context
 
     GlobalContext *global;
 
-    //Ports support
-    native_handler native_handler;
+    // Ports support
+    native_handler_f native_handler;
 
     uint64_t reductions;
 
@@ -299,5 +303,9 @@ size_t context_size(Context *ctx);
 
 uint64_t context_monitor(Context *ctx, term monitor_pid, bool linked);
 void context_demonitor(Context *ctx, term monitor_pid, bool linked);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

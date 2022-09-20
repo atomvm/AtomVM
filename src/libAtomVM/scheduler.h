@@ -28,6 +28,10 @@
 #ifndef _SCHEDULER_H_
 #define _SCHEDULER_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "context.h"
 #include "globalcontext.h"
 #include "linkedlist.h"
@@ -101,5 +105,9 @@ Context *scheduler_next(GlobalContext *global, Context *c);
 void scheduler_set_timeout(Context *ctx, uint32_t timeout);
 
 void scheduler_cancel_timeout(Context *ctx);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

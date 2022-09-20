@@ -26,6 +26,10 @@
 #ifndef _NIFS_H_
 #define _NIFS_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "atom.h"
 #include "context.h"
 #include "exportedfunction.h"
@@ -43,5 +47,9 @@
     return term_invalid_term();
 
 const struct Nif *nifs_get(AtomString module, AtomString function, int arity);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

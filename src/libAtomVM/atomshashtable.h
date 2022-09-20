@@ -21,6 +21,10 @@
 #ifndef _ATOMSHASHTABLE_H_
 #define _ATOMSHASHTABLE_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "atom.h"
 
 struct AtomsHashTable
@@ -36,5 +40,9 @@ unsigned long atomshashtable_get_value(const struct AtomsHashTable *hash_table, 
 int atomshashtable_has_key(const struct AtomsHashTable *hash_table, AtomString string);
 
 #define TO_ATOMSHASHTABLE_VALUE(value) ((unsigned long) (value))
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

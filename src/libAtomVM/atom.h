@@ -28,6 +28,10 @@
 #ifndef _ATOM_H_
 #define _ATOM_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -96,5 +100,9 @@ static inline const void *atom_string_data(AtomString atom_str)
  * @param   arity the function arity
  */
 void atom_write_mfa(char *buf, size_t buf_size, AtomString module, AtomString function, int arity);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

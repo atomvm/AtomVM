@@ -28,6 +28,10 @@
 #ifndef _TERM_H_
 #define _TERM_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -1655,5 +1659,9 @@ static inline term term_get_sub_binary_ref(term t)
     const term *boxed_value = term_to_const_term_ptr(t);
     return boxed_value[3];
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
