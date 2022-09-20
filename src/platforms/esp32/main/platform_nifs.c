@@ -191,8 +191,13 @@ static term nif_esp_partition_erase_range(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(argv[1], term_is_integer);
     avm_int_t offset = term_to_int(argv[1]);
 
-    VALIDATE_VALUE(argv[2], term_is_integer);
-    avm_int_t size = term_to_int(argv[2]);
+    avm_int_t size = 0;
+    if (argc == 3) {
+        VALIDATE_VALUE(argv[2], term_is_integer);
+        size = term_to_int(argv[2]);
+    } else {
+        size = partition->size - offset;
+    }
 
     esp_err_t res = esp_partition_erase_range(partition, offset, size);
     if (UNLIKELY(res != ESP_OK)) {
@@ -372,6 +377,10 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     if (strcmp("esp:freq_hz/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_freq_hz_nif;
+    }
+    if (strcmp("esp:partition_erase_range/2", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_partition_erase_range_nif;
     }
     if (strcmp("esp:partition_erase_range/3", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
