@@ -18,10 +18,16 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-set(MAIN_COMPONENT_SRCS
-    "main.c"
-)
+cmake_minimum_required(VERSION 3.16)
 
-idf_component_register(SRCS ${MAIN_COMPONENT_SRCS}
-                       REQUIRES "spi_flash"
-                       PRIV_REQUIRES "libatomvm" "avm_sys")
+set(EXTRA_COMPONENT_DIRS "../components")
+
+# Set the components to include the tests for.
+# This can be overriden from CMake cache:
+# - when invoking CMake directly: cmake -D TEST_COMPONENTS="xxxxx" ..
+# - when using idf.py: idf.py -T xxxxx build
+#
+set(TEST_COMPONENTS "testable" CACHE STRING "List of components to test")
+
+include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+project(atomvm-esp32-test)

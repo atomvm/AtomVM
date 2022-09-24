@@ -18,10 +18,10 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-set(MAIN_COMPONENT_SRCS
-    "main.c"
-)
+from pytest_embedded import Dut
 
-idf_component_register(SRCS ${MAIN_COMPONENT_SRCS}
-                       REQUIRES "spi_flash"
-                       PRIV_REQUIRES "libatomvm" "avm_sys")
+def test_atomvm(dut, redirect):
+     dut.expect_unity_test_output()
+     assert len(dut.testsuite.testcases) > 0
+     assert dut.testsuite.attrs['failures'] == 0
+     assert dut.testsuite.attrs['errors'] == 0
