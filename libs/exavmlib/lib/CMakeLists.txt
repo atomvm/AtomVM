@@ -23,6 +23,7 @@ project(exavmlib)
 include(BuildElixir)
 
 set(ELIXIR_MODULES
+    AVMPort
     Code
     Console
     GPIO
