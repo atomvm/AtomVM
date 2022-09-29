@@ -34,6 +34,7 @@
 -module(i2c).
 -export([
     open/1,
+    close/1,
     begin_transmission/2,
     write_byte/2,
     end_transmission/1,
@@ -60,6 +61,19 @@
 -spec open(Param :: params()) -> i2c().
 open(Param) ->
     open_port({spawn, "i2c"}, Param).
+
+%%-----------------------------------------------------------------------------
+%% @param   I2C I2C instance created via `open/1'
+%% @returns `ok' atom
+%% @doc     Closes the connection to the I2C driver
+%%
+%%          This function will close the connection to the I2C driver and
+%%          free any resources in use by it.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec close(I2C :: i2c()) -> ok | {error, Reason :: term()}.
+close(I2C) ->
+    port:call(I2C, {close}).
 
 %%-----------------------------------------------------------------------------
 %% @param   I2C I2C instance created via `open/1'
