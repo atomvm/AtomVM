@@ -301,10 +301,12 @@ static void uart_driver_do_read(Context *ctx, term msg)
 
     term pid = term_get_tuple_element(msg, 0);
     term ref = term_get_tuple_element(msg, 1);
+    uint64_t ref_ticks = term_to_ref_ticks(ref);
 
     if (uart_data->reader_process_pid != term_invalid_term()) {
-        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2) != MEMORY_GC_OK)) {
-            AVM_ABORT();
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + REF_SIZE) != MEMORY_GC_OK)) {
+            ESP_LOGE(TAG, "[uart_driver_do_read] Failed to allocate space for error tuple");
+            send_message(pid, MEMORY_ATOM, glb);
         }
 
         term ealready = context_make_atom(ctx, ealready_atom);
@@ -314,7 +316,7 @@ static void uart_driver_do_read(Context *ctx, term msg)
         term_put_tuple_element(error_tuple, 1, ealready);
 
         term result_tuple = term_alloc_tuple(2, ctx);
-        term_put_tuple_element(result_tuple, 0, ref);
+        term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, ctx));
         term_put_tuple_element(result_tuple, 1, error_tuple);
 
         send_message(pid, result_tuple, glb);
@@ -327,8 +329,9 @@ static void uart_driver_do_read(Context *ctx, term msg)
 
     if (count > 0) {
         int bin_size = term_binary_data_size_in_terms(count) + BINARY_HEADER_SIZE;
-        if (UNLIKELY(memory_ensure_free(uart_data->ctx, bin_size + TUPLE_SIZE(2) * 2) != MEMORY_GC_OK)) {
-            AVM_ABORT();
+        if (UNLIKELY(memory_ensure_free(uart_data->ctx, bin_size + TUPLE_SIZE(2) * 2 + REF_SIZE) != MEMORY_GC_OK)) {
+            ESP_LOGE(TAG, "[uart_driver_do_read] Failed to allocate space for return value");
+            send_message(pid, MEMORY_ATOM, glb);
         }
 
         term bin = term_create_uninitialized_binary(count, uart_data->ctx);
@@ -340,14 +343,14 @@ static void uart_driver_do_read(Context *ctx, term msg)
         term_put_tuple_element(ok_tuple, 1, bin);
 
         term result_tuple = term_alloc_tuple(2, ctx);
-        term_put_tuple_element(result_tuple, 0, ref);
+        term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, ctx));
         term_put_tuple_element(result_tuple, 1, ok_tuple);
 
         send_message(pid, result_tuple, uart_data->ctx->global);
 
     } else {
         uart_data->reader_process_pid = pid;
-        uart_data->reader_ref_ticks = term_to_ref_ticks(ref);
+        uart_data->reader_ref_ticks = ref_ticks;
     }
 }
 
@@ -358,6 +361,7 @@ static void uart_driver_do_write(Context *ctx, term msg)
 
     term pid = term_get_tuple_element(msg, 0);
     term ref = term_get_tuple_element(msg, 1);
+    uint64_t ref_ticks = term_to_ref_ticks(ref);
 
     term cmd = term_get_tuple_element(msg, 2);
 
@@ -372,12 +376,13 @@ static void uart_driver_do_write(Context *ctx, term msg)
 
     free(buffer);
 
-    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-        AVM_ABORT();
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + REF_SIZE) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "[uart_driver_do_write] Failed to allocate space for return value");
+        send_message(pid, MEMORY_ATOM, glb);
     }
 
     term result_tuple = term_alloc_tuple(2, ctx);
-    term_put_tuple_element(result_tuple, 0, ref);
+    term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, ctx));
     term_put_tuple_element(result_tuple, 1, OK_ATOM);
 
     send_message(pid, result_tuple, glb);
