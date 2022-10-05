@@ -584,6 +584,12 @@ Reading bytes is more straightforward.  Simply use `i2c:read_bytes/3,4`, specify
     %% erlang
     BinaryData = i2c:read_bytes(I2C, DeviceAddress, Register, Len)
 
+To close the I2C driver and free any resources in use by it, use the `i2c:close/1` function, supplying a reference to the I2C driver instance created via `i2c:open/1`:
+
+    %% erlang
+    ok = i2c:close(I2C)
+
+Once the I2C driver is closed, any calls to `i2c` functions using a reference to the I2C driver instance should return with the value `{error, noproc}`.
 
 ### SPI
 

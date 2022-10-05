@@ -24,6 +24,7 @@
 #include <string.h>
 
 #include <driver/i2c.h>
+#include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -38,6 +39,7 @@
 #include "mailbox.h"
 #include "module.h"
 #include "platform_defaultatoms.h"
+#include "scheduler.h"
 #include "term.h"
 #include "utils.h"
 
@@ -46,6 +48,8 @@
 
 #include "esp32_sys.h"
 #include "sys.h"
+
+#define TAG "i2c_driver"
 
 static void i2c_driver_init(GlobalContext *global);
 static Context *i2c_driver_create_port(GlobalContext *global, term opts);
@@ -72,13 +76,8 @@ void i2c_driver_init(GlobalContext *global)
 
 Context *i2c_driver_create_port(GlobalContext *global, term opts)
 {
-    Context *ctx = context_new(global);
-
     struct I2CData *i2c_data = calloc(1, sizeof(struct I2CData));
     i2c_data->transmitting_pid = term_invalid_term();
-
-    ctx->native_handler = i2cdriver_consume_mailbox;
-    ctx->platform_data = i2c_data;
 
     term scl_io_num_term = interop_proplist_get_value(opts, SCL_IO_NUM_ATOM);
     term sda_io_num_term = interop_proplist_get_value(opts, SDA_IO_NUM_ATOM);
@@ -92,21 +91,34 @@ Context *i2c_driver_create_port(GlobalContext *global, term opts)
     conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
     conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
     conf.master.clk_speed = term_to_int32(clock_hz_term);
-    esp_err_t ret = i2c_param_config(I2C_NUM_0, &conf);
+    esp_err_t err = i2c_param_config(I2C_NUM_0, &conf);
 
-    if (UNLIKELY(ret != ESP_OK)) {
-        TRACE("i2cdriver_init: failed config, return value: %i\n", ret);
-        //TODO: return error
+    if (UNLIKELY(err != ESP_OK)) {
+        ESP_LOGE(TAG, "Failed to initialize I2C parameters.  err=%i\n", err);
         return NULL;
     }
 
-    ret = i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0);
-    if (UNLIKELY(ret != ESP_OK)) {
-        TRACE("i2cdriver_init: failed install, return vale: %i\n", ret);
-        //TODO: return error
+    err = i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0);
+    if (UNLIKELY(err != ESP_OK)) {
+        ESP_LOGE(TAG, "Failed to install I2C driver.  err=%i\n", err);
         return NULL;
     }
+
+    Context *ctx = context_new(global);
+    ctx->native_handler = i2cdriver_consume_mailbox;
+    ctx->platform_data = i2c_data;
+
     return ctx;
+}
+
+static void i2c_driver_close(Context *ctx)
+{
+    UNUSED(ctx);
+    esp_err_t err = i2c_driver_delete(I2C_NUM_0);
+    if (UNLIKELY(err != ESP_OK)) {
+        ESP_LOGW(TAG, "Failed to delete I2C driver.  err=%i\n", err);
+    }
+    free(ctx->platform_data);
 }
 
 static term i2cdriver_begin_transmission(Context *ctx, term pid, term req)
@@ -378,6 +390,10 @@ static void i2cdriver_consume_mailbox(Context *ctx)
                 ret = i2cdriver_write_bytes(ctx, pid, req);
             }
             break;
+        case CLOSE_ATOM:
+            i2c_driver_close(ctx);
+            ret = OK_ATOM;
+            break;
 
         default:
             TRACE("i2c: error: unrecognized command: %x\n", cmd);
@@ -397,6 +413,10 @@ static void i2cdriver_consume_mailbox(Context *ctx)
 
     mailbox_send(target, ret_msg);
     mailbox_destroy_message(message);
+
+    if (cmd == CLOSE_ATOM) {
+        scheduler_terminate(ctx);
+    }
 }
 
 REGISTER_PORT_DRIVER(i2c, i2c_driver_init, i2c_driver_create_port)
