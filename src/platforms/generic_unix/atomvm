@@ -1,7 +1,8 @@
+#!/bin/sh
 #
 # This file is part of AtomVM.
 #
-# Copyright 2019-2021 Riccardo Binetti <rbino@gmx.com>
+# Copyright 2022 Fred Dushin <fred@dushin.net>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,24 +19,16 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-project(exavmlib)
+avm_root="$(cd $(dirname $0)/.. && pwd)"
+avm_lib="${avm_root}/lib"
 
-include(BuildElixir)
+nargs=$#
+if [ "${nargs}" -eq "0" ]
+then
+    echo "%%"
+    echo "%% Error!  Syntax: ${0} [<avm-file>]+"
+    echo "%%"
+    exit 1
+fi
 
-set(ELIXIR_MODULES
-    AVMPort
-    Code
-    Console
-    GPIO
-    Access
-    Enum
-    List
-    Map
-    Module
-    Keyword
-    Kernel
-    Process
-    Tuple
-)
-
-pack_archive(exavmlib ${ELIXIR_MODULES})
+exec "${avm_lib}/atomvm/AtomVM" $@ "${avm_lib}/atomvm/atomvm.avm"

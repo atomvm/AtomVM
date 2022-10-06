@@ -32,5 +32,3 @@ set(ERLANG_MODULES
 )
 
 pack_archive(alisp ${ERLANG_MODULES})
-
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/alisp.avm DESTINATION lib/AtomVM/ebin)
