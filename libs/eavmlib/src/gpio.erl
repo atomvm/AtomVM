@@ -128,9 +128,9 @@ digital_write(_GPIONum, _Level) ->
 digital_read(_GPIONum) ->
     throw(nif_error).
 
--spec attach_interrupt(GPIONum :: pin(), Mode :: direction()) -> ok | error.
-attach_interrupt(GPIONum, Mode) ->
-    set_int(start(), GPIONum, Mode).
+-spec attach_interrupt(GPIONum :: pin(), Trigger :: trigger()) -> ok | error.
+attach_interrupt(GPIONum, Trigger) ->
+    set_int(start(), GPIONum, Trigger).
 
 -spec detach_interrupt(GPIONum :: pin()) -> ok | error.
 detach_interrupt(GPIONum) ->
