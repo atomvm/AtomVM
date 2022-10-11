@@ -19,21 +19,38 @@
 %
 
 -module(uart).
--export([open/2, read/1, write/2]).
+-export([open/2, close/1, read/1, write/2]).
 
 open(Name, Opts) ->
     open_port({spawn, "uart"}, [{name, Name} | Opts]).
 
+close(Pid) ->
+    port:call(Pid, close).
+
 read(Pid) ->
-    call(Pid, read).
+    port:call(Pid, read).
 
 write(Pid, B) ->
-    call(Pid, {write, B}).
-
-call(DriverPid, Msg) ->
-    Ref = erlang:make_ref(),
-    DriverPid ! {self(), Ref, Msg},
-    receive
-        {Ref, Ret} ->
-            Ret
+    case is_iolist(B) of
+        true ->
+            port:call(Pid, {write, B});
+        false ->
+            throw(badarg)
     end.
+
+%% @private
+is_iolist([]) ->
+    true;
+is_iolist(B) when is_binary(B) ->
+    true;
+is_iolist(I) when is_integer(I) andalso 0 =< I andalso I =< 255 ->
+    true;
+is_iolist([H | T]) ->
+    case is_iolist(H) of
+        true ->
+            is_iolist(T);
+        false ->
+            false
+    end;
+is_iolist(_) ->
+    false.

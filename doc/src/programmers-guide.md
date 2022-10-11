@@ -756,6 +756,13 @@ To write data to the UART channel, use the `uart_write/2` function.  The input d
 
 Consult your local device data sheet for information about the format of data to be read from or written to the UART channel.
 
+To close the UART driver and free any resources in use by it, use the `uart:close/1` function, supplying a reference to the UART driver instance created via `uart:open/2`:
+
+    %% erlang
+    ok = uart:close(UART)
+
+Once the UART driver is closed, any calls to `uart` functions using a reference to the UART driver instance should return with the value `{error, noproc}`.
+
 ### LED Control
 
 The LED Control API can be used to drive LEDs, as well as generate PWM signals on GPIO pins.
