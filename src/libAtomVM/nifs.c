@@ -118,6 +118,7 @@ static term nif_erlang_iolist_size_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_iolist_to_binary_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_register_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_unregister_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_send_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_setelement_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_spawn(Context *ctx, int argc, term argv[]);
@@ -362,6 +363,12 @@ static const struct Nif register_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_register_2
+};
+
+static const struct Nif unregister_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_unregister_1
 };
 
 static const struct Nif spawn_nif =
@@ -770,6 +777,23 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[])
     }
 
     globalcontext_register_process(ctx->global, atom_index, pid);
+
+    return TRUE_ATOM;
+}
+
+static term nif_erlang_unregister_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term reg_name_term = argv[0];
+    VALIDATE_VALUE(reg_name_term, term_is_atom);
+
+    int atom_index = term_to_atom_index(reg_name_term);
+
+    bool unregistered = globalcontext_unregister_process(ctx->global, atom_index);
+    if (UNLIKELY(!unregistered)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
 
     return TRUE_ATOM;
 }
