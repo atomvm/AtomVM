@@ -135,6 +135,28 @@ void globalcontext_register_process(GlobalContext *glb, int atom_index, int loca
     linkedlist_append(&glb->registered_processes, &registered_process->registered_processes_list_head);
 }
 
+bool globalcontext_unregister_process(GlobalContext *glb, int atom_index)
+{
+    if (!glb->registered_processes) {
+        return false;
+    }
+
+    struct RegisteredProcess *registered_processes = GET_LIST_ENTRY(glb->registered_processes, struct RegisteredProcess, registered_processes_list_head);
+
+    struct RegisteredProcess *p = registered_processes;
+
+    do {
+        if (p->atom_index == atom_index) {
+            linkedlist_remove(&glb->registered_processes, &p->registered_processes_list_head);
+            free(p);
+            return true;
+        }
+        p = GET_LIST_ENTRY(p->registered_processes_list_head.next, struct RegisteredProcess, registered_processes_list_head);
+    } while (p != registered_processes);
+
+    return false;
+}
+
 int globalcontext_get_registered_process(GlobalContext *glb, int atom_index)
 {
     if (!glb->registered_processes) {

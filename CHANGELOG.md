@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `erlang:is_boolean/1` Bif.
 - Added support for `esp:partition_erase_range/2`
 - Added support for `i2c:close/1`
+- Added `erlang:is_boolean/1` Bif.
+- Added support for `esp:partition_erase_range/2`
+- Added support for `i2c:close/1`
+- Added support for `unregister/1`
 
 ### Breaking Changes
 

@@ -73,6 +73,7 @@ erlang:monitor/2, &monitor_nif
 erlang:demonitor/1, &demonitor_nif
 erlang:is_process_alive/1, &is_process_alive_nif
 erlang:register/2, &register_nif
+erlang:unregister/1, &unregister_nif
 erlang:send/2, &send_nif
 erlang:setelement/3, &setelement_nif
 erlang:spawn/1, &spawn_fun_nif
