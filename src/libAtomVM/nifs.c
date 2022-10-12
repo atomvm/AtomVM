@@ -762,8 +762,15 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[])
     int atom_index = term_to_atom_index(reg_name_term);
     int32_t pid = term_to_local_process_id(pid_or_port_term);
 
-    // TODO: pid must be existing, not already registered.
-    // TODO: reg_name_term must not be the atom undefined and not already registered.
+    // pid must be existing, not already registered.
+    if (UNLIKELY(globalcontext_get_process(ctx->global, pid) == NULL)){
+        RAISE_ERROR(BADARG_ATOM);
+    } else if (UNLIKELY(globalcontext_get_registered_process(ctx->global, atom_index) != 0)) {
+        RAISE_ERROR(BADARG_ATOM);
+    // reg_name_term must not be the atom undefined.
+    } else if (UNLIKELY(atom_index == UNDEFINED_ATOM_INDEX)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
 
     globalcontext_register_process(ctx->global, atom_index, pid);
 
