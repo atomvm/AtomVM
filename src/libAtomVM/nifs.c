@@ -760,7 +760,7 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(pid_or_port_term, term_is_pid);
 
     int atom_index = term_to_atom_index(reg_name_term);
-    int pid = term_to_local_process_id(pid_or_port_term);
+    int32_t pid = term_to_local_process_id(pid_or_port_term);
 
     // TODO: pid must be existing, not already registered.
     // TODO: reg_name_term must not be the atom undefined and not already registered.
