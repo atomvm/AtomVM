@@ -767,7 +767,7 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[])
 
     globalcontext_register_process(ctx->global, atom_index, pid);
 
-    return term_nil();
+    return TRUE_ATOM;
 }
 
 static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[])
