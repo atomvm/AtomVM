@@ -39,10 +39,10 @@ start() ->
     %% register as atom "undefined"
     T7 = reg_bad_arg(undefined, self()),
     %% test unregister an atom that has not been registered
-    T8 =  unreg_not_registered(something),
+    T8 = unreg_not_registered(something),
     T1 + T2 + T3 + T4 + T5 + T6 + T7 + T8.
 
-do_reg(Pid, Name)->
+do_reg(Pid, Name) ->
     Res = register(Pid, Name),
     case Res of
         true ->
@@ -51,7 +51,7 @@ do_reg(Pid, Name)->
             0
     end.
 
-test_reg(Name)->
+test_reg(Name) ->
     Pid = whereis(Name),
     Res = is_process_alive(Pid),
     case Res of
@@ -61,7 +61,7 @@ test_reg(Name)->
             0
     end.
 
-do_unreg(Name)->
+do_unreg(Name) ->
     Res = unregister(Name),
     case Res of
         true ->
@@ -70,7 +70,7 @@ do_unreg(Name)->
             0
     end.
 
-test_unreg(Name)->
+test_unreg(Name) ->
     Res = whereis(Name),
     case Res of
         undefined ->
@@ -79,7 +79,7 @@ test_unreg(Name)->
             0
     end.
 
-reg_bad_arg(Name, Pid)->
+reg_bad_arg(Name, Pid) ->
     try register(Name, Pid) of
         true ->
             0
@@ -88,7 +88,7 @@ reg_bad_arg(Name, Pid)->
             1
     end.
 
-test_already_registered(Name)->
+test_already_registered(Name) ->
     try register(Name, self()) of
         true ->
             0
@@ -97,7 +97,7 @@ test_already_registered(Name)->
             1
     end.
 
-unreg_not_registered(Name)->
+unreg_not_registered(Name) ->
     try unregister(Name) of
         true ->
             0
