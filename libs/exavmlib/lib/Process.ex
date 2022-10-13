@@ -217,8 +217,32 @@ defmodule Process do
   @spec list() :: [pid]
   defdelegate list(), to: :erlang, as: :processes
 
+  @doc """
+  Register a PID or port identifier under `name`.
+
+  See `:erlang.register/2` for more information.
+
+  ## Examples
+
+    Process.register(self(), :test)
+
+  """
   def register(pid_or_port, name) when is_atom(name) do
     :erlang.register(name, pid_or_port)
+  end
+
+  @doc """
+  Unregister a registered process by `name`.
+
+  See `:erlang.unregister/1` for more information.
+
+  ## Examples
+
+    Process.unregister(:test)
+
+  """
+  def unregister(name) when is_atom(name) do
+    :erlang.unregister(name)
   end
 
   @doc """
