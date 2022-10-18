@@ -19,54 +19,28 @@
 #
 
 defmodule Blink do
+  # suppress warnings when compileing the VM
+  # not needed or recommended for user apps.
+  @compile {:no_warn_undefined, [GPIO]}
+  @pin 2
 
   def start() do
-    gpio = do_open_port("gpio", [])
-    set_direction(gpio, 2, :output)
-
-    loop(gpio, 0)
+    GPIO.set_pin_mode(@pin, :output)
+    loop(@pin, :low)
   end
 
-  defp loop(gpio, 0) do
-    set_level(gpio, 2, 0)
-    sleep(200)
-
-    loop(gpio, 1)
+  defp loop(pin, level) do
+    GPIO.digital_write(pin, level)
+    Process.sleep(200)
+    loop(pin, toggle(level))
   end
 
-  defp loop(gpio, 1) do
-    set_level(gpio, 2, 1)
-    sleep(200)
-
-    loop(gpio, 0)
+  defp toggle(:high) do
+    :low
   end
 
-  defp do_open_port(port_name, param) do
-    Port.open({:spawn, port_name}, param)
-  end
-
-  defp sleep(t) do
-    receive do
-    after t -> :ok
-    end
-  end
-
-  defp set_direction(gpio, gpio_num, direction) do
-    send gpio, {self(), :set_direction, gpio_num, direction}
-
-    receive do
-      ret ->
-        ret
-    end
-  end
-
-  defp set_level(gpio, gpio_num, level) do
-    send gpio, {self(), :set_level, gpio_num, level}
-
-    receive do
-      ret ->
-        ret
-    end
+  defp toggle(:low) do
+    :high
   end
 
 end
