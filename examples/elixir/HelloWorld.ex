@@ -19,23 +19,13 @@
 #
 
 defmodule HelloWorld do
-
+  # this compiler option is to suppress warnings when compiling the VM
+  # it is not needed or recommended for user apps.
+  @compile {:no_warn_undefined, [Console]}
   def start() do
-    console = do_open_port("console", [])
-    write(console, "Hello World\n")
+    Console.print("Hello World\n")
+    Console.puts("Console.puts() and Console.print() work with binary ")
+    Console.puts('or charlist strings.\n')
+    Console.flush()
   end
-
-  defp do_open_port(port_name, param) do
-    Port.open({:spawn, port_name}, param)
-  end
-
-  defp write(console, string) do
-    send console, {self(), string}
-
-    receive do
-      return_status ->
-        return_status
-    end
-  end
-
 end
