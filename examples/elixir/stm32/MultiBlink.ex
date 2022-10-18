@@ -19,6 +19,9 @@
 #
 
 defmodule MultiBlink do
+  # suppress warnings when compileing the VM
+  # not needed or recommended for user apps.
+  @compile {:no_warn_undefined, [GPIO]}
   def start do
     spawn(__MODULE__, :blink, [{:d, 12}, 1000])
     spawn(__MODULE__, :blink, [{:d, 13}, 500])
