@@ -19,7 +19,11 @@
 #
 
 defmodule Console do
+  @compile {:no_warn_undefined, [:console]}
   @compile {:no_warn_undefined, [AVMPort]}
+
+  def print(string),
+    do: :console.print(string)
 
   def puts(device \\ :stdio, item) do
     pid =
@@ -44,4 +48,7 @@ defmodule Console do
 
   defp write(console, string),
     do: AVMPort.call(console, {:puts, string})
+
+  def flush(console \\ :erlang.whereis(:stdio)),
+    do: AVMPort.call(console, :flush)
 end
