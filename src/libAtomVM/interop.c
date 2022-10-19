@@ -286,3 +286,18 @@ term interop_kv_get_value_default(term kv, AtomString key, term default_value, G
         return default_value;
     }
 }
+
+term interop_string_to_atom(Context *ctx, const char *str, size_t len)
+{
+    if (len > 255) {
+        return term_invalid_term();
+    }
+    AtomString atom = malloc(len + 1);
+    if (IS_NULL_PTR(atom)) {
+        return term_invalid_term();
+    }
+    ((uint8_t *) atom)[0] = len;
+    memcpy(((char *) atom) + 1, str, len);
+
+    return context_make_atom(ctx, atom);
+}

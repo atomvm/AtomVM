@@ -21,6 +21,7 @@
 #define _GNU_SOURCE
 
 #include "atom.h"
+#include <avmpack.h>
 #include "defaultatoms.h"
 #include "esp32_sys.h"
 #include "interop.h"
@@ -29,9 +30,11 @@
 #include "platform_defaultatoms.h"
 #include "term.h"
 
+#include <esp_log.h>
 #include <esp_partition.h>
 #include <esp_sleep.h>
 #include <esp_system.h>
+#include <sdkconfig.h>
 #include <soc/soc.h>
 #include <stdlib.h>
 #if defined __has_include
@@ -55,6 +58,7 @@
 //#define ENABLE_TRACE
 #include "trace.h"
 
+#define TAG "AtomVM"
 #define MD5_DIGEST_LENGTH 16
 
 static const char *const esp_rst_unknown_atom   = "\xF"  "esp_rst_unknown";
@@ -68,6 +72,8 @@ static const char *const esp_rst_wdt            = "\xB"  "esp_rst_wdt";
 static const char *const esp_rst_deepsleep      = "\x11" "esp_rst_deepsleep";
 static const char *const esp_rst_brownout       = "\x10" "esp_rst_brownout";
 static const char *const esp_rst_sdio           = "\xC"  "esp_rst_sdio";
+static const char *const invalid_avm_atom       = "\xB"  "invalid_avm";
+static const char *const no_start_module_atom   = "\xF"  "no_start_module";
 //                                                        123456789ABCDEF01
 
 //
@@ -393,6 +399,84 @@ static term nif_atomvm_platform(Context *ctx, int argc, term argv[])
     return ESP32_ATOM;
 }
 
+static term nif_esp_load_avm_from_partition(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argv);
+    term partition_name_term = argv[0];
+    VALIDATE_VALUE(partition_name_term, term_is_binary);
+
+    char *partition_name = interop_binary_to_string(partition_name_term);
+    int size;
+    const void *start_avm = avm_partition(partition_name, &size);
+    free(partition_name);
+
+    uint32_t startup_beam_size;
+    const void *startup_beam;
+    const char *startup_module_name;
+
+    GlobalContext *glb = ctx->global;
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    if (!avmpack_is_valid(start_avm, size)) {
+        ESP_LOGE(TAG, "Invalid start avm.");
+        term ret = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(ret, 0, ERROR_ATOM);
+        term_put_tuple_element(ret, 1, context_make_atom(ctx, invalid_avm_atom));
+        return ret;
+    }
+    if (!avmpack_find_section_by_flag(start_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
+        ESP_LOGE(TAG, "Error: Failed to locate start module.  (Did you flash a library by mistake?)");
+        term ret = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(ret, 0, ERROR_ATOM);
+        term_put_tuple_element(ret, 1, context_make_atom(ctx, no_start_module_atom));
+        return ret;
+    }
+
+    struct AVMPackData *avmpack_data = malloc(sizeof(struct AVMPackData));
+    if (IS_NULL_PTR(avmpack_data)) {
+        ESP_LOGE(TAG, "Memory error: Cannot allocate AVMPackData for %s.", startup_module_name);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    avmpack_data->data = start_avm;
+    list_prepend(&glb->avmpack_data, (struct ListHead *) avmpack_data);
+
+    size_t len = strlen(startup_module_name);
+    size_t len_without_ext = len - 5; // strlen(".beam");
+    char *startup_module = malloc(len_without_ext + 1);
+    if (IS_NULL_PTR(startup_module)) {
+        ESP_LOGE(TAG, "Memory error: Cannot allocate startup module atom name for %s.", startup_module_name);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    memcpy(startup_module, startup_module_name, len_without_ext);
+    startup_module[len_without_ext] = '\0';
+    ESP_LOGI(TAG, "Found startup module %s", startup_module);
+
+    term startup_module_term = interop_string_to_atom(ctx, startup_module, len_without_ext);
+    free(startup_module);
+
+    term ret = term_alloc_tuple(2, ctx);
+    term_put_tuple_element(ret, 0, OK_ATOM);
+    term_put_tuple_element(ret, 1, startup_module_term);
+
+    return ret;
+}
+
+static term nif_esp_is_reset_boot_partition_on_not_ok(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
+    return
+#if defined(CONFIG_RESET_BOOT_PARTITION_ON_NOT_OK)
+        CONFIG_RESET_BOOT_PARTITION_ON_NOT_OK ? TRUE_ATOM : FALSE_ATOM;
+#else
+        FALSE_ATOM;
+#endif
+}
+
 //
 // NIF structures and distpatch
 //
@@ -464,6 +548,16 @@ static const struct Nif atomvm_platform_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_platform
 };
+static const struct Nif esp_load_avm_from_partition_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_load_avm_from_partition
+};
+static const struct Nif esp_is_reset_boot_partition_on_not_ok_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_is_reset_boot_partition_on_not_ok
+};
 
 const struct Nif *platform_nifs_get_nif(const char *nifname)
 {
@@ -524,6 +618,14 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     if (strcmp("atomvm:platform/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &atomvm_platform_nif;
+    }
+    if (strcmp("esp:load_avm_from_partition/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_load_avm_from_partition_nif;
+    }
+    if (strcmp("esp:is_reset_boot_partition_on_not_ok/0", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_is_reset_boot_partition_on_not_ok_nif;
     }
     const struct Nif *nif = nif_collection_resolve_nif(nifname);
     if (nif) {

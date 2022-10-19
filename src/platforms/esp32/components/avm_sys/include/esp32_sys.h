@@ -125,5 +125,6 @@ void socket_init(Context *ctx, term opts);
 void port_driver_init_all(GlobalContext *global);
 void nif_collection_init_all(GlobalContext *global);
 const struct Nif *nif_collection_resolve_nif(const char *name);
+const void *avm_partition(const char *partition_name, int *size);
 
 #endif

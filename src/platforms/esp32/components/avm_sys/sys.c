@@ -36,11 +36,14 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
+#include <esp_log.h>
+#include <esp_partition.h>
 #include <limits.h>
 #include <stdint.h>
 #include <sys/socket.h>
 
 #define EVENT_QUEUE_LEN 16
+#define TAG "AtomVM"
 
 static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts);
 
@@ -340,4 +343,28 @@ const struct Nif *nif_collection_resolve_nif(const char *name)
     }
 
     return NULL;
+}
+
+const void *avm_partition(const char *partition_name, int *size)
+{
+    const esp_partition_t *partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, partition_name);
+    if (!partition) {
+        ESP_LOGW(TAG, "AVM partition not found for %s", partition_name);
+        *size = 0;
+        return NULL;
+    } else {
+        *size = partition->size;
+    }
+
+    const void *mapped_memory;
+    spi_flash_mmap_handle_t unmap_handle;
+    if (esp_partition_mmap(partition, 0, partition->size, SPI_FLASH_MMAP_DATA, &mapped_memory, &unmap_handle) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to map BEAM partition for %s", partition_name);
+        return NULL;
+    }
+    ESP_LOGI(TAG, "Loaded BEAM partition %s at address 0x%x (size=%i bytes)", partition_name, partition->address, partition->size);
+
+    UNUSED(unmap_handle);
+
+    return mapped_memory;
 }

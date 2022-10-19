@@ -61,6 +61,7 @@ term interop_proplist_get_value(term list, term key);
 term interop_proplist_get_value_default(term list, term key, term default_value);
 term interop_map_get_value(Context *ctx, term map, term key);
 term interop_map_get_value_default(Context *ctx, term map, term key, term default_value);
+term interop_string_to_atom(Context *ctx, const char *str, size_t len);
 
 NO_DISCARD InteropFunctionResult interop_iolist_size(term t, size_t *size);
 NO_DISCARD InteropFunctionResult interop_write_iolist(term t, char *p);

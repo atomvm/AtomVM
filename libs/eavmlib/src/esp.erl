@@ -40,6 +40,11 @@
     freq_hz/0
 ]).
 
+%% internal functions
+-export([
+    boot/0, load_avm_from_partition/1, is_reset_boot_partition_on_not_ok/0
+]).
+
 -type esp_reset_reason() ::
     esp_rst_unknown
     | esp_rst_poweron
@@ -67,6 +72,8 @@
     | sleep_wakeup_bt.
 
 -define(ATOMVM_NVS_NS, atomvm).
+-define(BOOT_PARTITION_KEY, boot_partition).
+-define(DEFAULT_BOOT_PARTITION, <<"app1.avm">>).
 
 %%-----------------------------------------------------------------------------
 %% @doc     Restarts the ESP device
@@ -232,4 +239,41 @@ nvs_reformat() ->
 %%-----------------------------------------------------------------------------
 -spec freq_hz() -> non_neg_integer().
 freq_hz() ->
+    throw(nif_error).
+
+%% @hidden
+%% Entrypoint into AtomVM Erlang code.
+boot() ->
+    PartitionName = esp:nvs_get_binary(
+        ?ATOMVM_NVS_NS, ?BOOT_PARTITION_KEY, ?DEFAULT_BOOT_PARTITION
+    ),
+    case esp:load_avm_from_partition(PartitionName) of
+        {ok, StartModule} ->
+            case catch (StartModule:start()) of
+                ok ->
+                    ok;
+                NotOk ->
+                    maybe_reset_boot_partition(esp:is_reset_boot_partition_on_not_ok()),
+                    NotOk
+            end;
+        Error ->
+            io:format("Unable to locate `start/0` function in partition ~p.  error=~p~n", [
+                PartitionName, Error
+            ]),
+            maybe_reset_boot_partition(esp:is_reset_boot_partition_on_not_ok()),
+            Error
+    end.
+
+%% @private
+maybe_reset_boot_partition(false) ->
+    ok;
+maybe_reset_boot_partition(true) ->
+    esp:erase_key(?ATOMVM_NVS_NS, ?BOOT_PARTITION_KEY).
+
+%% @hidden
+load_avm_from_partition(_PartitionName) ->
+    throw(nif_error).
+
+%% @hidden
+is_reset_boot_partition_on_not_ok() ->
     throw(nif_error).
