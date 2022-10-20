@@ -71,6 +71,12 @@ struct Test
 #define SKIP_FP false
 #endif
 
+#ifndef AVM_NO_SMP
+#define SKIP_SMP false
+#else
+#define SKIP_SMP true
+#endif
+
 struct Test tests[] = {
     TEST_CASE_EXPECTED(add, 17),
     TEST_CASE_EXPECTED(fact, 120),
@@ -104,6 +110,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(guards4, 16),
     TEST_CASE_EXPECTED(guards5, 3),
     TEST_CASE_EXPECTED(prime, 1999),
+    TEST_CASE_COND(prime_smp, 0, SKIP_SMP),
     TEST_CASE_EXPECTED(match, 5),
     TEST_CASE_EXPECTED(if_test, 5),
     TEST_CASE(sleep),

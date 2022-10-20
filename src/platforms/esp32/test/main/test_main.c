@@ -38,6 +38,10 @@
 // must be packed together.
 #include "test_avm_otp21.h"
 
+#ifndef AVM_NO_SMP
+#include "smp.h"
+#endif
+
 #define TAG "AtomVM"
 
 const struct Nif *platform_nifs_get_nif(const char *nifname);
@@ -103,6 +107,15 @@ TEST_CASE("test_timers_and_messages", "[test_run]")
 
     TEST_ASSERT(term_to_int(ret_value) == 6);
 }
+
+#ifndef AVM_NO_SMP
+TEST_CASE("atomvm_smp_0", "[smp]")
+{
+    int cores = smp_get_online_processors();
+    ESP_LOGI(TAG, "Got %i cores\n", cores);
+    TEST_ASSERT(cores == 2);
+}
+#endif
 
 void app_main(void)
 {

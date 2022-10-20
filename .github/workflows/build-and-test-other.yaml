@@ -132,7 +132,7 @@ jobs:
         make test-mailbox &&
         make test-structs &&
         file ./tests/test-erlang &&
-        ./tests/test-erlang &&
+        ./tests/test-erlang -s prime_smp &&
         file ./tests/test-mailbox &&
         ./tests/test-mailbox &&
         file ./tests/test-structs &&

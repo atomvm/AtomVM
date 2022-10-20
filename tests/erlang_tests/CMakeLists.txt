@@ -144,6 +144,7 @@ compile_erlang(test_open_port_badargs)
 compile_erlang(echo)
 compile_erlang(pingpong)
 compile_erlang(prime_ext)
+compile_erlang(prime_smp)
 compile_erlang(test_try_case_end)
 compile_erlang(test_recursion_and_try_catch)
 compile_erlang(test_func_info)
@@ -549,6 +550,7 @@ add_custom_target(erlang_test_modules DEPENDS
     echo.beam
     pingpong.beam
     prime_ext.beam
+    prime_smp.beam
     test_try_case_end.beam
     test_recursion_and_try_catch.beam
     test_func_info.beam
