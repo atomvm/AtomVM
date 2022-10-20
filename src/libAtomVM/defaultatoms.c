@@ -93,6 +93,10 @@ static const char *const put_chars_atom = "\x9" "put_chars";
 static const char *const lowercase_exit_atom = "\x4" "exit";
 static const char *const atomvm_version_atom = "\xE" "atomvm_version";
 
+static const char *const second_atom = "\x6" "second";
+static const char *const millisecond_atom = "\xB" "millisecond";
+static const char *const microsecond_atom = "\xB" "microsecond";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -169,6 +173,10 @@ void defaultatoms_init(GlobalContext *glb)
 
     ok &= globalcontext_insert_atom(glb, lowercase_exit_atom) == LOWERCASE_EXIT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, atomvm_version_atom) == ATOMVM_VERSION_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, second_atom) == SECOND_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, millisecond_atom) == MILLISECOND_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, microsecond_atom) == MICROSECOND_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();
