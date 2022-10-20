@@ -348,11 +348,12 @@ Use `erlang:timestamp/0` to get the current time since the UNIX epoch (Midnight,
     %% erlang
     {MegaSecs, Secs, MicroSecs} = erlang:timestamp().
 
-User `erlang:system_time/1` to obtain the seconds or milliseconds since the UNIX epoch (Midnight, Jan 1, 1970, UTC):
+User `erlang:system_time/1` to obtain the seconds, milliseconds or microseconds since the UNIX epoch (Midnight, Jan 1, 1970, UTC):
 
     %% erlang
     Seconds = erlang:system_time(second).
     MilliSeconds = erlang:system_time(millisecond).
+    MicroSeconds = erlang:system_time(microsecond).
 
 Use `erlang:universaltime/0` to get the current time at second resolution, to obtain the year, month, day, hour, minute, and second:
 
