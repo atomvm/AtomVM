@@ -25,7 +25,7 @@
 start() ->
     Self = self(),
     IdList = [1, 2, 3],
-    Pids = [spawn(?MODULE, loop, [Self]) || _ <- IdList],
+    Pids = [spawn_opt(?MODULE, loop, [Self], [monitor]) || _ <- IdList],
     [
         receive
             ok -> ok
@@ -36,21 +36,19 @@ start() ->
 
 test_list_processes([], Accum, _Self) ->
     Accum;
-test_list_processes([Self | T], Accum, Self) ->
-    test_list_processes(T, Accum, Self);
-test_list_processes([Pid | T] = _PidList, Accum, Self) ->
+test_list_processes([{Pid, Ref} | T] = _PidList, Accum, Self) ->
     assert(contains(erlang:processes(), Pid)),
     Pid ! {Self, stop},
     receive
-        ok -> ok
+        {'DOWN', Ref, process, Pid, normal} -> ok
     end,
     assert(not contains(erlang:processes(), Pid)),
     test_list_processes(T, Accum + 1, Self).
 
 loop(undefined) ->
     receive
-        {Pid, stop} ->
-            Pid ! ok;
+        {_Pid, stop} ->
+            ok;
         _ ->
             loop(undefined)
     end;

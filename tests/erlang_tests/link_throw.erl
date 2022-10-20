@@ -48,6 +48,10 @@ start() ->
 
 start2() ->
     L = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    _Parent =
+        receive
+            {ParentPid, sum} -> ParentPid
+        end,
     Pid = spawn(?MODULE, proc, [L]),
     erlang:link(Pid),
     Pid ! {self(), sum},

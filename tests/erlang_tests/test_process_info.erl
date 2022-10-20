@@ -24,15 +24,21 @@
 
 start() ->
     Self = self(),
-    Pid = spawn(?MODULE, loop, [Self, []]),
+    {Pid, Ref} = spawn_opt(?MODULE, loop, [Self, []], [monitor]),
     receive
         ok -> ok
     end,
     test_message_queue_len(Pid, Self),
     Pid ! {Self, stop},
+    _Accum =
+        receive
+            {Pid, result, X} -> X
+        end,
     receive
-        _X -> 0
-    end.
+        {'DOWN', Ref, process, Pid, Reason} ->
+            assert(Reason =:= normal)
+    end,
+    0.
 
 test_message_queue_len(Pid, Self) ->
     {message_queue_len, MessageQueueLen} = process_info(Pid, message_queue_len),
@@ -43,6 +49,7 @@ test_message_queue_len(Pid, Self) ->
     Pid ! incr,
     {message_queue_len, MessageQueueLen2} = process_info(Pid, message_queue_len),
     {memory, Memory2} = process_info(Pid, memory),
+    Pid ! unlock,
     Pid ! {Self, ping},
     receive
         pong -> ok
@@ -55,15 +62,19 @@ test_message_queue_len(Pid, Self) ->
 loop(undefined, Accum) ->
     receive
         {Pid, stop} ->
-            Pid ! Accum;
+            Pid ! {self(), result, Accum};
         incr ->
             loop(undefined, [incr | Accum]);
         {Pid, ping} ->
             Pid ! pong,
             loop(undefined, Accum)
     end;
+loop(locked, Accum) ->
+    receive
+        unlock -> loop(undefined, Accum)
+    end;
 loop(Pid, Accum) ->
     Pid ! ok,
-    loop(undefined, Accum).
+    loop(locked, Accum).
 
 assert(true) -> ok.

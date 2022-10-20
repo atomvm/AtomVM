@@ -28,22 +28,24 @@ start() ->
     false = erlang:process_flag(trap_exit, true),
     erlang:link(Pid),
     Pid ! {self(), sum},
-    CM =
-        receive
-            N2 -> N2
-        after 2000 -> err
-        end,
-    case CM of
+    receive
         {'EXIT', Pid, {{nocatch, test}, EL}} when is_pid(Pid) andalso is_list(EL) ->
             1;
-        {'EXIT', _, normal} ->
+        {'EXIT', _, normal} = T ->
+            erlang:display(T),
             2;
-        {'EXIT', _, _} ->
+        {'EXIT', _, _} = T ->
+            erlang:display(T),
             3;
         T when is_tuple(T) ->
+            erlang:display(T),
             4;
-        _ ->
+        T ->
+            erlang:display(T),
             5
+    after 30000 ->
+        erlang:display(timeout),
+        6
     end.
 
 proc(_L) ->

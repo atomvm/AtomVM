@@ -26,9 +26,9 @@
 start() ->
     Ref1 = erlang:make_ref(),
     Ref2 = erlang:make_ref(),
+    T1 = erlang:system_time(millisecond),
     Pid1 = spawn(mod_a, proc1, [self(), Ref1]),
     Pid2 = spawn(mod_b, proc2, [self(), Ref2]),
-    T1 = erlang:system_time(millisecond),
     receive
         {foo2, Pid2, [Ref2]} -> ok
     end,
