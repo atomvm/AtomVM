@@ -178,6 +178,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_func_info3, 120),
     TEST_CASE(test_process_info),
     TEST_CASE(test_min_heap_size),
+    TEST_CASE(test_system_flag),
     TEST_CASE(test_system_info),
     TEST_CASE_EXPECTED(test_funs0, 20),
     TEST_CASE_EXPECTED(test_funs1, 517),

@@ -141,6 +141,7 @@ static term nif_erlang_processes(Context *ctx, int argc, term argv[]);
 static term nif_erlang_process_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_put_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_info(Context *ctx, int argc, term argv[]);
+static term nif_erlang_system_flag(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[]);
 static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_throw(Context *ctx, int argc, term argv[]);
@@ -510,6 +511,12 @@ static const struct Nif system_info_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_system_info
+};
+
+static const struct Nif system_flag_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_system_flag
 };
 
 static const struct Nif binary_to_term_nif =
@@ -2416,7 +2423,51 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
         }
         return ret;
     }
+    if (key == SCHEDULERS_ATOM) {
+#ifndef AVM_NO_SMP
+        return term_from_int32(smp_get_online_processors());
+#else
+        return term_from_int32(1);
+#endif
+    }
+    if (key == SCHEDULERS_ONLINE_ATOM) {
+#ifndef AVM_NO_SMP
+        return term_from_int32(ctx->global->online_schedulers);
+#else
+        return term_from_int32(1);
+#endif
+    }
     return sys_get_info(ctx, key);
+}
+
+static term nif_erlang_system_flag(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term key = argv[0];
+    term value = argv[1];
+
+    if (!term_is_atom(key)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+#ifndef AVM_NO_SMP
+    if (key == SCHEDULERS_ONLINE_ATOM) {
+        VALIDATE_VALUE(value, term_is_integer);
+        int old_value = 0;
+        int new_value = term_to_int(value);
+        int nb_processors = smp_get_online_processors();
+        if (UNLIKELY(new_value < 1) || UNLIKELY(new_value > nb_processors)) {
+            argv[0] = ERROR_ATOM;
+            argv[1] = BADARG_ATOM;
+            return term_invalid_term();
+        }
+        while (!atomic_compare_exchange_weak(&ctx->global->online_schedulers, &old_value, new_value)) {};
+        return term_from_int32(old_value);
+    }
+#else
+    UNUSED(value);
+#endif
+    RAISE_ERROR(BADARG_ATOM);
 }
 
 static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
