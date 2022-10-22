@@ -41,7 +41,7 @@
 #ifdef WITH_ZLIB
     static void *module_uncompress_literals(const uint8_t *litT, int size);
 #endif
-static void const **module_build_literals_table(const void *literalsBuf);
+static struct LiteralEntry *module_build_literals_table(const void *literalsBuf);
 static void module_add_label(Module *mod, int index, void *ptr);
 static enum ModuleLoadResult module_build_imported_functions_table(Module *this_module, uint8_t *table_data);
 static void module_add_label(Module *mod, int index, void *ptr);
@@ -287,20 +287,21 @@ static void *module_uncompress_literals(const uint8_t *litT, int size)
 }
 #endif
 
-static void const **module_build_literals_table(const void *literalsBuf)
+static struct LiteralEntry *module_build_literals_table(const void *literalsBuf)
 {
     uint32_t terms_count = READ_32_ALIGNED(literalsBuf);
 
     const uint8_t *pos = (const uint8_t *) literalsBuf + sizeof(uint32_t);
 
-    void const **literals_table = calloc(terms_count, sizeof(void *const));
+    struct LiteralEntry *literals_table = calloc(terms_count, sizeof(struct LiteralEntry));
     if (IS_NULL_PTR(literals_table)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         return NULL;
     }
     for (uint32_t i = 0; i < terms_count; i++) {
         uint32_t term_size = READ_32_UNALIGNED(pos);
-        literals_table[i] = pos + sizeof(uint32_t);
+        literals_table[i].size = term_size;
+        literals_table[i].data = pos + sizeof(uint32_t);
 
         pos += term_size + sizeof(uint32_t);
     }
@@ -310,7 +311,7 @@ static void const **module_build_literals_table(const void *literalsBuf)
 
 term module_load_literal(Module *mod, int index, Context *ctx)
 {
-    term t = externalterm_to_term(mod->literals_table[index], ctx, 1);
+    term t = externalterm_to_term(mod->literals_table[index].data, mod->literals_table[index].size, ctx, 1);
     if (term_is_invalid_term(t)) {
         fprintf(stderr, "Invalid term reading literals_table[%i] from module\n", index);
         abort();

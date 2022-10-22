@@ -45,8 +45,24 @@
 #define SMALL_ATOM_UTF8_EXT 119
 #define INVALID_TERM_SIZE -1
 
+#define NEW_FLOAT_EXT_SIZE 9
+#define SMALL_INTEGER_EXT_SIZE 2
+#define INTEGER_EXT_SIZE 5
+#define ATOM_EXT_BASE_SIZE 3
+#define STRING_EXT_BASE_SIZE 3
+#define LIST_EXT_BASE_SIZE 5
+#define BINARY_EXT_BASE_SIZE 5
+#define MAP_EXT_BASE_SIZE 5
+#define SMALL_ATOM_EXT_BASE_SIZE 2
+
+// MAINTENANCE NOTE.  Range checking on the external term buffer is only performed in
+// the calculate_heap_usage function, which will fail with an invalid term if there is
+// insufficient space in the external term buffer (preventing reading off the end of the
+// buffer).  The parse_external_terms function does NOT perform range checking, and MUST
+// therefore always be preceeded by a call to calculate_heap_usage.
+
 static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx, int copy);
-static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_size, bool copy, Context *ctx);
+static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaining, int *eterm_size, bool copy, Context *ctx);
 static size_t compute_external_size(Context *ctx, term t);
 static int externalterm_from_term(Context *ctx, uint8_t **buf, size_t *len, term t);
 static int serialize_term(Context *ctx, uint8_t *buf, term t);
@@ -60,7 +76,7 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t);
  * @param   bytes_read      the number of bytes read off external_term in order to yield a term
  * @return  the parsed term
  */
-static term externalterm_to_term_internal(const void *external_term, Context *ctx, int use_heap_fragment, size_t *bytes_read, bool copy)
+static term externalterm_to_term_internal(const void *external_term, size_t size, Context *ctx, int use_heap_fragment, size_t *bytes_read, bool copy)
 {
     const uint8_t *external_term_buf = (const uint8_t *) external_term;
 
@@ -68,8 +84,12 @@ static term externalterm_to_term_internal(const void *external_term, Context *ct
         return term_invalid_term();
     }
 
+    if (size == 0) {
+        return term_invalid_term();
+    }
+
     int eterm_size;
-    int heap_usage = calculate_heap_usage(external_term_buf + 1, &eterm_size, copy, ctx);
+    int heap_usage = calculate_heap_usage(external_term_buf + 1, size - 1, &eterm_size, copy, ctx);
     if (heap_usage == INVALID_TERM_SIZE) {
         return term_invalid_term();
     }
@@ -103,10 +123,10 @@ static term externalterm_to_term_internal(const void *external_term, Context *ct
     }
 }
 
-term externalterm_to_term(const void *external_term, Context *ctx, int use_heap_fragment)
+term externalterm_to_term(const void *external_term, size_t size, Context *ctx, int use_heap_fragment)
 {
     size_t bytes_read = 0;
-    return externalterm_to_term_internal(external_term, ctx, use_heap_fragment, &bytes_read, false);
+    return externalterm_to_term_internal(external_term, size, ctx, use_heap_fragment, &bytes_read, false);
 }
 
 enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term binary, size_t *bytes_read, size_t num_extra_terms)
@@ -128,7 +148,7 @@ enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term b
     //
     // convert
     //
-    term t = externalterm_to_term_internal(buf, ctx, 0, bytes_read, true);
+    term t = externalterm_to_term_internal(buf, len, ctx, 0, bytes_read, true);
     free(buf);
     if (term_is_invalid_term(t)) {
         return EXTERNAL_TERM_BAD_ARG;
@@ -488,12 +508,18 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
     }
 }
 
-static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_size, bool copy, Context *ctx)
+static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaining, int *eterm_size, bool copy, Context *ctx)
 {
+    if (UNLIKELY(remaining < 1)) {
+        return INVALID_TERM_SIZE;
+    }
     switch (external_term_buf[0]) {
         case NEW_FLOAT_EXT: {
             #ifndef AVM_NO_FP
-                *eterm_size = 9;
+                if (UNLIKELY(remaining < NEW_FLOAT_EXT_SIZE)) {
+                    return INVALID_TERM_SIZE;
+                }
+                *eterm_size = NEW_FLOAT_EXT_SIZE;
                 return FLOAT_SIZE;
             #else
                 fprintf(stderr, "floating point support not enabled.\n");
@@ -502,34 +528,59 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_siz
         }
 
         case SMALL_INTEGER_EXT: {
-            *eterm_size = 2;
+            if (UNLIKELY(remaining < SMALL_INTEGER_EXT_SIZE)) {
+                return INVALID_TERM_SIZE;
+            }
+            *eterm_size = SMALL_INTEGER_EXT_SIZE;
             return 0;
         }
 
         case INTEGER_EXT: {
+            if (UNLIKELY(remaining < INTEGER_EXT_SIZE)) {
+                return INVALID_TERM_SIZE;
+            }
             int32_t value = READ_32_UNALIGNED(external_term_buf + 1);
-            *eterm_size = 5;
+            *eterm_size = INTEGER_EXT_SIZE;
             return term_boxed_integer_size(value);
         }
 
         case ATOM_EXT: {
+            if (UNLIKELY(remaining < ATOM_EXT_BASE_SIZE)) {
+                return INVALID_TERM_SIZE;
+            }
             uint16_t atom_len = READ_16_UNALIGNED(external_term_buf + 1);
-            *eterm_size = 3 + atom_len;
+            remaining -= ATOM_EXT_BASE_SIZE;
+            if (UNLIKELY(remaining < atom_len)) {
+                return INVALID_TERM_SIZE;
+            }
+            *eterm_size = ATOM_EXT_BASE_SIZE + atom_len;
             return 0;
         }
 
         case SMALL_TUPLE_EXT: {
+            if (UNLIKELY(remaining < 1)) {
+                return INVALID_TERM_SIZE;
+            }
+            remaining--;
             uint8_t arity = external_term_buf[1];
+            if (UNLIKELY(remaining < arity)) {
+                return INVALID_TERM_SIZE;
+            }
 
             int heap_usage = 1;
             int buf_pos = 2;
 
             for (int i = 0; i < arity; i++) {
-                int element_size;
-                int u = calculate_heap_usage(external_term_buf + buf_pos, &element_size, copy, ctx) + 1;
-                if (u == INVALID_TERM_SIZE) {
+                int element_size = 0;
+                int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &element_size, copy, ctx);
+                if (UNLIKELY(u == INVALID_TERM_SIZE)) {
                     return INVALID_TERM_SIZE;
                 }
+                u += 1;
+                if (UNLIKELY(remaining < element_size)) {
+                    return INVALID_TERM_SIZE;
+                }
+                remaining -= element_size;
                 heap_usage += u;
 
                 buf_pos += element_size;
@@ -540,47 +591,80 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_siz
         }
 
         case NIL_EXT: {
+            if (UNLIKELY(remaining < 1)) {
+                return INVALID_TERM_SIZE;
+            }
             *eterm_size = 1;
             return 0;
         }
 
         case STRING_EXT: {
+            if (UNLIKELY(remaining < STRING_EXT_BASE_SIZE)) {
+                return INVALID_TERM_SIZE;
+            }
             uint16_t string_size = READ_16_UNALIGNED(external_term_buf + 1);
-            *eterm_size = 3 + string_size;
+            remaining -= STRING_EXT_BASE_SIZE;
+            if (UNLIKELY(remaining < string_size)) {
+                return INVALID_TERM_SIZE;
+            }
+            *eterm_size = STRING_EXT_BASE_SIZE + string_size;
             return string_size * 2;
         }
 
         case LIST_EXT: {
+            if (UNLIKELY(remaining < LIST_EXT_BASE_SIZE)) {
+                return INVALID_TERM_SIZE;
+            }
             uint32_t list_len = READ_32_UNALIGNED(external_term_buf + 1);
+            remaining -= LIST_EXT_BASE_SIZE;
+            if (UNLIKELY(remaining < list_len)) {
+                return INVALID_TERM_SIZE;
+            }
 
             int buf_pos = 5;
             int heap_usage = 0;
 
             for (unsigned int i = 0; i < list_len; i++) {
-                int item_size;
-                int u = calculate_heap_usage(external_term_buf + buf_pos, &item_size, copy, ctx) + 2;
-                if (u == INVALID_TERM_SIZE) {
+                int item_size = 0;
+                int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &item_size, copy, ctx);
+                if (UNLIKELY(u == INVALID_TERM_SIZE)) {
                     return INVALID_TERM_SIZE;
                 }
+                u += 2;
                 heap_usage += u;
                 buf_pos += item_size;
+                if (UNLIKELY(remaining < item_size)) {
+                    return INVALID_TERM_SIZE;
+                }
+                remaining -= item_size;
             }
 
-            int tail_size;
-            int u = calculate_heap_usage(external_term_buf + buf_pos, &tail_size, copy, ctx);
-            if (u == INVALID_TERM_SIZE) {
+            int tail_size = 0;
+            int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &tail_size, copy, ctx);
+            if (UNLIKELY(u == INVALID_TERM_SIZE)) {
                 return INVALID_TERM_SIZE;
             }
             heap_usage += u;
             buf_pos += tail_size;
+            if (UNLIKELY(remaining < tail_size)) {
+                return INVALID_TERM_SIZE;
+            }
+            // remaining -= tail_size; Not needed, since remaining is local, but here for completeness
 
             *eterm_size = buf_pos;
             return heap_usage;
         }
 
         case BINARY_EXT: {
+            if (UNLIKELY(remaining < BINARY_EXT_BASE_SIZE)) {
+                return INVALID_TERM_SIZE;
+            }
             uint32_t binary_size = READ_32_UNALIGNED(external_term_buf + 1);
-            *eterm_size = 5 + binary_size;
+            remaining -= LIST_EXT_BASE_SIZE;
+            if (UNLIKELY(remaining < binary_size)) {
+                return INVALID_TERM_SIZE;
+            }
+            *eterm_size = BINARY_EXT_BASE_SIZE + binary_size;
 
             #if TERM_BYTES == 4
                 int size_in_terms = ((binary_size + 4 - 1) >> 2);
@@ -598,16 +682,24 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_siz
         }
 
         case EXPORT_EXT: {
+            if (UNLIKELY(remaining < 1)) {
+                return INVALID_TERM_SIZE;
+            }
             int heap_usage = 1;
             int buf_pos = 1;
             for (int i = 0; i < 3; i++) {
-                int element_size;
-                int u = calculate_heap_usage(external_term_buf + buf_pos, &element_size, copy, ctx) + 1;
-                if (u == INVALID_TERM_SIZE) {
+                int element_size = 0;
+                int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &element_size, copy, ctx);
+                if (UNLIKELY(u == INVALID_TERM_SIZE)) {
                     return INVALID_TERM_SIZE;
                 }
+                u += 1;
                 heap_usage += u;
                 buf_pos += element_size;
+                if (UNLIKELY(remaining < element_size)) {
+                    return INVALID_TERM_SIZE;
+                }
+                remaining -= element_size;
             }
 
             *eterm_size = buf_pos;
@@ -615,32 +707,56 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, int *eterm_siz
         }
 
         case MAP_EXT: {
+            if (UNLIKELY(remaining < MAP_EXT_BASE_SIZE)) {
+                return INVALID_TERM_SIZE;
+            }
             uint32_t size = READ_32_UNALIGNED(external_term_buf + 1);
+            remaining -= MAP_EXT_BASE_SIZE;
+            if (UNLIKELY(remaining < size)) {
+                return INVALID_TERM_SIZE;
+            }
             int heap_usage = 1;
-            int buf_pos = 5;
+            int buf_pos = MAP_EXT_BASE_SIZE;
             for (uint32_t i = 0; i < size; ++i) {
-                int key_size;
-                int u = calculate_heap_usage(external_term_buf + buf_pos, &key_size, copy, ctx) + 1;
-                if (u == INVALID_TERM_SIZE) {
+                int key_size = 0;
+                int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &key_size, copy, ctx);
+                if (UNLIKELY(u == INVALID_TERM_SIZE)) {
                     return INVALID_TERM_SIZE;
                 }
+                u += 1;
                 heap_usage += u;
                 buf_pos += key_size;
-                int value_size;
-                u = calculate_heap_usage(external_term_buf + buf_pos, &value_size, copy, ctx) + 1;
-                if (u == INVALID_TERM_SIZE) {
+                if (UNLIKELY(remaining < key_size)) {
                     return INVALID_TERM_SIZE;
                 }
+                remaining -= key_size;
+                int value_size = 0;
+                u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &value_size, copy, ctx);
+                if (UNLIKELY(u == INVALID_TERM_SIZE)) {
+                    return INVALID_TERM_SIZE;
+                }
+                u += 1;
                 heap_usage += u;
                 buf_pos += value_size;
+                if (UNLIKELY(remaining < value_size)) {
+                    return INVALID_TERM_SIZE;
+                }
+                remaining -= value_size;
             }
             *eterm_size = buf_pos;
             return heap_usage + 2 + 1; // keys tuple header and size (2 words) + tuple_ptr (1 word)
         }
 
         case SMALL_ATOM_UTF8_EXT: {
+            if (UNLIKELY(remaining < SMALL_ATOM_EXT_BASE_SIZE)) {
+                return INVALID_TERM_SIZE;
+            }
             uint8_t atom_len = *(external_term_buf + 1);
-            *eterm_size = 2 + atom_len;
+            remaining -= SMALL_ATOM_EXT_BASE_SIZE;
+            if (UNLIKELY(remaining < atom_len)) {
+                return INVALID_TERM_SIZE;
+            }
+            *eterm_size = SMALL_ATOM_EXT_BASE_SIZE + atom_len;
             return 0;
         }
 

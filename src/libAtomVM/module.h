@@ -50,6 +50,12 @@ typedef struct
 
 struct ExportedFunction;
 
+struct LiteralEntry
+{
+    uint32_t size;
+    void const *data;
+};
+
 struct Module
 {
     GlobalContext *global;
@@ -70,7 +76,8 @@ struct Module
     void **labels;
 
     void *literals_data;
-    void const **literals_table;
+
+    struct LiteralEntry *literals_table;
 
     int *local_atoms_to_global_table;
 
