@@ -29,8 +29,11 @@ set(AVM_BUILTIN_COMPONENT_SRCS
     "uart_driver.c"
 )
 
-idf_component_register(SRCS ${AVM_BUILTIN_COMPONENT_SRCS}
-    PRIV_REQUIRES "libatomvm" "avm_sys" "nvs_flash")
+idf_component_register(
+    SRCS ${AVM_BUILTIN_COMPONENT_SRCS}
+    INCLUDE_DIRS "include"
+    PRIV_REQUIRES "libatomvm" "avm_sys" "nvs_flash"
+)
 
 idf_build_set_property(
     LINK_OPTIONS "-Wl,--whole-archive ${CMAKE_CURRENT_BINARY_DIR}/lib${COMPONENT_NAME}.a -Wl,--no-whole-archive"
