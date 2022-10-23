@@ -141,6 +141,15 @@ void globalcontext_register_process(GlobalContext *glb, int atom_index, int loca
 int globalcontext_get_registered_process(GlobalContext *glb, int atom_index);
 
 /**
+ * @brief Unregister a process
+ *
+ * @details Unregister a process with a certain name (atom).
+ * @param glb the global context, each registered process will be globally available for that context.
+ * @param atom_index the atom table index.
+ */
+bool globalcontext_unregister_process(GlobalContext *glb, int atom_index);
+
+/**
  * @brief equivalent to globalcontext_insert_atom_maybe_copy(glb, atom_string, 0);
  */
 int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string);

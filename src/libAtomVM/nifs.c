@@ -118,6 +118,7 @@ static term nif_erlang_iolist_size_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_iolist_to_binary_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_register_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_unregister_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_send_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_setelement_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_spawn(Context *ctx, int argc, term argv[]);
@@ -362,6 +363,12 @@ static const struct Nif register_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_register_2
+};
+
+static const struct Nif unregister_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_unregister_1
 };
 
 static const struct Nif spawn_nif =
@@ -760,14 +767,35 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(pid_or_port_term, term_is_pid);
 
     int atom_index = term_to_atom_index(reg_name_term);
-    int pid = term_to_local_process_id(pid_or_port_term);
+    int32_t pid = term_to_local_process_id(pid_or_port_term);
 
-    // TODO: pid must be existing, not already registered.
-    // TODO: reg_name_term must not be the atom undefined and not already registered.
+    // pid must be existing, not already registered, and not the atom undefined.
+    if (UNLIKELY(globalcontext_get_process(ctx->global, pid) == NULL) ||
+        globalcontext_get_registered_process(ctx->global, atom_index) != 0 ||
+        reg_name_term == UNDEFINED_ATOM){
+        RAISE_ERROR(BADARG_ATOM);
+    }
 
     globalcontext_register_process(ctx->global, atom_index, pid);
 
-    return term_nil();
+    return TRUE_ATOM;
+}
+
+static term nif_erlang_unregister_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term reg_name_term = argv[0];
+    VALIDATE_VALUE(reg_name_term, term_is_atom);
+
+    int atom_index = term_to_atom_index(reg_name_term);
+
+    bool unregistered = globalcontext_unregister_process(ctx->global, atom_index);
+    if (UNLIKELY(!unregistered)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    return TRUE_ATOM;
 }
 
 static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[])
