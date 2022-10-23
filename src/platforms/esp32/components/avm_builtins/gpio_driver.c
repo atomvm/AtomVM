@@ -348,7 +348,10 @@ static term gpiodriver_set_int(Context *ctx, Context *target, term cmd)
     gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
     gpio_set_intr_type(gpio_num, interrupt_type);
 
-    gpio_isr_handler_add(gpio_num, gpio_isr_handler, data);
+    esp_err_t ret = gpio_isr_handler_add(gpio_num, gpio_isr_handler, data);
+    if (UNLIKELY(ret != ESP_OK)) {
+        return ERROR_ATOM;
+    }
 
     return OK_ATOM;
 }
