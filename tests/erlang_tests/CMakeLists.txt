@@ -73,6 +73,7 @@ compile_erlang(if_test)
 compile_erlang(sleep)
 compile_erlang(hello_world)
 compile_erlang(whereis_fail)
+compile_erlang(register_unregister)
 compile_erlang(try_noerror)
 compile_erlang(catch_badmatch)
 compile_erlang(catch_nocasematch)
@@ -473,6 +474,7 @@ add_custom_target(erlang_test_modules DEPENDS
     sleep.beam
     hello_world.beam
     whereis_fail.beam
+    register_unregister.beam
     try_noerror.beam
     catch_badmatch.beam
     catch_nocasematch.beam
