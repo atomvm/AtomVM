@@ -23,7 +23,7 @@ project (ReleaseEsp32)
 
 include(${CMAKE_SOURCE_DIR}/CMakeModules/GetVersion.cmake)
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mkimage.erl ${CMAKE_CURRENT_BINARY_DIR}/mkimage.erl @COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mkimage.erl ${CMAKE_CURRENT_BINARY_DIR}/mkimage.erl COPYONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mkimage.sh.in ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/mkimage.sh @ONLY)
 file(COPY ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/mkimage.sh
     DESTINATION ${CMAKE_CURRENT_BINARY_DIR}
