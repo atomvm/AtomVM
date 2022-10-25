@@ -73,9 +73,12 @@ typedef union
 } dreg_type_t;
 
 #ifdef IMPL_EXECUTE_LOOP
-#define RAISE_ERROR(error_type_atom) \
+#define SET_ERROR(error_type_atom)   \
     ctx->x[0] = ERROR_ATOM;          \
-    ctx->x[1] = error_type_atom;     \
+    ctx->x[1] = error_type_atom;
+
+#define RAISE_ERROR(error_type_atom) \
+    SET_ERROR(error_type_atom)       \
     goto handle_error;
 
 #define VM_ABORT() \
@@ -459,22 +462,89 @@ typedef union
 #define SCHEDULE_NEXT(restore_mod, restore_to) \
     {                                                                                             \
         ctx->saved_ip = restore_to;                                                               \
-        ctx->jump_to_on_restore = NULL;                                                           \
         ctx->saved_module = restore_mod;                                                          \
-        Context *scheduled_context = scheduler_next(ctx->global, ctx);                            \
-        ctx = scheduled_context;                                                                  \
-        x_regs = ctx->x;                                                                          \
-        mod = ctx->saved_module;                                                                  \
-        code = mod->code->code;                                                                   \
-        remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;                                         \
-        JUMP_TO_ADDRESS(scheduled_context->saved_ip);                                             \
+        ctx = scheduler_next(ctx->global, ctx);                                                   \
+        goto schedule_in;                                                                         \
+    }
+
+// We use goto label as values, a GCC extension supported by clang.
+
+#define PROCESS_SIGNAL_MESSAGES() \
+    {                                                                                           \
+        MailboxMessage *signal_message = mailbox_process_outer_list(&ctx->mailbox);             \
+        void *next_label = NULL;                                                                \
+        while (signal_message) {                                                                \
+            switch (signal_message->header.type) {                                              \
+                case KillSignal: {                                                              \
+                    context_process_kill_signal(ctx, &signal_message->body.term);               \
+                    break;                                                                      \
+                }                                                                               \
+                case GCSignal: {                                                                \
+                    if (UNLIKELY(!memory_gc_min(ctx))) {                                        \
+                        SET_ERROR(OUT_OF_MEMORY_ATOM);                                          \
+                        next_label = &&handle_error;                                            \
+                    }                                                                           \
+                    break;                                                                      \
+                }                                                                               \
+                case ProcessInfoRequestSignal: {                                                \
+                    context_process_process_info_request_signal(ctx, &signal_message->body.atom_request); \
+                    break;                                                                      \
+                }                                                                               \
+                case TrapAnswerSignal: {                                                        \
+                    if (UNLIKELY(!context_process_signal_trap_answer(ctx, &signal_message->body.term))) { \
+                        SET_ERROR(OUT_OF_MEMORY_ATOM);                                          \
+                        next_label = &&handle_error;                                            \
+                    }                                                                           \
+                    break;                                                                      \
+                }                                                                               \
+                case TrapExceptionSignal: {                                                     \
+                    SET_ERROR(signal_message->body.atom.atom);                                  \
+                    next_label = &&handle_error;                                                \
+                    break;                                                                      \
+                }                                                                               \
+                case NormalMessage: {                                                           \
+                    __builtin_unreachable();                                                    \
+                }                                                                               \
+            }                                                                                   \
+            MailboxMessage *next = signal_message->header.next;                                 \
+            mailbox_destroy_signal_message(signal_message);                                     \
+            signal_message = next;                                                              \
+        }                                                                                       \
+        if (context_get_flags(ctx, Killed)) {                                                   \
+            goto terminate_context;                                                             \
+        }                                                                                       \
+        if (next_label) {                                                                       \
+            goto *next_label;                                                                   \
+        }                                                                                       \
+        if (context_get_flags(ctx, Trap)) {                                                     \
+            SCHEDULE_NEXT(mod, INSTRUCTION_POINTER());                                          \
+        }                                                                                       \
+    }
+
+#define PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value)           \
+    if (term_is_invalid_term(return_value)) {                   \
+        if (UNLIKELY(!context_get_flags(ctx, Trap))) {          \
+            HANDLE_ERROR();                                     \
+        } else {                                                \
+            SCHEDULE_NEXT(mod, INSTRUCTION_POINTER());          \
+        }                                                       \
+    }
+
+#define PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value)      \
+    if (term_is_invalid_term(return_value)) {                   \
+        if (UNLIKELY(!context_get_flags(ctx, Trap))) {          \
+            HANDLE_ERROR();                                     \
+        } else {                                                \
+            DO_RETURN();                                        \
+            SCHEDULE_NEXT(mod, INSTRUCTION_POINTER());          \
+        }                                                       \
     }
 
 #define INSTRUCTION_POINTER() \
     ((const void *) &code[i])
 
 #define DO_RETURN()                                     \
-    mod = mod->global->modules_by_index[ctx->cp >> 24]; \
+    mod = globalcontext_get_module_by_index(mod->global, ctx->cp >> 24); \
     code = mod->code->code;                             \
     i = (ctx->cp & 0xFFFFFF) >> 2;
 
@@ -581,7 +651,7 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
             int target_module;
             int target_label = term_to_catch_label_and_module(*ct, &target_module);
             TRACE("- found catch: label: %i, module: %i\n", target_label, target_module);
-            *mod = ctx->global->modules_by_index[target_module];
+            *mod = globalcontext_get_module_by_index(ctx->global, target_module);
 
             DEBUG_DUMP_STACK(ctx);
             ctx->e = last_frame;
@@ -601,7 +671,7 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
 
 COLD_FUNC static void cp_to_mod_lbl_off(term cp, Context *ctx, Module **cp_mod, int *label, int *l_off)
 {
-    Module *mod = ctx->global->modules_by_index[cp >> 24];
+    Module *mod = globalcontext_get_module_by_index(ctx->global, cp >> 24);
     long mod_offset = (cp & 0xFFFFFF) >> 2;
 
     *cp_mod = mod;
@@ -680,12 +750,7 @@ COLD_FUNC static void dump(Context *ctx)
     fprintf(stderr, "\n");
 
     fprintf(stderr, "\n\nMailbox\n--------\n");
-    struct ListHead *item;
-    LIST_FOR_EACH (item, &ctx->mailbox) {
-        Message *msg = GET_LIST_ENTRY(item, Message, mailbox_list_head);
-        term_display(stderr, msg->message, ctx);
-        fprintf(stderr, "\n");
-    }
+    mailbox_crashdump(ctx);
 
     fprintf(stderr, "\n\n**End Of Crash Report**\n");
 }
@@ -979,22 +1044,17 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 #endif
 
 #ifdef IMPL_CODE_LOADER
+    int read_core_chunk0(Module *mod);
+
     int read_core_chunk(Module *mod)
 #else
     #ifdef IMPL_EXECUTE_LOOP
-        HOT_FUNC int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity)
+        int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity)
     #else
         #error Need implementation type
     #endif
 #endif
 {
-    uint8_t *code = mod->code->code;
-    #ifdef IMPL_EXECUTE_LOOP
-        term *x_regs = ctx->x;
-    #endif
-
-    unsigned int i = 0;
-
     #ifdef IMPL_CODE_LOADER
         TRACE("-- Loading code\n");
     #endif
@@ -1015,13 +1075,73 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             return 0;
         }
 
-        ctx->cp = module_address(mod->module_index, mod->end_instruction_ii);
-        JUMP_TO_ADDRESS(mod->labels[label]);
+        ctx->saved_module = mod;
 
-        int remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;
+        ctx->cp = module_address(mod->module_index, mod->end_instruction_ii);
+        ctx->saved_ip = mod->labels[label];
+        scheduler_init_ready(ctx);
     #endif
 
+#ifdef IMPL_CODE_LOADER
+    return read_core_chunk0(mod);
+#endif
+#ifdef IMPL_EXECUTE_LOOP
+    // This process is the first scheduler process
+    #ifndef AVM_NO_SMP
+        ctx->global->running_schedulers = 1;
+    #endif
+    return scheduler_entry_point(ctx->global);
+#endif
+}
+
+#ifdef IMPL_CODE_LOADER
+int read_core_chunk0(Module *mod)
+#else
+#ifdef IMPL_EXECUTE_LOOP
+HOT_FUNC int scheduler_entry_point(GlobalContext *glb)
+#else
+#error Need implementation type
+#endif
+#endif
+{
+#ifdef IMPL_EXECUTE_LOOP
+    uint8_t *code;
+    Module *mod;
+    term *x_regs;
+    uintptr_t i;
+    int remaining_reductions;
+
+    Context *ctx = scheduler_run(glb);
+
+// This is where loop starts after context switching.
+schedule_in:
+    TRACE("scheduling in, ctx = %p\n", ctx);
+    if (ctx == NULL) return 0;
+    mod = ctx->saved_module;
+    code = mod->code->code;
+    x_regs = ctx->x;
+    JUMP_TO_ADDRESS(ctx->saved_ip);
+    remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+    // Handle traps.
+    if (ctx->restore_trap_handler)
+        goto *ctx->restore_trap_handler;
+    // Handle signals
+    PROCESS_SIGNAL_MESSAGES();
+#pragma GCC diagnostic pop
+#endif
+
+#ifdef IMPL_CODE_LOADER
+    TRACE("-- Loading code\n");
+    SMP_MODULE_LOCK(mod);
+    uint8_t *code = mod->code->code;
+    uintptr_t i = 0;
+#endif
+
     while (1) {
+    TRACE("-- loop -- i = %d\n", i);
 
         switch (code[i]) {
             case OP_LABEL: {
@@ -1068,11 +1188,11 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
             #ifdef IMPL_CODE_LOADER
                 TRACE("-- Code loading finished --\n");
+                SMP_MODULE_UNLOCK(mod);
                 return i;
             #endif
 
             #ifdef IMPL_EXECUTE_LOOP
-                ctx->exit_reason = NORMAL_ATOM;
                 goto terminate_context;
             #endif
             }
@@ -1193,30 +1313,22 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     remaining_reductions--;
                     if (UNLIKELY(!remaining_reductions)) {
                         SCHEDULE_NEXT(mod, INSTRUCTION_POINTER());
-                        continue;
                     }
 
                     NEXT_INSTRUCTION(next_off);
 
                     TRACE_CALL_EXT(ctx, mod, "call_ext", index, arity);
 
-                    const struct ExportedFunction *func = mod->imported_funcs[index].func;
-
-                    if (func->type == UnresolvedFunctionCall) {
-                        const struct ExportedFunction *resolved_func = module_resolve_function(mod, index);
-                        if (IS_NULL_PTR(resolved_func)) {
+                    const struct ExportedFunction *func = module_resolve_function(mod, index);
+                    if (IS_NULL_PTR(func)) {
                             RAISE_ERROR(UNDEF_ATOM);
-                        }
-                        func = resolved_func;
                     }
 
                     switch (func->type) {
                         case NIFFunctionType: {
                             const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
                             term return_value = nif->nif_ptr(ctx, arity, ctx->x);
-                            if (UNLIKELY(term_is_invalid_term(return_value))) {
-                                HANDLE_ERROR();
-                            }
+                            PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value);
                             ctx->x[0] = return_value;
                             break;
                         }
@@ -1258,7 +1370,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     remaining_reductions--;
                     if (UNLIKELY(!remaining_reductions)) {
                         SCHEDULE_NEXT(mod, INSTRUCTION_POINTER());
-                        continue;
                     }
 
                     TRACE_CALL_EXT(ctx, mod, "call_ext_last", index, arity);
@@ -1266,25 +1377,17 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     ctx->cp = ctx->e[n_words];
                     ctx->e += (n_words + 1);
 
-                    const struct ExportedFunction *func = mod->imported_funcs[index].func;
-
-                    if (func->type == UnresolvedFunctionCall) {
-                        const struct ExportedFunction *resolved_func = module_resolve_function(mod, index);
-                        if (IS_NULL_PTR(resolved_func)) {
-                            RAISE_ERROR(UNDEF_ATOM);
-                        }
-                        func = resolved_func;
+                    const struct ExportedFunction *func = module_resolve_function(mod, index);
+                    if (IS_NULL_PTR(func)) {
+                        RAISE_ERROR(UNDEF_ATOM);
                     }
 
                     switch (func->type) {
                         case NIFFunctionType: {
                             const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
                             term return_value = nif->nif_ptr(ctx, arity, ctx->x);
-                            if (UNLIKELY(term_is_invalid_term(return_value))) {
-                                HANDLE_ERROR();
-                            }
+                            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
                             ctx->x[0] = return_value;
-
                             DO_RETURN();
 
                             break;
@@ -1647,10 +1750,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     int local_process_id = term_to_local_process_id(ctx->x[0]);
                     TRACE("send/0 target_pid=%i\n", local_process_id);
                     TRACE_SEND(ctx, ctx->x[0], ctx->x[1]);
-                    Context *target = globalcontext_get_process(ctx->global, local_process_id);
-                    if (!IS_NULL_PTR(target)) {
-                        mailbox_send(target, ctx->x[1]);
-                    }
+                    globalcontext_send_message(ctx->global, local_process_id, ctx->x[1]);
 
                     ctx->x[0] = ctx->x[1];
                 #endif
@@ -1663,17 +1763,14 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 TRACE("remove_message/0\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (ctx->flags & (WaitingTimeout | WaitingTimeoutExpired)) {
+                    if (context_get_flags(ctx, WaitingTimeout | WaitingTimeoutExpired)) {
                         scheduler_cancel_timeout(ctx);
                     }
-                    mailbox_remove(ctx);
-
-                    struct ListHead *item;
-                    struct ListHead *tmp;
-                    MUTABLE_LIST_FOR_EACH(item, tmp, &ctx->save_queue) {
-                        list_prepend(&ctx->mailbox, item);
-                    }
-                    list_init(&ctx->save_queue);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+                    PROCESS_SIGNAL_MESSAGES();
+#pragma GCC diagnostic pop
+                    mailbox_remove(&ctx->mailbox);
                 #endif
 
                 NEXT_INSTRUCTION(1);
@@ -1684,14 +1781,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 TRACE("timeout/0\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    ctx->flags &= ~WaitingTimeoutExpired;
+                    context_update_flags(ctx, ~WaitingTimeoutExpired, NoFlags);
 
-                    struct ListHead *item;
-                    struct ListHead *tmp;
-                    MUTABLE_LIST_FOR_EACH(item, tmp, &ctx->save_queue) {
-                        list_prepend(&ctx->mailbox, item);
-                    }
-                    list_init(&ctx->save_queue);
+                    mailbox_reset(&ctx->mailbox);
                 #endif
 
                 NEXT_INSTRUCTION(1);
@@ -1710,14 +1802,18 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 USED_BY_TRACE(dreg);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (list_is_empty(&ctx->mailbox)) {
-                        JUMP_TO_ADDRESS(mod->labels[label]);
-                    } else {
-                        term ret = mailbox_peek(ctx);
+                    term ret;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+                    PROCESS_SIGNAL_MESSAGES();
+#pragma GCC diagnostic pop
+                    if (mailbox_peek(ctx, &ret)) {
                         TRACE_RECEIVE(ctx, ret);
 
                         WRITE_REGISTER(dreg_type, dreg, ret);
                         NEXT_INSTRUCTION(next_off);
+                    } else {
+                        JUMP_TO_ADDRESS(mod->labels[label]);
                     }
                 #endif
 
@@ -1737,10 +1833,11 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 USED_BY_TRACE(label);
 
 #ifdef IMPL_EXECUTE_LOOP
-                struct ListHead *msg = list_first(&ctx->mailbox);
-                list_remove(msg);
-                list_prepend(&ctx->save_queue, msg);
-
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+                PROCESS_SIGNAL_MESSAGES();
+#pragma GCC diagnostic pop
+                mailbox_next(&ctx->mailbox);
                 i = POINTER_TO_II(mod->labels[label]);
 #else
                 NEXT_INSTRUCTION(next_offset);
@@ -1757,16 +1854,14 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 TRACE("wait/1\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
+                    // When a message is sent, process is moved to ready list
+                    // after message is enqueued. So we always schedule out
+                    // when executing wait/1 and process will be scheduled in
+                    // and the outer list will be processed.
                     ctx->saved_ip = mod->labels[label];
-                    ctx->jump_to_on_restore = NULL;
                     ctx->saved_module = mod;
-                    Context *scheduled_context = scheduler_wait(ctx->global, ctx);
-                    ctx = scheduled_context;
-                    x_regs = ctx->x;
-
-                    mod = ctx->saved_module;
-                    code = mod->code->code;
-                    JUMP_TO_ADDRESS(scheduled_context->saved_ip);
+                    ctx = scheduler_wait(ctx);
+                    goto schedule_in;
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -1790,31 +1885,33 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     }
                     TRACE("wait_timeout/2, label: %i, timeout: %li\n", label, (long int) term_to_int32(timeout));
 
-                    NEXT_INSTRUCTION(next_off);
-                    //TODO: it looks like x[0] might be used instead of jump_to_on_restore
-                    ctx->saved_ip = INSTRUCTION_POINTER();
-                    ctx->jump_to_on_restore = mod->labels[label];
-                    ctx->saved_module = mod;
-
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+                    PROCESS_SIGNAL_MESSAGES();
+#pragma GCC diagnostic pop
                     int needs_to_wait = 0;
-                    if ((ctx->flags & (WaitingTimeout | WaitingTimeoutExpired)) == 0) {
+                    if (context_get_flags(ctx, WaitingTimeout | WaitingTimeoutExpired) == 0) {
                         if (timeout != INFINITY_ATOM) {
                             scheduler_set_timeout(ctx, term_to_int32(timeout));
                         }
                         needs_to_wait = 1;
-                    } else if ((ctx->flags & WaitingTimeout) == 0) {
+                    } else if (context_get_flags(ctx, WaitingTimeout) == 0) {
                         needs_to_wait = 1;
-                    } else if (!list_is_empty(&ctx->save_queue)) {
+                    } else if (!mailbox_has_next(&ctx->mailbox)) {
                         needs_to_wait = 1;
                     }
 
                     if (needs_to_wait) {
-                        Context *scheduled_context = scheduler_wait(ctx->global, ctx);
-                        ctx = scheduled_context;
-                        x_regs = ctx->x;
-                        mod = ctx->saved_module;
-                        code = mod->code->code;
-                        JUMP_TO_ADDRESS(scheduled_context->saved_ip);
+                        ctx->saved_ip = INSTRUCTION_POINTER();
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+                        ctx->restore_trap_handler = &&wait_timeout_trap_handler;
+#pragma GCC diagnostic pop
+                        ctx->saved_module = mod;
+                        ctx = scheduler_wait(ctx);
+                        goto schedule_in;
+                    } else {
+                        NEXT_INSTRUCTION(next_off);
                     }
                 #endif
 
@@ -1828,6 +1925,40 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 break;
             }
+
+#ifdef IMPL_EXECUTE_LOOP
+wait_timeout_trap_handler:
+            {
+                // Determine if a message arrived to either jump to timeout label
+                // or to continuation.
+                // Redo the offset computation and refetch the label
+                int next_off = 1;
+                int label;
+                DECODE_LABEL(label, code, i, next_off, next_off)
+                int timeout;
+                DECODE_COMPACT_TERM(timeout, code, i, next_off, next_off)
+                TRACE("wait_timeout_trap_handler, label: %i\n", label);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+                PROCESS_SIGNAL_MESSAGES();
+#pragma GCC diagnostic pop
+                if (context_get_flags(ctx, WaitingTimeoutExpired)) {
+                    ctx->restore_trap_handler = NULL;
+                    NEXT_INSTRUCTION(next_off);
+                } else {
+                    if (UNLIKELY(!mailbox_has_next(&ctx->mailbox))) {
+                        // No message is here.
+                        // We were signaled for another reason.
+                        ctx = scheduler_wait(ctx);
+                        goto schedule_in;
+                    } else {
+                        ctx->restore_trap_handler = NULL;
+                        JUMP_TO_ADDRESS(mod->labels[label]);
+                    }
+                }
+                break;
+            }
+#endif
 
             case OP_IS_LT: {
                 int next_off = 1;
@@ -2287,9 +2418,13 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                     if (term_is_pid(arg1)) {
                         int local_process_id = term_to_local_process_id(arg1);
-                        Context *target = globalcontext_get_process(ctx->global, local_process_id);
-
-                        if (context_is_port_driver(target)) {
+                        Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
+                        bool is_port_driver = false;
+                        if (target) {
+                            is_port_driver = context_is_port_driver(target);
+                            globalcontext_get_process_unlock(ctx->global, target);
+                        }
+                        if (is_port_driver) {
                             NEXT_INSTRUCTION(next_off);
                         } else {
                             i = POINTER_TO_II(mod->labels[label]);
@@ -2494,7 +2629,10 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     if (LIKELY(remaining_reductions)) {
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
-                        SCHEDULE_NEXT(mod, mod->labels[label]);
+                        ctx->saved_ip = mod->labels[label];
+                        ctx->saved_module = mod;
+                        ctx = scheduler_next(ctx->global, ctx);
+                        goto schedule_in;
                     }
                 #endif
 
@@ -2783,7 +2921,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     remaining_reductions--;
                     if (UNLIKELY(!remaining_reductions)) {
                         SCHEDULE_NEXT(mod, INSTRUCTION_POINTER());
-                        continue;
                     }
 
                     term fun = ctx->x[args_count];
@@ -2813,12 +2950,10 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                         struct Nif *nif = (struct Nif *) nifs_get(module_name, function_name, fun_arity);
                         if (!IS_NULL_PTR(nif)) {
-                            term return_value = nif->nif_ptr(ctx, arity, ctx->x);
-                            if (UNLIKELY(term_is_invalid_term(return_value))) {
-                                HANDLE_ERROR();
-                            }
-                            ctx->x[0] = return_value;
+                            term return_value = nif->nif_ptr(ctx, fun_arity, ctx->x);
                             NEXT_INSTRUCTION(next_off);
+                            PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value);
+                            ctx->x[0] = return_value;
                             continue;
 
                         } else {
@@ -2826,7 +2961,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                             if (IS_NULL_PTR(fun_module)) {
                                 HANDLE_ERROR();
                             }
-                            label = module_search_exported_function(fun_module, function_name, arity);
+                            label = module_search_exported_function(fun_module, function_name, fun_arity);
                             if (UNLIKELY(label == 0)) {
                                 HANDLE_ERROR();
                             }
@@ -2913,28 +3048,20 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     remaining_reductions--;
                     if (UNLIKELY(!remaining_reductions)) {
                         SCHEDULE_NEXT(mod, INSTRUCTION_POINTER());
-                        continue;
                     }
 
                     TRACE_CALL_EXT(ctx, mod, "call_ext_only", index, arity);
 
-                    const struct ExportedFunction *func = mod->imported_funcs[index].func;
-
-                    if (func->type == UnresolvedFunctionCall) {
-                        const struct ExportedFunction *resolved_func = module_resolve_function(mod, index);
-                        if (IS_NULL_PTR(resolved_func)) {
-                            RAISE_ERROR(UNDEF_ATOM);
-                        }
-                        func = resolved_func;
+                    const struct ExportedFunction *func = module_resolve_function(mod, index);
+                    if (IS_NULL_PTR(func)) {
+                        RAISE_ERROR(UNDEF_ATOM);
                     }
 
                     switch (func->type) {
                         case NIFFunctionType: {
                             const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
                             term return_value = nif->nif_ptr(ctx, arity, ctx->x);
-                            if (UNLIKELY(term_is_invalid_term(return_value))) {
-                                HANDLE_ERROR();
-                            }
+                            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
                             ctx->x[0] = return_value;
                             if ((long) ctx->cp == -1) {
                                 return 0;
@@ -4117,7 +4244,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 remaining_reductions--;
                 if (UNLIKELY(!remaining_reductions)) {
                     SCHEDULE_NEXT(mod, INSTRUCTION_POINTER());
-                    continue;
                 }
                 NEXT_INSTRUCTION(next_off);
 
@@ -4132,9 +4258,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 term native_return;
                 if (maybe_call_native(ctx, module_name, function_name, arity, &native_return)) {
-                    if (UNLIKELY(term_is_invalid_term(native_return))) {
-                        HANDLE_ERROR();
-                    }
+                    PROCESS_MAYBE_TRAP_RETURN_VALUE(native_return);
                     ctx->x[0] = native_return;
 
                 } else {
@@ -4173,7 +4297,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 remaining_reductions--;
                 if (UNLIKELY(!remaining_reductions)) {
                     SCHEDULE_NEXT(mod, INSTRUCTION_POINTER());
-                    continue;
                 }
 
                 ctx->cp = ctx->e[n_words];
@@ -4190,9 +4313,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 term native_return;
                 if (maybe_call_native(ctx, module_name, function_name, arity, &native_return)) {
-                    if (UNLIKELY(term_is_invalid_term(native_return))) {
-                        HANDLE_ERROR();
-                    }
+                    PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(native_return);
                     ctx->x[0] = native_return;
                     DO_RETURN();
 
@@ -5096,7 +5217,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             default:
                 printf("Undecoded opcode: %i\n", code[i]);
                 #ifdef IMPL_EXECUTE_LOOP
-                    fprintf(stderr, "failed at %i\n", i);
+                    fprintf(stderr, "failed at %u\n", (unsigned int) i);
                 #endif
 
                 AVM_ABORT();
@@ -5147,23 +5268,13 @@ handle_error:
 
 terminate_context:
         TRACE("-- Code execution finished for %i--\n", ctx->process_id);
-        if (ctx->leader) {
-            return 0;
-        }
         GlobalContext *global = ctx->global;
-        scheduler_terminate(ctx);
-        Context *scheduled_context = scheduler_do_wait(global);
-        if (UNLIKELY(scheduled_context == ctx)) {
-            fprintf(stderr, "bug: scheduled a terminated process!\n");
-            return 0;
+        if (ctx->leader) {
+            scheduler_stop_all(global);
         }
-
-        ctx = scheduled_context;
-        x_regs = ctx->x;
-        mod = ctx->saved_module;
-        code = mod->code->code;
-        remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;
-        JUMP_TO_ADDRESS(scheduled_context->saved_ip);
+        scheduler_terminate(ctx);
+        ctx = scheduler_run(global);
+        goto schedule_in;
 #endif
     }
 }

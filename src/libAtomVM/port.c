@@ -70,17 +70,21 @@ term port_create_ok_tuple(Context *ctx, term t)
     return port_create_tuple2(ctx, OK_ATOM, t);
 }
 
-void port_send_reply(Context *ctx, term pid, term ref, term reply)
+term port_create_reply(Context *ctx, term ref, term payload)
 {
-    term msg = port_create_tuple2(ctx, ref, reply);
-    port_send_message(ctx, pid, msg);
+    return port_create_tuple2(ctx, ref, payload);
 }
 
-void port_send_message(Context *ctx, term pid, term msg)
+void port_send_message(GlobalContext *glb, term pid, term msg)
 {
     int local_process_id = term_to_local_process_id(pid);
-    Context *target = globalcontext_get_process(ctx->global, local_process_id);
-    mailbox_send(target, msg);
+    globalcontext_send_message(glb, local_process_id, msg);
+}
+
+void port_send_message_nolock(GlobalContext *glb, term pid, term msg)
+{
+    int local_process_id = term_to_local_process_id(pid);
+    globalcontext_send_message_nolock(glb, local_process_id, msg);
 }
 
 void port_ensure_available(Context *ctx, size_t size)
@@ -118,4 +122,55 @@ int port_is_standard_port_command(term t)
             return 1;
         }
     }
+}
+
+term port_heap_create_tuple2(term **heap_ptr, term a, term b)
+{
+    term terms[2];
+    terms[0] = a;
+    terms[1] = b;
+
+    return port_heap_create_tuple_n(heap_ptr, 2, terms);
+}
+
+term port_heap_create_tuple3(term **heap_ptr, term a, term b, term c)
+{
+    term terms[3];
+    terms[0] = a;
+    terms[1] = b;
+    terms[2] = c;
+
+    return port_heap_create_tuple_n(heap_ptr, 3, terms);
+}
+
+term port_heap_create_tuple_n(term **heap_ptr, size_t num_terms, term *terms)
+{
+    term ret = term_heap_alloc_tuple(num_terms, heap_ptr);
+
+    for (size_t i = 0; i < num_terms; ++i) {
+        term_put_tuple_element(ret, i, terms[i]);
+    }
+
+    return ret;
+}
+
+term port_heap_create_error_tuple(term **heap_ptr, term reason)
+{
+    return port_heap_create_tuple2(heap_ptr, ERROR_ATOM, reason);
+}
+
+term port_heap_create_sys_error_tuple(term **heap_ptr, term syscall, int errno)
+{
+    term reason = port_heap_create_tuple2(heap_ptr, syscall, term_from_int32(errno));
+    return port_heap_create_error_tuple(heap_ptr, reason);
+}
+
+term port_heap_create_ok_tuple(term **heap_ptr, term t)
+{
+    return port_heap_create_tuple2(heap_ptr, OK_ATOM, t);
+}
+
+term port_heap_create_reply(term **heap_ptr, term ref, term payload)
+{
+    return port_heap_create_tuple2(heap_ptr, ref, payload);
 }

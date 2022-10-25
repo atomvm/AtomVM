@@ -20,10 +20,21 @@
 
 #include "atomshashtable.h"
 
+#include "smp.h"
 #include "utils.h"
 
 #include <stdlib.h>
 #include <string.h>
+
+#ifndef AVM_NO_SMP
+#define SMP_RDLOCK(htable) smp_rwlock_rdlock(htable->lock)
+#define SMP_WRLOCK(htable) smp_rwlock_wrlock(htable->lock)
+#define SMP_UNLOCK(htable) smp_rwlock_unlock(htable->lock)
+#else
+#define SMP_RDLOCK(htable)
+#define SMP_WRLOCK(htable)
+#define SMP_UNLOCK(htable)
+#endif
 
 #define DEFAULT_SIZE 8
 
@@ -62,6 +73,10 @@ struct AtomsHashTable *atomshashtable_new()
     htable->count = 0;
     htable->capacity = DEFAULT_SIZE;
 
+#ifndef AVM_NO_SMP
+    htable->lock = smp_rwlock_create();
+#endif
+
     return htable;
 }
 
@@ -70,6 +85,7 @@ int atomshashtable_insert(struct AtomsHashTable *hash_table, AtomString string, 
     int alen = atom_string_len(string);
 
     unsigned long hash = sdbm_hash(string, alen);
+    SMP_WRLOCK(hash_table);
     long index = hash % hash_table->capacity;
 
     struct HNode *node = hash_table->buckets[index];
@@ -77,6 +93,7 @@ int atomshashtable_insert(struct AtomsHashTable *hash_table, AtomString string, 
         while (1) {
             if (atom_are_equals(string, node->key)) {
                 node->value = value;
+                SMP_UNLOCK(hash_table);
                 return 1;
             }
 
@@ -90,6 +107,7 @@ int atomshashtable_insert(struct AtomsHashTable *hash_table, AtomString string, 
 
     struct HNode *new_node = malloc(sizeof(struct HNode));
     if (IS_NULL_PTR(new_node)) {
+        SMP_UNLOCK(hash_table);
         return 0;
     }
     new_node->next = NULL;
@@ -103,39 +121,47 @@ int atomshashtable_insert(struct AtomsHashTable *hash_table, AtomString string, 
     }
 
     hash_table->count++;
+    SMP_UNLOCK(hash_table);
     return 1;
 }
 
 unsigned long atomshashtable_get_value(const struct AtomsHashTable *hash_table, const AtomString string, unsigned long default_value)
 {
     unsigned long hash = sdbm_hash(string, atom_string_len(string));
+    SMP_RDLOCK(hash_table);
     long index = hash % hash_table->capacity;
 
     const struct HNode *node = hash_table->buckets[index];
     while (node) {
         if (atom_are_equals(string, node->key)) {
-            return node->value;
+            unsigned long result = node->value;
+            SMP_UNLOCK(hash_table);
+            return result;
         }
 
         node = node->next;
     }
 
+    SMP_UNLOCK(hash_table);
     return default_value;
 }
 
 int atomshashtable_has_key(const struct AtomsHashTable *hash_table, const AtomString string)
 {
     unsigned long hash = sdbm_hash(string, atom_string_len(string));
+    SMP_RDLOCK(hash_table);
     long index = hash % hash_table->capacity;
 
     const struct HNode *node = hash_table->buckets[index];
     while (node) {
         if (atom_are_equals(string, node->key)) {
+            SMP_UNLOCK(hash_table);
             return 1;
         }
 
         node = node->next;
     }
 
+    SMP_UNLOCK(hash_table);
     return 0;
 }

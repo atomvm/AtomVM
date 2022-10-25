@@ -25,6 +25,7 @@ jobs:
           distro: "stretch"
           base_url: "http://deb.debian.org/debian/"
           cflags: "-O2 -mthumb -mthumb-interwork -march=armv4t"
+          cmake_opts: "-DAVM_DISABLE_SMP=On"
           additional_packages: |
             http://ftp.us.debian.org/debian/pool/main/c/cmake/cmake-data_3.13.2-1~bpo9+1_all.deb \
             http://ftp.us.debian.org/debian/pool/main/r/rhash/librhash0_1.3.3-1+b2_armel.deb \
@@ -121,15 +122,21 @@ jobs:
         cmake --version &&
         mkdir -p build &&
         cd build &&
-        cmake .. &&
+        cmake .. ${{ matrix.cmake_opts }} &&
         cp ../build_tests/tests/erlang_tests/*.beam tests/erlang_tests/ &&
         cp ../build_tests/tests/libs/estdlib/*.avm tests/libs/estdlib/  &&
         cp ../build_tests/tests/libs/eavmlib/*.avm tests/libs/eavmlib/ &&
         cp ../build_tests/tests/libs/alisp/*.avm tests/libs/alisp/ &&
         make AtomVM &&
         make test-erlang &&
+        make test-mailbox &&
+        make test-structs &&
         file ./tests/test-erlang &&
         ./tests/test-erlang &&
+        file ./tests/test-mailbox &&
+        ./tests/test-mailbox &&
+        file ./tests/test-structs &&
+        ./tests/test-structs &&
         file ./src/AtomVM &&
         ./src/AtomVM tests/libs/estdlib/test_estdlib.avm &&
         ./src/AtomVM tests/libs/eavmlib/test_eavmlib.avm &&

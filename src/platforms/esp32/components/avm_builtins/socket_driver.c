@@ -50,15 +50,26 @@
 //#define ENABLE_TRACE 1
 #include "trace.h"
 
+typedef struct SocketListener
+{
+    EventListener base;
+    int32_t process_id;
+    avm_int_t buf_size;
+} ActiveRecvListener;
+
+// To make thread model explicit, functions that are passed Context *ctx are
+// called from this context.
 static void socket_driver_init(GlobalContext *global);
 static Context *socket_driver_create_port(GlobalContext *global, term opts);
 
-static void tcp_server_handler(Context *ctx);
-static void tcp_client_handler(Context *ctx);
-static void udp_handler(Context *ctx);
-static void socket_consume_mailbox(Context *ctx);
+static void tcp_server_handler(GlobalContext *glb, int32_t process_id);
+static void tcp_client_handler(GlobalContext *glb, int32_t process_id);
+static void udp_handler(GlobalContext *glb, int32_t process_id);
+static NativeHandlerResult socket_consume_mailbox(Context *ctx);
 
 static const char *const ealready_atom = "\x8" "ealready";
+
+static const char *const close_internal = "\x14" "$atomvm_socket_close";
 
 uint32_t socket_tuple_to_addr(term addr_tuple)
 {
@@ -68,41 +79,54 @@ uint32_t socket_tuple_to_addr(term addr_tuple)
         | (term_to_int32(term_get_tuple_element(addr_tuple, 3)) & 0xFF);
 }
 
-static term socket_tuple_from_addr(Context *ctx, uint32_t addr)
-{
-    term terms[4];
-    terms[0] = term_from_int32((addr >> 24) & 0xFF);
-    terms[1] = term_from_int32((addr >> 16) & 0xFF);
-    terms[2] = term_from_int32((addr >> 8) & 0xFF);
-    terms[3] = term_from_int32(addr & 0xFF);
-
-    return port_create_tuple_n(ctx, 4, terms);
-}
-
 static void tuple_to_ip_addr(term address_tuple, ip_addr_t *out_addr)
 {
     out_addr->type = IPADDR_TYPE_V4;
     out_addr->u_addr.ip4.addr = htonl(socket_tuple_to_addr(address_tuple));
 }
 
-static term socket_addr_to_tuple(Context *ctx, ip_addr_t *addr)
+static void socket_fill_ipv4_addr_tuple(term addr_tuple, ip_addr_t *addr)
+{
+    uint8_t ad1 = ip4_addr1(&(addr->u_addr.ip4));
+    uint8_t ad2 = ip4_addr2(&(addr->u_addr.ip4));
+    uint8_t ad3 = ip4_addr3(&(addr->u_addr.ip4));
+    uint8_t ad4 = ip4_addr4(&(addr->u_addr.ip4));
+    term_put_tuple_element(addr_tuple, 0, term_from_int11(ad1));
+    term_put_tuple_element(addr_tuple, 1, term_from_int11(ad2));
+    term_put_tuple_element(addr_tuple, 2, term_from_int11(ad3));
+    term_put_tuple_element(addr_tuple, 3, term_from_int11(ad4));
+}
+
+static term socket_heap_addr_to_tuple(term **heap_ptr, ip_addr_t *addr)
 {
     term addr_tuple;
-
     switch (IP_GET_TYPE(addr)) {
         case IPADDR_TYPE_V4: {
-            uint8_t ad1 = ip4_addr1(&(addr->u_addr.ip4));
-            uint8_t ad2 = ip4_addr2(&(addr->u_addr.ip4));
-            uint8_t ad3 = ip4_addr3(&(addr->u_addr.ip4));
-            uint8_t ad4 = ip4_addr4(&(addr->u_addr.ip4));
-            addr_tuple = term_alloc_tuple(4, ctx);
-            term_put_tuple_element(addr_tuple, 0, term_from_int11(ad1));
-            term_put_tuple_element(addr_tuple, 1, term_from_int11(ad2));
-            term_put_tuple_element(addr_tuple, 2, term_from_int11(ad3));
-            term_put_tuple_element(addr_tuple, 3, term_from_int11(ad4));
+            term addr_tuple = term_heap_alloc_tuple(4, heap_ptr);
+            socket_fill_ipv4_addr_tuple(addr_tuple, addr);
             break;
         }
+        case IPADDR_TYPE_V6:
+            //TODO: implement IPv6
+            addr_tuple = term_invalid_term();
+            break;
 
+        default:
+            addr_tuple = term_invalid_term();
+    }
+
+    return addr_tuple;
+}
+
+static term socket_ctx_addr_to_tuple(Context *ctx, ip_addr_t *addr)
+{
+    term addr_tuple;
+    switch (IP_GET_TYPE(addr)) {
+        case IPADDR_TYPE_V4: {
+            term addr_tuple = term_alloc_tuple(4, ctx);
+            socket_fill_ipv4_addr_tuple(addr_tuple, addr);
+            break;
+        }
         case IPADDR_TYPE_V6:
             //TODO: implement IPv6
             addr_tuple = term_invalid_term();
@@ -126,7 +150,7 @@ struct SocketData
 {
     struct ListHead sockets_head;
     struct netconn *conn;
-    Context *ctx;
+    int32_t process_id;
     enum socket_type type;
     term controlling_process_pid;
 
@@ -176,11 +200,10 @@ struct NetconnEvent
 
 xQueueHandle netconn_events = NULL;
 
-void socket_events_handler(EventListener *listener)
+EventListener *socket_events_handler(GlobalContext *glb, EventListener *listener)
 {
     TRACE("socket_events_handler\n");
 
-    GlobalContext *glb = listener->data;
     struct ESP32PlatformData *platform = glb->platform_data;
 
     struct NetconnEvent event;
@@ -220,15 +243,15 @@ void socket_events_handler(EventListener *listener)
 
             switch (socket->type) {
                 case TCPServerSocket:
-                    tcp_server_handler(socket->ctx);
+                    tcp_server_handler(glb, socket->process_id);
                     break;
 
                 case TCPClientSocket:
-                    tcp_client_handler(socket->ctx);
+                    tcp_client_handler(glb, socket->process_id);
                     break;
 
                 case UDPSocket:
-                    udp_handler(socket->ctx);
+                    udp_handler(glb, socket->process_id);
                     break;
 
                 default:
@@ -239,6 +262,7 @@ void socket_events_handler(EventListener *listener)
             TRACE("Got event for unknown conn: %p, evt: %i, len: %i\n", netconn, (int) evt, (int) len);
         }
     }
+    return listener;
 }
 
 void socket_driver_init(GlobalContext *glb)
@@ -249,8 +273,9 @@ void socket_driver_init(GlobalContext *glb)
     EventListener *socket_listener = malloc(sizeof(EventListener));
 
     struct ESP32PlatformData *platform = glb->platform_data;
-    sys_event_listener_init(socket_listener, &netconn_events, socket_events_handler, glb);
-    list_append(&platform->listeners, &socket_listener->listeners_list_head);
+    socket_listener->sender = netconn_events;
+    socket_listener->handler = socket_events_handler;
+    synclist_append(&platform->listeners, &socket_listener->listeners_list_head);
 
     list_init(&platform->sockets_list_head);
 
@@ -262,7 +287,7 @@ static void socket_data_init(struct SocketData *data, Context *ctx, struct netco
 {
     data->type = type;
     data->conn = conn;
-    data->ctx = ctx;
+    data->process_id = ctx->process_id;
     data->controlling_process_pid = term_invalid_term();
     data->port = 0;
     data->active = true;
@@ -322,8 +347,9 @@ static struct UDPSocketData *udp_socket_data_new(Context *ctx, struct netconn *c
 static void send_message(term pid, term message, GlobalContext *global)
 {
     int local_process_id = term_to_local_process_id(pid);
-    Context *target = globalcontext_get_process(global, local_process_id);
+    Context *target = globalcontext_get_process_lock(global, local_process_id);
     mailbox_send(target, message);
+    globalcontext_get_process_unlock(global, target);
 }
 
 void ESP_IRAM_ATTR socket_callback(struct netconn *netconn, enum netconn_evt evt, u16_t len)
@@ -347,12 +373,10 @@ void ESP_IRAM_ATTR socket_callback(struct netconn *netconn, enum netconn_evt evt
     }
 }
 
-void accept_conn(struct TCPServerAccepter *accepter, Context *ctx)
+term accept_conn(GlobalContext *glb, struct TCPServerSocketData *tcp_data, struct TCPServerAccepter *accepter)
 {
     TRACE("Going to accept a TCP connection\n");
 
-    struct TCPServerSocketData *tcp_data = ctx->platform_data;
-    GlobalContext *glb = ctx->global;
     struct ESP32PlatformData *platform = glb->platform_data;
 
     struct netconn *accepted_conn;
@@ -360,7 +384,7 @@ void accept_conn(struct TCPServerAccepter *accepter, Context *ctx)
     if (UNLIKELY(status != ERR_OK)) {
         //TODO
         fprintf(stderr, "accept error: %i on %p\n", status, (void *) tcp_data->socket_data.conn);
-        return;
+        return term_invalid_term();
     }
 
     term pid = accepter->accepting_process_pid;
@@ -369,7 +393,6 @@ void accept_conn(struct TCPServerAccepter *accepter, Context *ctx)
 
     Context *new_ctx = context_new(glb);
     new_ctx->native_handler = socket_consume_mailbox;
-    scheduler_make_waiting(glb, new_ctx);
 
     term socket_pid = term_from_local_process_id(new_ctx->process_id);
 
@@ -382,22 +405,23 @@ void accept_conn(struct TCPServerAccepter *accepter, Context *ctx)
     new_tcp_data->socket_data.buffer = tcp_data->socket_data.buffer;
 
     // TODO
-    if (UNLIKELY(memory_ensure_free(ctx, 128) != MEMORY_GC_OK)) {
+    // We use new_ctx's heap as we know it is not running.
+    if (UNLIKELY(memory_ensure_free(new_ctx, 128) != MEMORY_GC_OK)) {
         AVM_ABORT();
     }
-    term ref = term_from_ref_ticks(accepter->ref_ticks, ctx);
-    term return_tuple = term_alloc_tuple(2, ctx);
+    term ref = term_from_ref_ticks(accepter->ref_ticks, new_ctx);
+    term return_tuple = term_alloc_tuple(2, new_ctx);
 
     free(accepter);
 
-    term result_tuple = term_alloc_tuple(2, ctx);
+    term result_tuple = term_alloc_tuple(2, new_ctx);
     term_put_tuple_element(result_tuple, 0, OK_ATOM);
     term_put_tuple_element(result_tuple, 1, socket_pid);
 
     term_put_tuple_element(return_tuple, 0, ref);
     term_put_tuple_element(return_tuple, 1, result_tuple);
 
-    send_message(pid, return_tuple, glb);
+    return return_tuple;
 }
 
 static void do_accept(Context *ctx, term msg)
@@ -427,19 +451,22 @@ static void do_accept(Context *ctx, term msg)
         }
 
         if (accepter) {
-            accept_conn(accepter, ctx);
+            GlobalContext *glb = ctx->global;
+            term return_tuple = accept_conn(glb, tcp_data, accepter);
+            if (!term_is_invalid_term(return_tuple)) {
+                globalcontext_send_message(glb, accepter->accepting_process_pid, return_tuple);
+            }
             tcp_data->ready_connections--;
         }
     }
 }
 
-static void close_tcp_socket(Context *ctx, struct TCPClientSocketData *tcp_data)
+static void close_tcp_socket_and_unlock(GlobalContext *glb, Context *ctx, struct TCPClientSocketData *tcp_data)
 {
-    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-        AVM_ABORT();
-    }
+    term heap[3];
+    term *heap_ptr = heap;
     term pid = tcp_data->socket_data.controlling_process_pid;
-    term msg = term_alloc_tuple(2, ctx);
+    term msg = term_heap_alloc_tuple(2, &heap_ptr);
     term_put_tuple_element(msg, 0, TCP_CLOSED_ATOM);
     term_put_tuple_element(msg, 1, term_from_local_process_id(pid));
 
@@ -452,21 +479,24 @@ static void close_tcp_socket(Context *ctx, struct TCPClientSocketData *tcp_data)
 
     free(tcp_data);
 
-    send_message(pid, msg, ctx->global);
-    scheduler_terminate(ctx);
-
-    return;
+    mailbox_send(ctx, globalcontext_make_atom(glb, close_internal));
+    globalcontext_get_process_unlock(glb, ctx);
+    send_message(pid, msg, glb);
 }
 
-static void tcp_client_handler(Context *ctx)
+static void tcp_client_handler(GlobalContext *glb, int32_t process_id)
 {
     TRACE("tcp_client_handler\n");
 
+    Context *ctx = globalcontext_get_process_lock(glb, process_id);
+    if (UNLIKELY(ctx == NULL)) {
+        return;
+    }
     struct TCPClientSocketData *tcp_data = ctx->platform_data;
-    GlobalContext *glb = ctx->global;
 
     if (!tcp_data->socket_data.active) {
         TRACE("tcp_client_handler: Not active socket.  Ignoring.\n");
+        globalcontext_get_process_unlock(glb, ctx);
         return;
     }
 
@@ -474,7 +504,7 @@ static void tcp_client_handler(Context *ctx)
         TRACE("tcp_client_handler: No bytes to receive.\n");
         // NB. When the connection peer closes a connection, then no avail_bytes
         // are reported.  We verify that this is the expected behavior.
-        close_tcp_socket(ctx, tcp_data);
+        close_tcp_socket_and_unlock(glb, ctx, tcp_data);
         return;
     }
 
@@ -482,7 +512,7 @@ static void tcp_client_handler(Context *ctx)
     err_t status = netconn_recv(tcp_data->socket_data.conn, &buf);
     if (UNLIKELY(status != ERR_OK)) {
         TRACE("tcp_client_handler: netconn_recv error: %i\n", status);
-        close_tcp_socket(ctx, tcp_data);
+        close_tcp_socket_and_unlock(glb, ctx, tcp_data);
         return;
     }
 
@@ -491,7 +521,7 @@ static void tcp_client_handler(Context *ctx)
     status = netbuf_data(buf, &data, &data_len);
     if (UNLIKELY(status != ERR_OK)) {
         TRACE("tcp_client_handler: netbuf_data error: %i\n", status);
-        close_tcp_socket(ctx, tcp_data);
+        close_tcp_socket_and_unlock(glb, ctx, tcp_data);
         return;
     }
 
@@ -513,19 +543,18 @@ static void tcp_client_handler(Context *ctx)
         // tuples_size = 5 (result_tuple size)
         tuples_size = 4;
     } else {
-        // tuples_size = 3 (ok_tuple size) + 3 (result_tuple size)
-        tuples_size = 3 + 3;
+        // tuples_size = 3 (ok_tuple size) + 3 (result_tuple size) + (ref)
+        tuples_size = 3 + 3 + REF_SIZE;
     }
-    if (UNLIKELY(memory_ensure_free(ctx, tuples_size + recv_terms_size) != MEMORY_GC_OK)) {
-        AVM_ABORT();
-    }
+    term heap[tuples_size + recv_terms_size];
+    term *heap_ptr = heap;
 
     term recv_data;
     if (tcp_data->socket_data.binary) {
-        recv_data = term_create_uninitialized_binary(data_len, ctx);
+        recv_data = term_heap_create_uninitialized_binary(data_len, &heap_ptr);
         memcpy((void *) term_binary_data(recv_data), data, data_len);
     } else {
-        recv_data = term_from_string((const uint8_t *) data, data_len, ctx);
+        recv_data = term_heap_from_string((const uint8_t *) data, data_len, &heap_ptr);
     }
 
     netbuf_delete(buf);
@@ -534,18 +563,18 @@ static void tcp_client_handler(Context *ctx)
 
     term result_tuple;
     if (tcp_data->socket_data.active) {
-        result_tuple = term_alloc_tuple(3, ctx);
+        result_tuple = term_heap_alloc_tuple(3, &heap_ptr);
         term_put_tuple_element(result_tuple, 0, TCP_ATOM);
         term_put_tuple_element(result_tuple, 1, term_from_local_process_id(ctx->process_id));
         term_put_tuple_element(result_tuple, 2, recv_data);
 
     } else {
-        term ok_tuple = term_alloc_tuple(2, ctx);
+        term ok_tuple = term_heap_alloc_tuple(2, &heap_ptr);
         term_put_tuple_element(ok_tuple, 0, OK_ATOM);
         term_put_tuple_element(ok_tuple, 1, recv_data);
 
-        result_tuple = term_alloc_tuple(2, ctx);
-        term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(tcp_data->socket_data.passive_ref_ticks, ctx));
+        result_tuple = term_heap_alloc_tuple(2, &heap_ptr);
+        term_put_tuple_element(result_tuple, 0, term_heap_from_ref_ticks(tcp_data->socket_data.passive_ref_ticks, &heap_ptr));
         term_put_tuple_element(result_tuple, 1, ok_tuple);
 
         pid = tcp_data->socket_data.passive_receiver_process_pid;
@@ -564,12 +593,20 @@ static void tcp_client_handler(Context *ctx)
     #endif
     TRACE("\n");
 
+    // Unlock context (tcp_data is now unsafe)
+    globalcontext_get_process_unlock(glb, ctx);
+
     send_message(pid, result_tuple, glb);
 }
 
-static void tcp_server_handler(Context *ctx)
+static void tcp_server_handler(GlobalContext *glb, int32_t process_id)
 {
     TRACE("tcp_server_handler\n");
+
+    Context *ctx = globalcontext_get_process_lock(glb, process_id);
+    if (UNLIKELY(ctx == NULL)) {
+        return;
+    }
 
     struct TCPServerSocketData *tcp_data = ctx->platform_data;
 
@@ -585,27 +622,36 @@ static void tcp_server_handler(Context *ctx)
     }
 
     if (accepter) {
-        accept_conn(accepter, ctx);
-
+        term return_tuple = accept_conn(glb, tcp_data, accepter);
+        int32_t process_id = accepter->accepting_process_pid;
+        globalcontext_get_process_unlock(glb, ctx);
+        globalcontext_send_message(glb, process_id, return_tuple);
     } else {
         tcp_data->ready_connections++;
+        globalcontext_get_process_unlock(glb, ctx);
     }
 }
 
-static void udp_handler(Context *ctx)
+static void udp_handler(GlobalContext *glb, int32_t process_id)
 {
     TRACE("udp_client_handler\n");
 
+    Context *ctx = globalcontext_get_process_lock(glb, process_id);
+    if (UNLIKELY(ctx == NULL)) {
+        return;
+    }
+
     struct UDPSocketData *udp_data = ctx->platform_data;
-    GlobalContext *glb = ctx->global;
 
     struct SocketData *socket_data = &udp_data->socket_data;
     if (!socket_data->active && (socket_data->passive_receiver_process_pid == term_invalid_term())) {
+        globalcontext_get_process_unlock(glb, ctx);
         return;
     }
 
     if (!udp_data->socket_data.avail_bytes) {
         TRACE("No bytes to receive.\n");
+        globalcontext_get_process_unlock(glb, ctx);
         return;
     }
 
@@ -614,6 +660,7 @@ static void udp_handler(Context *ctx)
     if (UNLIKELY(status != ERR_OK)) {
         //TODO
         fprintf(stderr, "tcp_client_handler error: %i\n", status);
+        globalcontext_get_process_unlock(glb, ctx);
         return;
     }
 
@@ -623,6 +670,7 @@ static void udp_handler(Context *ctx)
     if (UNLIKELY(status != ERR_OK)) {
         //TODO
         fprintf(stderr, "netbuf_data error: %i\n", status);
+        globalcontext_get_process_unlock(glb, ctx);
         return;
     }
 
@@ -645,21 +693,20 @@ static void udp_handler(Context *ctx)
         tuples_size = 5 + 6;
     } else {
         // tuples_size = 4 (recv_ret size) + 5 (addr size) + 3 (ok_tuple size) + 3 (result_tuple size)
-        tuples_size = 4 + 5 + 3 + 3;
+        tuples_size = 4 + 5 + 3 + 3 + REF_SIZE;
     }
-    if (UNLIKELY(memory_ensure_free(ctx, tuples_size + recv_terms_size) != MEMORY_GC_OK)) {
-        AVM_ABORT();
-    }
+    term heap[tuples_size + recv_terms_size];
+    term *heap_ptr = heap;
 
     term recv_data;
     if (udp_data->socket_data.binary) {
-        recv_data = term_create_uninitialized_binary(data_len, ctx);
+        recv_data = term_heap_create_uninitialized_binary(data_len, &heap_ptr);
         memcpy((void *) term_binary_data(recv_data), data, data_len);
     } else {
-        recv_data = term_from_string((const uint8_t *) data, data_len, ctx);
+        recv_data = term_heap_from_string((const uint8_t *) data, data_len, &heap_ptr);
     }
 
-    term addr = socket_addr_to_tuple(ctx, netbuf_fromaddr(buf));
+    term addr = socket_heap_addr_to_tuple(&heap_ptr, netbuf_fromaddr(buf));
     term port = term_from_int32(netbuf_fromport(buf));
 
     netbuf_delete(buf);
@@ -668,7 +715,7 @@ static void udp_handler(Context *ctx)
 
     term result_tuple;
     if (socket_data->active) {
-        result_tuple = term_alloc_tuple(5, ctx);
+        result_tuple = term_heap_alloc_tuple(5, &heap_ptr);
         term_put_tuple_element(result_tuple, 0, UDP_ATOM);
         term_put_tuple_element(result_tuple, 1, term_from_local_process_id(ctx->process_id));
         term_put_tuple_element(result_tuple, 2, addr);
@@ -676,17 +723,17 @@ static void udp_handler(Context *ctx)
         term_put_tuple_element(result_tuple, 4, recv_data);
 
     } else {
-        term recv_ret = term_alloc_tuple(3, ctx);
+        term recv_ret = term_heap_alloc_tuple(3, &heap_ptr);
         term_put_tuple_element(recv_ret, 0, addr);
         term_put_tuple_element(recv_ret, 1, port);
         term_put_tuple_element(recv_ret, 2, recv_data);
 
-        term ok_tuple = term_alloc_tuple(2, ctx);
+        term ok_tuple = term_heap_alloc_tuple(2, &heap_ptr);
         term_put_tuple_element(ok_tuple, 0, OK_ATOM);
         term_put_tuple_element(ok_tuple, 1, recv_ret);
 
-        result_tuple = term_alloc_tuple(2, ctx);
-        term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(socket_data->passive_ref_ticks, ctx));
+        result_tuple = term_heap_alloc_tuple(2, &heap_ptr);
+        term_put_tuple_element(result_tuple, 0, term_heap_from_ref_ticks(socket_data->passive_ref_ticks, &heap_ptr));
         term_put_tuple_element(result_tuple, 1, ok_tuple);
 
         pid = socket_data->passive_receiver_process_pid;
@@ -704,6 +751,8 @@ static void udp_handler(Context *ctx)
         term_display(stdout, pid, ctx);
     #endif
     TRACE("\n");
+
+    globalcontext_get_process_unlock(glb, ctx);
 
     send_message(pid, result_tuple, glb);
 }
@@ -1086,7 +1135,6 @@ static void do_close(Context *ctx, term msg)
     send_message(pid, return_tuple, glb);
 
     free(tcp_data);
-    scheduler_terminate(ctx);
 }
 
 static void do_recvfrom(Context *ctx, term msg)
@@ -1103,7 +1151,7 @@ static void do_recvfrom(Context *ctx, term msg)
             AVM_ABORT();
         }
 
-        term ealready = context_make_atom(ctx, ealready_atom);
+        term ealready = globalcontext_make_atom(glb, ealready_atom);
 
         term error_tuple = term_alloc_tuple(2, ctx);
         term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
@@ -1162,7 +1210,7 @@ static void do_recvfrom(Context *ctx, term msg)
             recv_data = term_from_string((const uint8_t *) data, data_len, ctx);
         }
 
-        term addr = socket_addr_to_tuple(ctx, netbuf_fromaddr(buf));
+        term addr = socket_ctx_addr_to_tuple(ctx, netbuf_fromaddr(buf));
         term port = term_from_int32(netbuf_fromport(buf));
 
         netbuf_delete(buf);
@@ -1241,7 +1289,7 @@ static void do_sockname(Context *ctx, term msg)
             AVM_ABORT();
         }
         return_msg = term_alloc_tuple(2, ctx);
-        term addr_term = socket_addr_to_tuple(ctx, &addr);
+        term addr_term = socket_ctx_addr_to_tuple(ctx, &addr);
         term port_term = term_from_int(port);
         term address_port_term = term_alloc_tuple(2, ctx);
         term_put_tuple_element(address_port_term, 0, addr_term);
@@ -1280,7 +1328,7 @@ static void do_peername(Context *ctx, term msg)
             AVM_ABORT();
         }
         return_msg = term_alloc_tuple(2, ctx);
-        term addr_term = socket_addr_to_tuple(ctx, &addr);
+        term addr_term = socket_ctx_addr_to_tuple(ctx, &addr);
         term port_term = term_from_int(port);
         term address_port_term = term_alloc_tuple(2, ctx);
         term_put_tuple_element(address_port_term, 0, addr_term);
@@ -1330,10 +1378,12 @@ static void do_controlling_process(Context *ctx, term msg)
     send_message(pid, result_tuple, glb);
 }
 
-static void socket_consume_mailbox(Context *ctx)
+static NativeHandlerResult socket_consume_mailbox(Context *ctx)
 {
-    while (!list_is_empty(&ctx->mailbox)) {
-        Message *message = mailbox_dequeue(ctx);
+    GlobalContext *glb = ctx->global;
+
+    while (mailbox_has_next(&ctx->mailbox)) {
+        Message *message = mailbox_first(&ctx->mailbox);
         term msg = message->message;
 
         TRACE("message: ");
@@ -1341,6 +1391,11 @@ static void socket_consume_mailbox(Context *ctx)
             term_display(stdout, msg, ctx);
         #endif
         TRACE("\n");
+
+        if (msg == globalcontext_make_atom(glb, close_internal)) {
+            // We don't need to remove message.
+            return false;
+        }
 
         term cmd = term_get_tuple_element(msg, 2);
         term cmd_name = term_get_tuple_element(cmd, 0);
@@ -1380,7 +1435,8 @@ static void socket_consume_mailbox(Context *ctx)
             case CLOSE_ATOM:
                 TRACE("close\n");
                 do_close(ctx, msg);
-                break;
+                // We don't need to remove message.
+                return NativeTerminate;
 
             case GET_PORT_ATOM:
                 TRACE("get_port\n");
@@ -1407,8 +1463,9 @@ static void socket_consume_mailbox(Context *ctx)
                 break;
         }
 
-        mailbox_destroy_message(message);
+        mailbox_remove(&ctx->mailbox);
     }
+    return NativeContinue;
 }
 
 Context *socket_driver_create_port(GlobalContext *global, term opts)

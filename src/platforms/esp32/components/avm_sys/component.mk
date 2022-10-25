@@ -19,4 +19,5 @@
 #
 
 ## Add the libatomvm build component to the include path for generated headers (e.g., version.h)
+CFLAGS += -DAVM_NO_SMP
 COMPONENT_INCLUDES += $(COMPONENT_PATH)/../../build/libatomvm

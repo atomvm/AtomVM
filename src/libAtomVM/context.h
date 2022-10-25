@@ -34,8 +34,16 @@ extern "C" {
 
 #include "globalcontext.h"
 #include "linkedlist.h"
+#include "mailbox.h"
 #include "term.h"
-#include "timer_wheel.h"
+#include "timer_list.h"
+
+#if !defined(AVM_NO_SMP) && !defined(__cplusplus)
+#include <stdatomic.h>
+#define ATOMIC _Atomic
+#else
+#define ATOMIC
+#endif
 
 struct Module;
 
@@ -44,14 +52,25 @@ struct Module;
 typedef struct Module Module;
 #endif
 
-typedef void (*native_handler_f)(Context *ctx);
+typedef enum NativeHandlerResult
+{
+    NativeTerminate = 1,
+    NativeContinue
+} NativeHandlerResult;
+
+// Native handlers. Return NativeTerminate to terminate, NativeContinue
+// to keep the handler in the process table.
+typedef NativeHandlerResult (*native_handler_f)(Context *ctx);
 
 enum ContextFlags
 {
     NoFlags = 0,
-    WaitingMessages = 1,
-    WaitingTimeout = 2,
-    WaitingTimeoutExpired = 4
+    WaitingTimeout = 1,
+    WaitingTimeoutExpired = 2,
+    Running = 4,
+    Ready = 8,
+    Killed = 16,
+    Trap = 32,
 };
 
 struct Context
@@ -61,7 +80,7 @@ struct Context
     struct ListHead processes_table_head;
     int32_t process_id;
 
-    struct TimerWheelItem timer_wheel_head;
+    struct TimerListItem timer_list_head;
 
     struct ListHead monitors_head;
 
@@ -78,13 +97,13 @@ struct Context
 
     unsigned long cp;
 
-    //needed for wait and wait_timeout
+    // saved state when scheduled out
     Module *saved_module;
     const void *saved_ip;
-    const void *jump_to_on_restore;
+    // pointer to a trap or wait timeout handler
+    void *restore_trap_handler;
 
-    struct ListHead mailbox;
-    struct ListHead save_queue;
+    Mailbox mailbox;
 
     struct ListHead dictionary;
 
@@ -100,19 +119,18 @@ struct Context
     unsigned int has_max_heap_size : 1;
 
     bool trap_exit : 1;
-    #ifdef ENABLE_ADVANCED_TRACE
-        unsigned int trace_calls : 1;
-        unsigned int trace_call_args : 1;
-        unsigned int trace_returns : 1;
-        unsigned int trace_send : 1;
-        unsigned int trace_receive : 1;
-    #endif
-
+#ifdef ENABLE_ADVANCED_TRACE
+    unsigned int trace_calls : 1;
+    unsigned int trace_call_args : 1;
+    unsigned int trace_returns : 1;
+    unsigned int trace_send : 1;
+    unsigned int trace_receive : 1;
+#endif
 
     struct ListHead heap_fragments;
     int heap_fragments_size;
 
-    enum ContextFlags flags;
+    enum ContextFlags ATOMIC flags;
 
     void *platform_data;
 
@@ -146,7 +164,9 @@ struct Monitor
 /**
  * @brief Creates a new context
  *
- * @details Allocates a new Context struct and initialize it, the newly created context is also inserted into the processes table.
+ * @details Allocates a new Context struct and initialize it. The newly created
+ * context is also inserted into the processes table, however it is not scheduled,
+ * allowing for further initialization.
  * @param glb The global context of this virtual machine instance.
  * @returns created context.
  */
@@ -156,6 +176,8 @@ Context *context_new(GlobalContext *glb);
  * @brief Destroys a context
  *
  * @details Frees context resources and memory and removes it from the processes table.
+ * This should be called from the scheduler only. To actually delete a context that
+ * was created with context_new, use scheduler_terminate.
  * @param c the context that will be destroyed.
  */
 void context_destroy(Context *c);
@@ -244,33 +266,6 @@ static inline unsigned long context_stack_size(const Context *ctx)
 }
 
 /**
- * @brief Checks if a context is waiting a timeout.
- *
- * @details Check if given context has a timeout timestamp set, regardless current timestamp.
- * @param ctx a valid context.
- * @returns 1 if context has a timeout, otherwise 0.
- */
-static inline int context_is_waiting_timeout(const Context *ctx)
-{
-    return ctx->timer_wheel_head.callback != NULL;
-}
-
-/**
- * @brief Returns a term representing an atom, from the suppliend string
- *
- * @details Converns a string to an atom.  Note that this function may have a side-effect on the
- *          global context.
- * @param glb pointer to the global context
- * @param string an AtomString
- * @return an atom term formed from the supplied atom string.
- */
-static inline term context_make_atom(Context *ctx, AtomString string)
-{
-    int global_atom_index = globalcontext_insert_atom(ctx->global, string);
-    return term_from_atom_index(global_atom_index);
-}
-
-/**
  * @brief Compares a term with an AtomString.
  *
  * @details Checks if the given term and the given AtomString refers to the same atom.
@@ -300,6 +295,64 @@ size_t context_message_queue_len(Context *ctx);
  * @returns total amount of size (in byes) occupied by the process
  */
 size_t context_size(Context *ctx);
+
+/**
+ * @brief Set or clear a flag on another context.
+ *
+ * @details atomically update flags <- (flags & mask) | value
+ * @param ctx the context to set/clear flag on.
+ * @param mask the mask to apply on flags
+ * @param value the value to set
+ */
+void context_update_flags(Context *ctx, int mask, int value);
+
+/**
+ * @brief Get flags on a given context.
+ *
+ * @param ctx the context to get flags on.
+ * @param mask the mask to apply on flags
+ */
+static inline int context_get_flags(Context *ctx, int mask)
+{
+    return ctx->flags & mask;
+}
+
+/**
+ * @brief Process a kill signal, setting the exit reason and changing the
+ * killed flag.
+ *
+ * @param ctx the context being executed
+ * @param signal the kill message
+ */
+void context_process_kill_signal(Context *ctx, struct TermSignal *signal);
+
+/**
+ * @brief Process a process info request signal.
+ *
+ * @param ctx the context being executed
+ * @param signal the kill message
+ */
+void context_process_process_info_request_signal(Context *ctx, struct BuiltInAtomRequestSignal *signal);
+
+/**
+ * @brief Process a trap answer signal.
+ *
+ * @param ctx the context being executed
+ * @param signal the answer message
+ * @return \c true if successful, \c false in case of memory error
+ */
+bool context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal);
+
+/**
+ * @brief Get process information.
+ *
+ * @param ctx the context being executed
+ * @param out the answer term
+ * @param atom_key the key representing the info to get
+ * @return \c true if successful, \c false in case of an error in which case
+ * *out is filled with an exception atom
+ */
+bool context_get_process_info(Context *ctx, term *out, term atom_key);
 
 uint64_t context_monitor(Context *ctx, term monitor_pid, bool linked);
 void context_demonitor(Context *ctx, term monitor_pid, bool linked);

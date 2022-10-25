@@ -22,6 +22,7 @@ cmake_minimum_required (VERSION 3.13)
 project (tests)
 
 add_executable(test-erlang test.c)
+add_executable(test-mailbox test-mailbox.c)
 add_executable(test-structs test-structs.c)
 
 # AtomVM options impacting tests
@@ -30,10 +31,12 @@ if (AVM_DISABLE_FP)
 endif()
 
 target_compile_features(test-erlang PUBLIC c_std_11)
+target_compile_features(test-mailbox PUBLIC c_std_11)
 target_compile_features(test-structs PUBLIC c_std_11)
 
 if(CMAKE_COMPILER_IS_GNUCC)
     target_compile_options(test-erlang PUBLIC -Wall -pedantic -Wextra -ggdb)
+    target_compile_options(test-mailbox PUBLIC -Wall -pedantic -Wextra -ggdb)
     target_compile_options(test-structs PUBLIC -Wall -pedantic -Wextra -ggdb)
 endif()
 
@@ -42,8 +45,10 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
     include(CheckLibraryExists)
     check_library_exists(rt clock_gettime "time.h" HAVE_CLOCK_GETTIME)
     if (HAVE_CLOCK_GETTIME)
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lrt")
-        set(CMAKE_C_STANDARD_LIBRARIES "${CMAKE_C_STANDARD_LIBRARIES} -lrt")
+        find_library(LIBRT rt REQUIRED)
+        target_link_libraries(test-erlang PRIVATE ${LIBRT})
+        target_link_libraries(test-mailbox PRIVATE ${LIBRT})
+        target_link_libraries(test-structs PRIVATE ${LIBRT})
     else()
         # might also be in libc
         check_library_exists(c clock_gettime "" HAVE_CLOCK_GETTIME)
@@ -59,14 +64,17 @@ if((${CMAKE_SYSTEM_NAME} STREQUAL "Darwin") OR
    (${CMAKE_SYSTEM_NAME} STREQUAL "Linux") OR
    (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD"))
     target_include_directories(test-erlang PRIVATE ../src/platforms/generic_unix/lib)
+    target_include_directories(test-mailbox PRIVATE ../src/platforms/generic_unix/lib)
     target_include_directories(test-structs PRIVATE ../src/platforms/generic_unix/lib)
 else()
     message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_NAME}")
 endif()
 
-target_include_directories(test-structs PRIVATE ../src/libAtomVM)
 target_include_directories(test-erlang PRIVATE ../src/libAtomVM)
+target_include_directories(test-mailbox PRIVATE ../src/libAtomVM)
+target_include_directories(test-structs PRIVATE ../src/libAtomVM)
 target_link_libraries(test-erlang PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
+target_link_libraries(test-mailbox PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
 target_link_libraries(test-structs PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
 
 # Except for XCode, also compile beams
@@ -81,8 +89,10 @@ endif()
 if (COVERAGE)
     include(CodeCoverage)
     append_coverage_compiler_flags_to_target(test-erlang)
+    append_coverage_compiler_flags_to_target(test-mailbox)
     append_coverage_compiler_flags_to_target(test-structs)
     append_coverage_linker_flags_to_target(test-erlang)
+    append_coverage_linker_flags_to_target(test-mailbox)
     append_coverage_linker_flags_to_target(test-structs)
     if (CMAKE_COMPILER_IS_GNUCC)
         setup_target_for_coverage_lcov(NAME coverage EXECUTABLE test-erlang DEPENDENCIES test-erlang)

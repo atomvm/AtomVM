@@ -131,27 +131,27 @@ static term nif_esp_reset_reason(Context *ctx, int argc, term argv[])
     esp_reset_reason_t reason = esp_reset_reason();
     switch (reason) {
         case ESP_RST_UNKNOWN:
-            return context_make_atom(ctx, esp_rst_unknown_atom);
+            return globalcontext_make_atom(ctx->global, esp_rst_unknown_atom);
         case ESP_RST_POWERON:
-            return context_make_atom(ctx, esp_rst_poweron);
+            return globalcontext_make_atom(ctx->global, esp_rst_poweron);
         case ESP_RST_EXT:
-            return context_make_atom(ctx, esp_rst_ext);
+            return globalcontext_make_atom(ctx->global, esp_rst_ext);
         case ESP_RST_SW:
-            return context_make_atom(ctx, esp_rst_sw);
+            return globalcontext_make_atom(ctx->global, esp_rst_sw);
         case ESP_RST_PANIC:
-            return context_make_atom(ctx, esp_rst_panic);
+            return globalcontext_make_atom(ctx->global, esp_rst_panic);
         case ESP_RST_INT_WDT:
-            return context_make_atom(ctx, esp_rst_int_wdt);
+            return globalcontext_make_atom(ctx->global, esp_rst_int_wdt);
         case ESP_RST_TASK_WDT:
-            return context_make_atom(ctx, esp_rst_task_wdt);
+            return globalcontext_make_atom(ctx->global, esp_rst_task_wdt);
         case ESP_RST_WDT:
-            return context_make_atom(ctx, esp_rst_wdt);
+            return globalcontext_make_atom(ctx->global, esp_rst_wdt);
         case ESP_RST_DEEPSLEEP:
-            return context_make_atom(ctx, esp_rst_deepsleep);
+            return globalcontext_make_atom(ctx->global, esp_rst_deepsleep);
         case ESP_RST_BROWNOUT:
-            return context_make_atom(ctx, esp_rst_brownout);
+            return globalcontext_make_atom(ctx->global, esp_rst_brownout);
         case ESP_RST_SDIO:
-            return context_make_atom(ctx, esp_rst_sdio);
+            return globalcontext_make_atom(ctx->global, esp_rst_sdio);
         default:
             return UNDEFINED_ATOM;
     }
@@ -268,7 +268,7 @@ static term nif_esp_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[])
         case ESP_SLEEP_WAKEUP_UNDEFINED:
             return UNDEFINED_ATOM;
         case ESP_SLEEP_WAKEUP_TIMER:
-            return context_make_atom(ctx, sleep_wakeup_timer_atom);
+            return globalcontext_make_atom(ctx->global, sleep_wakeup_timer_atom);
         default:
             return ERROR_ATOM;
     }

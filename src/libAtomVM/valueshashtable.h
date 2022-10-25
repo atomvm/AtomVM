@@ -25,10 +25,20 @@
 extern "C" {
 #endif
 
+#ifndef AVM_NO_SMP
+#ifndef TYPEDEF_RWLOCK
+#define TYPEDEF_RWLOCK
+typedef struct RWLock RWLock;
+#endif
+#endif
+
 struct ValuesHashTable
 {
     int capacity;
     int count;
+#ifndef AVM_NO_SMP
+    RWLock *lock;
+#endif
     struct HNode **buckets;
 };
 

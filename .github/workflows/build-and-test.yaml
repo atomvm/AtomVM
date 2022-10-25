@@ -63,9 +63,14 @@ jobs:
           cflags: "-O3"
 
         include:
+        - cmake_opts_smp: ""
+        - cmake_opts_fp: ""
+        - cmake_opts_other: ""
+
         - cc: "gcc-4.8"
           cxx: "g++-4.8"
           compiler_pkgs: "gcc-4.8 g++-4.8"
+          cmake_opts_smp: "-DAVM_DISABLE_SMP=On"
         - cc: "gcc-5"
           cxx: "g++-5"
           compiler_pkgs: "gcc-5 g++-5"
@@ -87,25 +92,25 @@ jobs:
         - cc: "clang-3.9"
           cxx: "clang++-3.9"
           compiler_pkgs: "clang-3.9"
+          cmake_opts_smp: "-DAVM_DISABLE_SMP=On"
         - cc: "clang-10"
           cxx: "clang++-10"
           compiler_pkgs: "clang-10"
 
         - otp: "21"
           elixir_version: "1.7"
-          cmake_opts: ""
 
         - otp: "22"
           elixir_version: "1.8"
-          cmake_opts: "-DAVM_DISABLE_FP=on"
+          cmake_opts_fp: "-DAVM_DISABLE_FP=on"
 
         - otp: "23"
           elixir_version: "1.10.4"
-          cmake_opts: "-DAVM_DISABLE_FP=on"
+          cmake_opts_fp: "-DAVM_DISABLE_FP=on"
 
         - otp: "24"
           elixir_version: "1.11"
-          cmake_opts: "-DAVM_DISABLE_FP=on"
+          cmake_opts_fp: "-DAVM_DISABLE_FP=on"
 
         - os: "ubuntu-18.04"
           cc: "gcc-4.8"
@@ -113,7 +118,8 @@ jobs:
           cflags: "-m32 -O2"
           otp: "21"
           elixir_version: "1.7"
-          cmake_opts: "-DOPENSSL_CRYPTO_LIBRARY=/usr/lib/i386-linux-gnu/libcrypto.so"
+          cmake_opts_other: "-DOPENSSL_CRYPTO_LIBRARY=/usr/lib/i386-linux-gnu/libcrypto.so"
+          cmake_opts_smp: "-DAVM_DISABLE_SMP=On"
           arch: "i386"
           compiler_pkgs: "gcc-4.8 g++-4.8 gcc-4.8-multilib g++-4.8-multilib libc6-dev-i386
           libc6-dbg:i386 zlib1g-dev:i386 libssl-dev:i386"
@@ -124,8 +130,8 @@ jobs:
           cflags: "-m32 -O3"
           otp: "23"
           elixir_version: "1.10.4"
-          cmake_opts: "-DOPENSSL_CRYPTO_LIBRARY=/usr/lib/i386-linux-gnu/libcrypto.so
-          -DAVM_DISABLE_FP=on"
+          cmake_opts_other: "-DOPENSSL_CRYPTO_LIBRARY=/usr/lib/i386-linux-gnu/libcrypto.so"
+          cmake_opts_fp: "-DAVM_DISABLE_FP=on"
           arch: "i386"
           compiler_pkgs: "gcc-10 g++-10 gcc-10-multilib g++-10-multilib libc6-dev-i386
           libc6-dbg:i386 zlib1g-dev:i386 libssl-dev:i386"
@@ -188,7 +194,7 @@ jobs:
     - name: "Build: run cmake"
       working-directory: build
       run: |
-        cmake ${{ matrix.cmake_opts }} ..
+        cmake ${{ matrix.cmake_opts_fp }} ${{ matrix.cmake_opts_smp }} ${{ matrix.cmake_opts_other }} ..
         # git clone will use more recent timestamps than cached beam files
         # touch them so we can benefit from the cache and avoid costly beam file rebuild.
         find . -name '*.beam' -exec touch {} \;
@@ -204,6 +210,12 @@ jobs:
       run: |
         ./tests/test-erlang
         valgrind ./tests/test-erlang
+
+    - name: "Test: test-mailbox"
+      working-directory: build
+      run: |
+        ./tests/test-mailbox
+        valgrind ./tests/test-mailbox
 
     - name: "Test: test-structs"
       timeout-minutes: 10

@@ -27,10 +27,20 @@ extern "C" {
 
 #include "atom.h"
 
+#ifndef AVM_NO_SMP
+#ifndef TYPEDEF_RWLOCK
+#define TYPEDEF_RWLOCK
+typedef struct RWLock RWLock;
+#endif
+#endif
+
 struct AtomsHashTable
 {
     int capacity;
     int count;
+#ifndef AVM_NO_SMP
+    RWLock *lock;
+#endif
     struct HNode **buckets;
 };
 

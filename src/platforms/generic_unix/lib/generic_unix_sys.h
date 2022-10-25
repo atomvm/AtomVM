@@ -25,22 +25,27 @@
 
 typedef struct EventListener EventListener;
 
-typedef void (*event_handler_t)(EventListener *listener);
+/**
+ * Event handlers.
+ * @param glb global context
+ * @param listener the current listener
+ * @return NULL if the current listener should be removed, listener if it
+ * should be kept or another listener if it should be replaced.
+ * Appending a listener is also possible by altering the ListHead.
+ */
+typedef EventListener *(*event_handler_t)(GlobalContext *glb, EventListener *listener);
 
 struct EventListener
 {
     struct ListHead listeners_list_head;
 
     event_handler_t handler;
-    void *data;
     int fd;
 };
 
-struct GenericUnixPlatformData
-{
-    struct ListHead *listeners;
-};
-
 Context *socket_init(GlobalContext *global, term opts);
+
+void sys_register_listener(GlobalContext *global, struct EventListener *listener);
+void sys_unregister_listener(GlobalContext *global, struct EventListener *listener);
 
 #endif

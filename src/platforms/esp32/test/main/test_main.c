@@ -71,6 +71,8 @@ TEST_CASE("test_timers_and_messages", "[test_run]")
     port_driver_init_all(glb);
     nif_collection_init_all(glb);
 
+    ESP_LOGI(TAG, "Testing avm\n");
+
     TEST_ASSERT(avmpack_is_valid(main_avm, size) != 0);
     TEST_ASSERT(avmpack_find_section_by_flag(main_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name) != 0);
 
@@ -78,7 +80,7 @@ TEST_CASE("test_timers_and_messages", "[test_run]")
     TEST_ASSERT(avmpack_data != NULL);
 
     avmpack_data->data = main_avm;
-    list_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
+    synclist_append(&glb->avmpack_data, &avmpack_data->avmpack_head);
     glb->avmpack_platform_data = NULL;
 
     Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
