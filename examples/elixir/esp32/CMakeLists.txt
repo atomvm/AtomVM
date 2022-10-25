@@ -23,3 +23,4 @@ project(examples_elixir_esp32)
 include(BuildElixir)
 
 pack_runnable(Blink Blink estdlib eavmlib exavmlib)
+pack_runnable(Ledc_x4 Ledc_x4 estdlib eavmlib exavmlib)
