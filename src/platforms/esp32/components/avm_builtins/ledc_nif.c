@@ -418,55 +418,55 @@ static const struct Nif ledc_stop_nif =
 
 const struct Nif *ledc_nif_get_nif(const char *nifname)
 {
-    if (strcmp("ledc:timer_config/1", nifname) == 0) {
+    if (strcmp("ledc:timer_config/1", nifname) == 0 || strcmp("Elixir.LEDC:timer_config/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &ledc_timer_config_nif;
     }
-    if (strcmp("ledc:channel_config/1", nifname) == 0) {
+    if (strcmp("ledc:channel_config/1", nifname) == 0 || strcmp("Elixir.LEDC:channel_config/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &ledc_channel_config_nif;
     }
-    if (strcmp("ledc:fade_func_install/1", nifname) == 0) {
+    if (strcmp("ledc:fade_func_install/1", nifname) == 0 || strcmp("Elixir.LEDC:fade_func_install/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &ledc_fade_func_install_nif;
     }
-    if (strcmp("ledc:fade_func_uninstall/0", nifname) == 0) {
+    if (strcmp("ledc:fade_func_uninstall/0", nifname) == 0 || strcmp("Elixir.LEDC:fade_func_uninstall/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &ledc_fade_func_uninstall_nif;
     }
-    if (strcmp("ledc:set_fade_with_time/4", nifname) == 0) {
+    if (strcmp("ledc:set_fade_with_time/4", nifname) == 0 || strcmp("Elixir.LEDC:set_fade_with_time/4", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &ledc_set_fade_with_time_nif;
     }
-    if (strcmp("ledc:set_fade_with_step/5", nifname) == 0) {
+    if (strcmp("ledc:set_fade_with_step/5", nifname) == 0 || strcmp("Elixir.LEDC:set_fade_with_step/5", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &ledc_set_fade_with_step_nif;
     }
-    if (strcmp("ledc:fade_start/3", nifname) == 0) {
+    if (strcmp("ledc:fade_start/3", nifname) == 0 || strcmp("Elixir.LEDC:fade_start/3", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &ledc_fade_start_nif;
     }
-    if (strcmp("ledc:get_duty/2", nifname) == 0) {
+    if (strcmp("ledc:get_duty/2", nifname) == 0 || strcmp("Elixir.LEDC:get_duty/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &ledc_get_duty_nif;
     }
-    if (strcmp("ledc:set_duty/3", nifname) == 0) {
+    if (strcmp("ledc:set_duty/3", nifname) == 0 || strcmp("Elixir.LEDC:set_duty/3", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &ledc_set_duty_nif;
     }
-    if (strcmp("ledc:update_duty/2", nifname) == 0) {
+    if (strcmp("ledc:update_duty/2", nifname) == 0 || strcmp("Elixir.LEDC:update_duty/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &ledc_update_duty_nif;
     }
-    if (strcmp("ledc:get_freq/2", nifname) == 0) {
+    if (strcmp("ledc:get_freq/2", nifname) == 0 || strcmp("Elixir.LEDC:get_freq/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &ledc_get_freq_nif;
     }
-    if (strcmp("ledc:set_freq/3", nifname) == 0) {
+    if (strcmp("ledc:set_freq/3", nifname) == 0 || strcmp("Elixir.LEDC:set_freq/3", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &ledc_set_freq_nif;
     }
-    if (strcmp("ledc:stop/3", nifname) == 0) {
+    if (strcmp("ledc:stop/3", nifname) == 0 || strcmp("Elixir.LEDC:stop/3", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &ledc_stop_nif;
     }
