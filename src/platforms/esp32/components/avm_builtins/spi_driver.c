@@ -21,6 +21,8 @@
 #include <sdkconfig.h>
 #ifdef CONFIG_AVM_ENABLE_SPI_PORT_DRIVER
 
+#include "include/spi_driver.h"
+
 #include <string.h>
 
 #include <driver/spi_master.h>
@@ -592,6 +594,26 @@ static void spidriver_consume_mailbox(Context *ctx)
     if (cmd == CLOSE_ATOM) {
         scheduler_terminate(ctx);
     }
+}
+
+bool spi_driver_get_peripheral(term spi_port, spi_host_device_t *host_dev, GlobalContext *global)
+{
+    if (UNLIKELY(!term_is_pid(spi_port))) {
+        ESP_LOGW(TAG, "Given term is not a SPI port driver.");
+        return false;
+    }
+
+    int local_process_id = term_to_local_process_id(spi_port);
+    Context *ctx = globalcontext_get_process(global, local_process_id);
+
+    if (ctx->native_handler != spidriver_consume_mailbox) {
+        ESP_LOGW(TAG, "Given term is not a SPI port driver.");
+        return false;
+    }
+
+    struct SPIData *spi_data = ctx->platform_data;
+    *host_dev = spi_data->host_device;
+    return true;
 }
 
 REGISTER_PORT_DRIVER(spi, spi_driver_init, spi_driver_create_port)
