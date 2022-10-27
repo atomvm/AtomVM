@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for `i2c:close/1`
 - Added support for `erlang:unregister/1`
 - Added Elixir ESP32 LEDC driver and example
+- Added support for `uart:close/1`
 
 ### Breaking Changes
 
