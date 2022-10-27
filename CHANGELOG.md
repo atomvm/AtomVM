@@ -64,5 +64,7 @@ additional information.
   bit length is not a multiple of 8.
 - Fixed `esp:deep_sleep/1` that did not accept values above 31 minutes.
 - Fixed a bug that could cause processes to hang indefinitely when calling ports that have terminated.
+- Fixed potential VM crash when parsing external terms.
+- Fixed the enforcement of `min_free_space` process option.
 
 ## [0.5.0] - 2022-03-22

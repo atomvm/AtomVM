@@ -54,7 +54,7 @@ enum ExternalTermResult
  * store the generated terms.
  * @returns a term.
  */
-term externalterm_to_term(const void *external_term, Context *ctx, int use_heap_fragment);
+term externalterm_to_term(const void *external_term, size_t size, Context *ctx, int use_heap_fragment);
 
 /**
  * @brief Create a term from a binary.

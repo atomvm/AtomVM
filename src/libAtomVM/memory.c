@@ -71,9 +71,12 @@ enum MemoryGCResult memory_ensure_free(Context *c, uint32_t size)
         size_t new_minimum_free_space = 2 * (size + MIN_FREE_SPACE_SIZE);
         if (new_free_space > new_minimum_free_space) {
             size_t new_memory_size = context_memory_size(c);
-            if (UNLIKELY(memory_gc(c, (new_memory_size - new_free_space) + new_minimum_free_space) != MEMORY_GC_OK)) {
-                TRACE("Unable to allocate memory for GC shrink.  new_memory_size=%zu new_free_space=%zu new_minimum_free_space=%zu size=%u\n", new_memory_size, new_free_space, new_minimum_free_space, size);
-                return MEMORY_GC_ERROR_FAILED_ALLOCATION;
+            size_t new_requested_size = (new_memory_size - new_free_space) + new_minimum_free_space;
+            if (!c->has_min_heap_size || (c->min_heap_size < new_requested_size)) {
+                if (UNLIKELY(memory_gc(c, new_requested_size) != MEMORY_GC_OK)) {
+                    TRACE("Unable to allocate memory for GC shrink.  new_memory_size=%zu new_free_space=%zu new_minimum_free_space=%zu size=%u\n", new_memory_size, new_free_space, new_minimum_free_space, size);
+                    return MEMORY_GC_ERROR_FAILED_ALLOCATION;
+                }
             }
         }
     }
@@ -101,6 +104,8 @@ static inline void push_to_stack(term **stack, term value)
 enum MemoryGCResult memory_gc(Context *ctx, int new_size)
 {
     TRACE("Going to perform gc on process %i\n", ctx->process_id);
+    avm_int_t min_heap_size = ctx->has_min_heap_size ? ctx->min_heap_size : 0;
+    new_size = MAX(new_size, min_heap_size);
 
     new_size += ctx->heap_fragments_size;
     ctx->heap_fragments_size = 0;
