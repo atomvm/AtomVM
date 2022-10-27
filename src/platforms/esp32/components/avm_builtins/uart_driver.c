@@ -64,6 +64,33 @@ struct UARTData
     uint8_t uart_num;
 };
 
+static const AtomStringIntPair parity_table[] = {
+    { ATOM_STR("\x4", "none"), UART_PARITY_DISABLE },
+    { ATOM_STR("\x4", "even"), UART_PARITY_EVEN },
+    { ATOM_STR("\x3", "odd"), UART_PARITY_ODD },
+    SELECT_INT_DEFAULT(-1)
+};
+
+static const AtomStringIntPair flow_control_table[] = {
+    { ATOM_STR("\x4", "none"), UART_HW_FLOWCTRL_DISABLE },
+    { ATOM_STR("\x4", "hardware"), UART_HW_FLOWCTRL_CTS_RTS },
+    { ATOM_STR("\x3", "software"), -1 },
+    SELECT_INT_DEFAULT(-1)
+};
+
+enum uart_cmd
+{
+    UARTInvalidCmd = 0,
+    UARTReadCmd = 1,
+    UARTWriteCmd = 2
+};
+
+static const AtomStringIntPair cmd_table[] = {
+    { ATOM_STR("\x4", "read"), UARTReadCmd },
+    { ATOM_STR("\x5", "write"), UARTWriteCmd },
+    SELECT_INT_DEFAULT(UARTInvalidCmd)
+};
+
 static void send_message(term pid, term message, GlobalContext *global)
 {
     int local_process_id = term_to_local_process_id(pid);
@@ -215,32 +242,14 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
             AVM_ABORT();
     }
 
-    int flow_control;
-    switch (flow_control_term) {
-        case NONE_ATOM:
-            flow_control = UART_HW_FLOWCTRL_DISABLE;
-            break;
-        case HARDWARE_ATOM:
-            flow_control = UART_HW_FLOWCTRL_CTS_RTS;
-            break;
-        case SOFTWARE_ATOM:
-        default:
-            AVM_ABORT();
+    uart_hw_flowcontrol_t flow_control = interop_atom_term_select_int(ctx->global, flow_control_table, flow_control_term);
+    if (flow_control < 0) {
+        AVM_ABORT();
     }
 
-    int parity;
-    switch (parity_term) {
-        case NONE_ATOM:
-            parity = UART_PARITY_DISABLE;
-            break;
-        case EVEN_ATOM:
-            parity = UART_PARITY_EVEN;
-            break;
-        case ODD_ATOM:
-            parity = UART_PARITY_ODD;
-            break;
-        default:
-            AVM_ABORT();
+    uart_parity_t parity = interop_atom_term_select_int(ctx->global, parity_table, parity_term);
+    if (parity < 0) {
+        AVM_ABORT();
     }
 
     uart_config_t uart_config = {
@@ -381,15 +390,16 @@ static void uart_driver_consume_mailbox(Context *ctx)
         term msg = message->message;
         term req = term_get_tuple_element(msg, 2);
 
-        term cmd = term_is_atom(req) ? req : term_get_tuple_element(req, 0);
+        term cmd_term = term_is_atom(req) ? req : term_get_tuple_element(req, 0);
 
+        enum uart_cmd cmd = interop_atom_term_select_int(ctx->global, cmd_table, cmd_term);
         switch (cmd) {
-            case READ_ATOM:
+            case UARTReadCmd:
                 TRACE("read\n");
                 uart_driver_do_read(ctx, msg);
                 break;
 
-            case WRITE_ATOM:
+            case UARTWriteCmd:
                 TRACE("write\n");
                 uart_driver_do_write(ctx, msg);
                 break;

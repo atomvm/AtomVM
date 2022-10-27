@@ -20,20 +20,13 @@
 
 #include "platform_defaultatoms.h"
 
-static const char *const set_level_atom = "\x9" "set_level";
 static const char *const read_atom = "\x4" "read";
-static const char *const input_atom = "\x5" "input";
-static const char *const output_atom = "\x6" "output";
-static const char *const set_direction_atom ="\xD" "set_direction";
-static const char *const set_int_atom = "\x7" "set_int";
 static const char *const gpio_interrupt_atom = "\xE" "gpio_interrupt";
 static const char *const rising_atom = "\x6" "rising";
 static const char *const falling_atom = "\x7" "falling";
 static const char *const both_atom = "\x4" "both";
 static const char *const low_atom = "\x3" "low";
 static const char *const high_atom = "\x4" "high";
-static const char *const remove_int_atom = "\xA" "remove_int";
-static const char *const output_od_atom = "\x9" "output_od";
 
 static const char *const esp32_atom = "\x5" "esp32";
 
@@ -120,11 +113,7 @@ static const char *const write_atom = "\x5" "write";
 static const char *const data_bits_atom = "\x9" "data_bits";
 static const char *const stop_bits_atom = "\x9" "stop_bits";
 static const char *const flow_control_atom = "\xC" "flow_control";
-static const char *const hardware_atom = "\x8" "hardware";
-static const char *const software_atom = "\x8" "software";
 static const char *const parity_atom = "\x6" "parity";
-static const char *const even_atom = "\x4" "even";
-static const char *const odd_atom = "\x3" "odd";
 static const char *const rx_pin_atom = "\x6" "rx_pin";
 static const char *const tx_pin_atom = "\x6" "tx_pin";
 static const char *const rts_pin_atom = "\x7" "rts_pin";
@@ -136,20 +125,13 @@ void platform_defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
 
-    ok &= globalcontext_insert_atom(glb, set_level_atom) == SET_LEVEL_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, read_atom) == READ_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, input_atom) == INPUT_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, output_atom) == OUTPUT_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, set_direction_atom) == SET_DIRECTION_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, set_int_atom) == SET_INT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, gpio_interrupt_atom) == GPIO_INTERRUPT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, rising_atom) == RISING_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, falling_atom) == FALLING_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, both_atom) == BOTH_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, low_atom) == LOW_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, high_atom) == HIGH_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, remove_int_atom) == REMOVE_INT_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, output_od_atom) == OUTPUT_OD_ATOM_INDEX;
 
     ok &= globalcontext_insert_atom(glb, esp32_atom) == ESP32_ATOM_INDEX;
 
@@ -236,11 +218,7 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, data_bits_atom) == DATA_BITS_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, stop_bits_atom) == STOP_BITS_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, flow_control_atom) == FLOW_CONTROL_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, hardware_atom) == HARDWARE_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, software_atom) == SOFTWARE_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, parity_atom) == PARITY_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, even_atom) == EVEN_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, odd_atom) == ODD_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, tx_pin_atom) == TX_PIN_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, rx_pin_atom) == RX_PIN_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, rts_pin_atom) == RTS_PIN_ATOM_INDEX;
