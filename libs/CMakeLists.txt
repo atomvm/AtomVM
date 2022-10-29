@@ -36,3 +36,9 @@ if (Elixir_FOUND)
 else()
     pack_lib(atomvmlib eavmlib estdlib alisp)
 endif()
+
+install(
+    FILES ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.avm
+    DESTINATION lib/atomvm
+    RENAME atomvm.avm
+)

@@ -59,7 +59,7 @@ set(HEADER_FILES
     trace.h
     utils.h
     valueshashtable.h
-    version.h
+    ${CMAKE_CURRENT_BINARY_DIR}/version.h
 )
 
 set(SOURCE_FILES
@@ -160,5 +160,3 @@ set_property(TARGET libAtomVM PROPERTY C_STANDARD 99)
 if (CMAKE_BUILD_TYPE STREQUAL "Coverage")
     set_target_properties(libAtomVM PROPERTIES COMPILE_FLAGS "-O0 -fprofile-arcs -ftest-coverage")
 endif()
-
-install(FILES ${HEADER_FILES} DESTINATION include/AtomVM)

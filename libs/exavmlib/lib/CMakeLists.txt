@@ -40,5 +40,3 @@ set(ELIXIR_MODULES
 )
 
 pack_archive(exavmlib ${ELIXIR_MODULES})
-
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/exavmlib.avm DESTINATION lib/AtomVM/ebin)
