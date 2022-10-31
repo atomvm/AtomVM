@@ -44,6 +44,12 @@
 #include <string.h>
 #include <time.h>
 
+#ifndef AVM_NO_FP
+#include <errno.h>
+#include <fenv.h>
+#include <math.h>
+#endif
+
 #define MAX_NIF_NAME_LEN 260
 #define FLOAT_BUF_SIZE 64
 
@@ -155,6 +161,32 @@ static term nif_base64_decode(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode_to_string(Context *ctx, int argc, term argv[]);
 static term nif_base64_decode_to_string(Context *ctx, int argc, term argv[]);
 static term nif_maps_next(Context *ctx, int argc, term argv[]);
+
+#define DECLARE_MATH_NIF_FUN(moniker) \
+    static term nif_math_##moniker(Context *ctx, int argc, term argv[]);
+
+DECLARE_MATH_NIF_FUN(cos)
+DECLARE_MATH_NIF_FUN(acos)
+DECLARE_MATH_NIF_FUN(acosh)
+DECLARE_MATH_NIF_FUN(asin)
+DECLARE_MATH_NIF_FUN(asinh)
+DECLARE_MATH_NIF_FUN(atan)
+DECLARE_MATH_NIF_FUN(atan2)
+DECLARE_MATH_NIF_FUN(atanh)
+DECLARE_MATH_NIF_FUN(ceil)
+DECLARE_MATH_NIF_FUN(cosh)
+DECLARE_MATH_NIF_FUN(exp)
+DECLARE_MATH_NIF_FUN(floor)
+DECLARE_MATH_NIF_FUN(fmod)
+DECLARE_MATH_NIF_FUN(log)
+DECLARE_MATH_NIF_FUN(log10)
+DECLARE_MATH_NIF_FUN(log2)
+DECLARE_MATH_NIF_FUN(pow)
+DECLARE_MATH_NIF_FUN(sin)
+DECLARE_MATH_NIF_FUN(sinh)
+DECLARE_MATH_NIF_FUN(sqrt)
+DECLARE_MATH_NIF_FUN(tan)
+DECLARE_MATH_NIF_FUN(tanh)
 
 static const struct Nif binary_at_nif =
 {
@@ -605,6 +637,36 @@ static const struct Nif maps_next_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_maps_next
 };
+
+#define DEFINE_MATH_NIF(moniker)                    \
+    static const struct Nif math_##moniker##_nif =  \
+    {                                               \
+        .base.type = NIFFunctionType,               \
+        .nif_ptr = nif_math_##moniker               \
+    };
+
+DEFINE_MATH_NIF(cos)
+DEFINE_MATH_NIF(acos)
+DEFINE_MATH_NIF(acosh)
+DEFINE_MATH_NIF(asin)
+DEFINE_MATH_NIF(asinh)
+DEFINE_MATH_NIF(atan)
+DEFINE_MATH_NIF(atan2)
+DEFINE_MATH_NIF(atanh)
+DEFINE_MATH_NIF(ceil)
+DEFINE_MATH_NIF(cosh)
+DEFINE_MATH_NIF(exp)
+DEFINE_MATH_NIF(floor)
+DEFINE_MATH_NIF(fmod)
+DEFINE_MATH_NIF(log)
+DEFINE_MATH_NIF(log10)
+DEFINE_MATH_NIF(log2)
+DEFINE_MATH_NIF(pow)
+DEFINE_MATH_NIF(sin)
+DEFINE_MATH_NIF(sinh)
+DEFINE_MATH_NIF(sqrt)
+DEFINE_MATH_NIF(tan)
+DEFINE_MATH_NIF(tanh)
 
 //Ignore warning caused by gperf generated code
 #pragma GCC diagnostic push
@@ -3329,3 +3391,163 @@ static term nif_maps_next(Context *ctx, int argc, term argv[])
 
     return ret;
 }
+
+#ifndef AVM_NO_FP
+
+//
+// MAINTENANCE NOTE: Exception handling for fp operations using math
+// error handling is designed to be thread-safe, as errors are specified
+// to be stored as thread-local data.  The maybe_clear_exception and
+// clear_exception functions must ONLY be called within the execution
+// extent of a single Nif call, in order to guarantee thread-safety.
+//
+
+typedef avm_float_t (*unary_math_f)(avm_float_t x);
+typedef avm_float_t (*binary_math_f)(avm_float_t x, avm_float_t y);
+
+static void maybe_clear_exceptions()
+{
+#if defined(math_errhandling) && defined(MATH_ERREXCEPT)
+    if (math_errhandling & MATH_ERREXCEPT) {
+        feclearexcept(FE_ALL_EXCEPT);
+    }
+#endif
+}
+
+static term get_exception()
+{
+#if defined(math_errhandling) && defined(MATH_ERREXCEPT) && defined(MATH_ERRNO)
+    if (math_errhandling & MATH_ERREXCEPT) {
+        if (fetestexcept(FE_DIVBYZERO) || fetestexcept(FE_INVALID)) {
+            return BADARITH_ATOM;
+        } else {
+            return OK_ATOM;
+        }
+    } else if (math_errhandling & MATH_ERRNO) {
+        if (errno == EDOM || errno == ERANGE) {
+            return BADARITH_ATOM;
+        } else {
+            return OK_ATOM;
+        }
+    }
+#else
+    if (errno == EDOM || errno == ERANGE) {
+        return BADARITH_ATOM;
+    } else {
+        return OK_ATOM;
+    }
+#endif
+}
+
+static term math_unary_op(Context *ctx, term x_term, unary_math_f f)
+{
+    avm_float_t x = term_conv_to_float(x_term);
+    maybe_clear_exceptions();
+    avm_float_t y = f(x);
+    term exception = get_exception();
+    if (exception != OK_ATOM) {
+        return exception;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, FLOAT_SIZE) != MEMORY_GC_OK)) {
+        return OUT_OF_MEMORY_ATOM;
+    }
+    return term_from_float(y, ctx);
+}
+
+static term math_binary_op(Context *ctx, term x_term, term y_term, binary_math_f f)
+{
+    avm_float_t x = term_conv_to_float(x_term);
+    avm_float_t y = term_conv_to_float(y_term);
+    maybe_clear_exceptions();
+    avm_float_t z = f(x, y);
+    term exception = get_exception();
+    if (exception != OK_ATOM) {
+        return exception;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, FLOAT_SIZE) != MEMORY_GC_OK)) {
+        return OUT_OF_MEMORY_ATOM;
+    }
+    return term_from_float(z, ctx);
+}
+
+#define DEFINE_UNARY_MATH_OP(moniker)                                   \
+    static avm_float_t math_##moniker(avm_float_t x)                    \
+    {                                                                   \
+        return moniker(x);                                              \
+    }                                                                   \
+                                                                        \
+    static term nif_math_##moniker(Context *ctx, int argc, term argv[]) \
+    {                                                                   \
+        UNUSED(argc);                                                   \
+        VALIDATE_VALUE(argv[0], term_is_number);                        \
+        term t = math_unary_op(ctx, argv[0], math_##moniker);           \
+        if (term_is_atom(t)) {                                          \
+            RAISE_ERROR(t);                                             \
+        } else {                                                        \
+            return t;                                                   \
+        }                                                               \
+    }
+
+#define DEFINE_BINARY_MATH_OP(moniker)                                  \
+    static avm_float_t math_##moniker(avm_float_t x, avm_float_t y)     \
+    {                                                                   \
+        return moniker(x, y);                                           \
+    }                                                                   \
+                                                                        \
+    static term nif_math_##moniker(Context *ctx, int argc, term argv[]) \
+    {                                                                   \
+        UNUSED(argc);                                                   \
+        VALIDATE_VALUE(argv[0], term_is_number);                        \
+        VALIDATE_VALUE(argv[1], term_is_number);                        \
+        term t = math_binary_op(ctx, argv[0], argv[1], math_##moniker); \
+        if (term_is_atom(t)) {                                          \
+            RAISE_ERROR(t);                                             \
+        } else {                                                        \
+            return t;                                                   \
+        }                                                               \
+    }
+
+#else
+
+#define DEFINE_UNARY_MATH_OP(moniker)                                   \
+    static term nif_math_##moniker(Context *ctx, int argc, term argv[]) \
+    {                                                                   \
+        UNUSED(ctx);                                                    \
+        UNUSED(argv);                                                   \
+        RAISE_ERROR(BADARG_ATOM);                                       \
+}
+
+#define DEFINE_BINARY_MATH_OP(moniker)                                  \
+    static term nif_math_##moniker(Context *ctx, int argc, term argv[]) \
+    {                                                                   \
+        UNUSED(ctx);                                                    \
+        UNUSED(argv);                                                   \
+        RAISE_ERROR(BADARG_ATOM);                                       \
+    }
+
+#endif
+
+DEFINE_UNARY_MATH_OP(cos)
+DEFINE_UNARY_MATH_OP(acos)
+DEFINE_UNARY_MATH_OP(acosh)
+DEFINE_UNARY_MATH_OP(asin)
+DEFINE_UNARY_MATH_OP(asinh)
+DEFINE_UNARY_MATH_OP(atan)
+DEFINE_BINARY_MATH_OP(atan2)
+DEFINE_UNARY_MATH_OP(atanh)
+DEFINE_UNARY_MATH_OP(ceil)
+DEFINE_UNARY_MATH_OP(cosh)
+DEFINE_UNARY_MATH_OP(exp)
+DEFINE_UNARY_MATH_OP(floor)
+DEFINE_BINARY_MATH_OP(fmod)
+DEFINE_UNARY_MATH_OP(log)
+DEFINE_UNARY_MATH_OP(log10)
+DEFINE_UNARY_MATH_OP(log2)
+DEFINE_BINARY_MATH_OP(pow)
+DEFINE_UNARY_MATH_OP(sin)
+DEFINE_UNARY_MATH_OP(sinh)
+DEFINE_UNARY_MATH_OP(sqrt)
+DEFINE_UNARY_MATH_OP(tan)
+DEFINE_UNARY_MATH_OP(tanh)

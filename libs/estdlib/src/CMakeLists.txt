@@ -35,6 +35,7 @@ set(ERLANG_MODULES
     io
     lists
     maps
+    math
     proplists
     string
     timer
