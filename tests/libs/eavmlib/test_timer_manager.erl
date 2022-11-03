@@ -25,6 +25,7 @@
 test() ->
     ok = test_start_timer(),
     ok = test_cancel_timer(),
+    pong = test_send_after(),
     ok.
 
 -include("etest.hrl").
