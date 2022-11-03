@@ -62,6 +62,26 @@ static void i2cdriver_consume_mailbox(Context *ctx);
 static const char *const i2c_driver_atom = "\xA" "i2c_driver";
 static term i2c_driver;
 
+enum i2c_cmd
+{
+    I2CInvalidCmd = 0,
+    I2CBeginTransmissionCmd,
+    I2CEndTransmissionCmd,
+    I2CWriteByteCmd,
+    I2CReadBytesCmd,
+    I2CWriteBytesCmd,
+    I2CCloseCmd
+};
+
+static const AtomStringIntPair cmd_table[] = {
+    { ATOM_STR("\x12", "begin_transmission"), I2CBeginTransmissionCmd },
+    { ATOM_STR("\x10", "end_transmission"), I2CEndTransmissionCmd },
+    { ATOM_STR("\xA", "write_byte"), I2CWriteByteCmd },
+    { ATOM_STR("\xA", "read_bytes"), I2CReadBytesCmd },
+    { ATOM_STR("\x5", "close"), I2CCloseCmd },
+    SELECT_INT_DEFAULT(I2CInvalidCmd)
+};
+
 struct I2CData
 {
     i2c_cmd_handle_t cmd;
@@ -359,38 +379,39 @@ static void i2cdriver_consume_mailbox(Context *ctx)
     term pid = term_get_tuple_element(msg, 0);
     term req = term_get_tuple_element(msg, 2);
 
-    term cmd = term_get_tuple_element(req, 0);
+    term cmd_term = term_get_tuple_element(req, 0);
 
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
     term ret;
 
+    enum i2c_cmd cmd = interop_atom_term_select_int(ctx->global, cmd_table, cmd_term);
     switch (cmd) {
-        case BEGIN_TRANSMISSION_ATOM:
+        case I2CBeginTransmissionCmd:
             ret = i2cdriver_begin_transmission(ctx, pid, req);
             break;
 
-        case END_TRANSMISSION_ATOM:
+        case I2CEndTransmissionCmd:
             ret = i2cdriver_end_transmission(ctx, pid);
             break;
 
-        case WRITE_BYTE_ATOM:
+        case I2CWriteByteCmd:
             ret = i2cdriver_write_byte(ctx, pid, req);
             break;
 
-        case READ_BYTES_ATOM:
+        case I2CReadBytesCmd:
             ret = i2cdriver_read_bytes(ctx, pid, req);
             break;
 
-        case WRITE_BYTES_ATOM:
+        case I2CWriteBytesCmd:
             if (term_get_tuple_arity(req) == 2) {
                 ret = i2cdriver_qwrite_bytes(ctx, pid, req);
             } else {
                 ret = i2cdriver_write_bytes(ctx, pid, req);
             }
             break;
-        case CLOSE_ATOM:
+        case I2CCloseCmd:
             i2c_driver_close(ctx);
             ret = OK_ATOM;
             break;
