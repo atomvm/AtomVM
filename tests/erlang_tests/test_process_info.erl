@@ -31,7 +31,7 @@ start() ->
     test_message_queue_len(Pid, Self),
     Pid ! {Self, stop},
     receive
-        X -> 0
+        _X -> 0
     end.
 
 test_message_queue_len(Pid, Self) ->

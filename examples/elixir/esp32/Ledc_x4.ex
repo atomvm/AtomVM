@@ -19,6 +19,9 @@
 #
 
 defmodule Ledc_x4 do
+  # this compiler option is to suppress warnings when compiling the VM
+  # it is not needed or recommended for user apps.
+  @compile {:no_warn_undefined, [LEDC]}
   @moduledoc """
   Ledc_example for Elixir.
   """

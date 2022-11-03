@@ -2734,6 +2734,8 @@ static term nif_erlang_error(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_exit(Context *ctx, int argc, term argv[])
 {
+    UNUSED(argc);
+
     term reason = argv[0];
     ctx->exit_reason = reason;
     RAISE(LOWERCASE_EXIT_ATOM, reason);
@@ -2799,6 +2801,8 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[])
 {
+    UNUSED(argc);
+
     term ref = argv[0];
 
     VALIDATE_VALUE(ref, term_is_reference);
@@ -2841,6 +2845,8 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_unlink(Context *ctx, int argc, term argv[])
 {
+    UNUSED(argc);
+
     term target_pid = argv[0];
 
     VALIDATE_VALUE(target_pid, term_is_pid);
