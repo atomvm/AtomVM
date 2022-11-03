@@ -91,7 +91,7 @@ flush(Console) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec print(string()) -> ok | error.
-print(String) ->
+print(_String) ->
     throw(nif_error).
 
 %% Internal operations
