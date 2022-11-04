@@ -37,13 +37,13 @@ echo "%% Flashing ${1} (size=${filesize}k)"
 echo "%%"
 
 exec "${IDF_PATH}/components/esptool_py/esptool/esptool.py" \
-    --chip esp32 \
+    --chip auto \
     --port "${FLASH_SERIAL_PORT}" \
     --baud "${FLASH_BAUD_RATE}" \
     --before default_reset \
     --after hard_reset \
     write_flash \
-    -u --flash_mode dio --flash_freq 40m \
+    -u --flash_mode keep --flash_freq keep \
     --flash_size detect \
     ${FLASH_OFFSET} \
     "${1}"
