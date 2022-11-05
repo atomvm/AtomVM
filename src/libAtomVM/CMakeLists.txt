@@ -161,6 +161,19 @@ endif()
 # Add include to directory where version.h is generated so targets linking
 # libAtomVM can access it
 target_include_directories(libAtomVM PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
+
+set(OTP_VERSION "<unknown>")
+execute_process(
+        COMMAND erl -noshell -eval "io:format(\"~s\", [erlang:system_info(otp_release)])" -s erlang halt
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE OTP_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+message("Erlang OTP version: ${OTP_VERSION}.")
+if (NOT OTP_VERSION STREQUAL "")
+    set(OTP_VERSION ${OTP_VERSION})
+endif()
+
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_BINARY_DIR}/version.h)
 
 if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Generic")
