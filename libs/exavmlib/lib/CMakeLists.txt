@@ -24,6 +24,7 @@ include(BuildElixir)
 
 set(ELIXIR_MODULES
     AVMPort
+    Bitwise
     Code
     Console
     GPIO
