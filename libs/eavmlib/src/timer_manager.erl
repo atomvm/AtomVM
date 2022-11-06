@@ -1,27 +1,7 @@
 %
 % This file is part of AtomVM.
 %
-% Copyright 2019-2022 Fred Dushin <fred@dushin.net>
-%
-% Licensed under the Apache License, Version 2.0 (the "License");
-% you may not use this file except in compliance with the License.
-% You may obtain a copy of the License at
-%
-%    http://www.apache.org/licenses/LICENSE-2.0
-%
-% Unless required by applicable law or agreed to in writing, software
-% distributed under the License is distributed on an "AS IS" BASIS,
-% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-% See the License for the specific language governing permissions and
-% limitations under the License.
-%
-% SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
-%
-
-%
-% This file is part of AtomVM.
-%
-% Copyright 2018 Fred Dushin <fred@dushin.net>
+% Copyright 2018-2022 Fred Dushin <fred@dushin.net>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -57,6 +37,19 @@
 start() ->
     gen_server:start({local, ?SERVER_NAME}, ?MODULE, [], []).
 
+-spec maybe_start() -> {ok, Pod :: pid()}.
+maybe_start() ->
+    case erlang:whereis(?SERVER_NAME) of
+        undefined ->
+            case start() of
+                {ok, _Pid} = R -> R;
+                {error, {already_started, Pid}} ->
+                    {ok, Pid}
+            end;
+        Pid when is_pid(Pid) ->
+            {ok, Pid}
+    end.
+
 %%-----------------------------------------------------------------------------
 %% @param   Time time in milliseconds after which to send the timeout message.
 %% @param   Dest Pid or server name to which to send the timeout message.
@@ -69,7 +62,7 @@ start() ->
 -spec start_timer(Time :: non_neg_integer(), Dest :: pid(), Msg :: term()) ->
     TimerRef :: reference().
 start_timer(Time, Dest, Msg) ->
-    start(),
+    maybe_start(),
     gen_server:call(?SERVER_NAME, {Time, Dest, Msg}).
 
 %%-----------------------------------------------------------------------------
@@ -86,12 +79,12 @@ start_timer(Time, Dest, Msg) ->
 %%-----------------------------------------------------------------------------
 -spec cancel_timer(TimerRef :: reference()) -> ok.
 cancel_timer(TimerRef) ->
-    start(),
+    maybe_start(),
     gen_server:call(?SERVER_NAME, {cancel, TimerRef}).
 
 -spec get_timer_refs() -> [reference()].
 get_timer_refs() ->
-    start(),
+    maybe_start(),
     gen_server:call(?SERVER_NAME, get_timer_refs).
 
 %%-----------------------------------------------------------------------------
