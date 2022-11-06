@@ -248,22 +248,22 @@ do_handle_state(EventType, Request, State) ->
             {noreply, State#state{
                 current_state = NextState,
                 data = NewData,
-                timer_map = maps:merge(TimerMap, TimerRefs)
+                timer_map = maps:merge(NewTimerMap, TimerRefs)
             }};
         {stop, Reason} ->
-            maybe_cancel_timer(CurrentState, TimerMap),
-            {stop, Reason, State};
+            NewTimerMap = maybe_cancel_timer(CurrentState, TimerMap),
+            {stop, Reason, State#state{timer_map = NewTimerMap}};
         {stop, Reason, NewData} ->
-            maybe_cancel_timer(CurrentState, TimerMap),
-            {stop, Reason, State#state{data = NewData}};
+            NewTimerMap = maybe_cancel_timer(CurrentState, TimerMap),
+            {stop, Reason, State#state{data = NewData, timer_map = NewTimerMap}};
         {stop_and_reply, Reason, Replies} ->
-            maybe_cancel_timer(CurrentState, TimerMap),
+            NewTimerMap = maybe_cancel_timer(CurrentState, TimerMap),
             handle_actions(Replies, []),
-            {stop, Reason, State};
+            {stop, Reason, State#state{timer_map = NewTimerMap}};
         {stop_and_reply, Reason, Replies, NewData} ->
-            maybe_cancel_timer(CurrentState, TimerMap),
+            NewTimerMap = maybe_cancel_timer(CurrentState, TimerMap),
             handle_actions(Replies, []),
-            {stop, Reason, State#state{data = NewData}};
+            {stop, Reason, State#state{data = NewData, timer_map = NewTimerMap}};
         Reply ->
             {error, {unexpected_reply, Reply}}
     end.
