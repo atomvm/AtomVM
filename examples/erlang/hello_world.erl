@@ -18,7 +18,7 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module (hello_world).
+-module(hello_world).
 -export([start/0]).
 
 start() ->

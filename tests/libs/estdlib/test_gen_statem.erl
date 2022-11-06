@@ -122,7 +122,11 @@ free({call, From}, are_you_free, Data) ->
 %% we should never receive a timeout message, because the timer set in jail should be cancelled as the result of the escape
 free(state_timeout, _Msg, #data{num_spurious_timeouts = NumSpuriousTimeouts} = Data) ->
     {next_state, free, Data#data{num_spurious_timeouts = NumSpuriousTimeouts + 1}};
-free({call, From}, get_num_spurious_timeouts, #data{num_spurious_timeouts = NumSpuriousTimeouts} = Data) ->
+free(
+    {call, From},
+    get_num_spurious_timeouts,
+    #data{num_spurious_timeouts = NumSpuriousTimeouts} = Data
+) ->
     {next_state, free, Data, [{reply, From, NumSpuriousTimeouts}]}.
 
 terminate(_Reason, _StateName, _Data) ->

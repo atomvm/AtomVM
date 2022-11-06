@@ -27,7 +27,7 @@ start() ->
     Config = [
         {sta, [
             {ssid, "SSID"},
-            {psk,  "PSK"},
+            {psk, "PSK"},
             {connected, fun() -> Self ! connected end},
             {got_ip, fun(IpInfo) -> Self ! {ok, IpInfo} end},
             {disconnected, fun() -> Self ! disconnected end}
@@ -43,7 +43,6 @@ start() ->
 handle_req("GET", [], Conn) ->
     Body = <<"<html><body><h1>Hello World</h1></body></html>">>,
     http_server:reply(200, Body, Conn);
-
 handle_req(Method, Path, Conn) ->
     io:format("Method: ~p Path: ~p~n", [Method, Path]),
     Body = <<"<html><body><h1>Not Found</h1></body></html>">>,

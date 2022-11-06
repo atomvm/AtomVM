@@ -18,7 +18,7 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module (blink).
+-module(blink).
 -export([start/0]).
 
 start() ->

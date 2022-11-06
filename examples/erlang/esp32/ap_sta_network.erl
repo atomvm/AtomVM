@@ -39,7 +39,7 @@ start() ->
         ]},
         {sta, [
             {ssid, esp:nvs_get_binary(atomvm, sta_ssid, <<"myssid">>)},
-            {psk,  esp:nvs_get_binary(atomvm, sta_psk, <<"mypsk">>)},
+            {psk, esp:nvs_get_binary(atomvm, sta_psk, <<"mypsk">>)},
             {connected, fun connected/0},
             {got_ip, fun got_ip/1},
             {disconnected, fun disconnected/0}
@@ -53,7 +53,6 @@ start() ->
             erlang:display(Error)
     end.
 
-
 ap_started() ->
     io:format("AP started.~n").
 
@@ -66,8 +65,6 @@ sta_disconnected(Mac) ->
 sta_ip_assigned(Address) ->
     io:format("STA assigned address ~p~n", [Address]).
 
-
-
 connected() ->
     io:format("STA connected.~n").
 
@@ -76,7 +73,6 @@ got_ip(IpInfo) ->
 
 disconnected() ->
     io:format("STA disconnected.~n").
-
 
 sleep_forever() ->
     timer:sleep(10000),

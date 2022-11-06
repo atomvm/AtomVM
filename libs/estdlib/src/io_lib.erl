@@ -137,7 +137,7 @@ to_string(T, _Q) when is_map(T) ->
         lists:flatten(
             lists:join(",", [
                 to_string(K, quote) ++ " => " ++ to_string(V, quote)
-                || {K, V} <- maps:to_list(T)
+             || {K, V} <- maps:to_list(T)
             ])
         ) ++ "}";
 to_string(_T, _Q) ->

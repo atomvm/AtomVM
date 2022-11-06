@@ -30,16 +30,24 @@ do_main(Argv) ->
     {Opts, _Args} = parse_args(Argv),
     case maps:get(help, Opts, false) of
         true ->
-            print_help(), 0;
+            print_help(),
+            0;
         _ ->
             case maps:get(root_dir, Opts, undefined) of
                 undefined ->
-                    print_help("root_dir option is required and should be the root directory of the AtomVM checkout"),
+                    print_help(
+                        "root_dir option is required and should be the root directory of the AtomVM checkout"
+                    ),
                     255;
                 RootDir ->
                     try
                         Config = load_config(maps:get(config, Opts, "mkimage.config")),
-                        mkimage(RootDir, get_build_dir(Opts, RootDir), maps:get(out, Opts, "atomvm.img"), maps:get(segments, Config)),
+                        mkimage(
+                            RootDir,
+                            get_build_dir(Opts, RootDir),
+                            maps:get(out, Opts, "atomvm.img"),
+                            maps:get(segments, Config)
+                        ),
                         0
                     catch
                         _:Exception:Stacktrace ->
@@ -57,16 +65,16 @@ parse_args(Argv) ->
 %% @private
 parse_args([], {Opts, Args}) ->
     {Opts, lists:reverse(Args)};
-parse_args(["--out", Path|T], {Opts, Args}) ->
+parse_args(["--out", Path | T], {Opts, Args}) ->
     parse_args(T, {Opts#{out => Path}, Args});
-parse_args(["--root_dir", Path|T], {Opts, Args}) ->
+parse_args(["--root_dir", Path | T], {Opts, Args}) ->
     parse_args(T, {Opts#{root_dir => Path}, Args});
-parse_args(["--config", Path|T], {Opts, Args}) ->
+parse_args(["--config", Path | T], {Opts, Args}) ->
     parse_args(T, {Opts#{config => Path}, Args});
-parse_args(["--help"|T], {Opts, Args}) ->
+parse_args(["--help" | T], {Opts, Args}) ->
     parse_args(T, {Opts#{help => true}, Args});
-parse_args([H|T], {Opts, Args}) ->
-    parse_args(T, {Opts, [H|Args]}).
+parse_args([H | T], {Opts, Args}) ->
+    parse_args(T, {Opts, [H | Args]}).
 
 %% @private
 print_help(Msg) ->
@@ -125,34 +133,46 @@ mkimage(RootDir, BuildDir, OutputFile, Segments) ->
                 fun(Segment, PrevOffset) ->
                     SegmentOffset = from_hex(maps:get(offset, Segment)),
                     case PrevOffset of
-                        undefined -> no_padding;
+                        undefined ->
+                            no_padding;
                         _ ->
                             case SegmentOffset > PrevOffset of
                                 true ->
-                                    Padding = [16#FF || _ <- lists:seq(1, SegmentOffset - PrevOffset)],
+                                    Padding = [
+                                        16#FF
+                                     || _ <- lists:seq(1, SegmentOffset - PrevOffset)
+                                    ],
                                     io:format("Padding ~p bytes~n", [SegmentOffset - PrevOffset]),
                                     file:write(Fout, Padding);
                                 false ->
                                     throw(
                                         io_lib:format(
-                                            "Error: insufficient space for segment ~p.  Over by: ~p bytes~n", [
+                                            "Error: insufficient space for segment ~p.  Over by: ~p bytes~n",
+                                            [
                                                 maps:get(name, Segment), PrevOffset - SegmentOffset
                                             ]
                                         )
                                     )
                             end
                     end,
-                    SegmentPaths = [replace("BUILD_DIR", BuildDir, replace("ROOT_DIR", RootDir, SegmentPath)) || SegmentPath <- maps:get(path, Segment)],
+                    SegmentPaths = [
+                        replace("BUILD_DIR", BuildDir, replace("ROOT_DIR", RootDir, SegmentPath))
+                     || SegmentPath <- maps:get(path, Segment)
+                    ],
                     case try_read(SegmentPaths) of
                         {ok, Data} ->
                             file:write(Fout, Data),
                             io:format("Wrote ~s (~p bytes) at offset ~s (~p)~n", [
-                                maps:get(name, Segment), byte_size(Data), maps:get(offset, Segment), SegmentOffset
+                                maps:get(name, Segment),
+                                byte_size(Data),
+                                maps:get(offset, Segment),
+                                SegmentOffset
                             ]),
                             SegmentOffset + byte_size(Data);
                         {error, Reason} ->
-                            Fmt = "Failed to read file ~p  Reason: ~p."
-                                  "  Note that a full build is required before running this command.",
+                            Fmt =
+                                "Failed to read file ~p  Reason: ~p."
+                                "  Note that a full build is required before running this command.",
                             throw(io_lib:format(Fmt, [SegmentPaths, Reason]))
                     end
                 end,
@@ -173,7 +193,6 @@ try_read([Path | Rest]) ->
         {error, _Reason} ->
             try_read(Rest)
     end.
-
 
 %% @private
 from_hex([$0, $x | Bits]) ->

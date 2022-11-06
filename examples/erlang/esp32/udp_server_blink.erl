@@ -29,7 +29,7 @@
 start() ->
     Creds = [
         {ssid, esp:nvs_get_binary(atomvm, sta_ssid, <<"myssid">>)},
-        {psk,  esp:nvs_get_binary(atomvm, sta_psk, <<"mypsk">>)}
+        {psk, esp:nvs_get_binary(atomvm, sta_psk, <<"mypsk">>)}
     ],
     case network:wait_for_sta(Creds, 30000) of
         {ok, {Address, Netmask, Gateway}} ->
@@ -42,7 +42,6 @@ start() ->
             io:format("An error occurred starting network: ~p~n", [Error])
     end.
 
-
 udp_server_start() ->
     case gen_udp:open(44404, [{active, true}]) of
         {ok, Socket} ->
@@ -53,7 +52,6 @@ udp_server_start() ->
         Error ->
             io:format("An error occurred opening UDP socket: ~p~n", [Error])
     end.
-
 
 loop(Socket, Gpio, PinState) ->
     io:format("Waiting to receive data...~n"),
@@ -68,7 +66,7 @@ local_address(Socket) ->
     {ok, SockName} = inet:sockname(Socket),
     to_string(SockName).
 
-to_string({{A,B,C,D}, Port}) ->
-    io_lib:format("~p.~p.~p.~p:~p", [A,B,C,D, Port]);
-to_string({A,B,C,D}) ->
-    io_lib:format("~p.~p.~p.~p", [A,B,C,D]).
+to_string({{A, B, C, D}, Port}) ->
+    io_lib:format("~p.~p.~p.~p:~p", [A, B, C, D, Port]);
+to_string({A, B, C, D}) ->
+    io_lib:format("~p.~p.~p.~p", [A, B, C, D]).

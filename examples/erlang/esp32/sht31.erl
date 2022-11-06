@@ -21,8 +21,8 @@
 -module(sht31).
 -export([start/0, read/1]).
 
--define (SHT31_BASE_ADDR, 16#44).
--define (SHT31_MEAS_HIGH_REP, 16#2400).
+-define(SHT31_BASE_ADDR, 16#44).
+-define(SHT31_MEAS_HIGH_REP, 16#2400).
 
 start() ->
     I2C = i2c:open([{scl_io_num, 15}, {sda_io_num, 4}, {i2c_clock_hz, 1000000}]),

@@ -123,7 +123,7 @@ test_mutate_encoding(Term) ->
     Bin = term_to_binary(Term),
     Mutations = [mutate_bin(Bin, I) || I <- seq(erlang:byte_size(Bin) - 1)],
     %% verify the VM does not crash, even if the term can't be decoded
-    [catch(binary_to_term(Mutation)) || Mutation <- Mutations],
+    [catch (binary_to_term(Mutation)) || Mutation <- Mutations],
     ok.
 
 seq(N) -> seq(0, N).

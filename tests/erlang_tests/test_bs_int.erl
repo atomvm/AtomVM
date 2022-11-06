@@ -27,16 +27,16 @@ start() ->
 
     [
         test_bs_ints(Binaries, Size, Endianness, Signedness)
-        || Size <- [32, 16, 8],
-           Endianness <- [big, little],
-           Signedness <- [unsigned, signed]
+     || Size <- [32, 16, 8],
+        Endianness <- [big, little],
+        Signedness <- [unsigned, signed]
     ],
 
     [
         test_bs_ints(Binaries, Size, Endianness, Signedness)
-        || Size <- [64],
-           Endianness <- [big, little],
-           Signedness <- [unsigned]
+     || Size <- [64],
+        Endianness <- [big, little],
+        Signedness <- [unsigned]
     ],
 
     0.

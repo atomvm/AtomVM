@@ -59,5 +59,5 @@ peer_address(Socket) ->
     {ok, Peername} = inet:peername(Socket),
     to_string(Peername).
 
-to_string({{A,B,C,D}, Port}) ->
-    io_lib:format("~p.~p.~p.~p:~p", [A,B,C,D, Port]).
+to_string({{A, B, C, D}, Port}) ->
+    io_lib:format("~p.~p.~p.~p:~p", [A, B, C, D, Port]).

@@ -27,18 +27,25 @@ start() ->
     L1 =
         {[
             {[
-                {R, [], "foo", 0, {<<"bar">>, [1, 2, 3]}, [[a], b], {{{{}}}}, [[[R], 1], 2],
-                    {pow(-2, 63), <<"foo">>}}
+                {R, [], "foo", 0, {<<"bar">>, [1, 2, 3]}, [[a], b], {{{{}}}}, [[[R], 1], 2], {
+                    pow(-2, 63), <<"foo">>
+                }}
             ]}
         ]},
     L2 =
         {[
             {[
-                {id(R), id([]), binary_to_list(id(<<"foo">>)), id(pow(5, 0)) - 1,
+                {
+                    id(R),
+                    id([]),
+                    binary_to_list(id(<<"foo">>)),
+                    id(pow(5, 0)) - 1,
                     {id(<<"bar">>), [pow(id(1), 0), id(pow(2, 1)), id(pow(3, 1))]},
-                    id([[id(list_to_atom("a"))], b]), {{id({{}})}},
+                    id([[id(list_to_atom("a"))], b]),
+                    {{id({{}})}},
                     [[[id(id(R))], pow(6, id(0))], -pow(id(-2), 1)],
-                    {id(pow(-2, 63) + 1), list_to_binary(id("foo"))}}
+                    {id(pow(-2, 63) + 1), list_to_binary(id("foo"))}
+                }
             ]}
         ]},
     bool_to_n(L1 < L2).

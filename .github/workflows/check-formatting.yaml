@@ -35,8 +35,12 @@ jobs:
 
     - name: "Check formatting with Erlang fmt"
       run: |
-        cd libs/alisp/src/
-        rebar3 fmt -c -- *.erl
+        cd ..
+        git clone --depth 1 -b v1.1.0 https://github.com/WhatsApp/erlfmt.git
+        cd erlfmt
+        rebar3 as release escriptize
+        cd ../AtomVM
+        find . -name *.erl | xargs ../erlfmt/_build/release/bin/erlfmt -c
 
     - name: "Check formatting with Elixir mix format"
       run: |

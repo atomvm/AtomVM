@@ -27,7 +27,7 @@
 start() ->
     Creds = [
         {ssid, esp:nvs_get_binary(atomvm, sta_ssid, <<"myssid">>)},
-        {psk,  esp:nvs_get_binary(atomvm, sta_psk, <<"mypsk">>)}
+        {psk, esp:nvs_get_binary(atomvm, sta_psk, <<"mypsk">>)}
     ],
     case network:wait_for_sta(Creds, 30000) of
         {ok, {Address, Netmask, Gateway}} ->
@@ -56,7 +56,9 @@ accept(ListenSocket, Gpio) ->
     io:format("Waiting to accept connection...~n"),
     case gen_tcp:accept(ListenSocket) of
         {ok, Socket} ->
-            io:format("Accepted connection.  local: ~p peer: ~p~n", [local_address(Socket), peer_address(Socket)]),
+            io:format("Accepted connection.  local: ~p peer: ~p~n", [
+                local_address(Socket), peer_address(Socket)
+            ]),
             spawn(fun() -> accept(ListenSocket, Gpio) end),
             echo(Gpio, 0);
         Error ->
@@ -71,7 +73,9 @@ echo(Gpio, PinState) ->
             io:format("Connection closed.~n"),
             ok;
         {tcp, Socket, Packet} ->
-            io:format("Received packet ~p from ~p.  Echoing back...~n", [Packet, peer_address(Socket)]),
+            io:format("Received packet ~p from ~p.  Echoing back...~n", [
+                Packet, peer_address(Socket)
+            ]),
             gen_tcp:send(Socket, Packet),
             echo(Gpio, 1 - PinState)
     end.
@@ -84,10 +88,10 @@ peer_address(Socket) ->
     {ok, Peername} = inet:peername(Socket),
     to_string(Peername).
 
-to_string({{A,B,C,D}, Port}) ->
-    io_lib:format("~p.~p.~p.~p:~p", [A,B,C,D, Port]);
-to_string({A,B,C,D}) ->
-    io_lib:format("~p.~p.~p.~p", [A,B,C,D]).
+to_string({{A, B, C, D}, Port}) ->
+    io_lib:format("~p.~p.~p.~p:~p", [A, B, C, D, Port]);
+to_string({A, B, C, D}) ->
+    io_lib:format("~p.~p.~p.~p", [A, B, C, D]).
 
 sleep_forever() ->
     timer:sleep(10000),

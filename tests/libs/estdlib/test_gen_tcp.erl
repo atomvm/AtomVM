@@ -98,7 +98,10 @@ test_send_receive(Port, N, SpawnControllingProcess) ->
         false ->
             loop(Socket, N);
         true ->
-            Pid = spawn(fun() -> sleep(100), loop(Socket, N) end),
+            Pid = spawn(fun() ->
+                sleep(100),
+                loop(Socket, N)
+            end),
             gen_tcp:controlling_process(Socket, Pid)
     end,
 
@@ -122,7 +125,9 @@ loop(Socket, I) ->
     ok.
 
 sleep(Ms) ->
-    receive after Ms -> ok end.
+    receive
+    after Ms -> ok
+    end.
 
 test_accept_parameters() ->
     {ok, ListenSocket} = gen_tcp:listen(0, [{binary, false}, {buffer, 10}]),

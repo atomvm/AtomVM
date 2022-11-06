@@ -22,50 +22,50 @@
 -export([start/0]).
 -export([init/1, handle_call/3, handle_info/2, terminate/2]).
 
--define (REG_FIFO, 16#00).
--define (REG_OP_MODE, 16#01).
--define (REG_FRF_MSB, 16#06).
--define (REG_FRF_MID, 16#07).
--define (REG_FRF_LSB, 16#08).
--define (REG_PA_CONFIG, 16#09).
--define (REG_LR_OCP, 16#0B).
--define (REG_LNA, 16#0C).
--define (REG_FIFO_ADDR_PTR, 16#0D).
--define (REG_FIFO_TX_BASE_ADDR, 16#0E).
--define (REG_FIFO_RX_BASE_ADDR, 16#0F).
--define (REG_FIFO_RX_CURRENT_ADDR, 16#10).
--define (REG_IRQ_FLAGS, 16#12).
--define (REG_RX_NB_BYTES, 16#13).
--define (REG_PKT_RSSI_VALUE, 16#1A).
--define (REG_PKT_SNR_VALUE, 16#1B).
--define (REG_MODEM_CONFIG_1, 16#1D).
--define (REG_MODEM_CONFIG_2, 16#1E).
--define (REG_PREAMBLE_MSB, 16#20).
--define (REG_PREAMBLE_LSB, 16#21).
--define (REG_PAYLOAD_LENGTH, 16#22).
--define (REG_MODEM_CONFIG_3, 16#26).
--define (REG_RSSI_WIDEBAND, 16#2C).
--define (REG_DETECTION_OPTIMIZE, 16#31).
--define (REG_DETECTION_THRESHOLD, 16#37).
--define (REG_SYNC_WORD, 16#39).
--define (REG_DIO_MAPPING_1, 16#40).
--define (REG_VERSION, 16#42).
--define (REG_PADAC, 16#4D).
+-define(REG_FIFO, 16#00).
+-define(REG_OP_MODE, 16#01).
+-define(REG_FRF_MSB, 16#06).
+-define(REG_FRF_MID, 16#07).
+-define(REG_FRF_LSB, 16#08).
+-define(REG_PA_CONFIG, 16#09).
+-define(REG_LR_OCP, 16#0B).
+-define(REG_LNA, 16#0C).
+-define(REG_FIFO_ADDR_PTR, 16#0D).
+-define(REG_FIFO_TX_BASE_ADDR, 16#0E).
+-define(REG_FIFO_RX_BASE_ADDR, 16#0F).
+-define(REG_FIFO_RX_CURRENT_ADDR, 16#10).
+-define(REG_IRQ_FLAGS, 16#12).
+-define(REG_RX_NB_BYTES, 16#13).
+-define(REG_PKT_RSSI_VALUE, 16#1A).
+-define(REG_PKT_SNR_VALUE, 16#1B).
+-define(REG_MODEM_CONFIG_1, 16#1D).
+-define(REG_MODEM_CONFIG_2, 16#1E).
+-define(REG_PREAMBLE_MSB, 16#20).
+-define(REG_PREAMBLE_LSB, 16#21).
+-define(REG_PAYLOAD_LENGTH, 16#22).
+-define(REG_MODEM_CONFIG_3, 16#26).
+-define(REG_RSSI_WIDEBAND, 16#2C).
+-define(REG_DETECTION_OPTIMIZE, 16#31).
+-define(REG_DETECTION_THRESHOLD, 16#37).
+-define(REG_SYNC_WORD, 16#39).
+-define(REG_DIO_MAPPING_1, 16#40).
+-define(REG_VERSION, 16#42).
+-define(REG_PADAC, 16#4D).
 
--define (MODE_LONG_RANGE_MODE, 16#80).
--define (MODE_SLEEP, 16#00).
--define (MODE_STDBY, 16#01).
--define (MODE_TX, 16#03).
--define (MODE_RX_CONTINUOUS, 16#05).
--define (MODE_RX_SINGLE, 16#06).
+-define(MODE_LONG_RANGE_MODE, 16#80).
+-define(MODE_SLEEP, 16#00).
+-define(MODE_STDBY, 16#01).
+-define(MODE_TX, 16#03).
+-define(MODE_RX_CONTINUOUS, 16#05).
+-define(MODE_RX_SINGLE, 16#06).
 
--define (AUTO_AGC_FLAG, 16#04).
+-define(AUTO_AGC_FLAG, 16#04).
 
--define (IRQ_TX_DONE_MASK, 16#08).
--define (IRQ_PAYLOAD_CRC_ERROR_MASK, 16#20).
--define (IRQ_RX_DONE_MASK, 16#40).
+-define(IRQ_TX_DONE_MASK, 16#08).
+-define(IRQ_PAYLOAD_CRC_ERROR_MASK, 16#20).
+-define(IRQ_RX_DONE_MASK, 16#40).
 
--define (SPISettings, [
+-define(SPISettings, [
     {bus_config, [
         {miso_io_num, 19},
         {mosi_io_num, 27},
@@ -100,12 +100,10 @@ handle_call(init, _From, _State) ->
     GPIO = gpio:open(),
     {ok, SPI} = init_sx127x(GPIO, ?SPISettings),
     {reply, ok, SPI};
-
 handle_call({send, Msg}, _From, SPI) ->
     broadcast_packet(SPI, Msg),
     enable_receive(SPI),
     {reply, ok, SPI};
-
 handle_call(Call, _From, State) ->
     erlang:display(Call),
     {reply, ok, State}.
@@ -188,7 +186,6 @@ write_packet_data(SPI, L) ->
 
 write_packet_data(_SPI, [], Len) ->
     Len;
-
 write_packet_data(SPI, [H | T], Len) ->
     write_register(SPI, ?REG_FIFO, H),
     write_packet_data(SPI, T, Len + 1).
@@ -213,7 +210,8 @@ set_signal_bandwidth(SPI, 125000) ->
 
 set_tx_power(SPI, Level) ->
     write_register(SPI, ?REG_PADAC, 16#87),
-    write_register(SPI, ?REG_PA_CONFIG, 16#80 bor (Level - 2)). % con PA_BOOST
+    % con PA_BOOST
+    write_register(SPI, ?REG_PA_CONFIG, 16#80 bor (Level - 2)).
 
 set_spreading_factor(SPI, SF) ->
     write_register(SPI, ?REG_DETECTION_OPTIMIZE, 16#c3),
@@ -238,7 +236,8 @@ handle_irq(SPI) ->
     write_register(SPI, ?REG_IRQ_FLAGS, IRQFlags),
 
     if
-        ((IRQFlags band ?IRQ_RX_DONE_MASK) /= 0) andalso ((IRQFlags band ?IRQ_PAYLOAD_CRC_ERROR_MASK) == 0) ->
+        ((IRQFlags band ?IRQ_RX_DONE_MASK) /= 0) andalso
+            ((IRQFlags band ?IRQ_PAYLOAD_CRC_ERROR_MASK) == 0) ->
             {ok, PacketLength} = read_register(SPI, ?REG_RX_NB_BYTES),
             {ok, CurrentAddr} = read_register(SPI, ?REG_FIFO_RX_CURRENT_ADDR),
 
@@ -246,17 +245,14 @@ handle_irq(SPI) ->
             io:format("Received data: ~s~n", [read(SPI, PacketLength)]),
 
             write_register(SPI, ?REG_FIFO_ADDR_PTR, 0);
-
         (IRQFlags band ?IRQ_RX_DONE_MASK) /= 0 ->
             io:format("CRC error");
-
         true ->
             io:format("Unexpected IRQ")
     end.
 
 read(_SPI, 0) ->
     [];
-
 read(SPI, Len) ->
     {ok, Data} = read_register(SPI, ?REG_FIFO),
     [Data | read(SPI, Len - 1)].
@@ -265,9 +261,8 @@ wait_flags(SPI, Register, Mask) ->
     wait_flags(SPI, Register, Mask, 0).
 
 wait_flags(SPI, Register, Mask, 0) ->
-  {ok, Flags} = read_register(SPI, Register),
-  wait_flags(SPI, Register, Mask, Flags band Mask);
-
+    {ok, Flags} = read_register(SPI, Register),
+    wait_flags(SPI, Register, Mask, Flags band Mask);
 wait_flags(_SPI, _Register, _Mask, _NotZero) ->
     ok.
 
