@@ -25,16 +25,15 @@
 
 -export([start/0, start/1]).
 -export([button/1]).
--export([init/1,callback_mode/0,terminate/3]).
--export([locked/3,open/3]).
+-export([init/1, callback_mode/0, terminate/3]).
+-export([locked/3, open/3]).
 
 -record(state, {
     code, length, buttons
 }).
 
-
 start() ->
-    code_lock:start([1,2,3,4]),
+    code_lock:start([1, 2, 3, 4]),
     code_lock:button(1),
     code_lock:button(2),
     code_lock:button(3),
@@ -43,10 +42,10 @@ start() ->
     ok.
 
 start(Code) ->
-    gen_statem:start({local,?NAME}, ?MODULE, Code, []).
+    gen_statem:start({local, ?NAME}, ?MODULE, Code, []).
 
 button(Button) ->
-    gen_statem:cast(?NAME, {button,Button}).
+    gen_statem:cast(?NAME, {button, Button}).
 
 init(Code) ->
     do_lock(),
@@ -57,8 +56,10 @@ callback_mode() ->
     state_functions.
 
 locked(
-  cast, {button,Button},
-  #state{code = Code, length = Length, buttons = Buttons} = Data) ->
+    cast,
+    {button, Button},
+    #state{code = Code, length = Length, buttons = Buttons} = Data
+) ->
     NewButtons =
         if
             length(Buttons) < Length ->
@@ -67,18 +68,21 @@ locked(
                 tl(Buttons)
         end ++ [Button],
     if
-        NewButtons =:= Code -> % Correct
-        do_unlock(),
+        % Correct
+        NewButtons =:= Code ->
+            do_unlock(),
             {next_state, open, Data#state{buttons = []},
-             [{state_timeout,10000,lock}]}; % Time in milliseconds
-    true -> % Incomplete | Incorrect
+                % Time in milliseconds
+                [{state_timeout, 10000, lock}]};
+        % Incomplete | Incorrect
+        true ->
             {next_state, locked, Data#state{buttons = NewButtons}}
     end.
 
-open(state_timeout, lock,  Data) ->
+open(state_timeout, lock, Data) ->
     do_lock(),
     {next_state, locked, Data};
-open(cast, {button,_}, Data) ->
+open(cast, {button, _}, Data) ->
     {next_state, open, Data}.
 
 do_lock() ->

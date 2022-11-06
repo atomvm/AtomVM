@@ -35,11 +35,17 @@ test_send_receive_active(SpawnControllingProcess) ->
 
     Self = self(),
     F = fun() ->
-        case SpawnControllingProcess of true -> Self ! ready; _ -> ok end,
+        case SpawnControllingProcess of
+            true -> Self ! ready;
+            _ -> ok
+        end,
         NumReceived = count_received(),
         case SpawnControllingProcess of
             true ->
-                case SpawnControllingProcess of true -> Self ! {done, NumReceived}; _ -> ok end;
+                case SpawnControllingProcess of
+                    true -> Self ! {done, NumReceived};
+                    _ -> ok
+                end;
             false ->
                 ok
         end,
@@ -55,19 +61,20 @@ test_send_receive_active(SpawnControllingProcess) ->
             end;
         false ->
             ok
-        end,
+    end,
 
     NumToSend = 10,
     Sender = erlang:spawn(?MODULE, start_sender, [Socket, Port, make_messages(NumToSend)]),
 
-    NumReceived = case SpawnControllingProcess of
-        true ->
-            receive
-                {done, Received} ->
-                    Received
-            end;
-        false ->
-            F()
+    NumReceived =
+        case SpawnControllingProcess of
+            true ->
+                receive
+                    {done, Received} ->
+                        Received
+                end;
+            false ->
+                F()
         end,
     Sender ! stop,
 

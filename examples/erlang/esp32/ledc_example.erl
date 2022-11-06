@@ -18,7 +18,7 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module (ledc_example).
+-module(ledc_example).
 -export([start/0]).
 
 -include("ledc.hrl").
@@ -63,21 +63,24 @@ start() ->
             {speed_mode, ?LEDC_HS_MODE},
             {hpoint, 0},
             {timer_sel, ?LEDC_HS_TIMER}
-        ],[
+        ],
+        [
             {channel, ?LEDC_HS_CH1_CHANNEL},
             {duty, 0},
             {gpio_num, ?LEDC_HS_CH1_GPIO},
             {speed_mode, ?LEDC_HS_MODE},
             {hpoint, 0},
             {timer_sel, ?LEDC_HS_TIMER}
-        ],[
+        ],
+        [
             {channel, ?LEDC_LS_CH2_CHANNEL},
             {duty, 0},
             {gpio_num, ?LEDC_LS_CH2_GPIO},
             {speed_mode, ?LEDC_LS_MODE},
             {hpoint, 0},
             {timer_sel, ?LEDC_LS_TIMER}
-        ],[
+        ],
+        [
             {channel, ?LEDC_LS_CH3_CHANNEL},
             {duty, 0},
             {gpio_num, ?LEDC_LS_CH3_GPIO},
@@ -145,4 +148,3 @@ loop(LEDCChannel) ->
     timer:sleep(?LEDC_TEST_FADE_TIME),
 
     loop(LEDCChannel).
-

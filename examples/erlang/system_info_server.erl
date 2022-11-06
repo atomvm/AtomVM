@@ -27,7 +27,7 @@ start() ->
     Config = [
         {sta, [
             {ssid, "SSID"},
-            {psk,  "PSK"},
+            {psk, "PSK"},
             {connected, fun() -> Self ! connected end},
             {got_ip, fun(IpInfo) -> Self ! {ok, IpInfo} end},
             {disconnected, fun() -> Self ! disconnected end}
@@ -61,7 +61,6 @@ handle_req("GET", [], Conn) ->
     TimeString = universaltime_to_bin(erlang:universaltime()),
     Body = [<<"<html><body><h1>">>, TimeString, <<"</h1></body></html>">>],
     http_server:reply(200, Body, Conn);
-
 handle_req("GET", ["system", "info"], Conn) ->
     SysInfo = [
         {atom_count, erlang:system_info(atom_count)},
@@ -72,12 +71,10 @@ handle_req("GET", ["system", "info"], Conn) ->
     ],
     Body = json_encoder:encode(SysInfo),
     http_server:reply(200, Body, Conn);
-
 handle_req("GET", ["processes", PidString, "info"], Conn) ->
     {Code, ProcInfo} = try_proc_info_list(PidString),
     Body = json_encoder:encode(ProcInfo),
     http_server:reply(Code, Body, Conn);
-
 handle_req(Method, Path, Conn) ->
     io:format("Method: ~p Path: ~p~n", [Method, Path]),
     Body = <<"<html><body><h1>Not Found</h1></body></html>">>,
@@ -85,12 +82,17 @@ handle_req(Method, Path, Conn) ->
 
 universaltime_to_bin({{Year, Month, Day}, {H, M, S}}) ->
     [
-     erlang:integer_to_binary(Year), $/,
-     erlang:integer_to_binary(Month), $/,
-     erlang:integer_to_binary(Day), $\s,
-     erlang:integer_to_binary(H), $:,
-     erlang:integer_to_binary(M), $:,
-     erlang:integer_to_binary(S)
+        erlang:integer_to_binary(Year),
+        $/,
+        erlang:integer_to_binary(Month),
+        $/,
+        erlang:integer_to_binary(Day),
+        $\s,
+        erlang:integer_to_binary(H),
+        $:,
+        erlang:integer_to_binary(M),
+        $:,
+        erlang:integer_to_binary(S)
     ].
 
 try_proc_info_list(PidString) ->

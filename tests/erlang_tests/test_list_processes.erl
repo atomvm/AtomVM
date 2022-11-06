@@ -30,7 +30,7 @@ start() ->
         receive
             ok -> ok
         end
-        || _ <- IdList
+     || _ <- IdList
     ],
     test_list_processes(Pids, 0, Self).
 

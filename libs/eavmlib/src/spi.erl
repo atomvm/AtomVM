@@ -44,22 +44,22 @@
 
 -type spi_peripheral() :: hspi | vspi.
 -type bus_config() :: [
-    {miso_io_num, non_neg_integer()} |
-    {mosi_io_num, non_neg_integer()} |
-    {sclk_io_num, non_neg_integer()} |
-    {spi_peripheral, spi_peripheral()}
+    {miso_io_num, non_neg_integer()}
+    | {mosi_io_num, non_neg_integer()}
+    | {sclk_io_num, non_neg_integer()}
+    | {spi_peripheral, spi_peripheral()}
 ].
 -type device_config() :: [
-    {clock_speed_hz, non_neg_integer()} |
-    {mode, 0..3} |
-    {spi_cs_io_num, non_neg_integer()} |
-    {address_len_bits, 0..64} |
-    {command_len_bits, 0..16}
+    {clock_speed_hz, non_neg_integer()}
+    | {mode, 0..3}
+    | {spi_cs_io_num, non_neg_integer()}
+    | {address_len_bits, 0..64}
+    | {command_len_bits, 0..16}
 ].
 -type device_name() :: atom().
 -type params() :: [
-    {bus_config, bus_config()} |
-    {device_config, [{device_name(), device_config()}]}
+    {bus_config, bus_config()}
+    | {device_config, [{device_name(), device_config()}]}
 ].
 
 -type spi() :: pid().
@@ -166,7 +166,7 @@ open(Params) ->
 %% The SPI instance will no longer be valid and usable after this function has been called.
 %% @end
 %%-----------------------------------------------------------------------------
--spec close(SPI::spi()) -> ok.
+-spec close(SPI :: spi()) -> ok.
 close(SPI) ->
     port:call(SPI, {close}).
 
@@ -177,7 +177,9 @@ close(SPI) ->
 %% @doc     Read a value from and address on the device.
 %% @end
 %%-----------------------------------------------------------------------------
--spec read_at(SPI :: spi(), DeviceName::device_name(), Address :: address(), Len :: non_neg_integer()) ->
+-spec read_at(
+    SPI :: spi(), DeviceName :: device_name(), Address :: address(), Len :: non_neg_integer()
+) ->
     {ok, integer()} | error.
 read_at(SPI, DeviceName, Address, Len) ->
     port:call(SPI, {read_at, DeviceName, Address, Len}).
@@ -193,7 +195,13 @@ read_at(SPI, DeviceName, Address, Len) ->
 %%          values from this function.
 %% @end
 %%-----------------------------------------------------------------------------
--spec write_at(SPI :: spi(), DeviceName::device_name(), Address :: address(), Len :: non_neg_integer(), Data :: integer()) ->
+-spec write_at(
+    SPI :: spi(),
+    DeviceName :: device_name(),
+    Address :: address(),
+    Len :: non_neg_integer(),
+    Data :: integer()
+) ->
     {ok, integer()} | error.
 write_at(SPI, DeviceName, Address, Len, Data) ->
     port:call(SPI, {write_at, DeviceName, Address bor 16#80, Len, Data}).
@@ -222,8 +230,11 @@ write_at(SPI, DeviceName, Address, Len, Data) ->
 %%
 %% @end
 %%-----------------------------------------------------------------------------
--spec write(SPI :: spi(), DeviceName :: device_name(), Transaction :: transaction()) -> ok | {error, Reason :: term()}.
-write(SPI, DeviceName, Transaction) when is_pid(SPI) andalso is_atom(DeviceName) andalso is_map(Transaction) ->
+-spec write(SPI :: spi(), DeviceName :: device_name(), Transaction :: transaction()) ->
+    ok | {error, Reason :: term()}.
+write(SPI, DeviceName, Transaction) when
+    is_pid(SPI) andalso is_atom(DeviceName) andalso is_map(Transaction)
+->
     port:call(SPI, {write, DeviceName, Transaction}).
 
 %%-----------------------------------------------------------------------------
@@ -254,10 +265,12 @@ write(SPI, DeviceName, Transaction) when is_pid(SPI) andalso is_atom(DeviceName)
 %%
 %% @end
 %%-----------------------------------------------------------------------------
--spec write_read(SPI :: spi(), DeviceName :: device_name(), Transaction :: transaction()) -> {ok, ReadData :: binary()} | error.
-write_read(SPI, DeviceName, Transaction) when is_pid(SPI) andalso is_atom(DeviceName) andalso is_map(Transaction) ->
+-spec write_read(SPI :: spi(), DeviceName :: device_name(), Transaction :: transaction()) ->
+    {ok, ReadData :: binary()} | error.
+write_read(SPI, DeviceName, Transaction) when
+    is_pid(SPI) andalso is_atom(DeviceName) andalso is_map(Transaction)
+->
     port:call(SPI, {write_read, DeviceName, Transaction}).
-
 
 %%
 %% Internal operations
@@ -347,7 +360,9 @@ validate_device_config_entries(Entries) when is_map(Entries) orelse is_list(Entr
         spi_clock_hz => validate_integer_entry(spi_clock_hz, Entries),
         mode => validate_mode(get_value(mode, Entries, undefined)),
         spi_cs_io_num => validate_integer_entry(spi_cs_io_num, Entries, undefined),
-        address_len_bits => validate_address_len_bits(get_value(address_len_bits, Entries, undefined)),
+        address_len_bits => validate_address_len_bits(
+            get_value(address_len_bits, Entries, undefined)
+        ),
         command_len_bits => validate_command_len_bits(get_value(command_len_bits, Entries, 0))
     };
 validate_device_config_entries(Entries) ->

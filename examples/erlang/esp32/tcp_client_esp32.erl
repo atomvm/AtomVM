@@ -25,7 +25,7 @@
 start() ->
     Creds = [
         {ssid, esp:nvs_get_binary(atomvm, sta_ssid, <<"myssid">>)},
-        {psk,  esp:nvs_get_binary(atomvm, sta_psk, <<"mypsk">>)}
+        {psk, esp:nvs_get_binary(atomvm, sta_psk, <<"mypsk">>)}
     ],
     case network:wait_for_sta(Creds, 30000) of
         {ok, {Address, Netmask, Gateway}} ->
@@ -70,7 +70,7 @@ peer_address(Socket) ->
     {ok, Peername} = inet:peername(Socket),
     to_string(Peername).
 
-to_string({{A,B,C,D}, Port}) ->
-    io_lib:format("~p.~p.~p.~p:~p", [A,B,C,D, Port]);
-to_string({A,B,C,D}) ->
-    io_lib:format("~p.~p.~p.~p", [A,B,C,D]).
+to_string({{A, B, C, D}, Port}) ->
+    io_lib:format("~p.~p.~p.~p:~p", [A, B, C, D, Port]);
+to_string({A, B, C, D}) ->
+    io_lib:format("~p.~p.~p.~p", [A, B, C, D]).

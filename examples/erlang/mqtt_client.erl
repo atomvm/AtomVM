@@ -22,21 +22,18 @@
 
 -export([start/0, parse/1, publish/2, disconnect_req/0]).
 
--define(MQTT_BROKER,"test.mosquitto.org").
+-define(MQTT_BROKER, "test.mosquitto.org").
 
 start() ->
     tcp_client_start().
 
 parse(<<16#20, MsgLen, 0, ReturnCode>>) ->
     {connack, MsgLen, ReturnCode};
-
 parse(<<16#90, MsgLen, MsgId:16/integer-unsigned-big, QoS>>) ->
     {suback, MsgLen, MsgId, QoS};
-
 parse(<<16#30, _MsgLen, TopicLen:16/integer-unsigned-big, TopicAndMsg/binary>>) ->
     <<Topic:TopicLen/binary, Msg/binary>> = TopicAndMsg,
     {publish, Topic, Msg};
-
 parse(Binary) ->
     Binary.
 
@@ -49,23 +46,25 @@ disconnect_req() ->
     <<16#E0, 16#00>>.
 
 connect_command() ->
-  ProtocolName = <<"MQIsdp">>,
-  ProtocolNameLen = byte_size(ProtocolName),
-  ProtocolVersion = 3,
-  Flags = 2,
-  KeepAlive = 60,
-  ClientID = <<"atomvm|mqtt-test">>,
-  ClientIDLen = byte_size(ClientID),
-  MsgLen = 2 + ProtocolNameLen + 1 + 1 + 2 + 2 + ClientIDLen,
-  <<16#10, MsgLen, ProtocolNameLen:16/integer-unsigned-big, ProtocolName/binary, ProtocolVersion,
-    Flags, KeepAlive:16/integer-unsigned-big, ClientIDLen:16/integer-unsigned-big, ClientID/binary>>.
+    ProtocolName = <<"MQIsdp">>,
+    ProtocolNameLen = byte_size(ProtocolName),
+    ProtocolVersion = 3,
+    Flags = 2,
+    KeepAlive = 60,
+    ClientID = <<"atomvm|mqtt-test">>,
+    ClientIDLen = byte_size(ClientID),
+    MsgLen = 2 + ProtocolNameLen + 1 + 1 + 2 + 2 + ClientIDLen,
+    <<16#10, MsgLen, ProtocolNameLen:16/integer-unsigned-big, ProtocolName/binary, ProtocolVersion,
+        Flags, KeepAlive:16/integer-unsigned-big, ClientIDLen:16/integer-unsigned-big,
+        ClientID/binary>>.
 
 subscribe_command(Topic) ->
     TopicLen = byte_size(Topic),
     QoS = 0,
     MsgLen = 2 + 2 + TopicLen + 1,
     MsgId = 1,
-    <<16#82, MsgLen, MsgId:16/integer-unsigned-big, TopicLen:16/integer-unsigned-big, Topic/binary, QoS>>.
+    <<16#82, MsgLen, MsgId:16/integer-unsigned-big, TopicLen:16/integer-unsigned-big, Topic/binary,
+        QoS>>.
 
 tcp_client_start() ->
     erlang:display("Connecting"),

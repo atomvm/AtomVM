@@ -40,7 +40,9 @@
 %%-----------------------------------------------------------------------------
 -module(gen_tcp).
 
--export([connect/3, send/2, recv/2, recv/3, close/1, listen/2, accept/1, accept/2, controlling_process/2]).
+-export([
+    connect/3, send/2, recv/2, recv/3, close/1, listen/2, accept/1, accept/2, controlling_process/2
+]).
 
 -define(DEFAULT_PARAMS, [{active, true}, {buffer, 512}, {binary, true}, {timeout, infinity}]).
 

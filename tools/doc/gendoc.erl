@@ -32,8 +32,9 @@ main([LibraryName, SrcDir, TgtDir]) ->
             {application, LibraryName}
         ]
     ),
-    io:format("Generated documentation for application ~p using source files ~p into ~s~n", [LibraryName, ErlFiles, TgtDir]).
-
+    io:format("Generated documentation for application ~p using source files ~p into ~s~n", [
+        LibraryName, ErlFiles, TgtDir
+    ]).
 
 ends_with(Str, Suffix) ->
     string:find(Str, Suffix, trailing) =:= Suffix.

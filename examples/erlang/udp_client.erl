@@ -33,7 +33,7 @@ start() ->
 
 loop(Socket) ->
     Packet = <<":アトムＶＭ">>,
-    case gen_udp:send(Socket, {127,0,0,1}, 44404, Packet) of
+    case gen_udp:send(Socket, {127, 0, 0, 1}, 44404, Packet) of
         ok ->
             io:format("Sent ~p~n", [Packet]);
         Error ->
@@ -46,5 +46,5 @@ local_address(Socket) ->
     {ok, SockName} = inet:sockname(Socket),
     to_string(SockName).
 
-to_string({{A,B,C,D}, Port}) ->
-    io_lib:format("~p.~p.~p.~p:~p", [A,B,C,D, Port]).
+to_string({{A, B, C, D}, Port}) ->
+    io_lib:format("~p.~p.~p.~p:~p", [A, B, C, D, Port]).

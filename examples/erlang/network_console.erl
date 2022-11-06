@@ -42,7 +42,9 @@ accept(ListenSocket) ->
     case gen_tcp:accept(ListenSocket) of
         {ok, Socket} ->
             spawn_opt(?MODULE, start_repl, [self()], [link]),
-            io:format("Accepted shell connection. local: ~p peer: ~p~n", [local_address(Socket), peer_address(Socket)]),
+            io:format("Accepted shell connection. local: ~p peer: ~p~n", [
+                local_address(Socket), peer_address(Socket)
+            ]),
             spawn(fun() -> accept(ListenSocket) end),
             loop(#nc_state{socket = Socket});
         Error ->
@@ -54,7 +56,7 @@ loop(State) ->
         {tcp_closed, _Socket} ->
             io:format("Connection closed.~n"),
             erlang:exit(connection_closed);
-        {tcp, _Socket, <<255,244,255,253,6>>} ->
+        {tcp, _Socket, <<255, 244, 255, 253, 6>>} ->
             io:format("Break.~n"),
             gen_tcp:close(State#nc_state.socket),
             erlang:exit(break);
@@ -62,7 +64,6 @@ loop(State) ->
             Reply = {io_reply, State#nc_state.pending_ref, Packet},
             State#nc_state.pending_pid ! Reply,
             loop(State#nc_state{pending_pid = undefined, pending_ref = undefined});
-
         {io_request, FPid, FRef, Request} ->
             {ok, NewState} = io_request(Request, FPid, FRef, State),
             loop(NewState)
@@ -76,8 +77,8 @@ peer_address(Socket) ->
     {ok, Peername} = inet:peername(Socket),
     to_string(Peername).
 
-to_string({{A,B,C,D}, Port}) ->
-    io_lib:format("~p.~p.~p.~p:~p", [A,B,C,D, Port]).
+to_string({{A, B, C, D}, Port}) ->
+    io_lib:format("~p.~p.~p.~p:~p", [A, B, C, D, Port]).
 
 sleep_forever() ->
     timer:sleep(10000),
@@ -90,7 +91,6 @@ start_repl(SocketIOLeader) ->
 io_request({get_line, unicode, Data}, FPid, FRef, State) ->
     gen_tcp:send(State#nc_state.socket, Data),
     {ok, State#nc_state{pending_pid = FPid, pending_ref = FRef}};
-
 io_request({put_chars, unicode, Data}, FPid, FRef, State) ->
     gen_tcp:send(State#nc_state.socket, Data),
     FPid ! {io_reply, FRef, ok},
