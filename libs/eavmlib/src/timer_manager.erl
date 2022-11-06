@@ -57,6 +57,19 @@
 start() ->
     gen_server:start({local, ?SERVER_NAME}, ?MODULE, [], []).
 
+-spec maybe_start() -> {ok, Pod :: pid()}.
+maybe_start() ->
+    case erlang:whereis(?SERVER_NAME) of
+        undefined ->
+            case start() of
+                {ok, _Pid} = R -> R;
+                {error, {already_started, Pid}} ->
+                    {ok, Pid}
+            end;
+        Pid when is_pid(Pid) ->
+            {ok, Pid}
+    end.
+
 %%-----------------------------------------------------------------------------
 %% @param   Time time in milliseconds after which to send the timeout message.
 %% @param   Dest Pid or server name to which to send the timeout message.
@@ -69,7 +82,7 @@ start() ->
 -spec start_timer(Time :: non_neg_integer(), Dest :: pid(), Msg :: term()) ->
     TimerRef :: reference().
 start_timer(Time, Dest, Msg) ->
-    start(),
+    maybe_start(),
     gen_server:call(?SERVER_NAME, {Time, Dest, Msg}).
 
 %%-----------------------------------------------------------------------------
@@ -86,12 +99,12 @@ start_timer(Time, Dest, Msg) ->
 %%-----------------------------------------------------------------------------
 -spec cancel_timer(TimerRef :: reference()) -> ok.
 cancel_timer(TimerRef) ->
-    start(),
+    maybe_start(),
     gen_server:call(?SERVER_NAME, {cancel, TimerRef}).
 
 -spec get_timer_refs() -> [reference()].
 get_timer_refs() ->
-    start(),
+    maybe_start(),
     gen_server:call(?SERVER_NAME, get_timer_refs).
 
 %%-----------------------------------------------------------------------------

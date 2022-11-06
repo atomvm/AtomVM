@@ -49,7 +49,7 @@
     reply/2
 ]).
 
--export([loop/1, init_it/4]).
+-export([loop/1, init_it/4, init_it/5]).
 
 -record(state, {
     name = undefined :: atom(),
@@ -62,6 +62,31 @@
 -type options() :: list({atom(), term()}).
 -type server_ref() :: atom() | pid().
 -type from() :: any().
+
+
+%% @private
+do_spawn(Module, Args, Options, SpawnOpts) ->
+    Pid = spawn_opt(?MODULE, init_it, [self(), Module, Args, Options], SpawnOpts),
+    case wait_ack(Pid) of
+        ok -> {ok, Pid};
+        {error, Reason} -> {error, Reason}
+    end.
+
+%% @private
+do_spawn(Name, Module, Args, Options, SpawnOpts) ->
+    Pid = spawn_opt(?MODULE, init_it, [self(), Name, Module, Args, Options], SpawnOpts),
+    case wait_ack(Pid) of
+        ok -> {ok, Pid};
+        {error, Reason} -> {error, Reason}
+    end.
+
+init_it(Starter, Name, Module, Args, Options) ->
+    case erlang:register(Name, self()) of
+        true ->
+            init_it(Starter, Module, Args, Options);
+        false ->
+            init_ack(Starter, {error, {already_started, whereis(Name)}})
+    end.
 
 init_it(Starter, Module, Args, Options) ->
     State =
@@ -121,17 +146,9 @@ wait_ack(Pid) ->
 start({local, Name}, Module, Args, Options) when is_atom(Name) ->
     case erlang:whereis(Name) of
         undefined ->
-            Response = start(Module, Args, [{name, Name} | Options]),
-            case Response of
-                {ok, Pid} ->
-                    erlang:register(Name, Pid),
-                    ok;
-                _ ->
-                    ok
-            end,
-            Response;
-        _Pid ->
-            {error, already_started}
+            do_spawn(Name, Module, Args, [{name, Name} | Options], []);
+        Pid ->
+            {error, {already_started, Pid}}
     end.
 
 %%-----------------------------------------------------------------------------
@@ -149,11 +166,7 @@ start({local, Name}, Module, Args, Options) when is_atom(Name) ->
 -spec start(Module :: module(), Args :: term(), Options :: options()) ->
     {ok, pid()} | {error, Reason :: term()}.
 start(Module, Args, Options) ->
-    Pid = spawn(?MODULE, init_it, [self(), Module, Args, Options]),
-    case wait_ack(Pid) of
-        ok -> {ok, Pid};
-        {error, Reason} -> {error, Reason}
-    end.
+    do_spawn(Module, Args, Options, []).
 
 %%-----------------------------------------------------------------------------
 %% @param   ServerName the name with which to register the gen_server
@@ -179,17 +192,9 @@ start(Module, Args, Options) ->
 start_link({local, Name}, Module, Args, Options) when is_atom(Name) ->
     case erlang:whereis(Name) of
         undefined ->
-            Response = start_link(Module, Args, [{name, Name} | Options]),
-            case Response of
-                {ok, Pid} ->
-                    erlang:register(Name, Pid),
-                    ok;
-                _ ->
-                    ok
-            end,
-            Response;
-        _Pid ->
-            {error, already_started}
+            do_spawn(Name, Module, Args, [{name, Name} | Options], [link]);
+        Pid ->
+            {error, {already_started, Pid}}
     end.
 
 %%-----------------------------------------------------------------------------
@@ -207,11 +212,7 @@ start_link({local, Name}, Module, Args, Options) when is_atom(Name) ->
 -spec start_link(Module :: module(), Args :: term(), Options :: options()) ->
     {ok, pid()} | {error, Reason :: term()}.
 start_link(Module, Args, Options) ->
-    Pid = spawn_opt(?MODULE, init_it, [self(), Module, Args, Options], [link]),
-    case wait_ack(Pid) of
-        ok -> {ok, Pid};
-        {error, Reason} -> {error, Reason}
-    end.
+    do_spawn(Module, Args, Options, [link]).
 
 %%-----------------------------------------------------------------------------
 %% @equiv   stop(ServerRef, normal, infinity)
