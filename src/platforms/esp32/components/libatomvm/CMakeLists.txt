@@ -20,6 +20,36 @@
 
 idf_component_register(INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../../../../libAtomVM")
 
+if (CMAKE_SYSTEM_NAME STREQUAL "Generic")
+    if (CONFIG_IDF_TARGET_ARCH_XTENSA)
+        set(CMAKE_SYSTEM_NAME "Xtensa")
+    elseif(CONFIG_IDF_TARGET_ARCH_RISCV)
+        set(CMAKE_SYSTEM_NAME "RISC-V")
+    endif()
+endif()
+
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "")
+    if (CONFIG_IDF_TARGET)
+        set(CMAKE_SYSTEM_PROCESSOR "${CONFIG_IDF_TARGET}")
+    endif()
+endif()
+
+if (CMAKE_SYSTEM_VERSION STREQUAL "")
+    if("${IDF_VERSION_MAJOR}.${IDF_VERSION_MINOR}" VERSION_LESS "4.1")
+        set(SYSTEM_VERSION "<<unknown>>")
+    elseif("${IDF_VERSION_MAJOR}.${IDF_VERSION_MINOR}" GREATER_EQUAL "4.1")
+        execute_process(
+            COMMAND idf.py --version
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            OUTPUT_VARIABLE SYSTEM_VERSION
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+    endif()
+    if (NOT SYSTEM_VERSION STREQUAL "")
+        set(CMAKE_SYSTEM_VERSION "${SYSTEM_VERSION}")
+    endif()
+endif()
+
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../../libAtomVM" "libAtomVM")
 
 target_link_libraries(${COMPONENT_LIB}

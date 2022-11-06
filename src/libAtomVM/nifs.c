@@ -2341,7 +2341,7 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
         }
         return ret;
     }
-    if (key == OTP_VERSION_ATOM) {
+    if (key == ATOMVM_OTP_ATOM) {
         return term_from_literal_binary((const uint8_t *) OTP_VERSION, strlen(OTP_VERSION), ctx);
     }
     return sys_get_info(ctx, key);

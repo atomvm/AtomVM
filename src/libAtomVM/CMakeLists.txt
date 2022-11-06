@@ -115,6 +115,7 @@ if (AVM_VERBOSE_ABORT)
     target_compile_definitions(libAtomVM PUBLIC AVM_VERBOSE_ABORT)
 endif()
 
+set(CMAKE_SYSTEM_PORT "<unknown>")
 # Automatically use zlib if present to load .beam files
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin" OR ${CMAKE_SYSTEM_NAME} STREQUAL "Linux" OR ${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
     find_package(ZLIB)
@@ -176,7 +177,7 @@ endif()
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_BINARY_DIR}/version.h)
 
-if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Generic")
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin" OR ${CMAKE_SYSTEM_NAME} STREQUAL "Linux" OR ${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
     target_link_libraries(libAtomVM PUBLIC libAtomVM${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR})
 endif()
 
