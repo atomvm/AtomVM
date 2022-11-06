@@ -23,6 +23,8 @@ defmodule Process do
   # This avoids crashing the compiler at build time
   @compile {:autoload, false}
 
+  @max_int 4_294_967_295
+
   @moduledoc """
   Conveniences for working with processes and the process dictionary.
 
@@ -140,10 +142,12 @@ defmodule Process do
 
   """
   @spec sleep(timeout) :: :ok
-  def sleep(timeout)
-      when is_integer(timeout) and timeout >= 0
-      when timeout == :infinity do
+  def sleep(timeout) when is_integer(timeout) and timeout >= 0 do
     receive after: (timeout -> :ok)
+  end
+
+  def sleep(:infinity) do
+    receive after: (@max_int -> sleep(:infinity))
   end
 
   @type spawn_opt ::
