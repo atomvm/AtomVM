@@ -48,7 +48,7 @@ jobs:
       with:
         submodules: 'recursive'
 
-    - uses: erlef/setup-beam@v1.10.0
+    - uses: erlef/setup-beam@v1
       with:
         otp-version: ${{ env.otp_version }}
         elixir-version: ${{ env.elixir_version }}
