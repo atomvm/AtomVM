@@ -100,7 +100,7 @@ jobs:
           cmake_opts: "-DAVM_DISABLE_FP=on"
 
         - otp: "23.0"
-          elixir_version: "1.9"
+          elixir_version: "1.10.4"
           cmake_opts: "-DAVM_DISABLE_FP=on"
 
         - os: "ubuntu-18.04"
@@ -119,7 +119,7 @@ jobs:
           cxx: "g++-10"
           cflags: "-m32 -O3"
           otp: "23.0"
-          elixir_version: "1.9"
+          elixir_version: "1.10.4"
           cmake_opts: "-DOPENSSL_CRYPTO_LIBRARY=/usr/lib/i386-linux-gnu/libcrypto.so
           -DAVM_DISABLE_FP=on"
           arch: "i386"
@@ -139,7 +139,7 @@ jobs:
       with:
         submodules: 'recursive'
 
-    - uses: erlef/setup-beam@v1.10.0
+    - uses: erlef/setup-beam@v1
       with:
         otp-version: ${{ matrix.otp }}
         elixir-version: ${{ matrix.elixir_version }}
