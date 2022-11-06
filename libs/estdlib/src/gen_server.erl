@@ -328,8 +328,13 @@ call_internal(Pid, {_Tag, From, _Msg} = Msg, TimeoutMs) ->
     Pid ! Msg,
     wait_reply(From, TimeoutMs).
 
-wait_reply(_From, TimeoutMs) when TimeoutMs =< 0 ->
-    {error, timeout};
+wait_reply({Self, _Ref} = From, infinity) ->
+    receive
+        {'$reply', From, Reply} ->
+            Reply;
+        {'$reply', {Self, _AnotherRef}, _Reply} ->
+            wait_reply(From, infinity)
+    end;
 wait_reply({Self, _Ref} = From, TimeoutMs) ->
     StartMs = erlang:system_time(millisecond),
     receive
@@ -337,7 +342,7 @@ wait_reply({Self, _Ref} = From, TimeoutMs) ->
             Reply;
         {'$reply', {Self, _AnotherRef}, _Reply} ->
             ElapsedMs = erlang:system_time(millisecond) - StartMs,
-            NewTimeoutMs = TimeoutMs - ElapsedMs,
+            NewTimeoutMs = max(0, TimeoutMs - ElapsedMs),
             wait_reply(From, NewTimeoutMs)
     after TimeoutMs -> exit(timeout)
     end.

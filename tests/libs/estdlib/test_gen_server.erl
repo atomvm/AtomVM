@@ -126,6 +126,17 @@ test_late_reply() ->
     ok = gen_server:call(Pid, {reply_after, 0, ok}),
     {message_queue_len, 0} = erlang:process_info(self(), message_queue_len),
     %%
+    %% test that timed out message is properly flushed
+    %%
+    timeout =
+        try gen_server:call(Pid, {reply_after, 300, ok}, 200) of
+            unexpected -> unexpected
+        catch
+            exit:timeout -> timeout;
+            _:_ -> unexpected
+        end,
+    %%
+    ok2 = gen_server:call(Pid, {reply_after, 0, ok2}),
     gen_server:stop(Pid),
     ok.
 
