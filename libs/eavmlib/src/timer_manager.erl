@@ -43,8 +43,7 @@ maybe_start() ->
         undefined ->
             case start() of
                 {ok, _Pid} = R -> R;
-                {error, {already_started, Pid}} ->
-                    {ok, Pid}
+                {error, {already_started, Pid}} -> {ok, Pid}
             end;
         Pid when is_pid(Pid) ->
             {ok, Pid}

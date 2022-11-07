@@ -63,7 +63,6 @@
 -type server_ref() :: atom() | pid().
 -type from() :: any().
 
-
 %% @private
 do_spawn(Module, Args, Options, SpawnOpts) ->
     Pid = spawn_opt(?MODULE, init_it, [self(), Module, Args, Options], SpawnOpts),
