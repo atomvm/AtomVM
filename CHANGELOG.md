@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for esp32-s2, esp32-s3, and esp32-c3 chips.
 - Added Elixir I2C driver and example
 - Added the ability to specify the I2C port
+- Added ability to get the otp compatibility version via erlang:system_info.
 
 ### Breaking Changes
 

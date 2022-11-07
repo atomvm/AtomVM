@@ -311,6 +311,7 @@ You can obtain system information about the AtomVM virtual machine via the `erla
 * `atom_count` The number of atoms allocated in the system.
 * `word_size` The word size (in bytes) on the current platform (typically 4 or 8).
 * `atomvm_version` The version of AtomVM currently running (as a binary).
+* `atomvm_otp` The major version number of the OTP release the VM was compiled with.
 
 For example,
 
