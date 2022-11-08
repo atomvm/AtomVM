@@ -153,6 +153,7 @@ compile_erlang(test_min_heap_size)
 compile_erlang(test_system_info)
 compile_erlang(test_binary_to_term)
 compile_erlang(test_selective_receive)
+compile_erlang(test_timeout_not_integer)
 
 compile_erlang(test_funs0)
 compile_erlang(test_funs1)
@@ -554,6 +555,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_system_info.beam
     test_binary_to_term.beam
     test_selective_receive.beam
+    test_timeout_not_integer.beam
 
     test_funs0.beam
     test_funs1.beam

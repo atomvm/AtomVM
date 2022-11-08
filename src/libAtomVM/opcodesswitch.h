@@ -1759,10 +1759,13 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 int next_off = 1;
                 int label;
                 DECODE_LABEL(label, code, i, next_off, next_off)
-                int timeout;
+                term timeout;
                 DECODE_COMPACT_TERM(timeout, code, i, next_off, next_off)
 
                 #ifdef IMPL_EXECUTE_LOOP
+                    if (!term_is_integer(timeout) && UNLIKELY(timeout != INFINITY_ATOM)) {
+                        RAISE_ERROR(TIMEOUT_VALUE_ATOM);
+                    }
                     TRACE("wait_timeout/2, label: %i, timeout: %li\n", label, (long int) term_to_int32(timeout));
 
                     NEXT_INSTRUCTION(next_off);
@@ -1773,7 +1776,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                     int needs_to_wait = 0;
                     if ((ctx->flags & (WaitingTimeout | WaitingTimeoutExpired)) == 0) {
-                        scheduler_set_timeout(ctx, term_to_int32(timeout));
+                        if (timeout != INFINITY_ATOM) {
+                            scheduler_set_timeout(ctx, term_to_int32(timeout));
+                        }
                         needs_to_wait = 1;
                     } else if ((ctx->flags & WaitingTimeout) == 0) {
                         needs_to_wait = 1;
