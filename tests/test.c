@@ -320,6 +320,9 @@ struct Test tests[] =
     {"test_ordering_1.beam", 1},
     {"test_binary_to_term.beam", 0},
     {"test_selective_receive.beam", 0},
+#ifndef AVM_NO_FP
+    {"test_timeout_not_integer.beam", 0},
+#endif
     {"test_bs.beam", 0},
     {"test_bs_int.beam", 0},
     {"test_bs_int_unaligned.beam", 0},
