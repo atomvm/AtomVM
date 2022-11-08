@@ -57,7 +57,7 @@ test_start_link() ->
     ok = gen_server:cast(Pid, crash),
     receive
         {'EXIT', Pid, _Reason} -> ok
-    after 1000 -> error
+    after 30000 -> timeout
     end.
 
 test_cast() ->
@@ -107,7 +107,7 @@ test_late_reply() ->
     %% just check to make sure messages make it back before the timeout
     %%
     ok = gen_server:call(Pid, {reply_after, 0, ok}),
-    ok = gen_server:call(Pid, {reply_after, 100, ok}, 200),
+    ok = gen_server:call(Pid, {reply_after, 150, ok}, 300),
     %%
     %% this one should time out
     %%
@@ -121,7 +121,7 @@ test_late_reply() ->
     %%
     %% flush the late message in the mailbox
     %%
-    timer:sleep(150),
+    timer:sleep(200),
     {message_queue_len, 1} = erlang:process_info(self(), message_queue_len),
     ok = gen_server:call(Pid, {reply_after, 0, ok}),
     {message_queue_len, 0} = erlang:process_info(self(), message_queue_len),

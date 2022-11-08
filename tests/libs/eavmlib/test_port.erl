@@ -20,10 +20,10 @@
 
 -module(test_port).
 
--export([test/0]).
+-export([test/0, loop/0]).
 
 test() ->
-    Pid = spawn(fun loop/0),
+    {Pid, Ref} = spawn_opt(?MODULE, loop, [], [monitor]),
 
     pong = port:call(Pid, ping),
     pong = port:call(Pid, ping, 1000),
@@ -33,7 +33,9 @@ test() ->
     {error, timeout} = port:call(Pid, {sleep, 500}, 250),
 
     ok = port:call(Pid, halt),
-
+    receive
+        {'DOWN', Ref, process, Pid, normal} -> ok
+    end,
     {error, noproc} = port:call(Pid, ping),
     {error, noproc} = port:call(Pid, ping, 1000),
 

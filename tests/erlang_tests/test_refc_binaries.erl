@@ -131,11 +131,11 @@ test_spawn_fun() ->
     ok.
 
 get_heap_size() ->
-    get_heap_size(self()).
+    {heap_size, Size} = erlang:process_info(self(), heap_size),
+    Size * erlang:system_info(wordsize).
 
 get_heap_size(Pid) ->
-    {heap_size, Size} = erlang:process_info(Pid, heap_size),
-    Size * erlang:system_info(wordsize).
+    send(Pid, get_heap_size).
 
 send(Pid, Msg) ->
     Ref = erlang:make_ref(),
@@ -153,6 +153,9 @@ loop(State) ->
         {Pid, Ref, free} ->
             Pid ! {Ref, ok},
             loop(State#state{bin = undefined});
+        {Pid, Ref, get_heap_size} ->
+            Pid ! {Ref, get_heap_size()},
+            loop(State);
         {Pid, Ref, {ref, Bin}} ->
             Pid ! {Ref, ok},
             loop(State#state{bin = Bin});

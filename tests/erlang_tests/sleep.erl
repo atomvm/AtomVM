@@ -23,9 +23,22 @@
 -export([start/0, sleep_1/1, sleep_2/1, sleep_3/1, sleep_4/1]).
 
 start() ->
-    spawn(sleep, sleep_3, [self()]),
+    test_10(0, 0).
+
+% Tolerate 2 failures out of 10
+test_10(10, Failed) when Failed > 2 -> 1;
+test_10(10, _) ->
+    0;
+test_10(N, FailCount) ->
+    case test(N) of
+        ok -> test_10(N + 1, FailCount);
+        fail -> test_10(N + 1, FailCount + 1)
+    end.
+
+test(Index) ->
     spawn(sleep, sleep_1, [self()]),
     spawn(sleep, sleep_2, [self()]),
+    spawn(sleep, sleep_3, [self()]),
     sleep(400),
     FirstValue =
         receive
@@ -47,12 +60,18 @@ start() ->
             Value4 ->
                 Value4 * 64
         end,
-    FirstValue + SecondValue + ThirdValue + FourthValue.
+    case FirstValue + SecondValue + ThirdValue + FourthValue of
+        392 ->
+            ok;
+        Other ->
+            erlang:display({Index, fail, Other, 392}),
+            fail
+    end.
 
 sleep_1(ParentPid) ->
     sleep(100),
-    spawn(sleep, sleep_4, [ParentPid]),
-    ParentPid ! 1.
+    ParentPid ! 1,
+    spawn(sleep, sleep_4, [ParentPid]).
 
 sleep_2(ParentPid) ->
     sleep(200),

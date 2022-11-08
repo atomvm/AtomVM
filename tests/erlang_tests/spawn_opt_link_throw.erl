@@ -50,6 +50,10 @@ start() ->
 start2() ->
     L = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
     Pid = spawn_opt(?MODULE, proc, [L], [link]),
+    _Parent =
+        receive
+            {ParentPid, sum} -> ParentPid
+        end,
     Pid ! {self(), sum},
     receive
         N when is_integer(N) -> N
