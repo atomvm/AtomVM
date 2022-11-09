@@ -93,6 +93,7 @@ jobs:
         make test_alisp
 
     - name: "Build and Test: AtomVM on foreign arch"
+      timeout-minutes: 15
       run: |
         docker run --rm -v $PWD:/atomvm -w /atomvm \
         -e CFLAGS="${{ matrix.cflags }}" -e CXXFLAGS="${{ matrix.cflags }}" \
