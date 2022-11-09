@@ -40,6 +40,7 @@ jobs:
       run: docker save -o esp32-test.tar atomvm/esp32-test
 
     - name: "Run ESP32 tests using qemu-system-xtensa on Docker"
+      timeout-minutes: 10
       run: |
         docker run --rm -v $PWD:/atomvm -w /atomvm/src/platforms/esp32/test atomvm/esp32-test /bin/bash -c '
         idf.py build

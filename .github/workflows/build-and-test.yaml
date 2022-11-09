@@ -195,30 +195,35 @@ jobs:
 
     # Test
     - name: "Test: test-erlang"
+      timeout-minutes: 10
       working-directory: build
       run: |
         ./tests/test-erlang
         valgrind ./tests/test-erlang
 
     - name: "Test: test-structs"
+      timeout-minutes: 10
       working-directory: build
       run: |
         ./tests/test-structs
         valgrind ./tests/test-structs
 
     - name: "Test: test_estdlib.avm"
+      timeout-minutes: 10
       working-directory: build
       run: |
         ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         valgrind ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
 
     - name: "Test: test_eavmlib.avm"
+      timeout-minutes: 10
       working-directory: build
       run: |
         ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
         valgrind ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 
     - name: "Test: test_alisp.avm"
+      timeout-minutes: 10
       working-directory: build
       run: |
         ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
