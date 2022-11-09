@@ -65,7 +65,7 @@ puts(String) ->
 %% @hidden
 -spec puts(pid(), string()) -> ok.
 puts(Console, String) ->
-    call(Console, {puts, String}).
+    port:call(Console, {puts, String}).
 
 %%-----------------------------------------------------------------------------
 %% @returns ok if the data was written, or {error, Reason}, if there was
@@ -73,14 +73,14 @@ puts(Console, String) ->
 %% @doc     Flush any previously written data to the console.
 %% @end
 %%-----------------------------------------------------------------------------
--spec flush() -> ok.
+-spec flush() -> ok | {error, term()}.
 flush() ->
     flush(get_pid()).
 
 %% @hidden
 -spec flush(pid()) -> ok.
 flush(Console) ->
-    call(Console, flush).
+    port:call(Console, flush).
 
 %%-----------------------------------------------------------------------------
 %% @param   String the string data to write to the console
@@ -90,20 +90,11 @@ flush(Console) ->
 %% @doc     Write a string to the console.
 %% @end
 %%-----------------------------------------------------------------------------
--spec print(string()) -> ok | error.
+-spec print(string()) -> ok | {error, term()}.
 print(_String) ->
     throw(nif_error).
 
 %% Internal operations
-
-%% @private
--spec call(pid(), string()) -> ok.
-call(Console, Msg) ->
-    Ref = make_ref(),
-    Console ! {self(), Ref, Msg},
-    receive
-        {Ref, Reply} -> Reply
-    end.
 
 %% @private
 -spec get_pid() -> pid().
