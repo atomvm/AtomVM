@@ -240,3 +240,19 @@ int interop_atom_term_select_int(GlobalContext *global, const AtomStringIntPair 
     }
     return table[i].i_val;
 }
+
+term interop_kv_get_value_default(term kv, AtomString key, term default_value, GlobalContext *glb)
+{
+    term key_term = globalcontext_existing_term_from_atom_string(glb, key);
+    if (term_is_invalid_term(key_term)) {
+        return key_term;
+    }
+
+    if (term_is_nonempty_list(kv)) {
+        return interop_proplist_get_value_default(kv, key_term, default_value);
+    } else if (term_is_map(kv)) {
+        return interop_proplist_get_value_default(kv, key_term, default_value);
+    } else {
+        return default_value;
+    }
+}

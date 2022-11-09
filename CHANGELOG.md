@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   source file. This allows adding new components by just copying them to the components directory.
 - [ESP32] `REGISTER_NIF_COLLECTION` for registering additional NIFs sets without editing any
   source file. This allows adding new NIFs by just copying them to the components directory.
+- New function for getting a map or proplist value using an atom string without poluting the atom
+  table.
 
 ### Fixed
 - Fix `gen_statem`: Cancel outstanding timers during state transitions in
