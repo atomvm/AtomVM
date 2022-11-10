@@ -22,9 +22,14 @@ jobs:
 
         include:
         - arch: "armel"
-          distro: "wheezy"
-          base_url: "http://archive.debian.org/debian"
-          cflags: "-std=gnu99 -O2 -mthumb -mthumb-interwork -march=armv4t"
+          distro: "stretch"
+          base_url: "http://deb.debian.org/debian/"
+          cflags: "-O2 -mthumb -mthumb-interwork -march=armv4t"
+          additional_packages: |
+            http://ftp.us.debian.org/debian/pool/main/c/cmake/cmake-data_3.13.2-1~bpo9+1_all.deb \
+            http://ftp.us.debian.org/debian/pool/main/r/rhash/librhash0_1.3.3-1+b2_armel.deb \
+            http://ftp.us.debian.org/debian/pool/main/libu/libuv1/libuv1_1.34.2-1~bpo9+1_armel.deb \
+            http://ftp.us.debian.org/debian/pool/main/c/cmake/cmake_3.13.2-1~bpo9+1_armel.deb
 
         - arch: "armhf"
           distro: "bullseye"
@@ -32,7 +37,7 @@ jobs:
           cflags: "-mcpu=cortex-a7 -mfloat-abi=hard -O2 -mthumb -mthumb-interwork"
 
         - arch: "arm64"
-          distro: "buster"
+          distro: "bullseye"
           base_url: "http://deb.debian.org/debian/"
           cflags: "-O2"
 
@@ -71,10 +76,18 @@ jobs:
     - name: Bootrap Debian filesystem
       if: steps.cache.outputs.cache-hit != 'true'
       run: |
+        set -euo pipefail
         sudo mkdir debian
         sudo debootstrap --no-check-gpg --arch ${{ matrix.arch }} \
           --include=file,gcc,g++,binutils,cmake,make,doxygen,gperf,zlib1g-dev,libssl-dev \
           ${{ matrix.distro }} debian ${{ matrix.base_url }}
+        sudo dpkg --root debian --add-architecture ${{ matrix.arch }}
+        for pkg in ${{ matrix.additional_packages }}
+        do
+            additional_packages=1
+            sudo wget ${pkg}
+        done
+        [ ${additional_packages:-} ] && sudo dpkg --root debian --force-depends -i *.deb
         sudo tar -C debian -c . > debian-${{ matrix.arch }}.tar
         sudo rm -fr debian-${{ matrix.arch }}
 
