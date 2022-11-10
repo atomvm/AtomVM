@@ -18,21 +18,24 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 3.13)
 project (tests)
 
-if (NOT "${CMAKE_GENERATOR}" MATCHES "Xcode")
-    add_subdirectory(erlang_tests)
-    add_subdirectory(libs/estdlib)
-    add_subdirectory(libs/eavmlib)
-    add_subdirectory(libs/alisp)
+add_executable(test-erlang test.c)
+add_executable(test-structs test-structs.c)
+
+# AtomVM options impacting tests
+if (AVM_DISABLE_FP)
+    target_compile_definitions(test-erlang PRIVATE AVM_NO_FP)
 endif()
+
+target_compile_features(test-erlang PUBLIC c_std_11)
+target_compile_features(test-structs PUBLIC c_std_11)
 
 if(CMAKE_COMPILER_IS_GNUCC)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -pedantic -Wextra -ggdb")
+    target_compile_options(test-erlang PUBLIC -Wall -pedantic -Wextra -ggdb)
+    target_compile_options(test-structs PUBLIC -Wall -pedantic -Wextra -ggdb)
 endif()
-
-include_directories(${CMAKE_CURRENT_BINARY_DIR} ../src/libAtomVM/)
 
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
     include(CheckFunctionExists)
@@ -52,18 +55,36 @@ set(
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
 )
 
-add_executable(test-erlang test.c)
-target_link_libraries(test-erlang libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX} libAtomVM)
-set_property(TARGET test-erlang PROPERTY C_STANDARD 99)
-if (NOT "${CMAKE_GENERATOR}" MATCHES "Xcode")
-    add_dependencies(test-erlang erlang_test_modules)
+if((${CMAKE_SYSTEM_NAME} STREQUAL "Darwin") OR
+   (${CMAKE_SYSTEM_NAME} STREQUAL "Linux") OR
+   (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD"))
+    target_include_directories(test-erlang PRIVATE ../src/platforms/generic_unix/lib)
+    target_include_directories(test-structs PRIVATE ../src/platforms/generic_unix/lib)
+else()
+    message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_NAME}")
 endif()
 
-add_executable(test-structs test-structs.c)
-target_link_libraries(test-structs libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
-set_property(TARGET test-structs PROPERTY C_STANDARD 99)
+target_include_directories(test-structs PRIVATE ../src/libAtomVM)
+target_include_directories(test-erlang PRIVATE ../src/libAtomVM)
+target_link_libraries(test-erlang PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
+target_link_libraries(test-structs PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
 
-if (CMAKE_BUILD_TYPE STREQUAL "Coverage")
-    set (PROJECT_TEST_NAME test-erlang)
-    set_target_properties(test-erlang PROPERTIES COMPILE_FLAGS "-O0 -fprofile-arcs -ftest-coverage")
+# Except for XCode, also compile beams
+if (NOT "${CMAKE_GENERATOR}" MATCHES "Xcode")
+    add_dependencies(test-erlang erlang_test_modules)
+    add_subdirectory(erlang_tests)
+    add_subdirectory(libs/estdlib)
+    add_subdirectory(libs/eavmlib)
+    add_subdirectory(libs/alisp)
+endif()
+
+if (COVERAGE)
+    include(CodeCoverage)
+    append_coverage_compiler_flags_to_target(test-erlang)
+    append_coverage_compiler_flags_to_target(test-structs)
+    append_coverage_linker_flags_to_target(test-erlang)
+    append_coverage_linker_flags_to_target(test-structs)
+    if (CMAKE_COMPILER_IS_GNUCC)
+        setup_target_for_coverage_lcov(NAME coverage EXECUTABLE test-erlang DEPENDENCIES test-erlang)
+    endif()
 endif()

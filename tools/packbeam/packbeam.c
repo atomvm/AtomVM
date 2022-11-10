@@ -28,9 +28,9 @@
 #include <zlib.h>
 #endif
 
-#include "../../src/libAtomVM/iff.c"
-#include "../../src/libAtomVM/avmpack.h"
-#include "../../src/platforms/generic_unix/mapped_file.h"
+#include "iff.c"
+#include "avmpack.h"
+#include "mapped_file.h"
 
 #define LITT_UNCOMPRESSED_SIZE_OFFSET 8
 #define LITT_HEADER_SIZE 12

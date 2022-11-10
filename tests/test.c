@@ -28,11 +28,11 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "../platforms/generic_unix/mapped_file.h"
 #include "atom.h"
 #include "bif.h"
 #include "context.h"
 #include "iff.h"
+#include "mapped_file.h"
 #include "module.h"
 #include "term.h"
 #include "utils.h"

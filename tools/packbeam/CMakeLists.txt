@@ -18,31 +18,45 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 3.13)
 project (PackBEAM)
 
 set(PACKBEAM_SOURCES
     packbeam.c
 )
 
+add_executable(PackBEAM ${PACKBEAM_SOURCES})
+target_compile_features(PackBEAM PUBLIC c_std_11)
+if(CMAKE_COMPILER_IS_GNUCC)
+    target_compile_options(PackBEAM PUBLIC -Wall -pedantic -Wextra -ggdb)
+endif()
+
 find_package(ZLIB)
 if (ZLIB_FOUND)
-    add_definitions(-DWITH_ZLIB)
-else()
-    set(ZLIB_LIBRARIES "")
+    target_compile_definitions(PackBEAM PUBLIC WITH_ZLIB)
+    target_link_libraries(PackBEAM PRIVATE ${ZLIB_LIBRARIES})
 endif (ZLIB_FOUND)
 
+if((${CMAKE_SYSTEM_NAME} STREQUAL "Darwin") OR
+   (${CMAKE_SYSTEM_NAME} STREQUAL "Linux") OR
+   (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD"))
+    target_include_directories(PackBEAM PRIVATE ../../src/platforms/generic_unix/lib)
+else()
+    message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_NAME}")
+endif()
 set(
     PLATFORM_LIB_SUFFIX
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
 )
+target_link_libraries(PackBEAM PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX})
 
-if(CMAKE_COMPILER_IS_GNUCC)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -pedantic -Wextra -ggdb")
-endif()
-
-add_executable(PackBEAM packbeam.c)
-target_link_libraries(PackBEAM ${ZLIB_LIBRARIES} libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
-set_property(TARGET PackBEAM PROPERTY C_STANDARD 99)
+target_include_directories(PackBEAM PUBLIC ../../src/libAtomVM)
+target_link_libraries(PackBEAM PRIVATE libAtomVM)
 
 install(TARGETS PackBEAM DESTINATION bin)
+
+if (COVERAGE)
+    include(CodeCoverage)
+    append_coverage_compiler_flags_to_target(PackBEAM)
+    append_coverage_linker_flags_to_target(PackBEAM)
+endif()

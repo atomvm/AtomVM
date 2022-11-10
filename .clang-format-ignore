@@ -26,7 +26,6 @@ src/libAtomVM/term.h
 src/libAtomVM/term_typedef.h
 src/libAtomVM/trace.h
 src/libAtomVM/utils.h
-src/main.c
 src/platforms/esp32/main/gpio_driver.c
 src/platforms/esp32/main/i2c_driver.c
 src/platforms/esp32/main/ledc_nif.c
@@ -40,10 +39,10 @@ src/platforms/esp32/main/sys.c
 src/platforms/esp32/main/uart_driver.c
 src/platforms/esp32/build/*
 src/platforms/esp32/components/*
-src/platforms/generic_unix/platform_defaultatoms.c
-src/platforms/generic_unix/platform_nifs.c
-src/platforms/generic_unix/socket_driver.c
-src/platforms/generic_unix/sys.c
+src/platforms/generic_unix/lib/platform_defaultatoms.c
+src/platforms/generic_unix/lib/platform_nifs.c
+src/platforms/generic_unix/lib/socket_driver.c
+src/platforms/generic_unix/lib/sys.c
 src/platforms/stm32/src/lib/platform_defaultatoms.c
 src/platforms/stm32/src/lib/platform_nifs.c
 src/platforms/stm32/build/*

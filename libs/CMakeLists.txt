@@ -18,6 +18,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
+cmake_minimum_required (VERSION 3.12)
 project(libs)
 
 add_subdirectory(estdlib/src)

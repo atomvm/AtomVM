@@ -18,8 +18,13 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-cmake_minimum_required(VERSION 3.9)
-project(atom-vm)
+cmake_minimum_required (VERSION 3.13)
+project(AtomVM)
+
+# Options that make sense for this platform
+option(AVM_DISABLE_FP "Disable floating point support." OFF)
+option(AVM_USE_32BIT_FLOAT "Use 32 bit floats." OFF)
+option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
 
 # Include an error in case the user forgets to specify ARM as a toolchain
 if (NOT CMAKE_TOOLCHAIN_FILE)
@@ -36,18 +41,6 @@ if ((NOT ${CMAKE_C_COMPILER_ID} STREQUAL "GNU") OR
      ${CMAKE_CXX_COMPILER_ID} CXX, version ${CMAKE_CXX_COMPILER_VERSION}")
 endif()
 
-# Set the C/C++ standards
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/build)
-set(
-    PLATFORM_LIB_SUFFIX
-    ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
-)
-
-# Verbose logging
-set(LOG_VERBOSE false)
-
 if (NOT DEVICE)
     set(DEVICE stm32f407vgt6)
 endif ()
@@ -58,26 +51,4 @@ include(cmake/libopencm3.cmake)
 # Include additional compilation flags
 include(cmake/compile-flags.cmake)
 
-# Collect platform lib sources into LIB_SOURCE_FILES variable
-file(GLOB_RECURSE LIB_SOURCE_FILES "src/lib/*.c" "src/lib/*.cpp")
-
-# Add platform lib
-add_library(libAtomVM${PLATFORM_LIB_SUFFIX} ${LIB_SOURCE_FILES})
-target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE ../../libAtomVM PRIVATE src/lib)
-
-# Collect main sources into SOURCE_FILES variable
-file(GLOB_RECURSE SOURCE_FILES "src/*.c" "src/*.cpp")
-
-# Specify output executable
-add_executable(${PROJECT_NAME}.elf ${SOURCE_FILES})
-target_include_directories(${PROJECT_NAME}.elf PRIVATE ../../libAtomVM PRIVATE src/lib/)
-add_subdirectory(../../libAtomVM ./libAtomVM)
-target_link_libraries(${PROJECT_NAME}.elf libAtomVM)
-
-# Output elf file size
-add_custom_command(
-    TARGET ${PROJECT_NAME}.elf
-    POST_BUILD
-    COMMAND ${ARM_SIZE} ${PROJECT_NAME}.elf
-    WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-)
+add_subdirectory(src)

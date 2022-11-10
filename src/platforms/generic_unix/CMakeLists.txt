@@ -18,58 +18,43 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-cmake_minimum_required (VERSION 2.6)
-project (libAtomVMPlatformGenericUnix)
+cmake_minimum_required (VERSION 3.13)
 
-include_directories(${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_SOURCE_DIR}/src/libAtomVM)
+add_executable(AtomVM main.c)
+set_target_properties(AtomVM PROPERTIES RUNTIME_OUTPUT_DIRECTORY ../../)
+target_compile_features(AtomVM PUBLIC c_std_11)
+if(CMAKE_COMPILER_IS_GNUCC)
+    target_compile_options(AtomVM PUBLIC -Wall -pedantic -Wextra -ggdb)
+endif()
 
-set(HEADER_FILES
-    generic_unix_sys.h
-    mapped_file.h
-    platform_defaultatoms.h
-)
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+    include(CheckLibraryExists)
+    check_library_exists(rt clock_gettime "time.h" HAVE_CLOCK_GETTIME)
+    if (HAVE_CLOCK_GETTIME)
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lrt")
+        set(CMAKE_C_STANDARD_LIBRARIES "${CMAKE_C_STANDARD_LIBRARIES} -lrt")
+    else()
+        # might also be in libc
+        check_library_exists(c clock_gettime "" HAVE_CLOCK_GETTIME)
+    endif()
+endif()
 
-set(SOURCE_FILES
-    sys.c
-    mapped_file.c
-    platform_defaultatoms.c
-    platform_nifs.c
-    socket_driver.c
-)
+add_subdirectory(lib)
+target_include_directories(AtomVM PUBLIC lib/)
+
+add_subdirectory(../../libAtomVM libAtomVM)
+target_link_libraries(AtomVM PRIVATE libAtomVM)
 
 set(
     PLATFORM_LIB_SUFFIX
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
 )
+target_link_libraries(AtomVM PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX})
 
-find_package(OpenSSL)
-if (${OPENSSL_FOUND} STREQUAL TRUE)
-    include_directories(${OPENSSL_INCLUDE_DIR})
-    add_definitions(-DATOMVM_HAS_OPENSSL)
-    set(EXTRA_LIBS ${OPENSSL_CRYPTO_LIBRARY})
-else()
-    message("WARNING:  Some crypto operations will not be supported.")
-    set(EXTRA_LIBS "")
+if (COVERAGE)
+    include(CodeCoverage)
+    append_coverage_compiler_flags_to_target(AtomVM)
+    append_coverage_linker_flags_to_target(AtomVM)
 endif()
 
-# enable by default dynamic loading on unix
-add_definitions(-DDYNLOAD_PORT_DRIVERS)
-set(EXTRA_LIBS ${EXTRA_LIBS} ${CMAKE_DL_LIBS})
-
-if(CMAKE_COMPILER_IS_GNUCC)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -pedantic -Wextra -ggdb")
-endif()
-
-add_library(libAtomVM${PLATFORM_LIB_SUFFIX} ${SOURCE_FILES} ${HEADER_FILES})
-target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} libAtomVM ${EXTRA_LIBS})
-set_property(TARGET libAtomVM${PLATFORM_LIB_SUFFIX} PROPERTY C_STANDARD 99)
-
-install(
-    FILES ${CMAKE_CURRENT_SOURCE_DIR}/atomvm
-    DESTINATION bin
-    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-)
-
-if (CMAKE_BUILD_TYPE STREQUAL "Coverage")
-    set_target_properties(libAtomVM${PLATFORM_LIB_SUFFIX} PROPERTIES COMPILE_FLAGS "-O0 -fprofile-arcs -ftest-coverage")
-endif()
+install(TARGETS AtomVM DESTINATION lib/atomvm)
