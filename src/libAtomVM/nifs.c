@@ -3517,7 +3517,7 @@ static term math_binary_op(Context *ctx, term x_term, term y_term, binary_math_f
         UNUSED(ctx);                                                    \
         UNUSED(argv);                                                   \
         RAISE_ERROR(BADARG_ATOM);                                       \
-}
+    }
 
 #define DEFINE_BINARY_MATH_OP(moniker)                                  \
     static term nif_math_##moniker(Context *ctx, int argc, term argv[]) \

@@ -25,6 +25,7 @@ jobs:
           distro: "stretch"
           base_url: "http://deb.debian.org/debian/"
           cflags: "-O2 -mthumb -mthumb-interwork -march=armv4t"
+          test_erlang_skips: "-s floatmath"
           additional_packages: |
             http://ftp.us.debian.org/debian/pool/main/c/cmake/cmake-data_3.13.2-1~bpo9+1_all.deb \
             http://ftp.us.debian.org/debian/pool/main/r/rhash/librhash0_1.3.3-1+b2_armel.deb \
@@ -129,7 +130,7 @@ jobs:
         make AtomVM &&
         make test-erlang &&
         file ./tests/test-erlang &&
-        ./tests/test-erlang &&
+        ./tests/test-erlang ${{ matrix.test_erlang_skips }} &&
         file ./src/AtomVM &&
         ./src/AtomVM tests/libs/estdlib/test_estdlib.avm &&
         ./src/AtomVM tests/libs/eavmlib/test_eavmlib.avm &&
