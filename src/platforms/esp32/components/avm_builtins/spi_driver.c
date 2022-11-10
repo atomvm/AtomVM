@@ -83,6 +83,25 @@ static term spi_driver;
 
 static void spi_driver_init(GlobalContext *global);
 
+enum spi_cmd
+{
+    SPIInvalidCmd = 0,
+    SPIReadAtCmd,
+    SPIWriteAtCmd,
+    SPIWriteCmd,
+    SPIWriteReadCmd,
+    SPICloseCmd
+};
+
+static const AtomStringIntPair spi_cmd_table[] = {
+    { ATOM_STR("\x7", "read_at"), SPIReadAtCmd },
+    { ATOM_STR("\x8", "write_at"), SPIWriteAtCmd },
+    { ATOM_STR("\x5", "write"), SPIWriteCmd },
+    { ATOM_STR("\xA", "write_read"), SPIWriteReadCmd },
+    { ATOM_STR("\x5", "close"), SPICloseCmd },
+    SELECT_INT_DEFAULT(SPIInvalidCmd)
+};
+
 static spi_host_device_t get_spi_host_device(term spi_peripheral)
 {
     switch (spi_peripheral) {
@@ -540,35 +559,36 @@ static void spidriver_consume_mailbox(Context *ctx)
     term ref = term_get_tuple_element(msg, 1);
     term req = term_get_tuple_element(msg, 2);
 
-    term cmd = term_get_tuple_element(req, 0);
+    term cmd_term = term_get_tuple_element(req, 0);
 
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
     term ret;
 
+    enum spi_cmd cmd = interop_atom_term_select_int(ctx->global, spi_cmd_table, cmd_term);
     switch (cmd) {
-        case READ_AT_ATOM:
+        case SPIReadAtCmd:
             TRACE("spi: read at.\n");
             ret = spidriver_read_at(ctx, req);
             break;
 
-        case WRITE_AT_ATOM:
+        case SPIWriteAtCmd:
             TRACE("spi: write at.\n");
             ret = spidriver_write_at(ctx, req);
             break;
 
-        case WRITE_ATOM:
+        case SPIWriteCmd:
             TRACE("spi: write.\n");
             ret = spidriver_write(ctx, req);
             break;
 
-        case WRITE_READ_ATOM:
+        case SPIWriteReadCmd:
             TRACE("spi: write_read.\n");
             ret = spidriver_write_read(ctx, req);
             break;
 
-        case CLOSE_ATOM:
+        case SPICloseCmd:
             ret = spidriver_close(ctx);
             break;
 
