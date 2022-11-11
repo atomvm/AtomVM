@@ -20,7 +20,7 @@ jobs:
         submodules: 'recursive'
 
     - name: "Install deps"
-      run: brew install cmake gperf doxygen erlang@21
+      run: brew install cmake gperf doxygen erlang@21 ninja
 
     # Builder info
     - name: "System info"
@@ -47,13 +47,13 @@ jobs:
       working-directory: build
       run: |
         export PATH="/usr/local/opt/erlang@21/bin:$PATH"
-        cmake ${{ matrix.cmake_opts }} ..
+        cmake -G Ninja ..
 
-    - name: "Build: run make"
+    - name: "Build: run ninja"
       working-directory: build
       run: |
         export PATH="/usr/local/opt/erlang@21/bin:$PATH"
-        make
+        ninja
 
     # Test
     - name: "Test: test-erlang"
