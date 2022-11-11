@@ -39,10 +39,17 @@
 #    include <esp_idf_version.h>
 #  endif
 #endif
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 3, 0)
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 3, 0) && CONFIG_IDF_TARGET_ESP32
 #include <esp_rom_md5.h>
 #else
 #include <rom/md5_hash.h>
+#endif
+#if CONFIG_IDF_TARGET_ESP32C3
+#include "esp32c3/rom/md5_hash.h"
+#elif CONFIG_IDF_TARGET_ESP32S2
+#include "esp32s2/rom/md5_hash.h"
+#elif CONFIG_IDF_TARGET_ESP32S3
+#include "esp32s3/rom/md5_hash.h"
 #endif
 
 //#define ENABLE_TRACE
@@ -275,7 +282,7 @@ static term nif_rom_md5(Context *ctx, int argc, term argv[])
 
     unsigned char digest[MD5_DIGEST_LENGTH];
     struct MD5Context md5;
-    #if __has_include (<esp_idf_version.h>) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 3, 0)
+    #if __has_include (<esp_idf_version.h>) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 3, 0) && CONFIG_IDF_TARGET_ESP32
     esp_rom_md5_init(&md5);
     esp_rom_md5_update(&md5, (const unsigned char *) term_binary_data(data), term_binary_size(data));
     esp_rom_md5_final(digest, &md5);

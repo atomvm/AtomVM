@@ -54,6 +54,17 @@
 
 #define TAG "spi_driver"
 
+#ifdef CONFIG_IDF_TARGET_ESP32S2
+#define VSPI_HOST   SPI2_HOST
+#define HSPI_HOST   SPI3_HOST
+#elif CONFIG_IDF_TARGET_ESP32S3
+#define VSPI_HOST   SPI2_HOST
+#define HSPI_HOST   SPI3_HOST
+#elif CONFIG_IDF_TARGET_ESP32C3
+// only one user SPI bus, no VSPI
+#define HSPI_HOST   SPI2_HOST
+#endif
+
 struct SPIDevice
 {
     struct ListHead list_head;
@@ -107,8 +118,10 @@ static spi_host_device_t get_spi_host_device(term spi_peripheral)
     switch (spi_peripheral) {
         case HSPI_ATOM:
             return HSPI_HOST;
+        #ifndef CONFIG_IDF_TARGET_ESP32C3
         case VSPI_ATOM:
             return VSPI_HOST;
+        #endif
         default:
             ESP_LOGW(TAG, "Unrecognized SPI peripheral.  Must be either hspi or vspi.  Defaulting to hspi.");
             return HSPI_HOST;
