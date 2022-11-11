@@ -1,0 +1,46 @@
+#
+#  Copyright 2022 Paul Guyot <pguyot@kallisys.net>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: STM32 Build
+
+on: [push, pull_request]
+
+jobs:
+  stm32:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: Install arm-embedded toolchain
+      run: |
+        set -euo pipefail
+        cd $RUNNER_TEMP
+        wget https://developer.arm.com/-/media/Files/downloads/gnu/11.3.rel1/binrel/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi.tar.xz
+        tar xJf arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi.tar.xz
+
+    - name: Checkout and build libopencm3
+      run: |
+        set -euo pipefail
+        export PATH=$RUNNER_TEMP/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi/bin:${PATH}
+        cd src/platforms/stm32
+        git clone https://github.com/libopencm3/libopencm3.git -b v0.8.0
+        cd libopencm3
+        make
+
+    - name: "Install deps"
+      run: sudo apt install -y cmake gperf
+
+    - name: Build
+      shell: bash
+      working-directory: ./src/platforms/stm32/
+      run: |
+        set -euo pipefail
+        export PATH=$RUNNER_TEMP/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi/bin:${PATH}
+        mkdir build
+        cd build
+        cmake .. -DCMAKE_TOOLCHAIN_FILE=cmake/arm-toolchain.cmake
+        make -j
