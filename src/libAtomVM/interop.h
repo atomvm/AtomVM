@@ -72,6 +72,19 @@ int interop_write_iolist(term t, char *p);
  */
 int interop_atom_term_select_int(GlobalContext *global, const AtomStringIntPair *table, term atom);
 
+/**
+ * @brief Get a value given a key (as AtomString) from any proplist or map
+ *
+ * @details This function allows to easily get values from proplists or maps, without poluting the
+ * atom table.
+ * @param kv any proplist or map.
+ * @param key an AtomString, such as ATOM_STR("\x3", "key").
+ * @param default_value that is returned in case of missing item.
+ *
+ * @returns the value term in case given key exists, otherwise the default_value.
+ */
+term interop_kv_get_value_default(term kv, AtomString key, term default_value, GlobalContext *glb);
+
 #ifdef __cplusplus
 }
 #endif

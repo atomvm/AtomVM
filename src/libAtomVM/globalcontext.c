@@ -229,6 +229,15 @@ AtomString globalcontext_atomstring_from_term(GlobalContext *glb, term t)
     return (AtomString) ret;
 }
 
+term globalcontext_existing_term_from_atom_string(GlobalContext *glb, AtomString atom_string)
+{
+    unsigned long atom_index = atomshashtable_get_value(glb->atoms_table, atom_string, ULONG_MAX);
+    if (atom_index == ULONG_MAX) {
+        return term_invalid_term();
+    }
+    return term_from_atom_index(atom_index);
+}
+
 int globalcontext_insert_module(GlobalContext *global, Module *module, AtomString module_name_atom)
 {
     if (!atomshashtable_insert(global->modules_table, module_name_atom, TO_ATOMSHASHTABLE_VALUE(module))) {

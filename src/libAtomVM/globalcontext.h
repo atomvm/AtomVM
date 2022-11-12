@@ -211,6 +211,19 @@ static inline bool globalcontext_is_term_equal_to_atom_string(GlobalContext *glo
  */
 AtomString globalcontext_atomstring_from_term(GlobalContext *glb, term t);
 
+/**
+ * @brief Returns the term for an existing atom.
+ *
+ * @details This function allows to get an atom term associated to the given atom string, if and
+ *          only if the given atom is already in the atom table, otherwise an invalid term is
+ *          returned.
+ * @param   glb the global context.
+ * @param   atom_string the atom string that will be looked into the atom table.
+ * @returns the term associated with the supplied atom string when already existing in the atom
+ *          table, otherwise an invalid term.
+ */
+term globalcontext_existing_term_from_atom_string(GlobalContext *glb, AtomString atom_string);
+
 /*
  * @brief Insert an already loaded module with a certain filename to the modules table.
  *
