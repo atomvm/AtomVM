@@ -70,6 +70,7 @@ const char *const bind_a = "\x4" "bind";
 const char *const recvfrom_a = "\x8" "recvfrom";
 const char *const recv_a = "\x4" "recv";
 const char *const close_a = "\x5" "close";
+const char *const closed_a = "\x6" "closed";
 const char *const get_port_a = "\x8" "get_port";
 const char *const accept_a = "\x6" "accept";
 const char *const sockname_a = "\x8" "sockname";
@@ -181,9 +182,6 @@ static term init_udp_socket(Context *ctx, SocketDriverData *socket_data, term pa
     if (ret != OK_ATOM) {
         close(sockfd);
     } else {
-        if (fcntl(socket_data->sockfd, F_SETFL, O_NONBLOCK) == -1) {
-            return port_create_sys_error_tuple(ctx, FCNTL_ATOM, errno);
-        }
         if (active == TRUE_ATOM) {
             EventListener *listener = malloc(sizeof(EventListener));
             if (IS_NULL_PTR(listener)) {
@@ -702,6 +700,11 @@ static void passive_recv_callback(EventListener *listener)
     // allocate the receive buffer
     //
     avm_int_t buf_size = term_to_int(recvfrom_data->length);
+    int flags = MSG_WAITALL;
+    if (buf_size == 0) {
+        buf_size = term_to_int(socket_data->buffer);
+        flags = 0;
+    }
     char *buf = malloc(buf_size);
     if (IS_NULL_PTR(buf)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
@@ -710,8 +713,15 @@ static void passive_recv_callback(EventListener *listener)
     //
     // receive the data
     //
-    ssize_t len = recvfrom(socket_data->sockfd, buf, buf_size, 0, NULL, NULL);
-    if (len <= 0) {
+    ssize_t len = recvfrom(socket_data->sockfd, buf, buf_size, flags, NULL, NULL);
+    if (len == 0) {
+        // {Ref, {error, closed}}
+        port_ensure_available(ctx, 12);
+        term pid = recvfrom_data->pid;
+        term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
+        port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, context_make_atom(ctx, closed_a)));
+        socket_driver_do_close(ctx);
+    } else if (len < 0) {
         // {Ref, {error, {SysCall, Errno}}}
         port_ensure_available(ctx, 12);
         term pid = recvfrom_data->pid;
@@ -730,7 +740,7 @@ static void passive_recv_callback(EventListener *listener)
         // {Ref, {ok, Packet::binary()}}
         term pid = recvfrom_data->pid;
         term ref = term_from_ref_ticks(recvfrom_data->ref_ticks, ctx);
-        term packet = socket_create_packet_term(ctx, buf, len, ensure_packet_avail);
+        term packet = socket_create_packet_term(ctx, buf, len, socket_data->binary == TRUE_ATOM);
         term reply = port_create_ok_tuple(ctx, packet);
         port_send_reply(ctx, pid, ref, reply);
     }

@@ -44,7 +44,7 @@
     connect/3, send/2, recv/2, recv/3, close/1, listen/2, accept/1, accept/2, controlling_process/2
 ]).
 
--define(DEFAULT_PARAMS, [{active, true}, {buffer, 512}, {binary, true}, {timeout, infinity}]).
+-define(DEFAULT_PARAMS, [{active, true}, {buffer, 512}, {timeout, infinity}]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Address the address to which to connect
@@ -59,8 +59,9 @@
 %%          The following options are supported:
 %%          <ul>
 %%              <li><b>active</b> Active mode (default: true)</li>
-%%              <li><b>buffer</b> Size of the receive buffer to use in active mode (default: 128)</li>
-%%              <li><b>binary</b> If true, receive data as binaries, as opposed to strings (default: true)</li>
+%%              <li><b>buffer</b> Size of the receive buffer to use in active mode (default: 512)</li>
+%%              <li><b>binary</b> data is received as binaries (as opposed to lists)</li>
+%%              <li><b>list</b> data is received as lists (default)</li>
 %%          </ul>
 %%
 %%          If the socket is connected in active mode, then the calling process

@@ -26,9 +26,8 @@
 
 test() ->
     ok = test_echo_server(),
-    ok = test_echo_server(),
     ok = test_echo_server(true),
-    ok = test_accept_parameters(),
+    ok = test_listen_connect_parameters(),
     ok.
 
 test_echo_server() ->
@@ -70,15 +69,6 @@ accept(Pid, ListenSocket, SpawnControllingProcess) ->
             ok
     end.
 
-accept(Pid, ListenSocket) ->
-    case gen_tcp:accept(ListenSocket) of
-        {ok, Socket} ->
-            spawn(fun() -> accept(Pid, ListenSocket) end),
-            echo(Pid, Socket);
-        {error, closed} ->
-            ok
-    end.
-
 echo(Pid, Socket) ->
     receive
         {tcp_closed, _Socket} ->
@@ -91,18 +81,22 @@ echo(Pid, Socket) ->
 
 test_send_receive(Port, N, SpawnControllingProcess) ->
     {ok, Socket} = gen_tcp:connect(localhost, Port, [{active, true}]),
-
-    sleep(100),
-
     case SpawnControllingProcess of
         false ->
             loop(Socket, N);
         true ->
             Pid = spawn(fun() ->
-                sleep(100),
-                loop(Socket, N)
+                receive
+                    {Parent, go} ->
+                        loop(Socket, N),
+                        Parent ! done
+                end
             end),
-            gen_tcp:controlling_process(Socket, Pid)
+            gen_tcp:controlling_process(Socket, Pid),
+            Pid ! {self(), go},
+            receive
+                done -> ok
+            end
     end,
 
     gen_tcp:close(Socket),
@@ -121,56 +115,117 @@ loop(Socket, I) ->
             ok;
         {tcp, _OtherSocket, _OtherPacket} ->
             loop(Socket, I - 1)
-    end,
-    ok.
-
-sleep(Ms) ->
-    receive
-    after Ms -> ok
     end.
 
-test_accept_parameters() ->
-    {ok, ListenSocket} = gen_tcp:listen(0, [{binary, false}, {buffer, 10}]),
+test_listen_connect_parameters() ->
+    Results = [
+        test_listen_connect_parameters(ListenMode, ConnectMode, ListenActive, ConnectActive)
+     || ListenMode <- [binary, list],
+        ConnectMode <- [binary, list],
+        ListenActive <- [false, true],
+        ConnectActive <- [false, true]
+    ],
+    [] = [Error || Error <- Results, Error =/= ok],
+    ok.
+
+test_listen_connect_parameters(ListenMode, ConnectMode, ListenActive, ConnectActive) ->
+    {ok, ListenSocket} = gen_tcp:listen(0, [ListenMode, {active, ListenActive}, {buffer, 32}]),
     {ok, {_Address, Port}} = inet:sockname(ListenSocket),
 
     Self = self(),
-    spawn(fun() ->
-        Self ! ready,
-        accept(Self, ListenSocket)
+    ServerPid = spawn(fun() ->
+        Self ! {self(), ready},
+        Result = test_listen_connect_parameters_accept(ListenMode, ListenActive, ListenSocket),
+        Self ! {self(), Result}
     end),
     receive
-        ready ->
+        {ServerPid, ready} ->
             ok
     end,
 
-    {ok, Socket} = gen_tcp:connect(localhost, Port, [{active, true}]),
-
-    sleep(100),
-
-    ok = test_accept_parameters_loop(Socket, 10),
-
-    gen_tcp:close(Socket),
+    {ok, Socket} = gen_tcp:connect(localhost, Port, [ConnectMode, {active, ConnectActive}]),
+    ok = test_listen_connect_parameters_client_loop(Socket, ConnectMode, ConnectActive, 10),
+    ok = gen_tcp:close(Socket),
     receive
-        server_closed -> ok
-    after 1000 -> throw({timeout, waiting, recv, server_closed})
-    end,
+        {ServerPid, Result} -> Result
+    after 5000 -> throw({timeout, waiting, recv, server_closed})
+    end.
 
-    ok.
-
-test_accept_parameters_loop(_Socket, 0) ->
+test_listen_connect_parameters_client_loop(_Socket, _Mode, _Active, 0) ->
     ok;
-test_accept_parameters_loop(Socket, I) ->
+test_listen_connect_parameters_client_loop(Socket, Mode, Active, I) ->
     Packet = list_to_binary(pid_to_list(self()) ++ ":" ++ integer_to_list(I)),
     ok = gen_tcp:send(Socket, Packet),
+    test_listen_connect_parameters_client_loop0(Socket, Mode, Active, I).
+
+test_listen_connect_parameters_client_loop0(Socket, Mode, true = Active, I) ->
     receive
-        {tcp_closed, _OtherSocket} ->
+        {tcp_closed, Socket} ->
             ok;
-        {tcp, _OtherSocket, OtherPacket} ->
-            case is_binary(OtherPacket) of
+        {tcp, Socket, Packet} ->
+            if
+                Mode =:= binary andalso is_binary(Packet) ->
+                    test_listen_connect_parameters_client_loop(Socket, Mode, Active, I - 1);
+                Mode =:= list andalso is_list(Packet) ->
+                    test_listen_connect_parameters_client_loop(Socket, Mode, Active, I - 1);
                 true ->
-                    {error, expected_binary_packet};
-                false ->
-                    loop(Socket, I - 1)
-            end
-    end,
-    ok.
+                    {error, {unexpected_packet_format, client, Packet, Mode}}
+            end;
+        Other ->
+            {error, {unexpected_message, Other}}
+    end;
+test_listen_connect_parameters_client_loop0(Socket, Mode, false = Active, I) ->
+    case gen_tcp:recv(Socket, 0) of
+        {error, closed} ->
+            ok;
+        {ok, Packet} ->
+            if
+                Mode =:= binary andalso is_binary(Packet) ->
+                    test_listen_connect_parameters_client_loop(Socket, Mode, Active, I - 1);
+                Mode =:= list andalso is_list(Packet) ->
+                    test_listen_connect_parameters_client_loop(Socket, Mode, Active, I - 1);
+                true ->
+                    {error, {unexpected_packet_format, client, Packet, Mode}}
+            end;
+        Other ->
+            {error, {unexpected_result, client, Other}}
+    end.
+
+test_listen_connect_parameters_accept(ListenMode, ListenActive, ListenSocket) ->
+    {ok, Socket} = gen_tcp:accept(ListenSocket),
+    test_listen_connect_parameters_server_loop(ListenMode, ListenActive, Socket).
+
+test_listen_connect_parameters_server_loop(ListenMode, true = ListenActive, Socket) ->
+    receive
+        {tcp_closed, Socket} ->
+            ok;
+        {tcp, Socket, Packet} ->
+            ok = gen_tcp:send(Socket, Packet),
+            if
+                ListenMode =:= binary andalso is_binary(Packet) ->
+                    test_listen_connect_parameters_server_loop(ListenMode, ListenActive, Socket);
+                ListenMode =:= list andalso is_list(Packet) ->
+                    test_listen_connect_parameters_server_loop(ListenMode, ListenActive, Socket);
+                true ->
+                    {error, {unexpected_packet_format, server, Packet, ListenMode}}
+            end;
+        Other ->
+            {error, {unexpected_message, Other}}
+    end;
+test_listen_connect_parameters_server_loop(ListenMode, false = ListenActive, Socket) ->
+    case gen_tcp:recv(Socket, 0) of
+        {error, closed} ->
+            ok;
+        {ok, Packet} ->
+            ok = gen_tcp:send(Socket, Packet),
+            if
+                ListenMode =:= binary andalso is_binary(Packet) ->
+                    test_listen_connect_parameters_server_loop(ListenMode, ListenActive, Socket);
+                ListenMode =:= list andalso is_list(Packet) ->
+                    test_listen_connect_parameters_server_loop(ListenMode, ListenActive, Socket);
+                true ->
+                    {error, {unexpected_packet_format, server, Packet, ListenMode}}
+            end;
+        Other ->
+            {error, {unexpected_result, server, Other}}
+    end.
