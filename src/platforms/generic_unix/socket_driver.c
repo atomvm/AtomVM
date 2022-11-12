@@ -1032,8 +1032,8 @@ static void socket_consume_mailbox(Context *ctx)
         socket_driver_do_accept(ctx, pid, ref, timeout);
     } else if (cmd_name == context_make_atom(ctx, close_a)) {
         TRACE("close\n");
-        socket_driver_do_close(ctx);
         port_send_reply(ctx, pid, ref, OK_ATOM);
+        socket_driver_do_close(ctx);
         // TODO handle shutdown
         // socket_driver_delete_data(ctx->platform_data);
         // context_destroy(ctx);
