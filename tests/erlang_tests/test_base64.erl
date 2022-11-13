@@ -59,7 +59,7 @@ start() ->
     [verify_b64(Value, ExpectedEncoding) || {Value, ExpectedEncoding} <- RandomEntries],
 
     %% test against some randomly generated inputs
-    [verify_b64(atomvm:rand_bytes(I), undefined) || I <- [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,50,100,131,147,200,201,217,500,517]],
+    [verify_b64(rand_bytes(I), undefined) || I <- [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,50,100,131,147,200,201,217,500,517]],
 
     % expected errors
     expect_error(fun() -> base64:encode(foo) end, badarg),
@@ -69,12 +69,25 @@ start() ->
     expect_error(fun() -> base64:decode(<<"A ID">>) end, badarg),
 
     % it turns out we actually support iolists, which is kind of nice
-    <<"AQIDBAUG">> = base64:encode([<<1, 2>>, <<3, 4, 5>>, <<6>>]),
-    <<"AQIDBAUG">> = base64:encode([<<1, 2>>, <<3, 4, 5>>, 6]),
-    <<1, 2, 3, 4, 5, 6>> = base64:decode(["AQ", "ID", "BAUG"]),
-    <<1, 2, 3, 4, 5, 6>> = base64:decode(["AQ", "ID", <<"BAUG">>]),
-
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            expect_error(fun() -> base64:encode([<<1, 2>>, <<3, 4, 5>>, <<6>>]) end, badarith),
+            expect_error(fun() -> base64:encode([<<1, 2>>, <<3, 4, 5>>, <<6>>]) end, badarith),
+            expect_error(fun() -> base64:decode(["AQ", "ID", "BAUG"]) end, badarg),
+            expect_error(fun() -> base64:decode(["AQ", "ID", <<"BAUG">>]) end, badarg);
+        _ ->
+            <<"AQIDBAUG">> = base64:encode([<<1, 2>>, <<3, 4, 5>>, <<6>>]),
+            <<"AQIDBAUG">> = base64:encode([<<1, 2>>, <<3, 4, 5>>, 6]),
+            <<1, 2, 3, 4, 5, 6>> = base64:decode(["AQ", "ID", "BAUG"]),
+            <<1, 2, 3, 4, 5, 6>> = base64:decode(["AQ", "ID", <<"BAUG">>])
+    end,
     0.
+
+rand_bytes(I) ->
+    case erlang:system_info(machine) of
+        "BEAM" -> crypto:strong_rand_bytes(I);
+        _ -> atomvm:rand_bytes(I)
+    end.
 
 verify_b64(Input, ExpectedEncoding) ->
     %erlang:display({Input, ExpectedEncoding}),

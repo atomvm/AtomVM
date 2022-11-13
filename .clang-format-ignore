@@ -48,4 +48,3 @@ src/platforms/stm32/src/lib/platform_defaultatoms.c
 src/platforms/stm32/src/lib/platform_nifs.c
 src/platforms/stm32/build/*
 tests/test-structs.c
-tests/test.c

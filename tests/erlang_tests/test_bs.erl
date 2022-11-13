@@ -34,29 +34,25 @@ start() ->
     ),
     test_unpack_integers_and_binaries(IntegersAndBinaries, 16#F, 16#2, <<"fubar">>, <<"Had">>),
 
-    error = test_create_with_invalid_int_value(),
-    error = test_create_with_invalid_int_size(),
-    error = test_create_with_unsupported_int_unit(),
-    error = test_create_with_unaligned_int_size(),
+    ok = test_create_with_invalid_int_value(),
+    ok = test_create_with_invalid_int_size(),
+    ok = test_create_with_unsupported_int_unit(),
+    ok = test_create_with_unsupported_unaligned_int_size(),
     ok = test_create_with_int_little_endian(),
     ok = test_create_with_int_signed(),
-    error = test_create_with_invalid_binary_value(),
-    error = test_create_with_invalid_binary_size(),
-    error = test_create_with_binary_size_out_of_range(),
-    error = test_create_with_invalid_binary_unit(),
+    ok = test_create_with_invalid_binary_value(),
+    ok = test_create_with_invalid_binary_size(),
+    ok = test_create_with_binary_size_out_of_range(),
+    ok = test_create_with_unsupported_binary_unit(),
 
     15 = get_integer_big_unsigned(<<16#F>>, 8),
     128 = get_integer_big_unsigned(<<16#80>>, 8),
     4404 = get_integer_big_unsigned(<<0, 0, 17, 52>>, 32),
 
-    error = test_get_with_invalid_int_value(),
-    error = test_get_with_invalid_int_size(),
-    error = test_get_with_unsupported_int_unit(),
+    ok = test_get_with_unsupported_int_unit(),
     ok = test_get_with_int_little_endian(),
     ok = test_get_with_int_signed(),
-    error = test_get_with_invalid_binary_value(),
-    error = test_get_with_invalid_binary_size(),
-    error = test_get_with_unaligned_binary(),
+    ok = test_get_with_unaligned_binary(),
 
     <<"">> = test_match_first_integer(<<16#FF>>),
     <<1, 2, 3>> = test_match_first_integer(<<16#FF, 1, 2, 3>>),
@@ -124,10 +120,10 @@ test_create_with_invalid_int_size() ->
     expect_error(fun() -> create_int_binary(16#F, id(bar)) end, badarg).
 
 test_create_with_unsupported_int_unit() ->
-    expect_error(fun() -> create_int_binary_unit_3(16#F, id(32)) end, unsupported).
+    atom_unsupported(fun() -> create_int_binary_unit_3(16#F, id(32)) end).
 
-test_create_with_unaligned_int_size() ->
-    expect_error(fun() -> create_int_binary(16#FFFF, id(28)) end, unsupported).
+test_create_with_unsupported_unaligned_int_size() ->
+    atom_unsupported(fun() -> create_int_binary(16#FFFF, id(28)) end).
 
 test_create_with_int_little_endian() ->
     ok = expect_equals(<<255, 255, 0, 0>>, create_int_binary_little_endian(16#FFFF, 32)),
@@ -148,17 +144,19 @@ test_create_with_invalid_binary_size() ->
 test_create_with_binary_size_out_of_range() ->
     expect_error(fun() -> create_binary_binary(<<"foo">>, id(4)) end, badarg).
 
-test_create_with_invalid_binary_unit() ->
-    expect_error(fun() -> create_binary_binary_unit_3(<<"foo">>, id(3)) end, unsupported).
+test_create_with_unsupported_binary_unit() ->
+    atom_unsupported(fun() -> create_binary_binary_unit_3(<<"foo">>, id(3)) end).
 
-test_get_with_invalid_int_value() ->
-    expect_error(fun() -> get_integer_big_unsigned(foo, id(32)) end, badarg).
-
-test_get_with_invalid_int_size() ->
-    expect_error(fun() -> get_integer_big_unsigned(16#F, id(bar)) end, badarg).
-
+% Things are very broken here, we get {badmatch, <<16#FFFFFFFF:32>>} but
+% this term isn't equal to {badmatch, <<16#FFFFFFFF:32>>}
 test_get_with_unsupported_int_unit() ->
-    expect_error(fun() -> get_integer_big_unsigned_unit_3(16#F, id(32)) end, unsupported).
+    atom_unsupported(
+        fun() ->
+            R = id(16#FF),
+            R = get_integer_big_unsigned_unit_3(id(<<16#FFFFFFFF:32>>), id(8))
+        end,
+        fun(_) -> true end
+    ).
 
 test_get_with_int_little_endian() ->
     expect_equals(1024, get_integer_little_unsigned(<<0, 4, 0, 0>>, 32)).
@@ -166,14 +164,10 @@ test_get_with_int_little_endian() ->
 test_get_with_int_signed() ->
     expect_equals(-1024, get_integer_big_signed(<<255, 255, 252, 0>>, 32)).
 
-test_get_with_invalid_binary_value() ->
-    expect_error(fun() -> get_binary_binary(foo, id(32)) end, badarg).
-
-test_get_with_invalid_binary_size() ->
-    expect_error(fun() -> get_binary_binary(<<"foo">>, id(bar)) end, badarg).
-
 test_get_with_unaligned_binary() ->
-    expect_error(fun() -> get_int_then_binary(<<1, 2, 3, 4>>, id(4), id(1)) end, badarg).
+    atom_unsupported(fun() -> get_int_then_binary(<<1, 2, 3, 4>>, id(4), id(1)) end, fun(T) ->
+        T =:= badarg
+    end).
 
 create_int_binary_unit_3(Value, Size) ->
     <<Value:Size/integer-big-unit:3>>.
@@ -209,12 +203,8 @@ get_integer_big_signed(Bin, Size) ->
     <<Value:Size/signed, _Rest/binary>> = Bin,
     Value.
 
-get_binary_binary(Bin, Size) ->
-    <<Value:Size/binary, _Rest/binary>> = Bin,
-    Value.
-
 get_int_then_binary(Bin, IntSize, BinSize) ->
-    <<IntValue:IntSize/integer, BinValue:BinSize/binary, _Rest/binary>> = Bin,
+    <<IntValue:IntSize/integer, BinValue:BinSize/binary, _Rest/bitstring>> = Bin,
     {IntValue, BinValue}.
 
 expect_equals(A, A) ->
@@ -222,20 +212,42 @@ expect_equals(A, A) ->
 expect_equals(A, B) ->
     throw({not_equal, A, B}).
 
-expect_error(F, _Reason) ->
-    error =
+expect_error(F, Reason) when is_atom(Reason) orelse is_tuple(Reason) ->
+    expect_error(F, fun(Tag, Value) -> Tag =:= error andalso Value =:= Reason end);
+expect_error(F, ErrorValidator) when is_function(ErrorValidator) ->
+    ok =
+        try
+            F(),
+            unexpected
+        catch
+            T:V ->
+                case ErrorValidator(T, V) of
+                    false ->
+                        erlang:display({T, V}),
+                        {got, {T, V}, validator_failed};
+                    true ->
+                        ok
+                end
+        end.
+
+atom_unsupported(F) ->
+    atom_unsupported(F, fun(Reason) -> Reason =:= unsupported end).
+
+atom_unsupported(F, ExpectedErrorValidator) ->
+    R =
         try
             F(),
             ok
         catch
-            _E:_R ->
-                %% TODO E doesn't seem to match error and R doesn't seem to match Reason
-                %% even through they display the same
-                %% erlang:display({E, R}),
-                %% E = error,
-                %% R = Reason,
-                error
-        end.
+            error:Reason -> Reason
+        end,
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            R = ok;
+        _ ->
+            true = ExpectedErrorValidator(R),
+            ok
+    end.
 
 test_match_first_integer(<<16#FF:8, Rest/binary>>) ->
     Rest;
@@ -287,9 +299,16 @@ test_skip_bits() ->
     <<"oobar">> = skip_bits(8, <<"foobar">>),
     <<"obar">> = skip_bits(16, <<"foobar">>),
     <<"">> = skip_bits(48, <<"foobar">>),
-    expect_error(fun() -> skip_bits(128, <<"foobar">>) end, badmatch),
-    expect_error(fun() -> skip_bits(1, <<"foobar">>) end, unsupported),
+    ok = expect_error(fun() -> skip_bits(128, <<"foobar">>) end, {badmatch, <<"foobar">>}),
+    ok = expect_error(fun() -> skip_bits(1, <<"foobar">>) end, fun skip_bits_unsupported/2),
     ok.
+
+skip_bits_unsupported(Tag, Value) ->
+    case erlang:system_info(machine) of
+        "BEAM" -> Tag =:= error andalso Value =:= {badmatch, <<"foobar">>};
+        % cannot match here, things are broken (and unsupported)
+        _ -> true
+    end.
 
 skip_bits(Len, Bin) ->
     <<_First:Len, Rest/binary>> = Bin,
@@ -331,4 +350,12 @@ test_iterate_binary() ->
 traverse(<<"">>, Accum) -> Accum;
 traverse(<<H:8, T/binary>>, Accum) -> traverse(T, Accum ++ [H]).
 
-id(X) -> X.
+% Prevent optimization from the compiler
+id(X) ->
+    Self = self(),
+    Pid = spawn(fun() ->
+        Self ! {self(), X}
+    end),
+    receive
+        {Pid, R} -> R
+    end.

@@ -56,8 +56,14 @@ test_message_queue_len(Pid, Self) ->
     end,
     {heap_size, HeapSize2} = process_info(Pid, heap_size),
     assert(MessageQueueLen < MessageQueueLen2),
-    assert(Memory < Memory2),
-    assert(HeapSize < HeapSize2).
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            assert(Memory =< Memory2),
+            assert(HeapSize =< HeapSize2);
+        _ ->
+            assert(Memory < Memory2),
+            assert(HeapSize < HeapSize2)
+    end.
 
 loop(undefined, Accum) ->
     receive
