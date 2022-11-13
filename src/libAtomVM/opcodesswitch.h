@@ -4567,7 +4567,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     // and kv together into new map.  Both src and kv are sorted.
                     //
                     term map = term_alloc_map_maybe_shared(ctx, new_map_size, is_shared ? term_get_map_keys(src) : term_invalid_term());
-                    int src_pos = 0;
+                    size_t src_pos = 0;
                     int kv_pos = 0;
                     for (int j = 0; j < new_map_size; j++) {
                         if (src_pos >= src_size) {
