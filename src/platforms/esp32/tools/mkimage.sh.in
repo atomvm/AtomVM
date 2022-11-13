@@ -19,14 +19,14 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-escript "@CMAKE_CURRENT_BINARY_DIR@/mkimage.erl" \
-    --root_dir "@CMAKE_SOURCE_DIR@" \
-    --config "@CMAKE_SOURCE_DIR@/src/platforms/esp32/mkimage.config" \
-    --out "@CMAKE_SOURCE_DIR@/src/platforms/esp32/build/atomvm-esp32-@ATOMVM_VERSION@.img" \
+escript "@CMAKE_BINARY_DIR@/mkimage.erl" \
+    --root_dir "@CMAKE_BINARY_DIR@/../../.." \
+    --config "@CMAKE_BINARY_DIR@/mkimage.config" \
+    --out "@CMAKE_BINARY_DIR@/atomvm-esp32-@ATOMVM_VERSION@.img" \
     "$@"
 
 echo "============================================="
 
 echo ""
 echo "AtomVM ESP32 version @ATOMVM_VERSION@ image written to:"
-echo "@CMAKE_SOURCE_DIR@/src/platforms/esp32/build/atomvm-esp32-@ATOMVM_VERSION@.img"
+echo "@CMAKE_BINARY_DIR@/atomvm-esp32-@ATOMVM_VERSION@.img"
