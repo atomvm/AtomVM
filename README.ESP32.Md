@@ -16,14 +16,15 @@ Building AtomVM for ESP32
 
 ```
 cd src/platforms/esp32/
-make
+idf.py set-target esp32 (or esp32c3, esp32s2, esp32s3)
+idf.py menuconfig
+idf.py build
 ```
-
-> Note: GNU Make required
 
 * flash:
 ```
-make flash
+./build/mkimage.sh
+./build/flashimage.sh
 ```
 
 Running BEAM code on ESP32
@@ -53,7 +54,7 @@ $ $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32 --port /dev/tt
 $ cd src/platforms/esp32
 
 # Open the serial monitor
-$ make monitor
+$ idf.py monitor
 ```
 
 Running Blink Example

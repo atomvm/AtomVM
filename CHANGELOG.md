@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added Elixir ESP32 LEDC driver and example
 - Added support for `uart:close/1`
 - Added Bitwise support for Elixir
+- Added support for esp32-s2, esp32-s3, and esp32-c3 chips.
 
 ### Breaking Changes
 
