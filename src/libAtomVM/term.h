@@ -270,7 +270,7 @@ static inline int term_is_movable_boxed(term t)
  * @param t the boxed term header.
  * @return the size of the boxed term that follows the header. 0 is returned if the boxed term is just the header.
  */
-static inline int term_get_size_from_boxed_header(term header)
+static inline size_t term_get_size_from_boxed_header(term header)
 {
     return header >> 6;
 }
@@ -283,7 +283,7 @@ static inline int term_get_size_from_boxed_header(term header)
  * @return size of given term.
  *
  */
-static inline int term_boxed_size(term t)
+static inline size_t term_boxed_size(term t)
 {
     /* boxed: 10 */
     TERM_DEBUG_ASSERT((t & 0x3) == 0x2);
@@ -843,7 +843,7 @@ static inline bool term_binary_size_is_heap_binary(uint32_t size)
  * @param size the size in bytes
  * @return the count of terms
  */
-static inline int term_binary_data_size_in_terms(uint32_t size)
+static inline size_t term_binary_data_size_in_terms(size_t size)
 {
     if (term_binary_size_is_heap_binary(size)) {
 #if TERM_BYTES == 4
@@ -925,7 +925,7 @@ static inline const char *term_binary_data(term t)
 static inline term term_create_uninitialized_binary(uint32_t size, Context *ctx)
 {
     if (term_binary_size_is_heap_binary(size)) {
-        int size_in_terms = term_binary_data_size_in_terms(size);
+        size_t size_in_terms = term_binary_data_size_in_terms(size);
 
         term *boxed_value = memory_heap_alloc(ctx, size_in_terms + 1);
         boxed_value[0] = (size_in_terms << 6) | TERM_BOXED_HEAP_BINARY;
@@ -946,7 +946,7 @@ static inline term term_create_uninitialized_binary(uint32_t size, Context *ctx)
  * @param ctx the context that owns the memory that will be allocated.
  * @return a term pointing to the boxed binary pointer.
  */
-static inline term term_from_literal_binary(const void *data, uint32_t size, Context *ctx)
+static inline term term_from_literal_binary(const void *data, size_t size, Context *ctx)
 {
     term binary = term_create_uninitialized_binary(size, ctx);
     memcpy((void *) term_binary_data(binary), data, size);
@@ -1000,7 +1000,7 @@ static inline void term_set_refc_binary_data(term t, const char *data)
     boxed_value[3] = (term) data;
 }
 
-static inline term term_from_const_binary(const void *data, uint32_t size, Context *ctx)
+static inline term term_from_const_binary(const void *data, size_t size, Context *ctx)
 {
     term binary = term_alloc_refc_binary(ctx, size, true);
     term_set_refc_binary_data(binary, data);
@@ -1015,7 +1015,7 @@ static inline term term_from_const_binary(const void *data, uint32_t size, Conte
 * @param ctx the context that owns the memory that will be allocated.
 * @return a term pointing to the boxed binary pointer.
 */
-static inline term term_create_empty_binary(uint32_t size, Context *ctx)
+static inline term term_create_empty_binary(size_t size, Context *ctx)
 {
     term t = term_create_uninitialized_binary(size, ctx);
     memset((char *) term_binary_data(t), 0x00, size);
@@ -1114,7 +1114,7 @@ static inline uint64_t term_to_ref_ticks(term rt)
  * @param ctx the context that owns the memory that will be allocated.
  * @return a term pointing on an empty tuple allocated on the heap.
  */
-static inline term term_alloc_tuple(uint32_t size, Context *ctx)
+static inline term term_alloc_tuple(size_t size, Context *ctx)
 {
     //TODO: write a real implementation
     //align constraints here
@@ -1186,12 +1186,12 @@ static inline int term_get_tuple_arity(term t)
  * @param ctx the context that owns the memory that will be allocated.
  * @return a term pointing to a list.
  */
-static inline term term_from_string(const uint8_t *data, uint16_t size, Context *ctx)
+static inline term term_from_string(const uint8_t *data, size_t size, Context *ctx)
 {
     //TODO: write a real implementation
     //align constraints here
     term *list_cells = memory_heap_alloc(ctx, size * 2);
-    for (int i = 0; i < size * 2; i += 2) {
+    for (size_t i = 0; i < size * 2; i += 2) {
         list_cells[i] = (term) &list_cells[i + 2] | 0x1;
         list_cells[i + 1] = term_from_int11(data[i / 2]);
     }
@@ -1572,12 +1572,12 @@ static inline size_t term_get_map_value_offset()
     return 2;
 }
 
-static inline int term_map_size_in_terms_maybe_shared(size_t num_entries, bool is_shared)
+static inline size_t term_map_size_in_terms_maybe_shared(size_t num_entries, bool is_shared)
 {
     return 2 + (is_shared ? 0 : (1 + num_entries)) + num_entries;
 }
 
-static inline int term_map_size_in_terms(size_t num_entries)
+static inline size_t term_map_size_in_terms(size_t num_entries)
 {
     return term_map_size_in_terms_maybe_shared(num_entries, false);
 }
@@ -1604,7 +1604,7 @@ static inline term term_get_map_keys(term t)
     return boxed_value[term_get_map_keys_offset()];
 }
 
-static inline int term_get_map_size(term t)
+static inline size_t term_get_map_size(term t)
 {
     TERM_DEBUG_ASSERT(term_is_map(t));
 

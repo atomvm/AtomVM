@@ -25,7 +25,7 @@ static COLD_FUNC void debug_display_type(term t, const Context *ctx)
     if (term_is_atom(t) || term_is_integer(t) || term_is_nil(t) || term_is_pid(t)) {
         term_display(stderr, t, ctx);
     } else if ((t & 0x3F) == 0) {
-        fprintf(stderr, "tuple(%i)", term_get_size_from_boxed_header(t));
+        fprintf(stderr, "tuple(%zu)", term_get_size_from_boxed_header(t));
     } else if (term_is_boxed(t)) {
         fprintf(stderr, "boxed(0x%lx)", (unsigned long) term_to_term_ptr(t));
     } else if ((t & 0x3) == 0x1) {

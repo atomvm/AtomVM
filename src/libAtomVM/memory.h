@@ -84,7 +84,7 @@ term memory_copy_term_tree(term **new_heap, term t, term *mso_list);
  * @param ctx the target context.
  * @param size needed available memory.
  */
-enum MemoryGCResult memory_ensure_free(Context *ctx, uint32_t size) MUST_CHECK;
+enum MemoryGCResult memory_ensure_free(Context *ctx, size_t size) MUST_CHECK;
 
 /**
  * @brief runs a garbage collection and shrinks used memory
