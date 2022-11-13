@@ -457,7 +457,6 @@ void socket_driver_do_close(Context *ctx)
 
 static term socket_driver_controlling_process(Context *ctx, term pid, term new_pid_term)
 {
-    GlobalContext *glb = ctx->global;
     struct SocketDriverData *socket_data = ctx->platform_data;
 
     if (UNLIKELY(!term_is_pid(new_pid_term))) {

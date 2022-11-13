@@ -4719,7 +4719,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_INTEGER(list_len, code, i, next_off, next_off);
                 int fail = 0;
                 for (int j = 0;  j < list_len && !fail;  ++j) {
-                    term key, value;
+                    term key;
                     DECODE_COMPACT_TERM(key, code, i, next_off, next_off);
 
                     #ifdef IMPL_EXECUTE_LOOP
@@ -4750,7 +4750,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 int num_elements = list_len / 2;
                 int fail = 0;
                 for (int j = 0;  j < num_elements && !fail;  ++j) {
-                    term key, value;
+                    term key;
                     DECODE_COMPACT_TERM(key, code, i, next_off, next_off);
                     dreg_t dreg;
                     dreg_type_t dreg_type;
