@@ -86,7 +86,14 @@ struct I2CData
 {
     i2c_cmd_handle_t cmd;
     term transmitting_pid;
+    i2c_port_t i2c_num;
 };
+
+#define I2C_VALIDATE_NOT_INVALID(moniker)                       \
+    if (term_is_invalid_term(moniker##_term)) {             \
+        ESP_LOGE(TAG, "Missing parameter: " #moniker "\n"); \
+        goto free_and_exit;                                 \
+    }
 
 void i2c_driver_init(GlobalContext *global)
 {
@@ -99,9 +106,36 @@ Context *i2c_driver_create_port(GlobalContext *global, term opts)
     struct I2CData *i2c_data = calloc(1, sizeof(struct I2CData));
     i2c_data->transmitting_pid = term_invalid_term();
 
-    term scl_io_num_term = interop_proplist_get_value(opts, SCL_IO_NUM_ATOM);
-    term sda_io_num_term = interop_proplist_get_value(opts, SDA_IO_NUM_ATOM);
-    term clock_hz_term = interop_proplist_get_value(opts, I2C_CLOCK_HZ_ATOM);
+    term scl_io_num_term = interop_kv_get_value(
+        opts, ATOM_STR("\xA", "scl_io_num"), global
+    );
+    I2C_VALIDATE_NOT_INVALID(scl_io_num);
+
+    term sda_io_num_term = interop_kv_get_value(
+        opts, ATOM_STR("\xA", "sda_io_num"), global
+    );
+    I2C_VALIDATE_NOT_INVALID(sda_io_num);
+
+    term clock_hz_term = interop_kv_get_value(
+        opts, ATOM_STR("\xC", "i2c_clock_hz"), global
+    );
+    I2C_VALIDATE_NOT_INVALID(clock_hz);
+
+    i2c_data->i2c_num = I2C_NUM_0;
+    term i2c_num_term = interop_kv_get_value(
+        opts, ATOM_STR("\x7", "i2c_num"), global
+    );
+    if (!term_is_invalid_term(i2c_num_term)) {
+        if (!term_is_integer(i2c_num_term)) {
+            ESP_LOGE(TAG, "Invalid parameter: i2c_num is not an integer\n");
+            goto free_and_exit;
+        }
+        i2c_data->i2c_num = term_to_int32(i2c_num_term);
+        if (i2c_data->i2c_num < 0 || i2c_data->i2c_num > I2C_NUM_MAX - 1) {
+            ESP_LOGE(TAG, "Invalid parameter: i2c_num out of range\n");
+            goto free_and_exit;
+        }
+    }
 
     i2c_config_t conf;
     memset(&conf, 0, sizeof(i2c_config_t));
@@ -111,30 +145,37 @@ Context *i2c_driver_create_port(GlobalContext *global, term opts)
     conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
     conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
     conf.master.clk_speed = term_to_int32(clock_hz_term);
-    esp_err_t err = i2c_param_config(I2C_NUM_0, &conf);
+    esp_err_t err = i2c_param_config(i2c_data->i2c_num, &conf);
 
     if (UNLIKELY(err != ESP_OK)) {
         ESP_LOGE(TAG, "Failed to initialize I2C parameters.  err=%i\n", err);
-        return NULL;
+        goto free_and_exit;
     }
 
-    err = i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0);
+    err = i2c_driver_install(i2c_data->i2c_num, I2C_MODE_MASTER, 0, 0, 0);
     if (UNLIKELY(err != ESP_OK)) {
         ESP_LOGE(TAG, "Failed to install I2C driver.  err=%i\n", err);
-        return NULL;
+        goto free_and_exit;
     }
+
+    ESP_LOGI(TAG, "I2C driver installed using I2C port %i", i2c_data->i2c_num);
 
     Context *ctx = context_new(global);
     ctx->native_handler = i2cdriver_consume_mailbox;
     ctx->platform_data = i2c_data;
 
     return ctx;
+
+free_and_exit:
+    free(i2c_data);
+    return NULL;
 }
 
 static void i2c_driver_close(Context *ctx)
 {
-    UNUSED(ctx);
-    esp_err_t err = i2c_driver_delete(I2C_NUM_0);
+    struct I2CData *i2c_data = ctx->platform_data;
+
+    esp_err_t err = i2c_driver_delete(i2c_data->i2c_num);
     if (UNLIKELY(err != ESP_OK)) {
         ESP_LOGW(TAG, "Failed to delete I2C driver.  err=%i\n", err);
     }
@@ -174,7 +215,7 @@ static term i2cdriver_end_transmission(Context *ctx, term pid)
     }
 
     i2c_master_stop(i2c_data->cmd);
-    esp_err_t result = i2c_master_cmd_begin(I2C_NUM_0, i2c_data->cmd, portMAX_DELAY);
+    esp_err_t result = i2c_master_cmd_begin(i2c_data->i2c_num, i2c_data->cmd, portMAX_DELAY);
     i2c_cmd_link_delete(i2c_data->cmd);
 
     i2c_data->transmitting_pid = term_invalid_term();
@@ -283,7 +324,7 @@ static term i2cdriver_read_bytes(Context *ctx, term pid, term req)
     }
 
     i2c_master_stop(i2c_data->cmd);
-    result = i2c_master_cmd_begin(I2C_NUM_0, i2c_data->cmd, portMAX_DELAY);
+    result = i2c_master_cmd_begin(i2c_data->i2c_num, i2c_data->cmd, portMAX_DELAY);
     i2c_cmd_link_delete(i2c_data->cmd);
 
     i2c_data->transmitting_pid = term_invalid_term();
@@ -350,7 +391,7 @@ static term i2cdriver_write_bytes(Context *ctx, term pid, term req)
     }
 
     i2c_master_stop(i2c_data->cmd);
-    result = i2c_master_cmd_begin(I2C_NUM_0, i2c_data->cmd, portMAX_DELAY);
+    result = i2c_master_cmd_begin(i2c_data->i2c_num, i2c_data->cmd, portMAX_DELAY);
     i2c_cmd_link_delete(i2c_data->cmd);
 
     i2c_data->transmitting_pid = term_invalid_term();

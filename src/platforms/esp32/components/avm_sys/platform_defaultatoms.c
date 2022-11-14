@@ -93,11 +93,6 @@ static const char *const spi_cs_io_num_atom = "\xD" "spi_cs_io_num";
 static const char *const address_len_bits_atom = "\x10" "address_len_bits";
 static const char *const command_len_bits_atom = "\x10" "command_len_bits";
 
-//i2cdriver
-static const char *const scl_io_num_atom = "\xA" "scl_io_num";
-static const char *const sda_io_num_atom = "\xA" "sda_io_num";
-static const char *const i2c_clock_hz_atom = "\xC" "i2c_clock_hz";
-
 //uart
 static const char *const name_atom = "\x4" "name";
 static const char *const speed_atom = "\x5" "speed";
@@ -189,11 +184,6 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, spi_cs_io_num_atom) == SPI_CS_IO_NUM_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, address_len_bits_atom) == ADDRESS_LEN_BITS_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, command_len_bits_atom) == COMMAND_LEN_BITS_ATOM_INDEX;
-
-    //i2cdriver
-    ok &= globalcontext_insert_atom(glb, scl_io_num_atom) == SCL_IO_NUM_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, sda_io_num_atom) == SDA_IO_NUM_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, i2c_clock_hz_atom) == I2C_CLOCK_HZ_ATOM_INDEX;
 
     //uart
     ok &= globalcontext_insert_atom(glb, name_atom) == NAME_ATOM_INDEX;
