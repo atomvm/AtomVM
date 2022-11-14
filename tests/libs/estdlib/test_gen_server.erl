@@ -115,28 +115,21 @@ test_late_reply() ->
         try gen_server:call(Pid, {reply_after, 300, ok}, 200) of
             unexpected -> unexpected
         catch
+            % estdlib
             exit:timeout -> timeout;
-            _A:_B -> unexpected
+            % OTP
+            exit:{timeout, _} -> timeout;
+            T:V -> {unexpected, T, V}
         end,
     %%
     %% flush the late message in the mailbox
+    %% OTP's gen_server(3) man page says it's a two element tuple with a ref as
+    %% a first element.
     %%
-    timer:sleep(200),
-    {message_queue_len, 1} = erlang:process_info(self(), message_queue_len),
+    receive
+        {Ref, _} when is_reference(Ref) -> ok
+    end,
     ok = gen_server:call(Pid, {reply_after, 0, ok}),
-    {message_queue_len, 0} = erlang:process_info(self(), message_queue_len),
-    %%
-    %% test that timed out message is properly flushed
-    %%
-    timeout =
-        try gen_server:call(Pid, {reply_after, 300, ok}, 200) of
-            unexpected -> unexpected
-        catch
-            exit:timeout -> timeout;
-            _:_ -> unexpected
-        end,
-    %%
-    ok2 = gen_server:call(Pid, {reply_after, 0, ok2}),
     gen_server:stop(Pid),
     ok.
 

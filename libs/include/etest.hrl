@@ -51,6 +51,17 @@
             fail
     end
 ).
+-define(ASSERT_FAILURE(A),
+    case etest:assert_failure(fun() -> A end) of
+        ok ->
+            ok;
+        fail ->
+            erlang:display(
+                {failed_assert_failure, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, A}
+            ),
+            fail
+    end
+).
 -define(ASSERT_FAILURE(A, E),
     case etest:assert_failure(fun() -> A end, E) of
         ok ->

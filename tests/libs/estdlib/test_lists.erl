@@ -193,14 +193,14 @@ test_seq() ->
     ?ASSERT_MATCH(lists:seq(5, 1, -1), [5, 4, 3, 2, 1]),
     ?ASSERT_MATCH(lists:seq(1, 1, 0), [1]),
 
-    ?ASSERT_FAILURE(lists:seq(foo, 1), badarg),
-    ?ASSERT_FAILURE(lists:seq(1, bar), badarg),
-    ?ASSERT_FAILURE(lists:seq(foo, bar), badarg),
-    ?ASSERT_FAILURE(lists:seq(1, 2, tapas), badarg),
-    ?ASSERT_FAILURE(lists:seq(1, -1), badarg),
-    ?ASSERT_FAILURE(lists:seq(-1, 1, -1), badarg),
-    ?ASSERT_FAILURE(lists:seq(1, -1, 1), badarg),
-    ?ASSERT_FAILURE(lists:seq(1, 2, 0), badarg),
+    ?ASSERT_FAILURE(lists:seq(foo, 1)),
+    ?ASSERT_FAILURE(lists:seq(1, bar)),
+    ?ASSERT_FAILURE(lists:seq(foo, bar)),
+    ?ASSERT_FAILURE(lists:seq(1, 2, tapas)),
+    ?ASSERT_FAILURE(lists:seq(1, -1)),
+    ?ASSERT_FAILURE(lists:seq(-1, 1, -1)),
+    ?ASSERT_FAILURE(lists:seq(1, -1, 1)),
+    ?ASSERT_FAILURE(lists:seq(1, 2, 0)),
 
     ok.
 

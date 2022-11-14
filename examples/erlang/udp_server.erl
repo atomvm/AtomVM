@@ -23,7 +23,7 @@
 -export([start/0]).
 
 start() ->
-    case gen_udp:open(44404, [{active, true}]) of
+    case gen_udp:open(44404, [{active, true}, binary]) of
         {ok, Socket} ->
             io:format("Opened UDP socket on ~p.~n", [local_address(Socket)]),
             active_loop();

@@ -24,24 +24,16 @@
 
 test() ->
     {ok, _SupPid} = start_link(self()),
-    Pid1 =
-        receive
-            {ping_pong_server_ready, Pid} ->
-                Pid
-        after 2000 -> throw(timeout)
-        end,
-    pong = gen_server:call(Pid1, ping),
+    Pid1 = get_and_test_server(),
     gen_server:cast(Pid1, {crash, test}),
-    RestartedPid =
-        receive
-            {ping_pong_server_ready, Pid2} ->
-                Pid2
-        after 2000 -> throw(timeout)
-        end,
-    pong = gen_server:call(RestartedPid, ping),
-    false = erlang:is_process_alive(Pid1),
-    true = erlang:is_process_alive(RestartedPid),
-    ok = gen_server:call(RestartedPid, exit),
+    Pid2 = get_and_test_server(),
+    %   MonitorRef1 = erlang:monitor(process, Pid2),
+    ok = gen_server:call(Pid2, {stop, abnormal}),
+    %   receive {'DOWN', MonitorRef1, process, Pid2, abnormal} -> ok end,
+    Pid3 = get_and_test_server(),
+    %   MonitorRef2 = erlang:monitor(process, Pid3),
+    ok = gen_server:call(Pid3, {stop, normal}),
+    %   receive {'DOWN', MonitorRef2, process, Pid3, normal} -> ok end,
     no_restart =
         receive
             {ping_pong_server_ready, Pid3} ->
@@ -49,6 +41,16 @@ test() ->
         after 100 -> no_restart
         end,
     ok.
+
+get_and_test_server() ->
+    Pid =
+        receive
+            {ping_pong_server_ready, ReadyServer} ->
+                ReadyServer
+        after 2000 -> throw(timeout)
+        end,
+    pong = gen_server:call(Pid, ping),
+    Pid.
 
 start_link(Parent) ->
     supervisor:start_link({local, testsup}, ?MODULE, [Parent]).

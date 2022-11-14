@@ -47,7 +47,7 @@
 -type packet() :: string() | binary().
 -type reason() :: term().
 
--define(DEFAULT_PARAMS, [{active, false}, {buffer, 128}, {binary, true}, {timeout, infinity}]).
+-define(DEFAULT_PARAMS, [{active, true}, {buffer, 128}, {timeout, infinity}]).
 
 %%-----------------------------------------------------------------------------
 %% @doc     Create a UDP socket.  This function will instantiate a UDP socket

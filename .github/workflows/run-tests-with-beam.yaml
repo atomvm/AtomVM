@@ -60,3 +60,10 @@ jobs:
       working-directory: build
       run: |
         ./tests/test-erlang -b
+
+    # Test
+    - name: "Test: estdlib/ with BEAM"
+      timeout-minutes: 10
+      working-directory: build
+      run: |
+        erl -pa tests/libs/estdlib/ -pa tests/libs/estdlib/beams/ -pa libs/etest/src/beams -s tests -s init stop -noshell

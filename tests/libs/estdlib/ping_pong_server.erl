@@ -31,9 +31,8 @@ init([Parent]) ->
     Parent ! {ping_pong_server_ready, self()},
     {ok, nil}.
 
-handle_call(exit, From, State) ->
-    gen_server:reply(From, ok),
-    {stop, exit, noreply, State};
+handle_call({stop, Reason}, _From, State) ->
+    {stop, Reason, ok, State};
 handle_call(ping, From, State) ->
     gen_server:reply(From, pong),
     {noreply, State}.

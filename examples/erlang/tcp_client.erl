@@ -25,7 +25,7 @@
 start() ->
     Address = "localhost",
     Port = 44404,
-    case gen_tcp:connect(Address, Port, []) of
+    case gen_tcp:connect(Address, Port, [{active, true}, binary]) of
         {ok, Socket} ->
             io:format("Connected to ~p from ~p~n", [peer_address(Socket), local_address(Socket)]),
             loop(Socket);
