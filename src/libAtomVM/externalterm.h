@@ -71,7 +71,7 @@ term externalterm_to_term(const void *external_term, size_t size, Context *ctx, 
  * @returns the term deserialized from the input term, or an invalid term, if
  * deserialization fails.
  */
-enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term binary, size_t *bytes_read, size_t num_extra_terms);
+enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term binary, size_t *bytes_read);
 
 /**
  * @brief Create a binary from a term.

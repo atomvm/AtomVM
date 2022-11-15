@@ -129,7 +129,7 @@ term externalterm_to_term(const void *external_term, size_t size, Context *ctx, 
     return externalterm_to_term_internal(external_term, size, ctx, use_heap_fragment, &bytes_read, false);
 }
 
-enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term binary, size_t *bytes_read, size_t num_extra_terms)
+enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term binary, size_t *bytes_read)
 {
     if (!term_is_binary(binary)) {
         return EXTERNAL_TERM_BAD_ARG;

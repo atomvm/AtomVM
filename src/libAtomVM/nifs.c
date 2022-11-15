@@ -2357,14 +2357,12 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
     uint8_t return_used = 0;
-    size_t num_extra_terms = 0;
     if (argc == 2 && term_list_member(argv[1], USED_ATOM, ctx)) {
         return_used = 1;
-        num_extra_terms = 3;
     }
     term dst = term_invalid_term();
     size_t bytes_read = 0;
-    enum ExternalTermResult result = externalterm_from_binary(ctx, &dst, binary, &bytes_read, num_extra_terms);
+    enum ExternalTermResult result = externalterm_from_binary(ctx, &dst, binary, &bytes_read);
     switch (result) {
         case EXTERNAL_TERM_BAD_ARG:
             RAISE_ERROR(BADARG_ATOM);
