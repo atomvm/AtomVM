@@ -230,7 +230,7 @@ term interop_map_get_value_default(Context *ctx, term map, term key, term defaul
     }
 }
 
-int interop_atom_term_select_int(GlobalContext *global, const AtomStringIntPair *table, term atom)
+int interop_atom_term_select_int(const AtomStringIntPair *table, term atom, GlobalContext *global)
 {
     int i;
     for (i = 0; table[i].as_val != NULL; i++) {
