@@ -390,9 +390,7 @@ static inline bool term_is_boxed_integer(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_POSITIVE_INTEGER) {
-            return true;
-        }
+        return ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_POSITIVE_INTEGER);
     }
 
     return false;
@@ -432,9 +430,7 @@ static inline bool term_is_tuple(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == 0) {
-            return true;
-        }
+        return ((boxed_value[0] & 0x3F) == 0);
     }
 
     return false;
@@ -451,9 +447,7 @@ static inline bool term_is_reference(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == TERM_BOXED_REF) {
-            return true;
-        }
+        return ((boxed_value[0] & 0x3F) == TERM_BOXED_REF);
     }
 
     return false;
@@ -470,9 +464,7 @@ static inline bool term_is_function(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == TERM_BOXED_FUN) {
-            return true;
-        }
+        return ((boxed_value[0] & 0x3F) == TERM_BOXED_FUN);
     }
 
     return false;
@@ -1322,11 +1314,7 @@ static inline int term_list_length(term t, int *proper)
  */
 static inline bool term_exactly_equals(term a, term b, Context *ctx)
 {
-    if (a == b) {
-        return 1;
-    } else {
-        return term_compare(a, b, ctx) == 0;
-    }
+    return (a == b) || (term_compare(a, b, ctx) == 0);
 }
 
 /**
@@ -1339,12 +1327,8 @@ static inline bool term_exactly_equals(term a, term b, Context *ctx)
  */
 static inline bool term_equals(term a, term b, Context *ctx)
 {
-    if (a == b) {
-        return 1;
-    } else {
-        //TODO: add parameter for exactly equals.
-        return term_compare(a, b, ctx) == 0;
-    }
+    //TODO: add parameter for exactly equals.
+    return (a == b) || (term_compare(a, b, ctx) == 0);
 }
 
 #ifndef AVM_NO_FP
@@ -1354,10 +1338,9 @@ static inline bool term_is_float(term t)
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
         return (boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_FLOAT;
-
-    } else {
-        return false;
     }
+
+    return false;
 }
 
 static inline term term_from_float(avm_float_t f, Context *ctx)
@@ -1466,9 +1449,7 @@ static inline bool term_is_match_state(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == TERM_BOXED_BIN_MATCH_STATE) {
-            return true;
-        }
+        return ((boxed_value[0] & 0x3F) == TERM_BOXED_BIN_MATCH_STATE);
     }
 
     return false;
@@ -1554,9 +1535,7 @@ static inline bool term_is_map(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_MAP) {
-            return true;
-        }
+        return ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_MAP);
     }
 
     return false;
