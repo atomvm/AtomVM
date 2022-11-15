@@ -249,7 +249,7 @@ static inline bool term_is_boxed(term t)
 static inline bool term_is_movable_boxed(term t)
 {
     /* boxed: 10 */
-    if ((t & 0x3) == 0x2) {
+    if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
         switch (boxed_value[0] & TERM_BOXED_TAG_MASK) {
             case 0x10:
@@ -302,7 +302,7 @@ static inline int term_boxed_size(term t)
 static inline bool term_is_binary(term t)
 {
     /* boxed: 10 */
-    if ((t & 0x3) == 0x2) {
+    if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
         int masked_value = boxed_value[0] & TERM_BOXED_TAG_MASK;
         switch (masked_value) {
