@@ -80,4 +80,19 @@ int interop_atom_term_select_int(GlobalContext *global, const AtomStringIntPair 
  */
 term interop_kv_get_value_default(term kv, AtomString key, term default_value, GlobalContext *glb);
 
+/**
+ * @brief Get a value given a key (as AtomString) from any proplist or map
+ *
+ * @details This function allows to easily get values from proplists or maps, without poluting the
+ * atom table.  This function returns the invalid term if there is no such entry in kv.
+ * @param kv any proplist or map.
+ * @param key an AtomString, such as ATOM_STR("\x3", "key").
+ *
+ * @returns the value term in case given key exists, otherwise the invalid term.
+ */
+static inline term interop_kv_get_value(term kv, AtomString key, term default_value, GlobalContext *glb)
+{
+    return interop_kv_get_value_default(kv, key, term_invalid_term(), glb);
+}
+
 #endif
