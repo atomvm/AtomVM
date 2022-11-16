@@ -90,7 +90,7 @@ term interop_kv_get_value_default(term kv, AtomString key, term default_value, G
  *
  * @returns the value term in case given key exists, otherwise the invalid term.
  */
-static inline term interop_kv_get_value(term kv, AtomString key, term default_value, GlobalContext *glb)
+static inline term interop_kv_get_value(term kv, AtomString key, GlobalContext *glb)
 {
     return interop_kv_get_value_default(kv, key, term_invalid_term(), glb);
 }
