@@ -65,7 +65,7 @@ int interop_write_iolist(term t, char *p);
  * @param atom the atom used for comparison.
  * @returns the found int value which corresponds to the given atom.
  */
-int interop_atom_term_select_int(GlobalContext *global, const AtomStringIntPair *table, term atom);
+int interop_atom_term_select_int(const AtomStringIntPair *table, term atom, GlobalContext *global);
 
 /**
  * @brief Get a value given a key (as AtomString) from any proplist or map
