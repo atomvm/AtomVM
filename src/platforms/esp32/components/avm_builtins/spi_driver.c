@@ -566,7 +566,7 @@ static void spidriver_consume_mailbox(Context *ctx)
 
     term ret;
 
-    enum spi_cmd cmd = interop_atom_term_select_int(ctx->global, spi_cmd_table, cmd_term);
+    enum spi_cmd cmd = interop_atom_term_select_int(spi_cmd_table, cmd_term, ctx->global);
     switch (cmd) {
         case SPIReadAtCmd:
             TRACE("spi: read at.\n");
