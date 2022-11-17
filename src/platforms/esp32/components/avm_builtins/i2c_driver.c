@@ -435,7 +435,7 @@ static void i2cdriver_consume_mailbox(Context *ctx)
     mailbox_send(target, ret_msg);
     mailbox_destroy_message(message);
 
-    if (cmd == CLOSE_ATOM) {
+    if (cmd == I2CCloseCmd) {
         scheduler_terminate(ctx);
     }
 }
