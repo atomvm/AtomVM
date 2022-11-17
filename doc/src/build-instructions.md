@@ -129,7 +129,7 @@ The following software is required in order to build AtomVM for the ESP32 platfo
 * Espressif Xtensa tool chains
 * [Espressif IDF SDK](https://www.espressif.com/en/products/sdks/esp-idf) version 3.x (4.x support is currently _experimental_)
 * `cmake`
-* GNU `make`
+* GNU `make` (for ESP-IDF versions lower than 4)
 
 Instructions for downloading and installing the Espressif IDF SDK and tool chains are outside of the scope of this document.  Please consult the [IDF SDKGetting Started](https://docs.espressif.com/projects/esp-idf/en/release-v3.3/get-started/index.html) guide for more information.
 
@@ -140,22 +140,30 @@ Change directories to the `src/platforms/esp32` directory under the AtomVM sourc
 	shell$ cd <atomvm-source-tree-root>
 	shell$ cd src/platforms/esp32
 
-Start by updating the configuration of local `sdkconfig` file via the `menuconfig` Make target:
+Start by updating the default build configuration of local `sdkconfig` file via the `idf.py reconfigure` command:
 
-	shell$ make menuconfig
+	shell$ idf.py set-target esp32
+	shell$ idf.py reconfigure
 
-This command will bring up a curses dialog box.  You can exit the program by typing `E`.  Save the changes, and the program will exit.
+> Note.  For those familiar with esp-idf the build can be customized using `menuconfig` instead of `reconfigure`
+>
+>	`shell$ idf.py menuconfig`
+>
+>   This command will bring up a curses dialog box where you can make adjustments such as not including AtomVM components that
+>   are not desired in a particular build. You can also change the behavior of a crash in the VM to print the error and reboot,
+>   or halt after the error is printed. Extreme caution should be used when changing any non AtomVM settings. You can quit the
+>   program by typing `Q`.  Save the changes, and the program will exit.
 
-You can now build AtomvVM using the `make` command:
+You can now build AtomvVM using the build command:
 
-	shell$ make -j 8
+	shell$ idf.py build
 	...
 
 > Note.  You may specify `-j <n>`, where `<n>` is the number of CPUs you would like to assign to run the build in parallel.
 
 This command, once completed, will create the Espressif bootloader, partition table, and AtomVM binary.  The last line of the output should read something like the following:
 
-	To flash all build output, run 'make flash' or:
+	To flash all build output, run 'idf.py flash' or:
 	python /path/to/esp-idf-sdk/components/esptool_py/esptool/esptool.py --chip esp32
 	--port /dev/ttyUSB0 --baud 115200 --before default_reset --after hard_reset write_flash
 	-z --flash_mode dio --flash_freq 40m --flash_size detect
@@ -163,13 +171,13 @@ This command, once completed, will create the Espressif bootloader, partition ta
 	0x10000 /path-to-atomvm-source-tree/Atomvm/src/platforms/esp32/build/atomvvm-esp32.bin
 	0x8000 /path-to-atomvm-source-tree/Atomvm/src/platforms/esp32/build/partitions.bin
 
-At this point, you can run `make flash` to upload the 3 binaries up to your ESP32 device, and in some development scenarios, this is a preferable shortcut.
+At this point, you can run `idf.py flash` to upload the 3 binaries up to your ESP32 device, and in some development scenarios, this is a preferable shortcut.
 
 However, first, we will build a single binary image file containing all of the above 3 binaries, as well as the AtomVM core libraries.  See [Building a Release Image](#building-a-release-image), below.  But first, it is helpful to understand a bit about how the AtomVM partitioning scheme works, on the ESP32.
 
 ### Flash Layout
 
-The AtomVM Flash memory is partitioned to include areas for the above binary artifacts created from the build, as well areas for runtime information used by the ESP32 and compiled Erlang/Elixire code.
+The AtomVM Flash memory is partitioned to include areas for the above binary artifacts created from the build, as well areas for runtime information used by the ESP32 and compiled Erlang/Elixir code.
 
 The flash layout is roughly as follows (not to scale):
 
@@ -242,9 +250,9 @@ The `<atomvm-source-tree-root>/tools/release/esp32` directory contains the `mkim
 
 Running this script will generate a single `atomvm-<sha>.img` file in the `build` directory of the esp32 source tree, where `<sha>` is the git hash of the current checkout.  This image contains the ESP32 bootloader, AtomVM executable, and the `eavmlib` and `estdlib` Erlang libraries in one file, which can then be flashed to address `0x1000`.
 
-The `mkimage.sh` script is run as follows:
+The `mkimage.sh` script is run from the src/platform/esp32 directory as follows:
 
-    shell$ ./tools/release/esp32/mkimage.sh
+    shell$ ./build/mkimage.sh
     Writing output to /home/frege/AtomVM/src/platforms/esp32/build/atomvm-602e6bc.img
     =============================================
     Wrote bootloader at offset 0x1000 (4096)
@@ -267,9 +275,9 @@ But first, it is a good idea to erase the flash, e.g.,
     Chip erase completed successfully in 5.4s
     Hard resetting...
 
-You can then use the `./tools/dev/flash.sh` tool (or `esptool.py` directly, if you prefer), to flash the entire image to your device:
+You can then use the `./build/flash.sh` tool (or `esptool.py` directly, if you prefer), to flash the entire image to your device:
 
-    shell$ FLASH_OFFSET=0x1000 ./tools/dev/flash.sh ./src/platforms/esp32/build/atomvm-602e6bc.img
+    shell$ FLASH_OFFSET=0x1000 ./build/flash.sh ./build/atomvm-602e6bc.img
     esptool.py v2.8-dev
     Serial port /dev/tty.SLAB_USBtoUART
     Connecting........_
@@ -291,9 +299,13 @@ You can then use the `./tools/dev/flash.sh` tool (or `esptool.py` directly, if y
 
 > Note. Flashing the full AtomVM image will delete all entries in non-volatile storage.  Only flash the full image if you have a way to recover and re-write any such data.
 
+A `flashimage.sh` is also generated with each build that will flash the full image using the correct flash offset for the chip the build was configured for.
+
+	shell$ ./build/flashimage.sh
+
 Finally, you can then flash your own application, e.g.,
 
-    shell$ ./tools/dev/flash.sh examples/erlang/esp32/blink.avm
+    shell$ ./build/flash.sh ../../../build/examples/erlang/esp32/blink.avm
     %%
     %% Flashing examples/erlang/esp32/blink.avm (size=4k)
     %%

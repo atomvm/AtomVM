@@ -22,23 +22,23 @@
     segments => [
         #{
             name => "bootloader",
-            offset => "0x1000",
-            path => ["${ROOT_DIR}/src/platforms/esp32/build/bootloader/bootloader.bin"]
+            offset => "${BOOTLOADER_OFFSET}",
+            path => ["${BUILD_DIR}/bootloader/bootloader.bin"]
         },
         #{
             name => "partition-table",
             offset => "0x8000",
-            path => ["${ROOT_DIR}/src/platforms/esp32/build/partition_table/partition-table.bin", "${ROOT_DIR}/src/platforms/esp32/build/partitions.bin"]
+            path => ["${BUILD_DIR}/partition_table/partition-table.bin", "${BUILD_DIR}/partitions.bin"]
         },
         #{
             name => "AtomVM Virtual Machine",
             offset => "0x10000",
-            path => ["${ROOT_DIR}/src/platforms/esp32/build/atomvm-esp32.bin", "${ROOT_DIR}/src/platforms/esp32/build/atomvvm-esp32.bin"]
+            path => ["${BUILD_DIR}/atomvm-esp32.bin", "${ROOT_DIR}/src/platforms/esp32/build/atomvvm-esp32.bin"]
         },
         #{
             name => "AtomVM Core BEAM Library",
             offset =>  "0x1D0000",
-            path => ["${BUILD_DIR}/libs/atomvmlib.avm"]
+            path => ["${BUILD_DIR}/../../../../build/libs/atomvmlib.avm"]
         }
     ]
 }.

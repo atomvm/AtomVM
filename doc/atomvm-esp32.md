@@ -24,7 +24,7 @@ The ESP32-specific parts of the source code include implementations of:
 
 ## AtomVM Build
 
-AtomVM currently builds against the version 3 branch of the ESP IDF-SDK, and makes use of the make build system (as opposed to the CMake-based build, which is encouraged in version 4 and following of the IDF-SDK.)
+AtomVM currently builds against the version 3.3.6 thru version 4.4.3 of the ESP IDF-SDK, note versions lower than 4 must make use of the make build system (as opposed to the CMake-based build, which is used in version 4 and following of the IDF-SDK.)
 
 > Note.  Build and setup instructions for the IDF SDK and Xtensa tool chain are outside of the scope of this document.
 
@@ -165,9 +165,9 @@ The `tools/release/esp32` directory contains the `mkimage.sh` script that can be
 
 Running this script will generate a single `atomvm-<sha>.img` file in the `build` directory of the esp32 source tree, where `<sha>` is the git hash of the current checkout.  This image contains the ESP32 bootloader, AtomVM executable, and the `eavmlib` and `estdlib` Erlang libraries in one file, which can then be flashed to address `0x1000`.
 
-The `mkimage.sh` script is run as follows:
+After successfully building the VM with `make` or `idf.py build` the `mkimage.sh` script is run as follows (from the src/platforms/esp32 directory):
 
-    shell$ ./tools/release/esp32/mkimage.sh
+    shell$ ./build/mkimage.sh
     Writing output to /home/frege/AtomVM/src/platforms/esp32/build/atomvm-602e6bc.img
     =============================================
     Wrote bootloader at offset 0x1000 (4096)
@@ -190,9 +190,9 @@ But first, it is a good idea to erase the flash, e.g.,
     Chip erase completed successfully in 5.4s
     Hard resetting...
 
-You can then use the `./tools/dev/flash.sh` tool (or `esptool.py` directly, if you prefer), to flash the entire image to your device:
+You can then use the `./build/flashimage.sh` tool to flash the entire image to your device :
 
-    shell$ FLASH_OFFSET=0x1000 ./tools/dev/flash.sh ./src/platforms/esp32/build/atomvm-602e6bc.img
+    shell$ ./build/flashimage.sh
     esptool.py v2.8-dev
     Serial port /dev/tty.SLAB_USBtoUART
     Connecting........_
@@ -214,9 +214,16 @@ You can then use the `./tools/dev/flash.sh` tool (or `esptool.py` directly, if y
 
 > Note. Flashing the full AtomVM image will delete all entries in non-volatile storage.  Only flash the full image if you have a way to recover and re-write any such data.
 
+You can also use the `./build/flash.sh` tool (or `esptool.py` directly, if you prefer), to flash the image:
+
+    shell$ FLASH_OFFSET=0x1000 ./build/flash.sh ./build/atomvm-602e6bc.img
+    shell$ FLASH_OFFSET=0x1000 esptool.py ./build/atomvm-602e6bc.img
+
+>Note. FLASH_OFFSET=0x0 for esp32-s2, esp32-s3, and esp32-c3 chips.
+
 Finally, you can then flash your own application, e.g.,
 
-    shell$ ./tools/dev/flash.sh examples/erlang/esp32/blink.avm
+    shell$ ./build/flash.sh ../../../examples/erlang/esp32/blink.avm
     %%
     %% Flashing examples/erlang/esp32/blink.avm (size=4k)
     %%

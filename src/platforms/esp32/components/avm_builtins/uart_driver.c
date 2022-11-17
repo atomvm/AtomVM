@@ -208,9 +208,13 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
         uart_num = UART_NUM_0;
     } else if (!strcmp(uart_name, "UART1")) {
         uart_num = UART_NUM_1;
-    } else if (!strcmp(uart_name, "UART2")) {
+    }
+    #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S3)
+     else if (!strcmp(uart_name, "UART2")) {
         uart_num = UART_NUM_2;
-    } else {
+    }
+    #endif
+    else {
         AVM_ABORT();
     }
     free(uart_name);
