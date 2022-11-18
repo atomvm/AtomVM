@@ -23,7 +23,7 @@
 -export([start/0]).
 
 start() ->
-    etest:test([
+    ok = etest:test([
         test_lists,
         test_gen_server,
         test_gen_statem,

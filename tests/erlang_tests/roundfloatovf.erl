@@ -23,14 +23,24 @@
 -export([start/0]).
 
 start() ->
-    to_int(id(id([1.0e+65, 0]))).
+    to_int(id(id([1.0e+20, 0]))).
 
 to_int(A) ->
     try round(id(A)) of
-        B -> B
+        B when is_integer(B) ->
+            "BEAM" = erlang:system_info(machine),
+            "100000000000000000000" = integer_to_list(B),
+            0;
+        _Other ->
+            1
     catch
-        error:overflow -> -1;
-        _:_ -> 1
+        error:overflow ->
+            case erlang:system_info(machine) of
+                "BEAM" -> 2;
+                _ -> 0
+            end;
+        _:_ ->
+            3
     end.
 
 id([I | _T]) -> id(I);

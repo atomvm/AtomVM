@@ -23,7 +23,7 @@
 -export([start/0]).
 
 start() ->
-    case gen_tcp:listen(44404, []) of
+    case gen_tcp:listen(44404, [{active, true}, binary]) of
         {ok, ListenSocket} ->
             io:format("Listening on ~p.~n", [local_address(ListenSocket)]),
             spawn(fun() -> accept(ListenSocket) end),

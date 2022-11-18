@@ -171,11 +171,11 @@ test_remove() ->
     ok.
 
 test_update() ->
-    ?ASSERT_EQUALS(maps:update(foo, bar, maps:new()), #{foo => bar}),
+    ?ASSERT_FAILURE(maps:update(foo, bar, maps:new()), {badkey, foo}),
     ?ASSERT_EQUALS(maps:update(a, 10, #{a => 1, b => 2, c => 3}), #{a => 10, b => 2, c => 3}),
     ?ASSERT_EQUALS(maps:update(b, 20, #{a => 1, b => 2, c => 3}), #{a => 1, b => 20, c => 3}),
     ?ASSERT_EQUALS(maps:update(c, 30, #{a => 1, b => 2, c => 3}), #{a => 1, b => 2, c => 30}),
-    ?ASSERT_EQUALS(maps:update(d, 40, #{a => 1, b => 2, c => 3}), #{a => 1, b => 2, c => 3, d => 40}),
+    ?ASSERT_FAILURE(maps:update(d, 40, #{a => 1, b => 2, c => 3}), {badkey, d}),
     ok = check_bad_map(fun() -> maps:update(foo, bar, id(not_a_map)) end),
     ok.
 

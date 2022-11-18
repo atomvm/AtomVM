@@ -20,7 +20,7 @@ jobs:
         submodules: 'recursive'
 
     - name: "Install deps"
-      run: brew install cmake gperf doxygen erlang@21 ninja
+      run: brew install gperf doxygen erlang@21 ninja
 
     # Builder info
     - name: "System info"
@@ -37,17 +37,11 @@ jobs:
     - name: "Build: create build dir"
       run: mkdir build
 
-    # TODO: remove this workaround as soon as the issue is fixed.
-    - name: "Apply workarounds"
-      run: |
-        sed -i'.orig1' -e 's/{"test_map.beam", 0},//g' tests/test.c
-        sed -i'.orig2' -e 's/{"test_base64.beam", 0},//g' tests/test.c
-
     - name: "Build: run cmake"
       working-directory: build
       run: |
         export PATH="/usr/local/opt/erlang@21/bin:$PATH"
-        cmake -G Ninja ..
+        cmake -G Ninja -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl ..
 
     - name: "Build: run ninja"
       working-directory: build

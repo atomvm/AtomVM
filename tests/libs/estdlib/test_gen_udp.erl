@@ -25,12 +25,14 @@
 -include("etest.hrl").
 
 test() ->
-    ok = test_send_receive_active(false),
-    ok = test_send_receive_active(true),
+    ok = test_send_receive_active(false, binary),
+    ok = test_send_receive_active(true, binary),
+    ok = test_send_receive_active(false, list),
+    ok = test_send_receive_active(true, list),
     ok.
 
-test_send_receive_active(SpawnControllingProcess) ->
-    {ok, Socket} = gen_udp:open(0, [{active, true}]),
+test_send_receive_active(SpawnControllingProcess, Mode) ->
+    {ok, Socket} = gen_udp:open(0, [{active, true}, Mode]),
     {ok, Port} = inet:port(Socket),
 
     Self = self(),
@@ -39,7 +41,7 @@ test_send_receive_active(SpawnControllingProcess) ->
             true -> Self ! ready;
             _ -> ok
         end,
-        NumReceived = count_received(),
+        NumReceived = count_received(Mode),
         case SpawnControllingProcess of
             true ->
                 case SpawnControllingProcess of
@@ -100,12 +102,17 @@ send(Socket, Port, [Msg | Rest]) ->
     gen_udp:send(Socket, {127, 0, 0, 1}, Port, Msg),
     send(Socket, Port, Rest).
 
-count_received() ->
-    count_received(0).
+count_received(Mode) ->
+    count_received0(Mode, 0).
 
-count_received(I) ->
+count_received0(Mode, I) ->
     receive
-        {udp, _Pid, _Address, _Port, <<"foo">>} ->
-            count_received(I + 1)
+        {udp, _Pid, _Address, _Port, <<"foo">>} when Mode =:= binary ->
+            count_received0(Mode, I + 1);
+        {udp, _Pid, _Address, _Port, "foo"} when Mode =:= list ->
+            count_received0(Mode, I + 1);
+        Other ->
+            erlang:display({unexpected, Other}),
+            count_received0(Mode, I)
     after 500 -> I
     end.

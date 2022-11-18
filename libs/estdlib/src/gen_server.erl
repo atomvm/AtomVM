@@ -314,9 +314,9 @@ cast(Pid, Request) when is_pid(Pid) ->
 %%          function can be safely ignored.
 %% @end
 %%-----------------------------------------------------------------------------
--spec reply(From :: from(), Reply :: term) -> term().
-reply({Pid, _Ref} = From, Reply) ->
-    Pid ! {'$reply', From, Reply},
+-spec reply(from(), Reply :: term) -> term().
+reply({Pid, Ref}, Reply) ->
+    Pid ! {Ref, Reply},
     ok.
 
 %%
@@ -324,26 +324,13 @@ reply({Pid, _Ref} = From, Reply) ->
 %%
 
 %% @private
-call_internal(Pid, {_Tag, From, _Msg} = Msg, TimeoutMs) ->
+call_internal(Pid, {_Tag, From, _Term} = Msg, TimeoutMs) ->
     Pid ! Msg,
     wait_reply(From, TimeoutMs).
 
-wait_reply({Self, _Ref} = From, infinity) ->
+wait_reply({_Pid, Ref}, TimeoutMs) ->
     receive
-        {'$reply', From, Reply} ->
-            Reply;
-        {'$reply', {Self, _AnotherRef}, _Reply} ->
-            wait_reply(From, infinity)
-    end;
-wait_reply({Self, _Ref} = From, TimeoutMs) ->
-    StartMs = erlang:system_time(millisecond),
-    receive
-        {'$reply', From, Reply} ->
-            Reply;
-        {'$reply', {Self, _AnotherRef}, _Reply} ->
-            ElapsedMs = erlang:system_time(millisecond) - StartMs,
-            NewTimeoutMs = max(0, TimeoutMs - ElapsedMs),
-            wait_reply(From, NewTimeoutMs)
+        {Ref, Reply} -> Reply
     after TimeoutMs -> exit(timeout)
     end.
 
@@ -402,4 +389,8 @@ do_terminate(#state{mod = Mod, name = Name} = _State, Reason, ModState) ->
             Mod:terminate(Reason, ModState);
         false ->
             ok
+    end,
+    case Reason of
+        normal -> ok;
+        Other -> exit(Other)
     end.

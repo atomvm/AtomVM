@@ -18,26 +18,6 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
-%
-% This file is part of AtomVM.
-%
-% Copyright 2018 Fred Dushin <fred@dushin.net>
-%
-% Licensed under the Apache License, Version 2.0 (the "License");
-% you may not use this file except in compliance with the License.
-% You may obtain a copy of the License at
-%
-%    http://www.apache.org/licenses/LICENSE-2.0
-%
-% Unless required by applicable law or agreed to in writing, software
-% distributed under the License is distributed on an "AS IS" BASIS,
-% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-% See the License for the specific language governing permissions and
-% limitations under the License.
-%
-% SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
-%
-
 %%-----------------------------------------------------------------------------
 %% @doc This modules provides a basic testing framework for AtomVM Erlang
 %% libraries.
@@ -46,7 +26,7 @@
 -module(etest).
 
 -export([test/1]).
--export([assert_match/2, assert_equals/2, assert_true/1, assert_failure/2]).
+-export([assert_match/2, assert_equals/2, assert_true/1, assert_failure/1, assert_failure/2]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Tests a list of test modules
@@ -64,7 +44,10 @@
 -spec test(list(module())) -> ok | fail.
 test(Tests) ->
     Results = [{Test, run_test(Test)} || Test <- Tests],
-    console:puts("\n"),
+    case erlang:system_info(machine) of
+        "BEAM" -> io:format("\n");
+        _ -> console:puts("\n")
+    end,
     erlang:display(Results),
     check_results(Results).
 
@@ -105,6 +88,20 @@ assert_true(_) -> fail.
 %% @returns ok if evaluating F results in Error being thrown; fail, otherwise
 %% @end
 %%-----------------------------------------------------------------------------
+-spec assert_failure(fun()) -> ok | fail.
+assert_failure(F) ->
+    try
+        F(),
+        fail
+    catch
+        _:_ -> ok
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @param   F a function to evaluate
+%% @returns ok if evaluating F results in Error being thrown; fail, otherwise
+%% @end
+%%-----------------------------------------------------------------------------
 -spec assert_failure(fun(), Error :: atom()) -> ok | fail.
 assert_failure(F, E) ->
     try
@@ -124,13 +121,27 @@ assert_failure(F, E) ->
 run_test(Test) ->
     try
         Result = Test:test(),
-        console:puts("+"),
-        console:flush(),
+        case erlang:system_info(machine) of
+            "BEAM" ->
+                io:format("+");
+            _ ->
+                console:puts("+"),
+                console:flush()
+        end,
+        receive
+            Garbage -> erlang:display({test, Test, unexpected_msg, Garbage})
+        after 0 -> ok
+        end,
         Result
     catch
         _:E ->
-            console:puts("-"),
-            console:flush(),
+            case erlang:system_info(machine) of
+                "BEAM" ->
+                    io:format("-");
+                _ ->
+                    console:puts("-"),
+                    console:flush()
+            end,
             {exception, E}
     end.
 

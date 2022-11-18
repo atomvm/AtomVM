@@ -38,6 +38,22 @@
 ).
 
 start() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            ok = test_common();
+        _ ->
+            ok = test_common(),
+            ok = test_atom()
+    end,
+    0.
+
+test_common() ->
+    ok = run_test(fun() -> test_count_binary() end),
+    ok.
+
+test_atom() ->
+    % Most of these tests rely on a property of heap size that isn't
+    % verified with BEAM
     ok = run_test(fun() -> test_heap_sub_binary() end),
     ok = run_test(fun() -> test_const_sub_binary() end),
     ok = run_test(fun() -> test_non_const_sub_binary() end),
@@ -47,8 +63,7 @@ start() ->
     ok = run_test(fun() -> test_split_sub_binary() end),
     ok = run_test(fun() -> test_bit_syntax_tail() end),
     ok = run_test(fun() -> test_bit_syntax_get_binary() end),
-    ok = run_test(fun() -> test_count_binary() end),
-    0.
+    ok.
 
 test_heap_sub_binary() ->
     HeapSize0 = get_heap_size(),

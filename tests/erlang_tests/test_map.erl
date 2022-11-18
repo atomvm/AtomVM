@@ -293,7 +293,7 @@ generate_random_entry() ->
     {random_term(), random_term()}.
 
 random_term() ->
-    case random(5) of
+    case random_uniform(5) of
         1 ->
             random_atom();
         2 ->
@@ -307,17 +307,17 @@ random_term() ->
     end.
 
 random_atom() ->
-    case random(3) of
+    case random_uniform(3) of
         1 -> foo;
         2 -> bar;
         3 -> tapas
     end.
 
 random_int() ->
-    random(256).
+    random_uniform(256).
 
 random_tuple() ->
-    case random(3) of
+    case random_uniform(3) of
         1 ->
             {random_atom()};
         2 ->
@@ -327,14 +327,11 @@ random_tuple() ->
     end.
 
 random_binary() ->
-    Size = random(3) * 50,
-    atomvm:rand_bytes(Size).
+    Size = random_uniform(3) * 50,
+    rand_bytes(Size).
 
 random_list() ->
     binary_to_list(random_binary()).
-
-random(N) ->
-    (abs(atomvm:random()) rem N) + 1.
 
 remove_duplicates(KVList) ->
     reverse(remove_duplicates(reverse(KVList), [])).
@@ -369,3 +366,15 @@ create_test_map([{K, V} | T], Accum) ->
     create_test_map(T, Accum#{K => V}).
 
 id(X) -> X.
+
+rand_bytes(I) ->
+    case erlang:system_info(machine) of
+        "BEAM" -> crypto:strong_rand_bytes(I);
+        _ -> atomvm:rand_bytes(I)
+    end.
+
+random_uniform(N) ->
+    case erlang:system_info(machine) of
+        "BEAM" -> rand:uniform(N);
+        _ -> (abs(atomvm:random()) rem N) + 1
+    end.

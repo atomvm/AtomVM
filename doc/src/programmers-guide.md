@@ -909,7 +909,7 @@ For example:
 
     %% erlang
     Port = 44404,
-    case gen_udp:open(Port, [{active, true}]) of
+    case gen_udp:open(Port, [{active, true}, binary]) of
         {ok, Socket} ->
             {ok, SockName} = inet:sockname(Socket)
             io:format("Opened UDP socket on ~p.~n", [SockName])
@@ -917,7 +917,7 @@ For example:
             io:format("An error occurred opening UDP socket: ~p~n", [Error])
     end
 
-If the port is active, you can receive UDP messages in your application.  They will be delivered as a 5-tuple, starting with the `udp` atom, and containing the socket, address and port from which the message was sent, as well as the datagram packet, itself, as a binary.
+If the port is active, you can receive UDP messages in your application.  They will be delivered as a 5-tuple, starting with the `udp` atom, and containing the socket, address and port from which the message was sent, as well as the datagram packet, itself, as a list (by default) or a binary. To choose the format, pass `list` or `binary` in options, as with Erlang/OTP.
 
     %% erlang
     receive

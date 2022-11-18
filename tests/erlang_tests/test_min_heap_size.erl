@@ -33,7 +33,10 @@ start() ->
         ok
     end,
     {memory, Pid1MemorySize} = process_info(Pid1, memory),
-    assert(Pid1MemorySize < 1024),
+    case erlang:system_info(machine) of
+        "BEAM" -> ok;
+        _ -> assert(Pid1MemorySize < 1024)
+    end,
     Pid2 = spawn_opt(?MODULE, loop, [Self], [{min_heap_size, 1024}]),
     receive
         ok -> ok

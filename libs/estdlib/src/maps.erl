@@ -18,23 +18,6 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
-%%
-%% Copyright (c) 2021 dushin.net
-%% All rights reserved.
-%%
-%% Licensed under the Apache License, Version 2.0 (the "License");
-%% you may not use this file except in compliance with the License.
-%% You may obtain a copy of the License at
-%%
-%%     http://www.apache.org/licenses/LICENSE-2.0
-%%
-%% Unless required by applicable law or agreed to in writing, software
-%% distributed under the License is distributed on an "AS IS" BASIS,
-%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%% See the License for the specific language governing permissions and
-%% limitations under the License.
-%%
-
 %%-----------------------------------------------------------------------------
 %% @doc A <em>naive</em> implementation of the Erlang/OTP `maps' interface.
 %%
@@ -446,14 +429,14 @@ remove(_Key, Map) when not is_map(Map) ->
 %% @throws {badmap, Map}
 %% @doc Returns a new map with an updated key-value association.
 %%
-%% This function throws a `badmap' exception if `Map' is not a map.
+%% This function throws a `badmap' exception if `Map' is not a map and
+%% `{badkey, Key}` if key doesn't exist
 %% @end
 %%-----------------------------------------------------------------------------
 -spec update(Key :: key(), Value :: value(), Map :: map()) -> map().
-update(Key, Value, Map) when is_map(Map) ->
-    Map#{Key => Value};
-update(_Key, _Value, Map) when not is_map(Map) ->
-    throw({badmap, Map}).
+update(Key, Value, Map) ->
+    _ = ?MODULE:get(Key, Map),
+    Map#{Key => Value}.
 
 %%
 %% Internal functions

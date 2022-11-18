@@ -23,25 +23,33 @@
 -export([start/0, loop/1]).
 
 start() ->
-    assert(erlang:system_info(process_count) =:= 1),
-    assert(erlang:system_info(port_count) =:= 0),
+    Machine = erlang:system_info(machine),
+    ok = test_process_count(Machine),
+    ok = test_port_count(Machine),
     assert(erlang:system_info(atom_count) > 0),
     assert(erlang:system_info(wordsize) > 0),
-    assert(is_binary(erlang:system_info(system_architecture))),
-    assert(erlang:system_info(some_wierd_unused_key) =:= undefined),
-
-    Self = self(),
-    Pid = spawn(?MODULE, loop, [Self]),
-    receive
-        ok -> ok
+    case Machine of
+        "BEAM" ->
+            % beam returns a list and probably so should AtomVM.
+            assert(is_list(erlang:system_info(system_architecture)));
+        _ ->
+            assert(is_binary(erlang:system_info(system_architecture)))
     end,
-
-    assert(erlang:system_info(process_count) =:= 2),
-
-    Pid ! {Self, stop},
-    receive
-        ok -> 0
-    end.
+    case Machine of
+        "BEAM" ->
+            % beam raises badarg, and probably so should AtomVM.
+            ok =
+                try
+                    erlang:system_info(some_wierd_unused_key),
+                    unexpected
+                catch
+                    error:badarg ->
+                        ok
+                end;
+        _ ->
+            assert(erlang:system_info(some_wierd_unused_key) =:= undefined)
+    end,
+    0.
 
 loop(undefined) ->
     receive
@@ -53,3 +61,33 @@ loop(Pid) ->
     loop(undefined).
 
 assert(true) -> ok.
+
+test_port_count("BEAM") ->
+    N = erlang:system_info(port_count),
+    true = is_integer(N),
+    ok;
+test_port_count(_) ->
+    0 = erlang:system_info(port_count),
+    ok.
+
+test_process_count("BEAM") ->
+    _ = test_process_count(),
+    ok;
+test_process_count(_) ->
+    1 = test_process_count(),
+    ok.
+
+test_process_count() ->
+    Count = erlang:system_info(process_count),
+    Self = self(),
+    Pid = spawn(?MODULE, loop, [Self]),
+    receive
+        ok -> ok
+    end,
+    assert(erlang:system_info(process_count) =:= Count + 1),
+
+    Pid ! {Self, stop},
+    receive
+        ok -> ok
+    end,
+    Count.

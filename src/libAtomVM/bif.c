@@ -280,9 +280,12 @@ term bif_erlang_map_get_2(Context *ctx, term arg1, term arg2)
         }
         term err = term_alloc_tuple(2, ctx);
         term_put_tuple_element(err, 0, BADKEY_ATOM);
-        // TODO elt(2) of err term is supposed to be arg1 but may be invalidated by GC
-        term_put_tuple_element(err, 1, UNSUPPORTED_ATOM);
-
+        if (term_is_atom(arg1)) {
+            term_put_tuple_element(err, 1, arg1);
+        } else {
+            // TODO elt(2) of err term is supposed to be arg1 but may be invalidated by GC
+            term_put_tuple_element(err, 1, UNSUPPORTED_ATOM);
+        }
         RAISE_ERROR(err);
     }
     return term_get_map_value(arg2, pos);
