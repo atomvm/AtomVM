@@ -386,7 +386,7 @@ static void i2cdriver_consume_mailbox(Context *ctx)
 
     term ret;
 
-    enum i2c_cmd cmd = interop_atom_term_select_int(ctx->global, cmd_table, cmd_term);
+    enum i2c_cmd cmd = interop_atom_term_select_int(cmd_table, cmd_term, ctx->global);
     switch (cmd) {
         case I2CBeginTransmissionCmd:
             ret = i2cdriver_begin_transmission(ctx, pid, req);

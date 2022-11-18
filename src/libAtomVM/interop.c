@@ -246,7 +246,7 @@ term interop_map_get_value_default(Context *ctx, term map, term key, term defaul
     }
 }
 
-int interop_atom_term_select_int(GlobalContext *global, const AtomStringIntPair *table, term atom)
+int interop_atom_term_select_int(const AtomStringIntPair *table, term atom, GlobalContext *global)
 {
     int i;
     for (i = 0; table[i].as_val != NULL; i++) {
@@ -261,7 +261,7 @@ term interop_kv_get_value_default(term kv, AtomString key, term default_value, G
 {
     term key_term = globalcontext_existing_term_from_atom_string(glb, key);
     if (term_is_invalid_term(key_term)) {
-        return key_term;
+        return default_value;
     }
 
     if (term_is_nonempty_list(kv)) {

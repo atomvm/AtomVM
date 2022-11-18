@@ -251,12 +251,12 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
             AVM_ABORT();
     }
 
-    uart_hw_flowcontrol_t flow_control = interop_atom_term_select_int(ctx->global, flow_control_table, flow_control_term);
+    uart_hw_flowcontrol_t flow_control = interop_atom_term_select_int(flow_control_table, flow_control_term, ctx->global);
     if (flow_control < 0) {
         AVM_ABORT();
     }
 
-    uart_parity_t parity = interop_atom_term_select_int(ctx->global, parity_table, parity_term);
+    uart_parity_t parity = interop_atom_term_select_int(parity_table, parity_term, ctx->global);
     if (parity < 0) {
         AVM_ABORT();
     }
@@ -461,7 +461,7 @@ static void uart_driver_consume_mailbox(Context *ctx)
 
         term cmd_term = term_is_atom(req) ? req : term_get_tuple_element(req, 0);
 
-        enum uart_cmd cmd = interop_atom_term_select_int(ctx->global, cmd_table, cmd_term);
+        enum uart_cmd cmd = interop_atom_term_select_int(cmd_table, cmd_term, ctx->global);
         switch (cmd) {
             case UARTReadCmd:
                 TRACE("read\n");

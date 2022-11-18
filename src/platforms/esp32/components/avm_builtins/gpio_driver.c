@@ -137,7 +137,7 @@ static inline term gpio_set_pin_mode(Context *ctx, term gpio_num_term, term mode
 {
     int gpio_num = term_to_int(gpio_num_term);
 
-    gpio_mode_t mode = interop_atom_term_select_int(ctx->global, pin_mode_table, mode_term);
+    gpio_mode_t mode = interop_atom_term_select_int(pin_mode_table, mode_term, ctx->global);
     if (UNLIKELY(mode < 0)) {
         return ERROR_ATOM;
     }
@@ -152,7 +152,7 @@ static inline term gpio_set_pin_mode(Context *ctx, term gpio_num_term, term mode
 
 static gpio_pull_mode_t get_pull_mode(Context *ctx, term pull)
 {
-    return interop_atom_term_select_int(ctx->global, pull_mode_table, pull);
+    return interop_atom_term_select_int(pull_mode_table, pull, ctx->global);
 }
 
 static inline term set_pin_pull_mode(Context *ctx, term gpio_num_term, term pull)
@@ -197,7 +197,7 @@ static inline term gpio_digital_write(Context *ctx, term gpio_num_term, term lev
             return ERROR_ATOM;
         }
     } else {
-        level = interop_atom_term_select_int(ctx->global, pin_level_table, level_term);
+        level = interop_atom_term_select_int(pin_level_table, level_term, ctx->global);
         if (UNLIKELY(level < 0)) {
             return ERROR_ATOM;
         }
@@ -431,7 +431,7 @@ static void consume_gpio_mailbox(Context *ctx)
 
     term ret;
 
-    enum gpio_cmd cmd = interop_atom_term_select_int(ctx->global, gpio_cmd_table, cmd_term);
+    enum gpio_cmd cmd = interop_atom_term_select_int(gpio_cmd_table, cmd_term, ctx->global);
     switch (cmd) {
         case GPIOSetLevelCmd:
             ret = gpiodriver_set_level(ctx, req);

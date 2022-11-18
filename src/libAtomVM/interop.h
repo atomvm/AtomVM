@@ -70,7 +70,7 @@ int interop_write_iolist(term t, char *p);
  * @param atom the atom used for comparison.
  * @returns the found int value which corresponds to the given atom.
  */
-int interop_atom_term_select_int(GlobalContext *global, const AtomStringIntPair *table, term atom);
+int interop_atom_term_select_int(const AtomStringIntPair *table, term atom, GlobalContext *global);
 
 /**
  * @brief Get a value given a key (as AtomString) from any proplist or map
@@ -84,6 +84,21 @@ int interop_atom_term_select_int(GlobalContext *global, const AtomStringIntPair 
  * @returns the value term in case given key exists, otherwise the default_value.
  */
 term interop_kv_get_value_default(term kv, AtomString key, term default_value, GlobalContext *glb);
+
+/**
+ * @brief Get a value given a key (as AtomString) from any proplist or map
+ *
+ * @details This function allows to easily get values from proplists or maps, without poluting the
+ * atom table.  This function returns the invalid term if there is no such entry in kv.
+ * @param kv any proplist or map.
+ * @param key an AtomString, such as ATOM_STR("\x3", "key").
+ *
+ * @returns the value term in case given key exists, otherwise the invalid term.
+ */
+static inline term interop_kv_get_value(term kv, AtomString key, GlobalContext *glb)
+{
+    return interop_kv_get_value_default(kv, key, term_invalid_term(), glb);
+}
 
 #ifdef __cplusplus
 }
