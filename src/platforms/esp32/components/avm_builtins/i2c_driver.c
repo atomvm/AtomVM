@@ -89,7 +89,7 @@ struct I2CData
     i2c_port_t i2c_num;
 };
 
-#define I2C_VALIDATE_NOT_INVALID(moniker)                       \
+#define I2C_VALIDATE_NOT_INVALID(moniker)                   \
     if (term_is_invalid_term(moniker##_term)) {             \
         ESP_LOGE(TAG, "Missing parameter: " #moniker "\n"); \
         goto free_and_exit;                                 \
@@ -107,24 +107,20 @@ Context *i2c_driver_create_port(GlobalContext *global, term opts)
     i2c_data->transmitting_pid = term_invalid_term();
 
     term scl_io_num_term = interop_kv_get_value(
-        opts, ATOM_STR("\xA", "scl_io_num"), global
-    );
+        opts, ATOM_STR("\xA", "scl_io_num"), global);
     I2C_VALIDATE_NOT_INVALID(scl_io_num);
 
     term sda_io_num_term = interop_kv_get_value(
-        opts, ATOM_STR("\xA", "sda_io_num"), global
-    );
+        opts, ATOM_STR("\xA", "sda_io_num"), global);
     I2C_VALIDATE_NOT_INVALID(sda_io_num);
 
     term clock_hz_term = interop_kv_get_value(
-        opts, ATOM_STR("\xC", "i2c_clock_hz"), global
-    );
+        opts, ATOM_STR("\xC", "i2c_clock_hz"), global);
     I2C_VALIDATE_NOT_INVALID(clock_hz);
 
     i2c_data->i2c_num = I2C_NUM_0;
     term i2c_num_term = interop_kv_get_value(
-        opts, ATOM_STR("\x7", "i2c_num"), global
-    );
+        opts, ATOM_STR("\x7", "i2c_num"), global);
     if (!term_is_invalid_term(i2c_num_term)) {
         if (!term_is_integer(i2c_num_term)) {
             ESP_LOGE(TAG, "Invalid parameter: i2c_num is not an integer\n");
