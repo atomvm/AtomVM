@@ -50,6 +50,7 @@ set(HEADER_FILES
     port.h
     refc_binary.h
     scheduler.h
+    stacktrace.h
     sys.h
     term_typedef.h
     term.h
@@ -81,6 +82,7 @@ set(SOURCE_FILES
     port.c
     refc_binary.c
     scheduler.c
+    stacktrace.c
     term.c
     timer_wheel.c
     valueshashtable.c
@@ -125,6 +127,10 @@ endif()
 
 if (AVM_VERBOSE_ABORT)
     target_compile_definitions(libAtomVM PUBLIC AVM_VERBOSE_ABORT)
+endif()
+
+if(AVM_CREATE_STACKTRACES)
+    target_compile_definitions(libAtomVM PUBLIC AVM_CREATE_STACKTRACES)
 endif()
 
 # Automatically use zlib if present to load .beam files

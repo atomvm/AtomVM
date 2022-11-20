@@ -37,10 +37,16 @@ macro(pack_archive avm_name)
         DEPENDS ${BEAMS}
     )
 
+    if(AVM_RELEASE)
+        set(INCLUDE_LINES "")
+    else()
+        set(INCLUDE_LINES "-i")
+    endif()
+
     add_custom_target(
         ${avm_name} ALL
         DEPENDS ${avm_name}_beams PackBEAM
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${avm_name}.avm ${BEAMS}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${BEAMS}
         COMMENT "Packing archive ${avm_name}.avm"
         VERBATIM
     )
@@ -64,6 +70,12 @@ macro(pack_runnable avm_name main)
         DEPENDS Elixir.${main}.beam
     )
 
+    if(AVM_RELEASE)
+        set(INCLUDE_LINES "")
+    else()
+        set(INCLUDE_LINES "-i")
+    endif()
+
     foreach(archive_name ${ARGN})
         if(${archive_name} STREQUAL "exavmlib")
             set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/lib/${archive_name}.avm)
@@ -75,7 +87,7 @@ macro(pack_runnable avm_name main)
 
     add_custom_target(
         ${avm_name} ALL
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${avm_name}.avm Elixir.${main}.beam ${ARCHIVES}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${avm_name}.avm Elixir.${main}.beam ${ARCHIVES}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
