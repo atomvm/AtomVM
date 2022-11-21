@@ -20,13 +20,13 @@
 #
 
 escript "@CMAKE_BINARY_DIR@/mkimage.erl" \
-    --root_dir "@CMAKE_BINARY_DIR@/../../.." \
+    --root_dir "@CMAKE_BINARY_DIR@/../../../.." \
     --config "@CMAKE_BINARY_DIR@/mkimage.config" \
-    --out "@CMAKE_BINARY_DIR@/atomvm-esp32-@ATOMVM_VERSION@.img" \
+    --out "@CMAKE_BINARY_DIR@/atomvm-@CONFIG_IDF_TARGET@-@ATOMVM_VERSION@.img" \
     "$@"
 
 echo "============================================="
 
 echo ""
-echo "AtomVM ESP32 version @ATOMVM_VERSION@ image written to:"
-echo "@CMAKE_BINARY_DIR@/atomvm-esp32-@ATOMVM_VERSION@.img"
+echo "AtomVM @CONFIG_IDF_TARGET@ version @ATOMVM_VERSION@ image written to:"
+echo "@CMAKE_BINARY_DIR@/atomvm-@CONFIG_IDF_TARGET@-@ATOMVM_VERSION@.img"

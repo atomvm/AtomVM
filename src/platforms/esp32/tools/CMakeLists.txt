@@ -26,7 +26,7 @@ project (ReleaseEsp32)
 ## the code here .../GetVersion.cmake and AtomVM/version.cmake should be reworked so they can be used
 ## here as well as for the "generic_unix" port.
 
-include(${CMAKE_SOURCE_DIR}/../../../version.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../../../../version.cmake)
 
 if (ATOMVM_DEV)
     set(ATOMVM_GIT_REVISION "<unknown>")
