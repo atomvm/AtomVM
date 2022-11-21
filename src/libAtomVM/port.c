@@ -24,57 +24,6 @@
 #include "globalcontext.h"
 #include "mailbox.h"
 
-term port_create_tuple2(Context *ctx, term a, term b)
-{
-    term terms[2];
-    terms[0] = a;
-    terms[1] = b;
-
-    return port_create_tuple_n(ctx, 2, terms);
-}
-
-term port_create_tuple3(Context *ctx, term a, term b, term c)
-{
-    term terms[3];
-    terms[0] = a;
-    terms[1] = b;
-    terms[2] = c;
-
-    return port_create_tuple_n(ctx, 3, terms);
-}
-
-term port_create_tuple_n(Context *ctx, size_t num_terms, term *terms)
-{
-    term ret = term_alloc_tuple(num_terms, ctx);
-
-    for (size_t i = 0; i < num_terms; ++i) {
-        term_put_tuple_element(ret, i, terms[i]);
-    }
-
-    return ret;
-}
-
-term port_create_error_tuple(Context *ctx, term reason)
-{
-    return port_create_tuple2(ctx, ERROR_ATOM, reason);
-}
-
-term port_create_sys_error_tuple(Context *ctx, term syscall, int errno)
-{
-    term reason = port_create_tuple2(ctx, syscall, term_from_int32(errno));
-    return port_create_error_tuple(ctx, reason);
-}
-
-term port_create_ok_tuple(Context *ctx, term t)
-{
-    return port_create_tuple2(ctx, OK_ATOM, t);
-}
-
-term port_create_reply(Context *ctx, term ref, term payload)
-{
-    return port_create_tuple2(ctx, ref, payload);
-}
-
 void port_send_message(GlobalContext *glb, term pid, term msg)
 {
     int local_process_id = term_to_local_process_id(pid);
@@ -90,7 +39,7 @@ void port_send_message_nolock(GlobalContext *glb, term pid, term msg)
 void port_ensure_available(Context *ctx, size_t size)
 {
     if (context_avail_free_memory(ctx) < size) {
-        switch (memory_ensure_free(ctx, size)) {
+        switch (memory_ensure_free_opt(ctx, size, MEMORY_NO_GC)) {
             case MEMORY_GC_OK:
                 break;
             case MEMORY_GC_ERROR_FAILED_ALLOCATION:
@@ -124,28 +73,28 @@ int port_is_standard_port_command(term t)
     }
 }
 
-term port_heap_create_tuple2(term **heap_ptr, term a, term b)
+term port_heap_create_tuple2(Heap *heap, term a, term b)
 {
     term terms[2];
     terms[0] = a;
     terms[1] = b;
 
-    return port_heap_create_tuple_n(heap_ptr, 2, terms);
+    return port_heap_create_tuple_n(heap, 2, terms);
 }
 
-term port_heap_create_tuple3(term **heap_ptr, term a, term b, term c)
+term port_heap_create_tuple3(Heap *heap, term a, term b, term c)
 {
     term terms[3];
     terms[0] = a;
     terms[1] = b;
     terms[2] = c;
 
-    return port_heap_create_tuple_n(heap_ptr, 3, terms);
+    return port_heap_create_tuple_n(heap, 3, terms);
 }
 
-term port_heap_create_tuple_n(term **heap_ptr, size_t num_terms, term *terms)
+term port_heap_create_tuple_n(Heap *heap, size_t num_terms, term *terms)
 {
-    term ret = term_heap_alloc_tuple(num_terms, heap_ptr);
+    term ret = term_alloc_tuple(num_terms, heap);
 
     for (size_t i = 0; i < num_terms; ++i) {
         term_put_tuple_element(ret, i, terms[i]);
@@ -154,23 +103,23 @@ term port_heap_create_tuple_n(term **heap_ptr, size_t num_terms, term *terms)
     return ret;
 }
 
-term port_heap_create_error_tuple(term **heap_ptr, term reason)
+term port_heap_create_error_tuple(Heap *heap, term reason)
 {
-    return port_heap_create_tuple2(heap_ptr, ERROR_ATOM, reason);
+    return port_heap_create_tuple2(heap, ERROR_ATOM, reason);
 }
 
-term port_heap_create_sys_error_tuple(term **heap_ptr, term syscall, int errno)
+term port_heap_create_sys_error_tuple(Heap *heap, term syscall, int errno)
 {
-    term reason = port_heap_create_tuple2(heap_ptr, syscall, term_from_int32(errno));
-    return port_heap_create_error_tuple(heap_ptr, reason);
+    term reason = port_heap_create_tuple2(heap, syscall, term_from_int32(errno));
+    return port_heap_create_error_tuple(heap, reason);
 }
 
-term port_heap_create_ok_tuple(term **heap_ptr, term t)
+term port_heap_create_ok_tuple(Heap *heap, term t)
 {
-    return port_heap_create_tuple2(heap_ptr, OK_ATOM, t);
+    return port_heap_create_tuple2(heap, OK_ATOM, t);
 }
 
-term port_heap_create_reply(term **heap_ptr, term ref, term payload)
+term port_heap_create_reply(Heap *heap, term ref, term payload)
 {
-    return port_heap_create_tuple2(heap_ptr, ref, payload);
+    return port_heap_create_tuple2(heap, ref, payload);
 }

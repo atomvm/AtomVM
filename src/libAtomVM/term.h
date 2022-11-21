@@ -153,12 +153,13 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
  * to a reference counter, so that the block can be free'd when no other terms reference
  * the created object.  (The reference count will be initialized to 1).  If the data is
  * non-NULL, it will be copied into the newly allocated block of memory.
- * @param ctx the context in which to allocate memory in the heap
  * @param size the size (in bytes) of the data to allocate
  * @param is_const designates whether the data pointed to is "const", such as a term literal
+ * @param heap the heap to allocate the binary in
+ * @param glb the global context as refc binaries are global
  * @return a term (reference) pointing to the newly allocated binary in the process heap.
  */
-term term_alloc_refc_binary(Context *ctx, size_t size, bool is_const);
+term term_alloc_refc_binary(size_t size, bool is_const, Heap *heap, GlobalContext *glb);
 
 /**
  * @brief Create a sub-binary
@@ -169,10 +170,10 @@ term term_alloc_refc_binary(Context *ctx, size_t size, bool is_const);
  * @param binary the referenced binary
  * @param offset the offset into the referenced binary to start the sub-binary
  * @param len the length (in bytes) of the sub-binary
- * @param ctx the context in which to allocate memory in the heap
+ * @param heap the heap to allocate the binary in
  * @return a term (reference) pointing to the newly allocated sub-binary in the process heap.
  */
-term term_alloc_sub_binary(term binary, size_t offset, size_t len, Context *ctx);
+term term_alloc_sub_binary(term binary, size_t offset, size_t len, Heap *heap);
 
 /**
  * @brief Gets a pointer to a term stored on the heap
@@ -766,22 +767,17 @@ static inline avm_int64_t term_maybe_unbox_int64(term maybe_boxed_int)
     }
 }
 
-static inline void term_put_int(term *boxed_int, avm_int_t value)
+static inline term term_make_boxed_int(avm_int_t value, Heap *heap)
 {
+    term *boxed_int = memory_heap_alloc(heap, 1 + BOXED_TERMS_REQUIRED_FOR_INT);
     boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
     boxed_int[1] = value;
-}
-
-static inline term term_make_boxed_int(avm_int_t value, Context *ctx)
-{
-    term *boxed_int = memory_heap_alloc(ctx, 1 + BOXED_TERMS_REQUIRED_FOR_INT);
-    term_put_int(boxed_int, value);
-
     return ((term) boxed_int) | TERM_BOXED_VALUE_TAG;
 }
 
-static inline void term_put_int64(term *boxed_int, avm_int64_t large_int64)
+static inline term term_make_boxed_int64(avm_int64_t large_int64, Heap *heap)
 {
+    term *boxed_int = memory_heap_alloc(heap, 1 + BOXED_TERMS_REQUIRED_FOR_INT64);
     boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT64 << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
     #if BOXED_TERMS_REQUIRED_FOR_INT64 == 1
         boxed_int[1] = large_int64;
@@ -798,35 +794,19 @@ static inline void term_put_int64(term *boxed_int, avm_int64_t large_int64)
     #else
         #error "unsupported configuration."
     #endif
-}
-
-static inline term term_make_boxed_int64(avm_int64_t large_int64, Context *ctx)
-{
-    term *boxed_int = memory_heap_alloc(ctx, 1 + BOXED_TERMS_REQUIRED_FOR_INT64);
-    term_put_int64(boxed_int, large_int64);
-
     return ((term) boxed_int) | TERM_BOXED_VALUE_TAG;
 }
 
-static inline term term_make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
+static inline term term_make_maybe_boxed_int64(avm_int64_t value, Heap *heap)
 {
     #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
         if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
-            if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-                return term_invalid_term();
-            }
-
-            return term_make_boxed_int64(value, ctx);
-
+            return term_make_boxed_int64(value, heap);
         }
     #endif
 
     if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
-        if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-            return term_invalid_term();
-        }
-
-        return term_make_boxed_int(value, ctx);
+        return term_make_boxed_int(value, heap);
 
     } else {
         return term_from_int(value);
@@ -961,45 +941,23 @@ static inline const char *term_binary_data(term t)
 * Make sure to initialize before use, if needed (e.g., via memset).
 * The binary may be allocated as a refc if it is large enough.
 * @param size size of binary data buffer.
-* @param ctx the context that owns the memory that will be allocated.
+* @param heap the heap to allocate the binary in
+* @param glb the global context as refc binaries are global
 * @return a term pointing to the boxed binary pointer.
 */
-static inline term term_create_uninitialized_binary(uint32_t size, Context *ctx)
+static inline term term_create_uninitialized_binary(uint32_t size, Heap *heap, GlobalContext *glb)
 {
     if (term_binary_size_is_heap_binary(size)) {
         int size_in_terms = term_binary_data_size_in_terms(size);
 
-        term *boxed_value = memory_heap_alloc(ctx, size_in_terms + 1);
+        term *boxed_value = memory_heap_alloc(heap, size_in_terms + 1);
         boxed_value[0] = (size_in_terms << 6) | TERM_BOXED_HEAP_BINARY;
         boxed_value[1] = size;
 
         return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
     } else {
-        return term_alloc_refc_binary(ctx, size, false);
+        return term_alloc_refc_binary(size, false, heap, glb);
     }
-}
-
-/**
-* @brief Create an uninitialized binary on a separate heap.
-*
-* @details Allocates a binary on the heap, and returns a term pointing to it.
-* Note that the data in the binary is uninitialized and could contain any garbage.
-* Make sure to initialize before use, if needed (e.g., via memset).
-* The binary is always allocated on the separate heap.
-* @param size size of binary data buffer.
-* @param heap_ptr pointer on allocated memory
-* @return a term pointing to the boxed binary pointer.
-*/
-static inline term term_heap_create_uninitialized_binary(uint32_t size, term **heap_ptr)
-{
-    int size_in_terms = term_binary_data_size_in_terms(size);
-
-    term *boxed_value = *heap_ptr;
-    *heap_ptr += size_in_terms + 1;
-    boxed_value[0] = (size_in_terms << 6) | TERM_BOXED_HEAP_BINARY;
-    boxed_value[1] = size;
-
-    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
 }
 
 /**
@@ -1008,28 +966,13 @@ static inline term term_heap_create_uninitialized_binary(uint32_t size, term **h
  * @details Allocates a binary on the heap, and returns a term pointing to it.
  * @param data binary data.
  * @param size size of binary data buffer.
- * @param ctx the context that owns the memory that will be allocated.
+ * @param heap the heap to allocate the binary in
+ * @param glb the global context as refc binaries are global
  * @return a term pointing to the boxed binary pointer.
  */
-static inline term term_from_literal_binary(const void *data, uint32_t size, Context *ctx)
+static inline term term_from_literal_binary(const void *data, uint32_t size, Heap *heap, GlobalContext *glb)
 {
-    term binary = term_create_uninitialized_binary(size, ctx);
-    memcpy((void *) term_binary_data(binary), data, size);
-    return binary;
-}
-
-/**
- * @brief Term from binary data, on a separate heap
- *
- * @details Allocates a binary on the heap, and returns a term pointing to it.
- * @param data binary data.
- * @param size size of binary data buffer.
- * @param heap_ptr pointer on allocated memory
- * @return a term pointing to the boxed binary pointer.
- */
-static inline term term_heap_from_literal_binary(const void *data, uint32_t size, term **heap_ptr)
-{
-    term binary = term_heap_create_uninitialized_binary(size, heap_ptr);
+    term binary = term_create_uninitialized_binary(size, heap, glb);
     memcpy((void *) term_binary_data(binary), data, size);
     return binary;
 }
@@ -1061,16 +1004,17 @@ static inline size_t term_sub_binary_heap_size(term binary, size_t len)
  * @param binary source binary
  * @param offset offset into the source binary marking the start of the sub-binary
  * @param len desired length of the sub-binary
- * @param ctx the context that owns the memory that will be allocated.
+ * @param heap the heap to allocate memory in
+ * @param glb the global context as refc binaries are global
  * @return a term pointing to the boxed binary pointer.
  */
-static inline term term_maybe_create_sub_binary(term binary, size_t offset, size_t len, Context *ctx)
+static inline term term_maybe_create_sub_binary(term binary, size_t offset, size_t len, Heap *heap, GlobalContext *glb)
 {
     if (term_is_refc_binary(binary) && len >= SUB_BINARY_MIN) {
-        return term_alloc_sub_binary(binary, offset, len, ctx);
+        return term_alloc_sub_binary(binary, offset, len, heap);
     } else {
         const char *data = term_binary_data(binary);
-        return term_from_literal_binary(data + offset, len, ctx);
+        return term_from_literal_binary(data + offset, len, heap, glb);
     }
 }
 
@@ -1081,9 +1025,9 @@ static inline void term_set_refc_binary_data(term t, const void *data)
     boxed_value[3] = (term) data;
 }
 
-static inline term term_from_const_binary(const void *data, uint32_t size, Context *ctx)
+static inline term term_from_const_binary(const void *data, uint32_t size, Heap *heap, GlobalContext *glb)
 {
-    term binary = term_alloc_refc_binary(ctx, size, true);
+    term binary = term_alloc_refc_binary(size, true, heap, glb);
     term_set_refc_binary_data(binary, data);
     return binary;
 }
@@ -1093,12 +1037,13 @@ static inline term term_from_const_binary(const void *data, uint32_t size, Conte
 *
 * @details Allocates a binary on the heap, and returns a term pointing to it.
 * @param size size of binary data buffer.
-* @param ctx the context that owns the memory that will be allocated.
+* @param heap the heap to allocate memory in
+* @param glb the global context as refc binaries are global
 * @return a term pointing to the boxed binary pointer.
 */
-static inline term term_create_empty_binary(uint32_t size, Context *ctx)
+static inline term term_create_empty_binary(uint32_t size, Heap *heap, GlobalContext *glb)
 {
-    term t = term_create_uninitialized_binary(size, ctx);
+    term t = term_create_uninitialized_binary(size, heap, glb);
     memset((char *) term_binary_data(t), 0x00, size);
     return t;
 }
@@ -1148,39 +1093,12 @@ static inline int term_bs_insert_binary(term t, int offset, term src, int n)
  * @brief Get a ref term from ref ticks
  *
  * @param ref_ticks an unique uint64 value that will be used to create ref term.
- * @param ctx the context that owns the memory that will be allocated.
+ * @param heap the heap to allocate memory in
  * @return a ref term created using given ref ticks.
  */
-static inline term term_from_ref_ticks(uint64_t ref_ticks, Context *ctx)
+static inline term term_from_ref_ticks(uint64_t ref_ticks, Heap *heap)
 {
-    term *boxed_value = memory_heap_alloc(ctx, REF_SIZE);
-    boxed_value[0] = ((REF_SIZE - 1) << 6) | TERM_BOXED_REF;
-
-    #if TERM_BYTES == 8
-        boxed_value[1] = (term) ref_ticks;
-
-    #elif TERM_BYTES == 4
-        boxed_value[1] = (ref_ticks >> 4);
-        boxed_value[2] = (ref_ticks & 0xFFFFFFFF);
-
-    #else
-        #error "terms must be either 32 or 64 bit wide"
-    #endif
-
-    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
-}
-
-/**
- * @brief Get a ref term from ref ticks, allocated on a separate heap
- *
- * @param ref_ticks an unique uint64 value that will be used to create ref term.
- * @param ctx the context that owns the memory that will be allocated.
- * @return a ref term created using given ref ticks.
- */
-static inline term term_heap_from_ref_ticks(uint64_t ref_ticks, term **heap_ptr)
-{
-    term *boxed_value = *heap_ptr;
-    *heap_ptr += REF_SIZE;
+    term *boxed_value = memory_heap_alloc(heap, REF_SIZE);
     boxed_value[0] = ((REF_SIZE - 1) << 6) | TERM_BOXED_REF;
 
     #if TERM_BYTES == 8
@@ -1219,31 +1137,14 @@ static inline uint64_t term_to_ref_ticks(term rt)
  *
  * @details Allocates an uninitialized tuple on the heap with given arity.
  * @param size tuple arity (count of tuple elements).
- * @param ctx the context that owns the memory that will be allocated.
+ * @param heap the heap to allocate memory in
  * @return a term pointing on an empty tuple allocated on the heap.
  */
-static inline term term_alloc_tuple(uint32_t size, Context *ctx)
+static inline term term_alloc_tuple(uint32_t size, Heap *heap)
 {
     //TODO: write a real implementation
     //align constraints here
-    term *boxed_value = memory_heap_alloc(ctx, 1 + size);
-    boxed_value[0] = (size << 6); //tuple
-
-    return ((term) boxed_value) | 0x2;
-}
-
-/**
- * @brief Allocates a tuple on a separate heap
- *
- * @details Allocates an uninitialized tuple on the heap with given arity.
- * @param size tuple arity (count of tuple elements).
- * @param ctx the context that owns the memory that will be allocated.
- * @return a term pointing on an empty tuple allocated on the heap.
- */
-static inline term term_heap_alloc_tuple(uint32_t size, term **heap_ptr)
-{
-    term *boxed_value = *heap_ptr;
-    *heap_ptr += 1 + size;
+    term *boxed_value = memory_heap_alloc(heap, 1 + size);
     boxed_value[0] = (size << 6); //tuple
 
     return ((term) boxed_value) | 0x2;
@@ -1302,10 +1203,20 @@ static inline int term_get_tuple_arity(term t)
     return term_get_size_from_boxed_header(boxed_value[0]);
 }
 
-static inline term priv_term_from_string0(const uint8_t *data, uint16_t size, term *list_cells)
+/**
+ * @brief Allocates a new list using string data
+ *
+ * @details Returns a term that points to a list (cons) that will be created using a string.
+ * @param data a pointer to a string, it doesn't need to be NULL terminated.
+ * @param size of the string/list that will be read and allocated.
+ * @param heap the heap to allocate memory in
+ * @return a term pointing to a list.
+ */
+static inline term term_from_string(const uint8_t *data, uint16_t size, Heap *heap)
 {
     //TODO: write a real implementation
     //align constraints here
+    term *list_cells = memory_heap_alloc(heap, size * 2);
     for (int i = 0; i < size * 2; i += 2) {
         list_cells[i] = (term) &list_cells[i + 2] | 0x1;
         list_cells[i + 1] = term_from_int11(data[i / 2]);
@@ -1313,39 +1224,6 @@ static inline term priv_term_from_string0(const uint8_t *data, uint16_t size, te
     list_cells[size * 2 - 2] = 0x3B;
 
     return ((term) list_cells) | 0x1;
-}
-
-/**
- * @brief Allocates a new list using string data
- *
- * @details Returns a term that points to a list (cons) that will be created using a string.
- * @param data a pointer to a string, it doesn't need to be NULL terminated.
- * @param size of the string/list that will be read and allocated.
- * @param ctx the context that owns the memory that will be allocated.
- * @return a term pointing to a list.
- */
-static inline term term_from_string(const uint8_t *data, uint16_t size, Context *ctx)
-{
-    //TODO: write a real implementation
-    //align constraints here
-    term *list_cells = memory_heap_alloc(ctx, size * 2);
-    return priv_term_from_string0(data, size, list_cells);
-}
-
-/**
- * @brief Allocates a new list on a separate heap using string data
- *
- * @details Returns a term that points to a list (cons) that will be created using a string.
- * @param data a pointer to a string, it doesn't need to be NULL terminated.
- * @param size of the string/list that will be read and allocated.
- * @param heap_ptr the separate heap where the string will be allocated.
- * @return a term pointing to a list.
- */
-static inline term term_heap_from_string(const uint8_t *data, uint16_t size, term **heap_ptr)
-{
-    term *list_cells = *heap_ptr;
-    *heap_ptr += size * 2;
-    return priv_term_from_string0(data, size, list_cells);
 }
 
 /**
@@ -1401,12 +1279,12 @@ static inline term term_get_list_tail(term t)
  * @brief Allocate uninitialized memory for a list item
  *
  * @details Allocates a memory area that will be used to store a list item.
- * @param ctx the context that owns the memory that will be allocated.
+ * @param heap the heap to allocate memory in
  * @return a pointer to a newly allocated memory area.
  */
-MALLOC_LIKE static inline term *term_list_alloc(Context *ctx)
+MALLOC_LIKE static inline term *term_list_alloc(Heap *heap)
 {
-    return memory_heap_alloc(ctx, 2);
+    return memory_heap_alloc(heap, 2);
 }
 
 /**
@@ -1432,12 +1310,12 @@ static inline term term_list_init_prepend(term *list_elem, term head, term tail)
  * @details Allocates a new list item, set head to the given term and points tail to the given next item (that might be nil).
  * @param head term, the encapsulated list item value.
  * @param tail either nil or next list item.
- * @param ctx the context that owns the memory that will be allocated.
+ * @param heap the heap to allocate memory in
  * @return a term pointing to the newly created list item.
  */
-static inline term term_list_prepend(term head, term tail, Context *ctx)
+static inline term term_list_prepend(term head, term tail, Heap *heap)
 {
-    term *l = term_list_alloc(ctx);
+    term *l = term_list_alloc(heap);
     return term_list_init_prepend(l, head, tail);
 }
 
@@ -1471,9 +1349,9 @@ static inline int term_is_float(term t)
     }
 }
 
-static inline term term_from_float(avm_float_t f, Context *ctx)
+static inline term term_from_float(avm_float_t f, Heap *heap)
 {
-    term *boxed_value = memory_heap_alloc(ctx, FLOAT_SIZE);
+    term *boxed_value = memory_heap_alloc(heap, FLOAT_SIZE);
     boxed_value[0] = ((FLOAT_SIZE - 1) << 6) | TERM_BOXED_FLOAT;
 
     float_term_t *boxed_float = (float_term_t *) (boxed_value + 1);
@@ -1566,12 +1444,9 @@ static inline int term_is_string(term t)
     return term_is_nil(t);
 }
 
-static inline term term_make_function_reference(term m, term f, term a, Context *ctx)
+static inline term term_make_function_reference(term m, term f, term a, Heap *heap)
 {
-    if (memory_ensure_free(ctx, FUNCTION_REFERENCE_SIZE) != MEMORY_GC_OK) {
-        return term_invalid_term();
-    }
-    term *boxed_func = memory_heap_alloc(ctx, FUNCTION_REFERENCE_SIZE);
+    term *boxed_func = memory_heap_alloc(heap, FUNCTION_REFERENCE_SIZE);
 
     boxed_func[0] = ((FUNCTION_REFERENCE_SIZE - 1) << 6) | TERM_BOXED_FUN;
     boxed_func[1] = m;
@@ -1635,9 +1510,9 @@ static inline void term_match_state_restore_offset(term match_state, int index)
     boxed_value[2] = boxed_value[4 + index];
 }
 
-static inline term term_alloc_bin_match_state(term binary_or_state, int slots, Context *ctx)
+static inline term term_alloc_bin_match_state(term binary_or_state, int slots, Heap *heap)
 {
-    term *boxed_match_state = memory_heap_alloc(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE + slots);
+    term *boxed_match_state = memory_heap_alloc(heap, TERM_BOXED_BIN_MATCH_STATE_SIZE + slots);
 
     boxed_match_state[0] = (((TERM_BOXED_BIN_MATCH_STATE_SIZE + slots) - 1) << 6) | TERM_BOXED_BIN_MATCH_STATE;
     if (term_is_match_state(binary_or_state)) {
@@ -1694,19 +1569,19 @@ static inline int term_map_size_in_terms(size_t num_entries)
     return term_map_size_in_terms_maybe_shared(num_entries, false);
 }
 
-static inline term term_alloc_map_maybe_shared(Context *ctx, avm_uint_t size, term keys)
+static inline term term_alloc_map_maybe_shared(avm_uint_t size, term keys, Heap *heap)
 {
-    keys = term_is_invalid_term(keys) ? term_alloc_tuple(size, ctx) : keys;
-    term *boxed_value = memory_heap_alloc(ctx, 2 + size);
+    keys = term_is_invalid_term(keys) ? term_alloc_tuple(size, heap) : keys;
+    term *boxed_value = memory_heap_alloc(heap, 2 + size);
     boxed_value[0] = ((1 + size) << 6) | TERM_BOXED_MAP;
     boxed_value[term_get_map_keys_offset()] = keys;
 
     return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
 }
 
-static inline term term_alloc_map(Context *ctx, avm_uint_t size)
+static inline term term_alloc_map(avm_uint_t size, Heap *heap)
 {
-    return term_alloc_map_maybe_shared(ctx, size, term_invalid_term());
+    return term_alloc_map_maybe_shared(size, term_invalid_term(), heap);
 }
 
 static inline term term_get_map_keys(term t)
@@ -1759,11 +1634,11 @@ static inline int term_find_map_pos(term map, term key, GlobalContext *global)
     return TERM_MAP_NOT_FOUND;
 }
 
-term term_get_map_assoc(Context *ctx, term map, term key);
+term term_get_map_assoc(term map, term key, GlobalContext *glb);
 
-static inline term term_get_map_assoc_default(Context *ctx, term map, term key, term default_value)
+static inline term term_get_map_assoc_default(term map, term key, term default_value, GlobalContext *glb)
 {
-    term ret = term_get_map_assoc(ctx, map, key);
+    term ret = term_get_map_assoc(map, key, glb);
     if (term_is_invalid_term(ret)) {
         return default_value;
     }

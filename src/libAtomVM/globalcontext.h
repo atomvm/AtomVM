@@ -50,6 +50,8 @@ struct Context;
 typedef struct Context Context;
 #endif
 
+struct Module;
+
 #ifndef TYPEDEF_MODULE
 #define TYPEDEF_MODULE
 typedef struct Module Module;

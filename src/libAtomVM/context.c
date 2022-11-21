@@ -49,15 +49,12 @@ Context *context_new(GlobalContext *glb)
     }
     ctx->cp = 0;
 
-    ctx->heap_start = (term *) calloc(DEFAULT_STACK_SIZE, sizeof(term));
-    if (IS_NULL_PTR(ctx->heap_start)) {
+    if (UNLIKELY(memory_init_heap(&ctx->heap, DEFAULT_STACK_SIZE) != MEMORY_GC_OK)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         free(ctx);
         return NULL;
     }
-    ctx->stack_base = ctx->heap_start + DEFAULT_STACK_SIZE;
-    ctx->e = ctx->stack_base;
-    ctx->heap_ptr = ctx->heap_start;
+    ctx->e = ctx->heap.heap_end;
 
     context_clean_registers(ctx, 0);
 
@@ -93,9 +90,6 @@ Context *context_new(GlobalContext *glb)
     ctx->trace_receive = 0;
 #endif
 
-    list_init(&ctx->heap_fragments);
-    ctx->heap_fragments_size = 0;
-
     ctx->flags = NoFlags;
     ctx->platform_data = NULL;
 
@@ -105,7 +99,6 @@ Context *context_new(GlobalContext *glb)
     ctx->bs_offset = 0;
 
     ctx->exit_reason = NORMAL_ATOM;
-    ctx->mso_list = term_nil();
 
     globalcontext_init_process(glb, ctx);
 
@@ -121,18 +114,18 @@ void context_destroy(Context *ctx)
     context_monitors_handle_terminate(ctx);
 
     // Any other process released our mailbox, so we can clear it.
-    mailbox_destroy(&ctx->mailbox);
+    mailbox_destroy(&ctx->mailbox, &ctx->heap);
 
     free(ctx->fr);
 
-    memory_sweep_mso_list(ctx->mso_list);
+    memory_destroy_heap(&ctx->heap);
+
     dictionary_destroy(&ctx->dictionary);
 
     if (ctx->timer_list_head.head.next != &ctx->timer_list_head.head) {
         scheduler_cancel_timeout(ctx);
     }
 
-    free(ctx->heap_start);
     // Platform data is freed here to allow drivers to use the
     // globalcontext_get_process_lock lock to protect this pointer
     // Typically, another thread or an interrupt would call
@@ -147,11 +140,8 @@ void context_destroy(Context *ctx)
 
 void context_process_kill_signal(Context *ctx, struct TermSignal *signal)
 {
-    if (UNLIKELY(memory_ensure_free(ctx, signal->msg_memory_size))) {
-        ctx->exit_reason = OUT_OF_MEMORY_ATOM;
-    } else {
-        ctx->exit_reason = memory_copy_term_tree(&ctx->heap_ptr, signal->signal_term, &ctx->mso_list);
-    }
+    // exit_reason is one of the roots when garbage collecting
+    ctx->exit_reason = signal->signal_term;
     context_update_flags(ctx, ~NoFlags, Killed);
 }
 
@@ -172,10 +162,7 @@ void context_process_process_info_request_signal(Context *ctx, struct BuiltInAto
 bool context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal)
 {
     context_update_flags(ctx, ~Trap, NoFlags);
-    if (UNLIKELY(memory_ensure_free(ctx, signal->msg_memory_size))) {
-        return false;
-    }
-    ctx->x[0] = memory_copy_term_tree(&ctx->heap_ptr, signal->signal_term, &ctx->mso_list);
+    ctx->x[0] = signal->signal_term;
     return true;
 }
 
@@ -204,7 +191,7 @@ size_t context_size(Context *ctx)
     // TODO include ctx->platform_data
     return sizeof(Context)
         + messages_size
-        + context_memory_size(ctx) * BYTES_PER_TERM;
+        + memory_heap_memory_size(&ctx->heap) * BYTES_PER_TERM;
 }
 
 bool context_get_process_info(Context *ctx, term *out, term atom_key)
@@ -214,12 +201,12 @@ bool context_get_process_info(Context *ctx, term *out, term atom_key)
         return false;
     }
 
-    term ret = term_alloc_tuple(2, ctx);
+    term ret = term_alloc_tuple(2, &ctx->heap);
     switch (atom_key) {
         // heap_size size in words of the heap of the process
         case HEAP_SIZE_ATOM: {
             term_put_tuple_element(ret, 0, HEAP_SIZE_ATOM);
-            unsigned long value = context_heap_size(ctx);
+            unsigned long value = memory_heap_memory_size(&ctx->heap) - context_stack_size(ctx);
             term_put_tuple_element(ret, 1, term_from_int32(value));
             break;
         }
@@ -281,7 +268,7 @@ static void context_monitors_handle_terminate(Context *ctx)
                 }
 
                 // Prepare the message on ctx's heap which will be freed afterwards.
-                term info_tuple = term_alloc_tuple(3, ctx);
+                term info_tuple = term_alloc_tuple(3, &ctx->heap);
                 term_put_tuple_element(info_tuple, 0, EXIT_ATOM);
                 term_put_tuple_element(info_tuple, 1, term_from_local_process_id(ctx->process_id));
                 term_put_tuple_element(info_tuple, 2, ctx->exit_reason);
@@ -299,9 +286,9 @@ static void context_monitors_handle_terminate(Context *ctx)
             }
 
             // Prepare the message on ctx's heap which will be freed afterwards.
-            term ref = term_from_ref_ticks(monitor->ref_ticks, ctx);
+            term ref = term_from_ref_ticks(monitor->ref_ticks, &ctx->heap);
 
-            term info_tuple = term_alloc_tuple(5, ctx);
+            term info_tuple = term_alloc_tuple(5, &ctx->heap);
             term_put_tuple_element(info_tuple, 0, DOWN_ATOM);
             term_put_tuple_element(info_tuple, 1, ref);
             if (ctx->native_handler != NULL) {

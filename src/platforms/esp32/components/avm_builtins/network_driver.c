@@ -107,7 +107,7 @@ static NativeHandlerResult network_consume_mailbox(Context *ctx)
         fprintf(stderr, "WARNING: Invalid port command.  Unable to send reply");
     }
 
-    mailbox_remove(&ctx->mailbox);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
 
     return NativeContinue;
 }
@@ -482,7 +482,7 @@ static void send_term(ClientData *data, term t)
     Context *ctx = data->ctx;
 
     term pid = data->pid;
-    term ref = term_from_ref_ticks(data->ref_ticks, ctx);
+    term ref = term_from_ref_ticks(data->ref_ticks, &ctx->heap);
     // Pid ! {Ref, T}
     port_send_reply(ctx, pid, ref, t);
 }
@@ -526,7 +526,7 @@ static void send_ap_started(ClientData *data)
 static void send_atom_mac(ClientData *data, term atom, uint8_t *mac)
 {
     port_ensure_available(data->ctx, term_binary_data_size_in_terms(6) + 12);
-    term mac_term = term_from_literal_binary(mac, 6, data->ctx);
+    term mac_term = term_from_literal_binary(mac, 6, &data->ctx->heap, data->ctx->global);
     term reply = port_create_tuple2(data->ctx, atom, mac_term);
     send_term(data, reply);
 }

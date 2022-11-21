@@ -101,7 +101,7 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
 
     globalcontext_send_message(ctx->global, local_process_id, ret);
 
-    mailbox_remove(&ctx->mailbox);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
 
     return NativeContinue;
 }

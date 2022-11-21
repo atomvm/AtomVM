@@ -293,13 +293,15 @@ EventListener *gpio_interrupt_callback(GlobalContext *glb, EventListener *listen
     int gpio_num = data->gpio;
 
     // 1 header + 2 elements
-    term heap[3];
-    term *heap_ptr = heap;
-    term int_msg = term_heap_alloc_tuple(2, &heap_ptr);
+    BEGIN_WITH_STACK_HEAP(1 + 2, heap);
+
+    term int_msg = term_alloc_tuple(2, &heap);
     term_put_tuple_element(int_msg, 0, GPIO_INTERRUPT_ATOM);
     term_put_tuple_element(int_msg, 1, term_from_int32(gpio_num));
 
     globalcontext_send_message(glb, listening_pid, int_msg);
+
+    END_WITH_STACK_HEAP(heap);
 
     return listener;
 }
@@ -443,7 +445,7 @@ static term gpiodriver_remove_int(Context *ctx, term cmd)
 
 static term create_pair(Context *ctx, term term1, term term2)
 {
-    term ret = term_alloc_tuple(2, ctx);
+    term ret = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(ret, 0, term1);
     term_put_tuple_element(ret, 1, term2);
 
@@ -502,7 +504,7 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
     }
 
     globalcontext_send_message(ctx->global, local_process_id, ret_msg);
-    mailbox_remove(&ctx->mailbox);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
 
     return cmd == GPIOCloseCmd ? NativeTerminate : NativeContinue;
 }

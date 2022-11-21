@@ -84,10 +84,10 @@ term refc_binary_create_binary_info(Context *ctx)
     term ret = term_nil();
     LIST_FOR_EACH (item, refc_binaries) {
         struct RefcBinary *refc = GET_LIST_ENTRY(item, struct RefcBinary, head);
-        term t = term_alloc_tuple(2, ctx);
+        term t = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(t, 0, term_from_int(refc->size));
         term_put_tuple_element(t, 1, term_from_int(refc->ref_count));
-        ret = term_list_prepend(t, ret, ctx);
+        ret = term_list_prepend(t, ret, &ctx->heap);
     }
     synclist_unlock(&ctx->global->refc_binaries);
     return ret;

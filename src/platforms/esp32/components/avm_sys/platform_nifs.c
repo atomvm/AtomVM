@@ -82,7 +82,7 @@ static term nif_esp_random(Context *ctx, int argc, term argv[])
     if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    return term_make_boxed_int(r, ctx);
+    return term_make_boxed_int(r, &ctx->heap);
 }
 
 static term nif_esp_random_bytes(Context *ctx, int argc, term argv[])
@@ -98,7 +98,7 @@ static term nif_esp_random_bytes(Context *ctx, int argc, term argv[])
         if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(0) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        term binary = term_create_empty_binary(0, ctx);
+        term binary = term_create_empty_binary(0, &ctx->heap, ctx->global);
         return binary;
     } else {
         uint8_t *buf = malloc(len);
@@ -109,7 +109,7 @@ static term nif_esp_random_bytes(Context *ctx, int argc, term argv[])
         if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        term binary = term_from_literal_binary(buf, len, ctx);
+        term binary = term_from_literal_binary(buf, len, &ctx->heap, ctx->global);
         free(buf);
         return binary;
     }
@@ -382,7 +382,7 @@ static term nif_rom_md5(Context *ctx, int argc, term argv[])
     MD5Final(digest, &md5);
     #endif
 
-    return term_from_literal_binary(digest, MD5_DIGEST_LENGTH, ctx);
+    return term_from_literal_binary(digest, MD5_DIGEST_LENGTH, &ctx->heap, ctx->global);
 }
 
 static term nif_atomvm_platform(Context *ctx, int argc, term argv[])

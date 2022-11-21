@@ -40,7 +40,7 @@ void test_mailbox_send()
     assert(mailbox_peek(ctx, &t));
     assert(1 == term_to_int(t));
 
-    mailbox_remove(&ctx->mailbox);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
 
     assert(!mailbox_has_next(&ctx->mailbox));
 
@@ -68,12 +68,12 @@ void test_mailbox_next()
     assert(mailbox_peek(ctx, &t));
     assert(2 == term_to_int(t));
 
-    mailbox_remove(&ctx->mailbox);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
 
     assert(mailbox_peek(ctx, &t));
     assert(1 == term_to_int(t));
 
-    mailbox_remove(&ctx->mailbox);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
     assert(!mailbox_has_next(&ctx->mailbox));
     assert(mailbox_len(&ctx->mailbox) == 0);
 
@@ -91,12 +91,12 @@ void test_mailbox_next()
     assert(mailbox_peek(ctx, &t));
     assert(2 == term_to_int(t));
 
-    mailbox_remove(&ctx->mailbox);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
 
     assert(mailbox_peek(ctx, &t));
     assert(1 == term_to_int(t));
 
-    mailbox_remove(&ctx->mailbox);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
     assert(!mailbox_has_next(&ctx->mailbox));
     assert(mailbox_len(&ctx->mailbox) == 0);
 
@@ -115,12 +115,12 @@ void test_mailbox_next()
     assert(mailbox_peek(ctx, &t));
     assert(2 == term_to_int(t));
 
-    mailbox_remove(&ctx->mailbox);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
 
     assert(mailbox_peek(ctx, &t));
     assert(1 == term_to_int(t));
 
-    mailbox_remove(&ctx->mailbox);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
     assert(!mailbox_has_next(&ctx->mailbox));
     assert(mailbox_len(&ctx->mailbox) == 0);
 

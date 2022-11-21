@@ -94,12 +94,12 @@ static void socket_fill_ipv4_addr_tuple(term addr_tuple, ip_addr_t *addr)
     term_put_tuple_element(addr_tuple, 3, term_from_int11(ad4));
 }
 
-static term socket_ctx_addr_to_tuple(Context *ctx, ip_addr_t *addr)
+static term socket_addr_to_tuple(Heap *heap, ip_addr_t *addr)
 {
     term addr_tuple;
     switch (IP_GET_TYPE(addr)) {
         case IPADDR_TYPE_V4: {
-            term addr_tuple = term_alloc_tuple(4, ctx);
+            term addr_tuple = term_alloc_tuple(4, heap);
             socket_fill_ipv4_addr_tuple(addr_tuple, addr);
             break;
         }
@@ -342,15 +342,15 @@ static term accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, stru
     new_tcp_data->socket_data.binary = tcp_data->socket_data.binary;
     new_tcp_data->socket_data.buffer = tcp_data->socket_data.buffer;
 
-    if (UNLIKELY(memory_ensure_free(ctx, 128) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + REF_SIZE) != MEMORY_GC_OK)) {
         AVM_ABORT();
     }
-    term ref = term_from_ref_ticks(accepter->ref_ticks, new_ctx);
-    term return_tuple = term_alloc_tuple(2, new_ctx);
+    term ref = term_from_ref_ticks(accepter->ref_ticks, &ctx->heap);
+    term return_tuple = term_alloc_tuple(2, &ctx->heap);
 
     free(accepter);
 
-    term result_tuple = term_alloc_tuple(2, new_ctx);
+    term result_tuple = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(result_tuple, 0, OK_ATOM);
     term_put_tuple_element(result_tuple, 1, socket_pid);
 
@@ -401,8 +401,8 @@ static void do_accept(Context *ctx, term msg)
 static void do_send_reply(Context *ctx, term reply, uint64_t ref_ticks, int32_t pid)
 {
     GlobalContext *glb = ctx->global;
-    term reply_tuple = term_alloc_tuple(2, ctx);
-    term_put_tuple_element(reply_tuple, 0, term_from_ref_ticks(ref_ticks, ctx));
+    term reply_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(reply_tuple, 0, term_from_ref_ticks(ref_ticks, &ctx->heap));
     term_put_tuple_element(reply_tuple, 1, reply);
     globalcontext_send_message(glb, pid, reply_tuple);
 }
@@ -443,7 +443,7 @@ static void do_send_error_reply(Context *ctx, err_t status, uint64_t ref_ticks, 
         AVM_ABORT();
     }
     term reason_atom = lwip_error_atom(glb, status);
-    term error_tuple = term_alloc_tuple(2, ctx);
+    term error_tuple = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
     term_put_tuple_element(error_tuple, 1, reason_atom);
     do_send_reply(ctx, error_tuple, ref_ticks, pid);
@@ -460,7 +460,7 @@ static void do_send_socket_error(Context *ctx, err_t status)
                 AVM_ABORT();
             }
             term reason_atom = lwip_error_atom(glb, status);
-            term result_tuple = term_alloc_tuple(3, ctx);
+            term result_tuple = term_alloc_tuple(3, &ctx->heap);
             term_put_tuple_element(result_tuple, 0, globalcontext_make_atom(glb, tcp_error_atom));
             term_put_tuple_element(result_tuple, 1, term_from_local_process_id(ctx->process_id));
             term_put_tuple_element(result_tuple, 2, reason_atom);
@@ -481,7 +481,7 @@ static void do_send_tcp_closed(Context *ctx)
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
             AVM_ABORT();
         }
-        term result_tuple = term_alloc_tuple(2, ctx);
+        term result_tuple = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(result_tuple, 0, TCP_CLOSED_ATOM);
         term_put_tuple_element(result_tuple, 1, term_from_local_process_id(ctx->process_id));
         globalcontext_send_message(glb, socket_data->controlling_process_pid, result_tuple);
@@ -489,7 +489,7 @@ static void do_send_tcp_closed(Context *ctx)
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + REPLY_SIZE) != MEMORY_GC_OK)) {
             AVM_ABORT();
         }
-        term error_tuple = term_alloc_tuple(2, ctx);
+        term error_tuple = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
         term_put_tuple_element(error_tuple, 1, CLOSED_ATOM);
         do_send_passive_reply(ctx, socket_data, error_tuple);
@@ -582,10 +582,10 @@ static NativeHandlerResult do_receive_data(Context *ctx)
 
     term recv_data;
     if (socket_data->binary) {
-        recv_data = term_create_uninitialized_binary(data_len, ctx);
+        recv_data = term_create_uninitialized_binary(data_len, &ctx->heap, ctx->global);
         memcpy((void *) term_binary_data(recv_data), data, data_len);
     } else {
-        recv_data = term_from_string((const uint8_t *) data, data_len, ctx);
+        recv_data = term_from_string((const uint8_t *) data, data_len, &ctx->heap);
     }
 
     if (netbuf_next(buf) == 0) {
@@ -597,7 +597,7 @@ static NativeHandlerResult do_receive_data(Context *ctx)
     netbuf_delete(buf);
 
     if (socket_data->active) {
-        term active_tuple = term_alloc_tuple(3, ctx);
+        term active_tuple = term_alloc_tuple(3, &ctx->heap);
         term_put_tuple_element(active_tuple, 0, socket_data->type == TCPClientSocket ? TCP_ATOM : UDP_ATOM);
         term_put_tuple_element(active_tuple, 1, term_from_local_process_id(ctx->process_id));
         term_put_tuple_element(active_tuple, 2, recv_data);
@@ -608,7 +608,7 @@ static NativeHandlerResult do_receive_data(Context *ctx)
         #endif
         TRACE("\n");
     } else {
-        term ok_tuple = term_alloc_tuple(2, ctx);
+        term ok_tuple = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(ok_tuple, 0, OK_ATOM);
         term_put_tuple_element(ok_tuple, 1, recv_data);
         do_send_passive_reply(ctx, socket_data, ok_tuple);
@@ -1078,7 +1078,7 @@ static void do_get_port(Context *ctx, term msg)
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + REPLY_SIZE) != MEMORY_GC_OK)) {
             AVM_ABORT();
         }
-        term ok_tuple = term_alloc_tuple(2, ctx);
+        term ok_tuple = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(ok_tuple, 0, OK_ATOM);
         term_put_tuple_element(ok_tuple, 1, term_from_int(socket_data->port));
         do_send_reply(ctx, ok_tuple, ref_ticks, pid);
@@ -1102,10 +1102,10 @@ static void do_sockname(Context *ctx, term msg)
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + 8 + REPLY_SIZE) != MEMORY_GC_OK)) {
             AVM_ABORT();
         }
-        return_msg = term_alloc_tuple(2, ctx);
-        term addr_term = socket_ctx_addr_to_tuple(ctx, &addr);
+        return_msg = term_alloc_tuple(2, &ctx->heap);
+        term addr_term = socket_addr_to_tuple(&ctx->heap, &addr);
         term port_term = term_from_int(port);
-        term address_port_term = term_alloc_tuple(2, ctx);
+        term address_port_term = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(address_port_term, 0, addr_term);
         term_put_tuple_element(address_port_term, 1, port_term);
         term_put_tuple_element(return_msg, 0, OK_ATOM);
@@ -1131,10 +1131,10 @@ static void do_peername(Context *ctx, term msg)
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + 8 + REPLY_SIZE) != MEMORY_GC_OK)) {
             AVM_ABORT();
         }
-        return_msg = term_alloc_tuple(2, ctx);
-        term addr_term = socket_ctx_addr_to_tuple(ctx, &addr);
+        return_msg = term_alloc_tuple(2, &ctx->heap);
+        term addr_term = socket_addr_to_tuple(&ctx->heap, &addr);
         term port_term = term_from_int(port);
-        term address_port_term = term_alloc_tuple(2, ctx);
+        term address_port_term = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(address_port_term, 0, addr_term);
         term_put_tuple_element(address_port_term, 1, port_term);
         term_put_tuple_element(return_msg, 0, OK_ATOM);
@@ -1163,7 +1163,7 @@ static void do_controlling_process(Context *ctx, term msg)
         }
 
         if (UNLIKELY(pid != socket_data->controlling_process_pid)) {
-            return_msg = term_alloc_tuple(2, ctx);
+            return_msg = term_alloc_tuple(2, &ctx->heap);
             term_put_tuple_element(return_msg, 0, ERROR_ATOM);
             term_put_tuple_element(return_msg, 1, NOT_OWNER_ATOM);
         } else {
@@ -1195,7 +1195,7 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx)
                 // We don't need to remove message.
                 return NativeTerminate;
             }
-            mailbox_remove(&ctx->mailbox);
+            mailbox_remove_message(&ctx->mailbox, &ctx->heap);
             continue;
         }
 
@@ -1269,7 +1269,7 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx)
                 break;
         }
 
-        mailbox_remove(&ctx->mailbox);
+        mailbox_remove_message(&ctx->mailbox, &ctx->heap);
     }
     return NativeContinue;
 }

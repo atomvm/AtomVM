@@ -22,9 +22,14 @@
 
 -export([start/0, loop/1]).
 
--define(LITERAL_BIN,
-    <<"0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789">>
-).
+-define(LITERAL_BIN, <<
+    "01234567890123456789012345678901234567890123456789"
+    "01234567890123456789012345678901234567890123456789"
+    "01234567890123456789012345678901234567890123456789"
+    "01234567890123456789012345678901234567890123456789"
+    "01234567890123456789012345678901234567890123456789"
+    "01234567890123456789012345678901234567890123456789"
+>>).
 
 -define(VERIFY(X),
     case X of
@@ -58,10 +63,11 @@ test_heap_binary() ->
     ok.
 
 test_const_binary() ->
-    HeapSize0 = get_heap_size(),
     MemoryBinarySize = erlang:memory(binary),
+    BinarySize = erlang:byte_size(?LITERAL_BIN),
+    HeapSize0 = get_heap_size(),
+    ?VERIFY(HeapSize0 < BinarySize),
     ?VERIFY(MemoryBinarySize == erlang:memory(binary)),
-    ?VERIFY(HeapSize0 < erlang:byte_size(?LITERAL_BIN)),
     ok.
 
 test_non_const_binary() ->
@@ -73,7 +79,8 @@ test_non_const_binary() ->
     Bin = create_binary(String),
     HeapSize2 = get_heap_size(),
     ?VERIFY(MemoryBinarySize + 1024 == erlang:memory(binary)),
-    ?VERIFY(HeapSize1 < HeapSize2),
+    ?VERIFY(HeapSize1 =< HeapSize2),
+    true = HeapSize1 =< HeapSize2,
     ?VERIFY(HeapSize2 < (HeapSize1 + erlang:byte_size(Bin))),
     id(String),
     id(Bin),
@@ -171,6 +178,7 @@ get_largest_heap_binary_size() ->
     end.
 
 get_heap_size() ->
+    erlang:garbage_collect(),
     {heap_size, Size} = erlang:process_info(self(), heap_size),
     Size * erlang:system_info(wordsize).
 

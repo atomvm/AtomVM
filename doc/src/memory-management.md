@@ -92,7 +92,7 @@ AtomVM makes use of heap fragments in some edge cases, such as loading external 
 
 Each Erlang process contains a process mailbox, which is a linked-list structure of messages.  Each message in this list contains a term structure, which is a copy of a term sent to it, e.g., via the `erlang:send/2` operation, or `!` operator.
 
-The representation of terms in a message is identical to that in the heap and heap fragments, with the exception that messages in the process mailbox are not garbage collected, in the way that the process heap is.  Instead, messages in the process mailbox are copied to the process heap when the message is read off the mailbox (e.g., via `receive ... end`).  Messages (and their term contents) are then destroyed once they are no longer needed, and after being copied into the heap.
+The representation of terms in a message is identical to that in the heap and heap fragments.  Messages are allocated like fragments and they actually become heap fragments of the receiving process when the message is read off the mailbox (e.g., via `receive ... end`).  Messages (and their term contents) are moved to the main heap as part of regular garbage collection of the process, and the fragment is freed.
 
 ### Memory Graph
 
