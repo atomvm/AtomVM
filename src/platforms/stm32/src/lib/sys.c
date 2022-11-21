@@ -20,10 +20,11 @@
 
 #include <sys.h>
 
-#include "defaultatoms.h"
 #include <avmpack.h>
-#include <gpiodriver.h>
+#include <defaultatoms.h>
 #include <scheduler.h>
+
+#include "gpiodriver.h"
 
 // Monotonically increasing number of milliseconds from reset
 // Overflows every 49 days

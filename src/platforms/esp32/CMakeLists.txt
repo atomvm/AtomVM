@@ -18,8 +18,18 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required (VERSION 3.13)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(atomvm-esp32)
+
+idf_build_get_property(c_compile_options C_COMPILE_OPTIONS)
+list(REMOVE_ITEM c_compile_options -std=gnu99)
+list(APPEND c_compile_options -std=gnu11)
+idf_build_set_property(C_COMPILE_OPTIONS ${c_compile_options})
+
+# Options that make sense for this platform
+option(AVM_DISABLE_FP "Disable floating point support." OFF)
+option(AVM_USE_32BIT_FLOAT "Use 32 bit floats." OFF)
+option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
 
 add_subdirectory(tools)

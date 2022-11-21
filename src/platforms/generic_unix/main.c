@@ -30,13 +30,12 @@
 #include "context.h"
 #include "globalcontext.h"
 #include "iff.h"
+#include "mapped_file.h"
 #include "module.h"
-#include "platforms/generic_unix/mapped_file.h"
 #include "term.h"
 #include "utils.h"
 
-static const char *ok_a = "\x2" "ok";
-
+static const char *ok_a = ATOM_STR("\x2", "ok");
 
 void close_mapped_files(MappedFile **mapped_file, int len)
 {

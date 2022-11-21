@@ -18,7 +18,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required (VERSION 3.13)
 project (ReleaseEsp32)
 
 ## Configure version info for tools

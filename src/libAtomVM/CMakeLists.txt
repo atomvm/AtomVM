@@ -18,10 +18,8 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 3.13)
 project (libAtomVM)
-
-include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 set(HEADER_FILES
     atom.h
@@ -87,15 +85,43 @@ set(SOURCE_FILES
     timer_wheel.c
     valueshashtable.c
 )
+
+add_library(libAtomVM ${SOURCE_FILES} ${HEADER_FILES})
+target_include_directories(libAtomVM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_features(libAtomVM PUBLIC c_std_11)
+if(CMAKE_COMPILER_IS_GNUCC)
+    target_compile_options(libAtomVM PUBLIC -Wall -pedantic -Wextra -ggdb)
+endif()
+
+# AtomVM options used in libAtomVM
+if (ADVANCED_TRACING)
+    target_compile_definitions(libAtomVM PUBLIC ENABLE_ADVANCED_TRACE)
+endif()
+
+if (AVM_DISABLE_FP)
+    target_compile_definitions(libAtomVM PUBLIC AVM_NO_FP)
+else()
+    target_link_libraries(libAtomVM PUBLIC m)
+endif()
+
+if (AVM_USE_32BIT_FLOAT)
+    target_compile_definitions(libAtomVM PUBLIC AVM_USE_SINGLE_PRECISION)
+    if (AVM_DISABLE_FP)
+        message(FATAL_ERROR "AVM_USE_32BIT_FLOAT and AVM_DISABLE_FP options conflict")
+    endif()
+endif()
+
+if (AVM_VERBOSE_ABORT)
+    target_compile_definitions(libAtomVM PUBLIC AVM_VERBOSE_ABORT)
+endif()
+
+# Automatically use zlib if present to load .beam files
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin" OR ${CMAKE_SYSTEM_NAME} STREQUAL "Linux" OR ${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
     find_package(ZLIB)
     if (ZLIB_FOUND)
-        add_definitions(-DWITH_ZLIB)
-    else(ZLIB_FOUND)
-        set(ZLIB_LIBRARIES "")
+        target_compile_definitions(libAtomVM PRIVATE WITH_ZLIB)
+        target_link_libraries(libAtomVM PUBLIC ${ZLIB_LIBRARIES})
     endif(ZLIB_FOUND)
-else()
-    set(ZLIB_LIBRARIES "")
 endif()
 
 function(gperf_generate input output)
@@ -106,14 +132,6 @@ function(gperf_generate input output)
         COMMENT "Hashing ${input}"
     )
 endfunction()
-
-if(CMAKE_COMPILER_IS_GNUCC)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -pedantic -Wextra -ggdb")
-endif()
-
-if (NOT AVM_DISABLE_FP)
-    set(MATH_LIB "m")
-endif()
 
 gperf_generate(${CMAKE_CURRENT_SOURCE_DIR}/bifs.gperf bifs_hash.h)
 gperf_generate(${CMAKE_CURRENT_SOURCE_DIR}/nifs.gperf nifs_hash.h)
@@ -140,23 +158,18 @@ else()
     set(ATOMVM_VERSION ${ATOMVM_BASE_VERSION})
 endif()
 
+# Add include to directory where version.h is generated so targets linking
+# libAtomVM can access it
+target_include_directories(libAtomVM PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_BINARY_DIR}/version.h)
-include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Generic")
-    set(
-        ATOMVM_PLATFORM_LIB
-        libAtomVM${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
-    )
-else()
-    set(ATOMVM_PLATFORM_LIB "")
+    target_link_libraries(libAtomVM PUBLIC libAtomVM${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR})
 endif()
 
-add_library(libAtomVM ${SOURCE_FILES} ${HEADER_FILES})
 add_dependencies(libAtomVM generated generated-nifs-hash)
-target_link_libraries(libAtomVM ${ATOMVM_PLATFORM_LIB} ${ZLIB_LIBRARIES} ${MATH_LIB})
-set_property(TARGET libAtomVM PROPERTY C_STANDARD 99)
 
-if (CMAKE_BUILD_TYPE STREQUAL "Coverage")
-    set_target_properties(libAtomVM PROPERTIES COMPILE_FLAGS "-O0 -fprofile-arcs -ftest-coverage")
+if (COVERAGE)
+    include(CodeCoverage)
+    append_coverage_compiler_flags_to_target(libAtomVM)
 endif()

@@ -66,7 +66,10 @@ macro(pack_lib avm_name)
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
-    add_dependencies(${avm_name} ${avm_name}_main ${ARCHIVE_TARGETS} PackBEAM)
+    add_dependencies(${avm_name} ${ARCHIVE_TARGETS} PackBEAM)
+    if(TARGET ${avm_name}_main)
+        add_dependencies(${avm_name} ${avm_name}_main)
+    endif()
 
 endmacro()
 

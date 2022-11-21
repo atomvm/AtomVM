@@ -30,3 +30,5 @@ idf_component_register(
     REQUIRES "spi_flash"
     PRIV_REQUIRES "libatomvm"
 )
+
+target_compile_features(${COMPONENT_LIB} INTERFACE c_std_11)

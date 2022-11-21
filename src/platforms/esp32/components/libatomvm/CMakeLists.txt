@@ -21,7 +21,8 @@
 idf_component_register(INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../../../../libAtomVM")
 
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../../libAtomVM" "libAtomVM")
-target_include_directories(${COMPONENT_LIB} INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/libAtomVM")
 
 target_link_libraries(${COMPONENT_LIB}
     INTERFACE libAtomVM "-u platform_nifs_get_nif" "-u platform_defaultatoms_init")
+
+target_compile_features(${COMPONENT_LIB} INTERFACE c_std_11)

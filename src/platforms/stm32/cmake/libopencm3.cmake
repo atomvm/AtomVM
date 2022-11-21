@@ -30,18 +30,19 @@ endfunction()
 
 # LibOpenCM3 Stuff
 if (NOT LIBOPENCM3_DIR)
-    find_file(LIBOPENCM3_DIR "libopencm3" "${CMAKE_CURRENT_SOURCE_DIR}" PATH_SUFFIXES)
-    if (LIBOPENCM3_DIR STREQUAL "LIBOPENCM3_DIR-NOTFOUND")
-        message(FATAL_ERROR "Could not locate libopencm3 directory")
-    endif ()
+    set(LIBOPENCM3_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libopencm3/)
+endif ()
+
+if (NOT EXISTS ${LIBOPENCM3_DIR}/Makefile)
+    message(FATAL_ERROR "libopencm3 does not exist or LIBOPENCM3_DIR not set to checkout " ${LIBOPENCM3_DIR})
 endif ()
 
 add_custom_target(
     libopencm3 make
     WORKING_DIRECTORY ${LIBOPENCM3_DIR}
 )
-link_directories(${LIBOPENCM3_DIR}/lib)
-include_directories(SYSTEM ${LIBOPENCM3_DIR}/include)
+set(OPENCM3_LIB ${LIBOPENCM3_DIR}/lib)
+set(OPENCM3_INCLUDE ${LIBOPENCM3_DIR}/include)
 
 # Generate linker information for device, based on libopencm3/mk/genlink-config.mk
 if (NOT DEVICE)
@@ -119,10 +120,10 @@ endif ()
 set(LINKER_SCRIPT "generated.${DEVICE}.ld")
 
 if (EXISTS "${LIBOPENCM3_DIR}/lib/libopencm3_${GENLINK_FAMILY}.a")
-    set(LDLIBS "${LDLIBS} -lopencm3_${GENLINK_FAMILY}")
+    set(OPENCM3_RUNTIME "opencm3_${GENLINK_FAMILY}")
 else ()
     if (EXISTS "${LIBOPENCM3_DIR}/lib/libopencm3_${GENLINK_SUBFAMILY}.a")
-        set(LDLIBS "${LDLIBS} -lopencm3_${GENLINK_SUBFAMILY}")
+        set(OPENCM3_RUNTIME "opencm3_${GENLINK_SUBFAMILY}")
     else ()
         message(WARNING "${LIBOPENCM3_DIR}/lib/libopencm3_${GENLINK_FAMILY}. A library variant for the selected device does not exist.")
     endif ()
@@ -144,7 +145,7 @@ message(STATUS "Generated Linker File   : .../${LINKER_SCRIPT}")
 # ARCH_FLAGS has to be passed as a string here
 JOIN("${ARCH_FLAGS}" " " ARCH_FLAGS)
 # Set linker flags
-set(LINKER_FLAGS "${LINKER_FLAGS} -specs=nosys.specs -specs=nano.specs -nostartfiles ${LDLIBS} -T${CMAKE_CURRENT_SOURCE_DIR}/${LINKER_SCRIPT} ${ARCH_FLAGS}")
+set(LINKER_FLAGS "${LINKER_FLAGS} -specs=nosys.specs -specs=nano.specs -nostartfiles -T${CMAKE_CURRENT_SOURCE_DIR}/${LINKER_SCRIPT} ${ARCH_FLAGS}")
 message(STATUS "Linker Flags            : ${LINKER_FLAGS}")
 
 # Compiler flags
@@ -164,14 +165,13 @@ macro(add_executable _name)
 
     if (TARGET ${_name} AND NOT ${_name} MATCHES ".*Doxygen.*")
         # Set target properties
-        set_target_properties(${ARGV0} PROPERTIES LINK_FLAGS ${LINKER_FLAGS})
-        set_target_properties(${PROJECT_NAME}.elf PROPERTIES OUTPUT_NAME "${PROJECT_NAME}.elf")
-        target_link_libraries(${_name} "opencm3_${GENLINK_FAMILY}")
+        set_target_properties(${_name} PROPERTIES LINK_FLAGS ${LINKER_FLAGS})
+        set_target_properties(${_name} PROPERTIES OUTPUT_NAME "${PROJECT_NAME}.elf")
 
         # Set output file locations
-        string(REGEX MATCH "^(.*)\\.[^.]*$" dummy "${ARGV0}")
+        string(REGEX MATCH "^(.*)\\.[^.]*$" dummy "${_name}")
         set(bin ${CMAKE_MATCH_1}.bin)
-        set(elf ${ARGV0})
+        set(elf ${_name})
         set(bin_out ${CMAKE_MATCH_1}.bin)
         get_target_property(elf_in ${PROJECT_NAME}.elf OUTPUT_NAME)
 

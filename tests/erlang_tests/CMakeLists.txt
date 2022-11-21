@@ -18,7 +18,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 3.13)
 project (erlang_tests)
 
 function(compile_erlang module_name)

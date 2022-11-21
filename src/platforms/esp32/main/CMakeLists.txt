@@ -25,3 +25,5 @@ set(MAIN_COMPONENT_SRCS
 idf_component_register(SRCS ${MAIN_COMPONENT_SRCS}
                        REQUIRES "spi_flash"
                        PRIV_REQUIRES "libatomvm" "avm_sys")
+
+target_compile_features(${COMPONENT_LIB} INTERFACE c_std_11)
