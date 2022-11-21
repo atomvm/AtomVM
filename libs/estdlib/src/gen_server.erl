@@ -49,7 +49,7 @@
     reply/2
 ]).
 
--export([loop/1, init_it/4, init_it/5]).
+-export([init_it/4, init_it/5]).
 
 -record(state, {
     name = undefined :: atom(),
@@ -88,15 +88,28 @@ init_it(Starter, Name, Module, Args, Options) ->
     end.
 
 init_it(Starter, Module, Args, Options) ->
-    State =
+    StateT =
         try
             case Module:init(Args) of
                 {ok, ModState} ->
                     init_ack(Starter, ok),
-                    #state{
-                        name = proplists:get_value(name, Options),
-                        mod = Module,
-                        mod_state = ModState
+                    {
+                        #state{
+                            name = proplists:get_value(name, Options),
+                            mod = Module,
+                            mod_state = ModState
+                        },
+                        infinity
+                    };
+                {ok, ModState, InitTimeout} ->
+                    init_ack(Starter, ok),
+                    {
+                        #state{
+                            name = proplists:get_value(name, Options),
+                            mod = Module,
+                            mod_state = ModState
+                        },
+                        InitTimeout
                     };
                 {stop, Reason} ->
                     init_ack(Starter, {error, {init_stopped, Reason}}),
@@ -110,7 +123,10 @@ init_it(Starter, Module, Args, Options) ->
                 init_ack(Starter, {error, {bad_return_value, E}}),
                 undefined
         end,
-    loop(State).
+    case StateT of
+        undefined -> ok;
+        {State, Timeout} -> loop(State, Timeout)
+    end.
 
 init_ack(Parent, Return) ->
     Parent ! {ack, self(), Return},
@@ -335,17 +351,20 @@ wait_reply({_Pid, Ref}, TimeoutMs) ->
     end.
 
 %% @private
-loop(undefined) ->
-    ok;
-loop(#state{mod = Mod, mod_state = ModState} = State) ->
+loop(#state{mod = Mod, mod_state = ModState} = State, Timeout) ->
     receive
         {'$call', {_Pid, _Ref} = From, Request} ->
             case Mod:handle_call(Request, From, ModState) of
                 {reply, Reply, NewModState} ->
                     ok = reply(From, Reply),
-                    loop(State#state{mod_state = NewModState});
+                    loop(State#state{mod_state = NewModState}, infinity);
+                {reply, Reply, NewModState, NewTimeout} ->
+                    ok = reply(From, Reply),
+                    loop(State#state{mod_state = NewModState}, NewTimeout);
                 {noreply, NewModState} ->
-                    loop(State#state{mod_state = NewModState});
+                    loop(State#state{mod_state = NewModState}, infinity);
+                {noreply, NewModState, NewTimeout} ->
+                    loop(State#state{mod_state = NewModState}, NewTimeout);
                 {stop, Reason, Reply, NewModState} ->
                     ok = reply(From, Reply),
                     do_terminate(State, Reason, NewModState);
@@ -357,7 +376,9 @@ loop(#state{mod = Mod, mod_state = ModState} = State) ->
         {'$cast', Request} ->
             case Mod:handle_cast(Request, ModState) of
                 {noreply, NewModState} ->
-                    loop(State#state{mod_state = NewModState});
+                    loop(State#state{mod_state = NewModState}, infinity);
+                {noreply, NewModState, NewTimeout} ->
+                    loop(State#state{mod_state = NewModState}, NewTimeout);
                 {stop, Reason, NewModState} ->
                     do_terminate(State, Reason, NewModState);
                 _ ->
@@ -369,12 +390,25 @@ loop(#state{mod = Mod, mod_state = ModState} = State) ->
         Info ->
             case Mod:handle_info(Info, ModState) of
                 {noreply, NewModState} ->
-                    loop(State#state{mod_state = NewModState});
+                    loop(State#state{mod_state = NewModState}, infinity);
+                {noreply, NewModState, NewTimeout} ->
+                    loop(State#state{mod_state = NewModState}, NewTimeout);
                 {stop, Reason, NewModState} ->
                     do_terminate(State, Reason, NewModState);
                 _ ->
                     do_terminate(State, {error, unexpected_reply}, ModState)
             end
+    after Timeout ->
+        case Mod:handle_info(timeout, ModState) of
+            {noreply, NewModState} ->
+                loop(State#state{mod_state = NewModState}, infinity);
+            {noreply, NewModState, NewTimeout} ->
+                loop(State#state{mod_state = NewModState}, NewTimeout);
+            {stop, Reason, NewModState} ->
+                do_terminate(State, Reason, NewModState);
+            _ ->
+                do_terminate(State, {error, unexpected_reply}, ModState)
+        end
     end.
 
 %% @private
