@@ -73,7 +73,7 @@ int main(int argc, char **argv)
 
     if (argc == 2 && iff_is_valid_beam(mapped_file[0]->mapped)) {
         glb->avmpack_platform_data = NULL;
-        startup_module_name = argv[1];
+        startup_module_name = basename(argv[1]);
         startup_beam = mapped_file[0]->mapped;
         startup_beam_size = mapped_file[0]->size;
     } else {
@@ -92,9 +92,17 @@ int main(int argc, char **argv)
                 if (IS_NULL_PTR(startup_beam)) {
                     avmpack_find_section_by_flag(mapped_file[i]->mapped, 1, &startup_beam, &startup_beam_size, &startup_module_name);
                 }
-
+            } else if (i == 0 && iff_is_valid_beam(mapped_file[i]->mapped)) {
+                glb->avmpack_platform_data++;
+                startup_module_name = basename(argv[1]);
+                startup_beam = mapped_file[0]->mapped;
+                startup_beam_size = mapped_file[0]->size;
+            } else if (i == 0) {
+                fprintf(stderr, "%s is not an AVM or a BEAM file.\n", argv[1 + i]);
+                close_mapped_files(mapped_file, i + 1);
+                return EXIT_FAILURE;
             } else {
-                fprintf(stderr, "%s is not a BEAM file.\n", argv[i]);
+                fprintf(stderr, "%s is not an AVM file.\n", argv[1 + i]);
                 close_mapped_files(mapped_file, i + 1);
                 return EXIT_FAILURE;
             }
@@ -112,7 +120,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "Cannot load startup module: %s\n", startup_module_name);
         return EXIT_FAILURE;
     }
-    globalcontext_insert_module_with_filename(glb, mod, basename(startup_module_name));
+    globalcontext_insert_module_with_filename(glb, mod, startup_module_name);
     mod->module_platform_data = NULL;
     Context *ctx = context_new(glb);
     ctx->leader = 1;
