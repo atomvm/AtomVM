@@ -10,10 +10,29 @@ on: [push, pull_request]
 
 jobs:
   run-tests:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: ["macos-latest", "ubuntu-latest"]
         otp: ["21", "22", "23"]
+
+        include:
+        - os: "ubuntu-latest"
+
+        - os: "macos-latest"
+          cmake_opts: "-DOPENSSL_ROOT_DIR=/usr/local/opt/openssl"
+
+        - os: "macos-latest"
+          otp: "21"
+          path_prefix: "/usr/local/opt/erlang@21/bin:"
+
+        - os: "macos-latest"
+          otp: "22"
+          path_prefix: "/usr/local/opt/erlang@22/bin:"
+
+        - os: "macos-latest"
+          otp: "23"
+          path_prefix: "/usr/local/opt/erlang@23/bin:"
 
     steps:
     # Setup
@@ -23,14 +42,19 @@ jobs:
         submodules: 'recursive'
 
     - uses: erlef/setup-beam@v1
+      if: runner.os == 'Linux'
       with:
         otp-version: ${{ matrix.otp }}
 
-    - name: "APT update"
-      run: sudo apt update -y
+    - name: "Install deps (Linux)"
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt update -y
+        sudo apt install -y cmake gperf zlib1g-dev ninja-build
 
-    - name: "Install deps"
-      run: sudo apt install -y cmake gperf zlib1g-dev ninja-build
+    - name: "Install deps (macOS)"
+      if: runner.os == 'macOS'
+      run: brew install gperf erlang@${{ matrix.otp }} ninja
 
     # Build
     - name: "Build: create build dir"
@@ -45,25 +69,34 @@ jobs:
     - name: "Build: run cmake"
       working-directory: build
       run: |
-        cmake -G Ninja ..
+        export PATH="${{ matrix.path_prefix }}$PATH"
+        cmake -G Ninja ${{ matrix.cmake_opts }} ..
+
+    - name: "Touch files to benefit from cache"
+      working-directory: build
+      run: |
         # git clone will use more recent timestamps than cached beam files
         # touch them so we can benefit from the cache and avoid costly beam file rebuild.
         find . -name '*.beam' -exec touch {} \;
 
     - name: "Build: run ninja"
       working-directory: build
-      run: ninja
+      run: |
+        export PATH="${{ matrix.path_prefix }}$PATH"
+        ninja
 
     # Test
     - name: "Test: test-erlang with BEAM"
       timeout-minutes: 10
       working-directory: build
       run: |
-        ./tests/test-erlang -b
+        export PATH="${{ matrix.path_prefix }}$PATH"
+        ./tests/test-erlang -b ${{ matrix.test_erlang_opts }}
 
     # Test
     - name: "Test: estdlib/ with BEAM"
       timeout-minutes: 10
       working-directory: build
       run: |
+        export PATH="${{ matrix.path_prefix }}$PATH"
         erl -pa tests/libs/estdlib/ -pa tests/libs/estdlib/beams/ -pa libs/etest/src/beams -s tests -s init stop -noshell
