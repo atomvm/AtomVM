@@ -1444,7 +1444,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             case OP_ALLOCATE_HEAP: {
                 int next_off = 1;
                 int stack_need;
-                DECODE_ALLOCATOR_LIST(stack_need, code, i, next_off, next_off);
+                DECODE_INTEGER(stack_need, code, i, next_off, next_off);
                 int heap_need;
                 DECODE_ALLOCATOR_LIST(heap_need, code, i, next_off, next_off);
                 int live;
@@ -1513,9 +1513,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             case OP_ALLOCATE_HEAP_ZERO: {
                 int next_off = 1;
                 int stack_need;
-                DECODE_ALLOCATOR_LIST(stack_need, code, i, next_off, next_off);
+                DECODE_INTEGER(stack_need, code, i, next_off, next_off);
                 int heap_need;
-                DECODE_ALLOCATOR_LIST(heap_need, code, i, next_off, next_off);
+                DECODE_INTEGER(heap_need, code, i, next_off, next_off);
                 int live;
                 DECODE_INTEGER(live, code, i, next_off, next_off);
                 TRACE("allocate_heap_zero/3 stack_need=%i, heap_need=%i, live=%i\n", stack_need, heap_need, live);
