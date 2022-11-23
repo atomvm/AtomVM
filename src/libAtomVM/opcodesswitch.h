@@ -57,6 +57,7 @@
 #define COMPACT_LARGE_ATOM 10
 #define COMPACT_LARGE_YREG 12
 
+#define COMPACT_EXTENDED_LIST 0x37
 #define COMPACT_EXTENDED_LITERAL 0x47
 
 #define COMPACT_LARGE_IMM_MASK 0x18
@@ -424,7 +425,7 @@ typedef union
 }
 
 #define IS_EXTENDED_ALLOCATOR(code_chunk, base_index, off) \
-    ((code_chunk[(base_index) + (off)]) & 0xF) == COMPACT_EXTENDED
+    (code_chunk[(base_index) + (off)]) == COMPACT_EXTENDED_LIST
 
 #define DECODE_ALLOCATOR_LIST(need, code_chunk, base_index, off, next_operand_offset)   \
     if (IS_EXTENDED_ALLOCATOR(code, base_index, off)) {                                 \
