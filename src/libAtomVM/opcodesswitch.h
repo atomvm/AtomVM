@@ -427,7 +427,7 @@ typedef union
     ((code_chunk[(base_index) + (off)]) & 0xF) == COMPACT_EXTENDED
 
 #define DECODE_ALLOCATOR_LIST(need, code_chunk, base_index, off, next_operand_offset)   \
-    if (UNLIKELY(IS_EXTENDED_ALLOCATOR(code, base_index, off))) {                       \
+    if (IS_EXTENDED_ALLOCATOR(code, base_index, off)) {                                 \
         need = 0;                                                                       \
         next_operand_offset++; /* skip list tag */                                      \
         int list_size;                                                                  \
