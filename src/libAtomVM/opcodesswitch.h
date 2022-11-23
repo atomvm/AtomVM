@@ -426,6 +426,23 @@ typedef union
 #define IS_EXTENDED_ALLOCATOR(code_chunk, base_index, off) \
     ((code_chunk[(base_index) + (off)]) & 0xF) == COMPACT_EXTENDED
 
+#define DECODE_ALLOCATOR_LIST(need, code_chunk, base_index, off, next_operand_offset)   \
+    if (UNLIKELY(IS_EXTENDED_ALLOCATOR(code, base_index, off))) {                       \
+        need = 0;                                                                       \
+        next_operand_offset++; /* skip list tag */                                      \
+        int list_size;                                                                  \
+        DECODE_INTEGER(list_size, code, base_index, off, next_operand_offset);          \
+        int allocator_tag;                                                              \
+        int allocator_size;                                                             \
+        for (int j = 0; j < list_size; j++) {                                           \
+            DECODE_INTEGER(allocator_tag, code, base_index, off, next_operand_offset);  \
+            DECODE_INTEGER(allocator_size, code, base_index, off, next_operand_offset); \
+            need += allocator_size;                                                     \
+        }                                                                               \
+    } else {                                                                            \
+        DECODE_INTEGER(need, code_chunk, base_index, off, next_operand_offset);         \
+    }
+
 #define NEXT_INSTRUCTION(operands_size) \
     i += operands_size
 
@@ -1427,38 +1444,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             case OP_ALLOCATE_HEAP: {
                 int next_off = 1;
                 int stack_need;
-                if (UNLIKELY(IS_EXTENDED_ALLOCATOR(code, i, next_off))) {
-                    stack_need = 0;
-                    next_off++; // skip list tag
-                    int list_size;
-                    DECODE_INTEGER(list_size, code, i, next_off, next_off);
-                    int allocator_tag;
-                    int allocator_size;
-                    for (int j = 0; j < list_size; j++) {
-                        DECODE_INTEGER(allocator_tag, code, i, next_off, next_off);
-                        DECODE_INTEGER(allocator_size, code, i, next_off, next_off);
-                        stack_need += allocator_size;
-                    }
-                } else {
-                    DECODE_INTEGER(stack_need, code, i, next_off, next_off);
-                }
-
+                DECODE_ALLOCATOR_LIST(stack_need, code, i, next_off, next_off);
                 int heap_need;
-                if (UNLIKELY(IS_EXTENDED_ALLOCATOR(code, i, next_off))) {
-                    heap_need = 0;
-                    next_off++; // skip list tag
-                    int list_size;
-                    DECODE_INTEGER(list_size, code, i, next_off, next_off);
-                    int allocator_tag;
-                    int allocator_size;
-                    for (int j = 0; j < list_size; j++) {
-                        DECODE_INTEGER(allocator_tag, code, i, next_off, next_off);
-                        DECODE_INTEGER(allocator_size, code, i, next_off, next_off);
-                        heap_need += allocator_size;
-                    }
-                } else {
-                    DECODE_INTEGER(heap_need, code, i, next_off, next_off);
-                }
+                DECODE_ALLOCATOR_LIST(heap_need, code, i, next_off, next_off);
                 int live;
                 DECODE_INTEGER(live, code, i, next_off, next_off);
                 TRACE("allocate_heap/2 stack_need=%i, heap_need=%i, live=%i\n", stack_need, heap_need, live);
@@ -1525,38 +1513,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             case OP_ALLOCATE_HEAP_ZERO: {
                 int next_off = 1;
                 int stack_need;
-                if (UNLIKELY(IS_EXTENDED_ALLOCATOR(code, i, next_off))) {
-                    stack_need = 0;
-                    next_off++; // skip list tag
-                    int list_size;
-                    DECODE_INTEGER(list_size, code, i, next_off, next_off);
-                    int allocator_tag;
-                    int allocator_size;
-                    for (int j = 0; j < list_size; j++) {
-                        DECODE_INTEGER(allocator_tag, code, i, next_off, next_off);
-                        DECODE_INTEGER(allocator_size, code, i, next_off, next_off);
-                        stack_need += allocator_size;
-                    }
-                } else {
-                    DECODE_INTEGER(stack_need, code, i, next_off, next_off);
-                }
-
+                DECODE_ALLOCATOR_LIST(stack_need, code, i, next_off, next_off);
                 int heap_need;
-                if (UNLIKELY(IS_EXTENDED_ALLOCATOR(code, i, next_off))) {
-                    heap_need = 0;
-                    next_off++; // skip list tag
-                    int list_size;
-                    DECODE_INTEGER(list_size, code, i, next_off, next_off);
-                    int allocator_tag;
-                    int allocator_size;
-                    for (int j = 0; j < list_size; j++) {
-                        DECODE_INTEGER(allocator_tag, code, i, next_off, next_off);
-                        DECODE_INTEGER(allocator_size, code, i, next_off, next_off);
-                        heap_need += allocator_size;
-                    }
-                } else {
-                    DECODE_INTEGER(heap_need, code, i, next_off, next_off);
-                }
+                DECODE_ALLOCATOR_LIST(heap_need, code, i, next_off, next_off);
                 int live;
                 DECODE_INTEGER(live, code, i, next_off, next_off);
                 TRACE("allocate_heap_zero/3 stack_need=%i, heap_need=%i, live=%i\n", stack_need, heap_need, live);
@@ -1591,21 +1550,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             case OP_TEST_HEAP: {
                 int next_offset = 1;
                 unsigned int heap_need;
-                if (UNLIKELY(IS_EXTENDED_ALLOCATOR(code, i, next_offset))) {
-                    heap_need = 0;
-                    next_offset++; // skip list tag
-                    int list_size;
-                    DECODE_INTEGER(list_size, code, i, next_offset, next_offset);
-                    int allocator_tag;
-                    int allocator_size;
-                    for (int j = 0; j < list_size; j++) {
-                        DECODE_INTEGER(allocator_tag, code, i, next_offset, next_offset);
-                        DECODE_INTEGER(allocator_size, code, i, next_offset, next_offset);
-                        heap_need += allocator_size;
-                    }
-                } else {
-                    DECODE_INTEGER(heap_need, code, i, next_offset, next_offset);
-                }
+                DECODE_ALLOCATOR_LIST(heap_need, code, i, next_offset, next_offset);
                 int live_registers;
                 DECODE_INTEGER(live_registers, code, i, next_offset, next_offset);
 
