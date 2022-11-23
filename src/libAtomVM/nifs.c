@@ -138,6 +138,7 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[]);
 static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_throw(Context *ctx, int argc, term argv[]);
+static term nif_erlang_raise(Context *ctx, int argc, term argv[]);
 static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[]);
@@ -561,6 +562,12 @@ static const struct Nif group_leader_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_group_leader
+};
+
+static const struct Nif raise_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_raise
 };
 
 static const struct Nif atomvm_read_priv_nif =
@@ -2545,6 +2552,16 @@ static term nif_erlang_throw(Context *ctx, int argc, term argv[])
 
     ctx->x[0] = THROW_ATOM;
     ctx->x[1] = t;
+    return term_invalid_term();
+}
+
+static term nif_erlang_raise(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    ctx->x[0] = argv[0];
+    ctx->x[1] = argv[1];
+    ctx->x[2] = term_nil();
     return term_invalid_term();
 }
 

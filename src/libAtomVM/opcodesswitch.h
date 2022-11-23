@@ -40,6 +40,7 @@
 #define ENABLE_OTP21
 #define ENABLE_OTP22
 #define ENABLE_OTP23
+#define ENABLE_OTP24
 
 //#define ENABLE_TRACE
 
@@ -421,6 +422,9 @@ typedef union
             break;                                                                                  \
     }                                                                                               \
 }
+
+#define IS_EXTENDED_ALLOCATOR(code_chunk, base_index, off) \
+    ((code_chunk[(base_index) + (off)]) & 0xF) == COMPACT_EXTENDED
 
 #define NEXT_INSTRUCTION(operands_size) \
     i += operands_size
@@ -1423,9 +1427,38 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             case OP_ALLOCATE_HEAP: {
                 int next_off = 1;
                 int stack_need;
-                DECODE_INTEGER(stack_need, code, i, next_off, next_off);
+                if (UNLIKELY(IS_EXTENDED_ALLOCATOR(code, i, next_off))) {
+                    stack_need = 0;
+                    next_off++; // skip list tag
+                    int list_size;
+                    DECODE_INTEGER(list_size, code, i, next_off, next_off);
+                    int allocator_tag;
+                    int allocator_size;
+                    for (int j = 0; j < list_size; j++) {
+                        DECODE_INTEGER(allocator_tag, code, i, next_off, next_off);
+                        DECODE_INTEGER(allocator_size, code, i, next_off, next_off);
+                        stack_need += allocator_size;
+                    }
+                } else {
+                    DECODE_INTEGER(stack_need, code, i, next_off, next_off);
+                }
+
                 int heap_need;
-                DECODE_INTEGER(heap_need, code, i, next_off, next_off);
+                if (UNLIKELY(IS_EXTENDED_ALLOCATOR(code, i, next_off))) {
+                    heap_need = 0;
+                    next_off++; // skip list tag
+                    int list_size;
+                    DECODE_INTEGER(list_size, code, i, next_off, next_off);
+                    int allocator_tag;
+                    int allocator_size;
+                    for (int j = 0; j < list_size; j++) {
+                        DECODE_INTEGER(allocator_tag, code, i, next_off, next_off);
+                        DECODE_INTEGER(allocator_size, code, i, next_off, next_off);
+                        heap_need += allocator_size;
+                    }
+                } else {
+                    DECODE_INTEGER(heap_need, code, i, next_off, next_off);
+                }
                 int live;
                 DECODE_INTEGER(live, code, i, next_off, next_off);
                 TRACE("allocate_heap/2 stack_need=%i, heap_need=%i, live=%i\n", stack_need, heap_need, live);
@@ -1492,9 +1525,38 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             case OP_ALLOCATE_HEAP_ZERO: {
                 int next_off = 1;
                 int stack_need;
-                DECODE_INTEGER(stack_need, code, i, next_off, next_off);
+                if (UNLIKELY(IS_EXTENDED_ALLOCATOR(code, i, next_off))) {
+                    stack_need = 0;
+                    next_off++; // skip list tag
+                    int list_size;
+                    DECODE_INTEGER(list_size, code, i, next_off, next_off);
+                    int allocator_tag;
+                    int allocator_size;
+                    for (int j = 0; j < list_size; j++) {
+                        DECODE_INTEGER(allocator_tag, code, i, next_off, next_off);
+                        DECODE_INTEGER(allocator_size, code, i, next_off, next_off);
+                        stack_need += allocator_size;
+                    }
+                } else {
+                    DECODE_INTEGER(stack_need, code, i, next_off, next_off);
+                }
+
                 int heap_need;
-                DECODE_INTEGER(heap_need, code, i, next_off, next_off);
+                if (UNLIKELY(IS_EXTENDED_ALLOCATOR(code, i, next_off))) {
+                    heap_need = 0;
+                    next_off++; // skip list tag
+                    int list_size;
+                    DECODE_INTEGER(list_size, code, i, next_off, next_off);
+                    int allocator_tag;
+                    int allocator_size;
+                    for (int j = 0; j < list_size; j++) {
+                        DECODE_INTEGER(allocator_tag, code, i, next_off, next_off);
+                        DECODE_INTEGER(allocator_size, code, i, next_off, next_off);
+                        heap_need += allocator_size;
+                    }
+                } else {
+                    DECODE_INTEGER(heap_need, code, i, next_off, next_off);
+                }
                 int live;
                 DECODE_INTEGER(live, code, i, next_off, next_off);
                 TRACE("allocate_heap_zero/3 stack_need=%i, heap_need=%i, live=%i\n", stack_need, heap_need, live);
@@ -1529,7 +1591,21 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             case OP_TEST_HEAP: {
                 int next_offset = 1;
                 unsigned int heap_need;
-                DECODE_INTEGER(heap_need, code, i, next_offset, next_offset);
+                if (UNLIKELY(IS_EXTENDED_ALLOCATOR(code, i, next_offset))) {
+                    heap_need = 0;
+                    next_offset++; // skip list tag
+                    int list_size;
+                    DECODE_INTEGER(list_size, code, i, next_offset, next_offset);
+                    int allocator_tag;
+                    int allocator_size;
+                    for (int j = 0; j < list_size; j++) {
+                        DECODE_INTEGER(allocator_tag, code, i, next_offset, next_offset);
+                        DECODE_INTEGER(allocator_size, code, i, next_offset, next_offset);
+                        heap_need += allocator_size;
+                    }
+                } else {
+                    DECODE_INTEGER(heap_need, code, i, next_offset, next_offset);
+                }
                 int live_registers;
                 DECODE_INTEGER(live_registers, code, i, next_offset, next_offset);
 
@@ -4966,6 +5042,105 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_CODE_LOADER
                     NEXT_INSTRUCTION(next_off);
                 #endif
+                break;
+            }
+#endif
+
+#ifdef ENABLE_OTP24
+            case OP_MAKE_FUN3: {
+                int next_off = 1;
+                int fun_index;
+                DECODE_LABEL(fun_index, code, i, next_off, next_off);
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
+
+                next_off++; // skip extended list tag
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    uint32_t n_freeze = module_get_fun_freeze(mod, fun_index);
+
+                    int size = 2 + n_freeze;
+                    if (memory_ensure_free(ctx, size + 1) != MEMORY_GC_OK) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+                    term *boxed_func = memory_heap_alloc(ctx, size + 1);
+
+                    boxed_func[0] = (size << 6) | TERM_BOXED_FUN;
+                    boxed_func[1] = (term) mod;
+                    boxed_func[2] = term_from_int(fun_index);
+                #endif
+
+                int size_args;
+                DECODE_INTEGER(size_args, code, i, next_off, next_off);
+                for (int j = 0; j < size_args; j++) {
+                    term arg;
+                    DECODE_COMPACT_TERM(arg, code, i, next_off, next_off);
+                    #ifdef IMPL_EXECUTE_LOOP
+                        boxed_func[3 + j] = arg;
+                    #endif
+                }
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    term fun = ((term) boxed_func) | TERM_BOXED_VALUE_TAG;
+                    WRITE_REGISTER(dreg_type, dreg, fun);
+                #endif
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_INIT_YREGS: {
+                int next_off = 1;
+                next_off++; // skip extended list tag
+                int size;
+                DECODE_INTEGER(size, code, i, next_off, next_off);
+                for (int j = 0; j < size; j++) {
+                    int target;
+                    DECODE_INTEGER(target, code, i, next_off, next_off);
+                    #ifdef IMPL_EXECUTE_LOOP
+                        ctx->e[target] = term_nil();
+                    #endif
+                }
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_RECV_MARKER_BIND: {
+                int next_off = 1;
+                dreg_t reg_a;
+                dreg_type_t reg_a_type;
+                DECODE_DEST_REGISTER(reg_a, reg_a_type, code, i, next_off, next_off);
+                dreg_t reg_b;
+                dreg_type_t reg_b_type;
+                DECODE_DEST_REGISTER(reg_b, reg_b_type, code, i, next_off, next_off);
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_RECV_MARKER_CLEAR: {
+                int next_off = 1;
+                dreg_t reg_a;
+                dreg_type_t reg_a_type;
+                DECODE_DEST_REGISTER(reg_a, reg_a_type, code, i, next_off, next_off);
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_RECV_MARKER_RESERVE: {
+                int next_off = 1;
+                dreg_t reg_a;
+                dreg_type_t reg_a_type;
+                DECODE_DEST_REGISTER(reg_a, reg_a_type, code, i, next_off, next_off);
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_RECV_MARKER_USE: {
+                int next_off = 1;
+                dreg_t reg_a;
+                dreg_type_t reg_a_type;
+                DECODE_DEST_REGISTER(reg_a, reg_a_type, code, i, next_off, next_off);
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 #endif
