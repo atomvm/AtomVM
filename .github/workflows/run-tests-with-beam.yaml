@@ -13,11 +13,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: ["macos-latest", "ubuntu-latest"]
+        os: ["macos-latest", "ubuntu-20.04"]
         otp: ["21", "22", "23"]
 
         include:
-        - os: "ubuntu-latest"
+        - os: "ubuntu-20.04"
 
         - os: "macos-latest"
           cmake_opts: "-DOPENSSL_ROOT_DIR=/usr/local/opt/openssl"
