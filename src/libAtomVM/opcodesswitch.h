@@ -5002,6 +5002,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 next_off++; // skip extended list tag
+                int size_args;
+                DECODE_INTEGER(size_args, code, i, next_off, next_off);
+                TRACE("make_fun3/3, fun_index=%i dreg=%c%i arity=%i\n", fun_index, T_DEST_REG(dreg_type, dreg), size_args);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     uint32_t n_freeze = module_get_fun_freeze(mod, fun_index);
@@ -5017,8 +5020,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     boxed_func[2] = term_from_int(fun_index);
                 #endif
 
-                int size_args;
-                DECODE_INTEGER(size_args, code, i, next_off, next_off);
                 for (int j = 0; j < size_args; j++) {
                     term arg;
                     DECODE_COMPACT_TERM(arg, code, i, next_off, next_off);
@@ -5059,6 +5060,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 dreg_t reg_b;
                 dreg_type_t reg_b_type;
                 DECODE_DEST_REGISTER(reg_b, reg_b_type, code, i, next_off, next_off);
+                TRACE("recv_marker_bind/2: reg1=%c%i reg2=%c%i\n", T_DEST_REG(reg_a_type, reg_a), T_DEST_REG(reg_b_type, reg_b));
                 NEXT_INSTRUCTION(next_off);
                 break;
             }
@@ -5068,6 +5070,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 dreg_t reg_a;
                 dreg_type_t reg_a_type;
                 DECODE_DEST_REGISTER(reg_a, reg_a_type, code, i, next_off, next_off);
+                TRACE("recv_marker_clean/1: reg1=%c%i\n", T_DEST_REG(reg_a_type, reg_a));
                 NEXT_INSTRUCTION(next_off);
                 break;
             }
@@ -5077,6 +5080,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 dreg_t reg_a;
                 dreg_type_t reg_a_type;
                 DECODE_DEST_REGISTER(reg_a, reg_a_type, code, i, next_off, next_off);
+                TRACE("recv_marker_reserve/1: reg1=%c%i\n", T_DEST_REG(reg_a_type, reg_a));
                 NEXT_INSTRUCTION(next_off);
                 break;
             }
@@ -5086,6 +5090,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 dreg_t reg_a;
                 dreg_type_t reg_a_type;
                 DECODE_DEST_REGISTER(reg_a, reg_a_type, code, i, next_off, next_off);
+                TRACE("recv_marker_use/1: reg1=%c%i\n", T_DEST_REG(reg_a_type, reg_a));
                 NEXT_INSTRUCTION(next_off);
                 break;
             }
