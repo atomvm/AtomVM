@@ -2802,7 +2802,19 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     int local_process_id = term_to_local_process_id(target_pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
     if (IS_NULL_PTR(target)) {
-        return nif_erlang_make_ref_0(ctx, argc, argv);
+        int res_size = REF_SIZE + TUPLE_SIZE(5);
+        if (UNLIKELY(memory_ensure_free(ctx, res_size) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term ref = nif_erlang_make_ref_0(ctx, argc, argv);
+        term down_message_tuple = term_alloc_tuple(5, ctx);
+        term_put_tuple_element(down_message_tuple, 0, DOWN_ATOM);
+        term_put_tuple_element(down_message_tuple, 1, ref);
+        term_put_tuple_element(down_message_tuple, 2, PROCESS_ATOM);
+        term_put_tuple_element(down_message_tuple, 3, argv[1]);
+        term_put_tuple_element(down_message_tuple, 4, NOPROC_ATOM);
+        mailbox_send(ctx, down_message_tuple);
+        return ref;
     }
 
     term callee_pid = term_from_local_process_id(ctx->process_id);

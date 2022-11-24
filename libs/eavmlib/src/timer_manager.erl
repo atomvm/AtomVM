@@ -116,8 +116,10 @@ handle_call({cancel, TimerRef}, From, #state{timers = Timers} = State) ->
         false ->
             {reply, false, State};
         {TimerRef, Pid} ->
+            _MonitorRef = erlang:monitor(process, Pid),
             Pid ! {cancel, From},
-            {noreply, State}
+            NewTimers = lists:keyreplace(Pid, 2, Timers, {{canceled, From}, Pid}),
+            {noreply, State#state{timers = NewTimers}}
     end;
 handle_call({Time, Dest, Msg}, _From, #state{timers = Timers} = State) ->
     {TimerRef, Pid} = do_start_timer(Time, Dest, Msg),
@@ -128,8 +130,30 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 %% @hidden
-handle_info({finished, TimerRef}, #state{timers = Timers} = State) ->
-    {noreply, State#state{timers = lists:keydelete(TimerRef, 1, Timers)}}.
+handle_info({fired, Pid}, #state{timers = Timers} = State) ->
+    NewTimers =
+        case lists:keyfind(Pid, 2, Timers) of
+            {{canceled, From}, Pid} ->
+                gen_server:reply(From, false),
+                lists:keydelete(Pid, 2, Timers);
+            {_TimerRef, Pid} ->
+                lists:keydelete(Pid, 2, Timers);
+            false ->
+                Timers
+        end,
+    {noreply, State#state{timers = NewTimers}};
+handle_info({canceled, Pid}, #state{timers = Timers} = State) ->
+    NewTimers = lists:keydelete(Pid, 2, Timers),
+    {noreply, State#state{timers = NewTimers}};
+handle_info({'DOWN', _MonitorRef, process, Pid, _Reason}, #state{timers = Timers} = State) ->
+    case lists:keyfind(Pid, 2, Timers) of
+        false ->
+            {noreply, State};
+        {{canceled, From}, Pid} ->
+            gen_server:reply(From, false),
+            NewTimers = lists:keydelete(Pid, 2, Timers),
+            {noreply, State#state{timers = NewTimers}}
+    end.
 
 %% @hidden
 terminate(_Reason, _State) ->
@@ -149,12 +173,12 @@ run_timer(MgrPid, Time, TimerRef, Dest, Msg) ->
     Start = erlang:system_time(millisecond),
     receive
         {cancel, From} ->
-            %% TODO return {ok, cancel}
-            gen_server:reply(From, Time - (erlang:system_time(millisecond) - Start))
+            gen_server:reply(From, Time - (erlang:system_time(millisecond) - Start)),
+            MgrPid ! {canceled, self()}
     after Time ->
-        Dest ! {timeout, TimerRef, Msg}
-    end,
-    MgrPid ! {finished, TimerRef}.
+        Dest ! {timeout, TimerRef, Msg},
+        MgrPid ! {fired, self()}
+    end.
 
 %% @private
 send_after_timer(Time, Dest, Msg) ->
