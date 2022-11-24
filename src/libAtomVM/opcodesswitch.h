@@ -5002,25 +5002,22 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 next_off++; // skip extended list tag
-                int size_args;
-                DECODE_INTEGER(size_args, code, i, next_off, next_off);
-                TRACE("make_fun3/3, fun_index=%i dreg=%c%i arity=%i\n", fun_index, T_DEST_REG(dreg_type, dreg), size_args);
+                int size;
+                DECODE_INTEGER(size, code, i, next_off, next_off);
+                TRACE("make_fun3/3, fun_index=%i dreg=%c%i arity=%i\n", fun_index, T_DEST_REG(dreg_type, dreg), size);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    uint32_t n_freeze = module_get_fun_freeze(mod, fun_index);
-
-                    int size = 2 + n_freeze;
-                    if (memory_ensure_free(ctx, size + 1) != MEMORY_GC_OK) {
+                    if (memory_ensure_free(ctx, size + 3) != MEMORY_GC_OK) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    term *boxed_func = memory_heap_alloc(ctx, size + 1);
+                    term *boxed_func = memory_heap_alloc(ctx, size + 3);
 
-                    boxed_func[0] = (size << 6) | TERM_BOXED_FUN;
+                    boxed_func[0] = ((size + 2) << 6) | TERM_BOXED_FUN;
                     boxed_func[1] = (term) mod;
                     boxed_func[2] = term_from_int(fun_index);
                 #endif
 
-                for (int j = 0; j < size_args; j++) {
+                for (int j = 0; j < size; j++) {
                     term arg;
                     DECODE_COMPACT_TERM(arg, code, i, next_off, next_off);
                     #ifdef IMPL_EXECUTE_LOOP
