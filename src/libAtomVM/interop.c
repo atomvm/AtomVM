@@ -123,10 +123,7 @@ term interop_proplist_get_value_default(term list, term key, term default_value)
         term *t_ptr = term_get_list_ptr(t);
 
         term head = t_ptr[1];
-        if (term_is_tuple(head) && term_get_tuple_element(head, 0) == key) {
-            if (UNLIKELY(term_get_tuple_arity(head) != 2)) {
-                break;
-            }
+        if (term_is_tuple(head) && term_get_tuple_arity(head) == 2 && term_get_tuple_element(head, 0) == key) {
             return term_get_tuple_element(head, 1);
 
         } else if (term_is_atom(head)) {
