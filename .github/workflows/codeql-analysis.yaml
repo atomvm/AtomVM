@@ -31,7 +31,7 @@ jobs:
       run: sudo apt update -y
 
     - name: "Install deps"
-      run: sudo apt install -y cmake gperf zlib1g-dev doxygen valgrind
+      run: sudo apt install -y cmake gperf zlib1g-dev ninja-build erlang
 
     - name: "Checkout repository"
       uses: actions/checkout@v2
@@ -43,8 +43,10 @@ jobs:
 
     - name: "Build"
       run: |
-        cmake .
-        make
+        mkdir build
+        cd build
+        cmake .. -G Ninja
+        ninja
 
     - name: "Perform CodeQL Analysis"
       uses: github/codeql-action/analyze@v1
