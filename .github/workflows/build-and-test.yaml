@@ -17,7 +17,7 @@ jobs:
         cc: ["gcc-4.8", "gcc-5", "gcc-6", "gcc-7", "gcc-8", "gcc-9", "gcc-10", "clang-3.9",
         "clang-10"]
         cflags: ["-Os", "-O2", "-O3"]
-        otp: ["21", "22", "23"]
+        otp: ["21", "22", "23", "24"]
 
         exclude:
         - os: "ubuntu-18.04"
@@ -101,6 +101,10 @@ jobs:
 
         - otp: "23"
           elixir_version: "1.10.4"
+          cmake_opts: "-DAVM_DISABLE_FP=on"
+
+        - otp: "24"
+          elixir_version: "1.11"
           cmake_opts: "-DAVM_DISABLE_FP=on"
 
         - os: "ubuntu-18.04"

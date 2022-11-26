@@ -40,6 +40,7 @@
 #define ENABLE_OTP21
 #define ENABLE_OTP22
 #define ENABLE_OTP23
+#define ENABLE_OTP24
 
 //#define ENABLE_TRACE
 
@@ -56,6 +57,7 @@
 #define COMPACT_LARGE_ATOM 10
 #define COMPACT_LARGE_YREG 12
 
+#define COMPACT_EXTENDED_LIST 0x37
 #define COMPACT_EXTENDED_LITERAL 0x47
 
 #define COMPACT_LARGE_IMM_MASK 0x18
@@ -421,6 +423,26 @@ typedef union
             break;                                                                                  \
     }                                                                                               \
 }
+
+#define IS_EXTENDED_ALLOCATOR(code_chunk, base_index, off) \
+    (code_chunk[(base_index) + (off)]) == COMPACT_EXTENDED_LIST
+
+#define DECODE_ALLOCATOR_LIST(need, code_chunk, base_index, off, next_operand_offset)   \
+    if (IS_EXTENDED_ALLOCATOR(code, base_index, off)) {                                 \
+        need = 0;                                                                       \
+        next_operand_offset++; /* skip list tag */                                      \
+        int list_size;                                                                  \
+        DECODE_INTEGER(list_size, code, base_index, off, next_operand_offset);          \
+        int allocator_tag;                                                              \
+        int allocator_size;                                                             \
+        for (int j = 0; j < list_size; j++) {                                           \
+            DECODE_INTEGER(allocator_tag, code, base_index, off, next_operand_offset);  \
+            DECODE_INTEGER(allocator_size, code, base_index, off, next_operand_offset); \
+            need += allocator_size;                                                     \
+        }                                                                               \
+    } else {                                                                            \
+        DECODE_INTEGER(need, code_chunk, base_index, off, next_operand_offset);         \
+    }
 
 #define NEXT_INSTRUCTION(operands_size) \
     i += operands_size
@@ -1425,7 +1447,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 int stack_need;
                 DECODE_INTEGER(stack_need, code, i, next_off, next_off);
                 int heap_need;
-                DECODE_INTEGER(heap_need, code, i, next_off, next_off);
+                DECODE_ALLOCATOR_LIST(heap_need, code, i, next_off, next_off);
                 int live;
                 DECODE_INTEGER(live, code, i, next_off, next_off);
                 TRACE("allocate_heap/2 stack_need=%i, heap_need=%i, live=%i\n", stack_need, heap_need, live);
@@ -1529,7 +1551,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             case OP_TEST_HEAP: {
                 int next_offset = 1;
                 unsigned int heap_need;
-                DECODE_INTEGER(heap_need, code, i, next_offset, next_offset);
+                DECODE_ALLOCATOR_LIST(heap_need, code, i, next_offset, next_offset);
                 int live_registers;
                 DECODE_INTEGER(live_registers, code, i, next_offset, next_offset);
 
@@ -4966,6 +4988,107 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_CODE_LOADER
                     NEXT_INSTRUCTION(next_off);
                 #endif
+                break;
+            }
+#endif
+
+#ifdef ENABLE_OTP24
+            case OP_MAKE_FUN3: {
+                int next_off = 1;
+                int fun_index;
+                DECODE_LABEL(fun_index, code, i, next_off, next_off);
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
+
+                next_off++; // skip extended list tag
+                int size;
+                DECODE_INTEGER(size, code, i, next_off, next_off);
+                TRACE("make_fun3/3, fun_index=%i dreg=%c%i arity=%i\n", fun_index, T_DEST_REG(dreg_type, dreg), size);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    if (memory_ensure_free(ctx, size + 3) != MEMORY_GC_OK) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+                    term *boxed_func = memory_heap_alloc(ctx, size + 3);
+
+                    boxed_func[0] = ((size + 2) << 6) | TERM_BOXED_FUN;
+                    boxed_func[1] = (term) mod;
+                    boxed_func[2] = term_from_int(fun_index);
+                #endif
+
+                for (int j = 0; j < size; j++) {
+                    term arg;
+                    DECODE_COMPACT_TERM(arg, code, i, next_off, next_off);
+                    #ifdef IMPL_EXECUTE_LOOP
+                        boxed_func[3 + j] = arg;
+                    #endif
+                }
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    term fun = ((term) boxed_func) | TERM_BOXED_VALUE_TAG;
+                    WRITE_REGISTER(dreg_type, dreg, fun);
+                #endif
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_INIT_YREGS: {
+                int next_off = 1;
+                next_off++; // skip extended list tag
+                int size;
+                DECODE_INTEGER(size, code, i, next_off, next_off);
+                for (int j = 0; j < size; j++) {
+                    int target;
+                    DECODE_INTEGER(target, code, i, next_off, next_off);
+                    #ifdef IMPL_EXECUTE_LOOP
+                        ctx->e[target] = term_nil();
+                    #endif
+                }
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_RECV_MARKER_BIND: {
+                int next_off = 1;
+                dreg_t reg_a;
+                dreg_type_t reg_a_type;
+                DECODE_DEST_REGISTER(reg_a, reg_a_type, code, i, next_off, next_off);
+                dreg_t reg_b;
+                dreg_type_t reg_b_type;
+                DECODE_DEST_REGISTER(reg_b, reg_b_type, code, i, next_off, next_off);
+                TRACE("recv_marker_bind/2: reg1=%c%i reg2=%c%i\n", T_DEST_REG(reg_a_type, reg_a), T_DEST_REG(reg_b_type, reg_b));
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_RECV_MARKER_CLEAR: {
+                int next_off = 1;
+                dreg_t reg_a;
+                dreg_type_t reg_a_type;
+                DECODE_DEST_REGISTER(reg_a, reg_a_type, code, i, next_off, next_off);
+                TRACE("recv_marker_clean/1: reg1=%c%i\n", T_DEST_REG(reg_a_type, reg_a));
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_RECV_MARKER_RESERVE: {
+                int next_off = 1;
+                dreg_t reg_a;
+                dreg_type_t reg_a_type;
+                DECODE_DEST_REGISTER(reg_a, reg_a_type, code, i, next_off, next_off);
+                TRACE("recv_marker_reserve/1: reg1=%c%i\n", T_DEST_REG(reg_a_type, reg_a));
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_RECV_MARKER_USE: {
+                int next_off = 1;
+                dreg_t reg_a;
+                dreg_type_t reg_a_type;
+                DECODE_DEST_REGISTER(reg_a, reg_a_type, code, i, next_off, next_off);
+                TRACE("recv_marker_use/1: reg1=%c%i\n", T_DEST_REG(reg_a_type, reg_a));
+                NEXT_INSTRUCTION(next_off);
                 break;
             }
 #endif
