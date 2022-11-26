@@ -112,7 +112,7 @@ test_late_reply() ->
     %% just check to make sure messages make it back before the timeout
     %%
     ok = gen_server:call(Pid, {reply_after, 0, ok}),
-    ok = gen_server:call(Pid, {reply_after, 150, ok}, 300),
+    ok = gen_server:call(Pid, {reply_after, 150, ok}),
     %%
     %% this one should time out
     %%
@@ -203,13 +203,24 @@ test_timeout_info() ->
     timer:sleep(11),
     N = gen_server:call(Pid, get_num_timeouts),
     true = N > 0,
+    ok = test_timeout_info_repeats(Pid, 30),
+    gen_server:stop(Pid).
+
+% timeout message itself is repeated as it is a handle_info message.
+% This test is flappy as there is no guarantee that Pid would be
+% scheduled if the system is very busy.
+test_timeout_info_repeats(_Pid, Sleep) when Sleep > 5000 -> fail;
+test_timeout_info_repeats(Pid, Sleep) ->
+    N = gen_server:call(Pid, get_num_timeouts),
     Pid ! ping,
-    % timeout message itself is repeated as it is a handle_info message.
-    timer:sleep(30),
+    timer:sleep(Sleep),
     M = gen_server:call(Pid, get_num_timeouts),
-    true = M > N + 1,
-    gen_server:stop(Pid),
-    ok.
+    if
+        M > N + 1 ->
+            ok;
+        true ->
+            test_timeout_info_repeats(Pid, 2 * Sleep)
+    end.
 
 %%
 %% callbacks
