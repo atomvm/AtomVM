@@ -80,6 +80,8 @@ struct Module
     void *fun_table;
     void *str_table;
     size_t str_table_len;
+    
+    unsigned *label_fun_table;
 
     uint16_t *line_refs;
     struct ModuleFilename *filenames;
@@ -270,6 +272,9 @@ static inline const uint8_t *module_get_str(Module *mod, size_t offset, size_t *
     *remaining = mod->str_table_len - offset;
     return ((const uint8_t *) mod->str_table) + 8 + offset;
 }
+
+void module_get_fun_arity(Module *mod, int label, AtomString *function_name_atom, int *arity);
+void module_set_label_fun_arity(Module *mod, int label, int local_fun, int arity);
 
 #ifdef __cplusplus
 }

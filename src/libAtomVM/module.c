@@ -204,9 +204,17 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     mod->fun_table = beam_file + offsets[FUNT];
     mod->str_table = beam_file + offsets[STRT];
     mod->str_table_len = sizes[STRT];
-    mod->labels = calloc(ENDIAN_SWAP_32(mod->code->labels), sizeof(void *));
+    uint32_t num_labels = ENDIAN_SWAP_32(mod->code->labels);
+    mod->labels = calloc(num_labels, sizeof(void *));
     if (IS_NULL_PTR(mod->labels)) {
         fprintf(stderr, "Error: Null module labels: %s:%i.\n", __FILE__, __LINE__);
+        module_destroy(mod);
+        return NULL;
+    }
+
+    mod->label_fun_table = calloc(num_labels, sizeof(uint16_t));
+    if (IS_NULL_PTR(mod->label_fun_table)) {
+        fprintf(stderr, "Error: Failed to allocate memory for label_fun_table: %s:%i.\n", __FILE__, __LINE__);
         module_destroy(mod);
         return NULL;
     }
@@ -253,6 +261,7 @@ COLD_FUNC void module_destroy(Module *module)
     if (module->free_literals_data) {
         free(module->literals_data);
     }
+    free(module->label_fun_table);
     free(module);
 }
 
@@ -513,4 +522,25 @@ static void parse_line_table(uint16_t **line_refs, struct ModuleFilename **filen
     if (IS_NULL_PTR(*filenames)) {
         return;
     }
+}
+
+void module_get_fun_arity(Module *mod, int label, AtomString *function_name_atom, int *arity)
+{
+    uint32_t num_labels = ENDIAN_SWAP_32(mod->code->labels);
+    if (label >= num_labels) {
+        *function_name_atom = NULL;
+        *arity = 0;
+        return;
+    }
+    int value = mod->label_fun_table[label - 1];
+    int local_atom = (value >> 4) & 0x3FF;
+    *arity = value & 0x0F;
+    int global_index = mod->local_atoms_to_global_table[local_atom];
+    *function_name_atom = valueshashtable_get_value(mod->global->atoms_ids_table, global_index, NULL);
+}
+
+void module_set_label_fun_arity(Module *mod, int label, int local_fun, int arity)
+{
+    int value = ((local_fun & 0x3FF) << 4) | (arity & 0x0F);
+    mod->label_fun_table[label - 1] = value;
 }
