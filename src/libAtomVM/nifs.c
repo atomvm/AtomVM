@@ -3407,44 +3407,35 @@ typedef avm_float_t (*binary_math_f)(avm_float_t x, avm_float_t y);
 
 static void maybe_clear_exceptions()
 {
-#if defined(math_errhandling) && defined(MATH_ERREXCEPT)
-    if (math_errhandling & MATH_ERREXCEPT) {
-        feclearexcept(FE_ALL_EXCEPT);
-    }
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+    feclearexcept(FE_DIVBYZERO | FE_INVALID);
 #endif
 }
 
-static term get_exception()
+static term get_exception(avm_float_t f)
 {
-#if defined(math_errhandling) && defined(MATH_ERREXCEPT) && defined(MATH_ERRNO)
-    if (math_errhandling & MATH_ERREXCEPT) {
-        if (fetestexcept(FE_DIVBYZERO) || fetestexcept(FE_INVALID)) {
-            return BADARITH_ATOM;
-        } else {
-            return OK_ATOM;
-        }
-    } else if (math_errhandling & MATH_ERRNO) {
-        if (errno == EDOM || errno == ERANGE) {
-            return BADARITH_ATOM;
-        } else {
-            return OK_ATOM;
-        }
-    }
-#else
-    if (errno == EDOM || errno == ERANGE) {
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+    #pragma STDC FENV_ACCESS ON
+    UNUSED(f)
+    if (fetestexcept(FE_DIVBYZERO | FE_INVALID)) {
         return BADARITH_ATOM;
     } else {
         return OK_ATOM;
     }
+#else
+    return !isfinite(f) ? BADARITH_ATOM : OK_ATOM;
 #endif
 }
 
 static term math_unary_op(Context *ctx, term x_term, unary_math_f f)
 {
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+    #pragma STDC FENV_ACCESS ON
+#endif
     avm_float_t x = term_conv_to_float(x_term);
     maybe_clear_exceptions();
     avm_float_t y = f(x);
-    term exception = get_exception();
+    term exception = get_exception(y);
     if (exception != OK_ATOM) {
         return exception;
     }
@@ -3457,11 +3448,14 @@ static term math_unary_op(Context *ctx, term x_term, unary_math_f f)
 
 static term math_binary_op(Context *ctx, term x_term, term y_term, binary_math_f f)
 {
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+    #pragma STDC FENV_ACCESS ON
+#endif
     avm_float_t x = term_conv_to_float(x_term);
     avm_float_t y = term_conv_to_float(y_term);
     maybe_clear_exceptions();
     avm_float_t z = f(x, y);
-    term exception = get_exception();
+    term exception = get_exception(z);
     if (exception != OK_ATOM) {
         return exception;
     }
