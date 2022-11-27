@@ -256,6 +256,7 @@ struct Test tests[] = {
 
     TEST_CASE_EXPECTED(test_apply, 17),
     TEST_CASE_EXPECTED(test_apply_last, 17),
+    TEST_CASE(test_monitor),
     TEST_CASE_EXPECTED(test_timestamp, 1),
     TEST_CASE(test_set_tuple_element),
 

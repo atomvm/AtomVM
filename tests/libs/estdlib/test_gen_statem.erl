@@ -31,25 +31,9 @@
 
 test() ->
     ok = test_call(),
-    receive
-        X1 -> io:format("test_call, got ~p\n", [X1])
-    after 0 -> ok
-    end,
     ok = test_cast(),
-    receive
-        X2 -> io:format("test_cast, got ~p\n", [X2])
-    after 0 -> ok
-    end,
     ok = test_info(),
-    receive
-        X3 -> io:format("test_info, got ~p\n", [X3])
-    after 0 -> ok
-    end,
     ok = test_timeout(),
-    receive
-        X4 -> io:format("test_timeout, got ~p\n", [X4])
-    after 0 -> ok
-    end,
     ok.
 
 test_call() ->
@@ -90,14 +74,14 @@ test_timeout() ->
     {ok, Pid} = gen_statem:start(?MODULE, [], []),
     ok = gen_statem:call(Pid, {go_to_jail, 250}),
     no = gen_statem:call(Pid, are_you_free),
-    timer:sleep(251),
+    timer:sleep(500),
     yes = gen_statem:call(Pid, are_you_free),
 
     ok = gen_statem:call(Pid, {go_to_jail, 250}),
     no = gen_statem:call(Pid, are_you_free),
     ok = gen_statem:cast(Pid, escape),
     yes = gen_statem:call(Pid, are_you_free),
-    timer:sleep(251),
+    timer:sleep(500),
     0 = gen_statem:call(Pid, get_num_spurious_timeouts),
 
     gen_statem:stop(Pid),

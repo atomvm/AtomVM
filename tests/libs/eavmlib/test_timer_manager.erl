@@ -39,10 +39,12 @@ test_cancel_timer() ->
     ?ASSERT_MATCH(timer_manager:get_timer_refs(), []),
     TimerRef = timer_manager:start_timer(60000, self(), test_cancel_timer),
     ?ASSERT_MATCH(timer_manager:get_timer_refs(), [TimerRef]),
-    %% TODO check return value
-    timer_manager:cancel_timer(TimerRef),
-    %?TIMER:sleep(100),
+    R = timer_manager:cancel_timer(TimerRef),
+    ?ASSERT_TRUE(is_integer(R)),
+    ?ASSERT_TRUE(R > 0),
     ?ASSERT_MATCH(timer_manager:get_timer_refs(), []),
+    R2 = timer_manager:cancel_timer(TimerRef),
+    ?ASSERT_EQUALS(false, R2),
     ok.
 
 test_send_after() ->
