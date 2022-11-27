@@ -1258,6 +1258,8 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
     unsigned int i = 0;
 
     #ifdef IMPL_CODE_LOADER
+        int current_fun_local_atom = -1;
+        int current_fun_arity = -1;
         TRACE("-- Loading code\n");
     #endif
 
@@ -1296,6 +1298,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_CODE_LOADER
                     TRACE("Mark label %i here at %i\n", label, i);
                     module_add_label(mod, label, &code[i]);
+
+                    if (current_fun_local_atom != -1 && current_fun_arity != -1) {
+                        int local_fun = current_fun_local_atom;
+                        int arity = current_fun_arity;
+                        module_set_label_fun_arity(mod, label, local_fun, arity);
+                    }
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
@@ -1315,6 +1323,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 USED_BY_TRACE(function_name_atom);
                 USED_BY_TRACE(module_atom);
                 USED_BY_TRACE(arity);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("Current function updated with atom %i\n", function_name_atom);
+                    current_fun_local_atom = function_name_atom;
+                    current_fun_arity = arity;
+                #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
                     RAISE_ERROR(FUNCTION_CLAUSE_ATOM);
