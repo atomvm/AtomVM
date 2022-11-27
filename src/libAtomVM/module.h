@@ -60,6 +60,12 @@ struct LiteralEntry
     void const *data;
 };
 
+struct ModuleFilename
+{
+    uint8_t *data;
+    size_t len;
+};
+
 struct Module
 {
     GlobalContext *global;
@@ -74,6 +80,9 @@ struct Module
     void *fun_table;
     void *str_table;
     size_t str_table_len;
+
+    uint16_t *line_refs;
+    struct ModuleFilename *filenames;
 
     union imported_func *imported_funcs;
 
