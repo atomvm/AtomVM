@@ -80,11 +80,19 @@ do_spawn(Name, Module, Args, Options, SpawnOpts) ->
     end.
 
 init_it(Starter, Name, Module, Args, Options) ->
-    case erlang:register(Name, self()) of
+    try erlang:register(Name, self()) of
         true ->
-            init_it(Starter, Module, Args, Options);
-        false ->
-            init_ack(Starter, {error, {already_started, whereis(Name)}})
+            init_it(Starter, Module, Args, Options)
+    catch
+        error:badarg ->
+            ErrorT =
+                case whereis(Name) of
+                    undefined ->
+                        badarg;
+                    Pid when is_pid(Pid) ->
+                        {already_started, Pid}
+                end,
+            init_ack(Starter, {error, ErrorT})
     end.
 
 init_it(Starter, Module, Args, Options) ->

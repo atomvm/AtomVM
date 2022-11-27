@@ -41,6 +41,7 @@ test() ->
     ok = test_timeout_call(),
     ok = test_timeout_cast(),
     ok = test_timeout_info(),
+    ok = test_register(),
     ok.
 
 test_call() ->
@@ -221,6 +222,16 @@ test_timeout_info_repeats(Pid, Sleep) ->
         true ->
             test_timeout_info_repeats(Pid, 2 * Sleep)
     end.
+
+test_register() ->
+    {ok, Pid} = gen_server:start({local, ?MODULE}, ?MODULE, [], []),
+    Pid = whereis(?MODULE),
+    {error, {already_started, Pid}} = gen_server:start({local, ?MODULE}, ?MODULE, [], []),
+    gen_server:stop(Pid),
+    % unregister doesn't work yet
+    %   {ok, Pid2} = gen_server:start({local, ?MODULE}, ?MODULE, [], []),
+    %   gen_server:stop(Pid2),
+    ok.
 
 %%
 %% callbacks
