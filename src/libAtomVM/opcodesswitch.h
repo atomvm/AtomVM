@@ -3643,14 +3643,10 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                     avm_int64_t src_value = term_maybe_unbox_int64(src);
                     avm_int_t size_value = term_to_int(size);
-                    if (unit != 1) {
-                        TRACE("bs_put_integer: unit is not 1\n");
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
 
                     TRACE("bs_put_integer/5, fail=%u size=%li unit=%u flags=%x src=%i\n", (unsigned) fail, size_value, (unsigned) unit, (int) flags_value, (unsigned int) src_value);
 
-                    bool result = bitstring_insert_integer(ctx->bs, ctx->bs_offset, src_value, size_value, flags_value);
+                    bool result = bitstring_insert_integer(ctx->bs, ctx->bs_offset, src_value, size_value * unit, flags_value);
                     if (UNLIKELY(!result)) {
                         TRACE("bs_put_integer: Failed to insert integer into binary\n");
                         RAISE_ERROR(BADARG_ATOM);

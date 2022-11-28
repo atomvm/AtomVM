@@ -63,9 +63,14 @@ bool bitstring_insert_any_integer(uint8_t *dst, avm_int_t offset, avm_int64_t va
     if (bs_flags != 0) {
         return false;
     }
+    // value is truncated to 64 bits
+    if (n > 8 * sizeof(value)) {
+        offset += n - (8 * sizeof(value));
+        n = 8 * sizeof(value);
+    }
     for (int i = 0; i < n; ++i) {
         int k = (n - 1) - i;
-        int bit_val = (value & (0x01 << k)) >> k;
+        int bit_val = (value & (0x01LL << k)) >> k;
         if (bit_val) {
             int bit_pos = offset + i;
             int byte_pos = bit_pos >> 3; // div 8
