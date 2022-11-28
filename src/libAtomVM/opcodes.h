@@ -115,6 +115,11 @@
 #define OP_BS_APPEND 134
 #define OP_TRIM 136
 #define OP_BS_INIT_BITS 137
+#define OP_BS_UTF8_SIZE 144
+#define OP_BS_PUT_UTF8 145
+#define OP_BS_UTF16_SIZE 146
+#define OP_BS_PUT_UTF16 147
+#define OP_BS_PUT_UTF32 148
 #define OP_RECV_MARK 150
 #define OP_RECV_SET 151
 #define OP_GC_BIF3 152
