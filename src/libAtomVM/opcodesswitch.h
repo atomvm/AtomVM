@@ -1421,12 +1421,14 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 USED_BY_TRACE(stack_need);
                 USED_BY_TRACE(live);
 
-                #ifdef IMPL_EXECUTE_LOOP
-                    if (live > ctx->avail_registers) {
-                        fprintf(stderr, "Cannot use more than 16 registers.");
+                #ifdef IMPL_CODE_LOADER
+                    if (live > MAX_REG) {
+                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
                         AVM_ABORT();
                     }
+                #endif
 
+                #ifdef IMPL_EXECUTE_LOOP
                     context_clean_registers(ctx, live);
 
                     if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
@@ -1455,12 +1457,14 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 USED_BY_TRACE(heap_need);
                 USED_BY_TRACE(live);
 
-                #ifdef IMPL_EXECUTE_LOOP
-                    if (live > ctx->avail_registers) {
-                        fprintf(stderr, "Cannot use more than 16 registers.");
+                #ifdef IMPL_CODE_LOADER
+                    if (live > MAX_REG) {
+                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
                         AVM_ABORT();
                     }
+                #endif
 
+                #ifdef IMPL_EXECUTE_LOOP
                     context_clean_registers(ctx, live);
 
                     if ((ctx->heap_ptr + heap_need) > ctx->e - (stack_need + 1)) {
@@ -1486,12 +1490,14 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 USED_BY_TRACE(stack_need);
                 USED_BY_TRACE(live);
 
-                #ifdef IMPL_EXECUTE_LOOP
-                    if (live > ctx->avail_registers) {
-                        fprintf(stderr, "Cannot use more than 16 registers.");
+                #ifdef IMPL_CODE_LOADER
+                    if (live > MAX_REG) {
+                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
                         AVM_ABORT();
                     }
+                #endif
 
+                #ifdef IMPL_EXECUTE_LOOP
                     context_clean_registers(ctx, live);
 
                     if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
@@ -1524,12 +1530,14 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 USED_BY_TRACE(heap_need);
                 USED_BY_TRACE(live);
 
-                #ifdef IMPL_EXECUTE_LOOP
-                    if (live > ctx->avail_registers) {
-                        fprintf(stderr, "Cannot use more than 16 registers.");
+                #ifdef IMPL_CODE_LOADER
+                    if (live > MAX_REG) {
+                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
                         AVM_ABORT();
                     }
+                #endif
 
+                #ifdef IMPL_EXECUTE_LOOP
                     context_clean_registers(ctx, live);
 
                     if ((ctx->heap_ptr + heap_need) > ctx->e - (stack_need + 1)) {
