@@ -270,7 +270,7 @@ struct Test tests[] = {
 
     TEST_CASE_EXPECTED(test_integer_to_binary, 2),
     TEST_CASE_EXPECTED(test_list_to_binary, 1),
-    TEST_CASE_EXPECTED(test_binary_to_list, 1),
+    TEST_CASE_EXPECTED(test_binary_to_list, 0),
     TEST_CASE_EXPECTED(test_atom_to_binary, 1),
 
     TEST_CASE_EXPECTED(test_binary_part, 12),
