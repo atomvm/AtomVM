@@ -203,7 +203,7 @@ jobs:
       working-directory: build
       run: |
         ./tests/test-erlang
-        valgrind ./tests/test-erlang -s floatmath
+        valgrind ./tests/test-erlang
 
     - name: "Test: test-structs"
       timeout-minutes: 10
