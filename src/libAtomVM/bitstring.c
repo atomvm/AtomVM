@@ -44,7 +44,7 @@ bool bitstring_extract_any_integer(const uint8_t *src, size_t offset, avm_int_t 
         }
     }
 
-    if (bs_flags & LittleEndianInteger) {
+    if (bs_flags & LittleEndianIntegerMask) {
         out = from_le64(out) >> (64 - n);
     }
 
