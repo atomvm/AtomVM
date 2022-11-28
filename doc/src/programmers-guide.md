@@ -387,6 +387,40 @@ Use `base64:encode/1` and `base64:decode/1` to encode to and decode from Base64 
 
 You can Use `base64:encode_to_string/1` and `base64:decode_to_string/1` to perform the same encoding, but to return values as Erlang list structures, instead of as binaries.
 
+### Math
+
+AtomvVM supports the following standard functions from the OTP `math` module:
+
+* `cos/1`
+* `acos/1`
+* `acosh/1`
+* `asin/1`
+* `asinh/1`
+* `atan/1`
+* `atan2/2`
+* `atanh/1`
+* `ceil/1`
+* `cosh/1`
+* `exp/1`
+* `floor/1`
+* `fmod/2`
+* `log/1`
+* `log10/1`
+* `log2/1`
+* `pow/2`
+* `sin/1`
+* `sinh/1`
+* `sqrt/1`
+* `tan/1`
+* `tanh/1`
+* `pi/0`
+
+The input values for these functions may be `float` or `integer` types.  The return value is always a value of `float` type.
+
+Input values that are out of range for the specific mathematical function or which otherwise are invalid or yield an invalid result (e.g., division by 0) will result in a `badarith` error.
+
+> Note.  If the AtomVM virtual machine is built with floating point arithmetic support disabled, these functions will result in a `badarg` error.
+
 ## ESP32-specific APIs
 
 Certain APIs are specific to and only supported on the ESP32 platform.  This section describes these APIs.

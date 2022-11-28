@@ -396,6 +396,7 @@ struct Test tests[] = {
     TEST_CASE_COND(float2list2, 31, SKIP_NO_FP),
     TEST_CASE_COND(bin2float, 511, SKIP_NO_FP),
     TEST_CASE_COND(list2float, 511, SKIP_NO_FP),
+    TEST_CASE_COND(floatmath, 0, SKIP_NO_FP),
 
     TEST_CASE_EXPECTED(improper_concat, 7),
     TEST_CASE_EXPECTED(improper_cmp, 3),
