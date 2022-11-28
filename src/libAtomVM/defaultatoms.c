@@ -100,6 +100,9 @@ static const char *const microsecond_atom = "\xB" "microsecond";
 static const char *const infinity_atom = "\x8" "infinity";
 static const char *const timeout_value_atom = "\xD" "timeout_value";
 
+static const char *const machine_atom = "\x7" "machine";
+static const char *const avm_floatsize_atom = "\xD" "avm_floatsize";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -183,6 +186,9 @@ void defaultatoms_init(GlobalContext *glb)
 
     ok &= globalcontext_insert_atom(glb, infinity_atom) == INFINITY_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, timeout_value_atom) == TIMEOUT_VALUE_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, machine_atom) == MACHINE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, avm_floatsize_atom) == AVM_FLOATSIZE_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();

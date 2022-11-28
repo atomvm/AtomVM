@@ -2391,6 +2391,17 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
     if (key == WORDSIZE_ATOM) {
         return term_from_int32(TERM_BYTES);
     }
+    if (key == MACHINE_ATOM) {
+        if (memory_ensure_free(ctx, (sizeof("ATOM") - 1) * 2) != MEMORY_GC_OK) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return term_from_string((const uint8_t *) "ATOM", sizeof("ATOM") - 1, ctx);
+    }
+#ifndef AVM_NO_FP
+    if (key == AVM_FLOATSIZE_ATOM) {
+        return term_from_int32(sizeof(avm_float_t));
+    }
+#endif
     if (key == SYSTEM_ARCHITECTURE_ATOM) {
         char buf[128];
         snprintf(buf, 128, "%s-%s-%s", SYSTEM_NAME, SYSTEM_VERSION, SYSTEM_ARCHITECTURE);
