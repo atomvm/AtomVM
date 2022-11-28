@@ -104,7 +104,7 @@ static const char *const machine_atom = "\x7" "machine";
 static const char *const avm_floatsize_atom = "\xD" "avm_floatsize";
 
 static const char *const append_atom = "\x6" "append";
-static const char *const private_append_atom = "\xD" "private_append";
+static const char *const private_append_atom = "\xE" "private_append";
 static const char *const binary_atom = "\x6" "binary";
 static const char *const integer_atom = "\x7" "integer";
 static const char *const little_atom = "\x6" "little";
