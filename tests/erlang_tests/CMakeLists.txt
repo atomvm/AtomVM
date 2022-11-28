@@ -345,6 +345,7 @@ compile_erlang(floatmul)
 compile_erlang(floatmulovf)
 compile_erlang(floatneg)
 compile_erlang(floatabs)
+compile_erlang(floatdiv)
 compile_erlang(floatmath)
 
 compile_erlang(boxed_is_not_float)
@@ -751,6 +752,7 @@ add_custom_target(erlang_test_modules DEPENDS
     floatmulovf.beam
     floatneg.beam
     floatabs.beam
+    floatdiv.beam
     floatmath.beam
 
     boxed_is_not_float.beam

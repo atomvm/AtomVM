@@ -71,6 +71,10 @@ struct Context
 
     term x[MAX_REG];
 
+#ifndef AVM_NO_FP
+    avm_float_t *fr;
+#endif
+
     term *heap_start;
     term *stack_base;
     term *heap_ptr;
@@ -162,6 +166,23 @@ Context *context_new(GlobalContext *glb);
  * @param c the context that will be destroyed.
  */
 void context_destroy(Context *c);
+
+#ifndef AVM_NO_FP
+/**
+ * @brief Ensure we have FP registers, allocating them if necessary.
+ * @param c context fo allocate FP registers for
+ */
+static inline void context_ensure_fpregs(Context *c)
+{
+    if (UNLIKELY(c->fr == NULL)) {
+        c->fr = (avm_float_t *) malloc(sizeof(avm_float_t) * MAX_REG);
+        if (UNLIKELY(c->fr == NULL)) {
+            fprintf(stderr, "Could not allocate FP registers\n");
+            AVM_ABORT();
+        }
+    }
+}
+#endif
 
 /**
  * @brief Starts executing a function

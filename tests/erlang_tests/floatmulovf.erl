@@ -23,15 +23,46 @@
 -export([start/0]).
 
 start() ->
-    id(add(id(1.7976931348623158e+308), id(1.7976931348623158e+308))).
+    ok = test_mulovf_bif(),
+    ok = test_mulovf_isfloat(),
+    0.
 
-add(A, B) ->
+test_mulovf_bif() ->
+    ok = mul_bif(max_float(), 2.0),
+    ok.
+
+test_mulovf_isfloat() ->
+    ok = mul_isfloat(max_float(), 2.0),
+    ok.
+
+mul_bif(A, B) ->
     try id(A) * id(B) of
-        C -> C
+        _C ->
+            fail_no_ex
     catch
-        error:badarith -> -2;
-        _:_ -> -1
+        error:badarith -> ok;
+        _:_ -> fail_other_ex
     end.
 
 id(I) ->
     I.
+
+mul_isfloat(A, B) when is_float(A) andalso is_float(B) ->
+    try A * B of
+        _C ->
+            fail_no_ex
+    catch
+        error:badarith -> ok;
+        _:_ -> fail_other_ex
+    end.
+
+max_float() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            1.7976931348623157e308;
+        "ATOM" ->
+            case erlang:system_info(avm_floatsize) of
+                4 -> 3.4028234664e38;
+                8 -> 1.7976931348623157e308
+            end
+    end.

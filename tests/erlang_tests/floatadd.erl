@@ -20,13 +20,26 @@
 
 -module(floatadd).
 
--export([start/0]).
+-export([start/0, id/1]).
 
 start() ->
-    to_int(add(id(2.8), id(-0.8))).
+    ok = test_add_bif(),
+    ok = test_add_isfloat(),
+    0.
 
-add(A, B) ->
+test_add_bif() ->
+    2 = to_int(add_bif(id(2.8), id(-0.8))),
+    ok.
+
+test_add_isfloat() ->
+    2 = to_int(add_isfloat(id(2.8), id(-0.8))),
+    ok.
+
+add_bif(A, B) ->
     id(A) + id(B).
+
+add_isfloat(A, B) when is_float(A) andalso is_float(B) ->
+    A + B.
 
 to_int(A) ->
     round(A).

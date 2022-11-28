@@ -20,6 +20,9 @@
 
 #include "context.h"
 
+#include <fenv.h>
+#include <math.h>
+
 #include "dictionary.h"
 #include "globalcontext.h"
 #include "list.h"
@@ -54,6 +57,10 @@ Context *context_new(GlobalContext *glb)
     ctx->heap_ptr = ctx->heap_start;
 
     context_clean_registers(ctx, 0);
+
+#ifndef AVM_NO_FP
+    ctx->fr = NULL;
+#endif
 
     ctx->min_heap_size = 0;
     ctx->max_heap_size = 0;
@@ -111,6 +118,11 @@ Context *context_new(GlobalContext *glb)
 
 void context_destroy(Context *ctx)
 {
+#ifndef AVM_NO_FP
+    if (ctx->fr) {
+        free(ctx->fr);
+    }
+#endif
     list_remove(&ctx->processes_table_head);
 
     memory_sweep_mso_list(ctx->mso_list);

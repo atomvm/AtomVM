@@ -87,6 +87,15 @@
 #define OP_BS_PUT_INTEGER 89
 #define OP_BS_PUT_BINARY 90
 #define OP_BS_PUT_STRING 92
+#define OP_FCLEARERROR 94
+#define OP_FCHECKERROR 95
+#define OP_FMOVE 96
+#define OP_FCONV 97
+#define OP_FADD 98
+#define OP_FSUB 99
+#define OP_FMUL 100
+#define OP_FDIV 101
+#define OP_FNEGATE 102
 #define OP_MAKE_FUN2 103
 #define OP_TRY 104
 #define OP_TRY_END 105

@@ -20,10 +20,16 @@
 
 -module(floatneg).
 
--export([start/0, add/2, id/1, to_int/1]).
+-export([start/0, add/2, id/1, to_int/1, test_negate/2]).
 
 start() ->
-    to_int(-add(id(2.8), id(-0.8))).
+    ok = test_add_neg(),
+    ok = test_negate(1.0, -0.5),
+    0.
+
+test_add_neg() ->
+    -2 = to_int(-add(id(2.8), id(-0.8))),
+    ok.
 
 add(A, B) ->
     id(A) + id(B).
@@ -33,3 +39,12 @@ to_int(A) ->
 
 id(I) ->
     I.
+
+test_negate(X, Y) when is_float(X) ->
+    NX = -X,
+    if
+        NX < Y ->
+            ok;
+        true ->
+            fail
+    end.
