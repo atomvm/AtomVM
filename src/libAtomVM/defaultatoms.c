@@ -115,6 +115,15 @@ static const char *const utf16_atom = "\x5" "utf16";
 static const char *const utf32_atom = "\x5" "utf32";
 static const char *const badrecord_atom = "\x9" "badrecord";
 
+static const char *const copy_atom = "\x4" "copy";
+static const char *const reuse_atom = "\x5" "reuse";
+static const char *const ensure_at_least_atom = "\xF" "ensure_at_least";
+static const char *const ensure_exactly_atom = "\xE" "ensure_exactly";
+static const char *const skip_atom = "\x4" "skip";
+static const char *const get_tail_atom = "\x8" "get_tail";
+static const char *const equal_colon_equal_atom = "\x3" "=:=";
+static const char *const signed_atom = "\x6" "signed";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -213,6 +222,15 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, utf16_atom) == UTF16_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, utf32_atom) == UTF32_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, badrecord_atom) == BADRECORD_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, copy_atom) == COPY_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, reuse_atom) == REUSE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, ensure_at_least_atom) == ENSURE_AT_LEAST_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, ensure_exactly_atom) == ENSURE_EXACTLY_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, skip_atom) == SKIP_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, get_tail_atom) == GET_TAIL_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, equal_colon_equal_atom) == EQUAL_COLON_EQUAL_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, signed_atom) == SIGNED_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();

@@ -160,5 +160,7 @@
 #define OP_BS_CREATE_BIN 177
 #define OP_CALL_FUN2 178
 #define OP_BADRECORD 180
+#define OP_UPDATE_RECORD 181
+#define OP_BS_MATCH 182
 
 #endif
