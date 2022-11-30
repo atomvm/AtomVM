@@ -17,7 +17,7 @@ jobs:
         cc: ["gcc-4.8", "gcc-5", "gcc-6", "gcc-7", "gcc-8", "gcc-9", "gcc-10", "clang-3.9",
         "clang-10"]
         cflags: ["-Os", "-O2", "-O3"]
-        otp: ["21", "22", "23", "24"]
+        otp: ["21", "22", "23", "24", "25", "master"]
 
         exclude:
         - os: "ubuntu-18.04"
