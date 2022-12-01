@@ -47,6 +47,7 @@
 #define ENABLE_OTP26
 
 //#define ENABLE_TRACE
+#define ENABLE_DECODE_FAILURE_MESSAGES
 
 #include "trace.h"
 
@@ -104,193 +105,59 @@ typedef union
 
 #ifdef IMPL_CODE_LOADER
 
+#if defined(ENABLE_TRACE) || defined(ENABLE_DECODE_FAILURE_MESSAGES)
+#define DECODE_FAILURE(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__); return -1
+#else
+#define DECODE_FAILURE(fmt, ...) return -1
+#endif
+
 #define T_DEST_REG(dreg_type, dreg) \
     reg_type_c((dreg_type).reg_type), ((dreg))
-
-#define DECODE_COMPACT_TERM(dest_term, code_chunk, base_index, off)                     \
-{                                                                                       \
-    uint8_t first_byte = (code_chunk[(base_index) + (off)]);                            \
-    switch (first_byte & 0xF) {                                                         \
-        case COMPACT_LARGE_LITERAL:                                                     \
-        case COMPACT_LITERAL:                                                           \
-            switch (((first_byte) >> 3) & 0x3) {                                        \
-                case 0:                                                                 \
-                case 2:                                                                 \
-                    dest_term = term_from_int4(first_byte >> 4);                        \
-                    off += 1;                                                           \
-                    break;                                                              \
-                                                                                        \
-                case 1:                                                                 \
-                    dest_term = term_from_int4(((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]); \
-                    off += 2;                                                           \
-                    break;                                                              \
-                                                                                        \
-                default:                                                                \
-                    fprintf(stderr, "Operand not literal: %x, or unsupported encoding\n", (first_byte)); \
-                    AVM_ABORT();                                                        \
-                    break;                                                              \
-            }                                                                           \
-            break;                                                                      \
-                                                                                        \
-        case COMPACT_INTEGER:                                                           \
-            switch (((first_byte) >> 3) & 0x3) {                                        \
-                case 0:                                                                 \
-                case 2:                                                                 \
-                    off += 1;                                                           \
-                    break;                                                              \
-                                                                                        \
-                default:                                                                \
-                    fprintf(stderr, "Operand not a small integer: %x, or unsupported encoding\n", (first_byte));        \
-                    AVM_ABORT();                                                        \
-                    break;                                                              \
-            }                                                                           \
-            break;                                                                      \
-                                                                                        \
-        case COMPACT_ATOM:                                                              \
-        case COMPACT_XREG:                                                              \
-        case COMPACT_YREG:                                                              \
-            off += 1;                                                                   \
-            break;                                                                      \
-                                                                                        \
-        case COMPACT_EXTENDED:                                                          \
-            switch (first_byte) {                                                       \
-                case COMPACT_EXTENDED_LITERAL: {                                        \
-                    uint8_t ext = (code_chunk[(base_index) + (off) + 1] & 0xF);         \
-                    if (ext == 0) {                                                     \
-                        off += 2;                                                       \
-                    } else if (ext == 0x8) {                                            \
-                        off += 3;                                                       \
-                    } else {                                                            \
-                        AVM_ABORT();                                                    \
-                    }                                                                   \
-                    break;                                                              \
-                }                                                                       \
-                case COMPACT_EXTENDED_ALLOCATION_LIST: {                                \
-                    uint8_t len = (code_chunk[(base_index) + (off) + 1] >> 4);          \
-                    off += (len * 2);                                                   \
-                    break;                                                              \
-                }                                                                       \
-                case COMPACT_EXTENDED_TYPED_REGISTER: {                                 \
-                    uint8_t reg_byte = code_chunk[(base_index) + (off) + 1];            \
-                    if (((reg_byte & 0x0F) != COMPACT_XREG)                             \
-                        && ((reg_byte & 0x0F) != COMPACT_YREG)) {                       \
-                        fprintf(stderr, "Unexpected reg byte %x @ %d\n", (int) reg_byte, (base_index) + (off) + 1); \
-                        AVM_ABORT();                                                    \
-                    }                                                                   \
-                    off += 2;                                                           \
-                    int type_index;                                                     \
-                    DECODE_LITERAL(type_index, code_chunk, base_index, off)             \
-                    break;                                                              \
-                }                                                                       \
-                default:                                                                \
-                    fprintf(stderr, "Unexpected extended %x @ %d\n", (int) first_byte, (base_index) + (off) + 1); \
-                    AVM_ABORT();                                                        \
-                    break;                                                              \
-            }                                                                           \
-            break;                                                                      \
-                                                                                        \
-        case COMPACT_LARGE_INTEGER:                                                     \
-        case COMPACT_LARGE_ATOM:                                                        \
-            switch (first_byte & COMPACT_LARGE_IMM_MASK) {                              \
-                case COMPACT_11BITS_VALUE:                                              \
-                    off += 2;                                                           \
-                    break;                                                              \
-                                                                                        \
-                case COMPACT_NBITS_VALUE:                                               \
-                    /* TODO: when first_byte >> 5 is 7, a different encoding is used */ \
-                    off += (first_byte >> 5) + 3;                                       \
-                    break;                                                              \
-                                                                                        \
-                default:                                                                \
-                    assert((first_byte & 0x30) != COMPACT_LARGE_INTEGER);               \
-                    break;                                                              \
-            }                                                                           \
-            break;                                                                      \
-                                                                                        \
-        case COMPACT_LARGE_YREG:                                                        \
-            off += 2;                                                                   \
-            break;                                                                      \
-                                                                                        \
-        default:                                                                        \
-            fprintf(stderr, "unknown compact term type: %i\n", ((first_byte) & 0xF));   \
-            AVM_ABORT();                                                                \
-            break;                                                                      \
-    }                                                                                   \
-}
 
 #define DECODE_EXTENDED_LIST_TAG(code_chunk, base_index, off)                           \
 {                                                                                       \
     if ((code_chunk[(base_index) + (off)]) != COMPACT_EXTENDED_LIST) {                  \
-        fprintf(stderr, "Unexpected operand, expected a list, got %x\n", code_chunk[(base_index) + (off)]); \
-        AVM_ABORT();                                                                    \
+        DECODE_FAILURE("Unexpected operand, expected a list, got %x\n", code_chunk[(base_index) + (off)]); \
     }                                                                                   \
     off++;                                                                              \
 }
 
-#define DECODE_DEST_REGISTER(dreg, dreg_type, code_chunk, base_index, off)                          \
-{                                                                                                   \
-    uint8_t first_byte = code_chunk[(base_index) + (off)];                                          \
-    uint8_t reg_type = first_byte & 0xF;                                                            \
-    (dreg_type).reg_type = reg_type;                                                                \
-    switch (reg_type) {                                                                             \
-        case COMPACT_XREG:                                                                          \
-        case COMPACT_YREG:                                                                          \
-            (dreg) = code_chunk[(base_index) + (off)] >> 4;                                         \
-            off += 1;                                                                               \
-            break;                                                                                  \
-        case COMPACT_LARGE_YREG:                                                                    \
-            (dreg) = (((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]);           \
-            off += 2;                                                                               \
-            break;                                                                                  \
-        default:                                                                                    \
-            AVM_ABORT();                                                                            \
-    }                                                                                               \
+#define DECODE_DEST_REGISTER(dreg, dreg_type, code_chunk, base_index, off)          \
+{                                                                                   \
+    int r = decode_dest_register(&dreg, &dreg_type, code_chunk, base_index, off);   \
+    if (r < 0) {                                                                    \
+        return r;                                                                   \
+    }                                                                               \
+    off += r;                                                                       \
+}
+
+static int decode_dest_register(dreg_t *dreg_ptr, dreg_type_t *dreg_type_ptr, const uint8_t *code_chunk, int base_index, const int off)
+{
+    uint8_t first_byte = code_chunk[(base_index) + (off)];
+    uint8_t reg_type = first_byte & 0xF;
+    dreg_type_ptr->reg_type = reg_type;
+    switch (reg_type) {
+        case COMPACT_XREG:
+        case COMPACT_YREG:
+            *dreg_ptr = code_chunk[(base_index) + (off)] >> 4;
+            return 1;
+        case COMPACT_LARGE_YREG:
+            *dreg_ptr = (((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]);
+            return 2;
+        default:
+            DECODE_FAILURE("Unsupported dest register type %d\n", reg_type);
+    }
 }
 
 #define DECODE_FP_REGISTER(freg, code_chunk, base_index, off)                                       \
 {                                                                                                   \
     if ((code_chunk[(base_index) + (off)]) != COMPACT_EXTENDED_FP_REGISTER) {                       \
-        fprintf(stderr, "Unexpected operand, expected an fp register, got %x\n", code_chunk[(base_index) + (off)]); \
-        AVM_ABORT();                                                                                \
+        DECODE_FAILURE("Unexpected operand, expected an fp register, got %x\n", code_chunk[(base_index) + (off)]); \
     }                                                                                               \
     off++;                                                                                          \
     DECODE_LITERAL(freg, code_chunk, base_index, off);                                              \
     if (freg > MAX_REG) {                                                                           \
-        fprintf(stderr, "FP register index %d > MAX_REG = %d\n", freg, MAX_REG);                    \
-        AVM_ABORT();                                                                                \
-    }                                                                                               \
-}
-
-#define DECODE_VALUE32(val, code_chunk, base_index, off)                                            \
-{                                                                                                   \
-    uint8_t first_byte = (code_chunk[(base_index) + (off)]);                                        \
-    switch (((first_byte) >> 3) & 0x3) {                                                            \
-        case 0:                                                                                     \
-        case 2:                                                                                     \
-            val = first_byte >> 4;                                                                  \
-            off += 1;                                                                               \
-            break;                                                                                  \
-                                                                                                    \
-        case 1:                                                                                     \
-            val = ((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1];                \
-            off += 2;                                                                               \
-            break;                                                                                  \
-                                                                                                    \
-        case 3: {                                                                                   \
-            uint8_t sz = (first_byte >> 5) + 2;                                                     \
-            if (sz > 4) {                                                                           \
-                fprintf(stderr, "Unexpected operand, expected a literal of at most 4 bytes\n");     \
-                AVM_ABORT();                                                                        \
-            }                                                                                       \
-            val = 0;                                                                                \
-            for (uint8_t vi = 0; vi < sz; vi++) {                                                   \
-                val <<= 8;                                                                          \
-                val |= code[(base_index) + (off) + 1 + vi];                                         \
-            }                                                                                       \
-            off += 1 + sz;                                                                          \
-            break;                                                                                  \
-        }                                                                                           \
-        default: __builtin_unreachable(); /* help gcc 8.4 */                                        \
+        DECODE_FAILURE("FP register index %d > MAX_REG = %d\n", freg, MAX_REG);                     \
     }                                                                                               \
 }
 
@@ -312,8 +179,7 @@ typedef union
         case 3: {                                                                                   \
             uint8_t sz = (first_byte >> 5) + 2;                                                     \
             if (sz > 8) {                                                                           \
-                fprintf(stderr, "Unexpected operand, expected a literal of at most 8 bytes\n");     \
-                AVM_ABORT();                                                                        \
+                DECODE_FAILURE("Unexpected operand, expected a literal of at most 8 bytes\n");      \
             }                                                                                       \
             val = 0;                                                                                \
             for (uint8_t vi = 0; vi < sz; vi++) {                                                   \
@@ -326,60 +192,97 @@ typedef union
     }                                                                                               \
 }
 
-#define DECODE_ATOM(atom, code_chunk, base_index, off)                                                  \
-{                                                                                                       \
-    if (UNLIKELY(((code_chunk[(base_index) + (off)]) & 0x7) != COMPACT_ATOM)) {                         \
-        fprintf(stderr, "Unexpected operand, expected an atom (%x)\n", (code_chunk[(base_index) + (off)])); \
-        AVM_ABORT();                                                                                    \
-    }                                                                                                   \
-    uint32_t atom_ix;                                                                                   \
-    DECODE_VALUE32(atom_ix, code_chunk, base_index, off);                                               \
-    atom = module_get_atom_term_by_id(mod, atom_ix);                                                    \
+#define DECODE_ATOM(atom, code_chunk, base_index, off)                              \
+{                                                                                   \
+    uint32_t atom_ix;                                                               \
+    int r = decode_value32(&atom_ix, code_chunk, base_index, off, COMPACT_ATOM);    \
+    if (r < 0) {                                                                    \
+        return r;                                                                   \
+    }                                                                               \
+    off += r;                                                                       \
+    atom = module_get_atom_term_by_id(mod, atom_ix);                                \
 }
 
-#define DECODE_LABEL(label, code_chunk, base_index, off)                                                \
-{                                                                                                       \
-    if (UNLIKELY(((code_chunk[(base_index) + (off)]) & 0x7) != COMPACT_LABEL)) {                        \
-        fprintf(stderr, "Unexpected operand, expected a label (%x)\n", (code_chunk[(base_index) + (off)])); \
-        AVM_ABORT();                                                                                    \
-    }                                                                                                   \
-    DECODE_VALUE32(label, code_chunk, base_index, off);                                                 \
+#define DECODE_LABEL(label, code_chunk, base_index, off)                            \
+{                                                                                   \
+    int r = decode_value32(&label, code_chunk, base_index, off, COMPACT_LABEL);     \
+    if (r < 0) {                                                                    \
+        return r;                                                                   \
+    }                                                                               \
+    off += r;                                                                       \
 }
 
-#define DECODE_LITERAL(literal, code_chunk, base_index, off)                                            \
-{                                                                                                       \
-    if (UNLIKELY(((code_chunk[(base_index) + (off)]) & 0x7) != COMPACT_LITERAL)) {                      \
-        fprintf(stderr, "Unexpected operand, expected a literal (%x)\n", (code_chunk[(base_index) + (off)])); \
-        AVM_ABORT();                                                                                    \
-    }                                                                                                   \
-    DECODE_VALUE32(literal, code_chunk, base_index, off);                                               \
+#define DECODE_LITERAL(literal, code_chunk, base_index, off)                        \
+{                                                                                   \
+    int r = decode_value32(&literal, code_chunk, base_index, off, COMPACT_LITERAL); \
+    if (r < 0) {                                                                    \
+        return r;                                                                   \
+    }                                                                               \
+    off += r;                                                                       \
+}
+
+#define DECODE_YREG(reg, code_chunk, base_index, off)                               \
+{                                                                                   \
+    int r = decode_value32(&reg, code_chunk, base_index, off, COMPACT_YREG);        \
+    if (r < 0) {                                                                    \
+        return r;                                                                   \
+    }                                                                               \
+    off += r;                                                                       \
+}
+
+static int decode_value32(uint32_t *value_ptr, const uint8_t *code_chunk, int base_index, const int off, int tag)
+{
+    if (UNLIKELY(((code_chunk[(base_index) + (off)]) & 0x7) != tag)) {
+        DECODE_FAILURE("Unexpected operand, expected tag %x, got %x\n", tag, (code_chunk[(base_index) + (off)]));
+    }
+    uint8_t first_byte = (code_chunk[(base_index) + (off)]);
+    switch (((first_byte) >> 3) & 0x3) {
+        case 0:
+        case 2:
+            *value_ptr = first_byte >> 4;
+            return 1;
+
+        case 1:
+            *value_ptr = ((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1];
+            return 2;
+
+        case 3: {
+            uint8_t sz = (first_byte >> 5) + 2;
+            if (sz > 4) {
+                DECODE_FAILURE("Unexpected operand, expected a literal of at most 4 bytes\n");
+            }
+            uint32_t val = 0;
+            for (int vi = 0; vi < sz; vi++) {
+                val <<= 8;
+                val |= code_chunk[(base_index) + (off) + 1 + vi];
+            }
+            *value_ptr = val;
+            return 1 + sz;
+        }
+        default: __builtin_unreachable(); /* help gcc 8.4 */
+    }
 }
 
 #define DECODE_INTEGER(integer, code_chunk, base_index, off)                                            \
 {                                                                                                       \
     if (UNLIKELY(((code_chunk[(base_index) + (off)]) & 0x7) != COMPACT_INTEGER)) {                      \
-        fprintf(stderr, "Unexpected operand, expected an integer (%x)\n", (code_chunk[(base_index) + (off)])); \
-        AVM_ABORT();                                                                                    \
+        DECODE_FAILURE("Unexpected operand, expected an integer (%x)\n", (code_chunk[(base_index) + (off)])); \
     }                                                                                                   \
     DECODE_VALUE64(integer, code_chunk, base_index, off);                                               \
 }
 
-#define DECODE_XREG(reg, code_chunk, base_index, off)                                                   \
+#define DECODE_LABEL_OR_ATOM(label, code_chunk, base_index, off)                                        \
 {                                                                                                       \
-    if (UNLIKELY(((code_chunk[(base_index) + (off)]) & 0x7) != COMPACT_XREG)) {                         \
-        fprintf(stderr, "Unexpected operand, expected an xreg (%x)\n", (code_chunk[(base_index) + (off)])); \
-        AVM_ABORT();                                                                                    \
+    if (((code_chunk[(base_index) + (off)]) & 0x7) == COMPACT_ATOM) {                                   \
+        term label_atom;                                                                                \
+        DECODE_ATOM(label_atom, code_chunk, base_index, off);                                           \
+        if (UNLIKELY(label_atom != NO_FAIL_ATOM && label_atom != RESUME_ATOM)) {                        \
+            DECODE_FAILURE("Unexpected atom, expected no_fail or resume\n");                            \
+        }                                                                                               \
+        label = 0;                                                                                      \
+    } else {                                                                                            \
+        DECODE_LABEL(label, code_chunk, base_index, off);                                               \
     }                                                                                                   \
-    DECODE_VALUE32(reg, code_chunk, base_index, off);                                                   \
-}
-
-#define DECODE_YREG(reg, code_chunk, base_index, off)                                                   \
-{                                                                                                       \
-    if (UNLIKELY(((code_chunk[(base_index) + (off)]) & 0x7) != COMPACT_YREG)) {                         \
-        fprintf(stderr, "Unexpected operand, expected a yreg (%x)\n", (code_chunk[(base_index) + (off)])); \
-        AVM_ABORT();                                                                                    \
-    }                                                                                                   \
-    DECODE_VALUE32(reg, code_chunk, base_index, off);                                                   \
 }
 
 #define DECODE_ALLOCATOR_LIST(need, code_chunk, base_index, off)                        \
@@ -404,146 +307,138 @@ typedef union
         DECODE_LITERAL(need, code_chunk, base_index, off);                              \
     }
 
+#define DECODE_COMPACT_TERM(dest_term, code_chunk, base_index, off)                     \
+{                                                                                       \
+    int r = decode_compact_term(&dest_term, code_chunk, base_index, off);               \
+    if (UNLIKELY(r < 0)) {                                                              \
+        return r;                                                                       \
+    }                                                                                   \
+    off += r;                                                                           \
+}
+
+static int decode_compact_term(term *dest_term_ptr, const uint8_t *code_chunk, int base_index, const int off)
+{
+    uint8_t first_byte = (code_chunk[base_index + off]);
+    switch (first_byte & 0xF) {
+        case COMPACT_LARGE_LITERAL:
+        case COMPACT_LITERAL:
+            switch (((first_byte) >> 3) & 0x3) {
+                case 0:
+                case 2:
+                    *dest_term_ptr = term_from_int4(first_byte >> 4);
+                    return 1;
+
+                case 1:
+                    *dest_term_ptr = term_from_int4(((first_byte & 0xE0) << 3) | code_chunk[base_index + off + 1]);
+                    return 2;
+
+                default:
+                    DECODE_FAILURE("Operand not literal: %x, or unsupported encoding\n", (first_byte));
+            }
+            break;
+
+        case COMPACT_INTEGER:
+            switch (((first_byte) >> 3) & 0x3) {
+                case 0:
+                case 2:
+                    return 1;
+
+                default:
+                    DECODE_FAILURE("Operand not a small integer: %x, or unsupported encoding\n", (first_byte));
+            }
+            break;
+
+        case COMPACT_ATOM:
+        case COMPACT_XREG:
+        case COMPACT_YREG:
+            return 1;
+
+        case COMPACT_EXTENDED:
+            switch (first_byte) {
+                case COMPACT_EXTENDED_LITERAL: {
+                    uint8_t ext = (code_chunk[(base_index) + (off) + 1] & 0xF);
+                    if (ext == 0) {
+                        return 2;
+                    }
+                    if (ext == 0x8) {
+                        return 3;
+                    }
+                    return -1;
+                }
+                case COMPACT_EXTENDED_ALLOCATION_LIST: {
+                    uint8_t len = (code_chunk[(base_index) + (off) + 1] >> 4);
+                    return (len * 2);
+                }
+                case COMPACT_EXTENDED_TYPED_REGISTER: {
+                    uint8_t reg_byte = code_chunk[(base_index) + (off) + 1];
+                    if (((reg_byte & 0x0F) != COMPACT_XREG)
+                        && ((reg_byte & 0x0F) != COMPACT_YREG)) {
+                        DECODE_FAILURE("Unexpected reg byte %x @ %d\n", (int) reg_byte, (base_index) + (off) + 1);
+                    }
+                    uint32_t type_index;
+                    int r = decode_value32(&type_index, code_chunk, base_index, off + 2, COMPACT_LITERAL);
+                    if (r < 0) {
+                        return r;
+                    }
+                    return r + 2;
+                }
+                default:
+                    DECODE_FAILURE("Unexpected extended %x @ %d\n", (int) first_byte, (base_index) + (off) + 1);
+            }
+
+        case COMPACT_LARGE_INTEGER:
+        case COMPACT_LARGE_ATOM:
+            switch (first_byte & COMPACT_LARGE_IMM_MASK) {
+                case COMPACT_11BITS_VALUE:
+                    return 2;
+
+                case COMPACT_NBITS_VALUE:
+                    /* TODO: when first_byte >> 5 is 7, a different encoding is used */
+                    return (first_byte >> 5) + 3;
+
+                default:
+                    return -1;
+            }
+            break;
+
+        case COMPACT_LARGE_YREG:
+            return 2;
+
+        default:
+            DECODE_FAILURE("Unknown compact term type: %i\n", ((first_byte) & 0xF));
+    }
+}
+
 #endif
 
 #ifdef IMPL_EXECUTE_LOOP
 
+static int large_integer_to_term(term *dest_term_ptr, Context *ctx, const uint8_t *compact_term);
+
 #define T_DEST_REG(dreg_type, dreg) \
     (*dreg_type.ptr == ctx->x) ? 'x' : 'y', (dreg)
 
-#define DECODE_COMPACT_TERM(dest_term, code_chunk, base_index, off)                                                     \
-{                                                                                                                       \
-    uint8_t first_byte = (code_chunk[(base_index) + (off)]);                                                            \
-    switch (first_byte & 0xF) {                                                                                         \
-        case COMPACT_LARGE_LITERAL:                                                                                     \
-        case COMPACT_LITERAL:                                                                                           \
-            switch (((first_byte) >> 3) & 0x3) {                                                                        \
-                case 0:                                                                                                 \
-                case 2:                                                                                                 \
-                    dest_term = term_from_int4(first_byte >> 4);                                                        \
-                    off += 1;                                                                                           \
-                    break;                                                                                              \
-                                                                                                                        \
-                case 1:                                                                                                 \
-                    dest_term = term_from_int4(((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]);      \
-                    off += 2;                                                                                           \
-                    break;                                                                                              \
-                                                                                                                        \
-                default:                                                                                                \
-                    fprintf(stderr, "Operand not a literal: %x, or unsupported encoding\n", (first_byte));              \
-                    AVM_ABORT();                                                                                        \
-                    break;                                                                                              \
-            }                                                                                                           \
-            break;                                                                                                      \
-                                                                                                                        \
-        case COMPACT_INTEGER:                                                                                           \
-            dest_term = term_from_int4(first_byte >> 4);                                                                \
-            off += 1;                                                                                                   \
-            break;                                                                                                      \
-                                                                                                                        \
-        case COMPACT_ATOM:                                                                                              \
-            if (first_byte == COMPACT_ATOM) {                                                                           \
-                dest_term = term_nil();                                                                                 \
-            } else {                                                                                                    \
-                dest_term = module_get_atom_term_by_id(mod, first_byte >> 4);                                           \
-            }                                                                                                           \
-            off += 1;                                                                                                   \
-            break;                                                                                                      \
-                                                                                                                        \
-        case COMPACT_XREG:                                                                                              \
-            dest_term = ctx->x[first_byte >> 4];                                                                        \
-            off += 1;                                                                                                   \
-            break;                                                                                                      \
-                                                                                                                        \
-        case COMPACT_YREG:                                                                                              \
-            dest_term = ctx->e[first_byte >> 4];                                                                        \
-            off += 1;                                                                                                   \
-            break;                                                                                                      \
-                                                                                                                        \
-        case COMPACT_EXTENDED:                                                                                          \
-            switch (first_byte) {                                                                                       \
-                case COMPACT_EXTENDED_LITERAL: {                                                                        \
-                    uint8_t first_extended_byte = code_chunk[(base_index) + (off) + 1];                                 \
-                    if (!(first_extended_byte & 0xF)) {                                                                 \
-                        dest_term = module_load_literal(mod, first_extended_byte >> 4, ctx);                            \
-                        off += 2;                                                                                       \
-                    } else if ((first_extended_byte & 0xF) == 0x8) {                                                    \
-                        uint8_t byte_1 = code_chunk[(base_index) + (off) + 2];                                          \
-                        uint16_t index = (((uint16_t) first_extended_byte & 0xE0) << 3) | byte_1;                       \
-                        dest_term = module_load_literal(mod, index, ctx);                                               \
-                        off += 3;                                                                                       \
-                    } else {                                                                                            \
-                        VM_ABORT();                                                                                     \
-                    }                                                                                                   \
-                    if (UNLIKELY(term_is_invalid_term(dest_term))) {                                                    \
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);                                                                \
-                    }                                                                                                   \
-                                                                                                                        \
-                    break;                                                                                              \
-                }                                                                                                       \
-                case COMPACT_EXTENDED_TYPED_REGISTER: {                                                                 \
-                    uint8_t reg_byte = code_chunk[(base_index) + (off) + 1];                                            \
-                    if ((reg_byte & 0x0F) == COMPACT_XREG) {                                                            \
-                        dest_term = ctx->x[reg_byte >> 4];                                                              \
-                    } else {                                                                                            \
-                        dest_term = ctx->e[reg_byte >> 4];                                                              \
-                    }                                                                                                   \
-                    off += 2;                                                                                           \
-                    int type_index;                                                                                     \
-                    DECODE_LITERAL(type_index, code_chunk, base_index, off)                                             \
-                    break;                                                                                              \
-                }                                                                                                       \
-                default:                                                                                                \
-                    VM_ABORT();                                                                                         \
-                    break;                                                                                              \
-            }                                                                                                           \
-            break;                                                                                                      \
-                                                                                                                        \
-        case COMPACT_LARGE_ATOM:                                                                                        \
-            switch (first_byte & COMPACT_LARGE_IMM_MASK) {                                                              \
-                case COMPACT_11BITS_VALUE:                                                                              \
-                    dest_term = module_get_atom_term_by_id(mod, ((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]); \
-                    off += 2;                                                                                           \
-                    break;                                                                                              \
-                                                                                                                        \
-                default:                                                                                                \
-                    VM_ABORT();                                                                                         \
-                    break;                                                                                              \
-            }                                                                                                           \
-            break;                                                                                                      \
-                                                                                                                        \
-        case COMPACT_LARGE_INTEGER:                                                                                     \
-            switch (first_byte & COMPACT_LARGE_IMM_MASK) {                                                              \
-                case COMPACT_11BITS_VALUE:                                                                              \
-                    dest_term = term_from_int11(((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]);     \
-                    off += 2;                                                                                           \
-                    break;                                                                                              \
-                                                                                                                        \
-                case COMPACT_NBITS_VALUE:                                                                               \
-                    dest_term = large_integer_to_term(ctx, (code_chunk) + (base_index) + (off), &(off));                \
-                    if (UNLIKELY(term_is_invalid_term(dest_term))) {                                                    \
-                        HANDLE_ERROR();                                                                                 \
-                    }                                                                                                   \
-                    break;                                                                                              \
-                                                                                                                        \
-                default:                                                                                                \
-                    VM_ABORT();                                                                                         \
-                    break;                                                                                              \
-            }                                                                                                           \
-            break;                                                                                                      \
-                                                                                                                        \
-        case COMPACT_LARGE_YREG:                                                                                        \
-            if (LIKELY((first_byte & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE)) {                                \
-                dest_term = ctx->e[((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]];                  \
-                off += 2;                                                                                               \
-            } else {                                                                                                    \
-                VM_ABORT();                                                                                             \
-            }                                                                                                           \
-            break;                                                                                                      \
-                                                                                                                        \
-        default:                                                                                                        \
-            VM_ABORT();                                                                                                 \
-    }                                                                                                                   \
+enum DecodeTermErrors {
+    DECODE_TERM_VM_ABORT = -1,
+    DECODE_TERM_OUT_OF_MEMORY = -2,
+    DECODE_TERM_HANDLE_ERROR = -3
+};
+
+#define DECODE_COMPACT_TERM(dest_term, code_chunk, base_index, off)                     \
+{                                                                                       \
+    int r = decode_compact_term(&dest_term, code_chunk, base_index, off, mod, ctx);     \
+    if (UNLIKELY(r < 0)) {                                                              \
+        printf("r = %d\n", r); \
+        switch (r) {                                                                    \
+            case DECODE_TERM_VM_ABORT:                                                  \
+                VM_ABORT();                                                             \
+            case DECODE_TERM_OUT_OF_MEMORY:                                             \
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);                                        \
+            case DECODE_TERM_HANDLE_ERROR:                                              \
+                HANDLE_ERROR();                                                         \
+        }                                                                               \
+    }                                                                                   \
+    off += r;                                                                           \
 }
 
 #define READ_DEST_REGISTER(dreg_type, dreg) \
@@ -641,11 +536,131 @@ typedef union
 #define DECODE_INTEGER(integer, code_chunk, base_index, off) \
     DECODE_VALUE(integer, code_chunk, base_index, off)
 
-#define DECODE_XREG(reg, code_chunk, base_index, off) \
-    DECODE_VALUE(reg, code_chunk, base_index, off)
-
 #define DECODE_YREG(reg, code_chunk, base_index, off) \
     DECODE_VALUE(reg, code_chunk, base_index, off)
+
+#define DECODE_LABEL_OR_ATOM(label, code_chunk, base_index, off)                                        \
+{                                                                                                       \
+    if (((code_chunk[(base_index) + (off)]) & 0x7) == COMPACT_ATOM) {                                   \
+        term label_atom;                                                                                \
+        DECODE_ATOM(label_atom, code_chunk, base_index, off);                                           \
+        label = 0;                                                                                      \
+    } else {                                                                                            \
+        DECODE_LABEL(label, code_chunk, base_index, off);                                               \
+    }                                                                                                   \
+}
+
+
+static int decode_compact_term(term *dest_term_ptr, const uint8_t *code_chunk, int base_index, const int off, Module *mod, Context *ctx)
+{
+    uint8_t first_byte = (code_chunk[(base_index) + (off)]);
+    switch (first_byte & 0xF) {
+        case COMPACT_LARGE_LITERAL:
+        case COMPACT_LITERAL:
+            switch (((first_byte) >> 3) & 0x3) {
+                case 0:
+                case 2:
+                    *dest_term_ptr = term_from_int4(first_byte >> 4);
+                    return 1;
+                case 1:
+                    *dest_term_ptr = term_from_int4(((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]);
+                    return 2;
+            }
+
+        case COMPACT_INTEGER:
+            *dest_term_ptr = term_from_int4(first_byte >> 4);
+            return 1;
+
+        case COMPACT_ATOM:
+            if (first_byte == COMPACT_ATOM) {
+                *dest_term_ptr = term_nil();
+            } else {
+                *dest_term_ptr = module_get_atom_term_by_id(mod, first_byte >> 4);
+            }
+            return 1;
+
+        case COMPACT_XREG:
+            *dest_term_ptr = ctx->x[first_byte >> 4];
+            return 1;
+
+        case COMPACT_YREG:
+            *dest_term_ptr = ctx->e[first_byte >> 4];
+            return 1;
+
+        case COMPACT_EXTENDED:
+            switch (first_byte) {
+                case COMPACT_EXTENDED_LITERAL: {
+                    uint8_t first_extended_byte = code_chunk[(base_index) + (off) + 1];
+                    if (!(first_extended_byte & 0xF)) {
+                        *dest_term_ptr = module_load_literal(mod, first_extended_byte >> 4, ctx);
+                        if (UNLIKELY(term_is_invalid_term(*dest_term_ptr))) {
+                            return DECODE_TERM_OUT_OF_MEMORY;
+                        }
+                        return 2;
+                    }
+                    if ((first_extended_byte & 0xF) == 0x8) {
+                        uint8_t byte_1 = code_chunk[(base_index) + (off) + 2];
+                        uint16_t index = (((uint16_t) first_extended_byte & 0xE0) << 3) | byte_1;
+                        *dest_term_ptr = module_load_literal(mod, index, ctx);
+                        if (UNLIKELY(term_is_invalid_term(*dest_term_ptr))) {
+                            return DECODE_TERM_OUT_OF_MEMORY;
+                        }
+                        return 3;
+                    }
+                    return DECODE_TERM_VM_ABORT;
+                }
+                case COMPACT_EXTENDED_TYPED_REGISTER: {
+                    uint8_t reg_byte = code_chunk[(base_index) + (off) + 1];
+                    if ((reg_byte & 0x0F) == COMPACT_XREG) {
+                        *dest_term_ptr = ctx->x[reg_byte >> 4];
+                    } else {
+                        *dest_term_ptr = ctx->e[reg_byte >> 4];
+                    }
+                    int r = off + 2;
+                    uint32_t type_index;
+                    UNUSED(type_index);
+                    DECODE_LITERAL(type_index, code_chunk, base_index, r)
+                    return r - off;
+                }
+                default:
+                    return DECODE_TERM_VM_ABORT;
+            }
+
+        case COMPACT_LARGE_ATOM:
+            switch (first_byte & COMPACT_LARGE_IMM_MASK) {
+                case COMPACT_11BITS_VALUE:
+                    *dest_term_ptr = module_get_atom_term_by_id(mod, ((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]);
+                    return 2;
+
+                default:
+                    return DECODE_TERM_VM_ABORT;
+            }
+
+        case COMPACT_LARGE_INTEGER:
+            switch (first_byte & COMPACT_LARGE_IMM_MASK) {
+                case COMPACT_11BITS_VALUE:
+                    *dest_term_ptr = term_from_int11(((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]);
+                    return 2;
+
+                case COMPACT_NBITS_VALUE: {
+                    return large_integer_to_term(dest_term_ptr, ctx, (code_chunk) + (base_index) + (off));
+                }
+                default:
+                    return DECODE_TERM_VM_ABORT;
+            }
+            break;
+
+        case COMPACT_LARGE_YREG:
+            if (LIKELY((first_byte & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE)) {
+                *dest_term_ptr = ctx->e[((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]];
+                return 2;
+            }
+            return DECODE_TERM_VM_ABORT;
+
+        default:
+            return DECODE_TERM_VM_ABORT;
+    }
+}
 
 #define DECODE_ALLOCATOR_LIST(need, code_chunk, base_index, off)                        \
     if (IS_EXTENDED_ALLOCATOR(code_chunk, base_index, off)) {                           \
@@ -1024,119 +1039,115 @@ COLD_FUNC static void dump(Context *ctx)
     fprintf(stderr, "\n\n**End Of Crash Report**\n");
 }
 
-static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
+static int maybe_alloc_boxed_integer_fragment(term *dest_term_ptr, Context *ctx, avm_int64_t value)
 {
 #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
     if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
         term *fragment = memory_alloc_heap_fragment(ctx, BOXED_INT64_SIZE);
         if (IS_NULL_PTR(fragment)) {
-            ctx->x[0] = ERROR_ATOM;
-            ctx->x[1] = OUT_OF_MEMORY_ATOM;
-            return term_invalid_term();
+            return DECODE_TERM_OUT_OF_MEMORY;
         }
         term_put_int64(fragment, value);
-        return ((term) fragment) | ((term) TERM_BOXED_VALUE_TAG);
+        *dest_term_ptr = ((term) fragment) | ((term) TERM_BOXED_VALUE_TAG);
+        return 0;
     } else
 #endif
     if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
         term *fragment = memory_alloc_heap_fragment(ctx, BOXED_INT_SIZE);
         if (IS_NULL_PTR(fragment)) {
-            ctx->x[0] = ERROR_ATOM;
-            ctx->x[1] = OUT_OF_MEMORY_ATOM;
-            return term_invalid_term();
+            return DECODE_TERM_OUT_OF_MEMORY;
         }
         term_put_int(fragment, value);
-        return ((term) fragment) | TERM_BOXED_VALUE_TAG;
+        *dest_term_ptr = ((term) fragment) | TERM_BOXED_VALUE_TAG;
+        return 0;
     } else {
-        return term_from_int(value);
+        *dest_term_ptr = term_from_int(value);
+        return 0;
     }
 }
 
-static inline term maybe_alloc_boxed_integer_fragment_helper(Context *ctx, avm_int64_t value, unsigned int bytes_count)
+static inline int maybe_alloc_boxed_integer_fragment_helper(term *dest_term_ptr, Context *ctx, avm_int64_t value, unsigned int bytes_count)
 {
     if (bytes_count < sizeof(avm_int_t)) {
-        return term_from_int(value);
-    } else {
-        return maybe_alloc_boxed_integer_fragment(ctx, value);
+        *dest_term_ptr = term_from_int(value);
+        return bytes_count + 1;
     }
+    int r = maybe_alloc_boxed_integer_fragment(dest_term_ptr, ctx, value);
+    if (r < 0) {
+        return r;
+    }
+    return bytes_count + 1;
 }
 
-static term large_integer_to_term(Context *ctx, uint8_t *compact_term, int *next_operand_offset)
+static int large_integer_to_term(term *dest_term_ptr, Context *ctx, const uint8_t *compact_term)
 {
     int num_bytes = (*compact_term >> 5) + 2;
 
     switch (num_bytes) {
         case 2: {
-            *next_operand_offset += 3;
             int16_t ret_val16 = ((int16_t) compact_term[1]) << 8 | compact_term[2];
-            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val16, 2);
+            return maybe_alloc_boxed_integer_fragment_helper(dest_term_ptr, ctx, ret_val16, 2);
         }
 
         case 3: {
-            *next_operand_offset += 4;
             struct Int24 ret_val24;
             ret_val24.val24 = ((int32_t) compact_term[1]) << 16 | ((int32_t) compact_term[2] << 8) | compact_term[3];
-            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val24.val24, 3);
+            return maybe_alloc_boxed_integer_fragment_helper(dest_term_ptr, ctx, ret_val24.val24, 3);
         }
 
         case 4: {
-            *next_operand_offset += 5;
             int32_t ret_val32;
             ret_val32 = ((int32_t) compact_term[1]) << 24 | ((int32_t) compact_term[2] << 16)
                 | ((int32_t) compact_term[3] << 8) | compact_term[4];
-            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val32, 4);
+            return maybe_alloc_boxed_integer_fragment_helper(dest_term_ptr, ctx, ret_val32, 4);
         }
 
         case 5: {
-            *next_operand_offset += 6;
             struct Int40 ret_val40;
             ret_val40.val40 = ((int64_t) compact_term[1]) << 32 | ((int64_t) compact_term[2] << 24)
                 | ((int64_t) compact_term[3] << 16) | ((int64_t) compact_term[4] << 8)
                 | (int64_t) compact_term[5];
 
-            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val40.val40, 5);
+            return maybe_alloc_boxed_integer_fragment_helper(dest_term_ptr, ctx, ret_val40.val40, 5);
         }
 
         case 6: {
-            *next_operand_offset += 7;
             struct Int48 ret_val48;
             ret_val48.val48 = ((int64_t) compact_term[1]) << 40 | ((int64_t) compact_term[2] << 32)
                 | ((int64_t) compact_term[3] << 24) | ((int64_t) compact_term[4] << 16)
                 | ((int64_t) compact_term[5] << 8) | (int64_t) compact_term[6];
 
-            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val48.val48, 6);
+            return maybe_alloc_boxed_integer_fragment_helper(dest_term_ptr, ctx, ret_val48.val48, 6);
         }
 
         case 7: {
-            *next_operand_offset += 8;
             struct Int56 ret_val56;
             ret_val56.val56 = ((int64_t) compact_term[1]) << 48 | ((int64_t) compact_term[2] << 40)
                 | ((int64_t) compact_term[3] << 32) | ((int64_t) compact_term[4] << 24)
                 | ((int64_t) compact_term[5] << 16) | ((int64_t) compact_term[6] << 8)
                 | (int64_t) compact_term[7];
 
-            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val56.val56, 7);
+            return maybe_alloc_boxed_integer_fragment_helper(dest_term_ptr, ctx, ret_val56.val56, 7);
         }
 
         case 8: {
-            *next_operand_offset += 9;
             int64_t ret_val64;
             ret_val64 = ((int64_t) compact_term[1]) << 56 | ((int64_t) compact_term[2] << 48)
                 | ((int64_t) compact_term[3] << 40) | ((int64_t) compact_term[4] << 32)
                 | ((int64_t) compact_term[5] << 24) | ((int64_t) compact_term[6] << 16)
                 | ((int64_t) compact_term[7] << 8) | (int64_t) compact_term[8];
 
-            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val64, 8);
+            return maybe_alloc_boxed_integer_fragment_helper(dest_term_ptr, ctx, ret_val64, 8);
         }
 
         default:
             ctx->x[0] = ERROR_ATOM;
             ctx->x[1] = OVERFLOW_ATOM;
-            return term_invalid_term();
+            return DECODE_TERM_HANDLE_ERROR;
     }
 }
 
-term make_fun(Context *ctx, const Module *mod, int fun_index)
+static term make_fun(Context *ctx, const Module *mod, int fun_index)
 {
     uint32_t n_freeze = module_get_fun_freeze(mod, fun_index);
 
@@ -1775,8 +1786,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 #ifdef IMPL_CODE_LOADER
                     if (live > MAX_REG) {
-                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
-                        AVM_ABORT();
+                        DECODE_FAILURE("Cannot use more than %d registers.\n", MAX_REG);
                     }
                 #endif
 
@@ -1811,8 +1821,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 #ifdef IMPL_CODE_LOADER
                     if (live > MAX_REG) {
-                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
-                        AVM_ABORT();
+                        DECODE_FAILURE("Cannot use more than %d registers.\n", MAX_REG);
                     }
                 #endif
 
@@ -1844,8 +1853,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 #ifdef IMPL_CODE_LOADER
                     if (live > MAX_REG) {
-                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
-                        AVM_ABORT();
+                        DECODE_FAILURE("Cannot use more than %d registers.\n", MAX_REG);
                     }
                 #endif
 
@@ -1884,8 +1892,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 #ifdef IMPL_CODE_LOADER
                     if (live > MAX_REG) {
-                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
-                        AVM_ABORT();
+                        DECODE_FAILURE("Cannot use more than %d registers.\n", MAX_REG);
                     }
                 #endif
 
@@ -3040,10 +3047,11 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #endif
 
                 for (uint32_t j = 0; j < size; j++) {
-                    if (code[i + next_off] != OP_PUT) {
-                        fprintf(stderr, "Expected put, got opcode: %i\n", code[i + next_off]);
-                        AVM_ABORT();
-                    }
+                    #ifdef IMPL_CODE_LOADER
+                        if (code[i + next_off] != OP_PUT) {
+                            DECODE_FAILURE("Expected put, got opcode: %i\n", code[i + next_off]);
+                        }
+                    #endif
                     next_off++;
                     term put_value;
                     DECODE_COMPACT_TERM(put_value, code, i, next_off);
@@ -3638,8 +3646,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_CODE_LOADER
                     TRACE("bs_put_utf8/3 flags=%x\n", (int) flags);
                     if (flags != 0) {
-                        fprintf(stderr, "bs_put_utf8/3 : unsupported flags %x\n", (int) flags);
-                        AVM_ABORT();
+                        DECODE_FAILURE("bs_put_utf8/3 : unsupported flags %x\n", (int) flags);
                     }
                 #endif
                 #ifdef IMPL_EXECUTE_LOOP
@@ -3786,8 +3793,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_CODE_LOADER
                     TRACE("bs_put_utf16/3 flags=%x\n", (int) flags);
                     if (flags != 0 && flags != LittleEndianInteger && flags != NativeEndianInteger) {
-                        fprintf(stderr, "bs_put_utf16/3 : unsupported flags %x\n", (int) flags);
-                        AVM_ABORT();
+                        DECODE_FAILURE("bs_put_utf16/3 : unsupported flags %x\n", (int) flags);
                     }
                 #endif
                 #ifdef IMPL_EXECUTE_LOOP
@@ -3822,7 +3828,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_COMPACT_TERM(src, code, i, next_off);
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, code, i, next_off);
-                term flags;
+                uint32_t flags;
                 DECODE_LITERAL(flags, code, i, next_off);
                 dreg_t dreg;
                 dreg_type_t dreg_type;
@@ -3865,7 +3871,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_COMPACT_TERM(src, code, i, next_off);
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, code, i, next_off);
-                term flags;
+                uint32_t flags;
                 DECODE_LITERAL(flags, code, i, next_off);
 
                 #ifdef IMPL_CODE_LOADER
@@ -3907,8 +3913,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_CODE_LOADER
                     TRACE("bs_put_utf32/3 flags=%x\n", (int) flags);
                     if (flags != 0 && flags != LittleEndianInteger && flags != NativeEndianInteger) {
-                        fprintf(stderr, "bs_put_utf32/3 : unsupported flags %x\n", (int) flags);
-                        AVM_ABORT();
+                        DECODE_FAILURE("bs_put_utf32/3 : unsupported flags %x\n", (int) flags);
                     }
                 #endif
                 #ifdef IMPL_EXECUTE_LOOP
@@ -3942,7 +3947,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_COMPACT_TERM(src, code, i, next_off);
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, code, i, next_off);
-                term flags;
+                uint32_t flags;
                 DECODE_LITERAL(flags, code, i, next_off);
                 dreg_t dreg;
                 dreg_type_t dreg_type;
@@ -3984,7 +3989,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_COMPACT_TERM(src, code, i, next_off);
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, code, i, next_off);
-                term flags;
+                uint32_t flags;
                 DECODE_LITERAL(flags, code, i, next_off);
 
                 #ifdef IMPL_CODE_LOADER
@@ -4759,8 +4764,8 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     } else {
                         term_set_match_state_offset(src, bs_offset + increment);
 
-                        term t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
-                        if (UNLIKELY(term_is_invalid_term(t))) {
+                        term t;
+                        if (UNLIKELY(maybe_alloc_boxed_integer_fragment(&t, ctx, value.s) < 0)) {
                             HANDLE_ERROR();
                         }
 
@@ -5688,7 +5693,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             case OP_FCHECKERROR: {
                 int next_off = 1;
                 // This can be a noop as we raise from bifs
-                int fail_label;
+                uint32_t fail_label;
                 DECODE_LABEL(fail_label, code, i, next_off);
                 NEXT_INSTRUCTION(next_off);
                 break;
@@ -5697,7 +5702,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             case OP_FMOVE: {
                 int next_off = 1;
                 if (IS_EXTENDED_FP_REGISTER(code, i, next_off)) {
-                    int freg;
+                    uint32_t freg;
                     DECODE_FP_REGISTER(freg, code, i, next_off);
                     dreg_t dreg;
                     dreg_type_t dreg_type;
@@ -5718,7 +5723,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 } else {
                     term src_value;
                     DECODE_COMPACT_TERM(src_value, code, i, next_off);
-                    int freg;
+                    uint32_t freg;
                     DECODE_FP_REGISTER(freg, code, i, next_off);
                     #ifdef IMPL_EXECUTE_LOOP
                         TRACE("fmove/2 %lx, fp%i\n", src_value, freg);
@@ -5740,7 +5745,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 int next_off = 1;
                 term src_value;
                 DECODE_COMPACT_TERM(src_value, code, i, next_off);
-                int freg;
+                uint32_t freg;
                 DECODE_FP_REGISTER(freg, code, i, next_off);
 
                 #ifdef IMPL_EXECUTE_LOOP
@@ -5764,9 +5769,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     #pragma STDC FENV_ACCESS ON
                 #endif
                 int next_off = 1;
-                int fail_label;
+                uint32_t fail_label;
                 DECODE_LABEL(fail_label, code, i, next_off);
-                int freg1, freg2, freg3;
+                uint32_t freg1, freg2, freg3;
                 DECODE_FP_REGISTER(freg1, code, i, next_off);
                 DECODE_FP_REGISTER(freg2, code, i, next_off);
                 DECODE_FP_REGISTER(freg3, code, i, next_off);
@@ -5804,9 +5809,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     #pragma STDC FENV_ACCESS ON
                 #endif
                 int next_off = 1;
-                int fail_label;
+                uint32_t fail_label;
                 DECODE_LABEL(fail_label, code, i, next_off);
-                int freg1, freg2, freg3;
+                uint32_t freg1, freg2, freg3;
                 DECODE_FP_REGISTER(freg1, code, i, next_off);
                 DECODE_FP_REGISTER(freg2, code, i, next_off);
                 DECODE_FP_REGISTER(freg3, code, i, next_off);
@@ -5844,9 +5849,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     #pragma STDC FENV_ACCESS ON
                 #endif
                 int next_off = 1;
-                int fail_label;
+                uint32_t fail_label;
                 DECODE_LABEL(fail_label, code, i, next_off);
-                int freg1, freg2, freg3;
+                uint32_t freg1, freg2, freg3;
                 DECODE_FP_REGISTER(freg1, code, i, next_off);
                 DECODE_FP_REGISTER(freg2, code, i, next_off);
                 DECODE_FP_REGISTER(freg3, code, i, next_off);
@@ -5884,9 +5889,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     #pragma STDC FENV_ACCESS ON
                 #endif
                 int next_off = 1;
-                int fail_label;
+                uint32_t fail_label;
                 DECODE_LABEL(fail_label, code, i, next_off);
-                int freg1, freg2, freg3;
+                uint32_t freg1, freg2, freg3;
                 DECODE_FP_REGISTER(freg1, code, i, next_off);
                 DECODE_FP_REGISTER(freg2, code, i, next_off);
                 DECODE_FP_REGISTER(freg3, code, i, next_off);
@@ -5921,9 +5926,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
             case OP_FNEGATE: {
                 int next_off = 1;
-                int fail_label;
+                uint32_t fail_label;
                 DECODE_LABEL(fail_label, code, i, next_off);
-                int freg1, freg2;
+                uint32_t freg1, freg2;
                 DECODE_FP_REGISTER(freg1, code, i, next_off);
                 DECODE_FP_REGISTER(freg2, code, i, next_off);
                 #ifdef IMPL_EXECUTE_LOOP
@@ -6087,8 +6092,8 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 int next_off = 1;
                 // fail since OTP 23 might be either 'no_fail', 'resume' or a fail label
                 // we are ignoring this right now, but we might use it for future optimizations.
-                term fail;
-                DECODE_COMPACT_TERM(fail, code, i, next_off);
+                uint32_t fail;
+                DECODE_LABEL_OR_ATOM(fail, code, i, next_off);
                 uint32_t live;
                 DECODE_LITERAL(live, code, i, next_off);
                 term src;
@@ -6248,12 +6253,10 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 size_t nb_segments = list_len / 6;
                 #ifdef IMPL_CODE_LOADER
                     if (live > MAX_REG) {
-                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
-                        AVM_ABORT();
+                        DECODE_FAILURE("Cannot use more than %d registers.\n", MAX_REG);
                     }
                     if (list_len != nb_segments * 6) {
-                        fprintf(stderr, "Unexpected number of operations for bs_create_bin/6, each segment should be 6 elements\n");
-                        AVM_ABORT();
+                        DECODE_FAILURE("Unexpected number of operations for bs_create_bin/6, each segment should be 6 elements\n");
                     }
                 #endif
                 // Compute binary size in first iteration
@@ -6263,9 +6266,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 for (size_t j = 0; j < nb_segments; j++) {
                     term atom_type;
                     DECODE_ATOM(atom_type, code, i, next_off);
-                    int seg;
+                    uint32_t seg;
                     DECODE_LITERAL(seg, code, i, next_off);
-                    int segment_unit;
+                    uint32_t segment_unit;
                     DECODE_LITERAL(segment_unit, code, i, next_off);
                     term flags;
                     DECODE_COMPACT_TERM(flags, code, i, next_off);
@@ -6350,9 +6353,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     for (size_t j = 0; j < nb_segments; j++) {
                         term atom_type;
                         DECODE_ATOM(atom_type, code, i, list_off);
-                        int seg;
+                        uint32_t seg;
                         DECODE_LITERAL(seg, code, i, list_off);
-                        int segment_unit;
+                        uint32_t segment_unit;
                         DECODE_LITERAL(segment_unit, code, i, list_off);
                         term flags;
                         DECODE_COMPACT_TERM(flags, code, i, list_off);
@@ -6497,7 +6500,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 int next_off = 1;
                 term tag;
                 DECODE_COMPACT_TERM(tag, code, i, next_off)
-                unsigned int args_count;
+                uint32_t args_count;
                 DECODE_LITERAL(args_count, code, i, next_off)
                 #ifdef IMPL_EXECUTE_LOOP
                     int fun_off = next_off;
@@ -6565,7 +6568,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 term hint;
                 DECODE_ATOM(hint, code, i, next_off);
-                int size;
+                uint32_t size;
                 DECODE_LITERAL(size, code, i, next_off);
                 #ifdef IMPL_EXECUTE_LOOP
                     term dst;
@@ -6583,7 +6586,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     }
                 #endif
                 DECODE_EXTENDED_LIST_TAG(code, i, next_off);
-                int list_len;
+                uint32_t list_len;
                 DECODE_LITERAL(list_len, code, i, next_off);
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("update_record/5 hint=%lu, size=%i, src=%p, dst=%p, updates_len=%d\n", hint, size, (void *)src, (void *)dst, list_len);
@@ -6593,7 +6596,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     }
                 #endif
                 for (int j = 0;  j < list_len; j+=2) {
-                    int update_ix;
+                    uint32_t update_ix;
                     DECODE_LITERAL(update_ix, code, i, next_off);
                     term update_value;
                     DECODE_COMPACT_TERM(update_value, code, i, next_off);
@@ -6627,7 +6630,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 int next_off = 1;
                 TRACE("bs_match/3\n");
 
-                int fail;
+                uint32_t fail;
                 DECODE_LABEL(fail, code, i, next_off);
                 #ifdef IMPL_EXECUTE_LOOP
                     int match_off = next_off;
@@ -6640,7 +6643,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     size_t bs_offset = term_get_match_state_offset(match_state);
                 #endif
                 DECODE_EXTENDED_LIST_TAG(code, i, next_off);
-                int list_len;
+                uint32_t list_len;
                 DECODE_LITERAL(list_len, code, i, next_off);
                 int j = 0;
                 while (j < list_len) {
@@ -6649,10 +6652,10 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     j++;
                     switch (command) {
                         case ENSURE_AT_LEAST_ATOM: {
-                            int stride;
+                            uint32_t stride;
                             DECODE_LITERAL(stride, code, i, next_off);
                             j++;
-                            int unit; // TODO: check use of unit here
+                            uint32_t unit; // TODO: check use of unit here
                             DECODE_LITERAL(unit, code, i, next_off);
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
@@ -6670,7 +6673,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         }
 
                         case ENSURE_EXACTLY_ATOM: {
-                            int stride;
+                            uint32_t stride;
                             DECODE_LITERAL(stride, code, i, next_off);
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
@@ -6688,7 +6691,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         }
 
                         case INTEGER_ATOM: {
-                            int live;
+                            uint32_t live;
                             DECODE_LITERAL(live, code, i, next_off);
                             j++;
                             term flags;
@@ -6701,7 +6704,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                             term size;
                             DECODE_COMPACT_TERM(size, code, i, next_off);
                             j++;
-                            int unit;
+                            uint32_t unit;
                             DECODE_LITERAL(unit, code, i, next_off);
                             j++;
                             dreg_t dreg;
@@ -6730,7 +6733,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         }
 
                         case BINARY_ATOM: {
-                            int live;
+                            uint32_t live;
                             DECODE_LITERAL(live, code, i, next_off);
                             j++;
                             term flags;
@@ -6740,10 +6743,10 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                                 avm_int_t flags_value;
                                 DECODE_FLAGS_LIST(flags_value, flags, opcode)
                             #endif
-                            int size;
+                            uint32_t size;
                             DECODE_LITERAL(size, code, i, next_off);
                             j++;
-                            int unit;
+                            uint32_t unit;
                             DECODE_LITERAL(unit, code, i, next_off);
                             j++;
                             dreg_t dreg;
@@ -6777,10 +6780,10 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         }
 
                         case GET_TAIL_ATOM: {
-                            int live;
+                            uint32_t live;
                             DECODE_LITERAL(live, code, i, next_off);
                             j++;
-                            int unit;
+                            uint32_t unit;
                             DECODE_LITERAL(unit, code, i, next_off);
                             j++;
                             dreg_t dreg;
@@ -6814,10 +6817,10 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                             term live;
                             DECODE_COMPACT_TERM(live, code, i, next_off);
                             j++;
-                            int size;
+                            uint32_t size;
                             DECODE_LITERAL(size, code, i, next_off);
                             j++;
-                            avm_int_t pattern_value;
+                            uint32_t pattern_value;
                             DECODE_LITERAL(pattern_value, code, i, next_off);
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
@@ -6837,7 +6840,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         }
 
                         case SKIP_ATOM: {
-                            int stride;
+                            uint32_t stride;
                             DECODE_LITERAL(stride, code, i, next_off);
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
@@ -6846,13 +6849,10 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                             break;
                         }
 
-                        default:
-                            fprintf(stderr, "bs_match/3: undecoded command: %i, j = %d, list_len = %d\n\n", (int) term_to_atom_index(command), j, list_len);
-                            #ifdef IMPL_EXECUTE_LOOP
-                                fprintf(stderr, "failed at %i\n", i);
-                            #endif
-
-                            AVM_ABORT();
+                        #ifdef IMPL_CODE_LOADER
+                            default:
+                                DECODE_FAILURE("bs_match/3: undecoded command: %i, j = %d, list_len = %d\n\n", (int) term_to_atom_index(command), j, list_len);
+                        #endif
                     }
                     #ifdef IMPL_EXECUTE_LOOP
                         term_set_match_state_offset(match_state, bs_offset);
@@ -6868,15 +6868,10 @@ bs_match_jump_to_fail:
                 #endif
             }
 #endif
-
-            default:
-                printf("Undecoded opcode: %i\n", code[i]);
-                #ifdef IMPL_EXECUTE_LOOP
-                    fprintf(stderr, "failed at %i\n", i);
-                #endif
-
-                AVM_ABORT();
-                return 1;
+            #ifdef IMPL_CODE_LOADER
+                default:
+                    DECODE_FAILURE("Undecoded opcode: %i\n", code[i]);
+            #endif
         }
 
         continue;
