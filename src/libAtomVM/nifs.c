@@ -109,8 +109,8 @@ static term nif_erlang_make_fun_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[]);
-static term nif_erlang_integer_to_binary_1(Context *ctx, int argc, term argv[]);
-static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_integer_to_binary_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_integer_to_list_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_is_process_alive_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_link(Context *ctx, int argc, term argv[]);
 static term nif_erlang_float_to_binary(Context *ctx, int argc, term argv[]);
@@ -305,13 +305,13 @@ static const struct Nif insert_element_nif =
 static const struct Nif integer_to_binary_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_erlang_integer_to_binary_1
+    .nif_ptr = nif_erlang_integer_to_binary_2
 };
 
 static const struct Nif integer_to_list_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_erlang_integer_to_list_1
+    .nif_ptr = nif_erlang_integer_to_list_2
 };
 
 static const struct Nif float_to_binary_nif =
@@ -1842,39 +1842,81 @@ static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
     return prev;
 }
 
-static term nif_erlang_integer_to_binary_1(Context *ctx, int argc, term argv[])
+static size_t lltoa(avm_int64_t int_value, unsigned base, char *integer_string)
 {
-    UNUSED(argc);
+    int integer_string_len = 0;
+    bool neg = int_value < 0;
+    if (neg) {
+        integer_string_len++;
+        if (integer_string) {
+            integer_string[0] = '-';
+        }
+    }
+    avm_int64_t v = int_value;
+    do {
+        v = v / base;
+        integer_string_len++;
+    } while (v != 0);
+    if (integer_string) {
+        int ix = 1;
+        do {
+            avm_int_t digit = int_value % base;
+            if (digit < 0) {
+                digit = -digit;
+            }
+            if (digit < 10) {
+                integer_string[integer_string_len - ix] = '0' + digit;
+            } else {
+                integer_string[integer_string_len - ix] = 'A' + digit - 10;
+            }
+            int_value = int_value / base;
+            ix++;
+        } while (int_value != 0);
+    }
+    return integer_string_len;
+}
 
+static term nif_erlang_integer_to_binary_2(Context *ctx, int argc, term argv[])
+{
     term value = argv[0];
+    avm_int_t base = 10;
     VALIDATE_VALUE(value, term_is_any_integer);
+    if (argc > 1) {
+        VALIDATE_VALUE(argv[1], term_is_integer);
+        base = term_to_int(argv[1]);
+        if (UNLIKELY(base < 2 || base > 36)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
 
     avm_int64_t int_value = term_maybe_unbox_int64(value);
-    char integer_string[21];
-
-    //TODO: just copy data to the binary instead of using the stack
-    snprintf(integer_string, 21, AVM_INT64_FMT, int_value);
-    int len = strlen(integer_string);
+    size_t len = lltoa(int_value, base, NULL);
 
     if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-
-    return term_from_literal_binary(integer_string, len, ctx);
+    term result = term_create_empty_binary(len, ctx);
+    lltoa(int_value, base, (char *) term_binary_data(result));
+    return result;
 }
 
-static term nif_erlang_integer_to_list_1(Context *ctx, int argc, term argv[])
+static term nif_erlang_integer_to_list_2(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
-
     term value = argv[0];
+    unsigned base = 10;
     VALIDATE_VALUE(value, term_is_any_integer);
+    if (argc > 1) {
+        VALIDATE_VALUE(argv[1], term_is_integer);
+        base = term_to_int(argv[1]);
+        if (UNLIKELY(base < 2 || base > 36)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
 
     avm_int64_t int_value = term_maybe_unbox_int64(value);
-    char integer_string[21];
-
-    snprintf(integer_string, 21, AVM_INT64_FMT, int_value);
-    int integer_string_len = strlen(integer_string);
+    size_t integer_string_len = lltoa(int_value, base, NULL);
+    char integer_string[integer_string_len];
+    lltoa(int_value, base, integer_string);
 
     if (UNLIKELY(memory_ensure_free(ctx, integer_string_len * 2) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
