@@ -133,6 +133,8 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
                     next->prev = previous;
                     item = next;
                 } else if (new_listener != listener) {
+                    // Replace listener with new_listener in the list
+                    // listener was freed by handler.
                     previous->next = &new_listener->listeners_list_head;
                     next->prev = &new_listener->listeners_list_head;
                     new_listener->listeners_list_head.prev = previous;

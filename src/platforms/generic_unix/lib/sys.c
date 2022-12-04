@@ -136,6 +136,8 @@ static inline void process_listener_handler(GlobalContext *glb, int current_fd, 
                 struct GenericUnixPlatformData *platform = glb->platform_data;
                 do_unregister_listener(platform, current_fd);
                 do_register_listener(platform, new_listener);
+                // Replace listener with new_listener in the list
+                // listener was freed by handler.
                 previous->next = &new_listener->listeners_list_head;
                 next->prev = &new_listener->listeners_list_head;
                 new_listener->listeners_list_head.prev = previous;
