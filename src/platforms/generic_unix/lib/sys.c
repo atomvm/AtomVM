@@ -39,8 +39,8 @@
 #include <unistd.h>
 
 #ifdef HAVE_KQUEUE
-#include <sys/types.h>
 #include <sys/event.h>
+#include <sys/types.h>
 #else
 #include <poll.h>
 #ifdef HAVE_EVENTFD
@@ -68,9 +68,9 @@
 #endif
 
 #ifdef DYNLOAD_PORT_DRIVERS
-    #include <dlfcn.h>
+#include <dlfcn.h>
 
-    typedef Context *(*create_port_t)(GlobalContext *global, term opts);
+typedef Context *(*create_port_t)(GlobalContext *global, term opts);
 #endif
 
 #include "trace.h"
@@ -300,9 +300,9 @@ void sys_signal(GlobalContext *glb)
     struct timespec ts = { 0, 0 };
     struct kevent kev;
     EV_SET(&kev, SIGNAL_IDENTIFIER, EVFILT_USER, 0, NOTE_TRIGGER, 0, NULL);
-	if (UNLIKELY(kevent(platform->kqueue_fd, &kev, 1, NULL, 0, &ts) == -1)) {
+    if (UNLIKELY(kevent(platform->kqueue_fd, &kev, 1, NULL, 0, &ts) == -1)) {
         AVM_ABORT();
-	}
+    }
 #else
 #ifdef HAVE_EVENTFD
     // Write can fail if the counter overflows
@@ -378,7 +378,9 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 #ifdef DYNLOAD_PORT_DRIVERS
         void *handle;
         {
-            char port_driver_name[64 + strlen("avm_" "_port_driver.so") + 1];
+            char port_driver_name[64 + strlen("avm_"
+                                              "_port_driver.so")
+                + 1];
             snprintf(port_driver_name, sizeof(port_driver_name), "./avm_%s_port_driver.so", driver_name);
             handle = dlopen(port_driver_name, RTLD_NOW);
             if (!handle) {
@@ -421,9 +423,9 @@ void sys_init_platform(GlobalContext *global)
     struct timespec ts = { 0, 0 };
     struct kevent kev;
     EV_SET(&kev, SIGNAL_IDENTIFIER, EVFILT_USER, EV_ADD | EV_CLEAR, 0, 0, NULL);
-	if (UNLIKELY(kevent(platform->kqueue_fd, &kev, 1, NULL, 0, &ts))) {
-	    AVM_ABORT();
-	}
+    if (UNLIKELY(kevent(platform->kqueue_fd, &kev, 1, NULL, 0, &ts))) {
+        AVM_ABORT();
+    }
     platform->poll_count = 1;
 #else
     platform->poll_count = 0;
@@ -525,7 +527,8 @@ void sys_register_listener(GlobalContext *global, struct EventListener *listener
     SMP_MUTEX_UNLOCK(platform->listeners_mutex);
 }
 
-static void do_unregister_listener(struct GenericUnixPlatformData *platform, int listener_fd) {
+static void do_unregister_listener(struct GenericUnixPlatformData *platform, int listener_fd)
+{
 #ifdef HAVE_KQUEUE
     if (listener_fd) {
         struct timespec ts = { 0, 0 };

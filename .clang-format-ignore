@@ -40,7 +40,6 @@ src/platforms/esp32/components/*
 src/platforms/generic_unix/lib/platform_defaultatoms.c
 src/platforms/generic_unix/lib/platform_nifs.c
 src/platforms/generic_unix/lib/socket_driver.c
-src/platforms/generic_unix/lib/sys.c
 src/platforms/stm32/src/lib/platform_defaultatoms.c
 src/platforms/stm32/src/lib/platform_nifs.c
 src/platforms/stm32/build/*
