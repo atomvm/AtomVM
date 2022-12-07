@@ -32,9 +32,11 @@
 extern "C" {
 #endif
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "atom.h"
+#include "atomshashtable.h"
 #include "context.h"
 #include "globalcontext.h"
 #include "valueshashtable.h"
@@ -66,6 +68,13 @@ struct ModuleFilename
     size_t len;
 };
 
+struct LineRefOffset
+{
+    struct ListHead head;
+    uint16_t line_ref;
+    unsigned offset;
+};
+
 struct Module
 {
     GlobalContext *global;
@@ -80,11 +89,12 @@ struct Module
     void *fun_table;
     void *str_table;
     size_t str_table_len;
-    
-    unsigned *label_fun_table;
+
+    uint32_t *label_fun_table;
 
     uint16_t *line_refs;
     struct ModuleFilename *filenames;
+    struct ListHead line_ref_offsets;
 
     union imported_func *imported_funcs;
 
@@ -99,6 +109,8 @@ struct Module
     void *module_platform_data;
 
     int module_index;
+
+    AtomString module_name;
 
     int end_instruction_ii;
 
@@ -273,8 +285,78 @@ static inline const uint8_t *module_get_str(Module *mod, size_t offset, size_t *
     return ((const uint8_t *) mod->str_table) + 8 + offset;
 }
 
-void module_get_fun_arity(Module *mod, int label, AtomString *function_name_atom, int *arity);
+/*
+ * @brief Get the function name and arity of a function defined at a label.
+ *
+ * @details This function is used to get the function name and arity from the
+ * label -> fun/arity table that is built during code loading.
+ * See module_set_label_fun_arity.
+
+ * @param mod the module
+ * @param label the current label used to look up the function/arity
+ * @param function_name (output) the function name, as an AtomString.
+ * @param arity (output) the function arity
+ */
+void module_get_fun_arity(Module *mod, int label, AtomString *function_name, int *arity);
+
+/*
+ * @brief The the function and arity at a label.
+ *
+ * @details This function is used when loading a module.  When a function info instruction is scanned,
+ * the current label is used to build a table that maps labels to function/arity pairs.
+ *
+ * @param mod the module
+ * @param label the current label
+ * @param local_fun the local function index, as extracted from the instruction
+ * @param arity the function arity
+ */
 void module_set_label_fun_arity(Module *mod, int label, int local_fun, int arity);
+
+/*
+ * @brief Insert the instruction offset for a given module at a line reference instruction.
+ *
+ * @details This function is used when loading a module.  When a line instruction is
+ * scanned, this function is used to record the instruction offset at which the line
+ * instruction occurred.
+ *
+ * Note that if the module (BEAM file) does not contain a Line chunk, then this function
+ * is a no-op.
+ *
+ * @param mod the module
+ * @param line_ref the line reference (index)
+ * @param offset the instruction offset at which the line instruction occurred.
+ */
+void module_insert_line_ref_offset(Module *mod, int line_ref, int offset);
+
+/*
+ * @brief Find the latest line reference (index) before or at which the instruction offset
+ * occurs.
+ *
+ * @details This function searches for the most recent line instruction scanned during
+ * code loading at or before the specified instruction offset.  This function is used to
+ * locate the line number from a continuation pointer in a stack trace.
+ *
+ * @param mod the module
+ * @param offset
+ * @return the line reference
+ */
+int module_find_line(Module *mod, int offset);
+
+/**
+ * @return true if the module has line information, false, otherwise.
+ */
+static inline bool module_has_line_chunk(Module *mod)
+{
+    return !IS_NULL_PTR(mod->line_refs);
+}
+
+/**
+ * @return the module name for the given Module instance.
+ */
+static inline AtomString module_get_module_name(Module *mod)
+{
+    return mod->module_name;
+}
 
 #ifdef __cplusplus
 }
