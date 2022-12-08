@@ -26,6 +26,9 @@
 
 #include "gpiodriver.h"
 
+void sys_tick_handler();
+void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis);
+
 // Monotonically increasing number of milliseconds from reset
 // Overflows every 49 days
 // TODO: use 64 bit (remember to take into account atomicity)
