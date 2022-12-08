@@ -137,15 +137,15 @@ string(REPLACE " " ";" ARCH_FLAGS ${ARCH_FLAGS})
 # ------------------
 execute_process(
     COMMAND ${ARM_CXX} ${ARCH_FLAGS} ${GENLINK_DEFS} "-P" "-E" "${LIBOPENCM3_DIR}/ld/linker.ld.S"
-    OUTPUT_FILE "${CMAKE_CURRENT_SOURCE_DIR}/${LINKER_SCRIPT}"
+    OUTPUT_FILE "${CMAKE_CURRENT_BINARY_DIR}/${LINKER_SCRIPT}"
 )
 message("-----------Target Specific Info---------")
-message(STATUS "Generated Linker File   : .../${LINKER_SCRIPT}")
+message(STATUS "Generated Linker File   : ${CMAKE_CURRENT_BINARY_DIR}/${LINKER_SCRIPT}")
 
 # ARCH_FLAGS has to be passed as a string here
 JOIN("${ARCH_FLAGS}" " " ARCH_FLAGS)
 # Set linker flags
-set(LINKER_FLAGS "${LINKER_FLAGS} -specs=nosys.specs -specs=nano.specs -nostartfiles -T${CMAKE_CURRENT_SOURCE_DIR}/${LINKER_SCRIPT} ${ARCH_FLAGS}")
+set(LINKER_FLAGS "${LINKER_FLAGS} -specs=nosys.specs -specs=nano.specs -nostartfiles -T${CMAKE_CURRENT_BINARY_DIR}/${LINKER_SCRIPT} ${ARCH_FLAGS}")
 message(STATUS "Linker Flags            : ${LINKER_FLAGS}")
 
 # Compiler flags
@@ -166,25 +166,25 @@ macro(add_executable _name)
     if (TARGET ${_name} AND NOT ${_name} MATCHES ".*Doxygen.*")
         # Set target properties
         set_target_properties(${_name} PROPERTIES LINK_FLAGS ${LINKER_FLAGS})
-        set_target_properties(${_name} PROPERTIES OUTPUT_NAME "${PROJECT_NAME}.elf")
+        set_target_properties(${_name} PROPERTIES OUTPUT_NAME "${PROJECT_EXECUTABLE}")
 
         # Set output file locations
         string(REGEX MATCH "^(.*)\\.[^.]*$" dummy "${_name}")
         set(bin ${CMAKE_MATCH_1}.bin)
         set(elf ${_name})
         set(bin_out ${CMAKE_MATCH_1}.bin)
-        get_target_property(elf_in ${PROJECT_NAME}.elf OUTPUT_NAME)
+        get_target_property(elf_in ${PROJECT_EXECUTABLE} OUTPUT_NAME)
 
         # Add target
         add_custom_target(
             ${bin} ALL
             COMMAND ${ARM_OBJCOPY} -Obinary ${elf_in} ${bin_out}
-            WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             DEPENDS ${elf}
         )
 
         message("------------Output Locations------------")
-        message(STATUS "BIN: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${bin_out}")
-        message(STATUS "ELF: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${elf_in}")
+        message(STATUS "BIN: ${CMAKE_BINARY_DIR}/${bin_out}")
+        message(STATUS "ELF: ${CMAKE_BINARY_DIR}/${elf_in}")
     endif ()
 endmacro()
