@@ -436,6 +436,8 @@ compile_erlang(link_throw)
 compile_erlang(unlink_error)
 compile_erlang(trap_exit_flag)
 
+compile_erlang(test_stacktrace)
+
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
     fact.beam
@@ -845,4 +847,6 @@ add_custom_target(erlang_test_modules DEPENDS
     link_throw.beam
     unlink_error.beam
     trap_exit_flag.beam
+
+    test_stacktrace.beam
 )
