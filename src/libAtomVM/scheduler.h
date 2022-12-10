@@ -96,7 +96,7 @@ void scheduler_stop_all(GlobalContext *global);
  * @param global the global context.
  * @returns the total number of processes in the processes table.
  */
-int schedule_processes_count(GlobalContext *global);
+int scheduler_processes_count(GlobalContext *global);
 
 /**
  * @brief gets next runnable process from the ready queue.

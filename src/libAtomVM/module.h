@@ -213,7 +213,8 @@ const struct ExportedFunction *module_resolve_function0(Module *mod, int import_
  * @param import_table_index the unresolved function index.
  * @param func the unresolved function placeholder struct.
  */
-static inline const struct ExportedFunction *module_resolve_function(Module *mod, int import_table_index) {
+static inline const struct ExportedFunction *module_resolve_function(Module *mod, int import_table_index)
+{
     SMP_MODULE_LOCK(mod);
     // We cannot optimistically read the unresolved function call.
     // While reads of imported_funcs can happen outside the lock, read of the func

@@ -362,7 +362,7 @@ void scheduler_cancel_timeout(Context *ctx)
     SMP_SPINLOCK_UNLOCK(&glb->timer_spinlock);
 }
 
-int schedule_processes_count(GlobalContext *global)
+int scheduler_processes_count(GlobalContext *global)
 {
     int count = 0;
 

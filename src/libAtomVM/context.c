@@ -269,11 +269,7 @@ static void context_monitors_handle_terminate(Context *ctx)
                 term info_tuple = term_alloc_tuple(3, ctx);
                 term_put_tuple_element(info_tuple, 0, EXIT_ATOM);
                 term_put_tuple_element(info_tuple, 1, term_from_local_process_id(ctx->process_id));
-                term exit_reason = NORMAL_ATOM;
-                if (ctx->exit_reason != NORMAL_ATOM) {
-                    exit_reason = memory_copy_term_tree(&ctx->heap_ptr, ctx->exit_reason, &ctx->mso_list);
-                }
-                term_put_tuple_element(info_tuple, 2, exit_reason);
+                term_put_tuple_element(info_tuple, 2, ctx->exit_reason);
                 mailbox_send(target, info_tuple);
             } else {
                 mailbox_send_term_signal(target, KillSignal, ctx->exit_reason);
@@ -295,11 +291,7 @@ static void context_monitors_handle_terminate(Context *ctx)
             term_put_tuple_element(info_tuple, 1, ref);
             term_put_tuple_element(info_tuple, 2, PROCESS_ATOM);
             term_put_tuple_element(info_tuple, 3, term_from_local_process_id(ctx->process_id));
-            term exit_reason = NORMAL_ATOM;
-            if (ctx->exit_reason != NORMAL_ATOM) {
-                exit_reason = memory_copy_term_tree(&ctx->heap_ptr, ctx->exit_reason, &ctx->mso_list);
-            }
-            term_put_tuple_element(info_tuple, 4, exit_reason);
+            term_put_tuple_element(info_tuple, 4, ctx->exit_reason);
 
             mailbox_send(target, info_tuple);
         }

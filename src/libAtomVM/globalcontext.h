@@ -289,7 +289,7 @@ static inline bool globalcontext_is_term_equal_to_atom_string(GlobalContext *glo
 /**
  * @brief Returns a term representing an atom, from the suppliend string
  *
- * @details Converns a string to an atom.  Note that this function may have a side-effect on the
+ * @details Converts a string to an atom.  Note that this function may have a side-effect on the
  *          global context.
  * @param glb pointer to the global context
  * @param string an AtomString
