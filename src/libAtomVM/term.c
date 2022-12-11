@@ -443,7 +443,7 @@ term term_alloc_refc_binary(Context *ctx, size_t size, bool is_const)
         }
         boxed_value[3] = (term) refc;
         ctx->mso_list = term_list_init_prepend(boxed_value + 4, ret, ctx->mso_list);
-        list_append(&ctx->global->refc_binaries, (struct ListHead *) refc);
+        synclist_append(&ctx->global->refc_binaries, &refc->head);
     }
     return ret;
 }

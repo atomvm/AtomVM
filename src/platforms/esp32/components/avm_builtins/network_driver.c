@@ -77,9 +77,9 @@ static term network_driver_ifconfig(Context *ctx);
 static const char *const start_a = "\x5" "start";
 static const char *const ifconfig_a = "\x8" "ifconfig";
 
-static void network_consume_mailbox(Context *ctx)
+static NativeHandlerResult network_consume_mailbox(Context *ctx)
 {
-    Message *message = mailbox_dequeue(ctx);
+    Message *message = mailbox_first(&ctx->mailbox);
     term msg = message->message;
 
     if (port_is_standard_port_command(msg)) {
@@ -89,13 +89,13 @@ static void network_consume_mailbox(Context *ctx)
         term ref = term_get_tuple_element(msg, 1);
         term cmd = term_get_tuple_element(msg, 2);
 
-        if (term_is_atom(cmd) && cmd == context_make_atom(ctx, ifconfig_a)) {
+        if (term_is_atom(cmd) && cmd == globalcontext_make_atom(ctx->global, ifconfig_a)) {
             term reply = network_driver_ifconfig(ctx);
             port_send_reply(ctx, pid, ref, reply);
         } else if (term_is_tuple(cmd) && term_get_tuple_arity(cmd) == 2) {
             term cmd_name = term_get_tuple_element(cmd, 0);
             term config = term_get_tuple_element(cmd, 1);
-            if (cmd_name == context_make_atom(ctx, start_a)) {
+            if (cmd_name == globalcontext_make_atom(ctx->global, start_a)) {
                 network_driver_start(ctx, pid, ref, config);
             } else {
                 port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
@@ -107,7 +107,9 @@ static void network_consume_mailbox(Context *ctx)
         fprintf(stderr, "WARNING: Invalid port command.  Unable to send reply");
     }
 
-    free(message);
+    mailbox_remove(&ctx->mailbox);
+
+    return NativeContinue;
 }
 
 // TODO Move to new event handler APIs when we move to IDF SDK 4.x or later

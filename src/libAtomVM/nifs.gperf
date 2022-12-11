@@ -81,6 +81,7 @@ erlang:spawn/3, &spawn_nif
 erlang:spawn_opt/2, &spawn_fun_opt_nif
 erlang:spawn_opt/4, &spawn_opt_nif
 erlang:system_info/1, &system_info_nif
+erlang:system_flag/2, &system_flag_nif
 erlang:whereis/1, &whereis_nif
 erlang:++/2, &concat_nif
 erlang:system_time/1, &system_time_nif

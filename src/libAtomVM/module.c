@@ -27,6 +27,8 @@
 #include "iff.h"
 #include "nifs.h"
 #include "utils.h"
+#include "sys.h"
+#include "smp.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,7 +46,6 @@
 static struct LiteralEntry *module_build_literals_table(const void *literalsBuf);
 static void module_add_label(Module *mod, int index, void *ptr);
 static enum ModuleLoadResult module_build_imported_functions_table(Module *this_module, uint8_t *table_data);
-static void module_add_label(Module *mod, int index, void *ptr);
 
 #define IMPL_CODE_LOADER 1
 #include "opcodesswitch.h"
@@ -180,6 +181,10 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     mod->module_index = -1;
     mod->global = global;
 
+#ifndef AVM_NO_SMP
+    mod->mutex = smp_mutex_create();
+#endif
+
     if (UNLIKELY(module_populate_atoms_table(mod, beam_file + offsets[AT8U]) != MODULE_LOAD_OK)) {
         fprintf(stderr, "Error: Failed to populate atoms table: %s:%i.\n", __FILE__, __LINE__);
         module_destroy(mod);
@@ -248,6 +253,9 @@ COLD_FUNC void module_destroy(Module *module)
     if (module->free_literals_data) {
         free(module->literals_data);
     }
+#ifndef AVM_NO_SMP
+    smp_mutex_destroy(module->mutex);
+#endif
     free(module);
 }
 
@@ -319,10 +327,8 @@ term module_load_literal(Module *mod, int index, Context *ctx)
     return t;
 }
 
-const struct ExportedFunction *module_resolve_function(Module *mod, int import_table_index)
+const struct ExportedFunction *module_resolve_function0(Module *mod, int import_table_index, struct UnresolvedFunctionCall *unresolved)
 {
-    struct ExportedFunction *func = (struct ExportedFunction *) mod->imported_funcs[import_table_index].func;
-    struct UnresolvedFunctionCall *unresolved = EXPORTED_FUNCTION_TO_UNRESOLVED_FUNCTION_CALL(func);
 
     AtomString module_name_atom = (AtomString) valueshashtable_get_value(mod->global->atoms_ids_table, unresolved->module_atom_index, (unsigned long) NULL);
     AtomString function_name_atom = (AtomString) valueshashtable_get_value(mod->global->atoms_ids_table, unresolved->function_atom_index, (unsigned long) NULL);

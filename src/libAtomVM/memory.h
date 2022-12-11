@@ -87,12 +87,21 @@ term memory_copy_term_tree(term **new_heap, term t, term *mso_list);
 enum MemoryGCResult memory_ensure_free(Context *ctx, uint32_t size) MUST_CHECK;
 
 /**
- * @brief runs a garbage collection and shrinks used memory
+ * @brief If free memory is larger than 2 * MIN_FREE_SPACE_SIZE, runs a garbage collection to shrink used memory
  *
  * @details runs a garbage collection and shrinks used memory, a new heap will be allocated, any existing term might be invalid after this call.
  * @param ctx the context on which the garbage collection will be performed.
  */
 enum MemoryGCResult memory_gc_and_shrink(Context *ctx) MUST_CHECK;
+
+/**
+ * @brief runs a garbage collection towards MIN_FREE_SPACE_SIZE.
+ * TODO: This should be merged with memory_gc_and_shrink, but it changes semantic of manual GC.
+ *
+ * @details runs a garbage collection and shrinks used memory, a new heap will be allocated, any existing term might be invalid after this call.
+ * @param ctx the context on which the garbage collection will be performed.
+ */
+enum MemoryGCResult memory_gc_min(Context *ctx) MUST_CHECK;
 
 /**
  * @brief calculates term memory usage

@@ -50,10 +50,12 @@ set(HEADER_FILES
     port.h
     refc_binary.h
     scheduler.h
+    smp.h
+    synclist.h
     sys.h
     term_typedef.h
     term.h
-    timer_wheel.h
+    timer_list.h
     trace.h
     utils.h
     valueshashtable.h
@@ -82,7 +84,7 @@ set(SOURCE_FILES
     refc_binary.c
     scheduler.c
     term.c
-    timer_wheel.c
+    timer_list.c
     valueshashtable.c
 )
 
@@ -113,6 +115,21 @@ else()
      " HAVE_PRAGMA_STDC_FENV_ACCESS)
     if (HAVE_PRAGMA_STDC_FENV_ACCESS)
         target_compile_definitions(libAtomVM PUBLIC HAVE_PRAGMA_STDC_FENV_ACCESS)
+    endif()
+endif()
+
+if(${CMAKE_C_FLAGS} MATCHES -DAVM_NO_SMP)
+    message("SMP is disabled by CFLAGS environment")
+    set(AVM_DISABLE_SMP ON)
+endif()
+
+if (AVM_DISABLE_SMP)
+    target_compile_definitions(libAtomVM PUBLIC AVM_NO_SMP)
+else()
+    include(CheckIncludeFile)
+    CHECK_INCLUDE_FILE(stdatomic.h STDATOMIC_INCLUDE)
+    if(NOT STDATOMIC_INCLUDE)
+       message(FATAL_ERROR "stdatomic.h cannot be found, you need to disable SMP on this platform")
     endif()
 endif()
 

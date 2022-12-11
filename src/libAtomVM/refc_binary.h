@@ -29,10 +29,17 @@ extern "C" {
 #include <stdbool.h>
 #include <stdlib.h>
 
+#if !defined(AVM_NO_SMP) && !defined(__cplusplus)
+#include <stdatomic.h>
+#define ATOMIC _Atomic
+#else
+#define ATOMIC
+#endif
+
 struct RefcBinary
 {
     struct ListHead head;
-    size_t ref_count;
+    size_t ATOMIC ref_count;
     size_t size;
 };
 

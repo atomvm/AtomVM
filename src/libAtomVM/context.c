@@ -24,6 +24,9 @@
 #include "globalcontext.h"
 #include "list.h"
 #include "mailbox.h"
+#include "smp.h"
+#include "synclist.h"
+#include "sys.h"
 
 #define IMPL_EXECUTE_LOOP
 #include "opcodesswitch.h"
@@ -61,42 +64,35 @@ Context *context_new(GlobalContext *glb)
     ctx->has_min_heap_size = 0;
     ctx->has_max_heap_size = 0;
 
-    list_append(&glb->ready_processes, &ctx->processes_list_head);
+    mailbox_init(&ctx->mailbox);
 
-    list_init(&ctx->mailbox);
-    list_init(&ctx->save_queue);
     list_init(&ctx->dictionary);
-
-    ctx->global = glb;
-
-    ctx->process_id = globalcontext_get_new_process_id(glb);
-    list_append(&glb->processes_table, &ctx->processes_table_head);
 
     ctx->native_handler = NULL;
 
+    ctx->saved_module = NULL;
     ctx->saved_ip = NULL;
-    ctx->jump_to_on_restore = NULL;
+    ctx->restore_trap_handler = NULL;
 
     ctx->leader = 0;
 
-    timer_wheel_item_init(&ctx->timer_wheel_head, NULL, 0);
+    timer_list_item_init(&ctx->timer_list_head, 0);
 
     list_init(&ctx->monitors_head);
 
     ctx->trap_exit = false;
-    #ifdef ENABLE_ADVANCED_TRACE
-        ctx->trace_calls = 0;
-        ctx->trace_call_args = 0;
-        ctx->trace_returns = 0;
-        ctx->trace_send = 0;
-        ctx->trace_receive = 0;
-    #endif
+#ifdef ENABLE_ADVANCED_TRACE
+    ctx->trace_calls = 0;
+    ctx->trace_call_args = 0;
+    ctx->trace_returns = 0;
+    ctx->trace_send = 0;
+    ctx->trace_receive = 0;
+#endif
 
     list_init(&ctx->heap_fragments);
     ctx->heap_fragments_size = 0;
 
-    ctx->flags = 0;
-
+    ctx->flags = NoFlags;
     ctx->platform_data = NULL;
 
     ctx->group_leader = term_from_local_process_id(INVALID_PROCESS_ID);
@@ -107,48 +103,142 @@ Context *context_new(GlobalContext *glb)
     ctx->exit_reason = NORMAL_ATOM;
     ctx->mso_list = term_nil();
 
+    globalcontext_init_process(glb, ctx);
+
     return ctx;
 }
 
 void context_destroy(Context *ctx)
 {
-    list_remove(&ctx->processes_table_head);
+    // Another process can get an access to our mailbox until this point.
+    synclist_remove(&ctx->global->processes_table, &ctx->processes_table_head);
+
+    // When monitor message is sent, process is no longer in the table.
+    context_monitors_handle_terminate(ctx);
+
+    // Any other process released our mailbox, so we can clear it.
+    mailbox_destroy(&ctx->mailbox);
 
     memory_sweep_mso_list(ctx->mso_list);
     dictionary_destroy(&ctx->dictionary);
 
-    context_monitors_handle_terminate(ctx);
+    if (ctx->timer_list_head.head.next != &ctx->timer_list_head.head) {
+        scheduler_cancel_timeout(ctx);
+    }
 
     free(ctx->heap_start);
     free(ctx);
 }
 
+void context_process_kill_signal(Context *ctx, struct TermSignal *signal)
+{
+    if (UNLIKELY(memory_ensure_free(ctx, signal->msg_memory_size))) {
+        ctx->exit_reason = OUT_OF_MEMORY_ATOM;
+    } else {
+        ctx->exit_reason = memory_copy_term_tree(&ctx->heap_ptr, signal->signal_term, &ctx->mso_list);
+    }
+    context_update_flags(ctx, ~NoFlags, Killed);
+}
+
+void context_process_process_info_request_signal(Context *ctx, struct BuiltInAtomRequestSignal *signal)
+{
+    Context *target = globalcontext_get_process_lock(ctx->global, signal->sender_pid);
+    if (target) {
+        term ret;
+        if (context_get_process_info(ctx, &ret, signal->atom)) {
+            mailbox_send_term_signal(target, TrapAnswerSignal, ret);
+        } else {
+            mailbox_send_built_in_atom_signal(target, TrapExceptionSignal, ret);
+        }
+        globalcontext_get_process_unlock(ctx->global, target);
+    } // else: sender died
+}
+
+bool context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal)
+{
+    context_update_flags(ctx, ~Trap, NoFlags);
+    if (UNLIKELY(memory_ensure_free(ctx, signal->msg_memory_size))) {
+        return false;
+    }
+    ctx->x[0] = memory_copy_term_tree(&ctx->heap_ptr, signal->signal_term, &ctx->mso_list);
+    return true;
+}
+
+void context_update_flags(Context *ctx, int mask, int value) CLANG_THREAD_SANITIZE_SAFE
+{
+#ifndef AVM_NO_SMP
+    enum ContextFlags expected = ctx->flags;
+    enum ContextFlags desired;
+    do {
+        desired = (expected & mask) | value;
+    } while (!atomic_compare_exchange_weak(&ctx->flags, &expected, desired));
+#else
+    ctx->flags = (ctx->flags & mask) | value;
+#endif
+}
+
 size_t context_message_queue_len(Context *ctx)
 {
-    size_t num_messages = 0;
-
-    struct ListHead *item;
-    LIST_FOR_EACH (item, &ctx->mailbox) {
-        num_messages++;
-    }
-
-    return num_messages;
+    return mailbox_len(&ctx->mailbox);
 }
 
 size_t context_size(Context *ctx)
 {
-    size_t messages_size = 0;
-
-    struct ListHead *item;
-    LIST_FOR_EACH (item, &ctx->mailbox) {
-        Message *msg = GET_LIST_ENTRY(item, Message, mailbox_list_head);
-        messages_size += sizeof(Message) + msg->msg_memory_size;
-    }
+    size_t messages_size = mailbox_size(&ctx->mailbox);
 
     // TODO include ctx->platform_data
     return sizeof(Context)
         + messages_size
         + context_memory_size(ctx) * BYTES_PER_TERM;
+}
+
+bool context_get_process_info(Context *ctx, term *out, term atom_key)
+{
+    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+        *out = OUT_OF_MEMORY_ATOM;
+        return false;
+    }
+
+    term ret = term_alloc_tuple(2, ctx);
+    switch (atom_key) {
+        // heap_size size in words of the heap of the process
+        case HEAP_SIZE_ATOM: {
+            term_put_tuple_element(ret, 0, HEAP_SIZE_ATOM);
+            unsigned long value = context_heap_size(ctx);
+            term_put_tuple_element(ret, 1, term_from_int32(value));
+            break;
+        }
+
+        // stack_size stack size, in words, of the process
+        case STACK_SIZE_ATOM: {
+            term_put_tuple_element(ret, 0, STACK_SIZE_ATOM);
+            unsigned long value = context_stack_size(ctx);
+            term_put_tuple_element(ret, 1, term_from_int32(value));
+            break;
+        }
+
+        // message_queue_len number of messages currently in the message queue of the process
+        case MESSAGE_QUEUE_LEN_ATOM: {
+            term_put_tuple_element(ret, 0, MESSAGE_QUEUE_LEN_ATOM);
+            unsigned long value = context_message_queue_len(ctx);
+            term_put_tuple_element(ret, 1, term_from_int32(value));
+            break;
+        }
+
+        // memory size in bytes of the process. This includes call stack, heap, and internal structures.
+        case MEMORY_ATOM: {
+            term_put_tuple_element(ret, 0, MEMORY_ATOM);
+            unsigned long value = context_size(ctx);
+            term_put_tuple_element(ret, 1, term_from_int32(value));
+            break;
+        }
+
+        default:
+            *out = BADARG_ATOM;
+            return false;
+    }
+    *out = ret;
+    return true;
 }
 
 static void context_monitors_handle_terminate(Context *ctx)
@@ -158,7 +248,7 @@ static void context_monitors_handle_terminate(Context *ctx)
     MUTABLE_LIST_FOR_EACH (item, tmp, &ctx->monitors_head) {
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
         int local_process_id = term_to_local_process_id(monitor->monitor_pid);
-        Context *target = globalcontext_get_process(ctx->global, local_process_id);
+        Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
         if (IS_NULL_PTR(target)) {
             // TODO: we should scan for existing monitors when a context is destroyed
             // otherwise memory might be wasted for long living processes
@@ -169,34 +259,31 @@ static void context_monitors_handle_terminate(Context *ctx)
         if (monitor->linked && (ctx->exit_reason != NORMAL_ATOM || target->trap_exit)) {
             if (target->trap_exit) {
                 if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
-                    //TODO: handle out of memory here
+                    // TODO: handle out of memory here
                     fprintf(stderr, "Cannot handle out of memory.\n");
+                    globalcontext_get_process_unlock(ctx->global, target);
                     AVM_ABORT();
                 }
 
-                // TODO: move it out of heap
+                // Prepare the message on ctx's heap which will be freed afterwards.
                 term info_tuple = term_alloc_tuple(3, ctx);
                 term_put_tuple_element(info_tuple, 0, EXIT_ATOM);
                 term_put_tuple_element(info_tuple, 1, term_from_local_process_id(ctx->process_id));
                 term_put_tuple_element(info_tuple, 2, ctx->exit_reason);
-
                 mailbox_send(target, info_tuple);
             } else {
-                target->exit_reason = memory_copy_term_tree(&ctx->heap_ptr, ctx->exit_reason, &ctx->mso_list);
-
-                // TODO: this cannot work on multicore systems
-                // target context should be marked as killed and terminated during next scheduling
-                scheduler_terminate(target);
+                mailbox_send_term_signal(target, KillSignal, ctx->exit_reason);
             }
         } else if (!monitor->linked) {
             int required_terms = REF_SIZE + TUPLE_SIZE(5);
             if (UNLIKELY(memory_ensure_free(ctx, required_terms) != MEMORY_GC_OK)) {
-                //TODO: handle out of memory here
+                // TODO: handle out of memory here
                 fprintf(stderr, "Cannot handle out of memory.\n");
+                globalcontext_get_process_unlock(ctx->global, target);
                 AVM_ABORT();
             }
 
-            // TODO: move it out of heap
+            // Prepare the message on ctx's heap which will be freed afterwards.
             term ref = term_from_ref_ticks(monitor->ref_ticks, ctx);
 
             term info_tuple = term_alloc_tuple(5, ctx);
@@ -208,6 +295,7 @@ static void context_monitors_handle_terminate(Context *ctx)
 
             mailbox_send(target, info_tuple);
         }
+        globalcontext_get_process_unlock(ctx->global, target);
         free(monitor);
     }
 }

@@ -22,8 +22,8 @@ CODESUBDIR := $(COMPONENT_PATH)/../../../../libAtomVM
 
 LIBRARY := -llibAtomVM
 
-CFLAGS := -Og -ggdb -ffunction-sections -fdata-sections -fstrict-volatile-bitfields -mlongcalls -nostdlib -DWITH_POSIX -DMBEDTLS_CONFIG_FILE='"mbedtls/esp_config.h"' -DHAVE_CONFIG_H  -g -pipe -fvisibility=hidden -fPIC
-CPPFLAGS := -Og -ggdb -ffunction-sections -fdata-sections -fstrict-volatile-bitfields -mlongcalls -nostdlib -DWITH_POSIX -DMBEDTLS_CONFIG_FILE='"mbedtls/esp_config.h"' -DHAVE_CONFIG_H  -g -pipe -fvisibility=hidden -fPIC
+CFLAGS := -Og -ggdb -ffunction-sections -fdata-sections -fstrict-volatile-bitfields -mlongcalls -nostdlib -DWITH_POSIX -DMBEDTLS_CONFIG_FILE='"mbedtls/esp_config.h"' -DHAVE_CONFIG_H  -g -pipe -fvisibility=hidden -fPIC -DAVM_NO_SMP
+CPPFLAGS := -Og -ggdb -ffunction-sections -fdata-sections -fstrict-volatile-bitfields -mlongcalls -nostdlib -DWITH_POSIX -DMBEDTLS_CONFIG_FILE='"mbedtls/esp_config.h"' -DHAVE_CONFIG_H  -g -pipe -fvisibility=hidden -fPIC -DAVM_NO_SMP
 
 INCLUDE_FIXUP_DIR := $(IDF_PATH)/components/lwip/include/lwip/posix
 

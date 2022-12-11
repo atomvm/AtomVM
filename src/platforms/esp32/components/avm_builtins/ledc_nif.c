@@ -54,14 +54,15 @@ static term nif_ledc_timer_config(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     term config = argv[0];
     VALIDATE_VALUE(config, term_is_list);
+    GlobalContext *glb = ctx->global;
 
-    term speed_mode = interop_proplist_get_value(config, context_make_atom(ctx, ledc_speed_mode));
+    term speed_mode = interop_proplist_get_value(config, globalcontext_make_atom(glb, ledc_speed_mode));
     VALIDATE_VALUE(speed_mode, term_is_integer);
-    term duty_resolution = interop_proplist_get_value(config, context_make_atom(ctx, ledc_duty_resolution));
+    term duty_resolution = interop_proplist_get_value(config, globalcontext_make_atom(glb, ledc_duty_resolution));
     VALIDATE_VALUE(duty_resolution, term_is_integer);
-    term freq_hz = interop_proplist_get_value(config, context_make_atom(ctx, ledc_freq_hz));
+    term freq_hz = interop_proplist_get_value(config, globalcontext_make_atom(glb, ledc_freq_hz));
     VALIDATE_VALUE(freq_hz, term_is_integer);
-    term timer_num = interop_proplist_get_value(config, context_make_atom(ctx, ledc_timer_num));
+    term timer_num = interop_proplist_get_value(config, globalcontext_make_atom(glb, ledc_timer_num));
     VALIDATE_VALUE(timer_num, term_is_integer);
 
     ledc_timer_config_t ledc_timer = {
@@ -85,18 +86,19 @@ static term nif_ledc_channel_config(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     term config = argv[0];
     VALIDATE_VALUE(config, term_is_list);
+    GlobalContext *glb = ctx->global;
 
-    term gpio_num = interop_proplist_get_value(config, context_make_atom(ctx, ledc_gpio_num));
+    term gpio_num = interop_proplist_get_value(config, globalcontext_make_atom(glb, ledc_gpio_num));
     VALIDATE_VALUE(gpio_num, term_is_integer);
-    term speed_mode = interop_proplist_get_value(config, context_make_atom(ctx, ledc_speed_mode));
+    term speed_mode = interop_proplist_get_value(config, globalcontext_make_atom(glb, ledc_speed_mode));
     VALIDATE_VALUE(speed_mode, term_is_integer);
-    term channel = interop_proplist_get_value(config, context_make_atom(ctx, ledc_channel));
+    term channel = interop_proplist_get_value(config, globalcontext_make_atom(glb, ledc_channel));
     VALIDATE_VALUE(channel, term_is_integer);
-    term timer_sel = interop_proplist_get_value(config, context_make_atom(ctx, ledc_timer_sel));
+    term timer_sel = interop_proplist_get_value(config, globalcontext_make_atom(glb, ledc_timer_sel));
     VALIDATE_VALUE(timer_sel, term_is_integer);
-    term duty = interop_proplist_get_value(config, context_make_atom(ctx, ledc_duty));
+    term duty = interop_proplist_get_value(config, globalcontext_make_atom(glb, ledc_duty));
     VALIDATE_VALUE(duty, term_is_integer);
-    term hpoint = interop_proplist_get_value(config, context_make_atom(ctx, ledc_hpoint));
+    term hpoint = interop_proplist_get_value(config, globalcontext_make_atom(glb, ledc_hpoint));
     VALIDATE_VALUE(hpoint, term_is_integer);
 
     ledc_channel_config_t ledc_channel = {

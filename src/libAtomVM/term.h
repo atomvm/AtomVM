@@ -918,6 +918,7 @@ static inline const char *term_binary_data(term t)
 * @details Allocates a binary on the heap, and returns a term pointing to it.
 * Note that the data in the binary is uninitialized and could contain any garbage.
 * Make sure to initialize before use, if needed (e.g., via memset).
+* The binary may be allocated as a refc if it is large enough.
 * @param size size of binary data buffer.
 * @param ctx the context that owns the memory that will be allocated.
 * @return a term pointing to the boxed binary pointer.
@@ -938,6 +939,29 @@ static inline term term_create_uninitialized_binary(uint32_t size, Context *ctx)
 }
 
 /**
+* @brief Create an uninitialized binary on a separate heap.
+*
+* @details Allocates a binary on the heap, and returns a term pointing to it.
+* Note that the data in the binary is uninitialized and could contain any garbage.
+* Make sure to initialize before use, if needed (e.g., via memset).
+* The binary is always allocated on the separate heap.
+* @param size size of binary data buffer.
+* @param heap_ptr pointer on allocated memory
+* @return a term pointing to the boxed binary pointer.
+*/
+static inline term term_heap_create_uninitialized_binary(uint32_t size, term **heap_ptr)
+{
+    int size_in_terms = term_binary_data_size_in_terms(size);
+
+    term *boxed_value = *heap_ptr;
+    *heap_ptr += size_in_terms + 1;
+    boxed_value[0] = (size_in_terms << 6) | TERM_BOXED_HEAP_BINARY;
+    boxed_value[1] = size;
+
+    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+}
+
+/**
  * @brief Term from binary data
  *
  * @details Allocates a binary on the heap, and returns a term pointing to it.
@@ -949,6 +973,22 @@ static inline term term_create_uninitialized_binary(uint32_t size, Context *ctx)
 static inline term term_from_literal_binary(const void *data, uint32_t size, Context *ctx)
 {
     term binary = term_create_uninitialized_binary(size, ctx);
+    memcpy((void *) term_binary_data(binary), data, size);
+    return binary;
+}
+
+/**
+ * @brief Term from binary data, on a separate heap
+ *
+ * @details Allocates a binary on the heap, and returns a term pointing to it.
+ * @param data binary data.
+ * @param size size of binary data buffer.
+ * @param heap_ptr pointer on allocated memory
+ * @return a term pointing to the boxed binary pointer.
+ */
+static inline term term_heap_from_literal_binary(const void *data, uint32_t size, term **heap_ptr)
+{
+    term binary = term_heap_create_uninitialized_binary(size, heap_ptr);
     memcpy((void *) term_binary_data(binary), data, size);
     return binary;
 }
@@ -993,7 +1033,7 @@ static inline term term_maybe_create_sub_binary(term binary, size_t offset, size
     }
 }
 
-static inline void term_set_refc_binary_data(term t, const char *data)
+static inline void term_set_refc_binary_data(term t, const void *data)
 {
     TERM_DEBUG_ASSERT(term_is_refc_binary(t));
     term *boxed_value = term_to_term_ptr(t);
@@ -1089,6 +1129,33 @@ static inline term term_from_ref_ticks(uint64_t ref_ticks, Context *ctx)
     return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
 }
 
+/**
+ * @brief Get a ref term from ref ticks, allocated on a separate heap
+ *
+ * @param ref_ticks an unique uint64 value that will be used to create ref term.
+ * @param ctx the context that owns the memory that will be allocated.
+ * @return a ref term created using given ref ticks.
+ */
+static inline term term_heap_from_ref_ticks(uint64_t ref_ticks, term **heap_ptr)
+{
+    term *boxed_value = *heap_ptr;
+    *heap_ptr += REF_SIZE;
+    boxed_value[0] = ((REF_SIZE - 1) << 6) | TERM_BOXED_REF;
+
+    #if TERM_BYTES == 8
+        boxed_value[1] = (term) ref_ticks;
+
+    #elif TERM_BYTES == 4
+        boxed_value[1] = (ref_ticks >> 4);
+        boxed_value[2] = (ref_ticks & 0xFFFFFFFF);
+
+    #else
+        #error "terms must be either 32 or 64 bit wide"
+    #endif
+
+    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+}
+
 static inline uint64_t term_to_ref_ticks(term rt)
 {
     TERM_DEBUG_ASSERT(term_is_reference(rt));
@@ -1107,7 +1174,7 @@ static inline uint64_t term_to_ref_ticks(term rt)
 }
 
 /**
- * @brief Allocates a tuple on the heap
+ * @brief Allocates a tuple on a context heap
  *
  * @details Allocates an uninitialized tuple on the heap with given arity.
  * @param size tuple arity (count of tuple elements).
@@ -1119,6 +1186,23 @@ static inline term term_alloc_tuple(uint32_t size, Context *ctx)
     //TODO: write a real implementation
     //align constraints here
     term *boxed_value = memory_heap_alloc(ctx, 1 + size);
+    boxed_value[0] = (size << 6); //tuple
+
+    return ((term) boxed_value) | 0x2;
+}
+
+/**
+ * @brief Allocates a tuple on a separate heap
+ *
+ * @details Allocates an uninitialized tuple on the heap with given arity.
+ * @param size tuple arity (count of tuple elements).
+ * @param ctx the context that owns the memory that will be allocated.
+ * @return a term pointing on an empty tuple allocated on the heap.
+ */
+static inline term term_heap_alloc_tuple(uint32_t size, term **heap_ptr)
+{
+    term *boxed_value = *heap_ptr;
+    *heap_ptr += 1 + size;
     boxed_value[0] = (size << 6); //tuple
 
     return ((term) boxed_value) | 0x2;
@@ -1177,6 +1261,19 @@ static inline int term_get_tuple_arity(term t)
     return term_get_size_from_boxed_header(boxed_value[0]);
 }
 
+static inline term priv_term_from_string0(const uint8_t *data, uint16_t size, term *list_cells)
+{
+    //TODO: write a real implementation
+    //align constraints here
+    for (int i = 0; i < size * 2; i += 2) {
+        list_cells[i] = (term) &list_cells[i + 2] | 0x1;
+        list_cells[i + 1] = term_from_int11(data[i / 2]);
+    }
+    list_cells[size * 2 - 2] = 0x3B;
+
+    return ((term) list_cells) | 0x1;
+}
+
 /**
  * @brief Allocates a new list using string data
  *
@@ -1191,13 +1288,23 @@ static inline term term_from_string(const uint8_t *data, uint16_t size, Context 
     //TODO: write a real implementation
     //align constraints here
     term *list_cells = memory_heap_alloc(ctx, size * 2);
-    for (int i = 0; i < size * 2; i += 2) {
-        list_cells[i] = (term) &list_cells[i + 2] | 0x1;
-        list_cells[i + 1] = term_from_int11(data[i / 2]);
-    }
-    list_cells[size * 2 - 2] = 0x3B;
+    return priv_term_from_string0(data, size, list_cells);
+}
 
-    return ((term) list_cells) | 0x1;
+/**
+ * @brief Allocates a new list on a separate heap using string data
+ *
+ * @details Returns a term that points to a list (cons) that will be created using a string.
+ * @param data a pointer to a string, it doesn't need to be NULL terminated.
+ * @param size of the string/list that will be read and allocated.
+ * @param heap_ptr the separate heap where the string will be allocated.
+ * @return a term pointing to a list.
+ */
+static inline term term_heap_from_string(const uint8_t *data, uint16_t size, term **heap_ptr)
+{
+    term *list_cells = *heap_ptr;
+    *heap_ptr += size * 2;
+    return priv_term_from_string0(data, size, list_cells);
 }
 
 /**

@@ -57,8 +57,7 @@ void refc_binary_increment_refcount(struct RefcBinary *refc)
 
 bool refc_binary_decrement_refcount(struct RefcBinary *refc)
 {
-    refc->ref_count--;
-    if (refc->ref_count == 0) {
+    if (--refc->ref_count == 0) {
         list_remove(&refc->head);
         free(refc);
         return true;
@@ -70,22 +69,26 @@ term refc_binary_create_binary_info(Context *ctx)
 {
     size_t len = 0;
     struct ListHead *item;
-    LIST_FOR_EACH (item, &ctx->global->refc_binaries) {
+    struct ListHead *refc_binaries = synclist_wrlock(&ctx->global->refc_binaries);
+    LIST_FOR_EACH (item, refc_binaries) {
         len++;
     }
     if (len == 0) {
+        synclist_unlock(&ctx->global->refc_binaries);
         return term_nil();
     }
     if (memory_ensure_free(ctx, len * TUPLE_SIZE(2)) != MEMORY_GC_OK) {
+        synclist_unlock(&ctx->global->refc_binaries);
         return term_invalid_term();
     }
     term ret = term_nil();
-    LIST_FOR_EACH (item, &ctx->global->refc_binaries) {
+    LIST_FOR_EACH (item, refc_binaries) {
         struct RefcBinary *refc = GET_LIST_ENTRY(item, struct RefcBinary, head);
         term t = term_alloc_tuple(2, ctx);
         term_put_tuple_element(t, 0, term_from_int(refc->size));
         term_put_tuple_element(t, 1, term_from_int(refc->ref_count));
         ret = term_list_prepend(t, ret, ctx);
     }
+    synclist_unlock(&ctx->global->refc_binaries);
     return ret;
 }

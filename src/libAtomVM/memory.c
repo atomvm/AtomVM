@@ -86,13 +86,33 @@ enum MemoryGCResult memory_ensure_free(Context *c, uint32_t size)
 
 enum MemoryGCResult memory_gc_and_shrink(Context *c)
 {
+    enum MemoryGCResult r = MEMORY_GC_OK;
     if (context_avail_free_memory(c) >= MIN_FREE_SPACE_SIZE * 2) {
-        if (UNLIKELY(memory_gc(c, context_memory_size(c) - context_avail_free_memory(c) / 2) != MEMORY_GC_OK)) {
+        r = memory_gc(c, context_memory_size(c) - context_avail_free_memory(c) / 2);
+        if (UNLIKELY(r != MEMORY_GC_OK)) {
             fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         }
     }
+    return r;
+}
 
-    return MEMORY_GC_OK;
+enum MemoryGCResult memory_gc_min(Context *ctx)
+{
+    enum MemoryGCResult r = MEMORY_GC_OK;
+    size_t memory_size = context_memory_size(ctx);
+    r = memory_gc(ctx, memory_size + MIN_FREE_SPACE_SIZE);
+    if (UNLIKELY(r != MEMORY_GC_OK)) {
+        return r;
+    }
+
+    size_t free_space = context_avail_free_memory(ctx);
+    size_t minimum_free_space = 2 * MIN_FREE_SPACE_SIZE;
+    if (free_space > minimum_free_space) {
+        memory_size = context_memory_size(ctx);
+        r = memory_gc(ctx, (memory_size - free_space) + minimum_free_space);
+    }
+
+    return r;
 }
 
 static inline void push_to_stack(term **stack, term value)

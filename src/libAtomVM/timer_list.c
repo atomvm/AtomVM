@@ -18,36 +18,26 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#include "timer_wheel.h"
+#include "timer_list.h"
 
-struct TimerWheel *timer_wheel_new(int slots_count)
+void timer_list_next(struct TimerList *tw, uint64_t now, timer_list_callback_t cb)
 {
-    struct TimerWheel *tw = malloc(sizeof(struct TimerWheel));
-    tw->slots = malloc(sizeof(struct ListHead) * slots_count);
-    for (int i = 0; i < slots_count; i++) {
-        list_init(&tw->slots[i]);
+    if (tw->timers == 0 || now < tw->next_timer) {
+        return;
     }
-    tw->slots_count = slots_count;
-    tw->timers = 0;
-    tw->monotonic_time = 0;
-
-    return tw;
-}
-
-void timer_wheel_tick(struct TimerWheel *tw)
-{
-    tw->monotonic_time++;
-    uint64_t monotonic_time = tw->monotonic_time;
-    int pos = tw->monotonic_time % tw->slots_count;
-
     struct ListHead *item;
     struct ListHead *tmp;
-    MUTABLE_LIST_FOR_EACH (item, tmp, &tw->slots[pos]) {
-        struct TimerWheelItem *ti = GET_LIST_ENTRY(item, struct TimerWheelItem, head);
-        if (ti->expiry_time <= monotonic_time) {
+    uint64_t next_timer = 0;
+    MUTABLE_LIST_FOR_EACH (item, tmp, &tw->head) {
+        struct TimerListItem *ti = GET_LIST_ENTRY(item, struct TimerListItem, head);
+        if (ti->expiry_time <= now) {
             tw->timers--;
             list_remove(item);
-            ti->callback(ti);
+            list_init(item);
+            cb(ti);
+        } else if (next_timer == 0 || ti->expiry_time < next_timer) {
+            next_timer = ti->expiry_time;
         }
     }
+    tw->next_timer = next_timer;
 }

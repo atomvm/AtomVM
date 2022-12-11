@@ -57,7 +57,7 @@ static Context *i2c_driver_create_port(GlobalContext *global, term opts);
 static term i2cdriver_begin_transmission(Context *ctx, term pid, term req);
 static term i2cdriver_end_transmission(Context *ctx, term pid);
 static term i2cdriver_write_byte(Context *ctx, term pid, term req);
-static void i2cdriver_consume_mailbox(Context *ctx);
+static NativeHandlerResult i2cdriver_consume_mailbox(Context *ctx);
 
 static const char *const i2c_driver_atom = "\xA" "i2c_driver";
 static term i2c_driver;
@@ -409,9 +409,9 @@ static term create_pair(Context *ctx, term term1, term term2)
     return ret;
 }
 
-static void i2cdriver_consume_mailbox(Context *ctx)
+static NativeHandlerResult i2cdriver_consume_mailbox(Context *ctx)
 {
-    Message *message = mailbox_dequeue(ctx);
+    Message *message = mailbox_first(&ctx->mailbox);
     term msg = message->message;
     term pid = term_get_tuple_element(msg, 0);
     term req = term_get_tuple_element(msg, 2);
@@ -419,7 +419,6 @@ static void i2cdriver_consume_mailbox(Context *ctx)
     term cmd_term = term_get_tuple_element(req, 0);
 
     int local_process_id = term_to_local_process_id(pid);
-    Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
     term ret;
 
@@ -469,12 +468,10 @@ static void i2cdriver_consume_mailbox(Context *ctx)
     }
     dictionary_erase(&ctx->dictionary, ctx, i2c_driver);
 
-    mailbox_send(target, ret_msg);
-    mailbox_destroy_message(message);
+    globalcontext_send_message(ctx->global, local_process_id, ret_msg);
+    mailbox_remove(&ctx->mailbox);
 
-    if (cmd == I2CCloseCmd) {
-        scheduler_terminate(ctx);
-    }
+    return cmd == I2CCloseCmd ? NativeTerminate : NativeContinue;
 }
 
 REGISTER_PORT_DRIVER(i2c, i2c_driver_init, i2c_driver_create_port)

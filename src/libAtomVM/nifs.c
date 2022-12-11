@@ -81,8 +81,8 @@ static const char *const trace_send_atom = "\xA" "trace_send";
 static const char *const trace_receive_atom = "\xD" "trace_receive";
 #endif
 
-static void process_echo_mailbox(Context *ctx);
-static void process_console_mailbox(Context *ctx);
+static NativeHandlerResult process_echo_mailbox(Context *ctx);
+static NativeHandlerResult process_console_mailbox(Context *ctx);
 
 static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new);
 static term list_to_atom(Context *ctx, int argc, term argv[], int create_new);
@@ -141,6 +141,7 @@ static term nif_erlang_processes(Context *ctx, int argc, term argv[]);
 static term nif_erlang_process_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_put_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_info(Context *ctx, int argc, term argv[]);
+static term nif_erlang_system_flag(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[]);
 static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_throw(Context *ctx, int argc, term argv[]);
@@ -512,6 +513,12 @@ static const struct Nif system_info_nif =
     .nif_ptr = nif_erlang_system_info
 };
 
+static const struct Nif system_flag_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_system_flag
+};
+
 static const struct Nif binary_to_term_nif =
 {
     .base.type = NIFFunctionType,
@@ -821,7 +828,6 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
     if (!new_ctx) {
         RAISE_ERROR(BADARG_ATOM);
     } else {
-        scheduler_make_waiting(ctx->global, new_ctx);
         return term_from_local_process_id(new_ctx->process_id);
     }
 }
@@ -839,7 +845,7 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[])
     int32_t pid = term_to_local_process_id(pid_or_port_term);
 
     // pid must be existing, not already registered, and not the atom undefined.
-    if (UNLIKELY(globalcontext_get_process(ctx->global, pid) == NULL) ||
+    if (UNLIKELY(!globalcontext_process_exists(ctx->global, pid)) ||
         globalcontext_get_registered_process(ctx->global, atom_index) != 0 ||
         reg_name_term == UNDEFINED_ATOM){
         RAISE_ERROR(BADARG_ATOM);
@@ -884,17 +890,18 @@ static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[])
     }
 }
 
-static void process_echo_mailbox(Context *ctx)
+static NativeHandlerResult process_echo_mailbox(Context *ctx)
 {
-    Message *msg = mailbox_dequeue(ctx);
+    Message *msg = mailbox_first(&ctx->mailbox);
     term pid = term_get_tuple_element(msg->message, 0);
     term val = term_get_tuple_element(msg->message, 1);
 
     int local_process_id = term_to_local_process_id(pid);
-    Context *target = globalcontext_get_process(ctx->global, local_process_id);
-    mailbox_send(target, val);
+    globalcontext_send_message(ctx->global, local_process_id, val);
 
-    free(msg);
+    mailbox_remove(&ctx->mailbox);
+
+    return NativeContinue;
 }
 
 static bool is_tagged_tuple(term t, term tag, int size)
@@ -927,7 +934,7 @@ static void process_console_message(Context *ctx, term msg)
                 term_put_tuple_element(reply, 1, refcopy);
                 term_put_tuple_element(reply, 2, OK_ATOM);
 
-                port_send_message(ctx, pid, reply);
+                port_send_message(ctx->global, pid, reply);
             }
         }
 
@@ -965,16 +972,19 @@ static void process_console_message(Context *ctx, term msg)
     }
 }
 
-static void process_console_mailbox(Context *ctx)
+static NativeHandlerResult process_console_mailbox(Context *ctx)
 {
-    while (!list_is_empty(&ctx->mailbox)) {
-        Message *message = mailbox_dequeue(ctx);
+    while (true) {
+        Message *message = mailbox_first(&ctx->mailbox);
+        if (message == NULL) break;
         term msg = message->message;
 
         process_console_message(ctx, msg);
 
-        mailbox_destroy_message(message);
+        mailbox_remove(&ctx->mailbox);
     }
+
+    return NativeContinue;
 }
 
 static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])
@@ -1037,7 +1047,11 @@ static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])
         new_ctx->max_heap_size = term_to_int(max_heap_size_term);
     }
 
-    return term_from_local_process_id(new_ctx->process_id);
+    term result = term_from_local_process_id(new_ctx->process_id);
+
+    scheduler_init_ready(new_ctx);
+
+    return result;
 }
 
 static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
@@ -1158,6 +1172,8 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
 
     term new_pid = term_from_local_process_id(new_ctx->process_id);
 
+    scheduler_init_ready(new_ctx);
+
     if (ref_ticks) {
         int res_size = REF_SIZE + TUPLE_SIZE(2);
         if (UNLIKELY(memory_ensure_free(ctx, res_size) != MEMORY_GC_OK)) {
@@ -1186,9 +1202,7 @@ static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(pid_term, term_is_pid);
 
     int local_process_id = term_to_local_process_id(pid_term);
-    Context *target = globalcontext_get_process(ctx->global, local_process_id);
-
-    mailbox_send(target, argv[1]);
+    globalcontext_send_message(ctx->global, local_process_id, argv[1]);
 
     return argv[1];
 }
@@ -1198,9 +1212,9 @@ static term nif_erlang_is_process_alive_1(Context *ctx, int argc, term argv[])
     UNUSED(argc);
 
     int local_process_id = term_to_local_process_id(argv[0]);
-    Context *target = globalcontext_get_process(ctx->global, local_process_id);
+    bool process_exists = globalcontext_process_exists(ctx->global, local_process_id);
 
-    return target ? TRUE_ATOM : FALSE_ATOM;
+    return process_exists ? TRUE_ATOM : FALSE_ATOM;
 }
 
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[])
@@ -2156,52 +2170,9 @@ static term nif_erlang_display_1(Context *ctx, int argc, term argv[])
     return TRUE_ATOM;
 }
 
-static term nif_erlang_process_flag(Context *ctx, int argc, term argv[])
+// process_flag/3 work on a subset of flags, target is locked.
+static term nif_erlang_process_flag_3(Context *ctx, Context *target, term flag, term value)
 {
-    UNUSED(argc);
-
-    Context *target;
-    term flag;
-    term value;
-
-    if (argc == 2) {
-        flag = argv[0];
-        value = argv[1];
-        target = ctx;
-
-    // TODO: check erlang:process_flag/3 implementation
-    } else if (argc == 3) {
-        term pid = argv[0];
-        flag = argv[1];
-        value = argv[2];
-
-        VALIDATE_VALUE(pid, term_is_pid);
-        int local_process_id = term_to_local_process_id(pid);
-        target = globalcontext_get_process(ctx->global, local_process_id);
-        if (IS_NULL_PTR(target)) {
-            RAISE_ERROR(BADARG_ATOM);
-        }
-    } else {
-        AVM_ABORT();
-    }
-
-    switch (flag) {
-        case TRAP_EXIT_ATOM: {
-            term prev = ctx->trap_exit ? TRUE_ATOM : FALSE_ATOM;
-            switch (value) {
-                case FALSE_ATOM:
-                    ctx->trap_exit = false;
-                    break;
-                case TRUE_ATOM:
-                    ctx->trap_exit = true;
-                    break;
-                default:
-                    RAISE_ERROR(BADARG_ATOM);
-            }
-            return prev;
-        }
-    }
-
 #ifdef ENABLE_ADVANCED_TRACE
     if (flag == context_make_atom(target, trace_calls_atom)) {
         if (value == TRUE_ATOM) {
@@ -2244,9 +2215,61 @@ static term nif_erlang_process_flag(Context *ctx, int argc, term argv[])
             return OK_ATOM;
         }
     }
+#else
+    UNUSED(target);
+    UNUSED(flag);
+    UNUSED(value);
 #endif
 
     RAISE_ERROR(BADARG_ATOM);
+}
+
+static term nif_erlang_process_flag(Context *ctx, int argc, term argv[])
+{
+    term flag;
+    term value;
+
+    if (argc == 2) {
+        flag = argv[0];
+        value = argv[1];
+
+        // flags that only work with process_flag/2
+        switch (flag) {
+            case TRAP_EXIT_ATOM: {
+                term prev = ctx->trap_exit ? TRUE_ATOM : FALSE_ATOM;
+                switch (value) {
+                    case FALSE_ATOM:
+                        ctx->trap_exit = false;
+                        break;
+                    case TRUE_ATOM:
+                        ctx->trap_exit = true;
+                        break;
+                    default:
+                        RAISE_ERROR(BADARG_ATOM);
+                }
+                return prev;
+            }
+        }
+
+        // TODO: check erlang:process_flag/3 implementation
+        return nif_erlang_process_flag_3(ctx, ctx, flag, value);
+    } else if (argc == 3) {
+        term pid = argv[0];
+        flag = argv[1];
+        value = argv[2];
+
+        VALIDATE_VALUE(pid, term_is_pid);
+        int local_process_id = term_to_local_process_id(pid);
+        Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
+        if (IS_NULL_PTR(target)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        term result = nif_erlang_process_flag_3(ctx, target, flag, value);
+        globalcontext_get_process_unlock(ctx->global, target);
+        return result;
+    } else {
+        AVM_ABORT();
+    }
 }
 
 typedef void *(*context_iterator)(Context *ctx, void *accum);
@@ -2283,10 +2306,12 @@ static void *nif_cons_context(Context *ctx, void *p)
 static void *nif_iterate_processes(GlobalContext *glb, context_iterator fun, void *accum)
 {
     struct ListHead *item;
-    LIST_FOR_EACH (item, &glb->processes_table) {
+    struct ListHead *processes_table = synclist_rdlock(&glb->processes_table);
+    LIST_FOR_EACH (item, processes_table) {
         Context *p = GET_LIST_ENTRY(item, Context, processes_table_head);
         accum = fun(p, accum);
     }
+    synclist_unlock(&glb->processes_table);
     return accum;
 }
 
@@ -2336,36 +2361,24 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
     term item = item_or_item_info;
 
     int local_process_id = term_to_local_process_id(pid);
-    Context *target = globalcontext_get_process(ctx->global, local_process_id);
-
-    if (memory_ensure_free(ctx, 3) != MEMORY_GC_OK) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
+    if (IS_NULL_PTR(target)) {
+        return UNDEFINED_ATOM;
     }
 
-    term ret = term_alloc_tuple(2, ctx);
-    // heap_size size in words of the heap of the process
-    if (item == HEAP_SIZE_ATOM) {
-        term_put_tuple_element(ret, 0, HEAP_SIZE_ATOM);
-        term_put_tuple_element(ret, 1, term_from_int32(context_heap_size(target)));
-
-    // stack_size stack size, in words, of the process
-    } else if (item == STACK_SIZE_ATOM) {
-        term_put_tuple_element(ret, 0, STACK_SIZE_ATOM);
-        term_put_tuple_element(ret, 1, term_from_int32(context_stack_size(target)));
-
-    // message_queue_len number of messages currently in the message queue of the process
-    } else if (item == MESSAGE_QUEUE_LEN_ATOM) {
-        term_put_tuple_element(ret, 0, MESSAGE_QUEUE_LEN_ATOM);
-        term_put_tuple_element(ret, 1, term_from_int32(context_message_queue_len(target)));
-
-    // memory size in bytes of the process. This includes call stack, heap, and internal structures.
-    } else if (item == MEMORY_ATOM) {
-        term_put_tuple_element(ret, 0, MEMORY_ATOM);
-        term_put_tuple_element(ret, 1, term_from_int32(context_size(target)));
-
+    term ret = term_invalid_term();
+    if (ctx == target) {
+        if (!context_get_process_info(ctx, &ret, item)) {
+            globalcontext_get_process_unlock(ctx->global, target);
+            RAISE_ERROR(ret);
+        }
     } else {
-        RAISE_ERROR(BADARG_ATOM);
+        // Currently, all items require a signal. We could nevertheless filter
+        // items that do not exist.
+        mailbox_send_built_in_atom_request_signal(target, ProcessInfoRequestSignal, ctx->process_id, item);
+        context_update_flags(ctx, ~NoFlags, Trap);
     }
+    globalcontext_get_process_unlock(ctx->global, target);
 
     return ret;
 }
@@ -2410,7 +2423,51 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
         }
         return ret;
     }
+    if (key == SCHEDULERS_ATOM) {
+#ifndef AVM_NO_SMP
+        return term_from_int32(smp_get_online_processors());
+#else
+        return term_from_int32(1);
+#endif
+    }
+    if (key == SCHEDULERS_ONLINE_ATOM) {
+#ifndef AVM_NO_SMP
+        return term_from_int32(ctx->global->online_schedulers);
+#else
+        return term_from_int32(1);
+#endif
+    }
     return sys_get_info(ctx, key);
+}
+
+static term nif_erlang_system_flag(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term key = argv[0];
+    term value = argv[1];
+
+    if (!term_is_atom(key)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+#ifndef AVM_NO_SMP
+    if (key == SCHEDULERS_ONLINE_ATOM) {
+        VALIDATE_VALUE(value, term_is_integer);
+        int old_value = 0;
+        int new_value = term_to_int(value);
+        int nb_processors = smp_get_online_processors();
+        if (UNLIKELY(new_value < 1) || UNLIKELY(new_value > nb_processors)) {
+            argv[0] = ERROR_ATOM;
+            argv[1] = BADARG_ATOM;
+            return term_invalid_term();
+        }
+        while (!atomic_compare_exchange_weak(&ctx->global->online_schedulers, &old_value, new_value)) {};
+        return term_from_int32(old_value);
+    }
+#else
+    UNUSED(value);
+#endif
+    RAISE_ERROR(BADARG_ATOM);
 }
 
 static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
@@ -2771,34 +2828,34 @@ static term nif_erlang_function_exported(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[])
 {
-    Context *c = ctx;
-
-    if (argc == 1) {
+    if (argc == 0) {
+        if (UNLIKELY(memory_gc_min(ctx) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+    } else {
+        // argc == 1
         term t = argv[0];
         VALIDATE_VALUE(t, term_is_pid);
 
         int local_id = term_to_local_process_id(t);
-        c = globalcontext_get_process(ctx->global, local_id);
+        Context *target = globalcontext_get_process_lock(ctx->global, local_id);
 
-        if (IS_NULL_PTR(c)) {
+        if (IS_NULL_PTR(target)) {
             return FALSE_ATOM;
         }
-    }
 
-    size_t memory_size = context_memory_size(c);
-    if (UNLIKELY(memory_gc(c, memory_size + MIN_FREE_SPACE_SIZE) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    size_t free_space = context_avail_free_memory(c);
-    size_t minimum_free_space = 2 * MIN_FREE_SPACE_SIZE;
-    if (free_space > minimum_free_space) {
-        memory_size = context_memory_size(c);
-        if (UNLIKELY(memory_gc(c, (memory_size - free_space) + minimum_free_space) != MEMORY_GC_OK)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        if (target == ctx) {
+            globalcontext_get_process_unlock(ctx->global, target);
+            if (UNLIKELY(memory_gc_min(ctx) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+        } else {
+            // We cannot garbage collect another message, yet we will return
+            // true anyway.
+            mailbox_send_empty_body_signal(target, GCSignal);
+            globalcontext_get_process_unlock(ctx->global, target);
         }
     }
-
     return TRUE_ATOM;
 }
 
@@ -2862,7 +2919,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(target_pid, term_is_pid);
 
     int local_process_id = term_to_local_process_id(target_pid);
-    Context *target = globalcontext_get_process(ctx->global, local_process_id);
+    Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
     if (IS_NULL_PTR(target)) {
         int res_size = REF_SIZE + TUPLE_SIZE(5);
         if (UNLIKELY(memory_ensure_free(ctx, res_size) != MEMORY_GC_OK)) {
@@ -2882,6 +2939,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     term callee_pid = term_from_local_process_id(ctx->process_id);
 
     uint64_t ref_ticks = context_monitor(target, callee_pid, false);
+    globalcontext_get_process_unlock(ctx->global, target);
 
     if (UNLIKELY(memory_ensure_free(ctx, REF_SIZE) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -2913,7 +2971,7 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(target_pid, term_is_pid);
 
     int local_process_id = term_to_local_process_id(target_pid);
-    Context *target = globalcontext_get_process(ctx->global, local_process_id);
+    Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
     if (IS_NULL_PTR(target)) {
         RAISE_ERROR(NOPROC_ATOM);
     }
@@ -2922,10 +2980,12 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
 
     uint64_t ref_ticks = context_monitor(target, callee_pid, true);
     if (UNLIKELY(ref_ticks == 0)) {
+        globalcontext_get_process_unlock(ctx->global, target);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     ref_ticks = context_monitor(ctx, term_from_local_process_id(target->process_id), true);
+    globalcontext_get_process_unlock(ctx->global, target);
     if (UNLIKELY(ref_ticks == 0)) {
         // TODO: remove the other monitor
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -2943,7 +3003,7 @@ static term nif_erlang_unlink(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(target_pid, term_is_pid);
 
     int local_process_id = term_to_local_process_id(target_pid);
-    Context *target = globalcontext_get_process(ctx->global, local_process_id);
+    Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
     if (IS_NULL_PTR(target)) {
         return TRUE_ATOM;
     }
@@ -2952,6 +3012,7 @@ static term nif_erlang_unlink(Context *ctx, int argc, term argv[])
 
     context_demonitor(target, callee_pid, true);
     context_demonitor(ctx, term_from_local_process_id(target->process_id), true);
+    globalcontext_get_process_unlock(ctx->global, target);
 
     return TRUE_ATOM;
 }
@@ -2974,12 +3035,13 @@ static term nif_erlang_group_leader(Context *ctx, int argc, term argv[])
         VALIDATE_VALUE(leader, term_is_pid);
 
         int local_process_id = term_to_local_process_id(pid);
-        Context *target = globalcontext_get_process(ctx->global, local_process_id);
+        Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
         if (IS_NULL_PTR(target)) {
             RAISE_ERROR(BADARG_ATOM);
         }
 
         target->group_leader = leader;
+        globalcontext_get_process_unlock(ctx->global, target);
         return TRUE_ATOM;
     }
 }
@@ -2995,7 +3057,7 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
 
     GlobalContext *glb = ctx->global;
 
-    if (UNLIKELY(list_is_empty(&glb->avmpack_data))) {
+    if (UNLIKELY(synclist_is_empty(&glb->avmpack_data))) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -3026,20 +3088,26 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
     const void *bin_data;
     uint32_t size;
     struct ListHead *item;
-    LIST_FOR_EACH (item, &glb->avmpack_data) {
+    term result = UNDEFINED_ATOM;
+    struct ListHead *avmpack_data = synclist_rdlock(&glb->avmpack_data);
+    LIST_FOR_EACH (item, avmpack_data) {
         struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
         if (avmpack_find_section_by_name(avmpack_data->data, complete_path, &bin_data, &size)) {
             uint32_t file_size = READ_32_ALIGNED((uint32_t *) bin_data);
             free(complete_path);
+            complete_path = NULL;
             if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFC_BINARY_SIZE) != MEMORY_GC_OK)) {
+                synclist_unlock(&glb->avmpack_data);
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
-            return term_from_const_binary(((uint8_t *) bin_data) + sizeof(uint32_t), file_size, ctx);
+            result = term_from_const_binary(((uint8_t *) bin_data) + sizeof(uint32_t), file_size, ctx);
+            break;
         }
     }
+    synclist_unlock(&glb->avmpack_data);
 
     free(complete_path);
-    return UNDEFINED_ATOM;
+    return result;
 }
 
 static term nif_console_print(Context *ctx, int argc, term argv[])

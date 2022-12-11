@@ -28,11 +28,12 @@ set(HEADER_FILES
 )
 
 set(SOURCE_FILES
-    sys.c
     mapped_file.c
     platform_defaultatoms.c
     platform_nifs.c
+    smp.c
     socket_driver.c
+    sys.c
 )
 
 set(
@@ -60,6 +61,24 @@ endif()
 # enable by default dynamic loading on unix
 target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC DYNLOAD_PORT_DRIVERS)
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${CMAKE_DL_LIBS})
+
+if (NOT AVM_DISABLE_SMP)
+    set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+    find_package(Threads REQUIRED)
+    target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${CMAKE_THREAD_LIBS_INIT})
+endif()
+
+include(CheckSymbolExists)
+check_symbol_exists(eventfd "sys/eventfd.h" HAVE_EVENTFD)
+if (HAVE_EVENTFD)
+    add_definitions(-DHAVE_EVENTFD)
+endif()
+check_symbol_exists(kqueue "sys/event.h" HAVE_KQUEUE)
+check_symbol_exists(EVFILT_USER "sys/event.h" HAVE_EVFILT_USER)
+check_symbol_exists(NOTE_TRIGGER "sys/event.h" HAVE_NOTE_TRIGGER)
+if (HAVE_KQUEUE AND HAVE_EVFILT_USER AND HAVE_NOTE_TRIGGER)
+    target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC HAVE_KQUEUE)
+endif()
 
 install(
     FILES ${CMAKE_CURRENT_SOURCE_DIR}/atomvm

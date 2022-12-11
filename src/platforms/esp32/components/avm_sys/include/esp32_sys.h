@@ -63,20 +63,19 @@
 
 typedef struct EventListener EventListener;
 
-typedef void (*event_handler_t)(EventListener *listener);
+typedef EventListener *(*event_handler_t)(GlobalContext *glb, EventListener *listener);
 
 struct EventListener
 {
     struct ListHead listeners_list_head;
 
     event_handler_t handler;
-    void *data;
     void *sender;
 };
 
 struct ESP32PlatformData
 {
-    struct ListHead listeners;
+    struct SyncList listeners;
     struct ListHead sockets_list_head;
 };
 

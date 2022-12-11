@@ -9,14 +9,11 @@
 src/libAtomVM/bif.c
 src/libAtomVM/bitstring.c
 src/libAtomVM/bitstring.h
-src/libAtomVM/context.c
-src/libAtomVM/context.h
 src/libAtomVM/debug.h
 src/libAtomVM/defaultatoms.c
 src/libAtomVM/externalterm.c
 src/libAtomVM/memory.c
 src/libAtomVM/module.c
-src/libAtomVM/module.h
 src/libAtomVM/nifs.c
 src/libAtomVM/opcodesswitch.h
 src/libAtomVM/overflow_helpers.h
@@ -42,7 +39,6 @@ src/platforms/esp32/components/*
 src/platforms/generic_unix/lib/platform_defaultatoms.c
 src/platforms/generic_unix/lib/platform_nifs.c
 src/platforms/generic_unix/lib/socket_driver.c
-src/platforms/generic_unix/lib/sys.c
 src/platforms/stm32/src/lib/platform_defaultatoms.c
 src/platforms/stm32/src/lib/platform_nifs.c
 src/platforms/stm32/build/*

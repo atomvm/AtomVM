@@ -18,6 +18,7 @@ jobs:
 
         include:
         - os: "ubuntu-20.04"
+          test_erlang_opts: "-s prime_smp"
 
         - os: "macos-latest"
           cmake_opts: "-DOPENSSL_ROOT_DIR=/usr/local/opt/openssl"
