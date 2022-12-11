@@ -90,15 +90,6 @@ void scheduler_terminate(Context *c);
 void scheduler_stop_all(GlobalContext *global);
 
 /**
- * @brief the number of processes
- *
- * @detail counts the number of processes that are registered on the processes table.
- * @param global the global context.
- * @returns the total number of processes in the processes table.
- */
-int scheduler_processes_count(GlobalContext *global);
-
-/**
  * @brief gets next runnable process from the ready queue.
  *
  * @detail gets next runnable process from the ready queue, it may return current process if there isn't any other runnable process.

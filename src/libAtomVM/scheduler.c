@@ -361,17 +361,3 @@ void scheduler_cancel_timeout(Context *ctx)
     timer_list_remove(tw, &ctx->timer_list_head);
     SMP_SPINLOCK_UNLOCK(&glb->timer_spinlock);
 }
-
-int scheduler_processes_count(GlobalContext *global)
-{
-    int count = 0;
-
-    struct ListHead *item;
-    struct ListHead *processes_table = synclist_rdlock(&global->processes_table);
-    LIST_FOR_EACH (item, processes_table) {
-        count++;
-    }
-    synclist_unlock(&global->processes_table);
-
-    return count;
-}
