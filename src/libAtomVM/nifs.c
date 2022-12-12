@@ -1685,7 +1685,7 @@ static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    const char *bin_data = term_binary_data(argv[0]);
+    const uint8_t *bin_data = (const uint8_t *) term_binary_data(argv[0]);
 
     term prev = term_nil();
     for (int i = bin_size - 1; i >= 0; i--) {
