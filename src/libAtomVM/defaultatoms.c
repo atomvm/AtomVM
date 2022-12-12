@@ -103,6 +103,9 @@ static const char *const timeout_value_atom = "\xD" "timeout_value";
 static const char *const schedulers_atom = "\xA" "schedulers";
 static const char *const schedulers_online_atom = "\x11" "schedulers_online";
 
+static const char *const machine_atom = "\x7" "machine";
+static const char *const avm_floatsize_atom = "\xD" "avm_floatsize";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -189,6 +192,9 @@ void defaultatoms_init(GlobalContext *glb)
 
     ok &= globalcontext_insert_atom(glb, schedulers_atom) == SCHEDULERS_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, schedulers_online_atom) == SCHEDULERS_ONLINE_ATOM_INDEX;
+    
+    ok &= globalcontext_insert_atom(glb, machine_atom) == MACHINE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, avm_floatsize_atom) == AVM_FLOATSIZE_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();

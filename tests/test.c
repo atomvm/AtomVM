@@ -159,7 +159,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_binary_to_existing_atom, 9),
     TEST_CASE_EXPECTED(test_atom_to_list, 1),
     TEST_CASE(test_display),
-    TEST_CASE_EXPECTED(test_integer_to_list, 1),
+    TEST_CASE(test_integer_to_list),
     TEST_CASE_EXPECTED(test_list_to_integer, 99),
     TEST_CASE_EXPECTED(test_abs, 5),
     TEST_CASE_EXPECTED(test_is_process_alive, 121),
@@ -276,9 +276,9 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(binary_first_test, 82),
     TEST_CASE_EXPECTED(binary_last_test, 110),
 
-    TEST_CASE_EXPECTED(test_integer_to_binary, 2),
+    TEST_CASE(test_integer_to_binary),
     TEST_CASE_EXPECTED(test_list_to_binary, 1),
-    TEST_CASE_EXPECTED(test_binary_to_list, 1),
+    TEST_CASE_EXPECTED(test_binary_to_list, 0),
     TEST_CASE_EXPECTED(test_atom_to_binary, 1),
 
     TEST_CASE_EXPECTED(test_binary_part, 12),

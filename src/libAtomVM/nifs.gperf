@@ -57,7 +57,9 @@ erlang:insert_element/3, &insert_element_nif
 erlang:list_to_atom/1, &list_to_atom_nif
 erlang:list_to_existing_atom/1, &list_to_existing_atom_nif
 erlang:integer_to_binary/1, &integer_to_binary_nif
+erlang:integer_to_binary/2, &integer_to_binary_nif
 erlang:integer_to_list/1, &integer_to_list_nif
+erlang:integer_to_list/2, &integer_to_list_nif
 erlang:link/1, &link_nif
 erlang:list_to_binary/1, &list_to_binary_nif
 erlang:list_to_integer/1, &list_to_integer_nif
