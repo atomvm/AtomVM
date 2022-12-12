@@ -20,13 +20,20 @@
 
 -module(test_integer_to_binary).
 
--export([start/0, some_calculation/2, compare_bin/3]).
+-export([start/0, some_calculation/2, compare_bin/3, id/1]).
 
 start() ->
+    ok = test_decimal(),
+    ok = test_bases(),
+    0.
+
+test_decimal() ->
     NewBin1 = integer_to_binary(some_calculation(20, -2)),
     NewBin2 = integer_to_binary(some_calculation(1780, 0)),
-    compare_bin(NewBin1, <<"-1">>) + compare_bin(NewBin2, <<"89">>) -
-        compare_bin(NewBin1, <<"+1">>) * 10 - compare_bin(NewBin2, <<"88">>) * 100.
+    2 =
+        compare_bin(NewBin1, <<"-1">>) + compare_bin(NewBin2, <<"89">>) -
+            compare_bin(NewBin1, <<"+1">>) * 10 - compare_bin(NewBin2, <<"88">>) * 100,
+    ok.
 
 some_calculation(N, A) when is_integer(N) and is_integer(A) ->
     N div 20 + A;
@@ -46,3 +53,31 @@ compare_bin(Bin1, Bin2, Index) ->
         _Any ->
             0
     end.
+
+test_bases() ->
+    <<"0">> = integer_to_binary(?MODULE:id(0)),
+    <<"0">> = integer_to_binary(?MODULE:id(0), 10),
+    <<"-1">> = integer_to_binary(?MODULE:id(-1)),
+    <<"-1010">> = integer_to_binary(?MODULE:id(-10), 2),
+    <<"1010">> = integer_to_binary(?MODULE:id(10), 2),
+    <<"A">> = integer_to_binary(?MODULE:id(10), 16),
+    <<"123456789ABCDEF0">> = integer_to_binary(?MODULE:id(16#123456789ABCDEF0), 16),
+    <<"7FFFFFFFFFFFFFFF">> = integer_to_binary(?MODULE:id(16#7FFFFFFFFFFFFFFF), 16),
+    <<"-8000000000000000">> = integer_to_binary(?MODULE:id(-16#8000000000000000), 16),
+    <<"A">> = integer_to_binary(?MODULE:id(10), 36),
+    assert_badarg(fun() -> integer_to_binary(?MODULE:id(10), 1) end),
+    assert_badarg(fun() -> integer_to_binary(?MODULE:id(10), 0) end),
+    assert_badarg(fun() -> integer_to_binary(?MODULE:id(10), -1) end),
+    assert_badarg(fun() -> integer_to_binary(?MODULE:id(10), 37) end),
+    ok.
+
+assert_badarg(F) ->
+    ok =
+        try
+            F(),
+            fail_no_ex
+        catch
+            error:badarg -> ok
+        end.
+
+id(I) -> I.
