@@ -86,7 +86,7 @@ typedef union
 #define RAISE_ERROR(error_type_atom)                               \
     ctx->x[0] = ERROR_ATOM;                                        \
     ctx->x[1] = error_type_atom;                                   \
-    ctx->x[2] = create_raw_stacktrace(ctx, mod, current_label, i); \
+    ctx->x[2] = create_raw_stacktrace(ctx, mod, i); \
     goto handle_error;
 
 #define VM_ABORT() \
@@ -745,7 +745,7 @@ typedef union
     (((uint8_t *) (instruction_pointer)) - code)
 
 #define HANDLE_ERROR()                                              \
-    ctx->x[2] = create_raw_stacktrace(ctx, mod, current_label, i);  \
+    ctx->x[2] = create_raw_stacktrace(ctx, mod, i);  \
     goto handle_error;
 
 #define VERIFY_IS_INTEGER(t, opcode_name)                  \
@@ -890,10 +890,12 @@ COLD_FUNC static void cp_to_mod_lbl_off(term cp, Context *ctx, Module **cp_mod, 
     *l_off = *mod_offset - ((uint8_t *) mod->labels[*label] - code);
 }
 
-COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int current_label, int current_offset)
+COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int current_offset)
 {
     unsigned num_frames = 0;
     unsigned num_aux_terms = 0;
+    Module *prev_mod = NULL;
+    long prev_mod_offset = -1;
     term *ct = ctx->e;
     while (ct != ctx->stack_base) {
         if (term_is_cp(*ct)) {
@@ -904,8 +906,10 @@ COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int curre
             long mod_offset;
 
             cp_to_mod_lbl_off(*ct, ctx, &cp_mod, &label, &offset, &mod_offset);
-            if (mod_offset != cp_mod->end_instruction_ii) {
+            if (mod_offset != cp_mod->end_instruction_ii && !(prev_mod == cp_mod && mod_offset == prev_mod_offset)) {
                 ++num_frames;
+                prev_mod = cp_mod;
+                prev_mod_offset = mod_offset;
                 if (module_has_line_chunk(cp_mod)) {
                     num_aux_terms++;
                 }
@@ -913,10 +917,18 @@ COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int curre
         } else if (term_is_catch_label(*ct)) {
             int module_index;
             int label = term_to_catch_label_and_module(*ct, &module_index);
-            ++num_frames;
+
             Module *cl_mod = ctx->global->modules_by_index[module_index];
-            if (module_has_line_chunk(cl_mod)) {
-                num_aux_terms++;
+            uint8_t *code = &cl_mod->code->code[0];
+            int mod_offset = ((uint8_t *) cl_mod->labels[label] - code);
+
+            if (!(prev_mod == cl_mod && mod_offset == prev_mod_offset)) {
+                ++num_frames;
+                prev_mod = cl_mod;
+                prev_mod_offset = mod_offset;
+                if (module_has_line_chunk(cl_mod)) {
+                    num_aux_terms++;
+                }
             }
         }
         ct++;
@@ -927,8 +939,8 @@ COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int curre
         num_aux_terms++;
     }
 
-    // {current_label, num_frames, num_aux_terms, [{module, offset}, ...]}
-    size_t requested_size = TUPLE_SIZE(4) + num_frames * (2 + TUPLE_SIZE(2));
+    // {num_frames, num_aux_terms, [{module, offset}, ...]}
+    size_t requested_size = TUPLE_SIZE(3) + num_frames * (2 + TUPLE_SIZE(2));
     if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
         fprintf(stderr, "WARNING: Unable to allocate heap space for raw stacktrace\n");
         return OUT_OF_MEMORY_ATOM;
@@ -941,6 +953,8 @@ COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int curre
     term_put_tuple_element(frame_info, 1, term_from_int(current_offset));
     raw_stacktrace = term_list_prepend(frame_info, raw_stacktrace, ctx);
 
+    prev_mod = NULL;
+    prev_mod_offset = -1;
     ct = ctx->e;
     while (ct != ctx->stack_base) {
         if (term_is_cp(*ct)) {
@@ -950,7 +964,10 @@ COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int curre
             long mod_offset;
 
             cp_to_mod_lbl_off(*ct, ctx, &cp_mod, &label, &offset, &mod_offset);
-            if (mod_offset != cp_mod->end_instruction_ii) {
+            if (mod_offset != cp_mod->end_instruction_ii && !(prev_mod == cp_mod && mod_offset == prev_mod_offset)) {
+
+                prev_mod = cp_mod;
+                prev_mod_offset = mod_offset;
 
                 term frame_info = term_alloc_tuple(2, ctx);
                 term_put_tuple_element(frame_info, 0, term_from_int(cp_mod->module_index));
@@ -966,20 +983,25 @@ COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int curre
             uint8_t *code = &cl_mod->code->code[0];
             int mod_offset = ((uint8_t *) cl_mod->labels[label] - code);
 
-            term frame_info = term_alloc_tuple(2, ctx);
-            term_put_tuple_element(frame_info, 0, term_from_int(module_index));
-            term_put_tuple_element(frame_info, 1, term_from_int(mod_offset));
+            if (!(prev_mod == cl_mod && mod_offset == prev_mod_offset)) {
 
-            raw_stacktrace = term_list_prepend(frame_info, raw_stacktrace, ctx);
+                prev_mod = cl_mod;
+                prev_mod_offset = mod_offset;
+
+                term frame_info = term_alloc_tuple(2, ctx);
+                term_put_tuple_element(frame_info, 0, term_from_int(module_index));
+                term_put_tuple_element(frame_info, 1, term_from_int(mod_offset));
+
+                raw_stacktrace = term_list_prepend(frame_info, raw_stacktrace, ctx);
+            }
         }
         ct++;
     }
 
-    term stack_info = term_alloc_tuple(4, ctx);
-    term_put_tuple_element(stack_info, 0, term_from_int(current_label));
-    term_put_tuple_element(stack_info, 1, term_from_int(num_frames));
-    term_put_tuple_element(stack_info, 2, term_from_int(num_aux_terms));
-    term_put_tuple_element(stack_info, 3, raw_stacktrace);
+    term stack_info = term_alloc_tuple(3, ctx);
+    term_put_tuple_element(stack_info, 0, term_from_int(num_frames));
+    term_put_tuple_element(stack_info, 1, term_from_int(num_aux_terms));
+    term_put_tuple_element(stack_info, 2, raw_stacktrace);
 
     return stack_info;
 }
@@ -993,9 +1015,8 @@ COLD_FUNC static term build_stacktrace(Context *ctx, term *stack_info)
         return UNDEFINED_ATOM;
     }
 
-    int current_label = term_to_int(term_get_tuple_element(*stack_info, 0));
-    int num_frames = term_to_int(term_get_tuple_element(*stack_info, 1));
-    int num_aux_terms = term_to_int(term_get_tuple_element(*stack_info, 2));
+    int num_frames = term_to_int(term_get_tuple_element(*stack_info, 0));
+    int num_aux_terms = term_to_int(term_get_tuple_element(*stack_info, 1));
 
     //
     // [{module, function, arity, [{file, const-binary}, {line, int}]}, ...]
@@ -1008,7 +1029,7 @@ COLD_FUNC static term build_stacktrace(Context *ctx, term *stack_info)
     }
 
     // Note.  Safe to get stacktrace after GC when stack_info comes from x[0]
-    term raw_stacktrace = term_get_tuple_element(*stack_info, 3);
+    term raw_stacktrace = term_get_tuple_element(*stack_info, 2);
 
     term stacktrace = term_nil();
     term el = raw_stacktrace;
@@ -1443,9 +1464,8 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
     unsigned int i = 0;
 
-    int current_label = -1;
-
     #ifdef IMPL_CODE_LOADER
+        int current_label = -1;
         int current_fun_local_atom = -1;
         int current_fun_arity = -1;
         TRACE("-- Loading code\n");
@@ -1482,11 +1502,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 TRACE("label/1 label=%i\n", label);
 
-                current_label = label;
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("Mark label %i here at %i\n", label, i);
                     module_add_label(mod, label, &code[i]);
+
+                    current_label = label;
 
                     if (label != 1) {
                         int local_fun = current_fun_local_atom;
