@@ -224,26 +224,15 @@ AtomString globalcontext_atomstring_from_term(GlobalContext *glb, term t);
  */
 term globalcontext_existing_term_from_atom_string(GlobalContext *glb, AtomString atom_string);
 
-/*
- * @brief Insert an already loaded module with a certain filename to the modules table.
- *
- * @details Insert an already loaded module to the modules table using the filename without ".beam" as the module name.
- * @param glb the global context.
- * @param module the module that will be added to the modules table.
- * @param filename module filename (without the path).
- */
-void globalcontext_insert_module_with_filename(GlobalContext *glb, Module *module, const char *filename);
-
 /**
  * @brief Inserts a module to the modules table.
  *
  * @details Inserts an already loaded module to the modules table and assigns and index to it so it can be retrieved later by name or index.
  * @param global the global context.
  * @param module the module that will be added to the modules table.
- * @param module_name_atom the module name (as AtomString).
  * @returns the module index if successful, otherwise -1.
  */
-int globalcontext_insert_module(GlobalContext *global, Module *module, AtomString module_name_atom);
+int globalcontext_insert_module(GlobalContext *global, Module *module);
 
 /**
  * @brief Returns the module with the given name

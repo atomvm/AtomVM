@@ -238,8 +238,9 @@ term globalcontext_existing_term_from_atom_string(GlobalContext *glb, AtomString
     return term_from_atom_index(atom_index);
 }
 
-int globalcontext_insert_module(GlobalContext *global, Module *module, AtomString module_name_atom)
+int globalcontext_insert_module(GlobalContext *global, Module *module)
 {
+    AtomString module_name_atom = module_get_atom_string_by_id(module, 1);
     if (!atomshashtable_insert(global->modules_table, module_name_atom, TO_ATOMSHASHTABLE_VALUE(module))) {
         return -1;
     }
@@ -267,29 +268,6 @@ int globalcontext_insert_module(GlobalContext *global, Module *module, AtomStrin
     return module_index;
 }
 
-void globalcontext_insert_module_with_filename(GlobalContext *glb, Module *module, const char *filename)
-{
-    int len = strnlen(filename, 260);
-    int len_without_ext = len - strlen(".beam");
-
-    if (strcmp(filename + len_without_ext, ".beam") != 0) {
-        printf("File isn't a .beam file\n");
-        AVM_ABORT();
-    }
-
-    char *atom_string = malloc(len_without_ext + 1);
-    if (IS_NULL_PTR(atom_string)) {
-        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        AVM_ABORT();
-    }
-    memcpy(atom_string + 1, filename, len_without_ext);
-    atom_string[0] = len_without_ext;
-
-    if (UNLIKELY(globalcontext_insert_module(glb, module, atom_string) < 0)) {
-        AVM_ABORT();
-    }
-}
-
 Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_atom)
 {
     Module *found_module = (Module *) atomshashtable_get_value(global->modules_table, module_name_atom, (unsigned long) NULL);
@@ -305,7 +283,7 @@ Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_a
         Module *loaded_module = sys_load_module(global, module_name);
         free(module_name);
 
-        if (UNLIKELY(!loaded_module || (globalcontext_insert_module(global, loaded_module, module_name_atom) < 0))) {
+        if (UNLIKELY(!loaded_module || (globalcontext_insert_module(global, loaded_module) < 0))) {
             return NULL;
         }
 
