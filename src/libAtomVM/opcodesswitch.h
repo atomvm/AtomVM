@@ -892,8 +892,9 @@ COLD_FUNC static void cp_to_mod_lbl_off(term cp, Context *ctx, Module **cp_mod, 
 
 COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int current_offset)
 {
-    unsigned num_frames = 0;
-    unsigned num_aux_terms = 0;
+    unsigned int num_frames = 0;
+    unsigned int num_aux_terms = 0;
+    unsigned int filename_lens = 0;
     Module *prev_mod = NULL;
     long prev_mod_offset = -1;
     term *ct = ctx->e;
@@ -911,6 +912,7 @@ COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int curre
                 prev_mod = cp_mod;
                 prev_mod_offset = mod_offset;
                 if (module_has_line_chunk(cp_mod)) {
+                    filename_lens += cp_mod->filenames[0].len;
                     num_aux_terms++;
                 }
             }
@@ -927,6 +929,7 @@ COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int curre
                 prev_mod = cl_mod;
                 prev_mod_offset = mod_offset;
                 if (module_has_line_chunk(cl_mod)) {
+                    filename_lens += cl_mod->filenames[0].len;
                     num_aux_terms++;
                 }
             }
@@ -936,11 +939,12 @@ COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int curre
 
     num_frames++;
     if (module_has_line_chunk(mod)) {
+        filename_lens += mod->filenames[0].len;
         num_aux_terms++;
     }
 
-    // {num_frames, num_aux_terms, [{module, offset}, ...]}
-    size_t requested_size = TUPLE_SIZE(3) + num_frames * (2 + TUPLE_SIZE(2));
+    // {num_frames, num_aux_terms, filename_lens, [{module, offset}, ...]}
+    size_t requested_size = TUPLE_SIZE(4) + num_frames * (2 + TUPLE_SIZE(2));
     if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
         fprintf(stderr, "WARNING: Unable to allocate heap space for raw stacktrace\n");
         return OUT_OF_MEMORY_ATOM;
@@ -998,10 +1002,11 @@ COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int curre
         ct++;
     }
 
-    term stack_info = term_alloc_tuple(3, ctx);
+    term stack_info = term_alloc_tuple(4, ctx);
     term_put_tuple_element(stack_info, 0, term_from_int(num_frames));
     term_put_tuple_element(stack_info, 1, term_from_int(num_aux_terms));
-    term_put_tuple_element(stack_info, 2, raw_stacktrace);
+    term_put_tuple_element(stack_info, 2, term_from_int(filename_lens));
+    term_put_tuple_element(stack_info, 3, raw_stacktrace);
 
     return stack_info;
 }
@@ -1017,19 +1022,21 @@ COLD_FUNC static term build_stacktrace(Context *ctx, term *stack_info)
 
     int num_frames = term_to_int(term_get_tuple_element(*stack_info, 0));
     int num_aux_terms = term_to_int(term_get_tuple_element(*stack_info, 1));
+    int filename_lens = term_to_int(term_get_tuple_element(*stack_info, 2));
 
     //
-    // [{module, function, arity, [{file, const-binary}, {line, int}]}, ...]
+    // [{module, function, arity, [{file, string()}, {line, int}]}, ...]
     //
     size_t requested_size =
         (TUPLE_SIZE(4) + 2) * num_frames +
-        num_aux_terms * (2 + 2 * TUPLE_SIZE(2) + TERM_BOXED_REFC_BINARY_SIZE);
+        num_aux_terms * (2 + 2 * TUPLE_SIZE(2)) +
+        2 * filename_lens;
     if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
         return OUT_OF_MEMORY_ATOM;
     }
 
     // Note.  Safe to get stacktrace after GC when stack_info comes from x[0]
-    term raw_stacktrace = term_get_tuple_element(*stack_info, 2);
+    term raw_stacktrace = term_get_tuple_element(*stack_info, 3);
 
     term stacktrace = term_nil();
     term el = raw_stacktrace;
@@ -1062,7 +1069,7 @@ COLD_FUNC static term build_stacktrace(Context *ctx, term *stack_info)
 
             term file_tuple = term_alloc_tuple(2, ctx);
             term_put_tuple_element(file_tuple, 0, context_make_atom(ctx, ATOM_STR("\x4", "file")));
-            term_put_tuple_element(file_tuple, 1, term_from_const_binary(cp_mod->filenames[0].data, cp_mod->filenames[0].len, ctx));
+            term_put_tuple_element(file_tuple, 1, term_from_string((const uint8_t *) cp_mod->filenames[0].data, cp_mod->filenames[0].len, ctx));
             aux_data = term_list_prepend(file_tuple, aux_data, ctx);
         }
         term_put_tuple_element(frame_i, 3, aux_data);
