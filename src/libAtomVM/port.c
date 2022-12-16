@@ -110,12 +110,7 @@ bool port_is_standard_port_command(term t)
     } else {
         term pid = term_get_tuple_element(t, 0);
         term ref = term_get_tuple_element(t, 1);
-        if (!term_is_pid(pid)) {
-            return false;
-        } else if (!term_is_reference(ref)) {
-            return false;
-        } else {
-            return true;
-        }
+
+        return term_is_pid(pid) && term_is_reference(ref);
     }
 }
