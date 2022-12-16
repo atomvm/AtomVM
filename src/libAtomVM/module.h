@@ -110,8 +110,6 @@ struct Module
 
     int module_index;
 
-    AtomString module_name;
-
     int end_instruction_ii;
 
     unsigned int free_literals_data : 1;
@@ -348,14 +346,6 @@ int module_find_line(Module *mod, int offset);
 static inline bool module_has_line_chunk(Module *mod)
 {
     return !IS_NULL_PTR(mod->line_refs);
-}
-
-/**
- * @return the module name for the given Module instance.
- */
-static inline AtomString module_get_module_name(Module *mod)
-{
-    return mod->module_name;
 }
 
 #ifdef __cplusplus

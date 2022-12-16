@@ -1053,10 +1053,10 @@ COLD_FUNC static term build_stacktrace(Context *ctx, term *stack_info)
         long mod_offset;
         cp_to_mod_lbl_off(cp, ctx, &cp_mod, &label, &offset, &mod_offset);
 
-        AtomString module_name = module_get_module_name(cp_mod);
+        term module_name = module_get_name(cp_mod);
 
         term frame_i = term_alloc_tuple(4, ctx);
-        term_put_tuple_element(frame_i, 0, context_make_atom(ctx, module_name));
+        term_put_tuple_element(frame_i, 0, module_name);
 
         term aux_data = term_nil();
         if (module_has_line_chunk(cp_mod)) {

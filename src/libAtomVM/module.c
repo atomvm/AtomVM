@@ -70,8 +70,6 @@ static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, ui
     int atoms_count = READ_32_ALIGNED(table_data + 8);
     const char *current_atom = (const char *) table_data + 12;
 
-    this_module->module_name = (AtomString) current_atom;
-
     this_module->local_atoms_to_global_table = calloc(atoms_count + 1, sizeof(int));
     if (IS_NULL_PTR(this_module->local_atoms_to_global_table)) {
         fprintf(stderr, "Cannot allocate memory while loading module (line: %i).\n", __LINE__);
