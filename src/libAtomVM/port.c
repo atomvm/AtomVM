@@ -101,21 +101,21 @@ void port_ensure_available(Context *ctx, size_t size)
     }
 }
 
-int port_is_standard_port_command(term t)
+bool port_is_standard_port_command(term t)
 {
     if (!term_is_tuple(t)) {
-        return 0;
+        return false;
     } else if (term_get_tuple_arity(t) != 3) {
-        return 0;
+        return false;
     } else {
         term pid = term_get_tuple_element(t, 0);
         term ref = term_get_tuple_element(t, 1);
         if (!term_is_pid(pid)) {
-            return 0;
+            return false;
         } else if (!term_is_reference(ref)) {
-            return 0;
+            return false;
         } else {
-            return 1;
+            return true;
         }
     }
 }

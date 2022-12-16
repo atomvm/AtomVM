@@ -181,7 +181,7 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
     return MEMORY_GC_OK;
 }
 
-static inline int memory_is_moved_marker(term *t)
+static inline bool memory_is_moved_marker(term *t)
 {
     // 0x2B is an unused tag
     return *t == 0x2B;

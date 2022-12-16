@@ -21,6 +21,8 @@
 #ifndef _TEMPSTACK_H_
 #define _TEMPSTACK_H_
 
+#include <stdbool.h>
+
 struct TempStack
 {
     term *stack_end;
@@ -54,7 +56,7 @@ static void temp_stack_grow(struct TempStack *temp_stack)
     temp_stack->size = new_size;
 }
 
-static inline int temp_stack_is_empty(const struct TempStack *temp_stack)
+static inline bool temp_stack_is_empty(const struct TempStack *temp_stack)
 {
     return temp_stack->stack_end == temp_stack->stack_pos;
 }

@@ -1566,25 +1566,25 @@ static term nif_erlang_binary_to_integer_1(Context *ctx, int argc, term argv[])
 }
 
 #ifndef AVM_NO_FP
-static int is_valid_float_string(const char *str, int len)
+static bool is_valid_float_string(const char *str, int len)
 {
-    int has_point = 0;
-    int scientific = 0;
+    bool has_point = false;
+    bool scientific = false;
     for (int i = 0; i < len; i++) {
         switch (str[i]) {
             case '.':
                 if (!scientific) {
-                    has_point = 1;
+                    has_point = true;
                 } else {
-                    return 0;
+                    return false;
                 }
                 break;
 
             case 'e':
                 if (!scientific) {
-                    scientific = 1;
+                    scientific = true;
                 } else {
-                    return 0;
+                    return false;
                 }
                 break;
 
