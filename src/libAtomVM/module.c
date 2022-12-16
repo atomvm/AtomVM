@@ -64,6 +64,7 @@ static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, ui
 
     const char *atom = NULL;
     for (int i = 1; i <= atoms_count; i++) {
+        // atom 0 is NON TERM for historical reasons
         int atom_len = *current_atom;
         atom = current_atom;
 

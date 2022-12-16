@@ -492,7 +492,7 @@ static int test_atom(struct Test *test)
         fprintf(stderr, "Cannot load startup module: %s\n", test->test_module);
         return -1;
     }
-    globalcontext_insert_module_with_filename(glb, mod, module_file);
+    globalcontext_insert_module(glb, mod);
     Context *ctx = context_new(glb);
     ctx->leader = 1;
 
