@@ -21,6 +21,8 @@
 #ifndef _VALUESHASHTABLE_H_
 #define _VALUESHASHTABLE_H_
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -35,7 +37,7 @@ struct ValuesHashTable
 struct ValuesHashTable *valueshashtable_new();
 int valueshashtable_insert(struct ValuesHashTable *hash_table, unsigned long key, unsigned long value);
 unsigned long valueshashtable_get_value(const struct ValuesHashTable *hash_table, unsigned long key, unsigned long default_value);
-int valueshashtable_has_key(const struct ValuesHashTable *hash_table, unsigned long key);
+bool valueshashtable_has_key(const struct ValuesHashTable *hash_table, unsigned long key);
 
 #ifdef __cplusplus
 }
