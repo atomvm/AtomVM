@@ -85,12 +85,11 @@ struct Module
 
     CodeChunk *code;
     void *export_table;
+    void *local_table;
     void *atom_table;
     void *fun_table;
     void *str_table;
     size_t str_table_len;
-
-    uint32_t *label_fun_table;
 
     uint16_t *line_refs;
     struct ModuleFilename *filenames;
@@ -284,31 +283,48 @@ static inline const uint8_t *module_get_str(Module *mod, size_t offset, size_t *
 }
 
 /*
- * @brief Get the function name and arity of a function defined at a label.
+ * @brief Get the function name and arity of a function from a label.
  *
- * @details This function is used to get the function name and arity from the
- * label -> fun/arity table that is built during code loading.
- * See module_set_label_fun_arity.
-
+ * @details This function is used to get the function name and arity from a
+ * given label inside the function. It is based the property of labels are
+ * being allocated monotonously within functions.
  * @param mod the module
  * @param label the current label used to look up the function/arity
  * @param function_name (output) the function name, as an AtomString.
  * @param arity (output) the function arity
  */
-void module_get_fun_arity(Module *mod, int label, AtomString *function_name, int *arity);
+static inline void module_get_fun_from_label(Module *this_module, int label, AtomString *function_name, int *arity) {
+    int best_label = -1;
+    const uint8_t *table_data = (const uint8_t *) this_module->export_table;
+    int exports_count = READ_32_ALIGNED(table_data + 8);
+    for (int export_index = exports_count - 1; export_index >= 0; export_index--) {
+        int fun_atom_index = READ_32_ALIGNED(table_data + (export_index * 12) + 12);
+        int fun_arity = READ_32_ALIGNED(table_data + (export_index * 12) + 4 + 12);
+        int fun_label = READ_32_ALIGNED(table_data + (export_index * 12) + 8 + 12);
+        if (fun_label <= label && best_label < fun_label) {
+            best_label = fun_label;
+            *arity = fun_arity;
+            *function_name = module_get_atom_string_by_id(this_module, fun_atom_index);
+        }
+    }
 
-/*
- * @brief The the function and arity at a label.
- *
- * @details This function is used when loading a module.  When a function info instruction is scanned,
- * the current label is used to build a table that maps labels to function/arity pairs.
- *
- * @param mod the module
- * @param label the current label
- * @param local_fun the local function index, as extracted from the instruction
- * @param arity the function arity
- */
-void module_set_label_fun_arity(Module *mod, int label, int local_fun, int arity);
+    table_data = (const uint8_t *) this_module->local_table;
+    int locals_count = READ_32_ALIGNED(table_data + 8);
+    for (int local_index = locals_count - 1; local_index >= 0; local_index--) {
+        int fun_atom_index = READ_32_ALIGNED(table_data + (local_index * 12) + 12);
+        int fun_arity = READ_32_ALIGNED(table_data + (local_index * 12) + 4 + 12);
+        int fun_label = READ_32_ALIGNED(table_data + (local_index * 12) + 8 + 12);
+        if (fun_label <= label && best_label < fun_label) {
+            best_label = fun_label;
+            *arity = fun_arity;
+            *function_name = module_get_atom_string_by_id(this_module, fun_atom_index);
+        }
+    }
+    if (UNLIKELY(best_label == -1)) {
+        // Couldn't find the function.
+        AVM_ABORT();
+    }
+}
 
 /*
  * @brief Insert the instruction offset for a given module at a line reference instruction.

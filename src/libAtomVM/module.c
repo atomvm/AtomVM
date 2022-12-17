@@ -212,6 +212,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
 #endif
     mod->code = (CodeChunk *) (beam_file + offsets[CODE]);
     mod->export_table = beam_file + offsets[EXPT];
+    mod->local_table = beam_file + offsets[LOCT];
     mod->atom_table = beam_file + offsets[AT8U];
     mod->fun_table = beam_file + offsets[FUNT];
     mod->str_table = beam_file + offsets[STRT];
@@ -220,13 +221,6 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     mod->labels = calloc(num_labels, sizeof(void *));
     if (IS_NULL_PTR(mod->labels)) {
         fprintf(stderr, "Error: Null module labels: %s:%i.\n", __FILE__, __LINE__);
-        module_destroy(mod);
-        return NULL;
-    }
-
-    mod->label_fun_table = malloc(num_labels * sizeof(uint32_t));
-    if (IS_NULL_PTR(mod->label_fun_table)) {
-        fprintf(stderr, "Error: Failed to allocate memory for label_fun_table: %s:%i.\n", __FILE__, __LINE__);
         module_destroy(mod);
         return NULL;
     }
@@ -274,7 +268,6 @@ COLD_FUNC void module_destroy(Module *module)
     if (module->free_literals_data) {
         free(module->literals_data);
     }
-    free(module->label_fun_table);
     free(module);
 }
 
@@ -527,27 +520,6 @@ static void parse_line_table(uint16_t **line_refs, struct ModuleFilename **filen
         free(*line_refs);
         return;
     }
-}
-
-void module_get_fun_arity(Module *mod, int label, AtomString *function_name_atom, int *arity)
-{
-    uint32_t num_labels = ENDIAN_SWAP_32(mod->code->labels);
-    if (label >= num_labels) {
-        *function_name_atom = NULL;
-        *arity = 0;
-        return;
-    }
-    uint32_t value = mod->label_fun_table[label - 1];
-    uint32_t local_atom = (value >> 24) & 0xFFFFFF;
-    *arity = (int) (value & 0xFF);
-    int global_index = mod->local_atoms_to_global_table[local_atom];
-    *function_name_atom = (AtomString) valueshashtable_get_value(mod->global->atoms_ids_table, global_index, (unsigned long) NULL);
-}
-
-void module_set_label_fun_arity(Module *mod, int label, int local_fun, int arity)
-{
-    uint32_t value = ((local_fun & 0xFFFFFF) << 24) | (arity & 0xFF);
-    mod->label_fun_table[label - 1] = value;
 }
 
 void module_insert_line_ref_offset(Module *mod, int line_ref, int offset)
