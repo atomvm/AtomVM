@@ -890,6 +890,20 @@ COLD_FUNC static void cp_to_mod_lbl_off(term cp, Context *ctx, Module **cp_mod, 
     *l_off = *mod_offset - ((uint8_t *) mod->labels[*label] - code);
 }
 
+#ifndef AVM_CREATE_STACKTRACES
+
+COLD_FUNC static inline term create_raw_stacktrace(Context *ctx, Module *mod, int current_offset)
+{
+    return UNDEFINED_ATOM;
+}
+
+COLD_FUNC static inline term build_stacktrace(Context *ctx, term *stack_info)
+{
+    return UNDEFINED_ATOM;
+}
+
+#else
+
 COLD_FUNC static bool is_module_member(Module *mod, Module **mods, unsigned long len)
 {
     for (unsigned long i = 0; i < len;  ++i) {
@@ -1160,6 +1174,8 @@ COLD_FUNC static term build_stacktrace(Context *ctx, term *stack_info)
 
     return stacktrace;
 }
+
+#endif
 
 COLD_FUNC static void dump(Context *ctx)
 {

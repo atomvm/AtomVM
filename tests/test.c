@@ -71,6 +71,12 @@ struct Test
 #define SKIP_FP false
 #endif
 
+#ifndef AVM_CREATE_STACKTRACES
+#define SKIP_STACKTRACES true
+#else
+#define SKIP_STACKTRACES false
+#endif
+
 struct Test tests[] = {
     TEST_CASE_EXPECTED(add, 17),
     TEST_CASE_EXPECTED(fact, 120),
@@ -474,7 +480,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(link_throw, 1),
     TEST_CASE_EXPECTED(unlink_error, 1),
     TEST_CASE_EXPECTED(trap_exit_flag, 1),
-    TEST_CASE(test_stacktrace),
+    TEST_CASE_COND(test_stacktrace, 0, SKIP_STACKTRACES),
 
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 

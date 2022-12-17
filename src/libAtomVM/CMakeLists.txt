@@ -127,6 +127,10 @@ if (AVM_VERBOSE_ABORT)
     target_compile_definitions(libAtomVM PUBLIC AVM_VERBOSE_ABORT)
 endif()
 
+if(AVM_CREATE_STACKTRACES)
+    target_compile_definitions(libAtomVM PUBLIC AVM_CREATE_STACKTRACES)
+endif()
+
 # Automatically use zlib if present to load .beam files
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin" OR ${CMAKE_SYSTEM_NAME} STREQUAL "Linux" OR ${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
     find_package(ZLIB)

@@ -29,6 +29,7 @@ option(AVM_DISABLE_FP "Disable floating point support." OFF)
 option(AVM_USE_32BIT_FLOAT "Use 32 bit floats." OFF)
 option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
 option(AVM_RELEASE "Build an AtomVM release" OFF)
+option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 option(COVERAGE "Build for code coverage" OFF)
 
 if((${CMAKE_SYSTEM_NAME} STREQUAL "Darwin") OR
