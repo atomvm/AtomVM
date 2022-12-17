@@ -98,29 +98,6 @@ Stacktraces are computed from information gathered at load time from BEAM module
 
 Newcomers to Erlang may find stacktraces slightly confusing, because some optimizations taken by the Erlang compiler and runtime can result in stack frames "missing" from stack traces.  For example, tail-recursive function calls, as well as function calls that occur as the last expression in a function clause, don't involve the creation of frames in the runtime stack, and consequently will not appear in a stacktrace.
 
-Several data structures are used to track labels, functions, and code offsets.  These data structures are described in the following subsections.
-
-### The label-fun-arity table
-
-The label-fun-arity table is an array of 32-bit integers that associates BEAM labels with the function (index) and arity with which that label is associated.  This array is dynamically allocated, based on the number of labels in the BEAM file, and the array is stored on the `Module` structure.
-
-For example, a function definition may compile into a sequence of BEAM instructions that involve the declaration of multiple labels, say, labels `i..j`.  In the a case, the array indices `i..j` in the label-fun-arity table will all contain references to the associated function index and arity.
-
-A function index and arity are encoded into a 32-bit value, where the high-order 24 bits encodes the atom index that is local to the module definition, and the low order 8 bits encodes the function arity:
-
-    local atom index            arity
-    +------------------------+--------+
-    |                        |        |
-    +------------------------+--------+
-     high-order               low order
-     24 bits                   8 bits
-
-AtomVM therefore places a constraint of no more that `2^12` (16k) labels per BEAM file, and no more than 256 parameters per function, in order to have accurate stacktraces.
-
-When a module is loaded, the BEAM instructions are processed in sequence.  The current local function atom index and arity are recorded, and when a label instruction is encountered, the label-fun-arity table is updated with the local function atom index and arity.
-
-The memory cost of this table is `num_labels * 4` bytes, for each loaded module.
-
 ### Line Numbers
 
 Including file and line number information in stacktraces adds considerable overhead to both the BEAM file data, as well as the memory consumed at module load time.  The data structures used to track line numbers and file names are described below and are only created if the associated BEAM file contains a `Line` chunk.

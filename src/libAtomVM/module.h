@@ -293,7 +293,7 @@ static inline const uint8_t *module_get_str(Module *mod, size_t offset, size_t *
  * @param function_name (output) the function name, as an AtomString.
  * @param arity (output) the function arity
  */
-static inline void module_get_fun_from_label(Module *this_module, int label, AtomString *function_name, int *arity) {
+static inline bool module_get_fun_from_label(Module *this_module, int label, AtomString *function_name, int *arity) {
     int best_label = -1;
     const uint8_t *table_data = (const uint8_t *) this_module->export_table;
     int exports_count = READ_32_ALIGNED(table_data + 8);
@@ -322,8 +322,9 @@ static inline void module_get_fun_from_label(Module *this_module, int label, Ato
     }
     if (UNLIKELY(best_label == -1)) {
         // Couldn't find the function.
-        AVM_ABORT();
+        return false;
     }
+    return true;
 }
 
 /*

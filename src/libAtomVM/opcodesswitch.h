@@ -1074,11 +1074,11 @@ COLD_FUNC static term build_stacktrace(Context *ctx, term *stack_info)
         }
         term_put_tuple_element(frame_i, 3, aux_data);
 
-        AtomString function_name;
-        int arity;
-        module_get_fun_from_label(cp_mod, label, &function_name, &arity);
+        AtomString function_name = NULL;
+        int arity = 0;
+        bool result = module_get_fun_from_label(cp_mod, label, &function_name, &arity);
 
-        if (!IS_NULL_PTR(function_name)) {
+        if (LIKELY(result)) {
             term_put_tuple_element(frame_i, 1, context_make_atom(ctx, function_name));
             term_put_tuple_element(frame_i, 2, term_from_int(arity));
         } else {
