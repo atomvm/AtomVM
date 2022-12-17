@@ -890,6 +890,16 @@ COLD_FUNC static void cp_to_mod_lbl_off(term cp, Context *ctx, Module **cp_mod, 
     *l_off = *mod_offset - ((uint8_t *) mod->labels[*label] - code);
 }
 
+COLD_FUNC static bool is_module_member(Module *mod, Module **mods, unsigned long len)
+{
+    for (unsigned long i = 0; i < len;  ++i) {
+        if (mods[i] == mod) {
+            return true;
+        }
+    }
+    return false;
+}
+
 COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int current_offset)
 {
     unsigned int num_frames = 0;
@@ -898,6 +908,16 @@ COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int curre
     Module *prev_mod = NULL;
     long prev_mod_offset = -1;
     term *ct = ctx->e;
+
+    unsigned long stack_size = context_stack_size(ctx);
+    Module **modules = malloc(stack_size * sizeof(Module *));
+    if (IS_NULL_PTR(modules)) {
+        fprintf(stderr, "Unable to allocate space for modules list.  No stacktrace will be created\n");
+        return UNDEFINED_ATOM;
+    }
+
+    size_t num_mods = 0;
+
     while (ct != ctx->stack_base) {
         if (term_is_cp(*ct)) {
 
@@ -912,7 +932,11 @@ COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int curre
                 prev_mod = cp_mod;
                 prev_mod_offset = mod_offset;
                 if (module_has_line_chunk(cp_mod)) {
-                    filename_lens += cp_mod->filenames[0].len;
+                    if (!is_module_member(cp_mod, modules, num_mods)) {
+                        modules[num_mods] = cp_mod;
+                        filename_lens += cp_mod->filenames[0].len;
+                        num_mods++;
+                    }
                     num_aux_terms++;
                 }
             }
@@ -929,7 +953,11 @@ COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int curre
                 prev_mod = cl_mod;
                 prev_mod_offset = mod_offset;
                 if (module_has_line_chunk(cl_mod)) {
-                    filename_lens += cl_mod->filenames[0].len;
+                    if (!is_module_member(cl_mod, modules, num_mods)) {
+                        modules[num_mods] = cl_mod;
+                        filename_lens += cl_mod->filenames[0].len;
+                        num_mods++;
+                    }
                     num_aux_terms++;
                 }
             }
@@ -939,12 +967,17 @@ COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int curre
 
     num_frames++;
     if (module_has_line_chunk(mod)) {
-        filename_lens += mod->filenames[0].len;
+        if (!is_module_member(mod, modules, num_mods)) {
+            filename_lens += mod->filenames[0].len;
+            num_mods++;
+        }
         num_aux_terms++;
     }
 
-    // {num_frames, num_aux_terms, filename_lens, [{module, offset}, ...]}
-    size_t requested_size = TUPLE_SIZE(4) + num_frames * (2 + TUPLE_SIZE(2));
+    free(modules);
+
+    // {num_frames, num_aux_terms, filename_lens, num_mods, [{module, offset}, ...]}
+    size_t requested_size = TUPLE_SIZE(5) + num_frames * (2 + TUPLE_SIZE(2));
     if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
         fprintf(stderr, "WARNING: Unable to allocate heap space for raw stacktrace\n");
         return OUT_OF_MEMORY_ATOM;
@@ -1002,13 +1035,30 @@ COLD_FUNC static term create_raw_stacktrace(Context *ctx, Module *mod, int curre
         ct++;
     }
 
-    term stack_info = term_alloc_tuple(4, ctx);
+    term stack_info = term_alloc_tuple(5, ctx);
     term_put_tuple_element(stack_info, 0, term_from_int(num_frames));
     term_put_tuple_element(stack_info, 1, term_from_int(num_aux_terms));
     term_put_tuple_element(stack_info, 2, term_from_int(filename_lens));
-    term_put_tuple_element(stack_info, 3, raw_stacktrace);
+    term_put_tuple_element(stack_info, 3, term_from_int(num_mods));
+    term_put_tuple_element(stack_info, 4, raw_stacktrace);
 
     return stack_info;
+}
+
+struct ModulePathPair
+{
+    term module;
+    term path;
+};
+
+COLD_FUNC static term find_path_created(term module_name, struct ModulePathPair *module_paths, int len)
+{
+    for (int i = 0; i < len; ++i) {
+        if (module_paths[i].module == module_name) {
+            return module_paths[i].path;
+        }
+    }
+    return term_invalid_term();
 }
 
 COLD_FUNC static term build_stacktrace(Context *ctx, term *stack_info)
@@ -1023,6 +1073,13 @@ COLD_FUNC static term build_stacktrace(Context *ctx, term *stack_info)
     int num_frames = term_to_int(term_get_tuple_element(*stack_info, 0));
     int num_aux_terms = term_to_int(term_get_tuple_element(*stack_info, 1));
     int filename_lens = term_to_int(term_get_tuple_element(*stack_info, 2));
+    int num_mods = term_to_int(term_get_tuple_element(*stack_info, 3));
+
+    struct ModulePathPair *module_paths = malloc(num_mods * sizeof(struct ModulePathPair));
+    if (IS_NULL_PTR(module_paths)) {
+        fprintf(stderr, "Unable to allocate space for module paths.  Returning raw stacktrace.\n");
+        return *stack_info;
+    }
 
     //
     // [{module, function, arity, [{file, string()}, {line, int}]}, ...]
@@ -1032,14 +1089,16 @@ COLD_FUNC static term build_stacktrace(Context *ctx, term *stack_info)
         num_aux_terms * (2 + 2 * TUPLE_SIZE(2)) +
         2 * filename_lens;
     if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
+        free(module_paths);
         return OUT_OF_MEMORY_ATOM;
     }
 
     // Note.  Safe to get stacktrace after GC when stack_info comes from x[0]
-    term raw_stacktrace = term_get_tuple_element(*stack_info, 3);
+    term raw_stacktrace = term_get_tuple_element(*stack_info, 4);
 
     term stacktrace = term_nil();
     term el = raw_stacktrace;
+    int module_path_idx = 0;
     while (!term_is_nil(el)) {
         term mod_index_tuple = term_get_list_head(el);
         term cp = module_address(
@@ -1069,7 +1128,15 @@ COLD_FUNC static term build_stacktrace(Context *ctx, term *stack_info)
 
             term file_tuple = term_alloc_tuple(2, ctx);
             term_put_tuple_element(file_tuple, 0, context_make_atom(ctx, ATOM_STR("\x4", "file")));
-            term_put_tuple_element(file_tuple, 1, term_from_string((const uint8_t *) cp_mod->filenames[0].data, cp_mod->filenames[0].len, ctx));
+
+            term path = find_path_created(module_name, module_paths, module_path_idx);
+            if (term_is_invalid_term(path)) {
+                path = term_from_string((const uint8_t *) cp_mod->filenames[0].data, cp_mod->filenames[0].len, ctx);
+                module_paths[module_path_idx].module = module_name;
+                module_paths[module_path_idx].path = path;
+                module_path_idx++;
+            }
+            term_put_tuple_element(file_tuple, 1, path);
             aux_data = term_list_prepend(file_tuple, aux_data, ctx);
         }
         term_put_tuple_element(frame_i, 3, aux_data);
@@ -1089,6 +1156,7 @@ COLD_FUNC static term build_stacktrace(Context *ctx, term *stack_info)
 
         el = term_get_list_tail(el);
     }
+    free(module_paths);
 
     return stacktrace;
 }

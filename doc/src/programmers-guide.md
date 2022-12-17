@@ -421,9 +421,7 @@ Stacktrace data is represented as a list of tuples, each of which represents a s
 
 where `aux_data()` is a (possibly empty) properties list containing the following elements:
 
-    [{file, File :: binary(), line, Line :: pos_integer()}]
-
-> Note.  The representation of file information as a binary departs from the OTP standard (which uses strings to represent file information), in order to minimize use of heap space on memory-constrained platforms.
+    [{file, File :: string(), line, Line :: pos_integer()}]
 
 Stack frames are ordered from the frame “closest“ to the point of failure (the “top” of the stack) to the frame furthest from the point of failure (the “bottom” of the stack).
 
