@@ -71,8 +71,8 @@ struct ModuleFilename
 struct LineRefOffset
 {
     struct ListHead head;
+    unsigned int offset;
     uint16_t line_ref;
-    unsigned offset;
 };
 
 struct Module
@@ -293,39 +293,7 @@ static inline const uint8_t *module_get_str(Module *mod, size_t offset, size_t *
  * @param function_name (output) the function name, as an AtomString.
  * @param arity (output) the function arity
  */
-static inline bool module_get_fun_from_label(Module *this_module, int label, AtomString *function_name, int *arity) {
-    int best_label = -1;
-    const uint8_t *table_data = (const uint8_t *) this_module->export_table;
-    int exports_count = READ_32_ALIGNED(table_data + 8);
-    for (int export_index = exports_count - 1; export_index >= 0; export_index--) {
-        int fun_atom_index = READ_32_ALIGNED(table_data + (export_index * 12) + 12);
-        int fun_arity = READ_32_ALIGNED(table_data + (export_index * 12) + 4 + 12);
-        int fun_label = READ_32_ALIGNED(table_data + (export_index * 12) + 8 + 12);
-        if (fun_label <= label && best_label < fun_label) {
-            best_label = fun_label;
-            *arity = fun_arity;
-            *function_name = module_get_atom_string_by_id(this_module, fun_atom_index);
-        }
-    }
-
-    table_data = (const uint8_t *) this_module->local_table;
-    int locals_count = READ_32_ALIGNED(table_data + 8);
-    for (int local_index = locals_count - 1; local_index >= 0; local_index--) {
-        int fun_atom_index = READ_32_ALIGNED(table_data + (local_index * 12) + 12);
-        int fun_arity = READ_32_ALIGNED(table_data + (local_index * 12) + 4 + 12);
-        int fun_label = READ_32_ALIGNED(table_data + (local_index * 12) + 8 + 12);
-        if (fun_label <= label && best_label < fun_label) {
-            best_label = fun_label;
-            *arity = fun_arity;
-            *function_name = module_get_atom_string_by_id(this_module, fun_atom_index);
-        }
-    }
-    if (UNLIKELY(best_label == -1)) {
-        // Couldn't find the function.
-        return false;
-    }
-    return true;
-}
+bool module_get_function_from_label(Module *this_module, int label, AtomString *function_name, int *arity);
 
 /*
  * @brief Insert the instruction offset for a given module at a line reference instruction.
@@ -355,14 +323,14 @@ void module_insert_line_ref_offset(Module *mod, int line_ref, int offset);
  * @param offset
  * @return the line reference
  */
-int module_find_line(Module *mod, int offset);
+int module_find_line(Module *mod, unsigned int offset);
 
 /**
  * @return true if the module has line information, false, otherwise.
  */
 static inline bool module_has_line_chunk(Module *mod)
 {
-    return !IS_NULL_PTR(mod->line_refs);
+    return mod->line_refs != NULL;
 }
 
 #ifdef __cplusplus
