@@ -90,7 +90,13 @@ extern "C" {
 enum BitstringFlags
 {
     LittleEndianInteger = 0x2,
-    SignedInteger = 0x4
+    SignedInteger = 0x4,
+    NativeEndianInteger = 0x10,
+#ifdef __ORDER_LITTLE_ENDIAN__
+    LittleEndianIntegerMask = LittleEndianInteger | NativeEndianInteger
+#else
+    LittleEndianIntegerMask = LittleEndianInteger
+#endif
 };
 
 union maybe_unsigned_int8
@@ -150,7 +156,7 @@ static inline bool bitstring_extract_integer(term src_bin, size_t offset, avm_in
             case 16: {
                 union maybe_unsigned_int16 i16;
 
-                if (bs_flags & LittleEndianInteger) {
+                if (bs_flags & LittleEndianIntegerMask) {
                     i16.u = READ_16LE_UNALIGNED(src);
                 } else {
                     i16.u = READ_16_UNALIGNED(src);
@@ -165,8 +171,7 @@ static inline bool bitstring_extract_integer(term src_bin, size_t offset, avm_in
 
             case 32: {
                 union maybe_unsigned_int32 i32;
-
-                if (bs_flags & LittleEndianInteger) {
+                if (bs_flags & LittleEndianIntegerMask) {
                     i32.u = READ_32LE_UNALIGNED(src);
                 } else {
                     i32.u = READ_32_UNALIGNED(src);
@@ -182,7 +187,7 @@ static inline bool bitstring_extract_integer(term src_bin, size_t offset, avm_in
             case 64: {
                 union maybe_unsigned_int64 i64;
 
-                if (bs_flags & LittleEndianInteger) {
+                if (bs_flags & LittleEndianIntegerMask) {
                     i64.u = READ_64LE_UNALIGNED(src);
                 } else {
                     i64.u = READ_64_UNALIGNED(src);
@@ -226,7 +231,7 @@ static inline bool bitstring_insert_integer(term dst_bin, size_t offset, avm_int
             }
 
             case 16: {
-                if (bs_flags & LittleEndianInteger) {
+                if (bs_flags & LittleEndianIntegerMask) {
                     if (bs_flags & SignedInteger) {
                         int16_t signed_value = (int16_t) value;
                         WRITE_16LE_UNALIGNED(int16_t, dst, signed_value);
@@ -247,7 +252,7 @@ static inline bool bitstring_insert_integer(term dst_bin, size_t offset, avm_int
             }
 
             case 32: {
-                if (bs_flags & LittleEndianInteger) {
+                if (bs_flags & LittleEndianIntegerMask) {
                     if (bs_flags & SignedInteger) {
                         int32_t signed_value = (int32_t) value;
                         WRITE_32LE_UNALIGNED(int32_t, dst, signed_value);
@@ -268,7 +273,7 @@ static inline bool bitstring_insert_integer(term dst_bin, size_t offset, avm_int
             }
 
             case 64: {
-                if (bs_flags & LittleEndianInteger) {
+                if (bs_flags & LittleEndianIntegerMask) {
                     if (bs_flags & SignedInteger) {
                         avm_int64_t signed_value = value;
                         WRITE_64LE_UNALIGNED(avm_int64_t, dst, signed_value);
