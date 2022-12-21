@@ -68,17 +68,6 @@ uint32_t socket_tuple_to_addr(term addr_tuple)
         | (term_to_int32(term_get_tuple_element(addr_tuple, 3)) & 0xFF);
 }
 
-static term socket_tuple_from_addr(Context *ctx, uint32_t addr)
-{
-    term terms[4];
-    terms[0] = term_from_int32((addr >> 24) & 0xFF);
-    terms[1] = term_from_int32((addr >> 16) & 0xFF);
-    terms[2] = term_from_int32((addr >> 8) & 0xFF);
-    terms[3] = term_from_int32(addr & 0xFF);
-
-    return port_create_tuple_n(ctx, 4, terms);
-}
-
 static void tuple_to_ip_addr(term address_tuple, ip_addr_t *out_addr)
 {
     out_addr->type = IPADDR_TYPE_V4;
