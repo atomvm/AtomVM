@@ -255,7 +255,25 @@ static term nif_esp_deep_sleep(Context *ctx, int argc, term argv[])
     // technically, this function does not return
     return OK_ATOM;
 }
+static const char *const sleep_wakeup_ext0_atom = "\x11" "sleep_wakeup_ext0";
+static const char *const sleep_wakeup_ext1_atom = "\x11" "sleep_wakeup_ext1";
 static const char *const sleep_wakeup_timer_atom = "\x12" "sleep_wakeup_timer";
+static const char *const sleep_wakeup_touchpad_atom = "\x15" "sleep_wakeup_touchpad";
+static const char *const sleep_wakeup_ulp_atom = "\x10" "sleep_wakeup_ulp";
+static const char *const sleep_wakeup_gpio_atom = "\x11" "sleep_wakeup_gpio";
+static const char *const sleep_wakeup_uart_atom = "\x11" "sleep_wakeup_uart";
+#ifdef ESP_SLEEP_WAKEUP_WIFI
+static const char *const sleep_wakeup_wifi_atom = "\x11" "sleep_wakeup_wifi";
+#endif
+#ifdef ESP_SLEEP_WAKEUP_COCPU
+static const char *const sleep_wakeup_cocpu_atom = "\x12" "sleep_wakeup_cocpu";
+#endif
+#ifdef ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG
+static const char *const sleep_wakeup_cocpu_trap_trig_atom = "\x1C" "sleep_wakeup_cocpu_trap_trig";
+#endif
+#ifdef ESP_SLEEP_WAKEUP_BT
+static const char *const sleep_wakeup_bt_atom = "\xF" "sleep_wakeup_bt";
+#endif
 
 static term nif_esp_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[])
 {
@@ -267,11 +285,75 @@ static term nif_esp_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[])
     switch (cause) {
         case ESP_SLEEP_WAKEUP_UNDEFINED:
             return UNDEFINED_ATOM;
+        case ESP_SLEEP_WAKEUP_EXT0:
+            return context_make_atom(ctx, sleep_wakeup_ext0_atom);
+        case ESP_SLEEP_WAKEUP_EXT1:
+            return context_make_atom(ctx, sleep_wakeup_ext1_atom);
         case ESP_SLEEP_WAKEUP_TIMER:
             return context_make_atom(ctx, sleep_wakeup_timer_atom);
+        case ESP_SLEEP_WAKEUP_TOUCHPAD:
+            return context_make_atom(ctx, sleep_wakeup_touchpad_atom);
+        case ESP_SLEEP_WAKEUP_ULP:
+            return context_make_atom(ctx, sleep_wakeup_ulp_atom);
+        case ESP_SLEEP_WAKEUP_GPIO:
+            return context_make_atom(ctx, sleep_wakeup_gpio_atom);
+        case ESP_SLEEP_WAKEUP_UART:
+            return context_make_atom(ctx, sleep_wakeup_uart_atom);
+#ifdef ESP_SLEEP_WAKEUP_WIFI
+        case ESP_SLEEP_WAKEUP_WIFI:
+            return context_make_atom(ctx, sleep_wakeup_wifi_atom);
+#endif
+#ifdef ESP_SLEEP_WAKEUP_COCPU
+        case ESP_SLEEP_WAKEUP_COCPU:
+            return context_make_atom(ctx, sleep_wakeup_cocpu_atom);
+#endif
+#ifdef ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG
+        case ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG:
+            return context_make_atom(ctx, sleep_wakeup_cocpu_trap_trig_atom);
+#endif
+#ifdef ESP_SLEEP_WAKEUP_BT
+        case ESP_SLEEP_WAKEUP_BT:
+            return context_make_atom(ctx, sleep_wakeup_bt_atom);
+#endif
         default:
             return ERROR_ATOM;
     }
+}
+
+static term nif_esp_sleep_enable_ext0_wakeup(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    VALIDATE_VALUE(argv[0], term_is_integer);
+    VALIDATE_VALUE(argv[1], term_is_integer);
+    gpio_num_t pin = term_to_int(argv[0]);
+    int level = term_to_int(argv[1]);
+    esp_err_t err = esp_sleep_enable_ext0_wakeup(pin, level);
+    if (UNLIKELY(err == ESP_ERR_INVALID_ARG)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (UNLIKELY(err != ESP_OK)) {
+        return ERROR_ATOM;
+    }
+    return OK_ATOM;
+}
+
+static term nif_esp_sleep_enable_ext1_wakeup(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    VALIDATE_VALUE(argv[0], term_is_any_integer);
+    VALIDATE_VALUE(argv[1], term_is_integer);
+    avm_int64_t mask = term_maybe_unbox_int64(argv[0]);
+    esp_sleep_ext1_wakeup_mode_t mode = term_to_int(argv[1]);
+    esp_err_t err = esp_sleep_enable_ext1_wakeup(mask, mode);
+    if (UNLIKELY(err == ESP_ERR_INVALID_ARG)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (UNLIKELY(err != ESP_OK)) {
+        return ERROR_ATOM;
+    }
+    return OK_ATOM;
 }
 
 static term nif_rom_md5(Context *ctx, int argc, term argv[])
@@ -352,6 +434,16 @@ static const struct Nif esp_sleep_get_wakeup_cause_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_sleep_get_wakeup_cause
 };
+static const struct Nif esp_sleep_enable_ext0_wakeup_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_sleep_enable_ext0_wakeup
+};
+static const struct Nif esp_sleep_enable_ext1_wakeup_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_sleep_enable_ext1_wakeup
+};
 static const struct Nif rom_md5_nif =
 {
     .base.type = NIFFunctionType,
@@ -404,6 +496,14 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     if (strcmp("esp:sleep_get_wakeup_cause/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_sleep_get_wakeup_cause_nif;
+    }
+    if (strcmp("esp:sleep_enable_ext0_wakeup/2", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_sleep_enable_ext0_wakeup_nif;
+    }
+    if (strcmp("esp:sleep_enable_ext1_wakeup/2", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_sleep_enable_ext1_wakeup_nif;
     }
     if (strcmp("erlang:md5/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
