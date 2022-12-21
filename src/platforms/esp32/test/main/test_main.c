@@ -90,7 +90,7 @@ TEST_CASE("test_timers_and_messages", "[test_run]")
     Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
     TEST_ASSERT(mod != NULL);
 
-    globalcontext_insert_module_with_filename(glb, mod, startup_module_name);
+    globalcontext_insert_module(glb, mod);
 
     Context *ctx = context_new(glb);
     TEST_ASSERT(ctx != NULL);

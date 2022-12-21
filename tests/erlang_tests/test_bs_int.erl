@@ -28,14 +28,14 @@ start() ->
     [
         test_bs_ints(Binaries, Size, Endianness, Signedness)
      || Size <- [32, 16, 8],
-        Endianness <- [big, little],
+        Endianness <- [big, little, native],
         Signedness <- [unsigned, signed]
     ],
 
     [
         test_bs_ints(Binaries, Size, Endianness, Signedness)
      || Size <- [64],
-        Endianness <- [big, little],
+        Endianness <- [big, little, native],
         Signedness <- [unsigned]
     ],
 
@@ -107,6 +107,12 @@ get_int_value(Binary, Size, little, unsigned) ->
     Val;
 get_int_value(Binary, Size, little, signed) ->
     <<Val:Size/integer-little-signed, _/binary>> = Binary,
+    Val;
+get_int_value(Binary, Size, native, unsigned) ->
+    <<Val:Size/integer-native-unsigned, _/binary>> = Binary,
+    Val;
+get_int_value(Binary, Size, native, signed) ->
+    <<Val:Size/integer-native-signed, _/binary>> = Binary,
     Val.
 
 put_int_value(Val, Size, big, unsigned) ->
@@ -116,55 +122,56 @@ put_int_value(Val, Size, big, signed) ->
 put_int_value(Val, Size, little, unsigned) ->
     <<Val:Size/integer-little-unsigned>>;
 put_int_value(Val, Size, little, signed) ->
-    <<Val:Size/integer-little-signed>>.
+    <<Val:Size/integer-little-signed>>;
+put_int_value(Val, Size, native, unsigned) ->
+    <<Val:Size/integer-native-unsigned>>;
+put_int_value(Val, Size, native, signed) ->
+    <<Val:Size/integer-native-signed>>.
 
 compute_value(Bin, Size, Endianness, Signedness) when Size rem 8 =:= 0 ->
     Bytes = Size div 8,
     <<Data:Bytes/binary, _/binary>> = Bin,
     ByteList = binary_to_list(Data),
     NewByteList =
-        case Endianness of
+        case coerce_maybe_native(Endianness) of
             big ->
-                reverse(ByteList);
+                ByteList;
             little ->
-                ByteList
+                reverse(ByteList)
         end,
-    get_value(Signedness, accumulate(NewByteList, 0, 0), Size).
+    % avoid 64 bits overflow
+    case Signedness of
+        unsigned ->
+            accumulate(positive, NewByteList, 0);
+        signed ->
+            [FirstByte | _Tail] = NewByteList,
+            if
+                FirstByte >= 16#80 ->
+                    accumulate(negative, NewByteList, 0);
+                true ->
+                    accumulate(positive, NewByteList, 0)
+            end
+    end.
 
-get_value(signed, Value, Size) ->
-    %% https://en.wikipedia.org/wiki/Two%27s_complement#Converting_from_two's_complement_representation
-    -1 * ho_bit(Value, Size) * raise_2(Size - 1) + lo_bits(Value, Size);
-get_value(unsigned, Value, _Size) ->
-    Value.
+coerce_maybe_native(big) ->
+    big;
+coerce_maybe_native(little) ->
+    little;
+coerce_maybe_native(native) ->
+    % Not sure if there is a way to detect native endianess.
+    case <<1:16/native>> of
+        <<0, 1>> -> big;
+        <<1, 0>> -> little
+    end.
 
-ho_bit(Value, Size) ->
-    Value bsr (Size - 1).
-
-raise_2(N) ->
-    1 bsl N.
-
-lo_bits(Value, Size) ->
-    Value band ones(Size - 1).
-
-ones(N) ->
-    ones(N, 0).
-
-ones(0, Accum) ->
-    Accum bor 1;
-ones(N, Accum) ->
-    ones(N - 1, Accum bor (1 bsl (N - 1))).
-
-accumulate([], _I, Accum) ->
+accumulate(positive, [], Accum) ->
     Accum;
-accumulate([H | T], I, Accum) ->
-    %% NB. AtomVM treats H as a signed value, so we need to remove the signedness for this accumulator
-    IntValue =
-        case H < 0 of
-            true -> (H band 16#7F) bor 16#80;
-            _ -> H
-        end,
-    Addend = (IntValue bsl (I * 8)),
-    accumulate(T, I + 1, Accum + Addend).
+accumulate(negative, [], Accum) ->
+    Accum - 1;
+accumulate(positive, [H | T], Accum) ->
+    accumulate(positive, T, H + (Accum bsl 8));
+accumulate(negative, [H | T], Accum) ->
+    accumulate(negative, T, (Accum bsl 8) - (16#FF - H)).
 
 reverse(List) ->
     reverse(List, []).

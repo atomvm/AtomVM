@@ -507,15 +507,44 @@ Use the `esp:deep_sleep/1` function to put the ESP device into deep sleep for a 
     %% erlang
     esp:deep_sleep(60*1000).
 
-Use the `esp:sleep_get_wakeup_cause/0` function can be used to inspect the reason for a wakeup.  Currently, the only supported return value is the atom `undefined` or `sleep_wakeup_timer`.
+Use the `esp:sleep_get_wakeup_cause/0` function to inspect the reason for a wakeup.  Possible return values include:
+* `sleep_wakeup_ext0`
+* `sleep_wakeup_ext1`
+* `sleep_wakeup_timer`
+* `sleep_wakeup_touchpad`
+* `sleep_wakeup_ulp`
+* `sleep_wakeup_gpio`
+* `sleep_wakeup_uart`
+* `sleep_wakeup_wifi`
+* `sleep_wakeup_cocpu`
+* `sleep_wakeup_cocpu_trag_trig`
+* `sleep_wakeup_bt`
+* `undefined` (no sleep wakeup)
+* `error` (unknown other reason)
+
+The values matches the semantics of [`esp_sleep_get_wakeup_cause`](https://docs.espressif.com/projects/esp-idf/en/release-v4.4/esp32/api-reference/system/sleep_modes.html#_CPPv426esp_sleep_get_wakeup_causev).
 
     %% erlang
     case esp:sleep_get_wakeup_cause() of
         sleep_wakeup_timer ->
             io:format("Woke up from a timer~n");
+        sleep_wakeup_ext0 ->
+            io:format("Woke up from ext0~n");
+        sleep_wakeup_ext1 ->
+            io:format("Woke up from ext1~n");
         _ ->
             io:format("Woke up for some other reason~n")
     end.
+
+Use the `esp:sleep_enable_ext0_wakeup/2` and `esp:sleep_enable_ext1_wakeup` functions to configure ext0 and ext1 wakeup mechanisms. They follow the semantics of [`esp_sleep_enable_ext0_wakeup`](https://docs.espressif.com/projects/esp-idf/en/release-v4.4/esp32/api-reference/system/sleep_modes.html#_CPPv428esp_sleep_enable_ext0_wakeup10gpio_num_ti) and [`esp_sleep_enable_ext1_wakeup`](https://docs.espressif.com/projects/esp-idf/en/release-v4.4/esp32/api-reference/system/sleep_modes.html#_CPPv428esp_sleep_enable_ext1_wakeup8uint64_t28esp_sleep_ext1_wakeup_mode_t).
+
+    %% erlang
+    -spec shutdown() -> no_return().
+    shutdown() ->
+        % Configure wake up when GPIO 37 is set to low (M5StickC main button)
+        ok = esp:sleep_enable_ext0_wakeup(37, 0),
+        % Deep sleep for 1 hour
+        esp:deep_sleep(60*60*1000).
 
 ### Miscellaneous
 

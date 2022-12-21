@@ -21,12 +21,12 @@
 cmake_minimum_required (VERSION 3.13)
 
 # Specify output executable
-set(PROJECT_EXECUTABLE ${PROJECT_NAME}.elf)
+set(PROJECT_EXECUTABLE ${PROJECT_NAME}-${DEVICE}.elf)
 add_executable(${PROJECT_EXECUTABLE} main.c)
 
 target_compile_features(${PROJECT_EXECUTABLE} PUBLIC c_std_11)
 if(CMAKE_COMPILER_IS_GNUCC)
-    target_compile_options(${PROJECT_EXECUTABLE} PUBLIC -Wall -pedantic -Wextra -ggdb)
+    target_compile_options(${PROJECT_EXECUTABLE} PUBLIC -Wall -pedantic -Wextra -ggdb -std=gnu11)
 endif()
 
 add_subdirectory(lib)
@@ -45,6 +45,6 @@ target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE libAtomVM${PLATFORM_LIB_SUFF
 add_custom_command(
     TARGET ${PROJECT_EXECUTABLE}
     POST_BUILD
-    COMMAND ${ARM_SIZE} ${PROJECT_NAME}.elf
+    COMMAND ${ARM_SIZE} ${PROJECT_EXECUTABLE}
     WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
 )

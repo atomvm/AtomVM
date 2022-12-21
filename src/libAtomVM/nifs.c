@@ -3397,7 +3397,7 @@ static term base64_decode(Context *ctx, int argc, term argv[], bool return_binar
     if (UNLIKELY(memory_ensure_free(ctx, heap_free) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    term dst;
+    term dst = term_invalid_term();
     uint8_t *dst_pos, *dst_buf = NULL;
     if (return_binary) {
         dst = term_create_empty_binary(dst_size, ctx);

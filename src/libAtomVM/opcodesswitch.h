@@ -1524,12 +1524,14 @@ schedule_in:
                 USED_BY_TRACE(stack_need);
                 USED_BY_TRACE(live);
 
-                #ifdef IMPL_EXECUTE_LOOP
-                    if (live > ctx->avail_registers) {
-                        fprintf(stderr, "Cannot use more than 16 registers.");
+                #ifdef IMPL_CODE_LOADER
+                    if (live > MAX_REG) {
+                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
                         AVM_ABORT();
                     }
+                #endif
 
+                #ifdef IMPL_EXECUTE_LOOP
                     context_clean_registers(ctx, live);
 
                     if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
@@ -1558,12 +1560,14 @@ schedule_in:
                 USED_BY_TRACE(heap_need);
                 USED_BY_TRACE(live);
 
-                #ifdef IMPL_EXECUTE_LOOP
-                    if (live > ctx->avail_registers) {
-                        fprintf(stderr, "Cannot use more than 16 registers.");
+                #ifdef IMPL_CODE_LOADER
+                    if (live > MAX_REG) {
+                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
                         AVM_ABORT();
                     }
+                #endif
 
+                #ifdef IMPL_EXECUTE_LOOP
                     context_clean_registers(ctx, live);
 
                     if ((ctx->heap_ptr + heap_need) > ctx->e - (stack_need + 1)) {
@@ -1589,12 +1593,14 @@ schedule_in:
                 USED_BY_TRACE(stack_need);
                 USED_BY_TRACE(live);
 
-                #ifdef IMPL_EXECUTE_LOOP
-                    if (live > ctx->avail_registers) {
-                        fprintf(stderr, "Cannot use more than 16 registers.");
+                #ifdef IMPL_CODE_LOADER
+                    if (live > MAX_REG) {
+                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
                         AVM_ABORT();
                     }
+                #endif
 
+                #ifdef IMPL_EXECUTE_LOOP
                     context_clean_registers(ctx, live);
 
                     if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
@@ -1627,12 +1633,14 @@ schedule_in:
                 USED_BY_TRACE(heap_need);
                 USED_BY_TRACE(live);
 
-                #ifdef IMPL_EXECUTE_LOOP
-                    if (live > ctx->avail_registers) {
-                        fprintf(stderr, "Cannot use more than 16 registers.");
+                #ifdef IMPL_CODE_LOADER
+                    if (live > MAX_REG) {
+                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
                         AVM_ABORT();
                     }
+                #endif
 
+                #ifdef IMPL_EXECUTE_LOOP
                     context_clean_registers(ctx, live);
 
                     if ((ctx->heap_ptr + heap_need) > ctx->e - (stack_need + 1)) {
@@ -3438,6 +3446,7 @@ wait_timeout_trap_handler:
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 #ifdef IMPL_CODE_LOADER
+                    UNUSED(src_off);
                     TRACE("bs_append/6\n");
                 #endif
 
@@ -3751,6 +3760,7 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(live, code, i, next_off, next_off);
 
                 #ifdef IMPL_CODE_LOADER
+                    UNUSED(src_off);
                     TRACE("bs_get_tail/3\n");
                 #endif
 
@@ -4126,6 +4136,7 @@ wait_timeout_trap_handler:
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off, next_off);
 
                 #ifdef IMPL_CODE_LOADER
+                    UNUSED(src_offset);
                     TRACE("bs_get_binary2/7\n");
                 #endif
 
@@ -4678,6 +4689,13 @@ wait_timeout_trap_handler:
                         }
                     #endif
                 }
+
+                #ifdef IMPL_CODE_LOADER
+                    UNUSED(list_off);
+                    UNUSED(new_entries);
+                    UNUSED(src_offset);
+                #endif
+
                 #ifdef IMPL_EXECUTE_LOOP
                     //
                     // Maybe GC, and reset the src term in case it changed
@@ -4787,6 +4805,12 @@ wait_timeout_trap_handler:
                         }
                     #endif
                 }
+
+                #ifdef IMPL_CODE_LOADER
+                    UNUSED(list_off);
+                    UNUSED(src_offset);
+                #endif
+
                 #ifdef IMPL_EXECUTE_LOOP
                     //
                     // Maybe GC, and reset the src term in case it changed

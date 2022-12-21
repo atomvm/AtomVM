@@ -145,7 +145,7 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
     term *stack_ptr = new_stack;
 
     TRACE("- Running copy GC on registers\n");
-    for (int i = 0; i < ctx->avail_registers; i++) {
+    for (int i = 0; i < MAX_REG; i++) {
         term new_root = memory_shallow_copy_term(ctx->x[i], &heap_ptr, 1);
         ctx->x[i] = new_root;
     }

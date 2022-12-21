@@ -119,7 +119,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "Cannot load startup module: %s\n", startup_module_name);
         return EXIT_FAILURE;
     }
-    globalcontext_insert_module_with_filename(glb, mod, startup_module_name);
+    globalcontext_insert_module(glb, mod);
     mod->module_platform_data = NULL;
     Context *ctx = context_new(glb);
     ctx->leader = 1;

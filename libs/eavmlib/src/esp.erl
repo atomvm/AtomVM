@@ -18,26 +18,6 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
-%
-% This file is part of AtomVM.
-%
-% Copyright 2019 Fred Dushin <fred@dushin.net>
-%
-% Licensed under the Apache License, Version 2.0 (the "License");
-% you may not use this file except in compliance with the License.
-% You may obtain a copy of the License at
-%
-%    http://www.apache.org/licenses/LICENSE-2.0
-%
-% Unless required by applicable law or agreed to in writing, software
-% distributed under the License is distributed on an "AS IS" BASIS,
-% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-% See the License for the specific language governing permissions and
-% limitations under the License.
-%
-% SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
-%
-
 %%-----------------------------------------------------------------------------
 %% @doc ESP32-specific APIs
 %%
@@ -49,6 +29,9 @@
 -export([
     restart/0,
     reset_reason/0,
+    wakeup_cause/0,
+    sleep_enable_ext0_wakeup/2,
+    sleep_enable_ext1_wakeup/2,
     nvs_get_binary/1, nvs_get_binary/2, nvs_get_binary/3,
     nvs_set_binary/2, nvs_set_binary/3,
     nvs_erase_key/1, nvs_erase_key/2,
@@ -70,6 +53,19 @@
     | esp_rst_brownout
     | esp_rst_sdio.
 
+-type esp_wakeup_cause() ::
+    sleep_wakeup_ext0
+    | sleep_wakeup_ext1
+    | sleep_wakeup_timer
+    | sleep_wakeup_touchpad
+    | sleep_wakeup_ulp
+    | sleep_wakeup_gpio
+    | sleep_wakeup_uart
+    | sleep_wakeup_wifi
+    | sleep_wakeup_cocpu
+    | sleep_wakeup_cocpu_trap_trig
+    | sleep_wakeup_bt.
+
 -define(ATOMVM_NVS_NS, atomvm).
 
 %%-----------------------------------------------------------------------------
@@ -87,6 +83,31 @@ restart() ->
 %%-----------------------------------------------------------------------------
 -spec reset_reason() -> esp_reset_reason().
 reset_reason() ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @returns the cause for the wake up
+%% @doc     Returns the cause for the wakeup
+%% @end
+%%-----------------------------------------------------------------------------
+-spec wakeup_cause() -> undefined | esp_wakeup_cause() | error.
+wakeup_cause() ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @returns Configure ext0 wakeup
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sleep_enable_ext0_wakeup(Pin :: pos_integer(), Level :: 0..1) -> ok | error.
+sleep_enable_ext0_wakeup(_Pin, _Level) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @returns Configure ext1 wakeup
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sleep_enable_ext1_wakeup(Mask :: non_neg_integer(), Mode :: 0..1) -> ok | error.
+sleep_enable_ext1_wakeup(_Mask, _Mode) ->
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------

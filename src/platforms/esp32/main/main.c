@@ -115,7 +115,7 @@ void app_main()
         ESP_LOGE(TAG, "Error!  Unable to load startup module %s", startup_module_name);
         AVM_ABORT();
     }
-    globalcontext_insert_module_with_filename(glb, mod, startup_module_name);
+    globalcontext_insert_module(glb, mod);
     Context *ctx = context_new(glb);
     ctx->leader = 1;
 

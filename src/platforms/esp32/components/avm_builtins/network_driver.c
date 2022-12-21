@@ -543,16 +543,6 @@ static void send_ap_sta_disconnected(ClientData *data, uint8_t *mac)
     send_atom_mac(data, AP_STA_DISCONNECTED_ATOM, mac);
 }
 
-static void send_ap_sta_ip_acquired(ClientData *data, ip4_addr_t *ip)
-{
-    TRACE("Sending ap_sta_ip_acquired back to AtomVM\n");
-    Context *ctx = data->ctx;
-    port_ensure_available(ctx, ((4 + 1) + (2 + 1)) * 2);
-    term ip_term = tuple_from_addr(ctx, ntohl(ip->addr));
-    term reply = port_create_tuple2(ctx, AP_STA_IP_ASSIGNED_ATOM, ip_term);
-    send_term(data, reply);
-}
-
 static esp_err_t wifi_event_handler(void *ctx, system_event_t *event)
 {
     ClientData *data = (ClientData *) ctx;
@@ -565,7 +555,7 @@ static esp_err_t wifi_event_handler(void *ctx, system_event_t *event)
         case SYSTEM_EVENT_STA_GOT_IP:
             ESP_LOGI("NETWORK", "SYSTEM_EVENT_STA_GOT_IP: %s", inet_ntoa(event->event_info.got_ip.ip_info.ip));
             xEventGroupSetBits(wifi_event_group, CONNECTED_BIT);
-            send_got_ip(data, &event->event_info.got_ip.ip_info);
+            send_got_ip(data, (tcpip_adapter_ip_info_t *) &event->event_info.got_ip.ip_info);
             break;
 
         case SYSTEM_EVENT_STA_CONNECTED:

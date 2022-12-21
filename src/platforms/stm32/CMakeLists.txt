@@ -20,6 +20,8 @@
 
 cmake_minimum_required (VERSION 3.13)
 project(AtomVM)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
 
 # Options that make sense for this platform
 option(AVM_DISABLE_FP "Disable floating point support." OFF)

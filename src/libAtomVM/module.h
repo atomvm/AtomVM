@@ -206,6 +206,19 @@ static inline term module_get_atom_term_by_id(const Module *mod, int local_atom_
 const struct ExportedFunction *module_resolve_function0(Module *mod, int import_table_index, struct UnresolvedFunctionCall *unresolved);
 
 /**
+ * @brief Get the module name, as an atom term.
+ *
+ * @param mod the module to get the name of
+ * @return a term for the given module atom index.
+ */
+static inline term module_get_name(const Module *mod)
+{
+    // The module name always is the first atom, stored at index 1 for
+    // historical reasons.
+    return module_get_atom_term_by_id(mod, 1);
+}
+
+/**
  * @brief Resolves an unresolved function reference
  *
  * @details Resolves an unresolved function reference and it replaces the unresolved reference with a ModuleFunction struct,
