@@ -39,12 +39,15 @@ set(C_WARN_FLAGS "${COMMON_WARN_FLAGS} -Wbad-function-cast -Wmissing-prototypes 
 set(CXX_WARN_FLAGS "${COMMON_WARN_FLAGS} -Wctor-dtor-privacy -Wnoexcept -Wold-style-cast -Woverloaded-virtual \
 -Wsign-promo -Wstrict-null-sentinel -Wuseless-cast -Wzero-as-null-pointer-constant")
 
+# Use C and C++ compiler optimizatons for size and speed.
+set(OPTIMIZE_FLAG "-O2")
+
 # Pass them back to the CMake variable
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${C_WARN_FLAGS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_WARN_FLAGS}")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${C_WARN_FLAGS} ${OPTIMIZE_FLAG}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_WARN_FLAGS} ${OPTIMIZE_FLAG}")
 
 if (LOG_VERBOSE)
-    message("-------------Warning Flags--------------")
-    message(STATUS "C   : ${C_WARN_FLAGS}")
-    message(STATUS "CXX : ${CXX_WARN_FLAGS}")
+    message("--------------Build Flags---------------")
+    message(STATUS "C   : ${CMAKE_C_FLAGS}")
+    message(STATUS "CXX : ${CMAKE_CXX_FLAGS}")
 endif ()
