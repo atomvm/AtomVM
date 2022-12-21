@@ -54,6 +54,10 @@ enum ContextFlags
     WaitingTimeoutExpired = 4
 };
 
+// Max number of x(N) & fr(N) registers
+// BEAM sets this to 1024.
+#define MAX_REG 16
+
 struct Context
 {
     struct ListHead processes_list_head;
@@ -65,8 +69,7 @@ struct Context
 
     struct ListHead monitors_head;
 
-    term x[16];
-    int avail_registers;
+    term x[MAX_REG];
 
     term *heap_start;
     term *stack_base;
@@ -192,7 +195,7 @@ static inline int context_is_port_driver(const Context *ctx)
  */
 static inline void context_clean_registers(Context *ctx, int live)
 {
-    for (int i = live; i < ctx->avail_registers; i++) {
+    for (int i = live; i < MAX_REG; i++) {
         ctx->x[i] = term_nil();
     }
 }

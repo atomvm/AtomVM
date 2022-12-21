@@ -53,7 +53,6 @@ Context *context_new(GlobalContext *glb)
     ctx->e = ctx->stack_base;
     ctx->heap_ptr = ctx->heap_start;
 
-    ctx->avail_registers = 16;
     context_clean_registers(ctx, 0);
 
     ctx->min_heap_size = 0;
