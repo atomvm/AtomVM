@@ -2120,7 +2120,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_COMPACT_TERM(timeout, code, i, next_off)
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (!term_is_integer(timeout) && UNLIKELY(timeout != INFINITY_ATOM)) {
+                    if (term_is_any_integer(timeout)) {
+                        avm_int64_t t = term_maybe_unbox_int64(timeout);
+                        if (t < 0 || t > 4294967295L) {
+                            RAISE_ERROR(TIMEOUT_VALUE_ATOM);
+                        }
+                    } else if (UNLIKELY(timeout != INFINITY_ATOM)) {
                         RAISE_ERROR(TIMEOUT_VALUE_ATOM);
                     }
                     TRACE("wait_timeout/2, label: %i, timeout: %li\n", label, (long int) term_to_int32(timeout));
@@ -2137,7 +2142,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                             scheduler_set_timeout(ctx, term_to_int32(timeout));
                         }
                         needs_to_wait = 1;
-                    } else if ((ctx->flags & WaitingTimeout) == 0) {
+                    } else if ((ctx->flags & WaitingTimeout) != 0) {
                         needs_to_wait = 1;
                     } else if (!list_is_empty(&ctx->save_queue)) {
                         needs_to_wait = 1;
