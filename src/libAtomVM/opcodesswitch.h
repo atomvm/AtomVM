@@ -3580,7 +3580,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
 
                 #ifdef IMPL_CODE_LOADER
-                    UNUSED(src_off);
                     TRACE("bs_append/6\n");
                 #endif
 
@@ -3892,7 +3891,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_COMPACT_TERM(live, code, i, next_off);
 
                 #ifdef IMPL_CODE_LOADER
-                    UNUSED(src_off);
                     TRACE("bs_get_tail/3\n");
                 #endif
 
@@ -4266,7 +4264,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
 
                 #ifdef IMPL_CODE_LOADER
-                    UNUSED(src_offset);
                     TRACE("bs_get_binary2/7\n");
                 #endif
 
@@ -4830,12 +4827,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     #endif
                 }
 
-                #ifdef IMPL_CODE_LOADER
-                    UNUSED(list_off);
-                    UNUSED(new_entries);
-                    UNUSED(src_offset);
-                #endif
-
                 #ifdef IMPL_EXECUTE_LOOP
                     //
                     // Maybe GC, and reset the src term in case it changed
@@ -4948,11 +4939,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         }
                     #endif
                 }
-
-                #ifdef IMPL_CODE_LOADER
-                    UNUSED(list_off);
-                    UNUSED(src_offset);
-                #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
                     //
