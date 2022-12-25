@@ -2204,9 +2204,9 @@ wait_timeout_trap_handler:
                 // Redo the offset computation and refetch the label
                 int next_off = 1;
                 int label;
-                DECODE_LABEL(label, code, i, next_off, next_off)
+                DECODE_LABEL(label, code, i, next_off)
                 int timeout;
-                DECODE_COMPACT_TERM(timeout, code, i, next_off, next_off)
+                DECODE_COMPACT_TERM(timeout, code, i, next_off)
                 TRACE("wait_timeout_trap_handler, label: %i\n", label);
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
