@@ -96,13 +96,13 @@ struct SpinLock
  * @brief Create a new mutex.
  * @return a pointer to a mutex.
  */
-Mutex *smp_mutex_create();
+void smp_mutex_init(Mutex *mtx);
 
 /**
  * @brief Destroy a mutex.
  * @param mtx the mutex to destroy
  */
-void smp_mutex_destroy(Mutex *mtx);
+void smp_mutex_deinit(Mutex *mtx);
 
 /**
  * @brief Lock a mutex.

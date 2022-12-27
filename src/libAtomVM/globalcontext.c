@@ -124,7 +124,7 @@ GlobalContext *globalcontext_new()
     sys_init_platform(glb);
 
 #ifndef AVM_NO_SMP
-    glb->schedulers_mutex = smp_mutex_create();
+    smp_mutex_init(&glb->schedulers_mutex);
     if (IS_NULL_PTR(glb->schedulers_mutex)) {
         smp_rwlock_destroy(glb->modules_lock);
         free(glb->modules_table);
@@ -135,7 +135,7 @@ GlobalContext *globalcontext_new()
     }
     glb->schedulers_cv = smp_condvar_create();
     if (IS_NULL_PTR(glb->schedulers_cv)) {
-        smp_mutex_destroy(glb->schedulers_mutex);
+        smp_mutex_deinit(&glb->schedulers_mutex);
         smp_rwlock_destroy(glb->modules_lock);
         free(glb->modules_table);
         free(glb->atoms_ids_table);
@@ -158,7 +158,7 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
 
 #ifndef AVM_NO_SMP
     smp_condvar_destroy(glb->schedulers_cv);
-    smp_mutex_destroy(glb->schedulers_mutex);
+    smp_mutex_deinit(&glb->schedulers_mutex);
     smp_rwlock_destroy(glb->modules_lock);
 #endif
     synclist_destroy(&glb->registered_processes);

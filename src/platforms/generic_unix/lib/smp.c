@@ -96,24 +96,18 @@ bool smp_is_main_thread(GlobalContext *glb)
 #endif
 }
 
-Mutex *smp_mutex_create()
+void smp_mutex_init(Mutex *mtx)
 {
-    Mutex *result = malloc(sizeof(Mutex));
-    if (UNLIKELY(result == NULL && sizeof(Mutex) > 0)) {
-        AVM_ABORT();
-    }
     if (UNLIKELY(pthread_mutex_init(&result->mutex, NULL))) {
         AVM_ABORT();
     }
-    return result;
 }
 
-void smp_mutex_destroy(Mutex *mtx)
+void smp_mutex_deinit(Mutex *mtx)
 {
     if (UNLIKELY(pthread_mutex_destroy(&mtx->mutex))) {
         AVM_ABORT();
     }
-    free(mtx);
 }
 
 void smp_mutex_lock(Mutex *mtx)

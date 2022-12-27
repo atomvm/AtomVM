@@ -415,7 +415,7 @@ void sys_init_platform(GlobalContext *global)
     }
     list_init(&platform->listeners);
 #ifndef AVM_NO_SMP
-    platform->listeners_mutex = smp_mutex_create();
+    smp_mutex_create(&platform->listeners_mutex);
 #endif
 #ifdef HAVE_KQUEUE
     platform->kqueue_fd = kqueue();
@@ -462,7 +462,7 @@ void sys_free_platform(GlobalContext *global)
 {
     struct GenericUnixPlatformData *platform = global->platform_data;
 #ifndef AVM_NO_SMP
-    smp_mutex_destroy(platform->listeners_mutex);
+    smp_mutex_deinit(&platform->listeners_mutex);
 #endif
 
 #ifdef HAVE_KQUEUE

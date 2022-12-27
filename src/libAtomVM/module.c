@@ -183,7 +183,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     mod->global = global;
 
 #ifndef AVM_NO_SMP
-    mod->mutex = smp_mutex_create();
+    smp_mutex_init(&mod->mutex);
 #endif
 
     if (UNLIKELY(module_populate_atoms_table(mod, beam_file + offsets[AT8U]) != MODULE_LOAD_OK)) {
@@ -255,7 +255,7 @@ COLD_FUNC void module_destroy(Module *module)
         free(module->literals_data);
     }
 #ifndef AVM_NO_SMP
-    smp_mutex_destroy(module->mutex);
+    smp_mutex_deinit(&module->mutex);
 #endif
     free(module);
 }
