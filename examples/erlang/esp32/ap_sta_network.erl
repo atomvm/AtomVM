@@ -35,7 +35,8 @@ start() ->
             {ap_started, fun ap_started/0},
             {sta_connected, fun sta_connected/1},
             {sta_ip_assigned, fun sta_ip_assigned/1},
-            {sta_disconnected, fun sta_disconnected/1}
+            {sta_disconnected, fun sta_disconnected/1},
+            {ap_sta_ip_assigned, fun ap_sta_ip_assigned/1}
         ]},
         {sta, [
             {ssid, esp:nvs_get_binary(atomvm, sta_ssid, <<"myssid">>)},
@@ -73,6 +74,9 @@ got_ip(IpInfo) ->
 
 disconnected() ->
     io:format("STA disconnected.~n").
+
+ap_sta_ip_assigned(Address) ->
+    io:format("AP assigned STA address ~p~n", [Address]).
 
 sleep_forever() ->
     timer:sleep(10000),

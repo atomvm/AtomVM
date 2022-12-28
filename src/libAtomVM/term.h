@@ -859,6 +859,18 @@ static inline int term_binary_data_size_in_terms(uint32_t size)
 }
 
 /**
+ * @brief The total mount of heap space used by a binary (including headers)
+ *
+ * @details Returns the heap size of a binary.
+ * @param size the size in bytes
+ * @return the heap size in terms
+ */
+static inline int term_binary_heap_size(uint32_t size)
+{
+    return term_binary_data_size_in_terms(size) + BINARY_HEADER_SIZE;
+}
+
+/**
  * @brief Gets binary size
  *
  * @details Returns binary size for a given binary term.
