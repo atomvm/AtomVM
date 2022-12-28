@@ -255,8 +255,10 @@ static term nif_esp_deep_sleep(Context *ctx, int argc, term argv[])
     // technically, this function does not return
     return OK_ATOM;
 }
+#if SOC_PM_SUPPORT_EXT_WAKEUP
 static const char *const sleep_wakeup_ext0_atom = "\x11" "sleep_wakeup_ext0";
 static const char *const sleep_wakeup_ext1_atom = "\x11" "sleep_wakeup_ext1";
+#endif
 static const char *const sleep_wakeup_timer_atom = "\x12" "sleep_wakeup_timer";
 static const char *const sleep_wakeup_touchpad_atom = "\x15" "sleep_wakeup_touchpad";
 static const char *const sleep_wakeup_ulp_atom = "\x10" "sleep_wakeup_ulp";
@@ -285,10 +287,12 @@ static term nif_esp_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[])
     switch (cause) {
         case ESP_SLEEP_WAKEUP_UNDEFINED:
             return UNDEFINED_ATOM;
+#if SOC_PM_SUPPORT_EXT_WAKEUP
         case ESP_SLEEP_WAKEUP_EXT0:
             return context_make_atom(ctx, sleep_wakeup_ext0_atom);
         case ESP_SLEEP_WAKEUP_EXT1:
             return context_make_atom(ctx, sleep_wakeup_ext1_atom);
+#endif
         case ESP_SLEEP_WAKEUP_TIMER:
             return context_make_atom(ctx, sleep_wakeup_timer_atom);
         case ESP_SLEEP_WAKEUP_TOUCHPAD:
@@ -319,6 +323,8 @@ static term nif_esp_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[])
             return ERROR_ATOM;
     }
 }
+
+#if SOC_PM_SUPPORT_EXT_WAKEUP
 
 static term nif_esp_sleep_enable_ext0_wakeup(Context *ctx, int argc, term argv[])
 {
@@ -355,6 +361,8 @@ static term nif_esp_sleep_enable_ext1_wakeup(Context *ctx, int argc, term argv[]
     }
     return OK_ATOM;
 }
+
+#endif
 
 static term nif_rom_md5(Context *ctx, int argc, term argv[])
 {
@@ -434,6 +442,7 @@ static const struct Nif esp_sleep_get_wakeup_cause_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_sleep_get_wakeup_cause
 };
+#if SOC_PM_SUPPORT_EXT_WAKEUP
 static const struct Nif esp_sleep_enable_ext0_wakeup_nif =
 {
     .base.type = NIFFunctionType,
@@ -444,6 +453,7 @@ static const struct Nif esp_sleep_enable_ext1_wakeup_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_sleep_enable_ext1_wakeup
 };
+#endif
 static const struct Nif rom_md5_nif =
 {
     .base.type = NIFFunctionType,
@@ -497,6 +507,7 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_sleep_get_wakeup_cause_nif;
     }
+#if SOC_PM_SUPPORT_EXT_WAKEUP
     if (strcmp("esp:sleep_enable_ext0_wakeup/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_sleep_enable_ext0_wakeup_nif;
@@ -505,6 +516,7 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_sleep_enable_ext1_wakeup_nif;
     }
+#endif
     if (strcmp("erlang:md5/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &rom_md5_nif;
