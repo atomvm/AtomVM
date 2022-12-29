@@ -239,7 +239,42 @@ static inline bool mailbox_has_next(Mailbox *mbox)
  * @param out the allocated term.
  * @returns true if a term was available
  */
+// TODO: this function might be renamed to `mailbox_peek_term`.
 bool mailbox_peek(Context *ctx, term *out);
+
+/**
+ * @brief Gets next \c Message from a mailbox (without removing it).
+ *
+ * @details Peek the mailbox and retrieve a Message that has been previously
+ * queued on a certain process or driver mailbox. To be called from the process
+ * only.
+ * @param mbox the mailbox.
+ * @param out the found message, if any.
+ * @returns true if a \c Message was available
+ */
+// TODO: this function might be renamed to `mailbox_peek`.
+bool mailbox_peek_message(Mailbox *mbox, Message **out);
+
+/**
+ * @brief Detaches a \c Message from mailbox.
+ *
+ * @details It takes a message out of the mailbox, so it can be handled safely from outside the
+ * context thread. To be called from the process only.
+ * @param mbox the mailbox.
+ * @param message the Message that will be removed from the mailbox.
+ * @returns true if a \c Message was available
+ */
+void mailbox_take_message(Mailbox *mbox, Message *message);
+
+/**
+ * @brief Remove given \c Message from mailbox.
+ *
+ * @details Discard a \c Message that has been previously queued on a certain process
+ * or driver mailbox. To be called from the process only.
+ * @param mbox the mailbox to remove message from.
+ * @param message the Message that will be removed and deleted.
+ */
+void mailbox_remove_message(Mailbox *mbox, Message *message);
 
 /**
  * @brief Remove next message from mailbox.

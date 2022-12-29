@@ -26,6 +26,9 @@
 
 #define ADDITIONAL_PROCESSING_MEMORY_SIZE 4
 
+#define GET_MAILBOX_MESSAGE(message) \
+    ((MailboxMessage *) (((char *) (message)) - ((unsigned long) &((MailboxMessage *) 0)->body.normal)))
+
 static inline term *mailbox_message_memory(term *msg_term)
 {
     return msg_term + 1;
@@ -303,6 +306,50 @@ bool mailbox_peek(Context *c, term *out)
     *out = memory_copy_term_tree(&c->heap_ptr, m->body.normal.message, &c->mso_list);
 
     return true;
+}
+
+bool mailbox_peek_message(Mailbox *mbox, Message **out)
+{
+    MailboxMessage *m = mbox->receive_pointer;
+    if (m == NULL) {
+        return false;
+    }
+
+    *out = &m->body.normal;
+    return true;
+}
+
+void mailbox_take_message(Mailbox *mbox, Message *message)
+{
+    MailboxMessage *mbox_message = GET_MAILBOX_MESSAGE(message);
+
+    MailboxMessage *prev = NULL;
+    if (mbox->inner_first != mbox_message) {
+        prev = mbox->inner_first;
+        while (prev->header.next != mbox_message) {
+            prev = prev->header.next;
+        }
+
+        prev->header.next = mbox_message->header.next;
+    } else {
+        mbox->inner_first = mbox_message->header.next;
+    }
+
+    if (mbox->inner_last == mbox_message) {
+        mbox->inner_last = prev;
+    }
+
+    if (mbox->receive_pointer == mbox_message) {
+        mbox->receive_pointer = mbox_message->header.next;
+    } else if (mbox->receive_pointer_prev == mbox_message) {
+        mbox->receive_pointer_prev = prev;
+    }
+}
+
+void mailbox_remove_message(Mailbox *mbox, Message *message)
+{
+    mailbox_take_message(mbox, message);
+    mailbox_destroy_message(message);
 }
 
 void mailbox_remove(Mailbox *mbox)
