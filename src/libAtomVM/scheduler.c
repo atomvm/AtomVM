@@ -139,7 +139,7 @@ static void scheduler_timeout_callback(struct TimerWheelItem *it)
     scheduler_make_ready(ctx->global, ctx);
 }
 
-void scheduler_set_timeout(Context *ctx, uint32_t timeout)
+void scheduler_set_timeout(Context *ctx, avm_int64_t timeout)
 {
     GlobalContext *glb = ctx->global;
 

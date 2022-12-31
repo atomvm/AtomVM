@@ -67,7 +67,6 @@ timer_loop(I) ->
 
 test_timer_badargs() ->
     {'EXIT', {timeout_value, _}} = (catch timer:sleep(-1)),
-    {'EXIT', {timeout_value, _}} = (catch timer:sleep(4294967295 + 1)),
     {'EXIT', {timeout_value, _}} = (catch timer:sleep(not_infinity)),
     ok.
 

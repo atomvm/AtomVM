@@ -29,6 +29,7 @@ extern "C" {
 #include <stdint.h>
 
 #include "list.h"
+#include "term_typedef.h"
 
 struct TimerWheelItem;
 typedef void(timer_wheel_callback_t)(struct TimerWheelItem *);
@@ -84,7 +85,7 @@ static inline void timer_wheel_item_init(struct TimerWheelItem *it, timer_wheel_
     it->callback = cb;
 }
 
-static inline uint64_t timer_wheel_expiry_to_monotonic(const struct TimerWheel *tw, uint32_t expiry)
+static inline uint64_t timer_wheel_expiry_to_monotonic(const struct TimerWheel *tw, avm_int64_t expiry)
 {
     return tw->monotonic_time + expiry;
 }
