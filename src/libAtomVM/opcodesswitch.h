@@ -1783,7 +1783,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 uint32_t stack_need;
                 DECODE_LITERAL(stack_need, code, i, next_off);
                 uint32_t heap_need;
-                DECODE_LITERAL(heap_need, code, i, next_off);
+                DECODE_ALLOCATOR_LIST(heap_need, code, i, next_off);
                 uint32_t live;
                 DECODE_LITERAL(live, code, i, next_off);
                 TRACE("allocate_heap_zero/3 stack_need=%i, heap_need=%i, live=%i\n", stack_need, heap_need, live);
