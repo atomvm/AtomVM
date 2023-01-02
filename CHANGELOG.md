@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for the OTP `math` module
 - Added support for `erlang:integer_to_list/2` and `erlang:integer_to_binary/2`
 - Added functions `esp:sleep_enable_ext0_wakeup/2` and `esp:sleep_enable_ext1_wakeup/2.`
+- Added support for FP opcodes 94-102 thus removing the need for `AVM_DISABLE_FP=On` with OTP-22+
 
 ### Fixed
 - Fixed issue with formatting integers with io:format() on STM32 platform
