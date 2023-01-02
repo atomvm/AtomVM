@@ -276,7 +276,7 @@ typedef union
                 AVM_ABORT();                                                                        \
             }                                                                                       \
             val = 0;                                                                                \
-            for (int vi = 0; vi < sz; vi++) {                                                       \
+            for (uint8_t vi = 0; vi < sz; vi++) {                                                       \
                 val <<= 8;                                                                          \
                 val |= code[(base_index) + (off) + 1 + vi];                                         \
             }                                                                                       \
@@ -309,7 +309,7 @@ typedef union
                 AVM_ABORT();                                                                        \
             }                                                                                       \
             val = 0;                                                                                \
-            for (int vi = 0; vi < sz; vi++) {                                                       \
+            for (uint8_t vi = 0; vi < sz; vi++) {                                                       \
                 val <<= 8;                                                                          \
                 val |= code[(base_index) + (off) + 1 + vi];                                         \
             }                                                                                       \
@@ -384,7 +384,7 @@ typedef union
         DECODE_LITERAL(list_size, code_chunk, base_index, off);                         \
         uint32_t allocator_tag;                                                         \
         uint32_t allocator_size;                                                        \
-        for (int j = 0; j < list_size; j++) {                                           \
+        for (uint32_t j = 0; j < list_size; j++) {                                           \
             DECODE_LITERAL(allocator_tag, code_chunk, base_index, off);                 \
             DECODE_LITERAL(allocator_size, code_chunk, base_index, off);                \
             if (allocator_tag == COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FLOATS) {          \
@@ -404,7 +404,7 @@ typedef union
         DECODE_LITERAL(list_size, code_chunk, base_index, off);                         \
         uint32_t allocator_tag;                                                         \
         uint32_t allocator_size;                                                        \
-        for (int j = 0; j < list_size; j++) {                                           \
+        for (uint32_t j = 0; j < list_size; j++) {                                           \
             DECODE_LITERAL(allocator_tag, code_chunk, base_index, off);                 \
             DECODE_LITERAL(allocator_size, code_chunk, base_index, off);                \
             if (allocator_size > 0 && allocator_tag == COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FLOATS) { \
@@ -628,7 +628,7 @@ typedef union
         case 3: {                                                                                   \
             uint8_t sz = (first_byte >> 5) + 2;                                                     \
             val = 0;                                                                                \
-            for (int vi = 0; vi < sz; vi++) {                                                       \
+            for (uint8_t vi = 0; vi < sz; vi++) {                                                       \
                 val <<= 8;                                                                          \
                 val |= code_chunk[(base_index) + (off) + 1 + vi];                                   \
             }                                                                                       \
@@ -670,7 +670,7 @@ typedef union
         DECODE_LITERAL(list_size, code_chunk, base_index, off);                         \
         uint32_t allocator_tag;                                                         \
         uint32_t allocator_size;                                                        \
-        for (int j = 0; j < list_size; j++) {                                           \
+        for (uint32_t j = 0; j < list_size; j++) {                                           \
             DECODE_LITERAL(allocator_tag, code_chunk, base_index, off);                 \
             DECODE_LITERAL(allocator_size, code_chunk, base_index, off);                \
             if (allocator_tag == COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FLOATS) {          \
@@ -690,7 +690,7 @@ typedef union
         DECODE_LITERAL(list_size, code_chunk, base_index, off);                         \
         uint32_t allocator_tag;                                                         \
         uint32_t allocator_size;                                                        \
-        for (int j = 0; j < list_size; j++) {                                           \
+        for (uint32_t j = 0; j < list_size; j++) {                                           \
             DECODE_LITERAL(allocator_tag, code_chunk, base_index, off);                 \
             DECODE_LITERAL(allocator_size, code_chunk, base_index, off);                \
             need += allocator_size;                                                     \
@@ -1780,7 +1780,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     }
 
                     ctx->e -= stack_need + 1;
-                    for (int s = 0; s < stack_need; s++) {
+                    for (uint32_t s = 0; s < stack_need; s++) {
                         ctx->e[s] = term_nil();
                     }
                     ctx->e[stack_need] = ctx->cp;
@@ -1819,7 +1819,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         }
                     }
                     ctx->e -= stack_need + 1;
-                    for (int s = 0; s < stack_need; s++) {
+                    for (uint32_t s = 0; s < stack_need; s++) {
                         ctx->e[s] = term_nil();
                     }
                     ctx->e[stack_need] = ctx->cp;
@@ -2628,7 +2628,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("test_arity/2, label=%i, arg1=%lx\n", label, arg1);
 
-                    if (term_is_tuple(arg1) && term_get_tuple_arity(arg1) == arity) {
+                    if (term_is_tuple(arg1) && (uint32_t) term_get_tuple_arity(arg1) == arity) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = (uint8_t *) mod->labels[label] - code;
@@ -2667,7 +2667,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     void *jump_to_address = NULL;
                 #endif
 
-                for (int j = 0; j < size / 2; j++) {
+                for (uint32_t j = 0; j < size / 2; j++) {
                     term cmp_value;
                     DECODE_COMPACT_TERM(cmp_value, code, i, next_off)
                     uint32_t jmp_label;
@@ -2726,7 +2726,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     int arity = term_get_tuple_arity(src_value);
                 #endif
 
-                    for (int j = 0; j < size / 2; j++) {
+                    for (uint32_t j = 0; j < size / 2; j++) {
                         uint32_t cmp_value;
                         DECODE_LITERAL(cmp_value, code, i, next_off)
                         uint32_t jmp_label;
@@ -2738,7 +2738,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                         #ifdef IMPL_EXECUTE_LOOP
                             //TODO: check if src_value is a tuple
-                            if (!jump_to_address && (arity == cmp_value)) {
+                            if (!jump_to_address && ((uint32_t) arity == cmp_value)) {
                                 jump_to_address = mod->labels[jmp_label];
                             }
                         #endif
@@ -2853,7 +2853,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 USED_BY_TRACE(element);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (UNLIKELY(!term_is_tuple(src_value) || (element >= term_get_tuple_arity(src_value)))) {
+                    if (UNLIKELY(!term_is_tuple(src_value) || (element >= (uint32_t) term_get_tuple_arity(src_value)))) {
                         AVM_ABORT();
                     }
 
@@ -2881,7 +2881,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 TRACE("set_tuple_element/2\n");
 
 #ifdef IMPL_EXECUTE_LOOP
-                if (UNLIKELY(!term_is_tuple(tuple) || (position >= term_get_tuple_arity(tuple)))) {
+                if (UNLIKELY(!term_is_tuple(tuple) || (position >= (uint32_t) term_get_tuple_arity(tuple)))) {
                     AVM_ABORT();
                 }
 
@@ -2944,7 +2944,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
 
-                for (int j = 0; j < size; j++) {
+                for (uint32_t j = 0; j < size; j++) {
                     if (code[i + next_off] != OP_PUT) {
                         fprintf(stderr, "Expected put, got opcode: %i\n", code[i + next_off]);
                         AVM_ABORT();
@@ -4831,14 +4831,14 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     int list_off = next_off;
                 #endif
-                int num_elements = list_len / 2;
+                uint32_t num_elements = list_len / 2;
                 //
                 // Count how many of the entries in list(...) are not already in src
                 //
                 #ifdef IMPL_EXECUTE_LOOP
                     unsigned new_entries = 0;
                 #endif
-                for (int j = 0;  j < num_elements;  ++j) {
+                for (uint32_t j = 0;  j < num_elements;  ++j) {
                     term key, value;
                     DECODE_COMPACT_TERM(key, code, i, next_off);
                     DECODE_COMPACT_TERM(value, code, i, next_off);
@@ -4869,7 +4869,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     if (IS_NULL_PTR(kv)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    for (int j = 0; j < num_elements; j++) {
+                    for (uint32_t j = 0; j < num_elements; j++) {
                         term key, value;
                         DECODE_COMPACT_TERM(key, code, i, list_off);
                         DECODE_COMPACT_TERM(value, code, i, list_off);
@@ -4883,8 +4883,8 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     //
                     term map = term_alloc_map_maybe_shared(ctx, new_map_size, is_shared ? term_get_map_keys(src) : term_invalid_term());
                     size_t src_pos = 0;
-                    int kv_pos = 0;
-                    for (int j = 0; j < new_map_size; j++) {
+                    uint32_t kv_pos = 0;
+                    for (size_t j = 0; j < new_map_size; j++) {
                         if (src_pos >= src_size) {
                             term new_key = kv[kv_pos].key;
                             term new_value = kv[kv_pos].value;
@@ -4947,11 +4947,11 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     int list_off = next_off;
                 #endif
-                int num_elements = list_len / 2;
+                uint32_t num_elements = list_len / 2;
                 //
                 // Make sure every key from list is in src
                 //
-                for (int j = 0;  j < num_elements;  ++j) {
+                for (uint32_t j = 0;  j < num_elements;  ++j) {
                     term key, value;
                     DECODE_COMPACT_TERM(key, code, i, next_off);
                     DECODE_COMPACT_TERM(value, code, i, next_off);
@@ -4976,13 +4976,13 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     // Create a new map of the same size as src and populate with entries from src
                     //
                     term map = term_alloc_map_maybe_shared(ctx, src_size, term_get_map_keys(src));
-                    for (int j = 0;  j < src_size;  ++j) {
+                    for (size_t j = 0;  j < src_size;  ++j) {
                         term_set_map_assoc(map, j, term_get_map_key(src, j), term_get_map_value(src, j));
                     }
                     //
                     // Copy the new terms into the new map, in situ only
                     //
-                    for (int j = 0;  j < num_elements;  ++j) {
+                    for (uint32_t j = 0;  j < num_elements;  ++j) {
                         term key, value;
                         DECODE_COMPACT_TERM(key, code, i, list_off);
                         DECODE_COMPACT_TERM(value, code, i, list_off);
@@ -5037,7 +5037,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 uint32_t list_len;
                 DECODE_LITERAL(list_len, code, i, next_off);
                 int fail = 0;
-                for (int j = 0;  j < list_len && !fail;  ++j) {
+                for (uint32_t j = 0;  j < list_len && !fail;  ++j) {
                     term key;
                     DECODE_COMPACT_TERM(key, code, i, next_off);
 
@@ -5066,9 +5066,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_EXTENDED_LIST_TAG(code, i, next_off);
                 uint32_t list_len;
                 DECODE_LITERAL(list_len, code, i, next_off);
-                int num_elements = list_len / 2;
-                int fail = 0;
-                for (int j = 0;  j < num_elements && !fail;  ++j) {
+                uint32_t num_elements = list_len / 2;
+                uint32_t fail = 0;
+                for (uint32_t j = 0;  j < num_elements && !fail;  ++j) {
                     term key;
                     DECODE_COMPACT_TERM(key, code, i, next_off);
                     dreg_t dreg;
@@ -5106,7 +5106,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_tagged_tuple/2, label=%u, arg1=%p, arity=%u, atom_id=%p\n", (unsigned) label, (void *) arg1, (unsigned) arity, (void *) tag_atom);
 
-                    if (term_is_tuple(arg1) && (term_get_tuple_arity(arg1) == arity) && (term_get_tuple_element(arg1, 0) == tag_atom)) {
+                    if (term_is_tuple(arg1) && ((uint32_t) term_get_tuple_arity(arg1) == arity) && (term_get_tuple_element(arg1, 0) == tag_atom)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
@@ -5478,7 +5478,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     term t = term_alloc_tuple(size, ctx);
                 #endif
 
-                for (int j = 0; j < size; j++) {
+                for (uint32_t j = 0; j < size; j++) {
                     term element;
                     DECODE_COMPACT_TERM(element, code, i, next_off)
 
@@ -5593,7 +5593,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     boxed_func[2] = term_from_int(fun_index);
                 #endif
 
-                for (int j = 0; j < size; j++) {
+                for (uint32_t j = 0; j < size; j++) {
                     term arg;
                     DECODE_COMPACT_TERM(arg, code, i, next_off);
                     #ifdef IMPL_EXECUTE_LOOP
@@ -5614,7 +5614,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_EXTENDED_LIST_TAG(code, i, next_off);
                 uint32_t size;
                 DECODE_LITERAL(size, code, i, next_off);
-                for (int j = 0; j < size; j++) {
+                for (uint32_t j = 0; j < size; j++) {
                     uint32_t target;
                     DECODE_YREG(target, code, i, next_off);
                     #ifdef IMPL_EXECUTE_LOOP
