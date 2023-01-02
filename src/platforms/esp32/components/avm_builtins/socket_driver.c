@@ -2,7 +2,7 @@
  * This file is part of AtomVM.
  *
  * Copyright 2018,2019 Davide Bettio <davide@uninstall.it>
- * Copyright 2019 Fred Dushin <fred@dushin.net>
+ * Copyright 2019-2022 Fred Dushin <fred@dushin.net>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,29 +19,23 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#include <sdkconfig.h>
-#ifdef CONFIG_AVM_ENABLE_SOCKET_PORT_DRIVER
-
-#include "port.h"
-
 #include <stdbool.h>
 #include <string.h>
 
-#include "atom.h"
-#include "context.h"
-#include "globalcontext.h"
-#include "interop.h"
-#include "mailbox.h"
-#include "scheduler.h"
-#include "sys.h"
-#include "term.h"
-#include "utils.h"
-
-#include "esp32_sys.h"
-#include "platform_defaultatoms.h"
+#include <atom.h>
+#include <context.h>
+#include <esp32_sys.h>
+#include <globalcontext.h>
+#include <interop.h>
+#include <mailbox.h>
+#include <port.h>
+#include <scheduler.h>
+#include <sdkconfig.h>
+#include <sys.h>
+#include <term.h>
+#include <utils.h>
 
 #include <esp_log.h>
-
 #include <lwip/api.h>
 #include <lwip/inet.h>
 #include <lwip/ip_addr.h>
@@ -50,59 +44,12 @@
 //#define ENABLE_TRACE 1
 #include "trace.h"
 
-static void socket_driver_init(GlobalContext *global);
-static Context *socket_driver_create_port(GlobalContext *global, term opts);
+#define TAG "socket_driver"
 
 static void tcp_server_handler(Context *ctx);
 static void tcp_client_handler(Context *ctx);
 static void udp_handler(Context *ctx);
 static void socket_consume_mailbox(Context *ctx);
-
-static const char *const ealready_atom = "\x8" "ealready";
-
-uint32_t socket_tuple_to_addr(term addr_tuple)
-{
-    return ((term_to_int32(term_get_tuple_element(addr_tuple, 0)) & 0xFF) << 24)
-        | ((term_to_int32(term_get_tuple_element(addr_tuple, 1)) & 0xFF) << 16)
-        | ((term_to_int32(term_get_tuple_element(addr_tuple, 2)) & 0xFF) << 8)
-        | (term_to_int32(term_get_tuple_element(addr_tuple, 3)) & 0xFF);
-}
-
-static void tuple_to_ip_addr(term address_tuple, ip_addr_t *out_addr)
-{
-    out_addr->type = IPADDR_TYPE_V4;
-    out_addr->u_addr.ip4.addr = htonl(socket_tuple_to_addr(address_tuple));
-}
-
-static term socket_addr_to_tuple(Context *ctx, ip_addr_t *addr)
-{
-    term addr_tuple;
-
-    switch (IP_GET_TYPE(addr)) {
-        case IPADDR_TYPE_V4: {
-            uint8_t ad1 = ip4_addr1(&(addr->u_addr.ip4));
-            uint8_t ad2 = ip4_addr2(&(addr->u_addr.ip4));
-            uint8_t ad3 = ip4_addr3(&(addr->u_addr.ip4));
-            uint8_t ad4 = ip4_addr4(&(addr->u_addr.ip4));
-            addr_tuple = term_alloc_tuple(4, ctx);
-            term_put_tuple_element(addr_tuple, 0, term_from_int11(ad1));
-            term_put_tuple_element(addr_tuple, 1, term_from_int11(ad2));
-            term_put_tuple_element(addr_tuple, 2, term_from_int11(ad3));
-            term_put_tuple_element(addr_tuple, 3, term_from_int11(ad4));
-            break;
-        }
-
-        case IPADDR_TYPE_V6:
-            //TODO: implement IPv6
-            addr_tuple = term_invalid_term();
-            break;
-
-        default:
-            addr_tuple = term_invalid_term();
-    }
-
-    return addr_tuple;
-}
 
 enum socket_type
 {
@@ -163,7 +110,105 @@ struct NetconnEvent
     u16_t len;
 };
 
+static const char *const active_atom = ATOM_STR("\x6", "active");
+static const char *const address_atom = ATOM_STR("\x7", "address");
+static const char *const backlog_atom = ATOM_STR("\x7", "backlog");
+static const char *const binary_atom = ATOM_STR("\x6", "binary");
+static const char *const buffer_atom = ATOM_STR("\x6", "buffer");
+static const char *const connect_atom = ATOM_STR("\x7", "connect");
+static const char *const controlling_process_atom = ATOM_STR("\x13", "controlling_process");
+static const char *const ealready_atom = ATOM_STR("\x8", "ealready");
+static const char *const listen_atom = ATOM_STR("\x6", "listen");
+static const char *const not_owner_atom = ATOM_STR("\x9", "not_owner");
+static const char *const port_atom = ATOM_STR("\x4", "port");
+static const char *const proto_atom = ATOM_STR("\x5", "proto");
+static const char *const tcp_atom = ATOM_STR("\x3", "tcp");
+static const char *const tcp_closed_atom = ATOM_STR("\xA", "tcp_closed");
+static const char *const udp_atom = ATOM_STR("\x3", "udp");
+
+enum socket_cmd
+{
+    SocketInvalidCmd = 0,
+    SocketInitCmd,
+    SocketSendToCmd,
+    SocketSendCmd,
+    SocketRecvFromCmd,
+    SocketRecvCmd,
+    SocketAcceptCmd,
+    SocketCloseCmd,
+    SocketGetPortCmd,
+    SocketSockNameCmd,
+    SocketPeerNameCmd,
+    SocketControllingProcessCmd
+};
+
+static const AtomStringIntPair cmd_table[] = {
+    { ATOM_STR("\x4", "init"), SocketInitCmd },
+    { ATOM_STR("\x6", "sendto"), SocketSendToCmd },
+    { ATOM_STR("\x4", "send"), SocketSendCmd },
+    { ATOM_STR("\x8", "recvfrom"), SocketRecvFromCmd },
+    { ATOM_STR("\x4", "recv"), SocketRecvCmd },
+    { ATOM_STR("\x6", "accept"), SocketAcceptCmd },
+    { ATOM_STR("\x5", "close"), SocketCloseCmd },
+    { ATOM_STR("\x8", "get_port"), SocketGetPortCmd },
+    { ATOM_STR("\x8", "sockname"), SocketSockNameCmd },
+    { ATOM_STR("\x8", "peername"), SocketPeerNameCmd },
+    { ATOM_STR("\x13", "controlling_process"), SocketControllingProcessCmd },
+    SELECT_INT_DEFAULT(SocketInvalidCmd)
+};
+
 xQueueHandle netconn_events = NULL;
+
+// TODO use globalcontext_make_atom as part of merge into SMP branch
+static inline term make_atom(GlobalContext *global, AtomString atom_str)
+{
+    int global_atom_index = globalcontext_insert_atom(global, atom_str);
+    return term_from_atom_index(global_atom_index);
+}
+
+uint32_t socket_tuple_to_addr(term addr_tuple)
+{
+    return ((term_to_int32(term_get_tuple_element(addr_tuple, 0)) & 0xFF) << 24)
+        | ((term_to_int32(term_get_tuple_element(addr_tuple, 1)) & 0xFF) << 16)
+        | ((term_to_int32(term_get_tuple_element(addr_tuple, 2)) & 0xFF) << 8)
+        | (term_to_int32(term_get_tuple_element(addr_tuple, 3)) & 0xFF);
+}
+
+static void tuple_to_ip_addr(term address_tuple, ip_addr_t *out_addr)
+{
+    out_addr->type = IPADDR_TYPE_V4;
+    out_addr->u_addr.ip4.addr = htonl(socket_tuple_to_addr(address_tuple));
+}
+
+static term socket_addr_to_tuple(Context *ctx, ip_addr_t *addr)
+{
+    term addr_tuple;
+
+    switch (IP_GET_TYPE(addr)) {
+        case IPADDR_TYPE_V4: {
+            uint8_t ad1 = ip4_addr1(&(addr->u_addr.ip4));
+            uint8_t ad2 = ip4_addr2(&(addr->u_addr.ip4));
+            uint8_t ad3 = ip4_addr3(&(addr->u_addr.ip4));
+            uint8_t ad4 = ip4_addr4(&(addr->u_addr.ip4));
+            addr_tuple = term_alloc_tuple(4, ctx);
+            term_put_tuple_element(addr_tuple, 0, term_from_int11(ad1));
+            term_put_tuple_element(addr_tuple, 1, term_from_int11(ad2));
+            term_put_tuple_element(addr_tuple, 2, term_from_int11(ad3));
+            term_put_tuple_element(addr_tuple, 3, term_from_int11(ad4));
+            break;
+        }
+
+        case IPADDR_TYPE_V6:
+            // TODO: implement IPv6
+            addr_tuple = term_invalid_term();
+            break;
+
+        default:
+            addr_tuple = term_invalid_term();
+    }
+
+    return addr_tuple;
+}
 
 void socket_events_handler(EventListener *listener)
 {
@@ -221,29 +266,13 @@ void socket_events_handler(EventListener *listener)
                     break;
 
                 default:
-                    fprintf(stderr, "bug: unknown socket type.\n");
+                    ESP_LOGE(TAG, "bug: unknown socket type.");
             }
 
         } else {
             TRACE("Got event for unknown conn: %p, evt: %i, len: %i\n", netconn, (int) evt, (int) len);
         }
     }
-}
-
-void socket_driver_init(GlobalContext *glb)
-{
-    TRACE("Initializing socket driver\n");
-
-    netconn_events = xQueueCreate(32, sizeof(struct NetconnEvent));
-    EventListener *socket_listener = malloc(sizeof(EventListener));
-
-    struct ESP32PlatformData *platform = glb->platform_data;
-    sys_event_listener_init(socket_listener, &netconn_events, socket_events_handler, glb);
-    list_append(&platform->listeners, &socket_listener->listeners_list_head);
-
-    list_init(&platform->sockets_list_head);
-
-    TRACE("Socket driver init: done\n");
 }
 
 static void socket_data_init(struct SocketData *data, Context *ctx, struct netconn *conn,
@@ -326,13 +355,13 @@ void ESP_IRAM_ATTR socket_callback(struct netconn *netconn, enum netconn_evt evt
     BaseType_t xHigherPriorityTaskWoken;
     int result = xQueueSendFromISR(netconn_events, &event, &xHigherPriorityTaskWoken);
     if (result != pdTRUE) {
-        fprintf(stderr, "socket: failed to enqueue: %i to netconn_events.\n", result);
+        ESP_LOGE(TAG, "socket: failed to enqueue: %i to netconn_events.", result);
     }
 
     void *netconn_events_ptr = &netconn_events;
     result = xQueueSendFromISR(event_queue, &netconn_events_ptr, &xHigherPriorityTaskWoken);
     if (result != pdTRUE) {
-        fprintf(stderr, "socket: failed to enqueue: %i to event_queue.\n", result);
+        ESP_LOGE(TAG, "socket: failed to enqueue: %i to event_queue.", result);
     }
 }
 
@@ -343,16 +372,23 @@ void accept_conn(struct TCPServerAccepter *accepter, Context *ctx)
     struct TCPServerSocketData *tcp_data = ctx->platform_data;
     GlobalContext *glb = ctx->global;
     struct ESP32PlatformData *platform = glb->platform_data;
+    term pid = accepter->accepting_process_pid;
 
-    struct netconn *accepted_conn;
-    err_t status = netconn_accept(tcp_data->socket_data.conn, &accepted_conn);
-    if (UNLIKELY(status != ERR_OK)) {
-        //TODO
-        fprintf(stderr, "accept error: %i on %p\n", status, (void *) tcp_data->socket_data.conn);
+    // {Ref, {ok, pid} | {error, int()}}
+    size_t heap_size = TUPLE_SIZE(2) + REF_SIZE + TUPLE_SIZE(2);
+    if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "Unable to allocate space for return message.  No reply will be sent!");
         return;
     }
+    term ref = term_from_ref_ticks(accepter->ref_ticks, ctx);
 
-    term pid = accepter->accepting_process_pid;
+    struct netconn *accepted_conn;
+    err_t err = netconn_accept(tcp_data->socket_data.conn, &accepted_conn);
+    if (UNLIKELY(err != ERR_OK)) {
+        ESP_LOGE(TAG, "netconn_accept failed with error %d", err);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+    }
 
     TRACE("accepted conn: %p\n", accepted_conn);
 
@@ -364,18 +400,14 @@ void accept_conn(struct TCPServerAccepter *accepter, Context *ctx)
 
     struct TCPClientSocketData *new_tcp_data = tcp_client_socket_data_new(new_ctx, accepted_conn, platform, pid);
     if (IS_NULL_PTR(new_tcp_data)) {
-        AVM_ABORT();
+        ESP_LOGE(TAG, "Unable to create new tcp client socket data");
+        term error = port_create_error_tuple(ctx, UNDEFINED_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
     }
     new_tcp_data->socket_data.active = tcp_data->socket_data.active;
     new_tcp_data->socket_data.binary = tcp_data->socket_data.binary;
     new_tcp_data->socket_data.buffer = tcp_data->socket_data.buffer;
-
-    // TODO
-    if (UNLIKELY(memory_ensure_free(ctx, 128) != MEMORY_GC_OK)) {
-        AVM_ABORT();
-    }
-    term ref = term_from_ref_ticks(accepter->ref_ticks, ctx);
-    term return_tuple = term_alloc_tuple(2, ctx);
 
     free(accepter);
 
@@ -383,6 +415,7 @@ void accept_conn(struct TCPServerAccepter *accepter, Context *ctx)
     term_put_tuple_element(result_tuple, 0, OK_ATOM);
     term_put_tuple_element(result_tuple, 1, socket_pid);
 
+    term return_tuple = term_alloc_tuple(2, ctx);
     term_put_tuple_element(return_tuple, 0, ref);
     term_put_tuple_element(return_tuple, 1, result_tuple);
 
@@ -424,17 +457,21 @@ static void do_accept(Context *ctx, term msg)
 
 static void close_tcp_socket(Context *ctx, struct TCPClientSocketData *tcp_data)
 {
-    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-        AVM_ABORT();
+    // {tcp_closed, pid()}
+    size_t heap_size = TUPLE_SIZE(2);
+    if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "Unable to allocate space for return message.  No reply will be sent!");
+        return;
     }
+
     term pid = tcp_data->socket_data.controlling_process_pid;
     term msg = term_alloc_tuple(2, ctx);
-    term_put_tuple_element(msg, 0, TCP_CLOSED_ATOM);
+    term_put_tuple_element(msg, 0, make_atom(ctx->global, tcp_closed_atom));
     term_put_tuple_element(msg, 1, term_from_local_process_id(pid));
 
-    err_t res = netconn_delete(tcp_data->socket_data.conn);
-    if (res != ERR_OK) {
-        TRACE("close_tcp_socket: netconn_delete failed");
+    err_t err = netconn_delete(tcp_data->socket_data.conn);
+    if (err != ERR_OK) {
+        ESP_LOGW(TAG, "close_tcp_socket: netconn_delete failed");
     }
     tcp_data->socket_data.conn = NULL;
     list_remove(&tcp_data->socket_data.sockets_head);
@@ -468,18 +505,18 @@ static void tcp_client_handler(Context *ctx)
     }
 
     struct netbuf *buf = NULL;
-    err_t status = netconn_recv(tcp_data->socket_data.conn, &buf);
-    if (UNLIKELY(status != ERR_OK)) {
-        TRACE("tcp_client_handler: netconn_recv error: %i\n", status);
+    err_t err = netconn_recv(tcp_data->socket_data.conn, &buf);
+    if (UNLIKELY(err != ERR_OK)) {
+        ESP_LOGE(TAG, "tcp_client_handler: netconn_recv error: %i\n", err);
         close_tcp_socket(ctx, tcp_data);
         return;
     }
 
     void *data;
     u16_t data_len;
-    status = netbuf_data(buf, &data, &data_len);
-    if (UNLIKELY(status != ERR_OK)) {
-        TRACE("tcp_client_handler: netbuf_data error: %i\n", status);
+    err = netbuf_data(buf, &data, &data_len);
+    if (UNLIKELY(err != ERR_OK)) {
+        ESP_LOGE(TAG, "tcp_client_handler: netbuf_data error: %i\n", err);
         close_tcp_socket(ctx, tcp_data);
         return;
     }
@@ -506,7 +543,8 @@ static void tcp_client_handler(Context *ctx)
         tuples_size = 3 + 3;
     }
     if (UNLIKELY(memory_ensure_free(ctx, tuples_size + recv_terms_size) != MEMORY_GC_OK)) {
-        AVM_ABORT();
+        ESP_LOGE(TAG, "Unable to allocate space for return message.  No reply will be sent!");
+        return;
     }
 
     term recv_data;
@@ -524,7 +562,7 @@ static void tcp_client_handler(Context *ctx)
     term result_tuple;
     if (tcp_data->socket_data.active) {
         result_tuple = term_alloc_tuple(3, ctx);
-        term_put_tuple_element(result_tuple, 0, TCP_ATOM);
+        term_put_tuple_element(result_tuple, 0, make_atom(ctx->global, tcp_atom));
         term_put_tuple_element(result_tuple, 1, term_from_local_process_id(ctx->process_id));
         term_put_tuple_element(result_tuple, 2, recv_data);
 
@@ -548,7 +586,7 @@ static void tcp_client_handler(Context *ctx)
         term_display(stdout, result_tuple, ctx);
     #endif
     TRACE(" to ");
-     #ifdef ENABLE_TRACE
+    #ifdef ENABLE_TRACE
         term_display(stdout, pid, ctx);
     #endif
     TRACE("\n");
@@ -599,19 +637,19 @@ static void udp_handler(Context *ctx)
     }
 
     struct netbuf *buf = NULL;
-    err_t status = netconn_recv(udp_data->socket_data.conn, &buf);
-    if (UNLIKELY(status != ERR_OK)) {
+    err_t err = netconn_recv(udp_data->socket_data.conn, &buf);
+    if (UNLIKELY(err != ERR_OK)) {
         //TODO
-        fprintf(stderr, "tcp_client_handler error: %i\n", status);
+        ESP_LOGE(TAG, "tcp_client_handler error: %i", err);
         return;
     }
 
     void *data;
     u16_t data_len;
-    status = netbuf_data(buf, &data, &data_len);
-    if (UNLIKELY(status != ERR_OK)) {
+    err = netbuf_data(buf, &data, &data_len);
+    if (UNLIKELY(err != ERR_OK)) {
         //TODO
-        fprintf(stderr, "netbuf_data error: %i\n", status);
+        ESP_LOGE(TAG, "netbuf_data error: %i", err);
         return;
     }
 
@@ -637,7 +675,8 @@ static void udp_handler(Context *ctx)
         tuples_size = 4 + 5 + 3 + 3;
     }
     if (UNLIKELY(memory_ensure_free(ctx, tuples_size + recv_terms_size) != MEMORY_GC_OK)) {
-        AVM_ABORT();
+        ESP_LOGE(TAG, "Unable to allocate space for return message.  No reply will be sent!");
+        return;
     }
 
     term recv_data;
@@ -658,7 +697,7 @@ static void udp_handler(Context *ctx)
     term result_tuple;
     if (socket_data->active) {
         result_tuple = term_alloc_tuple(5, ctx);
-        term_put_tuple_element(result_tuple, 0, UDP_ATOM);
+        term_put_tuple_element(result_tuple, 0, make_atom(ctx->global, udp_atom));
         term_put_tuple_element(result_tuple, 1, term_from_local_process_id(ctx->process_id));
         term_put_tuple_element(result_tuple, 2, addr);
         term_put_tuple_element(result_tuple, 3, port);
@@ -719,40 +758,68 @@ static void do_connect(Context *ctx, term msg)
     GlobalContext *glb = ctx->global;
     struct ESP32PlatformData *platform = glb->platform_data;
 
+    term pid = term_get_tuple_element(msg, 0);
+    term ref = term_get_tuple_element(msg, 1);
     term cmd = term_get_tuple_element(msg, 2);
     term params = term_get_tuple_element(cmd, 1);
 
-    term address_term = interop_proplist_get_value(params, ADDRESS_ATOM);
-    term port_term = interop_proplist_get_value(params, PORT_ATOM);
-    term binary_term = interop_proplist_get_value(params, BINARY_ATOM);
-    term active_term = interop_proplist_get_value(params, ACTIVE_ATOM);
-    term controlling_process_term = interop_proplist_get_value(params, CONTROLLING_PROCESS_ATOM);
+    term address_term = interop_kv_get_value(params, address_atom, ctx->global);
+    term port_term = interop_kv_get_value(params, port_atom, ctx->global);
+    term binary_term = interop_kv_get_value(params, binary_atom, ctx->global);
+    term active_term = interop_kv_get_value(params, active_atom, ctx->global);
+    term controlling_process_term = interop_kv_get_value(params, controlling_process_atom, ctx->global);
+
+    // NB. GC is safe when msg is referenced from mailbox
+    // {Ref, ok | {error, atom()}}
+    size_t heap_size = TUPLE_SIZE(2) + REF_SIZE + TUPLE_SIZE(2);
+    if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "Unable to allocate space for return message.  No reply will be sent!");
+        return;
+    }
 
     int ok_int;
     char *address_string = interop_term_to_string(address_term, &ok_int);
     if (UNLIKELY(!ok_int)) {
-        AVM_ABORT();
+        ESP_LOGE(TAG, "Bad address parameter");
+        term error = port_create_error_tuple(ctx, BADARG_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
     }
 
+    if (!term_is_integer(port_term)) {
+        ESP_LOGE(TAG, "Bad port parameter");
+        term error = port_create_error_tuple(ctx, BADARG_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    }
     avm_int_t port = term_to_int(port_term);
+
     bool ok;
     bool active = bool_term_to_bool(active_term, &ok);
     if (UNLIKELY(!ok)) {
-        AVM_ABORT();
+        ESP_LOGE(TAG, "Bad active parameter");
+        term error = port_create_error_tuple(ctx, BADARG_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
     }
     bool binary = bool_term_to_bool(binary_term, &ok);
     if (UNLIKELY(!ok)) {
-        AVM_ABORT();
+        ESP_LOGE(TAG, "Bad binary parameter");
+        term error = port_create_error_tuple(ctx, BADARG_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
     }
 
     TRACE("tcp: connecting to: %s\n", address_string);
 
     struct ip_addr remote_ip;
     //TODO: use dns_gethostbyname instead
-    err_t status = netconn_gethostbyname(address_string, &remote_ip);
-    if (UNLIKELY(status != ERR_OK)) {
+    err_t err = netconn_gethostbyname(address_string, &remote_ip);
+    if (UNLIKELY(err != ERR_OK)) {
+        ESP_LOGE(TAG, "Host resolution failed for address %s with err %i", address_string, err);
         free(address_string);
-        TRACE("tcp: host resolution failed.\n");
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
         return;
     }
 
@@ -762,12 +829,17 @@ static void do_connect(Context *ctx, term msg)
 
     struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_TCP, 0, socket_callback);
     if (IS_NULL_PTR(conn)) {
-        AVM_ABORT();
+        ESP_LOGE(TAG, "Unable to create new netconn instance");
+        term error = port_create_error_tuple(ctx, UNDEFINED_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
     }
 
-    status = netconn_connect(conn, &remote_ip, port);
-    if (UNLIKELY(status != ERR_OK)) {
-        TRACE("tcp: failed connect: %i\n", status);
+    err = netconn_connect(conn, &remote_ip, port);
+    if (UNLIKELY(err != ERR_OK)) {
+        ESP_LOGE(TAG, "netconn_connect failed with error %d", err);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
         return;
     }
 
@@ -775,18 +847,15 @@ static void do_connect(Context *ctx, term msg)
 
     struct TCPClientSocketData *tcp_data = tcp_client_socket_data_new(ctx, conn, platform, controlling_process_term);
     if (IS_NULL_PTR(tcp_data)) {
-        AVM_ABORT();
+        ESP_LOGE(TAG, "Unable to create new tcp client socket data");
+        term error = port_create_error_tuple(ctx, UNDEFINED_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
     }
     tcp_data->socket_data.active = active;
     tcp_data->socket_data.binary = binary;
-    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-        AVM_ABORT();
-    }
+
     term return_tuple = term_alloc_tuple(2, ctx);
-
-    term pid = term_get_tuple_element(msg, 0);
-    term ref = term_get_tuple_element(msg, 1);
-
     term_put_tuple_element(return_tuple, 0, ref);
     term_put_tuple_element(return_tuple, 1, OK_ATOM);
 
@@ -798,69 +867,113 @@ static void do_listen(Context *ctx, term msg)
     GlobalContext *glb = ctx->global;
     struct ESP32PlatformData *platform = glb->platform_data;
 
+    term pid = term_get_tuple_element(msg, 0);
+    term ref = term_get_tuple_element(msg, 1);
     term cmd = term_get_tuple_element(msg, 2);
     term params = term_get_tuple_element(cmd, 1);
 
-    term port_term = interop_proplist_get_value(params, PORT_ATOM);
-    term backlog_term = interop_proplist_get_value(params, BACKLOG_ATOM);
-    term binary_term = interop_proplist_get_value(params, BINARY_ATOM);
-    term active_term = interop_proplist_get_value(params, ACTIVE_ATOM);
-    term buffer_term = interop_proplist_get_value(params, BUFFER_ATOM);
+    term port_term = interop_kv_get_value(params, port_atom, ctx->global);
+    term backlog_term = interop_kv_get_value(params, backlog_atom, ctx->global);
+    term binary_term = interop_kv_get_value(params, binary_atom, ctx->global);
+    term active_term = interop_kv_get_value(params, active_atom, ctx->global);
+    term buffer_term = interop_kv_get_value(params, buffer_atom, ctx->global);
 
+    // NB. GC is safe when msg is referenced from mailbox
+    // {Ref, ok | {error, atom()}}
+    size_t heap_size = TUPLE_SIZE(2) + REF_SIZE + TUPLE_SIZE(2);
+    if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "Unable to allocate space for return message.  No reply will be sent!");
+        return;
+    }
+
+    if (!term_is_integer(port_term)) {
+        ESP_LOGE(TAG, "Bad port parameter");
+        term error = port_create_error_tuple(ctx, BADARG_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    }
     avm_int_t port = term_to_int(port_term);
+
+    if (!term_is_integer(backlog_term)) {
+        ESP_LOGE(TAG, "Bad backlog parameter");
+        term error = port_create_error_tuple(ctx, BADARG_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    }
     avm_int_t backlog = term_to_int(backlog_term);
+
     bool ok;
     bool active = bool_term_to_bool(active_term, &ok);
     if (UNLIKELY(!ok)) {
-        AVM_ABORT();
+        ESP_LOGE(TAG, "Bad active parameter");
+        term error = port_create_error_tuple(ctx, BADARG_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
     }
+
     bool binary = bool_term_to_bool(binary_term, &ok);
     if (UNLIKELY(!ok)) {
-        AVM_ABORT();
+        ESP_LOGE(TAG, "Bad binary parameter");
+        term error = port_create_error_tuple(ctx, BADARG_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    }
+
+    if (!term_is_integer(buffer_term)) {
+        ESP_LOGE(TAG, "Bad buffer parameter");
+        term error = port_create_error_tuple(ctx, BADARG_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
     }
     avm_int_t buffer = term_to_int(buffer_term);
 
     struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_TCP, 0, socket_callback);
+    if (IS_NULL_PTR(conn)) {
+        ESP_LOGE(TAG, "Unable to create new netconn instance");
+        term error = port_create_error_tuple(ctx, UNDEFINED_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    }
 
-    err_t status = netconn_bind(conn, IP_ADDR_ANY, port);
-    if (UNLIKELY(status != ERR_OK)) {
-        //TODO
-        fprintf(stderr, "bind error: %i\n", status);
+    err_t err = netconn_bind(conn, IP_ADDR_ANY, port);
+    if (UNLIKELY(err != ERR_OK)) {
+        ESP_LOGE(TAG, "netconn_bind failed with error %d", err);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
         return;
     }
 
     ip_addr_t naddr;
     u16_t nport;
-    status = netconn_getaddr(conn, &naddr, &nport, 1);
-    if (UNLIKELY(status != ERR_OK)) {
-        //TODO
-        fprintf(stderr, "getaddr error: %i\n", status);
+    err = netconn_getaddr(conn, &naddr, &nport, 1);
+    if (UNLIKELY(err != ERR_OK)) {
+        ESP_LOGE(TAG, "netconn_getaddr failed with error %d", err);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
         return;
     }
 
-    status = netconn_listen_with_backlog(conn, backlog);
-    if (UNLIKELY(status != ERR_OK)) {
-        //TODO
-        fprintf(stderr, "listen error: %i\n", status);
+    err = netconn_listen_with_backlog(conn, backlog);
+    if (UNLIKELY(err != ERR_OK)) {
+        ESP_LOGE(TAG, "netconn_listen_with_backlog failed with error %d", err);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
         return;
     }
 
     struct TCPServerSocketData *tcp_data = tcp_server_socket_data_new(ctx, conn, platform);
     if (IS_NULL_PTR(tcp_data)) {
-        AVM_ABORT();
+        ESP_LOGE(TAG, "Unable to create new tcp server socket data");
+        term error = port_create_error_tuple(ctx, UNDEFINED_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
     }
     tcp_data->socket_data.port = nport;
     tcp_data->socket_data.active = active;
     tcp_data->socket_data.binary = binary;
     tcp_data->socket_data.buffer = buffer;
-    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-        AVM_ABORT();
-    }
+
     term return_tuple = term_alloc_tuple(2, ctx);
-
-    term pid = term_get_tuple_element(msg, 0);
-    term ref = term_get_tuple_element(msg, 1);
-
     term_put_tuple_element(return_tuple, 0, ref);
     term_put_tuple_element(return_tuple, 1, OK_ATOM);
 
@@ -872,64 +985,88 @@ void do_udp_open(Context *ctx, term msg)
     GlobalContext *glb = ctx->global;
     struct ESP32PlatformData *platform = glb->platform_data;
 
+    term pid = term_get_tuple_element(msg, 0);
+    term ref = term_get_tuple_element(msg, 1);
     term cmd = term_get_tuple_element(msg, 2);
     term params = term_get_tuple_element(cmd, 1);
 
-    term port_term = interop_proplist_get_value(params, PORT_ATOM);
-    term binary_term = interop_proplist_get_value(params, BINARY_ATOM);
-    term active_term = interop_proplist_get_value(params, ACTIVE_ATOM);
-    term controlling_process = interop_proplist_get_value(params, CONTROLLING_PROCESS_ATOM);
+    term port_term = interop_kv_get_value(params, port_atom, ctx->global);
+    term binary_term = interop_kv_get_value(params, binary_atom, ctx->global);
+    term active_term = interop_kv_get_value(params, active_atom, ctx->global);
+    term controlling_process_term = interop_kv_get_value(params, controlling_process_atom, ctx->global);
 
+    // NB. GC is safe when msg is referenced from mailbox
+    // {Ref, ok | {error, atom()}}
+    size_t heap_size = TUPLE_SIZE(2) + REF_SIZE + TUPLE_SIZE(2);
+    if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "Unable to allocate space for return message.  No reply will be sent!");
+        return;
+    }
+
+    if (!term_is_integer(port_term)) {
+        ESP_LOGE(TAG, "Bad port parameter");
+        term error = port_create_error_tuple(ctx, BADARG_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    }
     avm_int_t port = term_to_int(port_term);
+
     bool ok;
     bool active = bool_term_to_bool(active_term, &ok);
     if (UNLIKELY(!ok)) {
-        AVM_ABORT();
+        ESP_LOGE(TAG, "Bad active parameter");
+        term error = port_create_error_tuple(ctx, BADARG_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
     }
     bool binary = bool_term_to_bool(binary_term, &ok);
     if (UNLIKELY(!ok)) {
-        AVM_ABORT();
+        ESP_LOGE(TAG, "Bad binary parameter");
+        term error = port_create_error_tuple(ctx, BADARG_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
     }
 
     struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_UDP, 0, socket_callback);
     if (IS_NULL_PTR(conn)) {
-        fprintf(stderr, "failed to open conn\n");
-        AVM_ABORT();
+        ESP_LOGE(TAG, "Unable to create new netconn instance");
+        term error = port_create_error_tuple(ctx, UNDEFINED_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
     }
 
-    struct UDPSocketData *udp_data = udp_socket_data_new(ctx, conn, platform, controlling_process);
+    struct UDPSocketData *udp_data = udp_socket_data_new(ctx, conn, platform, controlling_process_term);
     if (IS_NULL_PTR(udp_data)) {
-        AVM_ABORT();
+        ESP_LOGE(TAG, "Unable to create new udp socket data");
+        term error = port_create_error_tuple(ctx, UNDEFINED_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
     }
     udp_data->socket_data.active = active;
     udp_data->socket_data.binary = binary;
 
     if (port != 0) {
-        err_t status = netconn_bind(conn, IP_ADDR_ANY, port);
-        if (UNLIKELY(status != ERR_OK)) {
-            fprintf(stderr, "bind error: %i\n", status);
+        err_t err = netconn_bind(conn, IP_ADDR_ANY, port);
+        if (UNLIKELY(err != ERR_OK)) {
+            ESP_LOGE(TAG, "netconn_bind failed with error %d", err);
+            term error = port_create_error_tuple(ctx, term_from_int(err));
+            port_send_reply(ctx, pid, ref, error);
             return;
         }
     }
 
     ip_addr_t naddr;
     u16_t nport;
-    err_t status = netconn_getaddr(conn, &naddr, &nport, 1);
-    if (UNLIKELY(status != ERR_OK)) {
-        //TODO
-        fprintf(stderr, "getaddr error: %i\n", status);
+    err_t err = netconn_getaddr(conn, &naddr, &nport, 1);
+    if (UNLIKELY(err != ERR_OK)) {
+        ESP_LOGE(TAG, "netconn_getaddr failed with error %d", err);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
         return;
     }
     udp_data->socket_data.port = nport;
 
-    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-        AVM_ABORT();
-    }
     term return_tuple = term_alloc_tuple(2, ctx);
-
-    term pid = term_get_tuple_element(msg, 0);
-    term ref = term_get_tuple_element(msg, 1);
-
     term_put_tuple_element(return_tuple, 0, ref);
     term_put_tuple_element(return_tuple, 1, OK_ATOM);
 
@@ -943,15 +1080,15 @@ static void do_init(Context *ctx, term msg)
     term cmd = term_get_tuple_element(msg, 2);
     term params = term_get_tuple_element(cmd, 1);
 
-    if (interop_proplist_get_value_default(params, LISTEN_ATOM, FALSE_ATOM) == TRUE_ATOM) {
+    if (interop_kv_get_value_default(params, listen_atom, FALSE_ATOM, ctx->global) == TRUE_ATOM) {
         TRACE("listen\n");
         do_listen(ctx, msg);
 
-    } else if (interop_proplist_get_value_default(params, CONNECT_ATOM, FALSE_ATOM) == TRUE_ATOM) {
+    } else if (interop_kv_get_value_default(params, connect_atom, FALSE_ATOM, ctx->global) == TRUE_ATOM) {
         TRACE("connect\n");
         do_connect(ctx, msg);
 
-    } else if (interop_proplist_get_value_default(params, PROTO_ATOM, FALSE_ATOM) == UDP_ATOM) {
+    } else if (interop_kv_get_value_default(params, proto_atom, FALSE_ATOM, ctx->global) == make_atom(ctx->global, udp_atom)) {
         TRACE("udp_open\n");
         do_udp_open(ctx, msg);
     }
@@ -965,30 +1102,45 @@ static void do_send(Context *ctx, term msg)
     term pid = term_get_tuple_element(msg, 0);
     term ref = term_get_tuple_element(msg, 1);
     term cmd = term_get_tuple_element(msg, 2);
-
     term data = term_get_tuple_element(cmd, 1);
+
+    // NB. GC is safe when msg is referenced from mailbox
+    // {Ref, ok | {error, atom()}}
+    size_t heap_size = TUPLE_SIZE(2) + REF_SIZE + TUPLE_SIZE(2);
+    if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "Unable to allocate space for return message.  No reply will be sent!");
+        return;
+    }
 
     int ok;
     int buffer_size = interop_iolist_size(data, &ok);
     if (UNLIKELY(!ok)) {
-        fprintf(stderr, "error: invalid iolist.\n");
+        ESP_LOGE(TAG, "Invalid iolist");
+        term error = port_create_error_tuple(ctx, BADARG_ATOM);
+        port_send_reply(ctx, pid, ref, error);
         return;
     }
+
     void *buffer = malloc(buffer_size);
+    if (IS_NULL_PTR(buffer)) {
+        ESP_LOGE(TAG, "Insufficient space to allocate buffer of size %i", buffer_size);
+        term error = port_create_error_tuple(ctx, MEMORY_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    }
     interop_write_iolist(data, buffer);
-    err_t status = netconn_write(tcp_data->socket_data.conn, buffer, buffer_size, NETCONN_NOCOPY);
-    if (UNLIKELY(status != ERR_OK)) {
-        fprintf(stderr, "write error: %i\n", status);
+
+    err_t err = netconn_write(tcp_data->socket_data.conn, buffer, buffer_size, NETCONN_NOCOPY);
+    if (UNLIKELY(err != ERR_OK)) {
+        ESP_LOGE(TAG, "netconn_write error %d", err);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
         return;
     }
 
     free(buffer);
 
-    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-        AVM_ABORT();
-    }
     term return_tuple = term_alloc_tuple(2, ctx);
-
     term_put_tuple_element(return_tuple, 0, ref);
     term_put_tuple_element(return_tuple, 1, OK_ATOM);
 
@@ -1008,9 +1160,23 @@ static void do_sendto(Context *ctx, term msg)
     term dest_port_term = term_get_tuple_element(cmd, 2);
     term data = term_get_tuple_element(cmd, 3);
 
+    // NB. GC is safe when msg is referenced from mailbox
+    // {Ref, ok | {error, atom()}}
+    size_t heap_size = TUPLE_SIZE(2) + REF_SIZE + TUPLE_SIZE(2);
+    if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "Unable to allocate space for return message.  No reply will be sent!");
+        return;
+    }
+
     int ok;
     int buffer_size = interop_iolist_size(data, &ok);
     void *buffer = malloc(buffer_size);
+    if (IS_NULL_PTR(buffer)) {
+        ESP_LOGE(TAG, "Insufficient space to allocate buffer of size %i", buffer_size);
+        term error = port_create_error_tuple(ctx, MEMORY_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    }
     interop_write_iolist(data, buffer);
 
     ip_addr_t ip4addr;
@@ -1019,28 +1185,27 @@ static void do_sendto(Context *ctx, term msg)
 
     struct netbuf *sendbuf = netbuf_new();
 
-    err_t status = netbuf_ref(sendbuf, buffer, buffer_size);
-    if (UNLIKELY(status != ERR_OK)) {
-        fprintf(stderr, "netbuf_ref error: %i\n", status);
+    err_t err = netbuf_ref(sendbuf, buffer, buffer_size);
+    if (UNLIKELY(err != ERR_OK)) {
+        ESP_LOGE(TAG, "netbuf_ref error %d", err);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
         netbuf_delete(sendbuf);
         return;
     }
 
-    status = netconn_sendto(udp_data->socket_data.conn, sendbuf, &ip4addr, destport);
-    if (UNLIKELY(status != ERR_OK)) {
-        fprintf(stderr, "netbuf_ref error: %i\n", status);
+    err = netconn_sendto(udp_data->socket_data.conn, sendbuf, &ip4addr, destport);
+    if (UNLIKELY(err != ERR_OK)) {
+        ESP_LOGE(TAG, "netconn_sendto error %d", err);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
         netbuf_delete(sendbuf);
         return;
     }
-
     netbuf_delete(sendbuf);
     free(buffer);
 
-    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-        AVM_ABORT();
-    }
     term return_tuple = term_alloc_tuple(2, ctx);
-
     term_put_tuple_element(return_tuple, 0, ref);
     term_put_tuple_element(return_tuple, 1, OK_ATOM);
 
@@ -1055,20 +1220,26 @@ static void do_close(Context *ctx, term msg)
     term pid = term_get_tuple_element(msg, 0);
     term ref = term_get_tuple_element(msg, 1);
 
-    err_t res = netconn_delete(tcp_data->socket_data.conn);
-    if (res != ERR_OK) {
-        TRACE("socket: close failed");
+    // NB. GC is safe when msg is referenced from mailbox
+    // {Ref, ok | {error, atom()}}
+    size_t heap_size = TUPLE_SIZE(2) + REF_SIZE + TUPLE_SIZE(2);
+    if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "Unable to allocate space for return message.  No reply will be sent!");
+        return;
+    }
+
+    err_t err = netconn_delete(tcp_data->socket_data.conn);
+    if (err != ERR_OK) {
+        ESP_LOGE(TAG, "netconn_delete failed with error %d", err);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
         return;
     }
     //TODO
     tcp_data->socket_data.conn = NULL;
     list_remove(&tcp_data->socket_data.sockets_head);
 
-    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-        AVM_ABORT();
-    }
     term return_tuple = term_alloc_tuple(2, ctx);
-
     term_put_tuple_element(return_tuple, 0, ref);
     term_put_tuple_element(return_tuple, 1, OK_ATOM);
 
@@ -1087,42 +1258,36 @@ static void do_recvfrom(Context *ctx, term msg)
     term ref = term_get_tuple_element(msg, 1);
 
     if (socket_data->passive_receiver_process_pid != term_invalid_term()) {
-        // 3 (error_tuple) + 3 (result_tuple)
-        if (UNLIKELY(memory_ensure_free(ctx, 3 + 3) != MEMORY_GC_OK)) {
-            AVM_ABORT();
+        // {Ref, {error, ealready}}
+        size_t heap_size = TUPLE_SIZE(2) + REF_SIZE + TUPLE_SIZE(2);
+        if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+            ESP_LOGE(TAG, "Unable to allocate space for return message.  No reply will be sent!");
+            return;
         }
 
-        term ealready = context_make_atom(ctx, ealready_atom);
-
-        term error_tuple = term_alloc_tuple(2, ctx);
-        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
-        term_put_tuple_element(error_tuple, 1, ealready);
-
-        term result_tuple = term_alloc_tuple(2, ctx);
-        term_put_tuple_element(result_tuple, 0, ref);
-        term_put_tuple_element(result_tuple, 1, error_tuple);
-
-        send_message(pid, result_tuple, glb);
+        term error = port_create_error_tuple(ctx, make_atom(ctx->global, ealready_atom));
+        port_send_reply(ctx, pid, ref, error);
+        return;
     }
 
     if (socket_data->avail_bytes) {
         TRACE(stderr, "do_recvfrom: have already ready bytes.\n");
 
         struct netbuf *buf = NULL;
-        err_t status = netconn_recv(socket_data->conn, &buf);
-        if (UNLIKELY(status != ERR_OK)) {
-            //TODO
-            fprintf(stderr, "do_recvfrom: netconn_recv error: %i\n", status);
-            return;
+        err_t err = netconn_recv(socket_data->conn, &buf);
+        if (UNLIKELY(err != ERR_OK)) {
+            ESP_LOGE(TAG, "netconn_recv failed with error %d", err);
+            term error = port_create_error_tuple(ctx, term_from_int(err));
+            port_send_reply(ctx, pid, ref, error);
         }
 
         void *data;
         u16_t data_len;
-        status = netbuf_data(buf, &data, &data_len);
-        if (UNLIKELY(status != ERR_OK)) {
-            //TODO
-            fprintf(stderr, "do_recvfrom: netbuf_data error: %i\n", status);
-            return;
+        err = netbuf_data(buf, &data, &data_len);
+        if (UNLIKELY(err != ERR_OK)) {
+            ESP_LOGE(TAG, "netbuf_data failed with error %d", err);
+            term error = port_create_error_tuple(ctx, term_from_int(err));
+            port_send_reply(ctx, pid, ref, error);
         }
 
         socket_data->avail_bytes -= data_len;
@@ -1138,9 +1303,11 @@ static void do_recvfrom(Context *ctx, term msg)
             recv_terms_size = data_len * 2;
         }
 
-        // 4 (recv_ret size) + 3 (ok_tuple size) + 3 (result_tuple size) + recv_terms_size
-        if (UNLIKELY(memory_ensure_free(ctx, 4 + 3 + 3 + recv_terms_size) != MEMORY_GC_OK)) {
-            AVM_ABORT();
+        // {Ref, {ok, {{192, 166, 1, 4}, Port, ReceiveData}}}
+        size_t heap_size = TUPLE_SIZE(2) + REF_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(3) + TUPLE_SIZE(4) + recv_terms_size;
+        if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+            ESP_LOGE(TAG, "Unable to allocate space for return message.  No reply will be sent!");
+            return;
         }
 
         term recv_data;
@@ -1185,9 +1352,12 @@ static void do_get_port(Context *ctx, term msg)
     term pid = term_get_tuple_element(msg, 0);
     term ref = term_get_tuple_element(msg, 1);
 
-    // 3 (error_ok_tuple) + 3 (result_tuple)
-    if (UNLIKELY(memory_ensure_free(ctx, 3 + 3) != MEMORY_GC_OK)) {
-        AVM_ABORT();
+    // NB. GC is safe when msg is referenced from mailbox
+    // {Ref, {ok, int()} | {error, badarg}}
+    size_t heap_size = TUPLE_SIZE(2) + REF_SIZE + TUPLE_SIZE(2);
+    if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "Unable to allocate space for return message.  No reply will be sent!");
+        return;
     }
 
     term error_ok_tuple = term_alloc_tuple(2, ctx);
@@ -1214,21 +1384,23 @@ static void do_sockname(Context *ctx, term msg)
     term pid = term_get_tuple_element(msg, 0);
     term ref = term_get_tuple_element(msg, 1);
 
+    // NB. GC is safe when msg is referenced from mailbox
+    // {Ref, {ok, {192, 168, 1, 3}} | {error, badarg}}
+    size_t heap_size = TUPLE_SIZE(2) + REF_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(4);
+    if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "Unable to allocate space for return message.  No reply will be sent!");
+        return;
+    }
+
     ip_addr_t addr;
     u16_t port;
-    err_t result = netconn_addr(socket_data->conn, &addr, &port);
+    err_t err = netconn_addr(socket_data->conn, &addr, &port);
     term return_msg;
-    if (result != ERR_OK) {
-        if (UNLIKELY(memory_ensure_free(ctx, 3 + 3) != MEMORY_GC_OK)) {
-            AVM_ABORT();
-        }
+    if (err != ERR_OK) {
         return_msg = term_alloc_tuple(2, ctx);
         term_put_tuple_element(return_msg, 0, ERROR_ATOM);
-        term_put_tuple_element(return_msg, 1, term_from_int(result));
+        term_put_tuple_element(return_msg, 1, term_from_int(err));
     } else {
-        if (UNLIKELY(memory_ensure_free(ctx, 3 + 3 + 8) != MEMORY_GC_OK)) {
-            AVM_ABORT();
-        }
         return_msg = term_alloc_tuple(2, ctx);
         term addr_term = socket_addr_to_tuple(ctx, &addr);
         term port_term = term_from_int(port);
@@ -1253,21 +1425,23 @@ static void do_peername(Context *ctx, term msg)
     term pid = term_get_tuple_element(msg, 0);
     term ref = term_get_tuple_element(msg, 1);
 
+    // NB. GC is safe when msg is referenced from mailbox
+    // {Ref, {ok, {192, 168, 1, 3}} | {error, badarg}}
+    size_t heap_size = TUPLE_SIZE(2) + REF_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(4);
+    if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "Unable to allocate space for return message.  No reply will be sent!");
+        return;
+    }
+
     ip_addr_t addr;
     u16_t port;
     err_t result = netconn_peer(socket_data->conn, &addr, &port);
     term return_msg;
     if (result != ERR_OK) {
-        if (UNLIKELY(memory_ensure_free(ctx, 3 + 3) != MEMORY_GC_OK)) {
-            AVM_ABORT();
-        }
         return_msg = term_alloc_tuple(2, ctx);
         term_put_tuple_element(return_msg, 0, ERROR_ATOM);
         term_put_tuple_element(return_msg, 1, term_from_int(result));
     } else {
-        if (UNLIKELY(memory_ensure_free(ctx, 3 + 3 + 8) != MEMORY_GC_OK)) {
-            AVM_ABORT();
-        }
         return_msg = term_alloc_tuple(2, ctx);
         term addr_term = socket_addr_to_tuple(ctx, &addr);
         term port_term = term_from_int(port);
@@ -1292,14 +1466,17 @@ static void do_controlling_process(Context *ctx, term msg)
     term pid = term_get_tuple_element(msg, 0);
     term ref = term_get_tuple_element(msg, 1);
     term cmd = term_get_tuple_element(msg, 2);
-
     term new_pid_term = term_get_tuple_element(cmd, 1);
-    term return_msg;
 
-    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
-        AVM_ABORT();
+    // NB. GC is safe when msg is referenced from mailbox
+    // {Ref, {ok | {error, badarg | not_owner}}
+    size_t heap_size = TUPLE_SIZE(2) + REF_SIZE + TUPLE_SIZE(2);
+    if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "Unable to allocate space for return message.  No reply will be sent!");
+        return;
     }
 
+    term return_msg;
     if (UNLIKELY(!term_is_pid(new_pid_term))) {
         return_msg = term_alloc_tuple(2, ctx);
         term_put_tuple_element(return_msg, 0, ERROR_ATOM);
@@ -1307,7 +1484,7 @@ static void do_controlling_process(Context *ctx, term msg)
     } else if (UNLIKELY(pid != socket_data->controlling_process_pid)) {
         return_msg = term_alloc_tuple(2, ctx);
         term_put_tuple_element(return_msg, 0, ERROR_ATOM);
-        term_put_tuple_element(return_msg, 1, NOT_OWNER_ATOM);
+        term_put_tuple_element(return_msg, 1, make_atom(ctx->global, not_owner_atom));
     } else {
         socket_data->controlling_process_pid = new_pid_term;
         return_msg = OK_ATOM;
@@ -1331,73 +1508,91 @@ static void socket_consume_mailbox(Context *ctx)
         #endif
         TRACE("\n");
 
-        term cmd = term_get_tuple_element(msg, 2);
-        term cmd_name = term_get_tuple_element(cmd, 0);
+        term cmd_term = term_get_tuple_element(msg, 2);
+        term cmd_name = term_get_tuple_element(cmd_term, 0);
 
-        switch (cmd_name) {
+        enum socket_cmd cmd = interop_atom_term_select_int(cmd_table, cmd_name, ctx->global);
+        switch (cmd) {
             //TODO: remove this
-            case INIT_ATOM:
+            case SocketInitCmd:
                 TRACE("init\n");
                 do_init(ctx, msg);
                 break;
 
-            case SENDTO_ATOM:
+            case SocketSendToCmd:
                 TRACE("sendto\n");
                 do_sendto(ctx, msg);
                 break;
 
-            case SEND_ATOM:
+            case SocketSendCmd:
                 TRACE("send\n");
                 do_send(ctx, msg);
                 break;
 
-            case RECVFROM_ATOM:
+            case SocketRecvFromCmd:
                 TRACE("recvfrom\n");
                 do_recvfrom(ctx, msg);
                 break;
 
-            case RECV_ATOM:
+            case SocketRecvCmd:
                 TRACE("recv\n");
                 do_recvfrom(ctx, msg);
                 break;
 
-            case ACCEPT_ATOM:
+            case SocketAcceptCmd:
                 TRACE("accept\n");
                 do_accept(ctx, msg);
                 break;
 
-            case CLOSE_ATOM:
+            case SocketCloseCmd:
                 TRACE("close\n");
                 do_close(ctx, msg);
                 break;
 
-            case GET_PORT_ATOM:
+            case SocketGetPortCmd:
                 TRACE("get_port\n");
                 do_get_port(ctx, msg);
                 break;
 
-            case SOCKNAME_ATOM:
+            case SocketSockNameCmd:
                 TRACE("sockname\n");
                 do_sockname(ctx, msg);
                 break;
 
-            case PEERNAME_ATOM:
+            case SocketPeerNameCmd:
                 TRACE("peername\n");
                 do_peername(ctx, msg);
                 break;
 
-            case CONTROLLING_PROCESS_ATOM:
+            case SocketControllingProcessCmd:
                 TRACE("controlling_process\n");
                 do_controlling_process(ctx, msg);
                 break;
 
+            case SocketInvalidCmd:
             default:
-                TRACE("badarg\n");
+                ESP_LOGE(TAG, "Unknown command");
                 break;
         }
 
         mailbox_destroy_message(message);
     }
+}
+
+void socket_driver_init(GlobalContext * glb)
+{
+    TRACE("Initializing socket driver\n");
+
+    netconn_events = xQueueCreate(32, sizeof(struct NetconnEvent));
+    EventListener *socket_listener = malloc(sizeof(EventListener));
+
+    struct ESP32PlatformData *platform = glb->platform_data;
+    sys_event_listener_init(socket_listener, &netconn_events, socket_events_handler, glb);
+    list_append(&platform->listeners, &socket_listener->listeners_list_head);
+
+    list_init(&platform->sockets_list_head);
+
+    TRACE("Socket driver init: done\n");
 }
 
 Context *socket_driver_create_port(GlobalContext *global, term opts)
@@ -1409,6 +1604,8 @@ Context *socket_driver_create_port(GlobalContext *global, term opts)
     ctx->platform_data = NULL;
     return ctx;
 }
+
+#ifdef CONFIG_AVM_ENABLE_SOCKET_PORT_DRIVER
 
 REGISTER_PORT_DRIVER(socket, socket_driver_init, socket_driver_create_port)
 
