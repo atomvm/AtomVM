@@ -1783,7 +1783,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 uint32_t stack_need;
                 DECODE_LITERAL(stack_need, code, i, next_off);
                 uint32_t heap_need;
-                DECODE_LITERAL(heap_need, code, i, next_off);
+                DECODE_ALLOCATOR_LIST(heap_need, code, i, next_off);
                 uint32_t live;
                 DECODE_LITERAL(live, code, i, next_off);
                 TRACE("allocate_heap_zero/3 stack_need=%i, heap_need=%i, live=%i\n", stack_need, heap_need, live);
@@ -5099,6 +5099,272 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 break;
             }
+
+#ifndef AVM_NO_FP
+            case OP_FCLEARERROR: {
+                // This can be a noop as we raise from bifs
+                TRACE("fclearerror/0\n");
+                NEXT_INSTRUCTION(1);
+                break;
+            }
+
+            case OP_FCHECKERROR: {
+                int next_off = 1;
+                // This can be a noop as we raise from bifs
+                int fail_label;
+                DECODE_LABEL(fail_label, code, i, next_off);
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_FMOVE: {
+                int next_off = 1;
+                if (IS_EXTENDED_FP_REGISTER(code, i, next_off)) {
+                    int freg;
+                    DECODE_FP_REGISTER(freg, code, i, next_off);
+                    dreg_t dreg;
+                    dreg_type_t dreg_type;
+                    DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
+                    #ifdef IMPL_EXECUTE_LOOP
+                        TRACE("fmove/2 fp%i, %c%i\n", freg, T_DEST_REG(dreg_type, dreg));
+                        // Space should be available on heap as compiler added an allocate opcode
+                        context_ensure_fpregs(ctx);
+                        term float_value = term_from_float(ctx->fr[freg], ctx);
+                        WRITE_REGISTER(dreg_type, dreg, float_value);
+                    #endif
+                    #ifdef IMPL_CODE_LOADER
+                        TRACE("fmove/2\n");
+                        UNUSED(freg)
+                        UNUSED(dreg)
+                        UNUSED(dreg_type)
+                    #endif
+                } else {
+                    term src_value;
+                    DECODE_COMPACT_TERM(src_value, code, i, next_off);
+                    int freg;
+                    DECODE_FP_REGISTER(freg, code, i, next_off);
+                    #ifdef IMPL_EXECUTE_LOOP
+                        TRACE("fmove/2 %lx, fp%i\n", src_value, freg);
+                        context_ensure_fpregs(ctx);
+                        ctx->fr[freg] = term_to_float(src_value);
+                    #endif
+                    #ifdef IMPL_CODE_LOADER
+                        TRACE("fmove/2\n");
+                        UNUSED(src_value)
+                        UNUSED(freg)
+                    #endif
+                }
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_FCONV: {
+                int next_off = 1;
+                term src_value;
+                DECODE_COMPACT_TERM(src_value, code, i, next_off);
+                int freg;
+                DECODE_FP_REGISTER(freg, code, i, next_off);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("fconv/2 %lx, fp%i\n", src_value, freg);
+                    context_ensure_fpregs(ctx);
+                    ctx->fr[freg] = term_conv_to_float(src_value);
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("fconv/2\n");
+                    UNUSED(freg)
+                    UNUSED(src_value)
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_FADD: {
+                #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                    #pragma STDC FENV_ACCESS ON
+                #endif
+                int next_off = 1;
+                int fail_label;
+                DECODE_LABEL(fail_label, code, i, next_off);
+                int freg1, freg2, freg3;
+                DECODE_FP_REGISTER(freg1, code, i, next_off);
+                DECODE_FP_REGISTER(freg2, code, i, next_off);
+                DECODE_FP_REGISTER(freg3, code, i, next_off);
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("fadd/3 fp%i, fp%i, fp%i\n", freg1, freg2, freg3);
+                    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                        feclearexcept(FE_OVERFLOW);
+                    #endif
+                    context_ensure_fpregs(ctx);
+                    ctx->fr[freg3] = ctx->fr[freg1] + ctx->fr[freg2];
+                    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                        if (fetestexcept(FE_OVERFLOW)) {
+                            RAISE_ERROR(BADARITH_ATOM);
+                        }
+                    #else
+                        if (!isfinite(ctx->fr[freg3])) {
+                            RAISE_ERROR(BADARITH_ATOM);
+                        }
+                    #endif
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("fadd/3\n");
+                    UNUSED(freg1)
+                    UNUSED(freg2)
+                    UNUSED(freg3)
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_FSUB: {
+                #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                    #pragma STDC FENV_ACCESS ON
+                #endif
+                int next_off = 1;
+                int fail_label;
+                DECODE_LABEL(fail_label, code, i, next_off);
+                int freg1, freg2, freg3;
+                DECODE_FP_REGISTER(freg1, code, i, next_off);
+                DECODE_FP_REGISTER(freg2, code, i, next_off);
+                DECODE_FP_REGISTER(freg3, code, i, next_off);
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("fsub/3 fp%i, fp%i, fp%i\n", freg1, freg2, freg3);
+                    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                        feclearexcept(FE_OVERFLOW);
+                    #endif
+                    context_ensure_fpregs(ctx);
+                    ctx->fr[freg3] = ctx->fr[freg1] - ctx->fr[freg2];
+                    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                        if (fetestexcept(FE_OVERFLOW)) {
+                            RAISE_ERROR(BADARITH_ATOM);
+                        }
+                    #else
+                        if (!isfinite(ctx->fr[freg3])) {
+                            RAISE_ERROR(BADARITH_ATOM);
+                        }
+                    #endif
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("fsub/3\n");
+                    UNUSED(freg1)
+                    UNUSED(freg2)
+                    UNUSED(freg3)
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_FMUL: {
+                #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                    #pragma STDC FENV_ACCESS ON
+                #endif
+                int next_off = 1;
+                int fail_label;
+                DECODE_LABEL(fail_label, code, i, next_off);
+                int freg1, freg2, freg3;
+                DECODE_FP_REGISTER(freg1, code, i, next_off);
+                DECODE_FP_REGISTER(freg2, code, i, next_off);
+                DECODE_FP_REGISTER(freg3, code, i, next_off);
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("fmul/3 fp%i, fp%i, fp%i\n", freg1, freg2, freg3);
+                    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                        feclearexcept(FE_OVERFLOW);
+                    #endif
+                    context_ensure_fpregs(ctx);
+                    ctx->fr[freg3] = ctx->fr[freg1] * ctx->fr[freg2];
+                    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                        if (fetestexcept(FE_OVERFLOW)) {
+                            RAISE_ERROR(BADARITH_ATOM);
+                        }
+                    #else
+                        if (!isfinite(ctx->fr[freg3])) {
+                            RAISE_ERROR(BADARITH_ATOM);
+                        }
+                    #endif
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("fmul/3\n");
+                    UNUSED(freg1)
+                    UNUSED(freg2)
+                    UNUSED(freg3)
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_FDIV: {
+                #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                    #pragma STDC FENV_ACCESS ON
+                #endif
+                int next_off = 1;
+                int fail_label;
+                DECODE_LABEL(fail_label, code, i, next_off);
+                int freg1, freg2, freg3;
+                DECODE_FP_REGISTER(freg1, code, i, next_off);
+                DECODE_FP_REGISTER(freg2, code, i, next_off);
+                DECODE_FP_REGISTER(freg3, code, i, next_off);
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("fdiv/3 fp%i, fp%i, fp%i\n", freg1, freg2, freg3);
+                    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                        feclearexcept(FE_OVERFLOW | FE_DIVBYZERO);
+                    #endif
+                    context_ensure_fpregs(ctx);
+                    ctx->fr[freg3] = ctx->fr[freg1] / ctx->fr[freg2];
+                    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                        if (fetestexcept(FE_OVERFLOW | FE_DIVBYZERO)) {
+                            RAISE_ERROR(BADARITH_ATOM);
+                        }
+                    #else
+                        if (!isfinite(ctx->fr[freg3])) {
+                            RAISE_ERROR(BADARITH_ATOM);
+                        }
+                    #endif
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("fdiv/3\n");
+                    UNUSED(freg1)
+                    UNUSED(freg2)
+                    UNUSED(freg3)
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_FNEGATE: {
+                int next_off = 1;
+                int fail_label;
+                DECODE_LABEL(fail_label, code, i, next_off);
+                int freg1, freg2;
+                DECODE_FP_REGISTER(freg1, code, i, next_off);
+                DECODE_FP_REGISTER(freg2, code, i, next_off);
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("fnegate/2 fp%i, fp%i\n", freg1, freg2);
+                    context_ensure_fpregs(ctx);
+                    ctx->fr[freg2] = - ctx->fr[freg1];
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("fnegate/2\n");
+                    UNUSED(freg1)
+                    UNUSED(freg2)
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+#endif
 
 #ifdef ENABLE_OTP21
             case OP_GET_HD: {

@@ -373,14 +373,15 @@ struct Test tests[] = {
     TEST_CASE_COND(truncfloat, -2, SKIP_NO_FP),
     TEST_CASE_COND(truncfloatovf, 0, SKIP_NO_FP),
 
-    TEST_CASE_COND(floataddovf, -2, SKIP_NO_FP),
-    TEST_CASE_COND(floatadd, 2, SKIP_NO_FP),
-    TEST_CASE_COND(floatsubovf, -2, SKIP_NO_FP),
-    TEST_CASE_COND(floatsub, 2, SKIP_NO_FP),
-    TEST_CASE_COND(floatmulovf, -2, SKIP_NO_FP),
-    TEST_CASE_COND(floatmul, 50, SKIP_NO_FP),
-    TEST_CASE_COND(floatneg, -2, SKIP_NO_FP),
+    TEST_CASE_COND(floataddovf, 0, SKIP_NO_FP),
+    TEST_CASE_COND(floatadd, 0, SKIP_NO_FP),
+    TEST_CASE_COND(floatsubovf, 0, SKIP_NO_FP),
+    TEST_CASE_COND(floatsub, 0, SKIP_NO_FP),
+    TEST_CASE_COND(floatmulovf, 0, SKIP_NO_FP),
+    TEST_CASE_COND(floatmul, 0, SKIP_NO_FP),
+    TEST_CASE_COND(floatneg, 0, SKIP_NO_FP),
     TEST_CASE_COND(floatabs, 3, SKIP_NO_FP),
+    TEST_CASE_COND(floatdiv, 0, SKIP_NO_FP),
 
     TEST_CASE_COND(boxed_is_not_float, 16, SKIP_NO_FP),
     TEST_CASE_COND(float_is_float, 32, SKIP_NO_FP),
@@ -397,6 +398,8 @@ struct Test tests[] = {
     TEST_CASE_COND(bin2float, 511, SKIP_NO_FP),
     TEST_CASE_COND(list2float, 511, SKIP_NO_FP),
     TEST_CASE_COND(floatmath, 0, SKIP_NO_FP),
+
+    TEST_CASE_COND(test_fp_allocate_heap_zero, 0, SKIP_NO_FP),
 
     TEST_CASE_EXPECTED(improper_concat, 7),
     TEST_CASE_EXPECTED(improper_cmp, 3),
