@@ -119,9 +119,7 @@ Context *context_new(GlobalContext *glb)
 void context_destroy(Context *ctx)
 {
 #ifndef AVM_NO_FP
-    if (ctx->fr) {
-        free(ctx->fr);
-    }
+    free(ctx->fr);
 #endif
     list_remove(&ctx->processes_table_head);
 
