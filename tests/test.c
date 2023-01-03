@@ -354,6 +354,7 @@ struct Test tests[] = {
     TEST_CASE(test_bs),
     TEST_CASE(test_bs_int),
     TEST_CASE(test_bs_int_unaligned),
+    TEST_CASE(test_bs_utf),
     TEST_CASE(test_catch),
     TEST_CASE(test_gc),
     TEST_CASE_EXPECTED(test_raise, 7),

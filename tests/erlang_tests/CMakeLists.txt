@@ -316,6 +316,7 @@ compile_erlang(test_ordering_1)
 compile_erlang(test_bs)
 compile_erlang(test_bs_int)
 compile_erlang(test_bs_int_unaligned)
+compile_erlang(test_bs_utf)
 compile_erlang(test_catch)
 compile_erlang(test_gc)
 compile_erlang(test_raise)
@@ -727,6 +728,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_bs.beam
     test_bs_int.beam
     test_bs_int_unaligned.beam
+    test_bs_utf.beam
     test_catch.beam
     test_gc.beam
     test_raise.beam

@@ -24,6 +24,7 @@
 #include <string.h>
 
 #include "bif.h"
+#include "bitstring.h"
 #include "debug.h"
 #include "defaultatoms.h"
 #include "exportedfunction.h"
@@ -3562,6 +3563,176 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
 
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_BS_UTF8_SIZE: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off)
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off)
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_utf8_size/3");
+                #endif
+                #ifdef IMPL_EXECUTE_LOOP
+                    VERIFY_IS_INTEGER(src, "bs_utf8_size/3");
+                    avm_int_t src_value = term_to_int(src);
+                    TRACE("bs_utf8_size/3 fail=%i src=0x%lx dreg=%c%i\n", fail, (long) src_value, T_DEST_REG(dreg_type, dreg));
+                    size_t utf8_size;
+                    if (UNLIKELY(!bitstring_utf8_size(src_value, &utf8_size))) {
+                        RAISE_ERROR(BADARG_ATOM);
+                    }
+                    WRITE_REGISTER(dreg_type, dreg, term_from_int(utf8_size));
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_BS_PUT_UTF8: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off)
+                uint32_t flags;
+                DECODE_LITERAL(flags, code, i, next_off)
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off)
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_put_utf8/3 flags=%x\n", (int) flags);
+                    if (flags != 0) {
+                        fprintf(stderr, "bs_put_utf8/3 : unsupported flags %x\n", (int) flags);
+                        AVM_ABORT();
+                    }
+                #endif
+                #ifdef IMPL_EXECUTE_LOOP
+                    VERIFY_IS_INTEGER(src, "bs_put_utf8/3");
+                    avm_int_t src_value = term_to_int(src);
+                    TRACE("bs_put_utf8/3 flags=%x, src=0x%lx\n", (int) flags, (long) src_value);
+                    if (UNLIKELY(!term_is_binary(ctx->bs))) {
+                        TRACE("bs_put_utf8/3: Bad state.  ctx->bs is not a binary.\n");
+                        RAISE_ERROR(BADARG_ATOM);
+                    }
+                    if (ctx->bs_offset % 8 != 0) {
+                        TRACE("bs_put_utf8/3: Unsupported bit syntax operation.  Writing strings must be byte-aligend.\n");
+                        RAISE_ERROR(UNSUPPORTED_ATOM);
+                    }
+                    size_t byte_size;
+                    bool result = bitstring_insert_utf8(ctx->bs, ctx->bs_offset, src_value, &byte_size);
+                    if (UNLIKELY(!result)) {
+                        TRACE("bs_put_utf8/3: Failed to insert character as utf8 into binary: %i\n", result);
+                        RAISE_ERROR(BADARG_ATOM);
+                    }
+                    ctx->bs_offset += byte_size * 8;
+                #endif
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+           case OP_BS_UTF16_SIZE: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off)
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off)
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_utf16_size/3");
+                #endif
+                #ifdef IMPL_EXECUTE_LOOP
+                    VERIFY_IS_INTEGER(src, "bs_utf16_size/3");
+                    avm_int_t src_value = term_to_int(src);
+                    TRACE("bs_utf16_size/3 fail=%i src=0x%lx dreg=%c%i\n", fail, (long) src_value, T_DEST_REG(dreg_type, dreg));
+                    size_t utf16_size;
+                    if (UNLIKELY(!bitstring_utf16_size(src_value, &utf16_size))) {
+                        RAISE_ERROR(BADARG_ATOM);
+                    }
+                    WRITE_REGISTER(dreg_type, dreg, term_from_int(utf16_size));
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_BS_PUT_UTF16: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off)
+                uint32_t flags;
+                DECODE_LITERAL(flags, code, i, next_off)
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off)
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_put_utf16/3 flags=%x\n", (int) flags);
+                    if (flags != 0 && flags != LittleEndianInteger && flags != NativeEndianInteger) {
+                        fprintf(stderr, "bs_put_utf16/3 : unsupported flags %x\n", (int) flags);
+                        AVM_ABORT();
+                    }
+                #endif
+                #ifdef IMPL_EXECUTE_LOOP
+                    VERIFY_IS_INTEGER(src, "bs_put_utf16/3");
+                    avm_int_t src_value = term_to_int(src);
+                    TRACE("bs_put_utf16/3 flags=%x, src=0x%lx\n", (int) flags, src_value);
+                    if (UNLIKELY(!term_is_binary(ctx->bs))) {
+                        TRACE("bs_put_utf16: Bad state.  ctx->bs is not a binary.\n");
+                        RAISE_ERROR(BADARG_ATOM);
+                    }
+                    if (ctx->bs_offset % 8 != 0) {
+                        TRACE("bs_put_utf16: Unsupported bit syntax operation.  Writing strings must be byte-aligend.\n");
+                        RAISE_ERROR(UNSUPPORTED_ATOM);
+                    }
+                    size_t byte_size;
+                    bool result = bitstring_insert_utf16(ctx->bs, ctx->bs_offset, src_value, flags, &byte_size);
+                    if (UNLIKELY(!result)) {
+                        TRACE("bs_put_utf8/3: Failed to insert character as utf8 into binary: %i\n", result);
+                        RAISE_ERROR(BADARG_ATOM);
+                    }
+                    ctx->bs_offset += byte_size * 8;
+                #endif
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_BS_PUT_UTF32: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off)
+                uint32_t flags;
+                DECODE_LITERAL(flags, code, i, next_off)
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off)
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_put_utf32/3 flags=%x\n", (int) flags);
+                    if (flags != 0 && flags != LittleEndianInteger && flags != NativeEndianInteger) {
+                        fprintf(stderr, "bs_put_utf32/3 : unsupported flags %x\n", (int) flags);
+                        AVM_ABORT();
+                    }
+                #endif
+                #ifdef IMPL_EXECUTE_LOOP
+                    VERIFY_IS_INTEGER(src, "bs_put_utf32/3");
+                    avm_int_t src_value = term_to_int(src);
+                    TRACE("bs_put_utf32/3 flags=%x, src=0x%lx\n", (int) flags, (long) src_value);
+                    if (UNLIKELY(!term_is_binary(ctx->bs))) {
+                        TRACE("bs_put_utf32/3: Bad state.  ctx->bs is not a binary.\n");
+                        RAISE_ERROR(BADARG_ATOM);
+                    }
+                    if (ctx->bs_offset % 8 != 0) {
+                        TRACE("bs_put_utf32/3: Unsupported bit syntax operation.  Writing strings must be byte-aligend.\n");
+                        RAISE_ERROR(UNSUPPORTED_ATOM);
+                    }
+                    bool result = bitstring_insert_utf32(ctx->bs, ctx->bs_offset, src_value, flags);
+                    if (UNLIKELY(!result)) {
+                        TRACE("bs_put_utf32/3: Failed to insert integer into binary: %i\n", result);
+                        RAISE_ERROR(BADARG_ATOM);
+                    }
+                    ctx->bs_offset += 4 * 8;
+                #endif
                 NEXT_INSTRUCTION(next_off);
                 break;
             }
