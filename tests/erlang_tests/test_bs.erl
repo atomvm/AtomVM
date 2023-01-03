@@ -36,7 +36,7 @@ start() ->
 
     ok = test_create_with_invalid_int_value(),
     ok = test_create_with_invalid_int_size(),
-    ok = test_create_with_unsupported_int_unit(),
+    ok = test_create_with_int_unit(),
     ok = test_create_with_unsupported_unaligned_int_size(),
     ok = test_create_with_int_little_endian(),
     ok = test_create_with_int_signed(),
@@ -119,8 +119,14 @@ test_create_with_invalid_int_value() ->
 test_create_with_invalid_int_size() ->
     expect_error(fun() -> create_int_binary(16#F, id(bar)) end, badarg).
 
-test_create_with_unsupported_int_unit() ->
-    atom_unsupported(fun() -> create_int_binary_unit_3(16#F, id(32)) end).
+test_create_with_int_unit() ->
+    <<1, 66, 67>> = create_int_binary_unit_3(16#14243, id(8)),
+    <<0, 0, 0, 1, 66, 67>> = create_int_binary_unit_3(16#14243, id(16)),
+    <<0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15>> = create_int_binary_unit_3(16#F, id(32)),
+    <<0, 0, 0, 0, 16#12, 16#34, 16#56, 16#78, 16#90, 16#AB, 16#CD, 16#EF>> = create_int_binary_unit_3(
+        16#1234567890ABCDEF, id(32)
+    ),
+    ok.
 
 test_create_with_unsupported_unaligned_int_size() ->
     atom_unsupported(fun() -> create_int_binary(16#FFFF, id(28)) end).
