@@ -20,7 +20,7 @@ A high level overview of the supported language features include:
 
 * All the major Erlang types, including
     * integers (with size limits)
-    * limited support for floats (not supported on all platforms)
+    * floats
     * tuples
     * lists
     * binaries

@@ -1347,8 +1347,6 @@ static inline int term_equals(term a, term b, Context *ctx)
     }
 }
 
-#ifndef AVM_NO_FP
-
 static inline int term_is_float(term t)
 {
     if (term_is_boxed(t)) {
@@ -1386,15 +1384,9 @@ static inline avm_float_t term_conv_to_float(term t)
     }
 }
 
-#endif
-
 static inline int term_is_number(term t)
 {
-    #ifndef AVM_NO_FP
-       return term_is_any_integer(t) || term_is_float(t);
-    #else
-       return term_is_any_integer(t);
-    #endif
+    return term_is_any_integer(t) || term_is_float(t);
 }
 
 /**

@@ -58,9 +58,7 @@ Context *context_new(GlobalContext *glb)
 
     context_clean_registers(ctx, 0);
 
-#ifndef AVM_NO_FP
     ctx->fr = NULL;
-#endif
 
     ctx->min_heap_size = 0;
     ctx->max_heap_size = 0;
@@ -118,9 +116,7 @@ Context *context_new(GlobalContext *glb)
 
 void context_destroy(Context *ctx)
 {
-#ifndef AVM_NO_FP
     free(ctx->fr);
-#endif
     list_remove(&ctx->processes_table_head);
 
     memory_sweep_mso_list(ctx->mso_list);

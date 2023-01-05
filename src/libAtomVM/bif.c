@@ -21,10 +21,7 @@
 #include "bif.h"
 
 #include <stdlib.h>
-
-#ifndef AVM_NO_FP
 #include <math.h>
-#endif
 
 #include "atom.h"
 #include "defaultatoms.h"
@@ -346,18 +343,12 @@ static term add_overflow_helper(Context *ctx, term arg1, term arg2)
 
 static term add_boxed_helper(Context *ctx, term arg1, term arg2)
 {
-#ifndef AVM_NO_FP
     int use_float = 0;
-#endif
     int size = 0;
     if (term_is_boxed_integer(arg1)) {
         size = term_boxed_size(arg1);
-
-#ifndef AVM_NO_FP
     } else if (term_is_float(arg1)) {
         use_float = 1;
-#endif
-
     } else if (!term_is_integer(arg1)) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
@@ -365,18 +356,13 @@ static term add_boxed_helper(Context *ctx, term arg1, term arg2)
 
     if (term_is_boxed_integer(arg2)) {
         size |= term_boxed_size(arg2);
-
-#ifndef AVM_NO_FP
     } else if (term_is_float(arg2)) {
         use_float = 1;
-#endif
-
     } else if (!term_is_integer(arg2)) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
     }
 
-#ifndef AVM_NO_FP
     if (use_float) {
         avm_float_t farg1 = term_conv_to_float(arg1);
         avm_float_t farg2 = term_conv_to_float(arg2);
@@ -390,7 +376,6 @@ static term add_boxed_helper(Context *ctx, term arg1, term arg2)
         }
         return term_from_float(fresult, ctx);
     }
-#endif
 
     switch (size) {
         case 0: {
@@ -467,17 +452,12 @@ static term sub_overflow_helper(Context *ctx, term arg1, term arg2)
 
 static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
 {
-#ifndef AVM_NO_FP
     int use_float = 0;
-#endif
     int size = 0;
     if (term_is_boxed_integer(arg1)) {
         size = term_boxed_size(arg1);
-
-#ifndef AVM_NO_FP
     } else if (term_is_float(arg1)) {
         use_float = 1;
-#endif
     } else if (!term_is_integer(arg1)) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
@@ -485,16 +465,13 @@ static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
 
     if (term_is_boxed_integer(arg2)) {
         size |= term_boxed_size(arg2);
-#ifndef AVM_NO_FP
     } else if (term_is_float(arg2)) {
         use_float = 1;
-#endif
     } else if (!term_is_integer(arg2)) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
     }
 
-#ifndef AVM_NO_FP
     if (use_float) {
         avm_float_t farg1 = term_conv_to_float(arg1);
         avm_float_t farg2 = term_conv_to_float(arg2);
@@ -507,7 +484,6 @@ static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
         }
         return term_from_float(fresult, ctx);
     }
-#endif
 
     switch (size) {
         case 0: {
@@ -599,16 +575,12 @@ static term mul_overflow_helper(Context *ctx, term arg1, term arg2)
 
 static term mul_boxed_helper(Context *ctx, term arg1, term arg2)
 {
-#ifndef AVM_NO_FP
     int use_float = 0;
-#endif
     int size = 0;
     if (term_is_boxed_integer(arg1)) {
         size = term_boxed_size(arg1);
-#ifndef AVM_NO_FP
     } else if (term_is_float(arg1)) {
         use_float = 1;
-#endif
     } else if (!term_is_integer(arg1)) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
@@ -616,16 +588,13 @@ static term mul_boxed_helper(Context *ctx, term arg1, term arg2)
 
     if (term_is_boxed_integer(arg2)) {
         size |= term_boxed_size(arg2);
-#ifndef AVM_NO_FP
     } else if (term_is_float(arg2)) {
         use_float = 1;
-#endif
     } else if (!term_is_integer(arg2)) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
     }
 
-#ifndef AVM_NO_FP
     if (use_float) {
         avm_float_t farg1 = term_conv_to_float(arg1);
         avm_float_t farg2 = term_conv_to_float(arg2);
@@ -638,7 +607,6 @@ static term mul_boxed_helper(Context *ctx, term arg1, term arg2)
         }
         return term_from_float(fresult, ctx);
     }
-#endif
 
     switch (size) {
         case 0: {
@@ -796,7 +764,6 @@ term bif_erlang_div_2(Context *ctx, int live, term arg1, term arg2)
 
 static term neg_boxed_helper(Context *ctx, term arg1)
 {
-#ifndef AVM_NO_FP
     if (term_is_float(arg1)) {
         avm_float_t farg1 = term_conv_to_float(arg1);
         avm_float_t fresult = -farg1;
@@ -808,7 +775,6 @@ static term neg_boxed_helper(Context *ctx, term arg1)
         }
         return term_from_float(fresult, ctx);
     }
-#endif
 
     if (term_is_boxed_integer(arg1)) {
         switch (term_boxed_size(arg1)) {
@@ -879,7 +845,6 @@ term bif_erlang_neg_1(Context *ctx, int live, term arg1)
 
 static term abs_boxed_helper(Context *ctx, term arg1)
 {
-#ifndef AVM_NO_FP
     if (term_is_float(arg1)) {
         avm_float_t farg1 = term_conv_to_float(arg1);
         avm_float_t fresult;
@@ -897,7 +862,6 @@ static term abs_boxed_helper(Context *ctx, term arg1)
         }
         return term_from_float(fresult, ctx);
     }
-#endif
 
     if (term_is_boxed_integer(arg1)) {
         switch (term_boxed_size(arg1)) {
@@ -1047,27 +1011,25 @@ term bif_erlang_ceil_1(Context *ctx, int live, term arg1)
 {
     UNUSED(live);
 
-    #ifndef AVM_NO_FP
-        if (term_is_float(arg1)) {
-            avm_float_t fvalue = term_to_float(arg1);
-            if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
-                RAISE_ERROR(OVERFLOW_ATOM);
-            }
-
-            avm_int64_t result;
-            #if AVM_USE_SINGLE_PRECISION
-                result = ceilf(fvalue);
-            #else
-                result = ceil(fvalue);
-            #endif
-
-            #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-                return make_maybe_boxed_int64(ctx, result);
-            #else
-                return make_maybe_boxed_int(ctx, result);
-            #endif
+    if (term_is_float(arg1)) {
+        avm_float_t fvalue = term_to_float(arg1);
+        if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+            RAISE_ERROR(OVERFLOW_ATOM);
         }
-    #endif
+
+        avm_int64_t result;
+        #if AVM_USE_SINGLE_PRECISION
+            result = ceilf(fvalue);
+        #else
+            result = ceil(fvalue);
+        #endif
+
+        #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+            return make_maybe_boxed_int64(ctx, result);
+        #else
+            return make_maybe_boxed_int(ctx, result);
+        #endif
+    }
 
     if (term_is_any_integer(arg1)) {
         return arg1;
@@ -1081,27 +1043,25 @@ term bif_erlang_floor_1(Context *ctx, int live, term arg1)
 {
     UNUSED(live);
 
-    #ifndef AVM_NO_FP
-        if (term_is_float(arg1)) {
-            avm_float_t fvalue = term_to_float(arg1);
-            if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
-                RAISE_ERROR(OVERFLOW_ATOM);
-            }
-
-            avm_int64_t result;
-            #if AVM_USE_SINGLE_PRECISION
-                result = floorf(fvalue);
-            #else
-                result = floor(fvalue);
-            #endif
-
-            #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-                return make_maybe_boxed_int64(ctx, result);
-            #else
-                return make_maybe_boxed_int(ctx, result);
-            #endif
+    if (term_is_float(arg1)) {
+        avm_float_t fvalue = term_to_float(arg1);
+        if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+            RAISE_ERROR(OVERFLOW_ATOM);
         }
-    #endif
+
+        avm_int64_t result;
+        #if AVM_USE_SINGLE_PRECISION
+            result = floorf(fvalue);
+        #else
+            result = floor(fvalue);
+        #endif
+
+        #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+            return make_maybe_boxed_int64(ctx, result);
+        #else
+            return make_maybe_boxed_int(ctx, result);
+        #endif
+    }
 
     if (term_is_any_integer(arg1)) {
         return arg1;
@@ -1115,27 +1075,25 @@ term bif_erlang_round_1(Context *ctx, int live, term arg1)
 {
     UNUSED(live);
 
-    #ifndef AVM_NO_FP
-        if (term_is_float(arg1)) {
-            avm_float_t fvalue = term_to_float(arg1);
-            if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
-                RAISE_ERROR(OVERFLOW_ATOM);
-            }
-
-            avm_int64_t result;
-            #if AVM_USE_SINGLE_PRECISION
-                result = llroundf(fvalue);
-            #else
-                result = llround(fvalue);
-            #endif
-
-            #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-                return make_maybe_boxed_int64(ctx, result);
-            #else
-                return make_maybe_boxed_int(ctx, result);
-            #endif
+    if (term_is_float(arg1)) {
+        avm_float_t fvalue = term_to_float(arg1);
+        if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+            RAISE_ERROR(OVERFLOW_ATOM);
         }
-    #endif
+
+        avm_int64_t result;
+        #if AVM_USE_SINGLE_PRECISION
+            result = llroundf(fvalue);
+        #else
+            result = llround(fvalue);
+        #endif
+
+        #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+            return make_maybe_boxed_int64(ctx, result);
+        #else
+            return make_maybe_boxed_int(ctx, result);
+        #endif
+    }
 
     if (term_is_any_integer(arg1)) {
         return arg1;
@@ -1149,27 +1107,25 @@ term bif_erlang_trunc_1(Context *ctx, int live, term arg1)
 {
     UNUSED(live);
 
-    #ifndef AVM_NO_FP
-        if (term_is_float(arg1)) {
-            avm_float_t fvalue = term_to_float(arg1);
-            if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
-                RAISE_ERROR(OVERFLOW_ATOM);
-            }
-
-            avm_int64_t result;
-            #if AVM_USE_SINGLE_PRECISION
-                result = truncf(fvalue);
-            #else
-                result = trunc(fvalue);
-            #endif
-
-            #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-                return make_maybe_boxed_int64(ctx, result);
-            #else
-                return make_maybe_boxed_int(ctx, result);
-            #endif
+    if (term_is_float(arg1)) {
+        avm_float_t fvalue = term_to_float(arg1);
+        if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+            RAISE_ERROR(OVERFLOW_ATOM);
         }
-    #endif
+
+        avm_int64_t result;
+        #if AVM_USE_SINGLE_PRECISION
+            result = truncf(fvalue);
+        #else
+            result = trunc(fvalue);
+        #endif
+
+        #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+            return make_maybe_boxed_int64(ctx, result);
+        #else
+            return make_maybe_boxed_int(ctx, result);
+        #endif
+    }
 
     if (term_is_any_integer(arg1)) {
         return arg1;

@@ -44,11 +44,9 @@
 #include <string.h>
 #include <time.h>
 
-#ifndef AVM_NO_FP
 #include <errno.h>
 #include <fenv.h>
 #include <math.h>
-#endif
 
 #define MAX_NIF_NAME_LEN 260
 #define FLOAT_BUF_SIZE 64
@@ -1565,7 +1563,6 @@ static term nif_erlang_binary_to_integer_1(Context *ctx, int argc, term argv[])
     return make_maybe_boxed_int64(ctx, value);
 }
 
-#ifndef AVM_NO_FP
 static int is_valid_float_string(const char *str, int len)
 {
     int has_point = 0;
@@ -1620,13 +1617,11 @@ static term parse_float(Context *ctx, const char *buf, int len)
     }
     return term_from_float(fvalue, ctx);
 }
-#endif
 
 static term nif_erlang_binary_to_float_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-#ifndef AVM_NO_FP
     term bin_term = argv[0];
     VALIDATE_VALUE(bin_term, term_is_binary);
 
@@ -1634,19 +1629,12 @@ static term nif_erlang_binary_to_float_1(Context *ctx, int argc, term argv[])
     int bin_data_size = term_binary_size(bin_term);
 
     return parse_float(ctx, bin_data, bin_data_size);
-
-#else
-    UNUSED(ctx);
-    UNUSED(argv);
-    RAISE_ERROR(BADARG_ATOM);
-#endif
 }
 
 static term nif_erlang_list_to_float_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-#ifndef AVM_NO_FP
     term t = argv[0];
     VALIDATE_VALUE(t, term_is_list);
 
@@ -1666,11 +1654,6 @@ static term nif_erlang_list_to_float_1(Context *ctx, int argc, term argv[])
     free(string);
 
     return res_term;
-#else
-    UNUSED(ctx);
-    UNUSED(argv);
-    RAISE_ERROR(BADARG_ATOM);
-#endif
 }
 
 static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[])
@@ -1930,7 +1913,6 @@ static term nif_erlang_integer_to_list_2(Context *ctx, int argc, term argv[])
     return prev;
 }
 
-#ifndef AVM_NO_FP
 static int format_float(term value, int scientific, int decimals, int compact, char *out_buf, int outbuf_len)
 {
     // %lf and %f are the same since C99 due to double promotion.
@@ -2018,13 +2000,11 @@ int get_float_format_opts(term opts, int *scientific, int *decimals, int *compac
 
     return 1;
 }
-#endif
 
 static term nif_erlang_float_to_binary(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-#ifndef AVM_NO_FP
     term float_term = argv[0];
     VALIDATE_VALUE(float_term, term_is_float);
 
@@ -2051,18 +2031,12 @@ static term nif_erlang_float_to_binary(Context *ctx, int argc, term argv[])
     }
 
     return term_from_literal_binary(float_buf, len, ctx);
-#else
-    UNUSED(ctx);
-    UNUSED(argv);
-    RAISE_ERROR(BADARG_ATOM);
-#endif
 }
 
 static term nif_erlang_float_to_list(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-#ifndef AVM_NO_FP
     term float_term = argv[0];
     VALIDATE_VALUE(float_term, term_is_float);
 
@@ -2094,11 +2068,6 @@ static term nif_erlang_float_to_list(Context *ctx, int argc, term argv[])
     }
 
     return prev;
-#else
-    UNUSED(ctx);
-    UNUSED(argv);
-    RAISE_ERROR(BADARG_ATOM);
-#endif
 }
 
 static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
@@ -2439,11 +2408,9 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
         }
         return term_from_string((const uint8_t *) "ATOM", sizeof("ATOM") - 1, ctx);
     }
-#ifndef AVM_NO_FP
     if (key == AVM_FLOATSIZE_ATOM) {
         return term_from_int32(sizeof(avm_float_t));
     }
-#endif
     if (key == SYSTEM_ARCHITECTURE_ATOM) {
         char buf[128];
         snprintf(buf, 128, "%s-%s-%s", SYSTEM_NAME, SYSTEM_VERSION, SYSTEM_ARCHITECTURE);
@@ -3445,8 +3412,6 @@ static term nif_maps_next(Context *ctx, int argc, term argv[])
     return ret;
 }
 
-#ifndef AVM_NO_FP
-
 //
 // MAINTENANCE NOTE: Exception handling for fp operations using math
 // error handling is designed to be thread-safe, as errors are specified
@@ -3555,26 +3520,6 @@ static term math_binary_op(Context *ctx, term x_term, term y_term, binary_math_f
             return t;                                                   \
         }                                                               \
     }
-
-#else
-
-#define DEFINE_UNARY_MATH_OP(moniker)                                   \
-    static term nif_math_##moniker(Context *ctx, int argc, term argv[]) \
-    {                                                                   \
-        UNUSED(ctx);                                                    \
-        UNUSED(argv);                                                   \
-        RAISE_ERROR(BADARG_ATOM);                                       \
-    }
-
-#define DEFINE_BINARY_MATH_OP(moniker)                                  \
-    static term nif_math_##moniker(Context *ctx, int argc, term argv[]) \
-    {                                                                   \
-        UNUSED(ctx);                                                    \
-        UNUSED(argv);                                                   \
-        RAISE_ERROR(BADARG_ATOM);                                       \
-    }
-
-#endif
 
 DEFINE_UNARY_MATH_OP(cos)
 DEFINE_UNARY_MATH_OP(acos)

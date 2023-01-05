@@ -100,29 +100,22 @@ if (ADVANCED_TRACING)
     target_compile_definitions(libAtomVM PUBLIC ENABLE_ADVANCED_TRACE)
 endif()
 
-if (AVM_DISABLE_FP)
-    target_compile_definitions(libAtomVM PUBLIC AVM_NO_FP)
-else()
-    target_link_libraries(libAtomVM PUBLIC m)
-    include(CheckCSourceCompiles)
-    set(CMAKE_REQUIRED_FLAGS -Werror=unknown-pragmas)
-    check_c_source_compiles("
-         #include <fenv.h>
-         int main() {
-             #pragma STDC FENV_ACCESS ON
-            return 0;
-         }
-     " HAVE_PRAGMA_STDC_FENV_ACCESS)
-    if (HAVE_PRAGMA_STDC_FENV_ACCESS)
-        target_compile_definitions(libAtomVM PUBLIC HAVE_PRAGMA_STDC_FENV_ACCESS)
-    endif()
+target_link_libraries(libAtomVM PUBLIC m)
+include(CheckCSourceCompiles)
+set(CMAKE_REQUIRED_FLAGS -Werror=unknown-pragmas)
+check_c_source_compiles("
+     #include <fenv.h>
+     int main() {
+         #pragma STDC FENV_ACCESS ON
+        return 0;
+     }
+ " HAVE_PRAGMA_STDC_FENV_ACCESS)
+if (HAVE_PRAGMA_STDC_FENV_ACCESS)
+    target_compile_definitions(libAtomVM PUBLIC HAVE_PRAGMA_STDC_FENV_ACCESS)
 endif()
 
 if (AVM_USE_32BIT_FLOAT)
     target_compile_definitions(libAtomVM PUBLIC AVM_USE_SINGLE_PRECISION)
-    if (AVM_DISABLE_FP)
-        message(FATAL_ERROR "AVM_USE_32BIT_FLOAT and AVM_DISABLE_FP options conflict")
-    endif()
 endif()
 
 if (AVM_VERBOSE_ABORT)

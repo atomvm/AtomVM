@@ -378,7 +378,6 @@ typedef union
     DECODE_VALUE32(reg, code_chunk, base_index, off);                                                   \
 }
 
-#ifndef AVM_NO_FP
 #define DECODE_ALLOCATOR_LIST(need, code_chunk, base_index, off)                        \
     if (IS_EXTENDED_ALLOCATOR(code_chunk, base_index, off)) {                           \
         need = 0;                                                                       \
@@ -398,28 +397,6 @@ typedef union
     } else {                                                                            \
         DECODE_LITERAL(need, code_chunk, base_index, off);                              \
     }
-#else
-#define DECODE_ALLOCATOR_LIST(need, code_chunk, base_index, off)                        \
-    if (IS_EXTENDED_ALLOCATOR(code_chunk, base_index, off)) {                           \
-        need = 0;                                                                       \
-        off++; /* skip list tag */                                                      \
-        uint32_t list_size;                                                             \
-        DECODE_LITERAL(list_size, code_chunk, base_index, off);                         \
-        uint32_t allocator_tag;                                                         \
-        uint32_t allocator_size;                                                        \
-        for (uint32_t j = 0; j < list_size; j++) {                                      \
-            DECODE_LITERAL(allocator_tag, code_chunk, base_index, off);                 \
-            DECODE_LITERAL(allocator_size, code_chunk, base_index, off);                \
-            if (allocator_size > 0 && allocator_tag == COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FLOATS) { \
-                fprintf(stderr, "Found allocation of fp terms while FP support is disabled\n"); \
-                AVM_ABORT();                                                            \
-            }                                                                           \
-            need += allocator_size;                                                     \
-        }                                                                               \
-    } else {                                                                            \
-        DECODE_LITERAL(need, code_chunk, base_index, off);                              \
-    }
-#endif
 
 #endif
 
@@ -664,7 +641,6 @@ typedef union
 #define DECODE_YREG(reg, code_chunk, base_index, off) \
     DECODE_VALUE(reg, code_chunk, base_index, off)
 
-#ifndef AVM_NO_FP
 #define DECODE_ALLOCATOR_LIST(need, code_chunk, base_index, off)                        \
     if (IS_EXTENDED_ALLOCATOR(code_chunk, base_index, off)) {                           \
         need = 0;                                                                       \
@@ -684,24 +660,6 @@ typedef union
     } else {                                                                            \
         DECODE_LITERAL(need, code_chunk, base_index, off);                              \
     }
-#else
-#define DECODE_ALLOCATOR_LIST(need, code_chunk, base_index, off)                        \
-    if (IS_EXTENDED_ALLOCATOR(code_chunk, base_index, off)) {                           \
-        need = 0;                                                                       \
-        off++; /* skip list tag */                                                      \
-        uint32_t list_size;                                                             \
-        DECODE_LITERAL(list_size, code_chunk, base_index, off);                         \
-        uint32_t allocator_tag;                                                         \
-        uint32_t allocator_size;                                                        \
-        for (uint32_t j = 0; j < list_size; j++) {                                      \
-            DECODE_LITERAL(allocator_tag, code_chunk, base_index, off);                 \
-            DECODE_LITERAL(allocator_size, code_chunk, base_index, off);                \
-            need += allocator_size;                                                     \
-        }                                                                               \
-    } else {                                                                            \
-        DECODE_LITERAL(need, code_chunk, base_index, off);                              \
-    }
-#endif
 
 #endif
 
@@ -2409,16 +2367,11 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_float/2, label=%i, arg1=%lx\n", label, arg1);
 
-#ifndef AVM_NO_FP
                     if (term_is_float(arg1)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
                     }
-#else
-                    fprintf(stderr, "Warning: is_float/1 unsupported on this platform\n");
-                    i = POINTER_TO_II(mod->labels[label]);
-#endif
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -5388,7 +5341,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 break;
             }
 
-#ifndef AVM_NO_FP
             case OP_FCLEARERROR: {
                 // This can be a noop as we raise from bifs
                 TRACE("fclearerror/0\n");
@@ -5652,7 +5604,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 NEXT_INSTRUCTION(next_off);
                 break;
             }
-#endif
 
             case OP_BUILD_STACKTRACE: {
                 int next_off = 1;

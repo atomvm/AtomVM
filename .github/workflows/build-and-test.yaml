@@ -125,16 +125,6 @@ jobs:
           compiler_pkgs: "gcc-10 g++-10 gcc-10-multilib g++-10-multilib libc6-dev-i386
           libc6-dbg:i386 zlib1g-dev:i386 libssl-dev:i386"
 
-        # keep one FP disabled configuration
-        - os: "ubuntu-20.04"
-          cc: "gcc-10"
-          cxx: "g++-10"
-          cflags: "-O3"
-          otp: "24"
-          elixir_version: "1.14"
-          cmake_opts: "-DAVM_DISABLE_FP=on"
-          compiler_pkgs: "gcc-10 g++-10"
-
     env:
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}

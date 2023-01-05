@@ -54,16 +54,6 @@ $ make
 $ ./src/AtomVM ./examples/erlang/hello_world.avm
 ```
 
-If you are using OTP 22 or 23, you need to disable FP opcodes with:
-
-```
-$ mkdir build
-$ cd build
-$ cmake -DAVM_DISABLE_FP=on ..
-$ make
-$ ./src/AtomVM ./examples/erlang/hello_world.avm
-```
-
 Run tests within build directory with:
 ```
 $ ./tests/test-erlang
