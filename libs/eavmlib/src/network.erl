@@ -98,7 +98,12 @@
     | ap_sta_ip_assigned_config().
 -type ap_config() :: {sta, [ap_config_property()]}.
 
--type sntp_config_property() :: {host, string() | binary()}.
+-type sntp_host_config() :: {host, string() | binary()}.
+-type sntp_synchronized_config() ::
+    {synchronized, fun(({non_neg_integer(), non_neg_integer()}) -> term())}.
+-type sntp_config_property() ::
+    sntp_host_config()
+    | sntp_synchronized_config().
 -type sntp_config() :: {sntp, [sntp_config_property()]}.
 
 -type network_config() :: [sta_config() | ap_config() | sntp_config()].
@@ -317,7 +322,11 @@ handle_info(
 ) ->
     maybe_ap_sta_ip_assigned_callback(Config, Address),
     {noreply, State};
-handle_info(_Msg, State) ->
+handle_info({Ref, {sntp_sync, TimeVal}} = _Msg, #state{ref = Ref, config = Config} = State) ->
+    maybe_sntp_sync_callback(Config, TimeVal),
+    {noreply, State};
+handle_info(Msg, State) ->
+    io:format("Received spurious message ~p~n", [Msg]),
     {noreply, State}.
 
 %% @hidden
@@ -352,12 +361,15 @@ get_driver_config(Config) ->
 
 %% @private
 maybe_add_nvs_entry(Key, List, NVSKey) ->
-    case {proplists:get_value(Key, List), esp:nvs_get_binary(atomvm, NVSKey)} of
-        {undefined, undefined} ->
-            List;
-        {undefined, NVSValue} ->
-            [{Key, NVSValue} | List];
-        {_Value, _} ->
+    case proplists:get_value(Key, List) of
+        undefined ->
+            case esp:nvs_get_binary(atomvm, NVSKey) of
+                undefined ->
+                    List;
+                NVSValue ->
+                    [{Key, NVSValue} | List]
+            end;
+        _Value ->
             List
     end.
 
@@ -388,6 +400,10 @@ maybe_ap_sta_disconnected_callback(Config, Mac) ->
 %% @private
 maybe_ap_sta_ip_assigned_callback(Config, Address) ->
     maybe_callback1({sta_ip_assigned, Address}, proplists:get_value(ap, Config)).
+
+%% @private
+maybe_sntp_sync_callback(Config, TimeVal) ->
+    maybe_callback1({synchronized, TimeVal}, proplists:get_value(sntp, Config)).
 
 %% @private
 maybe_callback0(_Key, undefined) ->

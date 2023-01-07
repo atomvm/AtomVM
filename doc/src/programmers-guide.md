@@ -1082,6 +1082,10 @@ For information about how to handle connections and disconnections from attached
 
 For information about how to run the AtomVM network in STA and AP mode simultaneously, see the [AtomVM Network Programming Guide](./network-programming-guide.md).
 
+#### SNTP
+
+For information about how to use SNTP to synchronize the clock on your device, see the [AtomVM Network Programming Guide](./network-programming-guide.md).
+
 ### UDP
 
 AtomVM supports network programming using the User Datagram Protocol (UDP) via the `gen_udp` module.  This modules obeys the syntax and semantics of the Erlang/OTP [`gen_udp`](https://erlang.org/doc/man/gen_udp.html) interface.
