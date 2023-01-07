@@ -44,6 +44,7 @@
 #define ENABLE_OTP23
 #define ENABLE_OTP24
 #define ENABLE_OTP25
+#define ENABLE_OTP26
 
 //#define ENABLE_TRACE
 
@@ -831,6 +832,30 @@ typedef union
     mod = fun_module;                                                   \
     code = mod->code->code;                                             \
     JUMP_TO_ADDRESS(mod->labels[label]);
+
+#define DECODE_FLAGS_LIST(flags_value, flags, opcode)                   \
+    flags_value = 0;                                                    \
+    while (term_is_nonempty_list(flags)) {                              \
+        switch (term_get_list_head(flags)) {                            \
+            case NATIVE_ATOM:                                           \
+                flags_value |= NativeEndianInteger;                     \
+                break;                                                  \
+            case LITTLE_ATOM:                                           \
+                flags_value |= LittleEndianInteger;                     \
+                break;                                                  \
+            case SIGNED_ATOM:                                           \
+                flags_value |= SignedInteger;                           \
+                break;                                                  \
+            default:                                                    \
+                TRACE(#opcode ": Unknown flag atom %lx\n", (long) flags); \
+                RAISE_ERROR(BADARG_ATOM);                               \
+        }                                                               \
+        flags = term_get_list_tail(flags);                              \
+    }                                                                   \
+    if (UNLIKELY(!term_is_nil(flags))) {                                \
+        TRACE(#opcode ": Flags not a proper list %lx\n", (long) flags); \
+        RAISE_ERROR(BADARG_ATOM);                                       \
+    }
 
 
 #define MIN(X, Y) ((X) < (Y) ? (X) : (Y))
@@ -6047,24 +6072,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                             case UTF16_ATOM:
                             case UTF32_ATOM:
                             case INTEGER_ATOM:
-                                while (term_is_nonempty_list(flags)) {
-                                    switch (term_get_list_head(flags)) {
-                                        case NATIVE_ATOM:
-                                            flags_value |= NativeEndianInteger;
-                                            break;
-                                        case LITTLE_ATOM:
-                                            flags_value |= LittleEndianInteger;
-                                            break;
-                                        default:
-                                            TRACE("bs_create_bin/6: Unknown flag atom %lx\n", (long) flags);
-                                            RAISE_ERROR(BADARG_ATOM);
-                                    }
-                                    flags = term_get_list_tail(flags);
-                                }
-                                if (UNLIKELY(!term_is_nil(flags))) {
-                                    TRACE("bs_create_bin/6: Flags not a proper list %lx\n", (long) flags);
-                                    RAISE_ERROR(BADARG_ATOM);
-                                }
+                                DECODE_FLAGS_LIST(flags_value, flags, opcode);
                                 break;
                             default:
                                 break;
@@ -6239,6 +6247,310 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #endif
 
                 break;
+            }
+#endif
+
+#ifdef ENABLE_OTP26
+            case OP_UPDATE_RECORD: {
+                int next_off = 1;
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("update_record/5\n");
+                #endif
+
+                term hint;
+                DECODE_ATOM(hint, code, i, next_off);
+                int size;
+                DECODE_LITERAL(size, code, i, next_off);
+                #ifdef IMPL_EXECUTE_LOOP
+                    term dst;
+                    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(size)) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+                    dst = term_alloc_tuple(size, ctx);
+                #endif
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off);
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
+                #ifdef IMPL_EXECUTE_LOOP
+                    if (UNLIKELY(!term_is_tuple(src) || (size != term_get_tuple_arity(src)))) {
+                        fprintf(stderr, "update_record/5 !term_is_tuple(src) or size doesn't match\n");
+                        AVM_ABORT();
+                    }
+                #endif
+                DECODE_EXTENDED_LIST_TAG(code, i, next_off);
+                int list_len;
+                DECODE_LITERAL(list_len, code, i, next_off);
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("update_record/5 hint=%lu, size=%i, src=%p, dst=%p, updates_len=%d\n", hint, size, (void *)src, (void *)dst, list_len);
+                    bool reuse = hint == REUSE_ATOM;
+                    for (int j = 0;  j < size; j++) {
+                        term_put_tuple_element(dst, j, term_get_tuple_element(src, j));
+                    }
+                #endif
+                for (int j = 0;  j < list_len; j+=2) {
+                    int update_ix;
+                    DECODE_LITERAL(update_ix, code, i, next_off);
+                    term update_value;
+                    DECODE_COMPACT_TERM(update_value, code, i, next_off);
+                    #ifdef IMPL_EXECUTE_LOOP
+                        if (reuse) {
+                            if (term_exactly_equals(update_value, term_get_tuple_element(dst, update_ix - 1), ctx)) {
+                                continue;
+                            }
+                            reuse = false;
+                        }
+                        term_put_tuple_element(dst, update_ix - 1, update_value);
+                    #endif
+                }
+                #ifdef IMPL_EXECUTE_LOOP
+                    if (reuse) {
+                        WRITE_REGISTER(dreg_type, dreg, src);
+                    } else {
+                        WRITE_REGISTER(dreg_type, dreg, dst);
+                    }
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_BS_MATCH: {
+                int next_off = 1;
+                TRACE("bs_match/3\n");
+
+                int fail;
+                DECODE_LABEL(fail, code, i, next_off);
+                #ifdef IMPL_EXECUTE_LOOP
+                    int match_off = next_off;
+                #endif
+                term match_state;
+                DECODE_COMPACT_TERM(match_state, code, i, next_off);
+                #ifdef IMPL_EXECUTE_LOOP
+                    VERIFY_IS_MATCH_STATE(match_state, "bs_match/3")
+                    term bs_bin = term_get_match_state_binary(match_state);
+                    size_t bs_offset = term_get_match_state_offset(match_state);
+                #endif
+                DECODE_EXTENDED_LIST_TAG(code, i, next_off);
+                int list_len;
+                DECODE_LITERAL(list_len, code, i, next_off);
+                int j = 0;
+                while (j < list_len) {
+                    term command;
+                    DECODE_ATOM(command, code, i, next_off);
+                    j++;
+                    switch (command) {
+                        case ENSURE_AT_LEAST_ATOM: {
+                            int stride;
+                            DECODE_LITERAL(stride, code, i, next_off);
+                            j++;
+                            int unit; // TODO: check use of unit here
+                            DECODE_LITERAL(unit, code, i, next_off);
+                            j++;
+                            #ifdef IMPL_EXECUTE_LOOP
+                                size_t bs_bin_size = term_binary_size(bs_bin);
+                                if ((bs_bin_size * 8) - bs_offset < stride) {
+                                    TRACE("bs_match/3: ensure_at_least failed -- bs_bin_size = %d, bs_offset = %d, stride = %d, unit = %d\n", (int) bs_bin_size, (int) bs_offset, (int) stride, (int) unit);
+                                    goto bs_match_jump_to_fail;
+                                }
+                            #endif
+                            break;
+                        }
+
+                        case ENSURE_EXACTLY_ATOM: {
+                            int stride;
+                            DECODE_LITERAL(stride, code, i, next_off);
+                            j++;
+                            #ifdef IMPL_EXECUTE_LOOP
+                                size_t bs_bin_size = term_binary_size(bs_bin);
+                                if ((bs_bin_size * 8) - bs_offset != stride) {
+                                    TRACE("bs_match/3: ensure_exactly failed -- bs_bin_size = %lu, bs_offset = %lu, stride = %lu\n", (unsigned long) bs_bin_size, (unsigned long) bs_offset, (unsigned long) stride);
+                                    goto bs_match_jump_to_fail;
+                                }
+                            #endif
+                            break;
+                        }
+
+                        case INTEGER_ATOM: {
+                            int live;
+                            DECODE_LITERAL(live, code, i, next_off);
+                            j++;
+                            term flags;
+                            DECODE_COMPACT_TERM(flags, code, i, next_off);
+                            j++;
+                            #ifdef IMPL_EXECUTE_LOOP
+                                avm_int_t flags_value;
+                                DECODE_FLAGS_LIST(flags_value, flags, opcode)
+                            #endif
+                            term size;
+                            DECODE_COMPACT_TERM(size, code, i, next_off);
+                            j++;
+                            int unit;
+                            DECODE_LITERAL(unit, code, i, next_off);
+                            j++;
+                            dreg_t dreg;
+                            dreg_type_t dreg_type;
+                            DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
+                            j++;
+                            #ifdef IMPL_EXECUTE_LOOP
+                                // context_clean_registers(ctx, live); // TODO: check if needed
+                                VERIFY_IS_INTEGER(size, "bs_match/3");
+                                avm_int_t size_val = term_to_int(size);
+                                avm_int_t increment = size_val * unit;
+                                union maybe_unsigned_int64 value;
+                                bool status = bitstring_extract_integer(bs_bin, bs_offset, increment, flags_value, &value);
+                                if (UNLIKELY(!status)) {
+                                    TRACE("bs_match/3: error extracting integer.\n");
+                                    goto bs_match_jump_to_fail;
+                                }
+                                term t = term_make_maybe_boxed_int64(ctx, value.s);
+                                if (UNLIKELY(term_is_invalid_term(t))) {
+                                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                                }
+                                WRITE_REGISTER(dreg_type, dreg, t);
+                                bs_offset += increment;
+                            #endif
+                            break;
+                        }
+
+                        case BINARY_ATOM: {
+                            int live;
+                            DECODE_LITERAL(live, code, i, next_off);
+                            j++;
+                            term flags;
+                            DECODE_COMPACT_TERM(flags, code, i, next_off);
+                            j++;
+                            #ifdef IMPL_EXECUTE_LOOP
+                                avm_int_t flags_value;
+                                DECODE_FLAGS_LIST(flags_value, flags, opcode)
+                            #endif
+                            int size;
+                            DECODE_LITERAL(size, code, i, next_off);
+                            j++;
+                            int unit;
+                            DECODE_LITERAL(unit, code, i, next_off);
+                            j++;
+                            dreg_t dreg;
+                            dreg_type_t dreg_type;
+                            DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
+                            j++;
+                            #ifdef IMPL_EXECUTE_LOOP
+                                // context_clean_registers(ctx, live); // TODO: check if needed
+                                int matched_bits = size * unit;
+                                if (bs_offset % 8 != 0 || matched_bits % 8 != 0) {
+                                    TRACE("bs_match/3: Unsupported.  Offset on binary read must be aligned on byte boundaries.\n");
+                                    RAISE_ERROR(BADARG_ATOM);
+                                }
+                                if ((bs_offset + matched_bits) > term_binary_size(bs_bin) * 8) {
+                                    TRACE("bs_match/3: insufficient capacity\n");
+                                    goto bs_match_jump_to_fail;
+                                }
+                                size_t heap_size = term_sub_binary_heap_size(bs_bin, matched_bits / 8);
+                                if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+                                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                                }
+                                // re-compute match_state as GC could have moved it
+                                int temp = match_off;
+                                DECODE_COMPACT_TERM(match_state, code, i, temp);
+                                bs_bin = term_get_match_state_binary(match_state);
+                                term t = term_maybe_create_sub_binary(bs_bin, bs_offset / 8, matched_bits / 8, ctx);
+                                WRITE_REGISTER(dreg_type, dreg, t);
+                                bs_offset += matched_bits;
+                            #endif
+                            break;
+                        }
+
+                        case GET_TAIL_ATOM: {
+                            int live;
+                            DECODE_LITERAL(live, code, i, next_off);
+                            j++;
+                            int unit;
+                            DECODE_LITERAL(unit, code, i, next_off);
+                            j++;
+                            dreg_t dreg;
+                            dreg_type_t dreg_type;
+                            DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
+                            j++;
+                            #ifdef IMPL_EXECUTE_LOOP
+                                // context_clean_registers(ctx, live); // TODO: check if needed
+                                size_t total_bits = term_binary_size(bs_bin) * 8;
+                                size_t tail_bits = total_bits - bs_offset;
+                                if (bs_offset % 8 != 0 || tail_bits % 8 != 0) {
+                                    TRACE("bs_match/3: Unsupported.  Offset on binary read must be aligned on byte boundaries.\n");
+                                    RAISE_ERROR(BADARG_ATOM);
+                                }
+                                size_t heap_size = term_sub_binary_heap_size(bs_bin, tail_bits / 8);
+                                if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+                                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                                }
+                                // re-compute match_state as GC could have moved it
+                                int temp = match_off;
+                                DECODE_COMPACT_TERM(match_state, code, i, temp);
+                                bs_bin = term_get_match_state_binary(match_state);
+                                term t = term_maybe_create_sub_binary(bs_bin, bs_offset / 8, tail_bits / 8, ctx);
+                                WRITE_REGISTER(dreg_type, dreg, t);
+                                bs_offset = total_bits;
+                            #endif
+                            break;
+                        }
+
+                        case EQUAL_COLON_EQUAL_ATOM: {
+                            term live;
+                            DECODE_COMPACT_TERM(live, code, i, next_off);
+                            j++;
+                            int size;
+                            DECODE_LITERAL(size, code, i, next_off);
+                            j++;
+                            avm_int_t pattern_value;
+                            DECODE_LITERAL(pattern_value, code, i, next_off);
+                            j++;
+                            #ifdef IMPL_EXECUTE_LOOP
+                                union maybe_unsigned_int64 matched_value;
+                                bool status = bitstring_extract_integer(bs_bin, bs_offset, size, 0, &matched_value);
+                                if (UNLIKELY(!status)) {
+                                    TRACE("bs_match/3: error extracting integer for =:=.\n");
+                                    goto bs_match_jump_to_fail;
+                                }
+                                if (matched_value.s != pattern_value) {
+                                    TRACE("bs_match/3: =:= : value doesn't match %lu != %lu\n", (unsigned long) pattern_value, (unsigned long) matched_value.s);
+                                    goto bs_match_jump_to_fail;
+                                }
+                                bs_offset += size;
+                            #endif
+                            break;
+                        }
+
+                        case SKIP_ATOM: {
+                            int stride;
+                            DECODE_LITERAL(stride, code, i, next_off);
+                            j++;
+                            #ifdef IMPL_EXECUTE_LOOP
+                                bs_offset += stride;
+                            #endif
+                            break;
+                        }
+
+                        default:
+                            fprintf(stderr, "bs_match/3: undecoded command: %i, j = %d, list_len = %d\n\n", (int) term_to_atom_index(command), j, list_len);
+                            #ifdef IMPL_EXECUTE_LOOP
+                                fprintf(stderr, "failed at %i\n", i);
+                            #endif
+
+                            AVM_ABORT();
+                    }
+                    #ifdef IMPL_EXECUTE_LOOP
+                        term_set_match_state_offset(match_state, bs_offset);
+                    #endif
+                }
+                NEXT_INSTRUCTION(next_off);
+                break;
+
+                #ifdef IMPL_EXECUTE_LOOP
+bs_match_jump_to_fail:
+                    JUMP_TO_ADDRESS(mod->labels[fail]);
+                    continue;
+                #endif
             }
 #endif
 
