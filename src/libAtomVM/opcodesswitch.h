@@ -278,7 +278,7 @@ typedef union
                 AVM_ABORT();                                                                        \
             }                                                                                       \
             val = 0;                                                                                \
-            for (uint8_t vi = 0; vi < sz; vi++) {                                                       \
+            for (uint8_t vi = 0; vi < sz; vi++) {                                                   \
                 val <<= 8;                                                                          \
                 val |= code[(base_index) + (off) + 1 + vi];                                         \
             }                                                                                       \
@@ -311,7 +311,7 @@ typedef union
                 AVM_ABORT();                                                                        \
             }                                                                                       \
             val = 0;                                                                                \
-            for (uint8_t vi = 0; vi < sz; vi++) {                                                       \
+            for (uint8_t vi = 0; vi < sz; vi++) {                                                   \
                 val <<= 8;                                                                          \
                 val |= code[(base_index) + (off) + 1 + vi];                                         \
             }                                                                                       \
@@ -386,7 +386,7 @@ typedef union
         DECODE_LITERAL(list_size, code_chunk, base_index, off);                         \
         uint32_t allocator_tag;                                                         \
         uint32_t allocator_size;                                                        \
-        for (uint32_t j = 0; j < list_size; j++) {                                           \
+        for (uint32_t j = 0; j < list_size; j++) {                                      \
             DECODE_LITERAL(allocator_tag, code_chunk, base_index, off);                 \
             DECODE_LITERAL(allocator_size, code_chunk, base_index, off);                \
             if (allocator_tag == COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FLOATS) {          \
@@ -406,7 +406,7 @@ typedef union
         DECODE_LITERAL(list_size, code_chunk, base_index, off);                         \
         uint32_t allocator_tag;                                                         \
         uint32_t allocator_size;                                                        \
-        for (uint32_t j = 0; j < list_size; j++) {                                           \
+        for (uint32_t j = 0; j < list_size; j++) {                                      \
             DECODE_LITERAL(allocator_tag, code_chunk, base_index, off);                 \
             DECODE_LITERAL(allocator_size, code_chunk, base_index, off);                \
             if (allocator_size > 0 && allocator_tag == COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FLOATS) { \
@@ -630,7 +630,7 @@ typedef union
         case 3: {                                                                                   \
             uint8_t sz = (first_byte >> 5) + 2;                                                     \
             val = 0;                                                                                \
-            for (uint8_t vi = 0; vi < sz; vi++) {                                                       \
+            for (uint8_t vi = 0; vi < sz; vi++) {                                                   \
                 val <<= 8;                                                                          \
                 val |= code_chunk[(base_index) + (off) + 1 + vi];                                   \
             }                                                                                       \
@@ -672,7 +672,7 @@ typedef union
         DECODE_LITERAL(list_size, code_chunk, base_index, off);                         \
         uint32_t allocator_tag;                                                         \
         uint32_t allocator_size;                                                        \
-        for (uint32_t j = 0; j < list_size; j++) {                                           \
+        for (uint32_t j = 0; j < list_size; j++) {                                      \
             DECODE_LITERAL(allocator_tag, code_chunk, base_index, off);                 \
             DECODE_LITERAL(allocator_size, code_chunk, base_index, off);                \
             if (allocator_tag == COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FLOATS) {          \
@@ -692,7 +692,7 @@ typedef union
         DECODE_LITERAL(list_size, code_chunk, base_index, off);                         \
         uint32_t allocator_tag;                                                         \
         uint32_t allocator_size;                                                        \
-        for (uint32_t j = 0; j < list_size; j++) {                                           \
+        for (uint32_t j = 0; j < list_size; j++) {                                      \
             DECODE_LITERAL(allocator_tag, code_chunk, base_index, off);                 \
             DECODE_LITERAL(allocator_size, code_chunk, base_index, off);                \
             need += allocator_size;                                                     \
@@ -5185,7 +5185,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 //
                 // Make sure every key from list is in src
                 //
-                for (uint32_t j = 0;  j < num_elements;  ++j) {
+                for (uint32_t j = 0; j < num_elements; ++j) {
                     term key, value;
                     DECODE_COMPACT_TERM(key, code, i, next_off);
                     DECODE_COMPACT_TERM(value, code, i, next_off);
@@ -5210,13 +5210,13 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     // Create a new map of the same size as src and populate with entries from src
                     //
                     term map = term_alloc_map_maybe_shared(ctx, src_size, term_get_map_keys(src));
-                    for (size_t j = 0;  j < src_size;  ++j) {
+                    for (size_t j = 0; j < src_size; ++j) {
                         term_set_map_assoc(map, j, term_get_map_key(src, j), term_get_map_value(src, j));
                     }
                     //
                     // Copy the new terms into the new map, in situ only
                     //
-                    for (uint32_t j = 0;  j < num_elements;  ++j) {
+                    for (uint32_t j = 0; j < num_elements; ++j) {
                         term key, value;
                         DECODE_COMPACT_TERM(key, code, i, list_off);
                         DECODE_COMPACT_TERM(value, code, i, list_off);
