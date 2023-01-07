@@ -298,7 +298,8 @@ handle_info(
 ) ->
     maybe_ap_sta_ip_assigned_callback(Config, Address),
     {noreply, State};
-handle_info(_Msg, State) ->
+handle_info(Msg, State) ->
+    io:format("Received spurious message ~p~n", [Msg]),
     {noreply, State}.
 
 %% @hidden
@@ -333,12 +334,15 @@ get_driver_config(Config) ->
 
 %% @private
 maybe_add_nvs_entry(Key, List, NVSKey) ->
-    case {proplists:get_value(Key, List), esp:nvs_get_binary(atomvm, NVSKey)} of
-        {undefined, undefined} ->
-            List;
-        {undefined, NVSValue} ->
-            [{Key, NVSValue} | List];
-        {_Value, _} ->
+    case proplists:get_value(Key, List) of
+        undefined ->
+            case esp:nvs_get_binary(atomvm, NVSKey) of
+                undefined ->
+                    List;
+                NVSValue ->
+                    [{Key, NVSValue} | List]
+            end;
+        _Value ->
             List
     end.
 
