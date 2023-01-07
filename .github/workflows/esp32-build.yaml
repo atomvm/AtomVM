@@ -18,48 +18,15 @@ jobs:
 
       matrix:
         idf-version:
-        - 3.3.6
-        - 4.0.4
-        - 4.2.3
-        - 4.4.1
-        build-system:
-        - make
-        - idf
-        exclude:
-          # Exclude old idf with idf.py build, not supported
-          - idf-version: 3.3.6
-            build-system: idf
-          # Newer esp-idf versions with make are not really interesting
-          - idf-version: 4.2.3
-            build-system: make
-          # Newer esp-idf versions with make are not really interesting
-          - idf-version: 4.4.1
-            build-system: make
+        - 4.2.4
+        - 4.3.4
+        - 4.4.3
 
     steps:
     - name: Checkout repo
       uses: actions/checkout@v2
 
-    - name: Remove config for all versions except 3.3.6
-      if: matrix.idf-version != '3.3.6'
-      run: rm -f ./src/platforms/esp32/sdkconfig
-
-    - name: Build with make
-      if: matrix.build-system == 'make'
-      shell: bash
-      working-directory: ./src/platforms/esp32/
-      run: |
-        . $IDF_PATH/export.sh
-        # sdkconfig is specific to a certain version
-        # so run defconfig as first step.
-        make defconfig
-        # Don't use any -j value
-        make
-        # Print component size info
-        make size-components
-
     - name: Build with idf.py
-      if: matrix.build-system == 'idf'
       shell: bash
       working-directory: ./src/platforms/esp32/
       run: |
