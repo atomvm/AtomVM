@@ -103,6 +103,18 @@ static const char *const timeout_value_atom = "\xD" "timeout_value";
 static const char *const machine_atom = "\x7" "machine";
 static const char *const avm_floatsize_atom = "\xD" "avm_floatsize";
 
+static const char *const append_atom = "\x6" "append";
+static const char *const private_append_atom = "\xE" "private_append";
+static const char *const binary_atom = "\x6" "binary";
+static const char *const integer_atom = "\x7" "integer";
+static const char *const little_atom = "\x6" "little";
+static const char *const native_atom = "\x6" "native";
+static const char *const string_atom = "\x6" "string";
+static const char *const utf8_atom = "\x4" "utf8";
+static const char *const utf16_atom = "\x5" "utf16";
+static const char *const utf32_atom = "\x5" "utf32";
+static const char *const badrecord_atom = "\x9" "badrecord";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -189,6 +201,18 @@ void defaultatoms_init(GlobalContext *glb)
 
     ok &= globalcontext_insert_atom(glb, machine_atom) == MACHINE_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, avm_floatsize_atom) == AVM_FLOATSIZE_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, append_atom) == APPEND_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, private_append_atom) == PRIVATE_APPEND_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, binary_atom) == BINARY_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, integer_atom) == INTEGER_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, little_atom) == LITTLE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, native_atom) == NATIVE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, string_atom) == STRING_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, utf8_atom) == UTF8_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, utf16_atom) == UTF16_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, utf32_atom) == UTF32_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, badrecord_atom) == BADRECORD_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();

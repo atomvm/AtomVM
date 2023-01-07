@@ -9,8 +9,8 @@ name: Build and Test on Other Architectures
 on: [push, pull_request]
 
 env:
-  otp_version: 21
-  elixir_version: 1.9
+  otp_version: 24
+  elixir_version: 1.14
 
 jobs:
   build-and-test-other:

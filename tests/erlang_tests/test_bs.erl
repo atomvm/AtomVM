@@ -61,6 +61,8 @@ start() ->
 
     <<1, 2, 3, 1, 2, 3, 4, 5, 6>> = test_bs_append(<<1, 2, 3>>, <<1, 2, 3, 4, 5, 6>>),
 
+    <<1, 2, 3>> = test_bs_private_append(<<1, 2, 3>>),
+
     nope = test_match_clause(<<"">>),
     nope = test_match_clause(<<16#FF>>),
     nope = test_match_clause(<<$n:8>>),
@@ -264,6 +266,9 @@ test_match_first_integer(_) ->
 
 test_bs_append(Bin1, Bin2) ->
     <<Bin1/binary, Bin2/binary>>.
+
+test_bs_private_append(Bin) ->
+    <<<<Byte:8>> || <<Byte:8>> <= Bin>>.
 
 test_match_clause(
     <<$n:8, FixedBinaryData:4/binary, Rest/binary>>

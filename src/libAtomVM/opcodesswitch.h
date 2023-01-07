@@ -43,6 +43,7 @@
 #define ENABLE_OTP22
 #define ENABLE_OTP23
 #define ENABLE_OTP24
+#define ENABLE_OTP25
 
 //#define ENABLE_TRACE
 
@@ -779,6 +780,58 @@ typedef union
         TRACE(opcode_name ": " #t " is not a binary or match context.\n"); \
         RAISE_ERROR(BADARG_ATOM);                                          \
     }
+
+#define CALL_FUN(fun, args_count, next_off)                             \
+    Module *fun_module;                                                 \
+    unsigned int fun_arity;                                             \
+    uint32_t n_freeze = 0;                                              \
+    uint32_t label;                                                     \
+    const term *boxed_value = term_to_const_term_ptr(fun);              \
+    term index_or_function = boxed_value[2];                            \
+    if (term_is_atom(index_or_function)) {                              \
+        term module = boxed_value[1];                                   \
+        fun_arity = term_to_int(boxed_value[3]);                        \
+        AtomString module_name = globalcontext_atomstring_from_term(mod->global, module); \
+        AtomString function_name = globalcontext_atomstring_from_term(mod->global, index_or_function); \
+        struct Nif *nif = (struct Nif *) nifs_get(module_name, function_name, fun_arity); \
+        if (!IS_NULL_PTR(nif)) {                                        \
+            term return_value = nif->nif_ptr(ctx, arity, ctx->x);       \
+            if (UNLIKELY(term_is_invalid_term(return_value))) {         \
+                HANDLE_ERROR();                                         \
+            }                                                           \
+            ctx->x[0] = return_value;                                   \
+            NEXT_INSTRUCTION(next_off);                                 \
+            continue;                                                   \
+        } else {                                                        \
+            fun_module = globalcontext_get_module(ctx->global, module_name); \
+            if (IS_NULL_PTR(fun_module)) {                              \
+                HANDLE_ERROR();                                         \
+            }                                                           \
+            label = module_search_exported_function(fun_module, function_name, arity); \
+            if (UNLIKELY(label == 0)) {                                 \
+                HANDLE_ERROR();                                         \
+            }                                                           \
+        }                                                               \
+    } else {                                                            \
+        fun_module = (Module *) boxed_value[1];                         \
+        uint32_t fun_index = term_to_int(index_or_function);            \
+        uint32_t fun_arity_and_freeze;                                  \
+        module_get_fun(fun_module, fun_index, &label, &fun_arity_and_freeze, &n_freeze); \
+        fun_arity = fun_arity_and_freeze - n_freeze;                    \
+        TRACE_CALL(ctx, mod, "call_fun", label, args_count);            \
+    }                                                                   \
+    if (UNLIKELY(args_count != fun_arity)) {                            \
+        RAISE_ERROR(BADARITY_ATOM);                                     \
+    }                                                                   \
+    for (uint32_t i = 0; i < n_freeze; i++) {                           \
+        ctx->x[i + fun_arity] = boxed_value[i + 3];                     \
+    }                                                                   \
+    NEXT_INSTRUCTION(next_off);                                         \
+    ctx->cp = module_address(mod->module_index, i);                     \
+    mod = fun_module;                                                   \
+    code = mod->code->code;                                             \
+    JUMP_TO_ADDRESS(mod->labels[label]);
+
 
 #define MIN(X, Y) ((X) < (Y) ? (X) : (Y))
 
@@ -3069,77 +3122,16 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     }
 
                     term fun = ctx->x[args_count];
-
                     if (UNLIKELY(!term_is_function(fun))) {
+                        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        }
                         term new_error_tuple = term_alloc_tuple(2, ctx);
-                        //TODO: ensure memory before
                         term_put_tuple_element(new_error_tuple, 0, BADFUN_ATOM);
                         term_put_tuple_element(new_error_tuple, 1, ctx->x[args_count]);
-
                         RAISE_ERROR(new_error_tuple);
                     }
-
-                    Module *fun_module;
-                    unsigned int fun_arity;
-                    uint32_t n_freeze = 0;
-                    uint32_t label;
-
-                    const term *boxed_value = term_to_const_term_ptr(fun);
-                    term index_or_function = boxed_value[2];
-                    if (term_is_atom(index_or_function)) {
-                        term module = boxed_value[1];
-                        fun_arity = term_to_int(boxed_value[3]);
-
-                        AtomString module_name = globalcontext_atomstring_from_term(mod->global, module);
-                        AtomString function_name = globalcontext_atomstring_from_term(mod->global, index_or_function);
-
-                        struct Nif *nif = (struct Nif *) nifs_get(module_name, function_name, fun_arity);
-                        if (!IS_NULL_PTR(nif)) {
-                            term return_value = nif->nif_ptr(ctx, arity, ctx->x);
-                            if (UNLIKELY(term_is_invalid_term(return_value))) {
-                                HANDLE_ERROR();
-                            }
-                            ctx->x[0] = return_value;
-                            NEXT_INSTRUCTION(next_off);
-                            continue;
-
-                        } else {
-                            fun_module = globalcontext_get_module(ctx->global, module_name);
-                            if (IS_NULL_PTR(fun_module)) {
-                                HANDLE_ERROR();
-                            }
-                            label = module_search_exported_function(fun_module, function_name, arity);
-                            if (UNLIKELY(label == 0)) {
-                                HANDLE_ERROR();
-                            }
-                        }
-
-                    } else {
-                        fun_module = (Module *) boxed_value[1];
-                        uint32_t fun_index = term_to_int(index_or_function);
-
-                        uint32_t fun_arity_and_freeze;
-                        module_get_fun(fun_module, fun_index, &label, &fun_arity_and_freeze, &n_freeze);
-
-                        fun_arity = fun_arity_and_freeze - n_freeze;
-
-                        TRACE_CALL(ctx, mod, "call_fun", label, args_count);
-                    }
-
-                    if (UNLIKELY(args_count != fun_arity)) {
-                        RAISE_ERROR(BADARITY_ATOM);
-                    }
-
-                    for (uint32_t i = 0; i < n_freeze; i++) {
-                        ctx->x[i + fun_arity] = boxed_value[i + 3];
-                    }
-
-                    NEXT_INSTRUCTION(next_off);
-                    ctx->cp = module_address(mod->module_index, i);
-
-                    mod = fun_module;
-                    code = mod->code->code;
-                    JUMP_TO_ADDRESS(mod->labels[label]);
+                    CALL_FUN(fun, args_count, next_off)
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -3737,6 +3729,26 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 break;
             }
 
+            case OP_BS_INIT_WRITABLE: {
+                int next_off = 1;
+
+                TRACE("bs_init_writable/0\n");
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(0) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+                    term t = term_create_empty_binary(0, ctx);
+
+                    ctx->bs = t;
+                    ctx->bs_offset = 0;
+                    ctx->x[0] = t;
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
             case OP_BS_APPEND: {
                 int next_off = 1;
                 uint32_t fail;
@@ -3764,7 +3776,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
 
                 #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_append/6\n");
+                    TRACE("bs_append/8\n");
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
@@ -3783,11 +3795,66 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         RAISE_ERROR(UNSUPPORTED_ATOM);
                     }
 
-                    TRACE("bs_append/7, fail=%u size=%li unit=%u src=0x%lx dreg=%c%i\n", (unsigned) fail, size_val, (unsigned) unit, src, T_DEST_REG(dreg_type, dreg));
+                    TRACE("bs_append/8, fail=%u size=%li unit=%u src=0x%lx dreg=%c%i\n", (unsigned) fail, size_val, (unsigned) unit, src, T_DEST_REG(dreg_type, dreg));
 
                     size_t src_size = term_binary_size(src);
                     // TODO: further investigate extra_val
                     if (UNLIKELY(memory_ensure_free(ctx, src_size + term_binary_data_size_in_terms(size_val / 8) + extra_val + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+                    DECODE_COMPACT_TERM(src, code, i, src_off)
+                    term t = term_create_empty_binary(src_size + size_val / 8, ctx);
+                    memcpy((void *) term_binary_data(t), (void *) term_binary_data(src), src_size);
+
+                    ctx->bs = t;
+                    ctx->bs_offset = src_size * 8;
+
+                    WRITE_REGISTER(dreg_type, dreg, t);
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_BS_PRIVATE_APPEND: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off)
+                term size;
+                DECODE_COMPACT_TERM(size, code, i, next_off)
+                uint32_t unit;
+                DECODE_LITERAL(unit, code, i, next_off);
+                term src;
+                #ifdef IMPL_EXECUTE_LOOP
+                    int src_off = next_off;
+                #endif
+                DECODE_COMPACT_TERM(src, code, i, next_off)
+                term flags;
+                UNUSED(flags);
+                DECODE_COMPACT_TERM(flags, code, i, next_off)
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_private_append/6\n");
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    VERIFY_IS_BINARY(src, "bs_private_append");
+                    VERIFY_IS_INTEGER(size, "bs_private_append");
+                    avm_int_t size_val = term_to_int(size);
+
+                    if (size_val % 8 != 0) {
+                        TRACE("bs_private_append: size_val (%li) is not evenly divisible by 8\n", (long int) size_val, (long int) unit);
+                        RAISE_ERROR(UNSUPPORTED_ATOM);
+                    }
+                    // TODO: further investigate unit.
+                    // We currently do not support unaligned binaries, unit seems to be equal to 1 binary comprehensions
+                    TRACE("bs_private_append/6, fail=%u size=%li unit=%u src=0x%lx dreg=%c%i\n", (unsigned) fail, size_val, (unsigned) unit, src, T_DEST_REG(dreg_type, dreg));
+
+                    size_t src_size = term_binary_size(src);
+                    if (UNLIKELY(memory_ensure_free(ctx, src_size + term_binary_data_size_in_terms(size_val / 8) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     DECODE_COMPACT_TERM(src, code, i, src_off)
@@ -5832,6 +5899,345 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_DEST_REGISTER(reg_a, reg_a_type, code, i, next_off);
                 TRACE("recv_marker_use/1: reg1=%c%i\n", T_DEST_REG(reg_a_type, reg_a));
                 NEXT_INSTRUCTION(next_off);
+                break;
+            }
+#endif
+
+#ifdef ENABLE_OTP25
+            case OP_BS_CREATE_BIN: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off);
+                uint32_t alloc;
+                DECODE_LITERAL(alloc, code, i, next_off);
+                uint32_t live;
+                DECODE_LITERAL(live, code, i, next_off);
+                uint32_t unit;
+                DECODE_LITERAL(unit, code, i, next_off);
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
+                TRACE("bs_create_bin/6 fail=%i, alloc=%i live=%i unit=%i dreg=%c%i\n", fail, alloc, live, unit, T_DEST_REG(dreg_type, dreg));
+                DECODE_EXTENDED_LIST_TAG(code, i, next_off);
+                uint32_t list_len;
+                DECODE_LITERAL(list_len, code, i, next_off);
+                #ifdef IMPL_EXECUTE_LOOP
+                    int list_off = next_off;
+                #endif
+                int nb_segments = list_len / 6;
+                #ifdef IMPL_CODE_LOADER
+                    if (live > MAX_REG) {
+                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
+                        AVM_ABORT();
+                    }
+                    if (list_len != nb_segments * 6) {
+                        fprintf(stderr, "Unexpected number of operations for bs_create_bin/6, each segment should be 6 elements\n");
+                        AVM_ABORT();
+                    }
+                #endif
+                // Compute binary size in first iteration
+                #ifdef IMPL_EXECUTE_LOOP
+                    size_t binary_size = 0;
+                #endif
+                for (int j = 0;  j < nb_segments; j++) {
+                    term atom_type;
+                    DECODE_ATOM(atom_type, code, i, next_off);
+                    int seg;
+                    DECODE_LITERAL(seg, code, i, next_off);
+                    int segment_unit;
+                    DECODE_LITERAL(segment_unit, code, i, next_off);
+                    term flags;
+                    DECODE_COMPACT_TERM(flags, code, i, next_off);
+                    term src;
+                    DECODE_COMPACT_TERM(src, code, i, next_off);
+                    term size;
+                    DECODE_COMPACT_TERM(size, code, i, next_off);
+                    #ifdef IMPL_EXECUTE_LOOP
+                        avm_int_t src_value = 0;
+                        switch (atom_type) {
+                            case UTF8_ATOM:
+                            case UTF16_ATOM:
+                            case UTF32_ATOM:
+                                VERIFY_IS_INTEGER(src, "bs_create_bin/6");
+                                src_value = term_to_int(src);
+                                break;
+                        }
+                        size_t segment_size = 0;
+                        switch (size) {
+                            case UNDEFINED_ATOM: {
+                                // Silently ignore segment_unit != 0
+                                segment_unit = 8;
+                                switch (atom_type) {
+                                    case UTF8_ATOM: {
+                                        if (UNLIKELY(!bitstring_utf8_size(src_value, &segment_size))) {
+                                            RAISE_ERROR(BADARG_ATOM);
+                                        }
+                                        break;
+                                    }
+                                    case UTF16_ATOM: {
+                                        if (UNLIKELY(!bitstring_utf16_size(src_value, &segment_size))) {
+                                            RAISE_ERROR(BADARG_ATOM);
+                                        }
+                                        break;
+                                    }
+                                    case UTF32_ATOM: {
+                                        segment_size = 4;
+                                        break;
+                                    }
+                                    default:
+                                        // In Erlang/OTP #5281, this is a compile time check
+                                        fprintf(stderr, "Unexpected type %lx for bs_create_bin/6 size undefined\n", (long) atom_type);
+                                        AVM_ABORT();
+                                }
+                                break;
+                            }
+                            case ALL_ATOM: {
+                                if (atom_type != BINARY_ATOM && atom_type != APPEND_ATOM && atom_type != PRIVATE_APPEND_ATOM) {
+                                    // In Erlang/OTP #5281, this is a compile time check
+                                    fprintf(stderr, "Unexpected type for bs_create_bin/6 size all\n");
+                                    AVM_ABORT();
+                                }
+                                VERIFY_IS_BINARY(src, "bs_create_bin/6");
+                                // We only support src as a binary of bytes here.
+                                segment_size = term_binary_size(src);
+                                segment_unit = 8;
+                                break;
+                            }
+                            default: {
+                                if (UNLIKELY(!term_is_integer(size) || term_to_int(size) < 0)) {
+                                    RAISE_ERROR(BADARG_ATOM);
+                                }
+                                segment_size = term_to_int(size);
+                            }
+                        }
+                        binary_size += segment_unit * segment_size;
+                    #endif
+                }
+                // Allocate and build binary in second iteration
+                #ifdef IMPL_EXECUTE_LOOP
+                    if (binary_size % 8) {
+                        TRACE("bs_create_bin/6: total binary size (%li) is not evenly divisible by 8\n", binary_size);
+                        RAISE_ERROR(UNSUPPORTED_ATOM);
+                    }
+                    context_clean_registers(ctx, live);
+                    if (UNLIKELY(memory_ensure_free(ctx, alloc + term_binary_data_size_in_terms(binary_size / 8) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+                    term t = term_create_empty_binary(binary_size / 8, ctx);
+                    size_t offset = 0;
+
+                    for (int j = 0;  j < nb_segments; j++) {
+                        term atom_type;
+                        DECODE_ATOM(atom_type, code, i, list_off);
+                        int seg;
+                        DECODE_LITERAL(seg, code, i, list_off);
+                        int segment_unit;
+                        DECODE_LITERAL(segment_unit, code, i, list_off);
+                        term flags;
+                        DECODE_COMPACT_TERM(flags, code, i, list_off);
+                        term src;
+                        DECODE_COMPACT_TERM(src, code, i, list_off);
+                        term size;
+                        DECODE_COMPACT_TERM(size, code, i, list_off);
+                        size_t segment_size;
+                        avm_int_t flags_value = 0;
+                        avm_int_t src_value = 0;
+                        avm_int_t size_value = 0;
+                        switch (atom_type) {
+                            case UTF16_ATOM:
+                            case UTF32_ATOM:
+                            case INTEGER_ATOM:
+                                while (term_is_nonempty_list(flags)) {
+                                    switch (term_get_list_head(flags)) {
+                                        case NATIVE_ATOM:
+                                            flags_value |= NativeEndianInteger;
+                                            break;
+                                        case LITTLE_ATOM:
+                                            flags_value |= LittleEndianInteger;
+                                            break;
+                                        default:
+                                            TRACE("bs_create_bin/6: Unknown flag atom %lx\n", (long) flags);
+                                            RAISE_ERROR(BADARG_ATOM);
+                                    }
+                                    flags = term_get_list_tail(flags);
+                                }
+                                if (UNLIKELY(!term_is_nil(flags))) {
+                                    TRACE("bs_create_bin/6: Flags not a proper list %lx\n", (long) flags);
+                                    RAISE_ERROR(BADARG_ATOM);
+                                }
+                                break;
+                            default:
+                                break;
+                        }
+                        switch (atom_type) {
+                            case STRING_ATOM:
+                            case UTF8_ATOM:
+                            case UTF16_ATOM:
+                            case UTF32_ATOM:
+                                VERIFY_IS_INTEGER(src, "bs_create_bin/6");
+                                src_value = term_to_int(src);
+                                break;
+                            case INTEGER_ATOM:
+                                VERIFY_IS_ANY_INTEGER(src, "bs_create_bin/6");
+                                src_value = term_maybe_unbox_int64(src);
+                                break;
+                            default:
+                                break;
+                        }
+                        switch (atom_type) {
+                            case INTEGER_ATOM:
+                            case STRING_ATOM:
+                                VERIFY_IS_INTEGER(size, "bs_create_bin/6");
+                                size_value = term_to_int(size);
+                                break;
+                            default:
+                                break;
+                        }
+                        switch (atom_type) {
+                            case UTF8_ATOM: {
+                                bool result = bitstring_insert_utf8(t, offset, src_value, &segment_size);
+                                if (UNLIKELY(!result)) {
+                                    TRACE("bs_create_bin/6: Failed to insert character as utf8 into binary: %i\n", result);
+                                    RAISE_ERROR(BADARG_ATOM);
+                                }
+                                segment_size *= 8;
+                                break;
+                            }
+                            case UTF16_ATOM: {
+                                bool result = bitstring_insert_utf16(t, offset, src_value, flags_value, &segment_size);
+                                if (UNLIKELY(!result)) {
+                                    TRACE("bs_create_bin/6: Failed to insert character as utf16 into binary: %i\n", result);
+                                    RAISE_ERROR(BADARG_ATOM);
+                                }
+                                segment_size *= 8;
+                                break;
+                            }
+                            case UTF32_ATOM: {
+                                bool result = bitstring_insert_utf32(t, offset, src_value, flags_value);
+                                if (UNLIKELY(!result)) {
+                                    TRACE("bs_create_bin/6: Failed to insert character as utf16 into binary: %i\n", result);
+                                    RAISE_ERROR(BADARG_ATOM);
+                                }
+                                segment_size = 32;
+                                break;
+                            }
+                            case INTEGER_ATOM: {
+                                bool result = bitstring_insert_integer(t, offset, src_value, size_value * segment_unit, flags_value);
+                                if (UNLIKELY(!result)) {
+                                    TRACE("bs_create_bin/6: Failed to insert integer into binary\n");
+                                    RAISE_ERROR(BADARG_ATOM);
+                                }
+                                segment_size = size_value;
+                                break;
+                            }
+                            case STRING_ATOM: {
+                                if (offset % 8) {
+                                    TRACE("bs_create_bin/6: current offset (%li) is not evenly divisible by 8\n", offset);
+                                    RAISE_ERROR(UNSUPPORTED_ATOM);
+                                }
+                                uint8_t *dst = (uint8_t *) term_binary_data(t) + (offset / 8);
+                                size_t remaining = 0;
+                                const uint8_t *str = module_get_str(mod, src_value, &remaining);
+                                segment_size = size_value * segment_unit;
+                                memcpy(dst, str, segment_size / 8);
+                                break;
+                            }
+                            case APPEND_ATOM:
+                            case BINARY_ATOM:
+                            case PRIVATE_APPEND_ATOM: {
+                                if (offset % 8) {
+                                    TRACE("bs_create_bin/6: current offset (%li) is not evenly divisible by 8\n", offset);
+                                    RAISE_ERROR(UNSUPPORTED_ATOM);
+                                }
+                                VERIFY_IS_BINARY(src, "bs_create_bin/6");
+                                uint8_t *dst = (uint8_t *) term_binary_data(t) + (offset / 8);
+                                const uint8_t *bin = (const uint8_t *) term_binary_data(src);
+                                size_t binary_size = term_binary_size(src);
+                                if (size != ALL_ATOM) {
+                                    VERIFY_IS_INTEGER(size, "bs_create_bin/6");
+                                    size_value = term_to_int(size);
+                                    if (size_value > binary_size) {
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    }
+                                    binary_size = size_value;
+                                }
+                                memcpy(dst, bin, binary_size);
+                                segment_size = binary_size * 8;
+                                break;
+                            }
+                            default: {
+                                TRACE("bs_create_bin/6: unsupported type atom_index=%i\n", (int) term_to_atom_index(atom_type));
+                                RAISE_ERROR(UNSUPPORTED_ATOM);
+                            }
+                        }
+                        offset += segment_size;
+                    }
+                    WRITE_REGISTER(dreg_type, dreg, t);
+                #endif
+
+                NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_CALL_FUN2: {
+                int next_off = 1;
+                term tag;
+                DECODE_COMPACT_TERM(tag, code, i, next_off)
+                unsigned int args_count;
+                DECODE_LITERAL(args_count, code, i, next_off)
+                #ifdef IMPL_EXECUTE_LOOP
+                    int fun_off = next_off;
+                #endif
+                term fun;
+                DECODE_COMPACT_TERM(fun, code, i, next_off)
+
+                TRACE("call_fun2/3, tag, args_count=%i, fun\n", args_count);
+                USED_BY_TRACE(args_count);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    if (UNLIKELY(!term_is_function(fun))) {
+                        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        }
+                        // Decode the function again after GC was possibly run
+                        DECODE_COMPACT_TERM(fun, code, i, fun_off)
+                        term new_error_tuple = term_alloc_tuple(2, ctx);
+                        term_put_tuple_element(new_error_tuple, 0, BADFUN_ATOM);
+                        term_put_tuple_element(new_error_tuple, 1, fun);
+                        RAISE_ERROR(new_error_tuple);
+                    }
+                    CALL_FUN(fun, args_count, next_off)
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                break;
+            }
+
+            case OP_BADRECORD: {
+                int next_off = 1;
+                TRACE("badrecord/1\n");
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+                    term value;
+                    DECODE_COMPACT_TERM(value, code, i, next_off)
+                    term new_error_tuple = term_alloc_tuple(2, ctx);
+                    term_put_tuple_element(new_error_tuple, 0, BADRECORD_ATOM);
+                    term_put_tuple_element(new_error_tuple, 1, value);
+                    RAISE_ERROR(new_error_tuple);
+                #endif
+
+                #ifdef IMPL_CODE_LOADER
+                    term value;
+                    DECODE_COMPACT_TERM(value, code, i, next_off)
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
                 break;
             }
 #endif
