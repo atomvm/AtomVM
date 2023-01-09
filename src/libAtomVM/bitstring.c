@@ -63,9 +63,14 @@ bool bitstring_insert_any_integer(uint8_t *dst, avm_int_t offset, avm_int64_t va
     if (bs_flags != 0) {
         return false;
     }
+    // value is truncated to 64 bits
+    if (n > 8 * sizeof(value)) {
+        offset += n - (8 * sizeof(value));
+        n = 8 * sizeof(value);
+    }
     for (int i = 0; i < n; ++i) {
         int k = (n - 1) - i;
-        int bit_val = (value & (0x01 << k)) >> k;
+        int bit_val = (value & (0x01LL << k)) >> k;
         if (bit_val) {
             int bit_pos = offset + i;
             int byte_pos = bit_pos >> 3; // div 8
@@ -73,6 +78,102 @@ bool bitstring_insert_any_integer(uint8_t *dst, avm_int_t offset, avm_int64_t va
             int shift = 7 - (bit_pos & 7); // mod 8
             *pos ^= (0x01 << shift);
         }
+    }
+    return true;
+}
+
+bool bitstring_utf8_encode(avm_int_t c, uint8_t *buf, size_t *out_size)
+{
+    size_t sz = 0;
+    if (c < 0 || c > 0x10FFFF) {
+        return false;
+    }
+    if (c < 0x80) {
+        if (buf) {
+            *buf++ = c;
+        }
+        sz++;
+    } else if (c < 0x800) {
+        if (buf) {
+            *buf++ = (c >> 6) | 0xC0;
+            *buf++ = (c & 0x3F) | 0x80;
+        }
+        sz += 2;
+    } else if (c < 0x10000) {
+        if (buf) {
+            *buf++ = (c >> 12) | 0xE0;
+            *buf++ = ((c >> 6) & 0x3F) | 0x80;
+            *buf++ = (c & 0x3F) | 0x80;
+        }
+        sz += 3;
+    } else {
+        if (buf) {
+            *buf++ = (c >> 18) | 0xF0;
+            *buf++ = ((c >> 12) & 0x3F) | 0x80;
+            *buf++ = ((c >> 6) & 0x3F) | 0x80;
+            *buf++ = (c & 0x3F) | 0x80;
+        }
+        sz += 4;
+    }
+    *out_size = sz;
+    return true;
+}
+
+bool bitstring_utf16_encode(avm_int_t c, uint8_t *buf, enum BitstringFlags bs_flags, size_t *out_size)
+{
+    size_t sz = 0;
+    if (c < 0 || c > 0x10FFFF) {
+        return false;
+    }
+    if (c < 0x10000) {
+        // Ignore D800-DFFF range
+        if (buf) {
+            if (bs_flags & LittleEndianIntegerMask) {
+                *buf++ = c & 0xFF;
+                *buf++ = c >> 8;
+            } else {
+                *buf++ = c >> 8;
+                *buf++ = c & 0xFF;
+            }
+        }
+        sz += 2;
+    } else {
+        if (buf) {
+            c -= 0x10000;
+            if (bs_flags & LittleEndianIntegerMask) {
+                *buf++ = ((c >> 10) & 0xFF);
+                *buf++ = (c >> 18) | 0xD8;
+                *buf++ = c & 0xFF;
+                *buf++ = ((c >> 8) & 0x03) | 0xDC;
+            } else {
+                *buf++ = (c >> 18) | 0xD8;
+                *buf++ = ((c >> 10) & 0xFF);
+                *buf++ = ((c >> 8) & 0x03) | 0xDC;
+                *buf++ = c & 0xFF;
+            }
+        }
+        sz += 4;
+    }
+    *out_size = sz;
+    return true;
+}
+
+bool bitstring_utf32_encode(avm_int_t c, uint8_t *buf, enum BitstringFlags bs_flags)
+{
+    UNUSED(bs_flags);
+    if (c < 0 || c > 0x10FFFF) {
+        return false;
+    }
+    if (bs_flags & LittleEndianIntegerMask) {
+        *buf++ = c & 0xFF;
+        *buf++ = (c >> 8) & 0xFF;
+        *buf++ = (c >> 16) & 0xFF;
+        *buf++ = c >> 24;
+    } else {
+        *buf++ = c >> 24;
+        *buf++ = (c >> 16) & 0xFF;
+        *buf++ = (c >> 8) & 0xFF;
+        *buf++ = c & 0xFF;
     }
     return true;
 }

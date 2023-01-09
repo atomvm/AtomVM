@@ -103,6 +103,27 @@ static const char *const timeout_value_atom = "\xD" "timeout_value";
 static const char *const schedulers_atom = "\xA" "schedulers";
 static const char *const schedulers_online_atom = "\x11" "schedulers_online";
 
+static const char *const append_atom = "\x6" "append";
+static const char *const private_append_atom = "\xE" "private_append";
+static const char *const binary_atom = "\x6" "binary";
+static const char *const integer_atom = "\x7" "integer";
+static const char *const little_atom = "\x6" "little";
+static const char *const native_atom = "\x6" "native";
+static const char *const string_atom = "\x6" "string";
+static const char *const utf8_atom = "\x4" "utf8";
+static const char *const utf16_atom = "\x5" "utf16";
+static const char *const utf32_atom = "\x5" "utf32";
+static const char *const badrecord_atom = "\x9" "badrecord";
+
+static const char *const copy_atom = "\x4" "copy";
+static const char *const reuse_atom = "\x5" "reuse";
+static const char *const ensure_at_least_atom = "\xF" "ensure_at_least";
+static const char *const ensure_exactly_atom = "\xE" "ensure_exactly";
+static const char *const skip_atom = "\x4" "skip";
+static const char *const get_tail_atom = "\x8" "get_tail";
+static const char *const equal_colon_equal_atom = "\x3" "=:=";
+static const char *const signed_atom = "\x6" "signed";
+
 static const char *const machine_atom = "\x7" "machine";
 static const char *const avm_floatsize_atom = "\xD" "avm_floatsize";
 
@@ -193,6 +214,27 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, schedulers_atom) == SCHEDULERS_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, schedulers_online_atom) == SCHEDULERS_ONLINE_ATOM_INDEX;
     
+    ok &= globalcontext_insert_atom(glb, append_atom) == APPEND_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, private_append_atom) == PRIVATE_APPEND_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, binary_atom) == BINARY_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, integer_atom) == INTEGER_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, little_atom) == LITTLE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, native_atom) == NATIVE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, string_atom) == STRING_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, utf8_atom) == UTF8_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, utf16_atom) == UTF16_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, utf32_atom) == UTF32_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, badrecord_atom) == BADRECORD_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, copy_atom) == COPY_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, reuse_atom) == REUSE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, ensure_at_least_atom) == ENSURE_AT_LEAST_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, ensure_exactly_atom) == ENSURE_EXACTLY_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, skip_atom) == SKIP_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, get_tail_atom) == GET_TAIL_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, equal_colon_equal_atom) == EQUAL_COLON_EQUAL_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, signed_atom) == SIGNED_ATOM_INDEX;
+
     ok &= globalcontext_insert_atom(glb, machine_atom) == MACHINE_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, avm_floatsize_atom) == AVM_FLOATSIZE_ATOM_INDEX;
 

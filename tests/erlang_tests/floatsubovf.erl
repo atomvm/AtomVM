@@ -23,15 +23,46 @@
 -export([start/0]).
 
 start() ->
-    id(sub(id(-1.7976931348623158e+308), id(1.7976931348623158e+308))).
+    ok = test_suboverflow_bif(),
+    ok = test_suboverflow_isfloat(),
+    0.
 
-sub(A, B) ->
+test_suboverflow_bif() ->
+    ok = id(sub_bif(id(-max_float()), max_float())),
+    ok.
+
+test_suboverflow_isfloat() ->
+    ok = id(sub_isfloat(id(-max_float()), max_float())),
+    ok.
+
+sub_bif(A, B) ->
     try id(A) - id(B) of
-        C -> C
+        _C ->
+            fail_no_ex
     catch
-        error:badarith -> -2;
-        _:_ -> -1
+        error:badarith -> ok;
+        _:_ -> fail_other_ex
     end.
 
 id(I) ->
     I.
+
+sub_isfloat(A, B) when is_float(A) andalso is_float(B) ->
+    try A - B of
+        _C ->
+            fail_no_ex
+    catch
+        error:badarith -> ok;
+        _:_ -> fail_other_ex
+    end.
+
+max_float() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            1.7976931348623157e308;
+        "ATOM" ->
+            case erlang:system_info(avm_floatsize) of
+                4 -> 3.4028234664e38;
+                8 -> 1.7976931348623157e308
+            end
+    end.

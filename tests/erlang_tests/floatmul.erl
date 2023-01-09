@@ -20,18 +20,39 @@
 
 -module(floatmul).
 
--export([start/0]).
+-export([start/0, id/1]).
 
 start() ->
-    to_int(id(mul(id(100), id(0.5)))).
+    ok = test_mul_bif(),
+    ok = test_mul_isfloat(),
+    0.
 
-mul(A, B) ->
-    id(A) * id(B).
+test_mul_bif() ->
+    50 = to_int(mul_bif(id(100), id(0.5))),
+    ok.
+
+test_mul_isfloat() ->
+    50 = to_int(mul_isfloat(id(100.0), id(0.5))),
+    ok.
+
+mul_bif(A, B) ->
+    try id(A) * id(B) of
+        C -> C
+    catch
+        error:badarith -> fail_badarith;
+        _:_ -> fail_other_ex
+    end.
+
+id(I) ->
+    I.
+
+mul_isfloat(A, B) when is_float(A) andalso is_float(B) ->
+    try A * B of
+        C -> C
+    catch
+        error:badarith -> fail_badarith;
+        _:_ -> fail_other_ex
+    end.
 
 to_int(A) ->
     round(A).
-
-id(I) when is_float(I) ->
-    I;
-id(I) when is_integer(I) ->
-    -I.

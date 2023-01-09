@@ -89,3 +89,41 @@ The relationship between the `GlobalContext` fields that manage BEAM processes a
 ## Exception Handling
 
 ## The Scheduler
+
+## Stacktraces
+
+Stacktraces are computed from information gathered at load time from BEAM modules loaded into the application, together with information in the runtime stack that is maintained during the execution of a program.  In addition, if a BEAM file contains a `Line` chunk, additional information is added to stack traces, including the file name (as defined at compile time), as well as the line number of a function call.
+
+> Note.  Adding line information to a BEAM file adds non-trivial memory overhead to applications and should only be used when necessary (e.g., during the development process).  For applications to make the best use of memory in tightly constrained environments, packagers should consider removing line information all together from BEAM files and rely instead on logging or other mechanisms for diagnosing problems in the field.
+
+Newcomers to Erlang may find stacktraces slightly confusing, because some optimizations taken by the Erlang compiler and runtime can result in stack frames "missing" from stack traces.  For example, tail-recursive function calls, as well as function calls that occur as the last expression in a function clause, don't involve the creation of frames in the runtime stack, and consequently will not appear in a stacktrace.
+
+### Line Numbers
+
+Including file and line number information in stacktraces adds considerable overhead to both the BEAM file data, as well as the memory consumed at module load time.  The data structures used to track line numbers and file names are described below and are only created if the associated BEAM file contains a `Line` chunk.
+
+#### The line-refs table
+
+The line-refs table is an array of 16-bit integers, mapping line references (as they occur in BEAM instructions) to the actual line numbers in a file.  (Internally, BEAM instructions do not reference line numbers directly, but instead are indirected through a line index).  This table is stored on the `Module` structure.
+
+This table is populated when the BEAM file is loaded.  The table is created from information in the `Line` chunk in the BEAM file, if it exists.  Note that if there is no `Line` chunk in a BEAM file, this table is not created.
+
+The memory cost of this table is `num_line_refs * 2` bytes, for each loaded module, or 0, if there is no `Line` chunk in the associated BEAM file.
+
+#### The filenames table
+
+The filenames table is a table of (usually only 1?) file name.  This table maps filename indices to `ModuleFilename` structures, which is essentially a pointer and a length (of type `size_t`).  This table generally only contains 1 entry, the file name of the Erlang source code module from which the BEAM file was generated.  This table is stored on the `Module` structure.
+
+Note that a `ModuleFilename` structure points to data directly in the `Line` chunk of the BEAM file.  Therefore, for ports of AtomVM that memory-map BEAM file data (e.g., ESP32), the actual file name data does not consume any memory.
+
+The memory cost of this table is `num_filenames * sizeof(struct ModuleFilename)`, where `struct ModuleFilename` is a pointer and length, for each loaded module, or 0, if there is no `Line` chunk in the associated BEAM file.
+
+#### The line-ref-offsets list
+
+The line-ref-offsets list is a sequence of `LineRefOffset` structures, where each structure contains a ListHead (for list book-keeping), a 16-bit line-ref, and an unsigned integer value designating the code offset at which the line reference occurs in the code chunk of the BEAM file.  This list is stored on the `Module` structure.
+
+This list is populated at code load time.  When a line reference is encountered during code loading, a `LineRefOffset` structure is allocated and added to the line-ref-offsets list.  This list is used at a later time to find the line number at which a stack frame is called, in a manner described below.
+
+The memory cost of this list is `num_line_refs * sizeof(struct LineRefOffset)`, for each loaded module, or 0, if there is no `Line` chunk in the associated BEAM file.
+
+### Raw Stacktraces

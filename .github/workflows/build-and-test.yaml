@@ -17,7 +17,7 @@ jobs:
         cc: ["gcc-4.8", "gcc-5", "gcc-6", "gcc-7", "gcc-8", "gcc-9", "gcc-10", "clang-3.9",
         "clang-10"]
         cflags: ["-Os", "-O2", "-O3"]
-        otp: ["21", "22", "23", "24"]
+        otp: ["21", "22", "23", "24", "25", "master"]
 
         exclude:
         - os: "ubuntu-18.04"
@@ -102,15 +102,12 @@ jobs:
 
         - otp: "22"
           elixir_version: "1.8"
-          cmake_opts_fp: "-DAVM_DISABLE_FP=on"
 
         - otp: "23"
-          elixir_version: "1.10.4"
-          cmake_opts_fp: "-DAVM_DISABLE_FP=on"
+          elixir_version: "1.11"
 
         - otp: "24"
-          elixir_version: "1.11"
-          cmake_opts_fp: "-DAVM_DISABLE_FP=on"
+          elixir_version: "1.14"
 
         - os: "ubuntu-18.04"
           cc: "gcc-4.8"
@@ -129,12 +126,21 @@ jobs:
           cxx: "g++-10"
           cflags: "-m32 -O3"
           otp: "23"
-          elixir_version: "1.10.4"
-          cmake_opts_other: "-DOPENSSL_CRYPTO_LIBRARY=/usr/lib/i386-linux-gnu/libcrypto.so"
-          cmake_opts_fp: "-DAVM_DISABLE_FP=on"
+          elixir_version: "1.11"
+          cmake_opts: "-DOPENSSL_CRYPTO_LIBRARY=/usr/lib/i386-linux-gnu/libcrypto.so -DAVM_CREATE_STACKTRACES=off"
           arch: "i386"
           compiler_pkgs: "gcc-10 g++-10 gcc-10-multilib g++-10-multilib libc6-dev-i386
           libc6-dbg:i386 zlib1g-dev:i386 libssl-dev:i386"
+
+        # keep one FP disabled configuration
+        - os: "ubuntu-20.04"
+          cc: "gcc-10"
+          cxx: "g++-10"
+          cflags: "-O3"
+          otp: "24"
+          elixir_version: "1.14"
+          cmake_opts: "-DAVM_DISABLE_FP=on"
+          compiler_pkgs: "gcc-10 g++-10"
 
     env:
       CC: ${{ matrix.cc }}

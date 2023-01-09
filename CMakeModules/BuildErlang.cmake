@@ -36,11 +36,17 @@ macro(pack_archive avm_name)
         DEPENDS ${BEAMS}
     )
 
+    if(AVM_RELEASE)
+        set(INCLUDE_LINES "")
+    else()
+        set(INCLUDE_LINES "-i")
+    endif()
+
     add_custom_target(
         ${avm_name} ALL
         DEPENDS ${avm_name}_beams PackBEAM
         #DEPENDS ${BEAMS}
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${avm_name}.avm ${BEAMS}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${BEAMS}
         COMMENT "Packing archive ${avm_name}.avm"
         VERBATIM
     )
@@ -60,9 +66,15 @@ macro(pack_lib avm_name)
         set(ARCHIVE_TARGETS ${ARCHIVE_TARGETS} ${archive_name})
     endforeach()
 
+    if(AVM_RELEASE)
+        set(INCLUDE_LINES "")
+    else()
+        set(INCLUDE_LINES "-i")
+    endif()
+
     add_custom_target(
         ${avm_name} ALL
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${avm_name}.avm ${ARCHIVES}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${ARCHIVES}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
@@ -98,9 +110,15 @@ macro(pack_runnable avm_name main)
         set(ARCHIVE_TARGETS ${ARCHIVE_TARGETS} ${archive_name})
     endforeach()
 
+    if(AVM_RELEASE)
+        set(INCLUDE_LINES "")
+    else()
+        set(INCLUDE_LINES "-i")
+    endif()
+
     add_custom_target(
         ${avm_name} ALL
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${avm_name}.avm ${main}.beam ${ARCHIVES}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${avm_name}.avm ${main}.beam ${ARCHIVES}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
@@ -118,10 +136,16 @@ macro(pack_test test_avm_name)
         set(ARCHIVE_TARGETS ${ARCHIVE_TARGETS} ${archive_name})
     endforeach()
 
+    if(AVM_RELEASE)
+        set(INCLUDE_LINES "")
+    else()
+        set(INCLUDE_LINES "-i")
+    endif()
+
     add_custom_target(
         ${test_avm_name} ALL
         COMMAND erlc -I ${CMAKE_SOURCE_DIR}/libs/include ${CMAKE_CURRENT_SOURCE_DIR}/tests.erl
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}.avm ${CMAKE_CURRENT_BINARY_DIR}/tests.beam ${ARCHIVES}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}.avm ${CMAKE_CURRENT_BINARY_DIR}/tests.beam ${ARCHIVES}
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests.erl
         COMMENT "Packing runnable ${test_avm_name}.avm"
         VERBATIM

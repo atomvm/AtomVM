@@ -77,6 +77,12 @@ struct Test
 #define SKIP_SMP true
 #endif
 
+#ifndef AVM_CREATE_STACKTRACES
+#define SKIP_STACKTRACES true
+#else
+#define SKIP_STACKTRACES false
+#endif
+
 struct Test tests[] = {
     TEST_CASE_EXPECTED(add, 17),
     TEST_CASE_EXPECTED(fact, 120),
@@ -356,6 +362,7 @@ struct Test tests[] = {
     TEST_CASE(test_bs),
     TEST_CASE(test_bs_int),
     TEST_CASE(test_bs_int_unaligned),
+    TEST_CASE(test_bs_utf),
     TEST_CASE(test_catch),
     TEST_CASE(test_gc),
     TEST_CASE_EXPECTED(test_raise, 7),
@@ -381,14 +388,15 @@ struct Test tests[] = {
     TEST_CASE_COND(truncfloat, -2, SKIP_NO_FP),
     TEST_CASE_COND(truncfloatovf, 0, SKIP_NO_FP),
 
-    TEST_CASE_COND(floataddovf, -2, SKIP_NO_FP),
-    TEST_CASE_COND(floatadd, 2, SKIP_NO_FP),
-    TEST_CASE_COND(floatsubovf, -2, SKIP_NO_FP),
-    TEST_CASE_COND(floatsub, 2, SKIP_NO_FP),
-    TEST_CASE_COND(floatmulovf, -2, SKIP_NO_FP),
-    TEST_CASE_COND(floatmul, 50, SKIP_NO_FP),
-    TEST_CASE_COND(floatneg, -2, SKIP_NO_FP),
+    TEST_CASE_COND(floataddovf, 0, SKIP_NO_FP),
+    TEST_CASE_COND(floatadd, 0, SKIP_NO_FP),
+    TEST_CASE_COND(floatsubovf, 0, SKIP_NO_FP),
+    TEST_CASE_COND(floatsub, 0, SKIP_NO_FP),
+    TEST_CASE_COND(floatmulovf, 0, SKIP_NO_FP),
+    TEST_CASE_COND(floatmul, 0, SKIP_NO_FP),
+    TEST_CASE_COND(floatneg, 0, SKIP_NO_FP),
     TEST_CASE_COND(floatabs, 3, SKIP_NO_FP),
+    TEST_CASE_COND(floatdiv, 0, SKIP_NO_FP),
 
     TEST_CASE_COND(boxed_is_not_float, 16, SKIP_NO_FP),
     TEST_CASE_COND(float_is_float, 32, SKIP_NO_FP),
@@ -405,6 +413,8 @@ struct Test tests[] = {
     TEST_CASE_COND(bin2float, 511, SKIP_NO_FP),
     TEST_CASE_COND(list2float, 511, SKIP_NO_FP),
     TEST_CASE_COND(floatmath, 0, SKIP_NO_FP),
+
+    TEST_CASE_COND(test_fp_allocate_heap_zero, 0, SKIP_NO_FP),
 
     TEST_CASE_EXPECTED(improper_concat, 7),
     TEST_CASE_EXPECTED(improper_cmp, 3),
@@ -479,6 +489,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(link_throw, 1),
     TEST_CASE_EXPECTED(unlink_error, 1),
     TEST_CASE_EXPECTED(trap_exit_flag, 1),
+    TEST_CASE_COND(test_stacktrace, 0, SKIP_STACKTRACES),
 
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 

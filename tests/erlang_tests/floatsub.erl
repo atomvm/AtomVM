@@ -20,13 +20,26 @@
 
 -module(floatsub).
 
--export([start/0]).
+-export([start/0, id/1]).
 
 start() ->
-    to_int(sub(id(2.8), id(0.8))).
+    ok = test_sub_bif(),
+    ok = test_sub_isfloat(),
+    0.
 
-sub(A, B) ->
-    id(A) - id(B).
+test_sub_bif() ->
+    2 = to_int(sub_bif(id(2.8), id(-0.8))),
+    ok.
+
+test_sub_isfloat() ->
+    2 = to_int(sub_isfloat(id(2.8), id(-0.8))),
+    ok.
+
+sub_bif(A, B) ->
+    id(A) + id(B).
+
+sub_isfloat(A, B) when is_float(A) andalso is_float(B) ->
+    A + B.
 
 to_int(A) ->
     round(A).

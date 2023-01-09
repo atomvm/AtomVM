@@ -318,6 +318,7 @@ compile_erlang(test_ordering_1)
 compile_erlang(test_bs)
 compile_erlang(test_bs_int)
 compile_erlang(test_bs_int_unaligned)
+compile_erlang(test_bs_utf)
 compile_erlang(test_catch)
 compile_erlang(test_gc)
 compile_erlang(test_raise)
@@ -347,6 +348,7 @@ compile_erlang(floatmul)
 compile_erlang(floatmulovf)
 compile_erlang(floatneg)
 compile_erlang(floatabs)
+compile_erlang(floatdiv)
 compile_erlang(floatmath)
 
 compile_erlang(boxed_is_not_float)
@@ -363,6 +365,8 @@ compile_erlang(float2list2scientific)
 compile_erlang(float2list2)
 compile_erlang(bin2float)
 compile_erlang(list2float)
+
+compile_erlang(test_fp_allocate_heap_zero)
 
 compile_erlang(improper_concat)
 compile_erlang(improper_cmp)
@@ -434,6 +438,8 @@ compile_erlang(link_kill_parent)
 compile_erlang(link_throw)
 compile_erlang(unlink_error)
 compile_erlang(trap_exit_flag)
+
+compile_erlang(test_stacktrace)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -726,6 +732,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_bs.beam
     test_bs_int.beam
     test_bs_int_unaligned.beam
+    test_bs_utf.beam
     test_catch.beam
     test_gc.beam
     test_raise.beam
@@ -755,6 +762,7 @@ add_custom_target(erlang_test_modules DEPENDS
     floatmulovf.beam
     floatneg.beam
     floatabs.beam
+    floatdiv.beam
     floatmath.beam
 
     boxed_is_not_float.beam
@@ -771,6 +779,8 @@ add_custom_target(erlang_test_modules DEPENDS
     float2list2.beam
     bin2float.beam
     list2float.beam
+
+    test_fp_allocate_heap_zero.beam
 
     improper_concat.beam
     improper_cmp.beam
@@ -843,4 +853,6 @@ add_custom_target(erlang_test_modules DEPENDS
     link_throw.beam
     unlink_error.beam
     trap_exit_flag.beam
+
+    test_stacktrace.beam
 )

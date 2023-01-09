@@ -301,6 +301,119 @@ static inline bool bitstring_insert_integer(term dst_bin, size_t offset, avm_int
     return bitstring_insert_any_integer((uint8_t *) term_binary_data(dst_bin), offset, value, n, bs_flags);
 }
 
+/**
+ * @brief Encode a character to UTF-8.
+ *
+ * @param c character to encode
+ * @param buf the buffer to encode the sring to or NULL to only compute the
+ * size.
+ * @param out_size the size in bytes, on output (if not NULL)
+ * @return \c true if encoding was successful, \c false if c is not a valid
+ * unicode character
+ */
+bool bitstring_utf8_encode(avm_int_t c, uint8_t *buf, size_t *out_size);
+
+/**
+ * @brief Encode a character to UTF-16.
+ *
+ * @param c character to encode
+ * @param buf the buffer to encode the character to or NULL to only compute the
+ * size.
+ * @param bs_flags flags to encode the character (undefined/little/big/native)
+ * @param out_size the size in bytes, on output (if not NULL)
+ * @return \c true if encoding was successful, \c false if c is not a valid
+ * unicode character
+ */
+bool bitstring_utf16_encode(avm_int_t c, uint8_t *buf, enum BitstringFlags bs_flags, size_t *out_size);
+
+/**
+ * @brief Encode a character to UTF-32.
+ *
+ * @param c character to encode
+ * @param buf the buffer to encode the character
+ * @param bs_flags flags to encode the character (undefined/little/big/native)
+ * @return \c true if encoding was successful, \c false if c is not a valid
+ * unicode character
+ */
+bool bitstring_utf32_encode(avm_int_t c, uint8_t *buf, enum BitstringFlags bs_flags);
+
+/**
+ * @brief Compute the size of a character when UTF-8 encoded.
+ *
+ * @param c character to encode
+ * @param out_size the size in bytes, on output
+ * @return \c true if encoding was successful, \c false if c is not a valid
+ * unicode character
+ */
+static inline bool bitstring_utf8_size(avm_int_t c, size_t *out_size)
+{
+    return bitstring_utf8_encode(c, NULL, out_size);
+}
+
+/**
+ * @brief Compute the size of a unicode character when UTF-16 encoded.
+ *
+ * @param c character to encode
+ * @param out_size the size in bytes, on output
+ * @return \c true if encoding was successful, \c false if c is not a valid
+ * unicode character
+ */
+static inline bool bitstring_utf16_size(avm_int_t c, size_t *out_size) {
+    return bitstring_utf16_encode(c, NULL, 0, out_size);
+}
+
+/**
+ * @brief Insert a character in UTF-8 format
+ *
+ * @param dst_bin binary to insert to
+ * @param offset offset, in bits, to where to insert the character
+ * @param c character to encode
+ * @param out_size the size in bytes, on output
+ * @return \c true if encoding was successful, \c false if c is not a valid
+ * unicode character
+ */
+static inline bool bitstring_insert_utf8(term dst_bin, size_t offset, avm_int_t c, size_t *out_size)
+{
+    // size was verified by a bs_utf8_size instruction call
+    uint8_t *dst = (uint8_t *) term_binary_data(dst_bin) + (offset >> 3);
+    return bitstring_utf8_encode(c, dst, out_size);
+}
+
+/**
+ * @brief Insert a character in UTF-&§ format
+ *
+ * @param dst_bin binary to insert to
+ * @param offset offset, in bits, to where to insert the character
+ * @param c character to encode
+ * @param bs_flags flags to encode the character (undefined/little/big/native)
+ * @param out_size the size in bytes, on output
+ * @return \c true if encoding was successful, \c false if c is not a valid
+ * unicode character
+ */
+static inline bool bitstring_insert_utf16(term dst_bin, size_t offset, avm_int_t c, enum BitstringFlags bs_flags, size_t *out_size)
+{
+    // size was verified by a bs_utf8_size instruction call
+    uint8_t *dst = (uint8_t *) term_binary_data(dst_bin) + (offset >> 3);
+    return bitstring_utf16_encode(c, dst, bs_flags, out_size);
+}
+
+/**
+ * @brief Insert a character in UTF-32 format
+ *
+ * @param dst_bin binary to insert to
+ * @param offset offset, in bits, to where to insert the character
+ * @param c character to encode
+ * @param bs_flags flags to encode the character (undefined/little/big/native)
+ * @param out_size the size in bytes, on output
+ * @return \c true if encoding was successful, \c false if c is not a valid
+ * unicode character
+ */
+static inline bool bitstring_insert_utf32(term dst_bin, size_t offset, avm_int_t c, enum BitstringFlags bs_flags)
+{
+    uint8_t *dst = (uint8_t *) term_binary_data(dst_bin) + (offset >> 3);
+    return bitstring_utf32_encode(c, dst, bs_flags);
+}
+
 #ifdef __cplusplus
 }
 #endif

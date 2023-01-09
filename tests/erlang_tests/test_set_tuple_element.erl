@@ -35,16 +35,20 @@
 }).
 
 start() ->
-    test(thing1, {lets, try_this}).
+    ok = test(thing1, {lets, try_this}),
+    ok = test(thing1, {ha, ha}),
+    ok = test(undefined, {ha, ha}),
+    ok = test(undefined, {lets, try_this}),
+    0.
 
 test(G, J) ->
     Big = make_a_change(#big{}, G, J),
     case {Big#big.g, Big#big.j} of
         {G, J} ->
-            0;
+            ok;
         X ->
             erlang:display(X),
-            1
+            fail
     end.
 
 make_a_change(Big, Thing1, Thing2) ->

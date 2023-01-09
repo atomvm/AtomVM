@@ -36,7 +36,7 @@ start() ->
 
     ok = test_create_with_invalid_int_value(),
     ok = test_create_with_invalid_int_size(),
-    ok = test_create_with_unsupported_int_unit(),
+    ok = test_create_with_int_unit(),
     ok = test_create_with_unsupported_unaligned_int_size(),
     ok = test_create_with_int_little_endian(),
     ok = test_create_with_int_signed(),
@@ -60,6 +60,8 @@ start() ->
     nope = test_match_first_integer(<<16#00, 1, 2, 3>>),
 
     <<1, 2, 3, 1, 2, 3, 4, 5, 6>> = test_bs_append(<<1, 2, 3>>, <<1, 2, 3, 4, 5, 6>>),
+
+    <<1, 2, 3>> = test_bs_private_append(<<1, 2, 3>>),
 
     nope = test_match_clause(<<"">>),
     nope = test_match_clause(<<16#FF>>),
@@ -119,8 +121,14 @@ test_create_with_invalid_int_value() ->
 test_create_with_invalid_int_size() ->
     expect_error(fun() -> create_int_binary(16#F, id(bar)) end, badarg).
 
-test_create_with_unsupported_int_unit() ->
-    atom_unsupported(fun() -> create_int_binary_unit_3(16#F, id(32)) end).
+test_create_with_int_unit() ->
+    <<1, 66, 67>> = create_int_binary_unit_3(16#14243, id(8)),
+    <<0, 0, 0, 1, 66, 67>> = create_int_binary_unit_3(16#14243, id(16)),
+    <<0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15>> = create_int_binary_unit_3(16#F, id(32)),
+    <<0, 0, 0, 0, 16#12, 16#34, 16#56, 16#78, 16#90, 16#AB, 16#CD, 16#EF>> = create_int_binary_unit_3(
+        16#1234567890ABCDEF, id(32)
+    ),
+    ok.
 
 test_create_with_unsupported_unaligned_int_size() ->
     atom_unsupported(fun() -> create_int_binary(16#FFFF, id(28)) end).
@@ -258,6 +266,9 @@ test_match_first_integer(_) ->
 
 test_bs_append(Bin1, Bin2) ->
     <<Bin1/binary, Bin2/binary>>.
+
+test_bs_private_append(Bin) ->
+    <<<<Byte:8>> || <<Byte:8>> <= Bin>>.
 
 test_match_clause(
     <<$n:8, FixedBinaryData:4/binary, Rest/binary>>

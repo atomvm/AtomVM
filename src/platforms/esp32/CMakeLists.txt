@@ -32,5 +32,6 @@ option(AVM_DISABLE_FP "Disable floating point support." OFF)
 option(AVM_DISABLE_SMP "Disable SMP." OFF)
 option(AVM_USE_32BIT_FLOAT "Use 32 bit floats." OFF)
 option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
+option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 
 add_subdirectory(tools)

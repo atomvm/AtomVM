@@ -20,6 +20,7 @@
 
 #include <assert.h>
 #include <libgen.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -48,9 +49,9 @@ typedef struct FileData {
 static void pad_and_align(FILE *f);
 static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize);
 static void add_module_header(FILE *f, const char *module_name, uint32_t flags);
-static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *filename, int is_entrypoint);
+static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *filename, int is_entrypoint, bool include_lines);
 
-static int do_pack(int argc, char **argv, int is_archive);
+static int do_pack(int argc, char **argv, int is_archive, bool include_lines);
 static int do_list(int argc, char **argv);
 
 static void usage3(FILE *out, const char *program, const char *msg) {
@@ -59,6 +60,7 @@ static void usage3(FILE *out, const char *program, const char *msg) {
     }
     fprintf(out, "Usage: %s [-h] [-l] <avm-file> [<options>]\n", program);
     fprintf(out, "    -h                                                Print this help menu.\n");
+    fprintf(out, "    -i                                                Include file and line information.\n");
     fprintf(out, "    -l <input-avm-file>                               List the contents of an AVM file.\n");
     fprintf(out, "    [-a] <output-avm-file> <input-beam-or-avm-file>+  Create an AVM file (archive if -a specified).\n"
     );
@@ -76,13 +78,17 @@ int main(int argc, char **argv)
 
     const char *action = "pack";
     int is_archive = 0;
-    while ((opt = getopt(argc, argv, "hal")) != -1) {
+    bool include_lines = false;
+    while ((opt = getopt(argc, argv, "hail")) != -1) {
         switch(opt) {
             case 'h':
                 usage(argv[0]);
                 return EXIT_SUCCESS;
             case 'a':
                 is_archive = 1;
+                break;
+            case 'i':
+                include_lines = true;
                 break;
             case 'l':
                 action = "list";
@@ -109,7 +115,7 @@ int main(int argc, char **argv)
             usage3(stderr, argv[0], "Missing options for pack\n");
             return EXIT_FAILURE;
         }
-        return do_pack(new_argc, new_argv, is_archive);
+        return do_pack(new_argc, new_argv, is_archive, include_lines);
     } else {
         return do_list(new_argc, new_argv);
     }
@@ -213,7 +219,7 @@ static void validate_pack_options(int argc, char ** argv)
     }
 }
 
-static int do_pack(int argc, char **argv, int is_archive)
+static int do_pack(int argc, char **argv, int is_archive, bool include_lines)
 {
     validate_pack_options(argc, argv);
 
@@ -263,7 +269,7 @@ static int do_pack(int argc, char **argv, int is_archive)
             }
         } else {
             char *filename = basename(argv[i]);
-            pack_beam_file(pack, file_data, file_size, filename, !is_archive && i == 1);
+            pack_beam_file(pack, file_data, file_size, filename, !is_archive && i == 1, include_lines);
         }
     }
 
@@ -273,7 +279,7 @@ static int do_pack(int argc, char **argv, int is_archive)
     return EXIT_SUCCESS;
 }
 
-static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *section_name, int is_entrypoint)
+static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *section_name, int is_entrypoint, bool include_lines)
 {
     size_t zero_pos = ftell(pack);
 
@@ -326,6 +332,10 @@ static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const c
     }
     if (offsets[STRT]) {
         assert_fwrite(data + offsets[STRT], sizes[STRT] + IFF_SECTION_HEADER_SIZE, pack);
+        pad_and_align(pack);
+    }
+    if (offsets[LINT] && include_lines) {
+        assert_fwrite(data + offsets[LINT], sizes[LINT] + IFF_SECTION_HEADER_SIZE, pack);
         pad_and_align(pack);
     }
 

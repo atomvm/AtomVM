@@ -10,7 +10,11 @@ on: [push, pull_request]
 
 jobs:
   build-and-test:
-    runs-on: "macos-11"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: ["macos-11"]
+        otp: ["23", "24", "25"]
 
     steps:
     # Setup
@@ -20,7 +24,7 @@ jobs:
         submodules: 'recursive'
 
     - name: "Install deps"
-      run: brew install gperf doxygen erlang@21 ninja
+      run: brew install gperf doxygen erlang@${{ matrix.otp }} ninja
 
     # Builder info
     - name: "System info"
@@ -40,13 +44,13 @@ jobs:
     - name: "Build: run cmake"
       working-directory: build
       run: |
-        export PATH="/usr/local/opt/erlang@21/bin:$PATH"
+        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
         cmake -G Ninja -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl ..
 
     - name: "Build: run ninja"
       working-directory: build
       run: |
-        export PATH="/usr/local/opt/erlang@21/bin:$PATH"
+        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
         ninja
 
     # Test

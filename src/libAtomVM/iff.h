@@ -53,11 +53,13 @@ extern "C" {
 #define FUNT 7
 /** Str table section */
 #define STRT 8
+/** Str table section */
+#define LINT 9
 
 /** Required size for offsets array */
-#define MAX_OFFS 9
+#define MAX_OFFS 10
 /** Required size for sizes array */
-#define MAX_SIZES 9
+#define MAX_SIZES 10
 
 /** sizeof IFF section header in bytes */
 #define IFF_SECTION_HEADER_SIZE 8
