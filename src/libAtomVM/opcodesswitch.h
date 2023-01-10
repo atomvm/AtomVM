@@ -2145,10 +2145,16 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_COMPACT_TERM(timeout, code, i, next_off)
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (!term_is_integer(timeout) && UNLIKELY(timeout != INFINITY_ATOM)) {
+                    avm_int64_t t = 0;
+                    if (term_is_any_integer(timeout)) {
+                        t = term_maybe_unbox_int64(timeout);
+                        if (UNLIKELY(t < 0)) {
+                            RAISE_ERROR(TIMEOUT_VALUE_ATOM);
+                        }
+                    } else if (UNLIKELY(timeout != INFINITY_ATOM)) {
                         RAISE_ERROR(TIMEOUT_VALUE_ATOM);
                     }
-                    TRACE("wait_timeout/2, label: %i, timeout: %li\n", label, (long int) term_to_int32(timeout));
+                    TRACE("wait_timeout/2, label: %i, timeout: %li\n", label, (long int) t);
 
                     NEXT_INSTRUCTION(next_off);
                     //TODO: it looks like x[0] might be used instead of jump_to_on_restore
@@ -2159,10 +2165,10 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     int needs_to_wait = 0;
                     if ((ctx->flags & (WaitingTimeout | WaitingTimeoutExpired)) == 0) {
                         if (timeout != INFINITY_ATOM) {
-                            scheduler_set_timeout(ctx, term_to_int32(timeout));
+                            scheduler_set_timeout(ctx, t);
                         }
                         needs_to_wait = 1;
-                    } else if ((ctx->flags & WaitingTimeout) == 0) {
+                    } else if ((ctx->flags & WaitingTimeout) != 0) {
                         needs_to_wait = 1;
                     } else if (!list_is_empty(&ctx->save_queue)) {
                         needs_to_wait = 1;
