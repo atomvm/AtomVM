@@ -150,6 +150,8 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
         if (item == listeners_list) {
             TRACE("sys: handler not found for: %p\n", (void *) sender);
         }
+
+        synclist_unlock(&platform->listeners);
     }
 }
 
