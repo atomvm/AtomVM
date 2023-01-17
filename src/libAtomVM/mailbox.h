@@ -262,12 +262,35 @@ void mailbox_remove(Mailbox *mbx);
 Message *mailbox_first(Mailbox *mbox);
 
 /**
+ * @brief Take first message from mailbox.
+ *
+ * @details Get the first message and remove it from the mailbox, advance pointer to next message
+ * in a receive loop. Used by ports & drivers. To be called from the process only. Message should
+ * be manually deleted later.
+ * This function is especially aimed for implementing port drivers.
+ * @param mbox the mailbox to take the current message from.
+ * @returns first message or NULL.
+ */
+Message *mailbox_take_first(Mailbox *mbox);
+
+/**
  * @brief Free memory associated with a mailbox.
  *
  * @details All messages in the mailbox will be freed.
  * @param mbox the mailbox to free.
  */
 void mailbox_destroy(Mailbox *mbox);
+
+/**
+ * @brief Free memory associated with a message.
+ *
+ * @details The supplied message will be free'd, and
+ * to any references to shared memory will decrement
+ * reference counts.
+ * This function is especially aimed for implementing port drivers.
+ * @param m the message to free.
+ */
+void mailbox_destroy_message(Message *m);
 
 /**
  * @brief Free memory associated with a signal mailbox message.

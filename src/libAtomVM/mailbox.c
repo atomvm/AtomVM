@@ -26,6 +26,9 @@
 
 #define ADDITIONAL_PROCESSING_MEMORY_SIZE 4
 
+#define GET_MAILBOX_MESSAGE(message) \
+    ((MailboxMessage *) (((char *) (message)) - ((unsigned long) &((MailboxMessage *) 0)->body.normal)))
+
 static inline term *mailbox_message_memory(term *msg_term)
 {
     return msg_term + 1;
@@ -52,9 +55,15 @@ void mailbox_destroy_signal_message(MailboxMessage *m)
     free(m);
 }
 
-static inline void mailbox_destroy_message(MailboxMessage *m)
+static inline void mailbox_destroy_mailbox_message(MailboxMessage *m)
 {
     mailbox_destroy_signal_message(m);
+}
+
+void mailbox_destroy_message(Message *m)
+{
+    MailboxMessage *mboxmsg = GET_MAILBOX_MESSAGE(m);
+    mailbox_destroy_mailbox_message(mboxmsg);
 }
 
 void mailbox_destroy(Mailbox *mbox)
@@ -62,13 +71,13 @@ void mailbox_destroy(Mailbox *mbox)
     MailboxMessage *msg = mbox->outer_first;
     while (msg) {
         MailboxMessage *next = msg->header.next;
-        mailbox_destroy_message(msg);
+        mailbox_destroy_mailbox_message(msg);
         msg = next;
     }
     msg = mbox->inner_first;
     while (msg) {
         MailboxMessage *next = msg->header.next;
-        mailbox_destroy_message(msg);
+        mailbox_destroy_mailbox_message(msg);
         msg = next;
     }
 }
@@ -331,7 +340,7 @@ void mailbox_remove(Mailbox *mbox)
         }
     }
 
-    mailbox_destroy_message(removed);
+    mailbox_destroy_mailbox_message(removed);
     // Reset receive pointers
     mailbox_reset(mbox);
 }
@@ -345,6 +354,25 @@ Message *mailbox_first(Mailbox *mbox)
         result = &msg->body.normal;
     }
     return result;
+}
+
+Message *mailbox_take_first(Mailbox *mbox)
+{
+    mailbox_reset(mbox);
+    MailboxMessage *msg = mbox->receive_pointer;
+    Message *first = NULL;
+    if (msg) {
+        first = &msg->body.normal;
+
+        mbox->inner_first = msg->header.next;
+        mbox->receive_pointer = msg->header.next;
+        if (mbox->inner_first == NULL) {
+            // If this also the last, update inner_last.
+            mbox->inner_last = NULL;
+        }
+    }
+
+    return first;
 }
 
 void mailbox_crashdump(Context *ctx)
