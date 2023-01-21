@@ -113,6 +113,7 @@ erlang:group_leader/0, &group_leader_nif
 erlang:group_leader/2, &group_leader_nif
 erts_debug:flat_size/1, &flat_size_nif
 atomvm:read_priv/2, &atomvm_read_priv_nif
+code:load_binary/3, &code_load_binary_nif
 console:print/1, &console_print_nif
 base64:encode/1, &base64_encode_nif
 base64:decode/1, &base64_decode_nif

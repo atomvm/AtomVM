@@ -127,6 +127,8 @@ static const char *const signed_atom = "\x6" "signed";
 static const char *const machine_atom = "\x7" "machine";
 static const char *const avm_floatsize_atom = "\xD" "avm_floatsize";
 
+static const char *const module_atom = "\x06" "module";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -237,6 +239,8 @@ void defaultatoms_init(GlobalContext *glb)
 
     ok &= globalcontext_insert_atom(glb, machine_atom) == MACHINE_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, avm_floatsize_atom) == AVM_FLOATSIZE_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, module_atom) == MODULE_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();

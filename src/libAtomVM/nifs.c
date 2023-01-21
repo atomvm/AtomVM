@@ -162,6 +162,7 @@ static term nif_base64_encode(Context *ctx, int argc, term argv[]);
 static term nif_base64_decode(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode_to_string(Context *ctx, int argc, term argv[]);
 static term nif_base64_decode_to_string(Context *ctx, int argc, term argv[]);
+static term nif_code_load_binary(Context *ctx, int argc, term argv[]);
 static term nif_maps_next(Context *ctx, int argc, term argv[]);
 
 #define DECLARE_MATH_NIF_FUN(moniker) \
@@ -645,6 +646,11 @@ static const struct Nif base64_decode_to_string_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_base64_decode_to_string
+};
+static const struct Nif code_load_binary_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_load_binary
 };
 static const struct Nif maps_next_nif =
 {
@@ -3498,6 +3504,61 @@ static term nif_base64_encode_to_string(Context *ctx, int argc, term argv[])
 static term nif_base64_decode_to_string(Context *ctx, int argc, term argv[])
 {
     return base64_decode(ctx, argc, argv, false);
+}
+
+static term nif_code_load_binary(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term module_name = argv[0];
+    if (UNLIKELY(!term_is_atom(module_name))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    term file_name = argv[1];
+    UNUSED(file_name);
+
+    term binary = argv[2];
+    if (UNLIKELY(!term_is_binary(binary))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    const uint8_t *data;
+    size_t bin_size = term_binary_size(binary);
+    if (term_is_refc_binary(binary)) {
+        if (!term_refc_binary_is_const(binary)) {
+            // TODO: track this and decrement when we free the Module
+            refc_binary_increment_refcount((struct RefcBinary *) term_refc_binary_ptr(binary));
+        }
+        data = (const uint8_t *) term_binary_data(binary);
+    } else {
+        uint8_t *allocated_data = malloc(bin_size);
+        if (IS_NULL_PTR(allocated_data)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        memcpy(allocated_data, term_binary_data(binary), bin_size);
+        data = allocated_data;
+    }
+
+    Module *new_module = module_new_from_iff_binary(ctx->global, data, bin_size);
+    if (IS_NULL_PTR(new_module)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    new_module->module_platform_data = NULL;
+
+    if (UNLIKELY(globalcontext_insert_module(ctx->global, new_module) < 0)) {
+        return ERROR_ATOM;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result = term_alloc_tuple(2, ctx);
+    term_put_tuple_element(result, 0, MODULE_ATOM);
+    term_put_tuple_element(result, 1, module_name);
+
+    return result;
 }
 
 static term nif_maps_next(Context *ctx, int argc, term argv[])
