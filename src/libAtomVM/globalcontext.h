@@ -58,7 +58,7 @@ typedef struct Module Module;
 
 struct Module;
 
-typedef struct
+struct GlobalContext
 {
     struct ListHead ready_processes;
     struct ListHead waiting_processes;
@@ -83,7 +83,7 @@ typedef struct
     uint64_t ref_ticks;
 
     void *platform_data;
-} GlobalContext;
+};
 
 /**
  * @brief Creates a new GlobalContext

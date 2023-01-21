@@ -86,6 +86,11 @@ extern "C" {
 
 #define TERM_FROM_ATOM_INDEX(atom_index) ((atom_index << 6) | 0xB)
 
+#ifndef TYPEDEF_GLOBALCONTEXT
+#define TYPEDEF_GLOBALCONTEXT
+typedef struct GlobalContext GlobalContext;
+#endif
+
 enum RefcBinaryFlags
 {
     RefcNoFlags = 0,
@@ -1392,11 +1397,22 @@ static inline int term_is_number(term t)
 /**
  * @brief Prints a term to stdout
  *
- * @details Print any given term to the standard output.
+ * @details Print any term to the given file.
+ * @param fd the file where the term will be printed.
  * @param t the term that will be printed.
  * @param ctx the context.
  */
 void term_display(FILE *fd, term t, const Context *ctx);
+
+/**
+ * @brief Prints a term to the given file
+ *
+ * @details Print any given term to the given file.
+ * @param fd the file where the term will be printed.
+ * @param t the term that will be printed.
+ * @param global the \c GlobalContext.
+ */
+void term_fprint(FILE *fd, term t, const GlobalContext *global);
 
 /**
  * @brief Checks if a term is a string (i.e., a list of characters)

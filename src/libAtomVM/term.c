@@ -34,9 +34,15 @@ const term empty_tuple = 0;
 
 void term_display(FILE *fd, term t, const Context *ctx)
 {
+    term_fprint(fd, t, ctx->global);
+}
+
+void term_fprint(FILE *fd, term t, const GlobalContext *global)
+{
     if (term_is_atom(t)) {
         int atom_index = term_to_atom_index(t);
-        AtomString atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table, atom_index, (unsigned long) NULL);
+        AtomString atom_string = (AtomString) valueshashtable_get_value(
+            global->atoms_ids_table, atom_index, (unsigned long) NULL);
         fprintf(fd, "%.*s", (int) atom_string_len(atom_string), (char *) atom_string_data(atom_string));
 
     } else if (term_is_integer(t)) {
@@ -79,12 +85,12 @@ void term_display(FILE *fd, term t, const Context *ctx)
                     display_separator = 1;
                 }
 
-                term_display(fd, term_get_list_head(t), ctx);
+                term_fprint(fd, term_get_list_head(t), global);
                 t = term_get_list_tail(t);
             }
             if (!term_is_nil(t)) {
                 fputc('|', fd);
-                term_display(fd, t, ctx);
+                term_fprint(fd, t, global);
             }
             fputc(']', fd);
         }
@@ -111,7 +117,7 @@ void term_display(FILE *fd, term t, const Context *ctx)
             if (i != 0) {
                 fputc(',', fd);
             }
-            term_display(fd, term_get_tuple_element(t, i), ctx);
+            term_fprint(fd, term_get_tuple_element(t, i), global);
         }
 
         fputc('}', fd);
@@ -124,9 +130,9 @@ void term_display(FILE *fd, term t, const Context *ctx)
             if (i != 0) {
                 fputc(',', fd);
             }
-            term_display(fd, term_get_map_key(t, i), ctx);
+            term_fprint(fd, term_get_map_key(t, i), global);
             fprintf(fd, "=>");
-            term_display(fd, term_get_map_value(t, i), ctx);
+            term_fprint(fd, term_get_map_value(t, i), global);
         }
 
         fputc('}', fd);
