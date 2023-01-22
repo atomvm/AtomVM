@@ -156,6 +156,7 @@ static term nif_erlang_group_leader(Context *ctx, int argc, term argv[]);
 static term nif_erlang_monitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_unlink(Context *ctx, int argc, term argv[]);
+static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[]);
 static term nif_console_print(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode(Context *ctx, int argc, term argv[]);
@@ -617,6 +618,11 @@ static const struct Nif raise_nif =
     .nif_ptr = nif_erlang_raise
 };
 
+static const struct Nif atomvm_add_avm_pack_binary_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_add_avm_pack_binary
+};
 static const struct Nif atomvm_read_priv_nif =
 {
     .base.type = NIFFunctionType,
@@ -3132,6 +3138,51 @@ static term nif_erlang_group_leader(Context *ctx, int argc, term argv[])
         globalcontext_get_process_unlock(ctx->global, target);
         return TRUE_ATOM;
     }
+}
+
+// AtomVM extension
+static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term binary = argv[0];
+    if (!term_is_binary(binary)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    uint8_t *allocated_data = NULL;
+    const uint8_t *data;
+    size_t bin_size = term_binary_size(binary);
+
+    if (UNLIKELY(!avmpack_is_valid(term_binary_data(binary), bin_size))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (term_is_refc_binary(binary)) {
+        if (!term_refc_binary_is_const(binary)) {
+            // TODO: track this and decrement when we free the Module
+            refc_binary_increment_refcount((struct RefcBinary *) term_refc_binary_ptr(binary));
+        }
+        data = (const uint8_t *) term_binary_data(binary);
+    } else {
+        allocated_data = malloc(bin_size);
+        if (IS_NULL_PTR(allocated_data)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        memcpy(allocated_data, term_binary_data(binary), bin_size);
+
+        data = allocated_data;
+    }
+
+    struct AVMPackData *avmpack_data = malloc(sizeof(struct AVMPackData));
+    if (IS_NULL_PTR(avmpack_data)) {
+        free(allocated_data);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    avmpack_data->data = data;
+    synclist_append(&ctx->global->avmpack_data, (struct ListHead *) avmpack_data);
+
+    return OK_ATOM;
 }
 
 // AtomVM extension
