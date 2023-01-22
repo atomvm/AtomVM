@@ -102,6 +102,8 @@ void sys_monotonic_time(struct timespec *t);
  */
 Module *sys_load_module(GlobalContext *global, const char *module_name);
 
+Module *sys_load_module_from_file(GlobalContext *global, const char *path);
+
 /**
  * @brief Create a port driver
  * @details This function creates a port driver, enscapsulated in a Context object.  This function should

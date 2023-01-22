@@ -338,36 +338,20 @@ void sys_monotonic_time(struct timespec *t)
     }
 }
 
-Module *sys_load_module(GlobalContext *global, const char *module_name)
+Module *sys_load_module_from_file(GlobalContext *global, const char *path)
 {
-    TRACE("sys_load_module: Going to load: %s\n", module_name);
+    TRACE("sys_load_module_from_file: Going to load: %s\n", path);
 
-    const void *beam_module = NULL;
-    uint32_t beam_module_size = 0;
-
-    MappedFile *beam_file = NULL;
-
-    struct ListHead *item;
-    struct ListHead *avmpack_data = synclist_rdlock(&global->avmpack_data);
-    LIST_FOR_EACH (item, avmpack_data) {
-        struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
-        if (avmpack_find_section_by_name(avmpack_data->data, module_name, &beam_module, &beam_module_size)) {
-            break;
-        }
+    MappedFile *beam_file = mapped_file_open_beam(path);
+    if (IS_NULL_PTR(beam_file)) {
+        return NULL;
     }
-    synclist_unlock(&global->avmpack_data);
-
-    if (IS_NULL_PTR(beam_module)) {
-        beam_file = mapped_file_open_beam(module_name);
-        if (IS_NULL_PTR(beam_file)) {
-            return NULL;
-        }
-        if (UNLIKELY(!iff_is_valid_beam(beam_file->mapped))) {
-            fprintf(stderr, "%s is not a valid BEAM file.\n", module_name);
-        }
-        beam_module = beam_file->mapped;
-        beam_module_size = beam_file->size;
+    if (UNLIKELY(!iff_is_valid_beam(beam_file->mapped))) {
+        fprintf(stderr, "%s is not a valid BEAM file.\n", path);
+        return NULL;
     }
+    const void *beam_module = beam_file->mapped;
+    uint32_t beam_module_size = beam_file->size;
 
     Module *new_module = module_new_from_iff_binary(global, beam_module, beam_module_size);
     if (IS_NULL_PTR(new_module)) {
@@ -376,6 +360,48 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
     new_module->module_platform_data = beam_file;
 
     return new_module;
+}
+
+Module *sys_find_and_load_module_from_avm(GlobalContext *global, const char *module_name)
+{
+    TRACE("sys_find_and_load_module_from_avm: Going to load: %s\n", module_name);
+
+    const void *beam_module = NULL;
+    uint32_t beam_module_size = 0;
+    MappedFile *beam_file = NULL;
+
+    Module *new_module = NULL;
+
+    struct ListHead *item;
+    struct ListHead *avmpack_data = synclist_rdlock(&global->avmpack_data);
+    LIST_FOR_EACH (item, avmpack_data) {
+        struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
+        if (avmpack_find_section_by_name(avmpack_data->data, module_name, &beam_module, &beam_module_size)) {
+            new_module = module_new_from_iff_binary(global, beam_module, beam_module_size);
+            if (IS_NULL_PTR(new_module)) {
+                synclist_unlock(&global->avmpack_data);
+                return NULL;
+            }
+            new_module->module_platform_data = beam_file;
+
+            break;
+        }
+    }
+    synclist_unlock(&global->avmpack_data);
+
+    return new_module;
+}
+
+Module *sys_load_module(GlobalContext *global, const char *module_name)
+{
+    TRACE("sys_load_module: Going to load: %s\n", module_name);
+
+    Module *new_module = sys_find_and_load_module_from_avm(global, module_name);
+    if (new_module) {
+        return new_module;
+    }
+
+    return sys_load_module_from_file(global, module_name);
 }
 
 Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)

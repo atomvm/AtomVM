@@ -239,6 +239,12 @@ uint64_t sys_millis(GlobalContext *glb)
     return usec / 1000UL;
 }
 
+Module *sys_load_module_from_file(GlobalContext *global, const char *path)
+{
+    // TODO
+    return NULL;
+}
+
 Module *sys_load_module(GlobalContext *global, const char *module_name)
 {
     const void *beam_module = NULL;
