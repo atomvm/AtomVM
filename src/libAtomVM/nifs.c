@@ -163,6 +163,7 @@ static term nif_base64_encode(Context *ctx, int argc, term argv[]);
 static term nif_base64_decode(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode_to_string(Context *ctx, int argc, term argv[]);
 static term nif_base64_decode_to_string(Context *ctx, int argc, term argv[]);
+static term nif_code_load_abs(Context *ctx, int argc, term argv[]);
 static term nif_code_load_binary(Context *ctx, int argc, term argv[]);
 static term nif_maps_next(Context *ctx, int argc, term argv[]);
 
@@ -652,6 +653,11 @@ static const struct Nif base64_decode_to_string_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_base64_decode_to_string
+};
+static const struct Nif code_load_abs_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_load_abs
 };
 static const struct Nif code_load_binary_nif =
 {
@@ -3555,6 +3561,44 @@ static term nif_base64_encode_to_string(Context *ctx, int argc, term argv[])
 static term nif_base64_decode_to_string(Context *ctx, int argc, term argv[])
 {
     return base64_decode(ctx, argc, argv, false);
+}
+
+static term nif_code_load_abs(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term abs_term = argv[0];
+
+    int ok;
+    char *abs = interop_list_to_string(abs_term, &ok);
+    if (UNLIKELY(!ok)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    char *path = malloc(strlen(abs) + strlen(".beam") + 1);
+    strcpy(path, abs);
+    strcat(path, ".beam");
+
+    Module *new_module = sys_load_module_from_file(ctx->global, path);
+    free(abs);
+    free(path);
+    if (IS_NULL_PTR(new_module)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    if (UNLIKELY(globalcontext_insert_module(ctx->global, new_module) < 0)) {
+        return ERROR_ATOM;
+    }
+
+    term module_name = module_get_atom_term_by_id(new_module, 1);
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term result = term_alloc_tuple(2, ctx);
+    term_put_tuple_element(result, 0, MODULE_ATOM);
+    term_put_tuple_element(result, 1, module_name);
+
+    return result;
 }
 
 static term nif_code_load_binary(Context *ctx, int argc, term argv[])
