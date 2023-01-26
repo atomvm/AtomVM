@@ -26,6 +26,8 @@
 
 #include "gpiodriver.h"
 
+#include "trace.h"
+
 void sys_tick_handler();
 void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis);
 
@@ -86,6 +88,14 @@ uint64_t sys_millis(GlobalContext *glb)
 {
     UNUSED(glb);
     return system_millis;
+}
+
+struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *path)
+{
+    TRACE("sys_open_avm_from_file: Going to open: %s\n", path);
+
+    // TODO
+    return NULL;
 }
 
 Module *sys_load_module_from_file(GlobalContext *global, const char *path)

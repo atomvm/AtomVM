@@ -338,6 +338,32 @@ void sys_monotonic_time(struct timespec *t)
     }
 }
 
+struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *path)
+{
+    TRACE("sys_open_avm_from_file: Going to open: %s\n", path);
+
+    UNUSED(global);
+
+    MappedFile *mapped = mapped_file_open_beam(path);
+    if (IS_NULL_PTR(mapped)) {
+        return NULL;
+    }
+    if (UNLIKELY(!avmpack_is_valid(mapped->mapped, mapped->size))) {
+        fprintf(stderr, "%s is not a valid AVM Pack file.\n", path);
+        return NULL;
+    }
+
+    struct AVMPackData *avmpack_data = malloc(sizeof(struct AVMPackData));
+    if (IS_NULL_PTR(avmpack_data)) {
+        fprintf(stderr, "Memory error: Cannot allocate AVMPackData.\n");
+        mapped_file_close(mapped);
+        return NULL;
+    }
+    avmpack_data->data = mapped->mapped;
+
+    return avmpack_data;
+}
+
 Module *sys_load_module_from_file(GlobalContext *global, const char *path)
 {
     TRACE("sys_load_module_from_file: Going to load: %s\n", path);

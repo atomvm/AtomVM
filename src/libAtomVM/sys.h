@@ -85,6 +85,8 @@ void sys_signal(GlobalContext *glb);
  */
 void sys_time(struct timespec *t);
 
+struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *path);
+
 /**
  * @brief gets monotonic time
  *
