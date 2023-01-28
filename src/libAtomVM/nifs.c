@@ -157,6 +157,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_unlink(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[]);
+static term nif_atomvm_add_avm_pack_file(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[]);
 static term nif_console_print(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode(Context *ctx, int argc, term argv[]);
@@ -623,6 +624,11 @@ static const struct Nif atomvm_add_avm_pack_binary_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_add_avm_pack_binary
+};
+static const struct Nif atomvm_add_avm_pack_file_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_add_avm_pack_file
 };
 static const struct Nif atomvm_read_priv_nif =
 {
@@ -3187,6 +3193,29 @@ static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
     }
     avmpack_data->data = data;
     synclist_append(&ctx->global->avmpack_data, (struct ListHead *) avmpack_data);
+
+    return OK_ATOM;
+}
+
+// AtomVM extension
+static term nif_atomvm_add_avm_pack_file(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term abs_term = argv[0];
+
+    int ok;
+    char *abs = interop_list_to_string(abs_term, &ok);
+    if (UNLIKELY(!ok)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    struct AVMPackData *avmpack_data = sys_open_avm_from_file(ctx->global, abs);
+    if (IS_NULL_PTR(avmpack_data)) {
+        free(abs);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    synclist_append(&ctx->global->avmpack_data, &avmpack_data->avmpack_head);
 
     return OK_ATOM;
 }

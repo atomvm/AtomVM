@@ -113,6 +113,7 @@ erlang:group_leader/0, &group_leader_nif
 erlang:group_leader/2, &group_leader_nif
 erts_debug:flat_size/1, &flat_size_nif
 atomvm:add_avm_pack_binary/2, &atomvm_add_avm_pack_binary_nif
+atomvm:add_avm_pack_file/2, &atomvm_add_avm_pack_file_nif
 atomvm:read_priv/2, &atomvm_read_priv_nif
 code:load_abs/1, &code_load_abs_nif
 code:load_binary/3, &code_load_binary_nif
