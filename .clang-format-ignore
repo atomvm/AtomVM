@@ -17,7 +17,6 @@ src/libAtomVM/module.c
 src/libAtomVM/nifs.c
 src/libAtomVM/opcodesswitch.h
 src/libAtomVM/overflow_helpers.h
-src/libAtomVM/scheduler.c
 src/libAtomVM/term.c
 src/libAtomVM/term.h
 src/libAtomVM/term_typedef.h
@@ -32,7 +31,6 @@ src/platforms/esp32/main/platform_defaultatoms.c
 src/platforms/esp32/main/platform_nifs.c
 src/platforms/esp32/main/socket_driver.c
 src/platforms/esp32/main/spi_driver.c
-src/platforms/esp32/main/sys.c
 src/platforms/esp32/main/uart_driver.c
 src/platforms/esp32/build/*
 src/platforms/esp32/components/*

@@ -50,6 +50,7 @@
 
 static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts);
 
+// clang-format off
 static const char *const esp_free_heap_size_atom = "\x14" "esp32_free_heap_size";
 static const char *const esp_largest_free_block_atom = "\x18" "esp32_largest_free_block";
 static const char *const esp_get_minimum_free_size_atom = "\x17" "esp32_minimum_free_size";
@@ -69,6 +70,7 @@ static const char *const cores_atom = "\x5" "cores";
 static const char *const features_atom = "\x8" "features";
 static const char *const model_atom = "\x5" "model";
 static const char *const revision_atom = "\x8" "revision";
+// clang-format on
 
 struct PortDriverDefListItem *port_driver_list;
 struct NifCollectionDefListItem *nif_collection_list;
@@ -145,7 +147,7 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
             }
             previous = item;
             item = next;
-       } while (item != listeners_list);
+        } while (item != listeners_list);
 
         if (item == listeners_list) {
             TRACE("sys: handler not found for: %p\n", (void *) sender);
@@ -297,7 +299,7 @@ static term get_model(Context *ctx, esp_chip_model_t model)
 static term get_features(Context *ctx, uint32_t features)
 {
     term ret = term_nil();
-    GlobalContext* glb = ctx->global;
+    GlobalContext *glb = ctx->global;
 
     if (features & CHIP_FEATURE_EMB_FLASH) {
         ret = term_list_prepend(globalcontext_make_atom(glb, emb_flash_atom), ret, ctx);
@@ -317,7 +319,7 @@ static term get_features(Context *ctx, uint32_t features)
 
 term sys_get_info(Context *ctx, term key)
 {
-    GlobalContext* glb = ctx->global;
+    GlobalContext *glb = ctx->global;
     if (key == globalcontext_make_atom(glb, esp_free_heap_size_atom)) {
         return term_from_int32(esp_get_free_heap_size());
     }
