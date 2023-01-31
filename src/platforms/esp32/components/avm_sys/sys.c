@@ -25,6 +25,7 @@
 #include "defaultatoms.h"
 #include "globalcontext.h"
 #include "scheduler.h"
+#include "utils.h"
 
 // #define ENABLE_TRACE
 #include "trace.h"
@@ -107,7 +108,7 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
         }
 
 #ifndef AVM_NO_SMP
-        if (sender == sys_signal) {
+        if (sender == CAST_FUNC_TO_VOID_PTR(sys_signal)) {
             // We've been signaled
             return;
         }
@@ -169,7 +170,7 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
 #ifndef AVM_NO_SMP
 void sys_signal(GlobalContext *glb)
 {
-    void *queue_item = sys_signal;
+    void *queue_item = CAST_FUNC_TO_VOID_PTR(sys_signal);
     xQueueSendToBack(event_queue, &queue_item, 0);
 }
 #endif
