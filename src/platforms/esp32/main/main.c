@@ -88,24 +88,26 @@ void app_main()
         AVM_ABORT();
     }
     ESP_LOGI(TAG, "Found startup beam %s", startup_module_name);
-    struct AVMPackData *avmpack_data = malloc(sizeof(struct AVMPackData));
+    struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
     if (IS_NULL_PTR(avmpack_data)) {
         ESP_LOGE(TAG, "Memory error: Cannot allocate AVMPackData for main.avm.");
         AVM_ABORT();
     }
-    avmpack_data->data = main_avm;
-    synclist_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
+    avmpack_data->base.obj_info = &const_avm_pack_info;
+    avmpack_data->base.data = main_avm;
+    synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
     glb->avmpack_platform_data = NULL;
 
     const void *lib_avm = avm_partition("lib.avm", &size);
     if (!IS_NULL_PTR(lib_avm) && avmpack_is_valid(lib_avm, size)) {
-        avmpack_data = malloc(sizeof(struct AVMPackData));
+        avmpack_data = malloc(sizeof(struct ConstAVMPack));
         if (IS_NULL_PTR(avmpack_data)) {
             ESP_LOGE(TAG, "Memory error: Cannot allocate AVMPackData for lib.avm.");
             AVM_ABORT();
         }
-        avmpack_data->data = lib_avm;
-        synclist_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
+        avmpack_data->base.obj_info = &const_avm_pack_info;
+        avmpack_data->base.data = lib_avm;
+        synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
     } else {
         ESP_LOGW(TAG, "Unable to mount lib.avm partition.  Hopefully the AtomVM core libraries are included in your application.");
     }

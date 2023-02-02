@@ -112,7 +112,7 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
     struct ListHead *avmpack_data_list = synclist_rdlock(&global->avmpack_data);
     struct ListHead *item;
     LIST_FOR_EACH (item, avmpack_data_list) {
-        struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
+        struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
         if (avmpack_find_section_by_name(avmpack_data->data, module_name, &beam_module, &beam_module_size)) {
             break;
         }

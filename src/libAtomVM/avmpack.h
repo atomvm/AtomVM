@@ -31,17 +31,45 @@ extern "C" {
 #endif
 
 #include "list.h"
+#include <stddef.h>
 #include <stdint.h>
 
 #define END_OF_FILE 0
 #define BEAM_START_FLAG 1
 #define BEAM_CODE_FLAG 2
 
+struct AVMPackData;
+
+struct AVMPackInfo
+{
+    void (*destructor)(struct AVMPackData *obj);
+};
+
 struct AVMPackData
 {
+    const struct AVMPackInfo *obj_info;
     struct ListHead avmpack_head;
     const void *data;
 };
+
+static inline void avmpack_data_destroy(struct AVMPackData *avm_pack_data)
+{
+    avm_pack_data->obj_info->destructor(avm_pack_data);
+}
+
+struct InMemoryAVMPack
+{
+    struct AVMPackData base;
+};
+
+extern const struct AVMPackInfo in_memory_avm_pack_info;
+
+struct ConstAVMPack
+{
+    struct AVMPackData base;
+};
+
+extern const struct AVMPackInfo const_avm_pack_info;
 
 /**
  * @brief callback function for AVMPack section fold.

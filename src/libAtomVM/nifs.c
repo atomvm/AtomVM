@@ -3152,6 +3152,25 @@ static term nif_erlang_group_leader(Context *ctx, int argc, term argv[])
     }
 }
 
+struct RefcBinaryAVMPack
+{
+    struct AVMPackData base;
+    struct RefcBinary *refc;
+};
+
+static void refc_binary_avm_pack_destructor(struct AVMPackData *obj);
+
+static const struct AVMPackInfo refc_binary_avm_pack_info = {
+    .destructor = refc_binary_avm_pack_destructor
+};
+
+static void refc_binary_avm_pack_destructor(struct AVMPackData *obj)
+{
+    struct RefcBinaryAVMPack *refc_bin_avm = CONTAINER_OF(obj, struct RefcBinaryAVMPack, base);
+    refc_binary_decrement_refcount(refc_bin_avm->refc);
+    free(obj);
+}
+
 // AtomVM extension
 static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
 {
@@ -3162,37 +3181,57 @@ static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    uint8_t *allocated_data = NULL;
-    const uint8_t *data;
     size_t bin_size = term_binary_size(binary);
 
     if (UNLIKELY(!avmpack_is_valid(term_binary_data(binary), bin_size))) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
+    struct AVMPackData *avmpack_data = NULL;
     if (term_is_refc_binary(binary)) {
         if (!term_refc_binary_is_const(binary)) {
-            // TODO: track this and decrement when we free the Module
-            refc_binary_increment_refcount((struct RefcBinary *) term_refc_binary_ptr(binary));
+            struct RefcBinaryAVMPack *refc_bin_avm = malloc(sizeof(struct RefcBinaryAVMPack));
+            if (IS_NULL_PTR(refc_bin_avm)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            refc_bin_avm->base.obj_info = &refc_binary_avm_pack_info;
+            refc_bin_avm->base.data = (const uint8_t *) term_binary_data(binary);
+            struct RefcBinary *refc_bin = (struct RefcBinary *) term_refc_binary_ptr(binary);
+            refc_binary_increment_refcount(refc_bin);
+            refc_bin_avm->refc = refc_bin;
+
+            avmpack_data = &refc_bin_avm->base;
+
+        } else {
+            struct ConstAVMPack *const_avm = malloc(sizeof(struct ConstAVMPack));
+            if (IS_NULL_PTR(const_avm)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            const_avm->base.obj_info = &const_avm_pack_info;
+            const_avm->base.data = (const uint8_t *) term_binary_data(binary);
+
+            avmpack_data = &const_avm->base;
         }
-        data = (const uint8_t *) term_binary_data(binary);
+
     } else {
-        allocated_data = malloc(bin_size);
+        uint8_t *allocated_data = malloc(bin_size);
         if (IS_NULL_PTR(allocated_data)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         memcpy(allocated_data, term_binary_data(binary), bin_size);
 
-        data = allocated_data;
+        struct InMemoryAVMPack *in_memory_avm = malloc(sizeof(struct InMemoryAVMPack));
+        if (IS_NULL_PTR(in_memory_avm)) {
+            free(allocated_data);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        in_memory_avm->base.obj_info = &in_memory_avm_pack_info;
+        in_memory_avm->base.data = (const uint8_t *) allocated_data;
+
+        avmpack_data = &in_memory_avm->base;
     }
 
-    struct AVMPackData *avmpack_data = malloc(sizeof(struct AVMPackData));
-    if (IS_NULL_PTR(avmpack_data)) {
-        free(allocated_data);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-    avmpack_data->data = data;
-    synclist_append(&ctx->global->avmpack_data, (struct ListHead *) avmpack_data);
+    synclist_append(&ctx->global->avmpack_data, &avmpack_data->avmpack_head);
 
     return OK_ATOM;
 }
@@ -3265,7 +3304,7 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
     term result = UNDEFINED_ATOM;
     struct ListHead *avmpack_data = synclist_rdlock(&glb->avmpack_data);
     LIST_FOR_EACH (item, avmpack_data) {
-        struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
+        struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
         if (avmpack_find_section_by_name(avmpack_data->data, complete_path, &bin_data, &size)) {
             uint32_t file_size = READ_32_ALIGNED((uint32_t *) bin_data);
             free(complete_path);

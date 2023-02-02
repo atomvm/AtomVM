@@ -98,6 +98,18 @@ struct GenericUnixPlatformData
 #endif
 };
 
+static void mapped_file_avm_pack_destructor(struct AVMPackData *obj);
+
+struct MappedFileAVMPack
+{
+    struct AVMPackData base;
+    MappedFile *mapped;
+};
+
+static const struct AVMPackInfo mapped_file_avm_pack_info = {
+    .destructor = mapped_file_avm_pack_destructor
+};
+
 #ifdef HAVE_KQUEUE
 #define SIGNAL_IDENTIFIER 1
 #endif
@@ -353,15 +365,24 @@ struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *pa
         return NULL;
     }
 
-    struct AVMPackData *avmpack_data = malloc(sizeof(struct AVMPackData));
+    struct MappedFileAVMPack *avmpack_data = malloc(sizeof(struct MappedFileAVMPack));
     if (IS_NULL_PTR(avmpack_data)) {
         fprintf(stderr, "Memory error: Cannot allocate AVMPackData.\n");
         mapped_file_close(mapped);
         return NULL;
     }
-    avmpack_data->data = mapped->mapped;
+    avmpack_data->base.obj_info = &mapped_file_avm_pack_info;
+    avmpack_data->base.data = mapped->mapped;
+    avmpack_data->mapped = mapped;
 
-    return avmpack_data;
+    return &avmpack_data->base;
+}
+
+static void mapped_file_avm_pack_destructor(struct AVMPackData *obj)
+{
+    struct MappedFileAVMPack *mmapped_avm = CONTAINER_OF(obj, struct MappedFileAVMPack, base);
+    mapped_file_close(mmapped_avm->mapped);
+    free(obj);
 }
 
 Module *sys_load_module_from_file(GlobalContext *global, const char *path)
@@ -401,7 +422,7 @@ Module *sys_find_and_load_module_from_avm(GlobalContext *global, const char *mod
     struct ListHead *item;
     struct ListHead *avmpack_data = synclist_rdlock(&global->avmpack_data);
     LIST_FOR_EACH (item, avmpack_data) {
-        struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
+        struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
         if (avmpack_find_section_by_name(avmpack_data->data, module_name, &beam_module, &beam_module_size)) {
             new_module = module_new_from_iff_binary(global, beam_module, beam_module_size);
             if (IS_NULL_PTR(new_module)) {

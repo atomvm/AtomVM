@@ -243,7 +243,7 @@ uint64_t sys_millis(GlobalContext *glb)
     return usec / 1000UL;
 }
 
-const void *mmap_partition(const char *partition_name, int *size)
+const void *mmap_partition(const char *partition_name, spi_flash_mmap_handle_t *handle, int *size)
 {
     const esp_partition_t *partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
         ESP_PARTITION_SUBTYPE_ANY, partition_name);
@@ -256,9 +256,8 @@ const void *mmap_partition(const char *partition_name, int *size)
     }
 
     const void *mapped_memory;
-    spi_flash_mmap_handle_t unmap_handle;
     if (esp_partition_mmap(partition, 0, partition->size, SPI_FLASH_MMAP_DATA, &mapped_memory,
-            &unmap_handle)
+            handle)
         != ESP_OK) {
         ESP_LOGE(TAG, "Failed to map BEAM partition for %s", partition_name);
         return NULL;
@@ -266,9 +265,26 @@ const void *mmap_partition(const char *partition_name, int *size)
     ESP_LOGI(TAG, "Loaded BEAM partition %s at address 0x%x (size=%i bytes)", partition_name,
         partition->address, partition->size);
 
-    UNUSED(unmap_handle);
-
     return mapped_memory;
+}
+
+struct ESP32PartAVMPack
+{
+    struct AVMPackData base;
+    spi_flash_mmap_handle_t part_handle;
+};
+
+static void esp32_part_avm_pack_destructor(struct AVMPackData *obj);
+
+static const struct AVMPackInfo esp32_part_avm_pack_info = {
+    .destructor = esp32_part_avm_pack_destructor
+};
+
+static void esp32_part_avm_pack_destructor(struct AVMPackData *obj)
+{
+    struct ESP32PartAVMPack *part_avm = CONTAINER_OF(obj, struct ESP32PartAVMPack, base);
+    spi_flash_munmap(part_avm->part_handle);
+    free(obj);
 }
 
 struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *path)
@@ -280,9 +296,10 @@ struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *pa
 
     struct AVMPackData *avmpack_data = NULL;
     if (!strncmp(path, parts_by_name, parts_by_name_len)) {
+        spi_flash_mmap_handle_t part_handle;
         int size;
         const char *part_name = path + parts_by_name_len;
-        const void *part_data = mmap_partition(part_name, &size);
+        const void *part_data = mmap_partition(part_name, &part_handle, &size);
         if (IS_NULL_PTR(part_data)) {
             return NULL;
         }
@@ -290,12 +307,15 @@ struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *pa
             return NULL;
         }
 
-        avmpack_data = malloc(sizeof(struct AVMPackData));
+        struct ESP32PartAVMPack *part_avm = malloc(sizeof(struct ESP32PartAVMPack));
         if (IS_NULL_PTR(avmpack_data)) {
             // use esp_partition_munmap
             return NULL;
         }
-        avmpack_data->data = part_data;
+        part_avm->base.obj_info = &esp32_part_avm_pack_info;
+        part_avm->base.data = part_data;
+        part_avm->part_handle = part_handle;
+        avmpack_data = &part_avm->base;
 
     } else {
         struct stat file_stats;
@@ -329,12 +349,14 @@ struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *pa
             return NULL;
         }
 
-        avmpack_data = malloc(sizeof(struct AVMPackData));
+        struct InMemoryAVMPack *in_memory_avm = malloc(sizeof(struct InMemoryAVMPack));
         if (IS_NULL_PTR(avmpack_data)) {
             free(file_data);
             return NULL;
         }
-        avmpack_data->data = file_data;
+        in_memory_avm->base.obj_info = &in_memory_avm_pack_info;
+        in_memory_avm->base.data = file_data;
+        avmpack_data = &in_memory_avm->base;
     }
 
     return avmpack_data;
@@ -354,7 +376,7 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
     struct ListHead *item;
     struct ListHead *avmpack_data = synclist_rdlock(&global->avmpack_data);
     LIST_FOR_EACH (item, avmpack_data) {
-        struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
+        struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
         if (avmpack_find_section_by_name(avmpack_data->data, module_name, &beam_module, &beam_module_size)) {
             break;
         }

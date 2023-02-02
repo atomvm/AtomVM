@@ -80,12 +80,12 @@ TEST_CASE("test_timers_and_messages", "[test_run]")
     TEST_ASSERT(avmpack_is_valid(main_avm, size) != 0);
     TEST_ASSERT(avmpack_find_section_by_flag(main_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name) != 0);
 
-    struct AVMPackData *avmpack_data = malloc(sizeof(struct AVMPackData));
+    struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
     TEST_ASSERT(avmpack_data != NULL);
 
-    avmpack_data->data = main_avm;
-    synclist_append(&glb->avmpack_data, &avmpack_data->avmpack_head);
-    glb->avmpack_platform_data = NULL;
+    avmpack_data->base.obj_info = &const_avm_pack_info;
+    avmpack_data->base.data = main_avm;
+    synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
 
     Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
     TEST_ASSERT(mod != NULL);
