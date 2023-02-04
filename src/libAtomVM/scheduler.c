@@ -21,9 +21,9 @@
 #include "scheduler.h"
 #include "debug.h"
 #include "list.h"
+#include "smp.h"
 #include "sys.h"
 #include "utils.h"
-#include "smp.h"
 
 #ifndef AVM_NO_SMP
 #define SMP_SPINLOCK_LOCK(spinlock) smp_spinlock_lock(spinlock)
@@ -138,8 +138,9 @@ static Context *scheduler_run0(GlobalContext *global)
                 SMP_MUTEX_UNLOCK(global->schedulers_mutex);
                 return NULL;
             }
-            if (!main_thread &&
-                (global->scheduler_stop_all || global->running_schedulers > global->online_schedulers)) {
+            if (!main_thread
+                && (global->scheduler_stop_all
+                    || global->running_schedulers > global->online_schedulers)) {
                 global->running_schedulers--;
                 if (is_waiting) {
                     global->waiting_scheduler = false;
