@@ -397,6 +397,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(bin2float, 511),
     TEST_CASE_EXPECTED(list2float, 511),
     TEST_CASE(floatmath),
+    TEST_CASE(floatext),
 
     TEST_CASE(test_fp_allocate_heap_zero),
 

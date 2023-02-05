@@ -219,6 +219,19 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
         }
         return 5;
 
+    } else if (term_is_float(t)) {
+        if (!IS_NULL_PTR(buf)) {
+            avm_float_t val = term_to_float(t);
+            buf[0] = NEW_FLOAT_EXT;
+            union {
+                uint64_t intvalue;
+                double doublevalue;
+            } v;
+            v.doublevalue = val;
+            WRITE_64_UNALIGNED(buf + 1, v.intvalue);
+        }
+        return NEW_FLOAT_EXT_SIZE;
+
     } else if (term_is_atom(t)) {
         AtomString atom_string = globalcontext_atomstring_from_term(ctx->global, t);
         size_t atom_len = atom_string_len(atom_string);
@@ -338,7 +351,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
             } v;
             v.intvalue = READ_64_UNALIGNED(external_term_buf + 1);
 
-            *eterm_size = 9;
+            *eterm_size = NEW_FLOAT_EXT_SIZE;
             return term_from_float(v.doublevalue, ctx);
         }
 
