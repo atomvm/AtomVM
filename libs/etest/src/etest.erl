@@ -134,7 +134,7 @@ run_test(Test) ->
         end,
         Result
     catch
-        _:E ->
+        _:E:S ->
             case erlang:system_info(machine) of
                 "BEAM" ->
                     io:format("-");
@@ -142,7 +142,7 @@ run_test(Test) ->
                     console:puts("-"),
                     console:flush()
             end,
-            {exception, E}
+            {exception, {E, S}}
     end.
 
 %% @private
@@ -150,7 +150,7 @@ check_results([]) ->
     ok;
 check_results([{_Test, ok} | T]) ->
     check_results(T);
-check_results(_) ->
-    fail.
+check_results([Failure | T]) ->
+    {fail, Failure}.
 
 id(X) -> X.
