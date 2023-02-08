@@ -96,7 +96,6 @@ void app_main()
     avmpack_data->base.obj_info = &const_avm_pack_info;
     avmpack_data->base.data = main_avm;
     synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
-    glb->avmpack_platform_data = NULL;
 
     const void *lib_avm = avm_partition("lib.avm", &size);
     if (!IS_NULL_PTR(lib_avm) && avmpack_is_valid(lib_avm, size)) {

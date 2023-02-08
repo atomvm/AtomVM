@@ -507,7 +507,6 @@ static int test_atom(struct Test *test)
     assert(beam_file != NULL);
 
     GlobalContext *glb = globalcontext_new();
-    glb->avmpack_platform_data = NULL;
     Module *mod = module_new_from_iff_binary(glb, beam_file->mapped, beam_file->size);
     if (IS_NULL_PTR(mod)) {
         fprintf(stderr, "Cannot load startup module: %s\n", test->test_module);

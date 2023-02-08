@@ -130,7 +130,6 @@ int main()
     avmpack_data->base.obj_info = &const_avm_pack_info;
     avmpack_data->base.data = flashed_avm;
     list_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
-    glb->avmpack_platform_data = NULL;
 
     Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
     globalcontext_insert_module(glb, mod);
