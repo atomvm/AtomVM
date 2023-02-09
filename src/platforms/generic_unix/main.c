@@ -63,49 +63,36 @@ int main(int argc, char **argv)
     uint32_t startup_beam_size;
     const char *startup_module_name;
 
-    if (argc == 2 && string_ends_with(argv[1], ".beam")) {
-        MappedFile *mapped_file = mapped_file_open_beam(argv[1]);
-        if (!iff_is_valid_beam(mapped_file->mapped)) {
-            fprintf(stderr, "%s has invalid BEAM format.\n", argv[1]);
-            return EXIT_FAILURE;
-        }
-
-        startup_module_name = basename(argv[1]);
-        startup_beam = mapped_file->mapped;
-        startup_beam_size = mapped_file->size;
-
-    } else {
-        for (int i = 1; i < argc; ++i) {
-            if (string_ends_with(argv[i], ".avm")) {
-                struct AVMPackData *avmpack_data = sys_open_avm_from_file(glb, argv[i]);
-                if (IS_NULL_PTR(avmpack_data)) {
-                    fprintf(stderr, "Failed opening %s.\n", argv[i]);
-                    return EXIT_FAILURE;
-                }
-                synclist_append(&glb->avmpack_data, &avmpack_data->avmpack_head);
-
-                if (IS_NULL_PTR(startup_beam)) {
-                    avmpack_find_section_by_flag(avmpack_data->data, 1, &startup_beam, &startup_beam_size, &startup_module_name);
-                }
-
-            } else if (i == 1 && string_ends_with(argv[i], ".beam")) {
-                MappedFile *mapped_file = mapped_file_open_beam(argv[i]);
-                if (!iff_is_valid_beam(mapped_file->mapped)) {
-                    fprintf(stderr, "%s has invalid AVM Pack format.\n", argv[i]);
-                    return EXIT_FAILURE;
-                }
-                startup_module_name = basename(argv[1]);
-                startup_beam = mapped_file->mapped;
-                startup_beam_size = mapped_file->size;
-
-            } else if (i == 1) {
-                fprintf(stderr, "%s is not an AVM or a BEAM file.\n", argv[i]);
-                return EXIT_FAILURE;
-
-            } else {
-                fprintf(stderr, "%s is not an AVM file.\n", argv[i]);
+    for (int i = 1; i < argc; ++i) {
+        if (string_ends_with(argv[i], ".avm")) {
+            struct AVMPackData *avmpack_data = sys_open_avm_from_file(glb, argv[i]);
+            if (IS_NULL_PTR(avmpack_data)) {
+                fprintf(stderr, "Failed opening %s.\n", argv[i]);
                 return EXIT_FAILURE;
             }
+            synclist_append(&glb->avmpack_data, &avmpack_data->avmpack_head);
+
+            if (IS_NULL_PTR(startup_beam)) {
+                avmpack_find_section_by_flag(avmpack_data->data, 1, &startup_beam, &startup_beam_size, &startup_module_name);
+            }
+
+        } else if (i == 1 && string_ends_with(argv[i], ".beam")) {
+            MappedFile *mapped_file = mapped_file_open_beam(argv[i]);
+            if (!iff_is_valid_beam(mapped_file->mapped)) {
+                fprintf(stderr, "%s has invalid AVM Pack format.\n", argv[i]);
+                return EXIT_FAILURE;
+            }
+            startup_module_name = basename(argv[1]);
+            startup_beam = mapped_file->mapped;
+            startup_beam_size = mapped_file->size;
+
+        } else if (i == 1) {
+            fprintf(stderr, "%s is not an AVM or a BEAM file.\n", argv[i]);
+            return EXIT_FAILURE;
+
+        } else {
+            fprintf(stderr, "%s is not an AVM file.\n", argv[i]);
+            return EXIT_FAILURE;
         }
     }
 
