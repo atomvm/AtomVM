@@ -24,6 +24,7 @@
 #include "globalcontext.h"
 
 #include "atomshashtable.h"
+#include "avmpack.h"
 #include "context.h"
 #include "defaultatoms.h"
 #include "list.h"
@@ -164,7 +165,16 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
     synclist_destroy(&glb->registered_processes);
     synclist_destroy(&glb->processes_table);
     synclist_destroy(&glb->refc_binaries);
+
+    struct ListHead *open_avm_packs = synclist_nolock(&glb->avmpack_data);
+    struct ListHead *item;
+    struct ListHead *tmp;
+    MUTABLE_LIST_FOR_EACH (item, tmp, open_avm_packs) {
+        struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
+        avmpack_data_destroy(avmpack_data);
+    }
     synclist_destroy(&glb->avmpack_data);
+
     free(glb);
 }
 
