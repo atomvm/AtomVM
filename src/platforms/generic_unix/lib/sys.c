@@ -415,7 +415,6 @@ Module *sys_find_and_load_module_from_avm(GlobalContext *global, const char *mod
 
     const void *beam_module = NULL;
     uint32_t beam_module_size = 0;
-    MappedFile *beam_file = NULL;
 
     Module *new_module = NULL;
 
@@ -429,7 +428,7 @@ Module *sys_find_and_load_module_from_avm(GlobalContext *global, const char *mod
                 synclist_unlock(&global->avmpack_data);
                 return NULL;
             }
-            new_module->module_platform_data = beam_file;
+            new_module->module_platform_data = NULL;
 
             break;
         }
