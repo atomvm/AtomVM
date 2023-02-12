@@ -34,6 +34,7 @@ set(ERLANG_MODULES
     test_proplists
     test_timer
     test_supervisor
+    notify_init_server
     ping_pong_server
 )
 
