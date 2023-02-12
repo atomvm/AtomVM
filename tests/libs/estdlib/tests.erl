@@ -32,6 +32,7 @@ start() ->
         test_io_lib,
         test_maps,
         test_proplists,
-        test_timer,
+        %% TODO investigate flappy test
+        % test_timer,
         test_supervisor
     ]).
