@@ -312,7 +312,7 @@ struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *pa
             // use esp_partition_munmap
             return NULL;
         }
-        part_avm->base.obj_info = &esp32_part_avm_pack_info;
+        avmpack_data_init(&part_avm->base, &esp32_part_avm_pack_info);
         part_avm->base.data = part_data;
         part_avm->part_handle = part_handle;
         avmpack_data = &part_avm->base;
@@ -354,7 +354,7 @@ struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *pa
             free(file_data);
             return NULL;
         }
-        in_memory_avm->base.obj_info = &in_memory_avm_pack_info;
+        avmpack_data_init(&in_memory_avm->base, &in_memory_avm_pack_info);
         in_memory_avm->base.data = file_data;
         avmpack_data = &in_memory_avm->base;
     }

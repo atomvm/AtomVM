@@ -371,7 +371,7 @@ struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *pa
         mapped_file_close(mapped);
         return NULL;
     }
-    avmpack_data->base.obj_info = &mapped_file_avm_pack_info;
+    avmpack_data_init(&avmpack_data->base, &mapped_file_avm_pack_info);
     avmpack_data->base.data = mapped->mapped;
     avmpack_data->mapped = mapped;
 

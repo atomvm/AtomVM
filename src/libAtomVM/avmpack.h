@@ -49,8 +49,16 @@ struct AVMPackData
 {
     const struct AVMPackInfo *obj_info;
     struct ListHead avmpack_head;
+    int name_atom_id;
     const void *data;
 };
+
+static inline void avmpack_data_init(struct AVMPackData *avm_pack_data, const struct AVMPackInfo *info)
+{
+    avm_pack_data->obj_info = info;
+    avm_pack_data->name_atom_id = 0;
+    avm_pack_data->data = NULL;
+}
 
 static inline void avmpack_data_destroy(struct AVMPackData *avm_pack_data)
 {

@@ -93,7 +93,7 @@ void app_main()
         ESP_LOGE(TAG, "Memory error: Cannot allocate AVMPackData for main.avm.");
         AVM_ABORT();
     }
-    avmpack_data->base.obj_info = &const_avm_pack_info;
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
     avmpack_data->base.data = main_avm;
     synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
 
@@ -104,7 +104,7 @@ void app_main()
             ESP_LOGE(TAG, "Memory error: Cannot allocate AVMPackData for lib.avm.");
             AVM_ABORT();
         }
-        avmpack_data->base.obj_info = &const_avm_pack_info;
+        avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
         avmpack_data->base.data = lib_avm;
         synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
     } else {

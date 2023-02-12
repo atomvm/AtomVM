@@ -127,7 +127,7 @@ int main()
         fprintf(stderr, "Memory error: Cannot allocate AVMPackData.\n");
         return 1;
     }
-    avmpack_data->base.obj_info = &const_avm_pack_info;
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
     avmpack_data->base.data = flashed_avm;
     list_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
 

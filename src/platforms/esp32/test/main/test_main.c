@@ -83,7 +83,7 @@ TEST_CASE("test_timers_and_messages", "[test_run]")
     struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
     TEST_ASSERT(avmpack_data != NULL);
 
-    avmpack_data->base.obj_info = &const_avm_pack_info;
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
     avmpack_data->base.data = main_avm;
     synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
 

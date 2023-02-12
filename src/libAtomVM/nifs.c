@@ -3181,6 +3181,11 @@ static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
+    term opts = argv[1];
+    if (!term_is_list(argv[1])) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
     size_t bin_size = term_binary_size(binary);
 
     if (UNLIKELY(!avmpack_is_valid(term_binary_data(binary), bin_size))) {
@@ -3194,7 +3199,7 @@ static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
             if (IS_NULL_PTR(refc_bin_avm)) {
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
-            refc_bin_avm->base.obj_info = &refc_binary_avm_pack_info;
+            avmpack_data_init(&refc_bin_avm->base, &refc_binary_avm_pack_info);
             refc_bin_avm->base.data = (const uint8_t *) term_binary_data(binary);
             struct RefcBinary *refc_bin = (struct RefcBinary *) term_refc_binary_ptr(binary);
             refc_binary_increment_refcount(refc_bin);
@@ -3207,7 +3212,7 @@ static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
             if (IS_NULL_PTR(const_avm)) {
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
-            const_avm->base.obj_info = &const_avm_pack_info;
+            avmpack_data_init(&const_avm->base, &const_avm_pack_info);
             const_avm->base.data = (const uint8_t *) term_binary_data(binary);
 
             avmpack_data = &const_avm->base;
@@ -3225,10 +3230,19 @@ static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
             free(allocated_data);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        in_memory_avm->base.obj_info = &in_memory_avm_pack_info;
+        avmpack_data_init(&in_memory_avm->base, &in_memory_avm_pack_info);
         in_memory_avm->base.data = (const uint8_t *) allocated_data;
 
         avmpack_data = &in_memory_avm->base;
+    }
+
+    term name = interop_kv_get_value_default(opts, ATOM_STR("\x4", "name"), UNDEFINED_ATOM, ctx->global);
+    if (!term_is_atom(name)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (name != UNDEFINED_ATOM) {
+        avmpack_data->name_atom_id = term_to_atom_index(name);
     }
 
     synclist_append(&ctx->global->avmpack_data, &avmpack_data->avmpack_head);
