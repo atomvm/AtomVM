@@ -3319,16 +3319,22 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
     struct ListHead *avmpack_data = synclist_rdlock(&glb->avmpack_data);
     LIST_FOR_EACH (item, avmpack_data) {
         struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
+        bool prev_in_use = avmpack_data->in_use;
+        avmpack_data->in_use = true;
         if (avmpack_find_section_by_name(avmpack_data->data, complete_path, &bin_data, &size)) {
             uint32_t file_size = READ_32_ALIGNED((uint32_t *) bin_data);
             free(complete_path);
             complete_path = NULL;
             if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFC_BINARY_SIZE) != MEMORY_GC_OK)) {
+                avmpack_data->in_use = prev_in_use;
                 synclist_unlock(&glb->avmpack_data);
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
+            prev_in_use = true;
             result = term_from_const_binary(((uint8_t *) bin_data) + sizeof(uint32_t), file_size, ctx);
             break;
+        } else {
+            avmpack_data->in_use = prev_in_use;
         }
     }
     synclist_unlock(&glb->avmpack_data);

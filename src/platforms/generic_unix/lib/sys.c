@@ -422,9 +422,12 @@ Module *sys_find_and_load_module_from_avm(GlobalContext *global, const char *mod
     struct ListHead *avmpack_data = synclist_rdlock(&global->avmpack_data);
     LIST_FOR_EACH (item, avmpack_data) {
         struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
+        bool prev_in_use = avmpack_data->in_use;
+        avmpack_data->in_use = true;
         if (avmpack_find_section_by_name(avmpack_data->data, module_name, &beam_module, &beam_module_size)) {
             new_module = module_new_from_iff_binary(global, beam_module, beam_module_size);
             if (IS_NULL_PTR(new_module)) {
+                avmpack_data->in_use = prev_in_use;
                 synclist_unlock(&global->avmpack_data);
                 return NULL;
             }

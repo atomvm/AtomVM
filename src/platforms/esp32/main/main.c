@@ -94,6 +94,7 @@ void app_main()
         AVM_ABORT();
     }
     avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
+    avmpack_data->base.in_use = true;
     avmpack_data->base.data = main_avm;
     synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
 

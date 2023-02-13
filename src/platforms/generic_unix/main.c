@@ -74,6 +74,10 @@ int main(int argc, char **argv)
 
             if (IS_NULL_PTR(startup_beam)) {
                 avmpack_find_section_by_flag(avmpack_data->data, 1, &startup_beam, &startup_beam_size, &startup_module_name);
+
+                if (startup_beam) {
+                    avmpack_data->in_use = true;
+                }
             }
 
         } else if (i == 1 && string_ends_with(argv[i], ".beam")) {

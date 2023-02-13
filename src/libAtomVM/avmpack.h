@@ -31,6 +31,7 @@ extern "C" {
 #endif
 
 #include "list.h"
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -49,6 +50,7 @@ struct AVMPackData
 {
     const struct AVMPackInfo *obj_info;
     struct ListHead avmpack_head;
+    bool in_use;
     int name_atom_id;
     const void *data;
 };
@@ -56,6 +58,7 @@ struct AVMPackData
 static inline void avmpack_data_init(struct AVMPackData *avm_pack_data, const struct AVMPackInfo *info)
 {
     avm_pack_data->obj_info = info;
+    avm_pack_data->in_use = false;
     avm_pack_data->name_atom_id = 0;
     avm_pack_data->data = NULL;
 }
