@@ -25,6 +25,7 @@ include(BuildErlang)
 set(ERLANG_MODULES
     base64
     calendar
+    gen_event
     gen_server
     gen_statem
     gen_udp
