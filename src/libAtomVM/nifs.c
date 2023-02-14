@@ -158,6 +158,7 @@ static term nif_erlang_demonitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_unlink(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_add_avm_pack_file(Context *ctx, int argc, term argv[]);
+static term nif_atomvm_close_avm_pack(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[]);
 static term nif_console_print(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode(Context *ctx, int argc, term argv[]);
@@ -629,6 +630,11 @@ static const struct Nif atomvm_add_avm_pack_file_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_add_avm_pack_file
+};
+static const struct Nif atomvm_close_avm_pack_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_close_avm_pack
 };
 static const struct Nif atomvm_read_priv_nif =
 {
@@ -3269,6 +3275,41 @@ static term nif_atomvm_add_avm_pack_file(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     synclist_append(&ctx->global->avmpack_data, &avmpack_data->avmpack_head);
+
+    return OK_ATOM;
+}
+
+static term nif_atomvm_close_avm_pack(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term name = argv[0];
+    if (UNLIKELY(!term_is_atom(name))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int name_atom_id = term_to_atom_index(name);
+
+    struct ListHead *open_avm_packs = synclist_wrlock(&ctx->global->avmpack_data);
+    struct ListHead *item;
+    struct ListHead *tmp;
+    bool found = false;
+    MUTABLE_LIST_FOR_EACH (item, tmp, open_avm_packs) {
+        struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
+        if (avmpack_data->name_atom_id == name_atom_id) {
+            if (UNLIKELY(avmpack_data->in_use)) {
+                return ERROR_ATOM;
+            }
+            found = true;
+            list_remove(&avmpack_data->avmpack_head);
+            avmpack_data_destroy(avmpack_data);
+        }
+    }
+    synclist_unlock(&ctx->global->avmpack_data);
+
+    if (UNLIKELY(!found)) {
+        return ERROR_ATOM;
+    }
 
     return OK_ATOM;
 }
