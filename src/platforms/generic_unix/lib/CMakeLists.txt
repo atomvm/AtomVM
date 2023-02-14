@@ -61,12 +61,6 @@ endif()
 target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC DYNLOAD_PORT_DRIVERS)
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${CMAKE_DL_LIBS})
 
-install(
-    FILES ${CMAKE_CURRENT_SOURCE_DIR}/atomvm
-    DESTINATION bin
-    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-)
-
 if (COVERAGE)
     include(CodeCoverage)
     append_coverage_compiler_flags_to_target(libAtomVM${PLATFORM_LIB_SUFFIX})
