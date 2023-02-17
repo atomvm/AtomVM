@@ -175,4 +175,52 @@ static inline void *rand_fail_calloc(int n, unsigned long alloc_size)
 #define AVM_ABORT() abort()
 #endif
 
+/*
+ * The following is a workaround for disabling
+ * "warning: ISO C forbids conversion of function pointer to object pointer type [-Wpedantic]".
+ * It also makes use of _Static_assert to actually check if it is safe or not.
+ */
+
+typedef void (*func_ptr_t)(void);
+
+#ifdef __GNUC__
+
+static inline __attribute__((always_inline)) void *cast_func_to_void_ptr(func_ptr_t func)
+{
+#if __STDC_VERSION__ >= 201112L
+    _Static_assert(sizeof(void *) >= sizeof(func_ptr_t), "function ptr cannot be casted to void *");
+#endif
+
+/*
+    The following workaround is way more standard, but overcomplicated:
+
+    union {
+        func_ptr_t fp;
+        void *vp;
+    } u;
+
+    u.fp = func;
+
+    return u.vp;
+*/
+
+// Let's rather play with GCC diagnostic
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+    return (void *) func;
+#pragma GCC diagnostic pop
+}
+
+/**
+ * Cast any function pointer to \c void *
+ */
+#define CAST_FUNC_TO_VOID_PTR(f) cast_func_to_void_ptr((func_ptr_t) (f))
+
+// else ifdef __GNUC__
+#else
+
+#define CAST_FUNC_TO_VOID_PTR(f) ((void *) (f))
+
+#endif
+
 #endif
