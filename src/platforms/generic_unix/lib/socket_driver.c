@@ -1108,7 +1108,6 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx)
         TRACE("close\n");
         port_send_reply(ctx, pid, ref, OK_ATOM);
         SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-        struct GenericUnixPlatformData *platform = ctx->global->platform_data;
         if (socket_data->active_listener) {
             sys_unregister_listener(glb, &socket_data->active_listener->base);
             free(socket_data->active_listener);
