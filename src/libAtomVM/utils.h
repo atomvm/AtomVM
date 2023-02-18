@@ -223,4 +223,14 @@ static inline __attribute__((always_inline)) void *cast_func_to_void_ptr(func_pt
 
 #endif
 
+/*
+ * CONTAINER_OF is useful for obtaining the outer struct.
+ * It makes use of offsetof() from stddef.h.
+ */
+
+#include <stddef.h>
+
+#define CONTAINER_OF(ptr, type, member) \
+    ((type *) (((char *) (ptr)) - offsetof(type, member)))
+
 #endif

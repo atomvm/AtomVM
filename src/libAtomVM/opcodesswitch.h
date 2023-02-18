@@ -741,9 +741,11 @@ typedef union
         MailboxMessage *signal_message = mailbox_process_outer_list(&ctx->mailbox);             \
         void *next_label = NULL;                                                                \
         while (signal_message) {                                                                \
-            switch (signal_message->header.type) {                                              \
+            switch (signal_message->type) {                                                     \
                 case KillSignal: {                                                              \
-                    context_process_kill_signal(ctx, &signal_message->body.term);               \
+                    struct TermSignal *kill_signal                                              \
+                        = CONTAINER_OF(signal_message, struct TermSignal, base);                \
+                    context_process_kill_signal(ctx, kill_signal);                              \
                     break;                                                                      \
                 }                                                                               \
                 case GCSignal: {                                                                \
@@ -754,18 +756,24 @@ typedef union
                     break;                                                                      \
                 }                                                                               \
                 case ProcessInfoRequestSignal: {                                                \
-                    context_process_process_info_request_signal(ctx, &signal_message->body.atom_request); \
+                    struct BuiltInAtomRequestSignal *request_signal                             \
+                        = CONTAINER_OF(signal_message, struct BuiltInAtomRequestSignal, base);  \
+                    context_process_process_info_request_signal(ctx, request_signal);           \
                     break;                                                                      \
                 }                                                                               \
                 case TrapAnswerSignal: {                                                        \
-                    if (UNLIKELY(!context_process_signal_trap_answer(ctx, &signal_message->body.term))) { \
+                    struct TermSignal *trap_answer                                              \
+                        = CONTAINER_OF(signal_message, struct TermSignal, base);                \
+                    if (UNLIKELY(!context_process_signal_trap_answer(ctx, trap_answer))) {      \
                         SET_ERROR(OUT_OF_MEMORY_ATOM);                                          \
                         next_label = &&handle_error;                                            \
                     }                                                                           \
                     break;                                                                      \
                 }                                                                               \
                 case TrapExceptionSignal: {                                                     \
-                    SET_ERROR(signal_message->body.atom.atom);                                  \
+                    struct BuiltInAtomSignal *trap_exception                                    \
+                        = CONTAINER_OF(signal_message, struct BuiltInAtomSignal, base);         \
+                    SET_ERROR(trap_exception->atom);                                            \
                     next_label = &&handle_error;                                                \
                     break;                                                                      \
                 }                                                                               \
@@ -773,7 +781,7 @@ typedef union
                     __builtin_unreachable();                                                    \
                 }                                                                               \
             }                                                                                   \
-            MailboxMessage *next = signal_message->header.next;                                 \
+            MailboxMessage *next = signal_message->next;                                        \
             mailbox_destroy_signal_message(signal_message);                                     \
             signal_message = next;                                                              \
         }                                                                                       \

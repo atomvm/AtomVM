@@ -44,12 +44,35 @@ void mailbox_init(Mailbox *mbx)
 // not call it. They should call mailbox_remove instead.
 void mailbox_destroy_signal_message(MailboxMessage *m)
 {
-    if (m->header.type == NormalMessage) {
-        memory_sweep_mso_list(m->body.normal.mso_list);
-    } else if (m->header.type == KillSignal || m->header.type == TrapAnswerSignal) {
-        memory_sweep_mso_list(m->body.term.mso_list);
+    switch (m->type) {
+        case NormalMessage: {
+            Message *normal_message = CONTAINER_OF(m, Message, base);
+            memory_sweep_mso_list(normal_message->mso_list);
+            free(normal_message);
+            break;
+        }
+        case KillSignal:
+        case TrapAnswerSignal: {
+            struct TermSignal *term_signal = CONTAINER_OF(m, struct TermSignal, base);
+            memory_sweep_mso_list(term_signal->mso_list);
+            free(term_signal);
+            break;
+        }
+        case ProcessInfoRequestSignal: {
+            struct BuiltInAtomRequestSignal *request_signal
+                = CONTAINER_OF(m, struct BuiltInAtomRequestSignal, base);
+            free(request_signal);
+            break;
+        }
+        case TrapExceptionSignal: {
+            struct BuiltInAtomSignal *atom_signal = CONTAINER_OF(m, struct BuiltInAtomSignal, base);
+            free(atom_signal);
+            break;
+        }
+        case GCSignal:
+            free(m);
+            break;
     }
-    free(m);
 }
 
 static inline void mailbox_destroy_message(MailboxMessage *m)
@@ -61,13 +84,13 @@ void mailbox_destroy(Mailbox *mbox)
 {
     MailboxMessage *msg = mbox->outer_first;
     while (msg) {
-        MailboxMessage *next = msg->header.next;
+        MailboxMessage *next = msg->next;
         mailbox_destroy_message(msg);
         msg = next;
     }
     msg = mbox->inner_first;
     while (msg) {
-        MailboxMessage *next = msg->header.next;
+        MailboxMessage *next = msg->next;
         mailbox_destroy_message(msg);
         msg = next;
     }
@@ -79,12 +102,12 @@ size_t mailbox_len(Mailbox *mbox)
     MailboxMessage *msg = mbox->outer_first;
     while (msg) {
         result++;
-        msg = msg->header.next;
+        msg = msg->next;
     }
     msg = mbox->inner_first;
     while (msg) {
         result++;
-        msg = msg->header.next;
+        msg = msg->next;
     }
     return result;
 }
@@ -95,31 +118,33 @@ size_t mailbox_size(Mailbox *mbox)
     MailboxMessage *msg = mbox->outer_first;
     while (msg) {
         // We don't count signals.
-        if (msg->header.type == NormalMessage) {
-            result += sizeof(MailboxMessage) + msg->body.normal.msg_memory_size;
+        if (msg->type == NormalMessage) {
+            Message *normal_message = CONTAINER_OF(msg, Message, base);
+            result += sizeof(Message) + normal_message->msg_memory_size;
         }
-        msg = msg->header.next;
+        msg = msg->next;
     }
     msg = mbox->inner_first;
     while (msg) {
-        result += sizeof(MailboxMessage) + msg->body.normal.msg_memory_size;
-        msg = msg->header.next;
+        Message *normal_message = CONTAINER_OF(msg, Message, base);
+        result += sizeof(Message) + normal_message->msg_memory_size;
+        msg = msg->next;
     }
     return result;
 }
 
 static void mailbox_post_message(Context *c, MailboxMessage *m)
 {
-    m->header.next = NULL;
+    m->next = NULL;
 
     // Append message at the beginning of outer_first.
 #ifndef AVM_NO_SMP
     MailboxMessage *current_first = NULL;
     do {
-        m->header.next = current_first;
+        m->next = current_first;
     } while (!atomic_compare_exchange_weak(&c->mailbox.outer_first, &current_first, m));
 #else
-    m->header.next = c->mailbox.outer_first;
+    m->next = c->mailbox.outer_first;
     c->mailbox.outer_first = m;
 #endif
 
@@ -132,75 +157,75 @@ void mailbox_send(Context *c, term t)
 
     unsigned long estimated_mem_usage = memory_estimate_usage(t);
 
-    MailboxMessage *m = malloc(sizeof(struct MessageHeader) + sizeof(struct Message) + estimated_mem_usage * sizeof(term));
-    if (IS_NULL_PTR(m)) {
+    Message *msg = malloc(sizeof(Message) + estimated_mem_usage * sizeof(term));
+    if (IS_NULL_PTR(msg)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         return;
     }
-    m->body.normal.mso_list = term_nil();
+    msg->mso_list = term_nil();
 
-    term *heap_pos = mailbox_message_memory(&m->body.normal.message);
-    m->header.type = NormalMessage;
-    m->body.normal.message = memory_copy_term_tree(&heap_pos, t, &m->body.normal.mso_list);
-    m->body.normal.msg_memory_size = estimated_mem_usage;
+    term *heap_pos = mailbox_message_memory(&msg->message);
+    msg->base.type = NormalMessage;
+    msg->message = memory_copy_term_tree(&heap_pos, t, &msg->mso_list);
+    msg->msg_memory_size = estimated_mem_usage;
 
-    mailbox_post_message(c, m);
+    mailbox_post_message(c, &msg->base);
 }
 
 void mailbox_send_term_signal(Context *c, enum MessageType type, term t)
 {
     unsigned long estimated_mem_usage = memory_estimate_usage(t);
 
-    MailboxMessage *m = malloc(sizeof(struct MessageHeader) + sizeof(struct TermSignal) + estimated_mem_usage * sizeof(term));
-    if (IS_NULL_PTR(m)) {
+    struct TermSignal *ts = malloc(sizeof(struct TermSignal) + estimated_mem_usage * sizeof(term));
+    if (IS_NULL_PTR(ts)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         return;
     }
-    m->body.term.mso_list = term_nil();
+    ts->mso_list = term_nil();
 
-    term *heap_pos = mailbox_message_memory(&m->body.term.signal_term);
-    m->header.type = type;
-    m->body.term.signal_term = memory_copy_term_tree(&heap_pos, t, &m->body.term.mso_list);
-    m->body.term.msg_memory_size = estimated_mem_usage;
+    term *heap_pos = mailbox_message_memory(&ts->signal_term);
+    ts->base.type = type;
+    ts->signal_term = memory_copy_term_tree(&heap_pos, t, &ts->mso_list);
+    ts->msg_memory_size = estimated_mem_usage;
 
-    mailbox_post_message(c, m);
+    mailbox_post_message(c, &ts->base);
 }
 
 void mailbox_send_built_in_atom_signal(Context *c, enum MessageType type, term atom)
 {
-    MailboxMessage *m = malloc(sizeof(struct MessageHeader) + sizeof(struct BuiltInAtomSignal));
-    if (IS_NULL_PTR(m)) {
+    struct BuiltInAtomSignal *atom_signal = malloc(sizeof(struct BuiltInAtomSignal));
+    if (IS_NULL_PTR(atom_signal)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         return;
     }
-    m->header.type = type;
-    m->body.atom.atom = atom;
+    atom_signal->base.type = type;
+    atom_signal->atom = atom;
 
-    mailbox_post_message(c, m);
+    mailbox_post_message(c, &atom_signal->base);
 }
 
 void mailbox_send_built_in_atom_request_signal(Context *c, enum MessageType type, int32_t pid, term atom)
 {
-    MailboxMessage *m = malloc(sizeof(struct MessageHeader) + sizeof(struct BuiltInAtomRequestSignal));
-    if (IS_NULL_PTR(m)) {
+    struct BuiltInAtomRequestSignal *atom_request = malloc(sizeof(struct BuiltInAtomRequestSignal));
+    if (IS_NULL_PTR(atom_request)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         return;
     }
-    m->header.type = type;
-    m->body.atom_request.sender_pid = pid;
-    m->body.atom_request.atom = atom;
+    atom_request->base.type = type;
+    atom_request->sender_pid = pid;
+    atom_request->atom = atom;
 
-    mailbox_post_message(c, m);
+    mailbox_post_message(c, &atom_request->base);
 }
 
 void mailbox_send_empty_body_signal(Context *c, enum MessageType type)
 {
-    MailboxMessage *m = malloc(sizeof(struct MessageHeader));
+    MailboxMessage *m = malloc(sizeof(MailboxMessage));
     if (IS_NULL_PTR(m)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         return;
     }
-    m->header.type = type;
+    m->type = type;
 
     mailbox_post_message(c, m);
 }
@@ -226,16 +251,16 @@ MailboxMessage *mailbox_process_outer_list(Mailbox *mbox)
     MailboxMessage *previous_signal = NULL;
     MailboxMessage *last_normal = NULL;
     while (current) {
-        MailboxMessage *next = current->header.next;
-        if (current->header.type == NormalMessage) {
+        MailboxMessage *next = current->next;
+        if (current->type == NormalMessage) {
             // Get last normal to update inner_last.
             if (last_normal == NULL) {
                 last_normal = current;
             }
-            current->header.next = previous_normal;
+            current->next = previous_normal;
             previous_normal = current;
         } else {
-            current->header.next = previous_signal;
+            current->next = previous_signal;
             previous_signal = current;
         }
         current = next;
@@ -249,7 +274,7 @@ MailboxMessage *mailbox_process_outer_list(Mailbox *mbox)
             mbox->receive_pointer = previous_normal;
             // If we had a prev, set the prev's next to the new current.
             if (mbox->receive_pointer_prev) {
-                mbox->receive_pointer_prev->header.next = previous_normal;
+                mbox->receive_pointer_prev->next = previous_normal;
             } else if (mbox->inner_first == NULL) {
                 // If we had no first, this is the first message.
                 mbox->inner_first = previous_normal;
@@ -261,7 +286,7 @@ MailboxMessage *mailbox_process_outer_list(Mailbox *mbox)
         if (mbox->inner_last) {
             // This may be mbox->receive_pointer_prev which we
             // are updating a second time here.
-            mbox->inner_last->header.next = previous_normal;
+            mbox->inner_last->next = previous_normal;
         }
         mbox->inner_last = last_normal;
     }
@@ -280,7 +305,7 @@ void mailbox_next(Mailbox *mbox)
     }
 
     mbox->receive_pointer_prev = mbox->receive_pointer;
-    mbox->receive_pointer = mbox->receive_pointer->header.next;
+    mbox->receive_pointer = mbox->receive_pointer->next;
 }
 
 bool mailbox_peek(Context *c, term *out)
@@ -290,17 +315,22 @@ bool mailbox_peek(Context *c, term *out)
         return false;
     }
 
-    TRACE("Pid %i is peeking 0x%lx.\n", c->process_id, m->message);
+    Message *data_message = CONTAINER_OF(m, Message, base);
 
-    if (c->e - c->heap_ptr < m->body.normal.msg_memory_size) {
-        // ADDITIONAL_PROCESSING_MEMORY_SIZE: ensure some additional memory for message processing, so there is
-        // no need to run GC again.
-        if (UNLIKELY(memory_gc(c, context_memory_size(c) + m->body.normal.msg_memory_size + ADDITIONAL_PROCESSING_MEMORY_SIZE) != MEMORY_GC_OK)) {
+    TRACE("Pid %i is peeking 0x%lx.\n", c->process_id, data_message->message);
+
+    if (c->e - c->heap_ptr < data_message->msg_memory_size) {
+        // ADDITIONAL_PROCESSING_MEMORY_SIZE: ensure some additional memory for message processing,
+        // so there is no need to run GC again.
+        if (UNLIKELY(memory_gc(c,
+                         context_memory_size(c) + data_message->msg_memory_size
+                             + ADDITIONAL_PROCESSING_MEMORY_SIZE)
+                != MEMORY_GC_OK)) {
             fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         }
     }
 
-    *out = memory_copy_term_tree(&c->heap_ptr, m->body.normal.message, &c->mso_list);
+    *out = memory_copy_term_tree(&c->heap_ptr, data_message->message, &c->mso_list);
 
     return true;
 }
@@ -317,14 +347,14 @@ void mailbox_remove(Mailbox *mbox)
     MailboxMessage *removed = mbox->receive_pointer;
     if (mbox->receive_pointer_prev) {
         // We did not remove first message.
-        mbox->receive_pointer_prev->header.next = removed->header.next;
+        mbox->receive_pointer_prev->next = removed->next;
         // If we removed last messages, update inner last.
         if (mbox->inner_last == removed) {
             mbox->inner_last = mbox->receive_pointer_prev;
         }
     } else {
         // We did remove first message.
-        mbox->inner_first = removed->header.next;
+        mbox->inner_first = removed->next;
         if (mbox->inner_first == NULL) {
             // If this also the last, update inner_last.
             mbox->inner_last = NULL;
@@ -342,7 +372,7 @@ Message *mailbox_first(Mailbox *mbox)
     MailboxMessage *msg = mbox->receive_pointer;
     Message *result = NULL;
     if (msg) {
-        result = &msg->body.normal;
+        result = CONTAINER_OF(msg, Message, base);
     }
     return result;
 }
@@ -353,8 +383,9 @@ void mailbox_crashdump(Context *ctx)
     ctx->mailbox.outer_first = mailbox_process_outer_list(&ctx->mailbox);
     MailboxMessage *msg = ctx->mailbox.inner_first;
     while (msg) {
-        term_display(stderr, msg->body.normal.message, ctx);
+        Message *data_message = CONTAINER_OF(msg, Message, base);
+        term_display(stderr, data_message->message, ctx);
         fprintf(stderr, "\n");
-        msg = msg->header.next;
+        msg = msg->next;
     }
 }

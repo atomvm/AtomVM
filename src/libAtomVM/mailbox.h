@@ -64,8 +64,16 @@ enum MessageType
     TrapExceptionSignal,
 };
 
+struct MailboxMessage
+{
+    MailboxMessage *next;
+    enum MessageType type;
+};
+
 struct Message
 {
+    MailboxMessage base;
+
     int msg_memory_size;
     term mso_list;
     term message; // must be declared last
@@ -73,6 +81,8 @@ struct Message
 
 struct TermSignal
 {
+    MailboxMessage base;
+
     int msg_memory_size;
     term mso_list;
     term signal_term; // must be declared last
@@ -80,31 +90,17 @@ struct TermSignal
 
 struct BuiltInAtomSignal
 {
+    MailboxMessage base;
+
     term atom;
 };
 
 struct BuiltInAtomRequestSignal
 {
+    MailboxMessage base;
+
     int32_t sender_pid;
     term atom;
-};
-
-struct MessageHeader
-{
-    MailboxMessage *next;
-    enum MessageType type;
-};
-
-struct MailboxMessage
-{
-    struct MessageHeader header;
-    union
-    {
-        Message normal;
-        struct TermSignal term;
-        struct BuiltInAtomSignal atom;
-        struct BuiltInAtomRequestSignal atom_request;
-    } body;
 };
 
 typedef struct
