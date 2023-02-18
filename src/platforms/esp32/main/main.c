@@ -58,8 +58,6 @@
     "    ###########################################################\n" \
     "\n"
 
-const void *avm_partition(const char *partition_name, int *size);
-
 void app_main()
 {
     esp32_sys_queue_init();
@@ -67,8 +65,9 @@ void app_main()
     fprintf(stdout, "%s", ATOMVM_BANNER);
     ESP_LOGI(TAG, "Starting AtomVM revision " ATOMVM_VERSION);
 
+    spi_flash_mmap_handle_t handle;
     int size;
-    const void *main_avm = avm_partition("main.avm", &size);
+    const void *main_avm = esp32_sys_mmap_partition("main.avm", &handle, &size);
 
     uint32_t startup_beam_size;
     const void *startup_beam;
@@ -98,7 +97,7 @@ void app_main()
     avmpack_data->base.data = main_avm;
     synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
 
-    const void *lib_avm = avm_partition("lib.avm", &size);
+    const void *lib_avm = esp32_sys_mmap_partition("lib.avm", &handle, &size);
     if (!IS_NULL_PTR(lib_avm) && avmpack_is_valid(lib_avm, size)) {
         avmpack_data = malloc(sizeof(struct ConstAVMPack));
         if (IS_NULL_PTR(avmpack_data)) {
@@ -148,30 +147,4 @@ void app_main()
             vTaskDelay(5000 / portTICK_PERIOD_MS);
         }
     }
-}
-
-const void *avm_partition(const char *partition_name, int *size)
-{
-    const esp_partition_t *partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, partition_name);
-    if (!partition) {
-        ESP_LOGW(TAG, "AVM partition not found for %s", partition_name);
-        *size = 0;
-        return NULL;
-
-    } else {
-        *size = partition->size;
-    }
-
-    const void *mapped_memory;
-    spi_flash_mmap_handle_t unmap_handle;
-    if (esp_partition_mmap(partition, 0, partition->size, SPI_FLASH_MMAP_DATA, &mapped_memory, &unmap_handle) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to map BEAM partition for %s", partition_name);
-        AVM_ABORT();
-        return NULL;
-    }
-    ESP_LOGI(TAG, "Loaded BEAM partition %s at address 0x%x (size=%i bytes)", partition_name, partition->address, partition->size);
-
-    UNUSED(unmap_handle);
-
-    return mapped_memory;
 }

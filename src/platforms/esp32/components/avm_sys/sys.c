@@ -243,7 +243,7 @@ uint64_t sys_millis(GlobalContext *glb)
     return usec / 1000UL;
 }
 
-const void *mmap_partition(const char *partition_name, spi_flash_mmap_handle_t *handle, int *size)
+const void *esp32_sys_mmap_partition(const char *partition_name, spi_flash_mmap_handle_t *handle, int *size)
 {
     const esp_partition_t *partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
         ESP_PARTITION_SUBTYPE_ANY, partition_name);
@@ -299,7 +299,7 @@ struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *pa
         spi_flash_mmap_handle_t part_handle;
         int size;
         const char *part_name = path + parts_by_name_len;
-        const void *part_data = mmap_partition(part_name, &part_handle, &size);
+        const void *part_data = esp32_sys_mmap_partition(part_name, &part_handle, &size);
         if (IS_NULL_PTR(part_data)) {
             return NULL;
         }
