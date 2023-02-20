@@ -165,11 +165,11 @@ static inline const term *term_to_const_term_ptr(term t)
 /**
  * @brief Checks if a term is an atom
  *
- * @details Returns 1 if a term is an atom, otherwise 0.
+ * @details Returns \c true if a term is an atom, otherwise \c false.
  * @param t the term that will be checked.
- * @return 1 if check succeeds, 0 otherwise.
+ * @return \c true if check succeeds, \c false otherwise.
  */
-static inline int term_is_atom(term t)
+static inline bool term_is_atom(term t)
 {
     /* atom: | atom index | 00 10 11 */
     return ((t & 0x3F) == 0xB);
@@ -178,11 +178,11 @@ static inline int term_is_atom(term t)
 /**
  * @brief Check if a term is an invalid term
  *
- * @details Returns 1 if a term is an invalid term, otherwise 0 is returned.
+ * @details Returns \c true if a term is an invalid term, otherwise \c false is returned.
  * @param t the term that will be checked.
- * @return 1 if check succeeds, 0 otherwise.
+ * @return \c true if check succeeds, \c false otherwise.
  */
-static inline int term_is_invalid_term(term t)
+static inline bool term_is_invalid_term(term t)
 {
     return (t == 0);
 }
@@ -190,11 +190,11 @@ static inline int term_is_invalid_term(term t)
 /**
  * @brief Checks if a term is nil
  *
- * @details Returns 1 if a term is nil, otherwise 0.
+ * @details Returns \c true if a term is nil, otherwise \c false.
  * @param t the term that will be checked.
- * @return 1 if check succeeds, 0 otherwise.
+ * @return \c true if check succeeds, \c false otherwise.
  */
-static inline int term_is_nil(term t)
+static inline bool term_is_nil(term t)
 {
     /* nil: 11 10 11 */
     return ((t & 0x3F) == 0x3B);
@@ -203,11 +203,11 @@ static inline int term_is_nil(term t)
 /**
  * @brief Checks if a term is a non empty list
  *
- * @details Returns 1 if a term is a non empty list (cons), otherwise 0.
+ * @details Returns \c true if a term is a non empty list (cons), otherwise \c false.
  * @param t the term that will be checked.
- * @return 1 if check succeeds, 0 otherwise.
+ * @return \c true if check succeeds, \c false otherwise.
  */
-static inline int term_is_nonempty_list(term t)
+static inline bool term_is_nonempty_list(term t)
 {
     /* list: 01 */
     return ((t & 0x3) == 0x1);
@@ -216,11 +216,11 @@ static inline int term_is_nonempty_list(term t)
 /**
  * @brief Checks if a term is a list
  *
- * @details Returns 1 if a term is a list (cons) or an empty list (nil term), otherwise 0.
+ * @details Returns \c true if a term is a list (cons) or an empty list (nil term), otherwise \c false.
  * @param t the term that will be checked.
- * @return 1 if check succeeds, 0 otherwise.
+ * @return \c true if check succeeds, \c false otherwise.
  */
-static inline int term_is_list(term t)
+static inline bool term_is_list(term t)
 {
     /* list: 01 */
     return term_is_nonempty_list(t) || term_is_nil(t);
@@ -229,38 +229,14 @@ static inline int term_is_list(term t)
 /**
  * @brief Checks if a term is a boxed value
  *
- * @details Returns 1 if a term is a boxed value stored on the heap, such as a tuple, otherwise 0.
+ * @details Returns \c true if a term is a boxed value stored on the heap, such as a tuple, otherwise \c false.
  * @param t the term that will be checked.
- * @return 1 if check succeeds, 0 otherwise.
+ * @return \c true if check succeeds, \c false otherwise.
  */
-static inline int term_is_boxed(term t)
+static inline bool term_is_boxed(term t)
 {
     /* boxed: 10 */
     return ((t & 0x3) == 0x2);
-}
-
-/**
- * @brief Checks if a term is a movable boxed value
- *
- * @details Returns 1 if a term is a boxed value that can be safely copied with memcpy.
- * @param t the term that will checked.
- * @return 1 if check succeeds, 0 otherwise.
- */
-static inline int term_is_movable_boxed(term t)
-{
-    /* boxed: 10 */
-    if ((t & 0x3) == 0x2) {
-        const term *boxed_value = term_to_const_term_ptr(t);
-        switch (boxed_value[0] & TERM_BOXED_TAG_MASK) {
-            case 0x10:
-                return 1;
-
-            default:
-                return 0;
-        }
-    } else {
-        return 0;
-    }
 }
 
 /**
@@ -295,35 +271,35 @@ static inline int term_boxed_size(term t)
 /**
  * @brief Checks if a term is a binary
  *
- * @details Returns 1 if a term is a binary stored on the heap, otherwise 0.
+ * @details Returns \c true if a term is a binary stored on the heap, otherwise \c false.
  * @param t the term that will be checked.
- * @return 1 if check succeeds, 0 otherwise.
+ * @return \c true if check succeeds, \c false otherwise.
  */
-static inline int term_is_binary(term t)
+static inline bool term_is_binary(term t)
 {
     /* boxed: 10 */
-    if ((t & 0x3) == 0x2) {
+    if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
         int masked_value = boxed_value[0] & TERM_BOXED_TAG_MASK;
         switch (masked_value) {
             case TERM_BOXED_REFC_BINARY:
             case TERM_BOXED_HEAP_BINARY:
             case TERM_BOXED_SUB_BINARY:
-                return 1;
+                return true;
             default:
-                return 0;
+                return false;
         }
     }
 
-    return 0;
+    return false;
 }
 
 /**
  * @brief Checks if a term is a binary
  *
- * @details Returns 1 if a term is a binary stored on the heap, otherwise 0.
+ * @details Returns \c true if a term is a binary stored on the heap, otherwise \c false.
  * @param t the term that will be checked.
- * @return 1 if check succeeds, 0 otherwise.
+ * @return \c true if check succeeds, \c false otherwise.
  */
 static inline bool term_is_refc_binary(term t)
 {
@@ -340,15 +316,15 @@ static inline bool term_is_refc_binary(term t)
 static inline bool term_refc_binary_is_const(term t)
 {
     const term *boxed_value = term_to_const_term_ptr(t);
-    return boxed_value[2] & RefcBinaryIsConst;
+    return (boxed_value[2] & RefcBinaryIsConst) != 0;
 }
 
 /**
  * @brief Checks if a term is a sub-binary
  *
- * @details Returns true if a term is a sub-binary; false, otherwise.
+ * @details Returns \c true if a term is a sub-binary; false, otherwise.
  * @param t the term that will be checked.
- * @return true if check succeeds; false, otherwise.
+ * @return \c true if check succeeds; false, otherwise.
  */
 static inline bool term_is_sub_binary(term t)
 {
@@ -364,11 +340,11 @@ static inline bool term_is_sub_binary(term t)
 /**
  * @brief Checks if a term is an integer value
  *
- * @details Returns 1 if a term is an integer value, otherwise 0.
+ * @details Returns \c true if a term is an integer value, otherwise \c false.
  * @param t the term that will be checked.
- * @return 1 if check succeeds, 0 otherwise.
+ * @return \c true if check succeeds, \c false otherwise.
  */
-static inline int term_is_integer(term t)
+static inline bool term_is_integer(term t)
 {
     /* integer: 11 11 */
     return ((t & 0xF) == 0xF);
@@ -377,33 +353,31 @@ static inline int term_is_integer(term t)
 /**
  * @brief Checks if a term is a uint8_t
  *
- * @details Returns 1 if a term is an integer value in the [0, 255] range, otherwise 0.
+ * @details Returns \c true if a term is an integer value in the [0, 255] range, otherwise \c false.
  * @param t the term that will be checked.
- * @return 1 if check succeeds, 0 otherwise.
+ * @return \c true if check succeeds, \c false otherwise.
  */
-static inline uint8_t term_is_uint8(term t)
+static inline bool term_is_uint8(term t)
 {
     return ((t & ~((term) 0xFF0)) == 0xF);
 }
 
-static inline int term_is_boxed_integer(term t)
+static inline bool term_is_boxed_integer(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_POSITIVE_INTEGER) {
-            return 1;
-        }
+        return ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_POSITIVE_INTEGER);
     }
 
-    return 0;
+    return false;
 }
 
-static inline int term_is_any_integer(term t)
+static inline bool term_is_any_integer(term t)
 {
     return term_is_integer(t) || term_is_boxed_integer(t);
 }
 
-static inline int term_is_catch_label(term t)
+static inline bool term_is_catch_label(term t)
 {
     return (t & 0x3F) == TERM_CATCH_TAG;
 }
@@ -411,11 +385,11 @@ static inline int term_is_catch_label(term t)
 /**
  * @brief Checks if a term is a pid
  *
- * @details Returns 1 if a term is a process id, otherwise 0.
+ * @details Returns \c true if a term is a process id, otherwise \c false.
  * @param t the term that will be checked.
- * @return 1 if check succeeds, 0 otherwise.
+ * @return \c true if check succeeds, \c false otherwise.
  */
-static inline int term_is_pid(term t)
+static inline bool term_is_pid(term t)
 {
     /* integer: 00 11 */
     return ((t & 0xF) == 0x3);
@@ -424,68 +398,62 @@ static inline int term_is_pid(term t)
 /**
  * @brief Checks if a term is a tuple
  *
- * @details Returns 1 if a term is a tuple, otherwise 0.
+ * @details Returns \c true if a term is a tuple, otherwise \c false.
  * @param t the term that will be checked.
- * @return 1 if check succeeds, 0 otherwise.
+ * @return \c true if check succeeds, \c false otherwise.
  */
-static inline int term_is_tuple(term t)
+static inline bool term_is_tuple(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == 0) {
-            return 1;
-        }
+        return ((boxed_value[0] & 0x3F) == 0);
     }
 
-    return 0;
+    return false;
 }
 
 /**
  * @brief Checks if a term is a reference
  *
- * @details Returns 1 if a term is a reference, otherwise 0.
+ * @details Returns \c true if a term is a reference, otherwise \c false.
  * @param t the term that will be checked.
- * @return 1 if check succeeds, 0 otherwise.
+ * @return \c true if check succeeds, \c false otherwise.
  */
-static inline int term_is_reference(term t)
+static inline bool term_is_reference(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == TERM_BOXED_REF) {
-            return 1;
-        }
+        return ((boxed_value[0] & 0x3F) == TERM_BOXED_REF);
     }
 
-    return 0;
+    return false;
 }
 
 /**
  * @brief Checks if a term is a function
  *
- * @details Returns 1 if a term is a fun, otherwise 0.
+ * @details Returns \c true if a term is a fun, otherwise \c false.
  * @param t the term that will be checked.
- * @return 1 if check succeeds, 0 otherwise.
+ * @return \c true if check succeeds, \c false otherwise.
  */
-static inline int term_is_function(term t)
+static inline bool term_is_function(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == TERM_BOXED_FUN) {
-            return 1;
-        }
+        return ((boxed_value[0] & 0x3F) == TERM_BOXED_FUN);
     }
 
-    return 0;
+    return false;
 }
 
 /**
  * @brief Checks if a term is a saved CP
  *
- * @details Returns 1 if a term is a saved continuation pointer, otherwise 0.
+ * @details Returns \c true if a term is a saved continuation pointer, otherwise \c false.
  * @param t the term that will be checked.
- * @return 1 if check succeeds, 0 otherwise.
+ * @return \c true if check succeeds, \c false otherwise.
  */
-static inline int term_is_cp(term t)
+static inline bool term_is_cp(term t)
 {
     return ((t & 0x3) == 0);
 }
@@ -826,10 +794,10 @@ static inline term term_from_local_process_id(uint32_t local_process_id)
 /**
  * @brief Determine whether a binary should be a heap binary or not
  *
- * @details Returns true if a binary of the specified size should be allocated
+ * @details Returns \c true if a binary of the specified size should be allocated
  *          in the process heap (as opposed to being a refc binary)
  * @param size the intended binary size
- * @return true if the binary should be allocated in the process heap; false, otherwise.
+ * @return \c true if the binary should be allocated in the process heap; false, otherwise.
  */
 static inline bool term_binary_size_is_heap_binary(uint32_t size)
 {
@@ -1313,51 +1281,42 @@ static inline int term_list_length(term t, int *proper)
 }
 
 /**
- * @brief Returns 1 if given terms are exactly equal.
+ * @brief Returns \c true if given terms are exactly equal.
  *
- * @details Compares 2 given terms and returns 1 if they are the same.
+ * @details Compares 2 given terms and returns true if they are the same.
  * @param a first term
  * @param b second term
- * @return 1 if they are the same, 0 otherwise.
+ * @return \c true if they are the same, \c false otherwise.
  */
-static inline int term_exactly_equals(term a, term b, Context *ctx)
+static inline bool term_exactly_equals(term a, term b, Context *ctx)
 {
-    if (a == b) {
-        return 1;
-    } else {
-        return term_compare(a, b, ctx) == 0;
-    }
+    return (a == b) || (term_compare(a, b, ctx) == 0);
 }
 
 /**
- * @brief Returns 1 if given terms are equal.
+ * @brief Returns \c true if given terms are equal.
  *
- * @details Compares 2 given terms and returns 1 if they are the same or they have same numeric value.
+ * @details Compares 2 given terms and returns true if they are the same or they have same numeric value.
  * @param a first term
  * @param b second term
- * @return 1 if they are the same, 0 otherwise.
+ * @return \c true if they are the same, \c false otherwise.
  */
-static inline int term_equals(term a, term b, Context *ctx)
+static inline bool term_equals(term a, term b, Context *ctx)
 {
-    if (a == b) {
-        return 1;
-    } else {
-        //TODO: add parameter for exactly equals.
-        return term_compare(a, b, ctx) == 0;
-    }
+    //TODO: add parameter for exactly equals.
+    return (a == b) || (term_compare(a, b, ctx) == 0);
 }
 
 #ifndef AVM_NO_FP
 
-static inline int term_is_float(term t)
+static inline bool term_is_float(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
         return (boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_FLOAT;
-
-    } else {
-        return 0;
     }
+
+    return false;
 }
 
 static inline term term_from_float(avm_float_t f, Context *ctx)
@@ -1388,7 +1347,7 @@ static inline avm_float_t term_conv_to_float(term t)
 
 #endif
 
-static inline int term_is_number(term t)
+static inline bool term_is_number(term t)
 {
     #ifndef AVM_NO_FP
        return term_is_any_integer(t) || term_is_float(t);
@@ -1409,17 +1368,17 @@ void term_display(FILE *fd, term t, const Context *ctx);
 /**
  * @brief Checks if a term is a string (i.e., a list of characters)
  *
- * @details Returns 1 if a term is a proper (nil-terminated) list of characters
+ * @details Returns \c true if a term is a proper (nil-terminated) list of characters
  * or an empty list (nil term), otherwise 0.
  * @param t the term that will be checked.
- * @return 1 if check succeeds, 0 otherwise.
+ * @return \c true if check succeeds, \c false otherwise.
  */
-static inline int term_is_string(term t)
+static inline bool term_is_string(term t)
 {
     while (term_is_nonempty_list(t)) {
         term e = term_get_list_head(t);
         if (!term_is_uint8(e)) {
-            return 0;
+            return false;
         }
         t = term_get_list_tail(t);
     }
@@ -1429,22 +1388,22 @@ static inline int term_is_string(term t)
 /**
  * @brief Checks to see if e is a member of list
  *
- * @details returns 1 if e is equal to an element of list; 0, otherwise
+ * @details returns true if e is equal to an element of list; false, otherwise
  * @param   list list term
  * @param   e element term
- * @return  1 if e is equal to a member of list; 0, otherwise
+ * @return  true if e is equal to a member of list; false, otherwise
  */
-static inline int term_list_member(term list, term e, Context *ctx)
+static inline bool term_list_member(term list, term e, Context *ctx)
 {
     term t = list;
     while (term_is_nonempty_list(t)) {
         term head = term_get_list_head(t);
         if (term_equals(head, e, ctx)) {
-            return 1;
+            return true;
         }
         t = term_get_list_tail(t);
     }
-    return 0;
+    return false;
 }
 
 static inline term term_make_function_reference(term m, term f, term a, Context *ctx)
@@ -1462,16 +1421,14 @@ static inline term term_make_function_reference(term m, term f, term a, Context 
     return ((term) boxed_func) | TERM_BOXED_VALUE_TAG;
 }
 
-static inline int term_is_match_state(term t)
+static inline bool term_is_match_state(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == TERM_BOXED_BIN_MATCH_STATE) {
-            return 1;
-        }
+        return ((boxed_value[0] & 0x3F) == TERM_BOXED_BIN_MATCH_STATE);
     }
 
-    return 0;
+    return false;
 }
 
 static inline term term_get_match_state_binary(term match_state)
@@ -1550,16 +1507,14 @@ static inline term term_alloc_bin_match_state(term binary_or_state, int slots, C
     return ((term) boxed_match_state) | TERM_BOXED_VALUE_TAG;
 }
 
-static inline int term_is_map(term t)
+static inline bool term_is_map(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_MAP) {
-            return 1;
-        }
+        return ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_MAP);
     }
 
-    return 0;
+    return false;
 }
 
 static inline size_t term_get_map_keys_offset()

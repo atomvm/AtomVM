@@ -21,6 +21,8 @@
 #ifndef _ATOMSHASHTABLE_H_
 #define _ATOMSHASHTABLE_H_
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -37,7 +39,7 @@ struct AtomsHashTable
 struct AtomsHashTable *atomshashtable_new();
 int atomshashtable_insert(struct AtomsHashTable *hash_table, AtomString string, unsigned long value);
 unsigned long atomshashtable_get_value(const struct AtomsHashTable *hash_table, AtomString string, unsigned long default_value);
-int atomshashtable_has_key(const struct AtomsHashTable *hash_table, AtomString string);
+bool atomshashtable_has_key(const struct AtomsHashTable *hash_table, AtomString string);
 
 #define TO_ATOMSHASHTABLE_VALUE(value) ((unsigned long) (value))
 

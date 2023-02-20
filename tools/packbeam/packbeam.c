@@ -175,18 +175,18 @@ FileData read_file_data(FILE *file)
     return file_data;
 }
 
-static int is_avm_file(FILE *file)
+static bool is_avm_file(FILE *file)
 {
     FileData file_data = read_file_data(file);
-    int ret = avmpack_is_valid(file_data.data, file_data.size);
+    bool ret = avmpack_is_valid(file_data.data, file_data.size);
     free(file_data.data);
     return ret;
 }
 
-static int is_beam_file(FILE *file)
+static bool is_beam_file(FILE *file)
 {
     FileData file_data = read_file_data(file);
-    int ret = iff_is_valid_beam(file_data.data);
+    bool ret = iff_is_valid_beam(file_data.data);
     free(file_data.data);
     return ret;
 }

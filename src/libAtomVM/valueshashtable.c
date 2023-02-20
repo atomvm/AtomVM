@@ -105,18 +105,18 @@ unsigned long valueshashtable_get_value(const struct ValuesHashTable *hash_table
     return default_value;
 }
 
-int valueshashtable_has_key(const struct ValuesHashTable *hash_table, unsigned long key)
+bool valueshashtable_has_key(const struct ValuesHashTable *hash_table, unsigned long key)
 {
     long index = key % hash_table->capacity;
 
     const struct HNode *node = hash_table->buckets[index];
     while (node) {
         if (node->key == key) {
-            return 1;
+            return true;
         }
 
         node = node->next;
     }
 
-    return 0;
+    return false;
 }

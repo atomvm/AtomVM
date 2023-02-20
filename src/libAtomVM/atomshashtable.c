@@ -123,7 +123,7 @@ unsigned long atomshashtable_get_value(const struct AtomsHashTable *hash_table, 
     return default_value;
 }
 
-int atomshashtable_has_key(const struct AtomsHashTable *hash_table, const AtomString string)
+bool atomshashtable_has_key(const struct AtomsHashTable *hash_table, const AtomString string)
 {
     unsigned long hash = sdbm_hash(string, atom_string_len(string));
     long index = hash % hash_table->capacity;
@@ -131,11 +131,11 @@ int atomshashtable_has_key(const struct AtomsHashTable *hash_table, const AtomSt
     const struct HNode *node = hash_table->buckets[index];
     while (node) {
         if (atom_are_equals(string, node->key)) {
-            return 1;
+            return true;
         }
 
         node = node->next;
     }
 
-    return 0;
+    return false;
 }

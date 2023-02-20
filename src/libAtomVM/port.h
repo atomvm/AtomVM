@@ -39,7 +39,7 @@ term port_create_ok_tuple(Context *ctx, term t);
 void port_send_reply(Context *ctx, term pid, term ref, term reply);
 void port_send_message(Context *ctx, term pid, term msg);
 void port_ensure_available(Context *ctx, size_t size);
-int port_is_standard_port_command(term msg);
+bool port_is_standard_port_command(term msg);
 
 #ifdef __cplusplus
 }

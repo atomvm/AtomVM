@@ -33,7 +33,7 @@ static inline int pad(int size)
     return ((size + 4 - 1) >> 2) << 2;
 }
 
-int avmpack_is_valid(const void *avmpack_binary, uint32_t size)
+bool avmpack_is_valid(const void *avmpack_binary, uint32_t size)
 {
     const unsigned char pack_header[AVMPACK_SIZE] = {
         0x23, 0x21, 0x2f, 0x75,
@@ -45,7 +45,7 @@ int avmpack_is_valid(const void *avmpack_binary, uint32_t size)
     };
 
     if (UNLIKELY(size < 24)) {
-        return 0;
+        return false;
     }
 
     return memcmp(avmpack_binary, pack_header, AVMPACK_SIZE) == 0;
