@@ -204,7 +204,8 @@ void mailbox_send_built_in_atom_signal(Context *c, enum MessageType type, term a
     mailbox_post_message(c, &atom_signal->base);
 }
 
-void mailbox_send_built_in_atom_request_signal(Context *c, enum MessageType type, int32_t pid, term atom)
+void mailbox_send_built_in_atom_request_signal(
+    Context *c, enum MessageType type, int32_t pid, term atom)
 {
     struct BuiltInAtomRequestSignal *atom_request = malloc(sizeof(struct BuiltInAtomRequestSignal));
     if (IS_NULL_PTR(atom_request)) {

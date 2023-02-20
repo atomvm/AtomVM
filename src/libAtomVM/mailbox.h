@@ -22,7 +22,8 @@
  * @file mailbox.h
  * @brief Mailbox management functions such as send and receive functions.
  *
- * @details Mailbox management functions should be used to send messages to a certain process or port and to receive them.
+ * @details Mailbox management functions should be used to send messages to a certain process or
+ * port and to receive them.
  */
 
 #ifndef _MAILBOX_H_
@@ -187,7 +188,8 @@ void mailbox_send_built_in_atom_signal(Context *c, enum MessageType type, term a
  * @param sender_pid the sender of the signal (to get the answer)
  * @param atom the built-in atom
  */
-void mailbox_send_built_in_atom_request_signal(Context *c, enum MessageType type, int32_t sender_pid, term atom);
+void mailbox_send_built_in_atom_request_signal(
+    Context *c, enum MessageType type, int32_t sender_pid, term atom);
 
 /**
  * @brief Sends an empty body signal to a certain mailbox.
