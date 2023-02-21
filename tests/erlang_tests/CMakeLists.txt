@@ -30,6 +30,19 @@ function(compile_erlang module_name)
     )
 endfunction()
 
+set(TO_HRL_PATH ${CMAKE_CURRENT_LIST_DIR})
+
+function(generate_hrl out_file def_name in_file)
+    add_custom_command(
+        OUTPUT ${out_file}
+        COMMAND escript ${TO_HRL_PATH}/to_hrl.erl ${in_file} ${def_name} ${out_file}
+        DEPENDS ${in_file}
+        COMMENT "Generating ${out_file}"
+    )
+endfunction()
+
+add_subdirectory(code_load)
+
 compile_erlang(add)
 compile_erlang(fact)
 compile_erlang(mutrec)
@@ -443,7 +456,12 @@ compile_erlang(trap_exit_flag)
 
 compile_erlang(test_stacktrace)
 
+compile_erlang(test_code_load_binary)
+compile_erlang(test_code_load_abs)
+
 add_custom_target(erlang_test_modules DEPENDS
+    code_load_modules
+
     add.beam
     fact.beam
     mutrec.beam
@@ -859,4 +877,7 @@ add_custom_target(erlang_test_modules DEPENDS
     trap_exit_flag.beam
 
     test_stacktrace.beam
+
+    test_code_load_binary.beam
+    test_code_load_abs.beam
 )

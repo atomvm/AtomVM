@@ -480,6 +480,9 @@ struct Test tests[] = {
     TEST_CASE_ATOMVM_ONLY(test_regecho_driver, 11),
     TEST_CASE_ATOMVM_ONLY(test_send_nif_and_echo, 11),
 
+    TEST_CASE_EXPECTED(test_code_load_binary, 24),
+    TEST_CASE_EXPECTED(test_code_load_abs, 24),
+
     // noisy tests, keep them at the end
     TEST_CASE_EXPECTED(spawn_opt_monitor_normal, 1),
     TEST_CASE_EXPECTED(spawn_opt_link_normal, 1),
