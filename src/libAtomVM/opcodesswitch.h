@@ -173,7 +173,7 @@ typedef union
                     uint8_t reg_byte = code_chunk[(base_index) + (off) + 1];            \
                     if (((reg_byte & 0x0F) != COMPACT_XREG)                             \
                         && ((reg_byte & 0x0F) != COMPACT_YREG)) {                       \
-                        fprintf(stderr, "Unexpected reg byte %x @ %d\n", (int) reg_byte, (base_index) + (off) + 1); \
+                        fprintf(stderr, "Unexpected reg byte %x @ %" PRIuPTR "\n", (int) reg_byte, (base_index) + (off) + 1); \
                         AVM_ABORT();                                                    \
                     }                                                                   \
                     off += 2;                                                           \
@@ -182,7 +182,7 @@ typedef union
                     break;                                                              \
                 }                                                                       \
                 default:                                                                \
-                    fprintf(stderr, "Unexpected extended %x @ %d\n", (int) first_byte, (base_index) + (off) + 1); \
+                    fprintf(stderr, "Unexpected extended %x @ %" PRIuPTR "\n", (int) first_byte, (base_index) + (off) + 1); \
                     AVM_ABORT();                                                        \
                     break;                                                              \
             }                                                                           \
@@ -6666,7 +6666,7 @@ wait_timeout_trap_handler:
                         default:
                             fprintf(stderr, "bs_match/3: undecoded command: %i, j = %d, list_len = %d\n\n", (int) term_to_atom_index(command), j, list_len);
                             #ifdef IMPL_EXECUTE_LOOP
-                                fprintf(stderr, "failed at %i\n", i);
+                                fprintf(stderr, "failed at %" PRIuPTR "\n", i);
                             #endif
 
                             AVM_ABORT();
