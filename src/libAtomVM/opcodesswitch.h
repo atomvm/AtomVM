@@ -1037,6 +1037,19 @@ COLD_FUNC static void dump(Context *ctx)
         fprintf(stderr, "\n");
     }
 
+    fprintf(stderr, "\n\nMonitors\n--------\n");
+    LIST_FOR_EACH (item, &ctx->monitors_head) {
+        struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
+        term_display(stderr, monitor->monitor_pid, ctx);
+        fprintf(stderr, " ");
+        if (monitor->linked) {
+            fprintf(stderr, "<");
+        }
+        fprintf(stderr, "---> ");
+        term_display(stderr, term_from_local_process_id(ctx->process_id), ctx);
+        fprintf(stderr, "\n");
+    }
+
     fprintf(stderr, "\n\n**End Of Crash Report**\n");
 }
 
