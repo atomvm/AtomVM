@@ -84,12 +84,15 @@ static void scheduler_process_native_signal_messages(Context *ctx)
     // for native processes.
     MailboxMessage *signal_message = mailbox_process_outer_list(&ctx->mailbox);
     while (signal_message) {
-        if (signal_message->header.type == KillSignal) {
-            context_process_kill_signal(ctx, &signal_message->body.term);
-        } else if (signal_message->header.type == ProcessInfoRequestSignal) {
-            context_process_process_info_request_signal(ctx, &signal_message->body.atom_request);
+        if (signal_message->type == KillSignal) {
+            struct TermSignal *kill_signal = CONTAINER_OF(signal_message, struct TermSignal, base);
+            context_process_kill_signal(ctx, kill_signal);
+        } else if (signal_message->type == ProcessInfoRequestSignal) {
+            struct BuiltInAtomRequestSignal *request_signal
+                = CONTAINER_OF(signal_message, struct BuiltInAtomRequestSignal, base);
+            context_process_process_info_request_signal(ctx, request_signal);
         }
-        MailboxMessage *next = signal_message->header.next;
+        MailboxMessage *next = signal_message->next;
         mailbox_destroy_signal_message(signal_message);
         signal_message = next;
     }

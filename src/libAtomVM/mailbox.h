@@ -22,7 +22,8 @@
  * @file mailbox.h
  * @brief Mailbox management functions such as send and receive functions.
  *
- * @details Mailbox management functions should be used to send messages to a certain process or port and to receive them.
+ * @details Mailbox management functions should be used to send messages to a certain process or
+ * port and to receive them.
  */
 
 #ifndef _MAILBOX_H_
@@ -64,8 +65,16 @@ enum MessageType
     TrapExceptionSignal,
 };
 
+struct MailboxMessage
+{
+    MailboxMessage *next;
+    enum MessageType type;
+};
+
 struct Message
 {
+    MailboxMessage base;
+
     int msg_memory_size;
     term mso_list;
     term message; // must be declared last
@@ -73,6 +82,8 @@ struct Message
 
 struct TermSignal
 {
+    MailboxMessage base;
+
     int msg_memory_size;
     term mso_list;
     term signal_term; // must be declared last
@@ -80,31 +91,17 @@ struct TermSignal
 
 struct BuiltInAtomSignal
 {
+    MailboxMessage base;
+
     term atom;
 };
 
 struct BuiltInAtomRequestSignal
 {
+    MailboxMessage base;
+
     int32_t sender_pid;
     term atom;
-};
-
-struct MessageHeader
-{
-    MailboxMessage *next;
-    enum MessageType type;
-};
-
-struct MailboxMessage
-{
-    struct MessageHeader header;
-    union
-    {
-        Message normal;
-        struct TermSignal term;
-        struct BuiltInAtomSignal atom;
-        struct BuiltInAtomRequestSignal atom_request;
-    } body;
 };
 
 typedef struct
@@ -191,7 +188,8 @@ void mailbox_send_built_in_atom_signal(Context *c, enum MessageType type, term a
  * @param sender_pid the sender of the signal (to get the answer)
  * @param atom the built-in atom
  */
-void mailbox_send_built_in_atom_request_signal(Context *c, enum MessageType type, int32_t sender_pid, term atom);
+void mailbox_send_built_in_atom_request_signal(
+    Context *c, enum MessageType type, int32_t sender_pid, term atom);
 
 /**
  * @brief Sends an empty body signal to a certain mailbox.
