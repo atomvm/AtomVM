@@ -292,6 +292,7 @@ static term nif_esp_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[])
             return globalcontext_make_atom(ctx->global, sleep_wakeup_ext0_atom);
         case ESP_SLEEP_WAKEUP_EXT1:
             return globalcontext_make_atom(ctx->global, sleep_wakeup_ext1_atom);
+#endif
         case ESP_SLEEP_WAKEUP_TIMER:
             return globalcontext_make_atom(ctx->global, sleep_wakeup_timer_atom);
         case ESP_SLEEP_WAKEUP_TOUCHPAD:
