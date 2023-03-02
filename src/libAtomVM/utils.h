@@ -64,24 +64,36 @@
               (((uint64_t) ((uint8_t *)(ptr))[6]) << 8) | (((uint64_t) ((uint8_t *) (ptr))[7])) )
 
         #define WRITE_64_UNALIGNED(ptr, val) \
-            *((uint64_t *) (ptr)) = ( \
-                ((uint64_t) ((uint8_t *)(&val))[0] << 56) | ((uint64_t) ((uint8_t *) (&val))[1] << 48) | \
-                ((uint64_t) ((uint8_t *)(&val))[2] << 40) | ((uint64_t) ((uint8_t *) (&val))[3] << 32) | \
-                ((uint64_t) ((uint8_t *)(&val))[4] << 24) | ((uint64_t) ((uint8_t *) (&val))[5] << 16) | \
-                ((uint64_t) ((uint8_t *)(&val))[6] <<  8) | (            (uint8_t *) (&val))[7] \
-            )
+            { \
+                ((uint8_t *)(ptr))[0] = (((uint64_t) val) >> 56) & 0xff; \
+                ((uint8_t *)(ptr))[1] = (((uint64_t) val) >> 48) & 0xff; \
+                ((uint8_t *)(ptr))[2] = (((uint64_t) val) >> 40) & 0xff; \
+                ((uint8_t *)(ptr))[3] = (((uint64_t) val) >> 32) & 0xff; \
+                ((uint8_t *)(ptr))[4] = (((uint64_t) val) >> 24) & 0xff; \
+                ((uint8_t *)(ptr))[5] = (((uint64_t) val) >> 16) & 0xff; \
+                ((uint8_t *)(ptr))[6] = (((uint64_t) val) >> 8) & 0xff; \
+                ((uint8_t *)(ptr))[7] = ((uint64_t) val) & 0xff; \
+            }
 
         #define READ_32_UNALIGNED(ptr) \
             ( (((uint8_t *)(ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) | (((uint8_t *)(ptr))[2] << 8) | ((uint8_t *)(ptr))[3] )
 
         #define WRITE_32_UNALIGNED(ptr, val) \
-            *((uint32_t *) (ptr)) = ( (((uint8_t *)(&val))[0] << 24) | (((uint8_t *) (&val))[1] << 16) | (((uint8_t *)(&val))[2] << 8) | ((uint8_t *)(&val))[3] )
+            { \
+                ((uint8_t *)(ptr))[0] = (((uint32_t) val) >> 24) & 0xff; \
+                ((uint8_t *)(ptr))[1] = (((uint32_t) val) >> 16) & 0xff; \
+                ((uint8_t *)(ptr))[2] = (((uint32_t) val) >> 8) & 0xff; \
+                ((uint8_t *)(ptr))[3] = ((uint32_t) val) & 0xff; \
+            }
 
         #define READ_16_UNALIGNED(ptr) \
             ( (((uint8_t *)(ptr))[0] << 8) | ((uint8_t *)(ptr))[1] )
 
         #define WRITE_16_UNALIGNED(ptr, val) \
-            *((uint16_t *) (ptr)) = ( (((uint8_t *)(&val))[0] << 8) | ((uint8_t *)(&val))[1] )
+            { \
+                ((uint8_t *)(ptr))[0] = (((uint16_t) val) >> 8) & 0xff; \
+                ((uint8_t *)(ptr))[1] = ((uint16_t) val) & 0xff; \
+            }
     #endif
 
     #ifdef __GNUC__

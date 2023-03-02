@@ -1118,6 +1118,20 @@ COLD_FUNC static void dump(Context *ctx)
     fprintf(stderr, "\n\nMailbox\n--------\n");
     mailbox_crashdump(ctx);
 
+    fprintf(stderr, "\n\nMonitors\n--------\n");
+    struct ListHead *item;
+    LIST_FOR_EACH (item, &ctx->monitors_head) {
+        struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
+        term_display(stderr, monitor->monitor_pid, ctx);
+        fprintf(stderr, " ");
+        if (monitor->linked) {
+            fprintf(stderr, "<");
+        }
+        fprintf(stderr, "---> ");
+        term_display(stderr, term_from_local_process_id(ctx->process_id), ctx);
+        fprintf(stderr, "\n");
+    }
+
     fprintf(stderr, "\n\n**End Of Crash Report**\n");
 }
 
@@ -2256,10 +2270,16 @@ schedule_in:
                 DECODE_COMPACT_TERM(timeout, code, i, next_off)
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (!term_is_integer(timeout) && UNLIKELY(timeout != INFINITY_ATOM)) {
+                    avm_int64_t t = 0;
+                    if (term_is_any_integer(timeout)) {
+                        t = term_maybe_unbox_int64(timeout);
+                        if (UNLIKELY(t < 0)) {
+                            RAISE_ERROR(TIMEOUT_VALUE_ATOM);
+                        }
+                    } else if (UNLIKELY(timeout != INFINITY_ATOM)) {
                         RAISE_ERROR(TIMEOUT_VALUE_ATOM);
                     }
-                    TRACE("wait_timeout/2, label: %i, timeout: %li\n", label, (long int) term_to_int32(timeout));
+                    TRACE("wait_timeout/2, label: %i, timeout: %li\n", label, (long int) t);
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
@@ -2268,10 +2288,10 @@ schedule_in:
                     int needs_to_wait = 0;
                     if (context_get_flags(ctx, WaitingTimeout | WaitingTimeoutExpired) == 0) {
                         if (timeout != INFINITY_ATOM) {
-                            scheduler_set_timeout(ctx, term_to_int32(timeout));
+                            scheduler_set_timeout(ctx, t);
                         }
                         needs_to_wait = 1;
-                    } else if (context_get_flags(ctx, WaitingTimeout) == 0) {
+                    } else if (context_get_flags(ctx, WaitingTimeout) != 0) {
                         needs_to_wait = 1;
                     } else if (!mailbox_has_next(&ctx->mailbox)) {
                         needs_to_wait = 1;

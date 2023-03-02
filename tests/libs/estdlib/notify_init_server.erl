@@ -1,7 +1,7 @@
 %
 % This file is part of AtomVM.
 %
-% Copyright 2019-2021 Fred Dushin <fred@dushin.net>
+% Copyright 2021 Davide Bettio <davide@uninstall.it>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -18,21 +18,27 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module(tests).
+-module(notify_init_server).
 
--export([start/0]).
+-behavior(gen_server).
 
-start() ->
-    ok = etest:test([
-        test_lists,
-        test_gen_event,
-        test_gen_server,
-        test_gen_statem,
-        test_gen_udp,
-        test_gen_tcp,
-        test_io_lib,
-        test_maps,
-        test_proplists,
-        test_timer,
-        test_supervisor
-    ]).
+-export([start_link/1, init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
+
+start_link({Parent, ReadyMsg}) ->
+    gen_server:start_link(?MODULE, {Parent, ReadyMsg}, []).
+
+init({Parent, ReadyMsg}) ->
+    Parent ! ReadyMsg,
+    {ok, nil}.
+
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
+handle_call(_Request, _From, State) ->
+    {reply, unimplemented, State}.
+
+handle_info(_Msg, State) ->
+    {noreply, State}.
+
+terminate(_Reason, _State) ->
+    ok.

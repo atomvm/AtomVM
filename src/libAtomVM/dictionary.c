@@ -79,9 +79,10 @@ term dictionary_erase(struct ListHead *dict, Context *ctx, term key)
 
 void dictionary_destroy(struct ListHead *dict)
 {
-    struct ListHead *entry;
+    struct ListHead *item;
     struct ListHead *tmp;
-    MUTABLE_LIST_FOR_EACH (entry, tmp, dict) {
+    MUTABLE_LIST_FOR_EACH (item, tmp, dict) {
+        struct DictEntry *entry = GET_LIST_ENTRY(item, struct DictEntry, head);
         free(entry);
     }
 }

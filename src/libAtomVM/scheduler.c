@@ -331,7 +331,7 @@ static void scheduler_timeout_callback(struct TimerListItem *it)
     scheduler_make_ready(ctx);
 }
 
-void scheduler_set_timeout(Context *ctx, uint32_t timeout)
+void scheduler_set_timeout(Context *ctx, avm_int64_t timeout)
 {
     GlobalContext *glb = ctx->global;
     uint64_t millis_now = sys_millis(glb);

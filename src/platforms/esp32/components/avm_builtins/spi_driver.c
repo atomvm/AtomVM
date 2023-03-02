@@ -239,7 +239,7 @@ Context *spi_driver_create_port(GlobalContext *global, term opts)
             // TODO handle out of memory errors
             spi_device->device_name = device_name;
             spi_device->handle = handle;
-            list_append(&spi_data->devices, (struct ListHead *) spi_device);
+            list_append(&spi_data->devices, &spi_device->list_head);
             char *str = interop_atom_to_string(ctx, device_name);
             ESP_LOGI(TAG, "SPI device %s added.", str);
             free(str);

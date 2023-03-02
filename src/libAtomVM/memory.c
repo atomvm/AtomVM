@@ -189,6 +189,7 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
     struct ListHead *fragment;
     struct ListHead *tmp;
     MUTABLE_LIST_FOR_EACH (fragment, tmp, &ctx->heap_fragments) {
+        // no need to get list entry, since it is guaranteed to be at offset 0
         free(fragment);
     }
     list_init(&ctx->heap_fragments);

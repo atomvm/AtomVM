@@ -23,7 +23,7 @@
 -behavior(gen_server).
 
 -export([
-    start_link/3
+    start_link/2, start_link/3
 ]).
 
 -export([
@@ -36,10 +36,12 @@
 -record(child, {pid = undefined, id, mfargs, restart_type, shutdown, child_type, modules = []}).
 -record(state, {children = []}).
 
-start_link({local, LocalServerName} = SN, Module, Args) ->
-    gen_server:start_link(SN, ?MODULE, {LocalServerName, Module, Args}, []).
+start_link(Module, Args) ->
+    gen_server:start_link(?MODULE, {Module, Args}, []).
+start_link(SupName, Module, Args) ->
+    gen_server:start_link(SupName, ?MODULE, {Module, Args}, []).
 
-init({_SupName, Mod, Args}) ->
+init({Mod, Args}) ->
     erlang:process_flag(trap_exit, true),
     case Mod:init(Args) of
         {ok, {{one_for_one, _Intensity, _Period}, StartSpec}} ->
@@ -62,7 +64,7 @@ init_state([{ChildId, MFA, Restart, brutal_kill, Type, Modules} | T], State) ->
     NewChildren = [Child | State#state.children],
     init_state(T, #state{children = NewChildren});
 init_state([], State) ->
-    State.
+    State#state{children = lists:reverse(State#state.children)}.
 
 start_children([Child | T], StartedC) ->
     #child{mfargs = {M, F, Args}} = Child,

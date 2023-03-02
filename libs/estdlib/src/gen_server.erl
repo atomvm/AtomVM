@@ -84,7 +84,7 @@ init_it(Starter, Name, Module, Args, Options) ->
         true ->
             init_it(Starter, Module, Args, Options)
     catch
-        error:badarg ->
+        error:badarg:S ->
             ErrorT =
                 case whereis(Name) of
                     undefined ->
@@ -92,6 +92,14 @@ init_it(Starter, Name, Module, Args, Options) ->
                     Pid when is_pid(Pid) ->
                         {already_started, Pid}
                 end,
+            crash_report(
+                io_lib:format("gen_server:init_it/5: Error initializing module ~p under name ~p", [
+                    Module, Name
+                ]),
+                Starter,
+                ErrorT,
+                S
+            ),
             init_ack(Starter, {error, ErrorT})
     end.
 
@@ -127,7 +135,13 @@ init_it(Starter, Module, Args, Options) ->
                     undefined
             end
         catch
-            _:E ->
+            _:E:S ->
+                crash_report(
+                    io_lib:format("gen_server:init_it/4: Error initializing module ~p", [Module]),
+                    Starter,
+                    E,
+                    S
+                ),
                 init_ack(Starter, {error, {bad_return_value, E}}),
                 undefined
         end,
@@ -144,6 +158,16 @@ wait_ack(Pid) ->
     receive
         {ack, Pid, Return} -> Return
     end.
+
+crash_report(ErrStr, Parent, E, S) ->
+    io:format("=============~n"),
+    io:format("CRASH REPORT~n"),
+    io:format("~s~n", [ErrStr]),
+    io:format("Error: ~p~n", [E]),
+    io:format("Parent: ~p~n", [Parent]),
+    io:format("Pid: ~p~n", [self()]),
+    io:format("Stacktrace: ~p~n", [S]),
+    io:format("=============~n").
 
 %%-----------------------------------------------------------------------------
 %% @param   ServerName the name with which to register the gen_server

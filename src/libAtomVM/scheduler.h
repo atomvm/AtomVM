@@ -106,7 +106,7 @@ Context *scheduler_next(GlobalContext *global, Context *c);
  * @param ctx the context that will be put on sleep
  * @param timeout amount of time to be waited in milliseconds.
  */
-void scheduler_set_timeout(Context *ctx, uint32_t timeout);
+void scheduler_set_timeout(Context *ctx, avm_int64_t timeout);
 
 void scheduler_cancel_timeout(Context *ctx);
 

@@ -1,7 +1,7 @@
 %
 % This file is part of AtomVM.
 %
-% Copyright 2021 Davide Bettio <davide@uninstall.it>
+% Copyright 2022 Fred Dushin <fred@dushin.net>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -23,6 +23,11 @@
 -export([test/0, init/1, start_link/1]).
 
 test() ->
+    ok = test_basic_supervisor(),
+    ok = test_supervisor_order(),
+    ok.
+
+test_basic_supervisor() ->
     {ok, _SupPid} = start_link(self()),
     Pid1 = get_and_test_server(),
     gen_server:cast(Pid1, {crash, test}),
@@ -53,12 +58,42 @@ get_and_test_server() ->
     Pid.
 
 start_link(Parent) ->
-    supervisor:start_link({local, testsup}, ?MODULE, [Parent]).
+    supervisor:start_link({local, testsup}, ?MODULE, {test_basic_supervisor, Parent}).
 
-init([Parent]) ->
+init({test_basic_supervisor, Parent}) ->
     ChildSpecs = [
         {test_child, {ping_pong_server, start_link, [Parent]}, transient, brutal_kill, worker, [
             ping_pong_server
         ]}
     ],
+    {ok, {{one_for_one, 10000, 3600}, ChildSpecs}};
+init({test_supervisor_order, Parent}) ->
+    ChildSpecs = [
+        {ready_1, {notify_init_server, start_link, [{Parent, ready_1}]}, transient, brutal_kill,
+            worker, [
+                notify_init_server
+            ]},
+        {ready_2, {notify_init_server, start_link, [{Parent, ready_2}]}, transient, brutal_kill,
+            worker, [
+                notify_init_server
+            ]}
+    ],
     {ok, {{one_for_one, 10000, 3600}, ChildSpecs}}.
+
+test_supervisor_order() ->
+    supervisor:start_link(?MODULE, {test_supervisor_order, self()}),
+    ready_1 =
+        receive
+            Msg1 ->
+                Msg1
+        after 1000 ->
+            {error, {timeout, ready_1}}
+        end,
+    ready_2 =
+        receive
+            Msg2 ->
+                Msg2
+        after 1000 ->
+            {error, {timeout, ready_2}}
+        end,
+    ok.

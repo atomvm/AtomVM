@@ -46,7 +46,7 @@
     wait_for_sta/0, wait_for_sta/1, wait_for_sta/2,
     wait_for_ap/0, wait_for_ap/1, wait_for_ap/2
 ]).
--export([start/1, stop/0]).
+-export([start/1, start_link/1, stop/0]).
 -export([
     init/1,
     handle_call/3,
@@ -226,7 +226,26 @@ wait_for_ap(ApConfig, Timeout) ->
 start(Config) ->
     case gen_server:start({local, ?MODULE}, ?MODULE, Config, []) of
         {ok, Pid} ->
-            gen_server:call(Pid, start);
+            case gen_server:call(Pid, start) of
+                ok ->
+                    {ok, Pid};
+                Error ->
+                    Error
+            end;
+        Error ->
+            Error
+    end.
+
+-spec start_link(Config :: network_config()) -> ok | {error, Reason :: term()}.
+start_link(Config) ->
+    case gen_server:start_link({local, ?MODULE}, ?MODULE, Config, []) of
+        {ok, Pid} ->
+            case gen_server:call(Pid, start) of
+                ok ->
+                    {ok, Pid};
+                Error ->
+                    Error
+            end;
         Error ->
             Error
     end.
