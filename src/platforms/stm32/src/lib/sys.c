@@ -77,6 +77,11 @@ void sys_time(struct timespec *t)
     sys_clock_gettime(t);
 }
 
+void sys_monotonic_time(struct timespec *t)
+{
+    sys_clock_gettime(t);
+}
+
 uint64_t sys_millis(GlobalContext *glb)
 {
     UNUSED(glb);

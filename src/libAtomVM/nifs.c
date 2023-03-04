@@ -120,6 +120,7 @@ static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_float_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_existing_atom_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_monotonic_time_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_iolist_size_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_iolist_to_binary_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[]);
@@ -451,6 +452,12 @@ static const struct Nif concat_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_concat_2
+};
+
+static const struct Nif monotonic_time_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_monotonic_time_1
 };
 
 static const struct Nif system_time_nif =
@@ -1286,6 +1293,28 @@ term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[])
     uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
 
     return term_from_ref_ticks(ref_ticks, ctx);
+}
+
+term nif_erlang_monotonic_time_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+
+    struct timespec ts;
+    sys_monotonic_time(&ts);
+
+    if (argv[0] == SECOND_ATOM) {
+        return make_maybe_boxed_int64(ctx, ts.tv_sec);
+
+    } else if (argv[0] == MILLISECOND_ATOM) {
+        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000 + ts.tv_nsec / 1000000);
+
+    } else if (argv[0] == MICROSECOND_ATOM) {
+        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000000 + ts.tv_nsec / 1000);
+
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
 }
 
 term nif_erlang_system_time_1(Context *ctx, int argc, term argv[])

@@ -32,9 +32,9 @@ test() ->
     ok.
 
 test_timer() ->
-    T0 = erlang:system_time(millisecond),
+    T0 = erlang:monotonic_time(millisecond),
     ok = timer:sleep(101),
-    T1 = erlang:system_time(millisecond),
+    T1 = erlang:monotonic_time(millisecond),
     ok = etest:assert_true((T1 - T0) >= 101),
     ok.
 
@@ -59,9 +59,9 @@ timer_loop(0) ->
             {error, SomethingElse}
     end;
 timer_loop(I) ->
-    T0 = erlang:system_time(millisecond),
+    T0 = erlang:monotonic_time(millisecond),
     ok = timer:sleep(101),
-    T1 = erlang:system_time(millisecond),
+    T1 = erlang:monotonic_time(millisecond),
     ok = etest:assert_true((T1 - T0) >= 101),
     timer_loop(I - 1).
 

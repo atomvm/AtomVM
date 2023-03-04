@@ -86,6 +86,7 @@ erlang:system_info/1, &system_info_nif
 erlang:system_flag/2, &system_flag_nif
 erlang:whereis/1, &whereis_nif
 erlang:++/2, &concat_nif
+erlang:monotonic_time/1, &monotonic_time_nif
 erlang:system_time/1, &system_time_nif
 erlang:tuple_to_list/1, &tuple_to_list_nif
 erlang:universaltime/0, &universaltime_nif

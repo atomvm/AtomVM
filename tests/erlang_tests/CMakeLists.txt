@@ -428,6 +428,8 @@ compile_erlang(test_refc_binaries)
 compile_erlang(test_sub_binaries)
 compile_erlang(bs_append_extra_words)
 
+compile_erlang(test_monotonic_time)
+
 compile_erlang(spawn_opt_monitor_normal)
 compile_erlang(spawn_opt_monitor_throw)
 compile_erlang(spawn_opt_demonitor_normal)
@@ -842,6 +844,8 @@ add_custom_target(erlang_test_modules DEPENDS
     bs_restore2_start_offset.beam
     bs_restore2_start_offset_no_fp.beam
     bs_append_extra_words.beam
+
+    test_monotonic_time.beam
 
     spawn_opt_monitor_normal.beam
     spawn_opt_monitor_throw.beam
