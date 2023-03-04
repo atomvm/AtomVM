@@ -461,6 +461,8 @@ struct Test tests[] = {
     TEST_CASE_COND(bs_restore2_start_offset, 823, SKIP_NO_FP),
     TEST_CASE_COND(bs_restore2_start_offset_no_fp, 823, SKIP_FP),
 
+    TEST_CASE_EXPECTED(test_monotonic_time, 1),
+
     // Tests relying on echo driver
     TEST_CASE_ATOMVM_ONLY(pingpong, 1),
 

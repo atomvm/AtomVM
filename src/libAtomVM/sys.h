@@ -56,6 +56,14 @@ void sys_consume_pending_events(GlobalContext *glb);
 void sys_time(struct timespec *t);
 
 /**
+ * @brief gets monotonic time
+ *
+ * @details gets monotonic time.
+ * @param t the timespec that will be updated.
+ */
+void sys_monotonic_time(struct timespec *t);
+
+/**
  * @brief Loads a BEAM module using platform dependent methods.
  *
  * @details Loads a BEAM module into memory using platform dependent methods and returns a pointer to a Module struct.
