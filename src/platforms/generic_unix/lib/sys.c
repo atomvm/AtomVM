@@ -141,6 +141,14 @@ void sys_time(struct timespec *t)
     }
 }
 
+void sys_monotonic_time(struct timespec *t)
+{
+    if (UNLIKELY(clock_gettime(CLOCK_MONOTONIC, t))) {
+        fprintf(stderr, "Failed clock_gettime.\n");
+        AVM_ABORT();
+    }
+}
+
 Module *sys_load_module(GlobalContext *global, const char *module_name)
 {
     TRACE("sys_load_module: Going to load: %s\n", module_name);

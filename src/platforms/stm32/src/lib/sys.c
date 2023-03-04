@@ -82,6 +82,11 @@ void sys_time(struct timespec *t)
     sys_clock_gettime(t);
 }
 
+void sys_monotonic_time(struct timespec *t)
+{
+    sys_clock_gettime(t);
+}
+
 uint32_t sys_millis()
 {
     return system_millis;

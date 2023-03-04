@@ -34,6 +34,7 @@
 #include "esp_heap_caps.h"
 #include "esp_idf_version.h"
 #include "esp_system.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include <limits.h>
 #include <stdint.h>
@@ -143,6 +144,14 @@ void sys_time(struct timespec *t)
 
     t->tv_sec = tv.tv_sec;
     t->tv_nsec = tv.tv_usec * 1000;
+}
+
+void sys_monotonic_time(struct timespec *t)
+{
+    int64_t us_since_boot = esp_timer_get_time();
+
+    t->tv_sec = us_since_boot / 1000000;
+    t->tv_nsec = us_since_boot * 1000;
 }
 
 void sys_init_platform(GlobalContext *glb)
