@@ -42,7 +42,9 @@
 %%-----------------------------------------------------------------------------
 -module(gen_statem).
 
--export([start/3, start/4, stop/1, stop/3, call/2, call/3, cast/2, reply/2]).
+-export([
+    start/3, start/4, start_link/3, start_link/4, stop/1, stop/3, call/2, call/3, cast/2, reply/2
+]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -record(state, {
@@ -97,6 +99,53 @@ start({local, Name} = ServerName, Module, Args, Options) when is_atom(Name) ->
     {ok, pid()} | {error, Reason :: term()}.
 start(Module, Args, Options) ->
     gen_server:start(?MODULE, {Module, Args}, Options).
+
+%%-----------------------------------------------------------------------------
+%% @param   ServerName the name with which to register the gen_statem
+%% @param   Module the module in which the gen_statem callbacks are defined
+%% @param   Args the arguments to pass to the module's init callback
+%% @param   Options the options used to create the gen_statem
+%% @returns the gen_statem pid, if successful; {error, Reason}, otherwise.
+%% @doc     Start a named gen_statem.
+%%
+%%          This function will start a gen_statem instance and register the
+%%          newly created process with the process registry.  Subsequent calls
+%%          may use the gen_statem name, in lieu of the process id.
+%%
+%%          This version of the start function will link the started gen_statem
+%%          process to the calling process.
+%%
+%%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
+%% @end
+%%-----------------------------------------------------------------------------
+-spec start_link(
+    ServerName :: {local, Name :: atom()},
+    Module :: module(),
+    Args :: term(),
+    Options :: options()
+) -> {ok, pid()} | {error, Reason :: term()}.
+start_link({local, Name} = ServerName, Module, Args, Options) when is_atom(Name) ->
+    gen_server:start_link(ServerName, ?MODULE, {Module, Args}, Options).
+
+%%-----------------------------------------------------------------------------
+%% @param   Module the module in which the gen_statem callbacks are defined
+%% @param   Args the arguments to pass to the module's init callback
+%% @param   Options the options used to create the gen_statem
+%% @returns the gen_statem pid, if successful; {error, Reason}, otherwise.
+%% @doc     Start an un-named gen_statem.
+%%
+%%          This function will start a gen_statem instance.
+%%
+%%          This version of the start function will link the started gen_statem
+%%          process to the calling process.
+%%
+%%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
+%% @end
+%%-----------------------------------------------------------------------------
+-spec start_link(Module :: module(), Args :: term(), Options :: options()) ->
+    {ok, pid()} | {error, Reason :: term()}.
+start_link(Module, Args, Options) ->
+    gen_server:start_link(?MODULE, {Module, Args}, Options).
 
 %%-----------------------------------------------------------------------------
 %% @equiv   stop(ServerRef, normal, infinity)
