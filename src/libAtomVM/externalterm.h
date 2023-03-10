@@ -42,6 +42,12 @@ enum ExternalTermResult
     EXTERNAL_TERM_HEAP_ALLOC = 3
 };
 
+typedef enum
+{
+    ExternalTermNoOpts = 0,
+    ExternalTermToHeapFragment = 1
+} ExternalTermOpts;
+
 /**
  * @brief Gets a term from external term data.
  *
@@ -54,7 +60,8 @@ enum ExternalTermResult
  * store the generated terms.
  * @returns a term.
  */
-term externalterm_to_term(const void *external_term, size_t size, Context *ctx, int use_heap_fragment);
+term externalterm_to_term(
+    const void *external_term, size_t size, Context *ctx, ExternalTermOpts opts);
 
 /**
  * @brief Create a term from a binary.

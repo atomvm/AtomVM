@@ -61,7 +61,7 @@
 // buffer).  The parse_external_terms function does NOT perform range checking, and MUST
 // therefore always be preceeded by a call to calculate_heap_usage.
 
-static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx, int copy);
+static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx, bool copy);
 static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaining, int *eterm_size, bool copy, Context *ctx);
 static size_t compute_external_size(Context *ctx, term t);
 static int externalterm_from_term(Context *ctx, uint8_t **buf, size_t *len, term t);
@@ -71,12 +71,14 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t);
  * @brief
  * @param   external_term   buffer containing external term
  * @param   ctx             current context in which terms may be stored
- * @param   use_heap_fragment whether to store parsed terms in a heap fragment.  If 0, terms
+ * @param   opts            additional opts, such as ExternalTermToHeapFragment for storing parsed
+ * terms in a heap fragment.
  *                          are stored in the context heap.
  * @param   bytes_read      the number of bytes read off external_term in order to yield a term
  * @return  the parsed term
  */
-static term externalterm_to_term_internal(const void *external_term, size_t size, Context *ctx, int use_heap_fragment, size_t *bytes_read, bool copy)
+static term externalterm_to_term_internal(const void *external_term, size_t size, Context *ctx,
+    ExternalTermOpts opts, size_t *bytes_read, bool copy)
 {
     const uint8_t *external_term_buf = (const uint8_t *) external_term;
 
@@ -94,7 +96,7 @@ static term externalterm_to_term_internal(const void *external_term, size_t size
         return term_invalid_term();
     }
 
-    if (use_heap_fragment) {
+    if (opts & ExternalTermToHeapFragment) {
         struct ListHead *heap_fragment = malloc(heap_usage * sizeof(term) + sizeof(struct ListHead));
         if (IS_NULL_PTR(heap_fragment)) {
             return term_invalid_term();
@@ -107,7 +109,7 @@ static term externalterm_to_term_internal(const void *external_term, size_t size
         // so all existing functions can be used on the heap fragment without any change.
         term *main_heap = ctx->heap_ptr;
         ctx->heap_ptr = external_term_heap;
-        term result = parse_external_terms(external_term_buf + 1, &eterm_size, ctx, 0);
+        term result = parse_external_terms(external_term_buf + 1, &eterm_size, ctx, false);
         *bytes_read = eterm_size + 1;
         ctx->heap_ptr = main_heap;
 
@@ -117,16 +119,16 @@ static term externalterm_to_term_internal(const void *external_term, size_t size
             fprintf(stderr, "Unable to ensure %i free words in heap\n", eterm_size);
             return term_invalid_term();
         }
-        term result = parse_external_terms(external_term_buf + 1, &eterm_size, ctx, 1);
+        term result = parse_external_terms(external_term_buf + 1, &eterm_size, ctx, true);
         *bytes_read = eterm_size + 1;
         return result;
     }
 }
 
-term externalterm_to_term(const void *external_term, size_t size, Context *ctx, int use_heap_fragment)
+term externalterm_to_term(const void *external_term, size_t size, Context *ctx, ExternalTermOpts opts)
 {
     size_t bytes_read = 0;
-    return externalterm_to_term_internal(external_term, size, ctx, use_heap_fragment, &bytes_read, false);
+    return externalterm_to_term_internal(external_term, size, ctx, opts, &bytes_read, false);
 }
 
 enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term binary, size_t *bytes_read)
@@ -326,7 +328,7 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
     }
 }
 
-static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx, int copy)
+static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx, bool copy)
 {
     switch (external_term_buf[0]) {
         case NEW_FLOAT_EXT: {
