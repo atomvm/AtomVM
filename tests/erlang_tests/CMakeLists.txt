@@ -372,7 +372,6 @@ compile_erlang(improper_literal)
 compile_erlang(improper_length)
 
 compile_erlang(jsonish_encode)
-compile_erlang(jsonish_encode_no_fp)
 compile_erlang(iolist_concat_bin)
 compile_erlang(binary_is_iolist)
 
@@ -421,7 +420,6 @@ compile_erlang(test_list_to_tuple)
 
 compile_erlang(bs_context_to_binary_with_offset)
 compile_erlang(bs_restore2_start_offset)
-compile_erlang(bs_restore2_start_offset_no_fp)
 compile_erlang(test_refc_binaries)
 compile_erlang(test_sub_binaries)
 compile_erlang(bs_append_extra_words)
@@ -786,7 +784,6 @@ add_custom_target(erlang_test_modules DEPENDS
     improper_length.beam
 
     jsonish_encode.beam
-    jsonish_encode_no_fp.beam
     iolist_concat_bin.beam
     binary_is_iolist.beam
 
@@ -838,7 +835,6 @@ add_custom_target(erlang_test_modules DEPENDS
 
     bs_context_to_binary_with_offset.beam
     bs_restore2_start_offset.beam
-    bs_restore2_start_offset_no_fp.beam
     bs_append_extra_words.beam
 
     test_monotonic_time.beam

@@ -330,19 +330,14 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
 {
     switch (external_term_buf[0]) {
         case NEW_FLOAT_EXT: {
-            #ifndef AVM_NO_FP
-                union {
-                    uint64_t intvalue;
-                    double doublevalue;
-                } v;
-                v.intvalue = READ_64_UNALIGNED(external_term_buf + 1);
+            union {
+                uint64_t intvalue;
+                double doublevalue;
+            } v;
+            v.intvalue = READ_64_UNALIGNED(external_term_buf + 1);
 
-                *eterm_size = 9;
-                return term_from_float(v.doublevalue, ctx);
-            #else
-                fprintf(stderr, "floating point support not enabled.\n");
-                return term_invalid_term();
-            #endif
+            *eterm_size = 9;
+            return term_from_float(v.doublevalue, ctx);
         }
 
         case SMALL_INTEGER_EXT: {
@@ -515,16 +510,11 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
     }
     switch (external_term_buf[0]) {
         case NEW_FLOAT_EXT: {
-            #ifndef AVM_NO_FP
-                if (UNLIKELY(remaining < NEW_FLOAT_EXT_SIZE)) {
-                    return INVALID_TERM_SIZE;
-                }
-                *eterm_size = NEW_FLOAT_EXT_SIZE;
-                return FLOAT_SIZE;
-            #else
-                fprintf(stderr, "floating point support not enabled.\n");
+            if (UNLIKELY(remaining < NEW_FLOAT_EXT_SIZE)) {
                 return INVALID_TERM_SIZE;
-            #endif
+            }
+            *eterm_size = NEW_FLOAT_EXT_SIZE;
+            return FLOAT_SIZE;
         }
 
         case SMALL_INTEGER_EXT: {
