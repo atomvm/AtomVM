@@ -187,4 +187,11 @@ static inline void *rand_fail_calloc(int n, unsigned long alloc_size)
 #define AVM_ABORT() abort()
 #endif
 
+#ifdef __GNUC__
+    #define PRINTF_FORMAT_ARGS(str_pos, arg_pos) \
+        __attribute__ ((format (printf, str_pos, arg_pos)))
+#else
+    #define PRINTF_FORMAT_ARGS(...)
+#endif
+
 #endif

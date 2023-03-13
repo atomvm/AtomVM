@@ -91,6 +91,15 @@ extern "C" {
 typedef struct GlobalContext GlobalContext;
 #endif
 
+typedef struct PrinterFun PrinterFun;
+
+typedef int (*printer_function_t)(PrinterFun *fun, const char *fmt, ...) PRINTF_FORMAT_ARGS(2, 3);
+
+struct PrinterFun
+{
+    printer_function_t print;
+};
+
 enum RefcBinaryFlags
 {
     RefcNoFlags = 0,
@@ -1405,14 +1414,26 @@ static inline int term_is_number(term t)
 void term_display(FILE *fd, term t, const Context *ctx);
 
 /**
+ * @brief Prints a term using given printer fun
+ *
+ * @details Print any given term using a printer fun
+ * @param fd the file where the term will be printed.
+ * @param t the term that will be printed.
+ * @param global the \c GlobalContext.
+ * @returns the number of printed characters.
+ */
+int term_funprint(PrinterFun *pf, term t, const GlobalContext *global);
+
+/**
  * @brief Prints a term to the given file
  *
  * @details Print any given term to the given file.
  * @param fd the file where the term will be printed.
  * @param t the term that will be printed.
  * @param global the \c GlobalContext.
+ * @returns the number of printed characters.
  */
-void term_fprint(FILE *fd, term t, const GlobalContext *global);
+int term_fprint(FILE *fd, term t, const GlobalContext *global);
 
 /**
  * @brief Checks if a term is a string (i.e., a list of characters)
