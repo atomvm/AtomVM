@@ -1436,6 +1436,18 @@ int term_funprint(PrinterFun *pf, term t, const GlobalContext *global);
 int term_fprint(FILE *fd, term t, const GlobalContext *global);
 
 /**
+ * @brief Write a term to a string as text
+ *
+ * @details Print any given term to the given buffer.
+ * @param buf the buffer where the term will be printed.
+ * @param size the buffer size.
+ * @param t the term that will be printed.
+ * @param global the \c GlobalContext.
+ * @returns the number of printed characters.
+ */
+int term_snprint(char *buf, size_t size, term t, const GlobalContext *global);
+
+/**
  * @brief Checks if a term is a string (i.e., a list of characters)
  *
  * @details Returns 1 if a term is a proper (nil-terminated) list of characters

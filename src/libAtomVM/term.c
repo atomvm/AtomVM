@@ -44,6 +44,13 @@ struct FprintfFun
     FILE *stream;
 };
 
+struct SnprintfFun
+{
+    PrinterFun base;
+    int size;
+    char *buf;
+};
+
 const term empty_tuple = 0;
 
 int fprintf_printer(PrinterFun *fun, const char *fmt, ...)
@@ -55,6 +62,23 @@ int fprintf_printer(PrinterFun *fun, const char *fmt, ...)
 
     FILE *stream = CONTAINER_OF(fun, struct FprintfFun, base)->stream;
     ret = vfprintf(stream, fmt, args);
+
+    va_end(args);
+
+    return ret;
+}
+
+int snprintf_printer(PrinterFun *fun, const char *fmt, ...)
+{
+    int ret;
+
+    va_list args;
+    va_start(args, fmt);
+
+    struct SnprintfFun *snpf = CONTAINER_OF(fun, struct SnprintfFun, base);
+    ret = vsnprintf(snpf->buf, snpf->size, fmt, args);
+    snpf->buf += ret;
+    snpf->size -= ret;
 
     va_end(args);
 
@@ -76,6 +100,19 @@ int term_fprint(FILE *stream, term t, const GlobalContext *global)
     };
 
     return term_funprint(&fprintf_fun.base, t, global);
+}
+
+int term_snprint(char *buf, size_t size, term t, const GlobalContext *global)
+{
+    struct SnprintfFun snprintf_fun = {
+        .base = {
+            .print = snprintf_printer
+        },
+        .buf = buf,
+        .size = size
+    };
+
+    return term_funprint(&snprintf_fun.base, t, global);
 }
 
 int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
