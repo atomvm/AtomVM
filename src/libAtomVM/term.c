@@ -28,23 +28,108 @@
 
 #include <ctype.h>
 #include <inttypes.h>
+#include <stdarg.h>
+#include <stddef.h>
 #include <stdio.h>
+
+//TODO use macro from utils
+#ifndef CONTAINER_OF
+#define CONTAINER_OF(ptr, type, member) \
+    ((type *) (((char *) (ptr)) - offsetof(type, member)))
+#endif
+
+struct FprintfFun
+{
+    PrinterFun base;
+    FILE *stream;
+};
+
+struct SnprintfFun
+{
+    PrinterFun base;
+    int size;
+    char *buf;
+};
 
 const term empty_tuple = 0;
 
+int fprintf_printer(PrinterFun *fun, const char *fmt, ...)
+{
+    int ret;
+
+    va_list args;
+    va_start(args, fmt);
+
+    FILE *stream = CONTAINER_OF(fun, struct FprintfFun, base)->stream;
+    ret = vfprintf(stream, fmt, args);
+
+    va_end(args);
+
+    return ret;
+}
+
+int snprintf_printer(PrinterFun *fun, const char *fmt, ...)
+{
+    int ret;
+
+    va_list args;
+    va_start(args, fmt);
+
+    struct SnprintfFun *snpf = CONTAINER_OF(fun, struct SnprintfFun, base);
+    ret = vsnprintf(snpf->buf, snpf->size, fmt, args);
+    snpf->buf += ret;
+    snpf->size -= ret;
+
+    va_end(args);
+
+    return ret;
+}
+
 void term_display(FILE *fd, term t, const Context *ctx)
+{
+    term_fprint(fd, t, ctx->global);
+}
+
+int term_fprint(FILE *stream, term t, const GlobalContext *global)
+{
+    struct FprintfFun fprintf_fun = {
+        .base = {
+            .print = fprintf_printer
+        },
+        .stream = stream
+    };
+
+    return term_funprint(&fprintf_fun.base, t, global);
+}
+
+int term_snprint(char *buf, size_t size, term t, const GlobalContext *global)
+{
+    struct SnprintfFun snprintf_fun = {
+        .base = {
+            .print = snprintf_printer
+        },
+        .buf = buf,
+        .size = size
+    };
+
+    return term_funprint(&snprintf_fun.base, t, global);
+}
+
+int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
 {
     if (term_is_atom(t)) {
         int atom_index = term_to_atom_index(t);
-        AtomString atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table, atom_index, (unsigned long) NULL);
-        fprintf(fd, "%.*s", (int) atom_string_len(atom_string), (char *) atom_string_data(atom_string));
+        AtomString atom_string = (AtomString) valueshashtable_get_value(
+            global->atoms_ids_table, atom_index, (unsigned long) NULL);
+        return fun->print(fun, "%.*s", (int) atom_string_len(atom_string),
+            (char *) atom_string_data(atom_string));
 
     } else if (term_is_integer(t)) {
         avm_int_t iv = term_to_int(t);
-        fprintf(fd, AVM_INT_FMT, iv);
+        return fun->print(fun, AVM_INT_FMT, iv);
 
     } else if (term_is_nil(t)) {
-        fprintf(fd, "[]");
+        return fun->print(fun, "[]");
 
     } else if (term_is_nonempty_list(t)) {
         int is_printable = 1;
@@ -63,33 +148,55 @@ void term_display(FILE *fd, term t, const Context *ctx)
             int ok;
             char *printable = interop_list_to_string(t, &ok);
             if (LIKELY(ok)) {
-                fprintf(fd, "\"%s\"", printable);
+                int ret = fun->print(fun, "\"%s\"", printable);
                 free(printable);
+                return ret;
             } else {
-                fprintf(fd, "???");
+                return fun->print(fun, "???");
             }
 
         } else {
-            fputc('[', fd);
+            int ret = fun->print(fun, "[");
+            if (UNLIKELY(ret < 0)) {
+                return ret;
+            }
             int display_separator = 0;
             while (term_is_nonempty_list(t)) {
                 if (display_separator) {
-                    fputc(',', fd);
+                    ret += fun->print(fun, ",");
                 } else {
                     display_separator = 1;
                 }
 
-                term_display(fd, term_get_list_head(t), ctx);
+                int printed = term_funprint(fun, term_get_list_head(t), global);
+                if (UNLIKELY(printed < 0)) {
+                    return printed;
+                }
+                ret += printed;
                 t = term_get_list_tail(t);
             }
             if (!term_is_nil(t)) {
-                fputc('|', fd);
-                term_display(fd, t, ctx);
+                int printed = fun->print(fun, "|");
+                if (UNLIKELY(printed < 0)) {
+                    return printed;
+                }
+                ret += printed;
+
+                printed = term_funprint(fun, t, global);
+                if (UNLIKELY(printed < 0)) {
+                    return printed;
+                }
+                ret += printed;
             }
-            fputc(']', fd);
+            int printed = fun->print(fun, "]");
+            if (UNLIKELY(printed < 0)) {
+                return printed;
+            }
+            ret += printed;
+            return ret;
         }
     } else if (term_is_pid(t)) {
-        fprintf(fd, "<0.%i.0>", term_to_local_process_id(t));
+        return fun->print(fun, "<0.%i.0>", term_to_local_process_id(t));
 
     } else if (term_is_function(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
@@ -101,35 +208,77 @@ void term_display(FILE *fd, term t, const Context *ctx)
         #else
                 "#Fun<erl_eval.%lu.%llu>";
         #endif
-        fprintf(fd, format, fun_index, (unsigned long) fun_module);
+        return fun->print(fun, format, fun_index, (unsigned long) fun_module);
 
     } else if (term_is_tuple(t)) {
-        fputc('{', fd);
+        int ret = fun->print(fun, "{");
+        if (UNLIKELY(ret < 0)) {
+            return ret;
+        }
 
         int tuple_size = term_get_tuple_arity(t);
         for (int i = 0; i < tuple_size; i++) {
             if (i != 0) {
-                fputc(',', fd);
+                int printed = fun->print(fun, ",");
+                if (UNLIKELY(printed < 0)) {
+                    return printed;
+                }
+                ret += printed;
             }
-            term_display(fd, term_get_tuple_element(t, i), ctx);
+            int printed = term_funprint(fun, term_get_tuple_element(t, i), global);
+            if (UNLIKELY(printed < 0)) {
+                return printed;
+            }
+            ret += printed;
         }
 
-        fputc('}', fd);
+        int printed = fun->print(fun, "}");
+        if (UNLIKELY(printed < 0)) {
+            return printed;
+        }
+        ret += printed;
+        return ret;
 
     } else if (term_is_map(t)) {
-        fprintf(fd, "#{");
+        int ret = fun->print(fun, "#{");
+        if (UNLIKELY(ret < 0)) {
+            return ret;
+        }
 
         int map_size = term_get_map_size(t);
         for (int i = 0; i < map_size; i++) {
             if (i != 0) {
-                fputc(',', fd);
+                int printed = fun->print(fun, ",");
+                if (UNLIKELY(printed < 0)) {
+                    return printed;
+                }
+                ret += printed;
             }
-            term_display(fd, term_get_map_key(t, i), ctx);
-            fprintf(fd, "=>");
-            term_display(fd, term_get_map_value(t, i), ctx);
+            int printed = term_funprint(fun, term_get_map_key(t, i), global);
+            if (UNLIKELY(printed < 0)) {
+                return printed;
+            }
+            ret += printed;
+
+            printed = fun->print(fun, "=>");
+            if (UNLIKELY(printed < 0)) {
+                return printed;
+            }
+            ret += printed;
+
+            printed = term_funprint(fun, term_get_map_value(t, i), global);
+            if (UNLIKELY(printed < 0)) {
+                return printed;
+            }
+            ret += printed;
         }
 
-        fputc('}', fd);
+        int printed = fun->print(fun, "}");
+        if (UNLIKELY(printed < 0)) {
+            return printed;
+        }
+        ret += printed;
+        return ret;
 
     } else if (term_is_binary(t)) {
         int len = term_binary_size(t);
@@ -143,24 +292,45 @@ void term_display(FILE *fd, term t, const Context *ctx)
             }
         }
 
-        fprintf(fd, "<<");
+        int ret = fun->print(fun, "<<");
+        if (UNLIKELY(ret < 0)) {
+            return ret;
+        }
+
         if (is_printable) {
-            fprintf(fd, "\"%.*s\"", len, binary_data);
+            int printed = fun->print(fun, "\"%.*s\"", len, binary_data);
+            if (UNLIKELY(printed < 0)) {
+                return printed;
+            }
+            ret += printed;
 
         } else {
             int display_separator = 0;
             for (int i = 0; i < len; i++) {
                 if (display_separator) {
-                    fputc(',', fd);
+                    int printed = fun->print(fun, ",");
+                    if (UNLIKELY(printed < 0)) {
+                        return printed;
+                    }
+                    ret += printed;
                 } else {
                     display_separator = 1;
                 }
 
                 uint8_t c = (uint8_t) binary_data[i];
-                fprintf(fd, "%i", (int) c);
+                int printed = fun->print(fun, "%i", (int) c);
+                if (UNLIKELY(printed < 0)) {
+                    return printed;
+                }
+                ret += printed;
             }
         }
-        fprintf(fd, ">>");
+        int printed = fun->print(fun, ">>");
+        if (UNLIKELY(printed < 0)) {
+            return printed;
+        }
+        ret += printed;
+        return ret;
 
     } else if (term_is_reference(t)) {
         const char *format =
@@ -169,30 +339,28 @@ void term_display(FILE *fd, term t, const Context *ctx)
 #else
         "#Ref<0.0.0.%lu>";
 #endif
-        fprintf(fd, format, term_to_ref_ticks(t));
+        return fun->print(fun, format, term_to_ref_ticks(t));
 
     } else if (term_is_boxed_integer(t)) {
         int size = term_boxed_size(t);
         switch (size) {
             case 1:
-                fprintf(fd, AVM_INT_FMT, term_unbox_int(t));
-                break;
+                return fun->print(fun, AVM_INT_FMT, term_unbox_int(t));
 
 #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
             case 2:
-                fprintf(fd, AVM_INT64_FMT, term_unbox_int64(t));
-                break;
+                return fun->print(fun, AVM_INT64_FMT, term_unbox_int64(t));
 #endif
-
             default:
                 AVM_ABORT();
         }
 
     } else if (term_is_float(t)) {
         avm_float_t f = term_to_float(t);
-        fprintf(fd, AVM_FLOAT_FMT, f);
+        return fun->print(fun, AVM_FLOAT_FMT, f);
+
     } else {
-        fprintf(fd, "Unknown term type: %" TERM_U_FMT, t);
+        return fun->print(fun, "Unknown term type: %" TERM_U_FMT, t);
     }
 }
 

@@ -86,6 +86,20 @@ extern "C" {
 
 #define TERM_FROM_ATOM_INDEX(atom_index) ((atom_index << 6) | 0xB)
 
+#ifndef TYPEDEF_GLOBALCONTEXT
+#define TYPEDEF_GLOBALCONTEXT
+typedef struct GlobalContext GlobalContext;
+#endif
+
+typedef struct PrinterFun PrinterFun;
+
+typedef int (*printer_function_t)(PrinterFun *fun, const char *fmt, ...) PRINTF_FORMAT_ARGS(2, 3);
+
+struct PrinterFun
+{
+    printer_function_t print;
+};
+
 enum RefcBinaryFlags
 {
     RefcNoFlags = 0,
@@ -1392,11 +1406,46 @@ static inline int term_is_number(term t)
 /**
  * @brief Prints a term to stdout
  *
- * @details Print any given term to the standard output.
+ * @details Print any term to the given file.
+ * @param fd the file where the term will be printed.
  * @param t the term that will be printed.
  * @param ctx the context.
  */
 void term_display(FILE *fd, term t, const Context *ctx);
+
+/**
+ * @brief Prints a term using given printer fun
+ *
+ * @details Print any given term using a printer fun
+ * @param fd the file where the term will be printed.
+ * @param t the term that will be printed.
+ * @param global the \c GlobalContext.
+ * @returns the number of printed characters.
+ */
+int term_funprint(PrinterFun *pf, term t, const GlobalContext *global);
+
+/**
+ * @brief Prints a term to the given file
+ *
+ * @details Print any given term to the given file.
+ * @param fd the file where the term will be printed.
+ * @param t the term that will be printed.
+ * @param global the \c GlobalContext.
+ * @returns the number of printed characters.
+ */
+int term_fprint(FILE *fd, term t, const GlobalContext *global);
+
+/**
+ * @brief Write a term to a string as text
+ *
+ * @details Print any given term to the given buffer.
+ * @param buf the buffer where the term will be printed.
+ * @param size the buffer size.
+ * @param t the term that will be printed.
+ * @param global the \c GlobalContext.
+ * @returns the number of printed characters.
+ */
+int term_snprint(char *buf, size_t size, term t, const GlobalContext *global);
 
 /**
  * @brief Checks if a term is a string (i.e., a list of characters)
