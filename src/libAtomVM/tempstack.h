@@ -1,7 +1,7 @@
 /*
  * This file is part of AtomVM.
  *
- * Copyright 2018 Davide Bettio <davide@uninstall.it>
+ * Copyright 2018-2023 Davide Bettio <davide@uninstall.it>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,14 @@
 #ifndef _TEMPSTACK_H_
 #define _TEMPSTACK_H_
 
+#include "utils.h"
+
+typedef enum
+{
+    TempStackOk = 0,
+    TempStackFailedAlloc = 1
+} TempStackResult;
+
 struct TempStack
 {
     term *stack_end;
@@ -28,11 +36,16 @@ struct TempStack
     int size;
 };
 
-static inline void temp_stack_init(struct TempStack *temp_stack)
+NO_DISCARD static inline TempStackResult temp_stack_init(struct TempStack *temp_stack)
 {
     temp_stack->size = 8;
     temp_stack->stack_end = ((term *) malloc(temp_stack->size * sizeof(term))) + temp_stack->size;
+    if (IS_NULL_PTR(temp_stack->stack_end)) {
+        return TempStackFailedAlloc;
+    }
     temp_stack->stack_pos = temp_stack->stack_end;
+
+    return TempStackOk;
 }
 
 static inline void temp_stack_destory(struct TempStack *temp_stack)
@@ -40,11 +53,14 @@ static inline void temp_stack_destory(struct TempStack *temp_stack)
     free(temp_stack->stack_end - temp_stack->size);
 }
 
-static void temp_stack_grow(struct TempStack *temp_stack)
+NO_DISCARD static TempStackResult temp_stack_grow(struct TempStack *temp_stack)
 {
     int old_used_size = temp_stack->stack_end - temp_stack->stack_pos;
     int new_size = temp_stack->size * 2;
     term *new_stack_end = ((term *) malloc(new_size * sizeof(term))) + new_size;
+    if (IS_NULL_PTR(new_stack_end)) {
+        return TempStackFailedAlloc;
+    }
     term *new_stack_pos = new_stack_end - old_used_size;
     memcpy(new_stack_pos, temp_stack->stack_pos, old_used_size * sizeof(term));
 
@@ -52,6 +68,8 @@ static void temp_stack_grow(struct TempStack *temp_stack)
     temp_stack->stack_end = new_stack_end;
     temp_stack->stack_pos = new_stack_pos;
     temp_stack->size = new_size;
+
+    return TempStackOk;
 }
 
 static inline int temp_stack_is_empty(const struct TempStack *temp_stack)
@@ -59,14 +77,19 @@ static inline int temp_stack_is_empty(const struct TempStack *temp_stack)
     return temp_stack->stack_end == temp_stack->stack_pos;
 }
 
-static inline void temp_stack_push(struct TempStack *temp_stack, term value)
+NO_DISCARD static inline TempStackResult temp_stack_push(struct TempStack *temp_stack, term value)
 {
     if (temp_stack->stack_end - temp_stack->stack_pos == temp_stack->size - 1) {
-        temp_stack_grow(temp_stack);
+        TempStackResult ret = temp_stack_grow(temp_stack);
+        if (UNLIKELY(ret != TempStackOk)) {
+            return ret;
+        }
     }
 
     temp_stack->stack_pos--;
     *temp_stack->stack_pos = value;
+
+    return TempStackOk;
 }
 
 static inline term temp_stack_pop(struct TempStack *temp_stack)
