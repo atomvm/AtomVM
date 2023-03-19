@@ -153,9 +153,18 @@ int interop_iolist_size(term t, int *ok)
     unsigned long acc = 0;
 
     struct TempStack temp_stack;
-    temp_stack_init(&temp_stack);
+    if (UNLIKELY(temp_stack_init(&temp_stack) != TempStackOk)) {
+        // TODO: return a better error code
+        *ok = 0;
+        return 0;
+    }
 
-    temp_stack_push(&temp_stack, t);
+    if (UNLIKELY(temp_stack_push(&temp_stack, t) != TempStackOk)) {
+        temp_stack_destory(&temp_stack);
+        // TODO: return a better error code
+        *ok = 0;
+        return 0;
+    }
 
     while (!temp_stack_is_empty(&temp_stack)) {
         if (term_is_integer(t)) {
@@ -166,7 +175,12 @@ int interop_iolist_size(term t, int *ok)
             t = temp_stack_pop(&temp_stack);
 
         } else if (term_is_nonempty_list(t)) {
-            temp_stack_push(&temp_stack, term_get_list_tail(t));
+            if (UNLIKELY(temp_stack_push(&temp_stack, term_get_list_tail(t)) != TempStackOk)) {
+                temp_stack_destory(&temp_stack);
+                // TODO: return a better error code
+                *ok = 0;
+                return 0;
+            }
             t = term_get_list_head(t);
 
         } else if (term_is_binary(t)) {
@@ -195,9 +209,16 @@ int interop_write_iolist(term t, char *p)
     }
 
     struct TempStack temp_stack;
-    temp_stack_init(&temp_stack);
+    if (UNLIKELY(temp_stack_init(&temp_stack) != TempStackOk)) {
+        // TODO: return a better error code
+        return 0;
+    }
 
-    temp_stack_push(&temp_stack, t);
+    if (UNLIKELY(temp_stack_push(&temp_stack, t) != TempStackOk)) {
+        temp_stack_destory(&temp_stack);
+        // TODO: return a better error code
+        return 0;
+    }
 
     while (!temp_stack_is_empty(&temp_stack)) {
         if (term_is_integer(t)) {
@@ -209,7 +230,11 @@ int interop_write_iolist(term t, char *p)
             t = temp_stack_pop(&temp_stack);
 
         } else if (term_is_nonempty_list(t)) {
-            temp_stack_push(&temp_stack, term_get_list_tail(t));
+            if (UNLIKELY(temp_stack_push(&temp_stack, term_get_list_tail(t)) != TempStackOk)) {
+                temp_stack_destory(&temp_stack);
+                // TODO: return a better error code
+                return 0;
+            }
             t = term_get_list_head(t);
 
         } else if (term_is_binary(t)) {
