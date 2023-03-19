@@ -194,4 +194,11 @@ static inline void *rand_fail_calloc(int n, unsigned long alloc_size)
     #define PRINTF_FORMAT_ARGS(...)
 #endif
 
+#ifdef __GNUC__
+    #define NO_DISCARD \
+        __attribute__ ((warn_unused_result))
+#else
+    #define NO_DISCARD(...)
+#endif
+
 #endif
