@@ -21,6 +21,7 @@
 #ifndef _TEMPSTACK_H_
 #define _TEMPSTACK_H_
 
+#include "term_typedef.h"
 #include "utils.h"
 
 typedef enum
