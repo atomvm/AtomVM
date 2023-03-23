@@ -475,6 +475,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(unlink_error, 1),
     TEST_CASE_EXPECTED(trap_exit_flag, 1),
     TEST_CASE_COND(test_stacktrace, 0, SKIP_STACKTRACES),
+    TEST_CASE(small_big_ext),
 
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 
