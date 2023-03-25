@@ -968,14 +968,30 @@ static void do_send(Context *ctx, term msg)
 
     term data = term_get_tuple_element(cmd, 1);
 
-    int ok;
-    int buffer_size = interop_iolist_size(data, &ok);
-    if (UNLIKELY(!ok)) {
-        fprintf(stderr, "error: invalid iolist.\n");
-        return;
+    size_t buffer_size;
+    switch (interop_iolist_size(data, &buffer_size)) {
+        case InteropOk:
+            break;
+        case InteropMemoryAllocFail:
+            fprintf(stderr, "error: failed alloc.\n");
+            return;
+        case InteropBadArg:
+            fprintf(stderr, "error: invalid iolist.\n");
+            return;
     }
     void *buffer = malloc(buffer_size);
-    interop_write_iolist(data, buffer);
+    switch (interop_write_iolist(data, buffer)) {
+        case InteropOk:
+            break;
+        case InteropMemoryAllocFail:
+            free(buffer);
+            fprintf(stderr, "error: failed alloc.\n");
+            return;
+        case InteropBadArg:
+            free(buffer);
+            fprintf(stderr, "error: invalid iolist.\n");
+            return;
+    }
     err_t status = netconn_write(tcp_data->socket_data.conn, buffer, buffer_size, NETCONN_NOCOPY);
     if (UNLIKELY(status != ERR_OK)) {
         fprintf(stderr, "write error: %i\n", status);
@@ -1008,10 +1024,30 @@ static void do_sendto(Context *ctx, term msg)
     term dest_port_term = term_get_tuple_element(cmd, 2);
     term data = term_get_tuple_element(cmd, 3);
 
-    int ok;
-    int buffer_size = interop_iolist_size(data, &ok);
+    size_t buffer_size;
+    switch (interop_iolist_size(data, &buffer_size)) {
+        case InteropOk:
+            break;
+        case InteropMemoryAllocFail:
+            fprintf(stderr, "error: failed alloc.\n");
+            return;
+        case InteropBadArg:
+            fprintf(stderr, "error: invalid iolist.\n");
+            return;
+    }
     void *buffer = malloc(buffer_size);
-    interop_write_iolist(data, buffer);
+    switch (interop_write_iolist(data, buffer)) {
+        case InteropOk:
+            break;
+        case InteropMemoryAllocFail:
+            free(buffer);
+            fprintf(stderr, "error: failed alloc.\n");
+            return;
+        case InteropBadArg:
+            free(buffer);
+            fprintf(stderr, "error: invalid iolist.\n");
+            return;
+    }
 
     ip_addr_t ip4addr;
     tuple_to_ip_addr(dest_addr_term, &ip4addr);
