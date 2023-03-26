@@ -32,7 +32,7 @@ Dependencies
 Required for building:
 * CMake ([CMake build system](https://cmake.org/))
 * gperf ([GNU Perfect Hash Function Generator](https://www.gnu.org/software/gperf/manual/gperf.html))
-* erlc ([erlang compiler](https://www.erlang.org/)) for OTP 21, 22 or 23
+* erlc ([erlang compiler](https://www.erlang.org/))
 * elixirc ([elixir compiler](https://elixir-lang.org))
 
 Optional:

@@ -45,7 +45,7 @@ To build documentation using Sphinx, we recommend using a Python virtual environ
     (sphinx) shell$ python3 -m pip install rinohtype
     (sphinx) shell$ python3 -m pip install pillow
 
-There is also a reqirements.txt to simplify installing all of the dependancies at once.
+There is also a reqirements.txt to simplify installing all of the dependencies at once.
 
     shell$ python3 -m venv $HOME/python-env/sphinx
     shell$ . $HOME/python-env/sphinx/bin/activate

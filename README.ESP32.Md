@@ -7,7 +7,7 @@
 Requirements
 ============
 
-AtomVM has been tested with esp-idf v3.2.
+AtomVM has been tested with the version 4 releases of the Espressif esp-idf SDK.
 
 Building AtomVM for ESP32
 =========================

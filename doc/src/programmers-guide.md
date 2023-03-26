@@ -14,7 +14,7 @@ This document describes the development workflow when writing AtomVM application
 
 ## AtomVM Features
 
-Currently, AtomVM implements a strict subset of the BEAM instruction set, as of Erlang/OTP R21.  Previous versions of Erlang/OTP are not supported.
+Currently, AtomVM implements a strict subset of the BEAM instruction set.
 
 A high level overview of the supported language features include:
 
@@ -72,7 +72,9 @@ This section describes the typical development environment and workflow most Ato
 
 ### Development Environment
 
-In general, for most development purposes, you should be able to get away with an Erlang/OTP development environment (OTP21 or later), and for Elixir developers, and Elixir version TODO development environment.  We assume most development will take place on some UNIX-like environment (e.g., Linux, FreeBSD, or MacOS).  Consult your local package manager for installation of these development environments.
+In general, for most development purposes, you should be able to get away with an Erlang/OTP development environment, and for Elixir developers, and Elixir development environment.  For specific version requirements, see the (Release Notes)(release-notes.md).
+
+We assume most development will take place on some UNIX-like environment (e.g., Linux, FreeBSD, or MacOS).  Consult your local package manager for installation of these development environments.
 
 Developers will want to make use of common Erlang or Elixir development tools, such as `rebar3` for Erlang developers or `mix` for Elixir developers.
 
@@ -269,6 +271,41 @@ In addition AtomVM provides limited implementations of standard Elixir modules, 
 
 For detailed information about these functions, please consult the [API reference documentation](api-reference-documentation.md).  These modules provide a strict subset of functionality from their Erlang/OTP counterparts.  However, they aim to be API-compatible with the Erlang/OTP interfaces, at least for the subset of provided functionality.
 
+### Spawning Processes
+
+AtomVM supports the actor concurrency model that is pioneered in the Erlang/OTP runtime.  As such, users can spawn processes, send messages to and receive message from processes, and can link or monitor processes to be notified if they have crashed.
+
+To spawn a process using a defined or anonymous function, pass the function to the `spawn/1` function:
+
+    %% erlang
+    Pid = spawn(fun run_some_code/0),
+
+The function you pass may admit closures, so for example you can pass variables defined outside of the scope of the function to the anonymous function to pass into `spawn/1`:
+
+    %% erlang
+    Args = ...
+    Pid = spawn(fun() -> run_some_code_with_args(Args) end),
+
+Alternatively, you can pass a module, function name, and list of arguments to the `spawn/3` function:
+
+    %% erlang
+    Args = ...
+    Pid = spawn(?MODULE, run_some_code_with_args, [Args]),
+
+The `spawn_opt/2,4` functions can be be used to spawn a function with additional options that control the behavior of the spawned processs, e.g.,
+
+    %% erlang
+    Pid = spawn_opt(fun run_some_code/0, [{min_heap_size, 1342}]),
+
+The options argument is a properties list containing optionally the following entries:
+
+| Key | Value Type | Default Value | Description |
+|-----|------------|---------------|-------------|
+| `min_heap_size` | `non_neg_integer()` | none | Minimum heap size of the process.  The heap will shrink no smaller than this size. |
+| `max_heap_size` | `non_neg_integer()` | unbounded | Maximum heap size of the process.  The heap will grow no larger than this size. |
+| `link` | `boolean()` | `false` | Whether to link the spawned process to the spawning process. |
+| `monitor` | `boolean()` | `false` | Whether to link the spawning process should monitor the spawned process. |
+
 ### Console Output
 
 There are several mechanisms for writing data to the console.
@@ -296,12 +333,23 @@ You can obtain a list of all processes in the system via `erlang:processes/0`:
     %% erlang
     Pids = erlang:processes().
 
-And for each process, you can get detailed process information via the `erlang:process_info/1` function:
+And for each process, you can get detailed process information via the `erlang:process_info/2` function:
 
     %% erlang
-    [io:format("Process info for Pid ~p: ~p~n", [Pid, erlang:process_info(Pid)]) || Pid <- Pids].
+    [io:format("Heap size for Pid ~p: ~p~n", [Pid, erlang:process_info(Pid, heap_size)]) || Pid <- Pids].
 
-The return value is a property list containing values for `heap_size`, `stack_size`, `message_queue_len`,and `memory` consumed by the process.
+The return value is a tuple containing the key passed into the `erlang:process_info/2` function and its associated value.
+
+The currently supported keys are enumerated in the following table:
+
+| Key | Value Type | Description |
+|-----|------------|-------------|
+| `heap_size` | `non_neg_integer()` | Number of terms (in machine words) used in the process heap |
+| `stack_size` | `non_neg_integer()` | Number of terms (in machine words) used in the process stack |
+| `message_queue_len` | `non_neg_integer()` | Number of unprocessed messages in the process mailbox |
+| `memory` | `non_neg_integer()` | Total number of bytes used by the process (estimate) |
+
+See the `word_size` key in the [System APIs](#System_APIs) section for information about how to find the number of bytes used in a machine word on the current platform.
 
 ### System APIs
 
@@ -355,6 +403,15 @@ User `erlang:system_time/1` to obtain the seconds, milliseconds or microseconds 
     Seconds = erlang:system_time(second).
     MilliSeconds = erlang:system_time(millisecond).
     MicroSeconds = erlang:system_time(microsecond).
+
+User `erlang:monotonic_time/1` to obtain a (possibly not strictly) monotonically increasing time measurement.  Use the same time units to convert to seconds, milliseconds, or microseconds:
+
+    %% erlang
+    Seconds = erlang:monotonic_time(second).
+    MilliSeconds = erlang:monotonic_time(millisecond).
+    MicroSeconds = erlang:monotonic_time(microsecond).
+
+> Note.  `erlang:monotonic_time/1` should not be used to calculate the wall clock time, but instead should be used by applications to compute time differences in a manner that is independent of the system time on the device, which might change, for example, due to NTP, leap seconds, or similar operations that may affect the wall time on the device.
 
 Use `erlang:universaltime/0` to get the current time at second resolution, to obtain the year, month, day, hour, minute, and second:
 
