@@ -168,8 +168,6 @@ term bif_erlang_is_map_1(Context *ctx, term arg1)
 
 term bif_erlang_is_map_key_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
     if (UNLIKELY(!term_is_map(arg2))) {
         if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -181,7 +179,15 @@ term bif_erlang_is_map_key_2(Context *ctx, term arg1, term arg2)
 
         RAISE_ERROR(err);
     }
-    return (term_find_map_pos(ctx, arg2, arg1) != -1) ? TRUE_ATOM : FALSE_ATOM;
+
+    switch (term_find_map_pos(arg2, arg1, ctx->global)) {
+        case TERM_MAP_NOT_FOUND:
+            return FALSE_ATOM;
+        case TERM_MAP_MEMORY_ALLOC_FAIL:
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        default:
+            return TRUE_ATOM;
+    }
 }
 
 term bif_erlang_length_1(Context *ctx, int live, term arg1)
@@ -256,8 +262,6 @@ term bif_erlang_map_size_1(Context *ctx, int live, term arg1)
 
 term bif_erlang_map_get_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
     if (!UNLIKELY(term_is_map(arg2))) {
         if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -270,8 +274,8 @@ term bif_erlang_map_get_2(Context *ctx, term arg1, term arg2)
         RAISE_ERROR(err);
     }
 
-    int pos = term_find_map_pos(ctx, arg2, arg1);
-    if (pos == -1) {
+    int pos = term_find_map_pos(arg2, arg1, ctx->global);
+    if (pos == TERM_MAP_NOT_FOUND) {
         if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
@@ -284,6 +288,8 @@ term bif_erlang_map_get_2(Context *ctx, term arg1, term arg2)
             term_put_tuple_element(err, 1, UNSUPPORTED_ATOM);
         }
         RAISE_ERROR(err);
+    } else if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     return term_get_map_value(arg2, pos);
 }
@@ -1325,97 +1331,111 @@ term bif_erlang_xor_2(Context *ctx, term arg1, term arg2)
 
 term bif_erlang_equal_to_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
-    if (term_equals(arg1, arg2, ctx)) {
+    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+    if (result == TermEquals) {
         return TRUE_ATOM;
-    } else {
+    } else if (result & (TermLessThan | TermGreaterThan)) {
         return FALSE_ATOM;
+    } else {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 }
 
 term bif_erlang_not_equal_to_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
     //TODO: fix this implementation
     //it should compare any kind of type, and 5.0 != 5 is false
-    if (!term_equals(arg1, arg2, ctx)) {
+    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+    if (result & (TermLessThan | TermGreaterThan)) {
         return TRUE_ATOM;
-    } else {
+    } else if (result == TermEquals) {
         return FALSE_ATOM;
+    } else {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 }
 
 term bif_erlang_exactly_equal_to_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
     //TODO: 5.0 != 5
-    if (term_equals(arg1, arg2, ctx)) {
+    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+    if (result == TermEquals) {
         return TRUE_ATOM;
-    } else {
+    } else if (result & (TermLessThan | TermGreaterThan)) {
         return FALSE_ATOM;
+    } else {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 }
 
 term bif_erlang_exactly_not_equal_to_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
     //TODO: 5.0 != 5
-    if (!term_equals(arg1, arg2, ctx)) {
+    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+    if (result & (TermLessThan | TermGreaterThan)) {
         return TRUE_ATOM;
-    } else {
+    } else if (result == TermEquals) {
         return FALSE_ATOM;
+    } else {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 }
 
 term bif_erlang_greater_than_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
-    if (term_compare(arg1, arg2, ctx) > 0) {
+    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+    if (result == TermGreaterThan) {
         return TRUE_ATOM;
-    } else {
+    } else if (result & (TermEquals | TermLessThan)) {
         return FALSE_ATOM;
+    } else {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 }
 
 term bif_erlang_less_than_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
-    if (term_compare(arg1, arg2, ctx) < 0) {
+    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+    if (result == TermLessThan) {
         return TRUE_ATOM;
-    } else {
+    } else if (result & (TermEquals | TermGreaterThan)) {
         return FALSE_ATOM;
+    } else {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 }
 
 term bif_erlang_less_than_or_equal_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
-    if (term_compare(arg1, arg2, ctx) <= 0) {
+    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+    if (result & (TermLessThan | TermEquals)) {
         return TRUE_ATOM;
-    } else {
+    } else if (result == TermGreaterThan) {
         return FALSE_ATOM;
+    } else {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 }
 
 term bif_erlang_greater_than_or_equal_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
-    if (term_compare(arg1, arg2, ctx) >= 0) {
+    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+    if (result & (TermGreaterThan | TermEquals)) {
         return TRUE_ATOM;
-    } else {
+    } else if (result & TermLessThan) {
         return FALSE_ATOM;
+    } else {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 }
 
 term bif_erlang_get_1(Context *ctx, term arg1)
 {
-    return dictionary_get(&ctx->dictionary, ctx, arg1);
+    term value;
+    DictionaryFunctionResult result = dictionary_get(&ctx->dictionary, arg1, &value, ctx->global);
+    if (UNLIKELY(result != DictionaryOk)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return value;
 }

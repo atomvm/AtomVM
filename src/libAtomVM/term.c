@@ -404,15 +404,21 @@ static int term_type_to_index(term t)
     }
 }
 
-int term_compare(term t, term other, Context *ctx)
+TermCompareResult term_compare(term t, term other, GlobalContext *global)
 {
     struct TempStack temp_stack;
-    temp_stack_init(&temp_stack);
+    if (UNLIKELY(temp_stack_init(&temp_stack) != TempStackOk)) {
+        return TermCompareMemoryAllocFail;
+    }
 
-    temp_stack_push(&temp_stack, t);
-    temp_stack_push(&temp_stack, other);
+    if (UNLIKELY(temp_stack_push(&temp_stack, t) != TempStackOk)) {
+        return TermCompareMemoryAllocFail;
+    }
+    if (UNLIKELY(temp_stack_push(&temp_stack, other) != TempStackOk)) {
+        return TermCompareMemoryAllocFail;
+    }
 
-    int result = 0;
+    TermCompareResult result = TermEquals;
 
     while (!temp_stack_is_empty(&temp_stack)) {
         if (t == other) {
@@ -423,7 +429,7 @@ int term_compare(term t, term other, Context *ctx)
             avm_int_t t_int = term_to_int(t);
             avm_int_t other_int = term_to_int(other);
             //They cannot be equal
-            result = (t_int > other_int) ? 1 : -1;
+            result = (t_int > other_int) ? TermGreaterThan : TermLessThan;
             break;
 
         } else if (term_is_reference(t) && term_is_reference(other)) {
@@ -433,7 +439,7 @@ int term_compare(term t, term other, Context *ctx)
                 other = temp_stack_pop(&temp_stack);
                 t = temp_stack_pop(&temp_stack);
             } else {
-                result = (t_ticks > other_ticks) ? 1 : -1;
+                result = (t_ticks > other_ticks) ? TermGreaterThan : TermLessThan;
                 break;
             }
 
@@ -448,8 +454,12 @@ int term_compare(term t, term other, Context *ctx)
             if (term_is_nil(other_tail)) {
                 other_tail = term_invalid_term();
             }
-            temp_stack_push(&temp_stack, t_tail);
-            temp_stack_push(&temp_stack, other_tail);
+            if (UNLIKELY(temp_stack_push(&temp_stack, t_tail) != TempStackOk)) {
+                return TermCompareMemoryAllocFail;
+            }
+            if (UNLIKELY(temp_stack_push(&temp_stack, other_tail) != TempStackOk)) {
+                return TermCompareMemoryAllocFail;
+            }
             t = term_get_list_head(t);
             other = term_get_list_head(other);
 
@@ -458,14 +468,20 @@ int term_compare(term t, term other, Context *ctx)
             int other_tuple_size = term_get_tuple_arity(other);
 
             if (tuple_size != other_tuple_size) {
-                result = (tuple_size > other_tuple_size) ? 1 : -1;
+                result = (tuple_size > other_tuple_size) ? TermGreaterThan : TermLessThan;
                 break;
             }
 
             if (tuple_size > 0) {
                 for (int i = 1; i < tuple_size; i++) {
-                    temp_stack_push(&temp_stack, term_get_tuple_element(t, i));
-                    temp_stack_push(&temp_stack, term_get_tuple_element(other, i));
+                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_tuple_element(t, i))
+                            != TempStackOk)) {
+                        return TermCompareMemoryAllocFail;
+                    }
+                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_tuple_element(other, i))
+                            != TempStackOk)) {
+                        return TermCompareMemoryAllocFail;
+                    }
                 }
                 t = term_get_tuple_element(t, 0);
                 other = term_get_tuple_element(other, 0);
@@ -490,11 +506,11 @@ int term_compare(term t, term other, Context *ctx)
                     other = temp_stack_pop(&temp_stack);
                     t = temp_stack_pop(&temp_stack);
                 } else {
-                    result = (t_size > other_size) ? 1 : -1;
+                    result = (t_size > other_size) ? TermGreaterThan : TermLessThan;
                     break;
                 }
             } else {
-                result = (memcmp_result > 0) ? 1 : -1;
+                result = (memcmp_result > 0) ? TermGreaterThan : TermLessThan;
                 break;
             }
 
@@ -503,15 +519,27 @@ int term_compare(term t, term other, Context *ctx)
             int other_size = term_get_map_size(other);
 
             if (t_size != other_size) {
-                result = (t_size > other_size) ? 1 : -1;
+                result = (t_size > other_size) ? TermGreaterThan : TermLessThan;
                 break;
             }
             if (t_size > 0) {
                 for (int i = 1; i < t_size; i++) {
-                    temp_stack_push(&temp_stack, term_get_map_value(t, i));
-                    temp_stack_push(&temp_stack, term_get_map_value(other, i));
-                    temp_stack_push(&temp_stack, term_get_map_key(t, i));
-                    temp_stack_push(&temp_stack, term_get_map_key(other, i));
+                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(t, i))
+                            != TempStackOk)) {
+                        return TermCompareMemoryAllocFail;
+                    }
+                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(other, i))
+                            != TempStackOk)) {
+                        return TermCompareMemoryAllocFail;
+                    }
+                    if (UNLIKELY(
+                            temp_stack_push(&temp_stack, term_get_map_key(t, i)) != TempStackOk)) {
+                        return TermCompareMemoryAllocFail;
+                    }
+                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_key(other, i))
+                            != TempStackOk)) {
+                        return TermCompareMemoryAllocFail;
+                    }
                 }
                 t = term_get_map_key(t, 0);
                 other = term_get_map_key(other, 0);
@@ -528,7 +556,7 @@ int term_compare(term t, term other, Context *ctx)
                 other = temp_stack_pop(&temp_stack);
                 t = temp_stack_pop(&temp_stack);
             } else {
-                result = (t_int > other_int) ? 1 : -1;
+                result = (t_int > other_int) ? TermGreaterThan : TermLessThan;
                 break;
             }
 
@@ -539,19 +567,19 @@ int term_compare(term t, term other, Context *ctx)
                 other = temp_stack_pop(&temp_stack);
                 t = temp_stack_pop(&temp_stack);
             } else {
-                result = (t_float > other_float) ? 1 : -1;
+                result = (t_float > other_float) ? TermGreaterThan : TermLessThan;
                 break;
             }
         } else if (term_is_atom(t) && term_is_atom(other)) {
             int t_atom_index = term_to_atom_index(t);
-            AtomString t_atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table,
+            AtomString t_atom_string = (AtomString) valueshashtable_get_value(global->atoms_ids_table,
                 t_atom_index, (unsigned long) NULL);
 
             int t_atom_len = atom_string_len(t_atom_string);
             const char *t_atom_data = (const char *) atom_string_data(t_atom_string);
 
             int other_atom_index = term_to_atom_index(other);
-            AtomString other_atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table,
+            AtomString other_atom_string = (AtomString) valueshashtable_get_value(global->atoms_ids_table,
                 other_atom_index, (unsigned long) NULL);
 
             int other_atom_len = atom_string_len(other_atom_string);
@@ -561,20 +589,20 @@ int term_compare(term t, term other, Context *ctx)
 
             int memcmp_result = memcmp(t_atom_data, other_atom_data, cmp_size);
             if (memcmp_result == 0) {
-                result = (t_atom_len > other_atom_len) ? 1 : -1;
+                result = (t_atom_len > other_atom_len) ? TermGreaterThan : TermLessThan;
                 break;
             } else {
-                result = memcmp_result > 0 ? 1 : -1;
+                result = memcmp_result > 0 ? TermGreaterThan : TermLessThan;
                 break;
             }
 
         } else if (term_is_pid(t) && term_is_pid(other)) {
             //TODO: handle ports
-            result = (t > other) ? 1 : -1;
+            result = (t > other) ? TermGreaterThan : TermLessThan;
             break;
 
         } else {
-            result = (term_type_to_index(t) > term_type_to_index(other)) ? 1 : -1;
+            result = (term_type_to_index(t) > term_type_to_index(other)) ? TermGreaterThan : TermLessThan;
             break;
         }
     }
@@ -638,9 +666,12 @@ term term_alloc_sub_binary(term binary_or_state, size_t offset, size_t len, Cont
 
 term term_get_map_assoc(Context *ctx, term map, term key)
 {
-    int pos = term_find_map_pos(ctx, map, key);
-    if (pos == -1) {
+    int pos = term_find_map_pos(map, key, ctx->global);
+    if (pos == TERM_MAP_NOT_FOUND) {
         return term_invalid_term();
+    } else if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
+        // TODO: do not AVM_ABORT, return out of memory error
+        AVM_ABORT();
     }
     return term_get_map_value(map, pos);
 }

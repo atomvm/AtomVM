@@ -458,16 +458,26 @@ static void consume_gpio_mailbox(Context *ctx)
             ret = ERROR_ATOM;
     }
 
-    dictionary_put(&ctx->dictionary, ctx, gpio_driver, ret);
+    term old;
+    if (UNLIKELY(dictionary_put(&ctx->dictionary, gpio_driver, ret, &old, ctx->global) != DictionaryOk)) {
+        // TODO: handle alloc error
+        AVM_ABORT();
+    }
     term ret_msg;
     if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
         ret_msg = OUT_OF_MEMORY_ATOM;
     } else {
-        ret = dictionary_get(&ctx->dictionary, ctx, gpio_driver);
+        if (UNLIKELY(dictionary_get(&ctx->dictionary, gpio_driver, &ret, ctx->global) != DictionaryOk)) {
+            // TODO: handle alloc error
+            AVM_ABORT();
+        }
         term ref = term_get_tuple_element(msg, 1);
         ret_msg = create_pair(ctx, ref, ret);
     }
-    dictionary_erase(&ctx->dictionary, ctx, gpio_driver);
+    if (UNLIKELY(dictionary_erase(&ctx->dictionary, gpio_driver, &old, ctx->global) != DictionaryOk)) {
+        // TODO: handle alloc error
+        AVM_ABORT();
+    }
 
     mailbox_send(target, ret_msg);
     mailbox_destroy_message(message);

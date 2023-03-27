@@ -249,9 +249,12 @@ term interop_map_get_value(Context *ctx, term map, term key)
 
 term interop_map_get_value_default(Context *ctx, term map, term key, term default_value)
 {
-    int pos = term_find_map_pos(ctx, map, key);
-    if (pos == -1) {
+    int pos = term_find_map_pos(map, key, ctx->global);
+    if (pos == TERM_MAP_NOT_FOUND) {
         return default_value;
+    } else if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
+        // TODO: do not crash, handle out of memory
+        AVM_ABORT();
     } else {
         return term_get_map_value(map, pos);
     }

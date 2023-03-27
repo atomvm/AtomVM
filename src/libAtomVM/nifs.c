@@ -2490,7 +2490,8 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
     uint8_t return_used = 0;
-    if (argc == 2 && term_list_member(argv[1], USED_ATOM, ctx)) {
+    if (argc == 2
+        && interop_proplist_get_value_default(argv[1], USED_ATOM, FALSE_ATOM) == TRUE_ATOM) {
         return_used = 1;
     }
     term dst = term_invalid_term();
@@ -2903,14 +2904,26 @@ static term nif_erlang_put_2(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-    return dictionary_put(&ctx->dictionary, ctx, argv[0], argv[1]);
+    term old;
+    DictionaryFunctionResult result = dictionary_put(&ctx->dictionary, argv[0], argv[1], &old, ctx->global);
+    if (UNLIKELY(result != DictionaryOk)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return old;
 }
 
 static term nif_erlang_erase_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-    return dictionary_erase(&ctx->dictionary, ctx, argv[0]);
+    term old;
+    DictionaryFunctionResult result = dictionary_erase(&ctx->dictionary, argv[0], &old, ctx->global);
+    if (UNLIKELY(result != DictionaryOk)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return old;
 }
 
 static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
