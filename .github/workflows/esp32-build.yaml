@@ -33,7 +33,7 @@ jobs:
         idf-version:
         - 4.2.4
         - 4.3.5
-        - 4.4.4
+        - 4.4.5
 
     steps:
     - name: Checkout repo

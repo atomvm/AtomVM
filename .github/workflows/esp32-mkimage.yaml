@@ -22,13 +22,13 @@ on:
       - 'src/libAtomVM/**'
 
 jobs:
-  esp32-release:
+  build-esp32-img:
     runs-on: ubuntu-latest
     container: espressif/idf:v${{ matrix.idf-version }}
 
     strategy:
       matrix:
-        idf-version: ["4.4.3"]
+        idf-version: ["4.4.5"]
         cc: ["clang-10"]
         cxx: ["clang++-10"]
         cflags: ["-O3"]
@@ -83,12 +83,10 @@ jobs:
         echo "**OTP version:**"
         cat $(dirname $(which erlc))/../releases/RELEASES || true
 
-    - name: "Build: create build dir"
-      run: mkdir build
-
     - name: "Build: run cmake"
-      working-directory: build
       run: |
+        mkdir build
+        cd build
         cmake ..
         # git clone will use more recent timestamps than cached beam files
         # touch them so we can benefit from the cache and avoid costly beam file rebuild.
@@ -97,7 +95,7 @@ jobs:
     - name: "Build erlang and Elixir libs"
       working-directory: build/libs
       run: |
-        make
+        make atomvmlib
 
     - name: "Build ${{ matrix.soc }} with idf.py"
       shell: bash
@@ -121,3 +119,26 @@ jobs:
         name: atomvm-${{ matrix.soc }}-image
         path: ./src/platforms/esp32/build/atomvm-${{ matrix.soc }}-*.img
         if-no-files-found: error
+
+  release-if-master:
+    if: github.ref_name == 'master'
+    needs: build-esp32-img
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Download artifacts"
+        uses: actions/download-artifact@v3
+
+      - name: Display structure of downloaded files
+        run: ls -R
+
+      - name: Upload snapshot release
+        uses: pyTooling/Actions/releaser@main
+        with:
+          tag: snapshot
+          rm: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            atomvm-esp32-image/*.img
+            atomvm-esp32c3-image/*.img
+            atomvm-esp32s2-image/*.img
+            atomvm-esp32s3-image/*.img
