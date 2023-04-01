@@ -108,6 +108,12 @@ enum RefcBinaryFlags
 
 typedef enum
 {
+    TermCompareNoOpts = 0,
+    TermCompareExact = 1
+} TermCompareOpts;
+
+typedef enum
+{
     TermCompareMemoryAllocFail = 0,
     TermEquals = 1,
     TermLessThan = 2,
@@ -131,7 +137,7 @@ extern const term empty_tuple;
  * @param global the global context
  * @return any of TermEquals, TermLessThan, TermGreaterThan or TermCompareMemoryAllocFail error.
  */
-TermCompareResult term_compare(term t, term other, GlobalContext *global);
+TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalContext *global);
 
 /**
  * @brief Create a reference-counted binary on the heap
@@ -1338,30 +1344,6 @@ static inline int term_list_length(term t, int *proper)
     return len;
 }
 
-/**
- * @brief Returns 1 if given terms are exactly equal.
- *
- * @details Compares 2 given terms and returns 1 if they are the same.
- * @param a first term
- * @param b second term
- * @return 1 if they are the same, 0 otherwise.
- */
-static inline int term_exactly_equals(term a, term b, GlobalContext *global)
-{
-    if (a == b) {
-        return 1;
-    } else {
-        TermCompareResult result = term_compare(a, b, global);
-        if (result == TermEquals) {
-            return 1;
-        } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
-            AVM_ABORT();
-        } else {
-            return 0;
-        }
-    }
-}
-
 static inline int term_is_float(term t)
 {
     if (term_is_boxed(t)) {
@@ -1656,7 +1638,8 @@ static inline int term_find_map_pos(term map, term key, GlobalContext *global)
     int arity = term_get_tuple_arity(keys);
     for (int i = 0; i < arity; ++i) {
         term k = term_get_tuple_element(keys, i);
-        TermCompareResult result = term_compare(key, k, global);
+        // TODO: not sure if exact is the right choice here
+        TermCompareResult result = term_compare(key, k, TermCompareExact, global);
         if (result == TermEquals) {
             return i;
         } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {

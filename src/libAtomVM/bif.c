@@ -1331,7 +1331,7 @@ term bif_erlang_xor_2(Context *ctx, term arg1, term arg2)
 
 term bif_erlang_equal_to_2(Context *ctx, term arg1, term arg2)
 {
-    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
     if (result == TermEquals) {
         return TRUE_ATOM;
     } else if (result & (TermLessThan | TermGreaterThan)) {
@@ -1343,9 +1343,7 @@ term bif_erlang_equal_to_2(Context *ctx, term arg1, term arg2)
 
 term bif_erlang_not_equal_to_2(Context *ctx, term arg1, term arg2)
 {
-    //TODO: fix this implementation
-    //it should compare any kind of type, and 5.0 != 5 is false
-    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
     if (result & (TermLessThan | TermGreaterThan)) {
         return TRUE_ATOM;
     } else if (result == TermEquals) {
@@ -1358,7 +1356,7 @@ term bif_erlang_not_equal_to_2(Context *ctx, term arg1, term arg2)
 term bif_erlang_exactly_equal_to_2(Context *ctx, term arg1, term arg2)
 {
     //TODO: 5.0 != 5
-    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+    TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
     if (result == TermEquals) {
         return TRUE_ATOM;
     } else if (result & (TermLessThan | TermGreaterThan)) {
@@ -1370,8 +1368,7 @@ term bif_erlang_exactly_equal_to_2(Context *ctx, term arg1, term arg2)
 
 term bif_erlang_exactly_not_equal_to_2(Context *ctx, term arg1, term arg2)
 {
-    //TODO: 5.0 != 5
-    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+    TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
     if (result & (TermLessThan | TermGreaterThan)) {
         return TRUE_ATOM;
     } else if (result == TermEquals) {
@@ -1383,7 +1380,7 @@ term bif_erlang_exactly_not_equal_to_2(Context *ctx, term arg1, term arg2)
 
 term bif_erlang_greater_than_2(Context *ctx, term arg1, term arg2)
 {
-    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
     if (result == TermGreaterThan) {
         return TRUE_ATOM;
     } else if (result & (TermEquals | TermLessThan)) {
@@ -1395,7 +1392,7 @@ term bif_erlang_greater_than_2(Context *ctx, term arg1, term arg2)
 
 term bif_erlang_less_than_2(Context *ctx, term arg1, term arg2)
 {
-    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
     if (result == TermLessThan) {
         return TRUE_ATOM;
     } else if (result & (TermEquals | TermGreaterThan)) {
@@ -1407,7 +1404,7 @@ term bif_erlang_less_than_2(Context *ctx, term arg1, term arg2)
 
 term bif_erlang_less_than_or_equal_2(Context *ctx, term arg1, term arg2)
 {
-    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
     if (result & (TermLessThan | TermEquals)) {
         return TRUE_ATOM;
     } else if (result == TermGreaterThan) {
@@ -1419,7 +1416,7 @@ term bif_erlang_less_than_or_equal_2(Context *ctx, term arg1, term arg2)
 
 term bif_erlang_greater_than_or_equal_2(Context *ctx, term arg1, term arg2)
 {
-    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
     if (result & (TermGreaterThan | TermEquals)) {
         return TRUE_ATOM;
     } else if (result & TermLessThan) {
