@@ -3622,6 +3622,94 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 break;
             }
 
+            case OP_BS_GET_UTF8: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off)
+                #ifdef IMPL_EXECUTE_LOOP
+                    int next_off_back = next_off;
+                #endif
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off);
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, code, i, next_off);
+                term arg3;
+                DECODE_COMPACT_TERM(arg3, code, i, next_off);
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_get_utf8/5\n");
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("bs_get_utf8/5, fail=%i src=0x%lx arg2=0x%lx arg3=0x%lx dreg=%c%i\n", fail, src, arg2, arg3, T_DEST_REG(dreg_type, dreg));
+
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf8");
+
+                    term src_bin = term_get_match_state_binary(src);
+                    avm_int_t offset_bits = term_get_match_state_offset(src);
+
+                    int32_t val = 0;
+                    size_t out_size = 0;
+                    bool is_valid = bitstring_match_utf8(src_bin, (size_t) offset_bits, &val, &out_size);
+
+                    if (!is_valid) {
+                        i = POINTER_TO_II(mod->labels[fail]);
+                    } else {
+                        term_set_match_state_offset(src, offset_bits + (out_size * 8));
+                        WRITE_REGISTER(dreg_type, dreg, term_from_int(val));
+                        NEXT_INSTRUCTION(next_off);
+                    }
+                #endif
+
+                break;
+            }
+
+            case OP_BS_SKIP_UTF8: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off)
+                #ifdef IMPL_EXECUTE_LOOP
+                    int next_off_back = next_off;
+                #endif
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off);
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, code, i, next_off);
+                term arg3;
+                DECODE_COMPACT_TERM(arg3, code, i, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_skip_utf8/4\n");
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("bs_skip_utf8/4, fail=%i src=0x%lx arg2=0x%lx arg3=0x%lx\n", fail, src, arg2, arg3);
+
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf8");
+
+                    term src_bin = term_get_match_state_binary(src);
+                    avm_int_t offset_bits = term_get_match_state_offset(src);
+
+                    int32_t c = 0;
+                    size_t out_size = 0;
+                    bool is_valid = bitstring_match_utf8(src_bin, (size_t) offset_bits, &c, &out_size);
+
+                    if (!is_valid) {
+                        i = POINTER_TO_II(mod->labels[fail]);
+                    } else {
+                        term_set_match_state_offset(src, offset_bits + (out_size * 8));
+                        NEXT_INSTRUCTION(next_off);
+                    }
+                #endif
+
+                break;
+            }
+
            case OP_BS_UTF16_SIZE: {
                 int next_off = 1;
                 uint32_t fail;
@@ -3688,6 +3776,94 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 break;
             }
 
+            case OP_BS_GET_UTF16: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off)
+                #ifdef IMPL_EXECUTE_LOOP
+                    int next_off_back = next_off;
+                #endif
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off);
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, code, i, next_off);
+                term flags;
+                DECODE_LITERAL(flags, code, i, next_off);
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_get_utf16/5\n");
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("bs_get_utf16/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%lx dreg=%c%i\n", fail, src, arg2, flags, T_DEST_REG(dreg_type, dreg));
+
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf16");
+
+                    term src_bin = term_get_match_state_binary(src);
+                    avm_int_t offset_bits = term_get_match_state_offset(src);
+
+                    int32_t val = 0;
+                    size_t out_size = 0;
+                    bool is_valid = bitstring_match_utf16(src_bin, (size_t) offset_bits, &val, &out_size, flags);
+
+                    if (!is_valid) {
+                        i = POINTER_TO_II(mod->labels[fail]);
+                    } else {
+                        term_set_match_state_offset(src, offset_bits + (out_size * 8));
+                        WRITE_REGISTER(dreg_type, dreg, term_from_int(val));
+                        NEXT_INSTRUCTION(next_off);
+                    }
+                #endif
+
+                break;
+            }
+
+            case OP_BS_SKIP_UTF16: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off)
+                #ifdef IMPL_EXECUTE_LOOP
+                    int next_off_back = next_off;
+                #endif
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off);
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, code, i, next_off);
+                term flags;
+                DECODE_LITERAL(flags, code, i, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_skip_utf16/5\n");
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("bs_skip_utf16/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%lx\n", fail, src, arg2, flags);
+
+                    VERIFY_IS_MATCH_STATE(src, "bs_skip_utf16");
+
+                    term src_bin = term_get_match_state_binary(src);
+                    avm_int_t offset_bits = term_get_match_state_offset(src);
+
+                    int32_t val = 0;
+                    size_t out_size = 0;
+                    bool is_valid = bitstring_match_utf16(src_bin, (size_t) offset_bits, &val, &out_size, flags);
+
+                    if (!is_valid) {
+                        i = POINTER_TO_II(mod->labels[fail]);
+                    } else {
+                        term_set_match_state_offset(src, offset_bits + (out_size * 8));
+                        NEXT_INSTRUCTION(next_off);
+                    }
+                #endif
+
+                break;
+            }
+
             case OP_BS_PUT_UTF32: {
                 int next_off = 1;
                 uint32_t fail;
@@ -3723,6 +3899,92 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     ctx->bs_offset += 4 * 8;
                 #endif
                 NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_BS_GET_UTF32: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off)
+                #ifdef IMPL_EXECUTE_LOOP
+                    int next_off_back = next_off;
+                #endif
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off);
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, code, i, next_off);
+                term flags;
+                DECODE_LITERAL(flags, code, i, next_off);
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_get_utf32/5\n");
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("bs_get_utf32/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%lx dreg=%c%i\n", fail, src, arg2, flags, T_DEST_REG(dreg_type, dreg));
+
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf32");
+
+                    term src_bin = term_get_match_state_binary(src);
+                    avm_int_t offset_bits = term_get_match_state_offset(src);
+
+                    int32_t val = 0;
+                    bool is_valid = bitstring_match_utf32(src_bin, (size_t) offset_bits, &val, flags);
+
+                    if (!is_valid) {
+                        i = POINTER_TO_II(mod->labels[fail]);
+                    } else {
+                        term_set_match_state_offset(src, offset_bits + 32);
+                        WRITE_REGISTER(dreg_type, dreg, term_from_int(val));
+                        NEXT_INSTRUCTION(next_off);
+                    }
+                #endif
+
+                break;
+            }
+
+            case OP_BS_SKIP_UTF32: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off)
+                #ifdef IMPL_EXECUTE_LOOP
+                    int next_off_back = next_off;
+                #endif
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off);
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, code, i, next_off);
+                term flags;
+                DECODE_LITERAL(flags, code, i, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_skip_utf32/5\n");
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("bs_skip_utf32/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%lx\n", fail, src, arg2, flags);
+
+                    VERIFY_IS_MATCH_STATE(src, "bs_skip_utf32");
+
+                    term src_bin = term_get_match_state_binary(src);
+                    avm_int_t offset_bits = term_get_match_state_offset(src);
+
+                    int32_t val = 0;
+                    bool is_valid = bitstring_match_utf32(src_bin, (size_t) offset_bits, &val, flags);
+
+                    if (!is_valid) {
+                        i = POINTER_TO_II(mod->labels[fail]);
+                    } else {
+                        term_set_match_state_offset(src, offset_bits + 32);
+                        NEXT_INSTRUCTION(next_off);
+                    }
+                #endif
+
                 break;
             }
 
