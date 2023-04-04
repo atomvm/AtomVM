@@ -28,6 +28,12 @@ extern "C" {
 #include "list.h"
 #include "term.h"
 
+typedef enum
+{
+    DictionaryOk,
+    DictionaryMemoryAllocFail
+} DictionaryFunctionResult;
+
 struct DictEntry
 {
     struct ListHead head;
@@ -35,9 +41,12 @@ struct DictEntry
     term value;
 };
 
-term dictionary_put(struct ListHead *dict, Context *ctx, term key, term value);
-term dictionary_get(struct ListHead *dict, Context *ctx, term key);
-term dictionary_erase(struct ListHead *dict, Context *ctx, term key);
+DictionaryFunctionResult dictionary_put(
+    struct ListHead *dict, term key, term value, term *old, GlobalContext *ctx);
+DictionaryFunctionResult dictionary_get(
+    struct ListHead *dict, term key, term *old, GlobalContext *ctx);
+DictionaryFunctionResult dictionary_erase(
+    struct ListHead *dict, term key, term *old, GlobalContext *ctx);
 void dictionary_destroy(struct ListHead *dict);
 
 #ifdef __cplusplus

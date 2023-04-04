@@ -376,10 +376,30 @@ static void uart_driver_do_write(Context *ctx, term msg)
 
     term data = term_get_tuple_element(cmd, 1);
 
-    int ok;
-    int buffer_size = interop_iolist_size(data, &ok);
+    size_t buffer_size;
+    switch (interop_iolist_size(data, &buffer_size)) {
+        case InteropOk:
+            break;
+        case InteropMemoryAllocFail:
+            ESP_LOGE(TAG, "[uart_driver_do_write] Failed to allocate memory");
+            return;
+        case InteropBadArg:
+            ESP_LOGE(TAG, "[uart_driver_do_write] Bad arg");
+            return;
+    }
     void *buffer = malloc(buffer_size);
-    interop_write_iolist(data, buffer);
+    switch (interop_write_iolist(data, buffer)) {
+        case InteropOk:
+            break;
+        case InteropMemoryAllocFail:
+            free(buffer);
+            ESP_LOGE(TAG, "[uart_driver_do_write] Failed to allocate memory");
+            return;
+        case InteropBadArg:
+            free(buffer);
+            ESP_LOGE(TAG, "[uart_driver_do_write] Bad arg");
+            return;
+    }
 
     uart_write_bytes(uart_data->uart_num, buffer, buffer_size);
 

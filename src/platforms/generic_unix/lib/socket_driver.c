@@ -558,15 +558,24 @@ term socket_driver_do_send(Context *ctx, term buffer)
         buf = (char *) term_binary_data(buffer);
         len = term_binary_size(buffer);
     } else if (term_is_list(buffer)) {
-        int ok;
-        len = interop_iolist_size(buffer, &ok);
-        if (UNLIKELY(!ok)) {
-            return port_create_error_tuple(ctx, BADARG_ATOM);
+        switch (interop_iolist_size(buffer, &len)) {
+            case InteropOk:
+                break;
+            case InteropMemoryAllocFail:
+                return port_create_error_tuple(ctx, OUT_OF_MEMORY_ATOM);
+            case InteropBadArg:
+                return port_create_error_tuple(ctx, BADARG_ATOM);
         }
         buf = malloc(len);
-        if (UNLIKELY(!interop_write_iolist(buffer, buf))) {
-            free(buf);
-            return port_create_error_tuple(ctx, BADARG_ATOM);
+        switch (interop_write_iolist(buffer, buf)) {
+            case InteropOk:
+                break;
+            case InteropMemoryAllocFail:
+                free(buf);
+                return port_create_error_tuple(ctx, OUT_OF_MEMORY_ATOM);
+            case InteropBadArg:
+                free(buf);
+                return port_create_error_tuple(ctx, BADARG_ATOM);
         }
     } else {
         return port_create_error_tuple(ctx, BADARG_ATOM);
@@ -600,15 +609,24 @@ term socket_driver_do_sendto(Context *ctx, term dest_address, term dest_port, te
         buf = (char *) term_binary_data(buffer);
         len = term_binary_size(buffer);
     } else if (term_is_list(buffer)) {
-        int ok;
-        len = interop_iolist_size(buffer, &ok);
-        if (UNLIKELY(!ok)) {
-            return port_create_error_tuple(ctx, BADARG_ATOM);
+        switch (interop_iolist_size(buffer, &len)) {
+            case InteropOk:
+                break;
+            case InteropMemoryAllocFail:
+                return port_create_error_tuple(ctx, OUT_OF_MEMORY_ATOM);
+            case InteropBadArg:
+                return port_create_error_tuple(ctx, BADARG_ATOM);
         }
         buf = malloc(len);
-        if (UNLIKELY(!interop_write_iolist(buffer, buf))) {
-            free(buf);
-            return port_create_error_tuple(ctx, BADARG_ATOM);
+        switch (interop_write_iolist(buffer, buf)) {
+            case InteropOk:
+                break;
+            case InteropMemoryAllocFail:
+                free(buf);
+                return port_create_error_tuple(ctx, OUT_OF_MEMORY_ATOM);
+            case InteropBadArg:
+                free(buf);
+                return port_create_error_tuple(ctx, BADARG_ATOM);
         }
     } else {
         return port_create_error_tuple(ctx, BADARG_ATOM);

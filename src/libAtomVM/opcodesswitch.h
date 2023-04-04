@@ -852,7 +852,7 @@ struct kv_pair
     term value;
 };
 
-static void sort_kv_pairs(Context *ctx, struct kv_pair *kv, int size)
+static bool sort_kv_pairs(struct kv_pair *kv, int size, GlobalContext *global)
 {
     int k = size;
     while (1 < k) {
@@ -860,9 +860,11 @@ static void sort_kv_pairs(Context *ctx, struct kv_pair *kv, int size)
         for (int i = 1; i < k; i++) {
             term t_max = kv[max_pos].key;
             term t = kv[i].key;
-            int c = term_compare(t, t_max, ctx);
-            if (0 < c) {
+            TermCompareResult result = term_compare(t, t_max, global);
+            if (result == TermGreaterThan) {
                 max_pos = i;
+            } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+                return false;
             }
         }
         if (max_pos != k - 1) {
@@ -871,6 +873,8 @@ static void sort_kv_pairs(Context *ctx, struct kv_pair *kv, int size)
         k--;
         // kv[k..size] sorted
     }
+
+    return true;
 }
 
 static int get_catch_label_and_change_module(Context *ctx, Module **mod)
@@ -2178,10 +2182,13 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_lt/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
-                    if (term_compare(arg1, arg2, ctx) < 0) {
+                    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+                    if (result == TermLessThan) {
                         NEXT_INSTRUCTION(next_off);
-                    } else {
+                    } else if (result & (TermGreaterThan | TermEquals)) {
                         i = POINTER_TO_II(mod->labels[label]);
+                    } else {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
 
@@ -2207,10 +2214,13 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_ge/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
-                    if (term_compare(arg1, arg2, ctx) >= 0) {
+                    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+                    if (result & (TermGreaterThan | TermEquals)) {
                         NEXT_INSTRUCTION(next_off);
-                    } else {
+                    } else if (result == TermLessThan) {
                         i = POINTER_TO_II(mod->labels[label]);
+                    } else {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
 
@@ -2237,10 +2247,13 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     TRACE("is_equal/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
                     //TODO: implement this
-                    if (term_equals(arg1, arg2, ctx)) {
+                    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+                    if (result == TermEquals) {
                         NEXT_INSTRUCTION(next_off);
-                    } else {
+                    } else if (result & (TermLessThan | TermGreaterThan)) {
                         i = POINTER_TO_II(mod->labels[label]);
+                    } else {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
 
@@ -2266,10 +2279,13 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_not_equal/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
-                    if (!term_equals(arg1, arg2, ctx)) {
+                    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+                    if (result & (TermLessThan | TermGreaterThan)) {
                         NEXT_INSTRUCTION(next_off);
-                    } else {
+                    } else if (result == TermEquals) {
                         i = POINTER_TO_II(mod->labels[label]);
+                    } else {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
 
@@ -2295,8 +2311,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_eq_exact/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
+                    // handle error
                     //TODO: implement this
-                    if (term_exactly_equals(arg1, arg2, ctx)) {
+                    if (term_exactly_equals(arg1, arg2, ctx->global)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
@@ -2325,8 +2342,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_not_eq_exact/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
+                    // handle error
                     //TODO: implement this
-                    if (!term_exactly_equals(arg1, arg2, ctx)) {
+                    if (!term_exactly_equals(arg1, arg2, ctx->global)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
@@ -5337,8 +5355,11 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     DECODE_COMPACT_TERM(value, code, i, next_off);
 
                     #ifdef IMPL_EXECUTE_LOOP
-                        if (term_find_map_pos(ctx, src, key) == -1) {
+                        int map_pos = term_find_map_pos(src, key, ctx->global);
+                        if (map_pos == TERM_MAP_NOT_FOUND) {
                             new_entries++;
+                        } else if (UNLIKELY(map_pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     #endif
                 }
@@ -5369,7 +5390,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         kv[j].key = key;
                         kv[j].value = value;
                     }
-                    sort_kv_pairs(ctx, kv, num_elements);
+                    if (UNLIKELY(!sort_kv_pairs(kv, num_elements, ctx->global))) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
                     //
                     // Create a new map of the requested size and stitch src
                     // and kv together into new map.  Both src and kv are sorted.
@@ -5391,20 +5414,32 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         } else {
                             term src_key = term_get_map_key(src, src_pos);
                             term new_key = kv[kv_pos].key;
-                            int c = term_compare(src_key, new_key, ctx);
-                            if (c < 0) {
-                                term src_value = term_get_map_value(src, src_pos);
-                                term_set_map_assoc(map, j, src_key, src_value);
-                                src_pos++;
-                            } else if (0 < c) {
-                                term new_value = kv[kv_pos].value;
-                                term_set_map_assoc(map, j, new_key, new_value);
-                                kv_pos++;
-                            } else { // keys are the same
-                                term new_value = kv[kv_pos].value;
-                                term_set_map_assoc(map, j, src_key, new_value);
-                                src_pos++;
-                                kv_pos++;
+                            switch (term_compare(src_key, new_key, ctx->global)) {
+                                case TermLessThan: {
+                                    term src_value = term_get_map_value(src, src_pos);
+                                    term_set_map_assoc(map, j, src_key, src_value);
+                                    src_pos++;
+                                    break;
+                                }
+
+                                case TermGreaterThan: {
+                                    term new_value = kv[kv_pos].value;
+                                    term_set_map_assoc(map, j, new_key, new_value);
+                                    kv_pos++;
+                                    break;
+                                }
+
+                                case TermEquals: {
+                                    term new_value = kv[kv_pos].value;
+                                    term_set_map_assoc(map, j, src_key, new_value);
+                                    src_pos++;
+                                    kv_pos++;
+                                    break;
+                                }
+
+                                case TermCompareMemoryAllocFail: {
+                                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                                }
                             }
                         }
                     }
@@ -5450,8 +5485,11 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     DECODE_COMPACT_TERM(value, code, i, next_off);
 
                     #ifdef IMPL_EXECUTE_LOOP
-                        if (term_find_map_pos(ctx, src, key) == -1) {
+                        int map_pos = term_find_map_pos(src, key, ctx->global);
+                        if (map_pos == TERM_MAP_NOT_FOUND) {
                             RAISE_ERROR(BADARG_ATOM);
+                        } else if (map_pos == TERM_MAP_MEMORY_ALLOC_FAIL) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     #endif
                 }
@@ -5479,7 +5517,10 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         term key, value;
                         DECODE_COMPACT_TERM(key, code, i, list_off);
                         DECODE_COMPACT_TERM(value, code, i, list_off);
-                        int pos = term_find_map_pos(ctx, src, key);
+                        int pos = term_find_map_pos(src, key, ctx->global);
+                        if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        }
                         term_set_map_assoc(map, pos, key, value);
                     }
                     WRITE_REGISTER(dreg_type, dreg, map);
@@ -5535,10 +5576,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     DECODE_COMPACT_TERM(key, code, i, next_off);
 
                     #ifdef IMPL_EXECUTE_LOOP
-                        int pos = term_find_map_pos(ctx, src, key);
-                        if (pos == -1) {
+                        int pos = term_find_map_pos(src, key, ctx->global);
+                        if (pos == TERM_MAP_NOT_FOUND) {
                             i = POINTER_TO_II(mod->labels[label]);
                             fail = 1;
+                        } else if (pos == TERM_MAP_MEMORY_ALLOC_FAIL) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     #endif
                 }
@@ -5569,10 +5612,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
 
                     #ifdef IMPL_EXECUTE_LOOP
-                        int pos = term_find_map_pos(ctx, src, key);
-                        if (pos == -1) {
+                        int pos = term_find_map_pos(src, key, ctx->global);
+                        if (pos == TERM_MAP_NOT_FOUND) {
                             i = POINTER_TO_II(mod->labels[label]);
                             fail = 1;
+                        } else if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         } else {
                             term value = term_get_map_value(src, pos);
                             WRITE_REGISTER(dreg_type, dreg, value);
@@ -6528,7 +6573,8 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     DECODE_COMPACT_TERM(update_value, code, i, next_off);
                     #ifdef IMPL_EXECUTE_LOOP
                         if (reuse) {
-                            if (term_exactly_equals(update_value, term_get_tuple_element(dst, update_ix - 1), ctx)) {
+                            // handle error
+                            if (term_exactly_equals(update_value, term_get_tuple_element(dst, update_ix - 1), ctx->global)) {
                                 continue;
                             }
                             reuse = false;

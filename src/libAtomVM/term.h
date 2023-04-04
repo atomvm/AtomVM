@@ -106,6 +106,17 @@ enum RefcBinaryFlags
     RefcBinaryIsConst
 };
 
+typedef enum
+{
+    TermCompareMemoryAllocFail = 0,
+    TermEquals = 1,
+    TermLessThan = 2,
+    TermGreaterThan = 4
+} TermCompareResult;
+
+#define TERM_MAP_NOT_FOUND -1
+#define TERM_MAP_MEMORY_ALLOC_FAIL -2
+
 /**
  * @brief All empty tuples will reference this
  */
@@ -117,9 +128,10 @@ extern const term empty_tuple;
  * @details Tells if first term is >, < or == to the second term.
  * @param t the first term
  * @param other the second term
- * @return 0 when given terms are equals, otherwise -1 when t < other, or 1 when t > other.
+ * @param global the global context
+ * @return any of TermEquals, TermLessThan, TermGreaterThan or TermCompareMemoryAllocFail error.
  */
-int term_compare(term t, term other, Context *ctx);
+TermCompareResult term_compare(term t, term other, GlobalContext *global);
 
 /**
  * @brief Create a reference-counted binary on the heap
@@ -1334,30 +1346,19 @@ static inline int term_list_length(term t, int *proper)
  * @param b second term
  * @return 1 if they are the same, 0 otherwise.
  */
-static inline int term_exactly_equals(term a, term b, Context *ctx)
+static inline int term_exactly_equals(term a, term b, GlobalContext *global)
 {
     if (a == b) {
         return 1;
     } else {
-        return term_compare(a, b, ctx) == 0;
-    }
-}
-
-/**
- * @brief Returns 1 if given terms are equal.
- *
- * @details Compares 2 given terms and returns 1 if they are the same or they have same numeric value.
- * @param a first term
- * @param b second term
- * @return 1 if they are the same, 0 otherwise.
- */
-static inline int term_equals(term a, term b, Context *ctx)
-{
-    if (a == b) {
-        return 1;
-    } else {
-        //TODO: add parameter for exactly equals.
-        return term_compare(a, b, ctx) == 0;
+        TermCompareResult result = term_compare(a, b, global);
+        if (result == TermEquals) {
+            return 1;
+        } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+            AVM_ABORT();
+        } else {
+            return 0;
+        }
     }
 }
 
@@ -1465,27 +1466,6 @@ static inline int term_is_string(term t)
         t = term_get_list_tail(t);
     }
     return term_is_nil(t);
-}
-
-/**
- * @brief Checks to see if e is a member of list
- *
- * @details returns 1 if e is equal to an element of list; 0, otherwise
- * @param   list list term
- * @param   e element term
- * @return  1 if e is equal to a member of list; 0, otherwise
- */
-static inline int term_list_member(term list, term e, Context *ctx)
-{
-    term t = list;
-    while (term_is_nonempty_list(t)) {
-        term head = term_get_list_head(t);
-        if (term_equals(head, e, ctx)) {
-            return 1;
-        }
-        t = term_get_list_tail(t);
-    }
-    return 0;
 }
 
 static inline term term_make_function_reference(term m, term f, term a, Context *ctx)
@@ -1670,18 +1650,21 @@ static inline term term_get_map_value(term map, avm_uint_t pos)
     return boxed_value[term_get_map_value_offset() + pos];
 }
 
-static inline int term_find_map_pos(Context *ctx, term map, term key)
+static inline int term_find_map_pos(term map, term key, GlobalContext *global)
 {
     term keys = term_get_map_keys(map);
     int arity = term_get_tuple_arity(keys);
     for (int i = 0; i < arity; ++i) {
         term k = term_get_tuple_element(keys, i);
-        if (term_equals(key, k, ctx)) {
+        TermCompareResult result = term_compare(key, k, global);
+        if (result == TermEquals) {
             return i;
+        } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+            return TERM_MAP_MEMORY_ALLOC_FAIL;
         }
     }
-    // TODO define a mnemonic (MAP_NOT_FOUND) in place of -1
-    return -1;
+
+    return TERM_MAP_NOT_FOUND;
 }
 
 term term_get_map_assoc(Context *ctx, term map, term key);
