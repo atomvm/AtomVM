@@ -48,6 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   devices to be attached to the same SPI Bus.
 - Changed the return value from `erlang:system_info(esp32_chip_info)` from a tuple to a map, with
 additional information.
+- Changed the return type of the `network:start` function to return the tuple `{ok, Pid}` on a
+successful call, instead of the bare atom `ok`.  Applications that use `network:start` and
+check the return value will need to be modified.
 
 ## [0.5.1] - Unreleased
 ### Added

@@ -47,7 +47,7 @@ start() ->
         {sntp, [{endpoint, "pool.ntp.org"}]}
     ],
     case network:start(Config) of
-        ok ->
+        {ok, _Pid} ->
             sleep_forever();
         Error ->
             erlang:display(Error)
