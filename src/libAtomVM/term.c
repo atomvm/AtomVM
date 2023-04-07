@@ -526,7 +526,7 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                 break;
             }
             if (t_size > 0) {
-                for (int i = 1; i < t_size; i++) {
+                for (int i = t_size - 1; i >= 1; i--) {
                     if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(t, i))
                             != TempStackOk)) {
                         return TermCompareMemoryAllocFail;
@@ -543,6 +543,12 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                             != TempStackOk)) {
                         return TermCompareMemoryAllocFail;
                     }
+                }
+                if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(t, 0)) != TempStackOk)) {
+                    return TermCompareMemoryAllocFail;
+                }
+                if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(other, 0)) != TempStackOk)) {
+                    return TermCompareMemoryAllocFail;
                 }
                 t = term_get_map_key(t, 0);
                 other = term_get_map_key(other, 0);
