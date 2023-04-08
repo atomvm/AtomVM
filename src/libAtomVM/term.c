@@ -32,12 +32,6 @@
 #include <stddef.h>
 #include <stdio.h>
 
-//TODO use macro from utils
-#ifndef CONTAINER_OF
-#define CONTAINER_OF(ptr, type, member) \
-    ((type *) (((char *) (ptr)) - offsetof(type, member)))
-#endif
-
 struct FprintfFun
 {
     PrinterFun base;
