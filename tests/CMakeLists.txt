@@ -25,11 +25,6 @@ add_executable(test-erlang test.c)
 add_executable(test-mailbox test-mailbox.c)
 add_executable(test-structs test-structs.c)
 
-# AtomVM options impacting tests
-if (AVM_DISABLE_FP)
-    target_compile_definitions(test-erlang PRIVATE AVM_NO_FP)
-endif()
-
 target_compile_features(test-erlang PUBLIC c_std_11)
 target_compile_features(test-mailbox PUBLIC c_std_11)
 target_compile_features(test-structs PUBLIC c_std_11)

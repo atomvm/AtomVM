@@ -138,24 +138,28 @@ term interop_proplist_get_value_default(term list, term key, term default_value)
     return default_value;
 }
 
-int interop_iolist_size(term t, int *ok)
+InteropFunctionResult interop_iolist_size(term t, size_t *size)
 {
     if (term_is_binary(t)) {
-        *ok = 1;
-        return term_binary_size(t);
+        *size = term_binary_size(t);
+        return InteropOk;
     }
 
     if (UNLIKELY(!term_is_list(t))) {
-        *ok = 0;
-        return 0;
+        return InteropBadArg;
     }
 
     unsigned long acc = 0;
 
     struct TempStack temp_stack;
-    temp_stack_init(&temp_stack);
+    if (UNLIKELY(temp_stack_init(&temp_stack) != TempStackOk)) {
+        return InteropMemoryAllocFail;
+    }
 
-    temp_stack_push(&temp_stack, t);
+    if (UNLIKELY(temp_stack_push(&temp_stack, t) != TempStackOk)) {
+        temp_stack_destory(&temp_stack);
+        return InteropMemoryAllocFail;
+    }
 
     while (!temp_stack_is_empty(&temp_stack)) {
         if (term_is_integer(t)) {
@@ -166,7 +170,10 @@ int interop_iolist_size(term t, int *ok)
             t = temp_stack_pop(&temp_stack);
 
         } else if (term_is_nonempty_list(t)) {
-            temp_stack_push(&temp_stack, term_get_list_tail(t));
+            if (UNLIKELY(temp_stack_push(&temp_stack, term_get_list_tail(t)) != TempStackOk)) {
+                temp_stack_destory(&temp_stack);
+                return InteropMemoryAllocFail;
+            }
             t = term_get_list_head(t);
 
         } else if (term_is_binary(t)) {
@@ -175,29 +182,33 @@ int interop_iolist_size(term t, int *ok)
 
         } else {
             temp_stack_destory(&temp_stack);
-            *ok = 0;
-            return 0;
+            return InteropBadArg;
         }
     }
 
     temp_stack_destory(&temp_stack);
 
-    *ok = 1;
-    return acc;
+    *size = acc;
+    return InteropOk;
 }
 
-int interop_write_iolist(term t, char *p)
+InteropFunctionResult interop_write_iolist(term t, char *p)
 {
     if (term_is_binary(t)) {
         int len = term_binary_size(t);
         memcpy(p, term_binary_data(t), len);
-        return 1;
+        return InteropOk;
     }
 
     struct TempStack temp_stack;
-    temp_stack_init(&temp_stack);
+    if (UNLIKELY(temp_stack_init(&temp_stack) != TempStackOk)) {
+        return InteropMemoryAllocFail;
+    }
 
-    temp_stack_push(&temp_stack, t);
+    if (UNLIKELY(temp_stack_push(&temp_stack, t) != TempStackOk)) {
+        temp_stack_destory(&temp_stack);
+        return InteropMemoryAllocFail;
+    }
 
     while (!temp_stack_is_empty(&temp_stack)) {
         if (term_is_integer(t)) {
@@ -209,7 +220,10 @@ int interop_write_iolist(term t, char *p)
             t = temp_stack_pop(&temp_stack);
 
         } else if (term_is_nonempty_list(t)) {
-            temp_stack_push(&temp_stack, term_get_list_tail(t));
+            if (UNLIKELY(temp_stack_push(&temp_stack, term_get_list_tail(t)) != TempStackOk)) {
+                temp_stack_destory(&temp_stack);
+                return InteropMemoryAllocFail;
+            }
             t = term_get_list_head(t);
 
         } else if (term_is_binary(t)) {
@@ -220,12 +234,12 @@ int interop_write_iolist(term t, char *p)
 
         } else {
             temp_stack_destory(&temp_stack);
-            return 0;
+            return InteropBadArg;
         }
     }
 
     temp_stack_destory(&temp_stack);
-    return 1;
+    return InteropOk;
 }
 
 term interop_map_get_value(Context *ctx, term map, term key)
@@ -235,9 +249,12 @@ term interop_map_get_value(Context *ctx, term map, term key)
 
 term interop_map_get_value_default(Context *ctx, term map, term key, term default_value)
 {
-    int pos = term_find_map_pos(ctx, map, key);
-    if (pos == -1) {
+    int pos = term_find_map_pos(map, key, ctx->global);
+    if (pos == TERM_MAP_NOT_FOUND) {
         return default_value;
+    } else if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
+        // TODO: do not crash, handle out of memory
+        AVM_ABORT();
     } else {
         return term_get_map_value(map, pos);
     }

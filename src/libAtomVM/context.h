@@ -90,9 +90,7 @@ struct Context
 
     term x[MAX_REG];
 
-#ifndef AVM_NO_FP
     avm_float_t *fr;
-#endif
 
     term *heap_start;
     term *stack_base;
@@ -189,7 +187,6 @@ Context *context_new(GlobalContext *glb);
  */
 void context_destroy(Context *c);
 
-#ifndef AVM_NO_FP
 /**
  * @brief Ensure we have FP registers, allocating them if necessary.
  * @param c context fo allocate FP registers for
@@ -204,7 +201,6 @@ static inline void context_ensure_fpregs(Context *c)
         }
     }
 }
-#endif
 
 /**
  * @brief Starts executing a function

@@ -40,6 +40,7 @@
 #define STRING_EXT 107
 #define LIST_EXT 108
 #define BINARY_EXT 109
+#define SMALL_BIG_EXT 110
 #define EXPORT_EXT 113
 #define MAP_EXT 116
 #define SMALL_ATOM_UTF8_EXT 119
@@ -48,6 +49,7 @@
 #define NEW_FLOAT_EXT_SIZE 9
 #define SMALL_INTEGER_EXT_SIZE 2
 #define INTEGER_EXT_SIZE 5
+#define SMALL_BIG_EXT_BASE_SIZE 3
 #define ATOM_EXT_BASE_SIZE 3
 #define STRING_EXT_BASE_SIZE 3
 #define LIST_EXT_BASE_SIZE 5
@@ -55,13 +57,16 @@
 #define MAP_EXT_BASE_SIZE 5
 #define SMALL_ATOM_EXT_BASE_SIZE 2
 
+// Assuming two's-complement implementation of signed integers
+#define SIGNED_INT_TO_UNSIGNED(val, unsigned_type) ((val) < 0 ? ~((unsigned_type) (val)) + 1 : (val))
+
 // MAINTENANCE NOTE.  Range checking on the external term buffer is only performed in
 // the calculate_heap_usage function, which will fail with an invalid term if there is
 // insufficient space in the external term buffer (preventing reading off the end of the
 // buffer).  The parse_external_terms function does NOT perform range checking, and MUST
 // therefore always be preceeded by a call to calculate_heap_usage.
 
-static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx, int copy);
+static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx, bool copy);
 static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaining, int *eterm_size, bool copy, Context *ctx);
 static size_t compute_external_size(Context *ctx, term t);
 static int externalterm_from_term(Context *ctx, uint8_t **buf, size_t *len, term t);
@@ -71,12 +76,14 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t);
  * @brief
  * @param   external_term   buffer containing external term
  * @param   ctx             current context in which terms may be stored
- * @param   use_heap_fragment whether to store parsed terms in a heap fragment.  If 0, terms
+ * @param   opts            additional opts, such as ExternalTermToHeapFragment for storing parsed
+ * terms in a heap fragment.
  *                          are stored in the context heap.
  * @param   bytes_read      the number of bytes read off external_term in order to yield a term
  * @return  the parsed term
  */
-static term externalterm_to_term_internal(const void *external_term, size_t size, Context *ctx, int use_heap_fragment, size_t *bytes_read, bool copy)
+static term externalterm_to_term_internal(const void *external_term, size_t size, Context *ctx,
+    ExternalTermOpts opts, size_t *bytes_read, bool copy)
 {
     const uint8_t *external_term_buf = (const uint8_t *) external_term;
 
@@ -94,7 +101,7 @@ static term externalterm_to_term_internal(const void *external_term, size_t size
         return term_invalid_term();
     }
 
-    if (use_heap_fragment) {
+    if (opts & ExternalTermToHeapFragment) {
         struct ListHead *heap_fragment = malloc(heap_usage * sizeof(term) + sizeof(struct ListHead));
         if (IS_NULL_PTR(heap_fragment)) {
             return term_invalid_term();
@@ -107,7 +114,7 @@ static term externalterm_to_term_internal(const void *external_term, size_t size
         // so all existing functions can be used on the heap fragment without any change.
         term *main_heap = ctx->heap_ptr;
         ctx->heap_ptr = external_term_heap;
-        term result = parse_external_terms(external_term_buf + 1, &eterm_size, ctx, 0);
+        term result = parse_external_terms(external_term_buf + 1, &eterm_size, ctx, false);
         *bytes_read = eterm_size + 1;
         ctx->heap_ptr = main_heap;
 
@@ -117,16 +124,16 @@ static term externalterm_to_term_internal(const void *external_term, size_t size
             fprintf(stderr, "Unable to ensure %i free words in heap\n", eterm_size);
             return term_invalid_term();
         }
-        term result = parse_external_terms(external_term_buf + 1, &eterm_size, ctx, 1);
+        term result = parse_external_terms(external_term_buf + 1, &eterm_size, ctx, true);
         *bytes_read = eterm_size + 1;
         return result;
     }
 }
 
-term externalterm_to_term(const void *external_term, size_t size, Context *ctx, int use_heap_fragment)
+term externalterm_to_term(const void *external_term, size_t size, Context *ctx, ExternalTermOpts opts)
 {
     size_t bytes_read = 0;
-    return externalterm_to_term_internal(external_term, size, ctx, use_heap_fragment, &bytes_read, false);
+    return externalterm_to_term_internal(external_term, size, ctx, opts, &bytes_read, false);
 }
 
 enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term binary, size_t *bytes_read)
@@ -200,6 +207,27 @@ static size_t compute_external_size(Context *ctx, term t)
     return serialize_term(ctx, NULL, t);
 }
 
+static uint8_t get_num_bytes(avm_uint64_t val)
+{
+    uint8_t num_bytes = 0;
+    while (val != 0) {
+        val = val >> 8;
+        ++num_bytes;
+    }
+    return num_bytes;
+}
+
+static void write_bytes(uint8_t *buf, avm_uint64_t val)
+{
+    uint8_t i = 0;
+    while (val != 0) {
+        uint8_t byte = val & 0xFF;
+        buf[i] = byte;
+        val = val >> 8;
+        ++i;
+    }
+}
+
 static int serialize_term(Context *ctx, uint8_t *buf, term t)
 {
     if (term_is_uint8(t)) {
@@ -209,13 +237,39 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
         }
         return 2;
 
-    } else if (term_is_integer(t)) {
-        if (!IS_NULL_PTR(buf)) {
-            int32_t val = term_to_int32(t);
-            buf[0] = INTEGER_EXT;
-            WRITE_32_UNALIGNED(buf + 1, val);
+    } else if (term_is_any_integer(t)) {
+
+        avm_int64_t val = term_maybe_unbox_int64(t);
+        if (val >= INT32_MIN && val <= INT32_MAX) {
+            if (buf != NULL) {
+                buf[0] = INTEGER_EXT;
+                WRITE_32_UNALIGNED(buf + 1, (int32_t) val);
+            }
+            return INTEGER_EXT_SIZE;
+        } else {
+            avm_uint64_t unsigned_val = SIGNED_INT_TO_UNSIGNED(val, avm_uint64_t);
+            uint8_t num_bytes = get_num_bytes(unsigned_val);
+            if (buf != NULL) {
+                buf[0] = SMALL_BIG_EXT;
+                buf[1] = num_bytes;
+                buf[2] = val < 0 ? 0x01 : 0x00;
+                write_bytes(buf + 3, unsigned_val);
+            }
+            return SMALL_BIG_EXT_BASE_SIZE + num_bytes;
         }
-        return 5;
+
+    } else if (term_is_float(t)) {
+        if (!IS_NULL_PTR(buf)) {
+            avm_float_t val = term_to_float(t);
+            buf[0] = NEW_FLOAT_EXT;
+            union {
+                uint64_t intvalue;
+                double doublevalue;
+            } v;
+            v.doublevalue = val;
+            WRITE_64_UNALIGNED(buf + 1, v.intvalue);
+        }
+        return NEW_FLOAT_EXT_SIZE;
 
     } else if (term_is_atom(t)) {
         AtomString atom_string = globalcontext_atomstring_from_term(ctx->global, t);
@@ -326,23 +380,27 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
     }
 }
 
-static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx, int copy)
+static avm_uint64_t read_bytes(const uint8_t *buf, uint8_t num_bytes)
+{
+    avm_uint64_t value = 0;
+    for (uint8_t i = 0; i < num_bytes; ++i) {
+        value |= (((avm_uint64_t) buf[i]) << (i * 8));
+    }
+    return value;
+}
+
+static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx, bool copy)
 {
     switch (external_term_buf[0]) {
         case NEW_FLOAT_EXT: {
-            #ifndef AVM_NO_FP
-                union {
-                    uint64_t intvalue;
-                    double doublevalue;
-                } v;
-                v.intvalue = READ_64_UNALIGNED(external_term_buf + 1);
+            union {
+                uint64_t intvalue;
+                double doublevalue;
+            } v;
+            v.intvalue = READ_64_UNALIGNED(external_term_buf + 1);
 
-                *eterm_size = 9;
-                return term_from_float(v.doublevalue, ctx);
-            #else
-                fprintf(stderr, "floating point support not enabled.\n");
-                return term_invalid_term();
-            #endif
+            *eterm_size = NEW_FLOAT_EXT_SIZE;
+            return term_from_float(v.doublevalue, ctx);
         }
 
         case SMALL_INTEGER_EXT: {
@@ -355,6 +413,23 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
 
             *eterm_size = 5;
 
+            return term_make_maybe_boxed_int64(ctx, value);
+        }
+
+        case SMALL_BIG_EXT: {
+            uint8_t num_bytes = external_term_buf[1];
+            uint8_t sign = external_term_buf[2];
+            avm_uint64_t unsigned_value = read_bytes(external_term_buf + 3, num_bytes);
+            // NB due to call to calculate_heap_usage, there is no loss of precision:
+            // 1. 0 <= unsigned_value <= INT64_MAX if sign is 0
+            // 2. 0 <= unsigned_value <= INT64_MAX + 1 if sign is not 0
+            avm_int64_t value = 0;
+            if (sign != 0x00) {
+                value = -((avm_int64_t) unsigned_value);
+            } else {
+                value = (avm_int64_t) unsigned_value;
+            }
+            *eterm_size = SMALL_BIG_EXT_BASE_SIZE + num_bytes;
             return term_make_maybe_boxed_int64(ctx, value);
         }
 
@@ -515,16 +590,11 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
     }
     switch (external_term_buf[0]) {
         case NEW_FLOAT_EXT: {
-            #ifndef AVM_NO_FP
-                if (UNLIKELY(remaining < NEW_FLOAT_EXT_SIZE)) {
-                    return INVALID_TERM_SIZE;
-                }
-                *eterm_size = NEW_FLOAT_EXT_SIZE;
-                return FLOAT_SIZE;
-            #else
-                fprintf(stderr, "floating point support not enabled.\n");
+            if (UNLIKELY(remaining < NEW_FLOAT_EXT_SIZE)) {
                 return INVALID_TERM_SIZE;
-            #endif
+            }
+            *eterm_size = NEW_FLOAT_EXT_SIZE;
+            return FLOAT_SIZE;
         }
 
         case SMALL_INTEGER_EXT: {
@@ -541,6 +611,21 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             }
             int32_t value = READ_32_UNALIGNED(external_term_buf + 1);
             *eterm_size = INTEGER_EXT_SIZE;
+            return term_boxed_integer_size(value);
+        }
+
+        case SMALL_BIG_EXT: {
+            uint8_t num_bytes = external_term_buf[1];
+            if (UNLIKELY(num_bytes > 8 || remaining < (SMALL_BIG_EXT_BASE_SIZE + num_bytes))) {
+                return INVALID_TERM_SIZE;
+            }
+            uint8_t sign = external_term_buf[2];
+            *eterm_size = SMALL_BIG_EXT_BASE_SIZE + num_bytes;
+            avm_uint64_t value = read_bytes(external_term_buf + 3, num_bytes);
+            // NB.  We currently support max 64-bit signed integers (assuming two's complement signed values in 63 bits)
+            if (UNLIKELY((sign == 0 && value > INT64_MAX) || (sign != 0 && value > (((avm_uint64_t) INT64_MAX) + 1)))) {
+                return INVALID_TERM_SIZE;
+            }
             return term_boxed_integer_size(value);
         }
 

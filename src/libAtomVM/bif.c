@@ -21,10 +21,7 @@
 #include "bif.h"
 
 #include <stdlib.h>
-
-#ifndef AVM_NO_FP
 #include <math.h>
-#endif
 
 #include "atom.h"
 #include "defaultatoms.h"
@@ -171,8 +168,6 @@ term bif_erlang_is_map_1(Context *ctx, term arg1)
 
 term bif_erlang_is_map_key_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
     if (UNLIKELY(!term_is_map(arg2))) {
         if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -184,7 +179,15 @@ term bif_erlang_is_map_key_2(Context *ctx, term arg1, term arg2)
 
         RAISE_ERROR(err);
     }
-    return (term_find_map_pos(ctx, arg2, arg1) != -1) ? TRUE_ATOM : FALSE_ATOM;
+
+    switch (term_find_map_pos(arg2, arg1, ctx->global)) {
+        case TERM_MAP_NOT_FOUND:
+            return FALSE_ATOM;
+        case TERM_MAP_MEMORY_ALLOC_FAIL:
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        default:
+            return TRUE_ATOM;
+    }
 }
 
 term bif_erlang_length_1(Context *ctx, int live, term arg1)
@@ -259,8 +262,6 @@ term bif_erlang_map_size_1(Context *ctx, int live, term arg1)
 
 term bif_erlang_map_get_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
     if (!UNLIKELY(term_is_map(arg2))) {
         if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -273,8 +274,8 @@ term bif_erlang_map_get_2(Context *ctx, term arg1, term arg2)
         RAISE_ERROR(err);
     }
 
-    int pos = term_find_map_pos(ctx, arg2, arg1);
-    if (pos == -1) {
+    int pos = term_find_map_pos(arg2, arg1, ctx->global);
+    if (pos == TERM_MAP_NOT_FOUND) {
         if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
@@ -287,6 +288,8 @@ term bif_erlang_map_get_2(Context *ctx, term arg1, term arg2)
             term_put_tuple_element(err, 1, UNSUPPORTED_ATOM);
         }
         RAISE_ERROR(err);
+    } else if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     return term_get_map_value(arg2, pos);
 }
@@ -346,18 +349,12 @@ static term add_overflow_helper(Context *ctx, term arg1, term arg2)
 
 static term add_boxed_helper(Context *ctx, term arg1, term arg2)
 {
-#ifndef AVM_NO_FP
     int use_float = 0;
-#endif
     int size = 0;
     if (term_is_boxed_integer(arg1)) {
         size = term_boxed_size(arg1);
-
-#ifndef AVM_NO_FP
     } else if (term_is_float(arg1)) {
         use_float = 1;
-#endif
-
     } else if (!term_is_integer(arg1)) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
@@ -365,18 +362,13 @@ static term add_boxed_helper(Context *ctx, term arg1, term arg2)
 
     if (term_is_boxed_integer(arg2)) {
         size |= term_boxed_size(arg2);
-
-#ifndef AVM_NO_FP
     } else if (term_is_float(arg2)) {
         use_float = 1;
-#endif
-
     } else if (!term_is_integer(arg2)) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
     }
 
-#ifndef AVM_NO_FP
     if (use_float) {
         avm_float_t farg1 = term_conv_to_float(arg1);
         avm_float_t farg2 = term_conv_to_float(arg2);
@@ -390,7 +382,6 @@ static term add_boxed_helper(Context *ctx, term arg1, term arg2)
         }
         return term_from_float(fresult, ctx);
     }
-#endif
 
     switch (size) {
         case 0: {
@@ -467,17 +458,12 @@ static term sub_overflow_helper(Context *ctx, term arg1, term arg2)
 
 static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
 {
-#ifndef AVM_NO_FP
     int use_float = 0;
-#endif
     int size = 0;
     if (term_is_boxed_integer(arg1)) {
         size = term_boxed_size(arg1);
-
-#ifndef AVM_NO_FP
     } else if (term_is_float(arg1)) {
         use_float = 1;
-#endif
     } else if (!term_is_integer(arg1)) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
@@ -485,16 +471,13 @@ static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
 
     if (term_is_boxed_integer(arg2)) {
         size |= term_boxed_size(arg2);
-#ifndef AVM_NO_FP
     } else if (term_is_float(arg2)) {
         use_float = 1;
-#endif
     } else if (!term_is_integer(arg2)) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
     }
 
-#ifndef AVM_NO_FP
     if (use_float) {
         avm_float_t farg1 = term_conv_to_float(arg1);
         avm_float_t farg2 = term_conv_to_float(arg2);
@@ -507,7 +490,6 @@ static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
         }
         return term_from_float(fresult, ctx);
     }
-#endif
 
     switch (size) {
         case 0: {
@@ -599,16 +581,12 @@ static term mul_overflow_helper(Context *ctx, term arg1, term arg2)
 
 static term mul_boxed_helper(Context *ctx, term arg1, term arg2)
 {
-#ifndef AVM_NO_FP
     int use_float = 0;
-#endif
     int size = 0;
     if (term_is_boxed_integer(arg1)) {
         size = term_boxed_size(arg1);
-#ifndef AVM_NO_FP
     } else if (term_is_float(arg1)) {
         use_float = 1;
-#endif
     } else if (!term_is_integer(arg1)) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
@@ -616,16 +594,13 @@ static term mul_boxed_helper(Context *ctx, term arg1, term arg2)
 
     if (term_is_boxed_integer(arg2)) {
         size |= term_boxed_size(arg2);
-#ifndef AVM_NO_FP
     } else if (term_is_float(arg2)) {
         use_float = 1;
-#endif
     } else if (!term_is_integer(arg2)) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR(BADARITH_ATOM);
     }
 
-#ifndef AVM_NO_FP
     if (use_float) {
         avm_float_t farg1 = term_conv_to_float(arg1);
         avm_float_t farg2 = term_conv_to_float(arg2);
@@ -638,7 +613,6 @@ static term mul_boxed_helper(Context *ctx, term arg1, term arg2)
         }
         return term_from_float(fresult, ctx);
     }
-#endif
 
     switch (size) {
         case 0: {
@@ -796,7 +770,6 @@ term bif_erlang_div_2(Context *ctx, int live, term arg1, term arg2)
 
 static term neg_boxed_helper(Context *ctx, term arg1)
 {
-#ifndef AVM_NO_FP
     if (term_is_float(arg1)) {
         avm_float_t farg1 = term_conv_to_float(arg1);
         avm_float_t fresult = -farg1;
@@ -808,7 +781,6 @@ static term neg_boxed_helper(Context *ctx, term arg1)
         }
         return term_from_float(fresult, ctx);
     }
-#endif
 
     if (term_is_boxed_integer(arg1)) {
         switch (term_boxed_size(arg1)) {
@@ -879,7 +851,6 @@ term bif_erlang_neg_1(Context *ctx, int live, term arg1)
 
 static term abs_boxed_helper(Context *ctx, term arg1)
 {
-#ifndef AVM_NO_FP
     if (term_is_float(arg1)) {
         avm_float_t farg1 = term_conv_to_float(arg1);
         avm_float_t fresult;
@@ -897,7 +868,6 @@ static term abs_boxed_helper(Context *ctx, term arg1)
         }
         return term_from_float(fresult, ctx);
     }
-#endif
 
     if (term_is_boxed_integer(arg1)) {
         switch (term_boxed_size(arg1)) {
@@ -1047,27 +1017,25 @@ term bif_erlang_ceil_1(Context *ctx, int live, term arg1)
 {
     UNUSED(live);
 
-    #ifndef AVM_NO_FP
-        if (term_is_float(arg1)) {
-            avm_float_t fvalue = term_to_float(arg1);
-            if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
-                RAISE_ERROR(OVERFLOW_ATOM);
-            }
-
-            avm_int64_t result;
-            #if AVM_USE_SINGLE_PRECISION
-                result = ceilf(fvalue);
-            #else
-                result = ceil(fvalue);
-            #endif
-
-            #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-                return make_maybe_boxed_int64(ctx, result);
-            #else
-                return make_maybe_boxed_int(ctx, result);
-            #endif
+    if (term_is_float(arg1)) {
+        avm_float_t fvalue = term_to_float(arg1);
+        if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+            RAISE_ERROR(OVERFLOW_ATOM);
         }
-    #endif
+
+        avm_int64_t result;
+        #if AVM_USE_SINGLE_PRECISION
+            result = ceilf(fvalue);
+        #else
+            result = ceil(fvalue);
+        #endif
+
+        #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+            return make_maybe_boxed_int64(ctx, result);
+        #else
+            return make_maybe_boxed_int(ctx, result);
+        #endif
+    }
 
     if (term_is_any_integer(arg1)) {
         return arg1;
@@ -1081,27 +1049,25 @@ term bif_erlang_floor_1(Context *ctx, int live, term arg1)
 {
     UNUSED(live);
 
-    #ifndef AVM_NO_FP
-        if (term_is_float(arg1)) {
-            avm_float_t fvalue = term_to_float(arg1);
-            if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
-                RAISE_ERROR(OVERFLOW_ATOM);
-            }
-
-            avm_int64_t result;
-            #if AVM_USE_SINGLE_PRECISION
-                result = floorf(fvalue);
-            #else
-                result = floor(fvalue);
-            #endif
-
-            #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-                return make_maybe_boxed_int64(ctx, result);
-            #else
-                return make_maybe_boxed_int(ctx, result);
-            #endif
+    if (term_is_float(arg1)) {
+        avm_float_t fvalue = term_to_float(arg1);
+        if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+            RAISE_ERROR(OVERFLOW_ATOM);
         }
-    #endif
+
+        avm_int64_t result;
+        #if AVM_USE_SINGLE_PRECISION
+            result = floorf(fvalue);
+        #else
+            result = floor(fvalue);
+        #endif
+
+        #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+            return make_maybe_boxed_int64(ctx, result);
+        #else
+            return make_maybe_boxed_int(ctx, result);
+        #endif
+    }
 
     if (term_is_any_integer(arg1)) {
         return arg1;
@@ -1115,27 +1081,25 @@ term bif_erlang_round_1(Context *ctx, int live, term arg1)
 {
     UNUSED(live);
 
-    #ifndef AVM_NO_FP
-        if (term_is_float(arg1)) {
-            avm_float_t fvalue = term_to_float(arg1);
-            if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
-                RAISE_ERROR(OVERFLOW_ATOM);
-            }
-
-            avm_int64_t result;
-            #if AVM_USE_SINGLE_PRECISION
-                result = llroundf(fvalue);
-            #else
-                result = llround(fvalue);
-            #endif
-
-            #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-                return make_maybe_boxed_int64(ctx, result);
-            #else
-                return make_maybe_boxed_int(ctx, result);
-            #endif
+    if (term_is_float(arg1)) {
+        avm_float_t fvalue = term_to_float(arg1);
+        if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+            RAISE_ERROR(OVERFLOW_ATOM);
         }
-    #endif
+
+        avm_int64_t result;
+        #if AVM_USE_SINGLE_PRECISION
+            result = llroundf(fvalue);
+        #else
+            result = llround(fvalue);
+        #endif
+
+        #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+            return make_maybe_boxed_int64(ctx, result);
+        #else
+            return make_maybe_boxed_int(ctx, result);
+        #endif
+    }
 
     if (term_is_any_integer(arg1)) {
         return arg1;
@@ -1149,27 +1113,25 @@ term bif_erlang_trunc_1(Context *ctx, int live, term arg1)
 {
     UNUSED(live);
 
-    #ifndef AVM_NO_FP
-        if (term_is_float(arg1)) {
-            avm_float_t fvalue = term_to_float(arg1);
-            if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
-                RAISE_ERROR(OVERFLOW_ATOM);
-            }
-
-            avm_int64_t result;
-            #if AVM_USE_SINGLE_PRECISION
-                result = truncf(fvalue);
-            #else
-                result = trunc(fvalue);
-            #endif
-
-            #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-                return make_maybe_boxed_int64(ctx, result);
-            #else
-                return make_maybe_boxed_int(ctx, result);
-            #endif
+    if (term_is_float(arg1)) {
+        avm_float_t fvalue = term_to_float(arg1);
+        if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+            RAISE_ERROR(OVERFLOW_ATOM);
         }
-    #endif
+
+        avm_int64_t result;
+        #if AVM_USE_SINGLE_PRECISION
+            result = truncf(fvalue);
+        #else
+            result = trunc(fvalue);
+        #endif
+
+        #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+            return make_maybe_boxed_int64(ctx, result);
+        #else
+            return make_maybe_boxed_int(ctx, result);
+        #endif
+    }
 
     if (term_is_any_integer(arg1)) {
         return arg1;
@@ -1369,97 +1331,108 @@ term bif_erlang_xor_2(Context *ctx, term arg1, term arg2)
 
 term bif_erlang_equal_to_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
-    if (term_equals(arg1, arg2, ctx)) {
+    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
+    if (result == TermEquals) {
         return TRUE_ATOM;
-    } else {
+    } else if (result & (TermLessThan | TermGreaterThan)) {
         return FALSE_ATOM;
+    } else {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 }
 
 term bif_erlang_not_equal_to_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
-    //TODO: fix this implementation
-    //it should compare any kind of type, and 5.0 != 5 is false
-    if (!term_equals(arg1, arg2, ctx)) {
+    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
+    if (result & (TermLessThan | TermGreaterThan)) {
         return TRUE_ATOM;
-    } else {
+    } else if (result == TermEquals) {
         return FALSE_ATOM;
+    } else {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 }
 
 term bif_erlang_exactly_equal_to_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
     //TODO: 5.0 != 5
-    if (term_equals(arg1, arg2, ctx)) {
+    TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
+    if (result == TermEquals) {
         return TRUE_ATOM;
-    } else {
+    } else if (result & (TermLessThan | TermGreaterThan)) {
         return FALSE_ATOM;
+    } else {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 }
 
 term bif_erlang_exactly_not_equal_to_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
-    //TODO: 5.0 != 5
-    if (!term_equals(arg1, arg2, ctx)) {
+    TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
+    if (result & (TermLessThan | TermGreaterThan)) {
         return TRUE_ATOM;
-    } else {
+    } else if (result == TermEquals) {
         return FALSE_ATOM;
+    } else {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 }
 
 term bif_erlang_greater_than_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
-    if (term_compare(arg1, arg2, ctx) > 0) {
+    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
+    if (result == TermGreaterThan) {
         return TRUE_ATOM;
-    } else {
+    } else if (result & (TermEquals | TermLessThan)) {
         return FALSE_ATOM;
+    } else {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 }
 
 term bif_erlang_less_than_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
-    if (term_compare(arg1, arg2, ctx) < 0) {
+    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
+    if (result == TermLessThan) {
         return TRUE_ATOM;
-    } else {
+    } else if (result & (TermEquals | TermGreaterThan)) {
         return FALSE_ATOM;
+    } else {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 }
 
 term bif_erlang_less_than_or_equal_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
-    if (term_compare(arg1, arg2, ctx) <= 0) {
+    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
+    if (result & (TermLessThan | TermEquals)) {
         return TRUE_ATOM;
-    } else {
+    } else if (result == TermGreaterThan) {
         return FALSE_ATOM;
+    } else {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 }
 
 term bif_erlang_greater_than_or_equal_2(Context *ctx, term arg1, term arg2)
 {
-    UNUSED(ctx);
-
-    if (term_compare(arg1, arg2, ctx) >= 0) {
+    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
+    if (result & (TermGreaterThan | TermEquals)) {
         return TRUE_ATOM;
-    } else {
+    } else if (result & TermLessThan) {
         return FALSE_ATOM;
+    } else {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 }
 
 term bif_erlang_get_1(Context *ctx, term arg1)
 {
-    return dictionary_get(&ctx->dictionary, ctx, arg1);
+    term value;
+    DictionaryFunctionResult result = dictionary_get(&ctx->dictionary, arg1, &value, ctx->global);
+    if (UNLIKELY(result != DictionaryOk)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return value;
 }

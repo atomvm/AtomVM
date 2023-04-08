@@ -245,4 +245,18 @@ static inline __attribute__((always_inline)) void *cast_func_to_void_ptr(func_pt
 #define CONTAINER_OF(ptr, type, member) \
     ((type *) (((char *) (ptr)) - offsetof(type, member)))
 
+#ifdef __GNUC__
+    #define PRINTF_FORMAT_ARGS(str_pos, arg_pos) \
+        __attribute__ ((format (printf, str_pos, arg_pos)))
+#else
+    #define PRINTF_FORMAT_ARGS(...)
+#endif
+
+#ifdef __GNUC__
+    #define NO_DISCARD \
+        __attribute__ ((warn_unused_result))
+#else
+    #define NO_DISCARD(...)
+#endif
+
 #endif

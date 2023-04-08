@@ -34,6 +34,7 @@ test() ->
     ok = test_cast(),
     ok = test_info(),
     ok = test_timeout(),
+    ok = test_start_link(),
     ok.
 
 test_call() ->
@@ -87,6 +88,18 @@ test_timeout() ->
     gen_statem:stop(Pid),
     ok.
 
+test_start_link() ->
+    {ok, Pid} = gen_statem:start_link(?MODULE, [], []),
+
+    pong = gen_statem:call(Pid, ping),
+
+    erlang:process_flag(trap_exit, true),
+    ok = gen_statem:cast(Pid, crash),
+    receive
+        {'EXIT', Pid, _Reason} -> ok
+    after 30000 -> timeout
+    end.
+
 %%
 %% callbacks
 %%
@@ -107,7 +120,9 @@ initial({call, From}, get_num_casts, #data{num_casts = NumCasts} = Data) ->
 initial({call, From}, get_num_infos, #data{num_infos = NumInfos} = Data) ->
     {next_state, initial, Data#data{num_infos = 0}, [{reply, From, NumInfos}]};
 initial({call, From}, {go_to_jail, Ms}, Data) ->
-    {next_state, jail, Data, [{reply, From, ok}, {state_timeout, Ms, you_are_free}]}.
+    {next_state, jail, Data, [{reply, From, ok}, {state_timeout, Ms, you_are_free}]};
+initial(cast, crash, _Data) ->
+    throw(test_crash).
 
 jail({call, From}, are_you_free, Data) ->
     {next_state, jail, Data, [{reply, From, no}]};

@@ -44,11 +44,9 @@
 #include <string.h>
 #include <time.h>
 
-#ifndef AVM_NO_FP
 #include <errno.h>
 #include <fenv.h>
 #include <math.h>
-#endif
 
 #define MAX_NIF_NAME_LEN 260
 #define FLOAT_BUF_SIZE 64
@@ -746,13 +744,16 @@ static term nif_erlang_iolist_size_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-    int ok;
-    avm_int_t size = interop_iolist_size(argv[0], &ok);
-
-    if (ok) {
-        return term_from_int(size);
-    } else {
-        RAISE_ERROR(BADARG_ATOM);
+    size_t size;
+    switch (interop_iolist_size(argv[0], &size)) {
+        case InteropOk:
+            return term_from_int(size);
+        case InteropMemoryAllocFail:
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        case InteropBadArg:
+            RAISE_ERROR(BADARG_ATOM);
+        default:
+            RAISE_ERROR(BADARG_ATOM);
     }
 }
 
@@ -766,10 +767,14 @@ static term nif_erlang_iolist_to_binary_1(Context *ctx, int argc, term argv[])
         return t;
     }
 
-    int ok;
-    int bin_size = interop_iolist_size(t, &ok);
-    if (!ok) {
-        RAISE_ERROR(BADARG_ATOM);
+    size_t bin_size;
+    switch (interop_iolist_size(t, &bin_size)) {
+        case InteropOk:
+            break;
+        case InteropMemoryAllocFail:
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        case InteropBadArg:
+            RAISE_ERROR(BADARG_ATOM);
     }
 
     char *bin_buf = malloc(bin_size);
@@ -777,11 +782,19 @@ static term nif_erlang_iolist_to_binary_1(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    if (UNLIKELY(!interop_write_iolist(t, bin_buf))) {
-        RAISE_ERROR(BADARG_ATOM);
+    switch (interop_write_iolist(t, bin_buf)) {
+        case InteropOk:
+            break;
+        case InteropMemoryAllocFail:
+            free(bin_buf);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        case InteropBadArg:
+            free(bin_buf);
+            RAISE_ERROR(BADARG_ATOM);
     }
 
     if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(bin_size) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+        free(bin_buf);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term bin_res = term_from_literal_binary(bin_buf, bin_size, ctx);
@@ -1608,7 +1621,6 @@ static term nif_erlang_binary_to_integer_1(Context *ctx, int argc, term argv[])
     return make_maybe_boxed_int64(ctx, value);
 }
 
-#ifndef AVM_NO_FP
 static int is_valid_float_string(const char *str, int len)
 {
     int has_point = 0;
@@ -1663,13 +1675,11 @@ static term parse_float(Context *ctx, const char *buf, int len)
     }
     return term_from_float(fvalue, ctx);
 }
-#endif
 
 static term nif_erlang_binary_to_float_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-#ifndef AVM_NO_FP
     term bin_term = argv[0];
     VALIDATE_VALUE(bin_term, term_is_binary);
 
@@ -1677,19 +1687,12 @@ static term nif_erlang_binary_to_float_1(Context *ctx, int argc, term argv[])
     int bin_data_size = term_binary_size(bin_term);
 
     return parse_float(ctx, bin_data, bin_data_size);
-
-#else
-    UNUSED(ctx);
-    UNUSED(argv);
-    RAISE_ERROR(BADARG_ATOM);
-#endif
 }
 
 static term nif_erlang_list_to_float_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-#ifndef AVM_NO_FP
     term t = argv[0];
     VALIDATE_VALUE(t, term_is_list);
 
@@ -1709,11 +1712,6 @@ static term nif_erlang_list_to_float_1(Context *ctx, int argc, term argv[])
     free(string);
 
     return res_term;
-#else
-    UNUSED(ctx);
-    UNUSED(argv);
-    RAISE_ERROR(BADARG_ATOM);
-#endif
 }
 
 static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[])
@@ -1973,7 +1971,6 @@ static term nif_erlang_integer_to_list_2(Context *ctx, int argc, term argv[])
     return prev;
 }
 
-#ifndef AVM_NO_FP
 static int format_float(term value, int scientific, int decimals, int compact, char *out_buf, int outbuf_len)
 {
     // %lf and %f are the same since C99 due to double promotion.
@@ -2061,13 +2058,11 @@ int get_float_format_opts(term opts, int *scientific, int *decimals, int *compac
 
     return 1;
 }
-#endif
 
 static term nif_erlang_float_to_binary(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-#ifndef AVM_NO_FP
     term float_term = argv[0];
     VALIDATE_VALUE(float_term, term_is_float);
 
@@ -2094,18 +2089,12 @@ static term nif_erlang_float_to_binary(Context *ctx, int argc, term argv[])
     }
 
     return term_from_literal_binary(float_buf, len, ctx);
-#else
-    UNUSED(ctx);
-    UNUSED(argv);
-    RAISE_ERROR(BADARG_ATOM);
-#endif
 }
 
 static term nif_erlang_float_to_list(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-#ifndef AVM_NO_FP
     term float_term = argv[0];
     VALIDATE_VALUE(float_term, term_is_float);
 
@@ -2137,11 +2126,6 @@ static term nif_erlang_float_to_list(Context *ctx, int argc, term argv[])
     }
 
     return prev;
-#else
-    UNUSED(ctx);
-    UNUSED(argv);
-    RAISE_ERROR(BADARG_ATOM);
-#endif
 }
 
 static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
@@ -2481,11 +2465,9 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
         }
         return term_from_string((const uint8_t *) "ATOM", sizeof("ATOM") - 1, ctx);
     }
-#ifndef AVM_NO_FP
     if (key == AVM_FLOATSIZE_ATOM) {
         return term_from_int32(sizeof(avm_float_t));
     }
-#endif
     if (key == SYSTEM_ARCHITECTURE_ATOM) {
         char buf[128];
         snprintf(buf, 128, "%s-%s-%s", SYSTEM_NAME, SYSTEM_VERSION, SYSTEM_ARCHITECTURE);
@@ -2565,7 +2547,8 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
     uint8_t return_used = 0;
-    if (argc == 2 && term_list_member(argv[1], USED_ATOM, ctx)) {
+    if (argc == 2
+        && interop_proplist_get_value_default(argv[1], USED_ATOM, FALSE_ATOM) == TRUE_ATOM) {
         return_used = 1;
     }
     term dst = term_invalid_term();
@@ -2978,14 +2961,26 @@ static term nif_erlang_put_2(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-    return dictionary_put(&ctx->dictionary, ctx, argv[0], argv[1]);
+    term old;
+    DictionaryFunctionResult result = dictionary_put(&ctx->dictionary, argv[0], argv[1], &old, ctx->global);
+    if (UNLIKELY(result != DictionaryOk)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return old;
 }
 
 static term nif_erlang_erase_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-    return dictionary_erase(&ctx->dictionary, ctx, argv[0]);
+    term old;
+    DictionaryFunctionResult result = dictionary_erase(&ctx->dictionary, argv[0], &old, ctx->global);
+    if (UNLIKELY(result != DictionaryOk)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return old;
 }
 
 static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
@@ -3202,21 +3197,30 @@ static term nif_console_print(Context *ctx, int argc, term argv[])
         unsigned long n = term_binary_size(t);
         fprintf(stdout, "%.*s", (int) n, data);
     } else {
-        VALIDATE_VALUE(t, term_is_list);
-        int ok;
-        int size = interop_iolist_size(t, &ok);
-        if (!ok) {
-            RAISE_ERROR(BADARG_ATOM);
+        size_t size;
+        switch (interop_iolist_size(t, &size)) {
+            case InteropOk:
+                break;
+            case InteropMemoryAllocFail:
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            case InteropBadArg:
+                RAISE_ERROR(BADARG_ATOM);
         }
         char *buf = malloc(size);
         if (IS_NULL_PTR(buf)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        if (UNLIKELY(!interop_write_iolist(t, buf))) {
-            free(buf);
-            RAISE_ERROR(BADARG_ATOM);
+        switch (interop_write_iolist(t, buf)) {
+            case InteropOk:
+                break;
+            case InteropMemoryAllocFail:
+                free(buf);
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            case InteropBadArg:
+                free(buf);
+                RAISE_ERROR(BADARG_ATOM);
         }
-        fprintf(stdout, "%.*s", size, buf);
+        fprintf(stdout, "%.*s", (int) size, buf);
         fflush(stdout);
         free(buf);
     }
@@ -3240,10 +3244,13 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
             return return_binary ? src : term_nil();
         }
     } else if (term_is_list(src)) {
-        int ok;
-        src_size = interop_iolist_size(src, &ok);
-        if (UNLIKELY(!ok)) {
-            RAISE_ERROR(BADARG_ATOM);
+        switch (interop_iolist_size(src, &src_size)) {
+            case InteropOk:
+                break;
+            case InteropMemoryAllocFail:
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            case InteropBadArg:
+                RAISE_ERROR(BADARG_ATOM);
         }
         if (src_size == 0) {
             if (return_binary) {
@@ -3259,9 +3266,15 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
         if (IS_NULL_PTR(src_buf)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        if (UNLIKELY(!interop_write_iolist(src, (char *) src_buf))) {
-            free(src_buf);
-            RAISE_ERROR(BADARG_ATOM);
+        switch (interop_write_iolist(src, (char *) src_buf)) {
+            case InteropOk:
+                break;
+            case InteropMemoryAllocFail:
+                free(src_buf);
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            case InteropBadArg:
+                free(src_buf);
+                RAISE_ERROR(BADARG_ATOM);
         }
         src_pos = src_buf;
     } else {
@@ -3378,10 +3391,13 @@ static term base64_decode(Context *ctx, int argc, term argv[], bool return_binar
         }
         src_pos = (uint8_t *) term_binary_data(src);
     } else if (term_is_list(src)) {
-        int ok;
-        src_size = interop_iolist_size(src, &ok);
-        if (UNLIKELY(!ok)) {
-            RAISE_ERROR(BADARG_ATOM);
+        switch (interop_iolist_size(src, &src_size)) {
+            case InteropOk:
+                break;
+            case InteropMemoryAllocFail:
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            case InteropBadArg:
+                RAISE_ERROR(BADARG_ATOM);
         }
         if (src_size == 0) {
             if (return_binary) {
@@ -3401,9 +3417,15 @@ static term base64_decode(Context *ctx, int argc, term argv[], bool return_binar
         if (IS_NULL_PTR(src_buf)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        if (UNLIKELY(!interop_write_iolist(src, (char *) src_buf))) {
-            free(src_buf);
-            RAISE_ERROR(BADARG_ATOM);
+        switch (interop_write_iolist(src, (char *) src_buf)) {
+            case InteropOk:
+                break;
+            case InteropMemoryAllocFail:
+                free(src_buf);
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            case InteropBadArg:
+                free(src_buf);
+                RAISE_ERROR(BADARG_ATOM);
         }
         src_pos = src_buf;
     } else {
@@ -3542,8 +3564,6 @@ static term nif_maps_next(Context *ctx, int argc, term argv[])
     return ret;
 }
 
-#ifndef AVM_NO_FP
-
 //
 // MAINTENANCE NOTE: Exception handling for fp operations using math
 // error handling is designed to be thread-safe, as errors are specified
@@ -3652,26 +3672,6 @@ static term math_binary_op(Context *ctx, term x_term, term y_term, binary_math_f
             return t;                                                   \
         }                                                               \
     }
-
-#else
-
-#define DEFINE_UNARY_MATH_OP(moniker)                                   \
-    static term nif_math_##moniker(Context *ctx, int argc, term argv[]) \
-    {                                                                   \
-        UNUSED(ctx);                                                    \
-        UNUSED(argv);                                                   \
-        RAISE_ERROR(BADARG_ATOM);                                       \
-    }
-
-#define DEFINE_BINARY_MATH_OP(moniker)                                  \
-    static term nif_math_##moniker(Context *ctx, int argc, term argv[]) \
-    {                                                                   \
-        UNUSED(ctx);                                                    \
-        UNUSED(argv);                                                   \
-        RAISE_ERROR(BADARG_ATOM);                                       \
-    }
-
-#endif
 
 DEFINE_UNARY_MATH_OP(cos)
 DEFINE_UNARY_MATH_OP(acos)

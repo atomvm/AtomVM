@@ -381,7 +381,6 @@ typedef union
     DECODE_VALUE32(reg, code_chunk, base_index, off);                                                   \
 }
 
-#ifndef AVM_NO_FP
 #define DECODE_ALLOCATOR_LIST(need, code_chunk, base_index, off)                        \
     if (IS_EXTENDED_ALLOCATOR(code_chunk, base_index, off)) {                           \
         need = 0;                                                                       \
@@ -401,28 +400,6 @@ typedef union
     } else {                                                                            \
         DECODE_LITERAL(need, code_chunk, base_index, off);                              \
     }
-#else
-#define DECODE_ALLOCATOR_LIST(need, code_chunk, base_index, off)                        \
-    if (IS_EXTENDED_ALLOCATOR(code_chunk, base_index, off)) {                           \
-        need = 0;                                                                       \
-        off++; /* skip list tag */                                                      \
-        uint32_t list_size;                                                             \
-        DECODE_LITERAL(list_size, code_chunk, base_index, off);                         \
-        uint32_t allocator_tag;                                                         \
-        uint32_t allocator_size;                                                        \
-        for (uint32_t j = 0; j < list_size; j++) {                                      \
-            DECODE_LITERAL(allocator_tag, code_chunk, base_index, off);                 \
-            DECODE_LITERAL(allocator_size, code_chunk, base_index, off);                \
-            if (allocator_size > 0 && allocator_tag == COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FLOATS) { \
-                fprintf(stderr, "Found allocation of fp terms while FP support is disabled\n"); \
-                AVM_ABORT();                                                            \
-            }                                                                           \
-            need += allocator_size;                                                     \
-        }                                                                               \
-    } else {                                                                            \
-        DECODE_LITERAL(need, code_chunk, base_index, off);                              \
-    }
-#endif
 
 #endif
 
@@ -667,7 +644,6 @@ typedef union
 #define DECODE_YREG(reg, code_chunk, base_index, off) \
     DECODE_VALUE(reg, code_chunk, base_index, off)
 
-#ifndef AVM_NO_FP
 #define DECODE_ALLOCATOR_LIST(need, code_chunk, base_index, off)                        \
     if (IS_EXTENDED_ALLOCATOR(code_chunk, base_index, off)) {                           \
         need = 0;                                                                       \
@@ -687,24 +663,6 @@ typedef union
     } else {                                                                            \
         DECODE_LITERAL(need, code_chunk, base_index, off);                              \
     }
-#else
-#define DECODE_ALLOCATOR_LIST(need, code_chunk, base_index, off)                        \
-    if (IS_EXTENDED_ALLOCATOR(code_chunk, base_index, off)) {                           \
-        need = 0;                                                                       \
-        off++; /* skip list tag */                                                      \
-        uint32_t list_size;                                                             \
-        DECODE_LITERAL(list_size, code_chunk, base_index, off);                         \
-        uint32_t allocator_tag;                                                         \
-        uint32_t allocator_size;                                                        \
-        for (uint32_t j = 0; j < list_size; j++) {                                      \
-            DECODE_LITERAL(allocator_tag, code_chunk, base_index, off);                 \
-            DECODE_LITERAL(allocator_size, code_chunk, base_index, off);                \
-            need += allocator_size;                                                     \
-        }                                                                               \
-    } else {                                                                            \
-        DECODE_LITERAL(need, code_chunk, base_index, off);                              \
-    }
-#endif
 
 #endif
 
@@ -980,7 +938,7 @@ struct kv_pair
     term value;
 };
 
-static void sort_kv_pairs(Context *ctx, struct kv_pair *kv, int size)
+static bool sort_kv_pairs(struct kv_pair *kv, int size, GlobalContext *global)
 {
     int k = size;
     while (1 < k) {
@@ -988,9 +946,12 @@ static void sort_kv_pairs(Context *ctx, struct kv_pair *kv, int size)
         for (int i = 1; i < k; i++) {
             term t_max = kv[max_pos].key;
             term t = kv[i].key;
-            int c = term_compare(t, t_max, ctx);
-            if (0 < c) {
+            // TODO: not sure if exact is the right choice here
+            TermCompareResult result = term_compare(t, t_max, TermCompareExact, global);
+            if (result == TermGreaterThan) {
                 max_pos = i;
+            } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+                return false;
             }
         }
         if (max_pos != k - 1) {
@@ -999,6 +960,8 @@ static void sort_kv_pairs(Context *ctx, struct kv_pair *kv, int size)
         k--;
         // kv[k..size] sorted
     }
+
+    return true;
 }
 
 static int get_catch_label_and_change_module(Context *ctx, Module **mod)
@@ -2368,10 +2331,13 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_lt/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
-                    if (term_compare(arg1, arg2, ctx) < 0) {
+                    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
+                    if (result == TermLessThan) {
                         NEXT_INSTRUCTION(next_off);
-                    } else {
+                    } else if (result & (TermGreaterThan | TermEquals)) {
                         i = POINTER_TO_II(mod->labels[label]);
+                    } else {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
 
@@ -2397,10 +2363,13 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_ge/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
-                    if (term_compare(arg1, arg2, ctx) >= 0) {
+                    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
+                    if (result & (TermGreaterThan | TermEquals)) {
                         NEXT_INSTRUCTION(next_off);
-                    } else {
+                    } else if (result == TermLessThan) {
                         i = POINTER_TO_II(mod->labels[label]);
+                    } else {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
 
@@ -2426,11 +2395,13 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_equal/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
-                    //TODO: implement this
-                    if (term_equals(arg1, arg2, ctx)) {
+                    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
+                    if (result == TermEquals) {
                         NEXT_INSTRUCTION(next_off);
-                    } else {
+                    } else if (result & (TermLessThan | TermGreaterThan)) {
                         i = POINTER_TO_II(mod->labels[label]);
+                    } else {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
 
@@ -2456,10 +2427,13 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_not_equal/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
-                    if (!term_equals(arg1, arg2, ctx)) {
+                    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
+                    if (result & (TermLessThan | TermGreaterThan)) {
                         NEXT_INSTRUCTION(next_off);
-                    } else {
+                    } else if (result == TermEquals) {
                         i = POINTER_TO_II(mod->labels[label]);
+                    } else {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
 
@@ -2485,11 +2459,13 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_eq_exact/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
-                    //TODO: implement this
-                    if (term_exactly_equals(arg1, arg2, ctx)) {
+                    TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
+                    if (result == TermEquals) {
                         NEXT_INSTRUCTION(next_off);
-                    } else {
+                    } else if (result & (TermLessThan | TermGreaterThan)) {
                         i = POINTER_TO_II(mod->labels[label]);
+                    } else {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
 
@@ -2515,11 +2491,13 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_not_eq_exact/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
-                    //TODO: implement this
-                    if (!term_exactly_equals(arg1, arg2, ctx)) {
+                    TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
+                    if (result & (TermLessThan | TermGreaterThan)) {
                         NEXT_INSTRUCTION(next_off);
-                    } else {
+                    } else if (result == TermEquals) {
                         i = POINTER_TO_II(mod->labels[label]);
+                    } else {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
 
@@ -2570,16 +2548,11 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_float/2, label=%i, arg1=%lx\n", label, arg1);
 
-#ifndef AVM_NO_FP
                     if (term_is_float(arg1)) {
                         NEXT_INSTRUCTION(next_off);
                     } else {
                         i = POINTER_TO_II(mod->labels[label]);
                     }
-#else
-                    fprintf(stderr, "Warning: is_float/1 unsupported on this platform\n");
-                    i = POINTER_TO_II(mod->labels[label]);
-#endif
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -3817,6 +3790,94 @@ wait_timeout_trap_handler:
                 break;
             }
 
+            case OP_BS_GET_UTF8: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off)
+                #ifdef IMPL_EXECUTE_LOOP
+                    int next_off_back = next_off;
+                #endif
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off);
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, code, i, next_off);
+                term arg3;
+                DECODE_COMPACT_TERM(arg3, code, i, next_off);
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_get_utf8/5\n");
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("bs_get_utf8/5, fail=%i src=0x%lx arg2=0x%lx arg3=0x%lx dreg=%c%i\n", fail, src, arg2, arg3, T_DEST_REG(dreg_type, dreg));
+
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf8");
+
+                    term src_bin = term_get_match_state_binary(src);
+                    avm_int_t offset_bits = term_get_match_state_offset(src);
+
+                    int32_t val = 0;
+                    size_t out_size = 0;
+                    bool is_valid = bitstring_match_utf8(src_bin, (size_t) offset_bits, &val, &out_size);
+
+                    if (!is_valid) {
+                        i = POINTER_TO_II(mod->labels[fail]);
+                    } else {
+                        term_set_match_state_offset(src, offset_bits + (out_size * 8));
+                        WRITE_REGISTER(dreg_type, dreg, term_from_int(val));
+                        NEXT_INSTRUCTION(next_off);
+                    }
+                #endif
+
+                break;
+            }
+
+            case OP_BS_SKIP_UTF8: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off)
+                #ifdef IMPL_EXECUTE_LOOP
+                    int next_off_back = next_off;
+                #endif
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off);
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, code, i, next_off);
+                term arg3;
+                DECODE_COMPACT_TERM(arg3, code, i, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_skip_utf8/4\n");
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("bs_skip_utf8/4, fail=%i src=0x%lx arg2=0x%lx arg3=0x%lx\n", fail, src, arg2, arg3);
+
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf8");
+
+                    term src_bin = term_get_match_state_binary(src);
+                    avm_int_t offset_bits = term_get_match_state_offset(src);
+
+                    int32_t c = 0;
+                    size_t out_size = 0;
+                    bool is_valid = bitstring_match_utf8(src_bin, (size_t) offset_bits, &c, &out_size);
+
+                    if (!is_valid) {
+                        i = POINTER_TO_II(mod->labels[fail]);
+                    } else {
+                        term_set_match_state_offset(src, offset_bits + (out_size * 8));
+                        NEXT_INSTRUCTION(next_off);
+                    }
+                #endif
+
+                break;
+            }
+
            case OP_BS_UTF16_SIZE: {
                 int next_off = 1;
                 uint32_t fail;
@@ -3883,6 +3944,94 @@ wait_timeout_trap_handler:
                 break;
             }
 
+            case OP_BS_GET_UTF16: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off)
+                #ifdef IMPL_EXECUTE_LOOP
+                    int next_off_back = next_off;
+                #endif
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off);
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, code, i, next_off);
+                term flags;
+                DECODE_LITERAL(flags, code, i, next_off);
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_get_utf16/5\n");
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("bs_get_utf16/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%lx dreg=%c%i\n", fail, src, arg2, flags, T_DEST_REG(dreg_type, dreg));
+
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf16");
+
+                    term src_bin = term_get_match_state_binary(src);
+                    avm_int_t offset_bits = term_get_match_state_offset(src);
+
+                    int32_t val = 0;
+                    size_t out_size = 0;
+                    bool is_valid = bitstring_match_utf16(src_bin, (size_t) offset_bits, &val, &out_size, flags);
+
+                    if (!is_valid) {
+                        i = POINTER_TO_II(mod->labels[fail]);
+                    } else {
+                        term_set_match_state_offset(src, offset_bits + (out_size * 8));
+                        WRITE_REGISTER(dreg_type, dreg, term_from_int(val));
+                        NEXT_INSTRUCTION(next_off);
+                    }
+                #endif
+
+                break;
+            }
+
+            case OP_BS_SKIP_UTF16: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off)
+                #ifdef IMPL_EXECUTE_LOOP
+                    int next_off_back = next_off;
+                #endif
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off);
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, code, i, next_off);
+                term flags;
+                DECODE_LITERAL(flags, code, i, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_skip_utf16/5\n");
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("bs_skip_utf16/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%lx\n", fail, src, arg2, flags);
+
+                    VERIFY_IS_MATCH_STATE(src, "bs_skip_utf16");
+
+                    term src_bin = term_get_match_state_binary(src);
+                    avm_int_t offset_bits = term_get_match_state_offset(src);
+
+                    int32_t val = 0;
+                    size_t out_size = 0;
+                    bool is_valid = bitstring_match_utf16(src_bin, (size_t) offset_bits, &val, &out_size, flags);
+
+                    if (!is_valid) {
+                        i = POINTER_TO_II(mod->labels[fail]);
+                    } else {
+                        term_set_match_state_offset(src, offset_bits + (out_size * 8));
+                        NEXT_INSTRUCTION(next_off);
+                    }
+                #endif
+
+                break;
+            }
+
             case OP_BS_PUT_UTF32: {
                 int next_off = 1;
                 uint32_t fail;
@@ -3918,6 +4067,92 @@ wait_timeout_trap_handler:
                     ctx->bs_offset += 4 * 8;
                 #endif
                 NEXT_INSTRUCTION(next_off);
+                break;
+            }
+
+            case OP_BS_GET_UTF32: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off)
+                #ifdef IMPL_EXECUTE_LOOP
+                    int next_off_back = next_off;
+                #endif
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off);
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, code, i, next_off);
+                term flags;
+                DECODE_LITERAL(flags, code, i, next_off);
+                dreg_t dreg;
+                dreg_type_t dreg_type;
+                DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_get_utf32/5\n");
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("bs_get_utf32/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%lx dreg=%c%i\n", fail, src, arg2, flags, T_DEST_REG(dreg_type, dreg));
+
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf32");
+
+                    term src_bin = term_get_match_state_binary(src);
+                    avm_int_t offset_bits = term_get_match_state_offset(src);
+
+                    int32_t val = 0;
+                    bool is_valid = bitstring_match_utf32(src_bin, (size_t) offset_bits, &val, flags);
+
+                    if (!is_valid) {
+                        i = POINTER_TO_II(mod->labels[fail]);
+                    } else {
+                        term_set_match_state_offset(src, offset_bits + 32);
+                        WRITE_REGISTER(dreg_type, dreg, term_from_int(val));
+                        NEXT_INSTRUCTION(next_off);
+                    }
+                #endif
+
+                break;
+            }
+
+            case OP_BS_SKIP_UTF32: {
+                int next_off = 1;
+                uint32_t fail;
+                DECODE_LABEL(fail, code, i, next_off)
+                #ifdef IMPL_EXECUTE_LOOP
+                    int next_off_back = next_off;
+                #endif
+                term src;
+                DECODE_COMPACT_TERM(src, code, i, next_off);
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, code, i, next_off);
+                term flags;
+                DECODE_LITERAL(flags, code, i, next_off);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_skip_utf32/5\n");
+                    NEXT_INSTRUCTION(next_off);
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("bs_skip_utf32/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%lx\n", fail, src, arg2, flags);
+
+                    VERIFY_IS_MATCH_STATE(src, "bs_skip_utf32");
+
+                    term src_bin = term_get_match_state_binary(src);
+                    avm_int_t offset_bits = term_get_match_state_offset(src);
+
+                    int32_t val = 0;
+                    bool is_valid = bitstring_match_utf32(src_bin, (size_t) offset_bits, &val, flags);
+
+                    if (!is_valid) {
+                        i = POINTER_TO_II(mod->labels[fail]);
+                    } else {
+                        term_set_match_state_offset(src, offset_bits + 32);
+                        NEXT_INSTRUCTION(next_off);
+                    }
+                #endif
+
                 break;
             }
 
@@ -5263,8 +5498,11 @@ wait_timeout_trap_handler:
                     DECODE_COMPACT_TERM(value, code, i, next_off);
 
                     #ifdef IMPL_EXECUTE_LOOP
-                        if (term_find_map_pos(ctx, src, key) == -1) {
+                        int map_pos = term_find_map_pos(src, key, ctx->global);
+                        if (map_pos == TERM_MAP_NOT_FOUND) {
                             new_entries++;
+                        } else if (UNLIKELY(map_pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     #endif
                 }
@@ -5295,7 +5533,9 @@ wait_timeout_trap_handler:
                         kv[j].key = key;
                         kv[j].value = value;
                     }
-                    sort_kv_pairs(ctx, kv, num_elements);
+                    if (UNLIKELY(!sort_kv_pairs(kv, num_elements, ctx->global))) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
                     //
                     // Create a new map of the requested size and stitch src
                     // and kv together into new map.  Both src and kv are sorted.
@@ -5317,20 +5557,33 @@ wait_timeout_trap_handler:
                         } else {
                             term src_key = term_get_map_key(src, src_pos);
                             term new_key = kv[kv_pos].key;
-                            int c = term_compare(src_key, new_key, ctx);
-                            if (c < 0) {
-                                term src_value = term_get_map_value(src, src_pos);
-                                term_set_map_assoc(map, j, src_key, src_value);
-                                src_pos++;
-                            } else if (0 < c) {
-                                term new_value = kv[kv_pos].value;
-                                term_set_map_assoc(map, j, new_key, new_value);
-                                kv_pos++;
-                            } else { // keys are the same
-                                term new_value = kv[kv_pos].value;
-                                term_set_map_assoc(map, j, src_key, new_value);
-                                src_pos++;
-                                kv_pos++;
+                            // TODO: not sure if exact is the right choice here
+                            switch (term_compare(src_key, new_key, TermCompareExact, ctx->global)) {
+                                case TermLessThan: {
+                                    term src_value = term_get_map_value(src, src_pos);
+                                    term_set_map_assoc(map, j, src_key, src_value);
+                                    src_pos++;
+                                    break;
+                                }
+
+                                case TermGreaterThan: {
+                                    term new_value = kv[kv_pos].value;
+                                    term_set_map_assoc(map, j, new_key, new_value);
+                                    kv_pos++;
+                                    break;
+                                }
+
+                                case TermEquals: {
+                                    term new_value = kv[kv_pos].value;
+                                    term_set_map_assoc(map, j, src_key, new_value);
+                                    src_pos++;
+                                    kv_pos++;
+                                    break;
+                                }
+
+                                case TermCompareMemoryAllocFail: {
+                                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                                }
                             }
                         }
                     }
@@ -5376,8 +5629,11 @@ wait_timeout_trap_handler:
                     DECODE_COMPACT_TERM(value, code, i, next_off);
 
                     #ifdef IMPL_EXECUTE_LOOP
-                        if (term_find_map_pos(ctx, src, key) == -1) {
+                        int map_pos = term_find_map_pos(src, key, ctx->global);
+                        if (map_pos == TERM_MAP_NOT_FOUND) {
                             RAISE_ERROR(BADARG_ATOM);
+                        } else if (map_pos == TERM_MAP_MEMORY_ALLOC_FAIL) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     #endif
                 }
@@ -5405,7 +5661,10 @@ wait_timeout_trap_handler:
                         term key, value;
                         DECODE_COMPACT_TERM(key, code, i, list_off);
                         DECODE_COMPACT_TERM(value, code, i, list_off);
-                        int pos = term_find_map_pos(ctx, src, key);
+                        int pos = term_find_map_pos(src, key, ctx->global);
+                        if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        }
                         term_set_map_assoc(map, pos, key, value);
                     }
                     WRITE_REGISTER(dreg_type, dreg, map);
@@ -5461,10 +5720,12 @@ wait_timeout_trap_handler:
                     DECODE_COMPACT_TERM(key, code, i, next_off);
 
                     #ifdef IMPL_EXECUTE_LOOP
-                        int pos = term_find_map_pos(ctx, src, key);
-                        if (pos == -1) {
+                        int pos = term_find_map_pos(src, key, ctx->global);
+                        if (pos == TERM_MAP_NOT_FOUND) {
                             i = POINTER_TO_II(mod->labels[label]);
                             fail = 1;
+                        } else if (pos == TERM_MAP_MEMORY_ALLOC_FAIL) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     #endif
                 }
@@ -5495,10 +5756,12 @@ wait_timeout_trap_handler:
                     DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
 
                     #ifdef IMPL_EXECUTE_LOOP
-                        int pos = term_find_map_pos(ctx, src, key);
-                        if (pos == -1) {
+                        int pos = term_find_map_pos(src, key, ctx->global);
+                        if (pos == TERM_MAP_NOT_FOUND) {
                             i = POINTER_TO_II(mod->labels[label]);
                             fail = 1;
+                        } else if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         } else {
                             term value = term_get_map_value(src, pos);
                             WRITE_REGISTER(dreg_type, dreg, value);
@@ -5542,7 +5805,6 @@ wait_timeout_trap_handler:
                 break;
             }
 
-#ifndef AVM_NO_FP
             case OP_FCLEARERROR: {
                 // This can be a noop as we raise from bifs
                 TRACE("fclearerror/0\n");
@@ -5806,7 +6068,6 @@ wait_timeout_trap_handler:
                 NEXT_INSTRUCTION(next_off);
                 break;
             }
-#endif
 
             case OP_BUILD_STACKTRACE: {
                 int next_off = 1;
@@ -6456,8 +6717,12 @@ wait_timeout_trap_handler:
                     DECODE_COMPACT_TERM(update_value, code, i, next_off);
                     #ifdef IMPL_EXECUTE_LOOP
                         if (reuse) {
-                            if (term_exactly_equals(update_value, term_get_tuple_element(dst, update_ix - 1), ctx)) {
+                            term old_value = term_get_tuple_element(dst, update_ix - 1);
+                            TermCompareResult result = term_compare(update_value, old_value, TermCompareExact, ctx->global);
+                            if (result == TermEquals) {
                                 continue;
+                            } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
                             reuse = false;
                         }

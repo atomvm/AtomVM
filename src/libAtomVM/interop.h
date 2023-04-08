@@ -28,6 +28,13 @@ extern "C" {
 #include "context.h"
 #include "term.h"
 
+typedef enum
+{
+    InteropOk,
+    InteropMemoryAllocFail,
+    InteropBadArg
+} InteropFunctionResult;
+
 /**
  * An idiomatic macro for marking an AtomStringIntPair table entry as a
  * interop_atom_term_select_int default.
@@ -55,8 +62,8 @@ term interop_proplist_get_value_default(term list, term key, term default_value)
 term interop_map_get_value(Context *ctx, term map, term key);
 term interop_map_get_value_default(Context *ctx, term map, term key, term default_value);
 
-int interop_iolist_size(term t, int *ok);
-int interop_write_iolist(term t, char *p);
+NO_DISCARD InteropFunctionResult interop_iolist_size(term t, size_t *size);
+NO_DISCARD InteropFunctionResult interop_write_iolist(term t, char *p);
 
 /**
  * @brief Finds on a table the first matching atom string.

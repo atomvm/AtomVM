@@ -28,23 +28,108 @@
 
 #include <ctype.h>
 #include <inttypes.h>
+#include <stdarg.h>
+#include <stddef.h>
 #include <stdio.h>
+
+//TODO use macro from utils
+#ifndef CONTAINER_OF
+#define CONTAINER_OF(ptr, type, member) \
+    ((type *) (((char *) (ptr)) - offsetof(type, member)))
+#endif
+
+struct FprintfFun
+{
+    PrinterFun base;
+    FILE *stream;
+};
+
+struct SnprintfFun
+{
+    PrinterFun base;
+    int size;
+    char *buf;
+};
 
 const term empty_tuple = 0;
 
+int fprintf_printer(PrinterFun *fun, const char *fmt, ...)
+{
+    int ret;
+
+    va_list args;
+    va_start(args, fmt);
+
+    FILE *stream = CONTAINER_OF(fun, struct FprintfFun, base)->stream;
+    ret = vfprintf(stream, fmt, args);
+
+    va_end(args);
+
+    return ret;
+}
+
+int snprintf_printer(PrinterFun *fun, const char *fmt, ...)
+{
+    int ret;
+
+    va_list args;
+    va_start(args, fmt);
+
+    struct SnprintfFun *snpf = CONTAINER_OF(fun, struct SnprintfFun, base);
+    ret = vsnprintf(snpf->buf, snpf->size, fmt, args);
+    snpf->buf += ret;
+    snpf->size -= ret;
+
+    va_end(args);
+
+    return ret;
+}
+
 void term_display(FILE *fd, term t, const Context *ctx)
+{
+    term_fprint(fd, t, ctx->global);
+}
+
+int term_fprint(FILE *stream, term t, const GlobalContext *global)
+{
+    struct FprintfFun fprintf_fun = {
+        .base = {
+            .print = fprintf_printer
+        },
+        .stream = stream
+    };
+
+    return term_funprint(&fprintf_fun.base, t, global);
+}
+
+int term_snprint(char *buf, size_t size, term t, const GlobalContext *global)
+{
+    struct SnprintfFun snprintf_fun = {
+        .base = {
+            .print = snprintf_printer
+        },
+        .buf = buf,
+        .size = size
+    };
+
+    return term_funprint(&snprintf_fun.base, t, global);
+}
+
+int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
 {
     if (term_is_atom(t)) {
         int atom_index = term_to_atom_index(t);
-        AtomString atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table, atom_index, (unsigned long) NULL);
-        fprintf(fd, "%.*s", (int) atom_string_len(atom_string), (char *) atom_string_data(atom_string));
+        AtomString atom_string = (AtomString) valueshashtable_get_value(
+            global->atoms_ids_table, atom_index, (unsigned long) NULL);
+        return fun->print(fun, "%.*s", (int) atom_string_len(atom_string),
+            (char *) atom_string_data(atom_string));
 
     } else if (term_is_integer(t)) {
         avm_int_t iv = term_to_int(t);
-        fprintf(fd, AVM_INT_FMT, iv);
+        return fun->print(fun, AVM_INT_FMT, iv);
 
     } else if (term_is_nil(t)) {
-        fprintf(fd, "[]");
+        return fun->print(fun, "[]");
 
     } else if (term_is_nonempty_list(t)) {
         int is_printable = 1;
@@ -63,33 +148,55 @@ void term_display(FILE *fd, term t, const Context *ctx)
             int ok;
             char *printable = interop_list_to_string(t, &ok);
             if (LIKELY(ok)) {
-                fprintf(fd, "\"%s\"", printable);
+                int ret = fun->print(fun, "\"%s\"", printable);
                 free(printable);
+                return ret;
             } else {
-                fprintf(fd, "???");
+                return fun->print(fun, "???");
             }
 
         } else {
-            fputc('[', fd);
+            int ret = fun->print(fun, "[");
+            if (UNLIKELY(ret < 0)) {
+                return ret;
+            }
             int display_separator = 0;
             while (term_is_nonempty_list(t)) {
                 if (display_separator) {
-                    fputc(',', fd);
+                    ret += fun->print(fun, ",");
                 } else {
                     display_separator = 1;
                 }
 
-                term_display(fd, term_get_list_head(t), ctx);
+                int printed = term_funprint(fun, term_get_list_head(t), global);
+                if (UNLIKELY(printed < 0)) {
+                    return printed;
+                }
+                ret += printed;
                 t = term_get_list_tail(t);
             }
             if (!term_is_nil(t)) {
-                fputc('|', fd);
-                term_display(fd, t, ctx);
+                int printed = fun->print(fun, "|");
+                if (UNLIKELY(printed < 0)) {
+                    return printed;
+                }
+                ret += printed;
+
+                printed = term_funprint(fun, t, global);
+                if (UNLIKELY(printed < 0)) {
+                    return printed;
+                }
+                ret += printed;
             }
-            fputc(']', fd);
+            int printed = fun->print(fun, "]");
+            if (UNLIKELY(printed < 0)) {
+                return printed;
+            }
+            ret += printed;
+            return ret;
         }
     } else if (term_is_pid(t)) {
-        fprintf(fd, "<0.%i.0>", term_to_local_process_id(t));
+        return fun->print(fun, "<0.%i.0>", term_to_local_process_id(t));
 
     } else if (term_is_function(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
@@ -101,35 +208,77 @@ void term_display(FILE *fd, term t, const Context *ctx)
         #else
                 "#Fun<erl_eval.%lu.%llu>";
         #endif
-        fprintf(fd, format, fun_index, (unsigned long) fun_module);
+        return fun->print(fun, format, fun_index, (unsigned long) fun_module);
 
     } else if (term_is_tuple(t)) {
-        fputc('{', fd);
+        int ret = fun->print(fun, "{");
+        if (UNLIKELY(ret < 0)) {
+            return ret;
+        }
 
         int tuple_size = term_get_tuple_arity(t);
         for (int i = 0; i < tuple_size; i++) {
             if (i != 0) {
-                fputc(',', fd);
+                int printed = fun->print(fun, ",");
+                if (UNLIKELY(printed < 0)) {
+                    return printed;
+                }
+                ret += printed;
             }
-            term_display(fd, term_get_tuple_element(t, i), ctx);
+            int printed = term_funprint(fun, term_get_tuple_element(t, i), global);
+            if (UNLIKELY(printed < 0)) {
+                return printed;
+            }
+            ret += printed;
         }
 
-        fputc('}', fd);
+        int printed = fun->print(fun, "}");
+        if (UNLIKELY(printed < 0)) {
+            return printed;
+        }
+        ret += printed;
+        return ret;
 
     } else if (term_is_map(t)) {
-        fprintf(fd, "#{");
+        int ret = fun->print(fun, "#{");
+        if (UNLIKELY(ret < 0)) {
+            return ret;
+        }
 
         int map_size = term_get_map_size(t);
         for (int i = 0; i < map_size; i++) {
             if (i != 0) {
-                fputc(',', fd);
+                int printed = fun->print(fun, ",");
+                if (UNLIKELY(printed < 0)) {
+                    return printed;
+                }
+                ret += printed;
             }
-            term_display(fd, term_get_map_key(t, i), ctx);
-            fprintf(fd, "=>");
-            term_display(fd, term_get_map_value(t, i), ctx);
+            int printed = term_funprint(fun, term_get_map_key(t, i), global);
+            if (UNLIKELY(printed < 0)) {
+                return printed;
+            }
+            ret += printed;
+
+            printed = fun->print(fun, "=>");
+            if (UNLIKELY(printed < 0)) {
+                return printed;
+            }
+            ret += printed;
+
+            printed = term_funprint(fun, term_get_map_value(t, i), global);
+            if (UNLIKELY(printed < 0)) {
+                return printed;
+            }
+            ret += printed;
         }
 
-        fputc('}', fd);
+        int printed = fun->print(fun, "}");
+        if (UNLIKELY(printed < 0)) {
+            return printed;
+        }
+        ret += printed;
+        return ret;
 
     } else if (term_is_binary(t)) {
         int len = term_binary_size(t);
@@ -143,24 +292,45 @@ void term_display(FILE *fd, term t, const Context *ctx)
             }
         }
 
-        fprintf(fd, "<<");
+        int ret = fun->print(fun, "<<");
+        if (UNLIKELY(ret < 0)) {
+            return ret;
+        }
+
         if (is_printable) {
-            fprintf(fd, "\"%.*s\"", len, binary_data);
+            int printed = fun->print(fun, "\"%.*s\"", len, binary_data);
+            if (UNLIKELY(printed < 0)) {
+                return printed;
+            }
+            ret += printed;
 
         } else {
             int display_separator = 0;
             for (int i = 0; i < len; i++) {
                 if (display_separator) {
-                    fputc(',', fd);
+                    int printed = fun->print(fun, ",");
+                    if (UNLIKELY(printed < 0)) {
+                        return printed;
+                    }
+                    ret += printed;
                 } else {
                     display_separator = 1;
                 }
 
                 uint8_t c = (uint8_t) binary_data[i];
-                fprintf(fd, "%i", (int) c);
+                int printed = fun->print(fun, "%i", (int) c);
+                if (UNLIKELY(printed < 0)) {
+                    return printed;
+                }
+                ret += printed;
             }
         }
-        fprintf(fd, ">>");
+        int printed = fun->print(fun, ">>");
+        if (UNLIKELY(printed < 0)) {
+            return printed;
+        }
+        ret += printed;
+        return ret;
 
     } else if (term_is_reference(t)) {
         const char *format =
@@ -169,33 +339,28 @@ void term_display(FILE *fd, term t, const Context *ctx)
 #else
         "#Ref<0.0.0.%lu>";
 #endif
-        fprintf(fd, format, term_to_ref_ticks(t));
+        return fun->print(fun, format, term_to_ref_ticks(t));
 
     } else if (term_is_boxed_integer(t)) {
         int size = term_boxed_size(t);
         switch (size) {
             case 1:
-                fprintf(fd, AVM_INT_FMT, term_unbox_int(t));
-                break;
+                return fun->print(fun, AVM_INT_FMT, term_unbox_int(t));
 
 #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
             case 2:
-                fprintf(fd, AVM_INT64_FMT, term_unbox_int64(t));
-                break;
+                return fun->print(fun, AVM_INT64_FMT, term_unbox_int64(t));
 #endif
-
             default:
                 AVM_ABORT();
         }
 
-#ifndef AVM_NO_FP
     } else if (term_is_float(t)) {
         avm_float_t f = term_to_float(t);
-        fprintf(fd, AVM_FLOAT_FMT, f);
-#endif
+        return fun->print(fun, AVM_FLOAT_FMT, f);
 
     } else {
-        fprintf(fd, "Unknown term type: %" TERM_U_FMT, t);
+        return fun->print(fun, "Unknown term type: %" TERM_U_FMT, t);
     }
 }
 
@@ -204,17 +369,20 @@ static int term_type_to_index(term t)
     if (term_is_invalid_term(t)) {
         return 0;
 
-    } else if (term_is_number(t)) {
+    } else if (term_is_any_integer(t)) {
         return 1;
 
-    } else if (term_is_atom(t)) {
+    } else if (term_is_float(t)) {
         return 2;
 
-    } else if (term_is_reference(t)) {
+    } else if (term_is_atom(t)) {
         return 3;
 
-    } else if (term_is_function(t)) {
+    } else if (term_is_reference(t)) {
         return 4;
+
+    } else if (term_is_function(t)) {
+        return 5;
 
     } else if (term_is_pid(t)) {
         return 6;
@@ -239,15 +407,21 @@ static int term_type_to_index(term t)
     }
 }
 
-int term_compare(term t, term other, Context *ctx)
+TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalContext *global)
 {
     struct TempStack temp_stack;
-    temp_stack_init(&temp_stack);
+    if (UNLIKELY(temp_stack_init(&temp_stack) != TempStackOk)) {
+        return TermCompareMemoryAllocFail;
+    }
 
-    temp_stack_push(&temp_stack, t);
-    temp_stack_push(&temp_stack, other);
+    if (UNLIKELY(temp_stack_push(&temp_stack, t) != TempStackOk)) {
+        return TermCompareMemoryAllocFail;
+    }
+    if (UNLIKELY(temp_stack_push(&temp_stack, other) != TempStackOk)) {
+        return TermCompareMemoryAllocFail;
+    }
 
-    int result = 0;
+    TermCompareResult result = TermEquals;
 
     while (!temp_stack_is_empty(&temp_stack)) {
         if (t == other) {
@@ -258,7 +432,7 @@ int term_compare(term t, term other, Context *ctx)
             avm_int_t t_int = term_to_int(t);
             avm_int_t other_int = term_to_int(other);
             //They cannot be equal
-            result = (t_int > other_int) ? 1 : -1;
+            result = (t_int > other_int) ? TermGreaterThan : TermLessThan;
             break;
 
         } else if (term_is_reference(t) && term_is_reference(other)) {
@@ -268,7 +442,7 @@ int term_compare(term t, term other, Context *ctx)
                 other = temp_stack_pop(&temp_stack);
                 t = temp_stack_pop(&temp_stack);
             } else {
-                result = (t_ticks > other_ticks) ? 1 : -1;
+                result = (t_ticks > other_ticks) ? TermGreaterThan : TermLessThan;
                 break;
             }
 
@@ -283,8 +457,12 @@ int term_compare(term t, term other, Context *ctx)
             if (term_is_nil(other_tail)) {
                 other_tail = term_invalid_term();
             }
-            temp_stack_push(&temp_stack, t_tail);
-            temp_stack_push(&temp_stack, other_tail);
+            if (UNLIKELY(temp_stack_push(&temp_stack, t_tail) != TempStackOk)) {
+                return TermCompareMemoryAllocFail;
+            }
+            if (UNLIKELY(temp_stack_push(&temp_stack, other_tail) != TempStackOk)) {
+                return TermCompareMemoryAllocFail;
+            }
             t = term_get_list_head(t);
             other = term_get_list_head(other);
 
@@ -293,14 +471,20 @@ int term_compare(term t, term other, Context *ctx)
             int other_tuple_size = term_get_tuple_arity(other);
 
             if (tuple_size != other_tuple_size) {
-                result = (tuple_size > other_tuple_size) ? 1 : -1;
+                result = (tuple_size > other_tuple_size) ? TermGreaterThan : TermLessThan;
                 break;
             }
 
             if (tuple_size > 0) {
                 for (int i = 1; i < tuple_size; i++) {
-                    temp_stack_push(&temp_stack, term_get_tuple_element(t, i));
-                    temp_stack_push(&temp_stack, term_get_tuple_element(other, i));
+                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_tuple_element(t, i))
+                            != TempStackOk)) {
+                        return TermCompareMemoryAllocFail;
+                    }
+                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_tuple_element(other, i))
+                            != TempStackOk)) {
+                        return TermCompareMemoryAllocFail;
+                    }
                 }
                 t = term_get_tuple_element(t, 0);
                 other = term_get_tuple_element(other, 0);
@@ -325,11 +509,11 @@ int term_compare(term t, term other, Context *ctx)
                     other = temp_stack_pop(&temp_stack);
                     t = temp_stack_pop(&temp_stack);
                 } else {
-                    result = (t_size > other_size) ? 1 : -1;
+                    result = (t_size > other_size) ? TermGreaterThan : TermLessThan;
                     break;
                 }
             } else {
-                result = (memcmp_result > 0) ? 1 : -1;
+                result = (memcmp_result > 0) ? TermGreaterThan : TermLessThan;
                 break;
             }
 
@@ -338,15 +522,27 @@ int term_compare(term t, term other, Context *ctx)
             int other_size = term_get_map_size(other);
 
             if (t_size != other_size) {
-                result = (t_size > other_size) ? 1 : -1;
+                result = (t_size > other_size) ? TermGreaterThan : TermLessThan;
                 break;
             }
             if (t_size > 0) {
                 for (int i = 1; i < t_size; i++) {
-                    temp_stack_push(&temp_stack, term_get_map_value(t, i));
-                    temp_stack_push(&temp_stack, term_get_map_value(other, i));
-                    temp_stack_push(&temp_stack, term_get_map_key(t, i));
-                    temp_stack_push(&temp_stack, term_get_map_key(other, i));
+                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(t, i))
+                            != TempStackOk)) {
+                        return TermCompareMemoryAllocFail;
+                    }
+                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(other, i))
+                            != TempStackOk)) {
+                        return TermCompareMemoryAllocFail;
+                    }
+                    if (UNLIKELY(
+                            temp_stack_push(&temp_stack, term_get_map_key(t, i)) != TempStackOk)) {
+                        return TermCompareMemoryAllocFail;
+                    }
+                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_key(other, i))
+                            != TempStackOk)) {
+                        return TermCompareMemoryAllocFail;
+                    }
                 }
                 t = term_get_map_key(t, 0);
                 other = term_get_map_key(other, 0);
@@ -363,33 +559,42 @@ int term_compare(term t, term other, Context *ctx)
                 other = temp_stack_pop(&temp_stack);
                 t = temp_stack_pop(&temp_stack);
             } else {
-                result = (t_int > other_int) ? 1 : -1;
+                result = (t_int > other_int) ? TermGreaterThan : TermLessThan;
                 break;
             }
 
-#ifndef AVM_NO_FP
-        } else if (term_is_number(t) && term_is_number(other)) {
+        } else if (term_is_float(t) && term_is_float(other)) {
+            avm_float_t t_float = term_to_float(t);
+            avm_float_t other_float = term_to_float(other);
+            if (t_float == other_float) {
+                other = temp_stack_pop(&temp_stack);
+                t = temp_stack_pop(&temp_stack);
+            } else {
+                result = (t_float > other_float) ? TermGreaterThan : TermLessThan;
+                break;
+            }
+
+        } else if (term_is_number(t) && term_is_number(other) && ((opts & TermCompareExact) != TermCompareExact)) {
             avm_float_t t_float = term_conv_to_float(t);
             avm_float_t other_float = term_conv_to_float(other);
             if (t_float == other_float) {
                 other = temp_stack_pop(&temp_stack);
                 t = temp_stack_pop(&temp_stack);
             } else {
-                result = (t_float > other_float) ? 1 : -1;
+                result = (t_float > other_float) ? TermGreaterThan : TermLessThan;
                 break;
             }
-#endif
 
         } else if (term_is_atom(t) && term_is_atom(other)) {
             int t_atom_index = term_to_atom_index(t);
-            AtomString t_atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table,
+            AtomString t_atom_string = (AtomString) valueshashtable_get_value(global->atoms_ids_table,
                 t_atom_index, (unsigned long) NULL);
 
             int t_atom_len = atom_string_len(t_atom_string);
             const char *t_atom_data = (const char *) atom_string_data(t_atom_string);
 
             int other_atom_index = term_to_atom_index(other);
-            AtomString other_atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table,
+            AtomString other_atom_string = (AtomString) valueshashtable_get_value(global->atoms_ids_table,
                 other_atom_index, (unsigned long) NULL);
 
             int other_atom_len = atom_string_len(other_atom_string);
@@ -399,20 +604,20 @@ int term_compare(term t, term other, Context *ctx)
 
             int memcmp_result = memcmp(t_atom_data, other_atom_data, cmp_size);
             if (memcmp_result == 0) {
-                result = (t_atom_len > other_atom_len) ? 1 : -1;
+                result = (t_atom_len > other_atom_len) ? TermGreaterThan : TermLessThan;
                 break;
             } else {
-                result = memcmp_result > 0 ? 1 : -1;
+                result = memcmp_result > 0 ? TermGreaterThan : TermLessThan;
                 break;
             }
 
         } else if (term_is_pid(t) && term_is_pid(other)) {
             //TODO: handle ports
-            result = (t > other) ? 1 : -1;
+            result = (t > other) ? TermGreaterThan : TermLessThan;
             break;
 
         } else {
-            result = (term_type_to_index(t) > term_type_to_index(other)) ? 1 : -1;
+            result = (term_type_to_index(t) > term_type_to_index(other)) ? TermGreaterThan : TermLessThan;
             break;
         }
     }
@@ -476,9 +681,12 @@ term term_alloc_sub_binary(term binary_or_state, size_t offset, size_t len, Cont
 
 term term_get_map_assoc(Context *ctx, term map, term key)
 {
-    int pos = term_find_map_pos(ctx, map, key);
-    if (pos == -1) {
+    int pos = term_find_map_pos(map, key, ctx->global);
+    if (pos == TERM_MAP_NOT_FOUND) {
         return term_invalid_term();
+    } else if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
+        // TODO: do not AVM_ABORT, return out of memory error
+        AVM_ABORT();
     }
     return term_get_map_value(map, pos);
 }

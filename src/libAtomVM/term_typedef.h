@@ -112,22 +112,19 @@ typedef uint64_t avm_uint64_t;
     #error "cannot define AVM_INT64_FMT: invalid build env."
 #endif
 
-#ifndef AVM_NO_FP
-
-    // %f and %lf are the same since C99 when using printf
-    // this is not true for scanf.
-    #ifdef AVM_USE_SINGLE_PRECISION
-        typedef float avm_float_t;
-        #define AVM_FLOAT_FMT "%f"
-    #else
-        typedef double avm_float_t;
-        #define AVM_FLOAT_FMT "%lf"
-    #endif
-
-    typedef union {
-        term t;
-        avm_float_t f;
-    } float_term_t;
+// %f and %lf are the same since C99 when using printf
+// this is not true for scanf.
+#ifdef AVM_USE_SINGLE_PRECISION
+    typedef float avm_float_t;
+    #define AVM_FLOAT_FMT "%f"
+#else
+    typedef double avm_float_t;
+    #define AVM_FLOAT_FMT "%lf"
 #endif
+
+typedef union {
+    term t;
+    avm_float_t f;
+} float_term_t;
 
 #endif

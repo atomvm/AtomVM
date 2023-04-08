@@ -244,9 +244,15 @@ unsigned long memory_estimate_usage(term t)
     unsigned long acc = 0;
 
     struct TempStack temp_stack;
-    temp_stack_init(&temp_stack);
+    if (UNLIKELY(temp_stack_init(&temp_stack) != TempStackOk)) {
+        // TODO: handle failed malloc
+        AVM_ABORT();
+    }
 
-    temp_stack_push(&temp_stack, t);
+    if (UNLIKELY(temp_stack_push(&temp_stack, t) != TempStackOk)) {
+        // TODO: handle failed malloc
+        AVM_ABORT();
+    }
 
     while (!temp_stack_is_empty(&temp_stack)) {
         if (term_is_atom(t)) {
@@ -263,7 +269,10 @@ unsigned long memory_estimate_usage(term t)
 
         } else if (term_is_nonempty_list(t)) {
             acc += 2;
-            temp_stack_push(&temp_stack, term_get_list_tail(t));
+            if (UNLIKELY(temp_stack_push(&temp_stack, term_get_list_tail(t)) != TempStackOk)) {
+                // TODO: handle failed malloc
+                AVM_ABORT();
+            }
             t = term_get_list_head(t);
 
         } else if (term_is_tuple(t)) {
@@ -272,7 +281,10 @@ unsigned long memory_estimate_usage(term t)
 
             if (tuple_size > 0) {
                 for (int i = 1; i < tuple_size; i++) {
-                    temp_stack_push(&temp_stack, term_get_tuple_element(t, i));
+                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_tuple_element(t, i)) != TempStackOk)) {
+                        // TODO: handle failed malloc
+                        AVM_ABORT();
+                    }
                 }
                 t = term_get_tuple_element(t, 0);
 
@@ -285,10 +297,19 @@ unsigned long memory_estimate_usage(term t)
             acc += term_map_size_in_terms(map_size);
             if (map_size > 0) {
                 for (int i = 1; i < map_size; i++) {
-                    temp_stack_push(&temp_stack, term_get_map_key(t, i));
-                    temp_stack_push(&temp_stack, term_get_map_value(t, i));
+                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_key(t, i)) != TempStackOk)) {
+                        // TODO: handle failed malloc
+                        AVM_ABORT();
+                    }
+                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(t, i)) != TempStackOk)) {
+                        // TODO: handle failed malloc
+                        AVM_ABORT();
+                    }
                 }
-                temp_stack_push(&temp_stack, term_get_map_value(t, 0));
+                if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(t, 0)) != TempStackOk)) {
+                    // TODO: handle failed malloc
+                    AVM_ABORT();
+                }
                 t = term_get_map_key(t, 0);
 
             } else {

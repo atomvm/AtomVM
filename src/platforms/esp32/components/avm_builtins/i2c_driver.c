@@ -457,16 +457,26 @@ static NativeHandlerResult i2cdriver_consume_mailbox(Context *ctx)
             ret = ERROR_ATOM;
     }
 
-    dictionary_put(&ctx->dictionary, ctx, i2c_driver, ret);
+    term old;
+    if (UNLIKELY(dictionary_put(&ctx->dictionary, i2c_driver, ret, &old, ctx->global) != DictionaryOk)) {
+        // TODO: handle alloc error
+        AVM_ABORT();
+    }
     term ret_msg;
     if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
         ret_msg = OUT_OF_MEMORY_ATOM;
     } else {
-        ret = dictionary_get(&ctx->dictionary, ctx, i2c_driver);
+        if (UNLIKELY(dictionary_get(&ctx->dictionary, i2c_driver, &ret, ctx->global) != DictionaryOk)) {
+            // TODO: handle alloc error
+            AVM_ABORT();
+        }
         term ref = term_get_tuple_element(msg, 1);
         ret_msg = create_pair(ctx, ref, ret);
     }
-    dictionary_erase(&ctx->dictionary, ctx, i2c_driver);
+    if (UNLIKELY(dictionary_erase(&ctx->dictionary, i2c_driver, &old, ctx->global) != DictionaryOk)) {
+        // TODO: handle alloc error
+        AVM_ABORT();
+    }
 
     globalcontext_send_message(ctx->global, local_process_id, ret_msg);
     mailbox_remove(&ctx->mailbox);

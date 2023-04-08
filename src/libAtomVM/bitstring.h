@@ -314,6 +314,19 @@ static inline bool bitstring_insert_integer(term dst_bin, size_t offset, avm_int
 bool bitstring_utf8_encode(avm_int_t c, uint8_t *buf, size_t *out_size);
 
 /**
+ * @brief Decode a character from UTF-8.
+ *
+ * @param c int value to decode to
+ * @param buf the buffer froom which to decode the sring to or NULL to only compute the
+ * size.
+ * @param len the length (in bytes) of the bytes in buf
+ * @param out_size the size in bytes, on output (if not NULL)
+ * @return \c true if decoding was successful, \c false if character starting at buf is not a valid
+ * unicode character
+ */
+bool bitstring_utf8_decode(const uint8_t *buf, size_t len, int32_t *c, size_t *out_size);
+
+/**
  * @brief Encode a character to UTF-16.
  *
  * @param c character to encode
@@ -327,6 +340,20 @@ bool bitstring_utf8_encode(avm_int_t c, uint8_t *buf, size_t *out_size);
 bool bitstring_utf16_encode(avm_int_t c, uint8_t *buf, enum BitstringFlags bs_flags, size_t *out_size);
 
 /**
+ * @brief Decode a character from UTF-16.
+ *
+ * @param c int value to decode to
+ * @param buf the buffer froom which to decode the sring to or NULL to only compute the
+ * size.
+ * @param len the length (in bytes) of the bytes in buf
+ * @param bs_flags flags to decode the character (undefined/little/big/native)
+ * @param out_size the size in bytes, on output (if not NULL)
+ * @return \c true if decoding was successful, \c false if character starting at buf is not a valid
+ * unicode character
+ */
+bool bitstring_utf16_decode(const uint8_t *buf, size_t len, int32_t *c, size_t *out_size, enum BitstringFlags bs_flags);
+
+/**
  * @brief Encode a character to UTF-32.
  *
  * @param c character to encode
@@ -336,6 +363,19 @@ bool bitstring_utf16_encode(avm_int_t c, uint8_t *buf, enum BitstringFlags bs_fl
  * unicode character
  */
 bool bitstring_utf32_encode(avm_int_t c, uint8_t *buf, enum BitstringFlags bs_flags);
+
+/**
+ * @brief Decode a character from UTF-32.
+ *
+ * @param c int value to decode to
+ * @param buf the buffer froom which to decode the sring to or NULL to only compute the
+ * size.
+ * @param len the length (in bytes) of the bytes in buf
+ * @param bs_flags flags to decode the character (undefined/little/big/native)
+ * @return \c true if decoding was successful, \c false if character starting at buf is not a valid
+ * unicode character
+ */
+bool bitstring_utf32_decode(const uint8_t *buf, size_t len, int32_t *c, enum BitstringFlags bs_flags);
 
 /**
  * @brief Compute the size of a character when UTF-8 encoded.
@@ -380,6 +420,23 @@ static inline bool bitstring_insert_utf8(term dst_bin, size_t offset, avm_int_t 
 }
 
 /**
+ * @brief Match a character in UTF-8 format
+ *
+ * @param src_bin binary to match against
+ * @param offset offset, in bits, to where to start to match the character
+ * @param c int to decode to
+ * @param out_size the size in bytes, on output
+ * @return \c true if encoding was successful, \c false if src_bin at offset is not a valid
+ * unicode character
+ */
+static inline bool bitstring_match_utf8(term src_bin, size_t offset, int32_t *c, size_t *out_size)
+{
+    size_t byte_offset = offset >> 3; // divide by 8
+    const uint8_t *src = (const uint8_t *) term_binary_data(src_bin) + byte_offset;
+    return bitstring_utf8_decode(src, term_binary_size(src_bin) - byte_offset, c, out_size);
+}
+
+/**
  * @brief Insert a character in UTF-&§ format
  *
  * @param dst_bin binary to insert to
@@ -398,6 +455,24 @@ static inline bool bitstring_insert_utf16(term dst_bin, size_t offset, avm_int_t
 }
 
 /**
+ * @brief Match a character in UTF-16 format
+ *
+ * @param src_bin binary to match against
+ * @param offset offset, in bits, to where to start to match the character
+ * @param c int to decode to
+ * @param bs_flags flags to decode the character (undefined/little/big/native)
+ * @param out_size the size in bytes, on output
+ * @return \c true if encoding was successful, \c false if src_bin at offset is not a valid
+ * unicode character
+ */
+static inline bool bitstring_match_utf16(term src_bin, size_t offset, int32_t *c, size_t *out_size, enum BitstringFlags bs_flags)
+{
+    size_t byte_offset = offset >> 3; // divide by 8
+    const uint8_t *src = (const uint8_t *) term_binary_data(src_bin) + byte_offset;
+    return bitstring_utf16_decode(src, term_binary_size(src_bin) - byte_offset, c, out_size, bs_flags);
+}
+
+/**
  * @brief Insert a character in UTF-32 format
  *
  * @param dst_bin binary to insert to
@@ -412,6 +487,23 @@ static inline bool bitstring_insert_utf32(term dst_bin, size_t offset, avm_int_t
 {
     uint8_t *dst = (uint8_t *) term_binary_data(dst_bin) + (offset >> 3);
     return bitstring_utf32_encode(c, dst, bs_flags);
+}
+
+/**
+ * @brief Match a character in UTF-32 format
+ *
+ * @param src_bin binary to match against
+ * @param offset offset, in bits, to where to start to match the character
+ * @param c int to decode to
+ * @param bs_flags flags to decode the character (undefined/little/big/native)
+ * @return \c true if encoding was successful, \c false if src_bin at offset is not a valid
+ * unicode character
+ */
+static inline bool bitstring_match_utf32(term src_bin, size_t offset, int32_t *c, enum BitstringFlags bs_flags)
+{
+    size_t byte_offset = offset >> 3; // divide by 8
+    const uint8_t *src = (const uint8_t *) term_binary_data(src_bin) + byte_offset;
+    return bitstring_utf32_decode(src, term_binary_size(src_bin) - byte_offset, c, bs_flags);
 }
 
 #ifdef __cplusplus

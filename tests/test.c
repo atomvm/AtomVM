@@ -63,14 +63,6 @@ struct Test
 #module, expected, skip, false         \
     }
 
-#ifndef AVM_NO_FP
-#define SKIP_NO_FP false
-#define SKIP_FP true
-#else
-#define SKIP_NO_FP true
-#define SKIP_FP false
-#endif
-
 #ifndef AVM_NO_SMP
 #define SKIP_SMP false
 #else
@@ -358,7 +350,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_ordering_1, 1),
     TEST_CASE(test_binary_to_term),
     TEST_CASE(test_selective_receive),
-    TEST_CASE_COND(test_timeout_not_integer, 0, SKIP_NO_FP),
+    TEST_CASE(test_timeout_not_integer),
     TEST_CASE(test_bs),
     TEST_CASE(test_bs_int),
     TEST_CASE(test_bs_int_unaligned),
@@ -379,50 +371,50 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(truncint, 1),
     TEST_CASE_EXPECTED(truncbadarg, -1),
 
-    TEST_CASE_COND(ceilfloat, -2, SKIP_NO_FP),
-    TEST_CASE_COND(ceilfloatovf, 0, SKIP_NO_FP),
-    TEST_CASE_COND(floorfloat, -3, SKIP_NO_FP),
-    TEST_CASE_COND(floorfloatovf, 0, SKIP_NO_FP),
-    TEST_CASE_COND(roundfloat, -3, SKIP_NO_FP),
-    TEST_CASE_COND(roundfloatovf, 0, SKIP_NO_FP),
-    TEST_CASE_COND(truncfloat, -2, SKIP_NO_FP),
-    TEST_CASE_COND(truncfloatovf, 0, SKIP_NO_FP),
+    TEST_CASE_EXPECTED(ceilfloat, -2),
+    TEST_CASE(ceilfloatovf),
+    TEST_CASE_EXPECTED(floorfloat, -3),
+    TEST_CASE(floorfloatovf),
+    TEST_CASE_EXPECTED(roundfloat, -3),
+    TEST_CASE(roundfloatovf),
+    TEST_CASE_EXPECTED(truncfloat, -2),
+    TEST_CASE(truncfloatovf),
 
-    TEST_CASE_COND(floataddovf, 0, SKIP_NO_FP),
-    TEST_CASE_COND(floatadd, 0, SKIP_NO_FP),
-    TEST_CASE_COND(floatsubovf, 0, SKIP_NO_FP),
-    TEST_CASE_COND(floatsub, 0, SKIP_NO_FP),
-    TEST_CASE_COND(floatmulovf, 0, SKIP_NO_FP),
-    TEST_CASE_COND(floatmul, 0, SKIP_NO_FP),
-    TEST_CASE_COND(floatneg, 0, SKIP_NO_FP),
-    TEST_CASE_COND(floatabs, 3, SKIP_NO_FP),
-    TEST_CASE_COND(floatdiv, 0, SKIP_NO_FP),
+    TEST_CASE(floataddovf),
+    TEST_CASE(floatadd),
+    TEST_CASE(floatsubovf),
+    TEST_CASE(floatsub),
+    TEST_CASE(floatmulovf),
+    TEST_CASE(floatmul),
+    TEST_CASE(floatneg),
+    TEST_CASE_EXPECTED(floatabs, 3),
+    TEST_CASE(floatdiv),
 
-    TEST_CASE_COND(boxed_is_not_float, 16, SKIP_NO_FP),
-    TEST_CASE_COND(float_is_float, 32, SKIP_NO_FP),
-    TEST_CASE_COND(float_is_number, 32, SKIP_NO_FP),
+    TEST_CASE_EXPECTED(boxed_is_not_float, 16),
+    TEST_CASE_EXPECTED(float_is_float, 32),
+    TEST_CASE_EXPECTED(float_is_number, 32),
 
-    TEST_CASE_COND(float2bin, 31, SKIP_NO_FP),
-    TEST_CASE_COND(float2list, 31, SKIP_NO_FP),
-    TEST_CASE_COND(float2bin2scientific, 31, SKIP_NO_FP),
-    TEST_CASE_COND(float2bin2decimals, 255, SKIP_NO_FP),
-    TEST_CASE_COND(float2bin2, 31, SKIP_NO_FP),
-    TEST_CASE_COND(float2list2scientific, 31, SKIP_NO_FP),
-    TEST_CASE_COND(float2list2decimals, 255, SKIP_NO_FP),
-    TEST_CASE_COND(float2list2, 31, SKIP_NO_FP),
-    TEST_CASE_COND(bin2float, 511, SKIP_NO_FP),
-    TEST_CASE_COND(list2float, 511, SKIP_NO_FP),
-    TEST_CASE_COND(floatmath, 0, SKIP_NO_FP),
+    TEST_CASE_EXPECTED(float2bin, 31),
+    TEST_CASE_EXPECTED(float2list, 31),
+    TEST_CASE_EXPECTED(float2bin2scientific, 31),
+    TEST_CASE_EXPECTED(float2bin2decimals, 255),
+    TEST_CASE_EXPECTED(float2bin2, 31),
+    TEST_CASE_EXPECTED(float2list2scientific, 31),
+    TEST_CASE_EXPECTED(float2list2decimals, 255),
+    TEST_CASE_EXPECTED(float2list2, 31),
+    TEST_CASE_EXPECTED(bin2float, 511),
+    TEST_CASE_EXPECTED(list2float, 511),
+    TEST_CASE(floatmath),
+    TEST_CASE(floatext),
 
-    TEST_CASE_COND(test_fp_allocate_heap_zero, 0, SKIP_NO_FP),
+    TEST_CASE(test_fp_allocate_heap_zero),
 
     TEST_CASE_EXPECTED(improper_concat, 7),
     TEST_CASE_EXPECTED(improper_cmp, 3),
     TEST_CASE_EXPECTED(improper_literal, 3),
     TEST_CASE_EXPECTED(improper_length, 3),
 
-    TEST_CASE_COND(jsonish_encode, 1058, SKIP_NO_FP),
-    TEST_CASE_COND(jsonish_encode_no_fp, 1046, SKIP_FP),
+    TEST_CASE_EXPECTED(jsonish_encode, 1058),
 
     TEST_CASE_EXPECTED(iolist_concat_bin, 71006),
     TEST_CASE_EXPECTED(binary_is_iolist, 1006),
@@ -466,10 +458,11 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_list_to_tuple, 69),
 
     TEST_CASE_EXPECTED(bs_context_to_binary_with_offset, 42),
-    TEST_CASE_COND(bs_restore2_start_offset, 823, SKIP_NO_FP),
-    TEST_CASE_COND(bs_restore2_start_offset_no_fp, 823, SKIP_FP),
+    TEST_CASE_EXPECTED(bs_restore2_start_offset, 823),
 
     TEST_CASE_EXPECTED(test_monotonic_time, 1),
+
+    TEST_CASE_EXPECTED(exactly_eq, 7),
 
     // Tests relying on echo driver
     TEST_CASE_ATOMVM_ONLY(pingpong, 1),
@@ -492,6 +485,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(unlink_error, 1),
     TEST_CASE_EXPECTED(trap_exit_flag, 1),
     TEST_CASE_COND(test_stacktrace, 0, SKIP_STACKTRACES),
+    TEST_CASE(small_big_ext),
 
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 

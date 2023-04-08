@@ -350,6 +350,7 @@ compile_erlang(floatneg)
 compile_erlang(floatabs)
 compile_erlang(floatdiv)
 compile_erlang(floatmath)
+compile_erlang(floatext)
 
 compile_erlang(boxed_is_not_float)
 compile_erlang(float_is_float)
@@ -374,7 +375,6 @@ compile_erlang(improper_literal)
 compile_erlang(improper_length)
 
 compile_erlang(jsonish_encode)
-compile_erlang(jsonish_encode_no_fp)
 compile_erlang(iolist_concat_bin)
 compile_erlang(binary_is_iolist)
 
@@ -423,12 +423,13 @@ compile_erlang(test_list_to_tuple)
 
 compile_erlang(bs_context_to_binary_with_offset)
 compile_erlang(bs_restore2_start_offset)
-compile_erlang(bs_restore2_start_offset_no_fp)
 compile_erlang(test_refc_binaries)
 compile_erlang(test_sub_binaries)
 compile_erlang(bs_append_extra_words)
 
 compile_erlang(test_monotonic_time)
+
+compile_erlang(exactly_eq)
 
 compile_erlang(spawn_opt_monitor_normal)
 compile_erlang(spawn_opt_monitor_throw)
@@ -442,6 +443,7 @@ compile_erlang(unlink_error)
 compile_erlang(trap_exit_flag)
 
 compile_erlang(test_stacktrace)
+compile_erlang(small_big_ext)
 
 add_custom_target(erlang_test_modules DEPENDS
     add.beam
@@ -766,6 +768,7 @@ add_custom_target(erlang_test_modules DEPENDS
     floatabs.beam
     floatdiv.beam
     floatmath.beam
+    floatext.beam
 
     boxed_is_not_float.beam
     float_is_float.beam
@@ -790,7 +793,6 @@ add_custom_target(erlang_test_modules DEPENDS
     improper_length.beam
 
     jsonish_encode.beam
-    jsonish_encode_no_fp.beam
     iolist_concat_bin.beam
     binary_is_iolist.beam
 
@@ -842,10 +844,11 @@ add_custom_target(erlang_test_modules DEPENDS
 
     bs_context_to_binary_with_offset.beam
     bs_restore2_start_offset.beam
-    bs_restore2_start_offset_no_fp.beam
     bs_append_extra_words.beam
 
     test_monotonic_time.beam
+
+    exactly_eq.beam
 
     spawn_opt_monitor_normal.beam
     spawn_opt_monitor_throw.beam
@@ -859,4 +862,5 @@ add_custom_target(erlang_test_modules DEPENDS
     trap_exit_flag.beam
 
     test_stacktrace.beam
+    small_big_ext.beam
 )

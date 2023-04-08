@@ -26,55 +26,85 @@
 
 #include <stdlib.h>
 
-static struct DictEntry *dictionary_find(struct ListHead *dictionary, Context *ctx, term key)
+static DictionaryFunctionResult dictionary_find(
+    struct ListHead *dictionary, term key, struct DictEntry **found, GlobalContext *global)
 {
     struct ListHead *item;
     LIST_FOR_EACH (item, dictionary) {
         struct DictEntry *entry = GET_LIST_ENTRY(item, struct DictEntry, head);
-        if (term_compare(entry->key, key, ctx) == 0) {
-            return entry;
+        TermCompareResult result = term_compare(entry->key, key, TermCompareExact, global);
+        if (result == TermEquals) {
+            *found = entry;
+            return DictionaryOk;
+        } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+            return DictionaryMemoryAllocFail;
         }
     }
 
-    return NULL;
+    *found = NULL;
+    return DictionaryOk;
 }
 
-term dictionary_put(struct ListHead *dict, Context *ctx, term key, term value)
+DictionaryFunctionResult dictionary_put(
+    struct ListHead *dict, term key, term value, term *old, GlobalContext *global)
 {
-    struct DictEntry *entry = dictionary_find(dict, ctx, key);
+    struct DictEntry *entry;
+    DictionaryFunctionResult result = dictionary_find(dict, key, &entry, global);
+    if (UNLIKELY(result != DictionaryOk)) {
+        return result;
+    }
+
     if (entry) {
-        term old = entry->value;
+        *old = entry->value;
         entry->value = value;
 
-        return old;
     } else {
         entry = malloc(sizeof(struct DictEntry));
+        if (IS_NULL_PTR(entry)) {
+            return DictionaryMemoryAllocFail;
+        }
         entry->key = key;
         entry->value = value;
         list_prepend(dict, &entry->head);
 
-        return UNDEFINED_ATOM;
+        *old = UNDEFINED_ATOM;
     }
+
+    return DictionaryOk;
 }
 
-term dictionary_get(struct ListHead *dict, Context *ctx, term key)
+DictionaryFunctionResult dictionary_get(
+    struct ListHead *dict, term key, term *old, GlobalContext *global)
 {
-    struct DictEntry *entry = dictionary_find(dict, ctx, key);
-    return entry ? entry->value : UNDEFINED_ATOM;
+    struct DictEntry *entry;
+    DictionaryFunctionResult result = dictionary_find(dict, key, &entry, global);
+    if (UNLIKELY(result != DictionaryOk)) {
+        return result;
+    }
+
+    *old = entry ? entry->value : UNDEFINED_ATOM;
+    return DictionaryOk;
 }
 
-term dictionary_erase(struct ListHead *dict, Context *ctx, term key)
+DictionaryFunctionResult dictionary_erase(
+    struct ListHead *dict, term key, term *old, GlobalContext *global)
 {
-    struct DictEntry *entry = dictionary_find(dict, ctx, key);
+    struct DictEntry *entry;
+    DictionaryFunctionResult result = dictionary_find(dict, key, &entry, global);
+    if (UNLIKELY(result != DictionaryOk)) {
+        return result;
+    }
+
     if (!entry) {
-        return UNDEFINED_ATOM;
+        *old = UNDEFINED_ATOM;
+        return DictionaryOk;
     }
-    term old = entry->value;
+    *old = entry->value;
 
     list_remove(&entry->head);
     free(entry);
 
-    return old;
+    return DictionaryOk;
 }
 
 void dictionary_destroy(struct ListHead *dict)

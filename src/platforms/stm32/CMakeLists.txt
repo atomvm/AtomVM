@@ -24,7 +24,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 
 # Options that make sense for this platform
-option(AVM_DISABLE_FP "Disable floating point support." OFF)
 option(AVM_USE_32BIT_FLOAT "Use 32 bit floats." OFF)
 option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
