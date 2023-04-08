@@ -369,17 +369,20 @@ static int term_type_to_index(term t)
     if (term_is_invalid_term(t)) {
         return 0;
 
-    } else if (term_is_number(t)) {
+    } else if (term_is_any_integer(t)) {
         return 1;
 
-    } else if (term_is_atom(t)) {
+    } else if (term_is_float(t)) {
         return 2;
 
-    } else if (term_is_reference(t)) {
+    } else if (term_is_atom(t)) {
         return 3;
 
-    } else if (term_is_function(t)) {
+    } else if (term_is_reference(t)) {
         return 4;
+
+    } else if (term_is_function(t)) {
+        return 5;
 
     } else if (term_is_pid(t)) {
         return 6;
@@ -404,7 +407,7 @@ static int term_type_to_index(term t)
     }
 }
 
-TermCompareResult term_compare(term t, term other, GlobalContext *global)
+TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalContext *global)
 {
     struct TempStack temp_stack;
     if (UNLIKELY(temp_stack_init(&temp_stack) != TempStackOk)) {
@@ -560,7 +563,18 @@ TermCompareResult term_compare(term t, term other, GlobalContext *global)
                 break;
             }
 
-        } else if (term_is_number(t) && term_is_number(other)) {
+        } else if (term_is_float(t) && term_is_float(other)) {
+            avm_float_t t_float = term_to_float(t);
+            avm_float_t other_float = term_to_float(other);
+            if (t_float == other_float) {
+                other = temp_stack_pop(&temp_stack);
+                t = temp_stack_pop(&temp_stack);
+            } else {
+                result = (t_float > other_float) ? TermGreaterThan : TermLessThan;
+                break;
+            }
+
+        } else if (term_is_number(t) && term_is_number(other) && ((opts & TermCompareExact) != TermCompareExact)) {
             avm_float_t t_float = term_conv_to_float(t);
             avm_float_t other_float = term_conv_to_float(other);
             if (t_float == other_float) {
@@ -570,6 +584,7 @@ TermCompareResult term_compare(term t, term other, GlobalContext *global)
                 result = (t_float > other_float) ? TermGreaterThan : TermLessThan;
                 break;
             }
+
         } else if (term_is_atom(t) && term_is_atom(other)) {
             int t_atom_index = term_to_atom_index(t);
             AtomString t_atom_string = (AtomString) valueshashtable_get_value(global->atoms_ids_table,

@@ -860,7 +860,8 @@ static bool sort_kv_pairs(struct kv_pair *kv, int size, GlobalContext *global)
         for (int i = 1; i < k; i++) {
             term t_max = kv[max_pos].key;
             term t = kv[i].key;
-            TermCompareResult result = term_compare(t, t_max, global);
+            // TODO: not sure if exact is the right choice here
+            TermCompareResult result = term_compare(t, t_max, TermCompareExact, global);
             if (result == TermGreaterThan) {
                 max_pos = i;
             } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
@@ -2182,7 +2183,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_lt/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
-                    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+                    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
                     if (result == TermLessThan) {
                         NEXT_INSTRUCTION(next_off);
                     } else if (result & (TermGreaterThan | TermEquals)) {
@@ -2214,7 +2215,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_ge/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
-                    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+                    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
                     if (result & (TermGreaterThan | TermEquals)) {
                         NEXT_INSTRUCTION(next_off);
                     } else if (result == TermLessThan) {
@@ -2246,8 +2247,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_equal/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
-                    //TODO: implement this
-                    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+                    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
                     if (result == TermEquals) {
                         NEXT_INSTRUCTION(next_off);
                     } else if (result & (TermLessThan | TermGreaterThan)) {
@@ -2279,7 +2279,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_not_equal/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
-                    TermCompareResult result = term_compare(arg1, arg2, ctx->global);
+                    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
                     if (result & (TermLessThan | TermGreaterThan)) {
                         NEXT_INSTRUCTION(next_off);
                     } else if (result == TermEquals) {
@@ -2311,12 +2311,13 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_eq_exact/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
-                    // handle error
-                    //TODO: implement this
-                    if (term_exactly_equals(arg1, arg2, ctx->global)) {
+                    TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
+                    if (result == TermEquals) {
                         NEXT_INSTRUCTION(next_off);
-                    } else {
+                    } else if (result & (TermLessThan | TermGreaterThan)) {
                         i = POINTER_TO_II(mod->labels[label]);
+                    } else {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
 
@@ -2342,12 +2343,13 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_not_eq_exact/2, label=%i, arg1=%lx, arg2=%lx\n", label, arg1, arg2);
 
-                    // handle error
-                    //TODO: implement this
-                    if (!term_exactly_equals(arg1, arg2, ctx->global)) {
+                    TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
+                    if (result & (TermLessThan | TermGreaterThan)) {
                         NEXT_INSTRUCTION(next_off);
-                    } else {
+                    } else if (result == TermEquals) {
                         i = POINTER_TO_II(mod->labels[label]);
+                    } else {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
 
@@ -5414,7 +5416,8 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         } else {
                             term src_key = term_get_map_key(src, src_pos);
                             term new_key = kv[kv_pos].key;
-                            switch (term_compare(src_key, new_key, ctx->global)) {
+                            // TODO: not sure if exact is the right choice here
+                            switch (term_compare(src_key, new_key, TermCompareExact, ctx->global)) {
                                 case TermLessThan: {
                                     term src_value = term_get_map_value(src, src_pos);
                                     term_set_map_assoc(map, j, src_key, src_value);
@@ -6573,9 +6576,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     DECODE_COMPACT_TERM(update_value, code, i, next_off);
                     #ifdef IMPL_EXECUTE_LOOP
                         if (reuse) {
-                            // handle error
-                            if (term_exactly_equals(update_value, term_get_tuple_element(dst, update_ix - 1), ctx->global)) {
+                            term old_value = term_get_tuple_element(dst, update_ix - 1);
+                            TermCompareResult result = term_compare(update_value, old_value, TermCompareExact, ctx->global);
+                            if (result == TermEquals) {
                                 continue;
+                            } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
                             reuse = false;
                         }

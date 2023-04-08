@@ -32,7 +32,7 @@ static DictionaryFunctionResult dictionary_find(
     struct ListHead *item;
     LIST_FOR_EACH (item, dictionary) {
         struct DictEntry *entry = GET_LIST_ENTRY(item, struct DictEntry, head);
-        TermCompareResult result = term_compare(entry->key, key, global);
+        TermCompareResult result = term_compare(entry->key, key, TermCompareExact, global);
         if (result == TermEquals) {
             *found = entry;
             return DictionaryOk;
