@@ -29,9 +29,6 @@ if(CMAKE_COMPILER_IS_GNUCC)
     target_compile_options(${PROJECT_EXECUTABLE} PUBLIC -Wall -pedantic -Wextra -ggdb -std=gnu11)
 endif()
 
-add_subdirectory(lib)
-target_include_directories(${PROJECT_EXECUTABLE} PUBLIC lib/)
-
 add_subdirectory(../../../libAtomVM libAtomVM)
 target_link_libraries(${PROJECT_EXECUTABLE} PUBLIC libAtomVM)
 
@@ -39,6 +36,8 @@ set(
     PLATFORM_LIB_SUFFIX
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
 )
+
+add_subdirectory(lib)
 target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX})
 
 # Output elf file size
