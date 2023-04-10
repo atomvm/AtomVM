@@ -33,16 +33,10 @@
 extern "C" {
 #endif
 
-#if !defined(AVM_NO_SMP) && !defined(__cplusplus)
-#include <stdatomic.h>
-#define ATOMIC _Atomic
-#else
-#define ATOMIC
-#endif
-
 #include <stdbool.h>
 
 #include "list.h"
+#include "smp.h"
 #include "term_typedef.h"
 
 struct Context;

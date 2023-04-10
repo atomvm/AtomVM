@@ -142,7 +142,7 @@ static void mailbox_post_message(Context *c, MailboxMessage *m)
     MailboxMessage *current_first = NULL;
     do {
         m->next = current_first;
-    } while (!atomic_compare_exchange_weak(&c->mailbox.outer_first, &current_first, m));
+    } while (!ATOMIC_COMPARE_EXCHANGE_WEAK(&c->mailbox.outer_first, &current_first, m));
 #else
     m->next = c->mailbox.outer_first;
     c->mailbox.outer_first = m;
@@ -242,7 +242,7 @@ MailboxMessage *mailbox_process_outer_list(Mailbox *mbox)
     // Empty outer list using CAS
     MailboxMessage *current = mbox->outer_first;
 #ifndef AVM_NO_SMP
-    while (!atomic_compare_exchange_weak(&mbox->outer_first, &current, NULL)) {
+    while (!ATOMIC_COMPARE_EXCHANGE_WEAK(&mbox->outer_first, &current, NULL)) {
     };
 #else
     mbox->outer_first = NULL;

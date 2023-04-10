@@ -35,6 +35,7 @@
 #include "platform_nifs.h"
 #include "port.h"
 #include "scheduler.h"
+#include "smp.h"
 #include "sys.h"
 #include "term.h"
 #include "utils.h"
@@ -68,7 +69,10 @@
     ctx->x[1] = (b); \
     return term_invalid_term();
 
+#ifndef MAX
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
+#endif
+
 #define NOT_FOUND (0xFF)
 
 #ifdef ENABLE_ADVANCED_TRACE
@@ -2525,7 +2529,7 @@ static term nif_erlang_system_flag(Context *ctx, int argc, term argv[])
             argv[1] = BADARG_ATOM;
             return term_invalid_term();
         }
-        while (!atomic_compare_exchange_weak(&ctx->global->online_schedulers, &old_value, new_value)) {};
+        while (!ATOMIC_COMPARE_EXCHANGE_WEAK(&ctx->global->online_schedulers, &old_value, new_value)) {};
         return term_from_int32(old_value);
     }
 #else

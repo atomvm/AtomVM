@@ -52,14 +52,6 @@
 #endif
 
 #ifndef AVM_NO_SMP
-#include <stdatomic.h>
-#else
-#ifndef _Atomic
-#define _Atomic
-#endif
-#endif
-
-#ifndef AVM_NO_SMP
 #define SMP_MUTEX_LOCK(mtx) smp_mutex_lock(mtx)
 #define SMP_MUTEX_UNLOCK(mtx) smp_mutex_unlock(mtx)
 #else
@@ -86,7 +78,7 @@ struct GenericUnixPlatformData
 #else
     struct pollfd *fds;
 #endif
-    int _Atomic poll_count;
+    int ATOMIC poll_count;
 #ifndef AVM_NO_SMP
 #ifndef HAVE_KQUEUE
 #ifdef HAVE_EVENTFD

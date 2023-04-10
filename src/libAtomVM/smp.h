@@ -42,22 +42,18 @@ extern "C" {
 #define CLANG_THREAD_SANITIZE_SAFE
 #endif
 
-#ifndef AVM_NO_SMP
-
+#if defined(AVM_NO_SMP)
+#define ATOMIC
+#else
 #include <stdbool.h>
-
 #ifndef __cplusplus
+#ifdef HAVE_PLATFORM_SMP_H
+#include "platform_smp.h"
+#else
 #include <stdatomic.h>
+#define ATOMIC_COMPARE_EXCHANGE_WEAK atomic_compare_exchange_weak
 #define ATOMIC _Atomic
-
-#if ATOMIC_POINTER_LOCK_FREE != 2
-#error Current SMP implementation requires lock-free atomic pointers which this platform does not support, please disable SMP
 #endif
-
-#if ATOMIC_LONG_LOCK_FREE != 2
-#error Current SMP implementation requires lock-free atomic long (32 bits) words which this platform does not support, please disable SMP
-#endif
-
 #else
 #define ATOMIC
 #endif
@@ -87,10 +83,12 @@ typedef struct RWLock RWLock;
 typedef struct GlobalContext GlobalContext;
 #endif
 
+#if !defined(SMP_PLATFORM_SPINLOCK)
 struct SpinLock
 {
     int ATOMIC lock;
 };
+#endif
 
 /**
  * @brief Create a new mutex.
@@ -180,7 +178,7 @@ void smp_rwlock_wrlock(RWLock *lock);
  */
 void smp_rwlock_unlock(RWLock *lock);
 
-#ifndef __cplusplus
+#if !defined(__cplusplus) && !defined(SMP_PLATFORM_SPINLOCK)
 
 /**
  * @brief Initialize a spinlock based on atomics.
@@ -200,7 +198,7 @@ static inline void smp_spinlock_lock(SpinLock *lock)
     int current;
     do {
         current = 0;
-    } while (!atomic_compare_exchange_weak(&lock->lock, &current, 1));
+    } while (!ATOMIC_COMPARE_EXCHANGE_WEAK(&lock->lock, &current, 1));
 }
 
 /**

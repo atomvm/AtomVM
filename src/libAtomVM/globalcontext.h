@@ -34,13 +34,6 @@ extern "C" {
 
 #include <stdint.h>
 
-#if !defined(AVM_NO_SMP) && !defined(__cplusplus)
-#include <stdatomic.h>
-#define ATOMIC _Atomic
-#else
-#define ATOMIC
-#endif
-
 #include "atom.h"
 #include "linkedlist.h"
 #include "smp.h"
@@ -102,7 +95,7 @@ struct GlobalContext
 #endif
 
 #if !defined(AVM_NO_SMP) && ATOMIC_LLONG_LOCK_FREE == 2
-    atomic_ullong ref_ticks;
+    unsigned long long ATOMIC ref_ticks;
 #else
     unsigned long long ref_ticks;
 #ifndef AVM_NO_SMP
