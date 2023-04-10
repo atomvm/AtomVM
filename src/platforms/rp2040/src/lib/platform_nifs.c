@@ -32,6 +32,8 @@
 
 #pragma GCC diagnostic pop
 
+#include "gpiodriver.h"
+
 //#define ENABLE_TRACE
 #include "trace.h"
 
@@ -126,5 +128,6 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &pico_rtc_set_datetime_nif;
     }
-    return NULL;
+
+    return nif_collection_resolve_nif(nifname);
 }

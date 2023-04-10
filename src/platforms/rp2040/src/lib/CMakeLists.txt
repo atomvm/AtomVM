@@ -21,12 +21,14 @@
 cmake_minimum_required (VERSION 3.13)
 
 set(HEADER_FILES
+    gpiodriver.h
     platform_defaultatoms.h
     platform_smp.h
     rp2040_sys.h
 )
 
 set(SOURCE_FILES
+    gpiodriver.c
     platform_defaultatoms.c
     platform_nifs.c
     smp.c
@@ -48,6 +50,7 @@ target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC libAtomVM)
 target_link_libraries(
     libAtomVM${PLATFORM_LIB_SUFFIX}
     PUBLIC
+        hardware_gpio
         hardware_rtc
         hardware_sync
         pico_float
@@ -60,3 +63,5 @@ target_link_libraries(
 if (NOT AVM_USE_32BIT_FLOAT)
     target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC pico_double)
 endif()
+
+target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC -Wl,-u -Wl,gpio_nif)

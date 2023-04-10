@@ -190,6 +190,28 @@ remove_int(GPIO, Pin) ->
     port:call(GPIO, {remove_int, Pin}).
 
 %%-----------------------------------------------------------------------------
+%% @param   Pin number to initialize
+%% @returns ok
+%% @doc     Initialize a pin to be used as GPIO.
+%%          Currently only implemented (and required) for RP2040 (Pico).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec init(Pin :: pin()) -> ok.
+init(_Pin) ->
+    ok.
+
+%%-----------------------------------------------------------------------------
+%% @param   Pin number to deinitialize
+%% @returns ok
+%% @doc     Reset a pin back to the NULL function.
+%%          Currently only implemented for RP2040 (Pico).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec deinit(Pin :: pin()) -> ok.
+deinit(_Pin) ->
+    ok.
+
+%%-----------------------------------------------------------------------------
 %% @param   Pin number to set operational mode
 %% @param   Direction is `input', `output', or `output_od'
 %% @returns ok | error

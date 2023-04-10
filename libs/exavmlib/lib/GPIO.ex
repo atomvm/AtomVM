@@ -251,6 +251,30 @@ defmodule GPIO do
     do: remove_int(:erlang.whereis(:gpio), gpio_num)
 
   @doc """
+  Initialize a pin to be used as a GPIO.
+
+  ## Parameters
+    - pin:  number of the pin to initialize
+
+  Only required on RP2040 (Pico).
+  """
+  @spec init(gpio_pin()) :: :ok
+  def init(_pin),
+    do: :ok
+
+  @doc """
+  Deinitialize a pin so it's no longer used as a GPIO.
+
+  ## Parameters
+    - pin:  number of the pin to initialize
+
+  Only implemented on RP2040 (Pico).
+  """
+  @spec deinit(gpio_pin()) :: :ok
+  def deinit(_pin),
+    do: :ok
+
+  @doc """
   Set the directional mode of a gpio pin.
 
   ## Parameters
@@ -342,6 +366,8 @@ defmodule GPIO do
 
   This will hold the current state of all pins when the mcu goes into
   deep sleep and will release the hold when the device wakes up.
+
+  Only implemented on esp32.
   """
   @spec deep_sleep_hold_en() :: :ok
   def deep_sleep_hold_en(),
@@ -349,6 +375,8 @@ defmodule GPIO do
 
   @doc """
   Disable all digital gpio pad hold function during deep sleep.
+
+  Only implemented on esp32.
   """
   @spec deep_sleep_hold_dis() :: :ok
   def deep_sleep_hold_dis(),

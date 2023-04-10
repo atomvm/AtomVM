@@ -40,6 +40,8 @@
 
 #include "rp2040_sys.h"
 
+struct NifCollectionDefListItem *nif_collection_list;
+
 void sys_init_platform(GlobalContext *glb)
 {
     struct RP2040PlatformData *platform = malloc(sizeof(struct RP2040PlatformData));
@@ -169,6 +171,7 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
     UNUSED(glb);
     UNUSED(driver_name);
     UNUSED(opts);
+
     return NULL;
 }
 
@@ -177,4 +180,34 @@ term sys_get_info(Context *ctx, term key)
     UNUSED(ctx);
     UNUSED(key);
     return UNDEFINED_ATOM;
+}
+
+void nif_collection_init_all(GlobalContext *global)
+{
+    for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
+        if (item->def->nif_collection_init_cb) {
+            item->def->nif_collection_init_cb(global);
+        }
+    }
+}
+
+void nif_collection_destroy_all(GlobalContext *global)
+{
+    for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
+        if (item->def->nif_collection_destroy_cb) {
+            item->def->nif_collection_destroy_cb(global);
+        }
+    }
+}
+
+const struct Nif *nif_collection_resolve_nif(const char *name)
+{
+    for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
+        const struct Nif *res = item->def->nif_collection_resove_nif_cb(name);
+        if (res) {
+            return res;
+        }
+    }
+
+    return NULL;
 }
