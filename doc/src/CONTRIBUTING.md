@@ -4,7 +4,7 @@
  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 -->
 
-# Contributing
+# Contributing Guidelines
 
 Make sure to understand the license and the contribution guidelines before contributing and last but not least be kind.
 
@@ -52,8 +52,8 @@ void f(int reverse) {
 
 * Struct names are PascalCase (e.g. Context)
 * Scalar types are lower case (e.g. term)
-* All other names (e.g. functions and variables) are snake_case (e.g. term_is_integer)
-* Always prefix function names (e.g. term_is_nil, term_is_integer, context_new, context_destroy)
+* All other names (e.g. functions and variables) are snake\_case (e.g. term\_is\_integer)
+* Always prefix function names (e.g. term\_is\_nil, term\_is\_integer, context\_new, context\_destroy)
 
 #### Other Coding Conventions
 * Pointer * should be with the variable name rather than with the type (e.g. `char *name`, not `char* name`)
