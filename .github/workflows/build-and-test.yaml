@@ -17,11 +17,13 @@ jobs:
 
       matrix:
         os: ["ubuntu-20.04", "ubuntu-22.04"]
-        cc: ["gcc-5", "gcc-6", "gcc-7", "gcc-8", "gcc-9", "gcc-10", "clang-3.9", "clang-10"]
-        cflags: ["-Os", "-O2", "-O3"]
+        cc: ["gcc-7", "gcc-8", "gcc-9", "gcc-10", "gcc-11", "gcc-12", "clang-10", "clang-11"]
+        # cc: ["gcc-7", "gcc-8", "gcc-9", "gcc-10", "gcc-11", "gcc-12", "clang-10", "clang-11", "clang-12", "clang-13", "clang-14"]
+        cflags: ["-O3"]
         otp: ["21", "22", "23", "24", "25", "master"]
 
         exclude:
+        # Ubuntu 22.04 with setup-beam only has OTP >= 24.2
         - os: "ubuntu-22.04"
           otp: "21"
         - os: "ubuntu-22.04"
@@ -29,55 +31,34 @@ jobs:
         - os: "ubuntu-22.04"
           otp: "23"
 
-        - os: "ubuntu-22.04"
-          cc: "clang-3.9"
-        - os: "ubuntu-22.04"
-          cc: "clang-10"
-        - os: "ubuntu-22.04"
-          cc: "gcc-5"
-        - os: "ubuntu-22.04"
-          cc: "gcc-6"
+        # Ubuntu 20.04 has gcc from 7 to 10 ("gcc" is gcc-9)
+        # Ubuntu 22.04 has gcc from 9 to 12 ("gcc" is gcc-11)
+        # Ubuntu 20.04 has clang 10 and 12 to  ("clang" is 10)
+        # Ubuntu 22.04 has clang from 12 to 14 ("clang" is 14)
+        # We want to test every compiler but don't need to test every OS
+        # and we favor later Ubuntu 22.04 + defaults
         - os: "ubuntu-22.04"
           cc: "gcc-7"
         - os: "ubuntu-22.04"
           cc: "gcc-8"
-
         - os: "ubuntu-20.04"
-          cc: "gcc-5"
+          cc: "gcc-10"
         - os: "ubuntu-20.04"
-          cc: "gcc-6"
+          cc: "gcc-11"
         - os: "ubuntu-20.04"
-          cc: "clang-3.9"
-
-        - cc: "gcc-5"
-          cflags: "-Os"
-        - cc: "gcc-6"
-          cflags: "-Os"
-        - cc: "gcc-7"
-          cflags: "-Os"
-        - cc: "gcc-8"
-          cflags: "-Os"
-        - cc: "gcc-9"
-          cflags: "-Os"
-
-        - cc: "gcc-5"
-          cflags: "-O3"
-        - cc: "gcc-6"
-          cflags: "-O3"
-        - cc: "gcc-7"
-          cflags: "-O3"
-        - cc: "gcc-8"
-          cflags: "-O3"
-        - cc: "gcc-9"
-          cflags: "-O3"
+          cc: "gcc-12"
+        - os: "ubuntu-22.04"
+          cc: "clang-10"
+        - os: "ubuntu-22.04"
+          cc: "clang-11"
+#       - os: "ubuntu-20.04"
+#         cc: "clang-12"
+#       - os: "ubuntu-20.04"
+#         cc: "clang-13"
+#       - os: "ubuntu-20.04"
+#         cc: "clang-14"
 
         include:
-        - cc: "gcc-5"
-          cxx: "g++-5"
-          compiler_pkgs: "gcc-5 g++-5"
-        - cc: "gcc-6"
-          cxx: "g++-6"
-          compiler_pkgs: "gcc-6 g++-6"
         - cc: "gcc-7"
           cxx: "g++-7"
           compiler_pkgs: "gcc-7 g++-7"
@@ -90,13 +71,28 @@ jobs:
         - cc: "gcc-10"
           cxx: "g++-10"
           compiler_pkgs: "gcc-10 g++-10"
-        - cc: "clang-3.9"
-          cxx: "clang++-3.9"
-          compiler_pkgs: "clang-3.9"
-          cmake_opts_smp: "-DAVM_DISABLE_SMP=On"
+        - cc: "gcc-11"
+          cxx: "g++-11"
+          compiler_pkgs: "gcc-11 g++-11"
+        - cc: "gcc-12"
+          cxx: "g++-12"
+          compiler_pkgs: "gcc-12 g++-12"
         - cc: "clang-10"
           cxx: "clang++-10"
           compiler_pkgs: "clang-10"
+        - cc: "clang-11"
+          cxx: "clang++-11"
+          compiler_pkgs: "clang-11"
+#       - cc: "clang-12"
+#         cxx: "clang++-12"
+#         compiler_pkgs: "clang-12"
+#       - cc: "clang-13"
+#         cxx: "clang++-13"
+#         compiler_pkgs: "clang-13"
+#       - cc: "clang-14"
+#         cxx: "clang++-14"
+#         compiler_pkgs: "clang-14"
+
 
         - otp: "21"
           elixir_version: "1.7"
@@ -110,6 +106,45 @@ jobs:
         - otp: "24"
           elixir_version: "1.14"
 
+        - otp: "25"
+          elixir_version: "1.14"
+
+        - otp: "master"
+          elixir_version: "master"
+
+        # Additional default compiler builds
+        - os: "ubuntu-20.04"
+          cc: "cc"
+          cxx: "c++"
+          otp: "25"
+          cflags: ""
+          elixir_version: "1.14"
+
+        - os: "ubuntu-22.04"
+          cc: "cc"
+          cxx: "c++"
+          otp: "25"
+          cflags: ""
+          elixir_version: "1.14"
+
+        # Additional latest & -Os compiler builds
+        - os: "ubuntu-22.04"
+          cc: "gcc-12"
+          cxx: "g++-12"
+          otp: "24"
+          cflags: "-Os"
+          elixir_version: "1.14"
+          compiler_pkgs: "gcc-12 g++-12"
+
+#       - os: "ubuntu-22.04"
+#         cc: "clang-14"
+#         cxx: "clang++-14"
+#         otp: "24"
+#         cflags: "-Os"
+#         elixir_version: "1.14"
+#         compiler_pkgs: "clang-14"
+
+        # Additional 32 bits build
         - os: "ubuntu-20.04"
           cc: "gcc-10"
           cxx: "g++-10"

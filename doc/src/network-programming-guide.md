@@ -29,7 +29,7 @@ The `<sta-properties>` property list should contain the following entries:
 
 > Note that the station mode SSID and password _may_ be stored in non-volatile storage, in which case these parameters may be skipped.  See the "NVS Credentials" section below, for more information about using non-volatile storage to store credentials that persist across device reboots.
 
-The `network:start/1` will immediately return `ok`, if the network was properly initialized, or `{error, Reason}`, if there was an error in configuration.  However, the application may want to wait for the device to connect to the target network and obtain an IP address, for example, before starting clients or services that require network access.
+The `network:start/1` will immediately return `{ok, Pid}`, where `Pid` is the process ID of the network server instance, if the network was properly initialized, or `{error, Reason}`, if there was an error in configuration.  However, the application may want to wait for the device to connect to the target network and obtain an IP address, for example, before starting clients or services that require network access.
 
 Applications can specify callback functions, which get triggered as events emerge from the network layer, including connection to and disconnection from the target network, as well as IP address acquisition.
 
@@ -60,7 +60,7 @@ The following example illustrates initialization of the WiFi network in STA mode
             {dhcp_hostname, <<"myesp32">>}
         ]}
     ],
-    ok = network:start(Config),
+    {ok, Pid} = network:start(Config),
     ...
 
 The following callback functions will be called when the corresponding events occur during the lifetime of the network connection.
@@ -113,7 +113,7 @@ If the password is omitted, then an _open network_ will be created, and a warnin
 
 > Note that the station mode SSID and password _may_ be stored in non-volatile storage, in which case these parameters may be skipped.  See the "NVS Credentials" section below, for more information about using non-volatile storage to store credentials that persist across device reboots.
 
-The `network:start/1` will immediately return `ok`, if the network was properly initialized, or `{error, Reason}`, if there was an error in configuration.  However, the application may want to wait for the device to to be ready to accept connections from other devices, or to be notified when other devices connect to this AP.
+The `network:start/1` will immediately return `{ok, Pid}`, where `Pid` is the process id of the network server, if the network was properly initialized, or `{error, Reason}`, if there was an error in configuration.  However, the application may want to wait for the device to to be ready to accept connections from other devices, or to be notified when other devices connect to this AP.
 
 Applications can specify callback functions, which get triggered as events emerge from the network layer, including when a station connects or disconnects from the AP, as well as when a station is assigned an IP address.
 
@@ -146,7 +146,7 @@ The following example illustrates initialization of the WiFi network in AP mode.
             {sta_disconnected, fun sta_disconnected/1},
         ]}
     ],
-    ok = network:start(Config),
+    {ok, Pid} = network:start(Config),
     ...
 
 The following callback functions will be called when the corresponding events occur during the lifetime of the network connection.
