@@ -154,7 +154,7 @@ wait_for_sta(StaConfig, Timeout) ->
     ],
     Config = [{sta, NewStaConfig}],
     case start(Config) of
-        ok ->
+        {ok, _Pid} ->
             wait_for_ip(Timeout);
         Error ->
             Error
@@ -203,7 +203,7 @@ wait_for_ap(ApConfig, Timeout) ->
     ],
     Config = [{ap, NewApConfig}],
     case start(Config) of
-        ok ->
+        {ok, _Pid} ->
             wait_for_ap_started(Timeout);
         Error ->
             Error
@@ -225,10 +225,10 @@ wait_for_ap(ApConfig, Timeout) ->
 -spec start(Config :: network_config()) -> ok | {error, Reason :: term()}.
 start(Config) ->
     case gen_server:start({local, ?MODULE}, ?MODULE, Config, []) of
-        {ok, Pid} ->
+        {ok, Pid} = R ->
             case gen_server:call(Pid, start) of
                 ok ->
-                    {ok, Pid};
+                    R;
                 Error ->
                     Error
             end;
@@ -239,10 +239,10 @@ start(Config) ->
 -spec start_link(Config :: network_config()) -> ok | {error, Reason :: term()}.
 start_link(Config) ->
     case gen_server:start_link({local, ?MODULE}, ?MODULE, Config, []) of
-        {ok, Pid} ->
+        {ok, Pid} = R ->
             case gen_server:call(Pid, start) of
                 ok ->
-                    {ok, Pid};
+                    R;
                 Error ->
                     Error
             end;

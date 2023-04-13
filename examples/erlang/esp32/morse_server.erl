@@ -34,7 +34,7 @@ start() ->
         ]}
     ],
     case network:start(Config) of
-        ok ->
+        {ok, _Pid} ->
             wait_for_message();
         Error ->
             erlang:display(Error)
