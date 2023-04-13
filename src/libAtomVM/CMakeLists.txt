@@ -126,8 +126,22 @@ if (AVM_DISABLE_SMP)
 else()
     include(CheckIncludeFile)
     CHECK_INCLUDE_FILE(stdatomic.h STDATOMIC_INCLUDE)
-    if(NOT STDATOMIC_INCLUDE)
-       message(FATAL_ERROR "stdatomic.h cannot be found, you need to disable SMP on this platform")
+    if(HAVE_PLATFORM_SMP_H)
+        target_compile_definitions(libAtomVM PUBLIC HAVE_PLATFORM_SMP_H)
+    endif()
+    include(CheckCSourceCompiles)
+    check_c_source_compiles("
+        #include <stdatomic.h>
+        int main() {
+            _Static_assert(ATOMIC_POINTER_LOCK_FREE == 2, \"Expected ATOMIC_POINTER_LOCK_FREE to be equal to 2\");
+        }
+    " ATOMIC_POINTER_LOCK_FREE_IS_TWO)
+    if (NOT ATOMIC_POINTER_LOCK_FREE_IS_TWO AND NOT HAVE_PLATFORM_SMP_H)
+        if (NOT STDATOMIC_INCLUDE)
+            message(FATAL_ERROR "stdatomic.h cannot be found, you need to disable SMP on this platform or provide platform_smp.h and define HAVE_PLATFORM_SMP_H")
+        else()
+            message(FATAL_ERROR "Platform doesn't support atomic pointers, you need to disable SMP or provide platform_smp.h and define HAVE_PLATFORM_SMP_H")
+        endif()
     endif()
 endif()
 

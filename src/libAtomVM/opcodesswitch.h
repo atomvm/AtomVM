@@ -902,7 +902,9 @@ typedef union
     }
 
 
+#ifndef MIN
 #define MIN(X, Y) ((X) < (Y) ? (X) : (Y))
+#endif
 
 #ifdef IMPL_EXECUTE_LOOP
 struct Int24

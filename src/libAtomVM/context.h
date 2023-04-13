@@ -35,15 +35,9 @@ extern "C" {
 #include "globalcontext.h"
 #include "linkedlist.h"
 #include "mailbox.h"
+#include "smp.h"
 #include "term.h"
 #include "timer_list.h"
-
-#if !defined(AVM_NO_SMP) && !defined(__cplusplus)
-#include <stdatomic.h>
-#define ATOMIC _Atomic
-#else
-#define ATOMIC
-#endif
 
 struct Module;
 
