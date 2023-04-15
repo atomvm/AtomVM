@@ -2980,6 +2980,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
 
 #ifdef IMPL_EXECUTE_LOOP
+                if (memory_ensure_free(ctx, 2) != MEMORY_GC_OK) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
                 term *list_elem = term_list_alloc(ctx);
 #endif
 
@@ -3011,7 +3014,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 USED_BY_TRACE(dreg);
 
                 #ifdef IMPL_EXECUTE_LOOP
+                    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(size)) != MEMORY_GC_OK)) {
+                      RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+
                     term t = term_alloc_tuple(size, ctx);
+
                     WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
 
@@ -3056,9 +3064,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("badmatch/1, v=0x%lx\n", arg1);
+                    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                      RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
 
                     term new_error_tuple = term_alloc_tuple(2, ctx);
-                    //TODO: check alloc
+
                     term_put_tuple_element(new_error_tuple, 0, BADMATCH_ATOM);
                     term_put_tuple_element(new_error_tuple, 1, arg1);
 
@@ -3107,9 +3118,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("case_end/1, v=0x%lx\n", arg1);
+                    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                      RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
 
                     term new_error_tuple = term_alloc_tuple(2, ctx);
-                    //TODO: reserve memory before
+
                     term_put_tuple_element(new_error_tuple, 0, CASE_CLAUSE_ATOM);
                     term_put_tuple_element(new_error_tuple, 1, arg1);
 
@@ -3345,6 +3359,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("try_case_end/1, val=%lx\n", arg1);
+                    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                      RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
 
                     term new_error_tuple = term_alloc_tuple(2, ctx);
                     //TODO: ensure memory before
@@ -3421,7 +3438,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         case ERROR_ATOM_INDEX: {
                             ctx->x[2] = stacktrace_build(ctx, &ctx->x[2]);
 
-                            if (UNLIKELY(memory_ensure_free(ctx, 6) != MEMORY_GC_OK)) {
+                            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
                             term reason_tuple = term_alloc_tuple(2, ctx);
@@ -3435,7 +3452,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                             break;
                         }
                         case LOWERCASE_EXIT_ATOM_INDEX: {
-                            if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+                            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
                             term exit_tuple = term_alloc_tuple(2, ctx);
@@ -6014,6 +6031,10 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
+                    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(size)) != MEMORY_GC_OK)) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+
                     term t = term_alloc_tuple(size, ctx);
                 #endif
 

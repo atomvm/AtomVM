@@ -81,6 +81,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(send_to_dead_process, 20),
     TEST_CASE_EXPECTED(byte_size_test, 10),
     TEST_CASE_EXPECTED(tuple, 6),
+    TEST_CASE_ATOMVM_ONLY(tuple_list_alloc, 4),
     TEST_CASE_EXPECTED(len_test, 5),
     TEST_CASE_EXPECTED(count_char, 2),
     TEST_CASE_EXPECTED(makelist_test, 532),

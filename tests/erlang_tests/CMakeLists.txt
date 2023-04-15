@@ -42,6 +42,7 @@ compile_erlang(send_to_dead_process)
 compile_erlang(selval)
 compile_erlang(byte_size_test)
 compile_erlang(tuple)
+compile_erlang(tuple_list_alloc)
 compile_erlang(count_char)
 compile_erlang(len_test)
 compile_erlang(makelist_test)
@@ -456,6 +457,7 @@ add_custom_target(erlang_test_modules DEPENDS
     selval.beam
     byte_size_test.beam
     tuple.beam
+    tuple_list_alloc.beam
     count_char.beam
     len_test.beam
     makelist_test.beam
