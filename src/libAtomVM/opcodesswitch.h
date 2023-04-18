@@ -391,6 +391,8 @@ typedef union
             DECODE_LITERAL(allocator_size, code_chunk, base_index, off);                \
             if (allocator_tag == COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FLOATS) {          \
                 allocator_size *= FLOAT_SIZE;                                           \
+            } else if (allocator_tag == COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FUNS) {     \
+                allocator_size *= BOXED_FUN_SIZE;                                       \
             }                                                                           \
             need += allocator_size;                                                     \
         }                                                                               \
@@ -654,6 +656,8 @@ typedef union
             DECODE_LITERAL(allocator_size, code_chunk, base_index, off);                \
             if (allocator_tag == COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FLOATS) {          \
                 allocator_size *= FLOAT_SIZE;                                           \
+            } else if (allocator_tag == COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FUNS) {     \
+                allocator_size *= BOXED_FUN_SIZE;                                       \
             }                                                                           \
             need += allocator_size;                                                     \
         }                                                                               \
@@ -1132,13 +1136,13 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 {
     uint32_t n_freeze = module_get_fun_freeze(mod, fun_index);
 
-    int size = 2 + n_freeze;
-    if (memory_ensure_free(ctx, size + 1) != MEMORY_GC_OK) {
+    int size = BOXED_FUN_SIZE + n_freeze;
+    if (memory_ensure_free(ctx, size) != MEMORY_GC_OK) {
         return term_invalid_term();
     }
-    term *boxed_func = memory_heap_alloc(ctx, size + 1);
+    term *boxed_func = memory_heap_alloc(ctx, size);
 
-    boxed_func[0] = (size << 6) | TERM_BOXED_FUN;
+    boxed_func[0] = ((size - 1) << 6) | TERM_BOXED_FUN;
     boxed_func[1] = (term) mod;
     boxed_func[2] = term_from_int(fun_index);
 
@@ -6117,22 +6121,20 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 dreg_type_t dreg_type;
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
                 DECODE_EXTENDED_LIST_TAG(code, i, next_off);
-                uint32_t size;
-                DECODE_LITERAL(size, code, i, next_off)
-                TRACE("make_fun3/3, fun_index=%i dreg=%c%i arity=%i\n", fun_index, T_DEST_REG(dreg_type, dreg), size);
+                uint32_t numfree;
+                DECODE_LITERAL(numfree, code, i, next_off)
+                TRACE("make_fun3/3, fun_index=%i dreg=%c%i numfree=%i\n", fun_index, T_DEST_REG(dreg_type, dreg), numfree);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (memory_ensure_free(ctx, size + 3) != MEMORY_GC_OK) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                    term *boxed_func = memory_heap_alloc(ctx, size + 3);
+                    size_t size = numfree + BOXED_FUN_SIZE;
+                    term *boxed_func = memory_heap_alloc(ctx, size);
 
-                    boxed_func[0] = ((size + 2) << 6) | TERM_BOXED_FUN;
+                    boxed_func[0] = ((size - 1) << 6) | TERM_BOXED_FUN;
                     boxed_func[1] = (term) mod;
                     boxed_func[2] = term_from_int(fun_index);
                 #endif
 
-                for (uint32_t j = 0; j < size; j++) {
+                for (uint32_t j = 0; j < numfree; j++) {
                     term arg;
                     DECODE_COMPACT_TERM(arg, code, i, next_off);
                     #ifdef IMPL_EXECUTE_LOOP
@@ -6543,9 +6545,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_LITERAL(size, code, i, next_off);
                 #ifdef IMPL_EXECUTE_LOOP
                     term dst;
-                    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(size)) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
                     dst = term_alloc_tuple(size, ctx);
                 #endif
                 term src;
