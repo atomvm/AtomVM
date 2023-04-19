@@ -4757,9 +4757,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     } else {
                         term_set_match_state_offset(src, bs_offset + increment);
 
-                        term t = term_make_maybe_boxed_int64(ctx, value.s);
+                        term t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
                         if (UNLIKELY(term_is_invalid_term(t))) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                            HANDLE_ERROR();
                         }
 
                         WRITE_REGISTER(dreg_type, dreg, t);
