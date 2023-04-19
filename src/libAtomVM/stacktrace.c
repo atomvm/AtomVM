@@ -261,7 +261,7 @@ term stacktrace_build(Context *ctx, term *stack_info)
     //
     // [{module, function, arity, [{file, string()}, {line, int}]}, ...]
     //
-    size_t requested_size = (TUPLE_SIZE(4) + 2) * num_frames + num_aux_terms * (2 + 2 * TUPLE_SIZE(2)) + 2 * filename_lens;
+    size_t requested_size = (TUPLE_SIZE(4) + 2) * num_frames + num_aux_terms * (4 + 2 * TUPLE_SIZE(2)) + 2 * filename_lens;
     if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
         free(module_paths);
         return OUT_OF_MEMORY_ATOM;
