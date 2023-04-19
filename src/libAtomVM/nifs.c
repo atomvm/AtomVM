@@ -2648,8 +2648,8 @@ static term nif_binary_split_2(Context *ctx, int argc, term argv[])
         int rest_size = bin_size - offset - pattern_size;
         size_t rest_size_in_terms = term_sub_binary_heap_size(bin_term, rest_size);
 
-        // + 2 which is the result cons
-        if (UNLIKELY(memory_ensure_free(ctx, tok_size_in_terms + rest_size_in_terms + 2) != MEMORY_GC_OK)) {
+        // + 4 which is the result cons
+        if (UNLIKELY(memory_ensure_free(ctx, tok_size_in_terms + rest_size_in_terms + 4) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 
