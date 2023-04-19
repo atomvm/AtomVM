@@ -187,7 +187,13 @@ static void context_monitors_handle_terminate(Context *ctx)
 
                 mailbox_send(target, info_tuple);
             } else {
-                target->exit_reason = memory_copy_term_tree(&ctx->heap_ptr, ctx->exit_reason, &ctx->mso_list);
+                size_t estimated_mem_usage = memory_estimate_usage(ctx->exit_reason);
+                if (UNLIKELY(memory_ensure_free(target, estimated_mem_usage) != MEMORY_GC_OK)) {
+                    //TODO: handle out of memory here
+                    fprintf(stderr, "Cannot handle out of memory.\n");
+                    AVM_ABORT();
+                }
+                target->exit_reason = memory_copy_term_tree(&target->heap_ptr, ctx->exit_reason, &target->mso_list);
 
                 // TODO: this cannot work on multicore systems
                 // target context should be marked as killed and terminated during next scheduling
