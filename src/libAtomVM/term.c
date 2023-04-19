@@ -407,6 +407,20 @@ static int term_type_to_index(term t)
     }
 }
 
+#define BEGIN_MAP_KEY TERM_RESERVED_MARKER(1)
+#define END_MAP_KEY TERM_RESERVED_MARKER(0)
+
+#define CMP_POP_AND_CONTINUE()                                                                     \
+    other = temp_stack_pop(&temp_stack);                                                           \
+    if (other == BEGIN_MAP_KEY) {                                                                  \
+        map_key_nesting++;                                                                       \
+        other = temp_stack_pop(&temp_stack);                                                       \
+    } else if (other == END_MAP_KEY) {                                                             \
+        map_key_nesting--;                                                                       \
+        other = temp_stack_pop(&temp_stack);                                                       \
+    }                                                                                              \
+    t = temp_stack_pop(&temp_stack);
+
 TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalContext *global)
 {
     struct TempStack temp_stack;
@@ -422,11 +436,11 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
     }
 
     TermCompareResult result = TermEquals;
+    int map_key_nesting = 0;
 
     while (!temp_stack_is_empty(&temp_stack)) {
         if (t == other) {
-            other = temp_stack_pop(&temp_stack);
-            t = temp_stack_pop(&temp_stack);
+            CMP_POP_AND_CONTINUE();
 
         } else if (term_is_integer(t) && term_is_integer(other)) {
             avm_int_t t_int = term_to_int(t);
@@ -439,8 +453,7 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
             int64_t t_ticks = term_to_ref_ticks(t);
             int64_t other_ticks = term_to_ref_ticks(other);
             if (t_ticks == other_ticks) {
-                other = temp_stack_pop(&temp_stack);
-                t = temp_stack_pop(&temp_stack);
+                CMP_POP_AND_CONTINUE();
             } else {
                 result = (t_ticks > other_ticks) ? TermGreaterThan : TermLessThan;
                 break;
@@ -490,8 +503,7 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                 other = term_get_tuple_element(other, 0);
 
             } else {
-                other = temp_stack_pop(&temp_stack);
-                t = temp_stack_pop(&temp_stack);
+                CMP_POP_AND_CONTINUE();
             }
 
         } else if (term_is_binary(t) && term_is_binary(other)) {
@@ -506,8 +518,7 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
             int memcmp_result = memcmp(t_data, other_data, cmp_size);
             if (memcmp_result == 0) {
                 if (t_size == other_size) {
-                    other = temp_stack_pop(&temp_stack);
-                    t = temp_stack_pop(&temp_stack);
+                    CMP_POP_AND_CONTINUE();
                 } else {
                     result = (t_size > other_size) ? TermGreaterThan : TermLessThan;
                     break;
@@ -536,11 +547,19 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                         return TermCompareMemoryAllocFail;
                     }
                     if (UNLIKELY(
+                            temp_stack_push(&temp_stack, END_MAP_KEY) != TempStackOk)) {
+                        return TermCompareMemoryAllocFail;
+                    }
+                    if (UNLIKELY(
                             temp_stack_push(&temp_stack, term_get_map_key(t, i)) != TempStackOk)) {
                         return TermCompareMemoryAllocFail;
                     }
                     if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_key(other, i))
                             != TempStackOk)) {
+                        return TermCompareMemoryAllocFail;
+                    }
+                    if (UNLIKELY(
+                            temp_stack_push(&temp_stack, BEGIN_MAP_KEY) != TempStackOk)) {
                         return TermCompareMemoryAllocFail;
                     }
                 }
@@ -550,20 +569,22 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                 if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(other, 0)) != TempStackOk)) {
                     return TermCompareMemoryAllocFail;
                 }
+                map_key_nesting++;
+                if (UNLIKELY(temp_stack_push(&temp_stack, END_MAP_KEY) != TempStackOk)) {
+                    return TermCompareMemoryAllocFail;
+                }
                 t = term_get_map_key(t, 0);
                 other = term_get_map_key(other, 0);
 
             } else {
-                other = temp_stack_pop(&temp_stack);
-                t = temp_stack_pop(&temp_stack);
+                CMP_POP_AND_CONTINUE();
             }
 
         } else if (term_is_any_integer(t) && term_is_any_integer(other)) {
             avm_int64_t t_int = term_maybe_unbox_int64(t);
             avm_int64_t other_int = term_maybe_unbox_int64(other);
             if (t_int == other_int) {
-                other = temp_stack_pop(&temp_stack);
-                t = temp_stack_pop(&temp_stack);
+                CMP_POP_AND_CONTINUE();
             } else {
                 result = (t_int > other_int) ? TermGreaterThan : TermLessThan;
                 break;
@@ -573,19 +594,18 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
             avm_float_t t_float = term_to_float(t);
             avm_float_t other_float = term_to_float(other);
             if (t_float == other_float) {
-                other = temp_stack_pop(&temp_stack);
-                t = temp_stack_pop(&temp_stack);
+                CMP_POP_AND_CONTINUE();
             } else {
                 result = (t_float > other_float) ? TermGreaterThan : TermLessThan;
                 break;
             }
 
-        } else if (term_is_number(t) && term_is_number(other) && ((opts & TermCompareExact) != TermCompareExact)) {
+        } else if (term_is_number(t) && term_is_number(other)
+            && ((opts & TermCompareExact) != TermCompareExact) && (map_key_nesting == 0)) {
             avm_float_t t_float = term_conv_to_float(t);
             avm_float_t other_float = term_conv_to_float(other);
             if (t_float == other_float) {
-                other = temp_stack_pop(&temp_stack);
-                t = temp_stack_pop(&temp_stack);
+                CMP_POP_AND_CONTINUE();
             } else {
                 result = (t_float > other_float) ? TermGreaterThan : TermLessThan;
                 break;
