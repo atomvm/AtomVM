@@ -3229,7 +3229,7 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
     size_t dst_size_with_pad = dst_size + pad;
     size_t heap_free = return_binary ?
         term_binary_data_size_in_terms(dst_size_with_pad) + BINARY_HEADER_SIZE
-        : 2*dst_size;
+        : 2*dst_size_with_pad;
     if (UNLIKELY(memory_ensure_free(ctx, heap_free) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
