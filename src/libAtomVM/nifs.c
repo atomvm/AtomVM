@@ -2709,8 +2709,8 @@ static term nif_binary_split_2(Context *ctx, int argc, term argv[])
         int rest_size = bin_size - offset - pattern_size;
         size_t rest_size_in_terms = term_sub_binary_heap_size(bin_term, rest_size);
 
-        // + 2 which is the result cons
-        if (UNLIKELY(memory_ensure_free(ctx, tok_size_in_terms + rest_size_in_terms + 2) != MEMORY_GC_OK)) {
+        // + 4 which is the result cons
+        if (UNLIKELY(memory_ensure_free(ctx, tok_size_in_terms + rest_size_in_terms + 4) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 
@@ -3301,7 +3301,7 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
     size_t dst_size_with_pad = dst_size + pad;
     size_t heap_free = return_binary ?
         term_binary_data_size_in_terms(dst_size_with_pad) + BINARY_HEADER_SIZE
-        : 2*dst_size;
+        : 2*dst_size_with_pad;
     if (UNLIKELY(memory_ensure_free(ctx, heap_free) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }

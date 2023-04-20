@@ -100,7 +100,11 @@ static term nif_openssl_random(Context *ctx, int argc, term argv[])
         return t;
     }
     uint32_t *r = (uint32_t *) term_binary_data(t);
-    return term_make_boxed_int(*r, ctx);
+    avm_int_t value = *r;
+    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    return term_make_boxed_int(value, ctx);
 }
 
 static const struct Nif openssl_md5_nif =
