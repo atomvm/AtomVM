@@ -49,6 +49,12 @@ start() ->
     true = test_reverse(-pow(31), <<131, 98, 128, 0, 0, 0>>),
     true = test_reverse(-pow(31) - 1, <<131, 110, 4, 1, 1, 0, 0, 128>>),
 
+    %% edge cases around boxed integers in 32 bits and 64 bits platforms
+    true = test_reverse(pow(27) - 1, <<131, 98, 7, 255, 255, 255>>),
+    true = test_reverse(-pow(27), <<131, 98, 248, 0, 0, 0>>),
+    true = test_reverse(pow(59) - 1, <<131, 110, 8, 0, 255, 255, 255, 255, 255, 255, 255, 7>>),
+    true = test_reverse(-pow(59), <<131, 110, 8, 1, 0, 0, 0, 0, 0, 0, 0, 8>>),
+
     %% missing sign
     ok = assert_badarg(
         fun() ->
