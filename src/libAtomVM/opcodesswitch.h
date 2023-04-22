@@ -1137,7 +1137,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
     uint32_t n_freeze = module_get_fun_freeze(mod, fun_index);
 
     int size = BOXED_FUN_SIZE + n_freeze;
-    if (memory_ensure_free(ctx, size) != MEMORY_GC_OK) {
+    if (memory_ensure_free_opt(ctx, size, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK) {
         return term_invalid_term();
     }
     term *boxed_func = memory_heap_alloc(ctx, size);
@@ -1764,7 +1764,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     context_clean_registers(ctx, live);
 
                     if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
-                        if (UNLIKELY(memory_ensure_free(ctx, stack_need + 1) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_opt(ctx, stack_need + 1, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     }
@@ -1800,7 +1800,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     context_clean_registers(ctx, live);
 
                     if ((ctx->heap_ptr + heap_need) > ctx->e - (stack_need + 1)) {
-                        if (UNLIKELY(memory_ensure_free(ctx, heap_need + stack_need + 1) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_opt(ctx, heap_need + stack_need + 1, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     }
@@ -1833,7 +1833,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     context_clean_registers(ctx, live);
 
                     if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
-                        if (UNLIKELY(memory_ensure_free(ctx, stack_need + 1) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_opt(ctx, stack_need + 1, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     }
@@ -1873,7 +1873,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     context_clean_registers(ctx, live);
 
                     if ((ctx->heap_ptr + heap_need) > ctx->e - (stack_need + 1)) {
-                        if (UNLIKELY(memory_ensure_free(ctx, heap_need + stack_need + 1) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_opt(ctx, heap_need + stack_need + 1, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     }
@@ -1904,14 +1904,14 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     // if we need more heap space than is currently free, then try to GC the needed space
                     if (heap_free < heap_need) {
                         context_clean_registers(ctx, live_registers);
-                        if (UNLIKELY(memory_ensure_free(ctx, heap_need) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_opt(ctx, heap_need, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     // otherwise, there is enough space for the needed heap, but there might
                     // more more than necessary.  In that case, try to shrink the heap.
                     } else if (heap_free > heap_need * HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF) {
                         context_clean_registers(ctx, live_registers);
-                        if (UNLIKELY(memory_ensure_free(ctx, heap_need * (HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF / 2)) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_opt(ctx, heap_need * (HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF / 2), MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                             TRACE("Unable to ensure free memory.  heap_need=%i\n", heap_need);
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
@@ -3044,7 +3044,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
             case OP_BADMATCH: {
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, 3, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
@@ -3095,7 +3095,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
             case OP_CASE_END: {
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, 3, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
@@ -3144,7 +3144,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                     term fun = ctx->x[args_count];
                     if (UNLIKELY(!term_is_function(fun))) {
-                        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                         term new_error_tuple = term_alloc_tuple(2, ctx);
@@ -3333,7 +3333,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
             case OP_TRY_CASE_END: {
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, 3, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
@@ -3425,7 +3425,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         case ERROR_ATOM_INDEX: {
                             ctx->x[2] = stacktrace_build(ctx, &ctx->x[2]);
 
-                            if (UNLIKELY(memory_ensure_free(ctx, 6) != MEMORY_GC_OK)) {
+                            if (UNLIKELY(memory_ensure_free_opt(ctx, 6, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
                             term reason_tuple = term_alloc_tuple(2, ctx);
@@ -3439,7 +3439,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                             break;
                         }
                         case LOWERCASE_EXIT_ATOM_INDEX: {
-                            if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+                            if (UNLIKELY(memory_ensure_free_opt(ctx, 3, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
                             term exit_tuple = term_alloc_tuple(2, ctx);
@@ -3516,7 +3516,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                     TRACE("bs_init2/6, fail=%u size=%li words=%u regs=%u dreg=%c%i\n", (unsigned) fail, size_val, (unsigned) words, (unsigned) regs, T_DEST_REG(dreg_type, dreg));
 
-                    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(size_val) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(size_val) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     term t = term_create_empty_binary(size_val, ctx);
@@ -3565,7 +3565,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                     TRACE("bs_init_bits/6, fail=%i size=%li words=%i regs=%i dreg=%c%i\n", fail, size_val, words, regs, T_DEST_REG(dreg_type, dreg));
 
-                    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(size_val / 8) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(size_val / 8) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     term t = term_create_empty_binary(size_val / 8, ctx);
@@ -4018,7 +4018,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 TRACE("bs_init_writable/0\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(0) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(0) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     term t = term_create_empty_binary(0, ctx);
@@ -4082,7 +4082,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                     size_t src_size = term_binary_size(src);
                     // TODO: further investigate extra_val
-                    if (UNLIKELY(memory_ensure_free(ctx, src_size + term_binary_data_size_in_terms(size_val / 8) + extra_val + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, src_size + term_binary_data_size_in_terms(size_val / 8) + extra_val + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     DECODE_COMPACT_TERM(src, code, i, src_off)
@@ -4137,7 +4137,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     TRACE("bs_private_append/6, fail=%u size=%li unit=%u src=0x%lx dreg=%c%i\n", (unsigned) fail, size_val, (unsigned) unit, src, T_DEST_REG(dreg_type, dreg));
 
                     size_t src_size = term_binary_size(src);
-                    if (UNLIKELY(memory_ensure_free(ctx, src_size + term_binary_data_size_in_terms(size_val / 8) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, src_size + term_binary_data_size_in_terms(size_val / 8) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     DECODE_COMPACT_TERM(src, code, i, src_off)
@@ -4307,7 +4307,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     int slots = term_to_int(slots_term);
 
-                    if (memory_ensure_free(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE + slots) != MEMORY_GC_OK) {
+                    if (memory_ensure_free_opt(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE + slots, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
 
@@ -4339,7 +4339,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
             case OP_BS_START_MATCH3: {
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (memory_ensure_free(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE) != MEMORY_GC_OK) {
+                    if (memory_ensure_free_opt(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
@@ -4446,7 +4446,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                             size_t heap_size = term_sub_binary_heap_size(bs_bin, src_size - start_pos);
 
 
-                            if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+                            if (UNLIKELY(memory_ensure_free_opt(ctx, heap_size, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
                             DECODE_COMPACT_TERM(src, code, i, src_off);
@@ -4834,7 +4834,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     term_set_match_state_offset(src, bs_offset + size_val * unit);
 
                     size_t heap_size = term_sub_binary_heap_size(bs_bin, size_val);
-                    if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, heap_size, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     // re-compute src
@@ -4880,7 +4880,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                             term src_bin = term_get_match_state_binary(src);
                             int len = term_binary_size(src_bin) - offset / 8;
                             size_t heap_size = term_sub_binary_heap_size(src_bin, len);
-                            if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+                            if (UNLIKELY(memory_ensure_free_opt(ctx, heap_size, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
                             // src might be invalid after a GC
@@ -5378,7 +5378,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     size_t new_map_size = src_size + new_entries;
                     bool is_shared = new_entries == 0;
                     size_t heap_needed = term_map_size_in_terms_maybe_shared(new_map_size, is_shared);
-                    if (memory_ensure_free(ctx, heap_needed) != MEMORY_GC_OK) {
+                    if (memory_ensure_free_opt(ctx, heap_needed, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     DECODE_COMPACT_TERM(src, code, i, src_offset);
@@ -5506,7 +5506,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     // Maybe GC, and reset the src term in case it changed
                     //
                     size_t src_size = term_get_map_size(src);
-                    if (memory_ensure_free(ctx, term_map_size_in_terms_maybe_shared(src_size, true)) != MEMORY_GC_OK) {
+                    if (memory_ensure_free_opt(ctx, term_map_size_in_terms_maybe_shared(src_size, true), MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     DECODE_COMPACT_TERM(src, code, i, src_offset);
@@ -6069,7 +6069,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
             case OP_BS_START_MATCH4: {
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (memory_ensure_free(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE) != MEMORY_GC_OK) {
+                    if (memory_ensure_free_opt(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
@@ -6331,7 +6331,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         RAISE_ERROR(UNSUPPORTED_ATOM);
                     }
                     context_clean_registers(ctx, live);
-                    if (UNLIKELY(memory_ensure_free(ctx, alloc + term_binary_data_size_in_terms(binary_size / 8) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, alloc + term_binary_data_size_in_terms(binary_size / 8) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     term t = term_create_empty_binary(binary_size / 8, ctx);
@@ -6490,7 +6490,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                 #ifdef IMPL_EXECUTE_LOOP
                     if (UNLIKELY(!term_is_function(fun))) {
-                        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                         // Decode the function again after GC was possibly run
@@ -6515,7 +6515,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 TRACE("badrecord/1\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     term value;
@@ -6734,7 +6734,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                                     goto bs_match_jump_to_fail;
                                 }
                                 size_t heap_size = term_sub_binary_heap_size(bs_bin, matched_bits / 8);
-                                if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+                                if (UNLIKELY(memory_ensure_free_opt(ctx, heap_size, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                                 }
                                 // re-compute match_state as GC could have moved it
@@ -6768,7 +6768,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                                     RAISE_ERROR(BADARG_ATOM);
                                 }
                                 size_t heap_size = term_sub_binary_heap_size(bs_bin, tail_bits / 8);
-                                if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+                                if (UNLIKELY(memory_ensure_free_opt(ctx, heap_size, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK)) {
                                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                                 }
                                 // re-compute match_state as GC could have moved it
@@ -6874,7 +6874,7 @@ handle_error:
             bool throw = ctx->x[0] == THROW_ATOM;
 
             int exit_reason_tuple_size = (throw ? TUPLE_SIZE(2) : 0) + TUPLE_SIZE(2);
-            if (memory_ensure_free(ctx, exit_reason_tuple_size) != MEMORY_GC_OK) {
+            if (memory_ensure_free_opt(ctx, exit_reason_tuple_size, MEMORY_CAN_SHRINK, 0, NULL) != MEMORY_GC_OK) {
                 ctx->exit_reason = OUT_OF_MEMORY_ATOM;
             } else {
                 term error_term;
