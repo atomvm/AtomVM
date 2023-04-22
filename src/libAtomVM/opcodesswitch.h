@@ -6195,6 +6195,10 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 dreg_type_t reg_a_type;
                 DECODE_DEST_REGISTER(reg_a, reg_a_type, code, i, next_off);
                 TRACE("recv_marker_reserve/1: reg1=%c%i\n", T_DEST_REG(reg_a_type, reg_a));
+#ifdef IMPL_EXECUTE_LOOP
+                // Clear register to avoid any issue with GC
+                WRITE_REGISTER(reg_a_type, reg_a, term_nil());
+#endif
                 NEXT_INSTRUCTION(next_off);
                 break;
             }
