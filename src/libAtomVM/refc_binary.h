@@ -77,6 +77,13 @@ bool refc_binary_decrement_refcount(struct RefcBinary *ptr);
  */
 term refc_binary_create_binary_info(Context *ctx);
 
+/**
+ * @brief Return the total size (in bytes) of all reference counted binaries
+ *
+ * @return the total size (in bytes) of all reference counted binaries
+ */
+size_t refc_binary_total_size(Context *ctx);
+
 #ifdef __cplusplus
 }
 #endif

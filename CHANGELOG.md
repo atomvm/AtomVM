@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for FP opcodes 94-102 thus removing the need for `AVM_DISABLE_FP=On` with OTP-22+
 - Added support for stacktraces
 - Added support for `utf-8`, `utf-16`, and `utf-32` bit syntax modifiers (put and match)
+- Added support for `erlang:memory(binary)`
 
 
 ### Fixed

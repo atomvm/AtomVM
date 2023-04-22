@@ -340,6 +340,16 @@ The 0-arity version of this function will run the garbage collector on the curre
     Pid = ... %% get a reference to some pid
     ok = erlang:garbage_collect(Pid).
 
+Use the `erlang:memory/1` function to obtain information about allocated memory.
+
+Currently, AtomVM supports the following types:
+
+| Type | Description |
+|------|-------------|
+| `binary` | Return the total amount of memory (in bytes) occupied by (reference counted) binaries |
+
+> Note.  Binary data small enough to be stored in the Erlang process heap are not counted in this measurement.
+
 ### System Time
 
 AtomVM supports numerous function for accessing the current time on the device.

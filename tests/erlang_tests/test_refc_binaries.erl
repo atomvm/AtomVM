@@ -26,6 +26,13 @@
     <<"0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789">>
 ).
 
+-define(VERIFY(X),
+    case X of
+        true -> ok;
+        _ -> throw({assertion_failure, ??X, ?MODULE, ?FUNCTION_NAME, ?LINE})
+    end
+).
+
 -record(state, {
     bin
 }).
@@ -42,47 +49,56 @@ start() ->
 
 test_heap_binary() ->
     HeapSize0 = get_heap_size(),
-    Bin = create_binary(63),
+    MemoryBinarySize = erlang:memory(binary),
+    Bin = create_binary(get_largest_heap_binary_size()),
     HeapSize1 = get_heap_size(),
-    true = HeapSize0 < HeapSize1,
-    true = erlang:byte_size(Bin) < HeapSize1,
+    ?VERIFY(MemoryBinarySize == erlang:memory(binary)),
+    ?VERIFY(HeapSize0 < HeapSize1),
+    ?VERIFY(erlang:byte_size(Bin) < HeapSize1),
     ok.
 
 test_const_binary() ->
     HeapSize0 = get_heap_size(),
-    BinarySize = erlang:byte_size(?LITERAL_BIN),
-    true = HeapSize0 < BinarySize,
+    MemoryBinarySize = erlang:memory(binary),
+    ?VERIFY(MemoryBinarySize == erlang:memory(binary)),
+    ?VERIFY(HeapSize0 < erlang:byte_size(?LITERAL_BIN)),
     ok.
 
 test_non_const_binary() ->
     HeapSize0 = get_heap_size(),
+    MemoryBinarySize = erlang:memory(binary),
     String = create_string(1024),
     HeapSize1 = get_heap_size(),
-    true = HeapSize0 < HeapSize1,
+    ?VERIFY(HeapSize0 < HeapSize1),
     Bin = create_binary(String),
     HeapSize2 = get_heap_size(),
-    true = HeapSize1 < HeapSize2,
-    true = HeapSize2 < (HeapSize1 + erlang:byte_size(Bin)),
+    ?VERIFY(MemoryBinarySize + 1024 == erlang:memory(binary)),
+    ?VERIFY(HeapSize1 < HeapSize2),
+    ?VERIFY(HeapSize2 < (HeapSize1 + erlang:byte_size(Bin))),
     id(String),
     id(Bin),
     ok.
 
 test_refc_binaries() ->
+    MemoryBinarySize = erlang:memory(binary),
     String = create_string(1024),
     Bins = [create_binary(String) || _ <- [x, x, x]],
-    BinsInfo = [{1024, 1} || _ <- [x, x, x]],
-    ok = verify_refc_binary_info(BinsInfo),
+    ?VERIFY(MemoryBinarySize + (1024 * 3) =< erlang:memory(binary)),
+
+    MemoryBinarySize1 = erlang:memory(binary),
     MoreBins = [create_binary(String) || _ <- [x, x, x], _ <- [x, x, x], _ <- [x, x, x]],
-    MoreBinsInfo = BinsInfo ++ [{1024, 1} || _ <- [x, x, x], _ <- [x, x, x], _ <- [x, x, x]],
-    ok = verify_refc_binary_info(MoreBinsInfo),
+    ?VERIFY(MemoryBinarySize1 + (1024 * 3) + (1024 * 9) =< erlang:memory(binary)),
+
     id(String),
     id(Bins),
     id(MoreBins),
     ok.
 
 test_send() ->
+    MemoryBinarySize = erlang:memory(binary),
     Bin = create_binary(1024),
-    ok = verify_refc_binary_info([{1024, 1}]),
+    ?VERIFY(MemoryBinarySize + 1024 =< erlang:memory(binary)),
+
     Pid = erlang:spawn(fun() -> loop(#state{}) end),
     PidHeapSize0 = get_heap_size(Pid),
     %%
@@ -90,9 +106,9 @@ test_send() ->
     %%
     ok = send(Pid, {ref, Bin}),
     PidHeapSize1 = get_heap_size(Pid),
-    true = PidHeapSize0 < PidHeapSize1,
-    true = PidHeapSize1 < 1024,
-    ok = verify_refc_binary_info([{1024, 2}]),
+    ?VERIFY(PidHeapSize0 < PidHeapSize1),
+    ?VERIFY(PidHeapSize1 < 1024),
+    ?VERIFY(MemoryBinarySize + 1024 =< erlang:memory(binary)),
     %%
     %% Make sure we can get what we sent
     %%
@@ -102,7 +118,7 @@ test_send() ->
     %%
     ok = send(Pid, free),
     PidHeapSize2 = get_heap_size(Pid),
-    true = PidHeapSize2 < PidHeapSize1,
+    ?VERIFY(PidHeapSize2 < PidHeapSize1),
     ok = send(Pid, halt),
     ok.
 
@@ -122,7 +138,7 @@ test_spawn() ->
     %%
     ok = send(Pid, free),
     PidHeapSize2 = get_heap_size(Pid),
-    true = PidHeapSize2 < PidHeapSize0,
+    ?VERIFY(PidHeapSize2 < PidHeapSize0),
     ok = send(Pid, halt),
     ok.
 
@@ -142,9 +158,17 @@ test_spawn_fun() ->
     %%
     ok = send(Pid, free),
     PidHeapSize2 = get_heap_size(Pid),
-    true = PidHeapSize2 < PidHeapSize0,
+    ?VERIFY(PidHeapSize2 < PidHeapSize0),
     ok = send(Pid, halt),
     ok.
+
+get_largest_heap_binary_size() ->
+    case erlang:system_info(wordsize) of
+        4 ->
+            31;
+        8 ->
+            63
+    end.
 
 get_heap_size() ->
     {heap_size, Size} = erlang:process_info(self(), heap_size),
@@ -214,14 +238,5 @@ execute(Pid, Fun) ->
                 {error, Error}
         end,
     Pid ! Result.
-
-verify_refc_binary_info(Expected) ->
-    case erlang:system_info(machine) of
-        "BEAM" ->
-            ok;
-        _ ->
-            Expected = erlang:system_info(refc_binary_info),
-            ok
-    end.
 
 id(X) -> X.
