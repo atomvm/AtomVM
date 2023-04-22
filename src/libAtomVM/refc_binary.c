@@ -76,7 +76,7 @@ term refc_binary_create_binary_info(Context *ctx)
     if (len == 0) {
         return term_nil();
     }
-    if (memory_ensure_free(ctx, len * TUPLE_SIZE(2)) != MEMORY_GC_OK) {
+    if (memory_ensure_free(ctx, len * (2 + TUPLE_SIZE(2))) != MEMORY_GC_OK) {
         return term_invalid_term();
     }
     term ret = term_nil();
