@@ -2511,8 +2511,13 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM)
     }
     if (return_used) {
+        // Trick: use x[0] as a gc root.
+        ctx->x[0] = dst;
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
         term ret = term_alloc_tuple(2, ctx);
-        term_put_tuple_element(ret, 0, dst);
+        term_put_tuple_element(ret, 0, ctx->x[0]);
         term_put_tuple_element(ret, 1, term_from_int(bytes_read));
         return ret;
     } else {
