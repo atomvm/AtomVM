@@ -34,6 +34,7 @@ start() ->
     ok = run_test(fun() -> test_heap_binary() end),
     ok = run_test(fun() -> test_const_binary() end),
     ok = run_test(fun() -> test_non_const_binary() end),
+    ok = run_test(fun() -> test_refc_binaries() end),
     ok = run_test(fun() -> test_send() end),
     ok = run_test(fun() -> test_spawn() end),
     ok = run_test(fun() -> test_spawn_fun() end),
@@ -66,8 +67,22 @@ test_non_const_binary() ->
     id(Bin),
     ok.
 
+test_refc_binaries() ->
+    String = create_string(1024),
+    Bins = [create_binary(String) || _ <- [x, x, x]],
+    BinsInfo = [{1024, 1} || _ <- [x, x, x]],
+    ok = verify_refc_binary_info(BinsInfo),
+    MoreBins = [create_binary(String) || _ <- [x, x, x], _ <- [x, x, x], _ <- [x, x, x]],
+    MoreBinsInfo = BinsInfo ++ [{1024, 1} || _ <- [x, x, x], _ <- [x, x, x], _ <- [x, x, x]],
+    ok = verify_refc_binary_info(MoreBinsInfo),
+    id(String),
+    id(Bins),
+    id(MoreBins),
+    ok.
+
 test_send() ->
     Bin = create_binary(1024),
+    ok = verify_refc_binary_info([{1024, 1}]),
     Pid = erlang:spawn(fun() -> loop(#state{}) end),
     PidHeapSize0 = get_heap_size(Pid),
     %%
@@ -77,6 +92,7 @@ test_send() ->
     PidHeapSize1 = get_heap_size(Pid),
     true = PidHeapSize0 < PidHeapSize1,
     true = PidHeapSize1 < 1024,
+    ok = verify_refc_binary_info([{1024, 2}]),
     %%
     %% Make sure we can get what we sent
     %%
@@ -160,6 +176,7 @@ loop(State) ->
             Pid ! {Ref, ok},
             loop(State#state{bin = Bin});
         {Pid, Ref, halt} ->
+            erlang:garbage_collect(),
             Pid ! {Ref, ok}
     end.
 
@@ -187,6 +204,7 @@ run_test(Fun) ->
     end.
 
 execute(Pid, Fun) ->
+    erlang:garbage_collect(),
     Result =
         try
             Fun(),
@@ -196,5 +214,14 @@ execute(Pid, Fun) ->
                 {error, Error}
         end,
     Pid ! Result.
+
+verify_refc_binary_info(Expected) ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            ok;
+        _ ->
+            Expected = erlang:system_info(refc_binary_info),
+            ok
+    end.
 
 id(X) -> X.
