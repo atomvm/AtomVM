@@ -4129,7 +4129,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     avm_int_t size_val = term_to_int(size);
 
                     if (size_val % 8 != 0) {
-                        TRACE("bs_private_append: size_val (%li) is not evenly divisible by 8\n", (long int) size_val, (long int) unit);
+                        TRACE("bs_private_append: size_val (%li) is not evenly divisible by 8\n", (long int) size_val);
                         RAISE_ERROR(UNSUPPORTED_ATOM);
                     }
                     // TODO: further investigate unit.
