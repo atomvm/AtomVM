@@ -1595,9 +1595,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
                     TRACE_CALL_EXT(ctx, mod, "call_ext_last", index, arity);
 
-                    ctx->cp = ctx->e[n_words];
-                    ctx->e += (n_words + 1);
-
                     const struct ExportedFunction *func = mod->imported_funcs[index].func;
 
                     if (func->type == UnresolvedFunctionCall) {
@@ -1617,11 +1614,25 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                             }
                             ctx->x[0] = return_value;
 
+                            // We deallocate after (instead of before) as a
+                            // workaround for issue
+                            // https://github.com/erlang/otp/issues/7152
+
+                            ctx->cp = ctx->e[n_words];
+                            ctx->e += (n_words + 1);
+
                             DO_RETURN();
 
                             break;
                         }
                         case ModuleFunction: {
+                            // In the non-nif case, we can deallocate before
+                            // (and it doesn't matter as the code below does
+                            // not access ctx->e or ctx->cp)
+
+                            ctx->cp = ctx->e[n_words];
+                            ctx->e += (n_words + 1);
+
                             const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
 
                             mod = jump->target;
