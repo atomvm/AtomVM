@@ -122,6 +122,16 @@ if(SPHINX_FOUND)
         DEPENDS ${ERLANG_DOTFILE_TARGETS} ${ERLANG_EDOC_TARGETS} ${CMAKE_CURRENT_BINARY_DIR}/conf.py
     )
 
+    ## This target is intended for CI `Publish Docs` workflow.
+    if ($ENV{CI})
+        add_custom_target(GitHub_CI_Publish_Docs
+            COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_BINARY_DIR}/html /home/runner/work/AtomVM/AtomVM/www/doc/${BRANCH_NAME}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+            COMMENT "Copying html docs to publish location /home/runner/work/AtomVM/AtomVM/www/doc/${BRANCH_NAME}." VERBATIM
+            DEPENDS doc /home/runner/work/AtomVM/AtomVM/www/doc $ENV{BRANCH_NAME}
+        )
+    endif()
+
 else()
     message("Unable to find Sphinx -- no Sphinx documentation will be generated")
 endif()
@@ -140,3 +150,35 @@ add_custom_target(doc #ALL
     DEPENDS ${ERLANG_EDOC_TARGETS} sphinx-html sphinx-pdf sphinx-epub
 )
 
+if (TARGET GitHub_CI_Publish_Docs)
+
+    add_custom_command(
+        COMMAND mkdir -p /home/runner/work/AtomVM/AtomVM/www/doc
+        OUTPUT /home/runner/work/AtomVM/AtomVM/www/doc
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Prepare publish directory structure." VERBATIM
+    )
+
+    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/pdf)
+    add_custom_command(TARGET sphinx-pdf POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/pdf/AtomVM-${BRANCH_NAME}.pdf ${CMAKE_CURRENT_BINARY_DIR}/html/pdf/
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/pdf
+        COMMENT "Copying pdf to download location" VERBATIM
+        DEPENDS $ENV{BRANCH_NAME}
+    )
+
+    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/epub)
+    add_custom_command(TARGET sphinx-epub POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_BINARY_DIR}/epub/AtomVM-${BRANCH_NAME}.epub" "${CMAKE_CURRENT_BINARY_DIR}/html/epub/"
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/epub
+        COMMENT "Copying epub to download location." VERBATIM
+        DEPENDS $ENV{BRANCH_NAME}
+    )
+
+    add_custom_command(TARGET sphinx-html POST_BUILD
+        COMMAND touch .nojekyll
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html
+        COMMENT "Creating .nojekyll to allow style content on GitHub Pages." VERBATIM
+    )
+
+endif()

@@ -1,0 +1,114 @@
+#
+#  Copyright 2023 Winford (Uncle Grumpy) <winford@object.stream>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+# This is a workflow for atomvm/AtomVM to Publish API documentation and other content from the `doc` directory to
+# atomvm.net hosted on GitHub Pages
+
+name: Publish Docs
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push request events for all branches
+  push:
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+
+      - name: Install Deps
+        run: |
+          sudo apt update -y
+          DEBIAN_FRONTEND=noninteractive sudo apt install -y git cmake doxygen graphviz python3-pip python3-virtualenv python3-setuptools python3-stemmer wget
+
+      - uses: actions/cache@v3
+        id: sphinx-cache
+        with:
+          path: /home/runner/python-env/sphinx
+          key: ${{ runner.os }}-sphinx-install
+
+      - name: Install Sphinx
+        if: steps.cache.outputs.sphinx-cache-hit != 'true'
+        run: |
+          python3 -m venv /home/runner/python-env/sphinx
+          . /home/runner/python-env/sphinx/bin/activate
+          python3 -m pip install sphinx
+          python3 -m pip install myst-parser
+          python3 -m pip install sphinx-rtd-theme
+          python3 -m pip install rinohtype
+          python3 -m pip install pillow
+          python3 -m pip install gitpython
+          python3 -m pip install breathe
+          python3 -m pip install pygments
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "24"
+          elixir-version: "1.14"
+
+      - name: Install rebar3
+        working-directory: /tmp
+        run: |
+          wget https://s3.amazonaws.com/rebar3/rebar3 && chmod +x rebar3
+          ./rebar3 local install
+          echo "/home/runner/.cache/rebar3/bin" >> ${GITHUB_PATH}
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "24"
+          elixir-version: "1.14"
+
+      - uses: actions/checkout@v3
+        with:
+          repository: atomvm/AtomVM
+          fetch-depth: 0
+
+      - uses: actions/checkout@v3
+        id: checkout-production
+        with:
+          repository: atomvm/atomvm_www
+          ref: Production
+          path: /home/runner/work/AtomVM/AtomVM/www
+
+      - name: Build Site
+        run: |
+          . /home/runner/python-env/sphinx/bin/activate
+          for remote in `git branch -r | grep -v /HEAD | grep -v ${{ github.ref_name }}`; do git checkout --track $remote; done
+          git switch ${{ github.ref_name }}
+          git branch
+          mkdir build
+          cd build
+          cmake ..
+          cd doc
+          make GitHub_CI_Publish_Docs
+
+      - name: Commit files
+        working-directory: /home/runner/work/AtomVM/AtomVM/www
+        run: |
+          git checkout Production
+          git config --local user.email "atomvm-doc-bot@users.noreply.github.com"
+          git config --local user.name "AtomVM Doc Bot"
+          git add .
+          git commit -m "Update Documentation"
+      - name: Push changes
+        working-directory: /home/runner/work/AtomVM/AtomVM/www
+        run: |
+          eval `ssh-agent -t 60 -s`
+          echo "${{ secrets.PUBLISH_ACTION_KEY }}" | ssh-add -
+          mkdir -p ~/.ssh/
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          git remote add push_dest "git@github.com:atomvm/atomvm_www.git"
+          git fetch push_dest
+          git push --set-upstream push_dest Production
+
