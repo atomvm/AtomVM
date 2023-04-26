@@ -20,19 +20,36 @@
 
 project(doc)
 
+# Prepare souces in build directory
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/edoc)
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/src DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/edoc/edown_dep DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/edoc/)
+
+add_custom_target(edown-escript
+    COMMAND rebar3 get-deps co edown edoc && rebar3 escriptize edown edoc
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/edoc/edown_dep
+    COMMENT "Preparing edown escript" VERBATIM
+)
+
+# Get branch name
+execute_process(COMMAND git branch --show-current OUTPUT_VARIABLE BRANCH_NAME OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 ##
 ## Erlang API documentation
 ##
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/apidocs/erlang)
+file(COPY ${CMAKE_SOURCE_DIR}/libs/include DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/edoc/)
+
 foreach(ERLANG_LIB estdlib eavmlib alisp etest)
-    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/apidocs/erlang/${ERLANG_LIB})
+    set(ERL_LIB ${ERLANG_LIB}) # to allow passing ERL_LIB to gendoc.erl.in
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/edoc/gendoc.erl.in ${CMAKE_CURRENT_BINARY_DIR}/edoc/${ERLANG_LIB}/gendoc.erl @ONLY)
+    file(COPY ${CMAKE_SOURCE_DIR}/libs/${ERLANG_LIB} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/edoc/)
     add_custom_target(edoc-${ERLANG_LIB}
-        COMMAND escript ${CMAKE_SOURCE_DIR}/tools/doc/gendoc.erl ${ERLANG_LIB} ${CMAKE_SOURCE_DIR}/libs/${ERLANG_LIB}/src ${CMAKE_CURRENT_BINARY_DIR}/html/apidocs/erlang/${ERLANG_LIB}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-        COMMENT "Generating edoc for ${ERLANG_LIB}"
-        VERBATIM
+        COMMAND escript gendoc.erl ${ERLANG_LIB} src ${CMAKE_CURRENT_BINARY_DIR}/src/apidocs/erlang/${ERLANG_LIB}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/edoc/${ERLANG_LIB}
+        COMMENT "Generating edoc markdown for ${ERLANG_LIB}" VERBATIM
+        DEPENDS edown-escript
     )
     set(ERLANG_EDOC_TARGETS ${ERLANG_EDOC_TARGETS} edoc-${ERLANG_LIB})
 endforeach(ERLANG_LIB)
@@ -41,45 +58,27 @@ endforeach(ERLANG_LIB)
 # ##
 # ## SVG files (from Graphviz dot files)
 # ##
-# set(DOT_FILES
-#     globalcontext-processes
-#     globalcontext-atoms
-#     globalcontext-modules
-# )
-# find_package(Graphviz)
-# if(GRAPHVIZ_FOUND)
-#     message("Graphiz found")
-#     file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/svg)
-#     foreach(DOT_FILE ${DOT_FILES})
-#         add_custom_command(
-#             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/html/svg/${DOT_FILE}.svg
-#             COMMAND dot -Tsvg ${CMAKE_CURRENT_SOURCE_DIR}/graphviz/${DOT_FILE}.dot > ${CMAKE_CURRENT_BINARY_DIR}/html/svg/${DOT_FILE}.svg
-#             DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/graphviz/${DOT_FILE}.dot
-#             WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-#             COMMENT "Generating SVG for ${DOT_FILE}.dot"
-#             VERBATIM
-#         )
-#         set(ERLANG_DOTFILE_TARGETS ${ERLANG_DOTFILE_TARGETS} ${CMAKE_CURRENT_BINARY_DIR}/html/svg/${DOT_FILE}.svg)
-#     endforeach()
-# else()
-#     message("WARNING: Graphviz not found.  Some images may be missing in generated documentation.")
-# endif()
-
-##
-## Doxygen (C) API documentation
-##
-find_package(Doxygen)
-if(DOXYGEN_FOUND)
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY)
-    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/apidocs/atomvmlib)
-    add_custom_target(doxygen-html # ALL
-        ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-        COMMENT "Generating documentation" VERBATIM
-        DEPENDS ${ERLANG_EDOC_TARGETS} ${ERLANG_DOTFILE_TARGETS}
-    )
+set(DOT_FILES
+    globalcontext-processes
+    globalcontext-atoms
+    globalcontext-modules
+)
+find_package(Graphviz)
+if(GRAPHVIZ_FOUND)
+    message("Graphiz found")
+    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/src/_static)
+    foreach(DOT_FILE ${DOT_FILES})
+        add_custom_command(
+            OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/_static/${DOT_FILE}.svg
+            COMMAND dot -Tsvg ${CMAKE_CURRENT_SOURCE_DIR}/graphviz/${DOT_FILE}.dot > ${CMAKE_CURRENT_BINARY_DIR}/src/_static/${DOT_FILE}.svg
+            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/graphviz/${DOT_FILE}.dot
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+            COMMENT "Generating SVG for ${DOT_FILE}.dot" VERBATIM
+        )
+        set(ERLANG_DOTFILE_TARGETS ${ERLANG_DOTFILE_TARGETS} ${CMAKE_CURRENT_BINARY_DIR}/src/_static/${DOT_FILE}.svg)
+    endforeach()
 else()
-    message("Unable to find doxygen -- no documentation will be generated")
+    message("WARNING: Graphviz not found.  Some images may be missing in generated documentation.")
 endif()
 
 ##
@@ -92,31 +91,44 @@ if(SPHINX_FOUND)
 
     message("Sphinx found: ${SPHINX_BUILD_EXECUTABLE}")
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/conf.py.in ${CMAKE_CURRENT_BINARY_DIR}/conf.py @ONLY)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY)
+    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/apidocs/libatomvm)
     add_custom_target(sphinx-html
-        ${SPHINX_BUILD_EXECUTABLE} -b html -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR}/html
+        ${SPHINX_BUILD_EXECUTABLE} -b html -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/html/
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Generating Sphinx HTML documentation" VERBATIM
-        DEPENDS ${ERLANG_DOTFILE_TARGETS}
+        DEPENDS ${ERLANG_DOTFILE_TARGETS} ${ERLANG_EDOC_TARGETS}
     )
 
     add_custom_target(sphinx-pdf
-        ${SPHINX_BUILD_EXECUTABLE} -b rinoh -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR}/html/pdf
+        ${SPHINX_BUILD_EXECUTABLE} -b rinoh -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/pdf/
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Generating Sphinx PDF documentation" VERBATIM
-        DEPENDS ${ERLANG_DOTFILE_TARGETS} ${CMAKE_CURRENT_BINARY_DIR}/conf.py
+        DEPENDS ${ERLANG_DOTFILE_TARGETS} ${ERLANG_EDOC_TARGETS} ${CMAKE_CURRENT_BINARY_DIR}/conf.py
     )
 
     add_custom_target(sphinx-epub
-        ${SPHINX_BUILD_EXECUTABLE} -b epub -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR}/html/epub
+        ${SPHINX_BUILD_EXECUTABLE} -b epub -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/epub/
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Generating Sphinx PDF documentation" VERBATIM
-        DEPENDS ${ERLANG_DOTFILE_TARGETS}
+        DEPENDS ${ERLANG_DOTFILE_TARGETS} ${ERLANG_EDOC_TARGETS} ${CMAKE_CURRENT_BINARY_DIR}/conf.py
     )
+
 else()
     message("Unable to find Sphinx -- no Sphinx documentation will be generated")
 endif()
 
+## Fix URLs and change title to include "library" instead of "application"
+foreach(LIBAVM_ERL_LIB estdlib eavmlib alisp etest)
+    add_custom_command(TARGET edoc-${LIBAVM_ERL_LIB}
+        POST_BUILD
+        COMMAND sed -i -e "s/\.md/\.html/g" -e "s/application/library/g" ${CMAKE_CURRENT_BINARY_DIR}/src/apidocs/erlang/${LIBAVM_ERL_LIB}/README.md
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMENT "Fixing html link locations for ${LIBAVM_ERL_LIB}." VERBATIM
+    )
+endforeach(LIBAVM_ERL_LIB)
 
 add_custom_target(doc #ALL
-    DEPENDS ${ERLANG_EDOC_TARGETS} doxygen-html sphinx-html sphinx-pdf sphinx-epub
+    DEPENDS ${ERLANG_EDOC_TARGETS} sphinx-html sphinx-pdf sphinx-epub
 )
+

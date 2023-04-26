@@ -4,8 +4,11 @@
 
 .. AtomVM documentation master file
 
-Welcome to AtomVM!
-=========================================
+Welcome to 
+==============================================
+
+.. image:: _static/AtomVM-logo.png
+   :alt: AtomVM!
 
 Welcome to AtomVM, the Erlang virtual machine for IoT devices!
 
@@ -15,7 +18,6 @@ AtomVM includes many advanced features, including process spawning, monitoring, 
 
 .. warning::  AtomVM is currently in Alpha status.  Software may contain bugs and should not be used for mission-critical applications.  Application Programming Interfaces may change without warning.
 
-[`PDF <pdf/atomvm.pdf>`_][`EPUB <epub/AtomVM.epub>`_]
 
 .. toctree::
    :maxdepth: 2
