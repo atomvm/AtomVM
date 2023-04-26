@@ -23,7 +23,7 @@ jobs:
         include:
         - arch: "armel"
           distro: "stretch"
-          base_url: "http://deb.debian.org/debian/"
+          base_url: "http://archive.debian.org/debian-archive/debian/"
           cflags: "-O2 -mthumb -mthumb-interwork -march=armv4t"
           additional_packages: |
             http://ftp.us.debian.org/debian/pool/main/c/cmake/cmake-data_3.13.2-1~bpo9+1_all.deb \
