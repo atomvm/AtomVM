@@ -758,7 +758,7 @@ typedef union
         AtomString function_name = globalcontext_atomstring_from_term(mod->global, index_or_function); \
         struct Nif *nif = (struct Nif *) nifs_get(module_name, function_name, fun_arity); \
         if (!IS_NULL_PTR(nif)) {                                        \
-            term return_value = nif->nif_ptr(ctx, arity, ctx->x);       \
+            term return_value = nif->nif_ptr(ctx, fun_arity, ctx->x);   \
             if (UNLIKELY(term_is_invalid_term(return_value))) {         \
                 HANDLE_ERROR();                                         \
             }                                                           \
@@ -770,7 +770,7 @@ typedef union
             if (IS_NULL_PTR(fun_module)) {                              \
                 HANDLE_ERROR();                                         \
             }                                                           \
-            label = module_search_exported_function(fun_module, function_name, arity); \
+            label = module_search_exported_function(fun_module, function_name, fun_arity); \
             if (UNLIKELY(label == 0)) {                                 \
                 HANDLE_ERROR();                                         \
             }                                                           \
