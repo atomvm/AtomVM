@@ -1031,7 +1031,7 @@ static inline term term_maybe_create_sub_binary(term binary, size_t offset, size
     }
 }
 
-static inline void term_set_refc_binary_data(term t, const char *data)
+static inline void term_set_refc_binary_data(term t, const void *data)
 {
     TERM_DEBUG_ASSERT(term_is_refc_binary(t));
     term *boxed_value = term_to_term_ptr(t);
