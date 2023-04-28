@@ -55,9 +55,9 @@ The [AtomVM Github Repository](https://github.com/atomvm/AtomVM) contains the At
 
 ## Contributing
 
-The AtomVM community welcomes contributions tot he AtomVM code base and upstream and downstream projects.  Please see the [contributing guidelines](../CONTRIBUTING.md) for information about how to contribute.
+The AtomVM community welcomes contributions to the AtomVM code base and upstream and downstream projects.  Please see the [contributing guidelines](CONTRIBUTING.md) for information about how to contribute.
 
-AtomVM developers can be reached on the #AtomVM discord server.
+AtomVM developers can be reached on the #AtomVM discord server or on Telegram at [AtomVM - Erlang and Elixir on Microcontrollers](https://t.me/atomvm).
 
 ## Where to go from here
 

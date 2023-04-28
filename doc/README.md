@@ -10,14 +10,14 @@ AtomVM documentation is built using the following tools:
 
 * Sphinx, for main HTML, PDF, and ePUB documentation
 * Doxygen, for AtomVMLib API documentation
-* Edoc, for Erlang library documentation
+* Rebar3, for Erlang library documentation (requires active internet connection during build to retrieve tool dependancies)
 * Graphviz, for image generation
 
 Dependencies and make files are generated via the standard CMake tooling used in AtomVM builds.  However, the documentation sets are not built by default.  Instead, issue the following make targets after a CMake
 
-* `make sphinx-html` to build the Sphinx HTML documentation
-* `make sphinx-pdf` to build the Sphinx PDF documentation
-* `make sphinx-epub` to build the Sphinx ePUB documentation
+* `make sphinx-html` to build the Sphinx HTML documentation (includes libAtomVM 'C' and Erlang APIs)
+* `make sphinx-pdf` to build the Sphinx PDF documentation, (includes Erlang APIs)
+* `make sphinx-epub` to build the Sphinx ePUB documentation, (includes Erlang APIs)
 * `make doc` to build all of the above
 
 
@@ -33,8 +33,21 @@ To build documentation using Sphinx, we recommend using a Python virtual environ
     (sphinx) shell$ python3 -m pip install myst-parser
     ...
     (sphinx) shell$ python3 -m pip install sphinx-rtd-theme
+    ...
+    (sphinx) shell$ python3 -m pip install gitpython
+    ...
+    (sphinx) shell$ python3 -m pip install breathe
+    ...
+    (sphinx) shell$ python3 -m pip install pygments
 
 
-    ## needed for latex documentation
+    ## needed for PDF
     (sphinx) shell$ python3 -m pip install rinohtype
     (sphinx) shell$ python3 -m pip install pillow
+
+There is also a reqirements.txt to simplify installing all of the dependancies at once.
+
+    shell$ python3 -m venv $HOME/python-env/sphinx
+    shell$ . $HOME/python-env/sphinx/bin/activate
+
+    (sphinx) shell$ python3 -m pip install -r requirements.txt

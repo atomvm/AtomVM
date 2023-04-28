@@ -1,0 +1,16 @@
+% Copyright 2023 Winford (Uncle Grumpy) <winford@object.stream>
+%
+% SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+
+{application, edown_dep, [
+    {description, "An OTP library"},
+    {vsn, "0.1.0"},
+    {registered, []},
+    {applications, [
+        kernel, stdlib
+    ]},
+    {env,[]},
+    {modules, []},
+    {licenses, ["Apache 2.0"]},
+    {links, []}
+ ]}.
