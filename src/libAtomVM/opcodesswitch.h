@@ -87,6 +87,10 @@ typedef union
 } dreg_type_t;
 
 #ifdef IMPL_EXECUTE_LOOP
+// Override nifs.h RAISE_ERROR macro
+#ifdef RAISE_ERROR
+#undef RAISE_ERROR
+#endif
 #define RAISE_ERROR(error_type_atom)                               \
     ctx->x[0] = ERROR_ATOM;                                        \
     ctx->x[1] = error_type_atom;                                   \
@@ -1301,11 +1305,14 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
 #endif
 
+#ifndef __clang__
 #pragma GCC diagnostic push
 #ifdef __GNUC__
-#ifndef __clang__
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 #endif
+#else
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-but-set-variable"
 #endif
 
 #ifdef IMPL_CODE_LOADER
@@ -3661,9 +3668,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 int next_off = 1;
                 uint32_t fail;
                 DECODE_LABEL(fail, code, i, next_off)
-                #ifdef IMPL_EXECUTE_LOOP
-                    int next_off_back = next_off;
-                #endif
                 term src;
                 DECODE_COMPACT_TERM(src, code, i, next_off);
                 term arg2;
@@ -3707,9 +3711,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 int next_off = 1;
                 uint32_t fail;
                 DECODE_LABEL(fail, code, i, next_off)
-                #ifdef IMPL_EXECUTE_LOOP
-                    int next_off_back = next_off;
-                #endif
                 term src;
                 DECODE_COMPACT_TERM(src, code, i, next_off);
                 term arg2;
@@ -3815,9 +3816,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 int next_off = 1;
                 uint32_t fail;
                 DECODE_LABEL(fail, code, i, next_off)
-                #ifdef IMPL_EXECUTE_LOOP
-                    int next_off_back = next_off;
-                #endif
                 term src;
                 DECODE_COMPACT_TERM(src, code, i, next_off);
                 term arg2;
@@ -3861,9 +3859,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 int next_off = 1;
                 uint32_t fail;
                 DECODE_LABEL(fail, code, i, next_off)
-                #ifdef IMPL_EXECUTE_LOOP
-                    int next_off_back = next_off;
-                #endif
                 term src;
                 DECODE_COMPACT_TERM(src, code, i, next_off);
                 term arg2;
@@ -3941,9 +3936,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 int next_off = 1;
                 uint32_t fail;
                 DECODE_LABEL(fail, code, i, next_off)
-                #ifdef IMPL_EXECUTE_LOOP
-                    int next_off_back = next_off;
-                #endif
                 term src;
                 DECODE_COMPACT_TERM(src, code, i, next_off);
                 term arg2;
@@ -3986,9 +3978,6 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 int next_off = 1;
                 uint32_t fail;
                 DECODE_LABEL(fail, code, i, next_off)
-                #ifdef IMPL_EXECUTE_LOOP
-                    int next_off_back = next_off;
-                #endif
                 term src;
                 DECODE_COMPACT_TERM(src, code, i, next_off);
                 term arg2;
@@ -4577,7 +4566,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         AVM_ABORT();
                     }
 
-                    TRACE("bs_save2/2, src=0x%lx pos=%li\n", src, index_val);
+                    TRACE("bs_save2/2, src=0x%lx pos=%li\n", src, index == START_ATOM ? -1 : index_val);
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
@@ -4608,7 +4597,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         AVM_ABORT();
                     }
 
-                    TRACE("bs_restore2/2, src=0x%lx pos=%li\n", src, index_val);
+                    TRACE("bs_restore2/2, src=0x%lx pos=%li\n", src, index == START_ATOM ? -1 : index_val);
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
@@ -5583,7 +5572,11 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 term src;
                 DECODE_COMPACT_TERM(src, code, i, next_off);
 
-                TRACE("has_map_fields/3: label: %i src: 0x%lx\n", label, src);
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("has_map_fields/3: label: %i src: 0x%lx\n", label, src);
+                #else
+                    TRACE("has_map_fields/3: label: %i\n", label);
+                #endif
 
                 DECODE_EXTENDED_LIST_TAG(code, i, next_off);
                 uint32_t list_len;
@@ -5615,7 +5608,11 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 DECODE_LABEL(label, code, i, next_off)
                 term src;
                 DECODE_COMPACT_TERM(src, code, i, next_off);
-                TRACE("get_map_elements/3: label: %i src: 0x%lx\n", label, src);
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("get_map_elements/3: label: %i src: 0x%lx\n", label, src);
+                #else
+                    TRACE("get_map_elements/3: label: %i\n", label);
+                #endif
 
                 DECODE_EXTENDED_LIST_TAG(code, i, next_off);
                 uint32_t list_len;
@@ -6927,6 +6924,10 @@ terminate_context:
     }
 }
 
+#ifndef __clang__
 #pragma GCC diagnostic pop
+#else
+#pragma clang diagnostic pop
+#endif
 
 #undef DECODE_COMPACT_TERM

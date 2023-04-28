@@ -18,7 +18,9 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 
 #include "nifs.h"
 
@@ -50,13 +52,6 @@
 
 #define MAX_NIF_NAME_LEN 260
 #define FLOAT_BUF_SIZE 64
-
-#define VALIDATE_VALUE(value, verify_function) \
-    if (UNLIKELY(!verify_function((value)))) { \
-        argv[0] = ERROR_ATOM;                  \
-        argv[1] = BADARG_ATOM;                 \
-        return term_invalid_term();            \
-    }
 
 #define RAISE_ERROR(error_type_atom) \
     ctx->x[0] = ERROR_ATOM;          \

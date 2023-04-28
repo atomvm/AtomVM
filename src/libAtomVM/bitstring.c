@@ -68,8 +68,8 @@ bool bitstring_insert_any_integer(uint8_t *dst, avm_int_t offset, avm_int64_t va
         offset += n - (8 * sizeof(value));
         n = 8 * sizeof(value);
     }
-    for (int i = 0; i < n; ++i) {
-        int k = (n - 1) - i;
+    for (size_t i = 0; i < n; ++i) {
+        size_t k = (n - 1) - i;
         int bit_val = (value & (0x01LL << k)) >> k;
         if (bit_val) {
             int bit_pos = offset + i;
