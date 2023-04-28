@@ -373,7 +373,17 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
             k += serialize_term(ctx, IS_NULL_PTR(buf) ? NULL : buf + k, value);
         }
         return k;
-
+    } else if (term_is_function(t)) {
+        if (!IS_NULL_PTR(buf)) {
+            buf[0] = EXPORT_EXT;
+        }
+        size_t k = 1;
+        const term *boxed_value = term_to_const_term_ptr(t);
+        for (size_t i = 1; i <= 3; ++i) {
+            term mfa = boxed_value[i];
+            k += serialize_term(ctx, IS_NULL_PTR(buf) ? NULL : buf + k, mfa);
+        }
+        return k;
     } else {
         fprintf(stderr, "Unknown external term type: %" TERM_U_FMT "\n", t);
         AVM_ABORT();
@@ -780,6 +790,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             }
             int heap_usage = 1;
             int buf_pos = 1;
+            remaining -= 1;
             for (int i = 0; i < 3; i++) {
                 int element_size = 0;
                 int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &element_size, copy, ctx);
@@ -796,7 +807,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             }
 
             *eterm_size = buf_pos;
-            return FUNCTION_REFERENCE_SIZE;
+            return heap_usage;
         }
 
         case MAP_EXT: {
