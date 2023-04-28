@@ -18,7 +18,7 @@ estdlib
 ---------------------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :glob:
 
    apidocs/erlang/estdlib/*
@@ -28,7 +28,7 @@ eavmlib
 ---------------------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :glob:
 
    apidocs/erlang/eavmlib/*
@@ -38,7 +38,7 @@ alisp
 ---------------------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :glob:
 
    apidocs/erlang/alisp/*
@@ -48,7 +48,7 @@ etest
 ---------------------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :glob:
 
    apidocs/erlang/etest/*
@@ -62,4 +62,4 @@ AtomVM 'C' Internal Libraries
 
    c_api_docs
 
-[`libAtomVM <apidocs/libatomvm/index.html>`_]
+[`libAtomVM  (Doxygen theme) <_static/libatomvm/index.html>`_]

@@ -21,11 +21,20 @@
 project(doc)
 
 # Prepare souces in build directory
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/_static)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/edoc)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/src DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/edoc/edown_dep DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/edoc/)
 
+# Configure libAtomVM restucturedtext skeleton.
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/src/apidocs/libatomvm/files)
+file(GLOB SOURCE_FILES LIST_DIRECTORIES false RELATIVE ${CMAKE_SOURCE_DIR}/src/libAtomVM/ ${CMAKE_SOURCE_DIR}/src/libAtomVM/*.c ${CMAKE_SOURCE_DIR}/src/libAtomVM/*.h)
+foreach(SOURCE_TARGET ${SOURCE_FILES})
+    set(SOURCE_FILE ${SOURCE_TARGET})
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/apidocs/libatomvm/file.rst.in ${CMAKE_CURRENT_BINARY_DIR}/src/apidocs/libatomvm/files/${SOURCE_FILE}.rst @ONLY)
+endforeach(SOURCE_TARGET)
+
+# Support for edoc -> markdown.
 add_custom_target(edown-escript
     COMMAND rebar3 get-deps co edown edoc && rebar3 escriptize edown edoc
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/edoc/edown_dep
@@ -54,7 +63,6 @@ foreach(ERLANG_LIB estdlib eavmlib alisp etest)
     set(ERLANG_EDOC_TARGETS ${ERLANG_EDOC_TARGETS} edoc-${ERLANG_LIB})
 endforeach(ERLANG_LIB)
 
-## TODO Uncomment when we incorporate Graphviz DOT files into documentation
 # ##
 # ## SVG files (from Graphviz dot files)
 # ##
@@ -101,14 +109,14 @@ if(SPHINX_FOUND)
     )
 
     add_custom_target(sphinx-pdf
-        ${SPHINX_BUILD_EXECUTABLE} -b rinoh -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/pdf/
+        ${SPHINX_BUILD_EXECUTABLE} -D exclude_patterns=**/c_api_docs.rst,**/libatomvm/** -b rinoh -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/pdf/
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Generating Sphinx PDF documentation" VERBATIM
         DEPENDS ${ERLANG_DOTFILE_TARGETS} ${ERLANG_EDOC_TARGETS} ${CMAKE_CURRENT_BINARY_DIR}/conf.py
     )
 
     add_custom_target(sphinx-epub
-        ${SPHINX_BUILD_EXECUTABLE} -b epub -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/epub/
+        ${SPHINX_BUILD_EXECUTABLE} -D exclude_patterns=**/c_api_docs.rst,**/libatomvm/** -b epub -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/epub/
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Generating Sphinx PDF documentation" VERBATIM
         DEPENDS ${ERLANG_DOTFILE_TARGETS} ${ERLANG_EDOC_TARGETS} ${CMAKE_CURRENT_BINARY_DIR}/conf.py
