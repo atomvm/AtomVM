@@ -37,9 +37,9 @@
 
 static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **new_heap_pos, term *mso_list, int move);
 static term memory_shallow_copy_term(term t, term **new_heap, int move);
-static enum MemoryGCResult memory_gc(Context *ctx, int new_size, int num_roots, term *roots);
+static enum MemoryGCResult memory_gc(Context *ctx, size_t new_size, size_t num_roots, term *roots);
 
-HOT_FUNC term *memory_heap_alloc(Context *c, uint32_t size)
+HOT_FUNC term *memory_heap_alloc(Context *c, size_t size)
 {
     term *allocated = c->heap_ptr;
     c->heap_ptr += size;
@@ -47,7 +47,7 @@ HOT_FUNC term *memory_heap_alloc(Context *c, uint32_t size)
     return allocated;
 }
 
-MALLOC_LIKE term *memory_alloc_heap_fragment(Context *ctx, uint32_t fragment_size)
+MALLOC_LIKE term *memory_alloc_heap_fragment(Context *ctx, size_t fragment_size)
 {
     struct ListHead *heap_fragment = malloc(fragment_size * sizeof(term) + sizeof(struct ListHead));
     if (IS_NULL_PTR(heap_fragment)) {
@@ -58,7 +58,7 @@ MALLOC_LIKE term *memory_alloc_heap_fragment(Context *ctx, uint32_t fragment_siz
     return (term *) (heap_fragment + 1);
 }
 
-enum MemoryGCResult memory_ensure_free_with_roots(Context *c, uint32_t size, int num_roots, term *roots, enum MemoryShrinkMode shrink_mode)
+enum MemoryGCResult memory_ensure_free_with_roots(Context *c, size_t size, size_t num_roots, term *roots, enum MemoryShrinkMode shrink_mode)
 {
     size_t free_space = context_avail_free_memory(c);
     size_t maximum_free_space = 2 * (size + MIN_FREE_SPACE_SIZE);
@@ -93,10 +93,10 @@ static inline void push_to_stack(term **stack, term value)
     **stack = value;
 }
 
-static enum MemoryGCResult memory_gc(Context *ctx, int new_size, int num_roots, term *roots)
+static enum MemoryGCResult memory_gc(Context *ctx, size_t new_size, size_t num_roots, term *roots)
 {
     TRACE("Going to perform gc on process %i\n", ctx->process_id);
-    avm_int_t min_heap_size = ctx->has_min_heap_size ? ctx->min_heap_size : 0;
+    size_t min_heap_size = ctx->has_min_heap_size ? ctx->min_heap_size : 0;
     new_size = MAX(new_size, min_heap_size);
 
     new_size += ctx->heap_fragments_size;
@@ -142,7 +142,7 @@ static enum MemoryGCResult memory_gc(Context *ctx, int new_size, int num_roots, 
     ctx->exit_reason = memory_shallow_copy_term(ctx->exit_reason, &heap_ptr, 1);
 
     TRACE("- Running copy GC on provided roots\n");
-    for (int i = 0; i < num_roots; i++) {
+    for (size_t i = 0; i < num_roots; i++) {
         roots[i] = memory_shallow_copy_term(roots[i], &heap_ptr, 1);
     }
 

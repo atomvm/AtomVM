@@ -6245,7 +6245,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     int list_off = next_off;
                 #endif
-                int nb_segments = list_len / 6;
+                size_t nb_segments = list_len / 6;
                 #ifdef IMPL_CODE_LOADER
                     if (live > MAX_REG) {
                         fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
@@ -6260,7 +6260,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                 #ifdef IMPL_EXECUTE_LOOP
                     size_t binary_size = 0;
                 #endif
-                for (int j = 0;  j < nb_segments; j++) {
+                for (size_t j = 0; j < nb_segments; j++) {
                     term atom_type;
                     DECODE_ATOM(atom_type, code, i, next_off);
                     int seg;
@@ -6347,7 +6347,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     term t = term_create_empty_binary(binary_size / 8, ctx);
                     size_t offset = 0;
 
-                    for (int j = 0;  j < nb_segments; j++) {
+                    for (size_t j = 0; j < nb_segments; j++) {
                         term atom_type;
                         DECODE_ATOM(atom_type, code, i, list_off);
                         int seg;
@@ -6363,7 +6363,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                         size_t segment_size;
                         avm_int_t flags_value = 0;
                         avm_int_t src_value = 0;
-                        avm_int_t size_value = 0;
+                        size_t size_value = 0;
                         switch (atom_type) {
                             case UTF16_ATOM:
                             case UTF32_ATOM:
@@ -6392,7 +6392,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                             case INTEGER_ATOM:
                             case STRING_ATOM:
                                 VERIFY_IS_INTEGER(size, "bs_create_bin/6");
-                                size_value = term_to_int(size);
+                                avm_int_t signed_size_value = term_to_int(size);
+                                if (UNLIKELY(signed_size_value < 0)) {
+                                    TRACE("bs_create_bin/6: size value less than 0: %i\n", signed_size_value);
+                                    RAISE_ERROR(BADARG_ATOM);
+                                }
+                                size_value = (size_t) signed_size_value;
                                 break;
                             default:
                                 break;
@@ -6459,7 +6464,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                                 size_t binary_size = term_binary_size(src);
                                 if (size != ALL_ATOM) {
                                     VERIFY_IS_INTEGER(size, "bs_create_bin/6");
-                                    size_value = term_to_int(size);
+                                    avm_int_t signed_size_value = term_to_int(size);
+                                    if (UNLIKELY(signed_size_value < 0)) {
+                                        TRACE("bs_create_bin/6: size value less than 0: %i\n", signed_size_value);
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    }
+                                    size_value = (size_t) signed_size_value;
                                     if (size_value > binary_size) {
                                         RAISE_ERROR(BADARG_ATOM);
                                     }
@@ -6647,7 +6657,11 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
                                 size_t bs_bin_size = term_binary_size(bs_bin);
-                                if ((bs_bin_size * 8) - bs_offset < stride) {
+                                if (UNLIKELY(stride < 0)) {
+                                    RAISE_ERROR(BADARG_ATOM);
+                                }
+                                size_t unsigned_stride = (size_t) stride;
+                                if ((bs_bin_size * 8) - bs_offset < unsigned_stride) {
                                     TRACE("bs_match/3: ensure_at_least failed -- bs_bin_size = %d, bs_offset = %d, stride = %d, unit = %d\n", (int) bs_bin_size, (int) bs_offset, (int) stride, (int) unit);
                                     goto bs_match_jump_to_fail;
                                 }
@@ -6660,8 +6674,12 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                             DECODE_LITERAL(stride, code, i, next_off);
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
+                                if (UNLIKELY(stride < 0)) {
+                                    RAISE_ERROR(BADARG_ATOM);
+                                }
+                                size_t unsigned_stride = (size_t) stride;
                                 size_t bs_bin_size = term_binary_size(bs_bin);
-                                if ((bs_bin_size * 8) - bs_offset != stride) {
+                                if ((bs_bin_size * 8) - bs_offset != unsigned_stride) {
                                     TRACE("bs_match/3: ensure_exactly failed -- bs_bin_size = %lu, bs_offset = %lu, stride = %lu\n", (unsigned long) bs_bin_size, (unsigned long) bs_offset, (unsigned long) stride);
                                     goto bs_match_jump_to_fail;
                                 }
