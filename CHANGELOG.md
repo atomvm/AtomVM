@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for FP opcodes 94-102 thus removing the need for `AVM_DISABLE_FP=On` with OTP-22+
 - Added support for stacktraces
 - Added support for `utf-8`, `utf-16`, and `utf-32` bit syntax modifiers (put and match)
-
+- Added `stop/0` and `stop/1` to erlang and elixir GPIO drivers.
 
 ### Fixed
 - Fixed issue with formatting integers with io:format() on STM32 platform

@@ -233,6 +233,24 @@ defmodule GPIO do
     do: remove_int(:erlang.whereis(:gpio), gpio_num)
 
   @doc """
+  Stop the gpio driver and remove any interrupts that have been set.
+
+  Use the pid returned from GPIO.start/0 as a parameter.
+  """
+  @spec close(pid()) :: :ok | :error
+  def close(gpio),
+    do: AVMPort.call(gpio, {:close})
+
+  @doc """
+  Stop the gpio driver and remove any interrupts that have been set.
+
+  Takes no parameters.
+  """
+  @spec stop() :: :ok | :error
+  def stop(),
+    do: AVMPort.call(:erlang.whereis(:gpio), {:close})
+
+  @doc """
   Set the directional mode of a gpio pin.
 
   ## Parameters

@@ -41,6 +41,7 @@
 #include "module.h"
 #include "nifs.h"
 #include "platform_defaultatoms.h"
+#include "scheduler.h"
 #include "term.h"
 #include "utils.h"
 
@@ -106,7 +107,8 @@ enum gpio_cmd
     GPIOReadCmd,
     GPIOSetDirectionCmd,
     GPIOSetIntCmd,
-    GPIORemoveIntCmd
+    GPIORemoveIntCmd,
+    GPIOCloseCmd
 };
 
 static const AtomStringIntPair gpio_cmd_table[] = {
@@ -115,6 +117,7 @@ static const AtomStringIntPair gpio_cmd_table[] = {
     { ATOM_STR("\xD", "set_direction"), GPIOSetDirectionCmd },
     { ATOM_STR("\x7", "set_int"), GPIOSetIntCmd },
     { ATOM_STR("\xA", "remove_int"), GPIORemoveIntCmd },
+    { ATOM_STR("\x5", "close"), GPIOCloseCmd },
     SELECT_INT_DEFAULT(GPIOInvalidCmd)
 };
 
@@ -409,6 +412,43 @@ static term gpiodriver_remove_int(Context *ctx, Context *target, term cmd)
     return ERROR_ATOM;
 }
 
+static term gpiodriver_close(Context *ctx)
+{
+    if (UNLIKELY(global_gpio_ctx == NULL)){
+        return ERROR_ATOM;
+    }
+
+    struct GPIOData *gpio_data = ctx->platform_data;
+
+    struct ListHead *item;
+    struct ListHead *tmp;
+    int32_t gpio_num;
+    if (!list_is_empty(&gpio_data->gpio_listeners)) {
+        MUTABLE_LIST_FOR_EACH (item, tmp, &gpio_data->gpio_listeners) {
+            struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
+            gpio_num = gpio_listener->gpio;
+            list_remove(&gpio_listener->gpio_listener_list_head);
+            list_remove(&gpio_listener->listener.listeners_list_head);
+            free(gpio_listener);
+
+            gpio_set_intr_type(gpio_num, GPIO_INTR_DISABLE);
+            gpio_isr_handler_remove(gpio_num);
+
+            if (list_is_empty(&gpio_data->gpio_listeners)) {
+                gpio_uninstall_isr_service();
+            }
+        }
+    }
+
+    term reg_name_term = context_make_atom(ctx, gpio_atom);
+    int atom_index = term_to_atom_index(reg_name_term);
+    globalcontext_unregister_process(ctx->global, atom_index);
+
+    free(gpio_data);
+
+    return OK_ATOM;
+}
+
 static term create_pair(Context *ctx, term term1, term term2)
 {
     term ret = term_alloc_tuple(2, ctx);
@@ -453,7 +493,11 @@ static void consume_gpio_mailbox(Context *ctx)
             ret = gpiodriver_remove_int(ctx, target, req);
             break;
 
-        default:
+         case GPIOCloseCmd:
+            ret = gpiodriver_close(ctx);
+            break;
+
+       default:
             ESP_LOGW(TAG, "Unrecognized command");
             ret = ERROR_ATOM;
     }
@@ -481,6 +525,11 @@ static void consume_gpio_mailbox(Context *ctx)
 
     mailbox_send(target, ret_msg);
     mailbox_destroy_message(message);
+
+    if (cmd == GPIOCloseCmd) {
+        global_gpio_ctx = NULL;
+        scheduler_terminate(ctx);
+    }
 }
 
 static void IRAM_ATTR gpio_isr_handler(void *arg)

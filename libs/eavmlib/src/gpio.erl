@@ -47,7 +47,9 @@
 %%-----------------------------------------------------------------------------
 -module(gpio).
 
--export([start/0, open/0, read/2, set_direction/3, set_level/3, set_int/3, remove_int/2]).
+-export([
+    start/0, open/0, read/2, set_direction/3, set_level/3, set_int/3, remove_int/2, stop/0, close/1
+]).
 -export([
     set_pin_mode/2,
     set_pin_pull/2,
@@ -180,6 +182,30 @@ remove_int(GPIO, GPIONum) ->
     port:call(GPIO, {remove_int, GPIONum}).
 
 %%-----------------------------------------------------------------------------
+%% @param   GPIO pid that was returned from gpio:start/0
+%% @returns ok atom
+%% @doc     Stop the GPIO interrupt port
+%%
+%%          This function disables any interrupts that are set, stops
+%%          the listening port, and frees all of its resources.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec close(GPIO :: gpio()) -> ok | error.
+close(GPIO) ->
+    port:call(GPIO, {close}).
+
+%%-----------------------------------------------------------------------------
+%% @returns ok atom
+%% @doc     Stop the GPIO interrupt port
+%%
+%%          This function disables any interrupts that are set, stops
+%%          the listening port, and frees all of its resources.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec stop() -> ok | error.
+stop() ->
+    port:call(whereis(gpio), {close}).
+
 %% @param   Pin number to set operational mode
 %% @param   Direction is `input', `output', or `output_od'
 %% @returns ok | error
