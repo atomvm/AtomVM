@@ -94,7 +94,7 @@ jobs:
           make GitHub_CI_Publish_Docs
 
       - name: Commit files
-        if: ${{ vars.GITHUB_REPOSITORY == 'atomvm/AtomVM' }}
+        if: github.repository == 'atomvm/AtomVM'
         working-directory: /home/runner/work/AtomVM/AtomVM/www
         run: |
           git checkout Production
@@ -103,7 +103,7 @@ jobs:
           git add .
           git commit -m "Update Documentation"
       - name: Push changes
-        if: ${{ vars.GITHUB_REPOSITORY == 'atomvm/AtomVM' }}
+        if: github.repository == 'atomvm/AtomVM'
         working-directory: /home/runner/work/AtomVM/AtomVM/www
         run: |
           eval `ssh-agent -t 60 -s`
