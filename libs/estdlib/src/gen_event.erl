@@ -116,7 +116,7 @@ handle_call(_Request, _From, State) ->
     {reply, {error, unimplemented}, State}.
 
 %% @hidden
-handle_info(Msg, State) ->
+handle_info(_Msg, State) ->
     {noreply, State}.
 
 %% @hidden
