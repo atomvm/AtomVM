@@ -46,6 +46,7 @@ compile_erlang(count_char)
 compile_erlang(len_test)
 compile_erlang(makelist_test)
 compile_erlang(test_echo_driver)
+compile_erlang(test_close_echo_driver)
 compile_erlang(test_regecho_driver)
 compile_erlang(test_send_nif_and_echo)
 compile_erlang(state_test)
@@ -465,6 +466,7 @@ add_custom_target(erlang_test_modules DEPENDS
     len_test.beam
     makelist_test.beam
     test_echo_driver.beam
+    test_close_echo_driver.beam
     test_regecho_driver.beam
     test_send_nif_and_echo.beam
     state_test.beam
