@@ -140,7 +140,7 @@ endif()
 foreach(LIBAVM_ERL_LIB estdlib eavmlib alisp etest)
     add_custom_command(TARGET edoc-${LIBAVM_ERL_LIB}
         POST_BUILD
-        COMMAND sed -i -e "s/\.md/\.html/g" -e "s/application/library/g" ${CMAKE_CURRENT_BINARY_DIR}/src/apidocs/erlang/${LIBAVM_ERL_LIB}/README.md
+        COMMAND sed -i -e "s/\.md/\.html/g; s/application/library/g" ${CMAKE_CURRENT_BINARY_DIR}/src/apidocs/erlang/${LIBAVM_ERL_LIB}/README.md
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Fixing html link locations for ${LIBAVM_ERL_LIB}." VERBATIM
     )
