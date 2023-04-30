@@ -641,6 +641,16 @@ When a trigger event occurs, such as a pin rising in voltage, a tuple will be de
 
 Interrupts can be removed by using the `gpio:remove_int/2` function.
 
+Use the `gpio:close/1` function to close the GPIO driver and free any resources in use by it, supplying a reference to a previously opened GPIO driver instance.  Any references to the closed GPIO instance are no longer valid after a successful call to this function, and all interrupts will be removed.
+
+    %% erlang
+    ok = gpio:close(GPIO).
+
+Since only one instance of the GPIO driver is allowed, you may also simply use `gpio:stop/0` to remove all interrupts, free the resouces, and close the GPIO driver port.
+
+    %% erlang
+    ok = gpio:stop().
+
 
 ### I2C
 

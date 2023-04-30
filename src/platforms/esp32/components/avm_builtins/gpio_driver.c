@@ -105,7 +105,8 @@ enum gpio_cmd
     GPIOReadCmd,
     GPIOSetDirectionCmd,
     GPIOSetIntCmd,
-    GPIORemoveIntCmd
+    GPIORemoveIntCmd,
+    GPIOCloseCmd
 };
 
 static const AtomStringIntPair gpio_cmd_table[] = {
@@ -114,6 +115,7 @@ static const AtomStringIntPair gpio_cmd_table[] = {
     { ATOM_STR("\xD", "set_direction"), GPIOSetDirectionCmd },
     { ATOM_STR("\x7", "set_int"), GPIOSetIntCmd },
     { ATOM_STR("\xA", "remove_int"), GPIORemoveIntCmd },
+    { ATOM_STR("\x5", "close"), GPIOCloseCmd },
     SELECT_INT_DEFAULT(GPIOInvalidCmd)
 };
 
@@ -246,6 +248,43 @@ Context *gpio_driver_create_port(GlobalContext *global, term opts)
     }
 
     return ctx;
+}
+
+static term gpiodriver_close(Context *ctx)
+{
+    GlobalContext *glb = ctx->global;
+    struct AtomsHashTable *htable = glb->atoms_table;
+    int gpio_atom_index = atomshashtable_get_value(htable, gpio_atom, ULONG_MAX);
+    if (UNLIKELY(!globalcontext_get_registered_process(glb, gpio_atom_index))) {
+        return ERROR_ATOM;
+    }
+
+    struct GPIOData *gpio_data = ctx->platform_data;
+
+    struct ListHead *item;
+    struct ListHead *tmp;
+    int32_t gpio_num;
+    if (!list_is_empty(&gpio_data->gpio_listeners)) {
+        MUTABLE_LIST_FOR_EACH (item, tmp, &gpio_data->gpio_listeners) {
+            struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
+            gpio_num = gpio_listener->gpio;
+            list_remove(&gpio_listener->gpio_listener_list_head);
+            list_remove(&gpio_listener->listener.listeners_list_head);
+            free(gpio_listener);
+
+            gpio_set_intr_type(gpio_num, GPIO_INTR_DISABLE);
+            gpio_isr_handler_remove(gpio_num);
+
+            if (list_is_empty(&gpio_data->gpio_listeners)) {
+                gpio_uninstall_isr_service();
+            }
+        }
+    }
+
+    globalcontext_unregister_process(glb, gpio_atom_index);
+    free(gpio_data);
+
+    return OK_ATOM;
 }
 
 EventListener *gpio_interrupt_callback(GlobalContext *glb, EventListener *listener)
@@ -446,6 +485,10 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
             ret = gpiodriver_remove_int(ctx, req);
             break;
 
+        case GPIOCloseCmd:
+            ret = gpiodriver_close(ctx);
+            break;
+
         default:
             ESP_LOGW(TAG, "Unrecognized command");
             ret = ERROR_ATOM;
@@ -475,7 +518,7 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
     globalcontext_send_message(ctx->global, local_process_id, ret_msg);
     mailbox_remove(&ctx->mailbox);
 
-    return NativeContinue;
+    return cmd == GPIOCloseCmd ? NativeTerminate : NativeContinue;
 }
 
 static void IRAM_ATTR gpio_isr_handler(void *arg)
