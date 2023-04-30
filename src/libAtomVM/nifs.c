@@ -920,6 +920,11 @@ static NativeHandlerResult process_echo_mailbox(Context *ctx)
     term pid = term_get_tuple_element(msg->message, 0);
     term val = term_get_tuple_element(msg->message, 1);
 
+    if (term_is_atom(val) && val == CLOSE_ATOM) {
+        mailbox_remove(&ctx->mailbox);
+        return NativeTerminate;
+    }
+
     int local_process_id = term_to_local_process_id(pid);
     globalcontext_send_message(ctx->global, local_process_id, val);
 
@@ -2993,7 +2998,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
 
     term target_pid = argv[1];
 
-    if (argv[0] != PROCESS_ATOM) {
+    if (argv[0] != PROCESS_ATOM && argv[0] != PORT_ATOM) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -3010,13 +3015,16 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
         term down_message_tuple = term_alloc_tuple(5, ctx);
         term_put_tuple_element(down_message_tuple, 0, DOWN_ATOM);
         term_put_tuple_element(down_message_tuple, 1, ref);
-        term_put_tuple_element(down_message_tuple, 2, PROCESS_ATOM);
+        term_put_tuple_element(down_message_tuple, 2, argv[0]);
         term_put_tuple_element(down_message_tuple, 3, argv[1]);
         term_put_tuple_element(down_message_tuple, 4, NOPROC_ATOM);
         mailbox_send(ctx, down_message_tuple);
         return ref;
     }
 
+    if ((argv[0] == PROCESS_ATOM && target->native_handler != NULL) || (argv[0] == PORT_ATOM && target->native_handler == NULL)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
     term callee_pid = term_from_local_process_id(ctx->process_id);
 
     uint64_t ref_ticks = context_monitor(target, callee_pid, false);

@@ -230,7 +230,7 @@ Context *scheduler_run(GlobalContext *global)
             // process signal messages and also empty outer list to inner list.
             scheduler_process_native_signal_messages(result);
             if (!(result->flags & Killed)) {
-                if (result->native_handler(result)) {
+                if (result->native_handler(result) == NativeContinue) {
                     context_update_flags(result, ~Running, NoFlags);
                 } else {
                     scheduler_terminate(result);

@@ -40,7 +40,6 @@ static const char *const getsockname_atom = "\xB" "getsockname";
 static const char *const recvfrom_atom = "\x8" "recvfrom";
 static const char *const sendto_atom = "\x6" "sendto";
 static const char *const address_atom = "\x7" "address";
-static const char *const port_atom = "\x4" "port";
 static const char *const controlling_process_atom = "\x13" "controlling_process";
 static const char *const active_atom = "\x6" "active";
 static const char *const buffer_atom = "\x6" "buffer";
@@ -54,7 +53,6 @@ static const char *const accept_atom = "\x6" "accept";
 static const char *const fd_atom = "\x2" "fd";
 
 static const char *const init_atom = "\x4" "init";
-static const char *const close_atom = "\x5" "close";
 static const char *const get_port_atom = "\x8" "get_port";
 static const char *const sockname_atom = "\x8" "sockname";
 static const char *const peername_atom = "\x8" "peername";
@@ -131,7 +129,6 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, recvfrom_atom) == RECVFROM_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, sendto_atom) == SENDTO_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, address_atom) == ADDRESS_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, port_atom) == PORT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, controlling_process_atom) == CONTROLLING_PROCESS_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, active_atom) == ACTIVE_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, buffer_atom) == BUFFER_ATOM_INDEX;
@@ -145,7 +142,6 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, fd_atom) == FD_ATOM_INDEX;
 
     ok &= globalcontext_insert_atom(glb, init_atom) == INIT_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, close_atom) == CLOSE_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, get_port_atom) == GET_PORT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, sockname_atom) == SOCKNAME_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, peername_atom) == PEERNAME_ATOM_INDEX;

@@ -295,7 +295,11 @@ static void context_monitors_handle_terminate(Context *ctx)
             term info_tuple = term_alloc_tuple(5, ctx);
             term_put_tuple_element(info_tuple, 0, DOWN_ATOM);
             term_put_tuple_element(info_tuple, 1, ref);
-            term_put_tuple_element(info_tuple, 2, PROCESS_ATOM);
+            if (ctx->native_handler != NULL) {
+                term_put_tuple_element(info_tuple, 2, PORT_ATOM);
+            } else {
+                term_put_tuple_element(info_tuple, 2, PROCESS_ATOM);
+            }
             term_put_tuple_element(info_tuple, 3, term_from_local_process_id(ctx->process_id));
             term_put_tuple_element(info_tuple, 4, ctx->exit_reason);
 
