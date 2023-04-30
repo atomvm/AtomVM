@@ -81,11 +81,25 @@ term memory_copy_term_tree(term **new_heap, term t, term *mso_list);
  * The function can also be passed roots to update during any garbage collection.
  * @param ctx the target context.
  * @param size needed available memory.
- * @param shrink if the heap can be shrunk
  * @param num_roots number of roots
  * @param roots roots to preserve
+ * @param shrink_mode whether the function can or should shrink
  */
-enum MemoryGCResult memory_ensure_free_opt(Context *ctx, uint32_t size, enum MemoryShrinkMode shrink_mode, int num_roots, term *roots) MUST_CHECK;
+enum MemoryGCResult memory_ensure_free_with_roots(Context *ctx, uint32_t size, int num_roots, term *roots, enum MemoryShrinkMode shrink_mode) MUST_CHECK;
+
+/**
+ * @brief makes sure that the given context has given free memory.
+ *
+ * @details this function makes sure at least size terms are available. Optionally,
+ * it can shrink the heap to the specified size, depending on allocation strategy.
+ * @param ctx the target context.
+ * @param size needed available memory.
+ * @param shrink_mode whether the function can or should shrink
+ */
+MUST_CHECK static inline enum MemoryGCResult memory_ensure_free_opt(Context *ctx, uint32_t size, enum MemoryShrinkMode shrink_mode)
+{
+    return memory_ensure_free_with_roots(ctx, size, 0, NULL, shrink_mode);
+}
 
 /**
  * @brief makes sure that the given context has given free memory
@@ -96,11 +110,10 @@ enum MemoryGCResult memory_ensure_free_opt(Context *ctx, uint32_t size, enum Mem
  * @param ctx the target context.
  * @param size needed available memory.
  */
-static inline enum MemoryGCResult memory_ensure_free(Context *ctx, uint32_t size)
+MUST_CHECK static inline enum MemoryGCResult memory_ensure_free(Context *ctx, uint32_t size)
 {
-    return memory_ensure_free_opt(ctx, size, MEMORY_NO_SHRINK, 0, NULL);
+    return memory_ensure_free_opt(ctx, size, MEMORY_NO_SHRINK);
 }
-MUST_CHECK
 
 /**
  * @brief calculates term memory usage

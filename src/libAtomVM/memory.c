@@ -58,7 +58,7 @@ MALLOC_LIKE term *memory_alloc_heap_fragment(Context *ctx, uint32_t fragment_siz
     return (term *) (heap_fragment + 1);
 }
 
-enum MemoryGCResult memory_ensure_free_opt(Context *c, uint32_t size, enum MemoryShrinkMode shrink_mode, int num_roots, term *roots)
+enum MemoryGCResult memory_ensure_free_with_roots(Context *c, uint32_t size, int num_roots, term *roots, enum MemoryShrinkMode shrink_mode)
 {
     size_t free_space = context_avail_free_memory(c);
     size_t maximum_free_space = 2 * (size + MIN_FREE_SPACE_SIZE);
