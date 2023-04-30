@@ -45,6 +45,13 @@ enum MemoryGCResult
     MEMORY_GC_DENIED_ALLOCATION = 2
 };
 
+enum MemoryShrinkMode
+{
+    MEMORY_NO_SHRINK = 0,
+    MEMORY_CAN_SHRINK = 1,
+    MEMORY_FORCE_SHRINK = 2
+};
+
 /**
  * @brief allocates space for a certain amount of terms on the heap
  *
@@ -58,16 +65,6 @@ MALLOC_LIKE term *memory_heap_alloc(Context *ctx, uint32_t size);
 MALLOC_LIKE term *memory_alloc_heap_fragment(Context *ctx, uint32_t size);
 
 /**
- * @brief allocates a new memory block and executes garbage collection
- *
- * @details allocates a new memory block (that can have new size) and executes garbage collection, any existing term might be invalid after this call.
- * @param ctx the context that owns the memory block.
- * @param new_size the size of the new memory block in term units.
- * @returns MEMORY_GC_OK when successful.
- */
-enum MemoryGCResult memory_gc(Context *ctx, int new_size);
-
-/**
  * @brief copies a term to a destination heap
  *
  * @details deep copies a term to a destination heap, once finished old memory can be freed.
@@ -77,22 +74,46 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size);
 term memory_copy_term_tree(term **new_heap, term t, term *mso_list);
 
 /**
- * @brief meakes sure that the given context has given free memory
+ * @brief makes sure that the given context has given free memory.
+ *
+ * @details this function makes sure at least size terms are available. Optionally,
+ * it can shrink the heap to the specified size, depending on allocation strategy.
+ * The function can also be passed roots to update during any garbage collection.
+ * @param ctx the target context.
+ * @param size needed available memory.
+ * @param num_roots number of roots
+ * @param roots roots to preserve
+ * @param shrink_mode whether the function can or should shrink
+ */
+enum MemoryGCResult memory_ensure_free_with_roots(Context *ctx, uint32_t size, int num_roots, term *roots, enum MemoryShrinkMode shrink_mode) MUST_CHECK;
+
+/**
+ * @brief makes sure that the given context has given free memory.
+ *
+ * @details this function makes sure at least size terms are available. Optionally,
+ * it can shrink the heap to the specified size, depending on allocation strategy.
+ * @param ctx the target context.
+ * @param size needed available memory.
+ * @param shrink_mode whether the function can or should shrink
+ */
+MUST_CHECK static inline enum MemoryGCResult memory_ensure_free_opt(Context *ctx, uint32_t size, enum MemoryShrinkMode shrink_mode)
+{
+    return memory_ensure_free_with_roots(ctx, size, 0, NULL, shrink_mode);
+}
+
+/**
+ * @brief makes sure that the given context has given free memory
  *
  * @details this function makes sure that at least size terms are available, when not available gc will be performed, any existing term might be invalid after this call.
-
+ * It does not shrink the heap, so if this function is called with a given value N and it is later called with a smaller value n, the actual amount of available free
+ * memory is N.
  * @param ctx the target context.
  * @param size needed available memory.
  */
-enum MemoryGCResult memory_ensure_free(Context *ctx, uint32_t size) MUST_CHECK;
-
-/**
- * @brief runs a garbage collection and shrinks used memory
- *
- * @details runs a garbage collection and shrinks used memory, a new heap will be allocated, any existing term might be invalid after this call.
- * @param ctx the context on which the garbage collection will be performed.
- */
-enum MemoryGCResult memory_gc_and_shrink(Context *ctx) MUST_CHECK;
+MUST_CHECK static inline enum MemoryGCResult memory_ensure_free(Context *ctx, uint32_t size)
+{
+    return memory_ensure_free_opt(ctx, size, MEMORY_NO_SHRINK);
+}
 
 /**
  * @brief calculates term memory usage

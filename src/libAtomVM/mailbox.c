@@ -75,7 +75,7 @@ term mailbox_peek(Context *c)
     if (c->e - c->heap_ptr < m->msg_memory_size) {
         // ADDITIONAL_PROCESSING_MEMORY_SIZE: ensure some additional memory for message processing, so there is
         // no need to run GC again.
-        if (UNLIKELY(memory_gc(c, context_memory_size(c) + m->msg_memory_size + ADDITIONAL_PROCESSING_MEMORY_SIZE) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free(c, m->msg_memory_size + ADDITIONAL_PROCESSING_MEMORY_SIZE) != MEMORY_GC_OK)) {
             fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         }
     }
