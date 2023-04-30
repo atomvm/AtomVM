@@ -20,7 +20,7 @@
 
 -module(test_binary_to_term).
 
--export([start/0]).
+-export([start/0, apply/2, apply/3]).
 
 start() ->
     test_reverse(foo, <<131, 100, 0, 3, 102, 111, 111>>),
@@ -61,6 +61,7 @@ start() ->
             57, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 48,
             49, 50, 51, 52, 53>>
     ),
+    ok = test_external_function(),
 
     {32768, 6} = erlang:binary_to_term(<<131, 98, 0, 0, 128, 0, 127>>, [used]),
     test_catentate_and_split([foo, bar, 128, {foo, bar}, [a, b, c, {d}]]),
@@ -137,6 +138,36 @@ mutate_bin(Bin, I) ->
     <<Prefix:I/binary, Ith:8/integer-unsigned, Rest/binary>> = Bin,
     I2 = Ith bxor 16#FF,
     <<Prefix/binary, I2:8/integer-unsigned, Rest/binary>>.
+
+test_external_function() ->
+    Bin = term_to_binary([fun ?MODULE:apply/2, fun ?MODULE:apply/3]),
+    Bin =
+        <<131, 108, 0, 0, 0, 2, 113, 100, 0, 19, 116, 101, 115, 116, 95, 98, 105, 110, 97, 114, 121,
+            95, 116, 111, 95, 116, 101, 114, 109, 100, 0, 5, 97, 112, 112, 108, 121, 97, 2, 113,
+            100, 0, 19, 116, 101, 115, 116, 95, 98, 105, 110, 97, 114, 121, 95, 116, 111, 95, 116,
+            101, 114, 109, 100, 0, 5, 97, 112, 112, 108, 121, 97, 3, 106>>,
+    [Fun2, Fun3] = binary_to_term(Bin),
+    true = is_function(Fun2),
+    true = is_function(Fun3),
+    42 = Fun2(fun() -> 42 end, []),
+    42 = Fun3(?MODULE, apply, [fun() -> 42 end, []]),
+    42 = Fun3(?MODULE, apply, [Fun2, [fun() -> 42 end, []]]),
+    ok.
+
+% We don't have access to erlang module in tests.
+apply(F, []) ->
+    F();
+apply(F, [X]) ->
+    F(X);
+apply(F, [X, Y]) ->
+    F(X, Y).
+
+apply(M, F, []) ->
+    M:F();
+apply(M, F, [X]) ->
+    M:F(X);
+apply(M, F, [X, Y]) ->
+    M:F(X, Y).
 
 expect_badarg(Fun) ->
     try

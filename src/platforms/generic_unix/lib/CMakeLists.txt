@@ -80,12 +80,6 @@ if (HAVE_KQUEUE AND HAVE_EVFILT_USER AND HAVE_NOTE_TRIGGER)
     target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC HAVE_KQUEUE)
 endif()
 
-install(
-    FILES ${CMAKE_CURRENT_SOURCE_DIR}/atomvm
-    DESTINATION bin
-    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-)
-
 if (COVERAGE)
     include(CodeCoverage)
     append_coverage_compiler_flags_to_target(libAtomVM${PLATFORM_LIB_SUFFIX})

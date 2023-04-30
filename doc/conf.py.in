@@ -33,17 +33,20 @@
 # import os
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
+import subprocess
+from sphinx.builders.html import StandaloneHTMLBuilder
 
+# Doxygen
+subprocess.call('doxygen Doxyfile', shell=True)
 
 # -- Project information -----------------------------------------------------
 import sphinx_rtd_theme
 
 project = 'AtomVM'
-copyright = '2017-2022, AtomVM'
+copyright = '2017-2023, AtomVM'
 author = 'github.com/atomvm'
 version = '@ATOMVM_BASE_VERSION@'
 release = '@ATOMVM_VERSION@'
-
 
 # -- General configuration ---------------------------------------------------
 
@@ -51,17 +54,46 @@ release = '@ATOMVM_VERSION@'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'myst_parser'
+    'breathe',
+    'myst_parser',
+    'sphinx_rtd_theme',
+    'sphinx.ext.graphviz',
+    'sphinx.ext.autodoc',
+    'sphinx.ext.intersphinx',
+    'sphinx.ext.autosectionlabel',
+    'sphinx.ext.todo',
+    'sphinx.ext.coverage',
+    'sphinx.ext.mathjax',
+    'sphinx.ext.ifconfig',
+    'sphinx.ext.viewcode',
+    'sphinx.ext.inheritance_diagram'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ['@CMAKE_CURRENT_SOURCE_DIR@/_templates']
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ['*/favicon/about.txt']
 
+# The master toctree document.
+master_doc = 'index'
+
+highlight_language = 'c'
+primary_domain = 'c'
+
+# Breathe configuration
+breathe_projects = { "libatomvm": "@CMAKE_CURRENT_BINARY_DIR@/xml/" }
+breathe_default_project = "libatomvm"
+breathe_default_members = ('members', 'undoc-members')
+
+StandaloneHTMLBuilder.supported_image_types = [
+    'image/svg+xml',
+    'image/gif',
+    'image/png',
+    'image/jpeg'
+]
 
 # -- Options for HTML output -------------------------------------------------
 
@@ -69,17 +101,19 @@ exclude_patterns = ['*/favicon/about.txt']
 # a list of builtin themes.
 #
 html_theme = 'sphinx_rtd_theme'
+html_logo = '@CMAKE_CURRENT_SOURCE_DIR@/src/_static/avm_logo_banner.png'
 html_theme_options = {
+    'logo_only': True,
     'style_external_links': True,
+    'display_version': True
 }
 
-# html_static_path = ['_static', '@CMAKE_CURRENT_BINARY_DIR@/html/svg']
+html_copy_source = False
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-# html_static_path = ['_static']
-
+html_static_path = ['@CMAKE_CURRENT_BINARY_DIR@/src/_static']
 
 source_suffix = {
     '.rst': 'restructuredtext',
@@ -87,7 +121,63 @@ source_suffix = {
     '.md': 'markdown',
 }
 
-html_favicon = '../../doc/src/_static/favicon/favicon.ico'
+html_favicon = '@CMAKE_CURRENT_SOURCE_DIR@/src/_static/favicon/favicon.ico'
 
-epub_tocdepth = 2
+html_baseurl = 'https://atomvm.net/doc'
+
+############################
+# SETUP THE RTD LOWER-LEFT #
+############################
+try:
+   html_context
+except NameError:
+   html_context = dict()
+
+html_baseurl = 'https://atomvm.net/doc'
+
+html_context['display_lower_left'] = 'True'
+
+# SET CURRENT_VERSION
+from git import Repo
+repo = Repo( search_parent_directories=True )
+current_version = repo.active_branch.name
+
+# tell the theme which version we're currently on ('current_version' affects
+# the lower-left rtd menu and 'version' affects the logo-area version)
+html_context['current_version'] = current_version
+html_context['version'] = current_version
+
+# POPULATE LINKS TO OTHER VERSIONS
+html_context['versions'] = list()
+
+versions = [branch.name for branch in repo.branches]
+print("Sphinx config found repository branches: %r." % (versions))
+for version in versions:
+   html_context['versions'].append( (version, '/doc/' +version+ '/') )
+
+#html_context['test_versions'] = html_context['versions']
+
+html_sidebars = {
+    '**': [
+        'versions.html',
+    ],
+}
+
+# settings for creating PDF with rinoh
+rinoh_documents = [(
+  master_doc,
+  project+ '-' +current_version,
+  project+ ' Documentation',
+  '© ' +copyright,
+)]
+today_fmt = "%B %d, %Y"
+
+# settings for EPUB
+epub_tocdepth = 6
 epub_show_urls = 'no'
+epub_basename = project+ '-' +current_version
+
+# POPULATE LINKS TO OTHER FORMATS/DOWNLOADS
+html_context['downloads'] = list()
+html_context['downloads'].append( ('pdf', '/doc/' +current_version+ '/pdf/' +project+ '-' +current_version+ '.pdf') )
+html_context['downloads'].append( ('epub', '/doc/' +current_version+ '/epub/' +project+ '-' +current_version+ '.epub') )

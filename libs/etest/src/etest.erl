@@ -150,7 +150,7 @@ check_results([]) ->
     ok;
 check_results([{_Test, ok} | T]) ->
     check_results(T);
-check_results([Failure | T]) ->
+check_results([Failure | _T]) ->
     {fail, Failure}.
 
 id(X) -> X.

@@ -49,7 +49,7 @@
 %% @doc     Format string and data to a string.
 %%          Approximates features of OTP io_lib:format/2, but
 %%          only supports ~p and ~n format specifiers.
-%%          Raises `badarg` error if the number of format specifiers
+%%          Raises `badarg' error if the number of format specifiers
 %%          does not match the length of the Args.
 %% @end
 %%-----------------------------------------------------------------------------

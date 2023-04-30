@@ -264,3 +264,9 @@ jobs:
       run: |
         ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
         valgrind ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
+
+    - name: "Install and smoke test"
+      working-directory: build
+      run: |
+        sudo PATH=${PATH} make install
+        atomvm examples/erlang/hello_world.avm

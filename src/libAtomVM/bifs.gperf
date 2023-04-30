@@ -40,6 +40,7 @@ erlang:get/1, bif_erlang_get_1, false
 erlang:is_atom/1, bif_erlang_is_atom_1, false
 erlang:is_binary/1, bif_erlang_is_binary_1, false
 erlang:is_boolean/1, bif_erlang_is_boolean_1, false
+erlang:is_function/1, bif_erlang_is_function_1, false
 erlang:is_integer/1, bif_erlang_is_integer_1, false
 erlang:is_list/1, bif_erlang_is_list_1, false
 erlang:is_number/1, bif_erlang_is_number_1, false

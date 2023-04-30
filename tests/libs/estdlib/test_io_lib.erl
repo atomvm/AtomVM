@@ -63,8 +63,11 @@ test() ->
     ),
     ?ASSERT_MATCH(?FLT(io_lib:format("escape ~~p~n", [])), "escape ~p\n"),
 
-    ?ASSERT_FAILURE(io_lib:format("no pattern", [foo]), badarg),
-    ?ASSERT_FAILURE(io_lib:format("too ~p many ~p patterns", [foo]), badarg),
-    ?ASSERT_FAILURE(io_lib:format("not enough ~p patterns", [foo, bar]), badarg),
+    ?ASSERT_FAILURE(io_lib:format("no pattern", id([foo])), badarg),
+    ?ASSERT_FAILURE(io_lib:format("too ~p many ~p patterns", id([foo])), badarg),
+    ?ASSERT_FAILURE(io_lib:format("not enough ~p patterns", id([foo, bar])), badarg),
 
     ok.
+
+id(X) ->
+    X.

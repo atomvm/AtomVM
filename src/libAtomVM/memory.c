@@ -37,6 +37,7 @@
 
 static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **new_heap_pos, term *mso_list, int move);
 static term memory_shallow_copy_term(term t, term **new_heap, int move);
+static enum MemoryGCResult memory_gc(Context *ctx, int new_size, int num_roots, term *roots);
 
 HOT_FUNC term *memory_heap_alloc(Context *c, uint32_t size)
 {
@@ -57,25 +58,27 @@ MALLOC_LIKE term *memory_alloc_heap_fragment(Context *ctx, uint32_t fragment_siz
     return (term *) (heap_fragment + 1);
 }
 
-enum MemoryGCResult memory_ensure_free(Context *c, uint32_t size)
+enum MemoryGCResult memory_ensure_free_with_roots(Context *c, uint32_t size, int num_roots, term *roots, enum MemoryShrinkMode shrink_mode)
 {
     size_t free_space = context_avail_free_memory(c);
-    if (free_space < size + MIN_FREE_SPACE_SIZE) {
+    size_t maximum_free_space = 2 * (size + MIN_FREE_SPACE_SIZE);
+    if (free_space < size || (shrink_mode == MEMORY_FORCE_SHRINK) || ((shrink_mode == MEMORY_CAN_SHRINK) && free_space > maximum_free_space)) {
         size_t memory_size = context_memory_size(c);
-        if (UNLIKELY(memory_gc(c, memory_size + size + MIN_FREE_SPACE_SIZE) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_gc(c, memory_size + size + MIN_FREE_SPACE_SIZE, num_roots, roots) != MEMORY_GC_OK)) {
             //TODO: handle this more gracefully
             TRACE("Unable to allocate memory for GC.  memory_size=%zu size=%u\n", memory_size, size);
             return MEMORY_GC_ERROR_FAILED_ALLOCATION;
         }
-        size_t new_free_space = context_avail_free_memory(c);
-        size_t new_minimum_free_space = 2 * (size + MIN_FREE_SPACE_SIZE);
-        if (new_free_space > new_minimum_free_space) {
-            size_t new_memory_size = context_memory_size(c);
-            size_t new_requested_size = (new_memory_size - new_free_space) + new_minimum_free_space;
-            if (!c->has_min_heap_size || (c->min_heap_size < new_requested_size)) {
-                if (UNLIKELY(memory_gc(c, new_requested_size) != MEMORY_GC_OK)) {
-                    TRACE("Unable to allocate memory for GC shrink.  new_memory_size=%zu new_free_space=%zu new_minimum_free_space=%zu size=%u\n", new_memory_size, new_free_space, new_minimum_free_space, size);
-                    return MEMORY_GC_ERROR_FAILED_ALLOCATION;
+        if (shrink_mode != MEMORY_NO_SHRINK) {
+            size_t new_free_space = context_avail_free_memory(c);
+            if (new_free_space > maximum_free_space) {
+                size_t new_memory_size = context_memory_size(c);
+                size_t new_requested_size = (new_memory_size - new_free_space) + maximum_free_space;
+                if (!c->has_min_heap_size || (c->min_heap_size < new_requested_size)) {
+                    if (UNLIKELY(memory_gc(c, new_requested_size, num_roots, roots) != MEMORY_GC_OK)) {
+                        TRACE("Unable to allocate memory for GC shrink.  new_memory_size=%zu new_free_space=%zu new_minimum_free_space=%zu size=%u\n", new_memory_size, new_free_space, maximum_free_space, size);
+                        return MEMORY_GC_ERROR_FAILED_ALLOCATION;
+                    }
                 }
             }
         }
@@ -84,44 +87,13 @@ enum MemoryGCResult memory_ensure_free(Context *c, uint32_t size)
     return MEMORY_GC_OK;
 }
 
-enum MemoryGCResult memory_gc_and_shrink(Context *c)
-{
-    enum MemoryGCResult r = MEMORY_GC_OK;
-    if (context_avail_free_memory(c) >= MIN_FREE_SPACE_SIZE * 2) {
-        r = memory_gc(c, context_memory_size(c) - context_avail_free_memory(c) / 2);
-        if (UNLIKELY(r != MEMORY_GC_OK)) {
-            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        }
-    }
-    return r;
-}
-
-enum MemoryGCResult memory_gc_min(Context *ctx)
-{
-    enum MemoryGCResult r = MEMORY_GC_OK;
-    size_t memory_size = context_memory_size(ctx);
-    r = memory_gc(ctx, memory_size + MIN_FREE_SPACE_SIZE);
-    if (UNLIKELY(r != MEMORY_GC_OK)) {
-        return r;
-    }
-
-    size_t free_space = context_avail_free_memory(ctx);
-    size_t minimum_free_space = 2 * MIN_FREE_SPACE_SIZE;
-    if (free_space > minimum_free_space) {
-        memory_size = context_memory_size(ctx);
-        r = memory_gc(ctx, (memory_size - free_space) + minimum_free_space);
-    }
-
-    return r;
-}
-
 static inline void push_to_stack(term **stack, term value)
 {
     *stack = (*stack) - 1;
     **stack = value;
 }
 
-enum MemoryGCResult memory_gc(Context *ctx, int new_size)
+static enum MemoryGCResult memory_gc(Context *ctx, int new_size, int num_roots, term *roots)
 {
     TRACE("Going to perform gc on process %i\n", ctx->process_id);
     avm_int_t min_heap_size = ctx->has_min_heap_size ? ctx->min_heap_size : 0;
@@ -168,6 +140,11 @@ enum MemoryGCResult memory_gc(Context *ctx, int new_size)
 
     TRACE("- Running copy GC on exit reason\n");
     ctx->exit_reason = memory_shallow_copy_term(ctx->exit_reason, &heap_ptr, 1);
+
+    TRACE("- Running copy GC on provided roots\n");
+    for (int i = 0; i < num_roots; i++) {
+        roots[i] = memory_shallow_copy_term(roots[i], &heap_ptr, 1);
+    }
 
     term *temp_start = new_heap;
     term *temp_end = heap_ptr;
