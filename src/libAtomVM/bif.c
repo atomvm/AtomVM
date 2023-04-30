@@ -46,6 +46,9 @@
         RAISE_ERROR(BADARG_ATOM);              \
     }
 
+#define INT64_MIN_AS_FLOAT (1.0 * INT64_MIN)
+#define INT64_MAX_AS_FLOAT (1.0 * INT64_MAX)
+
 BifImpl bif_registry_get_handler(AtomString module, AtomString function, int arity)
 {
     char bifname[MAX_BIF_NAME_LEN];
@@ -1033,7 +1036,7 @@ term bif_erlang_ceil_1(Context *ctx, int live, term arg1)
 
     if (term_is_float(arg1)) {
         avm_float_t fvalue = term_to_float(arg1);
-        if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+        if ((fvalue < INT64_MIN_AS_FLOAT) || (fvalue > INT64_MAX_AS_FLOAT)) {
             RAISE_ERROR(OVERFLOW_ATOM);
         }
 
@@ -1065,7 +1068,7 @@ term bif_erlang_floor_1(Context *ctx, int live, term arg1)
 
     if (term_is_float(arg1)) {
         avm_float_t fvalue = term_to_float(arg1);
-        if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+        if ((fvalue < INT64_MIN_AS_FLOAT) || (fvalue > INT64_MAX_AS_FLOAT)) {
             RAISE_ERROR(OVERFLOW_ATOM);
         }
 
@@ -1097,7 +1100,7 @@ term bif_erlang_round_1(Context *ctx, int live, term arg1)
 
     if (term_is_float(arg1)) {
         avm_float_t fvalue = term_to_float(arg1);
-        if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+        if ((fvalue < INT64_MIN_AS_FLOAT) || (fvalue > INT64_MAX_AS_FLOAT)) {
             RAISE_ERROR(OVERFLOW_ATOM);
         }
 
@@ -1129,7 +1132,7 @@ term bif_erlang_trunc_1(Context *ctx, int live, term arg1)
 
     if (term_is_float(arg1)) {
         avm_float_t fvalue = term_to_float(arg1);
-        if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+        if ((fvalue < INT64_MIN_AS_FLOAT) || (fvalue > INT64_MAX_AS_FLOAT)) {
             RAISE_ERROR(OVERFLOW_ATOM);
         }
 
