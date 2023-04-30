@@ -1312,6 +1312,8 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 #endif
 #else
 #pragma clang diagnostic push
+// Apple Clang 13.0.0 and clang < 13 do not know -Wunused-but-set-variable
+#pragma clang diagnostic ignored "-Wunknown-warning-option"
 #pragma clang diagnostic ignored "-Wunused-but-set-variable"
 #endif
 
