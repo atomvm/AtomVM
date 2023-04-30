@@ -362,6 +362,7 @@ struct Test tests[] = {
     TEST_CASE(test_map),
     TEST_CASE_ATOMVM_ONLY(test_refc_binaries, 0),
     TEST_CASE(test_sub_binaries),
+    TEST_CASE_ATOMVM_ONLY(test_throw_call_ext_last, 0),
 
     TEST_CASE_EXPECTED(ceilint, 1),
     TEST_CASE_EXPECTED(ceilbadarg, -1),

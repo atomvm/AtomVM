@@ -49,8 +49,3 @@ check(T) when T == [1, foo, {}, {1}, {1, 2}, [], [1, 2], <<"bar">>] ->
     1;
 check(_T) ->
     0.
-
-bool_to_n(true) ->
-    1;
-bool_to_n(false) ->
-    0.

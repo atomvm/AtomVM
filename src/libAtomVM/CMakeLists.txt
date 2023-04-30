@@ -93,8 +93,10 @@ set(SOURCE_FILES
 add_library(libAtomVM ${SOURCE_FILES} ${HEADER_FILES})
 target_include_directories(libAtomVM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(libAtomVM PUBLIC c_std_11)
-if(CMAKE_COMPILER_IS_GNUCC)
-    target_compile_options(libAtomVM PUBLIC -Wall -pedantic -Wextra -ggdb)
+if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(libAtomVM PUBLIC -Wall -pedantic -Wextra -ggdb -Werror=incompatible-pointer-types)
+elseif (CMAKE_C_COMPILER_ID MATCHES "Clang")
+    target_compile_options(libAtomVM PUBLIC -Wall --extra-warnings -Werror=incompatible-pointer-types)
 endif()
 
 # AtomVM options used in libAtomVM

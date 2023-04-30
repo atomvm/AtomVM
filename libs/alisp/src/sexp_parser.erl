@@ -32,7 +32,7 @@ parse([{'(', _Line} | T], Acc) ->
     parse(NewTail, [L | Acc]);
 parse([{')', _Line} | T], Acc) ->
     {T, reverse(Acc)};
-parse([{symbol_prefix, _Line, SymPrefix}, {symbol, _Line, Sym} | T], Acc) ->
+parse([{symbol_prefix, _Line1, SymPrefix}, {symbol, _Line2, Sym} | T], Acc) ->
     parse(T, [[symbol_pair, erlang:list_to_atom(SymPrefix), erlang:list_to_atom(Sym)] | Acc]);
 parse([{symbol, _Line, Sym} | T], Acc) ->
     parse(T, [erlang:list_to_atom(Sym) | Acc]);

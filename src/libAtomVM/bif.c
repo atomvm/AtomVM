@@ -116,6 +116,13 @@ term bif_erlang_is_boolean_1(Context *ctx, term arg1)
     return (arg1 == TRUE_ATOM || arg1 == FALSE_ATOM) ? TRUE_ATOM : FALSE_ATOM;
 }
 
+term bif_erlang_is_function_1(Context *ctx, term arg1)
+{
+    UNUSED(ctx);
+
+    return term_is_function(arg1) ? TRUE_ATOM : FALSE_ATOM;
+}
+
 term bif_erlang_is_integer_1(Context *ctx, term arg1)
 {
     UNUSED(ctx);
@@ -169,7 +176,7 @@ term bif_erlang_is_map_1(Context *ctx, term arg1)
 term bif_erlang_is_map_key_2(Context *ctx, term arg1, term arg2)
 {
     if (UNLIKELY(!term_is_map(arg2))) {
-        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, 3, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         term err = term_alloc_tuple(2, ctx);
@@ -246,7 +253,7 @@ term bif_erlang_map_size_1(Context *ctx, int live, term arg1)
     UNUSED(live);
 
     if (!UNLIKELY(term_is_map(arg1))) {
-        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, 3, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         term err = term_alloc_tuple(2, ctx);
@@ -263,7 +270,7 @@ term bif_erlang_map_size_1(Context *ctx, int live, term arg1)
 term bif_erlang_map_get_2(Context *ctx, term arg1, term arg2)
 {
     if (!UNLIKELY(term_is_map(arg2))) {
-        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, 3, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         term err = term_alloc_tuple(2, ctx);
@@ -276,7 +283,7 @@ term bif_erlang_map_get_2(Context *ctx, term arg1, term arg2)
 
     int pos = term_find_map_pos(arg2, arg1, ctx->global);
     if (pos == TERM_MAP_NOT_FOUND) {
-        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, 3, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         term err = term_alloc_tuple(2, ctx);
@@ -296,7 +303,7 @@ term bif_erlang_map_get_2(Context *ctx, term arg1, term arg2)
 
 static inline term make_boxed_int(Context *ctx, avm_int_t value)
 {
-    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, BOXED_INT_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -306,7 +313,7 @@ static inline term make_boxed_int(Context *ctx, avm_int_t value)
 #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
 static inline term make_boxed_int64(Context *ctx, avm_int64_t value)
 {
-    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, BOXED_INT64_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -377,7 +384,7 @@ static term add_boxed_helper(Context *ctx, term arg1, term arg2)
             RAISE_ERROR(BADARITH_ATOM);
         }
 
-        if (UNLIKELY(memory_ensure_free(ctx, FLOAT_SIZE) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, FLOAT_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         return term_from_float(fresult, ctx);
@@ -485,7 +492,7 @@ static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
         if (UNLIKELY(!isfinite(fresult))) {
             RAISE_ERROR(BADARITH_ATOM);
         }
-        if (UNLIKELY(memory_ensure_free(ctx, FLOAT_SIZE) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, FLOAT_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         return term_from_float(fresult, ctx);
@@ -608,7 +615,7 @@ static term mul_boxed_helper(Context *ctx, term arg1, term arg2)
         if (UNLIKELY(!isfinite(fresult))) {
             RAISE_ERROR(BADARITH_ATOM);
         }
-        if (UNLIKELY(memory_ensure_free(ctx, FLOAT_SIZE) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, FLOAT_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         return term_from_float(fresult, ctx);
@@ -776,7 +783,7 @@ static term neg_boxed_helper(Context *ctx, term arg1)
         if (UNLIKELY(!isfinite(fresult))) {
             RAISE_ERROR(BADARITH_ATOM);
         }
-        if (UNLIKELY(memory_ensure_free(ctx, FLOAT_SIZE) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, FLOAT_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         return term_from_float(fresult, ctx);
@@ -863,7 +870,7 @@ static term abs_boxed_helper(Context *ctx, term arg1)
         if (UNLIKELY(!isfinite(fresult))) {
             RAISE_ERROR(BADARITH_ATOM);
         }
-        if (UNLIKELY(memory_ensure_free(ctx, FLOAT_SIZE) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, FLOAT_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         return term_from_float(fresult, ctx);

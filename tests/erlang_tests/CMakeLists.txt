@@ -427,6 +427,7 @@ compile_erlang(bs_context_to_binary_with_offset)
 compile_erlang(bs_restore2_start_offset)
 compile_erlang(test_refc_binaries)
 compile_erlang(test_sub_binaries)
+compile_erlang(test_throw_call_ext_last)
 compile_erlang(bs_append_extra_words)
 
 compile_erlang(test_monotonic_time)
@@ -843,6 +844,7 @@ add_custom_target(erlang_test_modules DEPENDS
 
     test_refc_binaries.beam
     test_sub_binaries.beam
+    test_throw_call_ext_last.beam
     test_function_exported.beam
     test_list_to_tuple.beam
 

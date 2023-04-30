@@ -373,7 +373,17 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
             k += serialize_term(ctx, IS_NULL_PTR(buf) ? NULL : buf + k, value);
         }
         return k;
-
+    } else if (term_is_function(t)) {
+        if (!IS_NULL_PTR(buf)) {
+            buf[0] = EXPORT_EXT;
+        }
+        size_t k = 1;
+        const term *boxed_value = term_to_const_term_ptr(t);
+        for (size_t i = 1; i <= 3; ++i) {
+            term mfa = boxed_value[i];
+            k += serialize_term(ctx, IS_NULL_PTR(buf) ? NULL : buf + k, mfa);
+        }
+        return k;
     } else {
         fprintf(stderr, "Unknown external term type: %" TERM_U_FMT "\n", t);
         AVM_ABORT();
@@ -621,10 +631,18 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             }
             uint8_t sign = external_term_buf[2];
             *eterm_size = SMALL_BIG_EXT_BASE_SIZE + num_bytes;
-            avm_uint64_t value = read_bytes(external_term_buf + 3, num_bytes);
+            avm_uint64_t unsigned_value = read_bytes(external_term_buf + 3, num_bytes);
             // NB.  We currently support max 64-bit signed integers (assuming two's complement signed values in 63 bits)
-            if (UNLIKELY((sign == 0 && value > INT64_MAX) || (sign != 0 && value > (((avm_uint64_t) INT64_MAX) + 1)))) {
+            if (UNLIKELY((sign == 0 && unsigned_value > INT64_MAX) || (sign != 0 && unsigned_value > (((avm_uint64_t) INT64_MAX) + 1)))) {
                 return INVALID_TERM_SIZE;
+            }
+            // Compute the size with the sign as -2^27 or -2^59 can be encoded
+            // on 1 term while 2^27 and 2^59 respectively (32/64 bits) cannot.
+            avm_int64_t value = 0;
+            if (sign != 0x00) {
+                value = -((avm_int64_t) unsigned_value);
+            } else {
+                value = (avm_int64_t) unsigned_value;
             }
             return term_boxed_integer_size(value);
         }
@@ -772,6 +790,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             }
             int heap_usage = 1;
             int buf_pos = 1;
+            remaining -= 1;
             for (int i = 0; i < 3; i++) {
                 int element_size = 0;
                 int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &element_size, copy, ctx);
@@ -788,7 +807,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             }
 
             *eterm_size = buf_pos;
-            return FUNCTION_REFERENCE_SIZE;
+            return heap_usage;
         }
 
         case MAP_EXT: {
