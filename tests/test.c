@@ -472,6 +472,7 @@ struct Test tests[] = {
     // Tests relying on console driver
     TEST_CASE_ATOMVM_ONLY(hello_world, 10),
     TEST_CASE_ATOMVM_ONLY(test_echo_driver, 84),
+    TEST_CASE_ATOMVM_ONLY(test_close_console_driver, 0),
     TEST_CASE_ATOMVM_ONLY(test_close_echo_driver, 0),
     TEST_CASE_ATOMVM_ONLY(test_regecho_driver, 11),
     TEST_CASE_ATOMVM_ONLY(test_send_nif_and_echo, 11),
