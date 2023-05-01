@@ -24,7 +24,7 @@ defmodule SHT31 do
   # not needed or recommended for user apps.
   @compile {:no_warn_undefined, [I2C]}
 
-  use Bitwise
+  import Bitwise
 
   @sht31_base_addr 0x44
   @sht31_meas_high_rep 0x2400
