@@ -33,7 +33,7 @@ Deployment of AtomVM applications requires the following components:
 * (recommended) For Erlang programs, [`rebar3`](https://rebar3.org);
 * (recommended) For Elixir programs, [`mix`](https://elixir-lang.org/getting-started/mix-otp/introduction-to-mix.html), which ships with the Elixir runtime;
 
-For information about specific versions of required software, see the [Release Notes](release-notes.md).
+For information about specific versions of required software, see the [Release Notes](./release-notes.md).
 
 ### Deployment Overview
 
@@ -126,7 +126,7 @@ Once completed, your ESP32 device is ready to run Erlang or Elixir programs targ
 
 You may optionally build AtomVM from source and deploy the AtomVM virtual machine to your ESP32 device manually.  Building AtomVM from source is slightly more involved, as it requires the installation of the Espressif IDF SDK and tool chain and is typically recommended only for users who are doing development on the AtomVM virtual machine, or for developers implementing custom Nifs or ports.
 
-Instructions for building AtomVM from source are covered in the AtomVM [Build Instructions](build-instructions.md)
+Instructions for building AtomVM from source are covered in the AtomVM [Build Instructions](./build-instructions.md)
 
 ### Deploying an AtomVM application
 
@@ -220,11 +220,11 @@ You may specify one or more AVM files on the command line when running the `Atom
 
 Currently, the `AtomVM` executable must be built from source.
 
-> See the AtomVM [Build Instructions](build-instructions.md) for instructions about how to build AtomVM on the Generic UNIX platform.
+> See the AtomVM [Build Instructions](./build-instructions.md) for instructions about how to build AtomVM on the Generic UNIX platform.
 
 ## Where to go from here
 
 The following resources may be useful for understanding how to develop Erlang or Elixir applications for the AtomVM platform:
 
-* [Example Programs](example-programs.md)
-* [Programmers Guide](programmers-guide.md)
+* [Example Programs](./example-programs.md)
+* [Programmers Guide](./programmers-guide.md)

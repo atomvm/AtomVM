@@ -51,8 +51,8 @@ In addition, several features are supported specifically for integration with mi
 
 While the list of supported features is long and growing, the currently unsupported Erlang/OTP and BEAM features include (but are not limited to):
 
-* Bingnums.  Integer values are restricted to 64-bit values.
-* Bit Syntax.  While packing and unpacking of arbitrary (but less than 64-) bit values is support, packing and unpacking of integer values at the start of end of a binary, or bordering binary packing or extraction must align on 8-bit boundaries.  Arbitrary-bitlength binaries are not currently supported.
+* Bignums.  Integer values are restricted to 64-bit values.
+* Bit Syntax.  While packing and unpacking of arbitrary (but less than 64-) bit values is support, packing and unpacking of integer values at the start or end of a binary, or bordering binary packing or extraction must align on 8-bit boundaries.  Arbitrary bit length binaries are not currently supported.
 * SMP support.  The AtomVM VM is currently a single-threaded process.
 * The `epmd` and the `disterl` protocols are not supported.
 * There is no support for code hot swapping.
@@ -72,7 +72,7 @@ This section describes the typical development environment and workflow most Ato
 
 ### Development Environment
 
-In general, for most development purposes, you should be able to get away with an Erlang/OTP development environment, and for Elixir developers, and Elixir development environment.  For specific version requirements, see the (Release Notes)(release-notes.md).
+In general, for most development purposes, you should be able to get away with an Erlang/OTP development environment, and for Elixir developers, and Elixir development environment.  For specific version requirements, see the [Release Notes](./release-notes.md).
 
 We assume most development will take place on some UNIX-like environment (e.g., Linux, FreeBSD, or MacOS).  Consult your local package manager for installation of these development environments.
 
@@ -104,7 +104,7 @@ TODO
 
 ### Development Workflow
 
-For the majority of users, AtomVM applications are written in the Erlang or Elixir programming language.  These applications are compiled to BEAM (`.beam`) files using standard Erlang or Elixir compiler tool chains (`erlc`, `rebar`, `mix`, etc).  The generated BEAM files contain byte-code that can be executed by the Erlang/OTP runtime, or by the AtomVM virtual machine.
+For the majority of users, AtomVM applications are written in the Erlang or Elixir programming language.  These applications are compiled to BEAM (`.beam`) files using standard Erlang or Elixir compiler tool chains (`erlc`, `rebar3`, `mix`, etc).  The generated BEAM files contain byte-code that can be executed by the Erlang/OTP runtime, or by the AtomVM virtual machine.
 
 > Note.  In a small number of cases, it may be useful to write parts of an application in the C programming language, as AtomVM nifs or ports.  However, writing AtomVM nifs and ports is outside of the scope of this document.
 
@@ -154,7 +154,7 @@ The typical compile-test-debug cycle can be summarized in the following steps:
 
 Deployment of the AtomVM virtual machine and an AtomVM application currently require a USB serial connection.  There is currently no support for over-the-air (OTA) updates.
 
-For more information about deploying the AtomVM image and AtomVM applications to your device, see the [Getting Started Guide](getting-started-guide.md)
+For more information about deploying the AtomVM image and AtomVM applications to your device, see the [Getting Started Guide](./getting-started-guide.md)
 
 
 ## Applications
@@ -193,7 +193,7 @@ At least one BEAM module in this file must contain an exported `start/0` functio
 
 Not all files in a Packbeam need to be BEAM modules -- you can embed any type of file in a Packbeam file, for consumption by your AtomVM application.
 
-> Note.  The Packbeam format is described in more detail in the AtomVM [PackBEAM format](packbeam-format.md).
+> Note.  The Packbeam format is described in more detail in the AtomVM [PackBEAM format](./packbeam-format.md).
 
 The AtomVM community has provided several tools for simplifying your experience, as a developer.  These tools allow you to use standard Erlang and Elixir tooling (such as `rebar3` and `mix`) to build Packbeam files and deploy then to your device of choice.
 
@@ -243,7 +243,7 @@ On UNIX platforms, you can specify a BEAM file or AVM file as the first argument
 
 The AtomVM virtual machine provides a set of Erlang built-in functions (BIFs) and native functions (NIFs), as well as a collection of Erlang and Elixir libraries that can be used from your applications.
 
-This section provides an overview of these APIs.  For more detailed information about specific APIs, please consult the [API reference documentation](api-reference-documentation.md).
+This section provides an overview of these APIs.  For more detailed information about specific APIs, please consult the [API reference documentation](./api-reference-documentation.md).
 
 ### Standard Libraries
 
@@ -269,7 +269,7 @@ In addition AtomVM provides limited implementations of standard Elixir modules, 
 * `Process`
 * `Console`
 
-For detailed information about these functions, please consult the [API reference documentation](api-reference-documentation.md).  These modules provide a strict subset of functionality from their Erlang/OTP counterparts.  However, they aim to be API-compatible with the Erlang/OTP interfaces, at least for the subset of provided functionality.
+For detailed information about these functions, please consult the [API reference documentation](./api-reference-documentation.md).  These modules provide a strict subset of functionality from their Erlang/OTP counterparts.  However, they aim to be API-compatible with the Erlang/OTP interfaces, at least for the subset of provided functionality.
 
 ### Spawning Processes
 
@@ -428,7 +428,7 @@ Use `erlang:universaltime/0` to get the current time at second resolution, to ob
     %% erlang
     {{Year, Month, Day}, {Hour, Minute, Second}} = erlang:universaltime().
 
-> Note.  Setting the system time is done in a platform-specific manner.  For information about how to set system time on the ESP32, see the [Network Programming Guide](network-programming-guide.md).
+> Note.  Setting the system time is done in a platform-specific manner.  For information about how to set system time on the ESP32, see the [Network Programming Guide](./network-programming-guide.md).
 
 ### Miscellaneous
 
@@ -440,7 +440,7 @@ Use the `erlang:md5/1` function to compute the MD5 hash of an input binary.  The
 Use `atomvm:random/0` to generate a random unsigned 32-bit integer in the range `0..4294967295`:
 
     %% erlang
-    RandomInetger = atomvm:random().
+    RandomInteger = atomvm:random().
 
 Use `atomvm:random_bytes/1` to return a randomly populated binary of a specified size:
 
@@ -500,7 +500,7 @@ The PackBEAM tool does not include file and line information in the AVM files it
 
 ### Math
 
-AtomvVM supports the following standard functions from the OTP `math` module:
+AtomVM supports the following standard functions from the OTP `math` module:
 
 * `cos/1`
 * `acos/1`
@@ -995,7 +995,7 @@ The ESP32 supports WiFi connectivity as part of the built-in WiFi and Bluetooth 
 
 AtomVM supports these modes of operation via the `network` module, which is used to initialize the network and allow applications to respond to events within the network, such as a network disconnect or reconnect, or a connection to the ESP32 from another device.
 
-> Note. Establishment and maintenance of network connections on roaming devices is a complex and subtle art, and the AtomVM `network` module is designed to accommodate as many IoT scenarios as possible.  This section of the programmer's guide is deliberately brief and only addresses the most basic scenarios.  For a more detailed explanation of the AtomVM `network` module and its many use-cases, please refer to the [AtomVM Network Programming Guide](network-programming-guide.md).
+> Note. Establishment and maintenance of network connections on roaming devices is a complex and subtle art, and the AtomVM `network` module is designed to accommodate as many IoT scenarios as possible.  This section of the programmer's guide is deliberately brief and only addresses the most basic scenarios.  For a more detailed explanation of the AtomVM `network` module and its many use-cases, please refer to the [AtomVM Network Programming Guide](./network-programming-guide.md).
 
 #### STA mode
 
@@ -1032,7 +1032,7 @@ For example:
 
 Once connected to a WiFi network, you may begin TCP or UDP networking, as described in more detail below.
 
-For information about how to handle disconnections and reconnections to a WiFi network, see the [AtomVM Network Programming Guide](network-programming-guide.md).
+For information about how to handle disconnections and reconnections to a WiFi network, see the [AtomVM Network Programming Guide](./network-programming-guide.md).
 
 #### AP mode
 
@@ -1066,11 +1066,11 @@ For example:
 
 Once the WiFi network is started, you may begin TCP or UDP networking, as described in more detail below.
 
-For information about how to handle connections and disconnections from attached devices, see the [AtomVM Network Programming Guide](network-programming-guide.md).
+For information about how to handle connections and disconnections from attached devices, see the [AtomVM Network Programming Guide](./network-programming-guide.md).
 
 #### STA+AP mode
 
-For information about how to run the AtomVM network in STA and AP mode simultaneously, see the [AtomVM Network Programming Guide](network-programming-guide.md).
+For information about how to run the AtomVM network in STA and AP mode simultaneously, see the [AtomVM Network Programming Guide](./network-programming-guide.md).
 
 ### UDP
 
@@ -1177,7 +1177,7 @@ The socket returned from `gen_tcp:accept/1` can then be used to send and receive
 
 In this case, the server program will continuosuly echo the received input back to the client, until the client closes the connection.
 
-For more information about the `gen_tcp` server interface, consult the AtomVM [API Reference Documentation](api-reference-documentation.md).
+For more information about the `gen_tcp` server interface, consult the AtomVM [API Reference Documentation](./api-reference-documentation.md).
 
 #### Client-side TCP
 

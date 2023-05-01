@@ -14,22 +14,46 @@ These release notes provide information about the current release of AtoVM.
 
 The following software is required to develop Erlang or Elixir applications on AtomVM:
 
-* The [`esptool`](https://github.com/espressif/esptool) program, for flashing the AtomVM image and AtomVM programs;
-* An [Erlang/OTP](https://erlang.org);
-* The [Elixir](https://elixir-lang.org) runtime, if developing Elixir applications;
+* The [`esptool`](https://github.com/espressif/esptool) program, for flashing the AtomVM image and AtomVM programs to ESP32 MCUs.
+* An [Erlang/OTP](https://erlang.org)
+* The [Elixir](https://elixir-lang.org) runtime, if developing Elixir applications.
 * A serial console program, such as `minicom` or `screen`, so that you can view console output from your AtomVM application.
-* (recommended) For Erlang programs, [`rebar3`](https://rebar3.org);
-* (recommended) For Elixir programs, [`mix`](https://elixir-lang.org/getting-started/mix-otp/introduction-to-mix.html), which ships with the Elixir runtime;
+* (recommended) For Erlang programs, [`rebar3`](https://rebar3.org)
+* (recommended) For Elixir programs, [`mix`](https://elixir-lang.org/getting-started/mix-otp/introduction-to-mix.html), which ships with the Elixir runtime.
 
 AtomVM will run BEAM files that have been compiled using the following Erlang and Elixir versions:
 
 | Erlang Version | Elixir Version |
 |----------------|----------------|
-| OTP 22 | TODO |
-| OTP 23 | TODO |
-| OTP 24 | TODO |
-| OTP 25 | TODO |
+| OTP 21 | ✅ | 1.7 | ✅ |
+| OTP 22 | ✅ | 1.8 | ✅ |
+| OTP 23 | ✅ | 1.11 | ✅ |
+| OTP 24 | ✅ | 1.14 | ✅ |
+| OTP 25 | ✅ | 1.14 | ✅ |
+| OTP 26 | * | 1.15 | * |
+
+`*` OTP 26 is still a release candidate and should be considered experimental.
+Other versions of Elixir that are compatible with a particular OTP version may work, this chart reflects the versions that are tested.
 
 > Note.  Not all BEAM instructions are supported for every Erlang and Elixir compiler.  For details about which instructions are supported, see the `src/libAtomVM/opcodes.h` header file in the  [AtomVM](https://github.com/atomvm/AtomVM/) github repository corresponding to the current release.
+
+### ESP32 Build requirements
+
+This is entirely optional, you may simply use the downloadable images and flash them to your esp32 using `esptool`, but if you wish to work on development of the VM or use one on the additional drivers that are available in the ([AtomVM repositories](https://github.com/atomvm)) you will need a compatible version of ([Espressif's](https:/espressif.com)) ESP-IDF.
+Espressif provides excellent installation documentation on their website at:
+```
+     https://docs.espressif.com/projects/esp-idf/en/release-v4.4/esp32/get-started/index.html
+```
+
+AtomVM currently supports the following versions of ESP-IDF:
+
+| Espressif supported Versions |
+|------------------------------|
+| ESP-IDF v4.2 | ✅ |
+| ESP-IDF v4.3 | ✅ |
+| ESP-IDF v4.4 | ✅ |
+| ESP-IDF v5.0 | ❌ |
+
+> Support is planned for version 5.0...
 
 For detailed information about features and bug fixes in the current release, see the AtomVM [Change Log](CHANGELOG.md).
