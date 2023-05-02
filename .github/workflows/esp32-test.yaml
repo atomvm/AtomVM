@@ -6,7 +6,19 @@
 
 name: ESP32 Test
 
-on: [push, pull_request]
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+      - 'CMakeLists.txt'
+      - 'src/platforms/esp32/**'
+      - 'src/libAtomVM/**'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'CMakeLists.txt'
+      - 'src/platforms/esp32/**'
+      - 'src/libAtomVM/**'
 
 jobs:
   esp32-test:
