@@ -911,21 +911,29 @@ static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[])
 
 static NativeHandlerResult process_echo_mailbox(Context *ctx)
 {
+    NativeHandlerResult result = NativeContinue;
+
     Message *msg = mailbox_first(&ctx->mailbox);
     term pid = term_get_tuple_element(msg->message, 0);
     term val = term_get_tuple_element(msg->message, 1);
 
-    if (term_is_atom(val) && val == CLOSE_ATOM) {
-        mailbox_remove(&ctx->mailbox);
-        return NativeTerminate;
+    if (val == CLOSE_ATOM) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &pid, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            // Not much we can do.
+            return NativeTerminate;
+        }
+        result = NativeTerminate;
+        term reply = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(reply, 0, term_from_local_process_id(ctx->process_id));
+        term_put_tuple_element(reply, 1, CLOSED_ATOM);
+        port_send_message(ctx->global, pid, reply);
+    } else {
+        port_send_message(ctx->global, pid, val);
     }
-
-    int local_process_id = term_to_local_process_id(pid);
-    globalcontext_send_message(ctx->global, local_process_id, val);
 
     mailbox_remove(&ctx->mailbox);
 
-    return NativeContinue;
+    return result;
 }
 
 static bool is_tagged_tuple(term t, term tag, int size)
@@ -933,11 +941,23 @@ static bool is_tagged_tuple(term t, term tag, int size)
     return term_is_tuple(t) && term_get_tuple_arity(t) == size && term_get_tuple_element(t, 0) == tag;
 }
 
-static void process_console_message(Context *ctx, term msg)
+static NativeHandlerResult process_console_message(Context *ctx, term msg)
 {
-    port_ensure_available(ctx, 12);
+    // msg is not in the port's heap
+    NativeHandlerResult result = NativeContinue;
+    if (UNLIKELY(memory_ensure_free_opt(ctx, 12, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        fprintf(stderr, "Unable to allocate sufficient memory for console driver.\n");
+        AVM_ABORT();
+    }
 
-    if (is_tagged_tuple(msg, IO_REQUEST_ATOM, 4)) {
+    if (term_is_tuple(msg) && term_get_tuple_arity(msg) == 2 && term_get_tuple_element(msg, 1) == CLOSE_ATOM) {
+        result = NativeTerminate;
+        term pid = term_get_tuple_element(msg, 0);
+        term reply = term_alloc_tuple(2, ctx);
+        term_put_tuple_element(reply, 0, term_from_local_process_id(ctx->process_id));
+        term_put_tuple_element(reply, 1, CLOSED_ATOM);
+        port_send_message(ctx->global, pid, reply);
+    } else if (is_tagged_tuple(msg, IO_REQUEST_ATOM, 4)) {
         term pid = term_get_tuple_element(msg, 1);
         term ref = term_get_tuple_element(msg, 2);
         term req = term_get_tuple_element(msg, 3);
@@ -994,21 +1014,24 @@ static void process_console_message(Context *ctx, term msg)
     } else {
         fprintf(stderr, "WARNING: Invalid port command.  Unable to send reply");
     }
+
+    return result;
 }
 
 static NativeHandlerResult process_console_mailbox(Context *ctx)
 {
-    while (true) {
+    NativeHandlerResult result = NativeContinue;
+    while (result == NativeContinue) {
         Message *message = mailbox_first(&ctx->mailbox);
         if (message == NULL) break;
         term msg = message->message;
 
-        process_console_message(ctx, msg);
+        result = process_console_message(ctx, msg);
 
         mailbox_remove(&ctx->mailbox);
     }
 
-    return NativeContinue;
+    return result;
 }
 
 static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])

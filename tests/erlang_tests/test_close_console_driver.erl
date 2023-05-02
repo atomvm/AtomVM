@@ -18,14 +18,13 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module(test_close_echo_driver).
+-module(test_close_console_driver).
 
 -export([start/0]).
 
 start() ->
     N = erlang:system_info(process_count),
-    Port = do_open_port("echo", []),
-    11 = length(echo(Port, "Hello World")),
+    Port = do_open_port("console", []),
     MonitorRef = monitor(port, Port),
     Port ! {self(), close},
     ok =
@@ -44,10 +43,3 @@ start() ->
 
 do_open_port(PortName, Param) ->
     open_port({spawn, PortName}, Param).
-
-echo(Port, SendValue) ->
-    Port ! {self(), SendValue},
-    receive
-        Value ->
-            Value
-    end.
