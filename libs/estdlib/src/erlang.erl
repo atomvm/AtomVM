@@ -39,7 +39,8 @@
     map_is_key/2,
     monotonic_time/1,
     min/2,
-    max/2
+    max/2,
+    memory/1
 ]).
 
 %%
@@ -48,6 +49,8 @@
 %% * return value needs to be {ok, cancel} or {error, Reason}
 %% * review API documentation for timer functions in this module
 %%
+
+-type mem_type() :: binary.
 
 -type time_unit() :: second | millisecond | microsecond.
 
@@ -284,6 +287,17 @@ min(_A, B) -> B.
 %%-----------------------------------------------------------------------------
 max(A, B) when A > B -> A;
 max(_A, B) -> B.
+
+%%-----------------------------------------------------------------------------
+%% @param   Type the type of memory to request
+%% @returns the amount of memory (in bytes) used of the specified type
+%% @doc     Return the amount of memory (in bytes) used of the specified type
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-spec memory(Type :: mem_type()) -> non_neg_integer().
+memory(_Type) ->
+    throw(nif_error).
 
 %%-----------------------------------------------------------------------------
 %% @param   Unit    time unit

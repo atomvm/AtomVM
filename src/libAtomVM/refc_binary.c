@@ -89,3 +89,14 @@ term refc_binary_create_binary_info(Context *ctx)
     }
     return ret;
 }
+
+size_t refc_binary_total_size(Context *ctx)
+{
+    size_t size = 0;
+    struct ListHead *item;
+    LIST_FOR_EACH (item, &ctx->global->refc_binaries) {
+        struct RefcBinary *refc = GET_LIST_ENTRY(item, struct RefcBinary, head);
+        size += refc->size;
+    }
+    return size;
+}

@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `start_link` support for the `gen_statem` module
 - Added support for serializing floats in erlang external term encoding
 - Added support for the `SMALL_BIG_EXT` erlang external term encoding
+- Added support for `erlang:memory(binary)`
+
 
 ### Fixed
 - Fixed issue with formatting integers with io:format() on STM32 platform
