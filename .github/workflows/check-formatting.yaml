@@ -6,7 +6,21 @@
 
 name: "Check formatting"
 
-on: [push, pull_request]
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+      - 'CMakeLists.txt'
+      - 'src/**'
+      - 'tests/**'
+      - '**/*.erl'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'CMakeLists.txt'
+      - 'src/**'
+      - 'tests/**'
+      - '**/*.erl'
 
 jobs:
   clang-format-check:

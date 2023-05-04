@@ -6,7 +6,19 @@
 
 name: Build and Test on macOS
 
-on: [push, pull_request]
+on:
+  push:
+    paths-ignore:
+      - 'src/platforms/esp32/**'
+      - 'src/platforms/stm32/**'
+      - 'doc/**'
+      - 'LICENSES/**'
+  pull_request:
+    paths-ignore:
+      - 'src/platforms/esp32/**'
+      - 'src/platforms/stm32/**'
+      - 'doc/**'
+      - 'LICENSES/**'
 
 jobs:
   build-and-test:

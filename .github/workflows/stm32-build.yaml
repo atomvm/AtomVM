@@ -6,7 +6,19 @@
 
 name: STM32 Build
 
-on: [push, pull_request]
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+      - 'CMakeLists.txt'
+      - 'src/platforms/stm32/**'
+      - 'src/libAtomVM/**'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'CMakeLists.txt'
+      - 'src/platforms/stm32/**'
+      - 'src/libAtomVM/**'
 
 jobs:
   stm32:

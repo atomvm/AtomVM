@@ -6,7 +6,20 @@
 
 name: ESP32 Builds
 
-on: [push, pull_request]
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+      - 'CMakeLists.txt'
+      - 'libs/**'
+      - 'src/platforms/esp32/**'
+      - 'src/libAtomVM/**'
+      - 'tools/packbeam/**'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'src/platforms/esp32/**'
+      - 'src/libAtomVM/**'
 
 jobs:
   esp-idf:
