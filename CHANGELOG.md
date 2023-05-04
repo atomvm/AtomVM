@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added the ability to specify the HSPI or VSPI ESP32 hardware interfaces when initializing the
   SPI Bus.
 - Added support for the `spi:close/1` function.
-- Added AVM_VERBOSE_ABORT CMake define, which when set to on, will print the C module and line
+- Added `AVM_VERBOSE_ABORT` CMake define, which when set to on, will print the C module and line
   number when a VM abort occurs.  This define is off by default.
 - Added `spi:write/3` and `spi:write_read/3` functions to support generalized SPI transactions
   and arbitrary-length reads and writes from SPI devices.
@@ -35,10 +35,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for FP opcodes 94-102 thus removing the need for `AVM_DISABLE_FP=On` with OTP-22+
 - Added support for stacktraces
 - Added support for `utf-8`, `utf-16`, and `utf-32` bit syntax modifiers (put and match)
-
+- Added support for the Erlang `gen_event` module
+- Added `start_link` support for the `network` module
+- Added support for `erlang:monotomic_time/1`
+- Added `start_link` support for the `gen_statem` module
+- Added support for serializing floats in erlang external term encoding
+- Added support for the `SMALL_BIG_EXT` erlang external term encoding
 
 ### Fixed
 - Fixed issue with formatting integers with io:format() on STM32 platform
+- Fixed a bug in the order of child initialization in the `supervisor` module
+- Fixed a bug in the evaluation of `receive ... after infinity -> ...` expressions
+- Fixed a bug in when putting integers in bit syntax with integer field sizes
+- Fixed numerous bugs in memory allocations that could crash the VM
 
 ### Breaking Changes
 
@@ -80,7 +89,7 @@ check the return value will need to be modified.
   than UART0 are supported, with better performances and stability.
 - Fix binaries concat (`bs_append` instruction) that was adding some extra zeroes at the end of
   built binaries.
-- Fixed a bug in gen_tcp that prevents an accepting socket from inheriting settings on the listening socket.
+- Fixed a bug in `gen_tcp` that prevents an accepting socket from inheriting settings on the listening socket.
 - Fixed a bug in packing and unpacking integers into and from binaries when the
   bit length is not a multiple of 8.
 - Fixed `esp:deep_sleep/1` that did not accept values above 31 minutes.

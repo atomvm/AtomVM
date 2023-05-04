@@ -6,13 +6,15 @@
 
 # Build Instructions
 
-This guide is intended for anyone interested in the implementation of AtomVM, including developers who would like to provide enhancements or bug fixes to the core AtomVM virtual machine, as well as providing third-party extensions via the implementation of AtomVM Nifs or Ports.  Understanding the virtual machine and how it is implemented is also interesting in its own right, and having an understanding of the underlying mechanics can be helpful for writing better Erlang and Elixir programs.
+This guide is intended for anyone interested in building the AtomVM virtual machine from source code.  You may be interested in building the AtomVM source code if you want to provide bug fixes or enhancements to the VM, or if you want to simply learn more about the platform.  In addition, some "downstream" drivers for specific devices may need to be built specifically for the target platfom (e.g., ESP32), in which case building the VM from source code is required.
+
+> Note.  Many applications do not require building the AtomVM runtime from source code.  Instead, you can download pre-built VM images for platforms such as ESP32, and use Erlang and Elixir tooling to build and deploy your applications.
 
 The AtomVM virtual machine itself, including the runtime code execution engine, as well as built-in functions and Nifs is implemented in C.  The core standard and AtomVM libraries are implemented in Erlang and Elixir.
 
 The native C parts of AtomVM compile to machine code on MacOS, Linux, and FreeBSD platforms.  The C code also compiles to run on the ESP32 and STM32 platforms.  Typically, binaries for these platforms are created on a UNIX-like environment (MacOS or Linux, currently) using tool-chains provided by device vendors to cross-compile and target specific device architectures.
 
-The Erlang and Elixir parts are compiled to BEAM byte-code using the Erlang (`erlc`) and Elixir compilers.  Currently, Erlang/OTP versions 21 and 22 are supported.
+The Erlang and Elixir parts are compiled to BEAM byte-code using the Erlang (`erlc`) and Elixir compilers.  For information about specific versions of required software, see the [Release Notes](release-notes.md).
 
 This guide provides information about how to build AtomVM for the various supported platforms (Generic UNIX, ESP32, and STM32).
 

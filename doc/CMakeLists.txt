@@ -21,9 +21,13 @@
 project(doc)
 
 # Prepare souces in build directory
+include(${CMAKE_SOURCE_DIR}/CMakeModules/GetVersion.cmake)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/_static)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/edoc)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/src DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
+file(COPY ${CMAKE_SOURCE_DIR}/CONTRIBUTING.md DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/src)
+file(COPY ${CMAKE_SOURCE_DIR}/CHANGELOG.md DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/src)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/release-notes.md.in ${CMAKE_CURRENT_BINARY_DIR}/src/release-notes.md @ONLY)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/edoc/edown_dep DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/edoc/)
 
 # Configure libAtomVM restucturedtext skeleton.
@@ -94,8 +98,6 @@ endif()
 ##
 find_package(Sphinx)
 if(SPHINX_FOUND)
-
-    include(${CMAKE_SOURCE_DIR}/CMakeModules/GetVersion.cmake)
 
     message("Sphinx found: ${SPHINX_BUILD_EXECUTABLE}")
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/conf.py.in ${CMAKE_CURRENT_BINARY_DIR}/conf.py @ONLY)

@@ -10,7 +10,7 @@ The `AtomVM` project provides a ground-up implementation of the "Bogdan Erlang A
 
 While `AtomVM` can be compiled for and run on destop (UNIX-like) systems, the intended target for AtomVM are tiny microcontrollers, such as the ESP32 and STM32.
 
-Currently, AtomVM implements a strict subset of the BEAM instruction set, as of Erlang/OTP R20.  Previous and later versions of Erlang/OTP are not supported.
+Currently, AtomVM implements a strict subset of the BEAM instruction set.
 
 The currently unsupported Erlang/OTP and BEAM features includes (but is not limited to):
 
@@ -21,7 +21,7 @@ The currently unsupported Erlang/OTP and BEAM features includes (but is not limi
 * The Erlang/OTP standard libraries (kernel, stdlib, sasl, etc)
 * `epmd` and the `disterl` protocol
 
-As such, it is highly unlikely that an existing Erlang program targeted for Erlang/OTP R20 will run unmodified on AtomVM.  And indeed, even as AtomVM matures and additional features are added, it is more likley than not that Erlang applications will need to be ported or completely re-written to run on AtomVM.  The intended target environment (small, cheap micro-controllers) differs enough from desktop or server-class systems that special care and attention is needed to target applications for such embedded environments.
+As such, it is highly unlikely that an existing Erlang program targeted for Erlang/OTP will run unmodified on AtomVM.  And indeed, even as AtomVM matures and additional features are added, it is more likley than not that Erlang applications will need to be ported or completely re-written to run on AtomVM.  The intended target environment (small, cheap micro-controllers) differs enough from desktop or server-class systems that special care and attention is needed to target applications for such embedded environments.
 
 That being said, many of the features of the BEAM are supported and provide a rich and compelling development environment for embedded devices, which Erlang and Elixer developers will find natural and productive.
 
