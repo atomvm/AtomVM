@@ -457,6 +457,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_monotonic_time, 1),
 
     TEST_CASE_EXPECTED(exactly_eq, 7),
+    TEST_CASE_EXPECTED(tuple_comparisons, 6),
 
     // Tests relying on echo driver
     TEST_CASE_ATOMVM_ONLY(pingpong, 1),
