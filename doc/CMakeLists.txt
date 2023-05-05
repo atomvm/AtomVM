@@ -45,8 +45,8 @@ add_custom_target(edown-escript
     COMMENT "Preparing edown escript" VERBATIM
 )
 
-# Get branch name
-execute_process(COMMAND git branch --show-current OUTPUT_VARIABLE BRANCH_NAME OUTPUT_STRIP_TRAILING_WHITESPACE)
+# Get branch name replacing any `/` with `-` in name for URLs.
+execute_process(COMMAND "bash" "-c" "sed -e 'y/\\//-/' <<< `git branch --show-current`" OUTPUT_VARIABLE BRANCH_NAME OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 ##
 ## Erlang API documentation
