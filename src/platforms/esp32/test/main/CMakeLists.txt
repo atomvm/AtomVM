@@ -20,3 +20,6 @@
 
 idf_component_register(SRCS "test_main.c"
                     INCLUDE_DIRS ".")
+
+add_subdirectory(test_erl_sources)
+target_link_libraries(${COMPONENT_LIB} esp32_test_modules)

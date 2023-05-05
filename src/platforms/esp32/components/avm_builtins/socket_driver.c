@@ -174,7 +174,7 @@ void socket_events_handler(EventListener *listener)
 
     struct NetconnEvent event;
     while (xQueueReceive(netconn_events, &event, 1) == pdTRUE) {
-        TRACE("Got netconn event: %p %i %i\n", event.netconn, event.evt, event.len);
+        TRACE("Got netconn event: %p %i %i\n", (void *) event.netconn, event.evt, event.len);
 
         struct netconn *netconn = event.netconn;
         enum netconn_evt evt = event.evt;
@@ -225,7 +225,7 @@ void socket_events_handler(EventListener *listener)
             }
 
         } else {
-            TRACE("Got event for unknown conn: %p, evt: %i, len: %i\n", netconn, (int) evt, (int) len);
+            TRACE("Got event for unknown conn: %p, evt: %i, len: %i\n", (void *) netconn, (int) evt, (int) len);
         }
     }
 }
@@ -354,7 +354,7 @@ void accept_conn(struct TCPServerAccepter *accepter, Context *ctx)
 
     term pid = accepter->accepting_process_pid;
 
-    TRACE("accepted conn: %p\n", accepted_conn);
+    TRACE("accepted conn: %p\n", (void *) accepted_conn);
 
     Context *new_ctx = context_new(glb);
     new_ctx->native_handler = socket_consume_mailbox;
@@ -430,7 +430,7 @@ static void close_tcp_socket(Context *ctx, struct TCPClientSocketData *tcp_data)
     term pid = tcp_data->socket_data.controlling_process_pid;
     term msg = term_alloc_tuple(2, ctx);
     term_put_tuple_element(msg, 0, TCP_CLOSED_ATOM);
-    term_put_tuple_element(msg, 1, term_from_local_process_id(pid));
+    term_put_tuple_element(msg, 1, term_from_local_process_id(ctx->process_id));
 
     err_t res = netconn_delete(tcp_data->socket_data.conn);
     if (res != ERR_OK) {
@@ -1142,7 +1142,7 @@ static void do_recvfrom(Context *ctx, term msg)
     }
 
     if (socket_data->avail_bytes) {
-        TRACE(stderr, "do_recvfrom: have already ready bytes.\n");
+        TRACE("do_recvfrom: have already ready bytes.\n");
 
         struct netbuf *buf = NULL;
         err_t status = netconn_recv(socket_data->conn, &buf);
