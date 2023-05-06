@@ -12,6 +12,12 @@ name: Publish Docs
 on:
   # Triggers the workflow on push request events for all branches
   push:
+    paths:
+      - '.github/workflows/**'
+      - 'CMakeLists.txt'
+      - 'doc/**'
+      - 'libs/**'
+      - 'src/libAtomVM/**'
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -82,11 +88,14 @@ jobs:
           path: /home/runner/work/AtomVM/AtomVM/www
 
       - name: Build Site
+        shell: bash
         run: |
           . /home/runner/python-env/sphinx/bin/activate
-          for remote in `git branch -r | grep -v "/HEAD\|${{ github.ref_name }}"`; do git checkout --track $remote; done
-          git switch ${{ github.ref_name }}
-          git branch
+          if [ ${GITHUB_REPOSITORY} == 'atomvm/AtomVM' ]; then {
+            for remote in `git branch -r | grep -v "/HEAD\|${{ github.ref_name }}"`; do git checkout --track $remote; done
+            git switch ${{ github.ref_name }}
+          };
+          fi
           mkdir build
           cd build
           cmake ..

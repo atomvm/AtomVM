@@ -21,9 +21,13 @@
 project(doc)
 
 # Prepare souces in build directory
+include(${CMAKE_SOURCE_DIR}/CMakeModules/GetVersion.cmake)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/_static)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/edoc)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/src DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
+file(COPY ${CMAKE_SOURCE_DIR}/CONTRIBUTING.md DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/src)
+file(COPY ${CMAKE_SOURCE_DIR}/CHANGELOG.md DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/src)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/release-notes.md.in ${CMAKE_CURRENT_BINARY_DIR}/src/release-notes.md @ONLY)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/edoc/edown_dep DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/edoc/)
 
 # Configure libAtomVM restucturedtext skeleton.
@@ -41,8 +45,8 @@ add_custom_target(edown-escript
     COMMENT "Preparing edown escript" VERBATIM
 )
 
-# Get branch name
-execute_process(COMMAND git branch --show-current OUTPUT_VARIABLE BRANCH_NAME OUTPUT_STRIP_TRAILING_WHITESPACE)
+# Get branch name replacing any `/` with `-` in name for URLs.
+execute_process(COMMAND "bash" "-c" "sed -e 'y/\\//-/' <<< `git branch --show-current`" OUTPUT_VARIABLE BRANCH_NAME OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 ##
 ## Erlang API documentation
@@ -95,8 +99,6 @@ endif()
 find_package(Sphinx)
 if(SPHINX_FOUND)
 
-    include(${CMAKE_SOURCE_DIR}/CMakeModules/GetVersion.cmake)
-
     message("Sphinx found: ${SPHINX_BUILD_EXECUTABLE}")
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/conf.py.in ${CMAKE_CURRENT_BINARY_DIR}/conf.py @ONLY)
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY)
@@ -140,7 +142,7 @@ endif()
 foreach(LIBAVM_ERL_LIB estdlib eavmlib alisp etest)
     add_custom_command(TARGET edoc-${LIBAVM_ERL_LIB}
         POST_BUILD
-        COMMAND sed -i -e "s/\.md/\.html/g" -e "s/application/library/g" ${CMAKE_CURRENT_BINARY_DIR}/src/apidocs/erlang/${LIBAVM_ERL_LIB}/README.md
+        COMMAND sed -i -e "s/\.md/\.html/g; s/application/library/g" ${CMAKE_CURRENT_BINARY_DIR}/src/apidocs/erlang/${LIBAVM_ERL_LIB}/README.md
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Fixing html link locations for ${LIBAVM_ERL_LIB}." VERBATIM
     )

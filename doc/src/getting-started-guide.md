@@ -28,10 +28,12 @@ Deployment of AtomVM applications requires the following components:
 * An ESP32 module with a USB/UART connector (typically part of an ESP32 development board);
 * A USB cable capable of connecting the ESP32 module or board to your development machine (laptop or PC);
 * The [`esptool`](https://github.com/espressif/esptool) program, for flashing the AtomVM image and AtomVM programs;
-* An [Erlang/OTP](https://erlang.org) release (21, 22, or 23);
+* An [Erlang/OTP](https://erlang.org);
 * A serial console program, such as `minicom` or `screen`, so that you can view console output from your AtomVM application.
-* (optional) For Erlang programs, [`rebar3`](https://rebar3.org);
-* (optional) For Elixir programs, [`mix`](https://elixir-lang.org/getting-started/mix-otp/introduction-to-mix.html), which ships with the Elixir runtime;
+* (recommended) For Erlang programs, [`rebar3`](https://rebar3.org);
+* (recommended) For Elixir programs, [`mix`](https://elixir-lang.org/getting-started/mix-otp/introduction-to-mix.html), which ships with the Elixir runtime;
+
+For information about specific versions of required software, see the [Release Notes](./release-notes.md).
 
 ### Deployment Overview
 
@@ -106,9 +108,9 @@ We recommend first erasing any existing applications on the ESP32 device.  E.g.,
 
 > Note.  Specify the device port and baud settings and AtomVM image name to suit your particular environment.
 
-Next, download the latest stable or nightly ESP32 release image from the [AtomVM web site](http://www.atomvm.net).
+Next, download a stable or latest development ESP32 [release image](https://github.com/atomvm/AtomVM/releases).
 
-> Note.  Nightly images may be unstable and may result in unpredictable behavior.
+> Note.  Development images may be unstable and may result in unpredictable behavior.
 
 Finally, use the `esptool` to flash the image to the start address `0x1000` on the ESP32.  E.g.,
 
@@ -124,7 +126,7 @@ Once completed, your ESP32 device is ready to run Erlang or Elixir programs targ
 
 You may optionally build AtomVM from source and deploy the AtomVM virtual machine to your ESP32 device manually.  Building AtomVM from source is slightly more involved, as it requires the installation of the Espressif IDF SDK and tool chain and is typically recommended only for users who are doing development on the AtomVM virtual machine, or for developers implementing custom Nifs or ports.
 
-Instructions for building AtomVM from source are covered in the AtomVM [Build Instructions](build-instructions.md)
+Instructions for building AtomVM from source are covered in the AtomVM [Build Instructions](./build-instructions.md)
 
 ### Deploying an AtomVM application
 
@@ -138,7 +140,7 @@ This section describes both Erlang and Elixir tooling for deploying AtomVM appli
 
 #### Erlang Tooling
 
-Deployment of AtomVM applications written in the Erlang programming language is supported via the [`atomvm_rebar3_plugin`](https://github.com/fadushin/atomvm_rebar3_plugin) plugin, a community-supported plugin to the [`rebar3`](https://rebar3.org) Erlang build tool.
+Deployment of AtomVM applications written in the Erlang programming language is supported via the [`atomvm_rebar3_plugin`](https://github.com/atomvm/atomvm_rebar3_plugin) plugin, a community-supported plugin to the [`rebar3`](https://rebar3.org) Erlang build tool.
 
 You can generate a simple application from scratch using the `atomvm_rebar3_plugin` template, as follows:
 
@@ -146,7 +148,7 @@ Edit or create the `$HOME/.config/rebar3/rebar.config` file to include the `atom
 
     %% $HOME/.config/rebar3/rebar.config
     {plugins, [
-        {atomvm_rebar3_plugin, "0.3.0"},
+        atomvm_rebar3_plugin,
         ...
     ]}.
 
@@ -162,7 +164,7 @@ Specifically, note the following stanza in the generated `rebar.config` file:
 
     %% rebar.config
     {plugins, [
-        {atomvm_rebar3_plugin, "0.3.0"},
+        atomvm_rebar3_plugin,
         ...
     ]}.
 
@@ -178,7 +180,7 @@ And note the `myapp` application exports a `start/0` function, e.g.,
 With this plugin installed, you have access to the `esp32_flash` target, which will build an AtomVM packbeam
 
     shell$ rebar3 esp32_flash --port /dev/ttyUSB0
-    ===> Fetching atomvm_rebar3_plugin v0.3.0
+    ===> Fetching atomvm_rebar3_plugin v0.6.0
     ===> Fetching rebar3_hex v6.11.3
     ===> Fetching hex_core v0.7.1
     ===> Fetching verl v1.0.2
@@ -186,7 +188,7 @@ With this plugin installed, you have access to the `esp32_flash` target, which w
     ===> Compiling verl
     ===> Compiling hex_core
     ===> Compiling rebar3_hex
-    ===> Fetching atomvm_packbeam v0.3.0
+    ===> Fetching atomvm_packbeam v0.6.0
     ===> Analyzing applications...
     ===> Compiling atomvm_rebar3_plugin
     ===> Compiling packbeam
@@ -196,7 +198,7 @@ With this plugin installed, you have access to the `esp32_flash` target, which w
     ===> AVM file written to : myapp.avm
     ===> esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 115200 --before default_reset --after hard_reset write_flash -u --flash_mode dio --flash_freq 40m --flash_size detect 0x210000 /home/frege/myapp/_build/default/lib/myapp.avm
 
-> Note. Consult the the [`atomvm_rebar3_plugin`](https://github.com/fadushin/atomvm_rebar3_plugin) plugin documentation, for more detailed information about how to use this tool.
+> Note. Consult the the [`atomvm_rebar3_plugin`](https://github.com/atomvm/atomvm_rebar3_plugin) plugin documentation, for more detailed information about how to use this tool.
 
 Once the application has been flashed, you may connect to the ESP32 over the serial port using `minicom`, `screen`, or equivalent.
 
@@ -218,11 +220,11 @@ You may specify one or more AVM files on the command line when running the `Atom
 
 Currently, the `AtomVM` executable must be built from source.
 
-> See the AtomVM [Build Instructions](build-instructions.md) for instructions about how to build AtomVM on the Generic UNIX platform.
+> See the AtomVM [Build Instructions](./build-instructions.md) for instructions about how to build AtomVM on the Generic UNIX platform.
 
 ## Where to go from here
 
 The following resources may be useful for understanding how to develop Erlang or Elixir applications for the AtomVM platform:
 
-* [Example Programs](example-programs.md)
-* [Programmers Guide](programmers-guide.md)
+* [Example Programs](./example-programs.md)
+* [Programmers Guide](./programmers-guide.md)

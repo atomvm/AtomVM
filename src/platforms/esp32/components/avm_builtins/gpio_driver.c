@@ -35,7 +35,6 @@
 #include "scheduler.h"
 #include "debug.h"
 #include "defaultatoms.h"
-#include "dictionary.h"
 #include "globalcontext.h"
 #include "interop.h"
 #include "mailbox.h"
@@ -494,25 +493,12 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
             ret = ERROR_ATOM;
     }
 
-    term old;
-    if (UNLIKELY(dictionary_put(&ctx->dictionary, gpio_driver, ret, &old, ctx->global) != DictionaryOk)) {
-        // TODO: handle alloc error
-        AVM_ABORT();
-    }
     term ret_msg;
-    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, 3, 1, &ret, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         ret_msg = OUT_OF_MEMORY_ATOM;
     } else {
-        if (UNLIKELY(dictionary_get(&ctx->dictionary, gpio_driver, &ret, ctx->global) != DictionaryOk)) {
-            // TODO: handle alloc error
-            AVM_ABORT();
-        }
         term ref = term_get_tuple_element(msg, 1);
         ret_msg = create_pair(ctx, ref, ret);
-    }
-    if (UNLIKELY(dictionary_erase(&ctx->dictionary, gpio_driver, &old, ctx->global) != DictionaryOk)) {
-        // TODO: handle alloc error
-        AVM_ABORT();
     }
 
     globalcontext_send_message(ctx->global, local_process_id, ret_msg);

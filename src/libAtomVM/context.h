@@ -91,8 +91,8 @@ struct Context
     term *heap_ptr;
     term *e;
 
-    avm_int_t min_heap_size;
-    avm_int_t max_heap_size;
+    size_t min_heap_size;
+    size_t max_heap_size;
 
     unsigned long cp;
 

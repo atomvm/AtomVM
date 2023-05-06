@@ -66,8 +66,8 @@
 // buffer).  The parse_external_terms function does NOT perform range checking, and MUST
 // therefore always be preceeded by a call to calculate_heap_usage.
 
-static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx, bool copy);
-static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaining, int *eterm_size, bool copy, Context *ctx);
+static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm_size, Context *ctx, bool copy);
+static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaining, size_t *eterm_size, bool copy, Context *ctx);
 static size_t compute_external_size(Context *ctx, term t);
 static int externalterm_from_term(Context *ctx, uint8_t **buf, size_t *len, term t);
 static int serialize_term(Context *ctx, uint8_t *buf, term t);
@@ -95,7 +95,7 @@ static term externalterm_to_term_internal(const void *external_term, size_t size
         return term_invalid_term();
     }
 
-    int eterm_size;
+    size_t eterm_size;
     int heap_usage = calculate_heap_usage(external_term_buf + 1, size - 1, &eterm_size, copy, ctx);
     if (heap_usage == INVALID_TERM_SIZE) {
         return term_invalid_term();
@@ -121,7 +121,7 @@ static term externalterm_to_term_internal(const void *external_term, size_t size
         return result;
     } else {
         if (UNLIKELY(memory_ensure_free(ctx, heap_usage) != MEMORY_GC_OK)) {
-            fprintf(stderr, "Unable to ensure %i free words in heap\n", eterm_size);
+            fprintf(stderr, "Unable to ensure %zu free words in heap\n", eterm_size);
             return term_invalid_term();
         }
         term result = parse_external_terms(external_term_buf + 1, &eterm_size, ctx, true);
@@ -399,7 +399,7 @@ static avm_uint64_t read_bytes(const uint8_t *buf, uint8_t num_bytes)
     return value;
 }
 
-static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_size, Context *ctx, bool copy)
+static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm_size, Context *ctx, bool copy)
 {
     switch (external_term_buf[0]) {
         case NEW_FLOAT_EXT: {
@@ -459,7 +459,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
             int buf_pos = 2;
 
             for (int i = 0; i < arity; i++) {
-                int element_size;
+                size_t element_size;
                 term put_value = parse_external_terms(external_term_buf + buf_pos, &element_size, ctx, copy);
                 if (term_is_invalid_term(put_value)) {
                     return put_value;
@@ -493,7 +493,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
             int buf_pos = 5;
 
             for (unsigned int i = 0; i < list_len; i++) {
-                int item_size;
+                size_t item_size;
                 term head = parse_external_terms(external_term_buf + buf_pos, &item_size, ctx, copy);
                 if (term_is_invalid_term(head)) {
                     return head;
@@ -513,7 +513,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
             }
 
             if (prev_term) {
-                int tail_size;
+                size_t tail_size;
                 term tail = parse_external_terms(external_term_buf + buf_pos, &tail_size, ctx, copy);
                 if (term_is_invalid_term(tail)) {
                     return tail;
@@ -537,8 +537,8 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
         }
 
         case EXPORT_EXT: {
-            int buf_pos = 1;
-            int element_size;
+            size_t buf_pos = 1;
+            size_t element_size;
 
             term m = parse_external_terms(external_term_buf + buf_pos, &element_size, ctx, copy);
             buf_pos += element_size;
@@ -556,16 +556,16 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
         case MAP_EXT: {
             uint32_t size = READ_32_UNALIGNED(external_term_buf + 1);
             term map = term_alloc_map(ctx, size);
-            int buf_pos = 5;
+            size_t buf_pos = 5;
             for (uint32_t i = 0; i < size; ++i) {
-                int key_size;
+                size_t key_size;
                 term key = parse_external_terms(external_term_buf + buf_pos, &key_size, ctx, copy);
                 if (term_is_invalid_term(key)) {
                     return key;
                 }
                 buf_pos += key_size;
 
-                int value_size;
+                size_t value_size;
                 term value = parse_external_terms(external_term_buf + buf_pos, &value_size, ctx, copy);
                 if (term_is_invalid_term(value)) {
                     return value;
@@ -593,7 +593,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, int *eterm_si
     }
 }
 
-static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaining, int *eterm_size, bool copy, Context *ctx)
+static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaining, size_t *eterm_size, bool copy, Context *ctx)
 {
     if (UNLIKELY(remaining < 1)) {
         return INVALID_TERM_SIZE;
@@ -671,10 +671,10 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             }
 
             int heap_usage = 1;
-            int buf_pos = 2;
+            size_t buf_pos = 2;
 
             for (int i = 0; i < arity; i++) {
-                int element_size = 0;
+                size_t element_size = 0;
                 int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &element_size, copy, ctx);
                 if (UNLIKELY(u == INVALID_TERM_SIZE)) {
                     return INVALID_TERM_SIZE;
@@ -728,7 +728,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             int heap_usage = 0;
 
             for (unsigned int i = 0; i < list_len; i++) {
-                int item_size = 0;
+                size_t item_size = 0;
                 int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &item_size, copy, ctx);
                 if (UNLIKELY(u == INVALID_TERM_SIZE)) {
                     return INVALID_TERM_SIZE;
@@ -742,7 +742,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
                 remaining -= item_size;
             }
 
-            int tail_size = 0;
+            size_t tail_size = 0;
             int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &tail_size, copy, ctx);
             if (UNLIKELY(u == INVALID_TERM_SIZE)) {
                 return INVALID_TERM_SIZE;
@@ -792,7 +792,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             int buf_pos = 1;
             remaining -= 1;
             for (int i = 0; i < 3; i++) {
-                int element_size = 0;
+                size_t element_size = 0;
                 int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &element_size, copy, ctx);
                 if (UNLIKELY(u == INVALID_TERM_SIZE)) {
                     return INVALID_TERM_SIZE;
@@ -820,9 +820,9 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
                 return INVALID_TERM_SIZE;
             }
             int heap_usage = 1;
-            int buf_pos = MAP_EXT_BASE_SIZE;
+            size_t buf_pos = MAP_EXT_BASE_SIZE;
             for (uint32_t i = 0; i < size; ++i) {
-                int key_size = 0;
+                size_t key_size = 0;
                 int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &key_size, copy, ctx);
                 if (UNLIKELY(u == INVALID_TERM_SIZE)) {
                     return INVALID_TERM_SIZE;
@@ -834,7 +834,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
                     return INVALID_TERM_SIZE;
                 }
                 remaining -= key_size;
-                int value_size = 0;
+                size_t value_size = 0;
                 u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &value_size, copy, ctx);
                 if (UNLIKELY(u == INVALID_TERM_SIZE)) {
                     return INVALID_TERM_SIZE;

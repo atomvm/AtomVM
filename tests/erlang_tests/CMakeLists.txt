@@ -435,6 +435,8 @@ compile_erlang(bs_append_extra_words)
 compile_erlang(test_monotonic_time)
 
 compile_erlang(exactly_eq)
+compile_erlang(map_comparisons)
+compile_erlang(tuple_comparisons)
 
 compile_erlang(spawn_opt_monitor_normal)
 compile_erlang(spawn_opt_monitor_throw)
@@ -859,6 +861,8 @@ add_custom_target(erlang_test_modules DEPENDS
     test_monotonic_time.beam
 
     exactly_eq.beam
+    map_comparisons.beam
+    tuple_comparisons.beam
 
     spawn_opt_monitor_normal.beam
     spawn_opt_monitor_throw.beam

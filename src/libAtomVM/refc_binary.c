@@ -92,3 +92,16 @@ term refc_binary_create_binary_info(Context *ctx)
     synclist_unlock(&ctx->global->refc_binaries);
     return ret;
 }
+
+size_t refc_binary_total_size(Context *ctx)
+{
+    size_t size = 0;
+    struct ListHead *item;
+    struct ListHead *refc_binaries = synclist_rdlock(&ctx->global->refc_binaries);
+    LIST_FOR_EACH (item, refc_binaries) {
+        struct RefcBinary *refc = GET_LIST_ENTRY(item, struct RefcBinary, head);
+        size += refc->size;
+    }
+    synclist_unlock(&ctx->global->refc_binaries);
+    return size;
+}

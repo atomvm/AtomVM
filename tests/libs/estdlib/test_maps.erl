@@ -49,12 +49,15 @@ test_get() ->
     ok = check_bad_key(fun() -> maps:get(bar, id(#{foo => bar})) end, bar),
 
     ?ASSERT_MATCH(maps:get(gnu, id(#{foo => bar}), gnat), gnat),
+    ?ASSERT_FAILURE(maps:get({hello}, id(#{foo => bar})), {badkey, {hello}}),
+    ?ASSERT_FAILURE(maps:get(gnu, id({hello})), {badmap, {hello}}),
     ok.
 
 test_is_key() ->
     ?ASSERT_MATCH(maps:is_key(foo, id(#{foo => bar})), true),
     ok = check_bad_map(fun() -> maps:is_key(bar, id(not_a_map)) end),
     ?ASSERT_MATCH(maps:is_key(bar, id(#{foo => bar})), false),
+    ?ASSERT_FAILURE(maps:is_key(gnu, id({hello})), {badmap, {hello}}),
     ok.
 
 test_put() ->
@@ -108,6 +111,7 @@ test_from_list() ->
 test_size() ->
     ?ASSERT_MATCH(maps:size(maps:new()), 0),
     ?ASSERT_MATCH(maps:size(#{a => 1, b => 2, c => 3}), 3),
+    ?ASSERT_FAILURE(maps:size({hello}), {badmap, {hello}}),
     ok = check_bad_map(fun() -> maps:size(id(not_a_map)) end),
     ok.
 
@@ -176,6 +180,8 @@ test_update() ->
     ?ASSERT_EQUALS(maps:update(b, 20, #{a => 1, b => 2, c => 3}), #{a => 1, b => 20, c => 3}),
     ?ASSERT_EQUALS(maps:update(c, 30, #{a => 1, b => 2, c => 3}), #{a => 1, b => 2, c => 30}),
     ?ASSERT_FAILURE(maps:update(d, 40, #{a => 1, b => 2, c => 3}), {badkey, d}),
+    ?ASSERT_FAILURE(maps:update({hello}, 40, #{a => 1, b => 2, c => 3}), {badkey, {hello}}),
+    ?ASSERT_FAILURE(maps:update(a, 40, {hello}), {badmap, {hello}}),
     ok = check_bad_map(fun() -> maps:update(foo, bar, id(not_a_map)) end),
     ok.
 

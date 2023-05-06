@@ -6,13 +6,15 @@
 
 # Build Instructions
 
-This guide is intended for anyone interested in the implementation of AtomVM, including developers who would like to provide enhancements or bug fixes to the core AtomVM virtual machine, as well as providing third-party extensions via the implementation of AtomVM Nifs or Ports.  Understanding the virtual machine and how it is implemented is also interesting in its own right, and having an understanding of the underlying mechanics can be helpful for writing better Erlang and Elixir programs.
+This guide is intended for anyone interested in building the AtomVM virtual machine from source code.  You may be interested in building the AtomVM source code if you want to provide bug fixes or enhancements to the VM, or if you want to simply learn more about the platform.  In addition, some "downstream" drivers for specific devices may need to be built specifically for the target platform (e.g., ESP32), in which case building the VM from source code is required.
+
+> Note.  Many applications do not require building the AtomVM runtime from source code.  Instead, you can download pre-built VM images for platforms such as ESP32, and use Erlang and Elixir tooling to build and deploy your applications.
 
 The AtomVM virtual machine itself, including the runtime code execution engine, as well as built-in functions and Nifs is implemented in C.  The core standard and AtomVM libraries are implemented in Erlang and Elixir.
 
 The native C parts of AtomVM compile to machine code on MacOS, Linux, and FreeBSD platforms.  The C code also compiles to run on the ESP32 and STM32 platforms.  Typically, binaries for these platforms are created on a UNIX-like environment (MacOS or Linux, currently) using tool-chains provided by device vendors to cross-compile and target specific device architectures.
 
-The Erlang and Elixir parts are compiled to BEAM byte-code using the Erlang (`erlc`) and Elixir compilers.  Currently, Erlang/OTP versions 21 and 22 are supported.
+The Erlang and Elixir parts are compiled to BEAM byte-code using the Erlang (`erlc`) and Elixir compilers.  For information about specific versions of required software, see the [Release Notes](./release-notes.md).
 
 This guide provides information about how to build AtomVM for the various supported platforms (Generic UNIX, ESP32, and STM32).
 
@@ -56,13 +58,13 @@ The following software is required in order to build AtomVM in generic UNIX syst
 * `make`
 * `gperf`
 * `zlib`
-* Erlang/OTP 21
+* Erlang/OTP (consult [Release Notes](release-notes.md) for currently supported versions)
 
 Consult your local OS documentation for instructions about how to install these components.
 
 ### Build Instructions
 
-The AtomVM build for generic UNIX systems makes use of the `cmake` tool for generating `make` files from the top level AtomVM directory.  With CMake, you generally create a separate directory for all output files (make files, generated object files, linked binaries, etc).  A common pattern is to create a clcal `build` directory, and then point `cmake` to the parent directory for the root of the source tree:
+The AtomVM build for generic UNIX systems makes use of the `cmake` tool for generating `make` files from the top level AtomVM directory.  With CMake, you generally create a separate directory for all output files (make files, generated object files, linked binaries, etc).  A common pattern is to create a local `build` directory, and then point `cmake` to the parent directory for the root of the source tree:
 
 	shell$ mkdir build
 	shell$ cd build
@@ -127,13 +129,19 @@ In order to build a complete AtomVM image for ESP32, you will also need to build
 The following software is required in order to build AtomVM for the ESP32 platform:
 
 * Espressif Xtensa tool chains
-* [Espressif IDF SDK](https://www.espressif.com/en/products/sdks/esp-idf) version 3.x (4.x support is currently _experimental_)
+* [Espressif IDF SDK](https://www.espressif.com/en/products/sdks/esp-idf) (consult [Release Notes](release-notes.md) for currently supported versions)
 * `cmake`
-* GNU `make` (for ESP-IDF versions lower than 4)
 
-Instructions for downloading and installing the Espressif IDF SDK and tool chains are outside of the scope of this document.  Please consult the [IDF SDKGetting Started](https://docs.espressif.com/projects/esp-idf/en/release-v3.3/get-started/index.html) guide for more information.
+Instructions for downloading and installing the Espressif IDF SDK and tool chains are outside of the scope of this document.  Please consult the [IDF SDKGetting Started](https://docs.espressif.com/projects/esp-idf/en/release-v4.4/get-started/index.html) guide for more information.
 
 ### Build Instructions
+
+To activate the ESP-IDF build environment change directories to the tree root of your local ESP-IDF:
+
+	shell$ cd <ESP-IDF-ROOT-DIR>
+	shell$ . ./export.sh
+
+> Note: If you followed Espressif's installation guide the ESP-IDF directory is `${HOME}/esp/esp-idf`
 
 Change directories to the `src/platforms/esp32` directory under the AtomVM source tree root:
 
@@ -147,14 +155,14 @@ Start by updating the default build configuration of local `sdkconfig` file via 
 
 > Note.  For those familiar with esp-idf the build can be customized using `menuconfig` instead of `reconfigure`
 >
->	`shell$ idf.py menuconfig`
+>	shell$ idf.py menuconfig
 >
 >   This command will bring up a curses dialog box where you can make adjustments such as not including AtomVM components that
 >   are not desired in a particular build. You can also change the behavior of a crash in the VM to print the error and reboot,
 >   or halt after the error is printed. Extreme caution should be used when changing any non AtomVM settings. You can quit the
 >   program by typing `Q`.  Save the changes, and the program will exit.
 
-You can now build AtomvVM using the build command:
+You can now build AtomVM using the build command:
 
 	shell$ idf.py build
 	...
@@ -168,7 +176,7 @@ This command, once completed, will create the Espressif bootloader, partition ta
 	--port /dev/ttyUSB0 --baud 115200 --before default_reset --after hard_reset write_flash
 	-z --flash_mode dio --flash_freq 40m --flash_size detect
 	0x1000 /path-to-atomvm-source-tree/Atomvm/src/platforms/esp32/build/bootloader/bootloader.bin
-	0x10000 /path-to-atomvm-source-tree/Atomvm/src/platforms/esp32/build/atomvvm-esp32.bin
+	0x10000 /path-to-atomvm-source-tree/Atomvm/src/platforms/esp32/build/atomvm-esp32.bin
 	0x8000 /path-to-atomvm-source-tree/Atomvm/src/platforms/esp32/build/partitions.bin
 
 At this point, you can run `idf.py flash` to upload the 3 binaries up to your ESP32 device, and in some development scenarios, this is a preferable shortcut.
@@ -253,12 +261,12 @@ Running this script will generate a single `atomvm-<sha>.img` file in the `build
 The `mkimage.sh` script is run from the src/platform/esp32 directory as follows:
 
     shell$ ./build/mkimage.sh
-    Writing output to /home/frege/AtomVM/src/platforms/esp32/build/atomvm-602e6bc.img
+    Writing output to /home/frege/AtomVM/src/platforms/esp32/build/atomvm-esp32-0.6.0-dev+git.602e6bc.img
     =============================================
     Wrote bootloader at offset 0x1000 (4096)
     Wrote partition-table at offset 0x8000 (32768)
-    Wrote AtomvVM Virtual Machine at offset 0x10000 (65536)
-    Wrote AtomvVM Core BEAM Library at offset 0x110000 (1114112)
+    Wrote AtomVM Virtual Machine at offset 0x10000 (65536)
+    Wrote AtomVM Core BEAM Library at offset 0x110000 (1114112)
 
 Users can then use the `esptool.py` directly to flash the entire image to the ESP32 device, and then flash their applications to the `main.app` partition at address `0x210000`,
 
@@ -275,9 +283,15 @@ But first, it is a good idea to erase the flash, e.g.,
     Chip erase completed successfully in 5.4s
     Hard resetting...
 
-You can then use the `./build/flash.sh` tool (or `esptool.py` directly, if you prefer), to flash the entire image to your device:
+#### Flashing Release Images
 
-    shell$ FLASH_OFFSET=0x1000 ./build/flash.sh ./build/atomvm-602e6bc.img
+After preparing a release image you can use the `flashimage.sh`, which is generated with each build that will flash the full image using the correct flash offset for the chip the build was configured for.
+
+	shell$ ./build/flashimage.sh
+
+To perform this action manually you can use the `./build/flash.sh` tool (or `esptool.py` directly, if you prefer):
+
+    shell$ FLASH_OFFSET=0x1000 ./build/flash.sh ./build/atomvm-esp32-0.6.0-dev+git.602e6bc.img
     esptool.py v2.8-dev
     Serial port /dev/tty.SLAB_USBtoUART
     Connecting........_
@@ -297,13 +311,11 @@ You can then use the `./build/flash.sh` tool (or `esptool.py` directly, if you p
     Leaving...
     Hard resetting via RTS pin...
 
-> Note. Flashing the full AtomVM image will delete all entries in non-volatile storage.  Only flash the full image if you have a way to recover and re-write any such data.
+> Note. Flashing the full AtomVM image will delete all entries in non-volatile storage.  Only flash the full image if you have a way to recover and re-write any such data, if you need to retain it.
 
-A `flashimage.sh` is also generated with each build that will flash the full image using the correct flash offset for the chip the build was configured for.
+### Flashing Applications
 
-	shell$ ./build/flashimage.sh
-
-Finally, you can then flash your own application, e.g.,
+Applications can be flashed using the `flash.sh` script in the esp32 build directory:
 
     shell$ ./build/flash.sh ../../../build/examples/erlang/esp32/blink.avm
     %%
@@ -328,7 +340,7 @@ Finally, you can then flash your own application, e.g.,
     Leaving...
     Hard resetting via RTS pin...
 
-> Note.  Since the Erlang core libraries are flashed to the ESP32 device, it is not necessary to include core libraries in your application AVM files.  Users may be interested in using downstream development tools, such as the Elixir <a href="https://github.com/atomvm/ExAtomVM">ExAtomVM Mix task</a>, or the Erlang <a href="https://github.com/fadushin/atomvm_rebar3_plugin">AtomVM Rebar3 Plugin</a> for doing day-to-day development of applications for the AtomVM platform.
+> Note.  Since the Erlang core libraries are flashed to the ESP32 device, it is not necessary to include core libraries in your application AVM files.  Users may be interested in using downstream development tools, such as the Elixir <a href="https://github.com/atomvm/ExAtomVM">ExAtomVM Mix task</a>, or the Erlang <a href="https://github.com/atomvm/atomvm_rebar3_plugin">AtomVM Rebar3 Plugin</a> for doing day-to-day development of applications for the AtomVM platform.
 
 ### Adding custom Nifs, Ports, and third-party components
 
@@ -336,11 +348,11 @@ While AtomVM is a functional implementation of the Erlang virtual machine, it is
 
 AtomVM supports extensions to the VM via the implementation of custom native functions (Nifs) and processes (AtomVM Ports), allowing users to extend the VM for additional functionality, and you can add your own custom Nifs, ports, and additional third-party components to your ESP32 build by adding them to the `components` directory, and the ESP32 build will compile them automatically.
 
-> For more information about building components for the IDF SDK, consult the [IDF SDK Build System](https://docs.espressif.com/projects/esp-idf/en/v3.3.2/api-guides/build-system.html#) documentation.
+> For more information about building components for the IDF SDK, consult the [IDF SDK Build System](https://docs.espressif.com/projects/esp-idf/en/v4.4.4/api-guides/build-system.html#) documentation.
 
 The instructions for adding custom Nifs and ports differ in slight detail, but are otherwise quite similar.  In general, they involve:
 
-1. Adding the custom Nif or Port to the `comonents` directory of the AtomVM source tree;
+1. Adding the custom Nif or Port to the `components` directory of the AtomVM source tree;
 1. Adding the component to the corresponding `main/component_nifs.txt` or `main/component_ports.txt` files;
 1. Building the AtomVM binary.
 

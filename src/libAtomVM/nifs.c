@@ -150,6 +150,7 @@ static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_function_exported(Context *ctx, int argc, term argv[]);
 static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[]);
 static term nif_erlang_group_leader(Context *ctx, int argc, term argv[]);
+static term nif_erlang_memory(Context *ctx, int argc, term argv[]);
 static term nif_erlang_monitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_unlink(Context *ctx, int argc, term argv[]);
@@ -575,6 +576,12 @@ static const struct Nif make_fun_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_make_fun_3
+};
+
+static const struct Nif memory_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_memory
 };
 
 static const struct Nif monitor_nif =
@@ -2508,6 +2515,7 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
         return term_from_literal_binary((const uint8_t *) ATOMVM_VERSION, strlen(ATOMVM_VERSION), ctx);
     }
     if (key == REFC_BINARY_INFO_ATOM) {
+        fprintf(stderr, "WARNING: The refc_binary_info system info tag is deprecated.  Use erlang:memory(binary) instead.\n");
         term ret = refc_binary_create_binary_info(ctx);
         if (term_is_invalid_term(ret)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -3012,6 +3020,25 @@ static term nif_erlang_erase_1(Context *ctx, int argc, term argv[])
     }
 
     return old;
+}
+
+static term nif_erlang_memory(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term type = argv[0];
+    VALIDATE_VALUE(type, term_is_atom);
+
+    if (type == BINARY_ATOM) {
+        size_t size = refc_binary_total_size(ctx);
+        size_t term_size = term_boxed_integer_size(size);
+        if (UNLIKELY(memory_ensure_free_opt(ctx, term_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return term_make_maybe_boxed_int64(ctx, size);
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
 }
 
 static term nif_erlang_monitor(Context *ctx, int argc, term argv[])

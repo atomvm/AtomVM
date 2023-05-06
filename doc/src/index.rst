@@ -24,6 +24,7 @@ AtomVM includes many advanced features, including process spawning, monitoring, 
    :caption: Contents:
 
    welcome-to-atomvm
+   release-notes.md
    getting-started-guide
    programmers-guide
    example-programs
@@ -38,6 +39,7 @@ AtomVM includes many advanced features, including process spawning, monitoring, 
    :hidden:
 
    CONTRIBUTING.md
+   CHANGELOG.md
 
 
 Indices and tables

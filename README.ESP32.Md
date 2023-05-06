@@ -7,16 +7,23 @@
 Requirements
 ============
 
-AtomVM has been tested with esp-idf v3.2.
+AtomVM has been tested with the version 4 releases of the Espressif esp-idf SDK.
 
 Building AtomVM for ESP32
 =========================
 
+* activate the esp-idf build environment:
+
+```
+cd ${HOME}/esp/esp-idf (or the path to your esp-idf root directory)
+. ./export.sh
+```
+
 * build:
 
 ```
-cd src/platforms/esp32/
-idf.py set-target esp32 (or esp32c3, esp32s2, esp32s3)
+cd src/platforms/esp32/ # include the base path to your AtomVM clone i.e.: ${HOME}/AtomVM/src/...
+idf.py set-target esp32 # or esp32c3, esp32s2, esp32s3
 idf.py menuconfig
 idf.py build
 ```
@@ -31,6 +38,7 @@ Running BEAM code on ESP32
 ==========================
 
 * BEAM module must be stripped before using PackBEAM:
+  > Note: The executable is created in the AtomVM/build/tools/packbeam directory.
 
 ```
 ./PackBEAM packed.avm module.beam

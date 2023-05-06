@@ -60,9 +60,9 @@ enum MemoryShrinkMode
  * @param size the amount of terms that will be allocated.
  * @returns a pointer to the newly allocated memory block.
  */
-MALLOC_LIKE term *memory_heap_alloc(Context *ctx, uint32_t size);
+MALLOC_LIKE term *memory_heap_alloc(Context *ctx, size_t size);
 
-MALLOC_LIKE term *memory_alloc_heap_fragment(Context *ctx, uint32_t size);
+MALLOC_LIKE term *memory_alloc_heap_fragment(Context *ctx, size_t size);
 
 /**
  * @brief copies a term to a destination heap
@@ -85,7 +85,7 @@ term memory_copy_term_tree(term **new_heap, term t, term *mso_list);
  * @param roots roots to preserve
  * @param shrink_mode whether the function can or should shrink
  */
-enum MemoryGCResult memory_ensure_free_with_roots(Context *ctx, uint32_t size, int num_roots, term *roots, enum MemoryShrinkMode shrink_mode) MUST_CHECK;
+enum MemoryGCResult memory_ensure_free_with_roots(Context *ctx, size_t size, size_t num_roots, term *roots, enum MemoryShrinkMode shrink_mode) MUST_CHECK;
 
 /**
  * @brief makes sure that the given context has given free memory.
@@ -96,7 +96,7 @@ enum MemoryGCResult memory_ensure_free_with_roots(Context *ctx, uint32_t size, i
  * @param size needed available memory.
  * @param shrink_mode whether the function can or should shrink
  */
-MUST_CHECK static inline enum MemoryGCResult memory_ensure_free_opt(Context *ctx, uint32_t size, enum MemoryShrinkMode shrink_mode)
+MUST_CHECK static inline enum MemoryGCResult memory_ensure_free_opt(Context *ctx, size_t size, enum MemoryShrinkMode shrink_mode)
 {
     return memory_ensure_free_with_roots(ctx, size, 0, NULL, shrink_mode);
 }
@@ -110,7 +110,7 @@ MUST_CHECK static inline enum MemoryGCResult memory_ensure_free_opt(Context *ctx
  * @param ctx the target context.
  * @param size needed available memory.
  */
-MUST_CHECK static inline enum MemoryGCResult memory_ensure_free(Context *ctx, uint32_t size)
+MUST_CHECK static inline enum MemoryGCResult memory_ensure_free(Context *ctx, size_t size)
 {
     return memory_ensure_free_opt(ctx, size, MEMORY_NO_SHRINK);
 }

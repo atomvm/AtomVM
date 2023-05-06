@@ -38,8 +38,10 @@
     map_size/1,
     map_get/2,
     map_is_key/2,
+    monotonic_time/1,
     min/2,
-    max/2
+    max/2,
+    memory/1
 ]).
 
 %%
@@ -48,6 +50,10 @@
 %% * return value needs to be {ok, cancel} or {error, Reason}
 %% * review API documentation for timer functions in this module
 %%
+
+-type mem_type() :: binary.
+
+-type time_unit() :: second | millisecond | microsecond.
 
 %%-----------------------------------------------------------------------------
 %% @param   Time time in milliseconds after which to send the timeout message.
@@ -306,3 +312,35 @@ min(_A, B) -> B.
 %%-----------------------------------------------------------------------------
 max(A, B) when A > B -> A;
 max(_A, B) -> B.
+
+%%-----------------------------------------------------------------------------
+%% @param   Type the type of memory to request
+%% @returns the amount of memory (in bytes) used of the specified type
+%% @doc     Return the amount of memory (in bytes) used of the specified type
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-spec memory(Type :: mem_type()) -> non_neg_integer().
+memory(_Type) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Unit    time unit
+%% @returns monotonic time in the specified units
+%% @doc     Return the monotonic time in the specified units.
+%%
+%% Monotonic time varies from system to system, and should not be used
+%% to determine, for example the wall clock time.
+%%
+%% Instead, monotonic time should be used to compute time differences,
+%% where the function is guaranteed to return a (not necessarily strictly)
+%% monotonically increasing value.
+%%
+%% For example, on ESP32 system, monotonic time is reported as the difference from
+%% the current time and the time the ESP32 device was started, whereas on UNIX
+%% systems the value may vary among UNIX systems (e.g., Linux, macOS, FreeBSD).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec monotonic_time(Unit :: time_unit()) -> integer().
+monotonic_time(_Unit) ->
+    throw(nif_error).

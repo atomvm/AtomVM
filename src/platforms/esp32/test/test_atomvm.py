@@ -19,7 +19,15 @@
 #
 
 from pytest_embedded import Dut
+import pytest
 
+@pytest.mark.parametrize(
+    'qemu_extra_args',
+    [
+        '"-nic user,model=open_eth"',
+    ],
+    indirect=True,
+)
 def test_atomvm(dut, redirect):
      dut.expect_unity_test_output()
      assert len(dut.testsuite.testcases) > 0

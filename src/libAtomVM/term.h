@@ -60,6 +60,9 @@ extern "C" {
 #define TERM_BOXED_MAP 0x3C
 #define TERM_BOXED_SUB_BINARY 0x28
 
+#define TERM_UNUSED 0x2B
+#define TERM_RESERVED_MARKER(x) ((x << 6) | TERM_UNUSED)
+
 #define TERM_BOXED_REFC_BINARY_SIZE 6
 #define TERM_BOXED_BIN_MATCH_STATE_SIZE 4
 #define TERM_BOXED_SUB_BINARY_SIZE 4
@@ -1608,19 +1611,12 @@ static inline void term_set_match_state_offset(term match_state, avm_int_t offse
     boxed_value[2] = offset;
 }
 
-static inline int term_match_state_get_save_offset(term match_state, int index)
-{
-    term *boxed_value = term_to_term_ptr(match_state);
-    return boxed_value[4 + index];
-}
-
 static inline void term_match_state_save_offset(term match_state, int index)
 {
     term *boxed_value = term_to_term_ptr(match_state);
     boxed_value[4 + index] = boxed_value[2];
 }
 
-// TODO: not sure we really need this function
 static inline void term_match_state_save_start_offset(term match_state)
 {
     term *boxed_value = term_to_term_ptr(match_state);

@@ -46,6 +46,9 @@
         RAISE_ERROR(BADARG_ATOM);              \
     }
 
+#define INT64_MIN_AS_FLOAT (1.0 * INT64_MIN)
+#define INT64_MAX_AS_FLOAT (1.0 * INT64_MAX)
+
 BifImpl bif_registry_get_handler(AtomString module, AtomString function, int arity)
 {
     char bifname[MAX_BIF_NAME_LEN];
@@ -116,6 +119,13 @@ term bif_erlang_is_boolean_1(Context *ctx, term arg1)
     return (arg1 == TRUE_ATOM || arg1 == FALSE_ATOM) ? TRUE_ATOM : FALSE_ATOM;
 }
 
+term bif_erlang_is_float_1(Context *ctx, term arg1)
+{
+    UNUSED(ctx);
+
+    return term_is_float(arg1) ? TRUE_ATOM : FALSE_ATOM;
+}
+
 term bif_erlang_is_function_1(Context *ctx, term arg1)
 {
     UNUSED(ctx);
@@ -176,13 +186,12 @@ term bif_erlang_is_map_1(Context *ctx, term arg1)
 term bif_erlang_is_map_key_2(Context *ctx, term arg1, term arg2)
 {
     if (UNLIKELY(!term_is_map(arg2))) {
-        if (UNLIKELY(memory_ensure_free_opt(ctx, 3, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, 3, 1, &arg2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         term err = term_alloc_tuple(2, ctx);
         term_put_tuple_element(err, 0, BADMAP_ATOM);
-        // TODO elt(2) of err term is supposed to be arg2 but may be invalidated by GC
-        term_put_tuple_element(err, 1, UNSUPPORTED_ATOM);
+        term_put_tuple_element(err, 1, arg2);
 
         RAISE_ERROR(err);
     }
@@ -253,13 +262,12 @@ term bif_erlang_map_size_1(Context *ctx, int live, term arg1)
     UNUSED(live);
 
     if (!UNLIKELY(term_is_map(arg1))) {
-        if (UNLIKELY(memory_ensure_free_opt(ctx, 3, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, 3, 1, &arg1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         term err = term_alloc_tuple(2, ctx);
         term_put_tuple_element(err, 0, BADMAP_ATOM);
-        // TODO elt(2) of err term is supposed to be arg1 but may be invalidated by GC
-        term_put_tuple_element(err, 1, UNSUPPORTED_ATOM);
+        term_put_tuple_element(err, 1, arg1);
 
         RAISE_ERROR(err);
     }
@@ -270,30 +278,25 @@ term bif_erlang_map_size_1(Context *ctx, int live, term arg1)
 term bif_erlang_map_get_2(Context *ctx, term arg1, term arg2)
 {
     if (!UNLIKELY(term_is_map(arg2))) {
-        if (UNLIKELY(memory_ensure_free_opt(ctx, 3, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, 3, 1, &arg2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         term err = term_alloc_tuple(2, ctx);
         term_put_tuple_element(err, 0, BADMAP_ATOM);
-        // TODO elt(2) of err term is supposed to be arg2 but may be invalidated by GC
-        term_put_tuple_element(err, 1, UNSUPPORTED_ATOM);
+        term_put_tuple_element(err, 1, arg2);
 
         RAISE_ERROR(err);
     }
 
     int pos = term_find_map_pos(arg2, arg1, ctx->global);
     if (pos == TERM_MAP_NOT_FOUND) {
-        if (UNLIKELY(memory_ensure_free_opt(ctx, 3, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, 3, 1, &arg1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         term err = term_alloc_tuple(2, ctx);
         term_put_tuple_element(err, 0, BADKEY_ATOM);
-        if (term_is_atom(arg1)) {
-            term_put_tuple_element(err, 1, arg1);
-        } else {
-            // TODO elt(2) of err term is supposed to be arg1 but may be invalidated by GC
-            term_put_tuple_element(err, 1, UNSUPPORTED_ATOM);
-        }
+        term_put_tuple_element(err, 1, arg1);
+
         RAISE_ERROR(err);
     } else if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -1026,7 +1029,7 @@ term bif_erlang_ceil_1(Context *ctx, int live, term arg1)
 
     if (term_is_float(arg1)) {
         avm_float_t fvalue = term_to_float(arg1);
-        if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+        if ((fvalue < INT64_MIN_AS_FLOAT) || (fvalue > INT64_MAX_AS_FLOAT)) {
             RAISE_ERROR(OVERFLOW_ATOM);
         }
 
@@ -1058,7 +1061,7 @@ term bif_erlang_floor_1(Context *ctx, int live, term arg1)
 
     if (term_is_float(arg1)) {
         avm_float_t fvalue = term_to_float(arg1);
-        if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+        if ((fvalue < INT64_MIN_AS_FLOAT) || (fvalue > INT64_MAX_AS_FLOAT)) {
             RAISE_ERROR(OVERFLOW_ATOM);
         }
 
@@ -1090,7 +1093,7 @@ term bif_erlang_round_1(Context *ctx, int live, term arg1)
 
     if (term_is_float(arg1)) {
         avm_float_t fvalue = term_to_float(arg1);
-        if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+        if ((fvalue < INT64_MIN_AS_FLOAT) || (fvalue > INT64_MAX_AS_FLOAT)) {
             RAISE_ERROR(OVERFLOW_ATOM);
         }
 
@@ -1122,7 +1125,7 @@ term bif_erlang_trunc_1(Context *ctx, int live, term arg1)
 
     if (term_is_float(arg1)) {
         avm_float_t fvalue = term_to_float(arg1);
-        if ((fvalue < INT64_MIN) || (fvalue > INT64_MAX)) {
+        if ((fvalue < INT64_MIN_AS_FLOAT) || (fvalue > INT64_MAX_AS_FLOAT)) {
             RAISE_ERROR(OVERFLOW_ATOM);
         }
 

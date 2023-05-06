@@ -25,13 +25,13 @@ AtomVM features include:
 
 ## Why Erlang/Elixir?
 
-The environments on which AtomVM applications are deployed are significantly more constrained than typical programming environments.  For example, the typical ESP32 ships with 520K of RAM and 4MB of flash storage, roughly the specs of a mind 1980s desktop computer.  Moreover, most micro-controller environments do not support native POSIX APIs for interfacing with an operating system, and in many cases, common operating system abstractions, such as processes, threads, or files, are simply unavailable.
+The environments on which AtomVM applications are deployed are significantly more constrained than typical programming environments.  For example, the typical ESP32 ships with 520K of RAM and 4MB of flash storage, roughly the specs of a mid 1980s desktop computer.  Moreover, most micro-controller environments do not support native POSIX APIs for interfacing with an operating system, and in many cases, common operating system abstractions, such as processes, threads, or files, are simply unavailable.
 
 However, because the BEAM is provides a pre-emptive multitasking environment for your applications, many of the common operating system abstractions, particularly involving threading and concurrency, are simply not needed.  As concurrently-oriented languages, Erlang and Elixir support lightweight "processes", with message passing as the mechanism for inter-(erlang)process communication, pre-emptive multi-tasking, and per-process heap allocation and garbage collection.
 
 In many ways, the programming model for Erlang and Elixir is closer to that of an operating system and multiple concurrent processes running on it, where operating system processes are single execution units, communicate through message passing (signals), and don't share any state with one another.  Contrast that with most popular programming languages today (C, C++, Java, Python, etc), which use threading abstractions to achieve concurrency within a single memory space, and which subsequently require close attention to cases in which multiple CPUs operate on a shared region of memory, requiring threads, locks, semaphores, and so forth.
 
-As an implementation of the BEAM, AtomVM provides a modern, memory managed, and concurrency-oriented environment for developing applications on small devices.  This makes writing concurrent code for micro-controllers (e.g., and application that reads sensor data, services HTTP requests, and updates the system clock, all at the same time) incredibly simple and natural -- far easier than writing programs that use concurrency than C, C++, or even, for example, Micropython.
+As an implementation of the BEAM, AtomVM provides a modern, memory managed, and concurrency-oriented environment for developing applications on small devices.  This makes writing concurrent code for micro-controllers (e.g., and application that reads sensor data, services HTTP requests, and updates the system clock, all at the same time) incredibly simple and natural -- far easier writing programs that use concurrency than C, C++, or even, for example, Micropython.
 
 In addition, because it is targeted for micro-controller environments, AtomVM provides interfaces for integrating with features commonly seen on micro-controllers, such as GPIO pins, analog-to-digital conversion, and common industry peripheral interfaces, such as I2C, SPI, and UART, making AtomVM a rich platform for developing IoT applications.
 
@@ -51,11 +51,11 @@ AtomVM is licensed under the terms of the [Apache2](https://www.apache.org/licen
 
 ## Source Code
 
-The [AtomVM Github Repository](https://github.com/atomvm/AtomVM) contains the AtomVM source code, including the AtomVM virtual machine and core libraries.  The AtomVM [Build Instructions](build-instructions.md) contains instructions for building AtomVM for Generic UNIX, ESP32, and STM32 platforms.
+The [AtomVM Github Repository](https://github.com/atomvm/AtomVM) contains the AtomVM source code, including the AtomVM virtual machine and core libraries.  The AtomVM [Build Instructions](./build-instructions.md) contains instructions for building AtomVM for Generic UNIX, ESP32, and STM32 platforms.
 
 ## Contributing
 
-The AtomVM community welcomes contributions to the AtomVM code base and upstream and downstream projects.  Please see the [contributing guidelines](CONTRIBUTING.md) for information about how to contribute.
+The AtomVM community welcomes contributions to the AtomVM code base and upstream and downstream projects.  Please see the [contributing guidelines](./CONTRIBUTING.md) for information about how to contribute.
 
 AtomVM developers can be reached on the #AtomVM discord server or on Telegram at [AtomVM - Erlang and Elixir on Microcontrollers](https://t.me/atomvm).
 
@@ -63,7 +63,7 @@ AtomVM developers can be reached on the #AtomVM discord server or on Telegram at
 
 The following guides provide more detailed information about getting started with the AtomVM virtual machine, how to develop and deploy applications, and implementation information, for anyone interested in getting more involved:
 
-* [Getting Started Guide](getting-started-guide.md)
-* [Programmers Guide](programmers-guide.md)
-* [Example Programs](example-programs.md)
-* [Build Instructions](build-instructions.md)
+* [Getting Started Guide](./getting-started-guide.md)
+* [Programmers Guide](./programmers-guide.md)
+* [Example Programs](./example-programs.md)
+* [Build Instructions](./build-instructions.md)

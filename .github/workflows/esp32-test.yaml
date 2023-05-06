@@ -6,7 +6,23 @@
 
 name: ESP32 Test
 
-on: [push, pull_request]
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+      - 'CMakeLists.txt'
+      - 'src/libAtomVM/**'
+      - 'src/platforms/esp32/**'
+      - 'src/platforms/generic_unix/**'
+      - 'tools/packbeam/**'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'CMakeLists.txt'
+      - 'src/libAtomVM/**'
+      - 'src/platforms/esp32/**'
+      - 'src/platforms/generic_unix/**'
+      - 'tools/packbeam/**'
 
 jobs:
   esp32-test:
@@ -30,7 +46,7 @@ jobs:
       run: |
         sudo docker load -i esp32-test.tar
 
-    - name: "Build: customized esp-idf-v4.3 container"
+    - name: "Build: customized esp-idf-v4.4 container"
       if: steps.cache.outputs.cache-hit != 'true'
       run: docker build -t atomvm/esp32-test -f esp32-test-dockerfile .
       working-directory: .github/workflows

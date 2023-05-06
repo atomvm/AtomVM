@@ -6,7 +6,19 @@
 
 name: Build and Test on Other Architectures
 
-on: [push, pull_request]
+on:
+  push:
+    paths-ignore:
+      - 'src/platforms/esp32/**'
+      - 'src/platforms/stm32/**'
+      - 'doc/**'
+      - 'LICENSES/**'
+  pull_request:
+    paths-ignore:
+      - 'src/platforms/esp32/**'
+      - 'src/platforms/stm32/**'
+      - 'doc/**'
+      - 'LICENSES/**'
 
 env:
   otp_version: 24
@@ -28,7 +40,7 @@ jobs:
           cmake_opts: "-DAVM_DISABLE_SMP=On"
           additional_packages: |
             http://ftp.us.debian.org/debian/pool/main/c/cmake/cmake-data_3.13.2-1~bpo9+1_all.deb \
-            http://ftp.us.debian.org/debian/pool/main/r/rhash/librhash0_1.3.3-1+b2_armel.deb \
+            http://ftp.us.debian.org/debian/pool/main/r/rhash/librhash0_1.3.8-1_armel.deb \
             http://ftp.us.debian.org/debian/pool/main/libu/libuv1/libuv1_1.34.2-1~bpo9+1_armel.deb \
             http://ftp.us.debian.org/debian/pool/main/c/cmake/cmake_3.13.2-1~bpo9+1_armel.deb
 
