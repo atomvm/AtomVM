@@ -209,6 +209,7 @@ static esp_err_t network_event_handler(void *data, system_event_t *event)
     return ESP_OK;
 }
 
+#ifdef ENABLE_TEST_SOCKET
 TEST_CASE("test_socket", "[test_run]")
 {
     ESP_LOGI(TAG, "Starting event loop\n");
@@ -226,6 +227,7 @@ TEST_CASE("test_socket", "[test_run]")
     ESP_LOGI(TAG, "Stopping network\n");
     eth_stop(eth_netif);
 }
+#endif
 
 void app_main(void)
 {
