@@ -76,7 +76,8 @@ struct EventListener
 struct ESP32PlatformData
 {
     struct SyncList listeners;
-    struct ListHead sockets_list_head;
+    struct SyncList sockets;
+    struct ListHead ready_connections;
 };
 
 typedef void (*port_driver_init_t)(GlobalContext *global);
