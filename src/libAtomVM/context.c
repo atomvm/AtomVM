@@ -133,6 +133,15 @@ void context_destroy(Context *ctx)
     }
 
     free(ctx->heap_start);
+    // Platform data is freed here to allow drivers to use the
+    // globalcontext_get_process_lock lock to protect this pointer
+    // Typically, another thread or an interrupt would call
+    // globalcontext_get_process_lock before accessing platform_data.
+    // Here, the context can no longer be acquired with
+    // globalcontext_get_process_lock, so it's safe to free the pointer.
+    if (ctx->platform_data) {
+        free(ctx->platform_data);
+    }
     free(ctx);
 }
 
