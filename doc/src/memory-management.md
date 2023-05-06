@@ -96,7 +96,7 @@ The representation of terms in a message is identical to that in the heap and he
 
 ### Memory Graph
 
-Memory is allocated in the execution context heap, and structured types, such as tuples and lists, generally include references to the blocks of memory that have beenn previously allocated.
+Memory is allocated in the execution context heap, and structured types, such as tuples and lists, generally include references to the blocks of memory that have been previously allocated.
 
 For example, if we look at the memory allocated for the term
 
@@ -133,7 +133,7 @@ In this way, the set of allocated blocks in the execution context heap forms a d
 
 The stack, registers, and process dictionary contain pointers to terms in the heap.  We call these terms "root" nodes, and any term in the heap that is referenced by a root node, or any term that is so referenced by such a term, is in the path of a root node.  Some terms in the heap are not in the path of a root node.  We call these terms "garbage".
 
-Note that the values in the stack and register root nodes change over time as the result of the execution of Erlang opcodes, and are dependent on the BEAM output of the Erlang compiler, along with inputs to the program being executed.  Thus, a term in the process heap may become garbage, once it is no longer reachable from the root set.  But once garbage, the termill will always remain garbage, at least until it is reclaimed during a garbage collection event.  For more information about how the garbage collector works, see the Garbage Collection section, below.
+Note that the values in the stack and register root nodes change over time as the result of the execution of Erlang opcodes, and are dependent on the BEAM output of the Erlang compiler, along with inputs to the program being executed.  Thus, a term in the process heap may become garbage, once it is no longer reachable from the root set.  But once garbage, the term will always remain garbage, at least until it is reclaimed during a garbage collection event.  For more information about how the garbage collector works, see the Garbage Collection section, below.
 
 ## Simple Terms
 
@@ -373,7 +373,7 @@ The reference count is initialized to 1, under the principle that that reference
 
 > Note. The size of a reference counted binary is stored both in the process heap (in the boxed term), as well as in the off-heap storage.  The size count in the off-heap storage is needed in order to report the amount of data in use by binaries (e.g., via `erlang:memory/0,1`).
 
-In addition, a reference-counted boxed term contains a cons-cell appended to the end of the boxed term, which is used by the garbage collector for tracking references.  The `car` of this cell points to the boxed term, itself, and the `cdr` points to the "previous" cons cell associated with a reference counted binary in the heap, if there is one, or the empty list (`nil`), otherwise.  The cons cell forms an element in the "Mark and Sweep Object" (MSO) list, used to reclaim unreferenced storage during a garbage collection event..  See the Garabage Collection section, below, for more information about the critical role of this structure in the process of reclaiming unused memory in the AtomVM virtual machine.
+In addition, a reference-counted boxed term contains a cons-cell appended to the end of the boxed term, which is used by the garbage collector for tracking references.  The `car` of this cell points to the boxed term, itself, and the `cdr` points to the "previous" cons cell associated with a reference counted binary in the heap, if there is one, or the empty list (`nil`), otherwise.  The cons cell forms an element in the "Mark and Sweep Object" (MSO) list, used to reclaim unreferenced storage during a garbage collection event..  See the Garbage Collection section, below, for more information about the critical role of this structure in the process of reclaiming unused memory in the AtomVM virtual machine.
 
 #### Const Binaries
 
@@ -381,7 +381,7 @@ Const binaries are stored in the same manner as Reference Counted binaries, with
 
 * The low order bit of the flags field (`boxed[2]`) is `1`, to indicate that the reference binary is constant;
 * The ptr field (`boxed[3]`) points directly to the constant storage (e.g., literal data stored in a memory-mapped BEAM file);
-* The trailing cons cell elements are unused, as dynamic memory management for static storage is uncesessary.  These values are initialized to `nil`.
+* The trailing cons cell elements are unused, as dynamic memory management for static storage is unnecessary.  These values are initialized to `nil`.
 
 This heap structure has the following representation:
 
@@ -700,8 +700,8 @@ The iterative scan and copy phase works as follows:
 * Starting with the newly created region used in the shallow copy phase in the new heap, iterate over every term in the region  (call this the "scan&copy" region);
 * If any term in this region is a reference to a term on the old heap that has _not_ been marked as copied, perform a shallow copy of it (as described above) to the new heap, but starting at the next free address below the region being iterated over;
 * Note that after iterating over all such terms in the scan and copy region, all terms are "complete", in that there are no references to boxed terms in the old heap in that region.  We have, however, created a new region which may have references to boxed terms in the old heap;
-* So we repeat the process on the new region, which will complete the current scan&copy requion, but which in turn may create a new region of copied terms;
-* The process is repeated until no new reqions have been introduced.
+* So we repeat the process on the new region, which will complete the current scan&copy region, but which in turn may create a new region of copied terms;
+* The process is repeated until no new regions have been introduced.
 
 The following sequence of iterative additions to the new heap illustrates this process:
 
@@ -744,7 +744,7 @@ At the end of the iterative scan and copy, all reachable terms in the old heap w
 
 #### MSO Sweep
 
-As mentioned in the section above on binaries, AtomVM supports refrence-counted binaries, whereby binaries of a sufficiently large size (>64 bytes) are allocated outside of the process heap, and are instead referenced from boxed terms in the heap.  This way, binaries, which are immutable objects, can be shared between processes without incurring the time and space cost of a large data copy.
+As mentioned in the section above on binaries, AtomVM supports reference-counted binaries, whereby binaries of a sufficiently large size (>64 bytes) are allocated outside of the process heap, and are instead referenced from boxed terms in the heap.  This way, binaries, which are immutable objects, can be shared between processes without incurring the time and space cost of a large data copy.
 
 In order to manage the memory associated with such binaries, AtomVM tracks references to these off-heap binaries via the "Mark and Sweep Object" list, a list that keeps track of which boxed terms in the process heap have a reference to an off-heap binary.   When such a boxed term is copied (e.g., from a heap to a mailbox on a `send`, or from a mailbox to a heap on a `receive`), the reference count is incremented on the off-heap binary.
 
@@ -786,7 +786,7 @@ The following diagram illustrates a set of two reference counted binaries in a p
 
 After the new heap has been scanned and copied, as described above, the MSO list is traversed to determine if any reference-counted binaries are no longer referenced from the process heap.  If any reference counted binaries in the heap have not been marked as moved from the old heap, they are, effectively, no longer referenced from the root set, and the reference count on the corresponding off-heap binary can be decremented.  Furthermore, when the reference count reaches 0, the binaries can then be deleted.
 
-> Note.  Const binaries, while they have slots for entry into the MSO list, nonetheless are never "stitched" into the MSO list, as the binary data they poont to is const, endures for the lifecycle of the program, and is never deleted.  Match binaries, on the other hand, do count as references, and can therefore be stitched into the MSO list.  However, when they are, the reference counted binaries they point to are the actual binaries in the process heap, not the match binaries, as with the case of refc binaries on the process heap.
+> Note.  Const binaries, while they have slots for entry into the MSO list, nonetheless are never "stitched" into the MSO list, as the binary data they point to is const, endures for the lifecycle of the program, and is never deleted.  Match binaries, on the other hand, do count as references, and can therefore be stitched into the MSO list.  However, when they are, the reference counted binaries they point to are the actual binaries in the process heap, not the match binaries, as with the case of refc binaries on the process heap.
 
 #### Deletion
 

@@ -24,7 +24,9 @@ might be supported in a near future.
 
 Getting Started
 ===============
-There is much more information, including a more complete "Getting Started Guide," extensive documentation, examples, and contact information available on the [AtomVM](https://atomvm.net) project website.
+There is much more information, including a more complete (["Getting Started Guide"](https://www.atomvm.net/doc/master/getting-started-guide.html)), ([extensive documentation](https://www.atomvm.net/doc/master/build-instructions.html)), ([examples](https://www.atomvm.net/sample-code)), detailed ([build instructions](https://www.atomvm.net/doc/master/build-instructions.html)) and ([contact information](https://www.atomvm.net/contact)) available on the [AtomVM](https://atomvm.net) project website.
+
+> Don't forget to check out the ([examples repository](https://github.com/atomvm/atomvm_examples)) to help get you started on your next IoT project.
 
 Dependencies
 ------------
@@ -34,14 +36,11 @@ Required for building:
 * gperf ([GNU Perfect Hash Function Generator](https://www.gnu.org/software/gperf/manual/gperf.html))
 * erlc ([erlang compiler](https://www.erlang.org/))
 * elixirc ([elixir compiler](https://elixir-lang.org))
-
-Optional:
-* zlib ([zlib compression and decompression library](https://zlib.net/)) is optionally needed to run
-  standard BEAM files (without uncompressed literals extension).
+* zlib ([zlib compression and decompression library](https://zlib.net/))
 
 Documentation and Coverage:
 * gcov and lcov are optionally required to generate coverage report (`make coverage`).
-* doxygen is optionally required to generate documentation (`make doc`).
+* For documentation build requirements consult the [Documentation README](doc/README.md).
 
 Step-by-Step Build Instructions (generic unix platform)
 -------------------------------------------------------
@@ -80,8 +79,6 @@ Undecoded opcode: 15
 Aborted (core dumped)
 ```
 This basically means that an instruction has not been implemented yet, or that an outdated version has been used. Please, make sure to always run AtomVM using latest version.
-
-**Right now only binaries compiled with OTP 20-23 are supported.**
 
 Known Limitations
 -----------------
