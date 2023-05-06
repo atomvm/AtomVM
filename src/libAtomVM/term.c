@@ -489,7 +489,7 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
             }
 
             if (tuple_size > 0) {
-                for (int i = 1; i < tuple_size; i++) {
+                for (int i = tuple_size - 1; i >= 1; i--) {
                     if (UNLIKELY(temp_stack_push(&temp_stack, term_get_tuple_element(t, i))
                             != TempStackOk)) {
                         return TermCompareMemoryAllocFail;
