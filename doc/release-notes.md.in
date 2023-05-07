@@ -15,7 +15,7 @@ These release notes provide information about the current release of AtoVM.
 The following software is required to develop Erlang or Elixir applications on AtomVM:
 
 * The [`esptool`](https://github.com/espressif/esptool) program, for flashing the AtomVM image and AtomVM programs to ESP32 MCUs.
-* An [Erlang/OTP](https://erlang.org)
+* An [Erlang/OTP](https://erlang.org) compiler (`erlc`)
 * The [Elixir](https://elixir-lang.org) runtime, if developing Elixir applications.
 * A serial console program, such as `minicom` or `screen`, so that you can view console output from your AtomVM application.
 * (recommended) For Erlang programs, [`rebar3`](https://rebar3.org)
@@ -25,12 +25,12 @@ AtomVM will run BEAM files that have been compiled using the following Erlang an
 
 | Erlang Version | Elixir Version |
 |----------------|----------------|
-| OTP 21 | ✅ | 1.7 | ✅ |
-| OTP 22 | ✅ | 1.8 | ✅ |
-| OTP 23 | ✅ | 1.11 | ✅ |
-| OTP 24 | ✅ | 1.14 | ✅ |
-| OTP 25 | ✅ | 1.14 | ✅ |
-| OTP 26 | * | 1.15 | * |
+| ✅ OTP 21 | ✅ 1.7 |
+| ✅ OTP 22 | ✅ 1.8 |
+| ✅ OTP 23 | ✅ 1.11 |
+| ✅ OTP 24 | ✅ 1.14 |
+| ✅ OTP 25 | ✅ 1.14 |
+| ✅ OTP 26* | ✅ 1.15* |
 
 `*` OTP 26 is still a release candidate and should be considered experimental.
 Other versions of Elixir that are compatible with a particular OTP version may work, this chart reflects the versions that are tested.
@@ -47,8 +47,8 @@ Espressif provides excellent installation documentation on their website at:
 
 AtomVM currently supports the following versions of ESP-IDF:
 
-| Espressif supported Versions |
-|------------------------------|
+| Espressif supported versions | AtomVM support |
+|------------------------------|----------------|
 | ESP-IDF v4.2 | ✅ |
 | ESP-IDF v4.3 | ✅ |
 | ESP-IDF v4.4 | ✅ |
