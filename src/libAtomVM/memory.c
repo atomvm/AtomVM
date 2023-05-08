@@ -65,7 +65,7 @@ enum MemoryGCResult memory_ensure_free_with_roots(Context *c, size_t size, size_
     if (free_space < size || (shrink_mode == MEMORY_FORCE_SHRINK) || ((shrink_mode == MEMORY_CAN_SHRINK) && free_space > maximum_free_space)) {
         size_t memory_size = context_memory_size(c);
         if (UNLIKELY(memory_gc(c, memory_size + size + MIN_FREE_SPACE_SIZE, num_roots, roots) != MEMORY_GC_OK)) {
-            //TODO: handle this more gracefully
+            // TODO: handle this more gracefully
             TRACE("Unable to allocate memory for GC.  memory_size=%zu size=%u\n", memory_size, size);
             return MEMORY_GC_ERROR_FAILED_ALLOCATION;
         }
@@ -417,8 +417,7 @@ static void memory_scan_and_copy(term *mem_start, const term *mem_end, term **ne
                         TRACE("-- Map Value: %lx\n", ptr[i]);
                         ptr[i] = memory_shallow_copy_term(ptr[i], &new_heap, move);
                     }
-                }
-                    break;
+                } break;
 
                 default:
                     fprintf(stderr, "- Found unknown boxed type: %" TERM_X_FMT "\n", (t >> 2) & 0xF);
