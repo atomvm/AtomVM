@@ -87,39 +87,37 @@ void port_send_message_nolock(GlobalContext *glb, term pid, term msg)
     globalcontext_send_message_nolock(glb, local_process_id, msg);
 }
 
-void port_ensure_available(Context *ctx, size_t size)
+void port_ensure_available_with_roots(Context *ctx, size_t size, size_t num_roots, term *roots, enum MemoryShrinkMode shrink_mode)
 {
-    if (context_avail_free_memory(ctx) < size) {
-        switch (memory_ensure_free(ctx, size)) {
-            case MEMORY_GC_OK:
-                break;
-            case MEMORY_GC_ERROR_FAILED_ALLOCATION:
-                // TODO Improve error handling
-                fprintf(stderr, "Failed to allocate additional heap storage: [%s:%i]\n", __FILE__, __LINE__);
-                AVM_ABORT();
-            case MEMORY_GC_DENIED_ALLOCATION:
-                // TODO Improve error handling
-                fprintf(stderr, "Not permitted to allocate additional heap storage: [%s:%i]\n", __FILE__, __LINE__);
-                AVM_ABORT();
-        }
+    switch (memory_ensure_free_with_roots(ctx, size, num_roots, roots, shrink_mode)) {
+        case MEMORY_GC_OK:
+            break;
+        case MEMORY_GC_ERROR_FAILED_ALLOCATION:
+            // TODO Improve error handling
+            fprintf(stderr, "Failed to allocate additional heap storage: [%s:%i]\n", __FILE__, __LINE__);
+            AVM_ABORT();
+        case MEMORY_GC_DENIED_ALLOCATION:
+            // TODO Improve error handling
+            fprintf(stderr, "Not permitted to allocate additional heap storage: [%s:%i]\n", __FILE__, __LINE__);
+            AVM_ABORT();
     }
 }
 
-int port_is_standard_port_command(term t)
+bool port_is_standard_port_command(term t)
 {
     if (!term_is_tuple(t)) {
-        return 0;
+        return false;
     } else if (term_get_tuple_arity(t) != 3) {
-        return 0;
+        return false;
     } else {
         term pid = term_get_tuple_element(t, 0);
         term ref = term_get_tuple_element(t, 1);
         if (!term_is_pid(pid)) {
-            return 0;
+            return false;
         } else if (!term_is_reference(ref)) {
-            return 0;
+            return false;
         } else {
-            return 1;
+            return true;
         }
     }
 }

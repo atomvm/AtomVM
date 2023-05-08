@@ -26,6 +26,7 @@ static const char *const tcp_atom = "\x3" "tcp";
 static const char *const socket_atom = "\x6" "socket";
 static const char *const fcntl_atom = "\x5" "fcntl";
 static const char *const bind_atom = "\x4" "bind";
+static const char *const getpeername_atom = "\xB" "getpeername";
 static const char *const getsockname_atom = "\xB" "getsockname";
 static const char *const recvfrom_atom = "\x8" "recvfrom";
 static const char *const recv_atom = "\x4" "recv";
@@ -61,6 +62,7 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, socket_atom) == SOCKET_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, fcntl_atom) == FCNTL_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, bind_atom) == BIND_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, getpeername_atom) == GETPEERNAME_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, getsockname_atom) == GETSOCKNAME_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, recvfrom_atom) == RECVFROM_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, recv_atom) == RECV_ATOM_INDEX;
