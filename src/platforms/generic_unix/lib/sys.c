@@ -508,6 +508,7 @@ void do_register_listener(struct GenericUnixPlatformData *platform, struct Event
     }
     platform->poll_count++;
 #else
+    UNUSED(listener);
     platform->poll_count = -1;
 #endif
 }
@@ -539,6 +540,7 @@ static void do_unregister_listener(struct GenericUnixPlatformData *platform, int
     }
     platform->poll_count--;
 #else
+    UNUSED(listener_fd);
     platform->poll_count = -1;
 #endif
 }
