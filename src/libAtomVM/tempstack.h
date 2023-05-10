@@ -49,7 +49,7 @@ NO_DISCARD static inline TempStackResult temp_stack_init(struct TempStack *temp_
     return TempStackOk;
 }
 
-static inline void temp_stack_destory(struct TempStack *temp_stack)
+static inline void temp_stack_destroy(struct TempStack *temp_stack)
 {
     free(temp_stack->stack_end - temp_stack->size);
 }

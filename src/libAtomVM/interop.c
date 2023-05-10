@@ -157,7 +157,7 @@ InteropFunctionResult interop_iolist_size(term t, size_t *size)
     }
 
     if (UNLIKELY(temp_stack_push(&temp_stack, t) != TempStackOk)) {
-        temp_stack_destory(&temp_stack);
+        temp_stack_destroy(&temp_stack);
         return InteropMemoryAllocFail;
     }
 
@@ -171,7 +171,7 @@ InteropFunctionResult interop_iolist_size(term t, size_t *size)
 
         } else if (term_is_nonempty_list(t)) {
             if (UNLIKELY(temp_stack_push(&temp_stack, term_get_list_tail(t)) != TempStackOk)) {
-                temp_stack_destory(&temp_stack);
+                temp_stack_destroy(&temp_stack);
                 return InteropMemoryAllocFail;
             }
             t = term_get_list_head(t);
@@ -181,12 +181,12 @@ InteropFunctionResult interop_iolist_size(term t, size_t *size)
             t = temp_stack_pop(&temp_stack);
 
         } else {
-            temp_stack_destory(&temp_stack);
+            temp_stack_destroy(&temp_stack);
             return InteropBadArg;
         }
     }
 
-    temp_stack_destory(&temp_stack);
+    temp_stack_destroy(&temp_stack);
 
     *size = acc;
     return InteropOk;
@@ -206,7 +206,7 @@ InteropFunctionResult interop_write_iolist(term t, char *p)
     }
 
     if (UNLIKELY(temp_stack_push(&temp_stack, t) != TempStackOk)) {
-        temp_stack_destory(&temp_stack);
+        temp_stack_destroy(&temp_stack);
         return InteropMemoryAllocFail;
     }
 
@@ -221,7 +221,7 @@ InteropFunctionResult interop_write_iolist(term t, char *p)
 
         } else if (term_is_nonempty_list(t)) {
             if (UNLIKELY(temp_stack_push(&temp_stack, term_get_list_tail(t)) != TempStackOk)) {
-                temp_stack_destory(&temp_stack);
+                temp_stack_destroy(&temp_stack);
                 return InteropMemoryAllocFail;
             }
             t = term_get_list_head(t);
@@ -233,12 +233,12 @@ InteropFunctionResult interop_write_iolist(term t, char *p)
             t = temp_stack_pop(&temp_stack);
 
         } else {
-            temp_stack_destory(&temp_stack);
+            temp_stack_destroy(&temp_stack);
             return InteropBadArg;
         }
     }
 
-    temp_stack_destory(&temp_stack);
+    temp_stack_destroy(&temp_stack);
     return InteropOk;
 }
 
