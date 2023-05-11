@@ -66,7 +66,7 @@ The following example illustrates initialization of the WiFi network in STA mode
 The following callback functions will be called when the corresponding events occur during the lifetime of the network connection.
 
     %% erlang
-    connected()) ->
+    connected() ->
         io:format("Connected to AP.~n").
 
     gotIp(IpInfo) ->

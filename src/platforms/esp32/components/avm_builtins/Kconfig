@@ -66,4 +66,48 @@ config AVM_ENABLE_UART_PORT_DRIVER
     bool "Enable UART port driver"
     default y
 
+config AVM_ENABLE_OTP_SOCKET_PORT_DRIVER
+    bool "Enable OTP Socket port driver"
+    default y
+
+    menu "OTP Socket Driver Config (advanced)"
+
+        config SELECT_QUEUE_SIZE
+            int  "Select Queue size (entries)"
+            default 32
+            help
+                Use this parameter to set the size of the select queue used to communicate between RTOS tasks.
+
+        config SELECT_TASK_STACK_SIZE
+            int  "Stack size of select queue"
+            default 5000
+            help
+                Use this parameter to set the size of the select task stack.
+
+        config SELECT_TASK_MIN_SLEEP_MS
+            int  "Sleep time (in ms) between select calls when socket is active"
+            default 50
+            help
+               Use this parameter to set the amount of time for the select RTOS task to sleep between select calls when at least one socket is active.  Units are in milliseconds.
+
+        config SELECT_TASK_MAX_SLEEP_MS
+            int  "Sleep time (in ms) between select calls when no sockets are in use"
+            default 1000
+            help
+               Use this parameter to set the amount of time for the select RTOS task to sleep between select calls when no sockets are active.  Units are in milliseconds.
+
+        config SELECT_TASK_DECAY_MS
+            int  "Time (in ms) for linear decay sleep times from min to max"
+            default 60000
+            help
+               Use this parameter to set the amount of time to decay from the minimum to maximum sleep time.  Units are in milliseconds.
+
+        config SELECT_TASK_TIMEOUT_MS
+            int  "Timeout (in ms) for select calls"
+            default 0
+            help
+                Use this parameter to set the timeout passed to select.  Units are in milliseconds.
+
+    endmenu
+
 endmenu

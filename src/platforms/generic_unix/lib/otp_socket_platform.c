@@ -1,7 +1,7 @@
 /*
  * This file is part of AtomVM.
  *
- * Copyright 2019 by Fred Dushin <fred@dushin.net>
+ * Copyright 2023 by Fred Dushin <fred@dushin.net>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,26 +18,36 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#ifndef _GENERIC_UNIX_SYS_H_
-#define _GENERIC_UNIX_SYS_H_
+#include "otp_socket_platform.h"
+#include <otp_socket.h>
 
-#include <globalcontext.h>
-#include <list.h>
-#include <term.h>
-#include <time.h>
+//
+// platform-specific function implementations
+//
 
-#include "sys.h"
-#include "term_typedef.h"
-
-typedef int listener_event_t;
-
-struct EventListener
+void otp_socket_platform_notify_add(Context *ctx, int fd)
 {
-    struct ListHead listeners_list_head;
-    event_handler_t handler;
-    listener_event_t fd;
-};
+    UNUSED(ctx);
+    UNUSED(fd);
 
-Context *socket_init(GlobalContext *global, term opts);
+    // no-op
+}
 
-#endif
+void otp_socket_platform_notify_remove(Context *ctx, int fd)
+{
+    UNUSED(ctx);
+    UNUSED(fd);
+
+    // no-op
+}
+
+void otp_socket_platform_set_listener(void *ptr, struct EventListenerKey *key)
+{
+    EventListener *listener = (EventListener *) ptr;
+    listener->fd = key->fd;
+}
+
+bool otp_socket_platform_supports_peek()
+{
+    return false;
+}

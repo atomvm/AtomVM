@@ -1,7 +1,7 @@
 /*
  * This file is part of AtomVM.
  *
- * Copyright 2019 by Fred Dushin <fred@dushin.net>
+ * Copyright 2023 by Fred Dushin <fred@dushin.net>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,26 +18,18 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#ifndef _GENERIC_UNIX_SYS_H_
-#define _GENERIC_UNIX_SYS_H_
+#ifndef __OTP_SOCKET_PLATFORM_H__
+#define __OTP_SOCKET_PLATFORM_H__
 
-#include <globalcontext.h>
-#include <list.h>
-#include <term.h>
-#include <time.h>
+// TODO remove these once we get them moved into esp32_sys.h
+#include "esp32_sys.h"
+#include <context.h>
+#include <esp_log.h>
 
-#include "sys.h"
-#include "term_typedef.h"
+#define TAG "otp_socket"
 
-typedef int listener_event_t;
-
-struct EventListener
-{
-    struct ListHead listeners_list_head;
-    event_handler_t handler;
-    listener_event_t fd;
-};
-
-Context *socket_init(GlobalContext *global, term opts);
+#define AVM_LOGI ESP_LOGI
+#define AVM_LOGW ESP_LOGW
+#define AVM_LOGE ESP_LOGE
 
 #endif

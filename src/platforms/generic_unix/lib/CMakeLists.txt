@@ -22,18 +22,22 @@ cmake_minimum_required (VERSION 3.13)
 project (libAtomVMPlatformGenericUnix)
 
 set(HEADER_FILES
+    otp_socket_platform.h
     generic_unix_sys.h
     mapped_file.h
     platform_defaultatoms.h
+    ../../../libAtomVM/otp_socket.h
 )
 
 set(SOURCE_FILES
+    otp_socket_platform.c
     mapped_file.c
     platform_defaultatoms.c
     platform_nifs.c
     smp.c
     socket_driver.c
     sys.c
+    ../../../libAtomVM/otp_socket.c
 )
 
 set(
@@ -48,6 +52,7 @@ if(CMAKE_COMPILER_IS_GNUCC)
 endif()
 
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC libAtomVM)
+include_directories(${CMAKE_SOURCE_DIR}/src/platforms/generic_unix/lib)
 
 find_package(OpenSSL)
 if (${OPENSSL_FOUND} STREQUAL TRUE)

@@ -47,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Multithreading support (SMP)
 - Added support for code:load_abs/1, code:load_binary/3
 - Added support for loading / closing AVMPacks at runtime
+- Added support for the OTP `socket` interface.
 
 ### Fixed
 - Fixed issue with formatting integers with io:format() on STM32 platform

@@ -25,6 +25,7 @@
 #include "defaultatoms.h"
 #include "iff.h"
 #include "mapped_file.h"
+#include "otp_socket.h"
 #include "scheduler.h"
 #include "smp.h"
 #include "utils.h"
@@ -418,6 +419,8 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 {
     if (!strcmp(driver_name, "socket")) {
         return socket_init(glb, opts);
+    } else if (!strcmp(driver_name, "otp_socket")) {
+        return otp_socket_create_port(glb, opts);
     } else {
 #ifdef DYNLOAD_PORT_DRIVERS
         void *handle;

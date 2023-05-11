@@ -1,7 +1,7 @@
 /*
  * This file is part of AtomVM.
  *
- * Copyright 2019 by Fred Dushin <fred@dushin.net>
+ * Copyright 2023 by Fred Dushin <fred@dushin.net>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,26 +18,18 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#ifndef _GENERIC_UNIX_SYS_H_
-#define _GENERIC_UNIX_SYS_H_
+#ifndef __OTP_SOCKET_PLATFORM_H__
+#define __OTP_SOCKET_PLATFORM_H__
 
-#include <globalcontext.h>
-#include <list.h>
-#include <term.h>
-#include <time.h>
+#include "generic_unix_sys.h"
+#include <context.h>
 
-#include "sys.h"
-#include "term_typedef.h"
+#include <stdio.h>
 
-typedef int listener_event_t;
+#define TAG stderr
 
-struct EventListener
-{
-    struct ListHead listeners_list_head;
-    event_handler_t handler;
-    listener_event_t fd;
-};
-
-Context *socket_init(GlobalContext *global, term opts);
+#define AVM_LOGI fprintf
+#define AVM_LOGW fprintf
+#define AVM_LOGE fprintf
 
 #endif

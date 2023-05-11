@@ -19,6 +19,7 @@
 #
 
 set(AVM_BUILTIN_COMPONENT_SRCS
+    "otp_socket_platform.c"
     "gpio_driver.c"
     "i2c_driver.c"
     "ledc_nif.c"
@@ -28,6 +29,7 @@ set(AVM_BUILTIN_COMPONENT_SRCS
     "socket_driver.c"
     "spi_driver.c"
     "uart_driver.c"
+    "../../../../libAtomVM/otp_socket.c"
 )
 
 idf_component_register(
