@@ -44,6 +44,7 @@ set(ERLANG_MODULES
     logger
     logger_std_h
     proplists
+    socket
     string
     timer
     unicode

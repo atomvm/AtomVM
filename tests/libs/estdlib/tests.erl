@@ -23,7 +23,22 @@
 -export([start/0]).
 
 start() ->
-    ok = etest:test([
+    ok = etest:test(get_tests(get_otp_version())).
+
+get_otp_version() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            list_to_integer(erlang:system_info(otp_release));
+        _ ->
+            atomvm
+    end.
+
+get_tests(OTPVersion) when
+    (is_integer(OTPVersion) andalso OTPVersion >= 24) orelse OTPVersion == atomvm
+->
+    [test_tcp_socket, test_udp_socket | get_tests(undefined)];
+get_tests(_OTPVersion) ->
+    [
         test_lists,
         test_calendar,
         test_gen_event,
@@ -38,4 +53,4 @@ start() ->
         test_timer,
         test_spawn,
         test_supervisor
-    ]).
+    ].

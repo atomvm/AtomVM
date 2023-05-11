@@ -1610,3 +1610,201 @@ Once a connection is established, you can use a combination of
     end.
 
 For more information about the `gen_tcp` client interface, consults the AtomVM API documentation.
+
+## Socket Programming
+
+AtomVM supports a subset of the OTP [`socket`](https://www.erlang.org/doc/man/socket.html) interface, giving users more fine-grained control in socket programming.
+
+The OTP socket APIs are relatively new (they were introduced in OTP 22 and have seen revisions in OTP 24).  These APIs broadly mirror the [BSD Sockets](https://en.wikipedia.org/wiki/Berkeley_sockets) API, and should be familiar to most programmers who have had to work with low-level operating system networking interfaces.  AtomVM supports a strict subset of the OTP APIs.  Future versions of AtomVM may add additional coverage of these APIs.
+
+The following types are relevant to this interface and are referenced in the remainder of this section:
+
+    -type domain() :: inet.
+    -type type() :: stream | dgram.
+    -type protocol() :: tcp | udp.
+    -type socket() :: any().
+    -type sockaddr() :: sockaddr_in().
+    -type sockaddr_in() :: #{
+        family := inet,
+        port := port_number(),
+        addr := any | loopback | in_addr()
+    }.
+    -type in_addr() :: {0..255, 0..255, 0..255, 0..255}.
+    -type port_number() :: 0..65535.
+    -type socket_option() :: {socket, reuseaddr} | {socket, linger}.
+
+Create a socket using the `socket:open/3` function, providing a domain, type, and protocol.  Currently, AtomVM supports the `inet` domain, `stream` and `dgram` types, and `tcp` and `udp` protocols.
+
+For example:
+
+    %% erlang
+    {ok, Socket} = socket:open(inet, stream, tcp),
+
+### Server-side TCP Socket Programming
+
+To program using sockets on the server side, you can bind an opened socket to an address and port number using the `socket:bind/2` function, supplying a map that specifies the address and port number.
+
+This map may contain the following entries:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `family` | `inet` | | The address family.  (Currently, only `inet` is supported) |
+|  `addr` | `in_addr()` \| `any` \| `loopback` | The address to which to bind.  The `any` value will bind the socket to all interfaces on the device.  The `loopback` value will bind the socket to the loopback interface on the device. |
+|  `port` | `port_number()` |  | The port to which to bind the socket.  If no port is specified, the operating system will choose a port for the user. |
+
+For example:
+
+    %% erlang
+    PortNumber = 8080,
+    ok = socket:bind(Socket, #{family => inet, addr => any, port => PortNumber}),
+
+To listen for connections, use the `socket:listen/1` function:
+
+    %% erlang
+    ok = socket:listen(Socket),
+
+Once your socket is listening on an interface and port, you can wait to accept a connection from an incoming client using the `socket:accept/1` function.
+
+This function will block the current execution context (i.e., Erlang process) until a client establishes a TCP connection with the server:
+
+    %% erlang
+    {ok, ConnectedSocket} = socket:accept(Socket),
+
+> Note.  Many applications will spawn processes to listen for socket connections, so that the main execution context of your application is not blocked.
+
+### Client-side TCP Socket Programming
+
+To program using sockets on the client side, you can connect an opened socket to an address and port number using the `socket:connect/2` function, supplying a map that specifies the address and port number.
+
+This map may contain the following entries:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `family` | `inet` | | The address family.  (Currently, only `inet` is supported) |
+|  `addr` | `in_addr()` \| `loopback` | | The address to which to connect. The `loopback` value will connect the socket to the loopback interface on the device. |
+|  `port` | `port_num()` |  | The port to which to connect the socket. |
+
+    %% erlang
+    ok = socket:connect(Socket, #{family => inet, addr => loopback, port => 44404})
+
+### Sending and Receiving Data
+
+Once you have a connected socket (either via `socket:connect/2` or `socket:accept/1`), you can send and receive data on that socket using the `socket:send/2` and `socket:recv/1` functions.  Like the  `socket:accept/1` function, these functions will block until data is sent to a connected peer (or until the data is written to operating system buffers) or received from a connected peer.
+
+The `socket:send/2` function can take a binary blob of data or an io-list, containing binary data.
+
+For example, a process that receives data and echos it back to the connected peer might be implemented as follows:
+
+    %% erlang
+    case socket:recv(ConnectedSocket) of
+        {ok, Data} ->
+            case socket:send(ConnectedSocket, Data) of
+                ok ->
+                    io:format("All data was sent~n");
+                {ok, Rest} ->
+                    io:format("Some data was sent.  Remaining: ~p~n", [Rest]);
+                {error, Reason} ->
+                    io:format("An error occurred sending data: ~p~n", [Reason])
+            end;
+        {error, closed} ->
+            io:format("Connection closed.~n");
+        {error, Reason} ->
+            io:format("An error occurred waiting on a connected socket: ~p~n", [Reason])
+    end.
+
+The `socket:recv/1` function will block the current process until a packet has arrived or until the local or remote socket has been closed, or some other error occurs.
+
+Note that the `socket:send/2` function may return `ok` if all of the data has been sent, or `{ok, Rest}`, where `Rest` is the remaining part of the data that was not sent to the operating system.  If the supplied input to `socket:send/2` is an io-list, then the `Rest` will be a binary containing the rest of the data in the io-list.
+
+### Getting Information about Connected Sockets
+
+You can obtain information about connected sockets using the `socket:sockname/1` and `socket:peername/1` functions.  Supply the connected socket as a parameter.  The address and port are returned in a map structure
+
+For example:
+
+    %% erlang
+    {ok, #{addr := LocalAddress, port := LocalPort}} = socket:sockname(ConnectedSocket),
+    {ok, #{addr := PeerAddress, port := PeerPort}} = socket:peername(ConnectedSocket),
+
+### Closing and Shutting down Sockets
+
+Use the `socket:close/1` function to close a connected socket:
+
+    %% erlang
+    ok = socket:close(ConnectedSocket)
+
+> Note.  Data that has been buffered by the operating system may not be delivered, when a socket is closed via the `close/1` operation.
+
+For a more controlled way to close full-duplex connected sockets, use the `socket:shutdown/2` function.  Provide the atom `read` if you only want to shut down the reads on the socket, `write` if you want to shut down writes on the socket, or `read_write` to shut down both reads and writes on a socket.  Subsequent reads or writes on the socket will result in an `einval` error on the calls, depending on how the socket has been shut down.
+
+For example:
+
+    %% erlang
+    ok = socket:shutdown(Socket, read_write)
+
+### Setting Socket Options
+
+You can set options on a socket using the `socket:setopt/3` function.  This function takes an opened socket, a key, and a value, and returns `ok` if setting the option succeeded.
+
+Currently, the following options are supported:
+
+| Option Key | Option Value | Description |
+|------------|--------------|-------------|
+| `{socket, reuseaddr}` | `boolean()` | Sets `SO_REUSEADDR` on the socket. |
+| `{socket, linger}` | `#{onoff => boolean(), linger => non_neg_integer()}` | Sets `SO_LINGER` on the socekt. |
+
+For example:
+
+    %% erlang
+    ok = socket:setopt(Socket, {socket, reuseaddr}, true),
+    ok = socket:setopt(Socket, {socket, linger}, #{onoff => true, linger => 0}),
+
+### UDP Socket Programming
+
+You can use the `socket` interface to send and receive messages over the User Datagram Protocol (UDP), in addition to TCP.
+
+To use UDP sockets, open a socket using the `dgram` type and `udp` protocol.
+
+For example:
+
+    %% erlang
+    {ok, Socket} = socket:open(inet, dgram, udp)
+
+To listen for UDP connections, use the `socket:bind/2` function, as described above.
+
+For example:
+
+    %% erlang
+    PortNumber = 512,
+    ok = socket:bind(Socket, #{family => inet, addr => any, port => PortNumber}),
+
+Use the `socket:recvfrom/1` function to receive UDP packets from clients on your network.  When a packet arrives, this function will return the received packet, as well as the address of the client that sent the packet.
+
+For example:
+
+    %% erlang
+    case socket:recvfrom(dSocket) of
+        {ok, {From, Packet}} ->
+            io:format("Received packet ~p from ~p~n", [Packet, From]);
+        {error, Reason} ->
+            io:format("Error on recvfrom: ~p~n", [Reason])
+    end;
+
+> Note.  The `socket:recvfrom/1` function will block the current process until a packet has arrived or until the local or remote socket has been closed, or some other error occurs.
+
+Use the `socket:sendto/3` function to send UDP packets to a specific destination.  Specify the socket, data, and destination address you would like the packet to be delivered to.
+
+For example:
+
+    %% erlang
+    Dest = #{family => inet, addr => loopback, port => 512},
+    case socket:sendto(Socket, Data, Dest) of
+        ok ->
+            io:format("Send packet ~p to ~p.~n", [Data, Dest]);
+        {ok, Rest} ->
+            io:format("Send packet ~p to ~p.  Remaining: ~p~n", [Data, Dest, Rest]);
+        {error, Reason} ->
+            io:format("An error occurred sending a packet: ~p~n", [Reason])
+    end
+
+Close a UDP socket just as you would a TCP socket, as described above.

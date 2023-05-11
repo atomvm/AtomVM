@@ -24,6 +24,7 @@
 #include "avmpack.h"
 #include "defaultatoms.h"
 #include "globalcontext.h"
+#include "otp_socket.h"
 #include "scheduler.h"
 #include "utils.h"
 

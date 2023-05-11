@@ -28,6 +28,7 @@ set(AVM_BUILTIN_COMPONENT_SRCS
     "socket_driver.c"
     "spi_driver.c"
     "uart_driver.c"
+    "otp_socket_platform.c"
 )
 
 if (IDF_VERSION_MAJOR GREATER_EQUAL 5)

@@ -25,6 +25,7 @@
 #include "defaultatoms.h"
 #include "iff.h"
 #include "mapped_file.h"
+#include "otp_socket.h"
 #include "scheduler.h"
 #include "smp.h"
 #include "utils.h"
@@ -557,6 +558,9 @@ void sys_init_platform(GlobalContext *global)
 #endif
 #endif
 #endif
+
+    otp_socket_init(global);
+
     global->platform_data = platform;
 }
 

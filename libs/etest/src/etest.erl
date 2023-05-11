@@ -26,7 +26,14 @@
 -module(etest).
 
 -export([test/1]).
--export([assert_match/2, assert_equals/2, assert_true/1, assert_failure/1, assert_failure/2]).
+-export([
+    assert_match/2,
+    assert_equals/2,
+    assert_true/1,
+    assert_failure/1,
+    assert_failure/2,
+    flush_msg_queue/0
+]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Tests a list of test modules
@@ -114,6 +121,20 @@ assert_failure(F, E) ->
             ok
     end.
 
+%%-----------------------------------------------------------------------------
+%% @returns ok after flushing all messages in the process message queue
+%% @doc Use optionally to flush messages in test cases that run in a single test module
+%% @end
+%%-----------------------------------------------------------------------------
+-spec flush_msg_queue() -> ok.
+flush_msg_queue() ->
+    receive
+        _ ->
+            flush_msg_queue()
+    after 100 ->
+        ok
+    end.
+
 %%=============================================================================
 %% internal operations
 
@@ -154,10 +175,6 @@ do_run_test(Test) ->
             _ ->
                 console:puts("+"),
                 console:flush()
-        end,
-        receive
-            Garbage -> erlang:display({test, Test, unexpected_msg, Garbage})
-        after 0 -> ok
         end,
         Result
     catch
