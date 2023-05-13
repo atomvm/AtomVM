@@ -49,13 +49,7 @@
 
 #include <lwip/inet.h>
 
-#if ESP_IDF_VERSION_MAJOR < 4
-#include <apps/sntp/sntp.h>
-#endif
-
-#if ESP_IDF_VERSION_MAJOR >= 4
 #define TCPIP_HOSTNAME_MAX_SIZE 255
-#endif
 
 //#define ENABLE_TRACE 1
 
@@ -292,23 +286,7 @@ static wifi_config_t *get_ap_wifi_config(term ap_config)
 
 static void maybe_set_sntp(term sntp_config)
 {
-#if ESP_IDF_VERSION_MAJOR < 4
-    if (!term_is_nil(sntp_config) && !term_is_nil(interop_proplist_get_value(sntp_config, HOST_ATOM))) {
-        int ok;
-        char *host = interop_term_to_string(interop_proplist_get_value(sntp_config, HOST_ATOM), &ok);
-        if (LIKELY(ok)) {
-            // do not free(sntp)
-            sntp_setoperatingmode(SNTP_OPMODE_POLL);
-            sntp_setservername(0, host);
-            sntp_init();
-            ESP_LOGI("NETWORK", "SNTP initialized with host set to %s", host);
-        } else {
-            fprintf(stderr, "Unable to locate sntp host in configuration\n");
-        }
-    }
-#else
     fprintf(stderr, "SNTP not yet supported on esp-idf 4.x\n");
-#endif
 }
 
 static void set_dhcp_hostname(term dhcp_hostname_term)
