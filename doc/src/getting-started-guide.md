@@ -212,13 +212,13 @@ Once the application has been flashed, you may connect to the ESP32 over the ser
 
 ## Getting Started on the Generic UNIX platform
 
-AtomVM may be run on UNIX-like platforms using the `AtomVM` executable.
+AtomVM may be run on UNIX-like platforms using the `atomvm` command.
 
-You may specify one or more AVM files on the command line when running the `AtomVM` command.  BEAM modules defined in earlier AVM modules on the command line take higher precedence that BEAM modules included in AVM files later in the argument list.
+You may specify one or more AVM files on the command line when running the `atom` command.  BEAM modules defined in earlier AVM modules on the command line take higher precedence that BEAM modules included in AVM files later in the argument list.
 
-    shell$ AtomVM /path/to/myapp.avm
+    shell$ atomvm /path/to/myapp.avm
 
-Currently, the `AtomVM` executable must be built from source.
+Currently, the `atomvm` command and libraries must be built and installed from source.
 
 > See the AtomVM [Build Instructions](./build-instructions.md) for instructions about how to build AtomVM on the Generic UNIX platform.
 

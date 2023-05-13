@@ -58,7 +58,10 @@ The following software is required in order to build AtomVM in generic UNIX syst
 * `make`
 * `gperf`
 * `zlib`
-* Erlang/OTP (consult [Release Notes](release-notes.md) for currently supported versions)
+* Erlang/OTP compiler (`erlc`)
+* Elixir compiler
+
+Consult [Release Notes](./release-notes.md) for currently supported versions of required software.
 
 Consult your local OS documentation for instructions about how to install these components.
 
@@ -81,6 +84,21 @@ This command will create all of the required make files for creating the AtomVM 
 Upon completion, the `AtomVM` executable can be found in the `build/src` directory.
 
 The AtomVM core Erlang library can be found in the generated `libs/atomvmlib.avm` AVM file.
+
+Use the `install` target to install the `atomvm` command and associated binary files.  On most UNIX systems, these artifacts will be installed in the `/usr/local` directory tree.
+
+> Note.  On some systems, you may need to run this target with `root` or `sudo` permissions.
+
+    shell$ sudo make install
+
+Once installed, you can use the `atomvm` command to execute an AtomVM application.  E.g.,
+
+    shell$ atomvm /path/to/myapp.avm
+
+For users doing incremental development on the AtomVM virtual machine, you may want to run the `AtomVM` binary directly instead of installing the VM on your machine.  If you do, you will typically need to also specify the path to the AtomVM core Erlang library.  For example,
+
+    shell$ cd build
+    shell$ ./src/AtomVM /path/to/myapp.avm ./libs/atomvmlib.avm
 
 #### Special Note for MacOS users
 
@@ -129,7 +147,7 @@ In order to build a complete AtomVM image for ESP32, you will also need to build
 The following software is required in order to build AtomVM for the ESP32 platform:
 
 * Espressif Xtensa tool chains
-* [Espressif IDF SDK](https://www.espressif.com/en/products/sdks/esp-idf) (consult [Release Notes](release-notes.md) for currently supported versions)
+* [Espressif IDF SDK](https://www.espressif.com/en/products/sdks/esp-idf) (consult [Release Notes](./release-notes.md) for currently supported versions)
 * `cmake`
 
 Instructions for downloading and installing the Espressif IDF SDK and tool chains are outside of the scope of this document.  Please consult the [IDF SDKGetting Started](https://docs.espressif.com/projects/esp-idf/en/release-v4.4/get-started/index.html) guide for more information.
