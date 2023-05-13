@@ -38,6 +38,7 @@ endfunction()
 
 compile_erlang(test_socket)
 compile_erlang(test_time_and_processes)
+compile_erlang(test_tz)
 
 add_custom_command(
     OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/esp32_test_modules.avm"
@@ -45,10 +46,12 @@ add_custom_command(
         HostAtomVM-prefix/src/HostAtomVM-build/libs/atomvmlib.avm
         test_socket.beam
         test_time_and_processes.beam
+        test_tz.beam
     DEPENDS
         HostAtomVM
         "${CMAKE_CURRENT_BINARY_DIR}/test_socket.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_time_and_processes.beam"
+        "${CMAKE_CURRENT_BINARY_DIR}/test_tz.beam"
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     VERBATIM
 )

@@ -116,6 +116,10 @@ struct GlobalContext
     bool scheduler_stop_all;
 #endif
 
+#ifndef AVM_NO_SMP
+    SpinLock env_spinlock;
+#endif
+
     void *platform_data;
 };
 

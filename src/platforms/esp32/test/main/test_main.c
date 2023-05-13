@@ -183,6 +183,12 @@ TEST_CASE("test_time_and_processes", "[test_run]")
     TEST_ASSERT(term_to_int(ret_value) == 6);
 }
 
+TEST_CASE("test_tz", "[test_run]")
+{
+    term ret_value = avm_test_case("test_tz.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+
 #ifndef AVM_NO_SMP
 TEST_CASE("atomvm_smp_0", "[smp]")
 {

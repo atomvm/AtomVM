@@ -23,10 +23,35 @@
 -export([start/0]).
 
 start() ->
+    3 = test_localtime(),
+    3 = test_universaltime(),
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            % BEAM currently has no API to get the localtime for a given TZ
+            % https://github.com/erlang/otp/issues/7228
+            ok;
+        _ ->
+            ok = test_timezone()
+    end,
+    3.
+
+test_localtime() ->
+    {Date, Time} = erlang:localtime(),
+    test_date(Date) + test_time(Time).
+
+test_universaltime() ->
     {Date, Time} = erlang:universaltime(),
     test_date(Date) + test_time(Time).
 
-test_date({Y, M, D}) when Y >= 2018 andalso M >= 1 andalso M =< 12 andalso D >= 1 andalso D =< 31 ->
+test_timezone() ->
+    UTCDate = erlang:universaltime(),
+    ParisDate = erlang:localtime("Europe/Paris"),
+    LondonDate = erlang:localtime("Europe/London"),
+    true = ParisDate =/= UTCDate,
+    true = ParisDate =/= LondonDate,
+    ok.
+
+test_date({Y, M, D}) when Y >= 2023 andalso M >= 1 andalso M =< 12 andalso D >= 1 andalso D =< 31 ->
     1.
 
 test_time({HOUR, MIN, SEC}) when
