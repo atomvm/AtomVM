@@ -334,7 +334,7 @@ unsigned long memory_estimate_usage(term t)
         }
     }
 
-    temp_stack_destory(&temp_stack);
+    temp_stack_destroy(&temp_stack);
 
     return acc;
 }
