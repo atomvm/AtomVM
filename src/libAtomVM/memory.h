@@ -66,8 +66,8 @@ struct HeapFragment
     HeapFragment *next;
     union
     {
-        term mso_list;
-        term *heap_end;
+        term mso_list; // root fragment holds mso_list, with heap_end being in Heap
+        term *heap_end; // other fragments hold their own heap_end
     };
     term storage[];
 };

@@ -580,6 +580,8 @@ void memory_heap_append_fragment(Heap *heap, HeapFragment *fragment, term mso_li
         }
         tail->next = heap->root->next;
     }
+    // The passed fragment is set as next, heap's root fragment is unmodified
+    // as root fragment is different, holding the mso list
     heap->root->next = fragment;
     if (!term_is_nil(mso_list)) {
         // Suppose fragment mso_list is smaller and append heap mso at the end
