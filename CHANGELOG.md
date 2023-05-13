@@ -63,6 +63,9 @@ additional information.
 successful call, instead of the bare atom `ok`.  Applications that use `network:start` and
 check the return value will need to be modified.
 
+### Removed
+- ESP-IDF v3.x support.
+
 ## [0.5.1] - Unreleased
 ### Added
 - New function for atom comparison, useful when writing 3rd party components.
