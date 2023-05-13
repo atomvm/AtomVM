@@ -86,9 +86,8 @@ struct Context
 
     avm_float_t *fr;
 
-    term *heap_start;
-    term *stack_base;
-    term *heap_ptr;
+    Heap heap;
+
     term *e;
 
     size_t min_heap_size;
@@ -126,9 +125,6 @@ struct Context
     unsigned int trace_receive : 1;
 #endif
 
-    struct ListHead heap_fragments;
-    int heap_fragments_size;
-
     enum ContextFlags ATOMIC flags;
 
     void *platform_data;
@@ -139,7 +135,6 @@ struct Context
     size_t bs_offset;
 
     term exit_reason;
-    term mso_list;
 };
 
 #ifndef TYPEDEF_CONTEXT
@@ -234,49 +229,57 @@ static inline void context_clean_registers(Context *ctx, int live)
 }
 
 /**
+ * @brief Returns a context's stack base
+ *
+ * @details Used for stack traces
+ * @param ctx a valid context.
+ * @returns the stack base
+ */
+static inline term *context_stack_base(const Context *ctx)
+{
+    // Find which fragment the stack belongs to.
+    if (ctx->e >= ctx->heap.heap_start && ctx->e <= ctx->heap.heap_end) {
+        return ctx->heap.heap_end;
+    }
+    HeapFragment *fragment = ctx->heap.root->next;
+    while (fragment) {
+        if (ctx->e >= fragment->storage && ctx->e <= fragment->heap_end) {
+            return fragment->heap_end;
+        }
+        fragment = fragment->next;
+    }
+    fprintf(stderr, "Context heap is corrupted, cannot find fragment with stack pointer.\n");
+    AVM_ABORT();
+}
+
+/**
+ * @brief Returns a context's stack size
+ *
+ * @details Return the number of terms currently on the stack. Used for
+ * stack traces.
+ * @param ctx a valid context.
+ * @returns stack size in terms
+ */
+static inline size_t context_stack_size(const Context *ctx)
+{
+    term *stack_base = context_stack_base(ctx);
+    return stack_base - ctx->e;
+}
+
+/**
  * @brief Returns available free memory in term units
  *
- * @details Returns the number of terms that can fit either on the stack or on the heap.
+ * @details Returns the number of terms that can fit either on the heap.
  * @param ctx a valid context.
  * @returns available free memory that is avail_size_in_bytes / sizeof(term).
  */
-static inline unsigned long context_avail_free_memory(const Context *ctx)
+static inline size_t context_avail_free_memory(const Context *ctx)
 {
-    return ctx->e - ctx->heap_ptr;
-}
-
-/**
- * @brief Returns context total memory in term units
- *
- * @details Returns the total memory reserved for stack and heap in term units.
- * @param ctx a valid context.
- * @returns total memory that is total_size_in_bytes / sizeof(term).
- */
-static inline unsigned long context_memory_size(const Context *ctx)
-{
-    return ctx->stack_base - ctx->heap_start;
-}
-
-/**
- * @brief Returns context heap size in term units
- *
- * @param ctx a valid context.
- * @returns context heap size in term units
- */
-static inline unsigned long context_heap_size(const Context *ctx)
-{
-    return ctx->heap_ptr - ctx->heap_start;
-}
-
-/**
- * @brief Returns context heap size in term units
- *
- * @param ctx a valid context.
- * @returns context heap size in term units
- */
-static inline unsigned long context_stack_size(const Context *ctx)
-{
-    return ctx->stack_base - ctx->e;
+    // Check if stack is on current fragment
+    if (ctx->e <= ctx->heap.heap_end && ctx->e >= ctx->heap.heap_start) {
+        return ctx->e - ctx->heap.heap_ptr;
+    }
+    return ctx->heap.heap_end - ctx->heap.heap_ptr;
 }
 
 /**

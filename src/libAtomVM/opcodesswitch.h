@@ -23,6 +23,8 @@
 #include <assert.h>
 #include <string.h>
 
+//#define ENABLE_STACK_TRACE
+
 #include "bif.h"
 #include "bitstring.h"
 #include "debug.h"
@@ -748,7 +750,7 @@ typedef union
                 }                                                                               \
             }                                                                                   \
             MailboxMessage *next = signal_message->next;                                        \
-            mailbox_destroy_signal_message(signal_message);                                     \
+            mailbox_message_dispose(signal_message, &ctx->heap);                                \
             signal_message = next;                                                              \
         }                                                                                       \
         if (context_get_flags(ctx, Killed)) {                                                   \
@@ -854,6 +856,11 @@ typedef union
             NEXT_INSTRUCTION(next_off);                                 \
             PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value);              \
             ctx->x[0] = return_value;                                   \
+            if (ctx->heap.root->next) {                                 \
+                if (UNLIKELY(memory_ensure_free_opt(ctx, 0, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) { \
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);                    \
+                }                                                       \
+            }                                                           \
             continue;                                                   \
         } else {                                                        \
             fun_module = globalcontext_get_module(ctx->global, module_name); \
@@ -979,7 +986,7 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
     term *ct = ctx->e;
     term *last_frame = ctx->e;
 
-    while (ct != ctx->stack_base) {
+    while (ct != ctx->heap.heap_end) {
         if (term_is_catch_label(*ct)) {
             int target_module;
             int target_label = term_to_catch_label_and_module(*ct, &target_module);
@@ -1060,7 +1067,7 @@ COLD_FUNC static void dump(Context *ctx)
 
     term *ct = ctx->e;
 
-    while (ct != ctx->stack_base) {
+    while (ct != ctx->heap.heap_end) {
         if (term_is_catch_label(*ct)) {
             int target_module;
             int target_label = term_to_catch_label_and_module(*ct, &target_module);
@@ -1112,25 +1119,21 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 {
 #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
     if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
-        term *fragment = memory_alloc_heap_fragment(ctx, BOXED_INT64_SIZE);
-        if (IS_NULL_PTR(fragment)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, BOXED_INT64_SIZE, MEMORY_NO_GC) != MEMORY_GC_OK)) {
             ctx->x[0] = ERROR_ATOM;
             ctx->x[1] = OUT_OF_MEMORY_ATOM;
             return term_invalid_term();
         }
-        term_put_int64(fragment, value);
-        return ((term) fragment) | ((term) TERM_BOXED_VALUE_TAG);
+        return term_make_boxed_int64(value, &ctx->heap);
     } else
 #endif
     if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
-        term *fragment = memory_alloc_heap_fragment(ctx, BOXED_INT_SIZE);
-        if (IS_NULL_PTR(fragment)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, BOXED_INT_SIZE, MEMORY_NO_GC) != MEMORY_GC_OK)) {
             ctx->x[0] = ERROR_ATOM;
             ctx->x[1] = OUT_OF_MEMORY_ATOM;
             return term_invalid_term();
         }
-        term_put_int(fragment, value);
-        return ((term) fragment) | TERM_BOXED_VALUE_TAG;
+        return term_make_boxed_int(value, &ctx->heap);
     } else {
         return term_from_int(value);
     }
@@ -1228,7 +1231,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
     if (memory_ensure_free_opt(ctx, size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
         return term_invalid_term();
     }
-    term *boxed_func = memory_heap_alloc(ctx, size);
+    term *boxed_func = memory_heap_alloc(&ctx->heap, size);
 
     boxed_func[0] = ((size - 1) << 6) | TERM_BOXED_FUN;
     boxed_func[1] = (term) mod;
@@ -1690,6 +1693,11 @@ schedule_in:
                             term return_value = nif->nif_ptr(ctx, arity, ctx->x);
                             PROCESS_MAYBE_TRAP_RETURN_VALUE_RESTORE_I(return_value, orig_i);
                             ctx->x[0] = return_value;
+                            if (ctx->heap.root->next) {
+                                if (UNLIKELY(memory_ensure_free_opt(ctx, 0, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+                                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                                }
+                            }
                             break;
                         }
                         case ModuleFunction: {
@@ -1753,6 +1761,11 @@ schedule_in:
                             ctx->cp = ctx->e[n_words];
                             ctx->e += (n_words + 1);
 
+                            if (ctx->heap.root->next) {
+                                if (UNLIKELY(memory_ensure_free_opt(ctx, 0, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+                                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                                }
+                            }
                             DO_RETURN();
 
                             break;
@@ -1906,7 +1919,7 @@ schedule_in:
                 #ifdef IMPL_EXECUTE_LOOP
                     context_clean_registers(ctx, live);
 
-                    if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
+                    if (ctx->heap.root->next || ((ctx->heap.heap_ptr > ctx->e - (stack_need + 1)))) {
                         if (UNLIKELY(memory_ensure_free_opt(ctx, stack_need + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
@@ -1942,7 +1955,7 @@ schedule_in:
                 #ifdef IMPL_EXECUTE_LOOP
                     context_clean_registers(ctx, live);
 
-                    if ((ctx->heap_ptr + heap_need) > ctx->e - (stack_need + 1)) {
+                    if (ctx->heap.root->next || ((ctx->heap.heap_ptr + heap_need) > ctx->e - (stack_need + 1))) {
                         if (UNLIKELY(memory_ensure_free_opt(ctx, heap_need + stack_need + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
@@ -1975,7 +1988,7 @@ schedule_in:
                 #ifdef IMPL_EXECUTE_LOOP
                     context_clean_registers(ctx, live);
 
-                    if (ctx->heap_ptr > ctx->e - (stack_need + 1)) {
+                    if (ctx->heap.root->next || ((ctx->heap.heap_ptr > ctx->e - (stack_need + 1)))) {
                         if (UNLIKELY(memory_ensure_free_opt(ctx, stack_need + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
@@ -2015,7 +2028,7 @@ schedule_in:
                 #ifdef IMPL_EXECUTE_LOOP
                     context_clean_registers(ctx, live);
 
-                    if ((ctx->heap_ptr + heap_need) > ctx->e - (stack_need + 1)) {
+                    if (ctx->heap.root->next || ((ctx->heap.heap_ptr + heap_need) > ctx->e - (stack_need + 1))) {
                         if (UNLIKELY(memory_ensure_free_opt(ctx, heap_need + stack_need + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
@@ -2095,6 +2108,11 @@ schedule_in:
                     ctx->cp = ctx->e[n_words];
                     ctx->e += n_words + 1;
                     DEBUG_DUMP_STACK(ctx);
+                    if (ctx->heap.root->next) {
+                        if (UNLIKELY(memory_ensure_free_opt(ctx, 0, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        }
+                    }
                 #endif
 
                 NEXT_INSTRUCTION(next_off);
@@ -2150,7 +2168,8 @@ schedule_in:
 #pragma GCC diagnostic ignored "-Wpedantic"
                     PROCESS_SIGNAL_MESSAGES();
 #pragma GCC diagnostic pop
-                    mailbox_remove(&ctx->mailbox);
+                    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+                    // Cannot GC now as remove_message is GC neutral
                 #endif
 
                 NEXT_INSTRUCTION(1);
@@ -3162,7 +3181,7 @@ wait_timeout_trap_handler:
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
 
 #ifdef IMPL_EXECUTE_LOOP
-                term *list_elem = term_list_alloc(ctx);
+                term *list_elem = term_list_alloc(&ctx->heap);
 #endif
 
                 TRACE("put_list/3\n");
@@ -3193,7 +3212,7 @@ wait_timeout_trap_handler:
                 USED_BY_TRACE(dreg);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    term t = term_alloc_tuple(size, ctx);
+                    term t = term_alloc_tuple(size, &ctx->heap);
                     WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
 
@@ -3239,7 +3258,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("badmatch/1, v=0x%lx\n", arg1);
 
-                    term new_error_tuple = term_alloc_tuple(2, ctx);
+                    term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
                     //TODO: check alloc
                     term_put_tuple_element(new_error_tuple, 0, BADMATCH_ATOM);
                     term_put_tuple_element(new_error_tuple, 1, arg1);
@@ -3290,7 +3309,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("case_end/1, v=0x%lx\n", arg1);
 
-                    term new_error_tuple = term_alloc_tuple(2, ctx);
+                    term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
                     //TODO: reserve memory before
                     term_put_tuple_element(new_error_tuple, 0, CASE_CLAUSE_ATOM);
                     term_put_tuple_element(new_error_tuple, 1, arg1);
@@ -3324,14 +3343,13 @@ wait_timeout_trap_handler:
                         if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
-                        term new_error_tuple = term_alloc_tuple(2, ctx);
+                        term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
                         term_put_tuple_element(new_error_tuple, 0, BADFUN_ATOM);
                         term_put_tuple_element(new_error_tuple, 1, ctx->x[args_count]);
                         RAISE_ERROR(new_error_tuple);
                     }
 
                     CALL_FUN(fun, args_count, next_off)
-
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -3402,6 +3420,12 @@ wait_timeout_trap_handler:
                             term return_value = nif->nif_ptr(ctx, arity, ctx->x);
                             PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
                             ctx->x[0] = return_value;
+
+                            if (ctx->heap.root->next) {
+                                if (UNLIKELY(memory_ensure_free_opt(ctx, 0, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+                                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                                }
+                            }
                             if ((long) ctx->cp == -1) {
                                 return 0;
                             }
@@ -3521,7 +3545,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("try_case_end/1, val=%lx\n", arg1);
 
-                    term new_error_tuple = term_alloc_tuple(2, ctx);
+                    term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
                     //TODO: ensure memory before
                     term_put_tuple_element(new_error_tuple, 0, TRY_CLAUSE_ATOM);
                     term_put_tuple_element(new_error_tuple, 1, arg1);
@@ -3599,10 +3623,10 @@ wait_timeout_trap_handler:
                             if (UNLIKELY(memory_ensure_free_opt(ctx, 6, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
-                            term reason_tuple = term_alloc_tuple(2, ctx);
+                            term reason_tuple = term_alloc_tuple(2, &ctx->heap);
                             term_put_tuple_element(reason_tuple, 0, ctx->x[1]);
                             term_put_tuple_element(reason_tuple, 1, ctx->x[2]);
-                            term exit_tuple = term_alloc_tuple(2, ctx);
+                            term exit_tuple = term_alloc_tuple(2, &ctx->heap);
                             term_put_tuple_element(exit_tuple, 0, EXIT_ATOM);
                             term_put_tuple_element(exit_tuple, 1, reason_tuple);
                             ctx->x[0] = exit_tuple;
@@ -3613,7 +3637,7 @@ wait_timeout_trap_handler:
                             if (UNLIKELY(memory_ensure_free_opt(ctx, 3, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
-                            term exit_tuple = term_alloc_tuple(2, ctx);
+                            term exit_tuple = term_alloc_tuple(2, &ctx->heap);
                             term_put_tuple_element(exit_tuple, 0, EXIT_ATOM);
                             term_put_tuple_element(exit_tuple, 1, ctx->x[1]);
                             ctx->x[0] = exit_tuple;
@@ -3690,7 +3714,7 @@ wait_timeout_trap_handler:
                     if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(size_val) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    term t = term_create_empty_binary(size_val, ctx);
+                    term t = term_create_empty_binary(size_val, &ctx->heap, ctx->global);
 
                     ctx->bs = t;
                     ctx->bs_offset = 0;
@@ -3739,7 +3763,7 @@ wait_timeout_trap_handler:
                     if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(size_val / 8) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    term t = term_create_empty_binary(size_val / 8, ctx);
+                    term t = term_create_empty_binary(size_val / 8, &ctx->heap, ctx->global);
 
                     ctx->bs = t;
                     ctx->bs_offset = 0;
@@ -4174,7 +4198,7 @@ wait_timeout_trap_handler:
                     if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(0) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    term t = term_create_empty_binary(0, ctx);
+                    term t = term_create_empty_binary(0, &ctx->heap, ctx->global);
 
                     ctx->bs = t;
                     ctx->bs_offset = 0;
@@ -4239,7 +4263,7 @@ wait_timeout_trap_handler:
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     DECODE_COMPACT_TERM(src, code, i, src_off)
-                    term t = term_create_empty_binary(src_size + size_val / 8, ctx);
+                    term t = term_create_empty_binary(src_size + size_val / 8, &ctx->heap, ctx->global);
                     memcpy((void *) term_binary_data(t), (void *) term_binary_data(src), src_size);
 
                     ctx->bs = t;
@@ -4294,7 +4318,7 @@ wait_timeout_trap_handler:
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     DECODE_COMPACT_TERM(src, code, i, src_off)
-                    term t = term_create_empty_binary(src_size + size_val / 8, ctx);
+                    term t = term_create_empty_binary(src_size + size_val / 8, &ctx->heap, ctx->global);
                     memcpy((void *) term_binary_data(t), (void *) term_binary_data(src), src_size);
 
                     ctx->bs = t;
@@ -4477,7 +4501,7 @@ wait_timeout_trap_handler:
                         WRITE_REGISTER(dreg_type, dreg, src);
                         i = POINTER_TO_II(mod->labels[fail]);
                     } else {
-                        term match_state = term_alloc_bin_match_state(src, slots, ctx);
+                        term match_state = term_alloc_bin_match_state(src, slots, &ctx->heap);
 
                         WRITE_REGISTER(dreg_type, dreg, match_state);
                         NEXT_INSTRUCTION(next_off);
@@ -4518,7 +4542,7 @@ wait_timeout_trap_handler:
                         WRITE_REGISTER(dreg_type, dreg, src);
                         i = POINTER_TO_II(mod->labels[fail]);
                     } else {
-                        term match_state = term_alloc_bin_match_state(src, 0, ctx);
+                        term match_state = term_alloc_bin_match_state(src, 0, &ctx->heap);
 
                         WRITE_REGISTER(dreg_type, dreg, match_state);
                         NEXT_INSTRUCTION(next_off);
@@ -4604,7 +4628,7 @@ wait_timeout_trap_handler:
                             }
                             DECODE_COMPACT_TERM(src, code, i, src_off);
                             bs_bin = term_get_match_state_binary(src);
-                            term t = term_maybe_create_sub_binary(bs_bin, start_pos, new_bin_size, ctx);
+                            term t = term_maybe_create_sub_binary(bs_bin, start_pos, new_bin_size, &ctx->heap, ctx->global);
                             WRITE_REGISTER(dreg_type, dreg, t);
 
                         }
@@ -4994,7 +5018,7 @@ wait_timeout_trap_handler:
                     DECODE_COMPACT_TERM(src, code, i, src_offset);
                     bs_bin = term_get_match_state_binary(src);
 
-                    term t = term_maybe_create_sub_binary(bs_bin, bs_offset / unit, size_val, ctx);
+                    term t = term_maybe_create_sub_binary(bs_bin, bs_offset / unit, size_val, &ctx->heap, ctx->global);
 
                     WRITE_REGISTER(dreg_type, dreg, t);
                     NEXT_INSTRUCTION(next_off);
@@ -5039,7 +5063,7 @@ wait_timeout_trap_handler:
                             // src might be invalid after a GC
                             src = READ_DEST_REGISTER(dreg_type, dreg);
                             src_bin = term_get_match_state_binary(src);
-                            bin = term_maybe_create_sub_binary(src_bin, offset / 8, len, ctx);
+                            bin = term_maybe_create_sub_binary(src_bin, offset / 8, len, &ctx->heap, ctx->global);
                         }
                     } else {
                         bin = src;
@@ -5549,7 +5573,7 @@ wait_timeout_trap_handler:
                     // Create a new map of the requested size and stitch src
                     // and kv together into new map.  Both src and kv are sorted.
                     //
-                    term map = term_alloc_map_maybe_shared(ctx, new_map_size, is_shared ? term_get_map_keys(src) : term_invalid_term());
+                    term map = term_alloc_map_maybe_shared(new_map_size, is_shared ? term_get_map_keys(src) : term_invalid_term(), &ctx->heap);
                     size_t src_pos = 0;
                     uint32_t kv_pos = 0;
                     for (size_t j = 0; j < new_map_size; j++) {
@@ -5659,8 +5683,8 @@ wait_timeout_trap_handler:
                     //
                     // Create a new map of the same size as src and populate with entries from src
                     //
-                    term map = term_alloc_map_maybe_shared(ctx, src_size, term_get_map_keys(src));
-                    for (size_t j = 0; j < src_size; ++j) {
+                    term map = term_alloc_map_maybe_shared(src_size, term_get_map_keys(src), &ctx->heap);
+                    for (size_t j = 0;  j < src_size;  ++j) {
                         term_set_map_assoc(map, j, term_get_map_key(src, j), term_get_map_value(src, j));
                     }
                     //
@@ -5850,7 +5874,7 @@ wait_timeout_trap_handler:
                         TRACE("fmove/2 fp%i, %c%i\n", freg, T_DEST_REG(dreg_type, dreg));
                         // Space should be available on heap as compiler added an allocate opcode
                         context_ensure_fpregs(ctx);
-                        term float_value = term_from_float(ctx->fr[freg], ctx);
+                        term float_value = term_from_float(ctx->fr[freg], &ctx->heap);
                         WRITE_REGISTER(dreg_type, dreg, float_value);
                     #endif
                     #ifdef IMPL_CODE_LOADER
@@ -6172,7 +6196,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    term t = term_alloc_tuple(size, ctx);
+                    term t = term_alloc_tuple(size, &ctx->heap);
                 #endif
 
                 for (uint32_t j = 0; j < size; j++) {
@@ -6252,7 +6276,7 @@ wait_timeout_trap_handler:
                         WRITE_REGISTER(dreg_type, dreg, src);
                         i = POINTER_TO_II(mod->labels[fail]);
                     } else {
-                        term match_state = term_alloc_bin_match_state(src, 0, ctx);
+                        term match_state = term_alloc_bin_match_state(src, 0, &ctx->heap);
 
                         WRITE_REGISTER(dreg_type, dreg, match_state);
                         NEXT_INSTRUCTION(next_off);
@@ -6281,7 +6305,7 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     size_t size = numfree + BOXED_FUN_SIZE;
-                    term *boxed_func = memory_heap_alloc(ctx, size);
+                    term *boxed_func = memory_heap_alloc(&ctx->heap, size);
 
                     boxed_func[0] = ((size - 1) << 6) | TERM_BOXED_FUN;
                     boxed_func[1] = (term) mod;
@@ -6488,7 +6512,7 @@ wait_timeout_trap_handler:
                     if (UNLIKELY(memory_ensure_free_opt(ctx, alloc + term_binary_data_size_in_terms(binary_size / 8) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    term t = term_create_empty_binary(binary_size / 8, ctx);
+                    term t = term_create_empty_binary(binary_size / 8, &ctx->heap, ctx->global);
                     size_t offset = 0;
 
                     for (size_t j = 0; j < nb_segments; j++) {
@@ -6659,7 +6683,7 @@ wait_timeout_trap_handler:
                         }
                         // Decode the function again after GC was possibly run
                         DECODE_COMPACT_TERM(fun, code, i, fun_off)
-                        term new_error_tuple = term_alloc_tuple(2, ctx);
+                        term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
                         term_put_tuple_element(new_error_tuple, 0, BADFUN_ATOM);
                         term_put_tuple_element(new_error_tuple, 1, fun);
                         RAISE_ERROR(new_error_tuple);
@@ -6684,7 +6708,7 @@ wait_timeout_trap_handler:
                     }
                     term value;
                     DECODE_COMPACT_TERM(value, code, i, next_off)
-                    term new_error_tuple = term_alloc_tuple(2, ctx);
+                    term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
                     term_put_tuple_element(new_error_tuple, 0, BADRECORD_ATOM);
                     term_put_tuple_element(new_error_tuple, 1, value);
                     RAISE_ERROR(new_error_tuple);
@@ -6713,7 +6737,7 @@ wait_timeout_trap_handler:
                 DECODE_LITERAL(size, code, i, next_off);
                 #ifdef IMPL_EXECUTE_LOOP
                     term dst;
-                    dst = term_alloc_tuple(size, ctx);
+                    dst = term_alloc_tuple(size, &ctx->heap);
                 #endif
                 term src;
                 DECODE_COMPACT_TERM(src, code, i, next_off);
@@ -6863,7 +6887,7 @@ wait_timeout_trap_handler:
                                     TRACE("bs_match/3: error extracting integer.\n");
                                     goto bs_match_jump_to_fail;
                                 }
-                                term t = term_make_maybe_boxed_int64(ctx, value.s);
+                                term t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
                                 if (UNLIKELY(term_is_invalid_term(t))) {
                                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                                 }
@@ -6913,7 +6937,7 @@ wait_timeout_trap_handler:
                                 int temp = match_off;
                                 DECODE_COMPACT_TERM(match_state, code, i, temp);
                                 bs_bin = term_get_match_state_binary(match_state);
-                                term t = term_maybe_create_sub_binary(bs_bin, bs_offset / 8, matched_bits / 8, ctx);
+                                term t = term_maybe_create_sub_binary(bs_bin, bs_offset / 8, matched_bits / 8, &ctx->heap, ctx->global);
                                 WRITE_REGISTER(dreg_type, dreg, t);
                                 bs_offset += matched_bits;
                             #endif
@@ -6947,7 +6971,7 @@ wait_timeout_trap_handler:
                                 int temp = match_off;
                                 DECODE_COMPACT_TERM(match_state, code, i, temp);
                                 bs_bin = term_get_match_state_binary(match_state);
-                                term t = term_maybe_create_sub_binary(bs_bin, bs_offset / 8, tail_bits / 8, ctx);
+                                term t = term_maybe_create_sub_binary(bs_bin, bs_offset / 8, tail_bits / 8, &ctx->heap, ctx->global);
                                 WRITE_REGISTER(dreg_type, dreg, t);
                                 bs_offset = total_bits;
                             #endif
@@ -7051,14 +7075,14 @@ handle_error:
             } else {
                 term error_term;
                 if (throw) {
-                    error_term = term_alloc_tuple(2, ctx);
+                    error_term = term_alloc_tuple(2, &ctx->heap);
                     term_put_tuple_element(error_term, 0, NOCATCH_ATOM);
                     term_put_tuple_element(error_term, 1, ctx->x[1]);
                 } else {
                     error_term = ctx->x[1];
                 }
 
-                term exit_reason_tuple = term_alloc_tuple(2, ctx);
+                term exit_reason_tuple = term_alloc_tuple(2, &ctx->heap);
                 term_put_tuple_element(exit_reason_tuple, 0, error_term);
                 term_put_tuple_element(exit_reason_tuple, 1, term_nil());
                 ctx->exit_reason = exit_reason_tuple;

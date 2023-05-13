@@ -311,16 +311,16 @@ static term get_features(Context *ctx, uint32_t features)
     GlobalContext *glb = ctx->global;
 
     if (features & CHIP_FEATURE_EMB_FLASH) {
-        ret = term_list_prepend(globalcontext_make_atom(glb, emb_flash_atom), ret, ctx);
+        ret = term_list_prepend(globalcontext_make_atom(glb, emb_flash_atom), ret, &ctx->heap);
     }
     if (features & CHIP_FEATURE_WIFI_BGN) {
-        ret = term_list_prepend(globalcontext_make_atom(glb, bgn_atom), ret, ctx);
+        ret = term_list_prepend(globalcontext_make_atom(glb, bgn_atom), ret, &ctx->heap);
     }
     if (features & CHIP_FEATURE_BLE) {
-        ret = term_list_prepend(globalcontext_make_atom(glb, ble_atom), ret, ctx);
+        ret = term_list_prepend(globalcontext_make_atom(glb, ble_atom), ret, &ctx->heap);
     }
     if (features & CHIP_FEATURE_BT) {
-        ret = term_list_prepend(globalcontext_make_atom(glb, bt_atom), ret, ctx);
+        ret = term_list_prepend(globalcontext_make_atom(glb, bt_atom), ret, &ctx->heap);
     }
 
     return ret;
@@ -344,7 +344,7 @@ term sys_get_info(Context *ctx, term key)
         if (memory_ensure_free(ctx, term_map_size_in_terms(4) + 4 * 2) != MEMORY_GC_OK) {
             return OUT_OF_MEMORY_ATOM;
         }
-        term ret = term_alloc_map(ctx, 4);
+        term ret = term_alloc_map(4, &ctx->heap);
         term_set_map_assoc(ret, 0, globalcontext_make_atom(glb, cores_atom), term_from_int32(info.cores));
         term_set_map_assoc(ret, 1, globalcontext_make_atom(glb, features_atom), get_features(ctx, info.features));
         term_set_map_assoc(ret, 2, globalcontext_make_atom(glb, model_atom), get_model(ctx, info.model));
@@ -357,7 +357,7 @@ term sys_get_info(Context *ctx, term key)
         if (memory_ensure_free(ctx, 2 * n) != MEMORY_GC_OK) {
             return OUT_OF_MEMORY_ATOM;
         }
-        return term_from_string((const uint8_t *) str, n, ctx);
+        return term_from_string((const uint8_t *) str, n, &ctx->heap);
     }
     return UNDEFINED_ATOM;
 }

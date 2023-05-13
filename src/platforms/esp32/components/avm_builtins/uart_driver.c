@@ -105,24 +105,30 @@ EventListener *uart_interrupt_callback(GlobalContext *glb, EventListener *listen
             case UART_DATA:
                 if (uart_data->reader_process_pid != term_invalid_term()) {
                     int bin_size = term_binary_data_size_in_terms(event.size) + BINARY_HEADER_SIZE;
-                    term heap[bin_size + REF_SIZE + TUPLE_SIZE(2) * 2];
-                    term *heap_ptr = heap;
 
-                    term bin = term_heap_create_uninitialized_binary(event.size, &heap_ptr);
+                    Heap heap;
+                    if (UNLIKELY(memory_init_heap(&heap, bin_size + REF_SIZE + TUPLE_SIZE(2) * 2) != MEMORY_GC_OK)) {
+                        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+                        AVM_ABORT();
+                    }
+
+                    term bin = term_create_uninitialized_binary(event.size, &heap, glb);
                     uint8_t *bin_buf = (uint8_t *) term_binary_data(bin);
                     uart_read_bytes(uart_data->uart_num, bin_buf, event.size, portMAX_DELAY);
 
-                    term ok_tuple = term_heap_alloc_tuple(2, &heap_ptr);
+                    term ok_tuple = term_alloc_tuple(2, &heap);
                     term_put_tuple_element(ok_tuple, 0, OK_ATOM);
                     term_put_tuple_element(ok_tuple, 1, bin);
 
-                    term ref = term_heap_from_ref_ticks(uart_data->reader_ref_ticks, &heap_ptr);
+                    term ref = term_from_ref_ticks(uart_data->reader_ref_ticks, &heap);
 
-                    term result_tuple = term_heap_alloc_tuple(2, &heap_ptr);
+                    term result_tuple = term_alloc_tuple(2, &heap);
                     term_put_tuple_element(result_tuple, 0, ref);
                     term_put_tuple_element(result_tuple, 1, ok_tuple);
 
                     globalcontext_send_message(glb, uart_data->reader_process_pid, result_tuple);
+
+                    memory_destroy_heap(&heap);
 
                     uart_data->reader_process_pid = term_invalid_term();
                     uart_data->reader_ref_ticks = 0;
@@ -305,12 +311,12 @@ static void uart_driver_do_read(Context *ctx, term msg)
 
         term ealready = globalcontext_make_atom(glb, ealready_atom);
 
-        term error_tuple = term_alloc_tuple(2, ctx);
+        term error_tuple = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
         term_put_tuple_element(error_tuple, 1, ealready);
 
-        term result_tuple = term_alloc_tuple(2, ctx);
-        term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, ctx));
+        term result_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, &ctx->heap));
         term_put_tuple_element(result_tuple, 1, error_tuple);
 
         globalcontext_send_message(glb, pid, result_tuple);
@@ -328,16 +334,16 @@ static void uart_driver_do_read(Context *ctx, term msg)
             globalcontext_send_message(glb, pid, MEMORY_ATOM);
         }
 
-        term bin = term_create_uninitialized_binary(count, ctx);
+        term bin = term_create_uninitialized_binary(count, &ctx->heap, glb);
         uint8_t *bin_buf = (uint8_t *) term_binary_data(bin);
         uart_read_bytes(uart_data->uart_num, bin_buf, count, portMAX_DELAY);
 
-        term ok_tuple = term_alloc_tuple(2, ctx);
+        term ok_tuple = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(ok_tuple, 0, OK_ATOM);
         term_put_tuple_element(ok_tuple, 1, bin);
 
-        term result_tuple = term_alloc_tuple(2, ctx);
-        term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, ctx));
+        term result_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, &ctx->heap));
         term_put_tuple_element(result_tuple, 1, ok_tuple);
 
         globalcontext_send_message(glb, pid, result_tuple);
@@ -395,8 +401,8 @@ static void uart_driver_do_write(Context *ctx, term msg)
         globalcontext_send_message(glb, pid, MEMORY_ATOM);
     }
 
-    term result_tuple = term_alloc_tuple(2, ctx);
-    term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, ctx));
+    term result_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, &ctx->heap));
     term_put_tuple_element(result_tuple, 1, OK_ATOM);
 
     globalcontext_send_message(glb, pid, result_tuple);
@@ -418,8 +424,8 @@ static void uart_driver_do_close(Context *ctx, term msg)
         globalcontext_send_message(glb, pid, MEMORY_ATOM);
     }
 
-    term result_tuple = term_alloc_tuple(2, ctx);
-    term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, ctx));
+    term result_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, &ctx->heap));
     term_put_tuple_element(result_tuple, 1, OK_ATOM);
     globalcontext_send_message(glb, pid, result_tuple);
 
@@ -450,17 +456,17 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx)
             }
 
             term no_proc = globalcontext_make_atom(glb, no_proc_atom);
-            term error_tuple = term_alloc_tuple(2, ctx);
+            term error_tuple = term_alloc_tuple(2, &ctx->heap);
             term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
             term_put_tuple_element(error_tuple, 1, no_proc);
 
-            term result_tuple = term_alloc_tuple(2, ctx);
-            term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, ctx));
+            term result_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, &ctx->heap));
             term_put_tuple_element(result_tuple, 1, error_tuple);
 
             globalcontext_send_message(glb, pid, result_tuple);
 
-            mailbox_remove(&ctx->mailbox);
+            mailbox_remove_message(&ctx->mailbox, &ctx->heap);
             continue;
         }
 
@@ -488,7 +494,7 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx)
                 TRACE("uart: error: unrecognized command.\n");
         }
 
-        mailbox_remove(&ctx->mailbox);
+        mailbox_remove_message(&ctx->mailbox, &ctx->heap);
     }
     return is_closed ? NativeTerminate : NativeContinue;
 }

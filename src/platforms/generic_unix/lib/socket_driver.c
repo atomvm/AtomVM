@@ -126,7 +126,7 @@ term socket_ctx_tuple_from_addr(Context *ctx, uint32_t addr)
     return port_create_tuple_n(ctx, 4, terms);
 }
 
-term socket_heap_tuple_from_addr(term **heap_ptr, uint32_t addr)
+term socket_heap_tuple_from_addr(Heap *heap, uint32_t addr)
 {
     term terms[4];
     terms[0] = term_from_int32((addr >> 24) & 0xFF);
@@ -134,15 +134,15 @@ term socket_heap_tuple_from_addr(term **heap_ptr, uint32_t addr)
     terms[2] = term_from_int32((addr >> 8) & 0xFF);
     terms[3] = term_from_int32(addr & 0xFF);
 
-    return port_heap_create_tuple_n(heap_ptr, 4, terms);
+    return port_heap_create_tuple_n(heap, 4, terms);
 }
 
-term socket_heap_create_packet_term(term **heap_ptr, const char *buf, ssize_t len, int is_binary)
+term socket_create_packet_term(const char *buf, ssize_t len, int is_binary, Heap *heap, GlobalContext *glb)
 {
     if (is_binary) {
-        return term_heap_from_literal_binary((void *) buf, len, heap_ptr);
+        return term_from_literal_binary((void *) buf, len, heap, glb);
     } else {
-        return term_heap_from_string((const uint8_t *) buf, len, heap_ptr);
+        return term_from_string((const uint8_t *) buf, len, heap);
     }
 }
 
@@ -176,9 +176,9 @@ static term do_bind(Context *ctx, term address, term port)
     if (address == UNDEFINED_ATOM) {
         serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
     } else if (term_is_tuple(address)) {
+        term_display(stderr, address, ctx);
         serveraddr.sin_addr.s_addr = htonl(socket_tuple_to_addr(address));
     } else {
-        term_display(stderr, address, ctx);
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
     avm_int_t p = term_to_int(port);
@@ -485,7 +485,7 @@ static term socket_driver_controlling_process(Context *ctx, term pid, term new_p
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
             AVM_ABORT();
         }
-        term error = term_alloc_tuple(2, ctx);
+        term error = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(error, 0, ERROR_ATOM);
         term_put_tuple_element(error, 1, BADARG_ATOM);
         return error;
@@ -493,7 +493,7 @@ static term socket_driver_controlling_process(Context *ctx, term pid, term new_p
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
             AVM_ABORT();
         }
-        term error = term_alloc_tuple(2, ctx);
+        term error = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(error, 0, ERROR_ATOM);
         term_put_tuple_element(error, 1, globalcontext_make_atom(ctx->global, not_owner_a));
         return error;
@@ -695,16 +695,16 @@ static EventListener *active_recv_callback(GlobalContext *glb, EventListener *ba
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     if (len <= 0) {
         // {tcp, Socket, {error, {SysCall, Errno}}}
-        term heap[12];
-        term *heap_ptr = heap;
+        BEGIN_WITH_STACK_HEAP(12, heap);
         term pid = socket_data->controlling_process;
         term msgs[2] = { TCP_CLOSED_ATOM, term_from_local_process_id(ctx->process_id) };
-        term msg = port_heap_create_tuple_n(&heap_ptr, 2, msgs);
+        term msg = port_heap_create_tuple_n(&heap, 2, msgs);
         port_send_message_nolock(glb, pid, msg);
         socket_data->active_listener = NULL;
         mailbox_send(ctx, globalcontext_make_atom(glb, close_internal));
         free(listener);
         result = NULL;
+        END_WITH_STACK_HEAP(heap);
     } else {
         TRACE("socket_driver|active_recv_callback: received data of len %li from fd %i\n", len, socket_data->sockfd);
         int ensure_packet_avail;
@@ -714,13 +714,17 @@ static EventListener *active_recv_callback(GlobalContext *glb, EventListener *ba
             ensure_packet_avail = len * 2;
         }
         // {tcp, pid, binary}
-        term heap[20 + ensure_packet_avail];
-        term *heap_ptr = heap;
+        Heap heap;
+        if (UNLIKELY(memory_init_heap(&heap, 20 + ensure_packet_avail) != MEMORY_GC_OK)) {
+            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            AVM_ABORT();
+        }
         term pid = socket_data->controlling_process;
-        term packet = socket_heap_create_packet_term(&heap_ptr, buf, len, socket_data->binary);
+        term packet = socket_create_packet_term(buf, len, socket_data->binary, &heap, glb);
         term msgs[3] = { TCP_ATOM, term_from_local_process_id(ctx->process_id), packet };
-        term msg = port_heap_create_tuple_n(&heap_ptr, 3, msgs);
+        term msg = port_heap_create_tuple_n(&heap, 3, msgs);
         port_send_message_nolock(glb, pid, msg);
+        memory_destroy_heap(&heap);
     }
     globalcontext_get_process_unlock(glb, ctx);
     free(buf);
@@ -758,22 +762,22 @@ static EventListener *passive_recv_callback(GlobalContext *glb, EventListener *b
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     if (len == 0) {
         // {Ref, {error, closed}}
-        term heap[12];
-        term *heap_ptr = heap;
+        BEGIN_WITH_STACK_HEAP(12, heap);
         term pid = listener->pid;
-        term ref = term_heap_from_ref_ticks(listener->ref_ticks, &heap_ptr);
-        term reply = port_heap_create_reply(&heap_ptr, ref, port_heap_create_error_tuple(&heap_ptr, globalcontext_make_atom(glb, closed_a)));
+        term ref = term_from_ref_ticks(listener->ref_ticks, &heap);
+        term reply = port_heap_create_reply(&heap, ref, port_heap_create_error_tuple(&heap, globalcontext_make_atom(glb, closed_a)));
         port_send_message_nolock(glb, pid, reply);
         mailbox_send(ctx, globalcontext_make_atom(glb, close_internal));
+        END_WITH_STACK_HEAP(heap);
     } else if (len < 0) {
         // {Ref, {error, {SysCall, Errno}}}
-        term heap[12];
-        term *heap_ptr = heap;
+        BEGIN_WITH_STACK_HEAP(12, heap);
         term pid = listener->pid;
-        term ref = term_heap_from_ref_ticks(listener->ref_ticks, &heap_ptr);
-        term reply = port_heap_create_reply(&heap_ptr, ref, port_heap_create_sys_error_tuple(&heap_ptr, RECV_ATOM, errno));
+        term ref = term_from_ref_ticks(listener->ref_ticks, &heap);
+        term reply = port_heap_create_reply(&heap, ref, port_heap_create_sys_error_tuple(&heap, RECV_ATOM, errno));
         port_send_message_nolock(glb, pid, reply);
         mailbox_send(ctx, globalcontext_make_atom(glb, close_internal));
+        END_WITH_STACK_HEAP(heap);
     } else {
         TRACE("socket_driver|passive_recv_callback: passive received data of len: %li\n", len);
         int ensure_packet_avail;
@@ -782,15 +786,19 @@ static EventListener *passive_recv_callback(GlobalContext *glb, EventListener *b
         } else {
             ensure_packet_avail = len * 2;
         }
-        term heap[20 + ensure_packet_avail];
-        term *heap_ptr = heap;
         // {Ref, {ok, Packet::binary()}}
+        Heap heap;
+        if (UNLIKELY(memory_init_heap(&heap, 20 + ensure_packet_avail) != MEMORY_GC_OK)) {
+            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            AVM_ABORT();
+        }
         term pid = listener->pid;
-        term ref = term_heap_from_ref_ticks(listener->ref_ticks, &heap_ptr);
-        term packet = socket_heap_create_packet_term(&heap_ptr, buf, len, socket_data->binary);
-        term payload = port_heap_create_ok_tuple(&heap_ptr, packet);
-        term reply = port_heap_create_reply(&heap_ptr, ref, payload);
+        term ref = term_from_ref_ticks(listener->ref_ticks, &heap);
+        term packet = socket_create_packet_term(buf, len, socket_data->binary, &heap, glb);
+        term payload = port_heap_create_ok_tuple(&heap, packet);
+        term reply = port_heap_create_reply(&heap, ref, payload);
         port_send_message_nolock(glb, pid, reply);
+        memory_destroy_heap(&heap);
     }
     socket_data->passive_listener = NULL;
     globalcontext_get_process_unlock(glb, ctx);
@@ -828,12 +836,12 @@ static EventListener *active_recvfrom_callback(GlobalContext *glb, EventListener
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     if (len == -1) {
         // {udp, Socket, {error, {SysCall, Errno}}}
-        term heap[12];
-        term *heap_ptr = heap;
+        BEGIN_WITH_STACK_HEAP(12, heap);
         term pid = socket_data->controlling_process;
-        term msgs[3] = { UDP_ATOM, term_from_local_process_id(ctx->process_id), port_heap_create_sys_error_tuple(&heap_ptr, RECVFROM_ATOM, errno) };
-        term msg = port_heap_create_tuple_n(&heap_ptr, 3, msgs);
+        term msgs[3] = { UDP_ATOM, term_from_local_process_id(ctx->process_id), port_heap_create_sys_error_tuple(&heap, RECVFROM_ATOM, errno) };
+        term msg = port_heap_create_tuple_n(&heap, 3, msgs);
         port_send_message_nolock(glb, pid, msg);
+        END_WITH_STACK_HEAP(heap);
         // Not closing the listener here as there is no connection to close.
     } else {
         int ensure_packet_avail;
@@ -843,15 +851,19 @@ static EventListener *active_recvfrom_callback(GlobalContext *glb, EventListener
             ensure_packet_avail = len * 2;
         }
         // {udp, pid, {int,int,int,int}, int, binary}
-        term heap[20 + ensure_packet_avail];
-        term *heap_ptr = heap;
+        Heap heap;
+        if (UNLIKELY(memory_init_heap(&heap, 20 + ensure_packet_avail) != MEMORY_GC_OK)) {
+            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            AVM_ABORT();
+        }
         term pid = socket_data->controlling_process;
-        term addr = socket_heap_tuple_from_addr(&heap_ptr, htonl(clientaddr.sin_addr.s_addr));
+        term addr = socket_heap_tuple_from_addr(&heap, htonl(clientaddr.sin_addr.s_addr));
         term port = term_from_int32(htons(clientaddr.sin_port));
-        term packet = socket_heap_create_packet_term(&heap_ptr, buf, len, socket_data->binary);
+        term packet = socket_create_packet_term(buf, len, socket_data->binary, &heap, glb);
         term msgs[5] = { UDP_ATOM, term_from_local_process_id(ctx->process_id), addr, port, packet };
-        term msg = port_heap_create_tuple_n(&heap_ptr, 5, msgs);
+        term msg = port_heap_create_tuple_n(&heap, 5, msgs);
         port_send_message_nolock(glb, pid, msg);
+        memory_destroy_heap(&heap);
     }
     globalcontext_get_process_unlock(glb, ctx);
     free(buf);
@@ -891,12 +903,12 @@ static EventListener *passive_recvfrom_callback(GlobalContext *glb, EventListene
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     if (len == -1) {
         // {Ref, {error, {SysCall, Errno}}}
-        term heap[12];
-        term *heap_ptr = heap;
+        BEGIN_WITH_STACK_HEAP(12, heap);
         term pid = listener->pid;
-        term ref = term_heap_from_ref_ticks(listener->ref_ticks, &heap_ptr);
-        term reply = port_heap_create_reply(&heap_ptr, ref, port_heap_create_sys_error_tuple(&heap_ptr, RECVFROM_ATOM, errno));
+        term ref = term_from_ref_ticks(listener->ref_ticks, &heap);
+        term reply = port_heap_create_reply(&heap, ref, port_heap_create_sys_error_tuple(&heap, RECVFROM_ATOM, errno));
         port_send_message_nolock(glb, pid, reply);
+        END_WITH_STACK_HEAP(heap);
     } else {
         int ensure_packet_avail;
         if (socket_data->binary) {
@@ -905,17 +917,21 @@ static EventListener *passive_recvfrom_callback(GlobalContext *glb, EventListene
             ensure_packet_avail = len * 2;
         }
         // {Ref, {ok, {{int,int,int,int}, int, binary}}}
-        term heap[20 + ensure_packet_avail];
-        term *heap_ptr = heap;
+        Heap heap;
+        if (UNLIKELY(memory_init_heap(&heap, 20 + ensure_packet_avail) != MEMORY_GC_OK)) {
+            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            AVM_ABORT();
+        }
         term pid = listener->pid;
-        term ref = term_heap_from_ref_ticks(listener->ref_ticks, &heap_ptr);
-        term addr = socket_heap_tuple_from_addr(&heap_ptr, htonl(clientaddr.sin_addr.s_addr));
+        term ref = term_from_ref_ticks(listener->ref_ticks, &heap);
+        term addr = socket_heap_tuple_from_addr(&heap, htonl(clientaddr.sin_addr.s_addr));
         term port = term_from_int32(htons(clientaddr.sin_port));
-        term packet = socket_heap_create_packet_term(&heap_ptr, buf, len, socket_data->binary);
-        term addr_port_packet = port_heap_create_tuple3(&heap_ptr, addr, port, packet);
-        term payload = port_heap_create_ok_tuple(&heap_ptr, addr_port_packet);
-        term reply = port_heap_create_reply(&heap_ptr, ref, payload);
+        term packet = socket_create_packet_term(buf, len, socket_data->binary, &heap, glb);
+        term addr_port_packet = port_heap_create_tuple3(&heap, addr, port, packet);
+        term payload = port_heap_create_ok_tuple(&heap, addr_port_packet);
+        term reply = port_heap_create_reply(&heap, ref, payload);
         port_send_message_nolock(glb, pid, reply);
+        memory_destroy_heap(&heap);
     }
     socket_data->passive_listener = NULL;
     globalcontext_get_process_unlock(glb, ctx);
@@ -989,12 +1005,12 @@ static EventListener *accept_callback(GlobalContext *glb, EventListener *base_li
     EventListener *result = NULL;
     if (fd == -1) {
         // {Ref, {error, {SysCall, Errno}}}
-        term heap[12];
-        term *heap_ptr = heap;
+        BEGIN_WITH_STACK_HEAP(12, heap);
         term pid = listener->pid;
-        term ref = term_heap_from_ref_ticks(listener->ref_ticks, &heap_ptr);
-        term reply = port_heap_create_reply(&heap_ptr, ref, port_heap_create_sys_error_tuple(&heap_ptr, ACCEPT_ATOM, errno));
+        term ref = term_from_ref_ticks(listener->ref_ticks, &heap);
+        term reply = port_heap_create_reply(&heap, ref, port_heap_create_sys_error_tuple(&heap, ACCEPT_ATOM, errno));
         port_send_message_nolock(glb, pid, reply);
+        END_WITH_STACK_HEAP(heap);
     } else {
         TRACE("socket_driver|accept_callback: accepted connection.  fd: %i\n", fd);
 
@@ -1021,12 +1037,12 @@ static EventListener *accept_callback(GlobalContext *glb, EventListener *base_li
 
         // {Ref, Socket}
         term socket_pid = term_from_local_process_id(new_ctx->process_id);
-        term heap[10];
-        term *heap_ptr = heap;
-        term ref = term_heap_from_ref_ticks(listener->ref_ticks, &heap_ptr);
-        term payload = port_heap_create_ok_tuple(&heap_ptr, socket_pid);
-        term reply = port_heap_create_reply(&heap_ptr, ref, payload);
+        BEGIN_WITH_STACK_HEAP(10, heap);
+        term ref = term_from_ref_ticks(listener->ref_ticks, &heap);
+        term payload = port_heap_create_ok_tuple(&heap, socket_pid);
+        term reply = port_heap_create_reply(&heap, ref, payload);
         port_send_message_nolock(glb, pid, reply);
+        END_WITH_STACK_HEAP(heap);
     }
     socket_data->passive_listener = NULL;
     globalcontext_get_process_unlock(glb, ctx);
@@ -1161,7 +1177,7 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx)
         port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
     }
 
-    mailbox_remove(&ctx->mailbox);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
     TRACE("END socket_consume_mailbox\n");
 
     return NativeContinue;

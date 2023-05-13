@@ -291,10 +291,10 @@ static term i2cdriver_read_bytes(Context *ctx, term pid, term req)
         register_address = term_to_int32(register_term);
     }
 
-    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, BOXED_INT_SIZE, MEMORY_NO_GC) != MEMORY_GC_OK)) {
         return ERROR_ATOM;
     }
-    term data_term = term_create_uninitialized_binary(read_count, ctx);
+    term data_term = term_create_uninitialized_binary(read_count, &ctx->heap, ctx->global);
     uint8_t *data = (uint8_t *) term_binary_data(data_term);
 
     i2c_data->cmd = i2c_cmd_link_create();
@@ -401,7 +401,7 @@ static term i2cdriver_write_bytes(Context *ctx, term pid, term req)
 
 static term create_pair(Context *ctx, term term1, term term2)
 {
-    term ret = term_alloc_tuple(2, ctx);
+    term ret = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(ret, 0, term1);
     term_put_tuple_element(ret, 1, term2);
 
@@ -465,7 +465,7 @@ static NativeHandlerResult i2cdriver_consume_mailbox(Context *ctx)
     }
 
     globalcontext_send_message(ctx->global, local_process_id, ret_msg);
-    mailbox_remove(&ctx->mailbox);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
 
     return cmd == I2CCloseCmd ? NativeTerminate : NativeContinue;
 }

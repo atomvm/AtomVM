@@ -46,6 +46,13 @@ struct Context;
 typedef struct Context Context;
 #endif
 
+struct Heap;
+
+#ifndef TYPEDEF_HEAP
+#define TYPEDEF_HEAP
+typedef struct Heap Heap;
+#endif
+
 typedef struct Message Message;
 typedef struct MailboxMessage MailboxMessage;
 
@@ -62,25 +69,30 @@ enum MessageType
 struct MailboxMessage
 {
     MailboxMessage *next;
-    enum MessageType type;
+    // Make sure MailboxMessage structure matches HeapFragment
+    union
+    {
+        enum MessageType type;
+        term *heap_fragment_end;
+    };
 };
 
 struct Message
 {
     MailboxMessage base;
 
-    int msg_memory_size;
-    term mso_list;
-    term message; // must be declared last
+    term message;
+    term *heap_end;
+    term storage[];
 };
 
 struct TermSignal
 {
     MailboxMessage base;
 
-    int msg_memory_size;
-    term mso_list;
-    term signal_term; // must be declared last
+    term signal_term;
+    term *heap_end;
+    term storage[];
 };
 
 struct BuiltInAtomSignal
@@ -237,10 +249,11 @@ bool mailbox_peek(Context *ctx, term *out);
  * @brief Remove next message from mailbox.
  *
  * @details Discard a term that has been previously queued on a certain process
- * or driver mailbox. To be called from the process only.
+ * or driver mailbox. To be called from the process only. Term messages are
+ * actually added as fragments to the heap and will be gone at next GC.
  * @param mbx the mailbox to remove next message from.
  */
-void mailbox_remove(Mailbox *mbx);
+void mailbox_remove_message(Mailbox *mbox, Heap *ctx);
 
 /**
  * @brief Get first message from mailbox.
@@ -256,20 +269,22 @@ Message *mailbox_first(Mailbox *mbox);
 /**
  * @brief Free memory associated with a mailbox.
  *
- * @details All messages in the mailbox will be freed.
+ * @details All messages in the mailbox will be freed or appended to the heap.
  * @param mbox the mailbox to free.
+ * @param heap the heap to add messages to.
  */
-void mailbox_destroy(Mailbox *mbox);
+void mailbox_destroy(Mailbox *mbox, Heap *heap);
 
 /**
- * @brief Free memory associated with a signal mailbox message.
+ * @brief Dispose a (processed) mailbox message. The message will be freed or
+ * appended to current heap and will be destroyed on garbage collect.
+ * This function is called by mailbox_remove and is only needed for signal
+ * messages.
  *
- * @details The supplied message will be free'd, and
- * to any references to shared memory will decrement
- * reference counts.
  * @param m the message to free.
+ * @param heap heap to append the message to.
  */
-void mailbox_destroy_signal_message(MailboxMessage *m);
+void mailbox_message_dispose(MailboxMessage *m, Heap *heap);
 
 /**
  * @brief Output mailbox to stderr for crashdump reporting.
