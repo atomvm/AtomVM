@@ -381,7 +381,9 @@ static term nif_rom_md5(Context *ctx, int argc, term argv[])
     MD5Update(&md5, (const unsigned char *) term_binary_data(data), term_binary_size(data));
     MD5Final(digest, &md5);
     #endif
-
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(MD5_DIGEST_LENGTH) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
     return term_from_literal_binary(digest, MD5_DIGEST_LENGTH, &ctx->heap, ctx->global);
 }
 
