@@ -82,7 +82,7 @@ enum MemoryGCResult memory_ensure_free_with_roots(Context *c, size_t size, size_
         if (free_space < size || (alloc_mode == MEMORY_FORCE_SHRINK) || ((alloc_mode == MEMORY_CAN_SHRINK) && free_space > maximum_free_space)) {
             size_t memory_size = memory_heap_memory_size(&c->heap);
             if (UNLIKELY(memory_gc(c, memory_size + size + MIN_FREE_SPACE_SIZE, num_roots, roots) != MEMORY_GC_OK)) {
-                //TODO: handle this more gracefully
+                // TODO: handle this more gracefully
                 TRACE("Unable to allocate memory for GC.  memory_size=%zu size=%u\n", memory_size, size);
                 return MEMORY_GC_ERROR_FAILED_ALLOCATION;
             }
@@ -439,8 +439,7 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
                         TRACE("-- Map Value: %" TERM_X_FMT "\n", ptr[i]);
                         ptr[i] = memory_shallow_copy_term(old_fragment, ptr[i], &new_heap, move);
                     }
-                }
-                    break;
+                } break;
 
                 default:
                     fprintf(stderr, "- Found unknown boxed type: %" TERM_X_FMT "\n", (t >> 2) & 0xF);

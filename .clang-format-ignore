@@ -12,7 +12,6 @@ src/libAtomVM/bitstring.h
 src/libAtomVM/debug.h
 src/libAtomVM/defaultatoms.c
 src/libAtomVM/externalterm.c
-src/libAtomVM/memory.c
 src/libAtomVM/module.c
 src/libAtomVM/nifs.c
 src/libAtomVM/opcodesswitch.h

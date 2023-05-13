@@ -642,7 +642,7 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
         }
     }
 
-    temp_stack_destory(&temp_stack);
+    temp_stack_destroy(&temp_stack);
 
     return result;
 }
