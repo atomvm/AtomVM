@@ -331,8 +331,8 @@ validate_device_config(DeviceConfig) when is_map(DeviceConfig) ->
 validate_device_config(DeviceConfig) when is_list(DeviceConfig) ->
     lists:foldl(
         fun validate_device_config_fold/2,
-        DeviceConfig,
-        #{}
+        #{},
+        DeviceConfig
     );
 validate_device_config(DeviceConfig) ->
     throw({bardarg, {not_a_map_or_list, DeviceConfig}}).
