@@ -36,22 +36,19 @@ function(compile_erlang module_name)
     set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/${module_name}.beam")
 endfunction()
 
-compile_erlang(test_main)
-compile_erlang(mod_a)
-compile_erlang(mod_b)
-compile_erlang(test_time_and_processes)
 compile_erlang(test_socket)
+compile_erlang(test_time_and_processes)
 
 add_custom_command(
     OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/esp32_test_modules.avm"
-    COMMAND "${CMAKE_CURRENT_BINARY_DIR}/HostAtomVM-prefix/src/HostAtomVM-build/tools/packbeam/PackBEAM" esp32_test_modules.avm test_main.beam mod_a.beam mod_b.beam test_time_and_processes.beam test_socket.beam
+    COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/packbeam/PackBEAM -i esp32_test_modules.avm
+        HostAtomVM-prefix/src/HostAtomVM-build/libs/atomvmlib.avm
+        test_socket.beam
+        test_time_and_processes.beam
     DEPENDS
         HostAtomVM
-        "${CMAKE_CURRENT_BINARY_DIR}/test_main.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/mod_a.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/mod_b.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_time_and_processes.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_socket.beam"
+        "${CMAKE_CURRENT_BINARY_DIR}/test_time_and_processes.beam"
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     VERBATIM
 )

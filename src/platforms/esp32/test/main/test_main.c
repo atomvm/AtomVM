@@ -29,7 +29,8 @@
 #include <nifs.h>
 #include <platform_defaultatoms.h>
 
-#include <esp32_sys.h>
+#include "esp32_sys.h"
+#include "sys.h"
 
 #include <esp_eth.h>
 #include <esp_event.h>
@@ -132,13 +133,9 @@ static void eth_stop(esp_netif_t *eth_netif)
 #endif
 }
 
-term avm_test_case(const char *test_function)
+term avm_test_case(const char *test_module)
 {
     esp32_sys_queue_init();
-
-    uint32_t startup_beam_size;
-    const void *startup_beam;
-    const char *startup_module_name;
 
     GlobalContext *glb = globalcontext_new();
     TEST_ASSERT(glb != NULL);
@@ -146,10 +143,7 @@ term avm_test_case(const char *test_function)
     port_driver_init_all(glb);
     nif_collection_init_all(glb);
 
-    ESP_LOGI(TAG, "Testing avm\n");
-
     TEST_ASSERT(avmpack_is_valid(main_avm, size) != 0);
-    TEST_ASSERT(avmpack_find_section_by_flag(main_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name) != 0);
 
     struct AVMPackData *avmpack_data = malloc(sizeof(struct AVMPackData));
     TEST_ASSERT(avmpack_data != NULL);
@@ -158,7 +152,7 @@ term avm_test_case(const char *test_function)
     synclist_append(&glb->avmpack_data, &avmpack_data->avmpack_head);
     glb->avmpack_platform_data = NULL;
 
-    Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
+    Module *mod = sys_load_module(glb, test_module);
     TEST_ASSERT(mod != NULL);
 
     globalcontext_insert_module(glb, mod);
@@ -167,21 +161,25 @@ term avm_test_case(const char *test_function)
     TEST_ASSERT(ctx != NULL);
     ctx->leader = 1;
 
-    ESP_LOGI(TAG, "Running %s...\n", test_function);
+    ESP_LOGI(TAG, "Running start/0 from %s...\n", test_module);
 
-    context_execute_loop(ctx, mod, test_function, 0);
+    context_execute_loop(ctx, mod, "start", 0);
     term ret_value = ctx->x[0];
 
     fprintf(stdout, "AtomVM finished with return value: ");
     term_display(stdout, ret_value, ctx);
     fprintf(stdout, "\n");
 
+    // We cannot really cleanup for now as ports are not clean-able.
+    // globalcontext_destroy(glb);
+    // free(avmpack_data);
+
     return ret_value;
 }
 
 TEST_CASE("test_time_and_processes", "[test_run]")
 {
-    term ret_value = avm_test_case("test_time_and_processes");
+    term ret_value = avm_test_case("test_time_and_processes.beam");
     TEST_ASSERT(term_to_int(ret_value) == 6);
 }
 
@@ -220,7 +218,7 @@ TEST_CASE("test_socket", "[test_run]")
         vTaskDelay(1);
     }
 
-    term ret_value = avm_test_case("test_socket");
+    term ret_value = avm_test_case("test_socket.beam");
     TEST_ASSERT(term_to_int(ret_value) == 0);
 
     ESP_LOGI(TAG, "Stopping network\n");

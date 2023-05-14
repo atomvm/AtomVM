@@ -19,16 +19,17 @@
 %
 
 -module(test_time_and_processes).
--export([start/0]).
+-export([start/0, proc1/2, proc2/2]).
 
--include("intervals.hrl").
+-define(INTERVAL_1, 50).
+-define(INTERVAL_2, 10).
 
 start() ->
     Ref1 = erlang:make_ref(),
     Ref2 = erlang:make_ref(),
     T1 = erlang:system_time(millisecond),
-    Pid1 = spawn(mod_a, proc1, [self(), Ref1]),
-    Pid2 = spawn(mod_b, proc2, [self(), Ref2]),
+    Pid1 = spawn(?MODULE, proc1, [self(), Ref1]),
+    Pid2 = spawn(?MODULE, proc2, [self(), Ref2]),
     receive
         {foo2, Pid2, [Ref2]} -> ok
     end,
@@ -44,3 +45,23 @@ eval_time(I, Interval, _Num) when I < Interval ->
     0;
 eval_time(_I, _Interval, Num) ->
     Num.
+
+proc1(Pid, RRef) ->
+    erlang:display(foo1),
+    R = erlang:make_ref(),
+    receive
+        R -> unreachable
+    after ?INTERVAL_1 ->
+        Pid ! {foo1, self(), [RRef]}
+    end,
+    bar.
+
+proc2(Pid, RRef) ->
+    erlang:display(foo2),
+    R = erlang:make_ref(),
+    receive
+        R -> unreachable
+    after ?INTERVAL_2 ->
+        Pid ! {foo2, self(), [RRef]}
+    end,
+    bar.
