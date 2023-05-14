@@ -1,0 +1,12 @@
+#
+# This file is part of AtomVM.
+#
+# Copyright 2023 Davide Bettio <davide@uninstall.it>
+#
+# SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: atomvm/cpp-atomvmql
+groups: [cpp]
+libraryPathDependencies: codeql/cpp-all
+extractor: cpp
