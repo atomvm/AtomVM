@@ -156,7 +156,7 @@ static term do_bind(Context *ctx, term address, term port)
         if (getsockname(socket_data->sockfd, (struct sockaddr *) &serveraddr, &address_len) == -1) {
             return port_create_sys_error_tuple(ctx, GETSOCKNAME_ATOM, errno);
         } else {
-            socket_data->port = ntohs(serveraddr.sin_port);
+            socket_data->port = term_from_int(ntohs(serveraddr.sin_port));
             return OK_ATOM;
         }
     }
@@ -289,7 +289,7 @@ static term do_listen(SocketDriverData *socket_data, Context *ctx, term params)
     if (!term_is_integer(backlog)) {
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
-    int status = listen(socket_data->sockfd, term_from_int(backlog));
+    int status = listen(socket_data->sockfd, term_to_int(backlog));
     if (status == -1) {
         return port_create_sys_error_tuple(ctx, LISTEN_ATOM, errno);
     } else {
@@ -489,7 +489,7 @@ term socket_driver_get_port(Context *ctx)
 {
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     port_ensure_available(ctx, 7);
-    return port_create_ok_tuple(ctx, term_from_int(socket_data->port));
+    return port_create_ok_tuple(ctx, socket_data->port);
 }
 
 term socket_driver_sockname(Context *ctx)
