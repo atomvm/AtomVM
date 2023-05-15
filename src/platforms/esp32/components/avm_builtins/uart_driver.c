@@ -126,7 +126,8 @@ EventListener *uart_interrupt_callback(GlobalContext *glb, EventListener *listen
                     term_put_tuple_element(result_tuple, 0, ref);
                     term_put_tuple_element(result_tuple, 1, ok_tuple);
 
-                    globalcontext_send_message(glb, uart_data->reader_process_pid, result_tuple);
+                    int local_pid = term_to_local_process_id(uart_data->reader_process_pid);
+                    globalcontext_send_message(glb, local_pid, result_tuple);
 
                     memory_destroy_heap(&heap);
 
@@ -303,10 +304,12 @@ static void uart_driver_do_read(Context *ctx, term msg)
     term ref = term_get_tuple_element(msg, 1);
     uint64_t ref_ticks = term_to_ref_ticks(ref);
 
+    int local_pid = term_to_local_process_id(pid);
+
     if (uart_data->reader_process_pid != term_invalid_term()) {
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + REF_SIZE) != MEMORY_GC_OK)) {
             ESP_LOGE(TAG, "[uart_driver_do_read] Failed to allocate space for error tuple");
-            globalcontext_send_message(glb, pid, MEMORY_ATOM);
+            globalcontext_send_message(glb, local_pid, MEMORY_ATOM);
         }
 
         term ealready = globalcontext_make_atom(glb, ealready_atom);
@@ -319,7 +322,7 @@ static void uart_driver_do_read(Context *ctx, term msg)
         term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, &ctx->heap));
         term_put_tuple_element(result_tuple, 1, error_tuple);
 
-        globalcontext_send_message(glb, pid, result_tuple);
+        globalcontext_send_message(glb, local_pid, result_tuple);
 
         return;
     }
@@ -331,7 +334,7 @@ static void uart_driver_do_read(Context *ctx, term msg)
         int bin_size = term_binary_data_size_in_terms(count) + BINARY_HEADER_SIZE;
         if (UNLIKELY(memory_ensure_free(ctx, bin_size + TUPLE_SIZE(2) * 2 + REF_SIZE) != MEMORY_GC_OK)) {
             ESP_LOGE(TAG, "[uart_driver_do_read] Failed to allocate space for return value");
-            globalcontext_send_message(glb, pid, MEMORY_ATOM);
+            globalcontext_send_message(glb, local_pid, MEMORY_ATOM);
         }
 
         term bin = term_create_uninitialized_binary(count, &ctx->heap, glb);
@@ -346,7 +349,7 @@ static void uart_driver_do_read(Context *ctx, term msg)
         term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, &ctx->heap));
         term_put_tuple_element(result_tuple, 1, ok_tuple);
 
-        globalcontext_send_message(glb, pid, result_tuple);
+        globalcontext_send_message(glb, local_pid, result_tuple);
 
     } else {
         uart_data->reader_process_pid = pid;
@@ -396,16 +399,17 @@ static void uart_driver_do_write(Context *ctx, term msg)
 
     free(buffer);
 
+    int local_pid = term_to_local_process_id(pid);
     if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + REF_SIZE) != MEMORY_GC_OK)) {
         ESP_LOGE(TAG, "[uart_driver_do_write] Failed to allocate space for return value");
-        globalcontext_send_message(glb, pid, MEMORY_ATOM);
+        globalcontext_send_message(glb, local_pid, MEMORY_ATOM);
     }
 
     term result_tuple = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, &ctx->heap));
     term_put_tuple_element(result_tuple, 1, OK_ATOM);
 
-    globalcontext_send_message(glb, pid, result_tuple);
+    globalcontext_send_message(glb, local_pid, result_tuple);
 }
 
 static void uart_driver_do_close(Context *ctx, term msg)
@@ -417,17 +421,19 @@ static void uart_driver_do_close(Context *ctx, term msg)
     term ref = term_get_tuple_element(msg, 1);
     uint64_t ref_ticks = term_to_ref_ticks(ref);
 
+    int local_pid = term_to_local_process_id(pid);
+
     list_remove(&uart_data->listener.listeners_list_head);
 
     if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + REF_SIZE) != MEMORY_GC_OK)) {
         ESP_LOGE(TAG, "[uart_driver_do_close] Failed to allocate space for return value");
-        globalcontext_send_message(glb, pid, MEMORY_ATOM);
+        globalcontext_send_message(glb, local_pid, MEMORY_ATOM);
     }
 
     term result_tuple = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, &ctx->heap));
     term_put_tuple_element(result_tuple, 1, OK_ATOM);
-    globalcontext_send_message(glb, pid, result_tuple);
+    globalcontext_send_message(glb, local_pid, result_tuple);
 
     esp_err_t err = uart_driver_delete(uart_data->uart_num);
     if (UNLIKELY(err != ESP_OK)) {
@@ -449,10 +455,12 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx)
         term req = term_get_tuple_element(msg, 2);
         uint64_t ref_ticks = term_to_ref_ticks(ref);
 
+        int local_pid = term_to_local_process_id(pid);
+
         if (is_closed) {
             if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + REF_SIZE) != MEMORY_GC_OK)) {
                 ESP_LOGE(TAG, "[uart_driver_consume_mailbox] Failed to allocate space for error tuple");
-                globalcontext_send_message(glb, pid, MEMORY_ATOM);
+                globalcontext_send_message(glb, local_pid, MEMORY_ATOM);
             }
 
             term no_proc = globalcontext_make_atom(glb, no_proc_atom);
@@ -464,7 +472,7 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx)
             term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, &ctx->heap));
             term_put_tuple_element(result_tuple, 1, error_tuple);
 
-            globalcontext_send_message(glb, pid, result_tuple);
+            globalcontext_send_message(glb, local_pid, result_tuple);
 
             mailbox_remove_message(&ctx->mailbox, &ctx->heap);
             continue;
