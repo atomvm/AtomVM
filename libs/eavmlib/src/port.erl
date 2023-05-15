@@ -24,31 +24,26 @@
 -export([call/2, call/3]).
 
 -spec call(pid(), Message :: term()) -> term().
-call(Pid, Message) ->
-    case erlang:is_process_alive(Pid) of
-        false ->
-            {error, noproc};
-        true ->
-            Ref = erlang:make_ref(),
-            Pid ! {self(), Ref, Message},
-            receive
-                out_of_memory -> out_of_memory;
-                {Ref, Reply} -> Reply
-            end
-    end.
+call(Port, Message) ->
+    call(Port, Message, infinity).
 
 -spec call(pid(), Message :: term(), TimeoutMs :: non_neg_integer()) -> term() | {error, timeout}.
-call(Pid, Message, TimeoutMs) ->
-    case erlang:is_process_alive(Pid) of
-        false ->
-            {error, noproc};
-        true ->
-            Ref = erlang:make_ref(),
-            Pid ! {self(), Ref, Message},
-            receive
-                out_of_memory -> out_of_memory;
-                {Ref, Reply} -> Reply
-            after TimeoutMs ->
-                {error, timeout}
-            end
-    end.
+call(Port, Message, TimeoutMs) ->
+    Ref = erlang:make_ref(),
+    MonitorRef = monitor(port, Port),
+    Port ! {self(), Ref, Message},
+    Result =
+        receive
+            {'DOWN', MonitorRef, port, Port, normal} ->
+                {error, noproc};
+            {'DOWN', MonitorRef, port, Port, Reason} ->
+                {error, Reason};
+            out_of_memory ->
+                out_of_memory;
+            {Ref, Ret} ->
+                Ret
+        after TimeoutMs ->
+            {error, timeout}
+        end,
+    demonitor(MonitorRef, [flush]),
+    Result.

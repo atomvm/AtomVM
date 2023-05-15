@@ -135,14 +135,13 @@ recv(Socket, Length, Timeout) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket to close
-%% @returns ok, if closing the socket succeeded, or {error, Reason}, if
-%%          closing the socket failed for any reason.
+%% @returns ok
 %% @doc     Close the socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec close(inet:socket()) -> ok | {error, Reason :: reason()}.
+-spec close(inet:socket()) -> ok.
 close(Socket) ->
-    call(Socket, {close}).
+    inet:close(Socket).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket to which to assign the pid
@@ -179,15 +178,6 @@ init(DriverPid, PortNum, Params) ->
             ErrorReason
     end.
 
-%% @private
-call(DriverPid, Msg) ->
-    Ref = erlang:make_ref(),
-    DriverPid ! {self(), Ref, Msg},
-    receive
-        {Ref, Ret} ->
-            Ret
-    end.
-
 %% TODO implement this in lists
 
 %% @private
@@ -208,4 +198,15 @@ merge(Config, [H | T], Accum) ->
             merge(Config, T, [H | Accum]);
         Value ->
             merge(Config, T, [{Key, Value} | Accum])
+    end.
+
+%%
+%% Internal operations
+%%
+
+call(Port, Msg) ->
+    case port:call(Port, Msg) of
+        {error, noproc} -> {error, closed};
+        out_of_memory -> {error, enomem};
+        Result -> Result
     end.

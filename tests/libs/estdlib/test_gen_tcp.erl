@@ -28,6 +28,7 @@ test() ->
     ok = test_echo_server(),
     ok = test_echo_server(true),
     ok = test_listen_connect_parameters(),
+    ok = test_tcp_double_close(),
     ok.
 
 test_echo_server() ->
@@ -229,3 +230,10 @@ test_listen_connect_parameters_server_loop(ListenMode, false = ListenActive, Soc
         Other ->
             {error, {unexpected_result, server, Other}}
     end.
+
+test_tcp_double_close() ->
+    {ok, Socket} = gen_tcp:listen(10543, [{active, false}]),
+    ok = gen_tcp:close(Socket),
+    ok = gen_tcp:close(Socket),
+    {error, closed} = gen_tcp:recv(Socket, 512, 5000),
+    ok.
