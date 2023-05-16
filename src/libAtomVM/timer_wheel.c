@@ -19,11 +19,20 @@
  */
 
 #include "timer_wheel.h"
+#include "utils.h"
 
 struct TimerWheel *timer_wheel_new(int slots_count)
 {
     struct TimerWheel *tw = malloc(sizeof(struct TimerWheel));
+    if (IS_NULL_PTR(tw)) {
+        return NULL;
+    }
     tw->slots = malloc(sizeof(struct ListHead) * slots_count);
+    if (IS_NULL_PTR(tw->slots)) {
+        free(tw);
+        return NULL;
+    }
+
     for (int i = 0; i < slots_count; i++) {
         list_init(&tw->slots[i]);
     }
