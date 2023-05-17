@@ -19,6 +19,12 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
+%%-----------------------------------------------------------------------------
+%% @doc An implementation of the Erlang/OTP io interface.
+%%
+%% This module implements a strict subset of the Erlang/OTP io interface.
+%% @end
+%%-----------------------------------------------------------------------------
 -module(io).
 
 -export([format/1, format/2, get_line/1, put_chars/1]).
@@ -51,6 +57,13 @@ format(Format, Args) when is_list(Format) andalso is_list(Args) ->
         end,
     put_chars(Msg).
 
+%%-----------------------------------------------------------------------------
+%% @param   Prompt prompt for user input
+%% @returns string
+%% @doc     Read string from console with prompt.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_line(Prompt :: string()) -> string().
 get_line(Prompt) ->
     Self = self(),
     case erlang:group_leader() of
@@ -64,6 +77,13 @@ get_line(Prompt) ->
             end
     end.
 
+%%-----------------------------------------------------------------------------
+%% @param   Chars character(s) to write to console
+%% @returns ok
+%% @doc     Writes the given character(s) to the console.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec put_chars(Chars :: list() | binary()) -> ok.
 put_chars(Chars) ->
     Self = self(),
     case erlang:group_leader() of

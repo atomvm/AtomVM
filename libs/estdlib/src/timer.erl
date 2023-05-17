@@ -18,11 +18,26 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
+%%-----------------------------------------------------------------------------
+%% @doc An implementation of the Erlang/OTP timer interface.
+%%
+%% This module implements a strict subset of the Erlang/OTP timer
+%% interface.
+%% @end
+%%-----------------------------------------------------------------------------
 -module(timer).
 
 -export([sleep/1]).
 
--spec sleep(non_neg_integer() | infinity) -> ok.
+%%-----------------------------------------------------------------------------
+%% @parm Timeout number of milliseconds to sleep or `infinity'
+%% @returns `ok'
+%%
+%% @doc Pauses the execution of the current process for a given number of
+%%      milliseconds, or forever, using `infinity' as the parameter.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sleep(Timeout :: non_neg_integer() | infinity) -> ok.
 sleep(Timeout) ->
     receive
     after Timeout ->
