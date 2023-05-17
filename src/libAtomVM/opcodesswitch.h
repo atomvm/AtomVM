@@ -745,6 +745,14 @@ typedef union
                     next_label = &&handle_error;                                                \
                     break;                                                                      \
                 }                                                                               \
+                case FlushMonitorSignal:                                                        \
+                case FlushInfoMonitorSignal: {                                                  \
+                    struct RefSignal *flush_signal                                              \
+                        = CONTAINER_OF(signal_message, struct RefSignal, base);                 \
+                    bool info = signal_message->type == FlushInfoMonitorSignal;                 \
+                    context_process_flush_monitor_signal(ctx, flush_signal->ref_ticks, info);   \
+                    break;                                                                      \
+                }                                                                               \
                 case NormalMessage: {                                                           \
                     __builtin_unreachable();                                                    \
                 }                                                                               \

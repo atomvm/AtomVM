@@ -74,6 +74,7 @@ erlang:make_tuple/2, &make_tuple_nif
 erlang:memory/1, &memory_nif
 erlang:monitor/2, &monitor_nif
 erlang:demonitor/1, &demonitor_nif
+erlang:demonitor/2, &demonitor_nif
 erlang:is_process_alive/1, &is_process_alive_nif
 erlang:register/2, &register_nif
 erlang:unregister/1, &unregister_nif

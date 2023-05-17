@@ -354,7 +354,7 @@ Module *globalcontext_get_module_by_index(GlobalContext *global, int index);
  */
 Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_atom);
 
-void globalcontext_demonitor(GlobalContext *global, uint64_t ref_ticks);
+bool globalcontext_demonitor(GlobalContext *global, uint64_t ref_ticks);
 void globalcontext_unlink(GlobalContext *global, term pid);
 
 #ifndef __cplusplus

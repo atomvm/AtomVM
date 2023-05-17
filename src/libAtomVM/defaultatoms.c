@@ -131,6 +131,8 @@ static const char *const close_atom = "\x5" "close";
 static const char *const closed_atom = "\x6" "closed";
 static const char *const port_atom = "\x4" "port";
 
+static const char *const info_atom = "\x4" "info";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -245,6 +247,8 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, close_atom) == CLOSE_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, closed_atom) == CLOSED_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, port_atom) == PORT_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, info_atom) == INFO_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();

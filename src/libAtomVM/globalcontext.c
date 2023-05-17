@@ -438,7 +438,7 @@ Module *globalcontext_get_module_by_index(GlobalContext *global, int index)
     return result;
 }
 
-void globalcontext_demonitor(GlobalContext *global, uint64_t ref_ticks)
+bool globalcontext_demonitor(GlobalContext *global, uint64_t ref_ticks)
 {
     struct ListHead *pitem;
 
@@ -453,10 +453,11 @@ void globalcontext_demonitor(GlobalContext *global, uint64_t ref_ticks)
                 list_remove(&monitor->monitor_list_head);
                 free(monitor);
                 synclist_unlock(&global->processes_table);
-                return;
+                return true;
             }
         }
     }
 
     synclist_unlock(&global->processes_table);
+    return false;
 }

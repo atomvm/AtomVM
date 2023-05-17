@@ -105,6 +105,12 @@ void mailbox_message_dispose(MailboxMessage *m, Heap *heap)
             free(atom_signal);
             break;
         }
+        case FlushMonitorSignal:
+        case FlushInfoMonitorSignal: {
+            struct RefSignal *ref_signal = CONTAINER_OF(m, struct RefSignal, base);
+            free(ref_signal);
+            break;
+        }
         case GCSignal:
             free(m);
             break;
@@ -240,6 +246,19 @@ void mailbox_send_built_in_atom_request_signal(
     atom_request->atom = atom;
 
     mailbox_post_message(c, &atom_request->base);
+}
+
+void mailbox_send_ref_signal(Context *c, enum MessageType type, uint64_t ref_ticks)
+{
+    struct RefSignal *ref_signal = malloc(sizeof(struct RefSignal));
+    if (IS_NULL_PTR(ref_signal)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        return;
+    }
+    ref_signal->base.type = type;
+    ref_signal->ref_ticks = ref_ticks;
+
+    mailbox_post_message(c, &ref_signal->base);
 }
 
 void mailbox_send_empty_body_signal(Context *c, enum MessageType type)

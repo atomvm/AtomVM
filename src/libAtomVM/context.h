@@ -361,6 +361,15 @@ void context_process_process_info_request_signal(Context *ctx, struct BuiltInAto
 bool context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal);
 
 /**
+ * @brief Process a flush monitor signal.
+ *
+ * @param ctx the context being executed
+ * @param ref_ticks the monitor reference
+ * @param info whether to return FALSE_ATOM if no message was flushed.
+ */
+void context_process_flush_monitor_signal(Context *ctx, uint64_t ref_ticks, bool info);
+
+/**
  * @brief Get process information.
  *
  * @param ctx the context being executed

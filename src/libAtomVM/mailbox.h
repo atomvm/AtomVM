@@ -64,6 +64,8 @@ enum MessageType
     ProcessInfoRequestSignal,
     TrapAnswerSignal,
     TrapExceptionSignal,
+    FlushMonitorSignal,
+    FlushInfoMonitorSignal,
 };
 
 struct MailboxMessage
@@ -108,6 +110,13 @@ struct BuiltInAtomRequestSignal
 
     int32_t sender_pid;
     term atom;
+};
+
+struct RefSignal
+{
+    MailboxMessage base;
+
+    uint64_t ref_ticks;
 };
 
 typedef struct
@@ -196,6 +205,15 @@ void mailbox_send_built_in_atom_signal(Context *c, enum MessageType type, term a
  */
 void mailbox_send_built_in_atom_request_signal(
     Context *c, enum MessageType type, int32_t sender_pid, term atom);
+
+/**
+ * @brief Sends a ref signal to a certain mailbox.
+ *
+ * @param c the process context.
+ * @param type the type of the signal
+ * @param ref_ticks the ref
+ */
+void mailbox_send_ref_signal(Context *c, enum MessageType type, uint64_t ref_ticks);
 
 /**
  * @brief Sends an empty body signal to a certain mailbox.
