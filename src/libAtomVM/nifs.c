@@ -3087,16 +3087,28 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
-
     term ref = argv[0];
+    bool flush = false;
+    bool info = false;
+
+    if (argc == 2) {
+        term options = argv[1];
+        VALIDATE_VALUE(options, term_is_list);
+        flush = interop_proplist_get_value_default(options, FLUSH_ATOM, FALSE_ATOM) == TRUE_ATOM;
+        info = interop_proplist_get_value_default(options, INFO_ATOM, FALSE_ATOM) == TRUE_ATOM;
+    }
 
     VALIDATE_VALUE(ref, term_is_reference);
     uint64_t ref_ticks = term_to_ref_ticks(ref);
 
-    globalcontext_demonitor(ctx->global, ref_ticks);
+    bool result = globalcontext_demonitor(ctx->global, ref_ticks);
+    if (flush) {
+        mailbox_send_ref_signal(ctx, info ? FlushInfoMonitorSignal : FlushMonitorSignal, ref_ticks);
+        context_update_flags(ctx, ~NoFlags, Trap);
+        return term_invalid_term();
+    }
 
-    return TRUE_ATOM;
+    return !info || result ? TRUE_ATOM : FALSE_ATOM;
 }
 
 static term nif_erlang_link(Context *ctx, int argc, term argv[])

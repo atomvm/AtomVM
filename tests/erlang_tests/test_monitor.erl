@@ -26,6 +26,10 @@ start() ->
     ok = test_monitor_normal(),
     ok = test_monitor_demonitor(),
     ok = test_monitor_noproc(),
+    ok = test_monitor_demonitor_flush(),
+    ok = test_monitor_demonitor_info(),
+    ok = test_monitor_demonitor_flush_info_true(),
+    ok = test_monitor_demonitor_flush_info_false(),
     0.
 
 test_monitor_normal() ->
@@ -49,7 +53,7 @@ test_monitor_normal() ->
 test_monitor_demonitor() ->
     Pid = spawn(fun() -> normal_loop() end),
     Ref = monitor(process, Pid),
-    demonitor(Ref),
+    true = demonitor(Ref),
     Pid ! {self(), quit},
     ok =
         receive
@@ -75,6 +79,85 @@ test_monitor_noproc() ->
             {'DOWN', Ref, process, Pid, noproc} -> ok;
             Other -> {unexpected, Other}
         after 5000 -> timeout
+        end,
+    ok.
+
+test_monitor_demonitor_flush() ->
+    Pid = spawn(fun() -> normal_loop() end),
+    Ref = monitor(process, Pid),
+    Pid ! {self(), quit},
+    receive
+    after 100 -> ok
+    end,
+    true = demonitor(Ref, [flush]),
+    ok =
+        receive
+            {Pid, finished} -> ok;
+            Other1 -> {unexpected, Other1}
+        after 5000 -> timeout
+        end,
+    ok =
+        receive
+            Other2 -> {unexpected, Other2}
+        after 200 -> ok
+        end,
+    ok.
+
+test_monitor_demonitor_info() ->
+    Pid = spawn(fun() -> normal_loop() end),
+    Ref = monitor(process, Pid),
+    true = demonitor(Ref, [info]),
+    Pid ! {self(), quit},
+    false = demonitor(Ref, [info]),
+    ok =
+        receive
+            {Pid, finished} -> ok;
+            Other1 -> {unexpected, Other1}
+        after 5000 -> timeout
+        end,
+    ok =
+        receive
+            Other2 -> {unexpected, Other2}
+        after 200 -> ok
+        end,
+    ok.
+
+test_monitor_demonitor_flush_info_true() ->
+    Pid = spawn(fun() -> normal_loop() end),
+    Ref = monitor(process, Pid),
+    Pid ! {self(), quit},
+    receive
+    after 100 -> ok
+    end,
+    false = demonitor(Ref, [flush, info]),
+    ok =
+        receive
+            {Pid, finished} -> ok;
+            Other1 -> {unexpected, Other1}
+        after 5000 -> timeout
+        end,
+    ok =
+        receive
+            Other2 -> {unexpected, Other2}
+        after 200 -> ok
+        end,
+    ok.
+
+test_monitor_demonitor_flush_info_false() ->
+    Pid = spawn(fun() -> normal_loop() end),
+    Ref = monitor(process, Pid),
+    true = demonitor(Ref, [flush, info]),
+    Pid ! {self(), quit},
+    ok =
+        receive
+            {Pid, finished} -> ok;
+            Other1 -> {unexpected, Other1}
+        after 5000 -> timeout
+        end,
+    ok =
+        receive
+            Other2 -> {unexpected, Other2}
+        after 200 -> ok
         end,
     ok.
 

@@ -166,6 +166,29 @@ bool context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal)
     return true;
 }
 
+void context_process_flush_monitor_signal(Context *ctx, uint64_t ref_ticks, bool info)
+{
+    context_update_flags(ctx, ~Trap, NoFlags);
+    bool result = true;
+    mailbox_reset(&ctx->mailbox);
+    term msg;
+    while (mailbox_peek(ctx, &msg)) {
+        if (term_is_tuple(msg)
+            && term_get_tuple_arity(msg) == 5
+            && term_get_tuple_element(msg, 0) == DOWN_ATOM
+            && term_is_reference(term_get_tuple_element(msg, 1))
+            && term_to_ref_ticks(term_get_tuple_element(msg, 1)) == ref_ticks) {
+            mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+            // If option info is combined with option flush, false is returned if a flush was needed, otherwise true.
+            result = !info;
+        } else {
+            mailbox_next(&ctx->mailbox);
+        }
+    }
+    mailbox_reset(&ctx->mailbox);
+    ctx->x[0] = result ? TRUE_ATOM : FALSE_ATOM;
+}
+
 void context_update_flags(Context *ctx, int mask, int value) CLANG_THREAD_SANITIZE_SAFE
 {
 #ifndef AVM_NO_SMP
