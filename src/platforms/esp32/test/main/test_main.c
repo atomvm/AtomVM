@@ -177,6 +177,12 @@ term avm_test_case(const char *test_module)
     return ret_value;
 }
 
+TEST_CASE("test_md5", "[test_run]")
+{
+    term ret_value = avm_test_case("test_md5.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+
 TEST_CASE("test_time_and_processes", "[test_run]")
 {
     term ret_value = avm_test_case("test_time_and_processes.beam");
