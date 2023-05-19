@@ -25,46 +25,11 @@ env:
   elixir_version: 1.14
 
 jobs:
-  build-and-test-other:
-    runs-on: ubuntu-20.04
-
-    strategy:
-      matrix:
-        arch: ["armel", "armhf", "arm64"]
-
-        include:
-        - arch: "armel"
-          distro: "stretch"
-          base_url: "http://archive.debian.org/debian-archive/debian/"
-          cflags: "-O2 -mthumb -mthumb-interwork -march=armv4t"
-          cmake_opts: "-DAVM_DISABLE_SMP=On"
-          additional_packages: |
-            http://ftp.us.debian.org/debian/pool/main/c/cmake/cmake-data_3.13.2-1~bpo9+1_all.deb \
-            http://ftp.us.debian.org/debian/pool/main/r/rhash/librhash0_1.3.8-1_armel.deb \
-            http://ftp.us.debian.org/debian/pool/main/libu/libuv1/libuv1_1.34.2-1~bpo9+1_armel.deb \
-            http://ftp.us.debian.org/debian/pool/main/c/cmake/cmake_3.13.2-1~bpo9+1_armel.deb
-
-        - arch: "armhf"
-          distro: "bullseye"
-          base_url: "http://deb.debian.org/debian/"
-          cflags: "-mcpu=cortex-a7 -mfloat-abi=hard -O2 -mthumb -mthumb-interwork"
-
-        - arch: "arm64"
-          distro: "bullseye"
-          base_url: "http://deb.debian.org/debian/"
-          cflags: "-O2"
-
-        # It looks like we don't really support big-endian
-        # - arch: "powerpc"
-        #  distro: "jessie"
-        #  base_url: "http://archive.debian.org/debian"
-        #  cflags: "-std=gnu99 -Os"
-
+  compile_tests:
+    runs-on: ubuntu-22.04
     steps:
     - name: Checkout repo
-      uses: actions/checkout@v2
-      with:
-        submodules: 'recursive'
+      uses: actions/checkout@v3
 
     - uses: erlef/setup-beam@v1
       with:
@@ -75,41 +40,11 @@ jobs:
       run: sudo apt update
 
     - name: Install required packages
-      run: sudo apt install debootstrap gperf cmake
+      run: sudo apt install -y gperf
 
-    - name: Set up QEMU
-      run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-
-    - uses: actions/cache@v2
-      id: cache
-      with:
-        path: debian-${{ matrix.arch }}.tar
-        key: ${{ matrix.arch}}-${{ matrix.distro }}-${{ hashFiles('.github/workflows/build-and-test-other.yaml') }}
-
-    - name: Bootrap Debian filesystem
-      if: steps.cache.outputs.cache-hit != 'true'
+    - name: Compile test modules
       run: |
-        set -euo pipefail
-        sudo mkdir debian
-        sudo debootstrap --no-check-gpg --arch ${{ matrix.arch }} \
-          --include=file,gcc,g++,binutils,cmake,make,doxygen,gperf,zlib1g-dev,libssl-dev \
-          ${{ matrix.distro }} debian ${{ matrix.base_url }}
-        sudo dpkg --root debian --add-architecture ${{ matrix.arch }}
-        for pkg in ${{ matrix.additional_packages }}
-        do
-            additional_packages=1
-            sudo wget ${pkg}
-        done
-        [ ${additional_packages:-} ] && sudo dpkg --root debian --force-depends -i *.deb
-        sudo tar -C debian -c . > debian-${{ matrix.arch }}.tar
-        sudo rm -fr debian-${{ matrix.arch }}
-
-    - name: Import docker container image
-      run: |
-        sudo docker import debian-${{ matrix.arch }}.tar debian-${{ matrix.arch }}
-
-    - name: "Build: Tests"
-      run: |
+        set -e
         mkdir build_tests
         cd build_tests
         cmake ..
@@ -118,12 +53,95 @@ jobs:
         make test_eavmlib
         make test_alisp
 
+    - name: Upload test modules
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-modules
+        path: |
+            build_tests/**/*.avm
+            build_tests/**/*.beam
+            build_tests/**/*.hrl
+        retention-days: 1
+
+  build-and-test-other:
+    needs: compile_tests
+    runs-on: ubuntu-22.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: ["arm32v5", "arm32v7", "arm64v8"]
+
+        include:
+        - arch: "arm32v5"
+          platform: "arm/v5"
+          cflags: "-O2 -mthumb -mthumb-interwork -march=armv4t"
+          cmake_opts: "-DAVM_DISABLE_SMP=On"
+          tag: "stretch"
+          sources: |
+            deb [trusted=yes] http://archive.debian.org/debian/ stretch-backports main
+            deb [trusted=yes] http://archive.debian.org/debian/ stretch-backports-sloppy main
+            deb [trusted=yes] http://archive.debian.org/debian-security/ stretch/updates main
+            deb-src [trusted=yes] http://archive.debian.org/debian-security/ stretch/updates main
+            deb [trusted=yes] http://archive.debian.org/debian/ stretch main
+            deb-src [trusted=yes] http://archive.debian.org/debian/ stretch main
+          # Workaround from https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=954852
+          install_deps: |
+            apt update &&
+            apt install -y -t stretch-backports-sloppy libarchive13 &&
+            apt install -y -t stretch-backports cmake &&
+            apt install -y file gcc g++ binutils make doxygen gperf zlib1g-dev libssl-dev
+
+        - arch: "arm32v7"
+          platform: "arm/v7"
+          tag: "bullseye"
+          cflags: "-mcpu=cortex-a7 -mfloat-abi=hard -O2 -mthumb -mthumb-interwork"
+
+        - arch: "arm64v8"
+          platform: "arm64/v8"
+          tag: "bullseye"
+          cflags: "-O2"
+
+        # It looks like we don't really support big-endian
+        # - arch: "powerpc"
+        #  distro: "jessie"
+        #  base_url: "http://archive.debian.org/debian"
+        #  cflags: "-std=gnu99 -Os"
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: apt update
+      run: sudo apt update
+
+    - name: Install required packages
+      run: sudo apt install -y debootstrap
+
+    - name: Download test modules
+      uses: actions/download-artifact@v3
+      with:
+        name: test-modules
+        path: build_tests
+
+    - name: Set up QEMU
+      run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+
     - name: "Build and Test: AtomVM on foreign arch"
       timeout-minutes: 15
       run: |
-        docker run --rm -v $PWD:/atomvm -w /atomvm \
+        docker run --platform linux/${{ matrix.platform }} --rm -v $PWD:/atomvm -w /atomvm \
         -e CFLAGS="${{ matrix.cflags }}" -e CXXFLAGS="${{ matrix.cflags }}" \
-        debian-${{ matrix.arch }} /bin/bash -c '
+        ${{ matrix.arch }}/debian:${{ matrix.tag }} /bin/bash -c '
+        ([ -n "${{ matrix.sources }}" ] && echo "${{ matrix.sources }}" > /etc/apt/sources.list || true) &&
+        cat /etc/apt/sources.list &&
+        if test -n "${{ matrix.install_deps }}"; then
+            echo
+            ${{ matrix.install_deps }}
+        else
+            apt update &&
+            apt install -y file gcc g++ binutils cmake make doxygen gperf zlib1g-dev libssl-dev
+        fi &&
         file /bin/bash &&
         uname -a &&
         cc --version &&
