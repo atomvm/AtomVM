@@ -146,6 +146,8 @@ GlobalContext *globalcontext_new()
     glb->online_schedulers = smp_get_online_processors();
     glb->running_schedulers = 0;
     glb->waiting_scheduler = false;
+
+    smp_spinlock_init(&glb->env_spinlock);
 #endif
     glb->scheduler_stop_all = false;
 

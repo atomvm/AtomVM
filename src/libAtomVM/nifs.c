@@ -132,6 +132,7 @@ static term nif_erlang_system_time_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_tuple_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_tuple_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[]);
+static term nif_erlang_localtime(Context *ctx, int argc, term argv[]);
 static term nif_erlang_timestamp_0(Context *ctx, int argc, term argv[]);
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[]);
 static term nif_erlang_process_flag(Context *ctx, int argc, term argv[]);
@@ -468,6 +469,12 @@ static const struct Nif universaltime_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_universaltime_0
+};
+
+static const struct Nif localtime_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_localtime
 };
 
 static const struct Nif timestamp_nif =
@@ -1382,12 +1389,8 @@ term nif_erlang_system_time_1(Context *ctx, int argc, term argv[])
     }
 }
 
-term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[])
+static term build_datetime_from_tm(Context *ctx, struct tm *broken_down_time)
 {
-    UNUSED(ctx);
-    UNUSED(argc);
-    UNUSED(argv);
-
     // 4 = size of date/time tuple, 3 size of date time tuple
     if (UNLIKELY(memory_ensure_free_opt(ctx, 3 + 4 + 4, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -1396,24 +1399,75 @@ term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[])
     term time_tuple = term_alloc_tuple(3, &ctx->heap);
     term date_time_tuple = term_alloc_tuple(2, &ctx->heap);
 
-    struct timespec ts;
-    sys_time(&ts);
+    term_put_tuple_element(date_tuple, 0, term_from_int32(1900 + broken_down_time->tm_year));
+    term_put_tuple_element(date_tuple, 1, term_from_int32(broken_down_time->tm_mon + 1));
+    term_put_tuple_element(date_tuple, 2, term_from_int32(broken_down_time->tm_mday));
 
-    struct tm broken_down_time;
-    gmtime_r(&ts.tv_sec, &broken_down_time);
-
-    term_put_tuple_element(date_tuple, 0, term_from_int32(1900 + broken_down_time.tm_year));
-    term_put_tuple_element(date_tuple, 1, term_from_int32(broken_down_time.tm_mon + 1));
-    term_put_tuple_element(date_tuple, 2, term_from_int32(broken_down_time.tm_mday));
-
-    term_put_tuple_element(time_tuple, 0, term_from_int32(broken_down_time.tm_hour));
-    term_put_tuple_element(time_tuple, 1, term_from_int32(broken_down_time.tm_min));
-    term_put_tuple_element(time_tuple, 2, term_from_int32(broken_down_time.tm_sec));
+    term_put_tuple_element(time_tuple, 0, term_from_int32(broken_down_time->tm_hour));
+    term_put_tuple_element(time_tuple, 1, term_from_int32(broken_down_time->tm_min));
+    term_put_tuple_element(time_tuple, 2, term_from_int32(broken_down_time->tm_sec));
 
     term_put_tuple_element(date_time_tuple, 0, date_tuple);
     term_put_tuple_element(date_time_tuple, 1, time_tuple);
 
     return date_time_tuple;
+}
+
+term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    struct timespec ts;
+    sys_time(&ts);
+
+    struct tm broken_down_time;
+    return build_datetime_from_tm(ctx, gmtime_r(&ts.tv_sec, &broken_down_time));
+}
+
+term nif_erlang_localtime(Context *ctx, int argc, term argv[])
+{
+    char *tz;
+    if (argc == 1) {
+        int ok;
+        tz = interop_term_to_string(argv[0], &ok);
+        if (UNLIKELY(!ok)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    } else {
+        tz = NULL;
+    }
+
+    struct timespec ts;
+    sys_time(&ts);
+
+    struct tm storage;
+    struct tm *localtime;
+
+#ifndef AVM_NO_SMP
+    smp_spinlock_lock(&ctx->global->env_spinlock);
+#endif
+    if (tz) {
+        char *oldtz = getenv("TZ");
+        setenv("TZ", tz, 1);
+        tzset();
+        localtime = localtime_r(&ts.tv_sec, &storage);
+        if (oldtz) {
+            setenv("TZ", oldtz, 1);
+        } else {
+            unsetenv("TZ");
+        }
+    } else {
+        // Call tzset to handle DST changes
+        tzset();
+        localtime = localtime_r(&ts.tv_sec, &storage);
+    }
+#ifndef AVM_NO_SMP
+    smp_spinlock_unlock(&ctx->global->env_spinlock);
+#endif
+
+    free(tz);
+    return build_datetime_from_tm(ctx, localtime);
 }
 
 term nif_erlang_timestamp_0(Context *ctx, int argc, term argv[])
