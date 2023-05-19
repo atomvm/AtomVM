@@ -74,7 +74,7 @@
     {device_config, [
         {my_device, [
             {spi_clock_hz, 1000000},
-            {spi_mode, 0},
+            {mode, 0},
             {spi_cs_io_num, 18},
             {address_len_bits, 8}
         ]}

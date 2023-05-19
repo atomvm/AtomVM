@@ -24,7 +24,7 @@ import pytest
 @pytest.mark.parametrize(
     'qemu_extra_args',
     [
-        '"-nic user,model=open_eth"',
+        '-nic user,model=open_eth',
     ],
     indirect=True,
 )
