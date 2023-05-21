@@ -116,7 +116,6 @@ get_gpio() ->
     case whereis(gpio) of
         undefined ->
             GPIO = gpio:open(),
-            register(gpio, GPIO),
             GPIO;
         GPIO ->
             GPIO
