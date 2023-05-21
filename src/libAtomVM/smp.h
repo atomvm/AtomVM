@@ -225,7 +225,7 @@ int smp_get_online_processors();
  * global context.
  * @param glb the global context
  */
-void smp_scheduler_start(GlobalContext *ctx);
+void smp_scheduler_start(GlobalContext *glb);
 
 /**
  * @brief Determine if caller is in the main thread, i.e. thread that was not
