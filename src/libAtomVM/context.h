@@ -196,8 +196,9 @@ static inline void context_ensure_fpregs(Context *c)
  *
  * @details Start executing bytecode for the specified function, this function will block until it terminates. The outcome is saved to x[0] register.
  * @param ctx the context that will be used to run the specified functions, x registers must be set to function arguments.
+ * @param mod the module name C string.
  * @param function_name the function name C string.
- * @param the function arity (number of arguments that are required).
+ * @param arity the function arity (number of arguments that are required).
  * @returns 1 if an error occurred, otherwise 0 is always returned.
  */
 int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity);
