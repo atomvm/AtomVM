@@ -292,7 +292,12 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
         mod->free_literals_data = 0;
     }
 
-    mod->end_instruction_ii = read_core_chunk(mod);
+    int r = read_core_chunk(mod);
+    if (r < 0) {
+        module_destroy(mod);
+        return NULL;
+    }
+    mod->end_instruction_ii = r;
 
     return mod;
 }

@@ -124,6 +124,9 @@ static const char *const get_tail_atom = "\x8" "get_tail";
 static const char *const equal_colon_equal_atom = "\x3" "=:=";
 static const char *const signed_atom = "\x6" "signed";
 
+static const char *const no_fail_atom = "\x7" "no_fail";
+static const char *const resume_atom = "\x6" "resume";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -231,6 +234,9 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, get_tail_atom) == GET_TAIL_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, equal_colon_equal_atom) == EQUAL_COLON_EQUAL_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, signed_atom) == SIGNED_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, no_fail_atom) == NO_FAIL_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, resume_atom) == RESUME_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();
