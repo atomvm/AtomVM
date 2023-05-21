@@ -59,8 +59,8 @@ char *interop_list_to_string(term list, int *ok);
 char *interop_atom_to_string(Context *ctx, term atom);
 term interop_proplist_get_value(term list, term key);
 term interop_proplist_get_value_default(term list, term key, term default_value);
-term interop_map_get_value(Context *ctx, term map, term key);
-term interop_map_get_value_default(Context *ctx, term map, term key, term default_value);
+term interop_map_get_value(GlobalContext *glb, term map, term key);
+term interop_map_get_value_default(GlobalContext *glb, term map, term key, term default_value);
 
 NO_DISCARD InteropFunctionResult interop_iolist_size(term t, size_t *size);
 NO_DISCARD InteropFunctionResult interop_write_iolist(term t, char *p);

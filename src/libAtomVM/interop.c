@@ -242,14 +242,14 @@ InteropFunctionResult interop_write_iolist(term t, char *p)
     return InteropOk;
 }
 
-term interop_map_get_value(Context *ctx, term map, term key)
+term interop_map_get_value(GlobalContext *glb, term map, term key)
 {
-    return interop_map_get_value_default(ctx, map, key, term_nil());
+    return interop_map_get_value_default(glb, map, key, term_nil());
 }
 
-term interop_map_get_value_default(Context *ctx, term map, term key, term default_value)
+term interop_map_get_value_default(GlobalContext *glb, term map, term key, term default_value)
 {
-    int pos = term_find_map_pos(map, key, ctx->global);
+    int pos = term_find_map_pos(map, key, glb);
     if (pos == TERM_MAP_NOT_FOUND) {
         return default_value;
     } else if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
@@ -281,7 +281,7 @@ term interop_kv_get_value_default(term kv, AtomString key, term default_value, G
     if (term_is_nonempty_list(kv)) {
         return interop_proplist_get_value_default(kv, key_term, default_value);
     } else if (term_is_map(kv)) {
-        return interop_proplist_get_value_default(kv, key_term, default_value);
+        return interop_map_get_value_default(glb, kv, key_term, default_value);
     } else {
         return default_value;
     }
