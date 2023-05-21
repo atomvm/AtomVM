@@ -43,6 +43,7 @@
 #endif
 
 static void scheduler_timeout_callback(struct TimerListItem *it);
+static void scheduler_make_ready(Context *ctx);
 
 static int update_timer_list(GlobalContext *global)
 {
@@ -233,18 +234,39 @@ Context *scheduler_run(GlobalContext *global)
             // process signal messages and also empty outer list to inner list.
             scheduler_process_native_signal_messages(result);
             if (!(result->flags & Killed)) {
-                if (result->native_handler(result) == NativeContinue) {
-                    // If native handler has memory fragments, garbage collect
-                    // them
-                    if (result->heap.root->next) {
-                        if (UNLIKELY(memory_ensure_free_opt(result, 0, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
-                            fprintf(stderr, "Out of memory error in native handler\n");
-                            AVM_ABORT();
+                if (mailbox_has_next(&result->mailbox)) {
+                    if (result->native_handler(result) == NativeContinue) {
+                        // If native handler has memory fragments, garbage collect
+                        // them
+                        if (result->heap.root->next) {
+                            if (UNLIKELY(memory_ensure_free_opt(result, 0, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+                                fprintf(stderr, "Out of memory error in native handler\n");
+                                AVM_ABORT();
+                            }
                         }
+                        context_update_flags(result, ~Running, NoFlags);
+                        // The context was marked ready for the first message
+                        // However, another message may have arrived before it
+                        // was marked running in scheduler_run0, so there can
+                        // be several messages in the mailbox. Yet, the handler
+                        // may have processed only one message. So we rechedule
+                        // to make sure the handler process all messages.
+                        if (mailbox_has_next(&result->mailbox)) {
+                            scheduler_make_ready(result);
+                        }
+                    } else {
+                        scheduler_terminate(result);
                     }
-                    context_update_flags(result, ~Running, NoFlags);
                 } else {
-                    scheduler_terminate(result);
+                    // Don't call the native handler if the mailbox is empty
+                    // so native handlers can safely expect the first call to
+                    // `mailbox_first` will return a message.
+                    //
+                    // Indeed, a native process can be signaled and be made
+                    // ready, and in this case the mailbox may only contain
+                    // signal messages that are processed and removed by
+                    // `scheduler_process_native_signal_messages`.
+                    context_update_flags(result, ~Running, NoFlags);
                 }
             }
             result = NULL; // Schedule next process (native or not)
