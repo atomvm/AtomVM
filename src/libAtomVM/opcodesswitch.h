@@ -126,7 +126,7 @@ typedef union
                     break;                                                              \
                                                                                         \
                 case 1:                                                                 \
-                    dest_term = term_from_int4(((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]); \
+                    dest_term = term_from_int(((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]); \
                     off += 2;                                                           \
                     break;                                                              \
                                                                                         \
@@ -430,7 +430,7 @@ typedef union
                     break;                                                                                              \
                                                                                                                         \
                 case 1:                                                                                                 \
-                    dest_term = term_from_int4(((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]);      \
+                    dest_term = term_from_int(((first_byte & 0xE0) << 3) | code_chunk[(base_index) + (off) + 1]);      \
                     off += 2;                                                                                           \
                     break;                                                                                              \
                                                                                                                         \

@@ -216,6 +216,12 @@ TEST_CASE("test_socket", "[test_run]")
     eth_stop(eth_netif);
 }
 
+TEST_CASE("test_rtc_slow", "[test_run]")
+{
+    term ret_value = avm_test_case("test_rtc_slow.beam");
+    TEST_ASSERT(term_to_int(ret_value) == 0);
+}
+
 void app_main(void)
 {
     UNITY_BEGIN();

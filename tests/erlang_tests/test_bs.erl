@@ -91,6 +91,8 @@ start() ->
 
     ok = test_iterate_binary(),
 
+    ok = test_large(),
+
     0.
 
 test_pack_small_ints({A, B, C}, Expect) ->
@@ -360,6 +362,11 @@ test_iterate_binary() ->
 
 traverse(<<"">>, Accum) -> Accum;
 traverse(<<H:8, T/binary>>, Accum) -> traverse(T, Accum ++ [H]).
+
+test_large() ->
+    X = <<42:1024>>,
+    true = id(X) =:= <<42:1024>>,
+    ok.
 
 % Prevent optimization from the compiler
 id(X) ->

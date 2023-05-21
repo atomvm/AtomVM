@@ -37,6 +37,8 @@
     nvs_erase_key/1, nvs_erase_key/2,
     nvs_erase_all/0, nvs_erase_all/1,
     nvs_reformat/0,
+    rtc_slow_get_binary/0,
+    rtc_slow_set_binary/1,
     freq_hz/0
 ]).
 
@@ -223,6 +225,28 @@ nvs_erase_all(Namespace) when is_atom(Namespace) ->
 %%-----------------------------------------------------------------------------
 -spec nvs_reformat() -> ok.
 nvs_reformat() ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @returns the currently stored binary in RTC slow memory.
+%% @doc     Get the binary currently stored in RTC slow memory. Must not be
+%%          called unless the binary was stored with rtc_slow_set_binary/1.
+%%          A limited checksum is ran and this function may throw badarg if
+%%          the checksum is not valid.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec rtc_slow_get_binary() -> binary().
+rtc_slow_get_binary() ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @returns ok
+%% @doc     Store a binary to RTC slow memory. This memory is not erased on
+%%          software reset and deep sleeps.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec rtc_slow_set_binary(Bin :: binary()) -> ok.
+rtc_slow_set_binary(Bin) when is_binary(Bin) ->
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------
