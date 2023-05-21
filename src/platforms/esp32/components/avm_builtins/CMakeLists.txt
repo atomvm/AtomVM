@@ -24,6 +24,7 @@ set(AVM_BUILTIN_COMPONENT_SRCS
     "ledc_nif.c"
     "network_driver.c"
     "nvs_nif.c"
+    "rtc_slow_nif.c"
     "socket_driver.c"
     "spi_driver.c"
     "uart_driver.c"

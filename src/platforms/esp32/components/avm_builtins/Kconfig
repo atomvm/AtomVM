@@ -32,6 +32,16 @@ config AVM_ENABLE_NVS_NIFS
     bool "Enable NVS NIFs"
     default y
 
+config AVM_ENABLE_RTC_SLOW_NIFS
+    bool "Enable RTC SLOW NIFs"
+    default y
+
+config AVM_RTC_SLOW_MAX_SIZE
+    int "RTC SLOW maximum binary size"
+    # By default, use the maximum size for esp-idf < 4.4
+    # In newer version, available size is 8170
+    default 4086
+
 config AVM_ENABLE_GPIO_PORT_DRIVER
     bool "Enable GPIO port driver"
     default y
