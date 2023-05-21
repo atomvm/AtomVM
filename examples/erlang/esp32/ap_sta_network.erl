@@ -35,20 +35,24 @@ start() ->
             {ap_started, fun ap_started/0},
             {sta_connected, fun sta_connected/1},
             {sta_ip_assigned, fun sta_ip_assigned/1},
-            {sta_disconnected, fun sta_disconnected/1}
+            {sta_disconnected, fun sta_disconnected/1},
+            {ap_sta_ip_assigned, fun ap_sta_ip_assigned/1}
         ]},
         {sta, [
-            {ssid, esp:nvs_get_binary(atomvm, sta_ssid, <<"myssid">>)},
-            {psk, esp:nvs_get_binary(atomvm, sta_psk, <<"mypsk">>)},
+            {ssid, <<"myssid">>},
+            {psk, <<"mypsk">>},
             {connected, fun connected/0},
             {got_ip, fun got_ip/1},
             {disconnected, fun disconnected/0}
         ]},
-        {sntp, [{endpoint, "pool.ntp.org"}]}
+        {sntp, [
+            {host, "pool.ntp.org"},
+            {synchronized, fun sntp_synchronized/1}
+        ]}
     ],
     case network:start(Config) of
         {ok, _Pid} ->
-            sleep_forever();
+            timer:sleep(infinity);
         Error ->
             erlang:display(Error)
     end.
@@ -74,6 +78,8 @@ got_ip(IpInfo) ->
 disconnected() ->
     io:format("STA disconnected.~n").
 
-sleep_forever() ->
-    timer:sleep(10000),
-    sleep_forever().
+ap_sta_ip_assigned(Address) ->
+    io:format("AP assigned STA address ~p~n", [Address]).
+
+sntp_synchronized({TVSec, TVUsec}) ->
+    io:format("Synchronized time with SNTP server. TVSec=~p TVUsec=~p~n", [TVSec, TVUsec]).

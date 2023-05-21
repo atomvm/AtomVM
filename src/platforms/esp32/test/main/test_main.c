@@ -69,16 +69,10 @@ TEST_CASE("atomvm_missing_0", "[platform_nifs]")
 static esp_eth_handle_t s_eth_handle = NULL;
 static esp_eth_mac_t *s_mac = NULL;
 static esp_eth_phy_t *s_phy = NULL;
-#if !CONFIG_ESP_NETIF_TCPIP_ADAPTER_COMPATIBLE_LAYER
 static esp_eth_netif_glue_handle_t s_eth_glue = NULL;
-#endif
 
 static esp_netif_t *eth_start(void)
 {
-#if CONFIG_ESP_NETIF_TCPIP_ADAPTER_COMPATIBLE_LAYER
-    tcpip_adapter_set_default_eth_handlers();
-    esp_netif_t *netif = NULL;
-#else
     char *desc;
     esp_netif_inherent_config_t esp_netif_config = ESP_NETIF_INHERENT_DEFAULT_ETH();
     // Prefix the interface description with the module TAG
@@ -93,7 +87,6 @@ static esp_netif_t *eth_start(void)
     esp_netif_t *netif = esp_netif_new(&netif_config);
     assert(netif);
     free(desc);
-#endif
 
     eth_mac_config_t mac_config = ETH_MAC_DEFAULT_CONFIG();
     eth_phy_config_t phy_config = ETH_PHY_DEFAULT_CONFIG();
@@ -106,11 +99,9 @@ static esp_netif_t *eth_start(void)
     // Install Ethernet driver
     esp_eth_config_t config = ETH_DEFAULT_CONFIG(s_mac, s_phy);
     ESP_ERROR_CHECK(esp_eth_driver_install(&config, &s_eth_handle));
-#if !CONFIG_ESP_NETIF_TCPIP_ADAPTER_COMPATIBLE_LAYER
     // combine driver with netif
     s_eth_glue = esp_eth_new_netif_glue(s_eth_handle);
     esp_netif_attach(netif, s_eth_glue);
-#endif
 
     esp_eth_start(s_eth_handle);
     return netif;
@@ -119,18 +110,12 @@ static esp_netif_t *eth_start(void)
 static void eth_stop(esp_netif_t *eth_netif)
 {
     ESP_ERROR_CHECK(esp_eth_stop(s_eth_handle));
-#if CONFIG_ESP_NETIF_TCPIP_ADAPTER_COMPATIBLE_LAYER
-    tcpip_adapter_clear_default_eth_handlers();
-    // Unfortunately, tcpip_adapter_clear_default_eth_handlers is a noop
-    // So driver cannot be really stopped
-#else
     ESP_ERROR_CHECK(esp_eth_del_netif_glue(s_eth_glue));
     ESP_ERROR_CHECK(esp_eth_driver_uninstall(s_eth_handle));
     ESP_ERROR_CHECK(s_phy->del(s_phy));
     ESP_ERROR_CHECK(s_mac->del(s_mac));
 
     esp_netif_destroy(eth_netif);
-#endif
 }
 
 term avm_test_case(const char *test_module)
@@ -206,23 +191,17 @@ TEST_CASE("atomvm_smp_0", "[smp]")
 
 static volatile bool network_got_ip = false;
 
-static esp_err_t network_event_handler(void *data, system_event_t *event)
+static void got_ip_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
-    if (event->event_id == SYSTEM_EVENT_ETH_CONNECTED) {
-        ESP_LOGI("NETWORK", "ETH CONNECTED");
-    } else if (event->event_id == SYSTEM_EVENT_ETH_GOT_IP) {
-        ESP_LOGI("NETWORK", "ETH GOT IP");
-        network_got_ip = true;
-    } else {
-        ESP_LOGI("NETWORK", "Unhandled network event: %i.", event->event_id);
-    }
-    return ESP_OK;
+    ESP_LOGI("NETWORK", "ETH GOT IP");
+    network_got_ip = true;
 }
 
 TEST_CASE("test_socket", "[test_run]")
 {
-    ESP_LOGI(TAG, "Starting event loop\n");
-    ESP_ERROR_CHECK(esp_event_loop_init(network_event_handler, NULL));
+    // esp_netif_init() was called by network_driver_init
+    ESP_LOGI(TAG, "Registering handler\n");
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &got_ip_event_handler, NULL));
     ESP_LOGI(TAG, "Starting network\n");
     esp_netif_t *eth_netif = eth_start();
 

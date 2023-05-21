@@ -86,6 +86,19 @@ extern "C" {
 #define TUPLE_SIZE(elems) ((int) (elems + 1))
 #define REFC_BINARY_CONS_OFFET 4
 
+#define TERM_BINARY_SIZE_IS_HEAP(size) ((size) < REFC_BINARY_MIN)
+
+#if TERM_BYTES == 4
+#define TERM_BINARY_DATA_SIZE_IN_TERMS(size) \
+    (TERM_BINARY_SIZE_IS_HEAP(size) ? (((size) + 4 - 1) >> 2) + 1 : TERM_BOXED_REFC_BINARY_SIZE)
+#elif TERM_BYTES == 8
+#define TERM_BINARY_DATA_SIZE_IN_TERMS(size) \
+    (TERM_BINARY_SIZE_IS_HEAP(size) ? (((size) + 8 - 1) >> 3) + 1 : TERM_BOXED_REFC_BINARY_SIZE)
+#endif
+
+#define TERM_BINARY_HEAP_SIZE(size) \
+    (TERM_BINARY_DATA_SIZE_IN_TERMS(size) + BINARY_HEADER_SIZE)
+
 #define TERM_DEBUG_ASSERT(...)
 
 #define TERM_FROM_ATOM_INDEX(atom_index) ((atom_index << 6) | 0xB)

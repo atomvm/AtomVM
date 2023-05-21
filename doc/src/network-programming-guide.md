@@ -194,11 +194,25 @@ In order to enable both STA and AP mode, simply provide valid configuration for 
 
 You may configure the networking layer to automatically synchronize time on the ESP32 with an NTP server accessible on the network.
 
-To synchronize time with an NTP server, add a property list with the tag `sntp` at the top level configuration passed into the `network:start/1` function.  Specify the NTP hostname or IP address with which your device should sync using the `endpoint` property tag, e.g.,
+To synchronize time with an NTP server, add a property list with the tag `sntp` at the top level configuration passed into the `network:start/1` function.  Specify the NTP hostname or IP address with which your device should sync using the `host` property tag.  The `host` value can be a string or binary.
 
-    {sntp, [{endpoint, <<"pool.ntp.org">>}]}
+You can also specify a callback function that will get called when the clock is synchronized with the SNTP server via the `synchronized` property tag.  This function takes a tuple with the updated time in seconds and microseconds.
 
-The endpoint value can be a string or binary.
+For example:
+
+    %% erlang
+    {sntp, [
+        {host, <<"pool.ntp.org">>},
+        {synchronized, fun sntp_synchronized/1}
+    ]}
+
+where the `sntp_synchronized/1` function is defined as:
+
+    %% erlang
+    sntp_synchronized({TVSec, TVUsec}) ->
+        io:format("Synchronized time with SNTP server. TVSec=~p TVUsec=~p~n", [TVSec, TVUsec]).
+
+> Note. The device must be in STA mode and connected to an access point in order to use an SNTP server on your network or on the internet.
 
 ## NVS Credentials
 
