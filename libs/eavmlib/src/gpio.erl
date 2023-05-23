@@ -23,6 +23,9 @@
 %%
 %% This module provides functions for interacting with micro-controller GPIO
 %% (General Purpose Input and Output) pins.
+%%
+%% Note: `-type pin()' used in this driver refers to a pin number on Espressif
+%% chips, or a tuple {GPIO_GROUP, PIN} for stm32 chips.
 %% @end
 %%-----------------------------------------------------------------------------
 -module(gpio).
@@ -44,7 +47,7 @@
 ]).
 
 -type gpio() :: pid().
--type pin() :: non_neg_integer().
+-type pin() :: non_neg_integer() | {atom(), non_neg_integer()}.
 -type direction() :: input | output | output_od.
 -type pull() :: up | down | up_down | floating.
 -type low_level() :: low | 0.

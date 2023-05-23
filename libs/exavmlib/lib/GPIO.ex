@@ -28,8 +28,10 @@ defmodule GPIO do
   Valid GPIO pin number.
 
   The actual number of pins that are broken out vary by board and module.
+  For espressif chips this a the pin number marked on the board or data sheet.
+  For stm32 chips this is a tuple {GPIO_GROUP, PIN_NUMBER}.
   """
-  @type gpio_pin() :: non_neg_integer()
+  @type gpio_pin() :: non_neg_integer() | {atom(), non_neg_integer()}
 
   @typedoc """
   Event type describing the voltage that will trigger an interrupt.
