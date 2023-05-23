@@ -237,15 +237,6 @@ connect(DriverPid, Address, Port, Params) ->
             ErrorReason
     end.
 
-%% @private
-call(DriverPid, Msg) ->
-    Ref = erlang:make_ref(),
-    DriverPid ! {self(), Ref, Msg},
-    receive
-        {Ref, Ret} ->
-            Ret
-    end.
-
 %% TODO implement this in lists
 
 %% @private
@@ -286,3 +277,14 @@ normalize_address({A, B, C, D}) when
         "." ++ integer_to_list(D).
 
 %% TODO IPv6
+
+%%
+%% Internal operations
+%%
+
+call(Port, Msg) ->
+    case port:call(Port, Msg) of
+        {error, noproc} -> {error, closed};
+        out_of_memory -> {error, enomem};
+        Result -> Result
+    end.
