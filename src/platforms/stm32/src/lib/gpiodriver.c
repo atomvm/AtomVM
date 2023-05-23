@@ -27,6 +27,8 @@
 #include <mailbox.h>
 #include <term.h>
 
+// Uncomment to enable trace
+//#define ENABLE_TRACE 1
 #include <trace.h>
 
 #include "platform_defaultatoms.h"
@@ -35,6 +37,15 @@ static void consume_gpio_mailbox(Context *ctx);
 static uint32_t port_atom_to_gpio_port(Context *ctx, term port_atom);
 static uint16_t gpio_port_to_rcc_port(uint32_t gpio_port);
 static char gpio_port_to_name(uint32_t gpio_port);
+
+static term create_pair(Context *ctx, term term1, term term2)
+{
+    term ret = term_alloc_tuple(2, ctx);
+    term_put_tuple_element(ret, 0, term1);
+    term_put_tuple_element(ret, 1, term2);
+
+    return ret;
+}
 
 void gpiodriver_init(Context *ctx)
 {
@@ -49,17 +60,18 @@ static void consume_gpio_mailbox(Context *ctx)
     Message *message = mailbox_dequeue(ctx);
     term msg = message->message;
     term pid = term_get_tuple_element(msg, 0);
-    term cmd = term_get_tuple_element(msg, 1);
+    term req = term_get_tuple_element(msg, 2);
+    term cmd = term_get_tuple_element(req, 0);
 
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
     if (cmd == SET_LEVEL_ATOM) {
-        term gpio_tuple = term_get_tuple_element(msg, 2);
+        term gpio_tuple = term_get_tuple_element(req, 1);
         term gpio_port_atom = term_get_tuple_element(gpio_tuple, 0);
         uint32_t gpio_port = port_atom_to_gpio_port(ctx, gpio_port_atom);
         int32_t gpio_pin_num = term_to_int32(term_get_tuple_element(gpio_tuple, 1));
-        int32_t level = term_to_int32(term_get_tuple_element(msg, 3));
+        int32_t level = term_to_int32(term_get_tuple_element(req, 2));
 
         if (level != 0) {
             gpio_set(gpio_port, 1 << gpio_pin_num);
@@ -70,11 +82,11 @@ static void consume_gpio_mailbox(Context *ctx)
         ret = OK_ATOM;
 
     } else if (cmd == SET_DIRECTION_ATOM) {
-        term gpio_tuple = term_get_tuple_element(msg, 2);
+        term gpio_tuple = term_get_tuple_element(req, 1);
         term gpio_port_atom = term_get_tuple_element(gpio_tuple, 0);
         uint32_t gpio_port = port_atom_to_gpio_port(ctx, gpio_port_atom);
         int32_t gpio_pin_num = term_to_int32(term_get_tuple_element(gpio_tuple, 1));
-        term direction = term_get_tuple_element(msg, 3);
+        term direction = term_get_tuple_element(req, 2);
 
         uint16_t rcc_port = gpio_port_to_rcc_port(gpio_port);
         // Set direction implicitly enables the port of the GPIO
@@ -100,9 +112,16 @@ static void consume_gpio_mailbox(Context *ctx)
         ret = ERROR_ATOM;
     }
 
-    free(message);
+    term ret_msg;
+    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+        ret_msg = OUT_OF_MEMORY_ATOM;
+    } else {
+        term ref = term_get_tuple_element(msg, 1);
+        ret_msg = create_pair(ctx, ref, ret);
+    }
 
-    mailbox_send(target, ret);
+    mailbox_send(target, ret_msg);
+    mailbox_destroy_message(message);
 }
 
 static uint32_t port_atom_to_gpio_port(Context *ctx, term port_atom)
