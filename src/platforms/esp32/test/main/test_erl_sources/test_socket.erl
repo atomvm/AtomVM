@@ -155,12 +155,12 @@ test_udp(Active, QueryID) ->
                 ok =
                     receive
                         %               {udp, Socket, {{1,1,1,1}, 53, <<QueryID:16, 1:1, _:7, _/binary>>}} -> ok;    % not supported yet
-                        {udp, Socket, {{1, 1, 1, 1}, 53, <<QueryID:16, B, _/binary>>}} when
+                        {udp, Socket, {1, 1, 1, 1}, 53, <<QueryID:16, B, _/binary>>} when
                             B band 16#80 =:= 16#80
                         ->
                             ok;
-                        {udp, Socket, Packet} ->
-                            {unexpected_packet, Packet};
+                        {udp, Socket, Addr, Port, Packet} ->
+                            {unexpected_packet, Addr, Port, Packet};
                         UnexpectedAfterSend ->
                             {unexpected_message_after_send, UnexpectedAfterSend}
                     after 10000 ->
