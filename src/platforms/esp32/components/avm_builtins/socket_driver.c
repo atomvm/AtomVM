@@ -688,10 +688,16 @@ static NativeHandlerResult do_receive_data(Context *ctx)
 
 
     if (socket_data->active) {
-        term active_tuple = term_alloc_tuple(3, &ctx->heap);
+        term active_tuple = term_alloc_tuple(socket_data->type == TCPClientSocket ? 3 : 5, &ctx->heap);
         term_put_tuple_element(active_tuple, 0, socket_data->type == TCPClientSocket ? TCP_ATOM : UDP_ATOM);
         term_put_tuple_element(active_tuple, 1, term_from_local_process_id(ctx->process_id));
-        term_put_tuple_element(active_tuple, 2, recv_term);
+        if (socket_data->type == TCPClientSocket) {
+            term_put_tuple_element(active_tuple, 2, recv_term);
+        } else {
+            term_put_tuple_element(active_tuple, 2, term_get_tuple_element(recv_term, 0));
+            term_put_tuple_element(active_tuple, 3, term_get_tuple_element(recv_term, 1));
+            term_put_tuple_element(active_tuple, 4, recv_data);
+        }
         globalcontext_send_message(ctx->global, socket_data->controlling_process_pid, active_tuple);
         TRACE("sent received to active process (pid=%d): ", socket_data->controlling_process_pid);
         #ifdef ENABLE_TRACE
