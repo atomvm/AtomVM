@@ -30,7 +30,7 @@ start() ->
     case network:wait_for_sta(Creds, 30000) of
         {ok, {Address, Netmask, Gateway}} ->
             io:format(
-                "Acquired IP address: ~p Netmask: ~p Gateway: ~p~n",
+                "Acquired IP address: ~s Netmask: ~s Gateway: ~s~n",
                 [to_string(Address), to_string(Netmask), to_string(Gateway)]
             ),
             tcp_client_start();
@@ -41,10 +41,11 @@ start() ->
 tcp_client_start() ->
     case gen_tcp:connect("www.example.com", 80, [{active, true}]) of
         {ok, Socket} ->
-            io:format("Connected to ~p from ~p~n", [peer_address(Socket), local_address(Socket)]),
+            PeernameStr = peer_address(Socket),
+            io:format("Connected to ~s from ~s~n", [PeernameStr, local_address(Socket)]),
             case gen_tcp:send(Socket, "GET / HTTP/1.0\r\n\r\n") of
                 ok ->
-                    active_receive_data();
+                    active_receive_data(Socket, PeernameStr);
                 Error ->
                     io:format("An error occurred sending a packet: ~p~n", [Error])
             end;
@@ -52,14 +53,14 @@ tcp_client_start() ->
             io:format("An error occurred connecting: ~p~n", [Error])
     end.
 
-active_receive_data() ->
+active_receive_data(Socket, PeernameStr) ->
     receive
-        {tcp_closed, _Socket} ->
-            io:format("Connection closed.~n"),
+        {tcp_closed, Socket} ->
+            io:format("Connection from ~s closed.~n", [PeernameStr]),
             ok;
         {tcp, Socket, Packet} ->
-            io:format("Received ~p from ~p~n", [Packet, peer_address(Socket)]),
-            active_receive_data()
+            io:format("Received packet from ~s~n~s~n", [PeernameStr, Packet]),
+            active_receive_data(Socket, PeernameStr)
     end.
 
 local_address(Socket) ->
