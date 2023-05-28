@@ -20,18 +20,20 @@
 
 #include <stdlib.h>
 
-#include "context.h"
 #include "refc_binary.h"
-// #include "debug.h"
+
+#include "context.h"
 #include "dictionary.h"
+#include "erl_nif_priv.h"
 #include "memory.h"
 #include "tempstack.h"
+#include "utils.h"
 
 //#define ENABLE_TRACE
 
 #include "trace.h"
 
-struct RefcBinary *refc_binary_create_refc(size_t size)
+struct RefcBinary *refc_binary_create_resource(size_t size, struct ResourceType *resource_type)
 {
     size_t n = sizeof(struct RefcBinary) + size;
     struct RefcBinary *refc = malloc(n);
@@ -41,13 +43,19 @@ struct RefcBinary *refc_binary_create_refc(size_t size)
     list_init(&refc->head);
     refc->ref_count = 1;
     refc->size = size;
+    refc->resource_type = resource_type;
 
     return refc;
 }
 
 const char *refc_binary_get_data(const struct RefcBinary *refc)
 {
-    return (const char *) (refc + 1);
+    return (const char *) (&refc->data);
+}
+
+struct RefcBinary *refc_binary_from_data(void *ptr)
+{
+    return CONTAINER_OF(ptr, struct RefcBinary, data);
 }
 
 void refc_binary_increment_refcount(struct RefcBinary *refc)
@@ -69,6 +77,11 @@ void refc_binary_destroy(struct RefcBinary *refc, struct GlobalContext *global)
 {
     UNUSED(global);
 
+    if (refc->resource_type && refc->resource_type->dtor) {
+        ErlNifEnv env;
+        erl_nif_env_partial_init_from_globalcontext(&env, global);
+        refc->resource_type->dtor(&env, (void *) &refc->data);
+    }
     free(refc);
 }
 

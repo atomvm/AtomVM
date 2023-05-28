@@ -243,6 +243,12 @@ jobs:
         ./tests/test-erlang -s prime_smp
         valgrind ./tests/test-erlang -s prime_smp
 
+    - name: "Test: test-enif"
+      working-directory: build
+      run: |
+        ./tests/test-enif
+        valgrind ./tests/test-enif
+
     - name: "Test: test-mailbox"
       working-directory: build
       run: |

@@ -73,6 +73,12 @@ enum ContextFlags
 
 struct Context
 {
+    // First fields matches ErlNifEnv structure.
+    GlobalContext *global;
+    Heap heap;
+    term *e;
+    term x[MAX_REG];
+
     struct ListHead processes_list_head;
 
     struct ListHead processes_table_head;
@@ -82,13 +88,7 @@ struct Context
 
     struct ListHead monitors_head;
 
-    term x[MAX_REG];
-
     avm_float_t *fr;
-
-    Heap heap;
-
-    term *e;
 
     size_t min_heap_size;
     size_t max_heap_size;
@@ -104,8 +104,6 @@ struct Context
     Mailbox mailbox;
 
     struct ListHead dictionary;
-
-    GlobalContext *global;
 
     // Ports support
     native_handler_f native_handler;

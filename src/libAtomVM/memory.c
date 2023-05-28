@@ -24,6 +24,7 @@
 #include "context.h"
 #include "debug.h"
 #include "dictionary.h"
+#include "erl_nif_priv.h"
 #include "list.h"
 #include "memory.h"
 #include "refc_binary.h"
@@ -62,22 +63,50 @@ void memory_init_heap_root_fragment(Heap *heap, HeapFragment *root, size_t size)
     heap->heap_end = heap->heap_start + size;
 }
 
+static inline enum MemoryGCResult memory_heap_alloc_new_fragment(Heap *heap, size_t size)
+{
+    HeapFragment *root_fragment = heap->root;
+    term *old_end = heap->heap_end;
+    term mso_list = root_fragment->mso_list;
+    if (UNLIKELY(memory_init_heap(heap, size) != MEMORY_GC_OK)) {
+        TRACE("Unable to allocate memory fragment.  size=%u\n", size);
+        return MEMORY_GC_ERROR_FAILED_ALLOCATION;
+    }
+    // Convert root fragment to non-root fragment.
+    root_fragment->heap_end = old_end; // used to hold mso_list when it was the root fragment
+    heap->root->next = root_fragment;
+    heap->root->mso_list = mso_list;
+    return MEMORY_GC_OK;
+}
+
+enum MemoryGCResult memory_erl_nif_env_ensure_free(ErlNifEnv *env, size_t size)
+{
+    if (erl_nif_env_is_context(env)) {
+        return memory_ensure_free_opt((Context *) env, size, MEMORY_NO_GC);
+    } else {
+        // Check if we have a heap.
+        if (env->heap.root) {
+            // We have no stack pointer, free memory is the difference.
+            size_t free_space = env->heap.heap_end - env->heap.heap_ptr;
+            if (free_space < size) {
+                return memory_heap_alloc_new_fragment(&env->heap, size);
+            }
+        } else {
+            if (UNLIKELY(memory_init_heap(&env->heap, size) != MEMORY_GC_OK)) {
+                TRACE("Unable to allocate memory fragment.  size=%u\n", size);
+                return MEMORY_GC_ERROR_FAILED_ALLOCATION;
+            }
+        }
+    }
+    return MEMORY_GC_OK;
+}
+
 enum MemoryGCResult memory_ensure_free_with_roots(Context *c, size_t size, size_t num_roots, term *roots, enum MemoryAllocMode alloc_mode)
 {
     size_t free_space = context_avail_free_memory(c);
     if (alloc_mode == MEMORY_NO_GC) {
         if (free_space < size) {
-            HeapFragment *root_fragment = c->heap.root;
-            term *old_end = c->heap.heap_end;
-            term mso_list = root_fragment->mso_list;
-            if (UNLIKELY(memory_init_heap(&c->heap, size) != MEMORY_GC_OK)) {
-                TRACE("Unable to allocate memory fragment.  size=%u\n", size);
-                return MEMORY_GC_ERROR_FAILED_ALLOCATION;
-            }
-            // Convert root fragment to non-root fragment.
-            root_fragment->heap_end = old_end; // used to hold mso_list when it was the root fragment
-            c->heap.root->next = root_fragment;
-            c->heap.root->mso_list = mso_list;
+            return memory_heap_alloc_new_fragment(&c->heap, size);
         }
     } else {
         size_t maximum_free_space = 2 * (size + MIN_FREE_SPACE_SIZE);

@@ -25,6 +25,7 @@
 extern "C" {
 #endif
 
+#include "erl_nif.h"
 #include "term_typedef.h"
 #include "utils.h"
 
@@ -249,6 +250,15 @@ MUST_CHECK static inline enum MemoryGCResult memory_ensure_free(Context *ctx, si
 {
     return memory_ensure_free_opt(ctx, size, MEMORY_NO_SHRINK);
 }
+
+/**
+ * @brief makes sure that the given nif environment has given free memory
+ *
+ * @details this function makes sure that at least size terms are available. When not available, a new fragment will be allocated.
+ * @param env the target environment.
+ * @param size needed available memory.
+ */
+MUST_CHECK enum MemoryGCResult memory_erl_nif_env_ensure_free(ErlNifEnv *env, size_t size);
 
 /**
  * @brief copies a term to a storage, typically for mailbox messages
