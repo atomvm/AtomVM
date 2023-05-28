@@ -23,10 +23,9 @@
         ok ->
             ok;
         fail ->
-            erlang:display(
+            throw(
                 {failed_assert_match, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, A, B}
-            ),
-            fail
+            )
     end
 ).
 -define(ASSERT_EQUALS(A, B),
@@ -34,10 +33,9 @@
         ok ->
             ok;
         fail ->
-            erlang:display(
+            throw(
                 {failed_assert_equals, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, A, B}
-            ),
-            fail
+            )
     end
 ).
 -define(ASSERT_TRUE(C),
@@ -45,10 +43,9 @@
         ok ->
             ok;
         fail ->
-            erlang:display(
+            throw(
                 {failed_assert_true, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, C}
-            ),
-            fail
+            )
     end
 ).
 -define(ASSERT_FAILURE(A),
@@ -56,10 +53,9 @@
         ok ->
             ok;
         fail ->
-            erlang:display(
+            throw(
                 {failed_assert_failure, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, A}
-            ),
-            fail
+            )
     end
 ).
 -define(ASSERT_FAILURE(A, E),
@@ -67,9 +63,8 @@
         ok ->
             ok;
         fail ->
-            erlang:display(
+            throw(
                 {failed_assert_failure, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, A, E}
-            ),
-            fail
+            )
     end
 ).

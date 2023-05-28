@@ -30,19 +30,84 @@ test() ->
     ?ASSERT_MATCH(?FLT(io_lib:format("", [])), ""),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo", [])), "foo"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo~n", [])), "foo\n"),
+    % atom
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [bar])), "foo: bar\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~s~n", [bar])), "foo: bar\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [bar])), "foo: bar\n"),
+    % strings
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", ["bar"])), "foo: \"bar\"\n"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~s~n", ["bar"])), "foo: bar\n"),
-    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [123])), "foo: 123\n"),
-    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [-123])), "foo: -123\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", ["bar"])), "foo: [98,97,114]\n"),
+    % printable binaries
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [<<"bar">>])), "foo: <<\"bar\">>\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~s~n", [<<"bar">>])), "foo: bar\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [<<"bar">>])), "foo: <<98,97,114>>\n"),
+    % unprintable binaries
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [<<1, 2, 3>>])), "foo: <<1,2,3>>\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~s~n", [<<1, 2, 3>>])), ?FLT(["foo: ", 1, 2, 3, "\n"])),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [<<1, 2, 3>>])), "foo: <<1,2,3>>\n"),
+    % unprintable strings
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [[1, 2, 3]])), "foo: [1,2,3]\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~s~n", [[1, 2, 3]])), "foo: \1\2\3\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [[1, 2, 3]])), "foo: [1,2,3]\n"),
+    % unprintable lists
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [[-1]])), "foo: [-1]\n"),
+    ?ASSERT_FAILURE(io_lib:format("foo: ~s~n", [[-1]]), badarg),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [[-1]])), "foo: [-1]\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [[256]])), "foo: [256]\n"),
+    ?ASSERT_FAILURE(io_lib:format("foo: ~s~n", [[256]]), badarg),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [[256]])), "foo: [256]\n"),
+    % escapable strings
+    ?ASSERT_MATCH(
+        ?FLT(io_lib:format("foo: ~p~n", ["bar\b\t\n\v\f\r\e"])),
+        "foo: \"bar\\b\\t\\n\\v\\f\\r\\e\"\n"
+    ),
+    ?ASSERT_MATCH(
+        ?FLT(io_lib:format("foo: ~s~n", ["bar\b\t\n\v\f\r\e"])), "foo: bar\b\t\n\v\f\r\e\n"
+    ),
+    ?ASSERT_MATCH(
+        ?FLT(io_lib:format("foo: ~w~n", ["bar\b\t\n\v\f\r\e"])),
+        "foo: [98,97,114,8,9,10,11,12,13,27]\n"
+    ),
+    % escapable binaries
+    ?ASSERT_MATCH(
+        ?FLT(io_lib:format("foo: ~p~n", [<<"bar\b\t\n\v\f\r\e">>])),
+        "foo: <<\"bar\\b\\t\\n\\v\\f\\r\\e\">>\n"
+    ),
+    ?ASSERT_MATCH(
+        ?FLT(io_lib:format("foo: ~s~n", [<<"bar\b\t\n\v\f\r\e">>])), "foo: bar\b\t\n\v\f\r\e\n"
+    ),
+    ?ASSERT_MATCH(
+        ?FLT(io_lib:format("foo: ~w~n", [<<"bar\b\t\n\v\f\r\e">>])),
+        "foo: <<98,97,114,8,9,10,11,12,13,27>>\n"
+    ),
+    % nested lists of strings and chars
+    ?ASSERT_MATCH(
+        ?FLT(io_lib:format("foo: ~p~n", [[["hello", " "], "world"]])),
+        "foo: [[\"hello\",\" \"],\"world\"]\n"
+    ),
+    ?ASSERT_MATCH(
+        ?FLT(io_lib:format("foo: ~s~n", [[["hello", " "], "world"]])), "foo: hello world\n"
+    ),
+    ?ASSERT_MATCH(
+        ?FLT(io_lib:format("foo: ~w~n", [[["hello", " "], "world"]])),
+        "foo: [[[104,101,108,108,111],[32]],[119,111,114,108,100]]\n"
+    ),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [[1, 2, 3]])), "foo: [1,2,3]\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~s~n", [[1, 2, 3]])), "foo: \1\2\3\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [[1, 2, 3]])), "foo: [1,2,3]\n"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [[1, 2, [3]]])), "foo: [1,2,[3]]\n"),
+    % integers
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [123])), "foo: 123\n"),
+    ?ASSERT_FAILURE(io_lib:format("foo: ~s~n", [123]), badarg),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [123])), "foo: 123\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [-123])), "foo: -123\n"),
+    ?ASSERT_FAILURE(io_lib:format("foo: ~s~n", [-123]), badarg),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [-123])), "foo: -123\n"),
     ?ASSERT_MATCH(
         ?FLT(io_lib:format("foo: ~p~n", [[65, 116, 111, 109, 86, 77]])), "foo: \"AtomVM\"\n"
     ),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~s~n", [[65, 116, 111, 109, 86, 77]])), "foo: AtomVM\n"),
-    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [<<"bar">>])), "foo: <<\"bar\">>\n"),
-    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [<<1, 2, 3>>])), "foo: <<1,2,3>>\n"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [{bar, tapas}])), "foo: {bar,tapas}\n"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [{bar, "tapas"}])), "foo: {bar,\"tapas\"}\n"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [#{}])), "foo: #{}\n"),
@@ -66,7 +131,6 @@ test() ->
     ?ASSERT_FAILURE(io_lib:format("no pattern", id([foo])), badarg),
     ?ASSERT_FAILURE(io_lib:format("too ~p many ~p patterns", id([foo])), badarg),
     ?ASSERT_FAILURE(io_lib:format("not enough ~p patterns", id([foo, bar])), badarg),
-
     ok.
 
 id(X) ->
