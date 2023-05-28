@@ -37,7 +37,7 @@ term port_heap_create_tuple2(Heap *heap, term a, term b);
 term port_heap_create_tuple3(Heap *heap, term a, term b, term c);
 term port_heap_create_tuple_n(Heap *heap, size_t num_terms, term *terms);
 term port_heap_create_error_tuple(Heap *heap, term reason);
-term port_heap_create_sys_error_tuple(Heap *heap, term syscall, int errno);
+term port_heap_create_sys_error_tuple(Heap *heap, term syscall, int err);
 term port_heap_create_ok_tuple(Heap *heap, term t);
 term port_heap_create_reply(Heap *heap, term ref, term payload);
 
@@ -59,9 +59,9 @@ static inline term port_create_error_tuple(Context *ctx, term reason)
 {
     return port_heap_create_error_tuple(&ctx->heap, reason);
 }
-static inline term port_create_sys_error_tuple(Context *ctx, term syscall, int errno)
+static inline term port_create_sys_error_tuple(Context *ctx, term syscall, int err)
 {
-    return port_heap_create_sys_error_tuple(&ctx->heap, syscall, errno);
+    return port_heap_create_sys_error_tuple(&ctx->heap, syscall, err);
 }
 static inline term port_create_ok_tuple(Context *ctx, term t)
 {
