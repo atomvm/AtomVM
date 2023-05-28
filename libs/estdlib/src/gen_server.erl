@@ -21,7 +21,7 @@
 %%-----------------------------------------------------------------------------
 %% @doc An implementation of the Erlang/OTP gen_server interface.
 %%
-%% This module implements a strict susbset of the Erlang/OTP gen_server
+%% This module implements a strict subset of the Erlang/OTP gen_server
 %% interface, supporting operations for local creation and management of
 %% gen_server instances.
 %%
@@ -272,6 +272,8 @@ stop(ServerRef) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   ServerRef a reference to the gen_server acquired via start
+%% @param   Reason reason to be supplied to callback function
+%% @param   Timeout ms to wait for successful stop
 %% @returns ok, if the gen_server stopped; {error, Reason}, otherwise.
 %% @doc     Stop a previously started gen_server instance.
 %%
@@ -307,7 +309,7 @@ call(ServerRef, Request) ->
 %%-----------------------------------------------------------------------------
 %% @param   ServerRef a reference to the gen_server acquired via start
 %% @param   Request the request to send to the gen_server
-%% @param   Timeout the amount of time in milliseconds to wait for a reply
+%% @param   TimeoutMs the amount of time in milliseconds to wait for a reply
 %% @returns the reply sent back from the gen_server; {error, Reason}, otherwise.
 %% @doc     Send a request to a gen_server instance, and wait for a reply.
 %%
@@ -362,7 +364,7 @@ cast(Pid, Request) when is_pid(Pid) ->
 %%          function can be safely ignored.
 %% @end
 %%-----------------------------------------------------------------------------
--spec reply(from(), Reply :: term) -> term().
+-spec reply(From :: from(), Reply :: term) -> term().
 reply({Pid, Ref}, Reply) ->
     Pid ! {Ref, Reply},
     ok.

@@ -1,7 +1,7 @@
 %
 % This file is part of AtomVM.
 %
-% Copyright 2019-2022 Fred Dushin <fred@dushin.net>
+% Copyright 2019-2023 Fred Dushin <fred@dushin.net>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@
 %%     <li>No support for start_link</li>
 %%     <li>Support only for locally named gen_statem instances</li>
 %%     <li>Support only for state function event handlers</li>
-%%     <li>No support for keeep_state or repeat_state return values from Module:StateName/3 callbacks</li>
+%%     <li>No support for keep_state or repeat_state return values from Module:StateName/3 callbacks</li>
 %%     <li>No support for postpone or hibernate state transition actions</li>
 %%     <li>No support for state enter calls</li>
 %%     <li>No support for multi_call</li>
@@ -208,6 +208,7 @@ call(ServerRef, Request, Timeout) ->
 %%          gen_statem instance, but will not wait for a reply.
 %% @end
 %%-----------------------------------------------------------------------------
+-spec cast(ServerRef :: server_ref(), Request :: term()) -> ok | {error, Reason :: term()}.
 cast(ServerRef, Request) ->
     gen_server:cast(ServerRef, Request).
 
@@ -222,6 +223,7 @@ cast(ServerRef, Request) ->
 %%          function can be safely ignored.
 %% @end
 %%-----------------------------------------------------------------------------
+-spec reply(Client :: pid(), Reply :: term()) -> term().
 reply(Client, Reply) ->
     gen_server:reply(Client, Reply).
 

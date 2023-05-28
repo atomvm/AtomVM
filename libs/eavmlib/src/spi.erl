@@ -172,7 +172,9 @@ close(SPI) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   SPI SPI instance created via `open/1'
+%% @param   DeviceName device name from configuration
 %% @param   Address SPI Address from which to read
+%% @param   Len in bytes to read
 %% @returns `{ok, Value}' or `error'
 %% @doc     Read a value from and address on the device.
 %% @end
@@ -186,7 +188,10 @@ read_at(SPI, DeviceName, Address, Len) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   SPI SPI instance created via `open/1'
+%% @param   DeviceName device name from configuration
 %% @param   Address SPI Address to which to write
+%% @param   Len in bytes to read
+%% @param   Data byte(s) to write
 %% @returns `{ok, Value}' or `error'
 %% @doc     Write a value to and address on the device.
 %%
@@ -211,7 +216,7 @@ write_at(SPI, DeviceName, Address, Len, Data) ->
 %% @param   DeviceName SPI device name (use key in `device_config')
 %% @param   Transaction transaction map.
 %% @returns `ok' or `{error, Reason}', if an error occurred.
-%% @doc     Write data to the SPI device, using the intructions encoded in the supplied transaction.
+%% @doc     Write data to the SPI device, using the instructions encoded in the supplied transaction.
 %%
 %% The supplied `Transaction' encodes information about how data is to be written to the selected SPI device.
 %% See the description above for the fields that may be specified in this map.
@@ -242,7 +247,7 @@ write(SPI, DeviceName, Transaction) when
 %% @param   DeviceName SPI device name (use key in `device_config')
 %% @param   Transaction transaction.
 %% @returns `{ok, binary()}' or `{error, Reason}', if an error occurred.
-%% @doc     Write data to the SPI device, using the intructions encoded in the supplied transaction.
+%% @doc     Write data to the SPI device, using the instructions encoded in the supplied transaction.
 %% device, and simultaneously read data back from the device, returning the read data in a binary.
 %%
 %% The supplied `Transaction' encodes information about how data is to be written to the selected SPI device.
