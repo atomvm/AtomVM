@@ -43,6 +43,11 @@ extern "C" {
 typedef struct Context Context;
 #endif
 
+#ifndef TYPEDEF_GLOBAL_CONTEXT
+#define TYPEDEF_GLOBAL_CONTEXT
+typedef struct GlobalContext GlobalContext;
+#endif
+
 enum MemoryGCResult
 {
     MEMORY_GC_OK = 0,
@@ -99,10 +104,10 @@ typedef struct Heap Heap;
     Heap name;                            \
     memory_init_heap_root_fragment(&name, (HeapFragment *) &(name##__root__), size);
 
-#define END_WITH_STACK_HEAP(name)                      \
-    memory_sweep_mso_list(name.root->mso_list);        \
-    if (name.root->next) {                             \
-        memory_destroy_heap_fragment(name.root->next); \
+#define END_WITH_STACK_HEAP(name, global)               \
+    memory_sweep_mso_list(name.root->mso_list, global); \
+    if (name.root->next) {                              \
+        memory_destroy_heap_fragment(name.root->next);  \
     }
 
 // mso_list is the first term for message storage
@@ -303,8 +308,9 @@ static inline void memory_heap_append_heap(Heap *target, Heap *source)
  * function may be called in a copy even, such as in a process spawn, or in
  * the copy of a term to or from a process mailbox.
  * @param mso_list the list of mark-sweep object in a heap "space"
+ * @param global the global context
  */
-void memory_sweep_mso_list(term mso_list);
+void memory_sweep_mso_list(term mso_list, GlobalContext *global);
 
 /**
  * @brief Destroy a chain of heap fragments.
@@ -324,9 +330,9 @@ static inline void memory_destroy_heap_fragment(HeapFragment *fragment)
 /**
  * @brief Destroy a root heap. First sweep its mso list.
  */
-static inline void memory_destroy_heap(Heap *heap)
+static inline void memory_destroy_heap(Heap *heap, GlobalContext *global)
 {
-    memory_sweep_mso_list(heap->root->mso_list);
+    memory_sweep_mso_list(heap->root->mso_list, global);
     memory_destroy_heap_fragment(heap->root);
 }
 

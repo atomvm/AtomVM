@@ -129,7 +129,7 @@ EventListener *uart_interrupt_callback(GlobalContext *glb, EventListener *listen
                     int local_pid = term_to_local_process_id(uart_data->reader_process_pid);
                     globalcontext_send_message(glb, local_pid, result_tuple);
 
-                    memory_destroy_heap(&heap);
+                    memory_destroy_heap(&heap, glb);
 
                     uart_data->reader_process_pid = term_invalid_term();
                     uart_data->reader_ref_ticks = 0;

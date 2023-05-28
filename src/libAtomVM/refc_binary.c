@@ -55,14 +55,21 @@ void refc_binary_increment_refcount(struct RefcBinary *refc)
     refc->ref_count++;
 }
 
-bool refc_binary_decrement_refcount(struct RefcBinary *refc)
+bool refc_binary_decrement_refcount(struct RefcBinary *refc, struct GlobalContext *global)
 {
     if (--refc->ref_count == 0) {
-        list_remove(&refc->head);
-        free(refc);
+        synclist_remove(&global->refc_binaries, &refc->head);
+        refc_binary_destroy(refc, global);
         return true;
     }
     return false;
+}
+
+void refc_binary_destroy(struct RefcBinary *refc, struct GlobalContext *global)
+{
+    UNUSED(global);
+
+    free(refc);
 }
 
 term refc_binary_create_binary_info(Context *ctx)

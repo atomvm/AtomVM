@@ -135,7 +135,7 @@ static void send_got_ip(struct ClientData *data, tcpip_adapter_ip_info_t *info)
         term reply = port_heap_create_tuple2(&heap, make_atom(data->global, sta_got_ip_atom), ip_info);
         send_term(&heap, data, reply);
     }
-    END_WITH_STACK_HEAP(heap);
+    END_WITH_STACK_HEAP(heap, data->global);
 }
 
 static void send_sta_connected(struct ClientData *data)
@@ -147,7 +147,7 @@ static void send_sta_connected(struct ClientData *data)
     {
         send_term(&heap, data, make_atom(data->global, sta_connected_atom));
     }
-    END_WITH_STACK_HEAP(heap);
+    END_WITH_STACK_HEAP(heap, data->global);
 }
 
 static void send_sta_disconnected(struct ClientData *data)
@@ -159,7 +159,7 @@ static void send_sta_disconnected(struct ClientData *data)
     {
         send_term(&heap, data, make_atom(data->global, sta_disconnected_atom));
     }
-    END_WITH_STACK_HEAP(heap);
+    END_WITH_STACK_HEAP(heap, data->global);
 }
 
 static void send_ap_started(struct ClientData *data)
@@ -171,7 +171,7 @@ static void send_ap_started(struct ClientData *data)
     {
         send_term(&heap, data, make_atom(data->global, ap_started_atom));
     }
-    END_WITH_STACK_HEAP(heap);
+    END_WITH_STACK_HEAP(heap, data->global);
 }
 
 static void send_atom_mac(struct ClientData *data, term atom, uint8_t *mac)
@@ -183,7 +183,7 @@ static void send_atom_mac(struct ClientData *data, term atom, uint8_t *mac)
         term reply = port_heap_create_tuple2(&heap, atom, mac_term);
         send_term(&heap, data, reply);
     }
-    END_WITH_STACK_HEAP(heap);
+    END_WITH_STACK_HEAP(heap, data->global);
 }
 
 static void send_ap_sta_connected(struct ClientData *data, uint8_t *mac)
@@ -208,7 +208,7 @@ static void send_ap_sta_ip_assigned(struct ClientData *data, esp_ip4_addr_t *ip)
         term reply = port_heap_create_tuple2(&heap, make_atom(data->global, ap_sta_ip_assigned_atom), ip_term);
         send_term(&heap, data, reply);
     }
-    END_WITH_STACK_HEAP(heap);
+    END_WITH_STACK_HEAP(heap, data->global);
 }
 
 static void send_sntp_sync(struct ClientData *data, struct timeval *tv)
@@ -222,7 +222,7 @@ static void send_sntp_sync(struct ClientData *data, struct timeval *tv)
         term reply = port_heap_create_tuple2(&heap, make_atom(data->global, sntp_sync_atom), tv_tuple);
         send_term(&heap, data, reply);
     }
-    END_WITH_STACK_HEAP(heap);
+    END_WITH_STACK_HEAP(heap, data->global);
 }
 
 #define UNLIKELY_NOT_ESP_OK(E) UNLIKELY((E) != ESP_OK)

@@ -30,6 +30,15 @@ extern "C" {
 
 #include "list.h"
 #include "smp.h"
+#ifndef TYPEDEF_CONTEXT
+#define TYPEDEF_CONTEXT
+typedef struct Context Context;
+#endif
+
+#ifndef TYPEDEF_GLOBAL_CONTEXT
+#define TYPEDEF_GLOBAL_CONTEXT
+typedef struct GlobalContext GlobalContext;
+#endif
 
 struct RefcBinary
 {
@@ -41,10 +50,9 @@ struct RefcBinary
 /**
  * @brief Create a reference-counted binary outside of the process heap
  *
- * @details This function will create a reference-counted binary outside of the context heap.  If the binary is non-const,
- * a blob will be allocated in the VM memory (e.g., via malloc).  The allocated data will include
- * an internal data structure that includes the data size and reference count.  If the supplied
- * data is non-NULL, the supplied data will be copied to the newly allocated region.
+ * @details This function will create a reference-counted binary outside of the context heap.
+ * A blob will be allocated in the VM memory (e.g., via malloc).   The allocated data will include
+ * an internal data structure that includes the data size and reference count.
  * @param size the size of the data to create
  * @returns a pointer to the out-of-context data.
  */
@@ -67,12 +75,23 @@ void refc_binary_increment_refcount(struct RefcBinary *ptr);
 /**
  * @brief Decrement the reference count on the refc binary
  *
- * @details This function will free the the refc binary if the
+ * @details This function will call `refc_binary_destroy` if the
  * reference count reaches 0.
  * @param ptr the refc binary
+ * @param global the global context
  * @return true if the refc binary was free'd; false, otherwise
  */
-bool refc_binary_decrement_refcount(struct RefcBinary *ptr);
+bool refc_binary_decrement_refcount(struct RefcBinary *ptr, GlobalContext *global);
+
+/**
+ * @brief Destroy a refc binary after its reference count reached 0.
+ *
+ * @details This function will call the destructor if the refc binary is a
+ * resource and will free the refc binary.
+ * @param refc the binary to destroy
+ * @param global the global context
+ */
+void refc_binary_destroy(struct RefcBinary *refc, struct GlobalContext *global);
 
 /**
  * TODO consider implementing erlang:memory/0,1 instead

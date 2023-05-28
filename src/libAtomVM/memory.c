@@ -179,7 +179,7 @@ static enum MemoryGCResult memory_gc(Context *ctx, size_t new_size, size_t num_r
 
     ctx->heap.heap_ptr = temp_end;
 
-    memory_sweep_mso_list(old_mso_list);
+    memory_sweep_mso_list(old_mso_list, ctx->global);
     ctx->heap.root->mso_list = new_mso_list;
 
     memory_destroy_heap_fragment(old_root_fragment);
@@ -598,7 +598,7 @@ void memory_heap_append_fragment(Heap *heap, HeapFragment *fragment, term mso_li
     }
 }
 
-void memory_sweep_mso_list(term mso_list)
+void memory_sweep_mso_list(term mso_list, GlobalContext *global)
 {
     term l = mso_list;
     while (l != term_nil()) {
@@ -610,7 +610,7 @@ void memory_sweep_mso_list(term mso_list)
             // it has been moved, so it is referenced
         } else if (term_is_refc_binary(h) && !term_refc_binary_is_const(h)) {
             // unreferenced binary; decrement reference count
-            refc_binary_decrement_refcount((struct RefcBinary *) term_refc_binary_ptr(h));
+            refc_binary_decrement_refcount((struct RefcBinary *) term_refc_binary_ptr(h), global);
         }
         l = term_get_list_tail(l);
     }
