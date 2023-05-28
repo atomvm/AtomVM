@@ -57,10 +57,13 @@ As a BEAM implementation, AtomVM must be capable of spawning and managing the li
 The `GlobalContext` structure maintains a list of running processes and contains the following fields for managing the running Erlang processes in the VM:
 
 * `processes_table` the list of all processes running in the system
-* `waiting_processes` the subset of processes that are waiting to run (e.g., waiting for a message or timeout condition).  This set is the complement of the set of ready processes.
-* `ready_processes` the subset of processes that are ready to run.  This set is the complement of the set of waiting processes.
+* `waiting_processes` the subset of processes that are waiting to run (e.g., waiting for a message or timeout condition).
+* `running_processes` the subset of processes that are currently running.
+* `ready_processes` the subset of processes that are ready to run.
 
-Each of these fields are doubly-linked list (ring) structures, i.e, structs containing a `prev` and `next` pointer field.  The `Context` data structure begins with two such structures, the first of which links the `Context` struct in the `processes_table` field, and the second of which is used for either the `waiting_processes` or the `ready_processes` field.
+Processes are in either `waiting_processes`, `running_processes` or `ready_processes`.  A running process can technically be moved to the ready list while running to signify that if it yields, it will be eligible for being run again, typically if it receives a message.  Also, native handlers (ports) are never moved to the `running_processes` list but are in the `waiting_processes` list when they run (and can be moved to `ready_processes` list if they are made ready while running).
+
+Each of these fields are doubly-linked list (ring) structures, i.e, structs containing a `prev` and `next` pointer field.  The `Context` data structure begins with two such structures, the first of which links the `Context` struct in the `processes_table` field, and the second of which is used for either the `waiting_processes`, the `ready_processes` or the `running_processes` field.
 
 > Note.  The C programming language treats structures in memory as contiguous sequences of fields of given types.  Structures have no hidden pramble data, such as you might find in C++ or who knows what in even higher level languages.  The size of a struct, therefore, is determined simply by the size of the component fields.
 
@@ -89,6 +92,24 @@ The relationship between the `GlobalContext` fields that manage BEAM processes a
 ## Exception Handling
 
 ## The Scheduler
+
+In SMP builds, AtomVM runs one scheduler thread per core.  Scheduler threads are actually started on demand.  The number of scheduler threads can be queried with `erlang:system_info/1` and be modified with `erlang:system_flag/2`.  All scheduler threads are considered equal and there is no notion of main thread except when shutting down (main thread is shut down last).
+
+Each scheduler thread picks a ready process and execute it until it yields.  Erlang processes yield when they are waiting (for a message) and after a number of reductions elapsed.  Native processes yield when they are done consuming messages (when the handler returns).
+
+Once a scheduler thread is done executing a process, if no other thread is waiting into `sys_poll_events`, it calls `sys_poll_events` with a timeout that correspond to the time to wait for next execution.  If there are ready processes, the timeout is 0.  If there is no ready process, this scheduler thread will wait into `sys_poll_event` and depending on the platform implementation, the CPU usage can drop.
+
+If there already is one thread in `sys_poll_events`, other scheduler threads pick the next ready process and if there is none, wait.  Other scheduler threads can also interrupt the wait in `sys_poll_events` if a process is made ready to run.  They do so using platform function `sys_signal`.
+
+## Mailboxes and signals
+
+Erlang processes receive messages in a mailbox.  The mailbox is the interface with other processes.
+
+When a sender process sends a message to a recipient process, the message is first enqueued into an outer mailbox.  The recipient process eventually moves all messages from the outer mailbox to the inner mailbox.  The reason for the inner and outer mailbox is to use lock-free data structures using atomic CAS operations.
+
+Sometimes, Erlang processes need to query information from other processes but without sending a regular message, for example when using `process_info/1,2` nif.  This is handled by signals.  Signals are special messages that are enqueued in the outer mailbox of a process.  Signals are processed by the recipient process when regular messages from the outer mailbox are moved to the inner mailbox.  Signal processing code is part of the main loop and transparent to recipient processes.  Both native handlers and erlang processes can receive signals.  Signals are also used to run specific operation on other processes that cannot be done from another thread.  For example, signals are used to perform garbage collection on another process.
+
+When an Erlang process calls a nif that requires such an information from another process such as `process_info/1,2`, the nif returns a special value and set the Trap flag on the calling process.  The calling process is effectively blocked until the other process is scheduled and the information is sent back using another signal message.  This mechanism can also be used by nifs that want to block until a condition is true.
 
 ## Stacktraces
 
