@@ -118,7 +118,7 @@ void context_destroy(Context *ctx)
 
     free(ctx->fr);
 
-    memory_destroy_heap(&ctx->heap);
+    memory_destroy_heap(&ctx->heap, ctx->global);
 
     dictionary_destroy(&ctx->dictionary);
 

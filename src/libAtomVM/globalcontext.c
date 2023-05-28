@@ -27,6 +27,7 @@
 #include "context.h"
 #include "defaultatoms.h"
 #include "list.h"
+#include "refc_binary.h"
 #include "synclist.h"
 #include "sys.h"
 #include "utils.h"
@@ -165,7 +166,16 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
 #endif
     synclist_destroy(&glb->registered_processes);
     synclist_destroy(&glb->processes_table);
+    // Destroy every remaining refc binaries.
+    struct ListHead *item;
+    struct ListHead *tmp;
+    struct ListHead *refc_binaries = synclist_nolock(&glb->refc_binaries);
+    MUTABLE_LIST_FOR_EACH (item, tmp, refc_binaries) {
+        struct RefcBinary *refc = GET_LIST_ENTRY(item, struct RefcBinary, head);
+        refc_binary_destroy(refc, glb);
+    }
     synclist_destroy(&glb->refc_binaries);
+
     synclist_destroy(&glb->avmpack_data);
     free(glb);
 }

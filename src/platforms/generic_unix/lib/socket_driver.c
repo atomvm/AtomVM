@@ -704,7 +704,7 @@ static EventListener *active_recv_callback(GlobalContext *glb, EventListener *ba
         mailbox_send(ctx, globalcontext_make_atom(glb, close_internal));
         free(listener);
         result = NULL;
-        END_WITH_STACK_HEAP(heap);
+        END_WITH_STACK_HEAP(heap, glb);
     } else {
         TRACE("socket_driver|active_recv_callback: received data of len %li from fd %i\n", len, socket_data->sockfd);
         int ensure_packet_avail;
@@ -724,7 +724,7 @@ static EventListener *active_recv_callback(GlobalContext *glb, EventListener *ba
         term msgs[3] = { TCP_ATOM, term_from_local_process_id(ctx->process_id), packet };
         term msg = port_heap_create_tuple_n(&heap, 3, msgs);
         port_send_message_nolock(glb, pid, msg);
-        memory_destroy_heap(&heap);
+        memory_destroy_heap(&heap, glb);
     }
     globalcontext_get_process_unlock(glb, ctx);
     free(buf);
@@ -768,7 +768,7 @@ static EventListener *passive_recv_callback(GlobalContext *glb, EventListener *b
         term reply = port_heap_create_reply(&heap, ref, port_heap_create_error_tuple(&heap, globalcontext_make_atom(glb, closed_a)));
         port_send_message_nolock(glb, pid, reply);
         mailbox_send(ctx, globalcontext_make_atom(glb, close_internal));
-        END_WITH_STACK_HEAP(heap);
+        END_WITH_STACK_HEAP(heap, glb);
     } else if (len < 0) {
         // {Ref, {error, {SysCall, Errno}}}
         BEGIN_WITH_STACK_HEAP(12, heap);
@@ -777,7 +777,7 @@ static EventListener *passive_recv_callback(GlobalContext *glb, EventListener *b
         term reply = port_heap_create_reply(&heap, ref, port_heap_create_sys_error_tuple(&heap, RECV_ATOM, errno));
         port_send_message_nolock(glb, pid, reply);
         mailbox_send(ctx, globalcontext_make_atom(glb, close_internal));
-        END_WITH_STACK_HEAP(heap);
+        END_WITH_STACK_HEAP(heap, glb);
     } else {
         TRACE("socket_driver|passive_recv_callback: passive received data of len: %li\n", len);
         int ensure_packet_avail;
@@ -798,7 +798,7 @@ static EventListener *passive_recv_callback(GlobalContext *glb, EventListener *b
         term payload = port_heap_create_ok_tuple(&heap, packet);
         term reply = port_heap_create_reply(&heap, ref, payload);
         port_send_message_nolock(glb, pid, reply);
-        memory_destroy_heap(&heap);
+        memory_destroy_heap(&heap, glb);
     }
     socket_data->passive_listener = NULL;
     globalcontext_get_process_unlock(glb, ctx);
@@ -841,7 +841,7 @@ static EventListener *active_recvfrom_callback(GlobalContext *glb, EventListener
         term msgs[3] = { UDP_ATOM, term_from_local_process_id(ctx->process_id), port_heap_create_sys_error_tuple(&heap, RECVFROM_ATOM, errno) };
         term msg = port_heap_create_tuple_n(&heap, 3, msgs);
         port_send_message_nolock(glb, pid, msg);
-        END_WITH_STACK_HEAP(heap);
+        END_WITH_STACK_HEAP(heap, glb);
         // Not closing the listener here as there is no connection to close.
     } else {
         int ensure_packet_avail;
@@ -863,7 +863,7 @@ static EventListener *active_recvfrom_callback(GlobalContext *glb, EventListener
         term msgs[5] = { UDP_ATOM, term_from_local_process_id(ctx->process_id), addr, port, packet };
         term msg = port_heap_create_tuple_n(&heap, 5, msgs);
         port_send_message_nolock(glb, pid, msg);
-        memory_destroy_heap(&heap);
+        memory_destroy_heap(&heap, glb);
     }
     globalcontext_get_process_unlock(glb, ctx);
     free(buf);
@@ -908,7 +908,7 @@ static EventListener *passive_recvfrom_callback(GlobalContext *glb, EventListene
         term ref = term_from_ref_ticks(listener->ref_ticks, &heap);
         term reply = port_heap_create_reply(&heap, ref, port_heap_create_sys_error_tuple(&heap, RECVFROM_ATOM, errno));
         port_send_message_nolock(glb, pid, reply);
-        END_WITH_STACK_HEAP(heap);
+        END_WITH_STACK_HEAP(heap, glb);
     } else {
         int ensure_packet_avail;
         if (socket_data->binary) {
@@ -931,7 +931,7 @@ static EventListener *passive_recvfrom_callback(GlobalContext *glb, EventListene
         term payload = port_heap_create_ok_tuple(&heap, addr_port_packet);
         term reply = port_heap_create_reply(&heap, ref, payload);
         port_send_message_nolock(glb, pid, reply);
-        memory_destroy_heap(&heap);
+        memory_destroy_heap(&heap, glb);
     }
     socket_data->passive_listener = NULL;
     globalcontext_get_process_unlock(glb, ctx);
@@ -1010,7 +1010,7 @@ static EventListener *accept_callback(GlobalContext *glb, EventListener *base_li
         term ref = term_from_ref_ticks(listener->ref_ticks, &heap);
         term reply = port_heap_create_reply(&heap, ref, port_heap_create_sys_error_tuple(&heap, ACCEPT_ATOM, errno));
         port_send_message_nolock(glb, pid, reply);
-        END_WITH_STACK_HEAP(heap);
+        END_WITH_STACK_HEAP(heap, glb);
     } else {
         TRACE("socket_driver|accept_callback: accepted connection.  fd: %i\n", fd);
 
@@ -1042,7 +1042,7 @@ static EventListener *accept_callback(GlobalContext *glb, EventListener *base_li
         term payload = port_heap_create_ok_tuple(&heap, socket_pid);
         term reply = port_heap_create_reply(&heap, ref, payload);
         port_send_message_nolock(glb, pid, reply);
-        END_WITH_STACK_HEAP(heap);
+        END_WITH_STACK_HEAP(heap, glb);
     }
     socket_data->passive_listener = NULL;
     globalcontext_get_process_unlock(glb, ctx);

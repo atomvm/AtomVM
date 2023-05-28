@@ -269,7 +269,7 @@ EventListener *socket_events_handler(GlobalContext *glb, EventListener *listener
             term_put_tuple_element(message, 0, globalcontext_make_atom(glb, netconn_event_internal));
             term_put_tuple_element(message, 1, term_from_int(event.len));
             globalcontext_send_message(glb, socket->process_id, message);
-            END_WITH_STACK_HEAP(heap)
+            END_WITH_STACK_HEAP(heap, glb)
         }
     }
     return listener;

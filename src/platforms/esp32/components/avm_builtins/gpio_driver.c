@@ -301,7 +301,7 @@ EventListener *gpio_interrupt_callback(GlobalContext *glb, EventListener *listen
 
     globalcontext_send_message(glb, listening_pid, int_msg);
 
-    END_WITH_STACK_HEAP(heap);
+    END_WITH_STACK_HEAP(heap, glb);
 
     return listener;
 }
