@@ -264,6 +264,16 @@ static inline bool mailbox_has_next(Mailbox *mbox)
 bool mailbox_peek(Context *ctx, term *out);
 
 /**
+ * @brief Take next message from mailbox.
+ *
+ * @details Remove the first message from the mailbox and return it.
+ * To be called from the process only.
+ * This function is intended for some corner cases, such as certain port drivers.
+ * @param mbox the mailbox to take the next message from.
+ */
+MailboxMessage *mailbox_take_message(Mailbox *mbox);
+
+/**
  * @brief Remove next message from mailbox.
  *
  * @details Discard a term that has been previously queued on a certain process
