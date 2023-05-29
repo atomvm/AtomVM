@@ -38,6 +38,7 @@ extern "C" {
 #include "list.h"
 #include "smp.h"
 #include "term_typedef.h"
+#include "utils.h"
 
 struct Context;
 
@@ -274,16 +275,6 @@ bool mailbox_peek(Context *ctx, term *out);
 MailboxMessage *mailbox_take_message(Mailbox *mbox);
 
 /**
- * @brief Remove next message from mailbox.
- *
- * @details Discard a term that has been previously queued on a certain process
- * or driver mailbox. To be called from the process only. Term messages are
- * actually added as fragments to the heap and will be gone at next GC.
- * @param mbx the mailbox to remove next message from.
- */
-void mailbox_remove_message(Mailbox *mbox, Heap *ctx);
-
-/**
  * @brief Get first message from mailbox.
  *
  * @details Get the first message and sets the receive pointer to it so it can
@@ -313,6 +304,22 @@ void mailbox_destroy(Mailbox *mbox, Heap *heap);
  * @param heap heap to append the message to.
  */
 void mailbox_message_dispose(MailboxMessage *m, Heap *heap);
+
+/**
+ * @brief Remove next message from mailbox.
+ *
+ * @details Discard a term that has been previously queued on a certain process
+ * or driver mailbox. To be called from the process only. Term messages are
+ * actually added as fragments to the heap and will be gone at next GC.
+ * @param mbx the mailbox to remove next message from.
+ */
+static inline void mailbox_remove_message(Mailbox *mbox, Heap *heap)
+{
+    MailboxMessage *removed = mailbox_take_message(mbox);
+    if (LIKELY(removed != NULL)) {
+        mailbox_message_dispose(removed, heap);
+    }
+}
 
 /**
  * @brief Output mailbox to stderr for crashdump reporting.

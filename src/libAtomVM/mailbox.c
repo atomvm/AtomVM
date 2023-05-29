@@ -399,14 +399,6 @@ MailboxMessage *mailbox_take_message(Mailbox *mbox)
     return removed;
 }
 
-void mailbox_remove_message(Mailbox *mbox, Heap *heap)
-{
-    MailboxMessage *removed = mailbox_take_message(mbox);
-    if (LIKELY(removed != NULL)) {
-        mailbox_message_dispose(removed, heap);
-    }
-}
-
 Message *mailbox_first(Mailbox *mbox)
 {
     mailbox_reset(mbox);
