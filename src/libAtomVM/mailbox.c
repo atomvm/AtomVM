@@ -367,14 +367,14 @@ bool mailbox_peek(Context *c, term *out)
     return true;
 }
 
-void mailbox_remove_message(Mailbox *mbox, Heap *heap)
+MailboxMessage *mailbox_take_message(Mailbox *mbox)
 {
     // This is called from OP_REMOVE_MESSAGE opcode, so we cannot make any
     // assumption about the state and should perform a nop if the mailbox
     // is empty.
     if (UNLIKELY(mbox->receive_pointer == NULL)) {
         fprintf(stderr, "OP_REMOVE_MESSAGE on empty mailbox\n");
-        return;
+        return NULL;
     }
     MailboxMessage *removed = mbox->receive_pointer;
     if (mbox->receive_pointer_prev) {
@@ -393,9 +393,10 @@ void mailbox_remove_message(Mailbox *mbox, Heap *heap)
         }
     }
 
-    mailbox_message_dispose(removed, heap);
     // Reset receive pointers
     mailbox_reset(mbox);
+
+    return removed;
 }
 
 Message *mailbox_first(Mailbox *mbox)
