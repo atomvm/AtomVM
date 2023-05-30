@@ -768,7 +768,7 @@ In other cases, you may just need to write a byte or sequence of bytes in one op
 Reading bytes is more straightforward.  Simply use `i2c:read_bytes/3,4`, specifying the port instance, device address, optionally a register, and the number of bytes to read:
 
     %% erlang
-    BinaryData = i2c:read_bytes(I2C, DeviceAddress, Register, Len)
+    {ok, BinaryData} = i2c:read_bytes(I2C, DeviceAddress, Register, Len)
 
 To close the I2C driver and free any resources in use by it, use the `i2c:close/1` function, supplying a reference to the I2C driver instance created via `i2c:open/1`:
 

@@ -138,6 +138,7 @@ void port_driver_destroy_all(GlobalContext *global);
 void nif_collection_init_all(GlobalContext *global);
 void nif_collection_destroy_all(GlobalContext *global);
 const struct Nif *nif_collection_resolve_nif(const char *name);
+term esp_err_to_term(GlobalContext *glb, esp_err_t status);
 
 const void *esp32_sys_mmap_partition(
     const char *partition_name, spi_flash_mmap_handle_t *handle, int *size);

@@ -35,7 +35,7 @@ loop(I2C) ->
     loop(I2C).
 
 read(I2C) ->
-    Bin = read_sensor(I2C),
+    {ok, Bin} = read_sensor(I2C),
     parse_bin(Bin).
 
 parse_bin(B) ->

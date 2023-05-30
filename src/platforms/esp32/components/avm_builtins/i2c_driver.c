@@ -38,6 +38,7 @@
 #include "mailbox.h"
 #include "module.h"
 #include "platform_defaultatoms.h"
+#include "port.h"
 #include "scheduler.h"
 #include "term.h"
 #include "utils.h"
@@ -58,7 +59,8 @@ static term i2cdriver_end_transmission(Context *ctx, term pid);
 static term i2cdriver_write_byte(Context *ctx, term pid, term req);
 static NativeHandlerResult i2cdriver_consume_mailbox(Context *ctx);
 
-static const char *const i2c_driver_atom = "\xA" "i2c_driver";
+static const char *const einprogress_atom = ATOM_STR("\xB", "einprogress");
+static const char *const i2c_driver_atom = ATOM_STR("\xA", "i2c_driver");
 static term i2c_driver;
 
 enum i2c_cmd
@@ -89,10 +91,10 @@ struct I2CData
     i2c_port_t i2c_num;
 };
 
-#define I2C_VALIDATE_NOT_INVALID(moniker)                   \
-    if (term_is_invalid_term(moniker##_term)) {             \
-        ESP_LOGE(TAG, "Missing parameter: " #moniker "\n"); \
-        goto free_and_exit;                                 \
+#define I2C_VALIDATE_NOT_INVALID(moniker)              \
+    if (term_is_invalid_term(moniker##_term)) {        \
+        ESP_LOGE(TAG, "Missing parameter: " #moniker); \
+        goto free_and_exit;                            \
     }
 
 void i2c_driver_init(GlobalContext *global)
@@ -123,12 +125,12 @@ Context *i2c_driver_create_port(GlobalContext *global, term opts)
         opts, ATOM_STR("\x7", "i2c_num"), global);
     if (!term_is_invalid_term(i2c_num_term)) {
         if (!term_is_integer(i2c_num_term)) {
-            ESP_LOGE(TAG, "Invalid parameter: i2c_num is not an integer\n");
+            ESP_LOGE(TAG, "Invalid parameter: i2c_num is not an integer");
             goto free_and_exit;
         }
         i2c_data->i2c_num = term_to_int32(i2c_num_term);
         if (i2c_data->i2c_num < 0 || i2c_data->i2c_num > I2C_NUM_MAX - 1) {
-            ESP_LOGE(TAG, "Invalid parameter: i2c_num out of range\n");
+            ESP_LOGE(TAG, "Invalid parameter: i2c_num out of range");
             goto free_and_exit;
         }
     }
@@ -144,13 +146,13 @@ Context *i2c_driver_create_port(GlobalContext *global, term opts)
     esp_err_t err = i2c_param_config(i2c_data->i2c_num, &conf);
 
     if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGE(TAG, "Failed to initialize I2C parameters.  err=%i\n", err);
+        ESP_LOGE(TAG, "Failed to initialize I2C parameters.  err=%i", err);
         goto free_and_exit;
     }
 
     err = i2c_driver_install(i2c_data->i2c_num, I2C_MODE_MASTER, 0, 0, 0);
     if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGE(TAG, "Failed to install I2C driver.  err=%i\n", err);
+        ESP_LOGE(TAG, "Failed to install I2C driver.  err=%i", err);
         goto free_and_exit;
     }
 
@@ -173,7 +175,7 @@ static void i2c_driver_close(Context *ctx)
 
     esp_err_t err = i2c_driver_delete(i2c_data->i2c_num);
     if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGW(TAG, "Failed to delete I2C driver.  err=%i\n", err);
+        ESP_LOGW(TAG, "Failed to delete I2C driver.  err=%i", err);
     }
     free(ctx->platform_data);
 }
@@ -184,8 +186,19 @@ static term i2cdriver_begin_transmission(Context *ctx, term pid, term req)
 
     if (UNLIKELY(i2c_data->transmitting_pid != term_invalid_term())) {
         // another process is already transmitting
-        TRACE("i2cdriver_begin_transmission: Another process is already transmitting\n");
-        return ERROR_ATOM;
+        ESP_LOGE(TAG, "i2cdriver_begin_transmission: Another process is already transmitting");
+
+        // {error, {einprogress, Pid :: pid()}}
+        if (UNLIKELY(memory_ensure_free(ctx, 2 * TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return OUT_OF_MEMORY_ATOM;
+        }
+
+        term reason_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(reason_tuple, 0, globalcontext_make_atom(ctx->global, einprogress_atom));
+        term_put_tuple_element(reason_tuple, 1, i2c_data->transmitting_pid);
+
+        return port_create_error_tuple(ctx, reason_tuple);
     }
 
     term address_term = term_get_tuple_element(req, 1);
@@ -206,8 +219,19 @@ static term i2cdriver_end_transmission(Context *ctx, term pid)
 
     if (UNLIKELY(i2c_data->transmitting_pid != pid)) {
         // transaction owned from a different pid
-        TRACE("i2cdriver_end_transmission: Another process is already transmitting\n");
-        return ERROR_ATOM;
+        ESP_LOGE(TAG, "i2cdriver_end_transmission: Another process is already transmitting");
+
+        // {error, {einprogress, Pid :: pid()}}
+        if (UNLIKELY(memory_ensure_free(ctx, 2 * TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return OUT_OF_MEMORY_ATOM;
+        }
+
+        term reason_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(reason_tuple, 0, globalcontext_make_atom(ctx->global, einprogress_atom));
+        term_put_tuple_element(reason_tuple, 1, i2c_data->transmitting_pid);
+
+        return port_create_error_tuple(ctx, reason_tuple);
     }
 
     i2c_master_stop(i2c_data->cmd);
@@ -217,8 +241,15 @@ static term i2cdriver_end_transmission(Context *ctx, term pid)
     i2c_data->transmitting_pid = term_invalid_term();
 
     if (UNLIKELY(result != ESP_OK)) {
-        TRACE("i2cdriver_end_transmission i2c_master_cmd_begin error: result was: %i.\n", result);
-        return ERROR_ATOM;
+        ESP_LOGE(TAG, "i2cdriver_end_transmission i2c_master_cmd_begin error: result was: %i.", result);
+
+        // {error, Reason :: atom()}
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return OUT_OF_MEMORY_ATOM;
+        }
+
+        return port_create_error_tuple(ctx, esp_err_to_term(ctx->global, result));
     }
 
     return OK_ATOM;
@@ -230,8 +261,19 @@ static term i2cdriver_write_byte(Context *ctx, term pid, term req)
 
     if (UNLIKELY(i2c_data->transmitting_pid != pid)) {
         // transaction owned from a different pid
-        TRACE("i2cdriver_write_byte: Another process is already transmitting\n");
-        return ERROR_ATOM;
+        ESP_LOGE(TAG, "i2cdriver_write_byte: Another process is already transmitting");
+
+        // {error, {einprogress, Pid :: pid()}}
+        if (UNLIKELY(memory_ensure_free(ctx, 2 * TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return OUT_OF_MEMORY_ATOM;
+        }
+
+        term reason_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(reason_tuple, 0, globalcontext_make_atom(ctx->global, einprogress_atom));
+        term_put_tuple_element(reason_tuple, 1, i2c_data->transmitting_pid);
+
+        return port_create_error_tuple(ctx, reason_tuple);
     }
 
     term data_term = term_get_tuple_element(req, 1);
@@ -239,8 +281,15 @@ static term i2cdriver_write_byte(Context *ctx, term pid, term req)
     esp_err_t result = i2c_master_write_byte(i2c_data->cmd, (uint8_t) data, true);
 
     if (UNLIKELY(result != ESP_OK)) {
-        TRACE("i2cdriver_write_byte: i2c_master_write_byte error: result was: %i.\n", result);
-        return ERROR_ATOM;
+        ESP_LOGE(TAG, "i2cdriver_write_byte: i2c_master_write_byte error: result was: %i.", result);
+
+        // {error, Reason :: atom()}
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return OUT_OF_MEMORY_ATOM;
+        }
+
+        return port_create_error_tuple(ctx, esp_err_to_term(ctx->global, result));
     }
 
     return OK_ATOM;
@@ -252,8 +301,19 @@ static term i2cdriver_qwrite_bytes(Context *ctx, term pid, term req)
 
     if (UNLIKELY(i2c_data->transmitting_pid != pid)) {
         // transaction owned from a different pid
-        TRACE("i2cdriver_qwrite_bytes: Another process is already transmitting\n");
-        return ERROR_ATOM;
+        ESP_LOGE(TAG, "i2cdriver_qwrite_bytes: Another process is already transmitting");
+
+        // {error, {einprogress, Pid :: pid()}}
+        if (UNLIKELY(memory_ensure_free(ctx, 2 * TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return OUT_OF_MEMORY_ATOM;
+        }
+
+        term reason_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(reason_tuple, 0, globalcontext_make_atom(ctx->global, einprogress_atom));
+        term_put_tuple_element(reason_tuple, 1, i2c_data->transmitting_pid);
+
+        return port_create_error_tuple(ctx, reason_tuple);
     }
 
     term data_term = term_get_tuple_element(req, 1);
@@ -261,8 +321,15 @@ static term i2cdriver_qwrite_bytes(Context *ctx, term pid, term req)
     esp_err_t result = i2c_master_write(i2c_data->cmd, (unsigned char *) term_binary_data(data), term_binary_size(data), true);
 
     if (UNLIKELY(result != ESP_OK)) {
-        TRACE("i2cdriver_qwrite_bytes: i2c_master_write_byte error: result was: %i.\n", result);
-        return ERROR_ATOM;
+        ESP_LOGE(TAG, "i2cdriver_qwrite_bytes: i2c_master_write_byte error: result was: %i.", result);
+
+        // {error, Reason :: atom()}
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return OUT_OF_MEMORY_ATOM;
+        }
+
+        return port_create_error_tuple(ctx, esp_err_to_term(ctx->global, result));
     }
 
     return OK_ATOM;
@@ -273,8 +340,19 @@ static term i2cdriver_read_bytes(Context *ctx, term pid, term req)
     struct I2CData *i2c_data = ctx->platform_data;
 
     if (UNLIKELY(i2c_data->transmitting_pid != term_invalid_term())) {
-        TRACE("i2cdriver_read_bytes: Another process is already transmitting\n");
-        return ERROR_ATOM;
+        ESP_LOGE(TAG, "i2cdriver_read_bytes: Another process is already transmitting");
+
+        // {error, {einprogress, Pid :: pid()}}
+        if (UNLIKELY(memory_ensure_free(ctx, 2 * TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return OUT_OF_MEMORY_ATOM;
+        }
+
+        term reason_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(reason_tuple, 0, globalcontext_make_atom(ctx->global, einprogress_atom));
+        term_put_tuple_element(reason_tuple, 1, i2c_data->transmitting_pid);
+
+        return port_create_error_tuple(ctx, reason_tuple);
     }
 
     int arity = term_get_tuple_arity(req);
@@ -292,8 +370,10 @@ static term i2cdriver_read_bytes(Context *ctx, term pid, term req)
         register_address = term_to_int32(register_term);
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, BOXED_INT_SIZE, MEMORY_NO_GC) != MEMORY_GC_OK)) {
-        return ERROR_ATOM;
+    // {ok, Data :: binary()}
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2) + term_binary_heap_size(read_count), MEMORY_NO_GC) != MEMORY_GC_OK)) {
+        ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        return OUT_OF_MEMORY_ATOM;
     }
     term data_term = term_create_uninitialized_binary(read_count, &ctx->heap, ctx->global);
     uint8_t *data = (uint8_t *) term_binary_data(data_term);
@@ -309,14 +389,28 @@ static term i2cdriver_read_bytes(Context *ctx, term pid, term req)
     esp_err_t result = i2c_master_write_byte(i2c_data->cmd, (address << 1) | I2C_MASTER_READ, true);
 
     if (UNLIKELY(result != ESP_OK)) {
-        TRACE("i2cdriver_read_bytes: i2c_master_write_byte error: result was: %i.\n", result);
-        return ERROR_ATOM;
+        ESP_LOGE(TAG, "i2cdriver_read_bytes: i2c_master_write_byte error: result was: %i.", result);
+
+        // {error, Reason :: atom()}
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return OUT_OF_MEMORY_ATOM;
+        }
+
+        return port_create_error_tuple(ctx, esp_err_to_term(ctx->global, result));
     }
 
     result = i2c_master_read(i2c_data->cmd, data, read_count, I2C_MASTER_LAST_NACK);
     if (UNLIKELY(result != ESP_OK)) {
-        TRACE("i2cdriver_read_bytes: i2c_master_read error: result was: %i.\n", result);
-        return ERROR_ATOM;
+        ESP_LOGE(TAG, "i2cdriver_read_bytes: i2c_master_read error: result was: %i.", result);
+
+        // {error, Reason :: atom()}
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return OUT_OF_MEMORY_ATOM;
+        }
+
+        return port_create_error_tuple(ctx, esp_err_to_term(ctx->global, result));
     }
 
     i2c_master_stop(i2c_data->cmd);
@@ -326,11 +420,22 @@ static term i2cdriver_read_bytes(Context *ctx, term pid, term req)
     i2c_data->transmitting_pid = term_invalid_term();
 
     if (UNLIKELY(result != ESP_OK)) {
-        TRACE("i2cdriver_read_bytes: i2c_master_cmd_begin error: result was: %i.\n", result);
-        return ERROR_ATOM;
+        ESP_LOGE(TAG, "i2cdriver_read_bytes: i2c_master_cmd_begin error: result was: %i.", result);
+
+        // {error, Reason :: atom()}
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return OUT_OF_MEMORY_ATOM;
+        }
+
+        return port_create_error_tuple(ctx, esp_err_to_term(ctx->global, result));
     }
 
-    return data_term;
+    term ok_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(ok_tuple, 0, OK_ATOM);
+    term_put_tuple_element(ok_tuple, 1, data_term);
+
+    return ok_tuple;
 }
 
 static term i2cdriver_write_bytes(Context *ctx, term pid, term req)
@@ -338,8 +443,19 @@ static term i2cdriver_write_bytes(Context *ctx, term pid, term req)
     struct I2CData *i2c_data = ctx->platform_data;
 
     if (UNLIKELY(i2c_data->transmitting_pid != term_invalid_term())) {
-        TRACE("i2cdriver_write_bytes: Another process is already transmitting\n");
-        return ERROR_ATOM;
+        ESP_LOGE(TAG, "i2cdriver_write_bytes: Another process is already transmitting");
+
+        // {error, {einprogress, Pid :: pid()}}
+        if (UNLIKELY(memory_ensure_free(ctx, 2 * TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return OUT_OF_MEMORY_ATOM;
+        }
+
+        term reason_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(reason_tuple, 0, globalcontext_make_atom(ctx->global, einprogress_atom));
+        term_put_tuple_element(reason_tuple, 1, i2c_data->transmitting_pid);
+
+        return port_create_error_tuple(ctx, reason_tuple);
     }
 
     int arity = term_get_tuple_arity(req);
@@ -372,8 +488,15 @@ static term i2cdriver_write_bytes(Context *ctx, term pid, term req)
 
     esp_err_t result = i2c_master_write_byte(i2c_data->cmd, (address << 1) | I2C_MASTER_WRITE, 0x01);
     if (UNLIKELY(result != ESP_OK)) {
-        TRACE("i2cdriver_write_bytes i2c_master_write_byte error: result was: %i.\n", result);
-        return ERROR_ATOM;
+        ESP_LOGE(TAG, "i2cdriver_write_bytes i2c_master_write_byte error: result was: %i.", result);
+
+        // {error, Reason :: atom()}
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return OUT_OF_MEMORY_ATOM;
+        }
+
+        return port_create_error_tuple(ctx, esp_err_to_term(ctx->global, result));
     }
 
     if (!term_is_invalid_term(register_term)) {
@@ -382,8 +505,15 @@ static term i2cdriver_write_bytes(Context *ctx, term pid, term req)
 
     result = i2c_master_write(i2c_data->cmd, data, data_len, 0x01);
     if (UNLIKELY(result != ESP_OK)) {
-        TRACE("i2cdriver_write_bytes i2c_master_write error: result was: %i.\n", result);
-        return ERROR_ATOM;
+        ESP_LOGE(TAG, "i2cdriver_write_bytes i2c_master_write error: result was: %i.", result);
+
+        // {error, Reason :: atom()}
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return OUT_OF_MEMORY_ATOM;
+        }
+
+        return port_create_error_tuple(ctx, esp_err_to_term(ctx->global, result));
     }
 
     i2c_master_stop(i2c_data->cmd);
@@ -393,8 +523,15 @@ static term i2cdriver_write_bytes(Context *ctx, term pid, term req)
     i2c_data->transmitting_pid = term_invalid_term();
 
     if (UNLIKELY(result != ESP_OK)) {
-        TRACE("i2cdriver_write_bytes: i2c_master_cmd_begin error: result was: %i.\n", result);
-        return ERROR_ATOM;
+        ESP_LOGE(TAG, "i2cdriver_write_bytes: i2c_master_cmd_begin error: result was: %i", result);
+
+        // {error, Reason :: atom()}
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return OUT_OF_MEMORY_ATOM;
+        }
+
+        return port_create_error_tuple(ctx, esp_err_to_term(ctx->global, result));
     }
 
     return OK_ATOM;
@@ -415,6 +552,12 @@ static NativeHandlerResult i2cdriver_consume_mailbox(Context *ctx)
     term msg = message->message;
     term pid = term_get_tuple_element(msg, 0);
     term req = term_get_tuple_element(msg, 2);
+
+#ifdef ENABLE_TRACE
+    TRACE("message: ");
+    term_display(stdout, msg, ctx);
+    TRACE("\n");
+#endif
 
     term cmd_term = term_get_tuple_element(req, 0);
 
@@ -453,7 +596,7 @@ static NativeHandlerResult i2cdriver_consume_mailbox(Context *ctx)
             break;
 
         default:
-            TRACE("i2c: error: unrecognized command: %x\n", cmd);
+            ESP_LOGE(TAG, "i2c: error: unrecognized command: %x", cmd);
             ret = ERROR_ATOM;
     }
 
@@ -470,6 +613,10 @@ static NativeHandlerResult i2cdriver_consume_mailbox(Context *ctx)
 
     return cmd == I2CCloseCmd ? NativeTerminate : NativeContinue;
 }
+
+//
+// entrypoints
+//
 
 REGISTER_PORT_DRIVER(i2c, i2c_driver_init, NULL, i2c_driver_create_port)
 
