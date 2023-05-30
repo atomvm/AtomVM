@@ -51,6 +51,9 @@
 #endif
 #endif
 
+// Platform uses listeners
+#include "listeners.h"
+
 #ifndef AVM_NO_SMP
 #define SMP_MUTEX_LOCK(mtx) smp_mutex_lock(mtx)
 #define SMP_MUTEX_UNLOCK(mtx) smp_mutex_unlock(mtx)
@@ -78,7 +81,7 @@ struct GenericUnixPlatformData
 #else
     struct pollfd *fds;
 #endif
-    int ATOMIC poll_count;
+    int ATOMIC listeners_poll_count; // can be invalidated by being set to -1
 #ifndef AVM_NO_SMP
 #ifndef HAVE_KQUEUE
 #ifdef HAVE_EVENTFD
@@ -94,64 +97,12 @@ struct GenericUnixPlatformData
 #define SIGNAL_IDENTIFIER 1
 #endif
 
-static void do_register_listener(struct GenericUnixPlatformData *platform, struct EventListener *listener);
-static void do_unregister_listener(struct GenericUnixPlatformData *platform, int listener_fd);
-
-/**
- * @brief process listener handlers advancing order, especially useful with poll(2) which returns fd in the provided order.
- *
- * @detail mutex on listeners should be hold when this function is called.
- */
-static inline void process_listener_handler(GlobalContext *glb, int current_fd, struct ListHead *listeners, struct ListHead **item_ptr, struct ListHead **previous_ptr)
-{
-    struct ListHead *item;
-    struct ListHead *previous;
-    if (item_ptr) {
-        item = *item_ptr;
-        previous = *previous_ptr;
-    } else {
-        item = listeners->next;
-        previous = listeners;
-    }
-
-    while (item != listeners) {
-        struct ListHead *next = item->next;
-        EventListener *listener = GET_LIST_ENTRY(item, EventListener, listeners_list_head);
-        if (listener->fd == current_fd) {
-            EventListener *new_listener = listener->handler(glb, listener);
-            if (new_listener == NULL) {
-                do_unregister_listener(glb->platform_data, current_fd);
-                previous->next = next;
-                next->prev = previous;
-                item = next;
-            } else if (new_listener != listener) {
-                struct GenericUnixPlatformData *platform = glb->platform_data;
-                do_unregister_listener(platform, current_fd);
-                do_register_listener(platform, new_listener);
-                // Replace listener with new_listener in the list
-                // listener was freed by handler.
-                previous->next = &new_listener->listeners_list_head;
-                next->prev = &new_listener->listeners_list_head;
-                new_listener->listeners_list_head.prev = previous;
-                new_listener->listeners_list_head.next = next;
-                item = &new_listener->listeners_list_head;
-            }
-            break;
-        }
-        previous = item;
-        item = next;
-    }
-    if (item_ptr) {
-        *previous_ptr = previous;
-        *item_ptr = item;
-    }
-}
-
 #ifdef HAVE_KQUEUE
-static inline void sys_poll_events_with_kqueue(GlobalContext *glb, struct GenericUnixPlatformData *platform, int timeout_ms)
+static inline void sys_poll_events_with_kqueue(GlobalContext *glb, int timeout_ms)
 {
-    int poll_count = platform->poll_count;
-    struct kevent notified[platform->poll_count];
+    struct GenericUnixPlatformData *platform = glb->platform_data;
+    int poll_count = platform->listeners_poll_count + 1;
+    struct kevent notified[poll_count];
     struct timespec ts;
     struct timespec *ts_ptr = &ts;
     if (timeout_ms < 0) {
@@ -162,51 +113,56 @@ static inline void sys_poll_events_with_kqueue(GlobalContext *glb, struct Generi
     }
 
     int nbEvents = kevent(platform->kqueue_fd, NULL, 0, notified, poll_count, ts_ptr);
-    bool acquired = false;
+    struct ListHead *listeners = NULL;
     for (int i = 0; i < nbEvents; i++) {
         if (notified[i].filter == EVFILT_USER && notified[i].ident == SIGNAL_IDENTIFIER) {
             // We've been signaled.
             continue;
         }
         if (notified[i].filter == EVFILT_READ) {
-            if (!acquired) {
-                SMP_MUTEX_LOCK(platform->listeners_mutex);
-                acquired = true;
+            if (listeners == NULL) {
+                listeners = synclist_wrlock(&glb->listeners);
             }
-            process_listener_handler(glb, (int) notified[i].ident, &platform->listeners, NULL, NULL);
+            process_listener_handler(glb, (int) notified[i].ident, listeners, NULL, NULL);
         }
     }
-    if (acquired) {
-        SMP_MUTEX_UNLOCK(platform->listeners_mutex);
+    if (listeners) {
+        synclist_unlock(&glb->listeners);
     }
 }
 #else
-static inline void sys_poll_events_with_poll(GlobalContext *glb, struct GenericUnixPlatformData *platform, int timeout_ms)
+static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
 {
+    struct GenericUnixPlatformData *platform = glb->platform_data;
     struct pollfd *fds = platform->fds;
-    int poll_count = platform->poll_count;
-    if (poll_count < 0) {
-        // Means it is dirty and should be rebuilt.
+    int listeners_poll_count = platform->listeners_poll_count;
+    int poll_count;
 #ifndef AVM_NO_SMP
-        poll_count = 1;
-        int fd_index = 1;
+    poll_count = 1;
 #else
-        poll_count = 0;
-        int fd_index = 0;
+    poll_count = 0;
 #endif
-        SMP_MUTEX_LOCK(platform->listeners_mutex);
+    int fd_index;
+    if (listeners_poll_count < 0) {
+        // Means it is dirty and should be rebuilt.
+        size_t listeners_new_count = 0;
+        struct ListHead *listeners = NULL;
         struct ListHead *item;
-        LIST_FOR_EACH (item, &platform->listeners) {
-            EventListener *listener = GET_LIST_ENTRY(item, EventListener, listeners_list_head);
-            int listener_fd = listener->fd;
-            if (listener_fd >= 0) {
-                poll_count++;
+        if (listeners_poll_count < 0) {
+            listeners = synclist_rdlock(&glb->listeners);
+            LIST_FOR_EACH (item, listeners) {
+                EventListener *listener = GET_LIST_ENTRY(item, EventListener, listeners_list_head);
+                int listener_fd = listener->fd;
+                if (listener_fd >= 0) {
+                    listeners_new_count++;
+                }
             }
+        } else {
+            listeners_new_count = listeners_poll_count;
         }
 
-        fds = realloc(fds, sizeof(struct pollfd) * poll_count);
+        fds = realloc(fds, sizeof(struct pollfd) * (poll_count + listeners_new_count));
         platform->fds = fds;
-        platform->poll_count = poll_count;
 
 #ifndef AVM_NO_SMP
 #ifdef HAVE_EVENTFD
@@ -218,69 +174,80 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, struct GenericU
         fds[0].revents = 0;
 #endif
 
-        LIST_FOR_EACH (item, &platform->listeners) {
-            EventListener *listener = GET_LIST_ENTRY(item, EventListener, listeners_list_head);
-            int listener_fd = listener->fd;
-            if (listener_fd >= 0) {
-                fds[fd_index].fd = listener_fd;
-                fds[fd_index].events = POLLIN;
-                fds[fd_index].revents = 0;
+        fd_index = poll_count;
 
-                fd_index++;
+        if (listeners_poll_count < 0) {
+            // We put listeners first
+            LIST_FOR_EACH (item, listeners) {
+                EventListener *listener = GET_LIST_ENTRY(item, EventListener, listeners_list_head);
+                int listener_fd = listener->fd;
+                if (listener_fd >= 0) {
+                    fds[fd_index].fd = listener_fd;
+                    fds[fd_index].events = POLLIN;
+                    fds[fd_index].revents = 0;
+
+                    fd_index++;
+                }
             }
+            synclist_unlock(&glb->listeners);
         }
-        SMP_MUTEX_UNLOCK(platform->listeners_mutex);
+
+        listeners_poll_count = listeners_new_count;
+        platform->listeners_poll_count = listeners_new_count;
     }
 
+    poll_count += listeners_poll_count;
+
     int nb_descriptors = poll(fds, poll_count, timeout_ms);
+    fd_index = 0;
     if (nb_descriptors > 0) {
-        SMP_MUTEX_LOCK(platform->listeners_mutex);
-        struct ListHead *item = platform->listeners.next;
-        struct ListHead *previous = &platform->listeners;
-        for (int i = 0; i < poll_count && nb_descriptors > 0; i++) {
-            if (!(fds[i].revents & fds[i].events)) {
+#ifndef AVM_NO_SMP
+        if ((fds[0].revents & fds[0].events)) {
+            // We've been signaled
+            // Read can fail if the byte/event is also read concurrently by
+            // sys_signal
+#ifdef HAVE_EVENTFD
+            eventfd_t ignored;
+            (void) eventfd_read(platform->signal_fd, &ignored);
+#else
+            char ignored;
+            (void) read(platform->signal_pipe[0], &ignored, sizeof(ignored));
+#endif
+            nb_descriptors--;
+        }
+        fd_index++;
+#endif
+    }
+    if (nb_descriptors > 0) {
+        struct ListHead *listeners = synclist_wrlock(&glb->listeners);
+        struct ListHead *item = listeners->next;
+        struct ListHead *previous = listeners;
+        for (int i = 0; i < listeners_poll_count && nb_descriptors > 0; i++, fd_index++) {
+            if (!(fds[fd_index].revents & fds[fd_index].events)) {
                 continue;
             }
-            fds[i].revents = 0;
+            fds[fd_index].revents = 0;
             nb_descriptors--;
 
-#ifndef AVM_NO_SMP
-            if (i == 0) {
-                // We've been signaled
-                // Read can fail if the byte/event is also read concurrently by
-                // sys_signal
-#ifdef HAVE_EVENTFD
-                eventfd_t ignored;
-                (void) eventfd_read(platform->signal_fd, &ignored);
-#else
-                char ignored;
-                (void) read(platform->signal_pipe[0], &ignored, sizeof(ignored));
-#endif
-                continue;
-            }
-#endif
-
-            process_listener_handler(glb, fds[i].fd, &platform->listeners, &item, &previous);
+            process_listener_handler(glb, fds[fd_index].fd, listeners, &item, &previous);
         }
-        SMP_MUTEX_UNLOCK(platform->listeners_mutex);
+        synclist_unlock(&glb->listeners);
     }
 }
 #endif
 
 void sys_poll_events(GlobalContext *glb, int timeout_ms) CLANG_THREAD_SANITIZE_SAFE
 {
-    struct GenericUnixPlatformData *platform = glb->platform_data;
-
     // Optimization: do not go into poll(2) or kqueue(2) if we have nothing to
-    // wait on. We don't acquire the mutex here for optimization purposes
-    if (platform->listeners.next == &platform->listeners && timeout_ms == 0) {
+    // wait on.
+    if (timeout_ms == 0 && synclist_is_empty(&glb->listeners)) {
         return;
     }
 
 #ifdef HAVE_KQUEUE
-    sys_poll_events_with_kqueue(glb, platform, timeout_ms);
+    sys_poll_events_with_kqueue(glb, timeout_ms);
 #else
-    sys_poll_events_with_poll(glb, platform, timeout_ms);
+    sys_poll_events_with_poll(glb, timeout_ms);
 #endif
 }
 
@@ -419,6 +386,7 @@ void sys_init_platform(GlobalContext *global)
 #endif
 #ifdef HAVE_KQUEUE
     platform->kqueue_fd = kqueue();
+    platform->listeners_poll_count = 0;
 #ifndef AVM_NO_SMP
     struct timespec ts = { 0, 0 };
     struct kevent kev;
@@ -426,12 +394,9 @@ void sys_init_platform(GlobalContext *global)
     if (UNLIKELY(kevent(platform->kqueue_fd, &kev, 1, NULL, 0, &ts))) {
         AVM_ABORT();
     }
-    platform->poll_count = 1;
-#else
-    platform->poll_count = 0;
 #endif
 #else
-    platform->poll_count = -1;
+    platform->listeners_poll_count = -1;
     platform->fds = malloc(0);
 #ifndef AVM_NO_SMP
 #ifdef HAVE_EVENTFD
@@ -495,8 +460,9 @@ uint64_t sys_millis(GlobalContext *glb)
     return (ts.tv_nsec / 1000000UL) + (ts.tv_sec * 1000UL);
 }
 
-void do_register_listener(struct GenericUnixPlatformData *platform, struct EventListener *listener)
+void event_listener_add_to_polling_set(struct EventListener *listener, GlobalContext *global)
 {
+    struct GenericUnixPlatformData *platform = global->platform_data;
 #ifdef HAVE_KQUEUE
     if (listener->fd) {
         struct timespec ts = { 0, 0 };
@@ -506,30 +472,30 @@ void do_register_listener(struct GenericUnixPlatformData *platform, struct Event
             AVM_ABORT();
         }
     }
-    platform->poll_count++;
+    platform->listeners_poll_count++;
 #else
     UNUSED(listener);
-    platform->poll_count = -1;
+    platform->listeners_poll_count = -1;
 #endif
 }
 
 void sys_register_listener(GlobalContext *global, struct EventListener *listener)
 {
-    struct GenericUnixPlatformData *platform = global->platform_data;
-    SMP_MUTEX_LOCK(platform->listeners_mutex);
-    do_register_listener(platform, listener);
+    struct ListHead *listeners = synclist_wrlock(&global->listeners);
+    event_listener_add_to_polling_set(listener, global);
 #ifndef AVM_NO_SMP
 #ifndef HAVE_KQUEUE
     // With kqueue (like epoll), there is no need to restart the call
     sys_signal(global);
 #endif
 #endif
-    list_append(&platform->listeners, &listener->listeners_list_head);
-    SMP_MUTEX_UNLOCK(platform->listeners_mutex);
+    list_append(listeners, &listener->listeners_list_head);
+    synclist_unlock(&global->listeners);
 }
 
-static void do_unregister_listener(struct GenericUnixPlatformData *platform, int listener_fd)
+static void listener_event_remove_from_polling_set(listener_event_t listener_fd, GlobalContext *global)
 {
+    struct GenericUnixPlatformData *platform = global->platform_data;
 #ifdef HAVE_KQUEUE
     if (listener_fd) {
         struct timespec ts = { 0, 0 };
@@ -538,18 +504,20 @@ static void do_unregister_listener(struct GenericUnixPlatformData *platform, int
         (void) kevent(platform->kqueue_fd, &kev, 1, NULL, 0, &ts);
         // File descriptor is automatically removed when closed
     }
-    platform->poll_count--;
+    platform->listeners_poll_count--;
 #else
     UNUSED(listener_fd);
-    platform->poll_count = -1;
+    platform->listeners_poll_count = -1;
 #endif
 }
 
 void sys_unregister_listener(GlobalContext *global, struct EventListener *listener)
 {
-    struct GenericUnixPlatformData *platform = global->platform_data;
-    SMP_MUTEX_LOCK(platform->listeners_mutex);
-    do_unregister_listener(platform, listener->fd);
-    list_remove(&listener->listeners_list_head);
-    SMP_MUTEX_UNLOCK(platform->listeners_mutex);
+    listener_event_remove_from_polling_set(listener->fd, global);
+    synclist_remove(&global->listeners, &listener->listeners_list_head);
+}
+
+bool event_listener_is_event(EventListener *listener, listener_event_t event)
+{
+    return listener->fd == event;
 }
