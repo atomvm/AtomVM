@@ -192,7 +192,7 @@ static inline term gpio_digital_write(Context *ctx, term gpio_num_term, term lev
 
     int level;
     if (term_is_integer(level_term)) {
-        level = term_from_int(level_term);
+        level = term_to_int32(level_term);
         if (UNLIKELY((level != 0) && (level != 1))) {
             return ERROR_ATOM;
         }
