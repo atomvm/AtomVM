@@ -104,6 +104,22 @@ defmodule GPIO do
   end
 
   @doc """
+  Stop the gpio driver and remove any interrupts that have been set.
+  Use the pid returned from GPIO.start/0 as a parameter.
+  """
+  @spec close(pid()) :: :ok | :error
+  def close(gpio),
+    do: AVMPort.call(gpio, {:close})
+
+  @doc """
+  Stop the gpio driver and remove any interrupts that have been set.
+  Takes no parameters.
+  """
+  @spec stop() :: :ok | :error
+  def stop(),
+    do: close(:erlang.whereis(:gpio))
+
+  @doc """
   Read the state of a gpio input pin.
 
   ## Parameters

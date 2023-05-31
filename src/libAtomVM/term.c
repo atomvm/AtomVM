@@ -32,12 +32,6 @@
 #include <stddef.h>
 #include <stdio.h>
 
-//TODO use macro from utils
-#ifndef CONTAINER_OF
-#define CONTAINER_OF(ptr, type, member) \
-    ((type *) (((char *) (ptr)) - offsetof(type, member)))
-#endif
-
 struct FprintfFun
 {
     PrinterFun base;
@@ -653,9 +647,9 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
     return result;
 }
 
-term term_alloc_refc_binary(Context *ctx, size_t size, bool is_const)
+term term_alloc_refc_binary(size_t size, bool is_const, Heap *heap, GlobalContext *glb)
 {
-    term *boxed_value = memory_heap_alloc(ctx, TERM_BOXED_REFC_BINARY_SIZE);
+    term *boxed_value = memory_heap_alloc(heap, TERM_BOXED_REFC_BINARY_SIZE);
     boxed_value[0] = ((TERM_BOXED_REFC_BINARY_SIZE - 1) << 6) | TERM_BOXED_REFC_BINARY;
     boxed_value[1] = (term) size;
     boxed_value[2] = (term) is_const ? RefcBinaryIsConst : RefcNoFlags;
@@ -673,8 +667,8 @@ term term_alloc_refc_binary(Context *ctx, size_t size, bool is_const)
             AVM_ABORT();
         }
         boxed_value[3] = (term) refc;
-        ctx->mso_list = term_list_init_prepend(boxed_value + 4, ret, ctx->mso_list);
-        list_append(&ctx->global->refc_binaries, (struct ListHead *) refc);
+        heap->root->mso_list = term_list_init_prepend(boxed_value + 4, ret, heap->root->mso_list);
+        synclist_append(&glb->refc_binaries, &refc->head);
     }
     return ret;
 }
@@ -692,9 +686,9 @@ static term find_binary(term binary_or_state)
     return t;
 }
 
-term term_alloc_sub_binary(term binary_or_state, size_t offset, size_t len, Context *ctx)
+term term_alloc_sub_binary(term binary_or_state, size_t offset, size_t len, Heap *heap)
 {
-    term *boxed = memory_heap_alloc(ctx, TERM_BOXED_SUB_BINARY_SIZE);
+    term *boxed = memory_heap_alloc(heap, TERM_BOXED_SUB_BINARY_SIZE);
     term binary = find_binary(binary_or_state);
 
     boxed[0] = ((TERM_BOXED_SUB_BINARY_SIZE - 1) << 6) | TERM_BOXED_SUB_BINARY;
@@ -705,9 +699,9 @@ term term_alloc_sub_binary(term binary_or_state, size_t offset, size_t len, Cont
     return ((term) boxed) | TERM_BOXED_VALUE_TAG;
 }
 
-term term_get_map_assoc(Context *ctx, term map, term key)
+term term_get_map_assoc(term map, term key, GlobalContext *glb)
 {
-    int pos = term_find_map_pos(map, key, ctx->global);
+    int pos = term_find_map_pos(map, key, glb);
     if (pos == TERM_MAP_NOT_FOUND) {
         return term_invalid_term();
     } else if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {

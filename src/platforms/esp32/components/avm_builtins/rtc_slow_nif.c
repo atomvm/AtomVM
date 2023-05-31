@@ -65,7 +65,7 @@ static term nif_esp_rtc_slow_get_binary(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    return term_from_literal_binary(rtc_slow_data, rtc_slow_data_size, ctx);
+    return term_from_literal_binary(rtc_slow_data, rtc_slow_data_size, &ctx->heap, ctx->global);
 }
 
 static term nif_esp_rtc_slow_set_binary(Context *ctx, int argc, term argv[])

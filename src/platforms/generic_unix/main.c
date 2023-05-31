@@ -28,14 +28,13 @@
 #include "avmpack.h"
 #include "bif.h"
 #include "context.h"
+#include "defaultatoms.h"
 #include "globalcontext.h"
 #include "iff.h"
 #include "mapped_file.h"
 #include "module.h"
 #include "term.h"
 #include "utils.h"
-
-static const char *ok_a = ATOM_STR("\x2", "ok");
 
 void close_mapped_files(MappedFile **mapped_file, int len)
 {
@@ -87,7 +86,7 @@ int main(int argc, char **argv)
                     return EXIT_FAILURE;
                 }
                 avmpack_data->data = mapped_file[i]->mapped;
-                list_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
+                synclist_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
 
                 if (IS_NULL_PTR(startup_beam)) {
                     avmpack_find_section_by_flag(mapped_file[i]->mapped, 1, &startup_beam, &startup_beam_size, &startup_module_name);
@@ -132,16 +131,16 @@ int main(int argc, char **argv)
     term_display(stderr, ret_value, ctx);
     fprintf(stderr, "\n");
 
-    term ok_atom = context_make_atom(ctx, ok_a);
+    int status;
+    if (ret_value == OK_ATOM) {
+        status = EXIT_SUCCESS;
+    } else {
+        status = EXIT_FAILURE;
+    }
 
     context_destroy(ctx);
     globalcontext_destroy(glb);
     module_destroy(mod);
     close_mapped_files(mapped_file, num_mapped_files);
-
-    if (ok_atom == ret_value) {
-        return EXIT_SUCCESS;
-    } else {
-        return EXIT_FAILURE;
-    }
+    return status;
 }

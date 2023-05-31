@@ -77,7 +77,7 @@ struct SPIData
     spi_host_device_t host_device;
 };
 
-static void spidriver_consume_mailbox(Context *ctx);
+static NativeHandlerResult spidriver_consume_mailbox(Context *ctx);
 static uint32_t spidriver_transfer_at(struct SPIDevice *device, uint64_t address, int data_len, uint32_t data, bool *ok);
 static term create_pair(Context *ctx, term term1, term term2);
 
@@ -173,11 +173,11 @@ Context *spi_driver_create_port(GlobalContext *global, term opts)
     TRACE("spi_driver_create_port\n");
     Context *ctx = context_new(global);
 
-    term bus_config = term_get_map_assoc(ctx, opts, BUS_CONFIG_ATOM);
-    term miso_io_num_term = term_get_map_assoc(ctx, bus_config, MISO_IO_NUM_ATOM);
-    term mosi_io_num_term = term_get_map_assoc(ctx, bus_config, MOSI_IO_NUM_ATOM);
-    term sclk_io_num_term = term_get_map_assoc(ctx, bus_config, SCLK_IO_NUM_ATOM);
-    term spi_peripheral_term = term_get_map_assoc_default(ctx, bus_config, SPI_PERIPHERAL_ATOM, HSPI_ATOM);
+    term bus_config = term_get_map_assoc(opts, BUS_CONFIG_ATOM, ctx->global);
+    term miso_io_num_term = term_get_map_assoc(bus_config, MISO_IO_NUM_ATOM, ctx->global);
+    term mosi_io_num_term = term_get_map_assoc(bus_config, MOSI_IO_NUM_ATOM, ctx->global);
+    term sclk_io_num_term = term_get_map_assoc(bus_config, SCLK_IO_NUM_ATOM, ctx->global);
+    term spi_peripheral_term = term_get_map_assoc_default(bus_config, SPI_PERIPHERAL_ATOM, HSPI_ATOM, ctx->global);
     spi_host_device_t host_device = get_spi_host_device(spi_peripheral_term);
 
     spi_bus_config_t buscfg = { 0 };
@@ -203,19 +203,19 @@ Context *spi_driver_create_port(GlobalContext *global, term opts)
     // TODO handle out of memory errors
     spi_data->host_device = host_device;
 
-    term device_map = term_get_map_assoc(ctx, opts, DEVICE_CONFIG_ATOM);
+    term device_map = term_get_map_assoc(opts, DEVICE_CONFIG_ATOM, ctx->global);
     term device_names = term_get_map_keys(device_map);
 
     int n = term_get_map_size(device_map);
     for (int i = 0; i < n; ++i) {
         term device_name = term_get_tuple_element(device_names, i);
-        term device_config = term_get_map_assoc(ctx, device_map, device_name);
+        term device_config = term_get_map_assoc(device_map, device_name, ctx->global);
 
-        term clock_speed_hz_term = term_get_map_assoc(ctx, device_config, SPI_CLOCK_HZ_ATOM);
-        term mode_term = term_get_map_assoc(ctx, device_config, SPI_MODE_ATOM);
-        term spics_io_num_term = term_get_map_assoc(ctx, device_config, SPI_CS_IO_NUM_ATOM);
-        term address_bits_term = term_get_map_assoc(ctx, device_config, ADDRESS_LEN_BITS_ATOM);
-        term command_bits_term = term_get_map_assoc(ctx, device_config, COMMAND_LEN_BITS_ATOM);
+        term clock_speed_hz_term = term_get_map_assoc(device_config, SPI_CLOCK_HZ_ATOM, ctx->global);
+        term mode_term = term_get_map_assoc(device_config, SPI_MODE_ATOM, ctx->global);
+        term spics_io_num_term = term_get_map_assoc(device_config, SPI_CS_IO_NUM_ATOM, ctx->global);
+        term address_bits_term = term_get_map_assoc(device_config, ADDRESS_LEN_BITS_ATOM, ctx->global);
+        term command_bits_term = term_get_map_assoc(device_config, COMMAND_LEN_BITS_ATOM, ctx->global);
 
         spi_device_interface_config_t devcfg = { 0 };
         devcfg.clock_speed_hz = term_to_int32(clock_speed_hz_term);
@@ -256,7 +256,7 @@ static term device_not_found_error(Context *ctx)
     if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
         return OUT_OF_MEMORY_ATOM;
     }
-    return create_pair(ctx, ERROR_ATOM, context_make_atom(ctx, device_not_found_atom));
+    return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, device_not_found_atom));
 }
 
 static term spidriver_close(Context *ctx)
@@ -343,9 +343,9 @@ static inline term make_read_result_tuple(uint32_t read_value, Context *ctx)
         return ERROR_ATOM;
     }
 
-    term read_value_term = boxed ? term_make_boxed_int(read_value, ctx) : term_from_int(read_value);
+    term read_value_term = boxed ? term_make_boxed_int(read_value, &ctx->heap) : term_from_int(read_value);
 
-    term result_tuple = term_alloc_tuple(2, ctx);
+    term result_tuple = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(result_tuple, 0, OK_ATOM);
     term_put_tuple_element(result_tuple, 1, read_value_term);
 
@@ -410,9 +410,10 @@ static term spidriver_write_at(Context *ctx, term req)
 
 static term populate_transaction(Context *ctx, struct spi_transaction_t *transaction, term transaction_term, bool write_only, size_t *output_size)
 {
+    GlobalContext *glb = ctx->global;
     term zero_term = term_from_int(0);
 
-    term command_term = term_get_map_assoc_default(ctx, transaction_term, context_make_atom(ctx, command_atom), zero_term);
+    term command_term = term_get_map_assoc_default(transaction_term, globalcontext_make_atom(glb, command_atom), zero_term, ctx->global);
     if (!term_is_integer(command_term)) {
         ESP_LOGE(TAG, "command transaction entry is not an integer");
         return BADARG_ATOM;
@@ -424,14 +425,14 @@ static term populate_transaction(Context *ctx, struct spi_transaction_t *transac
     }
     transaction->cmd = (uint16_t) command_value;
 
-    term address_term = term_get_map_assoc_default(ctx, transaction_term, context_make_atom(ctx, address_atom), zero_term);
+    term address_term = term_get_map_assoc_default(transaction_term, globalcontext_make_atom(glb, address_atom), zero_term, ctx->global);
     if (!term_is_any_integer(address_term)) {
         ESP_LOGE(TAG, "address transaction entry is not an integer");
         return BADARG_ATOM;
     }
     transaction->addr = (uint64_t) term_maybe_unbox_int(address_term);
 
-    term write_data_term = term_get_map_assoc_default(ctx, transaction_term, context_make_atom(ctx, write_data_atom), UNDEFINED_ATOM);
+    term write_data_term = term_get_map_assoc_default(transaction_term, globalcontext_make_atom(glb, write_data_atom), UNDEFINED_ATOM, ctx->global);
     term binary_bits_term = zero_term;
     if (write_data_term != UNDEFINED_ATOM) {
         if (!term_is_binary(write_data_term)) {
@@ -442,7 +443,7 @@ static term populate_transaction(Context *ctx, struct spi_transaction_t *transac
 
         size_t binary_bits = term_binary_size(write_data_term) * 8;
         binary_bits_term = term_from_int(binary_bits);
-        term write_bits_term = term_get_map_assoc_default(ctx, transaction_term, context_make_atom(ctx, write_bits_atom), binary_bits_term);
+        term write_bits_term = term_get_map_assoc_default(transaction_term, globalcontext_make_atom(glb, write_bits_atom), binary_bits_term, ctx->global);
         if (!term_is_integer(write_bits_term)) {
             ESP_LOGE(TAG, "write_bits transaction entry is not an integer");
             return BADARG_ATOM;
@@ -456,7 +457,7 @@ static term populate_transaction(Context *ctx, struct spi_transaction_t *transac
     }
 
     if (!write_only) {
-        term read_bits_term = term_get_map_assoc_default(ctx, transaction_term, context_make_atom(ctx, read_bits_atom), binary_bits_term);
+        term read_bits_term = term_get_map_assoc_default(transaction_term, globalcontext_make_atom(glb, read_bits_atom), binary_bits_term, ctx->global);
         if (!term_is_integer(read_bits_term)) {
             ESP_LOGE(TAG, "read_bits transaction entry is not an integer");
             return BADARG_ATOM;
@@ -492,6 +493,7 @@ static term spidriver_write(Context *ctx, term req)
     term err_term = populate_transaction(ctx, &transaction, transaction_term, true, &output_size);
     if (err_term != OK_ATOM) {
         ESP_LOGE(TAG, "Invalid transaction");
+        // gc is ok as err_term is an atom
         if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
             return OUT_OF_MEMORY_ATOM;
         }
@@ -533,6 +535,7 @@ static term spidriver_write_read(Context *ctx, term req)
     term err_term = populate_transaction(ctx, &transaction, transaction_term, false, &output_size);
     if (err_term != OK_ATOM) {
         ESP_LOGE(TAG, "Invalid transaction");
+        // gc is ok as err_term is an atom
         if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
             return OUT_OF_MEMORY_ATOM;
         }
@@ -542,7 +545,7 @@ static term spidriver_write_read(Context *ctx, term req)
     if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(output_size) + BINARY_HEADER_SIZE + 3) != MEMORY_GC_OK)) {
         return OUT_OF_MEMORY_ATOM;
     }
-    term output_data_term = term_create_empty_binary(output_size, ctx);
+    term output_data_term = term_create_empty_binary(output_size, &ctx->heap, ctx->global);
     transaction.rx_buffer = (uint8_t *) term_binary_data(output_data_term);
 
     // TODO replace spi_device_polling_transmit with a interrupt-based mechanism
@@ -556,16 +559,16 @@ static term spidriver_write_read(Context *ctx, term req)
 
 static term create_pair(Context *ctx, term term1, term term2)
 {
-    term ret = term_alloc_tuple(2, ctx);
+    term ret = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(ret, 0, term1);
     term_put_tuple_element(ret, 1, term2);
 
     return ret;
 }
 
-static void spidriver_consume_mailbox(Context *ctx)
+static NativeHandlerResult spidriver_consume_mailbox(Context *ctx)
 {
-    Message *message = mailbox_dequeue(ctx);
+    Message *message = mailbox_first(&ctx->mailbox);
     term msg = message->message;
     term pid = term_get_tuple_element(msg, 0);
     term ref = term_get_tuple_element(msg, 1);
@@ -574,7 +577,7 @@ static void spidriver_consume_mailbox(Context *ctx)
     term cmd_term = term_get_tuple_element(req, 0);
 
     int local_process_id = term_to_local_process_id(pid);
-    Context *target = globalcontext_get_process(ctx->global, local_process_id);
+    Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
 
     term ret;
 
@@ -618,11 +621,10 @@ static void spidriver_consume_mailbox(Context *ctx)
     }
 
     mailbox_send(target, ret_msg);
-    mailbox_destroy_message(message);
+    globalcontext_get_process_unlock(ctx->global, target);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
 
-    if (cmd == CLOSE_ATOM) {
-        scheduler_terminate(ctx);
-    }
+    return cmd == CLOSE_ATOM ? NativeTerminate : NativeContinue;
 }
 
 bool spi_driver_get_peripheral(term spi_port, spi_host_device_t *host_dev, GlobalContext *global)
@@ -633,15 +635,17 @@ bool spi_driver_get_peripheral(term spi_port, spi_host_device_t *host_dev, Globa
     }
 
     int local_process_id = term_to_local_process_id(spi_port);
-    Context *ctx = globalcontext_get_process(global, local_process_id);
+    Context *ctx = globalcontext_get_process_lock(global, local_process_id);
 
     if (ctx->native_handler != spidriver_consume_mailbox) {
         ESP_LOGW(TAG, "Given term is not a SPI port driver.");
+        globalcontext_get_process_unlock(global, ctx);
         return false;
     }
 
     struct SPIData *spi_data = ctx->platform_data;
     *host_dev = spi_data->host_device;
+    globalcontext_get_process_unlock(global, ctx);
     return true;
 }
 

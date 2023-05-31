@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for FP opcodes 94-102 thus removing the need for `AVM_DISABLE_FP=On` with OTP-22+
 - Added support for stacktraces
 - Added support for `utf-8`, `utf-16`, and `utf-32` bit syntax modifiers (put and match)
+- Added support for Erlang `gpio:close/1` and Elixir `GPIO.close/1` for ESP32
 - Added support for the Erlang `gen_event` module
 - Added `start_link` support for the `network` module
 - Added support for `erlang:monotomic_time/1`
@@ -42,7 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for serializing floats in erlang external term encoding
 - Added support for the `SMALL_BIG_EXT` erlang external term encoding
 - Added support for `erlang:memory(binary)`
-
+- Added support for callbacks on SNTP updates
+- Multithreading support (SMP)
 
 ### Fixed
 - Fixed issue with formatting integers with io:format() on STM32 platform
@@ -50,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed a bug in the evaluation of `receive ... after infinity -> ...` expressions
 - Fixed a bug in when putting integers in bit syntax with integer field sizes
 - Fixed numerous bugs in memory allocations that could crash the VM
+- Fixed SNTP support that had been broken in IDF 4.x builds
 
 ### Breaking Changes
 

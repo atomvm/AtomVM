@@ -46,6 +46,8 @@ compile_erlang(count_char)
 compile_erlang(len_test)
 compile_erlang(makelist_test)
 compile_erlang(test_echo_driver)
+compile_erlang(test_close_console_driver)
+compile_erlang(test_close_echo_driver)
 compile_erlang(test_regecho_driver)
 compile_erlang(test_send_nif_and_echo)
 compile_erlang(state_test)
@@ -144,6 +146,7 @@ compile_erlang(test_open_port_badargs)
 compile_erlang(echo)
 compile_erlang(pingpong)
 compile_erlang(prime_ext)
+compile_erlang(prime_smp)
 compile_erlang(test_try_case_end)
 compile_erlang(test_recursion_and_try_catch)
 compile_erlang(test_func_info)
@@ -151,6 +154,7 @@ compile_erlang(test_func_info2)
 compile_erlang(test_func_info3)
 compile_erlang(test_process_info)
 compile_erlang(test_min_heap_size)
+compile_erlang(test_system_flag)
 compile_erlang(test_system_info)
 compile_erlang(test_binary_to_term)
 compile_erlang(test_selective_receive)
@@ -465,6 +469,8 @@ add_custom_target(erlang_test_modules DEPENDS
     len_test.beam
     makelist_test.beam
     test_echo_driver.beam
+    test_close_console_driver.beam
+    test_close_echo_driver.beam
     test_regecho_driver.beam
     test_send_nif_and_echo.beam
     state_test.beam
@@ -563,6 +569,7 @@ add_custom_target(erlang_test_modules DEPENDS
     echo.beam
     pingpong.beam
     prime_ext.beam
+    prime_smp.beam
     test_try_case_end.beam
     test_recursion_and_try_catch.beam
     test_func_info.beam
@@ -570,6 +577,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_func_info3.beam
     test_process_info.beam
     test_min_heap_size.beam
+    test_system_flag.beam
     test_system_info.beam
     test_binary_to_term.beam
     test_selective_receive.beam

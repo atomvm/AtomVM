@@ -30,23 +30,12 @@ void sys_tick_handler();
 void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis);
 
 // Monotonically increasing number of milliseconds from reset
-// Overflows every 49 days
-// TODO: use 64 bit (remember to take into account atomicity)
-static volatile uint32_t system_millis;
+static volatile uint64_t system_millis;
 
 // Called when systick fires
 void sys_tick_handler()
 {
     system_millis++;
-}
-
-// Sleep for delay milliseconds
-static void msleep(uint32_t delay)
-{
-    // TODO: use a smarter sleep instead of busy waiting
-    uint32_t wake = system_millis + delay;
-    while (wake > system_millis)
-        ;
 }
 
 static inline void sys_clock_gettime(struct timespec *t)
@@ -65,9 +54,15 @@ void sys_init_platform(GlobalContext *glb)
     UNUSED(glb);
 }
 
-void sys_consume_pending_events(GlobalContext *glb)
+void sys_free_platform(GlobalContext *glb)
 {
     UNUSED(glb);
+}
+
+void sys_poll_events(GlobalContext *glb, int timeout_ms)
+{
+    UNUSED(glb);
+    UNUSED(timeout_ms);
 }
 
 void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis)
@@ -87,17 +82,10 @@ void sys_monotonic_time(struct timespec *t)
     sys_clock_gettime(t);
 }
 
-uint32_t sys_millis()
+uint64_t sys_millis(GlobalContext *glb)
 {
+    UNUSED(glb);
     return system_millis;
-}
-
-void sys_start_millis_timer()
-{
-}
-
-void sys_stop_millis_timer()
-{
 }
 
 Module *sys_load_module(GlobalContext *global, const char *module_name)
@@ -105,13 +93,15 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
     const void *beam_module = NULL;
     uint32_t beam_module_size = 0;
 
+    struct ListHead *avmpack_data_list = synclist_rdlock(&global->avmpack_data);
     struct ListHead *item;
-    LIST_FOR_EACH (item, &global->avmpack_data) {
+    LIST_FOR_EACH (item, avmpack_data_list) {
         struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
         if (avmpack_find_section_by_name(avmpack_data->data, module_name, &beam_module, &beam_module_size)) {
             break;
         }
     }
+    synclist_unlock(&global->avmpack_data);
 
     if (IS_NULL_PTR(beam_module)) {
         fprintf(stderr, "Failed to open module: %s\n", module_name);
@@ -141,9 +131,4 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 term sys_get_info(Context *ctx, term key)
 {
     return UNDEFINED_ATOM;
-}
-
-void sys_sleep(GlobalContext *glb)
-{
-    UNUSED(glb);
 }

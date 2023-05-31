@@ -36,7 +36,10 @@ extern "C" {
 
 #include "atom.h"
 #include "linkedlist.h"
+#include "smp.h"
+#include "synclist.h"
 #include "term.h"
+#include "timer_list.h"
 
 #define INVALID_PROCESS_ID 0
 
@@ -47,40 +50,75 @@ struct Context;
 typedef struct Context Context;
 #endif
 
-#ifndef __cplusplus
-struct GlobalContext;
-#endif
+struct Module;
 
 #ifndef TYPEDEF_MODULE
 #define TYPEDEF_MODULE
 typedef struct Module Module;
 #endif
 
-struct Module;
+#ifndef TYPEDEF_GLOBALCONTEXT
+#define TYPEDEF_GLOBALCONTEXT
+typedef struct GlobalContext GlobalContext;
+#endif
 
 struct GlobalContext
 {
     struct ListHead ready_processes;
+    struct ListHead running_processes;
     struct ListHead waiting_processes;
-    struct ListHead refc_binaries;
-    struct ListHead processes_table;
-    struct ListHead *registered_processes;
+    // This lock is held when manipulating the process list and also
+    // when running native handlers.
+#ifndef AVM_NO_SMP
+    SpinLock processes_spinlock;
+#endif
+    struct SyncList refc_binaries;
+    struct SyncList processes_table;
+    struct SyncList registered_processes;
 
     int32_t last_process_id;
 
     struct AtomsHashTable *atoms_table;
     struct ValuesHashTable *atoms_ids_table;
     struct AtomsHashTable *modules_table;
+
+#ifndef AVM_NO_SMP
+    RWLock *modules_lock;
+#endif
     Module **modules_by_index;
     int loaded_modules_count;
 
-    struct ListHead avmpack_data;
+    struct SyncList avmpack_data;
     const void **avmpack_platform_data;
 
-    struct TimerWheel *timer_wheel;
-    uint32_t last_seen_millis;
+    struct TimerList timer_list;
+#ifndef AVM_NO_SMP
+    SpinLock timer_spinlock;
+#endif
 
-    uint64_t ref_ticks;
+#if !defined(AVM_NO_SMP) && ATOMIC_LLONG_LOCK_FREE == 2
+    unsigned long long ATOMIC ref_ticks;
+#else
+    unsigned long long ref_ticks;
+#ifndef AVM_NO_SMP
+    SpinLock ref_ticks_spinlock;
+#endif
+#endif
+
+#ifndef AVM_NO_SMP
+    int ATOMIC online_schedulers;
+    int running_schedulers; // GUARDED_BY(schedulers_mutex)
+    bool ATOMIC waiting_scheduler;
+    Mutex *schedulers_mutex;
+    CondVar *schedulers_cv;
+    bool ATOMIC scheduler_stop_all;
+#else
+    bool scheduler_stop_all;
+#endif
+
+#ifndef AVM_NO_SMP
+    SpinLock env_spinlock;
+#endif
 
     void *platform_data;
 };
@@ -102,23 +140,71 @@ GlobalContext *globalcontext_new();
 void globalcontext_destroy(GlobalContext *glb);
 
 /**
- * @brief Gets a Context from the process table
+ * @brief Gets a Context from the process table, acquiring a lock on the process
+ * table.
  *
- * @details Retrieves from the process table the context with the given local process id.
+ * @details Retrieves from the process table the context with the given local
+ * process id. If the process can be found, the process table is locked.
  * @param glb the global context (that owns the process table).
  * @param process_id the local process id.
- * @returns a Context * with the requested local process id.
+ * @returns a Context * with the requested local process id or NULL if not found.
  */
-Context *globalcontext_get_process(GlobalContext *glb, int32_t process_id);
+Context *globalcontext_get_process_lock(GlobalContext *glb, int32_t process_id);
 
 /**
- * @brief Gets a new process id
+ * @brief Unlock the process table after c was gotten.
  *
- * @details Returns a new (unused) process id, this functions should be used to allocate a new local process id.
- * @param glb the global context.
- * @returns A new local process id integer.
+ * @param glb the global context (that owns the process table).
+ * @param c the result of `globalcontext_get_process_lock`. If NULL, does
+ * nothing, otherwise releases the lock on process table.
  */
-int32_t globalcontext_get_new_process_id(GlobalContext *glb);
+void globalcontext_get_process_unlock(GlobalContext *glb, Context *c);
+
+/**
+ * @brief Determine if a process exists.
+ *
+ * @param glb the global context (that owns the process table).
+ * @param process_id the local process id.
+ * @returns true if a process exists with this id.
+ */
+bool globalcontext_process_exists(GlobalContext *glb, int32_t process_id);
+
+/**
+ * @brief Send a message to a process identified by its id.
+ *
+ * @details Safely send a message to the process, doing nothing is the process
+ * cannot be found.
+ *
+ * @param glb the global context (that owns the process table).
+ * @param process_id the local process id.
+ * @param t the message to send.
+ */
+void globalcontext_send_message(GlobalContext *glb, int32_t process_id, term t);
+
+/**
+ * @brief Send a message to a process from another process.
+ * There should be a lock on the process table. This variant can be used by
+ * listener handlers as an optimization (instead of sending a message to the
+ * port context which should then forward it to the target context).
+ *
+ * @details Safely send a message to the process, doing nothing if the process
+ * cannot be found.
+ *
+ * @param glb the global context (that owns the process table).
+ * @param process_id the target process id.
+ * @param t the message to send.
+ */
+void globalcontext_send_message_nolock(GlobalContext *glb, int32_t process_id, term t);
+
+/**
+ * @brief Initialize a new process, providing it with a process id.
+ *
+ * @details This function also inserts the process into the process and waiting
+ * tables.
+ * @param glb the global context.
+ * @param ctx the process to initialize
+ */
+void globalcontext_init_process(GlobalContext *glb, Context *ctx);
 
 /**
  * @brief Register a process
@@ -127,8 +213,9 @@ int32_t globalcontext_get_new_process_id(GlobalContext *glb);
  * @param glb the global context, each registered process will be globally available for that context.
  * @param atom_index the atom table index.
  * @param local_process_id the process local id.
+ * @returns \c true if the process was registered, \c false if another process with the same name already existed
  */
-void globalcontext_register_process(GlobalContext *glb, int atom_index, int local_process_id);
+bool globalcontext_register_process(GlobalContext *glb, int atom_index, int local_process_id);
 
 /**
  * @brief Get a registered process
@@ -146,6 +233,7 @@ int globalcontext_get_registered_process(GlobalContext *glb, int atom_index);
  * @details Unregister a process with a certain name (atom).
  * @param glb the global context, each registered process will be globally available for that context.
  * @param atom_index the atom table index.
+ * @returns \c true if the process was unregistered, \c false otherwise
  */
 bool globalcontext_unregister_process(GlobalContext *glb, int atom_index);
 
@@ -198,6 +286,21 @@ static inline bool globalcontext_is_term_equal_to_atom_string(GlobalContext *glo
 }
 
 /**
+ * @brief Returns a term representing an atom, from the suppliend string
+ *
+ * @details Converts a string to an atom.  Note that this function may have a side-effect on the
+ *          global context.
+ * @param glb pointer to the global context
+ * @param string an AtomString
+ * @return an atom term formed from the supplied atom string.
+ */
+static inline term globalcontext_make_atom(GlobalContext *glb, AtomString string)
+{
+    int global_atom_index = globalcontext_insert_atom(glb, string);
+    return term_from_atom_index(global_atom_index);
+}
+
+/**
  * @brief   Returns the AtomString value of a term.
  *
  * @details This function fetches the AtomString value of the atom associated
@@ -235,6 +338,17 @@ term globalcontext_existing_term_from_atom_string(GlobalContext *glb, AtomString
 int globalcontext_insert_module(GlobalContext *global, Module *module);
 
 /**
+ * @brief Get a module by index.
+ *
+ * @details Safely retrieve the module by index considering the table can be
+ * reallocated by globalcontext_insert_module.
+ * @param global the global context.
+ * @param index the module index.
+ * @returns the module
+ */
+Module *globalcontext_get_module_by_index(GlobalContext *global, int index);
+
+/**
  * @brief Returns the module with the given name
  *
  * @details Tries to get the module with the given name from the modules table and eventually loads it.
@@ -244,13 +358,22 @@ int globalcontext_insert_module(GlobalContext *global, Module *module);
  */
 Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_atom);
 
-void globalcontext_demonitor(GlobalContext *global, uint64_t ref_ticks);
+bool globalcontext_demonitor(GlobalContext *global, uint64_t ref_ticks);
 void globalcontext_unlink(GlobalContext *global, term pid);
 
+#ifndef __cplusplus
 static inline uint64_t globalcontext_get_ref_ticks(GlobalContext *global)
 {
+#if defined(AVM_NO_SMP) || ATOMIC_LLONG_LOCK_FREE == 2
     return ++global->ref_ticks;
+#else
+    smp_spinlock_lock(&global->ref_ticks_spinlock);
+    unsigned long long value = ++global->ref_ticks;
+    smp_spinlock_unlock(&global->ref_ticks_spinlock);
+    return value;
+#endif
 }
+#endif
 
 #ifdef __cplusplus
 }

@@ -39,51 +39,55 @@ extern "C" {
 #define DEFAULT_REDUCTIONS_AMOUNT 1024
 
 /**
+ * @brief run the scheduler and return a process to be executed.
+ *
+ * @param global the global context.
+ */
+Context *scheduler_run(GlobalContext *global);
+
+/**
  * @brief move a process to waiting queue and wait a ready one
  *
  * @details move current process to the waiting queue, and schedule the next one or sleep until an event is received.
- * @param global the global context.
  * @param c the process context.
  */
-Context *scheduler_wait(GlobalContext *global, Context *c);
-
-Context *scheduler_do_wait(GlobalContext *global);
+Context *scheduler_wait(Context *c);
 
 /**
- * @brief make sure a process is on the ready queue
+ * @brief Init a process in the ready state, moving it to the scheduler queue.
  *
- * @details make a process ready again by moving it to the ready queue.
- * @param global the global context.
  * @param c the process context.
  */
-void scheduler_make_ready(GlobalContext *global, Context *c);
+void scheduler_init_ready(Context *c);
 
 /**
- * @brief just move a process to the wait queue
+ * @brief Signal a process that a message was inserted in the mailbox.
  *
- * @details make a process waiting.
- * @param global the global context.
  * @param c the process context.
  */
-void scheduler_make_waiting(GlobalContext *global, Context *c);
+void scheduler_signal_message(Context *c);
+
+/**
+ * @brief Signal a process that it was killed.
+ *
+ * @param c the process context.
+ */
+void scheduler_kill(Context *ctx);
 
 /**
  * @brief removes a process and terminates it from the scheduling queue
  *
  * @detail removes a process from the scheduling ready queue and destroys it if its not a leader process.
- * @param global the global context.
  * @param c the process that is going to be terminated.
  */
 void scheduler_terminate(Context *c);
 
 /**
- * @brief the number of processes
+ * @brief Terminate all schedulers. Every process is terminated gracefully at next scheduling point.
  *
- * @detail counts the number of processes that are registered on the processes table.
  * @param global the global context.
- * @returns the total number of processes in the processes table.
  */
-int schudule_processes_count(GlobalContext *global);
+void scheduler_stop_all(GlobalContext *global);
 
 /**
  * @brief gets next runnable process from the ready queue.
@@ -105,6 +109,13 @@ Context *scheduler_next(GlobalContext *global, Context *c);
 void scheduler_set_timeout(Context *ctx, avm_int64_t timeout);
 
 void scheduler_cancel_timeout(Context *ctx);
+
+/**
+ * @brief Entry point for schedulers.
+ *
+ * @param glb the global context.
+ */
+int scheduler_entry_point(GlobalContext *glb);
 
 #ifdef __cplusplus
 }

@@ -85,6 +85,7 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset)
     Module *prev_mod = NULL;
     long prev_mod_offset = -1;
     term *ct = ctx->e;
+    term *stack_base = context_stack_base(ctx);
 
     unsigned long stack_size = context_stack_size(ctx);
     Module **modules = malloc(stack_size * sizeof(Module *));
@@ -95,7 +96,7 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset)
 
     size_t num_mods = 0;
 
-    while (ct != ctx->stack_base) {
+    while (ct != stack_base) {
         if (term_is_cp(*ct)) {
 
             Module *cp_mod;
@@ -162,15 +163,17 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset)
 
     term raw_stacktrace = term_nil();
 
-    term frame_info = term_alloc_tuple(2, ctx);
+    term frame_info = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(frame_info, 0, term_from_int(mod->module_index));
     term_put_tuple_element(frame_info, 1, term_from_int(current_offset));
-    raw_stacktrace = term_list_prepend(frame_info, raw_stacktrace, ctx);
+    raw_stacktrace = term_list_prepend(frame_info, raw_stacktrace, &ctx->heap);
 
     prev_mod = NULL;
     prev_mod_offset = -1;
+    // GC may have moved stack
     ct = ctx->e;
-    while (ct != ctx->stack_base) {
+    stack_base = context_stack_base(ctx);
+    while (ct != stack_base) {
         if (term_is_cp(*ct)) {
             Module *cp_mod;
             int label;
@@ -183,11 +186,11 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset)
                 prev_mod = cp_mod;
                 prev_mod_offset = mod_offset;
 
-                term frame_info = term_alloc_tuple(2, ctx);
+                term frame_info = term_alloc_tuple(2, &ctx->heap);
                 term_put_tuple_element(frame_info, 0, term_from_int(cp_mod->module_index));
                 term_put_tuple_element(frame_info, 1, term_from_int(mod_offset));
 
-                raw_stacktrace = term_list_prepend(frame_info, raw_stacktrace, ctx);
+                raw_stacktrace = term_list_prepend(frame_info, raw_stacktrace, &ctx->heap);
             }
         } else if (term_is_catch_label(*ct)) {
 
@@ -202,17 +205,17 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset)
                 prev_mod = cl_mod;
                 prev_mod_offset = mod_offset;
 
-                term frame_info = term_alloc_tuple(2, ctx);
+                term frame_info = term_alloc_tuple(2, &ctx->heap);
                 term_put_tuple_element(frame_info, 0, term_from_int(module_index));
                 term_put_tuple_element(frame_info, 1, term_from_int(mod_offset));
 
-                raw_stacktrace = term_list_prepend(frame_info, raw_stacktrace, ctx);
+                raw_stacktrace = term_list_prepend(frame_info, raw_stacktrace, &ctx->heap);
             }
         }
         ct++;
     }
 
-    term stack_info = term_alloc_tuple(5, ctx);
+    term stack_info = term_alloc_tuple(5, &ctx->heap);
     term_put_tuple_element(stack_info, 0, term_from_int(num_frames));
     term_put_tuple_element(stack_info, 1, term_from_int(num_aux_terms));
     term_put_tuple_element(stack_info, 2, term_from_int(filename_lens));
@@ -240,6 +243,8 @@ static term find_path_created(term module_name, struct ModulePathPair *module_pa
 
 term stacktrace_build(Context *ctx, term *stack_info)
 {
+    GlobalContext *glb = ctx->global;
+
     if (*stack_info == OUT_OF_MEMORY_ATOM) {
         return *stack_info;
     }
@@ -287,30 +292,29 @@ term stacktrace_build(Context *ctx, term *stack_info)
 
         term module_name = module_get_name(cp_mod);
 
-        term frame_i = term_alloc_tuple(4, ctx);
+        term frame_i = term_alloc_tuple(4, &ctx->heap);
         term_put_tuple_element(frame_i, 0, module_name);
 
         term aux_data = term_nil();
         if (module_has_line_chunk(cp_mod)) {
-
-            term line_tuple = term_alloc_tuple(2, ctx);
-            term_put_tuple_element(line_tuple, 0, context_make_atom(ctx, ATOM_STR("\x4", "line")));
+            term line_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(line_tuple, 0, globalcontext_make_atom(glb, ATOM_STR("\x4", "line")));
             int line = module_find_line(cp_mod, (unsigned int) mod_offset);
             term_put_tuple_element(line_tuple, 1, line == -1 ? UNDEFINED_ATOM : term_from_int(line));
-            aux_data = term_list_prepend(line_tuple, aux_data, ctx);
+            aux_data = term_list_prepend(line_tuple, aux_data, &ctx->heap);
 
-            term file_tuple = term_alloc_tuple(2, ctx);
-            term_put_tuple_element(file_tuple, 0, context_make_atom(ctx, ATOM_STR("\x4", "file")));
+            term file_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(file_tuple, 0, globalcontext_make_atom(glb, ATOM_STR("\x4", "file")));
 
             term path = find_path_created(module_name, module_paths, module_path_idx);
             if (term_is_invalid_term(path)) {
-                path = term_from_string((const uint8_t *) cp_mod->filenames[0].data, cp_mod->filenames[0].len, ctx);
+                path = term_from_string((const uint8_t *) cp_mod->filenames[0].data, cp_mod->filenames[0].len, &ctx->heap);
                 module_paths[module_path_idx].module = module_name;
                 module_paths[module_path_idx].path = path;
                 module_path_idx++;
             }
             term_put_tuple_element(file_tuple, 1, path);
-            aux_data = term_list_prepend(file_tuple, aux_data, ctx);
+            aux_data = term_list_prepend(file_tuple, aux_data, &ctx->heap);
         }
         term_put_tuple_element(frame_i, 3, aux_data);
 
@@ -319,13 +323,13 @@ term stacktrace_build(Context *ctx, term *stack_info)
         bool result = module_get_function_from_label(cp_mod, label, &function_name, &arity);
 
         if (LIKELY(result)) {
-            term_put_tuple_element(frame_i, 1, context_make_atom(ctx, function_name));
+            term_put_tuple_element(frame_i, 1, globalcontext_make_atom(glb, function_name));
             term_put_tuple_element(frame_i, 2, term_from_int(arity));
         } else {
             term_put_tuple_element(frame_i, 1, UNDEFINED_ATOM);
             term_put_tuple_element(frame_i, 2, term_from_int(0));
         }
-        stacktrace = term_list_prepend(frame_i, stacktrace, ctx);
+        stacktrace = term_list_prepend(frame_i, stacktrace, &ctx->heap);
 
         el = term_get_list_tail(el);
     }

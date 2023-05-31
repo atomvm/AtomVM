@@ -50,19 +50,9 @@
 %% return a term or `{error, Reason}'.
 %% @end
 %%-----------------------------------------------------------------------------
--spec call(Pid :: pid(), Message :: term()) -> term() | {error, Reason :: term()}.
-call(Pid, Message) ->
-    case erlang:is_process_alive(Pid) of
-        false ->
-            {error, noproc};
-        true ->
-            Ref = erlang:make_ref(),
-            Pid ! {self(), Ref, Message},
-            receive
-                out_of_memory -> out_of_memory;
-                {Ref, Reply} -> Reply
-            end
-    end.
+-spec call(pid(), Message :: term()) -> term().
+call(Port, Message) ->
+    call(Port, Message, infinity).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pid Pid to which to send messages
@@ -75,19 +65,23 @@ call(Pid, Message) ->
 %% a term or `{error, Reason}', or`{error, timeout}' if the TimeoutMs is reached first.
 %% @end
 %%-----------------------------------------------------------------------------
--spec call(Pid :: pid(), Message :: term(), TimeoutMs :: non_neg_integer()) ->
-    term() | {error, timeout}.
-call(Pid, Message, TimeoutMs) ->
-    case erlang:is_process_alive(Pid) of
-        false ->
-            {error, noproc};
-        true ->
-            Ref = erlang:make_ref(),
-            Pid ! {self(), Ref, Message},
-            receive
-                out_of_memory -> out_of_memory;
-                {Ref, Reply} -> Reply
-            after TimeoutMs ->
-                {error, timeout}
-            end
-    end.
+-spec call(pid(), Message :: term(), TimeoutMs :: non_neg_integer()) -> term() | {error, timeout}.
+call(Port, Message, TimeoutMs) ->
+    Ref = erlang:make_ref(),
+    MonitorRef = monitor(port, Port),
+    Port ! {self(), Ref, Message},
+    Result =
+        receive
+            {'DOWN', MonitorRef, port, Port, normal} ->
+                {error, noproc};
+            {'DOWN', MonitorRef, port, Port, Reason} ->
+                {error, Reason};
+            out_of_memory ->
+                out_of_memory;
+            {Ref, Ret} ->
+                Ret
+        after TimeoutMs ->
+            {error, timeout}
+        end,
+    demonitor(MonitorRef, [flush]),
+    Result.

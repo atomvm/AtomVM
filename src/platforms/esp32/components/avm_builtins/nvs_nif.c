@@ -88,7 +88,7 @@ static term nif_esp_nvs_get_binary(Context *ctx, int argc, term argv[])
         TRACE("Unabled to ensure free space for binary.  namespace='%s' key='%s' size=%i\n", namespace, key, size);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    term binary = term_create_uninitialized_binary(size, ctx);
+    term binary = term_create_uninitialized_binary(size, &ctx->heap, ctx->global);
 
     err = nvs_get_blob(nvs, key, (void *) term_binary_data(binary), &size);
     nvs_close(nvs);

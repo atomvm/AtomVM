@@ -82,7 +82,7 @@ static term nif_esp_random(Context *ctx, int argc, term argv[])
     if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    return term_make_boxed_int(r, ctx);
+    return term_make_boxed_int(r, &ctx->heap);
 }
 
 static term nif_esp_random_bytes(Context *ctx, int argc, term argv[])
@@ -98,7 +98,7 @@ static term nif_esp_random_bytes(Context *ctx, int argc, term argv[])
         if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(0) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        term binary = term_create_empty_binary(0, ctx);
+        term binary = term_create_empty_binary(0, &ctx->heap, ctx->global);
         return binary;
     } else {
         uint8_t *buf = malloc(len);
@@ -109,7 +109,7 @@ static term nif_esp_random_bytes(Context *ctx, int argc, term argv[])
         if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        term binary = term_from_literal_binary(buf, len, ctx);
+        term binary = term_from_literal_binary(buf, len, &ctx->heap, ctx->global);
         free(buf);
         return binary;
     }
@@ -131,27 +131,27 @@ static term nif_esp_reset_reason(Context *ctx, int argc, term argv[])
     esp_reset_reason_t reason = esp_reset_reason();
     switch (reason) {
         case ESP_RST_UNKNOWN:
-            return context_make_atom(ctx, esp_rst_unknown_atom);
+            return globalcontext_make_atom(ctx->global, esp_rst_unknown_atom);
         case ESP_RST_POWERON:
-            return context_make_atom(ctx, esp_rst_poweron);
+            return globalcontext_make_atom(ctx->global, esp_rst_poweron);
         case ESP_RST_EXT:
-            return context_make_atom(ctx, esp_rst_ext);
+            return globalcontext_make_atom(ctx->global, esp_rst_ext);
         case ESP_RST_SW:
-            return context_make_atom(ctx, esp_rst_sw);
+            return globalcontext_make_atom(ctx->global, esp_rst_sw);
         case ESP_RST_PANIC:
-            return context_make_atom(ctx, esp_rst_panic);
+            return globalcontext_make_atom(ctx->global, esp_rst_panic);
         case ESP_RST_INT_WDT:
-            return context_make_atom(ctx, esp_rst_int_wdt);
+            return globalcontext_make_atom(ctx->global, esp_rst_int_wdt);
         case ESP_RST_TASK_WDT:
-            return context_make_atom(ctx, esp_rst_task_wdt);
+            return globalcontext_make_atom(ctx->global, esp_rst_task_wdt);
         case ESP_RST_WDT:
-            return context_make_atom(ctx, esp_rst_wdt);
+            return globalcontext_make_atom(ctx->global, esp_rst_wdt);
         case ESP_RST_DEEPSLEEP:
-            return context_make_atom(ctx, esp_rst_deepsleep);
+            return globalcontext_make_atom(ctx->global, esp_rst_deepsleep);
         case ESP_RST_BROWNOUT:
-            return context_make_atom(ctx, esp_rst_brownout);
+            return globalcontext_make_atom(ctx->global, esp_rst_brownout);
         case ESP_RST_SDIO:
-            return context_make_atom(ctx, esp_rst_sdio);
+            return globalcontext_make_atom(ctx->global, esp_rst_sdio);
         default:
             return UNDEFINED_ATOM;
     }
@@ -289,35 +289,35 @@ static term nif_esp_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[])
             return UNDEFINED_ATOM;
 #if SOC_PM_SUPPORT_EXT_WAKEUP
         case ESP_SLEEP_WAKEUP_EXT0:
-            return context_make_atom(ctx, sleep_wakeup_ext0_atom);
+            return globalcontext_make_atom(ctx->global, sleep_wakeup_ext0_atom);
         case ESP_SLEEP_WAKEUP_EXT1:
-            return context_make_atom(ctx, sleep_wakeup_ext1_atom);
+            return globalcontext_make_atom(ctx->global, sleep_wakeup_ext1_atom);
 #endif
         case ESP_SLEEP_WAKEUP_TIMER:
-            return context_make_atom(ctx, sleep_wakeup_timer_atom);
+            return globalcontext_make_atom(ctx->global, sleep_wakeup_timer_atom);
         case ESP_SLEEP_WAKEUP_TOUCHPAD:
-            return context_make_atom(ctx, sleep_wakeup_touchpad_atom);
+            return globalcontext_make_atom(ctx->global, sleep_wakeup_touchpad_atom);
         case ESP_SLEEP_WAKEUP_ULP:
-            return context_make_atom(ctx, sleep_wakeup_ulp_atom);
+            return globalcontext_make_atom(ctx->global, sleep_wakeup_ulp_atom);
         case ESP_SLEEP_WAKEUP_GPIO:
-            return context_make_atom(ctx, sleep_wakeup_gpio_atom);
+            return globalcontext_make_atom(ctx->global, sleep_wakeup_gpio_atom);
         case ESP_SLEEP_WAKEUP_UART:
-            return context_make_atom(ctx, sleep_wakeup_uart_atom);
+            return globalcontext_make_atom(ctx->global, sleep_wakeup_uart_atom);
 #ifdef ESP_SLEEP_WAKEUP_WIFI
         case ESP_SLEEP_WAKEUP_WIFI:
-            return context_make_atom(ctx, sleep_wakeup_wifi_atom);
+            return globalcontext_make_atom(ctx->global, sleep_wakeup_wifi_atom);
 #endif
 #ifdef ESP_SLEEP_WAKEUP_COCPU
         case ESP_SLEEP_WAKEUP_COCPU:
-            return context_make_atom(ctx, sleep_wakeup_cocpu_atom);
+            return globalcontext_make_atom(ctx->global, sleep_wakeup_cocpu_atom);
 #endif
 #ifdef ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG
         case ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG:
-            return context_make_atom(ctx, sleep_wakeup_cocpu_trap_trig_atom);
+            return globalcontext_make_atom(ctx->global, sleep_wakeup_cocpu_trap_trig_atom);
 #endif
 #ifdef ESP_SLEEP_WAKEUP_BT
         case ESP_SLEEP_WAKEUP_BT:
-            return context_make_atom(ctx, sleep_wakeup_bt_atom);
+            return globalcontext_make_atom(ctx->global, sleep_wakeup_bt_atom);
 #endif
         default:
             return ERROR_ATOM;
@@ -381,8 +381,10 @@ static term nif_rom_md5(Context *ctx, int argc, term argv[])
     MD5Update(&md5, (const unsigned char *) term_binary_data(data), term_binary_size(data));
     MD5Final(digest, &md5);
     #endif
-
-    return term_from_literal_binary(digest, MD5_DIGEST_LENGTH, ctx);
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(MD5_DIGEST_LENGTH) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    return term_from_literal_binary(digest, MD5_DIGEST_LENGTH, &ctx->heap, ctx->global);
 }
 
 static term nif_atomvm_platform(Context *ctx, int argc, term argv[])

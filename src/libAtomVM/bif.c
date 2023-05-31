@@ -189,7 +189,7 @@ term bif_erlang_is_map_key_2(Context *ctx, term arg1, term arg2)
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, 3, 1, &arg2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        term err = term_alloc_tuple(2, ctx);
+        term err = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(err, 0, BADMAP_ATOM);
         term_put_tuple_element(err, 1, arg2);
 
@@ -265,7 +265,7 @@ term bif_erlang_map_size_1(Context *ctx, int live, term arg1)
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, 3, 1, &arg1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        term err = term_alloc_tuple(2, ctx);
+        term err = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(err, 0, BADMAP_ATOM);
         term_put_tuple_element(err, 1, arg1);
 
@@ -281,7 +281,7 @@ term bif_erlang_map_get_2(Context *ctx, term arg1, term arg2)
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, 3, 1, &arg2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        term err = term_alloc_tuple(2, ctx);
+        term err = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(err, 0, BADMAP_ATOM);
         term_put_tuple_element(err, 1, arg2);
 
@@ -293,7 +293,7 @@ term bif_erlang_map_get_2(Context *ctx, term arg1, term arg2)
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, 3, 1, &arg1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        term err = term_alloc_tuple(2, ctx);
+        term err = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(err, 0, BADKEY_ATOM);
         term_put_tuple_element(err, 1, arg1);
 
@@ -310,7 +310,7 @@ static inline term make_boxed_int(Context *ctx, avm_int_t value)
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    return term_make_boxed_int(value, ctx);
+    return term_make_boxed_int(value, &ctx->heap);
 }
 
 #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
@@ -320,7 +320,7 @@ static inline term make_boxed_int64(Context *ctx, avm_int64_t value)
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    return term_make_boxed_int64(value, ctx);
+    return term_make_boxed_int64(value, &ctx->heap);
 }
 #endif
 
@@ -390,7 +390,7 @@ static term add_boxed_helper(Context *ctx, term arg1, term arg2)
         if (UNLIKELY(memory_ensure_free_opt(ctx, FLOAT_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        return term_from_float(fresult, ctx);
+        return term_from_float(fresult, &ctx->heap);
     }
 
     switch (size) {
@@ -498,7 +498,7 @@ static term sub_boxed_helper(Context *ctx, term arg1, term arg2)
         if (UNLIKELY(memory_ensure_free_opt(ctx, FLOAT_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        return term_from_float(fresult, ctx);
+        return term_from_float(fresult, &ctx->heap);
     }
 
     switch (size) {
@@ -621,7 +621,7 @@ static term mul_boxed_helper(Context *ctx, term arg1, term arg2)
         if (UNLIKELY(memory_ensure_free_opt(ctx, FLOAT_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        return term_from_float(fresult, ctx);
+        return term_from_float(fresult, &ctx->heap);
     }
 
     switch (size) {
@@ -789,7 +789,7 @@ static term neg_boxed_helper(Context *ctx, term arg1)
         if (UNLIKELY(memory_ensure_free_opt(ctx, FLOAT_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        return term_from_float(fresult, ctx);
+        return term_from_float(fresult, &ctx->heap);
     }
 
     if (term_is_boxed_integer(arg1)) {
@@ -876,7 +876,7 @@ static term abs_boxed_helper(Context *ctx, term arg1)
         if (UNLIKELY(memory_ensure_free_opt(ctx, FLOAT_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        return term_from_float(fresult, ctx);
+        return term_from_float(fresult, &ctx->heap);
     }
 
     if (term_is_boxed_integer(arg1)) {

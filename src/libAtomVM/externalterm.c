@@ -66,11 +66,11 @@
 // buffer).  The parse_external_terms function does NOT perform range checking, and MUST
 // therefore always be preceeded by a call to calculate_heap_usage.
 
-static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm_size, Context *ctx, bool copy);
-static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaining, size_t *eterm_size, bool copy, Context *ctx);
-static size_t compute_external_size(Context *ctx, term t);
-static int externalterm_from_term(Context *ctx, uint8_t **buf, size_t *len, term t);
-static int serialize_term(Context *ctx, uint8_t *buf, term t);
+static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm_size, bool copy, Heap *heap, GlobalContext *glb);
+static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaining, size_t *eterm_size, bool copy);
+static size_t compute_external_size(term t, GlobalContext *glb);
+static int externalterm_from_term(uint8_t **buf, size_t *len, term t, GlobalContext *glb);
+static int serialize_term(uint8_t *buf, term t, GlobalContext *glb);
 
 /**
  * @brief
@@ -96,38 +96,30 @@ static term externalterm_to_term_internal(const void *external_term, size_t size
     }
 
     size_t eterm_size;
-    int heap_usage = calculate_heap_usage(external_term_buf + 1, size - 1, &eterm_size, copy, ctx);
+    int heap_usage = calculate_heap_usage(external_term_buf + 1, size - 1, &eterm_size, copy);
     if (heap_usage == INVALID_TERM_SIZE) {
         return term_invalid_term();
     }
 
+    term result;
     if (opts & ExternalTermToHeapFragment) {
-        struct ListHead *heap_fragment = malloc(heap_usage * sizeof(term) + sizeof(struct ListHead));
-        if (IS_NULL_PTR(heap_fragment)) {
+        // We need to allocate fragments as reading external terms from modules
+        // is not accounted for by the compiler when it emits test_heap opcodes
+        Heap heap;
+        if (UNLIKELY(memory_init_heap(&heap, heap_usage) != MEMORY_GC_OK)) {
             return term_invalid_term();
         }
-        list_append(&ctx->heap_fragments, heap_fragment);
-        ctx->heap_fragments_size += heap_usage;
-        term *external_term_heap = (term *) (heap_fragment + 1);
-
-        // save the heap pointer and temporary switch to the newly created heap fragment
-        // so all existing functions can be used on the heap fragment without any change.
-        term *main_heap = ctx->heap_ptr;
-        ctx->heap_ptr = external_term_heap;
-        term result = parse_external_terms(external_term_buf + 1, &eterm_size, ctx, false);
-        *bytes_read = eterm_size + 1;
-        ctx->heap_ptr = main_heap;
-
-        return result;
+        result = parse_external_terms(external_term_buf + 1, &eterm_size, copy, &heap, ctx->global);
+        memory_heap_append_heap(&ctx->heap, &heap);
     } else {
         if (UNLIKELY(memory_ensure_free(ctx, heap_usage) != MEMORY_GC_OK)) {
             fprintf(stderr, "Unable to ensure %zu free words in heap\n", eterm_size);
             return term_invalid_term();
         }
-        term result = parse_external_terms(external_term_buf + 1, &eterm_size, ctx, true);
-        *bytes_read = eterm_size + 1;
-        return result;
+        result = parse_external_terms(external_term_buf + 1, &eterm_size, copy, &ctx->heap, ctx->global);
     }
+    *bytes_read = eterm_size + 1;
+    return result;
 }
 
 term externalterm_to_term(const void *external_term, size_t size, Context *ctx, ExternalTermOpts opts)
@@ -155,7 +147,7 @@ enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term b
     //
     // convert
     //
-    term t = externalterm_to_term_internal(buf, len, ctx, 0, bytes_read, true);
+    term t = externalterm_to_term_internal(buf, len, ctx, false, bytes_read, true);
     free(buf);
     if (term_is_invalid_term(t)) {
         return EXTERNAL_TERM_BAD_ARG;
@@ -165,15 +157,15 @@ enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term b
     }
 }
 
-static int externalterm_from_term(Context *ctx, uint8_t **buf, size_t *len, term t)
+static int externalterm_from_term(uint8_t **buf, size_t *len, term t, GlobalContext *glb)
 {
-    *len = compute_external_size(ctx, t) + 1;
+    *len = compute_external_size(t, glb) + 1;
     *buf = malloc(*len);
     if (UNLIKELY(IS_NULL_PTR(*buf))) {
         fprintf(stderr, "Unable to allocate %zu bytes for externalized term.\n", *len);
         AVM_ABORT();
     }
-    size_t k = serialize_term(ctx, *buf + 1, t);
+    size_t k = serialize_term(*buf + 1, t, glb);
     *buf[0] = EXTERNAL_TERM_TAG;
     return k + 1;
 }
@@ -185,7 +177,7 @@ term externalterm_to_binary(Context *ctx, term t)
     //
     uint8_t *buf;
     size_t len;
-    externalterm_from_term(ctx, &buf, &len, t);
+    externalterm_from_term(&buf, &len, t, ctx->global);
     //
     // Ensure enough free space in heap for binary
     //
@@ -197,14 +189,14 @@ term externalterm_to_binary(Context *ctx, term t)
     //
     // create and return the binary
     //
-    term binary = term_from_literal_binary((void *) buf, len, ctx);
+    term binary = term_from_literal_binary((void *) buf, len, &ctx->heap, ctx->global);
     free(buf);
     return binary;
 }
 
-static size_t compute_external_size(Context *ctx, term t)
+static size_t compute_external_size(term t, GlobalContext *glb)
 {
-    return serialize_term(ctx, NULL, t);
+    return serialize_term(NULL, t, glb);
 }
 
 static uint8_t get_num_bytes(avm_uint64_t val)
@@ -228,7 +220,7 @@ static void write_bytes(uint8_t *buf, avm_uint64_t val)
     }
 }
 
-static int serialize_term(Context *ctx, uint8_t *buf, term t)
+static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
 {
     if (term_is_uint8(t)) {
         if (!IS_NULL_PTR(buf)) {
@@ -272,7 +264,7 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
         return NEW_FLOAT_EXT_SIZE;
 
     } else if (term_is_atom(t)) {
-        AtomString atom_string = globalcontext_atomstring_from_term(ctx->global, t);
+        AtomString atom_string = globalcontext_atomstring_from_term(glb, t);
         size_t atom_len = atom_string_len(atom_string);
         if (!IS_NULL_PTR(buf)) {
             buf[0] = ATOM_EXT;
@@ -297,7 +289,7 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
         size_t k = 2;
         for (size_t i = 0; i < arity; ++i) {
             term e = term_get_tuple_element(t, i);
-            k += serialize_term(ctx, IS_NULL_PTR(buf) ? NULL : buf + k, e);
+            k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, e, glb);
         }
         return k;
 
@@ -337,11 +329,11 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
         term i = t;
         while (term_is_nonempty_list(i)) {
             term e = term_get_list_head(i);
-            k += serialize_term(ctx, IS_NULL_PTR(buf) ? NULL : buf + k, e);
+            k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, e, glb);
             i = term_get_list_tail(i);
             ++len;
         }
-        k += serialize_term(ctx, IS_NULL_PTR(buf) ? NULL : buf + k, i);
+        k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, i, glb);
         if (!IS_NULL_PTR(buf)) {
             WRITE_32_UNALIGNED(buf + 1, len);
         }
@@ -368,9 +360,9 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
         size_t k = 5;
         for (size_t i = 0; i < size; ++i) {
             term key = term_get_map_key(t, i);
-            k += serialize_term(ctx, IS_NULL_PTR(buf) ? NULL : buf + k, key);
+            k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, key, glb);
             term value = term_get_map_value(t, i);
-            k += serialize_term(ctx, IS_NULL_PTR(buf) ? NULL : buf + k, value);
+            k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, value, glb);
         }
         return k;
     } else if (term_is_function(t)) {
@@ -381,7 +373,7 @@ static int serialize_term(Context *ctx, uint8_t *buf, term t)
         const term *boxed_value = term_to_const_term_ptr(t);
         for (size_t i = 1; i <= 3; ++i) {
             term mfa = boxed_value[i];
-            k += serialize_term(ctx, IS_NULL_PTR(buf) ? NULL : buf + k, mfa);
+            k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, mfa, glb);
         }
         return k;
     } else {
@@ -399,7 +391,7 @@ static avm_uint64_t read_bytes(const uint8_t *buf, uint8_t num_bytes)
     return value;
 }
 
-static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm_size, Context *ctx, bool copy)
+static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm_size, bool copy, Heap *heap, GlobalContext *glb)
 {
     switch (external_term_buf[0]) {
         case NEW_FLOAT_EXT: {
@@ -410,7 +402,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             v.intvalue = READ_64_UNALIGNED(external_term_buf + 1);
 
             *eterm_size = NEW_FLOAT_EXT_SIZE;
-            return term_from_float(v.doublevalue, ctx);
+            return term_from_float(v.doublevalue, heap);
         }
 
         case SMALL_INTEGER_EXT: {
@@ -423,7 +415,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
 
             *eterm_size = 5;
 
-            return term_make_maybe_boxed_int64(ctx, value);
+            return term_make_maybe_boxed_int64(value, heap);
         }
 
         case SMALL_BIG_EXT: {
@@ -440,13 +432,13 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
                 value = (avm_int64_t) unsigned_value;
             }
             *eterm_size = SMALL_BIG_EXT_BASE_SIZE + num_bytes;
-            return term_make_maybe_boxed_int64(ctx, value);
+            return term_make_maybe_boxed_int64(value, heap);
         }
 
         case ATOM_EXT: {
             uint16_t atom_len = READ_16_UNALIGNED(external_term_buf + 1);
 
-            int global_atom_id = globalcontext_insert_atom_maybe_copy(ctx->global, (AtomString) (external_term_buf + 2), copy);
+            int global_atom_id = globalcontext_insert_atom_maybe_copy(glb, (AtomString) (external_term_buf + 2), copy);
 
             *eterm_size = 3 + atom_len;
             return term_from_atom_index(global_atom_id);
@@ -454,13 +446,13 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
 
         case SMALL_TUPLE_EXT: {
             uint8_t arity = external_term_buf[1];
-            term tuple = term_alloc_tuple(arity, ctx);
+            term tuple = term_alloc_tuple(arity, heap);
 
             int buf_pos = 2;
 
             for (int i = 0; i < arity; i++) {
                 size_t element_size;
-                term put_value = parse_external_terms(external_term_buf + buf_pos, &element_size, ctx, copy);
+                term put_value = parse_external_terms(external_term_buf + buf_pos, &element_size, copy, heap, glb);
                 if (term_is_invalid_term(put_value)) {
                     return put_value;
                 }
@@ -481,7 +473,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
         case STRING_EXT: {
             uint16_t string_size = READ_16_UNALIGNED(external_term_buf + 1);
             *eterm_size = 3 + string_size;
-            return term_from_string((uint8_t *) external_term_buf + 3, string_size, ctx);
+            return term_from_string((uint8_t *) external_term_buf + 3, string_size, heap);
         }
 
         case LIST_EXT: {
@@ -494,11 +486,11 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
 
             for (unsigned int i = 0; i < list_len; i++) {
                 size_t item_size;
-                term head = parse_external_terms(external_term_buf + buf_pos, &item_size, ctx, copy);
+                term head = parse_external_terms(external_term_buf + buf_pos, &item_size, copy, heap, glb);
                 if (term_is_invalid_term(head)) {
                     return head;
                 }
-                term *new_list_item = term_list_alloc(ctx);
+                term *new_list_item = term_list_alloc(heap);
 
                 if (prev_term) {
                     prev_term[0] = term_list_from_list_ptr(new_list_item);
@@ -514,7 +506,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
 
             if (prev_term) {
                 size_t tail_size;
-                term tail = parse_external_terms(external_term_buf + buf_pos, &tail_size, ctx, copy);
+                term tail = parse_external_terms(external_term_buf + buf_pos, &tail_size, copy, heap, glb);
                 if (term_is_invalid_term(tail)) {
                     return tail;
                 }
@@ -530,9 +522,9 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             uint32_t binary_size = READ_32_UNALIGNED(external_term_buf + 1);
             *eterm_size = 5 + binary_size;
             if (copy) {
-                return term_from_literal_binary((uint8_t *) external_term_buf + 5, binary_size, ctx);
+                return term_from_literal_binary((uint8_t *) external_term_buf + 5, binary_size, heap, glb);
             } else {
-                return term_from_const_binary((uint8_t *) external_term_buf + 5, binary_size, ctx);
+                return term_from_const_binary((uint8_t *) external_term_buf + 5, binary_size, heap, glb);
             }
         }
 
@@ -540,33 +532,33 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             size_t buf_pos = 1;
             size_t element_size;
 
-            term m = parse_external_terms(external_term_buf + buf_pos, &element_size, ctx, copy);
+            term m = parse_external_terms(external_term_buf + buf_pos, &element_size, copy, heap, glb);
             buf_pos += element_size;
 
-            term f = parse_external_terms(external_term_buf + buf_pos, &element_size, ctx, copy);
+            term f = parse_external_terms(external_term_buf + buf_pos, &element_size, copy, heap, glb);
             buf_pos += element_size;
 
-            term a = parse_external_terms(external_term_buf + buf_pos, &element_size, ctx, copy);
+            term a = parse_external_terms(external_term_buf + buf_pos, &element_size, copy, heap, glb);
             buf_pos += element_size;
 
             *eterm_size = buf_pos;
-            return term_make_function_reference(m, f, a, ctx);
+            return term_make_function_reference(m, f, a, heap);
         }
 
         case MAP_EXT: {
             uint32_t size = READ_32_UNALIGNED(external_term_buf + 1);
-            term map = term_alloc_map(ctx, size);
+            term map = term_alloc_map(size, heap);
             size_t buf_pos = 5;
             for (uint32_t i = 0; i < size; ++i) {
                 size_t key_size;
-                term key = parse_external_terms(external_term_buf + buf_pos, &key_size, ctx, copy);
+                term key = parse_external_terms(external_term_buf + buf_pos, &key_size, copy, heap, glb);
                 if (term_is_invalid_term(key)) {
                     return key;
                 }
                 buf_pos += key_size;
 
                 size_t value_size;
-                term value = parse_external_terms(external_term_buf + buf_pos, &value_size, ctx, copy);
+                term value = parse_external_terms(external_term_buf + buf_pos, &value_size, copy, heap, glb);
                 if (term_is_invalid_term(value)) {
                     return value;
                 }
@@ -582,7 +574,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             uint8_t atom_len = *(external_term_buf + 1);
 
             // AtomString first byte is the atom length
-            int global_atom_id = globalcontext_insert_atom_maybe_copy(ctx->global, (AtomString) (external_term_buf + 1), copy);
+            int global_atom_id = globalcontext_insert_atom_maybe_copy(glb, (AtomString) (external_term_buf + 1), copy);
 
             *eterm_size = 2 + atom_len;
             return term_from_atom_index(global_atom_id);
@@ -593,7 +585,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
     }
 }
 
-static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaining, size_t *eterm_size, bool copy, Context *ctx)
+static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaining, size_t *eterm_size, bool copy)
 {
     if (UNLIKELY(remaining < 1)) {
         return INVALID_TERM_SIZE;
@@ -675,7 +667,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
 
             for (int i = 0; i < arity; i++) {
                 size_t element_size = 0;
-                int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &element_size, copy, ctx);
+                int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &element_size, copy);
                 if (UNLIKELY(u == INVALID_TERM_SIZE)) {
                     return INVALID_TERM_SIZE;
                 }
@@ -729,7 +721,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
 
             for (unsigned int i = 0; i < list_len; i++) {
                 size_t item_size = 0;
-                int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &item_size, copy, ctx);
+                int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &item_size, copy);
                 if (UNLIKELY(u == INVALID_TERM_SIZE)) {
                     return INVALID_TERM_SIZE;
                 }
@@ -743,7 +735,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             }
 
             size_t tail_size = 0;
-            int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &tail_size, copy, ctx);
+            int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &tail_size, copy);
             if (UNLIKELY(u == INVALID_TERM_SIZE)) {
                 return INVALID_TERM_SIZE;
             }
@@ -793,7 +785,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             remaining -= 1;
             for (int i = 0; i < 3; i++) {
                 size_t element_size = 0;
-                int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &element_size, copy, ctx);
+                int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &element_size, copy);
                 if (UNLIKELY(u == INVALID_TERM_SIZE)) {
                     return INVALID_TERM_SIZE;
                 }
@@ -823,7 +815,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             size_t buf_pos = MAP_EXT_BASE_SIZE;
             for (uint32_t i = 0; i < size; ++i) {
                 size_t key_size = 0;
-                int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &key_size, copy, ctx);
+                int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &key_size, copy);
                 if (UNLIKELY(u == INVALID_TERM_SIZE)) {
                     return INVALID_TERM_SIZE;
                 }
@@ -835,7 +827,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
                 }
                 remaining -= key_size;
                 size_t value_size = 0;
-                u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &value_size, copy, ctx);
+                u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &value_size, copy);
                 if (UNLIKELY(u == INVALID_TERM_SIZE)) {
                     return INVALID_TERM_SIZE;
                 }

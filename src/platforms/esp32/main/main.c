@@ -94,7 +94,7 @@ void app_main()
         AVM_ABORT();
     }
     avmpack_data->data = main_avm;
-    list_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
+    synclist_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
     glb->avmpack_platform_data = NULL;
 
     const void *lib_avm = avm_partition("lib.avm", &size);
@@ -105,7 +105,7 @@ void app_main()
             AVM_ABORT();
         }
         avmpack_data->data = lib_avm;
-        list_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
+        synclist_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
     } else {
         ESP_LOGW(TAG, "Unable to mount lib.avm partition.  Hopefully the AtomVM core libraries are included in your application.");
     }

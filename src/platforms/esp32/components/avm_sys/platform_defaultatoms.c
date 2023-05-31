@@ -40,7 +40,6 @@ static const char *const getsockname_atom = "\xB" "getsockname";
 static const char *const recvfrom_atom = "\x8" "recvfrom";
 static const char *const sendto_atom = "\x6" "sendto";
 static const char *const address_atom = "\x7" "address";
-static const char *const port_atom = "\x4" "port";
 static const char *const controlling_process_atom = "\x13" "controlling_process";
 static const char *const active_atom = "\x6" "active";
 static const char *const buffer_atom = "\x6" "buffer";
@@ -54,28 +53,10 @@ static const char *const accept_atom = "\x6" "accept";
 static const char *const fd_atom = "\x2" "fd";
 
 static const char *const init_atom = "\x4" "init";
-static const char *const close_atom = "\x5" "close";
 static const char *const get_port_atom = "\x8" "get_port";
 static const char *const sockname_atom = "\x8" "sockname";
 static const char *const peername_atom = "\x8" "peername";
 static const char *const not_owner_atom = "\x9" "not_owner";
-
-static const char *const sta_atom = "\x3" "sta";
-static const char *const ssid_atom = "\x4" "ssid";
-static const char *const psk_atom = "\x3" "psk";
-static const char *const sntp_atom = "\x4" "sntp";
-static const char *const sta_got_ip_atom = "\xA" "sta_got_ip";
-static const char *const sta_connected_atom = "\xD" "sta_connected";
-static const char *const sta_disconnected_atom = "\x10" "sta_disconnected";
-static const char *const sta_dhcp_hostname_atom = "\xD" "dhcp_hostname";
-static const char *const ap_atom = "\x2" "ap";
-static const char *const ssid_hidden_atom = "\xB" "ssid_hidden";
-static const char *const max_connections_atom = "\xF" "max_connections";
-static const char *const ap_started_atom = "\xA" "ap_started";
-static const char *const ap_sta_connected_atom = "\x10" "ap_sta_connected";
-static const char *const ap_sta_disconnected_atom = "\x13" "ap_sta_disconnected";
-static const char *const ap_sta_ip_assigned_atom = "\x12" "ap_sta_ip_assigned";
-static const char *const host_atom = "\x4" "host";
 
 //spidriver
 static const char *const bus_config_atom = "\xA" "bus_config";
@@ -131,7 +112,6 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, recvfrom_atom) == RECVFROM_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, sendto_atom) == SENDTO_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, address_atom) == ADDRESS_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, port_atom) == PORT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, controlling_process_atom) == CONTROLLING_PROCESS_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, active_atom) == ACTIVE_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, buffer_atom) == BUFFER_ATOM_INDEX;
@@ -145,28 +125,10 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, fd_atom) == FD_ATOM_INDEX;
 
     ok &= globalcontext_insert_atom(glb, init_atom) == INIT_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, close_atom) == CLOSE_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, get_port_atom) == GET_PORT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, sockname_atom) == SOCKNAME_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, peername_atom) == PEERNAME_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, not_owner_atom) == NOT_OWNER_ATOM_INDEX;
-
-    ok &= globalcontext_insert_atom(glb, sta_atom) == STA_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, ssid_atom) == SSID_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, psk_atom) == PSK_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, sntp_atom) == SNTP_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, sta_got_ip_atom) == STA_GOT_IP_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, sta_connected_atom) == STA_CONNECTED_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, sta_disconnected_atom) == STA_DISCONNECTED_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, sta_dhcp_hostname_atom) == STA_DHCP_HOSTNAME_INDEX;
-    ok &= globalcontext_insert_atom(glb, ap_atom) == AP_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, ssid_hidden_atom) == SSID_HIDDEN_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, max_connections_atom) == MAX_CONNECTIONS_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, ap_started_atom) == AP_STARTED_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, ap_sta_connected_atom) == AP_STA_CONNECTED_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, ap_sta_disconnected_atom) == AP_STA_DISCONNECTED_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, ap_sta_ip_assigned_atom) == AP_STA_IP_ASSIGNED_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, host_atom) == HOST_ATOM_INDEX;
 
     //spidriver
     ok &= globalcontext_insert_atom(glb, bus_config_atom) == BUS_CONFIG_ATOM_INDEX;

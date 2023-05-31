@@ -56,7 +56,7 @@ static Context *i2c_driver_create_port(GlobalContext *global, term opts);
 static term i2cdriver_begin_transmission(Context *ctx, term pid, term req);
 static term i2cdriver_end_transmission(Context *ctx, term pid);
 static term i2cdriver_write_byte(Context *ctx, term pid, term req);
-static void i2cdriver_consume_mailbox(Context *ctx);
+static NativeHandlerResult i2cdriver_consume_mailbox(Context *ctx);
 
 static const char *const i2c_driver_atom = "\xA" "i2c_driver";
 static term i2c_driver;
@@ -77,6 +77,7 @@ static const AtomStringIntPair cmd_table[] = {
     { ATOM_STR("\x10", "end_transmission"), I2CEndTransmissionCmd },
     { ATOM_STR("\xA", "write_byte"), I2CWriteByteCmd },
     { ATOM_STR("\xA", "read_bytes"), I2CReadBytesCmd },
+    { ATOM_STR("\xB", "write_bytes"), I2CWriteBytesCmd },
     { ATOM_STR("\x5", "close"), I2CCloseCmd },
     SELECT_INT_DEFAULT(I2CInvalidCmd)
 };
@@ -291,10 +292,10 @@ static term i2cdriver_read_bytes(Context *ctx, term pid, term req)
         register_address = term_to_int32(register_term);
     }
 
-    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, BOXED_INT_SIZE, MEMORY_NO_GC) != MEMORY_GC_OK)) {
         return ERROR_ATOM;
     }
-    term data_term = term_create_uninitialized_binary(read_count, ctx);
+    term data_term = term_create_uninitialized_binary(read_count, &ctx->heap, ctx->global);
     uint8_t *data = (uint8_t *) term_binary_data(data_term);
 
     i2c_data->cmd = i2c_cmd_link_create();
@@ -401,16 +402,16 @@ static term i2cdriver_write_bytes(Context *ctx, term pid, term req)
 
 static term create_pair(Context *ctx, term term1, term term2)
 {
-    term ret = term_alloc_tuple(2, ctx);
+    term ret = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(ret, 0, term1);
     term_put_tuple_element(ret, 1, term2);
 
     return ret;
 }
 
-static void i2cdriver_consume_mailbox(Context *ctx)
+static NativeHandlerResult i2cdriver_consume_mailbox(Context *ctx)
 {
-    Message *message = mailbox_dequeue(ctx);
+    Message *message = mailbox_first(&ctx->mailbox);
     term msg = message->message;
     term pid = term_get_tuple_element(msg, 0);
     term req = term_get_tuple_element(msg, 2);
@@ -418,7 +419,6 @@ static void i2cdriver_consume_mailbox(Context *ctx)
     term cmd_term = term_get_tuple_element(req, 0);
 
     int local_process_id = term_to_local_process_id(pid);
-    Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
     term ret;
 
@@ -465,12 +465,10 @@ static void i2cdriver_consume_mailbox(Context *ctx)
         ret_msg = create_pair(ctx, ref, ret);
     }
 
-    mailbox_send(target, ret_msg);
-    mailbox_destroy_message(message);
+    globalcontext_send_message(ctx->global, local_process_id, ret_msg);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
 
-    if (cmd == I2CCloseCmd) {
-        scheduler_terminate(ctx);
-    }
+    return cmd == I2CCloseCmd ? NativeTerminate : NativeContinue;
 }
 
 REGISTER_PORT_DRIVER(i2c, i2c_driver_init, i2c_driver_create_port)

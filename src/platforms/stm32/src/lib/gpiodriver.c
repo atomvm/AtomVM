@@ -33,14 +33,14 @@
 
 #include "platform_defaultatoms.h"
 
-static void consume_gpio_mailbox(Context *ctx);
+static NativeHandlerResult consume_gpio_mailbox(Context *ctx);
 static uint32_t port_atom_to_gpio_port(Context *ctx, term port_atom);
 static uint16_t gpio_port_to_rcc_port(uint32_t gpio_port);
 static char gpio_port_to_name(uint32_t gpio_port);
 
 static term create_pair(Context *ctx, term term1, term term2)
 {
-    term ret = term_alloc_tuple(2, ctx);
+    term ret = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(ret, 0, term1);
     term_put_tuple_element(ret, 1, term2);
 
@@ -53,18 +53,17 @@ void gpiodriver_init(Context *ctx)
     ctx->platform_data = NULL;
 }
 
-static void consume_gpio_mailbox(Context *ctx)
+static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
 {
     term ret;
 
-    Message *message = mailbox_dequeue(ctx);
+    Message *message = mailbox_first(&ctx->mailbox);
     term msg = message->message;
     term pid = term_get_tuple_element(msg, 0);
     term req = term_get_tuple_element(msg, 2);
     term cmd = term_get_tuple_element(req, 0);
 
     int local_process_id = term_to_local_process_id(pid);
-    Context *target = globalcontext_get_process(ctx->global, local_process_id);
 
     if (cmd == SET_LEVEL_ATOM) {
         term gpio_tuple = term_get_tuple_element(req, 1);
@@ -119,9 +118,11 @@ static void consume_gpio_mailbox(Context *ctx)
         term ref = term_get_tuple_element(msg, 1);
         ret_msg = create_pair(ctx, ref, ret);
     }
+    globalcontext_send_message(ctx->global, local_process_id, ret_msg);
 
-    mailbox_send(target, ret_msg);
-    mailbox_destroy_message(message);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+
+    return NativeContinue;
 }
 
 static uint32_t port_atom_to_gpio_port(Context *ctx, term port_atom)

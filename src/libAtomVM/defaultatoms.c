@@ -100,8 +100,8 @@ static const char *const microsecond_atom = "\xB" "microsecond";
 static const char *const infinity_atom = "\x8" "infinity";
 static const char *const timeout_value_atom = "\xD" "timeout_value";
 
-static const char *const machine_atom = "\x7" "machine";
-static const char *const avm_floatsize_atom = "\xD" "avm_floatsize";
+static const char *const schedulers_atom = "\xA" "schedulers";
+static const char *const schedulers_online_atom = "\x11" "schedulers_online";
 
 static const char *const append_atom = "\x6" "append";
 static const char *const private_append_atom = "\xE" "private_append";
@@ -123,6 +123,15 @@ static const char *const skip_atom = "\x4" "skip";
 static const char *const get_tail_atom = "\x8" "get_tail";
 static const char *const equal_colon_equal_atom = "\x3" "=:=";
 static const char *const signed_atom = "\x6" "signed";
+
+static const char *const machine_atom = "\x7" "machine";
+static const char *const avm_floatsize_atom = "\xD" "avm_floatsize";
+
+static const char *const close_atom = "\x5" "close";
+static const char *const closed_atom = "\x6" "closed";
+static const char *const port_atom = "\x4" "port";
+
+static const char *const info_atom = "\x4" "info";
 
 void defaultatoms_init(GlobalContext *glb)
 {
@@ -208,9 +217,9 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, infinity_atom) == INFINITY_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, timeout_value_atom) == TIMEOUT_VALUE_ATOM_INDEX;
 
-    ok &= globalcontext_insert_atom(glb, machine_atom) == MACHINE_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, avm_floatsize_atom) == AVM_FLOATSIZE_ATOM_INDEX;
-
+    ok &= globalcontext_insert_atom(glb, schedulers_atom) == SCHEDULERS_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, schedulers_online_atom) == SCHEDULERS_ONLINE_ATOM_INDEX;
+    
     ok &= globalcontext_insert_atom(glb, append_atom) == APPEND_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, private_append_atom) == PRIVATE_APPEND_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, binary_atom) == BINARY_ATOM_INDEX;
@@ -231,6 +240,15 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, get_tail_atom) == GET_TAIL_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, equal_colon_equal_atom) == EQUAL_COLON_EQUAL_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, signed_atom) == SIGNED_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, machine_atom) == MACHINE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, avm_floatsize_atom) == AVM_FLOATSIZE_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, close_atom) == CLOSE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, closed_atom) == CLOSED_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, port_atom) == PORT_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, info_atom) == INFO_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();

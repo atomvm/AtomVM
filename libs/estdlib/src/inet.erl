@@ -50,7 +50,8 @@ port(Socket) ->
 %%-----------------------------------------------------------------------------
 -spec close(Socket :: socket()) -> ok.
 close(Socket) ->
-    call(Socket, {close}).
+    call(Socket, {close}),
+    ok.
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
@@ -78,11 +79,9 @@ peername(Socket) ->
 %% Internal operations
 %%
 
-%% @private
-call(Socket, Msg) ->
-    Ref = erlang:make_ref(),
-    Socket ! {self(), Ref, Msg},
-    receive
-        {Ref, Ret} ->
-            Ret
+call(Port, Msg) ->
+    case port:call(Port, Msg) of
+        {error, noproc} -> {error, einval};
+        out_of_memory -> {error, enomem};
+        Result -> Result
     end.

@@ -63,6 +63,12 @@ struct Test
 #module, expected, skip, false         \
     }
 
+#ifndef AVM_NO_SMP
+#define SKIP_SMP false
+#else
+#define SKIP_SMP true
+#endif
+
 #ifndef AVM_CREATE_STACKTRACES
 #define SKIP_STACKTRACES true
 #else
@@ -102,6 +108,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(guards4, 16),
     TEST_CASE_EXPECTED(guards5, 3),
     TEST_CASE_EXPECTED(prime, 1999),
+    TEST_CASE_COND(prime_smp, 0, SKIP_SMP),
     TEST_CASE_EXPECTED(match, 5),
     TEST_CASE_EXPECTED(if_test, 5),
     TEST_CASE(sleep),
@@ -176,6 +183,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_func_info3, 120),
     TEST_CASE(test_process_info),
     TEST_CASE(test_min_heap_size),
+    TEST_CASE(test_system_flag),
     TEST_CASE(test_system_info),
     TEST_CASE_EXPECTED(test_funs0, 20),
     TEST_CASE_EXPECTED(test_funs1, 517),
@@ -466,6 +474,8 @@ struct Test tests[] = {
     // Tests relying on console driver
     TEST_CASE_ATOMVM_ONLY(hello_world, 10),
     TEST_CASE_ATOMVM_ONLY(test_echo_driver, 84),
+    TEST_CASE_ATOMVM_ONLY(test_close_console_driver, 0),
+    TEST_CASE_ATOMVM_ONLY(test_close_echo_driver, 0),
     TEST_CASE_ATOMVM_ONLY(test_regecho_driver, 11),
     TEST_CASE_ATOMVM_ONLY(test_send_nif_and_echo, 11),
 

@@ -20,44 +20,17 @@
 
 -module(test_port).
 
--export([test/0, loop/0]).
+-export([test/0]).
 
 test() ->
-    {Pid, Ref} = spawn_opt(?MODULE, loop, [], [monitor]),
+    ConsolePort = open_port({spawn, "console"}, []),
 
-    pong = port:call(Pid, ping),
-    pong = port:call(Pid, ping, 1000),
-    out_of_memory = port:call(Pid, out_of_memory),
-    out_of_memory = port:call(Pid, out_of_memory, 1000),
-
-    {error, timeout} = port:call(Pid, {sleep, 500}, 250),
-
-    ok = port:call(Pid, halt),
+    ok = port:call(ConsolePort, flush),
+    ok = port:call(ConsolePort, flush, 1000),
+    {error, badarg} = port:call(ConsolePort, unknown_cmd),
+    ConsolePort ! {self(), close},
     receive
-        {'DOWN', Ref, process, Pid, normal} -> ok
+        {ConsolePort, closed} -> ok
     end,
-    {error, noproc} = port:call(Pid, ping),
-    {error, noproc} = port:call(Pid, ping, 1000),
-
+    {error, noproc} = port:call(ConsolePort, flush),
     ok.
-
-loop() ->
-    receive
-        {Pid, Ref, ping} ->
-            Pid ! {Ref, pong},
-            loop();
-        {Pid, _Ref, out_of_memory} ->
-            Pid ! out_of_memory,
-            loop();
-        {Pid, Ref, {sleep, Ms}} ->
-            receive
-            after Ms -> ok
-            end,
-            Pid ! {Ref, ok},
-            loop();
-        {Pid, Ref, halt} ->
-            Pid ! {Ref, ok};
-        Garbage ->
-            erlang:display({unexpected_message, Garbage}),
-            loop()
-    end.

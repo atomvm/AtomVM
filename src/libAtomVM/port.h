@@ -28,18 +28,60 @@ extern "C" {
 #include "context.h"
 #include "defaultatoms.h"
 #include "globalcontext.h"
+#include "memory.h"
 #include "term.h"
 
-term port_create_tuple2(Context *ctx, term a, term b);
-term port_create_tuple3(Context *ctx, term a, term b, term c);
-term port_create_tuple_n(Context *ctx, size_t num_terms, term *terms);
-term port_create_error_tuple(Context *ctx, term reason);
-term port_create_sys_error_tuple(Context *ctx, term syscall, int errno);
-term port_create_ok_tuple(Context *ctx, term t);
-void port_send_reply(Context *ctx, term pid, term ref, term reply);
-void port_send_message(Context *ctx, term pid, term msg);
+// Sometimes ports need to send messages while not executed in a given ctx
+// (typically event handlers), so the helpers are available with a Heap
+term port_heap_create_tuple2(Heap *heap, term a, term b);
+term port_heap_create_tuple3(Heap *heap, term a, term b, term c);
+term port_heap_create_tuple_n(Heap *heap, size_t num_terms, term *terms);
+term port_heap_create_error_tuple(Heap *heap, term reason);
+term port_heap_create_sys_error_tuple(Heap *heap, term syscall, int err);
+term port_heap_create_ok_tuple(Heap *heap, term t);
+term port_heap_create_reply(Heap *heap, term ref, term payload);
+
+// All port_* functions with a given ctx may only be called from the
+// executed ctx.
+static inline term port_create_tuple2(Context *ctx, term a, term b)
+{
+    return port_heap_create_tuple2(&ctx->heap, a, b);
+}
+static inline term port_create_tuple3(Context *ctx, term a, term b, term c)
+{
+    return port_heap_create_tuple3(&ctx->heap, a, b, c);
+}
+static inline term port_create_tuple_n(Context *ctx, size_t num_terms, term *terms)
+{
+    return port_heap_create_tuple_n(&ctx->heap, num_terms, terms);
+}
+static inline term port_create_error_tuple(Context *ctx, term reason)
+{
+    return port_heap_create_error_tuple(&ctx->heap, reason);
+}
+static inline term port_create_sys_error_tuple(Context *ctx, term syscall, int err)
+{
+    return port_heap_create_sys_error_tuple(&ctx->heap, syscall, err);
+}
+static inline term port_create_ok_tuple(Context *ctx, term t)
+{
+    return port_heap_create_ok_tuple(&ctx->heap, t);
+}
+static inline term port_create_reply(Context *ctx, term ref, term payload)
+{
+    return port_heap_create_reply(&ctx->heap, ref, payload);
+}
+void port_send_message(GlobalContext *glb, term pid, term msg);
+void port_send_message_nolock(GlobalContext *glb, term pid, term msg);
 void port_ensure_available(Context *ctx, size_t size);
 int port_is_standard_port_command(term msg);
+
+// Helper to send a message from NIFs or from the native handler.
+static inline void port_send_reply(Context *ctx, term pid, term ref, term payload)
+{
+    term reply = port_create_reply(ctx, ref, payload);
+    port_send_message(ctx->global, pid, reply);
+}
 
 #ifdef __cplusplus
 }

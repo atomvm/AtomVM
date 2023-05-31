@@ -24,6 +24,17 @@
 
 #include <stdlib.h>
 
+#ifndef AVM_NO_SMP
+#include "smp.h"
+#define SMP_RDLOCK(htable) smp_rwlock_rdlock(htable->lock)
+#define SMP_WRLOCK(htable) smp_rwlock_wrlock(htable->lock)
+#define SMP_UNLOCK(htable) smp_rwlock_unlock(htable->lock)
+#else
+#define SMP_RDLOCK(htable)
+#define SMP_WRLOCK(htable)
+#define SMP_UNLOCK(htable)
+#endif
+
 #define DEFAULT_SIZE 8
 
 struct HNode
@@ -47,12 +58,16 @@ struct ValuesHashTable *valueshashtable_new()
 
     htable->count = 0;
     htable->capacity = DEFAULT_SIZE;
+#ifndef AVM_NO_SMP
+    htable->lock = smp_rwlock_create();
+#endif
 
     return htable;
 }
 
 int valueshashtable_insert(struct ValuesHashTable *hash_table, unsigned long key, unsigned long value)
 {
+    SMP_WRLOCK(hash_table);
     long index = key % hash_table->capacity;
 
     struct HNode *node = hash_table->buckets[index];
@@ -60,6 +75,7 @@ int valueshashtable_insert(struct ValuesHashTable *hash_table, unsigned long key
         while (1) {
             if (node->key == key) {
                 node->value = value;
+                SMP_UNLOCK(hash_table);
                 return 1;
             }
 
@@ -73,6 +89,7 @@ int valueshashtable_insert(struct ValuesHashTable *hash_table, unsigned long key
 
     struct HNode *new_node = malloc(sizeof(struct HNode));
     if (IS_NULL_PTR(new_node)) {
+        SMP_UNLOCK(hash_table);
         return 0;
     }
     new_node->next = NULL;
@@ -86,37 +103,45 @@ int valueshashtable_insert(struct ValuesHashTable *hash_table, unsigned long key
     }
 
     hash_table->count++;
+    SMP_UNLOCK(hash_table);
     return 1;
 }
 
 unsigned long valueshashtable_get_value(const struct ValuesHashTable *hash_table, unsigned long key, unsigned long default_value)
 {
+    SMP_RDLOCK(hash_table);
     long index = key % hash_table->capacity;
 
     const struct HNode *node = hash_table->buckets[index];
     while (node) {
         if (node->key == key) {
-            return node->value;
+            unsigned long result = node->value;
+            SMP_UNLOCK(hash_table);
+            return result;
         }
 
         node = node->next;
     }
 
+    SMP_UNLOCK(hash_table);
     return default_value;
 }
 
 int valueshashtable_has_key(const struct ValuesHashTable *hash_table, unsigned long key)
 {
+    SMP_RDLOCK(hash_table);
     long index = key % hash_table->capacity;
 
     const struct HNode *node = hash_table->buckets[index];
     while (node) {
         if (node->key == key) {
+            SMP_UNLOCK(hash_table);
             return 1;
         }
 
         node = node->next;
     }
 
+    SMP_UNLOCK(hash_table);
     return 0;
 }

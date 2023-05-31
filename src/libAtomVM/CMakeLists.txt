@@ -50,11 +50,13 @@ set(HEADER_FILES
     port.h
     refc_binary.h
     scheduler.h
+    smp.h
+    synclist.h
     stacktrace.h
     sys.h
     term_typedef.h
     term.h
-    timer_wheel.h
+    timer_list.h
     trace.h
     utils.h
     valueshashtable.h
@@ -84,7 +86,7 @@ set(SOURCE_FILES
     scheduler.c
     stacktrace.c
     term.c
-    timer_wheel.c
+    timer_list.c
     valueshashtable.c
 )
 
@@ -114,6 +116,35 @@ check_c_source_compiles("
  " HAVE_PRAGMA_STDC_FENV_ACCESS)
 if (HAVE_PRAGMA_STDC_FENV_ACCESS)
     target_compile_definitions(libAtomVM PUBLIC HAVE_PRAGMA_STDC_FENV_ACCESS)
+endif()
+
+if(${CMAKE_C_FLAGS} MATCHES -DAVM_NO_SMP)
+    message("SMP is disabled by CFLAGS environment")
+    set(AVM_DISABLE_SMP ON)
+endif()
+
+if (AVM_DISABLE_SMP)
+    target_compile_definitions(libAtomVM PUBLIC AVM_NO_SMP)
+else()
+    include(CheckIncludeFile)
+    CHECK_INCLUDE_FILE(stdatomic.h STDATOMIC_INCLUDE)
+    if(HAVE_PLATFORM_SMP_H)
+        target_compile_definitions(libAtomVM PUBLIC HAVE_PLATFORM_SMP_H)
+    endif()
+    include(CheckCSourceCompiles)
+    check_c_source_compiles("
+        #include <stdatomic.h>
+        int main() {
+            _Static_assert(ATOMIC_POINTER_LOCK_FREE == 2, \"Expected ATOMIC_POINTER_LOCK_FREE to be equal to 2\");
+        }
+    " ATOMIC_POINTER_LOCK_FREE_IS_TWO)
+    if (NOT ATOMIC_POINTER_LOCK_FREE_IS_TWO AND NOT HAVE_PLATFORM_SMP_H)
+        if (NOT STDATOMIC_INCLUDE)
+            message(FATAL_ERROR "stdatomic.h cannot be found, you need to disable SMP on this platform or provide platform_smp.h and define HAVE_PLATFORM_SMP_H")
+        else()
+            message(FATAL_ERROR "Platform doesn't support atomic pointers, you need to disable SMP or provide platform_smp.h and define HAVE_PLATFORM_SMP_H")
+        endif()
+    endif()
 endif()
 
 if (AVM_USE_32BIT_FLOAT)

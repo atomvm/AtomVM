@@ -60,7 +60,7 @@ static term nif_openssl_md5(Context *ctx, int argc, term argv[])
     if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(MD5_DIGEST_LENGTH) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    return term_from_literal_binary(digest, MD5_DIGEST_LENGTH, ctx);
+    return term_from_literal_binary(digest, MD5_DIGEST_LENGTH, &ctx->heap, ctx->global);
 }
 
 static term nif_openssl_rand_bytes(Context *ctx, int argc, term argv[])
@@ -84,7 +84,7 @@ static term nif_openssl_rand_bytes(Context *ctx, int argc, term argv[])
     if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(n) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    term ret = term_from_literal_binary(buf, n, ctx);
+    term ret = term_from_literal_binary(buf, n, &ctx->heap, ctx->global);
     free(buf);
     return ret;
 }
@@ -104,7 +104,7 @@ static term nif_openssl_random(Context *ctx, int argc, term argv[])
     if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    return term_make_boxed_int(value, ctx);
+    return term_make_boxed_int(value, &ctx->heap);
 }
 
 static const struct Nif openssl_md5_nif =

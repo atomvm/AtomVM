@@ -38,6 +38,8 @@ start() ->
         {'DOWN', Ref, process, Pid, Reason} ->
             assert(Reason =:= normal)
     end,
+    MessageQueueLen = process_info(Pid, message_queue_len),
+    assert(MessageQueueLen =:= undefined),
     0.
 
 test_message_queue_len(Pid, Self) ->

@@ -39,13 +39,43 @@ extern "C" {
 #include <stdint.h>
 #include <time.h>
 
+enum
+{
+    SYS_POLL_EVENTS_DO_NOT_WAIT = 0,
+    SYS_POLL_EVENTS_WAIT_FOREVER = -1
+};
+
 /**
- * @brief process any pending event without blocking
+ * @brief Poll events (from drivers), with a timeout (in ms), or until
+ * `sys_signal` is called.
  *
- * @details check all open file descriptors/queues, dispatch messages for new events and wake up contexts accordingly.
+ * @details Depending on platforms, check all open file descriptors/queues and
+ * call drivers that should send messages to contexts (which will unblock them).
+ * With SMP builds, this function can be called from any scheduler.
+ *
+ * @param glb the global context.
+ * @param timeout_ms the number of ms to wait, `SYS_POLL_EVENTS_WAIT_FOREVER` to wait forever.
+ */
+void sys_poll_events(GlobalContext *glb, int timeout_ms);
+
+#ifndef AVM_NO_SMP
+
+/**
+ * @brief Interrupt the wait in `sys_poll_events`.
+ *
+ * @details This function should signal the thread that is waiting in
+ * `sys_poll_events` so it returns before the timeout. It is only used
+ * for SMP builds.
+ *
+ * Please note that this function may be called while no thread is waiting in
+ * sys_poll_events and this should have no effect. This function is called in
+ * scheduler loop (internal function `scheduler_run0`).
+ *
  * @param glb the global context.
  */
-void sys_consume_pending_events(GlobalContext *glb);
+void sys_signal(GlobalContext *glb);
+
+#endif
 
 /**
  * @brief gets wall clock time
@@ -94,15 +124,20 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
  */
 term sys_get_info(Context *ctx, term key);
 
+/**
+ * @brief Initialize the platform, setting global->platform_data.
+ */
 void sys_init_platform(GlobalContext *global);
 
-void sys_start_millis_timer();
+/**
+ * @brief Free the platform data structure.
+ *
+ * @details Cleanup the platform data structure. Called by
+ * global_context_destroy.
+ */
+void sys_free_platform(GlobalContext *global);
 
-void sys_stop_millis_timer();
-
-uint32_t sys_millis();
-
-void sys_sleep(GlobalContext *glb);
+uint64_t sys_millis(GlobalContext *global);
 
 #ifdef __cplusplus
 }

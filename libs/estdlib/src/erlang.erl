@@ -32,6 +32,7 @@
     send_after/3,
     process_info/2,
     system_info/1,
+    system_flag/2,
     md5/1,
     is_map/1,
     map_size/1,
@@ -152,6 +153,8 @@ process_info(_Pid, _Key) ->
 %%      <li><b>system_architecture</b> the processor and OS architecture (binary)</li>
 %%      <li><b>version</b> the version of the AtomVM executable image (binary)</li>
 %%      <li><b>wordsize</b> the number of bytes in a machine word on the current platform (integer)</li>
+%%      <li><b>schedulers</b> the number of schedulers, equal to the number of online processors (integer)</li>
+%%      <li><b>schedulers_online</b> the current number of schedulers (integer)</li>
 %% </ul>
 %% The following keys are supported on the ESP32 platform:
 %% <ul>
@@ -170,6 +173,28 @@ process_info(_Pid, _Key) ->
 %%-----------------------------------------------------------------------------
 -spec system_info(Key :: atom()) -> term().
 system_info(_Key) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Key key used to change system flag.
+%% @param   Value value to change
+%% @returns previous value of the flag.
+%% @doc     Update system flags.
+%%
+%% This function allows to modify system flags at runtime.
+%%
+%% The following key is supported on SMP builds:
+%% <ul>
+%%       <li><b>schedulers_online</b> the number of schedulers online</li>
+%% </ul>
+%%
+%% Specifying an unsupported atom key will result in a bad_arg error.
+%% Specifying a term that is not an atom will result in a bad_arg error.
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-spec system_flag(Key :: atom(), term()) -> term().
+system_flag(_Key, _Value) ->
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------

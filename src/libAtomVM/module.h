@@ -38,8 +38,26 @@ extern "C" {
 #include "atom.h"
 #include "atomshashtable.h"
 #include "context.h"
+#include "exportedfunction.h"
 #include "globalcontext.h"
 #include "valueshashtable.h"
+
+#ifndef AVM_NO_SMP
+
+#ifndef TYPEDEF_MUTEX
+#define TYPEDEF_MUTEX
+typedef struct Mutex Mutex;
+#endif
+
+#endif
+
+#ifndef AVM_NO_SMP
+#define SMP_MODULE_LOCK(mod) smp_mutex_lock(mod->mutex)
+#define SMP_MODULE_UNLOCK(mod) smp_mutex_unlock(mod->mutex)
+#else
+#define SMP_MODULE_LOCK(mod)
+#define SMP_MODULE_UNLOCK(mod)
+#endif
 
 typedef struct
 {
@@ -112,6 +130,10 @@ struct Module
     int end_instruction_ii;
 
     unsigned int free_literals_data : 1;
+
+#ifndef AVM_NO_SMP
+    Mutex *mutex;
+#endif
 };
 
 #ifndef TYPEDEF_MODULE
@@ -201,6 +223,8 @@ static inline term module_get_atom_term_by_id(const Module *mod, int local_atom_
     return term_from_atom_index(global_id);
 }
 
+const struct ExportedFunction *module_resolve_function0(Module *mod, int import_table_index, struct UnresolvedFunctionCall *unresolved);
+
 /**
  * @brief Get the module name, as an atom term.
  *
@@ -222,7 +246,22 @@ static inline term module_get_name(const Module *mod)
  * @param import_table_index the unresolved function index.
  * @param func the unresolved function placeholder struct.
  */
-const struct ExportedFunction *module_resolve_function(Module *mod, int import_table_index);
+static inline const struct ExportedFunction *module_resolve_function(Module *mod, int import_table_index)
+{
+    SMP_MODULE_LOCK(mod);
+    // We cannot optimistically read the unresolved function call.
+    // While reads of imported_funcs can happen outside the lock, read of the func
+    // pointer itself cannot, as UnresolvedFunctionCall pointers are freed.
+    struct ExportedFunction *func = (struct ExportedFunction *) mod->imported_funcs[import_table_index].func;
+    if (func->type != UnresolvedFunctionCall) {
+        SMP_MODULE_UNLOCK(mod);
+        return func;
+    }
+    struct UnresolvedFunctionCall *unresolved = EXPORTED_FUNCTION_TO_UNRESOLVED_FUNCTION_CALL(func);
+    const struct ExportedFunction *result = module_resolve_function0(mod, import_table_index, unresolved);
+    SMP_MODULE_UNLOCK(mod);
+    return result;
+}
 
 /*
  * @brief Casts an instruction index and module index to a return address

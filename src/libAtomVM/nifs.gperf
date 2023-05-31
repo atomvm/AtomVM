@@ -74,6 +74,7 @@ erlang:make_tuple/2, &make_tuple_nif
 erlang:memory/1, &memory_nif
 erlang:monitor/2, &monitor_nif
 erlang:demonitor/1, &demonitor_nif
+erlang:demonitor/2, &demonitor_nif
 erlang:is_process_alive/1, &is_process_alive_nif
 erlang:register/2, &register_nif
 erlang:unregister/1, &unregister_nif
@@ -84,12 +85,15 @@ erlang:spawn/3, &spawn_nif
 erlang:spawn_opt/2, &spawn_fun_opt_nif
 erlang:spawn_opt/4, &spawn_opt_nif
 erlang:system_info/1, &system_info_nif
+erlang:system_flag/2, &system_flag_nif
 erlang:whereis/1, &whereis_nif
 erlang:++/2, &concat_nif
 erlang:monotonic_time/1, &monotonic_time_nif
 erlang:system_time/1, &system_time_nif
 erlang:tuple_to_list/1, &tuple_to_list_nif
 erlang:universaltime/0, &universaltime_nif
+erlang:localtime/0, &localtime_nif
+erlang:localtime/1, &localtime_nif
 erlang:timestamp/0, &timestamp_nif
 erlang:process_flag/2, &process_flag_nif
 erlang:process_flag/3, &process_flag_nif
