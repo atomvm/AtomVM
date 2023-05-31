@@ -24,12 +24,14 @@
 #include "freertos/FreeRTOS.h"
 #include <esp_partition.h>
 #include <freertos/queue.h>
+#include "esp_pthread.h"
 
 #if ESP_IDF_VERSION_MAJOR >= 5
 #include <spi_flash_mmap.h>
 #endif
 
 #include <time.h>
+#include <sys/poll.h>
 
 #include "sys.h"
 
@@ -81,6 +83,13 @@ struct EventListener
 
 struct ESP32PlatformData
 {
+    pthread_t select_thread;
+    bool select_thread_exit;
+    bool eventfd_registered;
+    int signal_fd;
+    int ATOMIC select_events_poll_count;
+    struct pollfd *fds;
+
     // socket_driver
     EventListener *socket_listener;
     struct SyncList sockets;

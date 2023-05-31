@@ -19,6 +19,7 @@
  */
 
 #include "unity.h"
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -37,6 +38,7 @@
 #include <esp_event.h>
 #include <esp_log.h>
 #include <esp_netif.h>
+#include <esp_vfs.h>
 #include <esp_vfs_fat.h>
 #include <sdmmc_cmd.h>
 
@@ -226,6 +228,163 @@ TEST_CASE("test_monotonic_time", "[test_run]")
 {
     term ret_value = avm_test_case("test_monotonic_time.beam");
     TEST_ASSERT(ret_value == OK_ATOM);
+}
+
+struct pipefs_global_ctx
+{
+    int max_fd;
+    uint8_t byte;
+    bool has_byte;
+    bool is_select;
+    int select_nfds;
+    esp_vfs_select_sem_t select_sem;
+    fd_set *readfds;
+    fd_set *writefds;
+    fd_set readfds_orig;
+    fd_set writefds_orig;
+};
+
+static struct pipefs_global_ctx pipefs_global_ctx;
+
+static ssize_t pipefs_write(int fd, const void *data, size_t size)
+{
+    UNUSED(fd);
+
+    if (size == 0) {
+        return 0;
+    }
+    if (pipefs_global_ctx.has_byte) {
+        errno = EAGAIN;
+        return -1;
+    }
+    pipefs_global_ctx.has_byte = true;
+    pipefs_global_ctx.byte = *((uint8_t *) data);
+    if (pipefs_global_ctx.is_select) {
+        // Notify any reader.
+        bool notify = false;
+        for (int i = 0; i < pipefs_global_ctx.select_nfds; i++) {
+            if (FD_ISSET(i, &pipefs_global_ctx.readfds_orig)) {
+                FD_SET(i, pipefs_global_ctx.readfds);
+                notify = true;
+            }
+        }
+        if (notify) {
+            esp_vfs_select_triggered(pipefs_global_ctx.select_sem);
+        }
+    }
+    return 1;
+}
+
+static ssize_t pipefs_read(int fd, void *data, size_t size)
+{
+    UNUSED(fd);
+
+    if (size == 0) {
+        return 0;
+    }
+    if (!pipefs_global_ctx.has_byte) {
+        errno = EAGAIN;
+        return -1;
+    }
+    pipefs_global_ctx.has_byte = false;
+    *((uint8_t *) data) = pipefs_global_ctx.byte;
+    if (pipefs_global_ctx.is_select) {
+        // Notify any writer.
+        bool notify = false;
+        for (int i = 0; i < pipefs_global_ctx.select_nfds; i++) {
+            if (FD_ISSET(i, &pipefs_global_ctx.writefds_orig)) {
+                FD_SET(i, pipefs_global_ctx.writefds);
+                notify = true;
+            }
+        }
+        if (notify) {
+            esp_vfs_select_triggered(pipefs_global_ctx.select_sem);
+        }
+    }
+    return 1;
+}
+
+static int pipefs_open(const char *path, int flags, int mode)
+{
+    return ++pipefs_global_ctx.max_fd;
+}
+
+static int pipefs_close(int fd)
+{
+    UNUSED(fd);
+    return 0;
+}
+
+static esp_err_t pipefs_start_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, esp_vfs_select_sem_t sem, void **end_select_args)
+{
+    // Cannot select twice in parallel
+    if (pipefs_global_ctx.is_select) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    pipefs_global_ctx.select_nfds = nfds;
+    pipefs_global_ctx.readfds = readfds;
+    pipefs_global_ctx.readfds_orig = *readfds;
+    pipefs_global_ctx.writefds = writefds;
+    pipefs_global_ctx.writefds_orig = *writefds;
+    pipefs_global_ctx.select_sem = sem;
+    pipefs_global_ctx.is_select = true;
+    FD_ZERO(readfds);
+    FD_ZERO(writefds);
+    FD_ZERO(exceptfds);
+
+    // Notify based on current state.
+    bool notify = false;
+    for (int i = 0; i < pipefs_global_ctx.select_nfds; i++) {
+        if (pipefs_global_ctx.has_byte) {
+            if (FD_ISSET(i, &pipefs_global_ctx.readfds_orig)) {
+                FD_SET(i, pipefs_global_ctx.readfds);
+                notify = true;
+            }
+        } else {
+            if (FD_ISSET(i, &pipefs_global_ctx.writefds_orig)) {
+                FD_SET(i, pipefs_global_ctx.writefds);
+                notify = true;
+            }
+        }
+    }
+    if (notify) {
+        esp_vfs_select_triggered(pipefs_global_ctx.select_sem);
+    }
+
+    return ESP_OK;
+}
+
+static esp_err_t pipefs_end_select(void *end_select_args)
+{
+    if (!pipefs_global_ctx.is_select) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    pipefs_global_ctx.is_select = false;
+    return ESP_OK;
+}
+
+TEST_CASE("test_select", "[test_run]")
+{
+    esp_vfs_t pipefs = {
+        .flags = ESP_VFS_FLAG_DEFAULT,
+        .write = &pipefs_write,
+        .open = &pipefs_open,
+        .read = &pipefs_read,
+        .close = &pipefs_close,
+        .start_select = &pipefs_start_select,
+        .end_select = &pipefs_end_select,
+    };
+    pipefs_global_ctx.has_byte = false;
+    pipefs_global_ctx.is_select = false;
+    pipefs_global_ctx.max_fd = 0;
+
+    ESP_ERROR_CHECK(esp_vfs_register("/pipe", &pipefs, NULL));
+
+    term ret_value = avm_test_case("test_select.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+
+    esp_vfs_unregister("/pipe");
 }
 
 TEST_CASE("test_time_and_processes", "[test_run]")

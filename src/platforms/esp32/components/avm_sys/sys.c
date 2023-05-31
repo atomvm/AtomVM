@@ -40,13 +40,15 @@
 #include <esp_log.h>
 #include <esp_partition.h>
 #include <limits.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <sys/socket.h>
 
-// introduced starting with 4.4
 #if ESP_IDF_VERSION_MAJOR >= 5
 #include "esp_chip_info.h"
 #endif
+
+#include <esp_vfs_eventfd.h>
 
 #ifdef HAVE_SOC_CPU_CORES_NUM
 #include "soc/soc_caps.h"
@@ -60,6 +62,9 @@
 #define TAG "sys"
 
 static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts);
+
+static void *select_thread_loop(void *);
+static void select_thread_signal(struct ESP32PlatformData *platform);
 
 // clang-format off
 static const char *const esp_free_heap_size_atom = "\x14" "esp32_free_heap_size";
@@ -182,6 +187,29 @@ void sys_init_platform(GlobalContext *glb)
 {
     struct ESP32PlatformData *platform = malloc(sizeof(struct ESP32PlatformData));
     glb->platform_data = platform;
+    platform->select_thread_exit = false;
+    platform->select_events_poll_count = -1;
+    esp_vfs_eventfd_config_t eventfd_config = ESP_VFS_EVENTD_CONFIG_DEFAULT();
+    esp_err_t err = esp_vfs_eventfd_register(&eventfd_config);
+    if (err == ESP_OK) {
+        platform->eventfd_registered = true;
+    } else {
+        if (UNLIKELY(err != ESP_ERR_INVALID_STATE)) {
+            // Function can return fatal ESP_ERR_NO_MEM
+            fprintf(stderr, "Cannot register eventfd, unexpected error = %d\n", err);
+            AVM_ABORT();
+        }
+        platform->eventfd_registered = false;
+    }
+    int signal_fd = eventfd(0, 0);
+    if (UNLIKELY(signal_fd < 0)) {
+        fprintf(stderr, "Cannot create signal_fd\n");
+        AVM_ABORT();
+    }
+    platform->signal_fd = signal_fd;
+    if (UNLIKELY(pthread_create(&platform->select_thread, NULL, select_thread_loop, glb))) {
+        AVM_ABORT();
+    }
 #ifndef AVM_NO_SMP
     // Use the ESP-IDF API to change the default thread attributes
     // We use the current main thread priority.
@@ -208,6 +236,16 @@ void sys_init_platform(GlobalContext *glb)
 void sys_free_platform(GlobalContext *glb)
 {
     struct ESP32PlatformData *platform = glb->platform_data;
+    platform->select_thread_exit = true;
+    select_thread_signal(platform);
+    pthread_join(platform->select_thread, NULL);
+    close(platform->signal_fd);
+    if (platform->eventfd_registered) {
+        if (UNLIKELY(esp_vfs_eventfd_unregister() != ESP_OK)) {
+            fprintf(stderr, "Cannot unregister eventfd\n");
+            AVM_ABORT();
+        }
+    }
     free(platform);
 }
 
@@ -560,16 +598,119 @@ void sys_unregister_listener(GlobalContext *global, struct EventListener *listen
 
 void sys_register_select_event(GlobalContext *global, ErlNifEvent event, bool is_write)
 {
-    UNUSED(global);
     UNUSED(event);
     UNUSED(is_write);
+
+    struct ESP32PlatformData *platform = global->platform_data;
+    platform->select_events_poll_count = -1;
+    select_thread_signal(platform);
 }
 
 void sys_unregister_select_event(GlobalContext *global, ErlNifEvent event, bool is_write)
 {
-    UNUSED(global);
     UNUSED(event);
     UNUSED(is_write);
+
+    struct ESP32PlatformData *platform = global->platform_data;
+    platform->select_events_poll_count = -1;
+    select_thread_signal(platform);
+}
+
+static void *select_thread_loop(void *arg)
+{
+    GlobalContext *glb = arg;
+    struct ESP32PlatformData *platform = glb->platform_data;
+    struct pollfd *fds = malloc(0);
+    while (!platform->select_thread_exit) {
+        int select_events_poll_count = platform->select_events_poll_count;
+        int poll_count = 1;
+        int fd_index;
+        if (select_events_poll_count < 0) {
+            // Means it is dirty and should be rebuilt.
+            size_t select_events_new_count;
+            if (select_events_poll_count < 0) {
+                select_event_count_and_destroy_closed(NULL, NULL, &select_events_new_count, glb);
+            } else {
+                select_events_new_count = select_events_poll_count;
+            }
+
+            fds = realloc(fds, sizeof(struct pollfd) * (poll_count + select_events_new_count));
+
+            fds[0].fd = platform->signal_fd;
+            fds[0].events = POLLIN;
+            fds[0].revents = 0;
+
+            fd_index = poll_count;
+
+            struct ListHead *item;
+            struct ListHead *select_events = synclist_rdlock(&glb->select_events);
+            LIST_FOR_EACH (item, select_events) {
+                struct SelectEvent *select_event = GET_LIST_ENTRY(item, struct SelectEvent, head);
+                if (select_event->read || select_event->write) {
+                    fds[fd_index].fd = select_event->event;
+                    fds[fd_index].events = (select_event->read ? POLLIN : 0) | (select_event->write ? POLLOUT : 0);
+                    fds[fd_index].revents = 0;
+
+                    fd_index++;
+                }
+            }
+            synclist_unlock(&glb->select_events);
+
+            select_events_poll_count = select_events_new_count;
+            platform->select_events_poll_count = select_events_new_count;
+        }
+
+        poll_count += select_events_poll_count;
+
+        int nb_descriptors = poll(fds, poll_count, -1);
+        fd_index = 0;
+        if (nb_descriptors > 0) {
+            if ((fds[0].revents & fds[0].events)) {
+                // We've been signaled
+                uint64_t ignored;
+                if (UNLIKELY(read(platform->signal_fd, &ignored, sizeof(ignored)) < 0)) {
+                    fprintf(stderr, "Reading event_fd failed -- errno = %d\n", errno);
+                    AVM_ABORT();
+                }
+                nb_descriptors--;
+            }
+            fd_index++;
+        }
+
+        for (int i = 0; i < select_events_poll_count && nb_descriptors > 0; i++, fd_index++) {
+            if (!(fds[fd_index].revents & fds[fd_index].events)) {
+                continue;
+            }
+            bool is_read = fds[fd_index].revents & POLLIN;
+            bool is_write = fds[fd_index].revents & POLLOUT;
+            fds[fd_index].revents = 0;
+            nb_descriptors--;
+
+            select_event_notify(fds[fd_index].fd, is_read, is_write, glb);
+        }
+    }
+
+    free((void *) fds);
+
+    return NULL;
+}
+
+static void select_thread_signal(struct ESP32PlatformData *platform)
+{
+    // Write can fail if the counter overflows
+    // (very unlikely, 2^64)
+    uint64_t val = 1;
+    if (UNLIKELY(write(platform->signal_fd, &val, sizeof(val)) < 0)) {
+        uint64_t ignored;
+        if (UNLIKELY(read(platform->signal_fd, &ignored, sizeof(ignored)) < 0)) {
+            fprintf(stderr, "Reading event_fd failed\n");
+            AVM_ABORT();
+        }
+        if (UNLIKELY(write(platform->signal_fd, &val, sizeof(val)) < 0)) {
+            fprintf(stderr, "Writing event_fd failed\n");
+            AVM_ABORT();
+        }
+    }
 }
 
 bool event_listener_is_event(EventListener *listener, listener_event_t event)

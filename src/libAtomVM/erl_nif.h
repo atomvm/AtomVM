@@ -201,6 +201,8 @@ ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj);
  * Please note that `kqueue(2)` and `poll(2)` behave differently for some
  * objects, for example for vnodes and EOF.
  *
+ * On `esp32`, this is currently implemented using `poll(2)`.
+ *
  * @param env current environment
  * @param event event object (typically a file descriptor)
  * @param mode select mode (`ERL_NIF_SELECT_READ` and/or `ERL_NIF_SELECT_WRITE`)
