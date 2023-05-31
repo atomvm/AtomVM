@@ -77,6 +77,7 @@ static const AtomStringIntPair cmd_table[] = {
     { ATOM_STR("\x10", "end_transmission"), I2CEndTransmissionCmd },
     { ATOM_STR("\xA", "write_byte"), I2CWriteByteCmd },
     { ATOM_STR("\xA", "read_bytes"), I2CReadBytesCmd },
+    { ATOM_STR("\xB", "write_bytes"), I2CWriteBytesCmd },
     { ATOM_STR("\x5", "close"), I2CCloseCmd },
     SELECT_INT_DEFAULT(I2CInvalidCmd)
 };
