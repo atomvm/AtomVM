@@ -51,6 +51,23 @@ struct ResourceType
     const char *name;
     GlobalContext *global;
     ErlNifResourceDtor *dtor;
+    ErlNifResourceStop *stop;
+};
+
+/**
+ * @brief A selectable event.
+ */
+struct SelectEvent
+{
+    struct ListHead head;
+    ErlNifEvent event;
+    struct RefcBinary *resource;
+    bool read;
+    bool write;
+    bool undefined_ref;
+    bool close;
+    int32_t local_pid;
+    uint64_t ref_ticks;
 };
 
 static inline void resource_type_destroy(struct ResourceType *resource_type)
@@ -58,6 +75,37 @@ static inline void resource_type_destroy(struct ResourceType *resource_type)
     free((void *) resource_type->name);
     free(resource_type);
 }
+
+/**
+ * @brief Send a notification that an event was selected
+ * @details This function is called from sys_poll_events platform function
+ * if a select event was selected and the read or write flag was set.
+ * It modifies the select_event object so the notification is only sent once.
+ *
+ * It is not an error to call this function with an event that is not in the
+ * list.
+ *
+ * This function calls `sys_unregister_select_event`.
+ *
+ * @param select_event the event to notify
+ * @param is_write if the event was selected for reading
+ * @param is_write if the event was selected for writing
+ * @param global the global context
+ * @return true if the event was found
+ */
+bool select_event_notify(ErlNifEvent event, bool is_read, bool is_write, GlobalContext *global);
+
+/**
+ * @brief Count events available for reading and/or writing and destroy the
+ * events marked for close.
+ * @details Convenience function that can be called by `sys_poll_events` and
+ * iterates on events to be closed and count them.
+ * @param read on output number of events with read = 1, can be NULL
+ * @param write on output number of events with write = 1, can be NULL
+ * @param either on output number of events with either read = 1 or write = 1, can be NULL
+ * @param global the global context
+ */
+void select_event_count_and_destroy_closed(size_t *read, size_t *write, size_t *either, GlobalContext *global);
 
 #ifdef __cplusplus
 }

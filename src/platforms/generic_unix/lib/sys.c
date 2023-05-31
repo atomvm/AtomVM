@@ -82,6 +82,7 @@ struct GenericUnixPlatformData
     struct pollfd *fds;
 #endif
     int ATOMIC listeners_poll_count; // can be invalidated by being set to -1
+    int ATOMIC select_events_poll_count; // can be invalidated by being set to -1
 #ifndef AVM_NO_SMP
 #ifndef HAVE_KQUEUE
 #ifdef HAVE_EVENTFD
@@ -113,7 +114,14 @@ static const struct AVMPackInfo mapped_file_avm_pack_info = {
 static inline void sys_poll_events_with_kqueue(GlobalContext *glb, int timeout_ms)
 {
     struct GenericUnixPlatformData *platform = glb->platform_data;
-    int poll_count = platform->listeners_poll_count + 1;
+    int select_events_poll_count = platform->select_events_poll_count;
+    if (select_events_poll_count < 0) {
+        size_t either;
+        select_event_count_and_destroy_closed(NULL, NULL, &either, glb);
+        select_events_poll_count = either;
+        platform->select_events_poll_count = either;
+    }
+    int poll_count = platform->listeners_poll_count + select_events_poll_count + 1;
     struct kevent notified[poll_count];
     struct timespec ts;
     struct timespec *ts_ptr = &ts;
@@ -135,7 +143,11 @@ static inline void sys_poll_events_with_kqueue(GlobalContext *glb, int timeout_m
             if (listeners == NULL) {
                 listeners = synclist_wrlock(&glb->listeners);
             }
-            process_listener_handler(glb, (int) notified[i].ident, listeners, NULL, NULL);
+            if (!process_listener_handler(glb, (int) notified[i].ident, listeners, NULL, NULL)) {
+                select_event_notify(notified[i].ident, true, false, glb);
+            }
+        } else if (notified[i].filter == EVFILT_WRITE) {
+            select_event_notify(notified[i].ident, false, true, glb);
         }
     }
     if (listeners) {
@@ -148,6 +160,7 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
     struct GenericUnixPlatformData *platform = glb->platform_data;
     struct pollfd *fds = platform->fds;
     int listeners_poll_count = platform->listeners_poll_count;
+    int select_events_poll_count = platform->select_events_poll_count;
     int poll_count;
 #ifndef AVM_NO_SMP
     poll_count = 1;
@@ -155,8 +168,15 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
     poll_count = 0;
 #endif
     int fd_index;
-    if (listeners_poll_count < 0) {
+    if (listeners_poll_count < 0 || select_events_poll_count < 0) {
         // Means it is dirty and should be rebuilt.
+        size_t select_events_new_count;
+        if (select_events_poll_count < 0) {
+            select_event_count_and_destroy_closed(NULL, NULL, &select_events_new_count, glb);
+        } else {
+            select_events_new_count = select_events_poll_count;
+        }
+
         size_t listeners_new_count = 0;
         struct ListHead *listeners = NULL;
         struct ListHead *item;
@@ -173,7 +193,7 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
             listeners_new_count = listeners_poll_count;
         }
 
-        fds = realloc(fds, sizeof(struct pollfd) * (poll_count + listeners_new_count));
+        fds = realloc(fds, sizeof(struct pollfd) * (poll_count + select_events_new_count + listeners_new_count));
         platform->fds = fds;
 
 #ifndef AVM_NO_SMP
@@ -204,16 +224,32 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
             synclist_unlock(&glb->listeners);
         }
 
+        struct ListHead *select_events = synclist_rdlock(&glb->select_events);
+        // We put listeners first
+        LIST_FOR_EACH (item, select_events) {
+            struct SelectEvent *select_event = GET_LIST_ENTRY(item, struct SelectEvent, head);
+            if (select_event->read || select_event->write) {
+                fds[fd_index].fd = select_event->event;
+                fds[fd_index].events = (select_event->read ? POLLIN : 0) | (select_event->write ? POLLOUT : 0);
+                fds[fd_index].revents = 0;
+
+                fd_index++;
+            }
+        }
+        synclist_unlock(&glb->select_events);
+
         listeners_poll_count = listeners_new_count;
+        select_events_poll_count = select_events_new_count;
         platform->listeners_poll_count = listeners_new_count;
+        platform->select_events_poll_count = select_events_new_count;
     }
 
-    poll_count += listeners_poll_count;
+    poll_count += listeners_poll_count + select_events_poll_count;
 
     int nb_descriptors = poll(fds, poll_count, timeout_ms);
     fd_index = 0;
-    if (nb_descriptors > 0) {
 #ifndef AVM_NO_SMP
+    if (nb_descriptors > 0) {
         if ((fds[0].revents & fds[0].events)) {
             // We've been signaled
             // Read can fail if the byte/event is also read concurrently by
@@ -228,8 +264,8 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
             nb_descriptors--;
         }
         fd_index++;
-#endif
     }
+#endif
     if (nb_descriptors > 0) {
         struct ListHead *listeners = synclist_wrlock(&glb->listeners);
         struct ListHead *item = listeners->next;
@@ -245,6 +281,18 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
         }
         synclist_unlock(&glb->listeners);
     }
+
+    for (int i = 0; i < select_events_poll_count && nb_descriptors > 0; i++, fd_index++) {
+        if (!(fds[fd_index].revents & fds[fd_index].events)) {
+            continue;
+        }
+        bool is_read = fds[fd_index].revents & POLLIN;
+        bool is_write = fds[fd_index].revents & POLLOUT;
+        fds[fd_index].revents = 0;
+        nb_descriptors--;
+
+        select_event_notify(fds[fd_index].fd, is_read, is_write, glb);
+    }
 }
 #endif
 
@@ -252,7 +300,7 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms) CLANG_THREAD_SANITIZE_S
 {
     // Optimization: do not go into poll(2) or kqueue(2) if we have nothing to
     // wait on.
-    if (timeout_ms == 0 && synclist_is_empty(&glb->listeners)) {
+    if (timeout_ms == 0 && synclist_is_empty(&glb->listeners) && synclist_is_empty(&glb->select_events)) {
         return;
     }
 
@@ -472,6 +520,7 @@ void sys_init_platform(GlobalContext *global)
 #ifdef HAVE_KQUEUE
     platform->kqueue_fd = kqueue();
     platform->listeners_poll_count = 0;
+    platform->select_events_poll_count = 0;
 #ifndef AVM_NO_SMP
     struct timespec ts = { 0, 0 };
     struct kevent kev;
@@ -482,6 +531,7 @@ void sys_init_platform(GlobalContext *global)
 #endif
 #else
     platform->listeners_poll_count = -1;
+    platform->select_events_poll_count = -1;
     platform->fds = malloc(0);
 #ifndef AVM_NO_SMP
 #ifdef HAVE_EVENTFD
@@ -588,6 +638,47 @@ void sys_unregister_listener(GlobalContext *global, struct EventListener *listen
 {
     listener_event_remove_from_polling_set(listener->fd, global);
     synclist_remove(&global->listeners, &listener->listeners_list_head);
+}
+
+void sys_register_select_event(GlobalContext *global, ErlNifEvent event, bool is_write)
+{
+    struct GenericUnixPlatformData *platform = global->platform_data;
+#ifdef HAVE_KQUEUE
+    struct timespec ts = { 0, 0 };
+    struct kevent kev;
+    EV_SET(&kev, event, is_write ? EVFILT_WRITE : EVFILT_READ, EV_ADD, 0, 0, NULL);
+    if (UNLIKELY(kevent(platform->kqueue_fd, &kev, 1, NULL, 0, &ts))) {
+        AVM_ABORT();
+    }
+    // We need this count to be the number of select events either read or write, so force a count
+    platform->select_events_poll_count = -1;
+#else
+    UNUSED(event);
+    UNUSED(is_write);
+    platform->select_events_poll_count = -1;
+#ifndef AVM_NO_SMP
+    sys_signal(global);
+#endif
+#endif
+}
+
+void sys_unregister_select_event(GlobalContext *global, ErlNifEvent event, bool is_write)
+{
+    struct GenericUnixPlatformData *platform = global->platform_data;
+#ifdef HAVE_KQUEUE
+    struct timespec ts = { 0, 0 };
+    struct kevent kev;
+    EV_SET(&kev, event, is_write ? EVFILT_WRITE : EVFILT_READ, EV_DELETE, 0, 0, NULL);
+    (void) kevent(platform->kqueue_fd, &kev, 1, NULL, 0, &ts);
+    platform->select_events_poll_count = -1;
+#else
+    UNUSED(event);
+    UNUSED(is_write);
+    platform->select_events_poll_count = -1;
+#ifndef AVM_NO_SMP
+    sys_signal(global);
+#endif
+#endif
 }
 
 bool event_listener_is_event(EventListener *listener, listener_event_t event)

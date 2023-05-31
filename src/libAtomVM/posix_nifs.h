@@ -40,6 +40,12 @@ extern const struct Nif atomvm_posix_open_nif;
 extern const struct Nif atomvm_posix_close_nif;
 extern const struct Nif atomvm_posix_read_nif;
 extern const struct Nif atomvm_posix_write_nif;
+extern const struct Nif atomvm_posix_select_read_nif;
+extern const struct Nif atomvm_posix_select_write_nif;
+extern const struct Nif atomvm_posix_select_stop_nif;
+#endif
+#if HAVE_MKFIFO
+extern const struct Nif atomvm_posix_mkfifo_nif;
 #endif
 #if HAVE_UNLINK
 extern const struct Nif atomvm_posix_unlink_nif;

@@ -105,6 +105,31 @@ typedef EventListener *(*event_handler_t)(GlobalContext *glb, EventListener *lis
 void sys_poll_events(GlobalContext *glb, int timeout_ms);
 
 /**
+ * @brief Update the select set by adding an event for reading or writing.
+ *
+ * @details This function probably should update set and call `sys_signal` so new
+ * set is taken into account.
+ *
+ * @param glb the global context.
+ * @param event the event (file descriptor) to add to the set
+ * @param is_write whether to add the event for writing (as opposed to reading)
+ */
+void sys_register_select_event(GlobalContext *glb, ErlNifEvent event, bool is_write);
+
+/**
+ * @brief Update the select set by removing an event for reading or writing.
+ *
+ * @details This function probably should update set and call `sys_signal` so new
+ * set is taken into account. After this function is called, `sys_poll_events`
+ * must check for closed select events.
+ *
+ * @param glb the global context.
+ * @param event the event (file descriptor) to remove from the set
+ * @param is_write whether to remove the event for writing (as opposed to reading)
+ */
+void sys_unregister_select_event(GlobalContext *glb, ErlNifEvent event, bool is_write);
+
+/**
  * @brief Register a listener.
  *
  * @details This function is called by ports to register a listener which is a

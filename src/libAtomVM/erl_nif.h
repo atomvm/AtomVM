@@ -64,14 +64,20 @@ typedef int ErlNifEvent;
 typedef void ErlNifResourceDtor(ErlNifEnv *caller_env, void *obj);
 
 /**
+ * @brief Select stop callback
+ */
+typedef void ErlNifResourceStop(ErlNifEnv *caller_env, void *obj, ErlNifEvent event, int is_direct_call);
+
+/**
  * @brief Resource callbacks.
- * @details Members should be set to 0, 1 depending on provided callbacks.
+ * @details Members should be set to 0, 1 or 2 depending on provided callbacks.
  * Callbacks can also be NULL if not used.
  */
 typedef struct
 {
     int members;
     ErlNifResourceDtor *dtor;
+    ErlNifResourceStop *stop;
 } ErlNifResourceTypeInit;
 
 /**
@@ -82,6 +88,35 @@ typedef enum
     ERL_NIF_RT_CREATE = 1,
     // ERL_NIF_RT_TAKEOVER is not supported yet
 } ErlNifResourceFlags;
+
+/**
+ * @brief enif_select mode flags
+ * @details ERL_NIF_SELECT_CANCEL which was introduced with OTP-22, is unimplemented.
+ */
+enum ErlNifSelectFlags
+{
+    ERL_NIF_SELECT_READ = 1,
+    ERL_NIF_SELECT_WRITE = 2,
+    ERL_NIF_SELECT_STOP = 4,
+    //  ERL_NIF_SELECT_CANCEL = 8,
+};
+
+/**
+ * @brief enif_select result flags
+ * @details ERL_NIF_SELECT_CANCEL which was introduced with OTP-22, is unimplemented.
+ */
+enum
+{
+    ERL_NIF_SELECT_STOP_CALLED = 1,
+    ERL_NIF_SELECT_STOP_SCHEDULED = 2,
+    //  ERL_NIF_SELECT_READ_CANCELLED = 4,
+    //  ERL_NIF_SELECT_WRITE_CANCELLED = 8,
+
+    ERL_NIF_SELECT_INVALID_EVENT = -1,
+    ERL_NIF_SELECT_FAILED = -2,
+
+    ERL_NIF_SELECT_BADARG = -3,
+};
 
 /**
  * @brief Create or take over (code upgrade) a resource type.
@@ -142,6 +177,30 @@ int enif_release_resource(void *resource);
  * @return a new term representing the resource
  */
 ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj);
+
+/**
+ * @brief Run a POSIX-like select on a given object (event) and send a message
+ * when the object is readable or writable.
+ *
+ * @details Actual implementation is platform dependent and platforms may not
+ * implement this feature.
+ *
+ * On `generic_unix`, this is currently implemented using what
+ * `sys_poll_events` uses, namely `kqueue(2)` (if available) or `poll(2)`.
+ * Please note that `kqueue(2)` and `poll(2)` behave differently for some
+ * objects, for example for vnodes and EOF.
+ *
+ * @param env current environment
+ * @param event event object (typically a file descriptor)
+ * @param mode select mode (`ERL_NIF_SELECT_READ` and/or `ERL_NIF_SELECT_WRITE`)
+ * optionally with `ERL_NIF_SELECT_CANCEL` to cancel, or `ERL_NIF_SELECT_STOP`
+ * to stop.
+ * @param obj resource object working as a container of the event object.
+ * @param pid process id to send a message to or NULL to use the current process (from `env`)
+ * @param ref reference object used in sent messages or `undefined` atom.
+ * @return a negative value on failure, 0 or flags on success.
+ */
+int enif_select(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSelectFlags mode, void *obj, const ErlNifPid *pid, ERL_NIF_TERM ref);
 
 #ifdef __cplusplus
 }
