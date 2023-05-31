@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for the `SMALL_BIG_EXT` erlang external term encoding
 - Added support for `erlang:memory(binary)`
 - Added support for callbacks on SNTP updates
+- Multithreading support (SMP)
 
 ### Fixed
 - Fixed issue with formatting integers with io:format() on STM32 platform
