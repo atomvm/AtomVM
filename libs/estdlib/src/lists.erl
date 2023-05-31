@@ -1,27 +1,7 @@
 %
 % This file is part of AtomVM.
 %
-% Copyright 2018-2022 Davide Bettio <davide@uninstall.it>
-%
-% Licensed under the Apache License, Version 2.0 (the "License");
-% you may not use this file except in compliance with the License.
-% You may obtain a copy of the License at
-%
-%    http://www.apache.org/licenses/LICENSE-2.0
-%
-% Unless required by applicable law or agreed to in writing, software
-% distributed under the License is distributed on an "AS IS" BASIS,
-% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-% See the License for the specific language governing permissions and
-% limitations under the License.
-%
-% SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
-%
-
-%
-% This file is part of AtomVM.
-%
-% Copyright 2017 Fred Dushin <fred@dushin.net>
+% Copyright 2017-2023 Fred Dushin <fred@dushin.net>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -90,7 +70,7 @@ map(F, []) when is_function(F, 1) ->
 %% @doc     Get the value in a list at position N.
 %%
 %%          Returns the value at the specified position in the list.
-%%          The bhavior of this function is undefined if N is outside of the
+%%          The behavior of this function is undefined if N is outside of the
 %%          {1..length(L)}.
 %% @end
 %%-----------------------------------------------------------------------------
@@ -248,11 +228,12 @@ keymember(K, I, [_H | T]) ->
     keymember(K, I, T).
 
 %%-----------------------------------------------------------------------------
-%% @param   K the key to match
-%% @param   I the position in the tuple to compare (1..tuple_size)
-%% @param   L the list from which to find the element
-%% @returns result of replacing the first element in L who's Ith element matches K.
-%% @doc     Returns the result of replacing the first element in L who's Ith element matches K.
+%% @param   K           the key to match
+%% @param   I           the position in the tuple to compare (1..tuple_size)
+%% @param   L           the list from which to find the element
+%% @param   NewTuple    tuple containing the new key to replace param `K'
+%% @returns result of replacing the first element in L who's Ith element matches K with the contents of NewTuple.
+%% @doc     Returns the result of replacing NewTuple for the first element in L with who's Ith element matches K.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec keyreplace(
@@ -431,21 +412,22 @@ join([E | R], Sep, Accum) ->
     join(R, Sep, [E, Sep | Accum]).
 
 %%-----------------------------------------------------------------------------
-%% @param   From from integer
-%% @param   To to Integer
+%% @param   From    from integer
+%% @param   To      to Integer
 %% @returns list of integers from [From..To]
 %% @doc     Returns a sequence of integers in a specified range.
 %%
 %%          This function is equivalent to `lists:seq(From, To, 1)'.
 %% @end
 %%-----------------------------------------------------------------------------
+-spec seq(From :: integer(), To :: integer()) -> list().
 seq(From, To) ->
     seq(From, To, 1).
 
 %%-----------------------------------------------------------------------------
-%% @param   From from integer
-%% @param   To to Integer
-%% @param   Incr increment value
+%% @param   From    from integer
+%% @param   To      to Integer
+%% @param   Incr    increment value
 %% @returns list of integers `[From, From+Incr, ..., N]', where `N' is the largest integer `<=' `To' incremented by `Incr'
 %% @doc     Returns a sequence of integers in a specified range incremented by a specified value.
 %%

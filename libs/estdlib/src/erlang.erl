@@ -51,8 +51,7 @@
 %% * review API documentation for timer functions in this module
 %%
 
--type mem_type() :: binary.
-
+-type mem_type() :: binary().
 -type time_unit() :: second | millisecond | microsecond.
 
 %%-----------------------------------------------------------------------------
@@ -64,7 +63,7 @@
 %%          Time ms, where TimerRef is the reference returned from this function.
 %% @end
 %%-----------------------------------------------------------------------------
--spec start_timer(non_neg_integer(), pid() | atom(), term()) -> reference().
+-spec start_timer(Time :: non_neg_integer(), Dest :: pid() | atom(), Msg :: term()) -> reference().
 start_timer(Time, Dest, Msg) ->
     start_timer(Time, Dest, Msg, []).
 
@@ -80,7 +79,9 @@ start_timer(Time, Dest, Msg) ->
 %%
 %%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
 %%-----------------------------------------------------------------------------
--spec start_timer(non_neg_integer(), pid() | atom(), term(), list()) -> reference().
+-spec start_timer(
+    Time :: non_neg_integer(), Dest :: pid() | atom(), Msg :: term(), _Options :: list()
+) -> reference().
 start_timer(Time, Dest, Msg, _Options) ->
     timer_manager:start_timer(Time, Dest, Msg).
 
@@ -108,7 +109,7 @@ cancel_timer(TimerRef) ->
 %% @doc     Send Msg to Dest after Time ms.
 %% @end
 %%-----------------------------------------------------------------------------
--spec send_after(non_neg_integer(), pid() | atom(), term()) -> reference().
+-spec send_after(Time :: non_neg_integer(), Dest :: pid() | atom(), Msg :: term()) -> reference().
 send_after(Time, Dest, Msg) ->
     timer_manager:send_after(Time, Dest, Msg).
 
@@ -207,6 +208,23 @@ system_flag(_Key, _Value) ->
 md5(Data) when is_binary(Data) ->
     throw(nif_error).
 
+%%-----------------------------------------------------------------------------
+%% @param   Module Name of module
+%% @param   Function Exported function name
+%% @param   Args Parameters to pass to function (max 6)
+%% @returns Returns the result of Module:Function(Args).
+%% @doc     Returns the result of applying Function in Module to Args. The applied
+%%          function must be exported from Module. The arity of the function is the
+%%          length of Args. Example:
+%%          ```> apply(lists, reverse, [[a, b, c]]).
+%%          [c,b,a]
+%%          > apply(erlang, atom_to_list, ['AtomVM']).
+%%          "AtomVM"'''
+%%          If the number of arguments are known at compile time, the call is better
+%%          written as Module:Function(Arg1, Arg2, ..., ArgN).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec apply(Module :: module(), Function :: function(), Args :: [term()]) -> term().
 apply(Module, Function, Args) ->
     case Args of
         [] ->
@@ -297,6 +315,7 @@ map_is_key(_Key, _Map) ->
 %% https://www.erlang.org/doc/reference_manual/expressions.html#term-comparisons
 %% @end
 %%-----------------------------------------------------------------------------
+-spec min(A :: any(), B :: any()) -> any().
 min(A, B) when A < B -> A;
 min(_A, B) -> B.
 
@@ -310,6 +329,7 @@ min(_A, B) -> B.
 %% https://www.erlang.org/doc/reference_manual/expressions.html#term-comparisons
 %% @end
 %%-----------------------------------------------------------------------------
+-spec max(A :: any(), B :: any()) -> any().
 max(A, B) when A > B -> A;
 max(_A, B) -> B.
 

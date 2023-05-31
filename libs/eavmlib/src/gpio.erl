@@ -125,9 +125,9 @@ stop() ->
 %%          `gpio:set_direction/3' it will always read as low.
 %% @end
 %%-----------------------------------------------------------------------------
--spec read(GPIO :: gpio(), GPIONum :: pin()) -> high | low.
-read(GPIO, GPIONum) ->
-    port:call(GPIO, {read, GPIONum}).
+-spec read(GPIO :: gpio(), Pin :: pin()) -> high | low.
+read(GPIO, Pin) ->
+    port:call(GPIO, {read, Pin}).
 
 %%-----------------------------------------------------------------------------
 %% @param   GPIO pid that was returned from `gpio:start/0'
@@ -139,9 +139,9 @@ read(GPIO, GPIONum) ->
 %%          Pins can be used for input, output, or output with open drain.
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_direction(GPIO :: gpio(), GPIONum :: pin(), Direction :: direction()) -> ok | error.
-set_direction(GPIO, GPIONum, Direction) ->
-    port:call(GPIO, {set_direction, GPIONum, Direction}).
+-spec set_direction(GPIO :: gpio(), Pin :: pin(), Direction :: direction()) -> ok | error.
+set_direction(GPIO, Pin, Direction) ->
+    port:call(GPIO, {set_direction, Pin, Direction}).
 
 %%-----------------------------------------------------------------------------
 %% @param   GPIO pid that was returned from `gpio:start/0'
@@ -153,9 +153,9 @@ set_direction(GPIO, GPIONum, Direction) ->
 %%          Set a pin to `high' (1) or `low' (0).
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_level(GPIO :: gpio(), GPIONum :: pin(), Level :: level()) -> ok | error.
-set_level(GPIO, GPIONum, Level) ->
-    port:call(GPIO, {set_level, GPIONum, Level}).
+-spec set_level(GPIO :: gpio(), Pin :: pin(), Level :: level()) -> ok | error.
+set_level(GPIO, Pin, Level) ->
+    port:call(GPIO, {set_level, Pin, Level}).
 
 %%-----------------------------------------------------------------------------
 %% @param   GPIO pid that was returned from `gpio:start/0'
@@ -172,9 +172,9 @@ set_level(GPIO, GPIONum, Level) ->
 %%          of the pin that triggered the interrupt.
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_int(GPIO :: gpio(), GPIONum :: pin(), Trigger :: trigger()) -> ok | error.
-set_int(GPIO, GPIONum, Trigger) ->
-    port:call(GPIO, {set_int, GPIONum, Trigger}).
+-spec set_int(GPIO :: gpio(), Pin :: pin(), Trigger :: trigger()) -> ok | error.
+set_int(GPIO, Pin, Trigger) ->
+    port:call(GPIO, {set_int, Pin, Trigger}).
 
 %%-----------------------------------------------------------------------------
 %% @param   GPIO pid that was returned from `gpio:start/0'
@@ -185,9 +185,9 @@ set_int(GPIO, GPIONum, Trigger) ->
 %%          Removes an interrupt from the specified pin.
 %% @end
 %%-----------------------------------------------------------------------------
--spec remove_int(GPIO :: gpio(), GPIONum :: pin()) -> ok | error.
-remove_int(GPIO, GPIONum) ->
-    port:call(GPIO, {remove_int, GPIONum}).
+-spec remove_int(GPIO :: gpio(), Pin :: pin()) -> ok | error.
+remove_int(GPIO, Pin) ->
+    port:call(GPIO, {remove_int, Pin}).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number to set operational mode
@@ -198,8 +198,8 @@ remove_int(GPIO, GPIONum) ->
 %%          Pins can be used for input, output, or output with open drain.
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_pin_mode(GPIONum :: pin(), Direction :: direction()) -> ok | error.
-set_pin_mode(_GPIONum, _Mode) ->
+-spec set_pin_mode(Pin :: pin(), Direction :: direction()) -> ok | error.
+set_pin_mode(_Pin, _Mode) ->
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------
@@ -212,8 +212,8 @@ set_pin_mode(_GPIONum, _Mode) ->
 %%          both directions), or left `floating'.
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_pin_pull(GPIONum :: pin(), Pull :: pull()) -> ok | error.
-set_pin_pull(_GPIONum, _Pull) ->
+-spec set_pin_pull(Pin :: pin(), Pull :: pull()) -> ok | error.
+set_pin_pull(_Pin, _Pull) ->
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------
@@ -236,8 +236,8 @@ set_pin_pull(_GPIONum, _Pull) ->
 %%          Deep-sleep `gpio:deep_sleep_hold_en' should also be called.
 %% @end
 %%-----------------------------------------------------------------------------
--spec hold_en(GPIONum :: pin()) -> ok | error.
-hold_en(_GPIONum) ->
+-spec hold_en(Pin :: pin()) -> ok | error.
+hold_en(_Pin) ->
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------
@@ -256,8 +256,8 @@ hold_en(_GPIONum) ->
 %%          set it to hight level before calling `gpio:hold_dis'.
 %% @end
 %%-----------------------------------------------------------------------------
--spec hold_dis(GPIONum :: pin()) -> ok | error.
-hold_dis(_GPIONum) ->
+-spec hold_dis(Pin :: pin()) -> ok | error.
+hold_dis(_Pin) ->
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------
@@ -301,8 +301,8 @@ deep_sleep_hold_dis() ->
 %%          Set a pin to `high' (1) or `low' (0).
 %% @end
 %%-----------------------------------------------------------------------------
--spec digital_write(GPIONum :: pin(), Level :: level()) -> ok | error.
-digital_write(_GPIONum, _Level) ->
+-spec digital_write(Pin :: pin(), Level :: level()) -> ok | error.
+digital_write(_Pin, _Level) ->
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------
@@ -315,8 +315,8 @@ digital_write(_GPIONum, _Level) ->
 %%          `gpio:set_pin_mode/2' it will always read as low.
 %% @end
 %%-----------------------------------------------------------------------------
--spec digital_read(GPIONum :: pin()) -> high | low.
-digital_read(_GPIONum) ->
+-spec digital_read(Pin :: pin()) -> high | low.
+digital_read(_Pin) ->
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------
@@ -335,9 +335,9 @@ digital_read(_GPIONum) ->
 %%          a race condition when start() is called internally by this function.
 %% @end
 %%-----------------------------------------------------------------------------
--spec attach_interrupt(GPIONum :: pin(), Trigger :: trigger()) -> ok | error.
-attach_interrupt(GPIONum, Trigger) ->
-    set_int(start(), GPIONum, Trigger).
+-spec attach_interrupt(Pin :: pin(), Trigger :: trigger()) -> ok | error.
+attach_interrupt(Pin, Trigger) ->
+    set_int(start(), Pin, Trigger).
 
 %-----------------------------------------------------------------------------
 %% @param   Pin number of the pin to remove the interrupt
@@ -351,6 +351,6 @@ attach_interrupt(GPIONum, Trigger) ->
 %%          regardless of the number of interrupt pins used in the application.
 %% @end
 %%-----------------------------------------------------------------------------
--spec detach_interrupt(GPIONum :: pin()) -> ok | error.
-detach_interrupt(GPIONum) ->
-    remove_int(whereis(gpio), GPIONum).
+-spec detach_interrupt(Pin :: pin()) -> ok | error.
+detach_interrupt(Pin) ->
+    remove_int(whereis(gpio), Pin).

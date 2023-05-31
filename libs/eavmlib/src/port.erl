@@ -19,14 +19,52 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
+%%-----------------------------------------------------------------------------
+%% @doc AtomVM port driver APIs
+%%
+%% This module contains functions that are intended to be used by drivers that
+%% rely on a `port' interface rather than `niffs'.
+%%
+%% The port driver should be initialized with:
+%% `open_port({spawn, "Name"}, Param)'
+%% Where Name is an atom(), and is the name of the driver. The return from `open_port/2'
+%% will be the Pid that will be required for future `port:call/2' or `port:call/3' use.
+%%
+%% Examples:
+%% ```open_port({spawn, "i2c"}, Param)'''
+%% or
+%% ```open_port({spawn, "spi"}, Params)'''
+%% @end
+%%-----------------------------------------------------------------------------
 -module(port).
 
 -export([call/2, call/3]).
 
+%%-----------------------------------------------------------------------------
+%% @param   Pid Pid to which to send messages
+%% @param   Message the message to send
+%% @returns term() | {error, Reason}.
+%% @doc     Send a message to a given port driver pid.
+%%
+%% This function is used to send a message to an open port divers pid and will
+%% return a term or `{error, Reason}'.
+%% @end
+%%-----------------------------------------------------------------------------
 -spec call(pid(), Message :: term()) -> term().
 call(Port, Message) ->
     call(Port, Message, infinity).
 
+%%-----------------------------------------------------------------------------
+%% @param   Pid Pid to which to send messages
+%% @param   Message the message to send
+%% @param   TimeoutMs the timeout value in milliseconds
+%% @returns term() | {error, Reason}.
+%% @doc     Send a message to a given port driver pid with a timeout.
+%%
+%% This function is used to send a message to an open port divers pid and will return
+%% a term or `{error, Reason}', or`{error, timeout}' if the TimeoutMs is reached first.
+%% @end
+%%-----------------------------------------------------------------------------
 -spec call(pid(), Message :: term(), TimeoutMs :: non_neg_integer()) -> term() | {error, timeout}.
 call(Port, Message, TimeoutMs) ->
     Ref = erlang:make_ref(),

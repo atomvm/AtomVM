@@ -28,7 +28,7 @@
 %% many operations in this module present entries in lexical order, users should
 %% in general make no assumptions about the ordering of entries in a map.
 %%
-%% This module implements a susbset of the Erlang/OTP `maps' interface.
+%% This module implements a subset of the Erlang/OTP `maps' interface.
 %% Some OTP functions are not implemented, and the approach favors
 %% correctness and readability over speed and performance.
 %% @end
@@ -143,7 +143,7 @@ put(_Key, _Value, Map) when not is_map(Map) ->
 %% @doc Return an iterator structure that can be used to iterate over associations
 %% in a map.
 %%
-%% In general, users shouuld make no assumptions about the order in which entries
+%% In general, users should make no assumptions about the order in which entries
 %% appear in an iterator.  The order of entries in a map is implementation-defined.
 %%
 %% This function throws a `{badmap, Map}' exception if `Map' is not a map.
@@ -217,7 +217,7 @@ values(Map) ->
     throw({badmap, Map}).
 
 %%-----------------------------------------------------------------------------
-%% @param   Map
+%% @param   Map     the map
 %% @returns a list of `[{Key, Value}]' tuples
 %% @doc Return the list of entries, expressed as `{Key, Value}' pairs, in the supplied map.
 %%

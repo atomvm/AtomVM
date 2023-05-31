@@ -44,17 +44,19 @@
     connect/3, send/2, recv/2, recv/3, close/1, listen/2, accept/1, accept/2, controlling_process/2
 ]).
 
+-type reason() :: term().
+
 -define(DEFAULT_PARAMS, [{active, true}, {buffer, 512}, {timeout, infinity}]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Address the address to which to connect
 %% @param   Port the port to which to connect
 %% @param   Options options for controlling the behavior of the socket (see below)
-%% @returns {ok, Socket}} | {error, Reason}
+%% @returns {ok, Socket} | {error, Reason}
 %% @doc     Connect to a TCP endpoint on the specified address and port.
 %%
 %%          If successful, this function will return a Socket which can be used
-%%          with the send/2 and revc/2 and recv/3 functions in this module.
+%%          with the send/2 and recv/2 and recv/3 functions in this module.
 %%
 %%          The following options are supported:
 %%          <ul>
@@ -71,8 +73,8 @@
 %%          in order to receive data on the socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec connect(inet:address(), inet:port_number(), Options :: inet:opts()) ->
-    {ok, Socket :: inet:socket()} | {error, Reason :: term()}.
+-spec connect(Address :: inet:address(), Port :: inet:port(), Options :: inet:opts()) ->
+    {ok, Socket :: inet:socket()} | {error, Reason :: reason()}.
 connect(Address, Port, Params0) ->
     Socket = open_port({spawn, "socket"}, []),
     Params = merge(Params0, ?DEFAULT_PARAMS),
@@ -88,7 +90,7 @@ connect(Address, Port, Params0) ->
 %%          otherwise, an error with a reason.
 %% @end
 %%-----------------------------------------------------------------------------
--spec send(inet:socket(), inet:packet()) -> ok | {error, Reason :: term()}.
+-spec send(Socket :: inet:socket(), Packet :: inet:packet()) -> ok | {error, Reason :: reason()}.
 send(Socket, Packet) ->
     case call(Socket, {send, Packet}) of
         {ok, _Len} ->
@@ -102,7 +104,8 @@ send(Socket, Packet) ->
 %% @doc     Receive a packet over a TCP socket from a source address/port.
 %% @end
 %%-----------------------------------------------------------------------------
--spec recv(inet:socket(), non_neg_integer()) -> {ok, inet:packet()} | {error, Reason :: term()}.
+-spec recv(Socket :: inet:socket(), Length :: non_neg_integer()) ->
+    {ok, inet:packet()} | {error, Reason :: reason()}.
 recv(Socket, Length) ->
     recv(Socket, Length, infinity).
 
@@ -110,7 +113,7 @@ recv(Socket, Length) ->
 %% @param   Socket the socket over which to receive a packet
 %% @param   Length the maximum length to read of the received packet
 %% @param   Timeout the amount of time to wait for a packet to arrive
-%% @returns {ok, Address, Port, Packet}} | {error, Reason}
+%% @returns {ok, Packet} | {error, Reason}
 %% @doc     Receive a packet over a TCP socket from a source address/port.
 %%
 %%          This function is used when the socket is not created in active mode.
@@ -125,8 +128,8 @@ recv(Socket, Length) ->
 %%          ignored.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec recv(inet:socket(), non_neg_integer(), non_neg_integer()) ->
-    {ok, inet:packet()} | {error, Reason :: term()}.
+-spec recv(Socket :: inet:socket(), Length :: non_neg_integer(), Timeout :: non_neg_integer()) ->
+    {ok, inet:packet()} | {error, Reason :: reason()}.
 recv(Socket, Length, Timeout) ->
     call(Socket, {recv, Length, Timeout}).
 
@@ -141,8 +144,8 @@ recv(Socket, Length, Timeout) ->
 %%          This function is currently unimplemented
 %% @end
 %%-----------------------------------------------------------------------------
--spec listen(Port :: inet:port_number(), Options :: inet:opts()) ->
-    {ok, ListeningSocket :: inet:socket()} | {error, Reason :: term()}.
+-spec listen(Port :: inet:port(), Options :: inet:opts()) ->
+    {ok, ListeningSocket :: inet:socket()} | {error, Reason :: reason()}.
 listen(Port, Options) ->
     Socket = open_port({spawn, "socket"}, []),
     Params = merge(Options, ?DEFAULT_PARAMS),
@@ -168,7 +171,8 @@ listen(Port, Options) ->
 %% @doc     Accept a connection on a listening socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec accept(inet:socket()) -> {ok, Socket :: inet:socket()} | {error, Reason :: term()}.
+-spec accept(ListenSocket :: inet:socket()) ->
+    {ok, Socket :: inet:socket()} | {error, Reason :: reason()}.
 accept(ListenSocket) ->
     accept(ListenSocket, infinity).
 
@@ -179,8 +183,8 @@ accept(ListenSocket) ->
 %% @doc     Accept a connection on a listening socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec accept(inet:socket(), Timeout :: non_neg_integer()) ->
-    {ok, Socket :: inet:socket()} | {error, Reason :: term()}.
+-spec accept(ListenSocket :: inet:socket(), Timeout :: non_neg_integer()) ->
+    {ok, Socket :: inet:socket()} | {error, Reason :: reason()}.
 accept(ListenSocket, Timeout) ->
     case call(ListenSocket, {accept, Timeout}) of
         {ok, Socket} when is_pid(Socket) ->
@@ -196,7 +200,7 @@ accept(ListenSocket, Timeout) ->
 %% @doc     Close the socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec close(inet:socket()) -> ok.
+-spec close(Socket :: inet:socket()) -> ok.
 close(Socket) ->
     inet:close(Socket).
 
@@ -208,12 +212,14 @@ close(Socket) ->
 %% process will receive messages from the socket.
 %%
 %% This function will return `{error, not_owner}' if the calling process
-%% is not the current controlling proces.
+%% is not the current controlling process.
 %%
 %% By default, the controlling process is the process associated with
 %% the creation of the Socket.
 %% @end
 %%-----------------------------------------------------------------------------
+-spec controlling_process(Socket :: inet:socket(), Pid :: pid()) ->
+    ok | {error, Reason :: reason()}.
 controlling_process(Socket, Pid) ->
     call(Socket, {controlling_process, Pid}).
 

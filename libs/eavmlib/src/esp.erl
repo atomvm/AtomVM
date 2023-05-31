@@ -179,6 +179,8 @@ nvs_set_binary(Namespace, Key, Value) when
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------
+%% @param   Key NVS key
+%% @returns ok
 %% @doc Equivalent to nvs_erase_key(?ATOMVM_NVS_NS, Key).
 %% @end
 %%-----------------------------------------------------------------------------
@@ -240,6 +242,7 @@ rtc_slow_get_binary() ->
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------
+%% @param   Bin binary to be stored in RTC slow memory
 %% @returns ok
 %% @doc     Store a binary to RTC slow memory. This memory is not erased on
 %%          software reset and deep sleeps.

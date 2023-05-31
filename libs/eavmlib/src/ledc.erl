@@ -1,27 +1,7 @@
 %
 % This file is part of AtomVM.
 %
-% Copyright 2020-2022 Fred Dushin <fred@dushin.net>
-%
-% Licensed under the Apache License, Version 2.0 (the "License");
-% you may not use this file except in compliance with the License.
-% You may obtain a copy of the License at
-%
-%    http://www.apache.org/licenses/LICENSE-2.0
-%
-% Unless required by applicable law or agreed to in writing, software
-% distributed under the License is distributed on an "AS IS" BASIS,
-% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-% See the License for the specific language governing permissions and
-% limitations under the License.
-%
-% SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
-%
-
-%
-% This file is part of AtomVM.
-%
-% Copyright 2020 Fred Dushin <fred@dushin.net>
+% Copyright 2020-2023 Fred Dushin <fred@dushin.net>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -73,14 +53,14 @@
 -type freq_hz_cfg() :: {freq_hz, freq_hz()}.
 -type speed_mode() :: ?LEDC_LOW_SPEED_MODE | ?LEDC_HIGH_SPEED_MODE.
 -type speed_mode_cfg() :: {speed_mode, speed_mode()}.
--type timer_num() :: non_neg_integer().
+-type timer_num() :: 0..3.
 -type timer_num_cfg() :: {timer_num, timer_num()}.
 
 -type timer_config() :: [
     duty_resolution_cfg() | freq_hz_cfg() | speed_mode_cfg() | timer_num_cfg()
 ].
 
--type channel() :: non_neg_integer().
+-type channel() :: 0..7.
 -type channel_cfg() :: {channel, channel()}.
 -type duty() :: non_neg_integer().
 -type duty_cfg() :: {duty, duty()}.
@@ -99,9 +79,9 @@
 -type fade_mode() :: non_neg_integer().
 
 %%-----------------------------------------------------------------------------
-%% @param   Config      timer configuration
+%% @param   Config      channel configuration
 %% @returns ok | {error, ledc_error_code()}
-%% @doc     LEDC timer configuration.
+%% @doc     LEDC channel configuration.
 %%
 %%          Configure LEDC timer with the given source timer/frequency(Hz)/duty_resolution.
 %% @end
@@ -123,8 +103,9 @@ timer_config(_Config) ->
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------
-%% @param   Flags   Flags used to allocate the interrupt. One or multiple (ORred)
-%%                  ESP_INTR_FLAG_* values. See esp_intr_alloc.h for more info.
+%% @param   Flags   Flags used to allocate the interrupt. One (or multiple, using
+%%                  an ORred mask) ESP_INTR_FLAG_* values. See esp_intr_alloc.h
+%%                  for more info.
 %% @returns         ok | {error, ledc_error_code()}
 %% @doc     Install LEDC fade function.
 %%
@@ -148,7 +129,7 @@ fade_func_uninstall() ->
 %% @param   SpeedMode   Select the LEDC channel group with specified speed mode.
 %%                      Note that not all targets support high speed mode.
 %% @param   Channel     LEDC channel index (0-7).
-%% @param   TargetDuty  Target duty of fading.(0..(2^duty_resolution-1)))
+%% @param   TargetDuty  Target duty of fading. (0..(2^duty_resolution)-1)
 %% @param   MaxFadeTimeMs The maximum time of the fading (ms).
 %% @returns         ok | {error, ledc_error_code()}
 %% @doc     Set LEDC fade function, with a limited time.
@@ -171,7 +152,7 @@ set_fade_with_time(_SpeedMode, _Channel, _TargetDuty, _MaxFadeTimeMs) ->
 %% @param   SpeedMode   Select the LEDC channel group with specified speed mode.
 %%                      Note that not all targets support high speed mode.
 %% @param   Channel     LEDC channel index (0-7).
-%% @param   TargetDuty  Target duty of fading.(0..(2^duty_resolution-1)))
+%% @param   TargetDuty  Target duty of fading. (0..(2^duty_resolution)-1)
 %% @param   Scale       Controls the increase or decrease step scale.
 %% @param   CycleNum    increase or decrease the duty every cycle_num cycles
 %% @returns         ok | {error, ledc_error_code()}
@@ -224,7 +205,7 @@ get_duty(_SpeedMode, _Channel) ->
 %% @param   SpeedMode   Select the LEDC channel group with specified speed mode.
 %%                      Note that not all targets support high speed mode.
 %% @param   Channel     LEDC channel index (0-7).
-%% @param   Duty        Set the LEDC duty, the range of duty setting is [0, (2**duty_resolution)]
+%% @param   Duty        Set the LEDC duty, the range of setting is [0, (2^duty_resolution)-1].
 %% @returns ok | {error, ledc_error_code()}
 %% @doc     LEDC set duty.
 %% @end
@@ -262,8 +243,9 @@ get_freq(_SpeedMode, _TimerNum) ->
 %%-----------------------------------------------------------------------------
 %% @param   SpeedMode   Select the LEDC channel group with specified speed mode.
 %% @param   TimerNum    LEDC timer index (0-3).
+%% @param   FreqHz      Set the LEDC frequency.
 %% @returns ok | {error, ledc_error_code()}
-%% @doc     LEDC get channel frequency (Hz)
+%% @doc     LEDC set channel frequency (Hz)
 %% @end
 %%-----------------------------------------------------------------------------
 -spec set_freq(SpeedMode :: speed_mode(), TimerNum :: timer_num(), FreqHz :: non_neg_integer()) ->

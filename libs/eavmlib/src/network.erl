@@ -18,26 +18,6 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
-%
-% This file is part of AtomVM.
-%
-% Copyright 2020 Fred Dushin <fred@dushin.net>
-%
-% Licensed under the Apache License, Version 2.0 (the "License");
-% you may not use this file except in compliance with the License.
-% You may obtain a copy of the License at
-%
-%    http://www.apache.org/licenses/LICENSE-2.0
-%
-% Unless required by applicable law or agreed to in writing, software
-% distributed under the License is distributed on an "AS IS" BASIS,
-% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-% See the License for the specific language governing permissions and
-% limitations under the License.
-%
-% SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
-%
-
 -module(network).
 
 -behavior(gen_server).
@@ -124,6 +104,7 @@ wait_for_sta() ->
     wait_for_sta(15000).
 
 %%-----------------------------------------------------------------------------
+%% @param   TimeoutOrStaConfig The STA network configuration or timeout in ms.
 %% @doc     Equivalent to wait_for_sta([], Timeout) or wait_for_sta(StaConfig, 15000).
 %% @end
 %%-----------------------------------------------------------------------------
@@ -137,11 +118,11 @@ wait_for_sta(StaConfig) when is_list(StaConfig) ->
 %%-----------------------------------------------------------------------------
 %% @param   StaConfig The STA network configuration
 %% @param   Timeout amount of time in milliseconds to wait for a connection
-%% @returns {ok, IpInfo}, if the network_fsm was started, or {error, Reason} if
+%% @returns {ok, IpInfo}, if the network interface was started, or {error, Reason} if
 %%          a failure occurred (e.g., due to malformed network configuration).
-%% @doc     Start a network_fsm in station mode and wait for a connection to be established
+%% @doc     Start a network interface in station mode and wait for a connection to be established
 %%
-%%          This function will start a network_fsm in station mode, and will wait
+%%          This function will start a network interface in station mode, and will wait
 %%          for a connection to be established.  This is a convenience function,
 %%          for applications that do not need to be notified of connectivity
 %%          changes in the network.
@@ -174,10 +155,11 @@ wait_for_ap() ->
     wait_for_ap(15000).
 
 %%-----------------------------------------------------------------------------
+%% @param   TimeoutOrApConfig The AP network configuration or timeout in ms.
 %% @doc     Equivalent to wait_for_ap([], Timeout) or wait_for_ap(StaConfig, 15000).
 %% @end
 %%-----------------------------------------------------------------------------
--spec wait_for_ap(TimeoutOrStaConfig :: non_neg_integer() | [ap_config_property()]) ->
+-spec wait_for_ap(TimeoutOrApConfig :: non_neg_integer() | [ap_config_property()]) ->
     ok | {error, Reason :: term()}.
 wait_for_ap(Timeout) when is_integer(Timeout) ->
     wait_for_ap([], Timeout);
@@ -187,12 +169,12 @@ wait_for_ap(ApConfig) when is_list(ApConfig) ->
 %%-----------------------------------------------------------------------------
 %% @param   ApConfig The AP network configuration
 %% @param   Timeout amount of time in milliseconds to wait for a connection
-%% @returns ok, when the nework_fsm has started the AP, or {error, Reason} if
+%% @returns ok, when the network has started the AP, or {error, Reason} if
 %%          a failure occurred (e.g., due to malformed network configuration).
-%% @doc     Start a network_fsm in access point mode and wait the AP to be
+%% @doc     Start a network interface in access point mode and wait the AP to be
 %%          up and running
 %%
-%%          This function will start a network_fsm in AP mode, and will wait
+%%          This function will start a network interface in AP mode, and will wait
 %%          until the network is up and ready to be connected.  This is a convenience function,
 %%          for applications that do not need to be notified of connectivity
 %%          changes in the network.
@@ -216,11 +198,11 @@ wait_for_ap(ApConfig, Timeout) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Config The network configuration
-%% @returns ok, if the network_fsm was started, or {error, Reason} if
+%% @returns ok, if the network interface was started, or {error, Reason} if
 %%          a failure occurred (e.g., due to malformed network configuration).
-%% @doc     Start a network_fsm.
+%% @doc     Start a network interface.
 %%
-%%          This function will start a network_fsm, which will attempt to
+%%          This function will start a network interface, which will attempt to
 %%          connect to an AP endpoint in the background.  Specify callback
 %%          functions to receive definitive
 %%          information that the connection succeeded.  See the AtomVM Network
@@ -256,9 +238,9 @@ start_link(Config) ->
     end.
 
 %%-----------------------------------------------------------------------------
-%% @returns ok, if the network_fsm was stopped, or {error, Reason} if
+%% @returns ok, if the network interface was stopped, or {error, Reason} if
 %%          a failure occurred.
-%% @doc     Stop a network_fsm.
+%% @doc     Stop a network interface.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec stop() -> ok | {error, Reason :: term()}.

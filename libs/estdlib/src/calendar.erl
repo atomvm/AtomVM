@@ -18,21 +18,62 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
+%%-----------------------------------------------------------------------------
+%% @doc A partial implementation of the Erlang/OTP calendar functions.
+%%
+%% This module provides an implementation of a subset of the functionality of
+%% the Erlang/OTP calendar functions.
+%%
+%% All dates conform to the Gregorian calendar. This calendar was introduced by
+%% Pope Gregory XIII in 1582 and was used in all Catholic countries from this year.
+%% Protestant parts of Germany and the Netherlands adopted it in 1698, England followed
+%% in 1752, and Russia in 1918 (the October revolution of 1917 took place in November
+%% according to the Gregorian calendar).
+%%
+%% The Gregorian calendar in this module is extended back to year 0. For a given date,
+%% the gregorian day is the number of days up to and including the date specified.
+%% @end
+%%-----------------------------------------------------------------------------
 -module(calendar).
 
 -export([date_to_gregorian_days/1, date_to_gregorian_days/3, day_of_the_week/1, day_of_the_week/3]).
 
--type year() :: integer().
+-type date() :: {year(), month(), day()}.
+
+%%-----------------------------------------------------------------------------
+%% @doc Year cannot be abbreviated.
+%%
+%% For example, 93 denotes year 93, not 1993. The valid range depends on the
+%% underlying operating system. The date tuple must denote a valid date.
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-type year() :: non_neg_integer().
+
 -type month() :: 1..12.
 -type day() :: 1..31.
 -type gregorian_days() :: integer().
 -type day_of_week() :: 1..7.
 
--spec date_to_gregorian_days({year(), month(), day()}) -> gregorian_days().
+%%-----------------------------------------------------------------------------
+%% @equiv date_to_gregorian_days(Year, M, D)
+%% @param   Date    the date to get the gregorian day count of
+%% @returns Days    number of days
+%% @end
+%%-----------------------------------------------------------------------------
+-spec date_to_gregorian_days(Date :: date()) -> Days :: gregorian_days().
 date_to_gregorian_days({Y, M, D}) ->
     date_to_gregorian_days(Y, M, D).
 
--spec date_to_gregorian_days(year(), month(), day()) -> gregorian_days().
+%%-----------------------------------------------------------------------------
+%% @param   Year    ending year
+%% @param   M       ending month
+%% @param   D       ending day
+%% @returns Days    number of days
+%% @doc     Computes the number of gregorian days starting with year 0 and ending at the specified date.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec date_to_gregorian_days(Year :: year(), M :: month(), D :: day()) -> gregorian_days().
 date_to_gregorian_days(Year, M, D) when M =< 12 andalso D =< 31 ->
     Y =
         if
@@ -54,10 +95,30 @@ date_to_gregorian_days(Year, M, D) when M =< 12 andalso D =< 31 ->
     DoE = YoE * 365 + YoE div 4 - YoE div 100 + DoY,
     Era * 146097 + DoE + 60.
 
--spec day_of_the_week({year(), month(), day()}) -> day_of_week().
+%%-----------------------------------------------------------------------------
+%% @equiv day_of_the_week(Y, M, D)
+%% @param   Date the date for which to retreive the weekday
+%% @returns Weekday day of the week
+%% @doc     Computes the day of the week from the specified date tuple {Year, Month, Day}.
+%%          Returns the day of the week as 1: Monday, 2: Tuesday, and so on.
+%% @end
+%%-----------------------------------------------------------------------------
+%%          Returns the day of the week as 1: Monday, 2: Tuesday, and so on.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec day_of_the_week(Date :: date()) -> day_of_week().
 day_of_the_week({Y, M, D}) ->
     day_of_the_week(Y, M, D).
 
--spec day_of_the_week(year(), month(), day()) -> day_of_week().
+%%-----------------------------------------------------------------------------
+%% @param   Y year of the desired day
+%% @param   M month of the desired day
+%% @param   D year of the desired day
+%% @returns Weekday day of the week
+%% @doc     Computes the day of the week from the specified Year, Month, and Day.
+%%          Returns the day of the week as 1: Monday, 2: Tuesday, and so on.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec day_of_the_week(Y :: year(), M :: month(), D :: day()) -> day_of_week().
 day_of_the_week(Y, M, D) ->
     (date_to_gregorian_days(Y, M, D) + 5) rem 7 + 1.

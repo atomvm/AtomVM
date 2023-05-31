@@ -50,12 +50,13 @@
 -define(DEFAULT_PARAMS, [{active, true}, {buffer, 128}, {timeout, infinity}]).
 
 %%-----------------------------------------------------------------------------
+%% @equiv   open(PortNum, [])
 %% @doc     Create a UDP socket.  This function will instantiate a UDP socket
 %%          that may be used to
 %%          send or receive UDP messages.
 %% @end
 %%-----------------------------------------------------------------------------
--spec open(inet:port_number()) -> {ok, inet:socket()} | {error, Reason :: reason()}.
+-spec open(PortNum :: inet:port()) -> {ok, inet:socket()} | {error, Reason :: reason()}.
 open(PortNum) ->
     open(PortNum, []).
 
@@ -63,7 +64,7 @@ open(PortNum) ->
 %% @param   Port the port number to bind to.  Specify 0 to use an OS-assigned
 %%          port number, which can then be retrieved via the inet:port/1
 %%          function.
-%% @param   Params A list of configuration parameters.
+%% @param   Options A list of configuration parameters.
 %% @returns an opaque reference to the socket instance, used in subsequent
 %%          commands.
 %% @throws  bad_arg
@@ -75,10 +76,11 @@ open(PortNum) ->
 %%          <em><b>Note.</b>  The Params argument is currently ignored.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec open(inet:port_number(), proplist()) -> {ok, inet:socket()} | {error, Reason :: reason()}.
-open(PortNum, Params0) ->
+-spec open(PortNum :: inet:port(), Options :: proplist()) ->
+    {ok, inet:socket()} | {error, Reason :: reason()}.
+open(PortNum, Options) ->
     DriverPid = open_port({spawn, "socket"}, []),
-    Params = merge(Params0, ?DEFAULT_PARAMS),
+    Params = merge(Options, ?DEFAULT_PARAMS),
     init(DriverPid, PortNum, Params).
 
 %%-----------------------------------------------------------------------------
@@ -92,7 +94,12 @@ open(PortNum, Params0) ->
 %%          <em><b>Note.</b> Currently only ipv4 addresses are supported.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec send(inet:socket(), inet:address(), inet:port_number(), packet()) -> ok | {error, reason()}.
+-spec send(
+    Socket :: inet:socket(),
+    Address :: inet:address(),
+    PortNum :: inet:port(),
+    Packet :: packet()
+) -> ok | {error, reason()}.
 send(Socket, Address, PortNum, Packet) ->
     case call(Socket, {sendto, Address, PortNum, Packet}) of
         {ok, _Sent} ->
@@ -106,8 +113,8 @@ send(Socket, Address, PortNum, Packet) ->
 %% @doc     Receive a packet over a UDP socket from a source address/port.
 %% @end
 %%-----------------------------------------------------------------------------
--spec recv(inet:socket(), non_neg_integer()) ->
-    {ok, {inet:address(), inet:port_number(), packet()}} | {error, reason()}.
+-spec recv(Socket :: inet:socket(), Length :: non_neg_integer()) ->
+    {ok, {inet:address(), inet:port(), packet()}} | {error, reason()}.
 recv(Socket, Length) ->
     recv(Socket, Length, infinity).
 
@@ -115,7 +122,7 @@ recv(Socket, Length) ->
 %% @param   Socket the socket over which to receive a packet
 %% @param   Length the maximum length to read of the received packet
 %% @param   Timeout the amount of time to wait for a packet to arrive
-%% @returns {ok, Address, Port, Packet}} | {error, Reason}
+%% @returns {ok, {Address, Port, Packet}} | {error, Reason}
 %% @doc     Receive a packet over a UDP socket from a source address/port.
 %%          The address and port of the received packet, as well as
 %%          the received packet data, are returned from this call.  This
@@ -128,8 +135,8 @@ recv(Socket, Length) ->
 %%          is limited to 128 bytes.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec recv(inet:socket(), non_neg_integer(), non_neg_integer()) ->
-    {ok, {inet:address(), inet:port_number(), packet()}} | {error, reason()}.
+-spec recv(Socket :: inet:socket(), Length :: non_neg_integer(), Timeout :: non_neg_integer()) ->
+    {ok, {inet:address(), inet:port(), packet()}} | {error, reason()}.
 recv(Socket, Length, Timeout) ->
     call(Socket, {recvfrom, Length, Timeout}).
 
@@ -151,12 +158,14 @@ close(Socket) ->
 %% process will receive messages from the socket.
 %%
 %% This function will return `{error, not_owner}' if the calling process
-%% is not the current controlling proces.
+%% is not the current controlling process.
 %%
 %% By default, the controlling process is the process associated with
 %% the creation of the Socket.
 %% @end
 %%-----------------------------------------------------------------------------
+-spec controlling_process(Socket :: inet:socket(), Pid :: pid()) ->
+    ok | {error, Reason :: reason()}.
 controlling_process(Socket, Pid) ->
     call(Socket, {controlling_process, Pid}).
 
