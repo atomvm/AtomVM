@@ -28,6 +28,7 @@ set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
 include(pico_sdk_import.cmake)
 
 project(AtomVM)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../CMakeModules")
 
 # initialize the Raspberry Pi Pico SDK
 pico_sdk_init()
@@ -37,6 +38,11 @@ include(${CMAKE_ROOT}/Modules/CMakeDetermineCompileFeatures.cmake)
 CMAKE_DETERMINE_COMPILE_FEATURES(C)
 
 enable_language( C CXX ASM )
+
+# Pico SDK currently forces -nostdlib when using TRY_COMPILE
+# This will make test of availability of POSIX functions fail but open and close
+# are implemented to always return -1 anyway.
+set(CMAKE_TRY_COMPILE_TARGET_TYPE EXECUTABLE)
 
 # Options that make sense for this platform
 option(AVM_DISABLE_SMP "Disable SMP support." OFF)

@@ -120,6 +120,12 @@ atomvm:add_avm_pack_binary/2, &atomvm_add_avm_pack_binary_nif
 atomvm:add_avm_pack_file/2, &atomvm_add_avm_pack_file_nif
 atomvm:close_avm_pack/2, &atomvm_close_avm_pack_nif
 atomvm:read_priv/2, &atomvm_read_priv_nif
+atomvm:posix_open/2, IF_HAVE_OPEN_CLOSE(&atomvm_posix_open_nif)
+atomvm:posix_open/3, IF_HAVE_OPEN_CLOSE(&atomvm_posix_open_nif)
+atomvm:posix_close/1, IF_HAVE_OPEN_CLOSE(&atomvm_posix_close_nif)
+atomvm:posix_read/2, IF_HAVE_OPEN_CLOSE(&atomvm_posix_read_nif)
+atomvm:posix_write/2, IF_HAVE_OPEN_CLOSE(&atomvm_posix_write_nif)
+atomvm:posix_unlink/1, IF_HAVE_UNLINK(&atomvm_posix_unlink_nif)
 code:load_abs/1, &code_load_abs_nif
 code:load_binary/3, &code_load_binary_nif
 console:print/1, &console_print_nif

@@ -153,6 +153,10 @@ set(TARGET_SPECIFIC_FLAGS "${GENLINK_CPPFLAGS} ${ARCH_FLAGS}")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${TARGET_SPECIFIC_FLAGS}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TARGET_SPECIFIC_FLAGS}")
 
+# Use linker flags to detect symbols
+set(CMAKE_TRY_COMPILE_TARGET_TYPE EXECUTABLE)
+set(CMAKE_REQUIRED_FLAGS ${LINKER_FLAGS})
+
 message(STATUS "Target Specific Flags   : ${TARGET_SPECIFIC_FLAGS}")
 
 # Replace `add_executable` with custom macro with same name that adds libopencm3 as a linking target

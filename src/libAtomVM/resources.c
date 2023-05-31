@@ -102,5 +102,7 @@ ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj)
     if (UNLIKELY(memory_erl_nif_env_ensure_free(env, TERM_BOXED_RESOURCE_SIZE) != MEMORY_GC_OK)) {
         AVM_ABORT();
     }
+    struct RefcBinary *refc = refc_binary_from_data(obj);
+    refc_binary_increment_refcount(refc);
     return term_from_resource(obj, &env->heap);
 }

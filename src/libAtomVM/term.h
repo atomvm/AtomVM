@@ -1679,7 +1679,7 @@ static inline term term_get_sub_binary_ref(term t)
 
 /**
  * @brief Create a resource on the heap.
- * @details This function creats a resource (obtained from `enif_alloc_resource`)
+ * @details This function creates a resource (obtained from `enif_alloc_resource`)
  * on the heap which must have `TERM_BOXED_RESOURCE_SIZE` free terms.
  *
  * @param resource resource obtained from `enif_alloc_resource`
@@ -1697,8 +1697,7 @@ static inline term term_from_resource(void *resource, Heap *heap)
     boxed_value[2] = (term) RefcNoFlags;
     term ret = ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
     boxed_value[3] = (term) refc;
-    // Increment ref count and add the resource to the mso list
-    refc_binary_increment_refcount(refc);
+    // Add the resource to the mso list
     heap->root->mso_list = term_list_init_prepend(boxed_value + 4, ret, heap->root->mso_list);
     return ret;
 }

@@ -24,6 +24,12 @@
 
 #include "nifs.h"
 
+#include <fenv.h>
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+
 #include "atomshashtable.h"
 #include "avmpack.h"
 #include "bif.h"
@@ -36,6 +42,7 @@
 #include "module.h"
 #include "platform_nifs.h"
 #include "port.h"
+#include "posix_nifs.h"
 #include "scheduler.h"
 #include "smp.h"
 #include "sys.h"
@@ -43,21 +50,8 @@
 #include "utils.h"
 #include "version.h"
 
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
-
-#include <errno.h>
-#include <fenv.h>
-#include <math.h>
-
 #define MAX_NIF_NAME_LEN 260
 #define FLOAT_BUF_SIZE 64
-
-#define RAISE_ERROR(error_type_atom) \
-    ctx->x[0] = ERROR_ATOM;          \
-    ctx->x[1] = (error_type_atom);   \
-    return term_invalid_term();
 
 #define RAISE(a, b)  \
     ctx->x[0] = (a); \
@@ -722,6 +716,18 @@ DEFINE_MATH_NIF(sinh)
 DEFINE_MATH_NIF(sqrt)
 DEFINE_MATH_NIF(tan)
 DEFINE_MATH_NIF(tanh)
+
+//Handle optional nifs
+#if HAVE_OPEN && HAVE_CLOSE
+#define IF_HAVE_OPEN_CLOSE(expr) (expr)
+#else
+#define IF_HAVE_OPEN_CLOSE(expr) NULL
+#endif
+#if HAVE_UNLINK
+#define IF_HAVE_UNLINK(expr) (expr)
+#else
+#define IF_HAVE_UNLINK(expr) NULL
+#endif
 
 //Ignore warning caused by gperf generated code
 #pragma GCC diagnostic push

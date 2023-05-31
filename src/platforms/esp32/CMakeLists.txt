@@ -21,6 +21,8 @@
 cmake_minimum_required (VERSION 3.13)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../CMakeModules")
+
 # Disable SMP with esp32 socs that have only one core
 if (${IDF_TARGET} MATCHES "esp32s2|esp32c3|esp32h2")
     message("Disabling SMP as selected target only has one core")

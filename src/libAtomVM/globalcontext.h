@@ -35,6 +35,7 @@ extern "C" {
 #include <stdint.h>
 
 #include "atom.h"
+#include "erl_nif.h"
 #include "list.h"
 #include "smp.h"
 #include "synclist.h"
@@ -119,6 +120,10 @@ struct GlobalContext
 
 #ifndef AVM_NO_SMP
     SpinLock env_spinlock;
+#endif
+
+#if HAVE_OPEN && HAVE_CLOSE
+    ErlNifResourceType *posix_fd_resource_type;
 #endif
 
     void *platform_data;
