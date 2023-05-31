@@ -155,9 +155,11 @@ term avm_test_case(const char *test_module)
     term_display(stdout, ret_value, ctx);
     fprintf(stdout, "\n");
 
-    // We cannot really cleanup for now as ports are not clean-able.
-    // globalcontext_destroy(glb);
-    // free(avmpack_data);
+    nif_collection_destroy_all(glb);
+    port_driver_destroy_all(glb);
+
+    globalcontext_destroy(glb);
+    free(avmpack_data);
 
     return ret_value;
 }

@@ -513,7 +513,7 @@ static void IRAM_ATTR gpio_isr_handler(void *arg)
     xQueueSendFromISR(event_queue, &arg, NULL);
 }
 
-REGISTER_PORT_DRIVER(gpio, gpio_driver_init, gpio_driver_create_port)
+REGISTER_PORT_DRIVER(gpio, gpio_driver_init, NULL, gpio_driver_create_port)
 
 #endif
 
@@ -685,7 +685,7 @@ const struct Nif *gpio_nif_get_nif(const char *nifname)
     return NULL;
 }
 
-REGISTER_NIF_COLLECTION(gpio, NULL, gpio_nif_get_nif)
+REGISTER_NIF_COLLECTION(gpio, NULL, NULL, gpio_nif_get_nif)
 #endif
 
 #endif

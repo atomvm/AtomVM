@@ -60,6 +60,7 @@ typedef struct SocketListener
 // To make thread model explicit, functions that are passed Context *ctx are
 // called from this context.
 static void socket_driver_init(GlobalContext *global);
+static void socket_driver_destroy(GlobalContext *global);
 static Context *socket_driver_create_port(GlobalContext *global, term opts);
 
 static NativeHandlerResult socket_consume_mailbox(Context *ctx);
@@ -283,6 +284,7 @@ void socket_driver_init(GlobalContext *glb)
     EventListener *socket_listener = malloc(sizeof(EventListener));
 
     struct ESP32PlatformData *platform = glb->platform_data;
+    platform->socket_listener = socket_listener;
     socket_listener->sender = netconn_events;
     socket_listener->handler = socket_events_handler;
     sys_register_listener(glb, socket_listener);
@@ -291,6 +293,21 @@ void socket_driver_init(GlobalContext *glb)
     list_init(&platform->ready_connections);
 
     TRACE("Socket driver init: done\n");
+}
+
+void socket_driver_destroy(GlobalContext *glb)
+{
+    TRACE("Destroying socket driver\n");
+
+    struct ESP32PlatformData *platform = glb->platform_data;
+    EventListener *socket_listener = platform->socket_listener;
+    sys_unregister_listener(glb, socket_listener);
+    vQueueDelete(socket_listener->sender);
+    free((void *) socket_listener);
+
+    synclist_destroy(&platform->sockets);
+
+    TRACE("Socket driver destroy: done\n");
 }
 
 static struct ListHead *socket_data_preinit(struct ESP32PlatformData *platform)
@@ -1403,6 +1420,6 @@ static Context *socket_driver_create_port(GlobalContext *global, term opts)
     return ctx;
 }
 
-REGISTER_PORT_DRIVER(socket, socket_driver_init, socket_driver_create_port)
+REGISTER_PORT_DRIVER(socket, socket_driver_init, socket_driver_destroy, socket_driver_create_port)
 
 #endif

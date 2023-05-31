@@ -471,6 +471,6 @@ static NativeHandlerResult i2cdriver_consume_mailbox(Context *ctx)
     return cmd == I2CCloseCmd ? NativeTerminate : NativeContinue;
 }
 
-REGISTER_PORT_DRIVER(i2c, i2c_driver_init, i2c_driver_create_port)
+REGISTER_PORT_DRIVER(i2c, i2c_driver_init, NULL, i2c_driver_create_port)
 
 #endif
