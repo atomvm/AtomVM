@@ -28,7 +28,6 @@ set(HEADER_FILES
     bif.h
     bitstring.h
     context.h
-    ccontext.h
     debug.h
     defaultatoms.h
     dictionary.h
