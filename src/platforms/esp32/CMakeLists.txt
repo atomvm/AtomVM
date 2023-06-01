@@ -20,6 +20,13 @@
 
 cmake_minimum_required (VERSION 3.13)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+
+# Disable SMP with esp32 socs that have only one core
+if (${IDF_TARGET} MATCHES "esp32s2|esp32c3|esp32h2")
+    message("Disabling SMP as selected target only has one core")
+    set(AVM_DISABLE_SMP YES FORCE)
+endif()
+
 project(atomvm-esp32)
 
 idf_build_get_property(c_compile_options C_COMPILE_OPTIONS)
