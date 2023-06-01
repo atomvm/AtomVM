@@ -31,6 +31,7 @@ extern "C" {
 // #define DEBUG_HEAP_ALLOC
 
 #include <stdint.h>
+#include <stdlib.h>
 #ifdef DEBUG_HEAP_ALLOC
 #include <stdio.h>
 #endif

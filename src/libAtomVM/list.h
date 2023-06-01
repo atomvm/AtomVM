@@ -21,13 +21,31 @@
 #ifndef _LIST_H_
 #define _LIST_H_
 
-#include "linkedlist.h"
+/**
+ * @brief gets a pointer to the struct that contains a certain list head
+ *
+ * @details This macro should be used to retrieve a pointer to the struct that is containing the given ListHead.
+ */
+#define GET_LIST_ENTRY(list_item, type, list_head_member) \
+    ((type *) (((char *) (list_item)) - ((unsigned long) &((type *) 0)->list_head_member)))
 
 #define LIST_FOR_EACH(item, head) \
     for (item = (head)->next; item != (head); item = item->next)
 
 #define MUTABLE_LIST_FOR_EACH(item, tmp, head) \
     for (item = (head)->next, tmp = item->next; item != (head); item = tmp, tmp = item->next)
+
+/*
+ * @brief a struct requires a ListHead member to be used with linked list manipulation functions.
+ *
+ * @detail Each struct that is going to be used as part of a linked list should have at least one ListHead,
+ * each head can be used for a different linked list.
+ */
+struct ListHead
+{
+    struct ListHead *next;
+    struct ListHead *prev;
+};
 
 static inline void list_insert(struct ListHead *new_item, struct ListHead *prev_head, struct ListHead *next_head)
 {

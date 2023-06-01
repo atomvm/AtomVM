@@ -34,7 +34,6 @@ extern "C" {
 
 #include "context.h"
 #include "globalcontext.h"
-#include "linkedlist.h"
 
 #define DEFAULT_REDUCTIONS_AMOUNT 1024
 

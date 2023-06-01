@@ -38,7 +38,6 @@ set(HEADER_FILES
     iff.h
     interop.h
     list.h
-    linkedlist.h
     listeners.h
     mailbox.h
     memory.h

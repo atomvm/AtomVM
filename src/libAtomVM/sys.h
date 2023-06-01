@@ -35,7 +35,6 @@ extern "C" {
 #endif
 
 #include "globalcontext.h"
-#include "linkedlist.h"
 #include "module.h"
 
 #include <stdint.h>
