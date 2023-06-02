@@ -75,6 +75,7 @@ GlobalContext *globalcontext_new()
     synclist_init(&glb->refc_binaries);
     synclist_init(&glb->processes_table);
     synclist_init(&glb->registered_processes);
+    synclist_init(&glb->listeners);
 
     glb->last_process_id = 0;
 
@@ -175,8 +176,13 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
         refc_binary_destroy(refc, glb);
     }
     synclist_destroy(&glb->refc_binaries);
-
     synclist_destroy(&glb->avmpack_data);
+    struct ListHead *listeners = synclist_nolock(&glb->listeners);
+    MUTABLE_LIST_FOR_EACH (item, tmp, listeners) {
+        sys_listener_destroy(item);
+    }
+    synclist_destroy(&glb->listeners);
+
     free(glb);
 }
 

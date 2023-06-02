@@ -267,15 +267,13 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
 
     uart_set_pin(uart_num, tx_pin, rx_pin, rts_pin, cts_pin);
 
-    struct ESP32PlatformData *platform = global->platform_data;
-
     struct UARTData *uart_data = malloc(sizeof(struct UARTData));
     if (IS_NULL_PTR(uart_data)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         AVM_ABORT();
     }
     uart_data->listener.handler = uart_interrupt_callback;
-    synclist_append(&platform->listeners, &uart_data->listener.listeners_list_head);
+    sys_register_listener(global, &uart_data->listener);
     uart_data->reader_process_pid = term_invalid_term();
     uart_data->reader_ref_ticks = 0;
     uart_data->uart_num = uart_num;
@@ -423,7 +421,7 @@ static void uart_driver_do_close(Context *ctx, term msg)
 
     int local_pid = term_to_local_process_id(pid);
 
-    list_remove(&uart_data->listener.listeners_list_head);
+    sys_unregister_listener(glb, &uart_data->listener);
 
     if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + REF_SIZE) != MEMORY_GC_OK)) {
         ESP_LOGE(TAG, "[uart_driver_do_close] Failed to allocate space for return value");

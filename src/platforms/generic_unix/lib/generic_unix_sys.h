@@ -23,29 +23,18 @@
 
 #include <time.h>
 
-typedef struct EventListener EventListener;
+#include "sys.h"
+#include "term_typedef.h"
 
-/**
- * Event handlers.
- * @param glb global context
- * @param listener the current listener
- * @return NULL if the current listener should be removed, listener if it
- * should be kept or another listener if it should be replaced.
- * Appending a listener is also possible by altering the ListHead.
- */
-typedef EventListener *(*event_handler_t)(GlobalContext *glb, EventListener *listener);
+typedef int listener_event_t;
 
 struct EventListener
 {
     struct ListHead listeners_list_head;
-
     event_handler_t handler;
-    int fd;
+    listener_event_t fd;
 };
 
 Context *socket_init(GlobalContext *global, term opts);
-
-void sys_register_listener(GlobalContext *global, struct EventListener *listener);
-void sys_unregister_listener(GlobalContext *global, struct EventListener *listener);
 
 #endif

@@ -26,6 +26,8 @@
 
 #include <time.h>
 
+#include "sys.h"
+
 #define REGISTER_PORT_DRIVER(NAME, INIT_CB, CREATE_CB)                \
     struct PortDriverDef NAME##_port_driver_def = {                   \
         .port_driver_name = #NAME,                                    \
@@ -61,21 +63,17 @@
 
 #define EVENT_DESCRIPTORS_COUNT 16
 
-typedef struct EventListener EventListener;
-
-typedef EventListener *(*event_handler_t)(GlobalContext *glb, EventListener *listener);
+typedef void *listener_event_t;
 
 struct EventListener
 {
     struct ListHead listeners_list_head;
-
     event_handler_t handler;
-    void *sender;
+    listener_event_t sender;
 };
 
 struct ESP32PlatformData
 {
-    struct SyncList listeners;
     struct SyncList sockets;
     struct ListHead ready_connections;
 };

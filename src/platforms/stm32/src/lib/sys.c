@@ -65,6 +65,11 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
     UNUSED(timeout_ms);
 }
 
+void sys_listener_destroy(struct ListHead *item)
+{
+    UNUSED(item);
+}
+
 void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis)
 {
     sys_clock_gettime(t);

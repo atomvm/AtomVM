@@ -47,6 +47,9 @@
 #include "soc/soc_caps.h"
 #endif
 
+// Platform uses listeners
+#include "listeners.h"
+
 #define EVENT_QUEUE_LEN 16
 
 static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts);
@@ -95,8 +98,6 @@ static inline void sys_clock_gettime(struct timespec *t)
 
 static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
 {
-    struct ESP32PlatformData *platform = glb->platform_data;
-
     void *sender = NULL;
     QueueSetMemberHandle_t event_source;
     while ((event_source = xQueueSelectFromSet(event_set, wait_ticks))) {
@@ -116,45 +117,12 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
         }
 #endif
 
-        if (UNLIKELY(synclist_is_empty(&platform->listeners))) {
-            fprintf(stderr, "warning: no listeners.\n");
-            return;
-        }
-
-        struct ListHead *listeners_list = synclist_rdlock(&platform->listeners);
-        struct ListHead *item = listeners_list;
-        struct ListHead *previous = listeners_list;
-        do {
-            struct ListHead *next = item->next;
-            EventListener *listener = GET_LIST_ENTRY(item, EventListener, listeners_list_head);
-            if (listener->sender == sender) {
-                TRACE("sys: handler found for: %p\n", (void *) sender);
-                EventListener *new_listener = listener->handler(glb, listener);
-                TRACE("sys: handler executed\n");
-                if (new_listener == NULL) {
-                    previous->next = next;
-                    next->prev = previous;
-                    item = next;
-                } else if (new_listener != listener) {
-                    // Replace listener with new_listener in the list
-                    // listener was freed by handler.
-                    previous->next = &new_listener->listeners_list_head;
-                    next->prev = &new_listener->listeners_list_head;
-                    new_listener->listeners_list_head.prev = previous;
-                    new_listener->listeners_list_head.next = next;
-                    item = &new_listener->listeners_list_head;
-                }
-                break;
-            }
-            previous = item;
-            item = next;
-        } while (item != listeners_list);
-
-        if (item == listeners_list) {
+        struct ListHead *listeners = synclist_wrlock(&glb->listeners);
+        if (!process_listener_handler(glb, sender, listeners, NULL, NULL)) {
             TRACE("sys: handler not found for: %p\n", (void *) sender);
         }
 
-        synclist_unlock(&platform->listeners);
+        synclist_unlock(&glb->listeners);
     }
 }
 
@@ -200,7 +168,6 @@ void sys_monotonic_time(struct timespec *t)
 void sys_init_platform(GlobalContext *glb)
 {
     struct ESP32PlatformData *platform = malloc(sizeof(struct ESP32PlatformData));
-    synclist_init(&platform->listeners);
     glb->platform_data = platform;
 #ifndef AVM_NO_SMP
     // Use the ESP-IDF API to change the default thread attributes
@@ -228,8 +195,6 @@ void sys_init_platform(GlobalContext *glb)
 void sys_free_platform(GlobalContext *glb)
 {
     struct ESP32PlatformData *platform = glb->platform_data;
-
-    synclist_destroy(&platform->listeners);
     free(platform);
 }
 
@@ -401,4 +366,45 @@ const struct Nif *nif_collection_resolve_nif(const char *name)
     }
 
     return NULL;
+}
+
+void event_listener_add_to_polling_set(struct EventListener *listener, GlobalContext *global)
+{
+    // Listener_event is not necessarily a queue to be added to event_set as
+    // drivers may use event_queue instead.
+    UNUSED(global);
+    UNUSED(listener);
+}
+
+void sys_register_listener(GlobalContext *global, struct EventListener *listener)
+{
+    struct ListHead *listeners = synclist_wrlock(&global->listeners);
+#ifndef AVM_NO_SMP
+    sys_signal(global);
+#endif
+    list_append(listeners, &listener->listeners_list_head);
+    synclist_unlock(&global->listeners);
+}
+
+static void listener_event_remove_from_polling_set(listener_event_t listener_event, GlobalContext *global)
+{
+    // Listener_event is not necessarily a queue to be added to event_set as
+    // drivers may use event_queue instead.
+    UNUSED(global);
+    UNUSED(listener_event);
+}
+
+void sys_unregister_listener(GlobalContext *global, struct EventListener *listener)
+{
+    synclist_wrlock(&global->listeners);
+#ifndef AVM_NO_SMP
+    sys_signal(global);
+#endif
+    list_remove(&listener->listeners_list_head);
+    synclist_unlock(&global->listeners);
+}
+
+bool event_listener_is_event(EventListener *listener, listener_event_t event)
+{
+    return listener->sender == event;
 }

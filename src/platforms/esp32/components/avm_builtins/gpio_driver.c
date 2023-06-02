@@ -343,7 +343,6 @@ static bool gpiodriver_is_gpio_attached(struct GPIOData *gpio_data, int gpio_num
 static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
 {
     GlobalContext *glb = ctx->global;
-    struct ESP32PlatformData *platform = glb->platform_data;
 
     struct GPIOData *gpio_data = ctx->platform_data;
 
@@ -399,7 +398,7 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
     list_append(&gpio_data->gpio_listeners, &data->gpio_listener_list_head);
     data->gpio = gpio_num;
     data->target_local_pid = target_pid;
-    synclist_append(&platform->listeners, &data->listener.listeners_list_head);
+    sys_register_listener(glb, &data->listener);
     data->listener.sender = data;
     data->listener.handler = gpio_interrupt_callback;
 
@@ -426,7 +425,7 @@ static term gpiodriver_remove_int(Context *ctx, term cmd)
         struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
         if (gpio_listener->gpio == gpio_num) {
             list_remove(&gpio_listener->gpio_listener_list_head);
-            list_remove(&gpio_listener->listener.listeners_list_head);
+            sys_unregister_listener(ctx->global, &gpio_listener->listener);
             free(gpio_listener);
 
             gpio_set_intr_type(gpio_num, GPIO_INTR_DISABLE);

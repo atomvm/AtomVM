@@ -285,7 +285,7 @@ void socket_driver_init(GlobalContext *glb)
     struct ESP32PlatformData *platform = glb->platform_data;
     socket_listener->sender = netconn_events;
     socket_listener->handler = socket_events_handler;
-    synclist_append(&platform->listeners, &socket_listener->listeners_list_head);
+    sys_register_listener(glb, socket_listener);
 
     synclist_init(&platform->sockets);
     list_init(&platform->ready_connections);

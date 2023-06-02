@@ -75,6 +75,7 @@ struct GlobalContext
     struct SyncList refc_binaries;
     struct SyncList processes_table;
     struct SyncList registered_processes;
+    struct SyncList listeners;
 
     int32_t last_process_id;
 
