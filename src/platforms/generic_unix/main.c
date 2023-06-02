@@ -38,18 +38,6 @@
 #include "term.h"
 #include "utils.h"
 
-static bool string_ends_with(const char *string, const char *end)
-{
-    size_t suffix_len = strlen(end);
-    size_t len = strlen(string);
-
-    if (suffix_len < len) {
-        return memcmp(string + len - suffix_len, end, suffix_len) == 0;
-    } else {
-        return false;
-    }
-}
-
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -64,7 +52,8 @@ int main(int argc, char **argv)
     const char *startup_module_name;
 
     for (int i = 1; i < argc; ++i) {
-        if (string_ends_with(argv[i], ".avm")) {
+        const char *ext = strrchr(argv[i], '.');
+        if (ext && strcmp(ext, ".avm") == 0) {
             struct AVMPackData *avmpack_data = sys_open_avm_from_file(glb, argv[i]);
             if (IS_NULL_PTR(avmpack_data)) {
                 fprintf(stderr, "Failed opening %s.\n", argv[i]);
@@ -80,7 +69,7 @@ int main(int argc, char **argv)
                 }
             }
 
-        } else if (i == 1 && string_ends_with(argv[i], ".beam")) {
+        } else if (i == 1 && ext && (strcmp(ext, ".beam") == 0)) {
             MappedFile *mapped_file = mapped_file_open_beam(argv[i]);
             if (!iff_is_valid_beam(mapped_file->mapped)) {
                 fprintf(stderr, "%s has invalid AVM Pack format.\n", argv[i]);
