@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added functions `esp:sleep_enable_ext0_wakeup/2` and `esp:sleep_enable_ext1_wakeup/2.`
 - Added support for FP opcodes 94-102 thus removing the need for `AVM_DISABLE_FP=On` with OTP-22+
 - Added support for stacktraces
+- Added support for code:load_abs/1, code:load_binary/3
+- Added support for loading / closing AVMPacks at runtime
 
 ### Fixed
 - Fixed issue with formatting integers with io:format() on STM32 platform
