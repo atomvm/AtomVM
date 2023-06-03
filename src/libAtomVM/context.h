@@ -33,7 +33,7 @@ extern "C" {
 #endif
 
 #include "globalcontext.h"
-#include "linkedlist.h"
+#include "list.h"
 #include "mailbox.h"
 #include "smp.h"
 #include "term.h"

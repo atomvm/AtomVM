@@ -28,7 +28,6 @@ set(HEADER_FILES
     bif.h
     bitstring.h
     context.h
-    ccontext.h
     debug.h
     defaultatoms.h
     dictionary.h
@@ -38,7 +37,6 @@ set(HEADER_FILES
     iff.h
     interop.h
     list.h
-    linkedlist.h
     listeners.h
     mailbox.h
     memory.h

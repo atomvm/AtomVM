@@ -35,7 +35,7 @@ extern "C" {
 #include <stdint.h>
 
 #include "atom.h"
-#include "linkedlist.h"
+#include "list.h"
 #include "smp.h"
 #include "synclist.h"
 #include "term.h"
