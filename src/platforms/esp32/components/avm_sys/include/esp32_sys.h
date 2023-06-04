@@ -22,6 +22,7 @@
 #define _ESP32_SYS_H_
 
 #include "freertos/FreeRTOS.h"
+#include <esp_partition.h>
 #include <freertos/queue.h>
 
 #include <time.h>
@@ -123,5 +124,8 @@ void socket_init(Context *ctx, term opts);
 void port_driver_init_all(GlobalContext *global);
 void nif_collection_init_all(GlobalContext *global);
 const struct Nif *nif_collection_resolve_nif(const char *name);
+
+const void *esp32_sys_mmap_partition(
+    const char *partition_name, spi_flash_mmap_handle_t *handle, int *size);
 
 #endif

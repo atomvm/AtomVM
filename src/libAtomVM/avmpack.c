@@ -127,3 +127,30 @@ void *avmpack_fold(void *accum, const void *avmpack_binary, avmpack_fold_fun fol
 
     return accum;
 }
+
+static void in_memory_avm_pack_destructor(struct AVMPackData *obj, GlobalContext *global);
+
+const struct AVMPackInfo in_memory_avm_pack_info = {
+    .destructor = in_memory_avm_pack_destructor
+};
+
+static void in_memory_avm_pack_destructor(struct AVMPackData *obj, GlobalContext *global)
+{
+    UNUSED(global);
+
+    free((void *) obj->data);
+    free(obj);
+}
+
+static void const_avm_pack_destructor(struct AVMPackData *obj, GlobalContext *global);
+
+const struct AVMPackInfo const_avm_pack_info = {
+    .destructor = const_avm_pack_destructor
+};
+
+static void const_avm_pack_destructor(struct AVMPackData *obj, GlobalContext *global)
+{
+    UNUSED(global);
+
+    free(obj);
+}

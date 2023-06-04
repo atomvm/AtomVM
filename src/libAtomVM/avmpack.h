@@ -30,18 +30,58 @@
 extern "C" {
 #endif
 
+#include "globalcontext.h"
 #include "list.h"
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define END_OF_FILE 0
 #define BEAM_START_FLAG 1
 #define BEAM_CODE_FLAG 2
 
+struct AVMPackData;
+
+struct AVMPackInfo
+{
+    void (*destructor)(struct AVMPackData *obj, GlobalContext *global);
+};
+
 struct AVMPackData
 {
+    const struct AVMPackInfo *obj_info;
     struct ListHead avmpack_head;
+    bool in_use;
+    int name_atom_id;
     const void *data;
 };
+
+static inline void avmpack_data_init(struct AVMPackData *avm_pack_data, const struct AVMPackInfo *info)
+{
+    avm_pack_data->obj_info = info;
+    avm_pack_data->in_use = false;
+    avm_pack_data->name_atom_id = 0;
+    avm_pack_data->data = NULL;
+}
+
+static inline void avmpack_data_destroy(struct AVMPackData *avm_pack_data, GlobalContext *global)
+{
+    avm_pack_data->obj_info->destructor(avm_pack_data, global);
+}
+
+struct InMemoryAVMPack
+{
+    struct AVMPackData base;
+};
+
+extern const struct AVMPackInfo in_memory_avm_pack_info;
+
+struct ConstAVMPack
+{
+    struct AVMPackData base;
+};
+
+extern const struct AVMPackInfo const_avm_pack_info;
 
 /**
  * @brief callback function for AVMPack section fold.

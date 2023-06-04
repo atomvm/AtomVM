@@ -122,14 +122,15 @@ int main()
         return 1;
     }
 
-    struct AVMPackData *avmpack_data = malloc(sizeof(struct AVMPackData));
+    struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
     if (IS_NULL_PTR(avmpack_data)) {
         fprintf(stderr, "Memory error: Cannot allocate AVMPackData.\n");
         return 1;
     }
-    avmpack_data->data = flashed_avm;
-    list_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
-    glb->avmpack_platform_data = NULL;
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
+    avmpack_data->base.data = flashed_avm;
+    avmpack_data->base.in_use = true;
+    list_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
 
     Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
     globalcontext_insert_module(glb, mod);

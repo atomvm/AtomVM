@@ -90,7 +90,6 @@ struct GlobalContext
     int loaded_modules_count;
 
     struct SyncList avmpack_data;
-    const void **avmpack_platform_data;
 
     struct TimerList timer_list;
 #ifndef AVM_NO_SMP

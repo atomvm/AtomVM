@@ -45,6 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for `erlang:memory(binary)`
 - Added support for callbacks on SNTP updates
 - Multithreading support (SMP)
+- Added support for code:load_abs/1, code:load_binary/3
+- Added support for loading / closing AVMPacks at runtime
 
 ### Fixed
 - Fixed issue with formatting integers with io:format() on STM32 platform

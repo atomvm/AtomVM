@@ -130,12 +130,12 @@ term avm_test_case(const char *test_module)
 
     TEST_ASSERT(avmpack_is_valid(main_avm, size) != 0);
 
-    struct AVMPackData *avmpack_data = malloc(sizeof(struct AVMPackData));
+    struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
     TEST_ASSERT(avmpack_data != NULL);
 
-    avmpack_data->data = main_avm;
-    synclist_append(&glb->avmpack_data, &avmpack_data->avmpack_head);
-    glb->avmpack_platform_data = NULL;
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
+    avmpack_data->base.data = main_avm;
+    synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
 
     Module *mod = sys_load_module(glb, test_module);
     TEST_ASSERT(mod != NULL);

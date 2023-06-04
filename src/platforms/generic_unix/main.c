@@ -1,7 +1,7 @@
 /*
  * This file is part of AtomVM.
  *
- * Copyright 2017 Davide Bettio <davide@uninstall.it>
+ * Copyright 2017-2023 Davide Bettio <davide@uninstall.it>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
  */
 
 #include <libgen.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,15 +34,9 @@
 #include "iff.h"
 #include "mapped_file.h"
 #include "module.h"
+#include "sys.h"
 #include "term.h"
 #include "utils.h"
-
-void close_mapped_files(MappedFile **mapped_file, int len)
-{
-    for (int i = 0; i < len; ++i) {
-        mapped_file_close(mapped_file[i]);
-    }
-}
 
 int main(int argc, char **argv)
 {
@@ -50,67 +45,52 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    int num_mapped_files = argc - 1;
-    MappedFile **mapped_file = malloc(num_mapped_files * sizeof(MappedFile *));
-    if (UNLIKELY(IS_NULL_PTR(mapped_file))) {
-        fprintf(stderr, "Memory error:  Unable to allocate space for %d mapped files\n", num_mapped_files);
-        return EXIT_FAILURE;
-    }
-    for (int i = 0; i < num_mapped_files; ++i) {
-        mapped_file[i] = mapped_file_open_beam(argv[i + 1]);
-        if (IS_NULL_PTR(mapped_file[i])) {
-            fprintf(stderr, "Failed to map file %s\n", argv[i + 1]);
-            return EXIT_FAILURE;
-        }
-    }
-
     GlobalContext *glb = globalcontext_new();
 
     const void *startup_beam = NULL;
     uint32_t startup_beam_size;
     const char *startup_module_name;
 
-    if (argc == 2 && iff_is_valid_beam(mapped_file[0]->mapped)) {
-        glb->avmpack_platform_data = NULL;
-        startup_module_name = basename(argv[1]);
-        startup_beam = mapped_file[0]->mapped;
-        startup_beam_size = mapped_file[0]->size;
-    } else {
-        glb->avmpack_platform_data = (const void **) mapped_file;
-        for (int i = 0; i < num_mapped_files; ++i) {
-            if (avmpack_is_valid(mapped_file[i]->mapped, mapped_file[i]->size)) {
-                struct AVMPackData *avmpack_data = malloc(sizeof(struct AVMPackData));
-                if (IS_NULL_PTR(avmpack_data)) {
-                    fprintf(stderr, "Memory error: Cannot allocate AVMPackData.\n");
-                    close_mapped_files(mapped_file, i + 1);
-                    return EXIT_FAILURE;
-                }
-                avmpack_data->data = mapped_file[i]->mapped;
-                synclist_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
-
-                if (IS_NULL_PTR(startup_beam)) {
-                    avmpack_find_section_by_flag(mapped_file[i]->mapped, 1, &startup_beam, &startup_beam_size, &startup_module_name);
-                }
-            } else if (i == 0 && iff_is_valid_beam(mapped_file[i]->mapped)) {
-                glb->avmpack_platform_data++;
-                startup_module_name = basename(argv[1]);
-                startup_beam = mapped_file[0]->mapped;
-                startup_beam_size = mapped_file[0]->size;
-            } else if (i == 0) {
-                fprintf(stderr, "%s is not an AVM or a BEAM file.\n", argv[1 + i]);
-                close_mapped_files(mapped_file, i + 1);
-                return EXIT_FAILURE;
-            } else {
-                fprintf(stderr, "%s is not an AVM file.\n", argv[1 + i]);
-                close_mapped_files(mapped_file, i + 1);
+    for (int i = 1; i < argc; ++i) {
+        const char *ext = strrchr(argv[i], '.');
+        if (ext && strcmp(ext, ".avm") == 0) {
+            struct AVMPackData *avmpack_data = sys_open_avm_from_file(glb, argv[i]);
+            if (IS_NULL_PTR(avmpack_data)) {
+                fprintf(stderr, "Failed opening %s.\n", argv[i]);
                 return EXIT_FAILURE;
             }
+            synclist_append(&glb->avmpack_data, &avmpack_data->avmpack_head);
+
+            if (IS_NULL_PTR(startup_beam)) {
+                avmpack_find_section_by_flag(avmpack_data->data, 1, &startup_beam, &startup_beam_size, &startup_module_name);
+
+                if (startup_beam) {
+                    avmpack_data->in_use = true;
+                }
+            }
+
+        } else if (i == 1 && ext && (strcmp(ext, ".beam") == 0)) {
+            MappedFile *mapped_file = mapped_file_open_beam(argv[i]);
+            if (!iff_is_valid_beam(mapped_file->mapped)) {
+                fprintf(stderr, "%s has invalid AVM Pack format.\n", argv[i]);
+                return EXIT_FAILURE;
+            }
+            startup_module_name = basename(argv[1]);
+            startup_beam = mapped_file->mapped;
+            startup_beam_size = mapped_file->size;
+
+        } else if (i == 1) {
+            fprintf(stderr, "%s is not an AVM or a BEAM file.\n", argv[i]);
+            return EXIT_FAILURE;
+
+        } else {
+            fprintf(stderr, "%s is not an AVM file.\n", argv[i]);
+            return EXIT_FAILURE;
         }
     }
 
     if (IS_NULL_PTR(startup_beam)) {
         fprintf(stderr, "Unable to locate entrypoint.\n");
-        close_mapped_files(mapped_file, num_mapped_files);
         return EXIT_FAILURE;
     }
 
@@ -141,6 +121,6 @@ int main(int argc, char **argv)
     context_destroy(ctx);
     globalcontext_destroy(glb);
     module_destroy(mod);
-    close_mapped_files(mapped_file, num_mapped_files);
+
     return status;
 }

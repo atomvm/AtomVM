@@ -155,12 +155,17 @@ static term nif_erlang_memory(Context *ctx, int argc, term argv[]);
 static term nif_erlang_monitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_unlink(Context *ctx, int argc, term argv[]);
+static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[]);
+static term nif_atomvm_add_avm_pack_file(Context *ctx, int argc, term argv[]);
+static term nif_atomvm_close_avm_pack(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[]);
 static term nif_console_print(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode(Context *ctx, int argc, term argv[]);
 static term nif_base64_decode(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode_to_string(Context *ctx, int argc, term argv[]);
 static term nif_base64_decode_to_string(Context *ctx, int argc, term argv[]);
+static term nif_code_load_abs(Context *ctx, int argc, term argv[]);
+static term nif_code_load_binary(Context *ctx, int argc, term argv[]);
 static term nif_maps_next(Context *ctx, int argc, term argv[]);
 
 #define DECLARE_MATH_NIF_FUN(moniker) \
@@ -627,6 +632,21 @@ static const struct Nif raise_nif =
     .nif_ptr = nif_erlang_raise
 };
 
+static const struct Nif atomvm_add_avm_pack_binary_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_add_avm_pack_binary
+};
+static const struct Nif atomvm_add_avm_pack_file_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_add_avm_pack_file
+};
+static const struct Nif atomvm_close_avm_pack_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_close_avm_pack
+};
 static const struct Nif atomvm_read_priv_nif =
 {
     .base.type = NIFFunctionType,
@@ -656,6 +676,16 @@ static const struct Nif base64_decode_to_string_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_base64_decode_to_string
+};
+static const struct Nif code_load_abs_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_load_abs
+};
+static const struct Nif code_load_binary_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_load_binary
 };
 static const struct Nif maps_next_nif =
 {
@@ -3249,6 +3279,162 @@ static term nif_erlang_group_leader(Context *ctx, int argc, term argv[])
     }
 }
 
+struct RefcBinaryAVMPack
+{
+    struct AVMPackData base;
+    struct RefcBinary *refc;
+};
+
+static void refc_binary_avm_pack_destructor(struct AVMPackData *obj, GlobalContext *global);
+
+static const struct AVMPackInfo refc_binary_avm_pack_info = {
+    .destructor = refc_binary_avm_pack_destructor
+};
+
+static void refc_binary_avm_pack_destructor(struct AVMPackData *obj, GlobalContext *global)
+{
+    struct RefcBinaryAVMPack *refc_bin_avm = CONTAINER_OF(obj, struct RefcBinaryAVMPack, base);
+    refc_binary_decrement_refcount(refc_bin_avm->refc, global);
+    free(obj);
+}
+
+// AtomVM extension
+static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term binary = argv[0];
+    if (!term_is_binary(binary)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    term opts = argv[1];
+    if (!term_is_list(argv[1])) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    size_t bin_size = term_binary_size(binary);
+
+    if (UNLIKELY(!avmpack_is_valid(term_binary_data(binary), bin_size))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    struct AVMPackData *avmpack_data = NULL;
+    if (term_is_refc_binary(binary)) {
+        if (!term_refc_binary_is_const(binary)) {
+            struct RefcBinaryAVMPack *refc_bin_avm = malloc(sizeof(struct RefcBinaryAVMPack));
+            if (IS_NULL_PTR(refc_bin_avm)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            avmpack_data_init(&refc_bin_avm->base, &refc_binary_avm_pack_info);
+            refc_bin_avm->base.data = (const uint8_t *) term_binary_data(binary);
+            struct RefcBinary *refc_bin = (struct RefcBinary *) term_refc_binary_ptr(binary);
+            refc_binary_increment_refcount(refc_bin);
+            refc_bin_avm->refc = refc_bin;
+
+            avmpack_data = &refc_bin_avm->base;
+
+        } else {
+            struct ConstAVMPack *const_avm = malloc(sizeof(struct ConstAVMPack));
+            if (IS_NULL_PTR(const_avm)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            avmpack_data_init(&const_avm->base, &const_avm_pack_info);
+            const_avm->base.data = (const uint8_t *) term_binary_data(binary);
+
+            avmpack_data = &const_avm->base;
+        }
+
+    } else {
+        uint8_t *allocated_data = malloc(bin_size);
+        if (IS_NULL_PTR(allocated_data)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        memcpy(allocated_data, term_binary_data(binary), bin_size);
+
+        struct InMemoryAVMPack *in_memory_avm = malloc(sizeof(struct InMemoryAVMPack));
+        if (IS_NULL_PTR(in_memory_avm)) {
+            free(allocated_data);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        avmpack_data_init(&in_memory_avm->base, &in_memory_avm_pack_info);
+        in_memory_avm->base.data = (const uint8_t *) allocated_data;
+
+        avmpack_data = &in_memory_avm->base;
+    }
+
+    term name = interop_kv_get_value_default(opts, ATOM_STR("\x4", "name"), UNDEFINED_ATOM, ctx->global);
+    if (!term_is_atom(name)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (name != UNDEFINED_ATOM) {
+        avmpack_data->name_atom_id = term_to_atom_index(name);
+    }
+
+    synclist_append(&ctx->global->avmpack_data, &avmpack_data->avmpack_head);
+
+    return OK_ATOM;
+}
+
+// AtomVM extension
+static term nif_atomvm_add_avm_pack_file(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term abs_term = argv[0];
+
+    int ok;
+    char *abs = interop_list_to_string(abs_term, &ok);
+    if (UNLIKELY(!ok)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    struct AVMPackData *avmpack_data = sys_open_avm_from_file(ctx->global, abs);
+    if (IS_NULL_PTR(avmpack_data)) {
+        free(abs);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    synclist_append(&ctx->global->avmpack_data, &avmpack_data->avmpack_head);
+
+    return OK_ATOM;
+}
+
+static term nif_atomvm_close_avm_pack(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term name = argv[0];
+    if (UNLIKELY(!term_is_atom(name))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int name_atom_id = term_to_atom_index(name);
+
+    struct ListHead *open_avm_packs = synclist_wrlock(&ctx->global->avmpack_data);
+    struct ListHead *item;
+    struct ListHead *tmp;
+    bool found = false;
+    MUTABLE_LIST_FOR_EACH (item, tmp, open_avm_packs) {
+        struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
+        if (avmpack_data->name_atom_id == name_atom_id) {
+            if (UNLIKELY(avmpack_data->in_use)) {
+                return ERROR_ATOM;
+            }
+            found = true;
+            list_remove(&avmpack_data->avmpack_head);
+            avmpack_data_destroy(avmpack_data, ctx->global);
+        }
+    }
+    synclist_unlock(&ctx->global->avmpack_data);
+
+    if (UNLIKELY(!found)) {
+        return ERROR_ATOM;
+    }
+
+    return OK_ATOM;
+}
+
 // AtomVM extension
 static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
 {
@@ -3294,17 +3480,23 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
     term result = UNDEFINED_ATOM;
     struct ListHead *avmpack_data = synclist_rdlock(&glb->avmpack_data);
     LIST_FOR_EACH (item, avmpack_data) {
-        struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
+        struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
+        bool prev_in_use = avmpack_data->in_use;
+        avmpack_data->in_use = true;
         if (avmpack_find_section_by_name(avmpack_data->data, complete_path, &bin_data, &size)) {
             uint32_t file_size = READ_32_ALIGNED((uint32_t *) bin_data);
             free(complete_path);
             complete_path = NULL;
             if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFC_BINARY_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                avmpack_data->in_use = prev_in_use;
                 synclist_unlock(&glb->avmpack_data);
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
+            prev_in_use = true;
             result = term_from_const_binary(((uint8_t *) bin_data) + sizeof(uint32_t), file_size, &ctx->heap, ctx->global);
             break;
+        } else {
+            avmpack_data->in_use = prev_in_use;
         }
     }
     synclist_unlock(&glb->avmpack_data);
@@ -3646,6 +3838,99 @@ static term nif_base64_encode_to_string(Context *ctx, int argc, term argv[])
 static term nif_base64_decode_to_string(Context *ctx, int argc, term argv[])
 {
     return base64_decode(ctx, argc, argv, false);
+}
+
+static term nif_code_load_abs(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term abs_term = argv[0];
+
+    int ok;
+    char *abs = interop_list_to_string(abs_term, &ok);
+    if (UNLIKELY(!ok)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    char *path = malloc(strlen(abs) + strlen(".beam") + 1);
+    strcpy(path, abs);
+    strcat(path, ".beam");
+
+    Module *new_module = sys_load_module_from_file(ctx->global, path);
+    free(abs);
+    free(path);
+    if (IS_NULL_PTR(new_module)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    if (UNLIKELY(globalcontext_insert_module(ctx->global, new_module) < 0)) {
+        return ERROR_ATOM;
+    }
+
+    term module_name = module_get_atom_term_by_id(new_module, 1);
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, MODULE_ATOM);
+    term_put_tuple_element(result, 1, module_name);
+
+    return result;
+}
+
+static term nif_code_load_binary(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term module_name = argv[0];
+    if (UNLIKELY(!term_is_atom(module_name))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    term file_name = argv[1];
+    UNUSED(file_name);
+
+    term binary = argv[2];
+    if (UNLIKELY(!term_is_binary(binary))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    const uint8_t *data;
+    size_t bin_size = term_binary_size(binary);
+    if (term_is_refc_binary(binary)) {
+        if (!term_refc_binary_is_const(binary)) {
+            // TODO: track this and decrement when we free the Module
+            refc_binary_increment_refcount((struct RefcBinary *) term_refc_binary_ptr(binary));
+        }
+        data = (const uint8_t *) term_binary_data(binary);
+    } else {
+        uint8_t *allocated_data = malloc(bin_size);
+        if (IS_NULL_PTR(allocated_data)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        memcpy(allocated_data, term_binary_data(binary), bin_size);
+        data = allocated_data;
+    }
+
+    Module *new_module = module_new_from_iff_binary(ctx->global, data, bin_size);
+    if (IS_NULL_PTR(new_module)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    new_module->module_platform_data = NULL;
+
+    if (UNLIKELY(globalcontext_insert_module(ctx->global, new_module) < 0)) {
+        return ERROR_ATOM;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, MODULE_ATOM);
+    term_put_tuple_element(result, 1, module_name);
+
+    return result;
 }
 
 static term nif_maps_next(Context *ctx, int argc, term argv[])

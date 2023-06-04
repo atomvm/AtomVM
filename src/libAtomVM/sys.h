@@ -165,6 +165,8 @@ void sys_signal(GlobalContext *glb);
  */
 void sys_time(struct timespec *t);
 
+struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *path);
+
 /**
  * @brief gets monotonic time
  *
@@ -181,6 +183,8 @@ void sys_monotonic_time(struct timespec *t);
  * @param module_name the name of the BEAM file (e.g. "mymodule.beam").
  */
 Module *sys_load_module(GlobalContext *global, const char *module_name);
+
+Module *sys_load_module_from_file(GlobalContext *global, const char *path);
 
 /**
  * @brief Create a port driver

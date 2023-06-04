@@ -479,6 +479,12 @@ struct Test tests[] = {
     TEST_CASE_ATOMVM_ONLY(test_regecho_driver, 11),
     TEST_CASE_ATOMVM_ONLY(test_send_nif_and_echo, 11),
 
+    TEST_CASE_EXPECTED(test_code_load_binary, 24),
+    TEST_CASE_EXPECTED(test_code_load_abs, 24),
+    TEST_CASE_EXPECTED(test_add_avm_pack_binary, 24),
+    TEST_CASE_EXPECTED(test_add_avm_pack_file, 24),
+    TEST_CASE(test_close_avm_pack),
+
     // noisy tests, keep them at the end
     TEST_CASE_EXPECTED(spawn_opt_monitor_normal, 1),
     TEST_CASE_EXPECTED(spawn_opt_link_normal, 1),
@@ -507,7 +513,6 @@ static int test_atom(struct Test *test)
     assert(beam_file != NULL);
 
     GlobalContext *glb = globalcontext_new();
-    glb->avmpack_platform_data = NULL;
     Module *mod = module_new_from_iff_binary(glb, beam_file->mapped, beam_file->size);
     if (IS_NULL_PTR(mod)) {
         fprintf(stderr, "Cannot load startup module: %s\n", test->test_module);

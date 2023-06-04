@@ -133,6 +133,8 @@ static const char *const port_atom = "\x4" "port";
 
 static const char *const info_atom = "\x4" "info";
 
+static const char *const module_atom = "\x06" "module";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -249,6 +251,8 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, port_atom) == PORT_ATOM_INDEX;
 
     ok &= globalcontext_insert_atom(glb, info_atom) == INFO_ATOM_INDEX;
+    
+    ok &= globalcontext_insert_atom(glb, module_atom) == MODULE_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();

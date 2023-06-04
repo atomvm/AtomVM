@@ -39,6 +39,8 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <esp_log.h>
+#include <esp_partition.h>
 #include <limits.h>
 #include <stdint.h>
 #include <sys/socket.h>
@@ -51,6 +53,8 @@
 #include "listeners.h"
 
 #define EVENT_QUEUE_LEN 16
+
+#define TAG "sys"
 
 static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts);
 
@@ -204,6 +208,133 @@ uint64_t sys_millis(GlobalContext *glb)
     return usec / 1000UL;
 }
 
+const void *esp32_sys_mmap_partition(const char *partition_name, spi_flash_mmap_handle_t *handle, int *size)
+{
+    const esp_partition_t *partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
+        ESP_PARTITION_SUBTYPE_ANY, partition_name);
+    if (!partition) {
+        ESP_LOGW(TAG, "AVM partition not found for %s", partition_name);
+        *size = 0;
+        return NULL;
+    } else {
+        *size = partition->size;
+    }
+
+    const void *mapped_memory;
+    if (esp_partition_mmap(partition, 0, partition->size, SPI_FLASH_MMAP_DATA, &mapped_memory,
+            handle)
+        != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to map BEAM partition for %s", partition_name);
+        return NULL;
+    }
+    ESP_LOGI(TAG, "Loaded BEAM partition %s at address 0x%x (size=%i bytes)", partition_name,
+        partition->address, partition->size);
+
+    return mapped_memory;
+}
+
+struct ESP32PartAVMPack
+{
+    struct AVMPackData base;
+    spi_flash_mmap_handle_t part_handle;
+};
+
+static void esp32_part_avm_pack_destructor(struct AVMPackData *obj, GlobalContext *global);
+
+static const struct AVMPackInfo esp32_part_avm_pack_info = {
+    .destructor = esp32_part_avm_pack_destructor
+};
+
+static void esp32_part_avm_pack_destructor(struct AVMPackData *obj, GlobalContext *global)
+{
+    UNUSED(global);
+
+    struct ESP32PartAVMPack *part_avm = CONTAINER_OF(obj, struct ESP32PartAVMPack, base);
+    spi_flash_munmap(part_avm->part_handle);
+    free(obj);
+}
+
+struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *path)
+{
+    TRACE("sys_open_avm_from_file: Going to open: %s\n", path);
+
+    const char *const parts_by_name = "/dev/partition/by-name/";
+    int parts_by_name_len = strlen(parts_by_name);
+
+    struct AVMPackData *avmpack_data = NULL;
+    if (!strncmp(path, parts_by_name, parts_by_name_len)) {
+        spi_flash_mmap_handle_t part_handle;
+        int size;
+        const char *part_name = path + parts_by_name_len;
+        const void *part_data = esp32_sys_mmap_partition(part_name, &part_handle, &size);
+        if (IS_NULL_PTR(part_data)) {
+            return NULL;
+        }
+        if (UNLIKELY(!avmpack_is_valid(part_data, size))) {
+            return NULL;
+        }
+
+        struct ESP32PartAVMPack *part_avm = malloc(sizeof(struct ESP32PartAVMPack));
+        if (IS_NULL_PTR(avmpack_data)) {
+            // use esp_partition_munmap
+            return NULL;
+        }
+        avmpack_data_init(&part_avm->base, &esp32_part_avm_pack_info);
+        part_avm->base.data = part_data;
+        part_avm->part_handle = part_handle;
+        avmpack_data = &part_avm->base;
+
+    } else {
+        struct stat file_stats;
+        if (UNLIKELY(stat(path, &file_stats) < 0)) {
+            return NULL;
+        }
+        // check int max
+        int size = file_stats.st_size;
+
+        void *file_data = malloc(size);
+        if (IS_NULL_PTR(file_data)) {
+            return NULL;
+        }
+
+        FILE *avm_file = fopen(path, "r");
+        if (UNLIKELY(!avm_file)) {
+            free(file_data);
+            return NULL;
+        }
+
+        int bytes_read = fread(file_data, 1, size, avm_file);
+        fclose(avm_file);
+
+        if (UNLIKELY(bytes_read != size)) {
+            free(file_data);
+            return NULL;
+        }
+
+        if (UNLIKELY(!avmpack_is_valid(file_data, size))) {
+            free(file_data);
+            return NULL;
+        }
+
+        struct InMemoryAVMPack *in_memory_avm = malloc(sizeof(struct InMemoryAVMPack));
+        if (IS_NULL_PTR(avmpack_data)) {
+            free(file_data);
+            return NULL;
+        }
+        avmpack_data_init(&in_memory_avm->base, &in_memory_avm_pack_info);
+        in_memory_avm->base.data = file_data;
+        avmpack_data = &in_memory_avm->base;
+    }
+
+    return avmpack_data;
+}
+
+Module *sys_load_module_from_file(GlobalContext *global, const char *path)
+{
+    // TODO
+    return NULL;
+}
+
 Module *sys_load_module(GlobalContext *global, const char *module_name)
 {
     const void *beam_module = NULL;
@@ -212,7 +343,8 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
     struct ListHead *item;
     struct ListHead *avmpack_data = synclist_rdlock(&global->avmpack_data);
     LIST_FOR_EACH (item, avmpack_data) {
-        struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
+        struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
+        avmpack_data->in_use = true;
         if (avmpack_find_section_by_name(avmpack_data->data, module_name, &beam_module, &beam_module_size)) {
             break;
         }
