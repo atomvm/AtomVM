@@ -546,7 +546,8 @@ static void listener_event_remove_from_polling_set(listener_event_t listener_eve
 
 void sys_unregister_listener(GlobalContext *global, struct EventListener *listener)
 {
-    synclist_wrlock(&global->listeners);
+    struct ListHead *dummy = synclist_wrlock(&global->listeners);
+    UNUSED(dummy);
 #ifndef AVM_NO_SMP
     sys_signal(global);
 #endif
