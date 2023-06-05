@@ -159,7 +159,6 @@ term avm_test_case(const char *test_module)
     port_driver_destroy_all(glb);
 
     globalcontext_destroy(glb);
-    free(avmpack_data);
 
     return ret_value;
 }
