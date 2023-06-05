@@ -23,6 +23,7 @@ project(examples_erlang)
 include(BuildErlang)
 
 add_subdirectory(esp32)
+add_subdirectory(rp2040)
 
 pack_runnable(hello_world hello_world eavmlib)
 pack_runnable(udp_server udp_server estdlib eavmlib)

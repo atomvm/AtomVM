@@ -34,7 +34,9 @@
 
 #include "trace.h"
 
+#ifndef MAX
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
+#endif
 
 static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, const term *mem_end, term **new_heap_pos, term *mso_list, bool move);
 static term memory_shallow_copy_term(HeapFragment *old_fragment, term t, term **new_heap, bool move);

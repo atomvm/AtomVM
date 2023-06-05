@@ -83,6 +83,14 @@ macro(pack_lib avm_name)
         add_dependencies(${avm_name} ${avm_name}_main)
     endif()
 
+    add_custom_target(
+        ${avm_name}.uf2 ALL
+        COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}.uf2 -s 0x10080000 ${avm_name}.avm
+        COMMENT "Creating UF2 file ${avm_name}.uf2"
+        VERBATIM
+    )
+    add_dependencies(${avm_name}.uf2 ${avm_name})
+
 endmacro()
 
 
@@ -151,5 +159,47 @@ macro(pack_test test_avm_name)
         VERBATIM
     )
     add_dependencies(${test_avm_name} ${ARCHIVE_TARGETS} PackBEAM)
+
+endmacro()
+
+macro(pack_uf2 avm_name main)
+
+    add_custom_command(
+        OUTPUT ${main}.beam
+        COMMAND erlc -I ${CMAKE_SOURCE_DIR}/libs/include ${CMAKE_CURRENT_SOURCE_DIR}/${main}.erl
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${main}.erl
+        COMMENT "Compiling ${main}.erl"
+        VERBATIM
+    )
+
+    add_custom_target(
+        ${avm_name}_main
+        DEPENDS ${main}.beam
+    )
+
+    foreach(archive_name ${ARGN})
+        if(NOT ${archive_name} STREQUAL "exavmlib")
+            set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
+        else()
+            set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/lib/${archive_name}.avm)
+        endif()
+        set(ARCHIVE_TARGETS ${ARCHIVE_TARGETS} ${archive_name})
+    endforeach()
+
+    add_custom_target(
+        ${avm_name}.avm ALL
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${avm_name}.avm ${main}.beam ${ARCHIVES}
+        COMMENT "Packing runnable ${avm_name}.avm"
+        VERBATIM
+    )
+    add_dependencies(${avm_name}.avm ${avm_name}_main ${ARCHIVE_TARGETS} PackBEAM)
+
+    add_custom_target(
+        ${avm_name}.uf2 ALL
+        COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}.uf2 -s 0x100A0000 ${avm_name}.avm
+        COMMENT "Creating UF2 file ${avm_name}.uf2"
+        VERBATIM
+    )
+    add_dependencies(${avm_name}.uf2 ${avm_name}.avm uf2tool)
 
 endmacro()

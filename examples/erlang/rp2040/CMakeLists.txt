@@ -1,7 +1,7 @@
 #
 # This file is part of AtomVM.
 #
-# Copyright 2018-2021 Fred Dushin <fred@dushin.net>
+# Copyright 2022 Paul Guyot <pguyot@kallisys.net>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,28 +18,9 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-project(eavmlib)
+project(examples_erlang_rp2040)
 
 include(BuildErlang)
 
-set(ERLANG_MODULES
-    atomvm
-    console
-    esp
-    gpio
-    i2c
-    http_server
-    json_encoder
-    ledc
-    logger
-    network
-    network_fsm
-    pico
-    port
-    spi
-    timer_manager
-    timestamp_util
-    uart
-)
-
-pack_archive(eavmlib ${ERLANG_MODULES})
+pack_uf2(hello_pico hello_pico eavmlib estdlib)
+pack_uf2(pico_rtc pico_rtc eavmlib estdlib)

@@ -1,7 +1,7 @@
 #
 # This file is part of AtomVM.
 #
-# Copyright 2018-2021 Fred Dushin <fred@dushin.net>
+# Copyright 2022 Paul Guyot <pguyot@kallisys.net>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,28 +18,19 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-project(eavmlib)
+cmake_minimum_required (VERSION 3.13)
+project (UF2Tool)
 
-include(BuildErlang)
+include(${CMAKE_SOURCE_DIR}/CMakeModules/GetVersion.cmake)
 
-set(ERLANG_MODULES
-    atomvm
-    console
-    esp
-    gpio
-    i2c
-    http_server
-    json_encoder
-    ledc
-    logger
-    network
-    network_fsm
-    pico
-    port
-    spi
-    timer_manager
-    timestamp_util
-    uart
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/uf2tool.erl ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/uf2tool @ONLY)
+file(COPY ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/uf2tool
+    DESTINATION ${CMAKE_CURRENT_BINARY_DIR}
+    FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
 )
 
-pack_archive(eavmlib ${ERLANG_MODULES})
+add_custom_target(
+    uf2tool ALL
+    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_BINARY_DIR}/uf2tool
+    VERBATIM
+)
