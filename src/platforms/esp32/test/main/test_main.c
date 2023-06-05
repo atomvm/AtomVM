@@ -134,6 +134,7 @@ term avm_test_case(const char *test_module)
     TEST_ASSERT(avmpack_data != NULL);
 
     avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
+    avmpack_data->base.in_use = true;
     avmpack_data->base.data = main_avm;
     synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
 
