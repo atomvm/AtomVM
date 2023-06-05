@@ -136,7 +136,9 @@ jobs:
         cd build &&
         cmake .. ${{ matrix.cmake_opts }} &&
         cp ../build_tests/tests/erlang_tests/*.beam tests/erlang_tests/ &&
-        cp ../build_tests/tests/erlang_tests/code_load/*.beam tests/erlang_tests/code_load/ &&
+        cp ../build_tests/tests/erlang_tests/code_load/*.{avm,beam,hrl} tests/erlang_tests/code_load/ &&
+        mkdir -p tests/erlang_tests/code_load/beams/ &&
+        cp ../build_tests/tests/erlang_tests/code_load/beams/*.beam tests/erlang_tests/code_load/beams/ &&
         cp ../build_tests/tests/libs/estdlib/*.avm tests/libs/estdlib/  &&
         cp ../build_tests/tests/libs/eavmlib/*.avm tests/libs/eavmlib/ &&
         cp ../build_tests/tests/libs/alisp/*.avm tests/libs/alisp/ &&
