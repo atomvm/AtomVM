@@ -39,6 +39,8 @@
 #include <module.h>
 #include <version.h>
 
+#include "rp2040_sys.h"
+
 extern char __flash_binary_end;
 
 #define LIB_AVM ((void *) 0x10080000)
@@ -75,6 +77,7 @@ static int app_main()
     }
 
     GlobalContext *glb = globalcontext_new();
+    nif_collection_init_all(glb);
 
     uint32_t startup_beam_size;
     const void *startup_beam;
@@ -100,6 +103,7 @@ static int app_main()
 
     avmpack_data->base.data = MAIN_AVM;
     avmpack_data->base.in_use = true;
+
     synclist_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
 
     if (avmpack_is_valid(LIB_AVM, (uintptr_t) MAIN_AVM - (uintptr_t) LIB_AVM)) {
@@ -141,6 +145,7 @@ static int app_main()
 
     context_destroy(ctx);
 
+    nif_collection_destroy_all(glb);
     globalcontext_destroy(glb);
 
     return result;
