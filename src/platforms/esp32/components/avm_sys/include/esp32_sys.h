@@ -29,10 +29,11 @@
 
 #include "sys.h"
 
-#define REGISTER_PORT_DRIVER(NAME, INIT_CB, CREATE_CB)                \
+#define REGISTER_PORT_DRIVER(NAME, INIT_CB, DESTROY_CB, CREATE_CB)    \
     struct PortDriverDef NAME##_port_driver_def = {                   \
         .port_driver_name = #NAME,                                    \
         .port_driver_init_cb = INIT_CB,                               \
+        .port_driver_destroy_cb = DESTROY_CB,                         \
         .port_driver_create_port_cb = CREATE_CB                       \
     };                                                                \
                                                                       \
@@ -46,9 +47,10 @@
         port_driver_list = &NAME##_port_driver_def_list_item;         \
     }
 
-#define REGISTER_NIF_COLLECTION(NAME, INIT_CB, RESOLVE_NIF_CB)              \
+#define REGISTER_NIF_COLLECTION(NAME, INIT_CB, DESTROY_CB, RESOLVE_NIF_CB)  \
     struct NifCollectionDef NAME##_nif_collection_def = {                   \
         .nif_collection_init_cb = INIT_CB,                                  \
+        .nif_collection_destroy_cb = DESTROY_CB,                            \
         .nif_collection_resove_nif_cb = RESOLVE_NIF_CB                      \
     };                                                                      \
                                                                             \
@@ -75,17 +77,21 @@ struct EventListener
 
 struct ESP32PlatformData
 {
+    // socket_driver
+    EventListener *socket_listener;
     struct SyncList sockets;
     struct ListHead ready_connections;
 };
 
 typedef void (*port_driver_init_t)(GlobalContext *global);
+typedef void (*port_driver_destroy_t)(GlobalContext *global);
 typedef Context *(*port_driver_create_port_t)(GlobalContext *global, term opts);
 
 struct PortDriverDef
 {
     const char *port_driver_name;
     const port_driver_init_t port_driver_init_cb;
+    const port_driver_destroy_t port_driver_destroy_cb;
     const port_driver_create_port_t port_driver_create_port_cb;
 };
 
@@ -96,11 +102,13 @@ struct PortDriverDefListItem
 };
 
 typedef void (*nif_collection_init_t)(GlobalContext *global);
+typedef void (*nif_collection_destroy_t)(GlobalContext *global);
 typedef const struct Nif *(*nif_collection_resolve_nif_t)(const char *name);
 
 struct NifCollectionDef
 {
     const nif_collection_init_t nif_collection_init_cb;
+    const nif_collection_destroy_t nif_collection_destroy_cb;
     const nif_collection_resolve_nif_t nif_collection_resove_nif_cb;
 };
 
@@ -122,7 +130,9 @@ void sys_event_listener_init(EventListener *listener, void *sender, event_handle
 void socket_init(Context *ctx, term opts);
 
 void port_driver_init_all(GlobalContext *global);
+void port_driver_destroy_all(GlobalContext *global);
 void nif_collection_init_all(GlobalContext *global);
+void nif_collection_destroy_all(GlobalContext *global);
 const struct Nif *nif_collection_resolve_nif(const char *name);
 
 const void *esp32_sys_mmap_partition(

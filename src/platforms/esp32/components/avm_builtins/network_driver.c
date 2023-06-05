@@ -822,6 +822,6 @@ Context *network_driver_create_port(GlobalContext *global, term opts)
 
 #ifdef CONFIG_AVM_ENABLE_NETWORK_PORT_DRIVER
 
-REGISTER_PORT_DRIVER(network, network_driver_init, network_driver_create_port)
+REGISTER_PORT_DRIVER(network, network_driver_init, NULL, network_driver_create_port)
 
 #endif

@@ -468,6 +468,15 @@ void port_driver_init_all(GlobalContext *global)
     }
 }
 
+void port_driver_destroy_all(GlobalContext *global)
+{
+    for (struct PortDriverDefListItem *item = port_driver_list; item != NULL; item = item->next) {
+        if (item->def->port_driver_destroy_cb) {
+            item->def->port_driver_destroy_cb(global);
+        }
+    }
+}
+
 static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts)
 {
     for (struct PortDriverDefListItem *item = port_driver_list; item != NULL; item = item->next) {
@@ -484,6 +493,15 @@ void nif_collection_init_all(GlobalContext *global)
     for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
         if (item->def->nif_collection_init_cb) {
             item->def->nif_collection_init_cb(global);
+        }
+    }
+}
+
+void nif_collection_destroy_all(GlobalContext *global)
+{
+    for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
+        if (item->def->nif_collection_destroy_cb) {
+            item->def->nif_collection_destroy_cb(global);
         }
     }
 }

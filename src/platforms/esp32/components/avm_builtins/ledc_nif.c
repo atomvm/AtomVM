@@ -475,6 +475,6 @@ const struct Nif *ledc_nif_get_nif(const char *nifname)
     return NULL;
 }
 
-REGISTER_NIF_COLLECTION(ledc, NULL, ledc_nif_get_nif)
+REGISTER_NIF_COLLECTION(ledc, NULL, NULL, ledc_nif_get_nif)
 
 #endif

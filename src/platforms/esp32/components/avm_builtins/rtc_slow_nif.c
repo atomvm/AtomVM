@@ -94,11 +94,6 @@ static const struct Nif esp_rtc_slow_set_binary_nif = {
     .nif_ptr = nif_esp_rtc_slow_set_binary
 };
 
-void rtc_slow_nif_init(GlobalContext *gloabl)
-{
-    // no-op
-}
-
 const struct Nif *rtc_slow_nif_get_nif(const char *nifname)
 {
     if (strcmp("esp:rtc_slow_get_binary/0", nifname) == 0) {
@@ -112,6 +107,6 @@ const struct Nif *rtc_slow_nif_get_nif(const char *nifname)
     return NULL;
 }
 
-REGISTER_NIF_COLLECTION(rtc_slow, rtc_slow_nif_init, rtc_slow_nif_get_nif)
+REGISTER_NIF_COLLECTION(rtc_slow, NULL, NULL, rtc_slow_nif_get_nif)
 
 #endif

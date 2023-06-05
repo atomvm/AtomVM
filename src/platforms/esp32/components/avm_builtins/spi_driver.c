@@ -649,6 +649,6 @@ bool spi_driver_get_peripheral(term spi_port, spi_host_device_t *host_dev, Globa
     return true;
 }
 
-REGISTER_PORT_DRIVER(spi, spi_driver_init, spi_driver_create_port)
+REGISTER_PORT_DRIVER(spi, spi_driver_init, NULL, spi_driver_create_port)
 
 #endif

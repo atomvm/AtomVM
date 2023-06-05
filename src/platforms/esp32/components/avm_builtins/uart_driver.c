@@ -505,6 +505,6 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx)
     return is_closed ? NativeTerminate : NativeContinue;
 }
 
-REGISTER_PORT_DRIVER(uart, NULL, uart_driver_create_port)
+REGISTER_PORT_DRIVER(uart, NULL, NULL, uart_driver_create_port)
 
 #endif

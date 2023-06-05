@@ -308,6 +308,6 @@ static int write_atom_c_string(Context *ctx, char *buf, size_t bufsize, term t)
     return 0;
 }
 
-REGISTER_NIF_COLLECTION(nvs, nvs_nif_init, nvs_nif_get_nif)
+REGISTER_NIF_COLLECTION(nvs, nvs_nif_init, NULL, nvs_nif_get_nif)
 
 #endif
