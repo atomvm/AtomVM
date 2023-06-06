@@ -140,17 +140,23 @@ struct Context
 typedef struct Context Context;
 #endif
 
+/**
+ * @brief A regular monitor or a half link.
+ */
 struct Monitor
 {
     struct ListHead monitor_list_head;
+    uint64_t ref_ticks; // 0 for links
+    term monitor_obj;
+};
 
-    term monitor_pid;
-    uint64_t ref_ticks;
-
-    // this might be replaced with a handler function, this might be useful as a replacement
-    // to leader process field or for any other purposes.
-    // TODO: we might save useful bytes by assuming that ref_links == 0 means linked
-    bool linked : 1;
+/**
+ * @brief A resource monitor.
+ */
+struct ResourceMonitor
+{
+    struct Monitor base;
+    struct ListHead resource_list_head;
 };
 
 /**
@@ -379,8 +385,46 @@ void context_process_flush_monitor_signal(Context *ctx, uint64_t ref_ticks, bool
  */
 bool context_get_process_info(Context *ctx, term *out, term atom_key);
 
-uint64_t context_monitor(Context *ctx, term monitor_pid, bool linked);
-void context_demonitor(Context *ctx, term monitor_pid, bool linked);
+/**
+ * @brief Half-link process to another process
+ * @details Caller must hold the global process lock. This creates one half of
+ * the link.
+ *
+ * @param ctx context to link
+ * @param link_pid process to link ctx to
+ * @return 0 on success
+ */
+int context_link(Context *ctx, term monitor_pid);
+
+/**
+ * @brief Create a monitor on a process.
+ * @details Caller must hold the global process lock.
+ *
+ * @param ctx context to monitor
+ * @param monitor_pid monitoring process
+ * @return the ref ticks
+ */
+uint64_t context_monitor(Context *ctx, term monitor_pid);
+
+/**
+ * @brief Create a resource monitor on a process.
+ * @details Caller must hold the global process lock. The returned resource
+ * monitor is not added to the monitors list on the resource type.
+ *
+ * @param ctx context to monitor
+ * @param resource resource object
+ * @return the resource monitor
+ */
+struct ResourceMonitor *context_resource_monitor(Context *ctx, void *resource);
+/**
+ * @brief Remove a half-link from a process.
+ * @details Caller must hold the global process lock. This removes one half of
+ * the link.
+ *
+ * @param ctx context to monitor
+ * @param link_id process to unlink
+ */
+void context_unlink(Context *ctx, term monitor_pid);
 
 #ifdef __cplusplus
 }
