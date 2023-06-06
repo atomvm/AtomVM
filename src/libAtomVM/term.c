@@ -276,7 +276,7 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
 
     } else if (term_is_binary(t)) {
         int len = term_binary_size(t);
-        const char *binary_data = term_binary_data(t);
+        const unsigned char *binary_data = (const unsigned char *) term_binary_data(t);
 
         int is_printable = 1;
         for (int i = 0; i < len; i++) {
