@@ -27,11 +27,20 @@ set(AVM_SYS_COMPONENT_SRCS
     "platform_defaultatoms.c"
 )
 
+if (IDF_VERSION_MAJOR GREATER_EQUAL 5)
+    set(ADDITIONAL_COMPONENTS "esp_partition")
+    # available starting from v4.4
+    set(ADDITIONAL_PRIV_REQUIRES "esp_hw_support")
+else()
+    set(ADDITIONAL_COMPONENTS "")
+    set(ADDITIONAL_PRIV_REQUIRES "")
+endif()
+
 idf_component_register(
     SRCS ${AVM_SYS_COMPONENT_SRCS}
     INCLUDE_DIRS "include"
-    REQUIRES "spi_flash" "soc" "newlib" "pthread"
-    PRIV_REQUIRES "libatomvm"
+    REQUIRES "spi_flash" "soc" "newlib" "pthread" ${ADDITIONAL_COMPONENTS}
+    PRIV_REQUIRES "libatomvm" "esp_timer" ${ADDITIONAL_PRIV_REQUIRES}
 )
 
 target_compile_features(${COMPONENT_LIB} INTERFACE c_std_11)

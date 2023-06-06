@@ -18,12 +18,10 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#include <esp_event.h>
-#include <esp_event_loop.h>
 #include <esp_log.h>
-#include <esp_partition.h>
 #include <esp_system.h>
 #include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <sdkconfig.h>
 #include <stdbool.h>
 

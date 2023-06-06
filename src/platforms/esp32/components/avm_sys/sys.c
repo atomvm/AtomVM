@@ -30,8 +30,6 @@
 // #define ENABLE_TRACE
 #include "trace.h"
 
-#include "esp_event.h"
-#include "esp_event_loop.h"
 #include "esp_heap_caps.h"
 #include "esp_idf_version.h"
 #include "esp_pthread.h"

@@ -33,7 +33,7 @@ set(AVM_BUILTIN_COMPONENT_SRCS
 idf_component_register(
     SRCS ${AVM_BUILTIN_COMPONENT_SRCS}
     INCLUDE_DIRS "include"
-    PRIV_REQUIRES "libatomvm" "avm_sys" "nvs_flash"
+    PRIV_REQUIRES "libatomvm" "avm_sys" "nvs_flash" "driver" "esp_event" "esp_wifi"
 )
 
 idf_build_set_property(
