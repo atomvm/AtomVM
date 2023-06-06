@@ -1198,21 +1198,19 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
     uint64_t ref_ticks = 0;
 
     if (link_term == TRUE_ATOM) {
-        int res = context_monitor(new_ctx, term_from_local_process_id(ctx->process_id), true);
-        if (UNLIKELY(res == 0)) {
+        if (UNLIKELY(context_link(new_ctx, term_from_local_process_id(ctx->process_id)) < 0)) {
             fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
             AVM_ABORT();
         }
         // This is a really simple hack to get the parent - child linking
         // I don't really like how it is implemented but it works nicely.
         // I think it should be implemented adding a parent field to Context.
-        res = context_monitor(ctx, term_from_local_process_id(new_ctx->process_id), true);
-        if (UNLIKELY(res == 0)) {
+        if (UNLIKELY(context_link(ctx, term_from_local_process_id(new_ctx->process_id)) < 0)) {
             fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
             AVM_ABORT();
         }
     } else if (monitor_term == TRUE_ATOM) {
-        ref_ticks = context_monitor(new_ctx, term_from_local_process_id(ctx->process_id), false);
+        ref_ticks = context_monitor(new_ctx, term_from_local_process_id(ctx->process_id));
         if (UNLIKELY(ref_ticks == 0)) {
             fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
             AVM_ABORT();
@@ -3210,7 +3208,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     }
     term callee_pid = term_from_local_process_id(ctx->process_id);
 
-    uint64_t ref_ticks = context_monitor(target, callee_pid, false);
+    uint64_t ref_ticks = context_monitor(target, callee_pid);
     globalcontext_get_process_unlock(ctx->global, target);
 
     if (UNLIKELY(memory_ensure_free_opt(ctx, REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -3262,18 +3260,17 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
 
     term callee_pid = term_from_local_process_id(ctx->process_id);
 
-    uint64_t ref_ticks = context_monitor(target, callee_pid, true);
-    if (UNLIKELY(ref_ticks == 0)) {
+    if (UNLIKELY(context_link(target, callee_pid) < 0)) {
         globalcontext_get_process_unlock(ctx->global, target);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    ref_ticks = context_monitor(ctx, term_from_local_process_id(target->process_id), true);
-    globalcontext_get_process_unlock(ctx->global, target);
-    if (UNLIKELY(ref_ticks == 0)) {
-        // TODO: remove the other monitor
+    if (UNLIKELY(context_link(ctx, term_from_local_process_id(target->process_id)) < 0)) {
+        context_unlink(target, callee_pid);
+        globalcontext_get_process_unlock(ctx->global, target);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
+    globalcontext_get_process_unlock(ctx->global, target);
 
     return TRUE_ATOM;
 }
@@ -3294,8 +3291,8 @@ static term nif_erlang_unlink(Context *ctx, int argc, term argv[])
 
     term callee_pid = term_from_local_process_id(ctx->process_id);
 
-    context_demonitor(target, callee_pid, true);
-    context_demonitor(ctx, term_from_local_process_id(target->process_id), true);
+    context_unlink(target, callee_pid);
+    context_unlink(ctx, term_from_local_process_id(target->process_id));
     globalcontext_get_process_unlock(ctx->global, target);
 
     return TRUE_ATOM;

@@ -54,6 +54,11 @@ typedef int32_t ErlNifPid;
 typedef struct ResourceType ErlNifResourceType;
 
 /**
+ * @brief Opaque monitor type
+ */
+typedef uint64_t ErlNifMonitor;
+
+/**
  * @brief Selectable event.
  */
 typedef int ErlNifEvent;
@@ -69,6 +74,11 @@ typedef void ErlNifResourceDtor(ErlNifEnv *caller_env, void *obj);
 typedef void ErlNifResourceStop(ErlNifEnv *caller_env, void *obj, ErlNifEvent event, int is_direct_call);
 
 /**
+ * @brief Resource monitor callback
+ */
+typedef void ErlNifResourceDown(ErlNifEnv *caller_env, void *obj, ErlNifPid *pid, ErlNifMonitor *mon);
+
+/**
  * @brief Resource callbacks.
  * @details Members should be set to 0, 1 or 2 depending on provided callbacks.
  * Callbacks can also be NULL if not used.
@@ -78,6 +88,7 @@ typedef struct
     int members;
     ErlNifResourceDtor *dtor;
     ErlNifResourceStop *stop;
+    ErlNifResourceDown *down;
 } ErlNifResourceTypeInit;
 
 /**
@@ -201,6 +212,38 @@ ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj);
  * @return a negative value on failure, 0 or flags on success.
  */
 int enif_select(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSelectFlags mode, void *obj, const ErlNifPid *pid, ERL_NIF_TERM ref);
+
+/**
+ * @brief Monitor a process by using a resource object.
+ * @details The monitor is automatically removed after being triggered or if the
+ * associated resource is deallocated.
+ *
+ * @param env current environment
+ * @param obj resource to use for monitor
+ * @param target_pid process to monitor
+ * @param mon on output, monitor object (can be NULL)
+ * @return 0 on success, <0 if no down callback is provided with resource (badarg), >0 if the process is no longer alive
+ */
+int enif_monitor_process(ErlNifEnv *env, void *obj, const ErlNifPid *target_pid, ErlNifMonitor *mon);
+
+/**
+ * @brief Unmonitor a process
+ *
+ * @param env current environment
+ * @param obj resource used by monitor
+ * @param mon monitor
+ * @return 0 on success
+ */
+int enif_demonitor_process(ErlNifEnv *caller_env, void *obj, const ErlNifMonitor *mon);
+
+/**
+ * @brief compare two monitors
+ *
+ * @param monitor1 first monitor
+ * @param monitor2 second monitor
+ * @return 0 if equals, < 0 if `monitor1` < `monitor2`, > 0 if `monitor1` > `monitor2`.
+ */
+int enif_compare_monitors(const ErlNifMonitor *monitor1, const ErlNifMonitor *monitor2);
 
 #ifdef __cplusplus
 }
