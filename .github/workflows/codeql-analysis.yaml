@@ -52,7 +52,9 @@ jobs:
       uses: github/codeql-action/init@v2
       with:
         languages: ${{ matrix.language }}
-        queries: ./code-queries/term-to-non-term-func.ql
+        queries:
+          - ./code-queries/term-to-non-term-func.ql
+          - ./code-queries/non-term-to-term-func.ql
 
     - name: "Build"
       run: |
