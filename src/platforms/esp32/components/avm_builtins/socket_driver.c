@@ -204,7 +204,7 @@ struct ReadyConnection
 // This pattern makes sure all accesses to netconn API are serialized. They
 // may be called in different scheduler threads, though.
 
-xQueueHandle netconn_events = NULL;
+QueueHandle_t netconn_events = NULL;
 
 void ESP_IRAM_ATTR socket_callback(struct netconn *netconn, enum netconn_evt evt, u16_t len)
 {

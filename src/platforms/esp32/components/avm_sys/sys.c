@@ -83,7 +83,7 @@ static const char *const revision_atom = "\x8" "revision";
 struct PortDriverDefListItem *port_driver_list;
 struct NifCollectionDefListItem *nif_collection_list;
 
-xQueueHandle event_queue = NULL;
+QueueHandle_t event_queue = NULL;
 QueueSetHandle_t event_set = NULL;
 
 void esp32_sys_queue_init()

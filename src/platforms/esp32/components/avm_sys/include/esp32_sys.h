@@ -122,7 +122,7 @@ extern struct PortDriverDefListItem *port_driver_list;
 extern struct NifCollectionDefListItem *nif_collection_list;
 
 extern QueueSetHandle_t event_set;
-extern xQueueHandle event_queue;
+extern QueueHandle_t event_queue;
 void esp32_sys_queue_init();
 
 void sys_event_listener_init(EventListener *listener, void *sender, event_handler_t handler, void *data);

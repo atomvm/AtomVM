@@ -59,7 +59,7 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx);
 
 struct UARTData
 {
-    xQueueHandle rxqueue;
+    QueueHandle_t rxqueue;
     EventListener listener;
     term reader_process_pid;
     uint64_t reader_ref_ticks;
@@ -100,7 +100,7 @@ EventListener *uart_interrupt_callback(GlobalContext *glb, EventListener *listen
     struct UARTData *uart_data = GET_LIST_ENTRY(listener, struct UARTData, listener);
 
     uart_event_t event;
-    if (xQueueReceive(uart_data->rxqueue, (void *) &event, (portTickType) portMAX_DELAY)) {
+    if (xQueueReceive(uart_data->rxqueue, (void *) &event, (TickType_t) portMAX_DELAY)) {
         switch (event.type) {
             case UART_DATA:
                 if (uart_data->reader_process_pid != term_invalid_term()) {
