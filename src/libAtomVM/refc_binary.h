@@ -35,8 +35,8 @@ extern "C" {
 typedef struct Context Context;
 #endif
 
-#ifndef TYPEDEF_GLOBAL_CONTEXT
-#define TYPEDEF_GLOBAL_CONTEXT
+#ifndef TYPEDEF_GLOBALCONTEXT
+#define TYPEDEF_GLOBALCONTEXT
 typedef struct GlobalContext GlobalContext;
 #endif
 
