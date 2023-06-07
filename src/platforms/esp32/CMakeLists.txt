@@ -29,10 +29,15 @@ endif()
 
 project(atomvm-esp32)
 
+# esp-idf does not use compile_feature but instead sets version in
+# c_compile_options
+# Ensure project is compiled with at least C11
 idf_build_get_property(c_compile_options C_COMPILE_OPTIONS)
-list(REMOVE_ITEM c_compile_options -std=gnu99)
-list(APPEND c_compile_options -std=gnu11)
-idf_build_set_property(C_COMPILE_OPTIONS ${c_compile_options})
+if (-std=gnu99 IN_LIST c_compile_options )
+    list(REMOVE_ITEM c_compile_options -std=gnu99)
+    list(APPEND c_compile_options -std=gnu11)
+    idf_build_set_property(C_COMPILE_OPTIONS ${c_compile_options})
+endif()
 
 # Options that make sense for this platform
 option(AVM_DISABLE_SMP "Disable SMP." OFF)
