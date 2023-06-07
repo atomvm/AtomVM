@@ -43,6 +43,11 @@
 #include <stdint.h>
 #include <sys/socket.h>
 
+// introduced starting with 4.4
+#if ESP_IDF_VERSION_MAJOR >= 5
+#include "esp_chip_info.h"
+#endif
+
 #ifdef HAVE_SOC_CPU_CORES_NUM
 #include "soc/soc_caps.h"
 #endif

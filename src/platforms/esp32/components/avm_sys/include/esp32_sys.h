@@ -25,6 +25,10 @@
 #include <esp_partition.h>
 #include <freertos/queue.h>
 
+#if ESP_IDF_VERSION_MAJOR >= 5
+#include <spi_flash_mmap.h>
+#endif
+
 #include <time.h>
 
 #include "sys.h"

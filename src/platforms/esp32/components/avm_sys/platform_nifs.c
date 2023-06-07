@@ -54,6 +54,11 @@
 #include "esp32s3/rom/md5_hash.h"
 #endif
 
+// introduced starting with 4.4
+#if ESP_IDF_VERSION_MAJOR >= 5
+#include <esp_random.h>
+#endif
+
 //#define ENABLE_TRACE
 #include "trace.h"
 
