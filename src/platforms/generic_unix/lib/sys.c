@@ -309,6 +309,14 @@ void sys_monotonic_time(struct timespec *t)
     }
 }
 
+uint64_t sys_monotonic_millis()
+{
+    // On generic unix, native format is timespec.
+    struct timespec ts;
+    sys_monotonic_time(&ts);
+    return (ts.tv_nsec / 1000000UL) + (ts.tv_sec * 1000UL);
+}
+
 struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *path)
 {
     TRACE("sys_open_avm_from_file: Going to open: %s\n", path);
@@ -523,18 +531,6 @@ void sys_free_platform(GlobalContext *global)
 #endif
 #endif
     free(platform);
-}
-
-uint64_t sys_millis(GlobalContext *glb)
-{
-    UNUSED(glb);
-    struct timespec ts;
-    if (UNLIKELY(clock_gettime(CLOCK_MONOTONIC, &ts))) {
-        fprintf(stderr, "Failed clock_gettime.\n");
-        AVM_ABORT();
-    }
-
-    return (ts.tv_nsec / 1000000UL) + (ts.tv_sec * 1000UL);
 }
 
 void event_listener_add_to_polling_set(struct EventListener *listener, GlobalContext *global)

@@ -165,8 +165,14 @@ void sys_monotonic_time(struct timespec *t)
 {
     int64_t us_since_boot = esp_timer_get_time();
 
-    t->tv_sec = us_since_boot / 1000000;
-    t->tv_nsec = us_since_boot * 1000;
+    t->tv_sec = us_since_boot / 1000000UL;
+    t->tv_nsec = us_since_boot * 1000UL;
+}
+
+uint64_t sys_monotonic_millis()
+{
+    int64_t usec = esp_timer_get_time();
+    return usec / 1000UL;
 }
 
 void sys_init_platform(GlobalContext *glb)
@@ -200,12 +206,6 @@ void sys_free_platform(GlobalContext *glb)
 {
     struct ESP32PlatformData *platform = glb->platform_data;
     free(platform);
-}
-
-uint64_t sys_millis(GlobalContext *glb)
-{
-    int64_t usec = esp_timer_get_time();
-    return usec / 1000UL;
 }
 
 const void *esp32_sys_mmap_partition(const char *partition_name, spi_flash_mmap_handle_t *handle, int *size)
