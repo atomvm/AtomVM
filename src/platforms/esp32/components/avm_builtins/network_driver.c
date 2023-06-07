@@ -34,14 +34,17 @@
 // #define ENABLE_TRACE 1
 #include <trace.h>
 
-#include <esp32_sys.h>
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 #include <esp_log.h>
+#include <esp_sntp.h>
 #include <esp_wifi.h>
+#include <esp32_sys.h>
 #include <lwip/inet.h>
+#pragma GCC diagnostic pop
 
 #include <string.h>
 
-#include <esp_sntp.h>
 
 #define TCPIP_HOSTNAME_MAX_SIZE 255
 
