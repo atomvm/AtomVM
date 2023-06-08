@@ -230,8 +230,8 @@ const void *esp32_sys_mmap_partition(const char *partition_name, spi_flash_mmap_
         ESP_LOGE(TAG, "Failed to map BEAM partition for %s", partition_name);
         return NULL;
     }
-    ESP_LOGI(TAG, "Loaded BEAM partition %s at address 0x%x (size=%i bytes)", partition_name,
-        partition->address, partition->size);
+    ESP_LOGI(TAG, "Loaded BEAM partition %s at address 0x%"PRIx32" (size=%"PRIu32" bytes)",
+        partition_name, partition->address, partition->size);
 
     return mapped_memory;
 }
