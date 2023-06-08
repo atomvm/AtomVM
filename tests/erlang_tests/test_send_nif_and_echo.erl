@@ -24,13 +24,20 @@
 
 start() ->
     register(echo, do_open_port(<<"echo">>, [])),
-    byte_size(echo(<<"Hello World">>)).
+    byte_size(echo(<<"Hello World">>)) + byte_size(to_pid(erlang:whereis(echo), <<"Hello World">>)).
 
 do_open_port(PortName, Param) ->
     open_port({spawn, PortName}, Param).
 
 echo(SendValue) ->
-    erlang:send(whereis(echo), {self(), SendValue}),
+    erlang:send(echo, {self(), SendValue}),
+    receive
+        Value ->
+            Value
+    end.
+
+to_pid(Pid, SendValue) ->
+    erlang:send(Pid, {self(), SendValue}),
     receive
         Value ->
             Value

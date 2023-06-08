@@ -174,7 +174,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(long_atoms, 4),
     TEST_CASE_EXPECTED(test_concat_badarg, 4),
     TEST_CASE_EXPECTED(register_and_whereis_badarg, 333),
-    TEST_CASE_EXPECTED(test_send, -3),
+    TEST_CASE(test_send),
     TEST_CASE_EXPECTED(test_open_port_badargs, -21),
     TEST_CASE_EXPECTED(prime_ext, 1999),
     TEST_CASE_EXPECTED(test_try_case_end, 256),
@@ -478,7 +478,7 @@ struct Test tests[] = {
     TEST_CASE_ATOMVM_ONLY(test_close_console_driver, 0),
     TEST_CASE_ATOMVM_ONLY(test_close_echo_driver, 0),
     TEST_CASE_ATOMVM_ONLY(test_regecho_driver, 11),
-    TEST_CASE_ATOMVM_ONLY(test_send_nif_and_echo, 11),
+    TEST_CASE_ATOMVM_ONLY(test_send_nif_and_echo, 22),
 
     TEST_CASE_EXPECTED(test_code_load_binary, 24),
     TEST_CASE_EXPECTED(test_code_load_abs, 24),
