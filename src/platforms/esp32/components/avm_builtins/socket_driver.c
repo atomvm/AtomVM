@@ -40,12 +40,14 @@
 #include "esp32_sys.h"
 #include "platform_defaultatoms.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 #include <esp_log.h>
-
 #include <lwip/api.h>
 #include <lwip/inet.h>
 #include <lwip/ip_addr.h>
 #include <tcpip_adapter.h>
+#pragma GCC diagnostic pop
 
 //#define ENABLE_TRACE 1
 #include "trace.h"
