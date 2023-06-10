@@ -190,7 +190,7 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
             return ret;
         }
     } else if (term_is_pid(t)) {
-        return fun->print(fun, "<0.%i.0>", term_to_local_process_id(t));
+        return fun->print(fun, "<0.%" PRIu32 ".0>", term_to_local_process_id(t));
 
     } else if (term_is_function(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);

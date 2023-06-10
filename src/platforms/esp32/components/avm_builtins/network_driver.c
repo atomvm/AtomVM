@@ -279,7 +279,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
             }
 
             default:
-                ESP_LOGI(TAG, "Unhandled wifi event: %i.", event_id);
+                ESP_LOGI(TAG, "Unhandled wifi event: %" PRIi32 ".", event_id);
                 break;
         }
 
@@ -302,7 +302,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
             }
 
             default:
-                ESP_LOGI(TAG, "Unhandled ip event: %i.", event_id);
+                ESP_LOGI(TAG, "Unhandled ip event: %" PRIi32 ".", event_id);
                 break;
         }
     } else if (event_base == sntp_event_base) {
@@ -315,12 +315,12 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
             }
 
             default:
-                ESP_LOGI(TAG, "Unhandled sntp event: %i.", event_id);
+                ESP_LOGI(TAG, "Unhandled sntp event: %" PRIi32 ".", event_id);
                 break;
         }
 
     } else {
-        ESP_LOGI(TAG, "Unhandled network event: %i.", event_id);
+        ESP_LOGI(TAG, "Unhandled network event: %" PRIi32 ".", event_id);
     }
 }
 

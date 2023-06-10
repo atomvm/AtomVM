@@ -536,7 +536,7 @@ static void parse_line_table(uint16_t **line_refs, struct ModuleFilename **filen
     CHECK_FREE_SPACE(4, "Error reading Line chunk: version\n");
     uint32_t version = READ_32_UNALIGNED(pos);
     if (UNLIKELY(version != 0)) {
-        fprintf(stderr, "Warning: Unsupported line version %u.  Line information in stacktraces may be missing\n", version);
+        fprintf(stderr, "Warning: Unsupported line version %" PRIu32 ". Line information in stacktraces may be missing\n", version);
         return;
     }
     pos += 4;

@@ -2889,7 +2889,7 @@ static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[])
     // 2^32 = 4294967296 (10 chars)
     // 6 chars of static text + '\0'
     char buf[17];
-    snprintf(buf, 17, "<0.%i.0>", term_to_local_process_id(t));
+    snprintf(buf, 17, "<0.%" PRIu32 ".0>", term_to_local_process_id(t));
 
     int str_len = strnlen(buf, 17);
 
