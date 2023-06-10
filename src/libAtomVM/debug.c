@@ -110,7 +110,7 @@ COLD_FUNC void debug_print_processes_list(struct ListHead *processes)
     Context *context = contexts;
     printf("Processes list:\n");
     do {
-        printf("%i: %p\n", context->process_id, (void *) context);
+        printf("%" PRIu32 ": %p\n", context->process_id, (void *) context);
         context = GET_LIST_ENTRY(context->processes_list_head.next, Context, processes_list_head);
     } while (context != contexts);
     printf("\n");

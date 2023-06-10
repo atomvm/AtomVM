@@ -1719,7 +1719,7 @@ schedule_in:
                             break;
                         }
                         default: {
-                            fprintf(stderr, "Invalid function type %i at index: %i\n", func->type, index);
+                            fprintf(stderr, "Invalid function type %i at index: %" PRIu32 "\n", func->type, index);
                             AVM_ABORT();
                         }
                     }
@@ -1795,7 +1795,7 @@ schedule_in:
                             break;
                         }
                         default: {
-                            fprintf(stderr, "Invalid function type %i at index: %i\n", func->type, index);
+                            fprintf(stderr, "Invalid function type %i at index: %" PRIu32 "\n", func->type, index);
                             AVM_ABORT();
                         }
                     }
