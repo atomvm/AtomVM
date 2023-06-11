@@ -112,19 +112,24 @@ static const AtomStringIntPair spi_cmd_table[] = {
     SELECT_INT_DEFAULT(SPIInvalidCmd)
 };
 
-static spi_host_device_t get_spi_host_device(term spi_peripheral)
+static const AtomStringIntPair spi_host_table[] = {
+    { ATOM_STR("\x4", "hspi"), HSPI_HOST },
+#ifndef CONFIG_IDF_TARGET_ESP32C3
+    { ATOM_STR("\x4", "vspi"), VSPI_HOST },
+#endif
+    SELECT_INT_DEFAULT(-1)
+};
+
+static spi_host_device_t get_spi_host_device(term spi_peripheral, GlobalContext *global)
 {
-    switch (spi_peripheral) {
-        case HSPI_ATOM:
-            return HSPI_HOST;
-        #ifndef CONFIG_IDF_TARGET_ESP32C3
-        case VSPI_ATOM:
-            return VSPI_HOST;
-        #endif
-        default:
-            ESP_LOGW(TAG, "Unrecognized SPI peripheral.  Must be either hspi or vspi.  Defaulting to hspi.");
-            return HSPI_HOST;
+    int peripheral = interop_atom_term_select_int(spi_host_table, spi_peripheral, global);
+
+    if (peripheral < 0) {
+        ESP_LOGW(TAG, "Unrecognized SPI peripheral.  Must be either hspi or vspi.  Defaulting to hspi.");
+        return HSPI_HOST;
     }
+
+    return peripheral;
 }
 
 static struct SPIDevice *get_spi_device(struct SPIData *spi_data, term device_term)
@@ -173,12 +178,14 @@ Context *spi_driver_create_port(GlobalContext *global, term opts)
     TRACE("spi_driver_create_port\n");
     Context *ctx = context_new(global);
 
-    term bus_config = term_get_map_assoc(opts, BUS_CONFIG_ATOM, ctx->global);
-    term miso_io_num_term = term_get_map_assoc(bus_config, MISO_IO_NUM_ATOM, ctx->global);
-    term mosi_io_num_term = term_get_map_assoc(bus_config, MOSI_IO_NUM_ATOM, ctx->global);
-    term sclk_io_num_term = term_get_map_assoc(bus_config, SCLK_IO_NUM_ATOM, ctx->global);
-    term spi_peripheral_term = term_get_map_assoc_default(bus_config, SPI_PERIPHERAL_ATOM, HSPI_ATOM, ctx->global);
-    spi_host_device_t host_device = get_spi_host_device(spi_peripheral_term);
+    term hspi_atom = globalcontext_make_atom(global, ATOM_STR("\x4", "hspi"));
+
+    term bus_config = interop_kv_get_value(opts, ATOM_STR("\xA", "bus_config"), global);
+    term miso_io_num_term = interop_kv_get_value(bus_config, ATOM_STR("\xB", "miso_io_num"), global);
+    term mosi_io_num_term = interop_kv_get_value(bus_config, ATOM_STR("\xB", "mosi_io_num"), global);
+    term sclk_io_num_term = interop_kv_get_value(bus_config, ATOM_STR("\xB", "sclk_io_num"), global);
+    term spi_peripheral_term = interop_kv_get_value_default(bus_config, ATOM_STR("\xB", "spi_peripheral"), hspi_atom, global);
+    spi_host_device_t host_device = get_spi_host_device(spi_peripheral_term, global);
 
     spi_bus_config_t buscfg = { 0 };
     buscfg.miso_io_num = term_to_int32(miso_io_num_term);
@@ -203,7 +210,7 @@ Context *spi_driver_create_port(GlobalContext *global, term opts)
     // TODO handle out of memory errors
     spi_data->host_device = host_device;
 
-    term device_map = term_get_map_assoc(opts, DEVICE_CONFIG_ATOM, ctx->global);
+    term device_map = interop_kv_get_value(opts, ATOM_STR("\xD", "device_config"), global);
     term device_names = term_get_map_keys(device_map);
 
     int n = term_get_map_size(device_map);
@@ -211,11 +218,11 @@ Context *spi_driver_create_port(GlobalContext *global, term opts)
         term device_name = term_get_tuple_element(device_names, i);
         term device_config = term_get_map_assoc(device_map, device_name, ctx->global);
 
-        term clock_speed_hz_term = term_get_map_assoc(device_config, SPI_CLOCK_HZ_ATOM, ctx->global);
-        term mode_term = term_get_map_assoc(device_config, SPI_MODE_ATOM, ctx->global);
-        term spics_io_num_term = term_get_map_assoc(device_config, SPI_CS_IO_NUM_ATOM, ctx->global);
-        term address_bits_term = term_get_map_assoc(device_config, ADDRESS_LEN_BITS_ATOM, ctx->global);
-        term command_bits_term = term_get_map_assoc(device_config, COMMAND_LEN_BITS_ATOM, ctx->global);
+        term clock_speed_hz_term = interop_kv_get_value(device_config, ATOM_STR("\xC", "spi_clock_hz"), global);
+        term mode_term = interop_kv_get_value(device_config, ATOM_STR("\x8", "spi_mode"), global);
+        term spics_io_num_term = interop_kv_get_value(device_config, ATOM_STR("\xD", "spi_cs_io_num"), global);
+        term address_bits_term = interop_kv_get_value(device_config, ATOM_STR("\x10", "address_len_bits"), global);
+        term command_bits_term = interop_kv_get_value(device_config, ATOM_STR("\x10", "command_len_bits"), global);
 
         spi_device_interface_config_t devcfg = { 0 };
         devcfg.clock_speed_hz = term_to_int32(clock_speed_hz_term);

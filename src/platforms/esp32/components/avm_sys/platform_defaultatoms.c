@@ -58,21 +58,6 @@ static const char *const sockname_atom = "\x8" "sockname";
 static const char *const peername_atom = "\x8" "peername";
 static const char *const not_owner_atom = "\x9" "not_owner";
 
-//spidriver
-static const char *const bus_config_atom = "\xA" "bus_config";
-static const char *const miso_io_num_atom = "\xB" "miso_io_num";
-static const char *const mosi_io_num_atom = "\xB" "mosi_io_num";
-static const char *const sclk_io_num_atom = "\xB" "sclk_io_num";
-static const char *const spi_peripheral_atom = "\xE" "spi_peripheral";
-static const char *const hspi_atom = "\x4" "hspi";
-static const char *const vspi_atom = "\x4" "vspi";
-static const char *const device_config_atom = "\xD" "device_config";
-static const char *const spi_clock_hz_atom = "\xC" "spi_clock_hz";
-static const char *const spi_mode_atom = "\x8" "spi_mode";
-static const char *const spi_cs_io_num_atom = "\xD" "spi_cs_io_num";
-static const char *const address_len_bits_atom = "\x10" "address_len_bits";
-static const char *const command_len_bits_atom = "\x10" "command_len_bits";
-
 //uart
 static const char *const name_atom = "\x4" "name";
 static const char *const speed_atom = "\x5" "speed";
@@ -129,21 +114,6 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, sockname_atom) == SOCKNAME_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, peername_atom) == PEERNAME_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, not_owner_atom) == NOT_OWNER_ATOM_INDEX;
-
-    //spidriver
-    ok &= globalcontext_insert_atom(glb, bus_config_atom) == BUS_CONFIG_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, miso_io_num_atom) == MISO_IO_NUM_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, mosi_io_num_atom) == MOSI_IO_NUM_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, sclk_io_num_atom) == SCLK_IO_NUM_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, spi_peripheral_atom) == SPI_PERIPHERAL_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, hspi_atom) == HSPI_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, vspi_atom) == VSPI_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, device_config_atom) == DEVICE_CONFIG_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, spi_clock_hz_atom) == SPI_CLOCK_HZ_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, spi_mode_atom) == SPI_MODE_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, spi_cs_io_num_atom) == SPI_CS_IO_NUM_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, address_len_bits_atom) == ADDRESS_LEN_BITS_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, command_len_bits_atom) == COMMAND_LEN_BITS_ATOM_INDEX;
 
     //uart
     ok &= globalcontext_insert_atom(glb, name_atom) == NAME_ATOM_INDEX;
