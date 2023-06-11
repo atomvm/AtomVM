@@ -157,6 +157,8 @@ void sys_signal(GlobalContext *glb);
 
 #endif
 
+struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *path);
+
 /**
  * @brief gets wall clock time
  *
@@ -165,15 +167,24 @@ void sys_signal(GlobalContext *glb);
  */
 void sys_time(struct timespec *t);
 
-struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *path);
-
 /**
  * @brief gets monotonic time
  *
- * @details gets monotonic time.
+ * @details gets monotonic time. Must have the same origin as
+ * `sys_monotonic_millis`.
  * @param t the timespec that will be updated.
  */
 void sys_monotonic_time(struct timespec *t);
+
+/**
+ * @brief gets monotonic time in milliseconds.
+ * @details This function must have the same origin as `sys_monotonic_time`.
+ * The native format depends on platform and this function should be fast as it
+ * is used in timers.
+ *
+ * @return a monotonic time in milliseconds
+ */
+uint64_t sys_monotonic_millis();
 
 /**
  * @brief Loads a BEAM module using platform dependent methods.
@@ -220,8 +231,6 @@ void sys_init_platform(GlobalContext *global);
  * global_context_destroy.
  */
 void sys_free_platform(GlobalContext *global);
-
-uint64_t sys_millis(GlobalContext *global);
 
 #ifdef __cplusplus
 }

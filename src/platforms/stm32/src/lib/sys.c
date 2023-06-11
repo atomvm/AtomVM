@@ -29,7 +29,6 @@
 #include "trace.h"
 
 void sys_tick_handler();
-void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis);
 
 // Monotonically increasing number of milliseconds from reset
 static volatile uint64_t system_millis;
@@ -42,8 +41,9 @@ void sys_tick_handler()
 
 static inline void sys_clock_gettime(struct timespec *t)
 {
-    t->tv_sec = (time_t) system_millis / 1000;
-    t->tv_nsec = ((int32_t) system_millis % 1000) * 1000000;
+    uint64_t now = sys_monotonic_millis();
+    t->tv_sec = (time_t) now / 1000;
+    t->tv_nsec = ((int32_t) now % 1000) * 1000000;
 }
 
 static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *timespec2)
@@ -72,13 +72,6 @@ void sys_listener_destroy(struct ListHead *item)
     UNUSED(item);
 }
 
-void sys_set_timestamp_from_relative_to_abs(struct timespec *t, int32_t millis)
-{
-    sys_clock_gettime(t);
-    t->tv_sec += millis / 1000;
-    t->tv_nsec += (millis % 1000) * 1000000;
-}
-
 void sys_time(struct timespec *t)
 {
     sys_clock_gettime(t);
@@ -89,9 +82,8 @@ void sys_monotonic_time(struct timespec *t)
     sys_clock_gettime(t);
 }
 
-uint64_t sys_millis(GlobalContext *glb)
+uint64_t sys_monotonic_millis()
 {
-    UNUSED(glb);
     return system_millis;
 }
 

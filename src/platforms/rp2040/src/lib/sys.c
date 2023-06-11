@@ -114,9 +114,8 @@ void sys_monotonic_time(struct timespec *t)
     sys_time(t);
 }
 
-uint64_t sys_millis(GlobalContext *glb)
+uint64_t sys_monotonic_millis()
 {
-    UNUSED(glb);
     absolute_time_t now = get_absolute_time();
     uint64_t usec = to_us_since_boot(now);
     return usec / 1000;
