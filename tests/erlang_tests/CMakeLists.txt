@@ -87,6 +87,7 @@ compile_erlang(match)
 compile_erlang(if_test)
 compile_erlang(sleep)
 compile_erlang(hello_world)
+compile_erlang(whereis_dead_process)
 compile_erlang(whereis_fail)
 compile_erlang(register_unregister)
 compile_erlang(try_noerror)
@@ -518,6 +519,7 @@ add_custom_target(erlang_test_modules DEPENDS
     if_test.beam
     sleep.beam
     hello_world.beam
+    whereis_dead_process.beam
     whereis_fail.beam
     register_unregister.beam
     try_noerror.beam

@@ -110,6 +110,9 @@ void context_destroy(Context *ctx)
     // Another process can get an access to our mailbox until this point.
     synclist_remove(&ctx->global->processes_table, &ctx->processes_table_head);
 
+    // Ensure process is not registered
+    globalcontext_maybe_unregister_process_id(ctx->global, ctx->process_id);
+
     // When monitor message is sent, process is no longer in the table.
     context_monitors_handle_terminate(ctx);
 
@@ -135,6 +138,7 @@ void context_destroy(Context *ctx)
     if (ctx->platform_data) {
         free(ctx->platform_data);
     }
+
     free(ctx);
 }
 
