@@ -31,3 +31,13 @@ set(TEST_COMPONENTS "testable" CACHE STRING "List of components to test")
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(atomvm-esp32-test)
+
+# esp-idf does not use compile_feature but instead sets version in
+# c_compile_options
+# Ensure project is compiled with at least C11
+idf_build_get_property(c_compile_options C_COMPILE_OPTIONS)
+if (-std=gnu99 IN_LIST c_compile_options )
+    list(REMOVE_ITEM c_compile_options -std=gnu99)
+    list(APPEND c_compile_options -std=gnu11)
+    idf_build_set_property(C_COMPILE_OPTIONS ${c_compile_options})
+endif()
