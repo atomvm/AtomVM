@@ -46,7 +46,6 @@
 #include <lwip/api.h>
 #include <lwip/inet.h>
 #include <lwip/ip_addr.h>
-#include <tcpip_adapter.h>
 #pragma GCC diagnostic pop
 
 //#define ENABLE_TRACE 1
