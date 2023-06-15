@@ -173,11 +173,11 @@ run_timer(MgrPid, Time, TimerRef, Dest, Msg) ->
     Start = erlang:system_time(millisecond),
     receive
         {cancel, From} ->
-            gen_server:reply(From, Time - (erlang:system_time(millisecond) - Start)),
-            MgrPid ! {canceled, self()}
+            MgrPid ! {canceled, self()},
+            gen_server:reply(From, Time - (erlang:system_time(millisecond) - Start))
     after Time ->
-        Dest ! {timeout, TimerRef, Msg},
-        MgrPid ! {fired, self()}
+        MgrPid ! {fired, self()},
+        Dest ! {timeout, TimerRef, Msg}
     end.
 
 %% @private
