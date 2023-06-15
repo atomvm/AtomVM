@@ -71,9 +71,10 @@ test_put() ->
 test_iterator() ->
     Map = #{c => 3, a => 1, b => 2},
     Iterator0 = maps:iterator(Map),
-    {a, 1, Iterator1} = maps:next(Iterator0),
-    {b, 2, Iterator2} = maps:next(Iterator1),
-    {c, 3, Iterator3} = maps:next(Iterator2),
+    {XK, XV, Iterator1} = maps:next(Iterator0),
+    {YK, YV, Iterator2} = maps:next(Iterator1),
+    {ZK, ZV, Iterator3} = maps:next(Iterator2),
+    [{a, 1}, {b, 2}, {c, 3}] = lists:sort([{XK, XV}, {YK, YV}, {ZK, ZV}]),
     none = maps:next(Iterator3),
     none = maps:next(none),
 
@@ -85,19 +86,19 @@ test_iterator() ->
 
 test_keys() ->
     ?ASSERT_MATCH(maps:keys(maps:new()), []),
-    ?ASSERT_MATCH(maps:keys(#{a => 1, b => 2, c => 3}), [a, b, c]),
+    ?ASSERT_MATCH(lists:sort(maps:keys(#{a => 1, b => 2, c => 3})), [a, b, c]),
     ok = check_bad_map(fun() -> maps:keys(id(not_a_map)) end),
     ok.
 
 test_values() ->
     ?ASSERT_MATCH(maps:values(maps:new()), []),
-    ?ASSERT_MATCH(maps:values(#{a => 1, b => 2, c => 3}), [1, 2, 3]),
+    ?ASSERT_MATCH(lists:sort(maps:values(#{a => 1, b => 2, c => 3})), [1, 2, 3]),
     ok = check_bad_map(fun() -> maps:values(id(not_a_map)) end),
     ok.
 
 test_to_list() ->
     ?ASSERT_MATCH(maps:to_list(maps:new()), []),
-    ?ASSERT_MATCH(maps:to_list(#{a => 1, b => 2, c => 3}), [{a, 1}, {b, 2}, {c, 3}]),
+    ?ASSERT_MATCH(lists:sort(maps:to_list(#{a => 1, b => 2, c => 3})), [{a, 1}, {b, 2}, {c, 3}]),
     ok = check_bad_map(fun() -> maps:to_list(id(not_a_map)) end),
     ok.
 
@@ -129,7 +130,7 @@ test_filter() ->
     ?ASSERT_EQUALS(maps:filter(Filter, maps:new()), #{}),
     ?ASSERT_EQUALS(maps:filter(Filter, #{a => 1, b => 2, c => 3}), #{b => 2}),
     ok = check_bad_map(fun() -> maps:filter(Filter, id(not_a_map)) end),
-    ok = check_bad_map(fun() -> maps:filter(not_a_function, id(not_a_map)) end),
+    ok = check_bad_map_or_badarg(fun() -> maps:filter(not_a_function, id(not_a_map)) end),
     ?ASSERT_FAILURE(maps:filter(not_a_function, maps:new()), badarg),
     ok.
 
@@ -138,7 +139,7 @@ test_fold() ->
     ?ASSERT_EQUALS(maps:fold(Fun, 0, maps:new()), 0),
     ?ASSERT_EQUALS(maps:fold(Fun, 0, #{a => 1, b => 2, c => 3}), 6),
     ok = check_bad_map(fun() -> maps:fold(Fun, any, id(not_a_map)) end),
-    ok = check_bad_map(fun() -> maps:fold(not_a_function, any, id(not_a_map)) end),
+    ok = check_bad_map_or_badarg(fun() -> maps:fold(not_a_function, any, id(not_a_map)) end),
     ?ASSERT_FAILURE(maps:fold(not_a_function, any, maps:new()), badarg),
     ok.
 
@@ -147,7 +148,7 @@ test_map() ->
     ?ASSERT_EQUALS(maps:map(Fun, maps:new()), #{}),
     ?ASSERT_EQUALS(maps:map(Fun, #{a => 1, b => 2, c => 3}), #{a => 2, b => 4, c => 6}),
     ok = check_bad_map(fun() -> maps:map(Fun, id(not_a_map)) end),
-    ok = check_bad_map(fun() -> maps:map(not_a_function, id(not_a_map)) end),
+    ok = check_bad_map_or_badarg(fun() -> maps:map(not_a_function, id(not_a_map)) end),
     ?ASSERT_FAILURE(maps:map(not_a_function, maps:new()), badarg),
     ok.
 
@@ -192,9 +193,21 @@ check_bad_map(F) ->
         F(),
         fail
     catch
-        %% TODO OTP23 compiler compiles to erlang:map_ equivalents
-        _:{badmap, _} ->
-            ok
+        _:{badmap, _} -> ok
+    end.
+
+check_bad_map_or_badarg(F) ->
+    BadargFirst =
+        case erlang:system_info(machine) of
+            "BEAM" -> erlang:system_info(version) >= "12.";
+            "ATOM" -> false
+        end,
+    try
+        F(),
+        fail
+    catch
+        _:{badmap, _} when not BadargFirst -> ok;
+        error:badarg when BadargFirst -> ok
     end.
 
 check_bad_key(F, _Key) ->

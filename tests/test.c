@@ -208,15 +208,15 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(simple_list_size0, 2),
     TEST_CASE_EXPECTED(simple_list_size1, 10),
 
-    TEST_CASE_EXPECTED(tuple_size0, 1),
+    TEST_CASE(tuple_size0),
     TEST_CASE_EXPECTED(tuple_size1, 2),
     TEST_CASE_EXPECTED(tuple_size2, 3),
     TEST_CASE_EXPECTED(tuple_size3, 4),
     TEST_CASE_EXPECTED(tuple_size4, 13),
-    TEST_CASE_EXPECTED(tuple_size5, 7),
-    TEST_CASE_EXPECTED(tuple_size6, 17),
+    TEST_CASE(tuple_size5),
+    TEST_CASE(tuple_size6),
 
-    TEST_CASE_EXPECTED(tuples_and_list_size0, 3),
+    TEST_CASE(tuples_and_list_size0),
     TEST_CASE_EXPECTED(tuples_and_list_size1, 5),
     TEST_CASE_EXPECTED(tuples_and_list_size2, 10),
 

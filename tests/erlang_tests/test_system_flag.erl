@@ -31,21 +31,27 @@ test_schedulers_online() ->
         % probably not an SMP build
         1 ->
             ok;
-        N when is_integer(N) ->
-            N = erlang:system_flag(schedulers_online, 1),
+        Schedulers when is_integer(Schedulers) ->
+            Online = erlang:system_info(schedulers_online),
+            Online = erlang:system_flag(schedulers_online, 1),
+            true = Online =< Schedulers,
             1 = erlang:system_info(schedulers_online),
             1 = erlang:system_flag(schedulers_online, 2),
             2 = erlang:system_info(schedulers_online),
-            M = N + 2,
+            Overflow =
+                if
+                    Online < Schedulers -> Schedulers;
+                    true -> Online
+                end + 1,
             ok =
                 try
-                    erlang:system_flag(schedulers_online, M),
+                    erlang:system_flag(schedulers_online, Overflow),
                     expected_error
                 catch
                     error:badarg -> ok
                 end,
-            2 = erlang:system_flag(schedulers_online, N),
-            N = erlang:system_info(schedulers_online),
+            2 = erlang:system_flag(schedulers_online, Online),
+            Online = erlang:system_info(schedulers_online),
             ok =
                 try
                     erlang:system_flag(schedulers_online, 0),
@@ -53,6 +59,6 @@ test_schedulers_online() ->
                 catch
                     error:badarg -> ok
                 end,
-            N = erlang:system_info(schedulers_online),
+            Online = erlang:system_info(schedulers_online),
             ok
     end.

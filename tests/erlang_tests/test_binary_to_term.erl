@@ -23,26 +23,43 @@
 -export([start/0, apply/2, apply/3]).
 
 start() ->
-    test_reverse(foo, <<131, 100, 0, 3, 102, 111, 111>>),
-    test_reverse(bar, <<131, 100, 0, 3, 98, 97, 114>>),
+    % Starting from OTP-26, atoms are encoded as UTF-8 by default.
+    TermToBinaryOptions =
+        case erlang:system_info(machine) of
+            "BEAM" ->
+                case erlang:system_info(version) >= "13.2" of
+                    true -> [{minor_version, 1}];
+                    false -> []
+                end;
+            "ATOM" ->
+                []
+        end,
+    test_reverse(foo, <<131, 100, 0, 3, 102, 111, 111>>, TermToBinaryOptions),
+    test_reverse(bar, <<131, 100, 0, 3, 98, 97, 114>>, TermToBinaryOptions),
     test_reverse(128, <<131, 97, 128>>),
     test_reverse(257, <<131, 98, 0, 0, 1, 1>>),
     test_reverse(0, <<131, 97, 0>>),
     test_reverse(-1, <<131, 98, 255, 255, 255, 255>>),
     test_reverse(32768, <<131, 98, 0, 0, 128, 0>>),
     test_reverse(-32768, <<131, 98, 255, 255, 128, 0>>),
-    test_reverse({foo, bar}, <<131, 104, 2, 100, 0, 3, 102, 111, 111, 100, 0, 3, 98, 97, 114>>),
-    test_reverse({foo, 0}, <<131, 104, 2, 100, 0, 3, 102, 111, 111, 97, 0>>),
+    test_reverse(
+        {foo, bar},
+        <<131, 104, 2, 100, 0, 3, 102, 111, 111, 100, 0, 3, 98, 97, 114>>,
+        TermToBinaryOptions
+    ),
+    test_reverse({foo, 0}, <<131, 104, 2, 100, 0, 3, 102, 111, 111, 97, 0>>, TermToBinaryOptions),
     test_reverse([], <<131, 106>>),
     test_reverse(
         [{foo, 0}, {bar, 1}],
         <<131, 108, 0, 0, 0, 2, 104, 2, 100, 0, 3, 102, 111, 111, 97, 0, 104, 2, 100, 0, 3, 98, 97,
-            114, 97, 1, 106>>
+            114, 97, 1, 106>>,
+        TermToBinaryOptions
     ),
     test_reverse(
         [improper | list],
         <<131, 108, 0, 0, 0, 1, 100, 0, 8, 105, 109, 112, 114, 111, 112, 101, 114, 100, 0, 4, 108,
-            105, 115, 116>>
+            105, 115, 116>>,
+        TermToBinaryOptions
     ),
     test_reverse(<<"foobar">>, <<131, 109, 0, 0, 0, 6, 102, 111, 111, 98, 97, 114>>),
     test_reverse(<<":アトムＶＭ">>, <<131, 109, 0, 0, 0, 6, 58, 162, 200, 224, 54, 45>>),
@@ -61,16 +78,23 @@ start() ->
             57, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 48,
             49, 50, 51, 52, 53>>
     ),
-    ok = test_external_function(),
+    ok = test_external_function(TermToBinaryOptions),
 
     {32768, 6} = erlang:binary_to_term(<<131, 98, 0, 0, 128, 0, 127>>, [used]),
-    test_catentate_and_split([foo, bar, 128, {foo, bar}, [a, b, c, {d}]]),
+    test_catenate_and_split([foo, bar, 128, {foo, bar}, [a, b, c, {d}]]),
     ok = test_invalid_term_encoding(),
     ok = test_mutate_encodings(),
     0.
 
 test_reverse(T, Interop) ->
-    Bin = erlang:term_to_binary(T),
+    test_reverse(T, Interop, []).
+
+test_reverse(T, Interop, Options) ->
+    Bin =
+        case Options of
+            [] -> erlang:term_to_binary(T);
+            _ -> erlang:term_to_binary(T, Options)
+        end,
     %% erlang:display(Bin),
     Bin = Interop,
     {X, Used} = erlang:binary_to_term(Bin, [used]),
@@ -79,7 +103,7 @@ test_reverse(T, Interop) ->
     %% erlang:display(X),
     X = T.
 
-test_catentate_and_split(L) ->
+test_catenate_and_split(L) ->
     Bins = [erlang:term_to_binary(E) || E <- L],
     Bin = erlang:iolist_to_binary(Bins),
     L2 = split(Bin, []),
@@ -139,8 +163,13 @@ mutate_bin(Bin, I) ->
     I2 = Ith bxor 16#FF,
     <<Prefix/binary, I2:8/integer-unsigned, Rest/binary>>.
 
-test_external_function() ->
-    Bin = term_to_binary([fun ?MODULE:apply/2, fun ?MODULE:apply/3]),
+test_external_function(Options) ->
+    T = [fun ?MODULE:apply/2, fun ?MODULE:apply/3],
+    Bin =
+        case Options of
+            [] -> erlang:term_to_binary(T);
+            _ -> erlang:term_to_binary(T, Options)
+        end,
     Bin =
         <<131, 108, 0, 0, 0, 2, 113, 100, 0, 19, 116, 101, 115, 116, 95, 98, 105, 110, 97, 114, 121,
             95, 116, 111, 95, 116, 101, 114, 109, 100, 0, 5, 97, 112, 112, 108, 121, 97, 2, 113,

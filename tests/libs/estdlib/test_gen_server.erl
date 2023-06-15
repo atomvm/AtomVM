@@ -122,19 +122,40 @@ test_late_reply() ->
             unexpected -> unexpected
         catch
             % estdlib
-            exit:timeout -> timeout;
+            exit:timeout ->
+                timeout;
             % OTP
-            exit:{timeout, _} -> timeout;
-            T:V -> {unexpected, T, V}
+            exit:{timeout, _} ->
+                timeout;
+            T:V ->
+                erlang:display({unexpected, T, V}),
+                unexpected
         end,
     %%
     %% flush the late message in the mailbox
     %% OTP's gen_server(3) man page says it's a two element tuple with a ref as
     %% a first element.
     %%
-    receive
-        {Ref, _} when is_reference(Ref) -> ok
-    end,
+    %% Starting with OTP 24, gen_server:call uses process aliases, so late
+    %% replies will not be received.
+    %%
+    ProcessAliases =
+        case erlang:system_info(machine) of
+            "BEAM" -> erlang:system_info(version) >= "12.";
+            "ATOM" -> false
+        end,
+    ok =
+        case ProcessAliases of
+            true ->
+                ok;
+            false ->
+                receive
+                    {Ref, _} when is_reference(Ref) -> ok;
+                    Other -> {unexpected_other, Other}
+                after 1000 ->
+                    timeout
+                end
+        end,
     ok = gen_server:call(Pid, {reply_after, 0, ok}),
     gen_server:stop(Pid),
     ok.

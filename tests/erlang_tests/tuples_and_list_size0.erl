@@ -23,7 +23,20 @@
 -export([start/0, make_tuples_and_list/0]).
 
 start() ->
-    erts_debug:flat_size(make_tuples_and_list()).
+    EmptyTupleSize =
+        case erlang:system_info(machine) of
+            "BEAM" ->
+                case erlang:system_info(version) >= "13." of
+                    true -> 0;
+                    false -> 1
+                end;
+            "ATOM" ->
+                1
+        end,
+    EmptyTupleSize = erts_debug:flat_size({}),
+    TupleAndListSize = erts_debug:flat_size(make_tuples_and_list()),
+    TupleAndListSize = 2 + EmptyTupleSize,
+    0.
 
 make_tuples_and_list() ->
     [{}].
