@@ -30,8 +30,8 @@ jobs:
 
     - uses: erlef/setup-beam@v1.10.0
       with:
-        otp-version: 23.0
-        elixir-version: 1.9
+        otp-version: 24.3
+        elixir-version: 1.12
 
     - name: "Install run-clang-format"
       run: |
