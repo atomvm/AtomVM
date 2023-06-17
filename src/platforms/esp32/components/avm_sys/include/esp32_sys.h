@@ -25,6 +25,10 @@
 #include <esp_partition.h>
 #include <freertos/queue.h>
 
+#if ESP_IDF_VERSION_MAJOR >= 5
+#include <spi_flash_mmap.h>
+#endif
+
 #include <time.h>
 
 #include "sys.h"
@@ -122,7 +126,7 @@ extern struct PortDriverDefListItem *port_driver_list;
 extern struct NifCollectionDefListItem *nif_collection_list;
 
 extern QueueSetHandle_t event_set;
-extern xQueueHandle event_queue;
+extern QueueHandle_t event_queue;
 void esp32_sys_queue_init();
 
 void sys_event_listener_init(EventListener *listener, void *sender, event_handler_t handler, void *data);

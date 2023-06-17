@@ -46,7 +46,6 @@
 #include <lwip/api.h>
 #include <lwip/inet.h>
 #include <lwip/ip_addr.h>
-#include <tcpip_adapter.h>
 #pragma GCC diagnostic pop
 
 //#define ENABLE_TRACE 1
@@ -204,9 +203,9 @@ struct ReadyConnection
 // This pattern makes sure all accesses to netconn API are serialized. They
 // may be called in different scheduler threads, though.
 
-xQueueHandle netconn_events = NULL;
+QueueHandle_t netconn_events = NULL;
 
-void ESP_IRAM_ATTR socket_callback(struct netconn *netconn, enum netconn_evt evt, u16_t len)
+void IRAM_ATTR socket_callback(struct netconn *netconn, enum netconn_evt evt, u16_t len)
 {
     TRACE("socket_callback netconn=%p, evt=%d, len=%d\n", (void *) netconn, evt, len);
 

@@ -30,8 +30,6 @@
 // #define ENABLE_TRACE
 #include "trace.h"
 
-#include "esp_event.h"
-#include "esp_event_loop.h"
 #include "esp_heap_caps.h"
 #include "esp_idf_version.h"
 #include "esp_pthread.h"
@@ -44,6 +42,11 @@
 #include <limits.h>
 #include <stdint.h>
 #include <sys/socket.h>
+
+// introduced starting with 4.4
+#if ESP_IDF_VERSION_MAJOR >= 5
+#include "esp_chip_info.h"
+#endif
 
 #ifdef HAVE_SOC_CPU_CORES_NUM
 #include "soc/soc_caps.h"
@@ -83,7 +86,7 @@ static const char *const revision_atom = "\x8" "revision";
 struct PortDriverDefListItem *port_driver_list;
 struct NifCollectionDefListItem *nif_collection_list;
 
-xQueueHandle event_queue = NULL;
+QueueHandle_t event_queue = NULL;
 QueueSetHandle_t event_set = NULL;
 
 void esp32_sys_queue_init()
@@ -227,8 +230,8 @@ const void *esp32_sys_mmap_partition(const char *partition_name, spi_flash_mmap_
         ESP_LOGE(TAG, "Failed to map BEAM partition for %s", partition_name);
         return NULL;
     }
-    ESP_LOGI(TAG, "Loaded BEAM partition %s at address 0x%x (size=%i bytes)", partition_name,
-        partition->address, partition->size);
+    ESP_LOGI(TAG, "Loaded BEAM partition %s at address 0x%"PRIx32" (size=%"PRIu32" bytes)",
+        partition_name, partition->address, partition->size);
 
     return mapped_memory;
 }

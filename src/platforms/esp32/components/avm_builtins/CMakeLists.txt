@@ -22,7 +22,6 @@ set(AVM_BUILTIN_COMPONENT_SRCS
     "gpio_driver.c"
     "i2c_driver.c"
     "ledc_nif.c"
-    "network_driver.c"
     "nvs_nif.c"
     "rtc_slow_nif.c"
     "socket_driver.c"
@@ -30,10 +29,16 @@ set(AVM_BUILTIN_COMPONENT_SRCS
     "uart_driver.c"
 )
 
+if (IDF_VERSION_MAJOR EQUAL 4)
+    list(APPEND AVM_BUILTIN_COMPONENT_SRCS "network_driver.c")
+else()
+    message(WARNING "network driver is not supported yet with esp-idf 5.x.")
+endif()
+
 idf_component_register(
     SRCS ${AVM_BUILTIN_COMPONENT_SRCS}
     INCLUDE_DIRS "include"
-    PRIV_REQUIRES "libatomvm" "avm_sys" "nvs_flash"
+    PRIV_REQUIRES "libatomvm" "avm_sys" "nvs_flash" "driver" "esp_event" "esp_wifi"
 )
 
 idf_build_set_property(
