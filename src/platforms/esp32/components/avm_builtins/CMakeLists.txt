@@ -35,14 +35,25 @@ else()
     message(WARNING "network driver is not supported yet with esp-idf 5.x.")
 endif()
 
+# WHOLE_ARCHIVE option is supported only with esp-idf 5.x
+# A link option will be used with esp-idf 4.x
+if (IDF_VERSION_MAJOR EQUAL 5)
+    set(OPTIONAL_WHOLE_ARCHIVE WHOLE_ARCHIVE)
+else()
+    set(OPTIONAL_WHOLE_ARCHIVE "")
+endif()
+
 idf_component_register(
     SRCS ${AVM_BUILTIN_COMPONENT_SRCS}
     INCLUDE_DIRS "include"
     PRIV_REQUIRES "libatomvm" "avm_sys" "nvs_flash" "driver" "esp_event" "esp_wifi"
+    ${OPTIONAL_WHOLE_ARCHIVE}
 )
 
-idf_build_set_property(
-    LINK_OPTIONS "-Wl,--whole-archive ${CMAKE_CURRENT_BINARY_DIR}/lib${COMPONENT_NAME}.a -Wl,--no-whole-archive"
-    APPEND)
+if (IDF_VERSION_MAJOR EQUAL 4)
+    idf_build_set_property(
+        LINK_OPTIONS "-Wl,--whole-archive ${CMAKE_CURRENT_BINARY_DIR}/lib${COMPONENT_NAME}.a -Wl,--no-whole-archive"
+        APPEND)
+endif()
 
 target_compile_features(${COMPONENT_LIB} INTERFACE c_std_11)
