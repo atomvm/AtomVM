@@ -35,6 +35,7 @@ jobs:
         - 4.3.5
         - 4.4.4
         - 5.0.2
+        - 5.1-rc1
 
     steps:
     - name: Checkout repo
