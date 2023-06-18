@@ -24,29 +24,47 @@ jobs:
   run-tests:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: ["macos-latest", "ubuntu-20.04"]
-        otp: ["21", "22", "23"]
-
         include:
         - os: "ubuntu-20.04"
           test_erlang_opts: "-s prime_smp"
-
-        - os: "macos-latest"
-          cmake_opts: "-DOPENSSL_ROOT_DIR=/usr/local/opt/openssl"
-
-        - os: "macos-latest"
           otp: "21"
-          path_prefix: "/usr/local/opt/erlang@21/bin:"
 
-        - os: "macos-latest"
+        - os: "ubuntu-20.04"
+          test_erlang_opts: "-s prime_smp"
           otp: "22"
-          path_prefix: "/usr/local/opt/erlang@22/bin:"
+
+        - os: "ubuntu-20.04"
+          test_erlang_opts: "-s prime_smp"
+          otp: "23"
+
+        - os: "ubuntu-22.04"
+          test_erlang_opts: "-s prime_smp"
+          otp: "24"
+
+        - os: "ubuntu-22.04"
+          test_erlang_opts: "-s prime_smp"
+          otp: "25"
+
+        - os: "ubuntu-22.04"
+          test_erlang_opts: "-s prime_smp"
+          otp: "26"
 
         - os: "macos-latest"
           otp: "23"
           path_prefix: "/usr/local/opt/erlang@23/bin:"
+          cmake_opts: "-DOPENSSL_ROOT_DIR=/usr/local/opt/openssl"
 
+        - os: "macos-latest"
+          otp: "24"
+          path_prefix: "/usr/local/opt/erlang@24/bin:"
+          cmake_opts: "-DOPENSSL_ROOT_DIR=/usr/local/opt/openssl"
+
+        - os: "macos-latest"
+          otp: "25"
+          path_prefix: "/usr/local/opt/erlang@25/bin:"
+          cmake_opts: "-DOPENSSL_ROOT_DIR=/usr/local/opt/openssl"
     steps:
     # Setup
     - name: "Checkout repo"
@@ -73,7 +91,7 @@ jobs:
     - name: "Build: create build dir"
       run: mkdir build
 
-    - uses: actions/cache@v2
+    - uses: actions/cache@v3
       id: cache
       with:
         path: 'build/tests/**/*.beam'
