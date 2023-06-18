@@ -22,6 +22,7 @@ set(AVM_BUILTIN_COMPONENT_SRCS
     "gpio_driver.c"
     "i2c_driver.c"
     "ledc_nif.c"
+    "network_driver.c"
     "nvs_nif.c"
     "rtc_slow_nif.c"
     "socket_driver.c"
@@ -29,10 +30,10 @@ set(AVM_BUILTIN_COMPONENT_SRCS
     "uart_driver.c"
 )
 
-if (IDF_VERSION_MAJOR EQUAL 4)
-    list(APPEND AVM_BUILTIN_COMPONENT_SRCS "network_driver.c")
+if (IDF_VERSION_MAJOR GREATER_EQUAL 5)
+    set(ADDITIONAL_PRIV_REQUIRES "esp_hw_support" "efuse")
 else()
-    message(WARNING "network driver is not supported yet with esp-idf 5.x.")
+    set(ADDITIONAL_PRIV_REQUIRES "")
 endif()
 
 # WHOLE_ARCHIVE option is supported only with esp-idf 5.x
@@ -46,7 +47,7 @@ endif()
 idf_component_register(
     SRCS ${AVM_BUILTIN_COMPONENT_SRCS}
     INCLUDE_DIRS "include"
-    PRIV_REQUIRES "libatomvm" "avm_sys" "nvs_flash" "driver" "esp_event" "esp_wifi"
+    PRIV_REQUIRES "libatomvm" "avm_sys" "nvs_flash" "driver" "esp_event" "esp_wifi" ${ADDITIONAL_PRIV_REQUIRES}
     ${OPTIONAL_WHOLE_ARCHIVE}
 )
 
