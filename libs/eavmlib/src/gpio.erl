@@ -34,6 +34,8 @@
     start/0, open/0, read/2, set_direction/3, set_level/3, set_int/3, remove_int/2, stop/0, close/1
 ]).
 -export([
+    init/1,
+    deinit/1,
     set_pin_mode/2,
     set_pin_pull/2,
     hold_en/1,
