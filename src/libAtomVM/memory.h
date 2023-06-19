@@ -133,19 +133,6 @@ void memory_init_heap_root_fragment(Heap *heap, HeapFragment *root, size_t size)
 enum MemoryGCResult memory_init_heap(Heap *heap, size_t size) MUST_CHECK;
 
 /**
- * @brief return the available free memory on the heap.
- *
- * @details the result does not include fragments.
- * @param heap the heap to get the available memory of
- * @returns the available memory in terms
- */
-static inline size_t memory_heap_avail_free_memory(const Heap *heap)
-{
-    // Free memory is always on current fragment.
-    return heap->heap_end - heap->heap_ptr;
-}
-
-/**
  * @brief return the total memory size of a heap fragment and its children.
  *
  * @param fragment the root fragment to get the size of
