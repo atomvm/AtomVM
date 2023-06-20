@@ -36,15 +36,20 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
+#include <esp32_sys.h>
+#include <esp_efuse.h>
+#include <esp_efuse_table.h>
 #include <esp_log.h>
+#include <esp_netif.h>
 #include <esp_sntp.h>
 #include <esp_wifi.h>
-#include <esp32_sys.h>
 #include <lwip/inet.h>
+#if ESP_IDF_VERSION_MAJOR >= 5
+#include <esp_mac.h>
+#endif
 #pragma GCC diagnostic pop
 
 #include <string.h>
-
 
 #define TCPIP_HOSTNAME_MAX_SIZE 255
 
@@ -72,7 +77,8 @@ static const char *const sta_got_ip_atom = ATOM_STR("\xA", "sta_got_ip");
 ESP_EVENT_DECLARE_BASE(sntp_event_base);
 ESP_EVENT_DEFINE_BASE(sntp_event_base);
 
-enum {
+enum
+{
     SNTP_EVENT_BASE_SYNC
 };
 
@@ -123,7 +129,7 @@ static void send_term(Heap *heap, struct ClientData *data, term t)
     port_send_message(data->global, term_from_local_process_id(data->owner_process_id), msg);
 }
 
-static void send_got_ip(struct ClientData *data, tcpip_adapter_ip_info_t *info)
+static void send_got_ip(struct ClientData *data, esp_netif_ip_info_t *info)
 {
     TRACE("Sending got_ip back to AtomVM\n");
 
@@ -288,12 +294,12 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 
     } else if (event_base == IP_EVENT) {
 
-        switch(event_id) {
+        switch (event_id) {
 
             case IP_EVENT_STA_GOT_IP: {
                 ip_event_got_ip_t *event = (ip_event_got_ip_t *) event_data;
                 ESP_LOGI(TAG, "IP_EVENT_STA_GOT_IP: %s", inet_ntoa(event->ip_info.ip));
-                send_got_ip(data, (tcpip_adapter_ip_info_t *) &event->ip_info.ip);
+                send_got_ip(data, (esp_netif_ip_info_t *) &event->ip_info.ip);
                 break;
             }
 
@@ -404,10 +410,17 @@ static wifi_config_t *get_sta_wifi_config(term sta_config, GlobalContext *global
     return wifi_config;
 }
 
-static char *get_default_device_name()
+static char *get_default_device_name(esp_mac_type_t interface)
 {
     uint8_t mac[6];
+// Support actually begins with IDF v4.3
+#if ESP_IDF_VERSION_MAJOR == 5
+    esp_read_mac(mac, interface);
+// TODO: remove this conditional when IDF 4.2 is dropped.
+#else
+    UNUSED(interface);
     esp_efuse_mac_get_default(mac);
+#endif
 
     size_t buf_size = strlen("atomvm-") + 12 + 1;
     char *buf = malloc(buf_size);
@@ -434,7 +447,7 @@ static wifi_config_t *get_ap_wifi_config(term ap_config, GlobalContext *global)
     //
     char *ssid = NULL;
     if (term_is_invalid_term(ssid_term)) {
-        ssid = get_default_device_name();
+        ssid = get_default_device_name(ESP_MAC_WIFI_SOFTAP);
     } else {
         int ok = 0;
         ssid = interop_term_to_string(ssid_term, &ok);
@@ -492,19 +505,18 @@ static wifi_config_t *get_ap_wifi_config(term ap_config, GlobalContext *global)
         free(psk);
     }
 
-    wifi_config->ap.authmode = IS_NULL_PTR(psk) ? WIFI_AUTH_OPEN :
-                WIFI_AUTH_WPA_WPA2_PSK;
-                term ssid_hidden_term = interop_kv_get_value(ap_config, ssid_hidden_atom, global);
-                wifi_config->ap.ssid_hidden = term_is_invalid_term(ssid_hidden_term) ? 0 : ssid_hidden_term == TRUE_ATOM;
-                term max_connections_term = interop_kv_get_value(ap_config, max_connections_atom, global);
-                wifi_config->ap.max_connection = term_is_invalid_term(max_connections_term) ? 4 : term_to_int(max_connections_term);
+    wifi_config->ap.authmode = IS_NULL_PTR(psk) ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA_WPA2_PSK;
+    term ssid_hidden_term = interop_kv_get_value(ap_config, ssid_hidden_atom, global);
+    wifi_config->ap.ssid_hidden = term_is_invalid_term(ssid_hidden_term) ? 0 : ssid_hidden_term == TRUE_ATOM;
+    term max_connections_term = interop_kv_get_value(ap_config, max_connections_atom, global);
+    wifi_config->ap.max_connection = term_is_invalid_term(max_connections_term) ? 4 : term_to_int(max_connections_term);
 
-                ESP_LOGI(TAG, "AP ssid: %s", wifi_config->ap.ssid);
-                ESP_LOGI(TAG, "AP authmode: %d", wifi_config->ap.authmode);
-                ESP_LOGI(TAG, "AP ssid_hidden: %d", wifi_config->ap.ssid_hidden);
-                ESP_LOGI(TAG, "AP max_connection: %d", wifi_config->ap.max_connection);
+    ESP_LOGI(TAG, "AP ssid: %s", wifi_config->ap.ssid);
+    ESP_LOGI(TAG, "AP authmode: %d", wifi_config->ap.authmode);
+    ESP_LOGI(TAG, "AP ssid_hidden: %d", wifi_config->ap.ssid_hidden);
+    ESP_LOGI(TAG, "AP max_connection: %d", wifi_config->ap.max_connection);
 
-                return wifi_config;
+    return wifi_config;
 }
 
 static void time_sync_notification_cb(struct timeval *tv)
@@ -535,7 +547,7 @@ static void maybe_set_sntp(term sntp_config, GlobalContext *global)
     }
 }
 
-static void set_dhcp_hostname(term dhcp_hostname_term)
+static void set_dhcp_hostname(esp_netif_t *interface, term dhcp_hostname_term)
 {
     char dhcp_hostname[TCPIP_HOSTNAME_MAX_SIZE + 1];
     if (!term_is_invalid_term(dhcp_hostname_term)) {
@@ -550,11 +562,11 @@ static void set_dhcp_hostname(term dhcp_hostname_term)
             free(tmp);
         }
     } else {
-        char *tmp = get_default_device_name();
+        char *tmp = get_default_device_name(ESP_MAC_WIFI_STA);
         strncpy(dhcp_hostname, tmp, TCPIP_HOSTNAME_MAX_SIZE);
         free(tmp);
     }
-    esp_err_t status = tcpip_adapter_set_hostname(WIFI_IF_STA, dhcp_hostname);
+    esp_err_t status = esp_netif_set_hostname(interface, dhcp_hostname);
     if (status == ESP_OK) {
         ESP_LOGI(TAG, "DHCP hostname set to %s", dhcp_hostname);
     } else {
@@ -565,6 +577,8 @@ static void set_dhcp_hostname(term dhcp_hostname_term)
 static void start_network(Context *ctx, term pid, term ref, term config)
 {
     TRACE("start_network");
+
+    esp_netif_t *interface = NULL;
 
     // {Ref, ok | {error, atom() | integer()}}
     size_t heap_size = PORT_REPLY_SIZE + TUPLE_SIZE(2);
@@ -609,10 +623,16 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     esp_err_t err;
 
     if (sta_wifi_config != NULL) {
-        esp_netif_create_default_wifi_sta();
+        interface = esp_netif_create_default_wifi_sta();
     }
     if (ap_wifi_config != NULL) {
-        esp_netif_create_default_wifi_ap();
+        interface = esp_netif_create_default_wifi_ap();
+    }
+    if (IS_NULL_PTR(interface)) {
+        ESP_LOGE(TAG, "Failed to create net work interface");
+        term error = port_create_error_tuple(ctx, ERROR_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
     }
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -729,7 +749,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     // Set the DHCP hostname, if STA mode is enabled
     //
     if (!IS_NULL_PTR(sta_wifi_config)) {
-        set_dhcp_hostname(interop_kv_get_value(sta_config, dhcp_hostname_atom, ctx->global));
+        set_dhcp_hostname(interface, interop_kv_get_value(sta_config, dhcp_hostname_atom, ctx->global));
     }
     //
     // Done -- send an ok so the FSM can proceed
