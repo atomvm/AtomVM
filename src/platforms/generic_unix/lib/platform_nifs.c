@@ -57,7 +57,7 @@ static term nif_openssl_md5(Context *ctx, int argc, term argv[])
 
     unsigned char digest[MD5_DIGEST_LENGTH];
     MD5((const unsigned char *) term_binary_data(data), term_binary_size(data), digest);
-    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(MD5_DIGEST_LENGTH) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(MD5_DIGEST_LENGTH)) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     return term_from_literal_binary(digest, MD5_DIGEST_LENGTH, &ctx->heap, ctx->global);
@@ -81,7 +81,7 @@ static term nif_openssl_rand_bytes(Context *ctx, int argc, term argv[])
         RAISE_ERROR(LOW_ENTROPY_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(n) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(n)) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term ret = term_from_literal_binary(buf, n, &ctx->heap, ctx->global);

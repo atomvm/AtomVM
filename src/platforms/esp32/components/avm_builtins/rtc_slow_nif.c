@@ -61,7 +61,7 @@ static term nif_esp_rtc_slow_get_binary(Context *ctx, int argc, term argv[])
     if (checksum != rtc_slow_data_checksum) {
         RAISE_ERROR(BADARG_ATOM);
     }
-    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(rtc_slow_data_size) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(rtc_slow_data_size)) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 

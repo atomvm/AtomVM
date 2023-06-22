@@ -102,7 +102,7 @@ static term nif_esp_random_bytes(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
     if (len == 0) {
-        if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(0) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(0)) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         term binary = term_create_empty_binary(0, &ctx->heap, ctx->global);
@@ -113,7 +113,7 @@ static term nif_esp_random_bytes(Context *ctx, int argc, term argv[])
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         esp_fill_random(buf, len);
-        if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(len)) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         term binary = term_from_literal_binary(buf, len, &ctx->heap, ctx->global);
@@ -388,7 +388,7 @@ static term nif_rom_md5(Context *ctx, int argc, term argv[])
     MD5Update(&md5, (const unsigned char *) term_binary_data(data), term_binary_size(data));
     MD5Final(digest, &md5);
     #endif
-    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(MD5_DIGEST_LENGTH) + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(MD5_DIGEST_LENGTH)) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     return term_from_literal_binary(digest, MD5_DIGEST_LENGTH, &ctx->heap, ctx->global);

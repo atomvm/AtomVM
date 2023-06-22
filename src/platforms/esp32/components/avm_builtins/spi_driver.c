@@ -543,13 +543,13 @@ static term spidriver_write_read(Context *ctx, term req)
     if (err_term != OK_ATOM) {
         ESP_LOGE(TAG, "Invalid transaction");
         // gc is ok as err_term is an atom
-        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
             return OUT_OF_MEMORY_ATOM;
         }
         return create_pair(ctx, ERROR_ATOM, err_term);
     }
 
-    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(output_size) + BINARY_HEADER_SIZE + 3) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(output_size) + TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
         return OUT_OF_MEMORY_ATOM;
     }
     term output_data_term = term_create_empty_binary(output_size, &ctx->heap, ctx->global);

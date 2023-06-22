@@ -104,7 +104,7 @@ EventListener *uart_interrupt_callback(GlobalContext *glb, EventListener *listen
         switch (event.type) {
             case UART_DATA:
                 if (uart_data->reader_process_pid != term_invalid_term()) {
-                    int bin_size = term_binary_data_size_in_terms(event.size) + BINARY_HEADER_SIZE;
+                    int bin_size = term_binary_heap_size(event.size);
 
                     Heap heap;
                     if (UNLIKELY(memory_init_heap(&heap, bin_size + REF_SIZE + TUPLE_SIZE(2) * 2) != MEMORY_GC_OK)) {
@@ -329,7 +329,7 @@ static void uart_driver_do_read(Context *ctx, term msg)
     uart_get_buffered_data_len(uart_data->uart_num, &count);
 
     if (count > 0) {
-        int bin_size = term_binary_data_size_in_terms(count) + BINARY_HEADER_SIZE;
+        int bin_size = term_binary_heap_size(count);
         if (UNLIKELY(memory_ensure_free(ctx, bin_size + TUPLE_SIZE(2) * 2 + REF_SIZE) != MEMORY_GC_OK)) {
             ESP_LOGE(TAG, "[uart_driver_do_read] Failed to allocate space for return value");
             globalcontext_send_message(glb, local_pid, MEMORY_ATOM);

@@ -709,7 +709,7 @@ static EventListener *active_recv_callback(GlobalContext *glb, EventListener *ba
         TRACE("socket_driver|active_recv_callback: received data of len %li from fd %i\n", len, socket_data->sockfd);
         int ensure_packet_avail;
         if (socket_data->binary) {
-            ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
+            ensure_packet_avail = term_binary_heap_size(len);
         } else {
             ensure_packet_avail = len * 2;
         }
@@ -782,7 +782,7 @@ static EventListener *passive_recv_callback(GlobalContext *glb, EventListener *b
         TRACE("socket_driver|passive_recv_callback: passive received data of len: %li\n", len);
         int ensure_packet_avail;
         if (socket_data->binary) {
-            ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
+            ensure_packet_avail = term_binary_heap_size(len);
         } else {
             ensure_packet_avail = len * 2;
         }
@@ -846,7 +846,7 @@ static EventListener *active_recvfrom_callback(GlobalContext *glb, EventListener
     } else {
         int ensure_packet_avail;
         if (socket_data->binary) {
-            ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
+            ensure_packet_avail = term_binary_heap_size(len);
         } else {
             ensure_packet_avail = len * 2;
         }
@@ -912,7 +912,7 @@ static EventListener *passive_recvfrom_callback(GlobalContext *glb, EventListene
     } else {
         int ensure_packet_avail;
         if (socket_data->binary) {
-            ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
+            ensure_packet_avail = term_binary_heap_size(len);
         } else {
             ensure_packet_avail = len * 2;
         }

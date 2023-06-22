@@ -181,8 +181,8 @@ term externalterm_to_binary(Context *ctx, term t)
     //
     // Ensure enough free space in heap for binary
     //
-    int size_in_terms = term_binary_data_size_in_terms(len);
-    if (UNLIKELY(memory_ensure_free(ctx, size_in_terms + 1) != MEMORY_GC_OK)) {
+    int size_in_terms = term_binary_heap_size(len);
+    if (UNLIKELY(memory_ensure_free(ctx, size_in_terms) != MEMORY_GC_OK)) {
         fprintf(stderr, "Unable to ensure %i free words in heap\n", size_in_terms);
         return term_invalid_term();
     }

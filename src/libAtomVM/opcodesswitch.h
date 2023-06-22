@@ -3719,7 +3719,7 @@ wait_timeout_trap_handler:
 
                     TRACE("bs_init2/6, fail=%u size=%li words=%u regs=%u dreg=%c%i\n", (unsigned) fail, size_val, (unsigned) words, (unsigned) regs, T_DEST_REG(dreg_type, dreg));
 
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(size_val) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(size_val), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     term t = term_create_empty_binary(size_val, &ctx->heap, ctx->global);
@@ -3768,7 +3768,7 @@ wait_timeout_trap_handler:
 
                     TRACE("bs_init_bits/6, fail=%i size=%li words=%i regs=%i dreg=%c%i\n", fail, size_val, words, regs, T_DEST_REG(dreg_type, dreg));
 
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(size_val / 8) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(size_val / 8), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     term t = term_create_empty_binary(size_val / 8, &ctx->heap, ctx->global);
@@ -4203,7 +4203,7 @@ wait_timeout_trap_handler:
                 TRACE("bs_init_writable/0\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(0) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(0), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     term t = term_create_empty_binary(0, &ctx->heap, ctx->global);
@@ -4267,7 +4267,7 @@ wait_timeout_trap_handler:
 
                     size_t src_size = term_binary_size(src);
                     // TODO: further investigate extra_val
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, src_size + term_binary_data_size_in_terms(size_val / 8) + extra_val + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, src_size + term_binary_heap_size(size_val / 8) + extra_val, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     DECODE_COMPACT_TERM(src, code, i, src_off)
@@ -4322,7 +4322,7 @@ wait_timeout_trap_handler:
                     TRACE("bs_private_append/6, fail=%u size=%li unit=%u src=0x%lx dreg=%c%i\n", (unsigned) fail, size_val, (unsigned) unit, src, T_DEST_REG(dreg_type, dreg));
 
                     size_t src_size = term_binary_size(src);
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, src_size + term_binary_data_size_in_terms(size_val / 8) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, src_size + term_binary_heap_size(size_val / 8), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     DECODE_COMPACT_TERM(src, code, i, src_off)
@@ -6517,7 +6517,7 @@ wait_timeout_trap_handler:
                         RAISE_ERROR(UNSUPPORTED_ATOM);
                     }
                     context_clean_registers(ctx, live);
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, alloc + term_binary_data_size_in_terms(binary_size / 8) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, alloc + term_binary_heap_size(binary_size / 8), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     term t = term_create_empty_binary(binary_size / 8, &ctx->heap, ctx->global);
