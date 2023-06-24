@@ -302,10 +302,10 @@ bool globalcontext_unregister_process(GlobalContext *glb, int atom_index)
     struct ListHead *registered_processes_list = synclist_wrlock(&glb->registered_processes);
     struct ListHead *item;
     LIST_FOR_EACH (item, registered_processes_list) {
-        const struct RegisteredProcess *registered_process = GET_LIST_ENTRY(item, struct RegisteredProcess, registered_processes_list_head);
+        struct RegisteredProcess *registered_process = GET_LIST_ENTRY(item, struct RegisteredProcess, registered_processes_list_head);
         if (registered_process->atom_index == atom_index) {
             list_remove(item);
-            free(item);
+            free(registered_process);
             synclist_unlock(&glb->registered_processes);
             return true;
         }
@@ -313,6 +313,23 @@ bool globalcontext_unregister_process(GlobalContext *glb, int atom_index)
 
     synclist_unlock(&glb->registered_processes);
 
+    return false;
+}
+
+bool globalcontext_maybe_unregister_process_id(GlobalContext *glb, int target_process_id)
+{
+    struct ListHead *registered_processes_list = synclist_wrlock(&glb->registered_processes);
+    struct ListHead *item;
+    LIST_FOR_EACH (item, registered_processes_list) {
+        struct RegisteredProcess *registered_process = GET_LIST_ENTRY(item, struct RegisteredProcess, registered_processes_list_head);
+        if (registered_process->local_process_id == target_process_id) {
+            list_remove(item);
+            free(registered_process);
+            synclist_unlock(&glb->registered_processes);
+            return true;
+        }
+    }
+    synclist_unlock(&glb->registered_processes);
     return false;
 }
 

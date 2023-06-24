@@ -112,6 +112,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(match, 5),
     TEST_CASE_EXPECTED(if_test, 5),
     TEST_CASE(sleep),
+    TEST_CASE(whereis_dead_process),
     TEST_CASE_EXPECTED(whereis_fail, 2),
     TEST_CASE_EXPECTED(try_noerror, 1),
     TEST_CASE_EXPECTED(catch_badmatch, 1),
