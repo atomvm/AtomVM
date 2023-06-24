@@ -97,25 +97,10 @@ int enif_release_resource(void *resource)
     return true;
 }
 
-static inline term resource_to_term(struct RefcBinary *refc, Heap *heap)
-{
-    term *boxed_value = memory_heap_alloc(heap, TERM_BOXED_REFC_BINARY_SIZE);
-    boxed_value[0] = ((TERM_BOXED_REFC_BINARY_SIZE - 1) << 6) | TERM_BOXED_REFC_BINARY;
-    boxed_value[1] = (term) 0; // binary size, this is pre ERTS 9.0 (OTP-20.0) behavior
-    boxed_value[2] = (term) RefcNoFlags;
-    term ret = ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
-    boxed_value[3] = (term) refc;
-    // Increment ref count and add the resource to the mso list
-    refc_binary_increment_refcount(refc);
-    heap->root->mso_list = term_list_init_prepend(boxed_value + 4, ret, heap->root->mso_list);
-    return ret;
-}
-
 ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj)
 {
-    struct RefcBinary *refc = refc_binary_from_data(obj);
-    if (UNLIKELY(memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFC_BINARY_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_erl_nif_env_ensure_free(env, TERM_BOXED_RESOURCE_SIZE) != MEMORY_GC_OK)) {
         AVM_ABORT();
     }
-    return resource_to_term(refc, &env->heap);
+    return term_from_resource(obj, &env->heap);
 }
