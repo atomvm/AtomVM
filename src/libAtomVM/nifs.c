@@ -832,7 +832,7 @@ static term nif_erlang_iolist_to_binary_1(Context *ctx, int argc, term argv[])
             RAISE_ERROR(BADARG_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(bin_size) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(bin_size), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         free(bin_buf);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
@@ -1964,7 +1964,7 @@ static term nif_erlang_atom_to_binary_2(Context *ctx, int argc, term argv[])
 
     int atom_len = atom_string_len(atom_string);
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(atom_len) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(atom_len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -2047,7 +2047,7 @@ static term nif_erlang_integer_to_binary_2(Context *ctx, int argc, term argv[])
     avm_int64_t int_value = term_maybe_unbox_int64(value);
     size_t len = lltoa(int_value, base, NULL);
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term result = term_create_empty_binary(len, &ctx->heap, ctx->global);
@@ -2198,7 +2198,7 @@ static term nif_erlang_float_to_binary(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -2255,7 +2255,7 @@ static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -2586,7 +2586,7 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
         char buf[128];
         snprintf(buf, 128, "%s-%s-%s", SYSTEM_NAME, SYSTEM_VERSION, SYSTEM_ARCHITECTURE);
         size_t len = strnlen(buf, 128);
-        if (memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+        if (memory_ensure_free_opt(ctx, term_binary_heap_size(len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         return term_from_literal_binary((const uint8_t *) buf, len, &ctx->heap, ctx->global);
@@ -3572,7 +3572,7 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
         }
         if (src_size == 0) {
             if (return_binary) {
-                if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(0) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(0), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                 }
                 return term_create_empty_binary(0, &ctx->heap, ctx->global);
@@ -3614,7 +3614,7 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
     }
     size_t dst_size_with_pad = dst_size + pad;
     size_t heap_free = return_binary ?
-        term_binary_data_size_in_terms(dst_size_with_pad) + BINARY_HEADER_SIZE
+        term_binary_heap_size(dst_size_with_pad)
         : 2*dst_size_with_pad;
     if (UNLIKELY(memory_ensure_free_opt(ctx, heap_free, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -3719,7 +3719,7 @@ static term base64_decode(Context *ctx, int argc, term argv[], bool return_binar
         }
         if (src_size == 0) {
             if (return_binary) {
-                if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(0) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(0), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                 }
                 return term_create_empty_binary(0, &ctx->heap, ctx->global);
@@ -3761,7 +3761,7 @@ static term base64_decode(Context *ctx, int argc, term argv[], bool return_binar
     }
     dst_size -= pad;
     size_t heap_free = return_binary ?
-        term_binary_data_size_in_terms(dst_size) + BINARY_HEADER_SIZE
+        term_binary_heap_size(dst_size)
         : 2*dst_size;
     if (UNLIKELY(memory_ensure_free_opt(ctx, heap_free, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);

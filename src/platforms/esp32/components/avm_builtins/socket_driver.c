@@ -651,7 +651,7 @@ static NativeHandlerResult do_receive_data(Context *ctx)
 
     int recv_terms_size;
     if (socket_data->binary) {
-        recv_terms_size = term_binary_data_size_in_terms(data_len) + BINARY_HEADER_SIZE;
+        recv_terms_size = term_binary_heap_size(data_len);
     } else {
         recv_terms_size = data_len * 2;
     }

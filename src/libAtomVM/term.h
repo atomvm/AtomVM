@@ -893,6 +893,18 @@ static inline int term_binary_data_size_in_terms(uint32_t size)
 }
 
 /**
+ * @brief The size (in terms) of a binary of size-many bytes in the heap
+ *
+ * @details Returns the number of terms needed in the heap to store a binary of a given size (in bytes)
+ * @param size the size of the binary (in bytes)
+ * @return the size (in terms) of a binary of size-many bytes in the heap
+ */
+static inline int term_binary_heap_size(uint32_t size)
+{
+    return term_binary_data_size_in_terms(size) + BINARY_HEADER_SIZE;
+}
+
+/**
  * @brief Gets binary size
  *
  * @details Returns binary size for a given binary term.
@@ -1005,7 +1017,7 @@ static inline size_t term_sub_binary_heap_size(term binary, size_t len)
     if (term_is_refc_binary(binary) && len >= SUB_BINARY_MIN) {
         return TERM_BOXED_SUB_BINARY_SIZE;
     } else {
-        return term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
+        return term_binary_heap_size(len);
     }
 }
 
