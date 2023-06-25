@@ -70,7 +70,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: ["arm32v5", "arm32v7", "arm64v8"]
+        arch: ["arm32v5", "arm32v7", "arm64v8", "riscv64"]
 
         include:
         - arch: "arm32v5"
