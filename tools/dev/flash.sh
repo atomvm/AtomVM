@@ -36,7 +36,7 @@ echo "%%"
 echo "%% Flashing ${1} (size=${filesize}k)"
 echo "%%"
 
-exec "${IDF_PATH}/components/esptool_py/esptool/esptool.py" \
+exec `which esptool.py` \
     --chip auto \
     --port "${FLASH_SERIAL_PORT}" \
     --baud "${FLASH_BAUD_RATE}" \
