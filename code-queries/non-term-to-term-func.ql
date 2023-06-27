@@ -15,8 +15,16 @@
 
 import cpp
 
+predicate isTermType(Type t) {
+    t.getName() = "term" or
+    (
+        t instanceof TypedefType
+        and isTermType(t.(TypedefType).getBaseType())
+    )
+}
+
 predicate isNotTermOrAtom(Expr expr) {
-  expr.getExplicitlyConverted().getType().getName() != "term" and
+  not isTermType(expr.getExplicitlyConverted().getType()) and
   not (
     expr.isInMacroExpansion() and
     expr.isConstant() and
@@ -37,7 +45,7 @@ predicate isNotTermOrAtom(Expr expr) {
 from FunctionCall functioncall, Type expected_type, Expr expr, int i
 where
   functioncall.getExpectedParameterType(i) = expected_type and
-  expected_type.getName() = "term" and
+  isTermType(expected_type) and
   functioncall.getArgument(i) = expr and
   isNotTermOrAtom(expr)
 select expr, "Passing a non-term to a function expecting a term, without an explicit cast"

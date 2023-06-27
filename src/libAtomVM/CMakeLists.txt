@@ -31,6 +31,8 @@ set(HEADER_FILES
     debug.h
     defaultatoms.h
     dictionary.h
+    erl_nif.h
+    erl_nif_priv.h
     exportedfunction.h
     externalterm.h
     globalcontext.h
@@ -48,6 +50,7 @@ set(HEADER_FILES
     platform_nifs.h
     port.h
     refc_binary.h
+    resources.h
     scheduler.h
     smp.h
     synclist.h
@@ -82,6 +85,7 @@ set(SOURCE_FILES
     nifs.c
     port.c
     refc_binary.c
+    resources.c
     scheduler.c
     stacktrace.c
     term.c

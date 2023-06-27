@@ -29,6 +29,7 @@
 #include "defaultatoms.h"
 #include "list.h"
 #include "refc_binary.h"
+#include "resources.h"
 #include "synclist.h"
 #include "sys.h"
 #include "utils.h"
@@ -77,6 +78,7 @@ GlobalContext *globalcontext_new()
     synclist_init(&glb->processes_table);
     synclist_init(&glb->registered_processes);
     synclist_init(&glb->listeners);
+    synclist_init(&glb->resource_types);
 
     glb->last_process_id = 0;
 
@@ -190,6 +192,14 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
         sys_listener_destroy(item);
     }
     synclist_destroy(&glb->listeners);
+
+    // Destroy resource types
+    struct ListHead *resource_types = synclist_nolock(&glb->resource_types);
+    MUTABLE_LIST_FOR_EACH (item, tmp, resource_types) {
+        struct ResourceType *resource_type = GET_LIST_ENTRY(item, struct ResourceType, head);
+        resource_type_destroy(resource_type);
+    }
+    synclist_destroy(&glb->resource_types);
 
     free(glb);
 }

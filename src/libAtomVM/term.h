@@ -66,6 +66,7 @@ extern "C" {
 #define TERM_BOXED_REFC_BINARY_SIZE 6
 #define TERM_BOXED_BIN_MATCH_STATE_SIZE 4
 #define TERM_BOXED_SUB_BINARY_SIZE 4
+#define TERM_BOXED_RESOURCE_SIZE TERM_BOXED_REFC_BINARY_SIZE
 #if TERM_BYTES == 8
     #define REFC_BINARY_MIN 64
     #define SUB_BINARY_MIN 16
@@ -1674,6 +1675,32 @@ static inline term term_get_sub_binary_ref(term t)
 {
     const term *boxed_value = term_to_const_term_ptr(t);
     return boxed_value[3];
+}
+
+/**
+ * @brief Create a resource on the heap.
+ * @details This function creats a resource (obtained from `enif_alloc_resource`)
+ * on the heap which must have `TERM_BOXED_RESOURCE_SIZE` free terms.
+ *
+ * @param resource resource obtained from `enif_alloc_resource`
+ * @param heap the heap to allocate the resource in
+ * @return a term pointing to the resource
+ */
+static inline term term_from_resource(void *resource, Heap *heap)
+{
+    // Resources are currently refc binaries with a size of 0 but may be
+    // references in the future.
+    struct RefcBinary *refc = refc_binary_from_data(resource);
+    term *boxed_value = memory_heap_alloc(heap, TERM_BOXED_REFC_BINARY_SIZE);
+    boxed_value[0] = ((TERM_BOXED_REFC_BINARY_SIZE - 1) << 6) | TERM_BOXED_REFC_BINARY;
+    boxed_value[1] = (term) 0; // binary size, this is pre ERTS 9.0 (OTP-20.0) behavior
+    boxed_value[2] = (term) RefcNoFlags;
+    term ret = ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+    boxed_value[3] = (term) refc;
+    // Increment ref count and add the resource to the mso list
+    refc_binary_increment_refcount(refc);
+    heap->root->mso_list = term_list_init_prepend(boxed_value + 4, ret, heap->root->mso_list);
+    return ret;
 }
 
 #ifdef __cplusplus

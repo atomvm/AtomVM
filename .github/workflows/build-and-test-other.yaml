@@ -162,10 +162,13 @@ jobs:
         cp ../build_tests/tests/libs/alisp/*.avm tests/libs/alisp/ &&
         make AtomVM &&
         make test-erlang &&
+        make test-enif &&
         make test-mailbox &&
         make test-structs &&
         file ./tests/test-erlang &&
         ./tests/test-erlang -s prime_smp &&
+        file ./tests/test-enif &&
+        ./tests/test-enif &&
         file ./tests/test-mailbox &&
         ./tests/test-mailbox &&
         file ./tests/test-structs &&

@@ -29,7 +29,9 @@ extern "C" {
 #include <stdlib.h>
 
 #include "list.h"
+#include "resources.h"
 #include "smp.h"
+
 #ifndef TYPEDEF_CONTEXT
 #define TYPEDEF_CONTEXT
 typedef struct Context Context;
@@ -45,7 +47,21 @@ struct RefcBinary
     struct ListHead head;
     size_t ATOMIC ref_count;
     size_t size;
+    struct ResourceType *resource_type; // Resource type or NULL for regular refc binaries.
+    uint8_t data[];
 };
+
+/**
+ * @brief Create a reference-counted resource object outside of the process heap
+ *
+ * @details This function will create a reference-counted resource object outside of the context heap.
+ * A blob will be allocated in the VM memory (e.g., via malloc).  The allocated data will include
+ * an internal data structure that includes the data size and reference count.
+ * @param size the size of the data to create
+ * @param resource_type the resource type, `NULL` for regular refc binaries.
+ * @returns a pointer to the out-of-context data.
+ */
+struct RefcBinary *refc_binary_create_resource(size_t size, struct ResourceType *resource_type);
 
 /**
  * @brief Create a reference-counted binary outside of the process heap
@@ -56,7 +72,10 @@ struct RefcBinary
  * @param size the size of the data to create
  * @returns a pointer to the out-of-context data.
  */
-struct RefcBinary *refc_binary_create_refc(size_t size);
+static inline struct RefcBinary *refc_binary_create_refc(size_t size)
+{
+    return refc_binary_create_resource(size, NULL);
+}
 
 /**
  * @brief get the data of the off-context binary
@@ -65,6 +84,14 @@ struct RefcBinary *refc_binary_create_refc(size_t size);
  * @param ptr Refc binary returned from memory_create_refc_binary
  */
 const char *refc_binary_get_data(const struct RefcBinary *ptr);
+
+/**
+ * @brief get the refc binary from its pointer
+ * @details This must only be passed the result of `refc_binary_get_data`.
+ *
+ * @param ptr pointer obtained from `refc_binary_get_data`
+ */
+struct RefcBinary *refc_binary_from_data(void *ptr);
 
 /**
  * @brief Increment the reference count on the refc binary
