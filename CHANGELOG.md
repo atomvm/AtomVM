@@ -56,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed a bug in when putting integers in bit syntax with integer field sizes
 - Fixed numerous bugs in memory allocations that could crash the VM
 - Fixed SNTP support that had been broken in IDF 4.x builds
+- Fixed `erlang:send/2` not sending to registered name
 
 ### Breaking Changes
 

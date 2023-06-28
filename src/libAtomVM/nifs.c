@@ -1284,12 +1284,40 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
 static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
+    term target = argv[0];
+    GlobalContext *glb = ctx->global;
 
-    term pid_term = argv[0];
-    VALIDATE_VALUE(pid_term, term_is_pid);
+    if (term_is_pid(target)) {
+        int32_t local_process_id = term_to_local_process_id(target);
 
-    int local_process_id = term_to_local_process_id(pid_term);
-    globalcontext_send_message(ctx->global, local_process_id, argv[1]);
+        globalcontext_send_message(glb, local_process_id, argv[1]);
+
+    } else if (term_is_atom(target)) {
+        // We need to hold a lock on the processes_table until the message is sent to avoid a race condition,
+        // otherwise the receiving process could be killed at any point between checking it is registered,
+        // obtaining its process_id, and sending the message, any of which would lead to crashes or incorrect
+        // behavior that does not match OTP.
+        struct ListHead *dummy = synclist_rdlock(&glb->processes_table);
+        UNUSED(dummy);
+        int atom_index = term_to_atom_index(target);
+
+        int local_process_id = globalcontext_get_registered_process(glb, atom_index);
+        if (UNLIKELY(local_process_id == 0)) {
+            synclist_unlock(&glb->processes_table);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+
+        Context *p = globalcontext_get_process_nolock(glb, local_process_id);
+        if (IS_NULL_PTR(p)) {
+            synclist_unlock(&glb->processes_table);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+
+        globalcontext_send_message_nolock(glb, local_process_id, argv[1]);
+        synclist_unlock(&glb->processes_table);
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
 
     return argv[1];
 }

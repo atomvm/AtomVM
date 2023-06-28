@@ -141,6 +141,18 @@ GlobalContext *globalcontext_new();
 void globalcontext_destroy(GlobalContext *glb);
 
 /**
+ * @brief Gets a Context from the process table, without acquiring a lock on the process table.
+ *
+ * @details Retrieves from the process table the context with the given local
+ * process id. If the process can be found, without locking the process table.
+ * This is unsafe unless a lock on the process table has been obtained previously.
+ * @param glb the global context (that owns the process table).
+ * @param process_id the local process id.
+ * @returns a Context * with the requested local process id or NULL if not found.
+ */
+Context *globalcontext_get_process_nolock(GlobalContext *glb, int32_t process_id);
+
+/**
  * @brief Gets a Context from the process table, acquiring a lock on the process
  * table.
  *

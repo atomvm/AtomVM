@@ -204,7 +204,7 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
     free(glb);
 }
 
-static Context *globalcontext_get_process_nolock(GlobalContext *glb, int32_t process_id)
+Context *globalcontext_get_process_nolock(GlobalContext *glb, int32_t process_id)
 {
     struct ListHead *item;
     Context *p = NULL;
