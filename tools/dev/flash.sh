@@ -30,6 +30,39 @@ if [ -z "${IDF_PATH}" ]; then
     exit -1
 fi
 
+usage() {
+    echo "Usage: $0 [-p <port>] [-b <baud>] <avm_file>"
+}
+
+if [[ $# -lt 1 ]]; then
+    usage
+    exit -1
+fi
+
+while getopts 'p:b:h' arg; do
+    case ${arg} in
+        p)
+            FLASH_SERIAL_PORT=${OPTARG}
+            ;;
+        b)
+            FLASH_BAUD_RATE=${OPTARG}
+            ;;
+        h)
+            usage
+            exit 0
+            ;;
+        *)
+            ;;
+     esac
+done
+
+shift $((OPTIND - 1))
+
+if [[ ! -e "${1}" ]] ; then
+    echo "AVM file ${1} does not exist."
+    exit 1
+fi
+
 filesize="$(ls -s -k ${1} | xargs | cut -d ' ' -f 1)"
 
 echo "%%"
