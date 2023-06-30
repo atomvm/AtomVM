@@ -278,7 +278,7 @@ struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *pa
         }
 
         struct ESP32PartAVMPack *part_avm = malloc(sizeof(struct ESP32PartAVMPack));
-        if (IS_NULL_PTR(avmpack_data)) {
+        if (IS_NULL_PTR(part_avm)) {
             // use esp_partition_munmap
             return NULL;
         }
