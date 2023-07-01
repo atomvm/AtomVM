@@ -47,7 +47,6 @@ RTC_NOINIT_ATTR uint32_t rtc_slow_data_checksum;
 RTC_NOINIT_ATTR uint16_t rtc_slow_data_size;
 RTC_NOINIT_ATTR uint8_t rtc_slow_data[CONFIG_AVM_RTC_SLOW_MAX_SIZE];
 
-static void rtc_slow_nif_init(GlobalContext *global);
 static const struct Nif *rtc_slow_nif_get_nif(const char *nifname);
 
 static term nif_esp_rtc_slow_get_binary(Context *ctx, int argc, term argv[])
