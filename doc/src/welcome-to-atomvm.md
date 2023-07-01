@@ -19,6 +19,7 @@ AtomVM features include:
 * A memory-managed environment, with efficient garbage collection and shared data, where permissible;
 * Support for truly functional programming languages, making your programs easier to understand and debug;
 * A concurrency-oriented platform, allowing users to spawn, monitor, and communicate with lightweight processes, making it easy for your IoT devices to perform tasks simultaneously;
+* Support for symmetric multi-processing (SMP); leverage all available cores on platforms that support it (e.g., ESP32) without any code changes;
 * A rich set of networking APIs, for writing robust IoT applications that communicate over IP networks;
 * A rich set of APIs for interfacing with standard device protocols, such as GPIO, I2C, SPI, and UART;
 * And more!

@@ -10,6 +10,7 @@ The getting started is broken up into the following sections:
 
 * Getting Started on the ESP32 platform
 * Getting Started on the STM32 platform
+* Getting Started on the Raspberry Pi Pico platform
 * Getting Started on the Generic UNIX platform
 
 ## Getting Started on the ESP32 platform
@@ -209,6 +210,10 @@ Once the application has been flashed, you may connect to the ESP32 over the ser
 ## Getting Started on the STM32 platform
 
 > TODO will se distribute a binary image for STM32?
+
+## Getting Started on the Raspberry Pi Pico platform
+
+> TODO
 
 ## Getting Started on the Generic UNIX platform
 

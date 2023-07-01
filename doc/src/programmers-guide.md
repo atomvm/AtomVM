@@ -33,6 +33,8 @@ A high level overview of the supported language features include:
 * send (`!`) and `receive` messages
 * bit syntax (with some restrictions)
 * reference counted binaries
+* stacktraces
+* symmetric multi-processing (SMP)
 
 In addition, several features are supported specifically for integration with micro-controllers, including:
 
@@ -45,6 +47,7 @@ In addition, several features are supported specifically for integration with mi
     * UART interface
     * LEDC (PWM)
     * non-volatile storage (NVS)
+    * RTC storage
     * deep sleep
 
 ### Limitations
@@ -53,7 +56,6 @@ While the list of supported features is long and growing, the currently unsuppor
 
 * Bignums.  Integer values are restricted to 64-bit values.
 * Bit Syntax.  While packing and unpacking of arbitrary (but less than 64-) bit values is support, packing and unpacking of integer values at the start or end of a binary, or bordering binary packing or extraction must align on 8-bit boundaries.  Arbitrary bit length binaries are not currently supported.
-* SMP support.  The AtomVM VM is currently a single-threaded process.
 * The `epmd` and the `disterl` protocols are not supported.
 * There is no support for code hot swapping.
 * There is no support for a Read-Eval-Print-Loop. (REPL)
@@ -498,6 +500,82 @@ Stack frames will contain file and line information in the AuxData list if the B
 
 The PackBEAM tool does not include file and line information in the AVM files it creates, but file and line information can be included via a command line option.  For information about the PackBEAM too, see the [`PackBEAM` tool](#Packbeam_tool).
 
+### Reading data from AVM files
+
+AVM files are generally packed BEAM files, but they can also contain non-BEAM files, such as plain text files, binary data, or even encoded Erlang terms.
+
+Typically, these files are included from the `priv` directory in a build tree, for example, when using the [`atomvm_rebar3_plugin`](https://github.com/atomvm/atomvm_rebar3_plugin), though the [`PackBEAM`](./packbeam-format.md) tool and the [`atomvm_packbeam`](https://github.com/atomvm/atomvm_packbeam) tool allow you to specify any location for files to include in AVM files.
+
+By convention, these files obey the following path in an AVM file:
+
+    <application-name>/priv/<file-path>
+
+For example, if you wanted to embed `my_file.txt` into your application AVM file (where your application name is, for example, `my_application`), you would use:
+
+    my_application/priv/my_file.txt
+
+The `atomvm:read_priv/2` function can then be used to extract the contents of this file into a binary, e.g.,
+
+    %% erlang
+    MyFileBin = atomvm:read_priv(my_application, <<"my_file.txt">>)
+
+> Note. Embedded files may contain path separators, so for example `<<"my_files/my_file.txt">>` would be used if the AVM file embeds `my_file.txt` using the path `my_application/priv/my_files/my_file.txt`
+
+For more information about how to embed files into AVM files, see the [`atomvm_rebar3_plugin`](https://github.com/atomvm/atomvm_rebar3_plugin).
+
+### Code Loading
+
+AtomVM provides a limited set of APIs for loading code and data embedded dynamically at runtime.
+
+To load an AVM file from binary data, use the `atomvm:add_avm_pack_binary/2` function.  Supply a reference to the AVM data, together with a (possibly empty) list of options.  Specify a `name` option, whose value is an atom, if you wish to close the AVM data at a later point in the program.
+
+For example:
+
+    %% erlang
+    AVMData = ... %% load AVM data into memory as a binary
+    ok = atomvm:add_avm_pack_binary(AVMData, [{name, my_avm}])
+
+You can also load AVM data from a file (on the `generic_unix` platform) or from a flash partition (on ESP32 platforms) using the `atomvm:add_avm_pack_file/2` function.  Specify a string (or binary) as the path to the AVM file, together with a list of options.
+
+For example:
+
+    %% erlang
+    ok = atomvm:add_avm_pack_file("/path/to/file.avm", [])
+
+> Note.  Currently, the options parameter is ignored, so use the empty list (`[]`) for foward compatibility.
+
+On `esp32` platforms, the partition name should be prefixed with the string `/dev/partition/by-name/`.  Thus, for example, if you specify `/dev/partition/by-name/main2.avm` as the partition, the ESP32 flash should contain a data partition with the name `main2.avm`
+
+For example:
+
+    %% erlang
+    ok = atomvm:add_avm_pack_file("/dev/partition/by-name/main2.avm", [])
+
+To close a previous opened AVM by name, use the `atomvm:close_avm_pack/2` function.  Specify the name of the AVM pack used to add
+
+    %% erlang
+    ok = atomvm:close_avm_pack(my_avm, [])
+
+> Note.  Currently, the options parameter is ignored, so use the empty list (`[]`) for foward compatibility.
+
+You can load an individual BEAM file using the `code:load_binary/3` function.  Specify the Module name (as an atom), as well as the BEAM data you have loaded into memory.
+
+For Example:
+
+    %% erlang
+    BEAMData = ... %% load BEAM data into memory as a binary
+    {module, Module} = code:load_binary(Module, Filename, BEAMData)
+
+> Note.  The `Filename` parameter is currently ignored.
+
+You can load an individual BEAM file from the file system using the `code:load_abs/1` function.  Specify the path to the BEAM file.  This path should not include the `.beam` extension, as this extension will be added automatically.
+
+For example:
+
+    {module, Module} = code:load_abs("/path/to/beam/file/without/beam/extension")
+
+> Note.  This function is currently only supported on the `generic_unix` platform.
+
 ### Math
 
 AtomVM supports the following standard functions from the OTP `math` module:
@@ -656,6 +734,25 @@ Use the `esp:sleep_enable_ext0_wakeup/2` and `esp:sleep_enable_ext1_wakeup` func
         ok = esp:sleep_enable_ext0_wakeup(37, 0),
         % Deep sleep for 1 hour
         esp:deep_sleep(60*60*1000).
+
+#### RTC Memory
+
+On ESP32 systems, you can use (slow) "real-time clock" memory to store data between deep sleeps.  This storage can be useful, for example, to store interim state data in your application.
+
+> Note.  RTC memory is initialized if the device is reset.
+
+To store data in RTC slow memory, use the `esp:rtc_slow_set_binary/1` function:
+
+    %% erlang
+    esp:rtc_slow_set_binary(<<"some binary data">>)
+
+To retrieve data in RTC slow memory, use the `esp:rtc_slow_get_binary/0` function:
+
+    %% erlang
+    Data = esp:rtc_slow_get_binary()
+
+By default, RTC slow memory in AtomVM is limited to 4098 (4k) bytes.  This value can be modified at build time using an IDF SDK `KConfig` setting.  For  instructions about how to build AtomVM, see the AtomVM [Build Instructions](./build-instructions.html).
+
 
 ### Miscellaneous
 
