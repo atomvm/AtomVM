@@ -29,6 +29,8 @@ set(EXTRA_COMPONENT_DIRS "../components")
 #
 set(TEST_COMPONENTS "testable" CACHE STRING "List of components to test")
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../../CMakeModules")
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(atomvm-esp32-test)
 

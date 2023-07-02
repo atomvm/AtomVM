@@ -32,10 +32,13 @@
 #include "esp32_sys.h"
 #include "sys.h"
 
+#include <driver/sdmmc_host.h>
 #include <esp_eth.h>
 #include <esp_event.h>
 #include <esp_log.h>
 #include <esp_netif.h>
+#include <esp_vfs_fat.h>
+#include <sdmmc_cmd.h>
 
 extern const uint8_t main_avm[] asm("_binary_esp32_test_modules_avm_start");
 extern const size_t size asm("esp32_test_modules_avm_length");
@@ -162,6 +165,43 @@ term avm_test_case(const char *test_module)
     globalcontext_destroy(glb);
 
     return ret_value;
+}
+
+TEST_CASE("test_file", "[test_run]")
+{
+    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+        .format_if_mount_failed = true,
+        .max_files = 5,
+        .allocation_unit_size = 16 * 1024
+    };
+    sdmmc_card_t *card;
+    const char mount_point[] = "/sdcard";
+    ESP_LOGI(TAG, "Initializing SD card");
+
+    ESP_LOGI(TAG, "Using SDMMC peripheral");
+    // By default, SD card frequency is initialized to SDMMC_FREQ_DEFAULT (20MHz)
+    // For setting a specific frequency, use host.max_freq_khz (range 400kHz - 40MHz for SDMMC)
+    // Example: for fixed frequency of 10MHz, use host.max_freq_khz = 10000;
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+
+    // This initializes the slot without card detect (CD) and write protect (WP) signals.
+    // Modify slot_config.gpio_cd and slot_config.gpio_wp if your board has these signals.
+    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+
+    ESP_LOGI(TAG, "Mounting filesystem");
+    // With qemu, this logs "sdmmc_req: sdmmc_host_wait_for_event returned 0x107" twice with v4.4.4, but it eventually succeeds.
+    // See: https://github.com/espressif/qemu/issues/38
+    esp_err_t ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card);
+
+    TEST_ASSERT(ret == ESP_OK);
+
+    sdmmc_card_print_info(stdout, card);
+
+    term ret_value = avm_test_case("test_file.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+
+    esp_vfs_fat_sdcard_unmount(mount_point, card);
+    ESP_LOGI(TAG, "Card unmounted");
 }
 
 TEST_CASE("test_md5", "[test_run]")

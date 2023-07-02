@@ -27,7 +27,9 @@
 #include "avmpack.h"
 #include "context.h"
 #include "defaultatoms.h"
+#include "erl_nif_priv.h"
 #include "list.h"
+#include "posix_nifs.h"
 #include "refc_binary.h"
 #include "resources.h"
 #include "synclist.h"
@@ -126,11 +128,30 @@ GlobalContext *globalcontext_new()
     smp_spinlock_init(&glb->ref_ticks_spinlock);
 #endif
 
+#if HAVE_OPEN && HAVE_CLOSE
+    ErlNifEnv env;
+    erl_nif_env_partial_init_from_globalcontext(&env, glb);
+    glb->posix_fd_resource_type = enif_init_resource_type(&env, "posix_fd", &posix_fd_resource_type_init, ERL_NIF_RT_CREATE, NULL);
+    if (IS_NULL_PTR(glb->posix_fd_resource_type)) {
+#ifndef AVM_NO_SMP
+        smp_rwlock_destroy(glb->modules_lock);
+#endif
+        free(glb->modules_table);
+        free(glb->atoms_ids_table);
+        free(glb->atoms_table);
+        free(glb);
+        return NULL;
+    }
+#endif
+
     sys_init_platform(glb);
 
 #ifndef AVM_NO_SMP
     glb->schedulers_mutex = smp_mutex_create();
     if (IS_NULL_PTR(glb->schedulers_mutex)) {
+#if HAVE_OPEN && HAVE_CLOSE
+        resource_type_destroy(glb->posix_fd_resource_type);
+#endif
         smp_rwlock_destroy(glb->modules_lock);
         free(glb->modules_table);
         free(glb->atoms_ids_table);
@@ -141,6 +162,9 @@ GlobalContext *globalcontext_new()
     glb->schedulers_cv = smp_condvar_create();
     if (IS_NULL_PTR(glb->schedulers_cv)) {
         smp_mutex_destroy(glb->schedulers_mutex);
+#if HAVE_OPEN && HAVE_CLOSE
+        resource_type_destroy(glb->posix_fd_resource_type);
+#endif
         smp_rwlock_destroy(glb->modules_lock);
         free(glb->modules_table);
         free(glb->atoms_ids_table);

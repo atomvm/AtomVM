@@ -20,11 +20,20 @@
 
 from pytest_embedded import Dut
 import pytest
+import os
+
+@pytest.fixture(autouse=True)
+def create_sd_image():
+    path = 'sd_image.bin'
+    with open(path, 'wb') as f:
+        f.truncate(1 * 1024 * 1024)
+    yield path
+    os.unlink(path)
 
 @pytest.mark.parametrize(
     'qemu_extra_args',
     [
-        '-nic user,model=open_eth',
+        '-nic user,model=open_eth -drive file=sd_image.bin,if=sd,format=raw',
     ],
     indirect=True,
 )

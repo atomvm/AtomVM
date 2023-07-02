@@ -49,6 +49,7 @@ set(HEADER_FILES
     nifs.h
     platform_nifs.h
     port.h
+    posix_nifs.h
     refc_binary.h
     resources.h
     scheduler.h
@@ -84,6 +85,7 @@ set(SOURCE_FILES
     module.c
     nifs.c
     port.c
+    posix_nifs.c
     refc_binary.c
     resources.c
     scheduler.c
@@ -109,7 +111,7 @@ endif()
 
 target_link_libraries(libAtomVM PUBLIC m)
 include(CheckCSourceCompiles)
-set(CMAKE_REQUIRED_FLAGS -Werror=unknown-pragmas)
+set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -Werror=unknown-pragmas")
 check_c_source_compiles("
      #include <fenv.h>
      int main() {
@@ -149,6 +151,20 @@ else()
         endif()
     endif()
 endif()
+
+include(DefineIfExists)
+# HAVE_OPEN & HAVE_CLOSE are used in globalcontext.h
+define_if_function_exists(libAtomVM open "fcntl.h" PUBLIC HAVE_OPEN)
+define_if_function_exists(libAtomVM close "unistd.h" PUBLIC HAVE_CLOSE)
+define_if_function_exists(libAtomVM unlink "unistd.h" PRIVATE HAVE_UNLINK)
+define_if_symbol_exists(libAtomVM O_CLOEXEC "fcntl.h" PRIVATE HAVE_O_CLOEXEC)
+define_if_symbol_exists(libAtomVM O_DIRECTORY "fcntl.h" PRIVATE HAVE_O_DIRECTORY)
+define_if_symbol_exists(libAtomVM O_DSYNC "fcntl.h" PRIVATE HAVE_O_DSYNC)
+define_if_symbol_exists(libAtomVM O_EXEC "fcntl.h" PRIVATE HAVE_O_EXEC)
+define_if_symbol_exists(libAtomVM O_NOFOLLOW "fcntl.h" PRIVATE HAVE_O_NOFOLLOW)
+define_if_symbol_exists(libAtomVM O_RSYNC "fcntl.h" PRIVATE HAVE_O_RSYNC)
+define_if_symbol_exists(libAtomVM O_SEARCH "fcntl.h" PRIVATE HAVE_O_SEARCH)
+define_if_symbol_exists(libAtomVM O_TTY_INIT "fcntl.h" PRIVATE HAVE_O_TTY_INIT)
 
 if (AVM_USE_32BIT_FLOAT)
     target_compile_definitions(libAtomVM PUBLIC AVM_USE_SINGLE_PRECISION)
