@@ -3418,6 +3418,11 @@ static term nif_atomvm_add_avm_pack_file(Context *ctx, int argc, term argv[])
 
     term abs_term = argv[0];
 
+    term opts = argv[1];
+    if (!term_is_list(argv[1])) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
     int ok;
     char *abs = interop_list_to_string(abs_term, &ok);
     if (UNLIKELY(!ok)) {
@@ -3428,6 +3433,15 @@ static term nif_atomvm_add_avm_pack_file(Context *ctx, int argc, term argv[])
     if (IS_NULL_PTR(avmpack_data)) {
         free(abs);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term name = interop_kv_get_value_default(opts, ATOM_STR("\x4", "name"), UNDEFINED_ATOM, ctx->global);
+    if (!term_is_atom(name)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (name != UNDEFINED_ATOM) {
+        avmpack_data->name_atom_id = term_to_atom_index(name);
     }
     synclist_append(&ctx->global->avmpack_data, &avmpack_data->avmpack_head);
 
