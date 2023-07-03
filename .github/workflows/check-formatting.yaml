@@ -28,7 +28,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - uses: erlef/setup-beam@v1.10.0
+    - uses: erlef/setup-beam@v1
       with:
         otp-version: 24.3
         elixir-version: 1.12
