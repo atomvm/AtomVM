@@ -120,6 +120,7 @@ erts_debug:flat_size/1, &flat_size_nif
 atomvm:add_avm_pack_binary/2, &atomvm_add_avm_pack_binary_nif
 atomvm:add_avm_pack_file/2, &atomvm_add_avm_pack_file_nif
 atomvm:close_avm_pack/2, &atomvm_close_avm_pack_nif
+atomvm:get_start_beam/1, &atomvm_get_start_beam_nif
 atomvm:read_priv/2, &atomvm_read_priv_nif
 atomvm:posix_open/2, IF_HAVE_OPEN_CLOSE(&atomvm_posix_open_nif)
 atomvm:posix_open/3, IF_HAVE_OPEN_CLOSE(&atomvm_posix_open_nif)
