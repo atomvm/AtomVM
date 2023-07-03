@@ -74,7 +74,7 @@ loop() ->
 
 boot() ->
     BootPath = get_boot_path(),
-    atomvm:add_avm_pack_file(BootPath, []),
+    atomvm:add_avm_pack_file(BootPath, [{name, app}]),
 
     StartModule = get_start_module(),
     StartModule:start().
@@ -90,7 +90,14 @@ get_boot_path() ->
 get_start_module() ->
     case esp:nvs_get_binary(atomvm, start_module) of
         undefined ->
-            main;
+            case atomvm:get_start_beam(app) of
+                error ->
+                    main;
+                {ok, ModuleNameWithExt} when is_binary(ModuleNameWithExt) ->
+                    Len = byte_size(ModuleNameWithExt) - byte_size(<<".beam">>),
+                    ModuleName = binary:part(ModuleNameWithExt, 0, Len),
+                    erlang:binary_to_atom(ModuleName, latin1)
+            end;
         Module ->
             erlang:binary_to_atom(Module, latin1)
     end.
