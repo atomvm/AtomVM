@@ -31,7 +31,7 @@ start() ->
 listen(Port) ->
     case gen_tcp:listen(Port, []) of
         {ok, ListenSocket} ->
-            io:format("Listening on ~p.~n", [local_address(ListenSocket)]),
+            io:format("Listening on ~s.~n", [local_address(ListenSocket)]),
             spawn(fun() -> accept(ListenSocket) end);
         Error ->
             io:format("An error occurred listening: ~p~n", [Error])
@@ -42,7 +42,7 @@ accept(ListenSocket) ->
     case gen_tcp:accept(ListenSocket) of
         {ok, Socket} ->
             spawn_opt(?MODULE, start_repl, [self()], [link]),
-            io:format("Accepted shell connection. local: ~p peer: ~p~n", [
+            io:format("Accepted shell connection. local: ~s peer: ~s~n", [
                 local_address(Socket), peer_address(Socket)
             ]),
             spawn(fun() -> accept(ListenSocket) end),

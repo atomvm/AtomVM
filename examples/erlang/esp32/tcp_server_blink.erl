@@ -43,7 +43,7 @@ start() ->
 tcp_server_start() ->
     case gen_tcp:listen(44404, [{active, true}]) of
         {ok, ListenSocket} ->
-            io:format("Listening on ~p.~n", [local_address(ListenSocket)]),
+            io:format("Listening on ~s.~n", [local_address(ListenSocket)]),
             Gpio = gpio:open(),
             gpio:set_direction(Gpio, ?PIN, output),
             spawn(fun() -> accept(ListenSocket, Gpio) end),
