@@ -535,14 +535,12 @@ For example:
     AVMData = ... %% load AVM data into memory as a binary
     ok = atomvm:add_avm_pack_binary(AVMData, [{name, my_avm}])
 
-You can also load AVM data from a file (on the `generic_unix` platform) or from a flash partition (on ESP32 platforms) using the `atomvm:add_avm_pack_file/2` function.  Specify a string (or binary) as the path to the AVM file, together with a list of options.
+You can also load AVM data from a file (on the `generic_unix` platform) or from a flash partition (on ESP32 platforms) using the `atomvm:add_avm_pack_file/2` function.  Specify a string (or binary) as the path to the AVM file, together with a list of options, such as `name`.
 
 For example:
 
     %% erlang
-    ok = atomvm:add_avm_pack_file("/path/to/file.avm", [])
-
-> Note.  Currently, the options parameter is ignored, so use the empty list (`[]`) for foward compatibility.
+    ok = atomvm:add_avm_pack_file("/path/to/file.avm", [{name, my_avm}])
 
 On `esp32` platforms, the partition name should be prefixed with the string `/dev/partition/by-name/`.  Thus, for example, if you specify `/dev/partition/by-name/main2.avm` as the partition, the ESP32 flash should contain a data partition with the name `main2.avm`
 
