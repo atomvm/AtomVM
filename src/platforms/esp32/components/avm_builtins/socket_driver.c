@@ -774,8 +774,8 @@ static bool bool_term_to_bool(term b, bool *ok)
             return false;
 
         default:
-            return false;
             *ok = false;
+            return false;
     }
 }
 
