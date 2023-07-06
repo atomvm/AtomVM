@@ -27,7 +27,7 @@
 %%-----------------------------------------------------------------------------
 -module(string).
 
--export([to_upper/1, split/2, split/3, trim/1, trim/2]).
+-export([to_upper/1, to_lower/1, split/2, split/3, trim/1, trim/2]).
 
 %%-----------------------------------------------------------------------------
 %% @param Input a string or character to convert
@@ -47,6 +47,26 @@ to_upper(C) when is_integer(C) ->
 upper_char(C) when is_integer(C) andalso C >= $a andalso C =< $z ->
     C - 32;
 upper_char(C) when is_integer(C) ->
+    C.
+
+%%-----------------------------------------------------------------------------
+%% @param Input a string or character to convert
+%% @returns a Character or string
+%% @doc Convert string or character to uppercase.
+%%
+%% The specified string or character is case-converted. Notice that the supported character
+%% set is ISO/IEC 8859-1 (also called Latin 1); all values outside this set are unchanged
+%% @end
+%%-----------------------------------------------------------------------------
+-spec to_lower(Input :: string() | char()) -> string() | char().
+to_lower(S) when is_list(S) ->
+    [lower_char(C) || C <- S];
+to_lower(C) when is_integer(C) ->
+    lower_char(C).
+
+lower_char(C) when is_integer(C) andalso C >= $A andalso C =< $Z ->
+    C + 32;
+lower_char(C) when is_integer(C) ->
     C.
 
 %%-----------------------------------------------------------------------------
