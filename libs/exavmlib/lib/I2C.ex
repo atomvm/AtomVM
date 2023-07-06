@@ -86,7 +86,7 @@ defmodule I2C do
   This command is typically followed by one or more calls to
   write_byte/2 and then a call to end_transmission/1.
   """
-  @spec begin_transmission(pid(), address()) :: :ok | :error
+  @spec begin_transmission(pid(), address()) :: :ok | {:error, term()}
   def begin_transmission(driver, device) do
     AVMPort.call(driver, {:begin_transmission, device})
   end
@@ -101,7 +101,7 @@ defmodule I2C do
   This command must be wrapped in a begin_transmission/2
   and end_transmission/1 call.
   """
-  @spec write_byte(pid(), byte()) :: :ok | :error
+  @spec write_byte(pid(), byte()) :: :ok | {:error, term()}
   def write_byte(driver, data) do
     AVMPort.call(driver, {:write_byte, data})
   end
@@ -116,7 +116,7 @@ defmodule I2C do
   This command must be wrapped in a begin_transmission/2
   and end_transmission/1 call.
   """
-  @spec write_bytes(pid(), binary()) :: :ok | :error
+  @spec write_bytes(pid(), binary()) :: :ok | {:error, term()}
   def write_bytes(driver, data) do
     AVMPort.call(driver, {:write_bytes, data})
   end
@@ -130,7 +130,7 @@ defmodule I2C do
   This command is typically preceded by a call to begin_transmission/2
   and one or more calls to write_byte/2 or write_bytes/2.
   """
-  @spec end_transmission(pid()) :: :ok | :error
+  @spec end_transmission(pid()) :: :ok | {:error, term()}
   def end_transmission(driver) do
     AVMPort.call(driver, {:end_transmission})
   end
@@ -146,7 +146,7 @@ defmodule I2C do
   This command is not wrapped in a begin_transmission/2
   and end_transmission/1 call.
   """
-  @spec read_bytes(pid(), address(), non_neg_integer()) :: :error | binary()
+  @spec read_bytes(pid(), address(), non_neg_integer()) :: {:ok, binary()} | {:error, term()}
   def read_bytes(driver, addr, count) do
     AVMPort.call(driver, {:read_bytes, addr, count})
   end
@@ -164,7 +164,8 @@ defmodule I2C do
   This command is not wrapped in a begin_transmission/2
   and end_transmission/1 call.
   """
-  @spec read_bytes(pid(), address(), register(), non_neg_integer()) :: :error | binary()
+  @spec read_bytes(pid(), address(), register(), non_neg_integer()) ::
+          {:ok, binary()} | {:error, term()}
   def read_bytes(device, addr, reg, count) do
     AVMPort.call(device, {:read_bytes, addr, count, reg})
   end
@@ -180,7 +181,7 @@ defmodule I2C do
   This command is not wrapped in a begin_transmission/2
   and end_transmission/1 call.
   """
-  @spec write_bytes(pid(), address(), binary() | byte()) :: :ok | :error
+  @spec write_bytes(pid(), address(), binary() | byte()) :: :ok | {:error, term()}
   def write_bytes(driver, addr, data) do
     AVMPort.call(driver, {:write_bytes, addr, data})
   end
@@ -198,7 +199,7 @@ defmodule I2C do
   This command is not wrapped in a begin_transmission/2
   and end_transmission/1 call.
   """
-  @spec write_bytes(pid(), address(), register(), binary() | integer()) :: :ok | :error
+  @spec write_bytes(pid(), address(), register(), binary() | integer()) :: :ok | {:error, term()}
   def write_bytes(driver, addr, reg, data) do
     AVMPort.call(driver, {:write_bytes, addr, data, reg})
   end
@@ -212,7 +213,7 @@ defmodule I2C do
   This function will close the connection to the I2C driver and
   free any resources in use by it.
   """
-  @spec close(pid()) :: :ok | :error
+  @spec close(pid()) :: :ok | {:error, term()}
   def close(driver) do
     AVMPort.call(driver, {:close})
   end

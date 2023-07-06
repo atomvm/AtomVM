@@ -69,6 +69,10 @@ additional information.
 - Changed the return type of the `network:start` function to return the tuple `{ok, Pid}` on a
 successful call, instead of the bare atom `ok`.  Applications that use `network:start` and
 check the return value will need to be modified.
+- The return type of `i2c:read_bytes` has changed from returning just a binary to
+returning the tuple `{ok, Binary}` when successful.
+- The return type of many `i2c` operations under error conditions has changed from
+`error` to `{error, Reason}`, for improved diagnostics.
 
 ### Removed
 - ESP-IDF v3.x support.

@@ -562,3 +562,35 @@ bool event_listener_is_event(EventListener *listener, listener_event_t event)
 {
     return listener->sender == event;
 }
+
+term esp_err_to_term(GlobalContext *glb, esp_err_t status)
+{
+    switch (status) {
+        case ESP_FAIL:
+            return globalcontext_make_atom(glb, ATOM_STR("\x8", "esp_fail"));
+        case ESP_ERR_NO_MEM:
+            return globalcontext_make_atom(glb, ATOM_STR("\xE", "esp_err_no_mem"));
+        case ESP_ERR_INVALID_ARG:
+            return globalcontext_make_atom(glb, ATOM_STR("\x13", "esp_err_invalid_arg"));
+        case ESP_ERR_INVALID_STATE:
+            return globalcontext_make_atom(glb, ATOM_STR("\x15", "esp_err_invalid_state"));
+        case ESP_ERR_INVALID_SIZE:
+            return globalcontext_make_atom(glb, ATOM_STR("\x14", "esp_err_invalid_size"));
+        case ESP_ERR_NOT_FOUND:
+            return globalcontext_make_atom(glb, ATOM_STR("\x11", "esp_err_not_found"));
+        case ESP_ERR_NOT_SUPPORTED:
+            return globalcontext_make_atom(glb, ATOM_STR("\x15", "esp_err_not_supported"));
+        case ESP_ERR_TIMEOUT:
+            return globalcontext_make_atom(glb, ATOM_STR("\xF", "esp_err_timeout"));
+        case ESP_ERR_INVALID_RESPONSE:
+            return globalcontext_make_atom(glb, ATOM_STR("\x18", "esp_err_invalid_response"));
+        case ESP_ERR_INVALID_CRC:
+            return globalcontext_make_atom(glb, ATOM_STR("\x13", "esp_err_invalid_crc"));
+        case ESP_ERR_INVALID_VERSION:
+            return globalcontext_make_atom(glb, ATOM_STR("\x17", "esp_err_invalid_version"));
+        case ESP_ERR_INVALID_MAC:
+            return globalcontext_make_atom(glb, ATOM_STR("\x13", "esp_err_invalid_mac"));
+        default:
+            return term_from_int(status);
+    }
+}

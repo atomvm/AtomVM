@@ -78,56 +78,56 @@ close(I2C) ->
 %%-----------------------------------------------------------------------------
 %% @param   I2C I2C instance created via `open/1'
 %% @param   Address I2C Address of the device (typically fixed for the device type)
-%% @returns `ok' or `error'
+%% @returns `ok' or `{error, Reason}'
 %% @doc     Begin a transmission of I2C commands
 %%
 %%          This command is typically followed by one or more calls to
 %%          `write_byte/2' and then a call to `end_transmission/1'
 %% @end
 %%-----------------------------------------------------------------------------
--spec begin_transmission(I2C :: i2c(), Address :: address()) -> ok | error.
+-spec begin_transmission(I2C :: i2c(), Address :: address()) -> ok | {error, Reason :: term()}.
 begin_transmission(I2C, Address) ->
     port:call(I2C, {begin_transmission, Address}).
 
 %%-----------------------------------------------------------------------------
 %% @param   I2C I2C instance created via `open/1'
 %% @param   Byte value to write
-%% @returns `ok' or `error'
+%% @returns `ok' or `{error, Reason}'
 %% @doc     Write a byte to the device.
 %%
 %%          This command must be wrapped in a `begin_transmission/2'
 %%          and `end_transmission/1' call.
 %% @end
 %%-----------------------------------------------------------------------------
--spec write_byte(I2C :: i2c(), Byte :: byte()) -> ok | error.
+-spec write_byte(I2C :: i2c(), Byte :: byte()) -> ok | {error, Reason :: term()}.
 write_byte(I2C, Byte) ->
     port:call(I2C, {write_byte, Byte}).
 
 %%-----------------------------------------------------------------------------
 %% @param   I2C I2C instance created via `open/1'
 %% @param   Bytes value to write
-%% @returns `ok' or `error'
+%% @returns `ok' or `{error, Reason}'
 %% @doc     Write a sequence of bytes to the device.
 %%
 %%          This command must be wrapped in a `begin_transmission/2'
 %%          and `end_transmission/1' call.
 %% @end
 %%-----------------------------------------------------------------------------
--spec write_bytes(I2C :: i2c(), Bytes :: binary()) -> ok | error.
+-spec write_bytes(I2C :: i2c(), Bytes :: binary()) -> ok | {error, Reason :: term()}.
 write_bytes(I2C, Bytes) ->
     port:call(I2C, {write_bytes, Bytes}).
 
 %%-----------------------------------------------------------------------------
 %% @param   I2C I2C instance created via `open/1'
 %% @param   Address I2C Address of the device (typically fixed for the device type)
-%% @returns `ok' or `error'
+%% @returns `ok' or `{error, Reason}'
 %% @doc     End a transmission of I2C commands
 %%
 %%          This command is typically preceded by a call to `begin_transmission/2'
 %%          and one or more calls to `write_byte/2'.
 %% @end
 %%-----------------------------------------------------------------------------
--spec end_transmission(I2C :: i2c()) -> ok | error.
+-spec end_transmission(I2C :: i2c()) -> ok | {error, Reason :: term()}.
 end_transmission(I2C) ->
     port:call(I2C, {end_transmission}).
 
@@ -135,7 +135,7 @@ end_transmission(I2C) ->
 %% @param   I2C I2C instance created via `open/1'
 %% @param   Address I2C Address of the device (typically fixed for the device type)
 %% @param   Count The number of bytes to read
-%% @returns the read binary data or `error'
+%% @returns `{ok, Data}' which includes the read binary data or `{error, Reason}'
 %% @doc     Read a block of bytes from the I2C device.
 %%
 %%          This command is not wrapped in a `begin_transmission/2'
@@ -143,7 +143,7 @@ end_transmission(I2C) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec read_bytes(I2C :: i2c(), Address :: address(), Count :: non_neg_integer()) ->
-    error | binary().
+    {ok, Data :: binary()} | {error, Reason :: term()}.
 read_bytes(I2C, Address, Count) ->
     port:call(I2C, {read_bytes, Address, Count}).
 
@@ -152,7 +152,7 @@ read_bytes(I2C, Address, Count) ->
 %% @param   Address I2C Address of the device (typically fixed for the device type)
 %% @param   Register The register address in the device from which to read data
 %% @param   Count The number of bytes to read
-%% @returns the read binary data or `error'
+%% @returns `{ok, Data}' which includes the read binary data or `{error, Reason}'
 %% @doc     Read a block of bytes from the I2C device starting at a specified
 %%          register address
 %%
@@ -162,7 +162,7 @@ read_bytes(I2C, Address, Count) ->
 %%-----------------------------------------------------------------------------
 -spec read_bytes(
     I2C :: i2c(), Address :: address(), Register :: register(), Count :: non_neg_integer()
-) -> error | binary().
+) -> {ok, binary()} | {error, Reason :: term()}.
 read_bytes(I2C, Address, Register, Count) ->
     port:call(I2C, {read_bytes, Address, Count, Register}).
 
@@ -170,14 +170,15 @@ read_bytes(I2C, Address, Register, Count) ->
 %% @param   I2C I2C instance created via `open/1'
 %% @param   Address I2C Address of the device (typically fixed for the device type)
 %% @param   BinOrInt The binary or byte value to write
-%% @returns `ok' or `error'
+%% @returns `ok' or `{error, Reason}'
 %% @doc     Write a block of bytes to the I2C device.
 %%
 %%          This command is not wrapped in a `begin_transmission/2'
 %%          and `end_transmission/1' call.
 %% @end
 %%-----------------------------------------------------------------------------
--spec write_bytes(I2C :: i2c(), Address :: address(), BinOrInt :: binary() | byte()) -> ok | error.
+-spec write_bytes(I2C :: i2c(), Address :: address(), BinOrInt :: binary() | byte()) ->
+    ok | {error, Reason :: term()}.
 write_bytes(I2C, Address, BinOrInt) ->
     port:call(I2C, {write_bytes, Address, BinOrInt}).
 
@@ -186,7 +187,7 @@ write_bytes(I2C, Address, BinOrInt) ->
 %% @param   Address I2C Address of the device (typically fixed for the device type)
 %% @param   Register The register address in the device to which to write data
 %% @param   BinOrInt The binary or byte value to write
-%% @returns `ok' or `error'
+%% @returns `ok' or `{error, Reason}'
 %% @doc     Write a block of bytes to the I2C device starting at a specified
 %%          register address.
 %%
@@ -196,6 +197,6 @@ write_bytes(I2C, Address, BinOrInt) ->
 %%-----------------------------------------------------------------------------
 -spec write_bytes(
     I2C :: i2c(), Address :: address(), Register :: register(), BinOrInt :: binary() | integer()
-) -> ok | error.
+) -> ok | {error, Reason :: term()}.
 write_bytes(I2C, Address, Register, BinOrInt) ->
     port:call(I2C, {write_bytes, Address, BinOrInt, Register}).

@@ -42,7 +42,7 @@ defmodule SHT31 do
   end
 
   defp read(i2c) do
-    bin = read_sensor(i2c)
+    {:ok, bin} = read_sensor(i2c)
     parse_bin(bin)
   end
 
