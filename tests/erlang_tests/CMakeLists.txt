@@ -110,7 +110,7 @@ compile_erlang(compact27bitsinteger)
 compile_erlang(compact23bitsneginteger)
 compile_erlang(negatives2)
 compile_erlang(datetime)
-compile_erlang(timestamp)
+compile_erlang(test_system_time)
 compile_erlang(is_type)
 compile_erlang(test_bitshift)
 compile_erlang(test_bitwise)
@@ -542,7 +542,7 @@ add_custom_target(erlang_test_modules DEPENDS
     compact23bitsneginteger.beam
     negatives2.beam
     datetime.beam
-    timestamp.beam
+    test_system_time.beam
     is_type.beam
     test_bitshift.beam
     test_bitwise.beam

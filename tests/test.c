@@ -134,7 +134,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(compact23bitsneginteger, -47376112),
     TEST_CASE_EXPECTED(negatives2, -500),
     TEST_CASE_EXPECTED(datetime, 3),
-    TEST_CASE_EXPECTED(timestamp, 1),
+    TEST_CASE(test_system_time),
     TEST_CASE_EXPECTED(is_type, 255),
     TEST_CASE(test_bitshift),
     TEST_CASE_EXPECTED(test_bitwise, -4),

@@ -432,6 +432,14 @@ Use `erlang:universaltime/0` to get the current time at second resolution, to ob
 
 > Note.  Setting the system time is done in a platform-specific manner.  For information about how to set system time on the ESP32, see the [Network Programming Guide](./network-programming-guide.md).
 
+To convert a time (in seconds, milliseconds, or microseconds from the UNIX epoch) to a date-time, use the `calendar:system_time_to_universal_time/2` function.  For example,
+
+    %% erlang
+    Milliseconds = ... %% get milliseconds from the UNIX epoch
+    {{Year, Month, Day}, {Hour, Minute, Second}} = calendar:system_time_to_universal_time(Milliseconds, millisecond).
+
+As above, valid time units are `second`, `millisecond`, and `microsecond`.
+
 ### Miscellaneous
 
 Use the `erlang:md5/1` function to compute the MD5 hash of an input binary.  The output is a fixed-length binary ()
