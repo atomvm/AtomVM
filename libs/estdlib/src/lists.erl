@@ -47,7 +47,9 @@
     filter/2,
     join/2,
     seq/2, seq/3,
-    sort/1, sort/2
+    sort/1, sort/2,
+    duplicate/2,
+    sublist/2
 ]).
 
 %%-----------------------------------------------------------------------------
@@ -487,3 +489,34 @@ quick_sort(_Fun, []) ->
 
 %% @private
 lt(A, B) -> A < B.
+
+%%-----------------------------------------------------------------------------
+%% @param   Elem the element to duplicate
+%% @param   Count the number of times to duplicate the element
+%% @returns a list made of Elem duplicate Count times
+%% @doc     Duplicate an element
+%% @end
+%%-----------------------------------------------------------------------------
+-spec duplicate(integer(), Elem) -> [Elem].
+duplicate(Count, Elem) when is_integer(Count) andalso Count > 0 ->
+    duplicate(Count, Elem, []).
+
+duplicate(0, _Elem, Acc) -> Acc;
+duplicate(Count, Elem, Acc) -> duplicate(Count - 1, Elem, [Elem | Acc]).
+
+%%-----------------------------------------------------------------------------
+%% @param   List list to take the sublist from
+%% @param   Len the number of elements to get from List
+%% @returns a list made of the first `Len' elements of `List'
+%% @doc     Return a sublist made of the first `Len' elements of `List'.
+%%          It is not an error for `Len' to be larger than the length of `List'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sublist([Elem], integer()) -> [Elem].
+sublist(List, Len) when is_integer(Len) andalso Len >= 0 ->
+    sublist0(List, Len, []).
+
+%% @private
+sublist0(_List, 0, Acc) -> reverse(Acc);
+sublist0([], _, Acc) -> reverse(Acc);
+sublist0([H | Tail], Len, Acc) -> sublist0(Tail, Len - 1, [H | Acc]).
