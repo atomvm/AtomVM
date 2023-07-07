@@ -24,6 +24,7 @@ include(BuildErlang)
 
 set(ERLANG_MODULES
     atomvm
+    avm_pubsub
     console
     esp
     gpio
