@@ -791,8 +791,8 @@ static void do_connect(Context *ctx, term msg)
 
     term address_term = interop_proplist_get_value(params, ADDRESS_ATOM);
     term port_term = interop_proplist_get_value(params, PORT_ATOM);
-    term binary_term = interop_proplist_get_value(params, BINARY_ATOM);
-    term active_term = interop_proplist_get_value(params, ACTIVE_ATOM);
+    term binary_term = interop_proplist_get_value_default(params, BINARY_ATOM, FALSE_ATOM);
+    term active_term = interop_proplist_get_value_default(params, ACTIVE_ATOM, TRUE_ATOM);
     term controlling_process_term = interop_proplist_get_value(params, CONTROLLING_PROCESS_ATOM);
 
     bool ok = term_is_pid(controlling_process_term);
@@ -878,8 +878,8 @@ static void do_listen(Context *ctx, term msg)
 
     term port_term = interop_proplist_get_value(params, PORT_ATOM);
     term backlog_term = interop_proplist_get_value(params, BACKLOG_ATOM);
-    term binary_term = interop_proplist_get_value(params, BINARY_ATOM);
-    term active_term = interop_proplist_get_value(params, ACTIVE_ATOM);
+    term binary_term = interop_proplist_get_value_default(params, BINARY_ATOM, FALSE_ATOM);
+    term active_term = interop_proplist_get_value_default(params, ACTIVE_ATOM, TRUE_ATOM);
     term buffer_term = interop_proplist_get_value(params, BUFFER_ATOM);
 
     avm_int_t port = term_to_int(port_term);
@@ -949,8 +949,8 @@ void do_udp_open(Context *ctx, term msg)
     term params = term_get_tuple_element(cmd, 1);
 
     term port_term = interop_proplist_get_value(params, PORT_ATOM);
-    term binary_term = interop_proplist_get_value(params, BINARY_ATOM);
-    term active_term = interop_proplist_get_value(params, ACTIVE_ATOM);
+    term binary_term = interop_proplist_get_value_default(params, BINARY_ATOM, FALSE_ATOM);
+    term active_term = interop_proplist_get_value_default(params, ACTIVE_ATOM, TRUE_ATOM);
     term controlling_process_term = interop_proplist_get_value(params, CONTROLLING_PROCESS_ATOM);
 
     bool ok = term_is_pid(controlling_process_term);

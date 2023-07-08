@@ -27,7 +27,7 @@ on:
 jobs:
   esp32-test:
     runs-on: ubuntu-latest
-    container: espressif/idf:v4.4.4
+    container: espressif/idf:v4.4.5
 
     strategy:
       fail-fast: false
