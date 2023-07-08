@@ -185,8 +185,6 @@ You can now build AtomVM using the build command:
 	shell$ idf.py build
 	...
 
-> Note.  You may specify `-j <n>`, where `<n>` is the number of CPUs you would like to assign to run the build in parallel.
-
 This command, once completed, will create the Espressif bootloader, partition table, and AtomVM binary.  The last line of the output should read something like the following:
 
 	To flash all build output, run 'idf.py flash' or:
@@ -200,6 +198,43 @@ This command, once completed, will create the Espressif bootloader, partition ta
 At this point, you can run `idf.py flash` to upload the 3 binaries up to your ESP32 device, and in some development scenarios, this is a preferable shortcut.
 
 However, first, we will build a single binary image file containing all of the above 3 binaries, as well as the AtomVM core libraries.  See [Building a Release Image](#building-a-release-image), below.  But first, it is helpful to understand a bit about how the AtomVM partitioning scheme works, on the ESP32.
+
+### Running tests
+
+Tests for ESP32 are run on the desktop (or CI) using qemu.
+
+Install or compile [Espressif's fork of qemu](https://github.com/espressif/esp-toolchain-docs/blob/main/qemu/README.md).
+Espressif provides [binaries for Linux amd64](https://github.com/espressif/qemu/releases) and it's also bundled in [espressif/idf:5.1 docker image](https://hub.docker.com/r/espressif/idf).
+
+Also install Espressif pytest's extensions for embedded testing with:
+
+	shell$ cd <ESP-IDF-ROOT-DIR>
+	shell$ . ./export.sh
+	shell$ pip install pytest==7.0.1 \
+	        pytest-embedded==1.2.5 \
+	        pytest-embedded-serial-esp==1.2.5 \
+	        pytest-embedded-idf==1.2.5 \
+	        pytest-embedded-qemu==1.2.5
+	...
+
+Change directory to the `src/platforms/esp32/test` directory under the AtomVM source tree root:
+
+	shell$ cd <atomvm-source-tree-root>
+	shell$ cd src/platforms/esp32/test
+
+Build tests using the build command:
+
+	shell$ idf.py build
+	...
+
+> Note.  This eventually compiles host AtomVM to be able to build and pack erlang test modules.
+
+Run tests using the command:
+
+	shell$ pytest --embedded-services=idf,qemu -s
+	...
+
+ESP32 tests are erlang modules located in `src/platforms/esp32/test/main/test_erl_sources/` and executed from `src/platforms/esp32/test/main/test_main.c`.
 
 ### Flash Layout
 
