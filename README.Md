@@ -19,6 +19,7 @@ Supported Platforms
 * ESP32 SoC (with IDF/FreeRTOS, see [README.ESP32.Md](README.ESP32.Md))
 * STM32 MCUs (with LibOpenCM3, see [README.STM32.Md](README.STM32.Md))
 * Raspberry Pi Pico (see [README.PICO.Md](README.PICO.Md))
+* nodejs with Wasm (see [README.Wasm.Md](README.Wasm.Md))
 
 AtomVM aims to be easily portable to new platforms with a minimum effort, so additional platforms
 might be supported in a near future.

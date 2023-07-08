@@ -118,7 +118,7 @@ check_c_source_compiles("
          #pragma STDC FENV_ACCESS ON
         return 0;
      }
- " HAVE_PRAGMA_STDC_FENV_ACCESS)
+ " HAVE_PRAGMA_STDC_FENV_ACCESS FAIL_REGEX FENV_ACCESS)
 if (HAVE_PRAGMA_STDC_FENV_ACCESS)
     target_compile_definitions(libAtomVM PUBLIC HAVE_PRAGMA_STDC_FENV_ACCESS)
 endif()

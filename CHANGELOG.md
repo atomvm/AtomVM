@@ -48,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for code:load_abs/1, code:load_binary/3
 - Added support for loading / closing AVMPacks at runtime
 - Added support for ESP-IDF v5.x
+- Added support for Raspberry Pi Pico
+- Added support for nodejs with Wasm
 
 ### Fixed
 - Fixed issue with formatting integers with io:format() on STM32 platform
