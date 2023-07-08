@@ -102,8 +102,8 @@ static inline int synclist_is_empty(struct SyncList *synclist)
 #define synclist_rdlock(list) list
 #define synclist_wrlock(list) list
 #define synclist_nolock(list) list
-#define synclist_unlock(list)
-#define synclist_destroy(list)
+#define synclist_unlock(list) UNUSED(list)
+#define synclist_destroy(list) UNUSED(list)
 #define synclist_append(list, new_item) list_append(list, new_item)
 #define synclist_remove(list, new_item) list_remove(new_item)
 #define synclist_is_empty(list) list_is_empty(list)
