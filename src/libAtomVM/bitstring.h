@@ -316,10 +316,9 @@ bool bitstring_utf8_encode(avm_int_t c, uint8_t *buf, size_t *out_size);
 /**
  * @brief Decode a character from UTF-8.
  *
- * @param c int value to decode to
- * @param buf the buffer froom which to decode the sring to or NULL to only compute the
- * size.
+ * @param buf the buffer from which to decode the string
  * @param len the length (in bytes) of the bytes in buf
+ * @param c int value to decode to or NULL to only compute the size.
  * @param out_size the size in bytes, on output (if not NULL)
  * @return \c true if decoding was successful, \c false if character starting at buf is not a valid
  * unicode character

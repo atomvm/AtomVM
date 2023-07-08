@@ -30,7 +30,7 @@
 -export([sleep/1]).
 
 %%-----------------------------------------------------------------------------
-%% @parm Timeout number of milliseconds to sleep or `infinity'
+%% @param Timeout number of milliseconds to sleep or `infinity'
 %% @returns `ok'
 %%
 %% @doc Pauses the execution of the current process for a given number of

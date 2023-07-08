@@ -54,7 +54,6 @@ format(Format, Args) ->
 %% internal operations
 %%
 
-%% @private
 -record(format, {
     field_width = undefined :: number() | undefined,
     precision = undefined :: number() | undefined,
