@@ -23,6 +23,7 @@ project(test_estdlib)
 include(BuildErlang)
 
 set(ERLANG_MODULES
+    test_calendar
     test_gen_event
     test_gen_server
     test_gen_statem

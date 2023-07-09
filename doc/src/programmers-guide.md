@@ -438,7 +438,42 @@ To convert a time (in seconds, milliseconds, or microseconds from the UNIX epoch
     Milliseconds = ... %% get milliseconds from the UNIX epoch
     {{Year, Month, Day}, {Hour, Minute, Second}} = calendar:system_time_to_universal_time(Milliseconds, millisecond).
 
-As above, valid time units are `second`, `millisecond`, and `microsecond`.
+Valid time units are `second`, `millisecond`, and `microsecond`.
+
+### Date and Time
+
+A `datetime()` is a tuple containing a date and time, where a date is a tuple containing the year, month, and day (in the [Gregorian](https://en.wikipedia.org/wiki/Gregorian_calendar) calendar), expressed as integers, and a time is an hour, minute, and second, also expressed in integers.
+
+The following Erlang type specification enumerates this type:
+
+    %% erlang
+    -type year() :: integer().
+    -type month() :: 1..12.
+    -type day() :: 1..31.
+    -type date() :: {year(), month(), day()}.
+    -type gregorian_days() :: integer().
+    -type day_of_week() :: 1..7.
+    -type hour() :: 0..23.
+    -type minute() :: 0..59.
+    -type second() :: 0..59.
+    -type time() :: {hour(), minute(), second()}.
+    -type datetime() :: {date(), time()}.
+
+Erlang/OTP uses the Christian epoch to count time units from year 0 in the Gregorian calendar.  The, for example, the value 0 in Gregorian seconds represents the date Jan 1, year 0, and midnight (UTC), or in Erlang terms, `{{0, 1, 1}, {0, 0, 0}}`.
+
+> Note.  AtomVM is currently limited to representing integers in at most 64 bits, with one bit representing the sign bit.  However, even with this limitation, AtomVM is able to resolve microsecond values in the Gregorian calendar for over 292,000 years, likely well past the likely lifetime of an AtomVM application (unless perhaps launched on a deep space probe).
+
+The `calendar` module provides useful functions for converting dates to Gregorian days, and date-times to Gregorian seconds.
+
+To convert a `date()` to the number of days since January 1, year 0, use the `calendar:date_to_gregorian_days/1` function, e.g.,
+
+    GregorianDays = calendar:date_to_gregorian_days({2023, 7, 23})
+
+To convert a `datetime()` to convert the number of seconds since midnight January 1, year 0, use the `calendar:datetime_to_gregorian_seconds/1` function, e.g.,
+
+    GregorianSeconds = calendar:datetime_to_gregorian_seconds({{2023, 7, 23}, {13, 31, 7}})
+
+> Note.  The `calendar` module does not support year values before year `0`.
 
 ### Miscellaneous
 
