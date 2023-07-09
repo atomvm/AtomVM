@@ -36,9 +36,17 @@
 %%-----------------------------------------------------------------------------
 -module(calendar).
 
--export([date_to_gregorian_days/1, date_to_gregorian_days/3, day_of_the_week/1, day_of_the_week/3]).
+-export([
+    date_to_gregorian_days/1,
+    date_to_gregorian_days/3,
+    day_of_the_week/1,
+    day_of_the_week/3,
+    system_time_to_universal_time/2
+]).
 
 -type date() :: {year(), month(), day()}.
+-type time() :: {hour(), minute(), second()}.
+-type datetime() :: {date(), time()}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Year cannot be abbreviated.
@@ -52,8 +60,12 @@
 
 -type month() :: 1..12.
 -type day() :: 1..31.
+-type hour() :: 0..23.
+-type minute() :: 0..59.
+-type second() :: 0..59.
 -type gregorian_days() :: integer().
 -type day_of_week() :: 1..7.
+-type time_unit() :: second | millisecond | microsecond.
 
 %%-----------------------------------------------------------------------------
 %% @equiv date_to_gregorian_days(Year, M, D)
@@ -122,3 +134,15 @@ day_of_the_week({Y, M, D}) ->
 -spec day_of_the_week(Y :: year(), M :: month(), D :: day()) -> day_of_week().
 day_of_the_week(Y, M, D) ->
     (date_to_gregorian_days(Y, M, D) + 5) rem 7 + 1.
+
+%%-----------------------------------------------------------------------------
+%% @param   Time the time, as an integer, in the specified unit
+%% @param   TimeUnit the time unit
+%% @param   The date and time (in UTC) converted from the specified time and time unit
+%% @doc     Convert an integer time value to a date and time in UTC.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec system_time_to_universal_time(Time :: integer(), TimeUnit :: time_unit()) ->
+    datetime().
+system_time_to_universal_time(_Time, _TimeUnit) ->
+    throw(nif_error).

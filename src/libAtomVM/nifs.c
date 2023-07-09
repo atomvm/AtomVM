@@ -83,6 +83,7 @@ static term nif_binary_first_1(Context *ctx, int argc, term argv[]);
 static term nif_binary_last_1(Context *ctx, int argc, term argv[]);
 static term nif_binary_part_3(Context *ctx, int argc, term argv[]);
 static term nif_binary_split_2(Context *ctx, int argc, term argv[]);
+static term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_binary_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[]);
@@ -480,6 +481,12 @@ static const struct Nif timestamp_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_timestamp_0
+};
+
+static const struct Nif system_time_to_universal_time_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_calendar_system_time_to_universal_time_2
 };
 
 static const struct Nif tuple_to_list_nif =
@@ -1553,6 +1560,35 @@ term nif_erlang_timestamp_0(Context *ctx, int argc, term argv[])
     term_put_tuple_element(timestamp_tuple, 2, term_from_int32(ts.tv_nsec / 1000));
 
     return timestamp_tuple;
+}
+
+term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+
+    struct timespec ts;
+
+    avm_int64_t value = term_maybe_unbox_int64(argv[0]);
+
+    if (argv[1] == SECOND_ATOM) {
+        ts.tv_sec = (time_t) value;
+        ts.tv_nsec = 0;
+
+    } else if (argv[1] == MILLISECOND_ATOM) {
+        ts.tv_sec = (time_t) (value / 1000);
+        ts.tv_nsec = (value % 1000) * 1000000;
+
+    } else if (argv[1] == MICROSECOND_ATOM) {
+        ts.tv_sec = (time_t) (value / 1000000);
+        ts.tv_nsec = (value % 1000000) * 1000;
+
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    struct tm broken_down_time;
+    return build_datetime_from_tm(ctx, gmtime_r(&ts.tv_sec, &broken_down_time));
 }
 
 static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[])
