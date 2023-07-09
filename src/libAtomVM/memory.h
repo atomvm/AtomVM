@@ -122,12 +122,14 @@ typedef struct Heap Heap;
  *
  * @param heap heap to initialize.
  * @param root fragment root.
+ * @param size capacity of the heap to create, including the mso_list.
  */
 void memory_init_heap_root_fragment(Heap *heap, HeapFragment *root, size_t size);
 
 /**
  * @brief Initialize a root heap.
  *
+ * @param heap heap to initialize.
  * @param size capacity of the heap to create, including the mso_list.
  * @returns MEMORY_GC_OK or MEMORY_GC_ERROR_FAILED_ALLOCATION depending on the outcome.
  */
@@ -168,7 +170,7 @@ static inline size_t memory_heap_memory_size(const Heap *heap)
  * @brief allocates space for a certain amount of terms on the heap
  *
  * @details allocates space for a certain amount of terms on the heap, GC will be performed when needed, any existing term might be invalid after this call.
- * @param ctx the context that owns the heap.
+ * @param heap heap to initialize.
  * @param size the amount of terms that will be allocated.
  * @returns a pointer to the newly allocated memory block.
  */
@@ -191,6 +193,7 @@ static inline MALLOC_LIKE term *memory_heap_alloc(Heap *heap, size_t size)
  *
  * @details deep copies a term to a destination heap, once finished old memory can be freed.
  * @param new_heap the destination heap where terms will be copied.
+ * @param t term to copy
  * @returns a new term that is stored on the new heap.
  */
 term memory_copy_term_tree(Heap *new_heap, term t);

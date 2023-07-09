@@ -141,7 +141,7 @@ GlobalContext *globalcontext_new();
  * @brief Destoys an existing GlobalContext
  *
  * @details Frees global context resources and memory and removes it from the processes table.
- * @param c the global context that will be destroyed.
+ * @param glb the global context that will be destroyed.
  */
 void globalcontext_destroy(GlobalContext *glb);
 
@@ -290,7 +290,7 @@ int globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_str
  * @details Checks if the given atom table index and the given AtomString refers to the same atom.
  * @param glb the global context.
  * @param atom_index_a an atom table index.
- * @param AtomString an atom string, which is the atom length followed by atom characters.
+ * @param atom_string_b an atom string, which is the atom length followed by atom characters.
  * @returns true if they both refer to the same atom, otherwise false.
  */
 bool globalcontext_is_atom_index_equal_to_atom_string(GlobalContext *glb, int atom_index_a, AtomString atom_string_b);
@@ -301,7 +301,7 @@ bool globalcontext_is_atom_index_equal_to_atom_string(GlobalContext *glb, int at
  * @details Checks if the given term and the given AtomString refers to the same atom.
  * @param glb the global context.
  * @param atom_a any term of any type, when it is not an atom false is always returned.
- * @param AtomString an atom string, which is the atom length followed by atom characters.
+ * @param atom_string_b an atom string, which is the atom length followed by atom characters.
  * @returns true if they both refer to the same atom, otherwise false.
  */
 static inline bool globalcontext_is_term_equal_to_atom_string(GlobalContext *global, term atom_a, AtomString atom_string_b)

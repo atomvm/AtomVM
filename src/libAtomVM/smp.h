@@ -148,7 +148,7 @@ void smp_condvar_signal(CondVar *cv);
 
 /**
  * @brief Create a new rwlock.
- * @detail A RW Lock can be replaced by a mutex if RW Lock are not available
+ * @details A RW Lock can be replaced by a mutex if RW Lock are not available
  * on the platform.
  * @return a pointer to a lock.
  */
@@ -214,7 +214,7 @@ static inline void smp_spinlock_unlock(SpinLock *lock)
 
 /**
  * @brief Get the number of online processors to configure schedulers.
- * @detail This value is one plus the maximum number of times
+ * @details This value is one plus the maximum number of times
  * smp_scheduler_start will be called by the scheduler.
  * @return the number of online processors.
  */

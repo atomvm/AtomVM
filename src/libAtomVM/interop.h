@@ -71,10 +71,10 @@ NO_DISCARD InteropFunctionResult interop_write_iolist(term t, char *p);
  * @details Allows to quickly translate atoms to any integer constant. This function is useful for
  * creating switch statements for atom values.
  * A linear search is performed, so table entries should be sorted by frequency.
- * @param glb the global context.
  * @param table an array AtomStringIntPair structs, teminated with a default entry marked with
  * SELECT_INT_DEFAULT macro.
  * @param atom the atom used for comparison.
+ * @param global the global context.
  * @returns the found int value which corresponds to the given atom.
  */
 int interop_atom_term_select_int(const AtomStringIntPair *table, term atom, GlobalContext *global);
@@ -87,7 +87,7 @@ int interop_atom_term_select_int(const AtomStringIntPair *table, term atom, Glob
  * @param kv any proplist or map.
  * @param key an AtomString, such as ATOM_STR("\x3", "key").
  * @param default_value that is returned in case of missing item.
- *
+ * @param glb the global context.
  * @returns the value term in case given key exists, otherwise the default_value.
  */
 term interop_kv_get_value_default(term kv, AtomString key, term default_value, GlobalContext *glb);
@@ -99,7 +99,7 @@ term interop_kv_get_value_default(term kv, AtomString key, term default_value, G
  * atom table.  This function returns the invalid term if there is no such entry in kv.
  * @param kv any proplist or map.
  * @param key an AtomString, such as ATOM_STR("\x3", "key").
- *
+ * @param glb the global context.
  * @returns the value term in case given key exists, otherwise the invalid term.
  */
 static inline term interop_kv_get_value(term kv, AtomString key, GlobalContext *glb)

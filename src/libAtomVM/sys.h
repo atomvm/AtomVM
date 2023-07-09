@@ -199,17 +199,18 @@ Module *sys_load_module_from_file(GlobalContext *global, const char *path);
 
 /**
  * @brief Create a port driver
- * @details This function creates a port driver, enscapsulated in a Context object.  This function should
+ * @details This function creates a port driver, encapsulated in a Context object.  This function should
  * create a Context object through the supplied global context, which will assume ownership of the new instance.
- * @param glb the global context
- * @param opts the term options passed into the port open command
+ * @param glb the global context.
+ * @param driver_name the name of the driver that will control the port.
+ * @param opts the term options passed into the port open command.
  * @return a new Context instance, or NULL, if a driver cannot be created from the inputs.
  */
 Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts);
 
 /**
  * @brief Get platform-dependent information for the specified key.
- * @details This function returns platform-depndent information specified by the supplied key.
+ * @details This function returns platform-dependent information specified by the supplied key.
  * If not information is available for the specified key, this function should return the
  * atom 'undefined'
  * @param ctx the current context

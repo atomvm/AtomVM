@@ -288,7 +288,7 @@ static inline size_t context_avail_free_memory(const Context *ctx)
  * This function is just a shortcut that uses the corresponding funtion from globalcontext.
  * @param ctx the current Context.
  * @param atom_a any term of any type, when it is not an atom false is always returned.
- * @param AtomString an atom string, which is the atom length followed by atom characters.
+ * @param atom_string_b an atom string, which is the atom length followed by atom characters.
  * @returns true if they both refer to the same atom, otherwise false.
  */
 static inline bool context_is_term_equal_to_atom_string(Context *ctx, term atom_a, AtomString atom_string_b)

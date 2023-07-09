@@ -160,7 +160,7 @@ void module_get_imported_function_module_and_name(const Module *this_module, int
 #endif
 
 /**
- * @briefs Gets exported function index by searching it by function name and arity
+ * @brief Gets exported function index by searching it by function name and arity
  *
  * @details Gets exported function index by searching it by function name and arity
  * @param this_module the module on which the function will be searched.
@@ -181,6 +181,7 @@ void module_destroy(Module *module);
  * @brief Parse a BEAM file and returns a Module
  *
  * @details Parse a BEAM file a returns a newly allocated and initialized Module struct.
+ * @param global the global context.
  * @param iff_binary the IFF file data.
  * @param size the size of the buffer containing the IFF data.
  */
@@ -192,6 +193,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
  * @details Loads and deserialize a term stored in the literal table and returns a term.
  * @param mod The module that owns that is going to be loaded.
  * @param index a valid literal index.
+ * @param ctx the target context.
  */
 term module_load_literal(Module *mod, int index, Context *ctx);
 
@@ -243,8 +245,8 @@ static inline term module_get_name(const Module *mod)
  *
  * @details Resolves an unresolved function reference and it replaces the unresolved reference with a ModuleFunction struct,
  * also it loads the referenced module if it hasn't been loaded yet.
+ * @param mod the module containing the function to resolve.
  * @param import_table_index the unresolved function index.
- * @param func the unresolved function placeholder struct.
  */
 static inline const struct ExportedFunction *module_resolve_function(Module *mod, int import_table_index)
 {

@@ -69,14 +69,14 @@ void scheduler_signal_message(Context *c);
 /**
  * @brief Signal a process that it was killed.
  *
- * @param c the process context.
+ * @param ctx the process context.
  */
 void scheduler_kill(Context *ctx);
 
 /**
  * @brief removes a process and terminates it from the scheduling queue
  *
- * @detail removes a process from the scheduling ready queue and destroys it if its not a leader process.
+ * @details removes a process from the scheduling ready queue and destroys it if its not a leader process.
  * @param c the process that is going to be terminated.
  */
 void scheduler_terminate(Context *c);
@@ -91,7 +91,7 @@ void scheduler_stop_all(GlobalContext *global);
 /**
  * @brief gets next runnable process from the ready queue.
  *
- * @detail gets next runnable process from the ready queue, it may return current process if there isn't any other runnable process.
+ * @details gets next runnable process from the ready queue, it may return current process if there isn't any other runnable process.
  * @param global the global context.
  * @param c the current process.
  * @returns runnable process.

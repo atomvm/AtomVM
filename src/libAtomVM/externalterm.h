@@ -53,8 +53,9 @@ typedef enum
  *
  * @details Deserialize an external term from external format and returns a term.
  * @param external_term the external term that will be deserialized.
+ * @param size to allocate for term.
  * @param ctx the context that owns the memory that will be allocated.
- * @param use_heap_fragment if non-zero, use a heap fragment to store the generated
+ * @param opts if non-zero, use a heap fragment to store the generated
  * terms.  Otherwise, use the heap in the provided context.  Note that when using the
  * context heap, this function may call the GC, if there is insufficient space to
  * store the generated terms.
@@ -71,10 +72,9 @@ term externalterm_to_term(
  * allocate the instantiated terms.  This function is the complement of externalterm_to_binary.
  * WARNING: This function may call the GC, which may render the input binary invalid.
  * @param ctx the context that owns the memory that will be allocated.
- * @param binary the binary
- * @param bytes_read the number of bytes read from the input binary
- * @param num_extra_terms the number of words (terms) to (possibly) allocate space for
- * in the heap, prior to instantiating the destination term (may trigger GC).
+ * @param dst a pointer to a term that will contain the binary encoded term.
+ * @param binary the binary.
+ * @param bytes_read the number of bytes read from the input binary.
  * @returns the term deserialized from the input term, or an invalid term, if
  * deserialization fails.
  */
@@ -88,7 +88,7 @@ enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term b
  * terms.  This function is the complement of externalterm_to_binary.
  * WARNING: This function may call the GC, which may render the input binary invalid.
  * @param ctx the context that owns the memory that will be allocated.
- * @param binary the binary
+ * @param t the term to return as binary.
  * @returns the term deserialized from the input term, or an invalid term, if
  * deserialization fails.
  */
