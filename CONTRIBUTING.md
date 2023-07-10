@@ -167,6 +167,22 @@ C source modules (`.c`) should be organized as follows:
     +-------------------
      module.c
 
+#### Documentation
+
+[Doxygen Javadoc style](https://www.doxygen.nl/manual/docblocks.html) code comments will be picked up and added to the documentation. Changes will automatically be added to the [libAtomVM Source Files](https://www.atomvm.net/doc/master/c_api_docs.html#libatomvm-source-files) and the [libAtomVM Index](https://www.atomvm.net/doc/master/apidocs/libatomvm/index.html#libatomvm-index). But to have `Data Strucures`, `Types`, `MACROS`, and `Functions` appear in the correct C Library APIs section the corresponding entries must be added to the similarly named `*.rst` files in the `AtomVM/doc/src/apidocs/libatomvm/` directory. The exact names of the flies that need to be altered are: `data_structures.rst`, `functions.rst`, `macros.rst`, and `types.rst`. The other files in the directory handle auto`generated content and do not need to be altered.
+
+In the rare case that a function declaration and definition are both in different header files (rather than the definition in a `*.c` file) this can cause rendering errors for `Doxygen`. The work around for these cases can be demonstrated with this example for the function `sys_listener_destroy` it is documented and declared in `sys.h` and defined as follows in `listeners.h`:
+
+    #ifndef DOXYGEN_SKIP_SECTION /* documented in sys.h */
+    void sys_listener_destroy(struct ListHead *item)
+    {
+        EventListener *listener = GET_LIST_ENTRY(item, EventListener, listeners_list_head);
+        free(listener);
+    }
+    #endif /* DOXYGEN_SKIP_SECTION */
+
+> Note: You should include a short `/* comment */` trailing the `#ifndef` entry mentioning the file where the function is actually documented.
+
 ### Erlang Code
 
 Erlang source code style is enforced using [erlfmt](https://github.com/WhatsApp/erlfmt).

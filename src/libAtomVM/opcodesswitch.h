@@ -1418,7 +1418,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
     int read_core_chunk(Module *mod)
 #else
     #ifdef IMPL_EXECUTE_LOOP
+    #ifndef DOXYGEN_SKIP_SECTION /* documented in context.h */
         int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity)
+    #endif /* DOXYGEN_SKIP_SECTION */
     #else
         #error Need implementation type
     #endif
