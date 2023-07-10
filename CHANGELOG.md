@@ -50,6 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for ESP-IDF v5.x
 - Added support for `calendar:system_time_to_universal_time/2`
 - Added support for `calendar:datetime_to_gregorian_seconds/1`
+- Added support for Raspberry Pi Pico
+- Added support for nodejs with Wasm
 
 ### Fixed
 - Fixed issue with formatting integers with io:format() on STM32 platform

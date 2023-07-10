@@ -1,0 +1,99 @@
+#
+#  Copyright 2023 Paul Guyot <pguyot@kallisys.net>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: Wasm Build
+
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+      - 'CMakeLists.txt'
+      - 'libs/**'
+      - 'src/platforms/emscripten/**'
+      - 'src/libAtomVM/**'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'CMakeLists.txt'
+      - 'libs/**'
+      - 'src/platforms/emscripten/**'
+      - 'src/libAtomVM/**'
+
+env:
+  otp_version: 24
+  elixir_version: 1.14
+
+jobs:
+  compile_tests:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: ${{ env.otp_version }}
+        elixir-version: ${{ env.elixir_version }}
+
+    - name: apt update
+      run: sudo apt update
+
+    - name: Install required packages
+      run: sudo apt install -y gperf
+
+    - name: Compile test modules
+      run: |
+        set -e
+        mkdir build_tests
+        cd build_tests
+        cmake ..
+        make test_eavmlib
+        make test_alisp
+
+    - name: Upload test modules
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-modules
+        path: |
+            build_tests/**/*.avm
+            build_tests/**/*.beam
+            build_tests/**/*.hrl
+        retention-days: 1
+
+  wasm:
+    needs: compile_tests
+    runs-on: ubuntu-latest
+    container: emscripten/emsdk
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: "Install deps"
+      run: sudo apt update -y && sudo apt install -y cmake gperf
+
+    - name: Build
+      shell: bash
+      working-directory: ./src/platforms/emscripten/
+      run: |
+        set -euo pipefail
+        mkdir build
+        cd build
+        emcmake cmake ..
+        emmake make -j
+
+    - name: Download test modules
+      uses: actions/download-artifact@v3
+      with:
+        name: test-modules
+        path: build_tests
+
+    - name: Test
+      shell: bash
+      working-directory: ./src/platforms/emscripten/build
+      run: |
+        set -euo pipefail
+        node src/AtomVM.js ../../../../build_tests/tests/libs/alisp/test_alisp.avm
+        node src/AtomVM.js ../../../../build_tests/tests/libs/eavmlib/test_eavmlib.avm
