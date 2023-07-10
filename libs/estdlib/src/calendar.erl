@@ -39,14 +39,11 @@
 -export([
     date_to_gregorian_days/1,
     date_to_gregorian_days/3,
+    datetime_to_gregorian_seconds/1,
     day_of_the_week/1,
     day_of_the_week/3,
     system_time_to_universal_time/2
 ]).
-
--type date() :: {year(), month(), day()}.
--type time() :: {hour(), minute(), second()}.
--type datetime() :: {date(), time()}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Year cannot be abbreviated.
@@ -56,8 +53,8 @@
 %%
 %% @end
 %%-----------------------------------------------------------------------------
--type year() :: non_neg_integer().
 
+-type year() :: integer().
 -type month() :: 1..12.
 -type day() :: 1..31.
 -type hour() :: 0..23.
@@ -65,6 +62,9 @@
 -type second() :: 0..59.
 -type gregorian_days() :: integer().
 -type day_of_week() :: 1..7.
+-type date() :: {year(), month(), day()}.
+-type time() :: {hour(), minute(), second()}.
+-type datetime() :: {date(), time()}.
 -type time_unit() :: second | millisecond | microsecond.
 
 %%-----------------------------------------------------------------------------
@@ -86,7 +86,11 @@ date_to_gregorian_days({Y, M, D}) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec date_to_gregorian_days(Year :: year(), M :: month(), D :: day()) -> gregorian_days().
-date_to_gregorian_days(Year, M, D) when M =< 12 andalso D =< 31 ->
+date_to_gregorian_days(Year, M, D) when
+    is_integer(Year) andalso Year >= 0 andalso
+        is_integer(M) andalso M > 0 andalso M =< 12 andalso
+        is_integer(D) andalso D > 0 andalso D =< 31
+->
     Y =
         if
             M =< 2 -> Year - 1;
@@ -106,6 +110,21 @@ date_to_gregorian_days(Year, M, D) when M =< 12 andalso D =< 31 ->
     DoY = (153 * (M + MO) + 2) div 5 + D - 1,
     DoE = YoE * 365 + YoE div 4 - YoE div 100 + DoY,
     Era * 146097 + DoE + 60.
+
+%%-----------------------------------------------------------------------------
+%% @param   DateTime
+%% @returns Days    number of days
+%% @doc     Computes the number of gregorian days starting with year 0 and ending at the specified date.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec datetime_to_gregorian_seconds(DateTime :: datetime()) -> integer().
+datetime_to_gregorian_seconds({Date, {Hour, Minute, Second}}) when
+    is_integer(Hour) andalso Hour >= 0 andalso Hour =< 23 andalso
+        is_integer(Minute) andalso Minute >= 0 andalso Minute =< 59 andalso
+        is_integer(Second) andalso Second >= 0 andalso Second =< 59
+->
+    DateSeconds = date_to_gregorian_days(Date) * 24 * 60 * 60,
+    DateSeconds + Hour * 60 * 60 + Minute * 60 + Second.
 
 %%-----------------------------------------------------------------------------
 %% @equiv day_of_the_week(Y, M, D)
