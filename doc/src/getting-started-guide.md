@@ -8,10 +8,10 @@
 
 The getting started is broken up into the following sections:
 
-* Getting Started on the ESP32 platform
-* Getting Started on the STM32 platform
-* Getting Started on the Raspberry Pi Pico platform
-* Getting Started on the Generic UNIX platform
+* [Getting Started on the ESP32 platform](#getting-started-on-the-esp32-platform)
+* [Getting Started on the STM32 platform](#getting-started-on-the-stm32-platform)
+* [Getting Started on the Raspberry Pi Pico platform](#getting-started-on-the-raspberry-pi-pico-platform)
+* [Getting Started on the Generic UNIX platform](#getting-started-on-the-generic-unix-platform)
 
 ## Getting Started on the ESP32 platform
 
@@ -209,11 +209,110 @@ Once the application has been flashed, you may connect to the ESP32 over the ser
 
 ## Getting Started on the STM32 platform
 
-> TODO will se distribute a binary image for STM32?
+AtomVM can run on a wide variety of STM32 chipsets available from [STMicroelectronics](https://www.st.com). The support is not nearly as mature as for the ESP32 platform, but work is ongoing, and pull requests are always welcome. At this time AtomVM will work on any board with a minimum of around 128k ram and 512k (1M recommended) flash. Simple applications and tests have been successfully run on a stm32f411ceu6 (A.K.A. Black Pill V2). These minimum requirements may need to be raised as platform support matures.
+
+### Prerequisites
+
+* [st-flash](https://github.com/texane/stlink), to flash both AtomVM and your packed AVM applications. Make sure to follow its [installation procedure](https://github.com/texane/stlink#installation) before proceeding further.
+* [`packbeam`](https://github.com/atomvm/atomvm_packbeam) the AtomVM for packing and stripping `*.beam` files into the AtomVM `*.avm` format.
+* A serial console program, such as `minicom` or `screen`, so that you can view console output from your AtomVM application.
+
+### Build an AtomVM binary
+You will first need to build a binary configured for your processor and board layout. Consult the [Build Instruction for STM32](./build-instructions#building-for-stm32)
+
+### Flashing
+To flash AtomVM, use
+
+    $ st-flash --reset write AtomVM-stm32f407vgt6.bin 0x8000000
+
+To flash your packed AVM, use
+
+    $ st-flash --reset write /path/to/your/packed.avm 0x8080000
+
+You must include the atomvmlib.avm with your application when using [packbeam](https://github.com/atomvm/atomvm_packbeam), and it should be pruned:
+
+	$ packbeam create -p -i application.avm application.beam /path/to/AtomVM/build/libs/atomvmlib.avm
+
+> Note: The option`-i` will instruct packbeam to include file names and line numbers in stack traces. This makes debugging applications far easier, but also increases size, so it may be omitted if desired. The `-p` option should be used, it instructs packbeam to prune the unused functions from the packed `.avm` file, and is strongly recommended.
+
+AtomVM expects to find the AVM at the address 0x808000. On a STM32 Discovery board this means that the 1MB of flash will be split in 512KB available for the program and 512KB available for the packed AVM. If for any reason you want to modify this, you can change `AVM_ADDRESS` and `AVM_FLASH_MAX_SIZE` defines in `main.c`.
+
+### Printing
+By default, stdout and stderr are printed on USART2. On the STM32F4Discovery board, you can see them
+using a TTL-USB with the TX pin connected to board's pin PA2 (USART2 RX). Baudrate is 115200 and serial transmission
+is 8N1 with no flow control.
+
+### Distributed Binaries
+Due to the very large number of supported chipsets, the wide variety of board configurations, and the code changes required to support them, it is unlikely pre-built binaries will be available for the stm32 platform in the near future. Consult the [Build Instruction](./build-instructions#building-for-stm32) to create a binary compatible with your board.
 
 ## Getting Started on the Raspberry Pi Pico platform
 
-> TODO
+### Prerequisites
+
+None of these tools are strictly required, but all are recommended for easier development:
+* [`rebar3`](https://rebar3.org)
+* [`atomvm_rebar3_plugin`](https://github.com/atomvm/atomvm_rebar3_plugin)
+* [`packbeam`](https://github.com/atomvm/atomvm_packbeam) the AtomVM for packing and stripping `*.beam` files into the AtomVM `*.avm` format. (included as part of the `atomvm_rebar3_plugin`)
+* A serial console program, such as `minicom` or `screen`, so that you can view console output from your AtomVM application.
+
+### Building AtomVM for Raspberry Pico
+
+If you want to use a custom built VM for testing consult the [Build Instructions for Raspberry Pi Pico](./build-instructions#building-for-raspberry-pi-pico)
+
+### Installing AtomVM and programs on Raspberry Pico
+
+The approach consists in installing various uf2 files which include the
+address they should be loaded to.
+
+You typically need three uf2 files:
+- `AtomVM.uf2` for the VM
+- `atomvmlib.uf2` for the standard libraries
+- your application's uf2.
+
+We provide an escript-based (what else?) tool to build uf2 files called
+`uf2tool` that you can use to bundle your `avm` into uf2.
+
+If you need to upgrade AtomVM or the standard libraries, simply copy them again.
+
+### Installing AtomVM on Raspberry Pico
+
+VM binary is file `AtomVM.uf2` - `src/platforms/rp2040/build/src/AtomVM.uf2` if build from source. Simply copy it
+to the pico. The VM will crash because there is no application.
+
+### Installing atomvm library to Raspberry Pico
+
+AtomVM library must be installed as well. For Build instructions consult the Raspberry Pi Pico [libAtomVM build steps](./build-instructions#libatomvm-build-steps)
+
+#### Installing it
+
+The library to install is `atomvmlib.uf2`, `build/libs/atomvmlib.uf2` if build from source. Copy the library to the pico.
+
+### Running Hello Pico
+
+This example will print a Hello Pico message repeatedly.
+
+It is built into `build/examples/erlang/rp2040/hello_pico.uf2`.
+
+You can install it and then connect to the serial port with minicom.
+
+### Running your own BEAM code on Raspberry Pico
+
+You need to create an avm file using the `packbeam` tool the [`atomvm_rebar3_plugin`](https://github.com/atomvm/atomvm_rebar3_plugin).
+
+    packbeam create -p -i packed.avm module.beam
+
+or
+
+    rebar3 packbeam -p -i packed.avm module.beam
+
+Then the BEAM file must be converted to UF2.
+The VM currently expects the application to be loaded at address 0x100A0000.
+
+    ./uf2tool create -o packed.uf2 -s 0x100A0000 packed.avm
+
+Copy this UF2 to the Pico after you copied the VM (`AtomVM.uf2`) and the
+standard libraries (`atomvmlib.uf2`).
+
 
 ## Getting Started on the Generic UNIX platform
 

@@ -150,9 +150,10 @@ extern const term empty_tuple;
  * @brief Compares two terms
  *
  * @details Tells if first term is >, < or == to the second term.
- * @param t the first term
- * @param other the second term
- * @param global the global context
+ * @param t the first term.
+ * @param other the second term.
+ * @param opts a value of 1 will compare exact equality, 0 for less strict equality.
+ * @param global the global context.
  * @return any of TermEquals, TermLessThan, TermGreaterThan or TermCompareMemoryAllocFail error.
  */
 TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalContext *global);
@@ -318,7 +319,7 @@ static inline int term_is_movable_boxed(term t)
  * @brief Returns size of a boxed term from its header
  *
  * @details Returns the size that is stored in boxed term header most significant bits.
- * @param t the boxed term header.
+ * @param header the boxed term header.
  * @return the size of the boxed term that follows the header. 0 is returned if the boxed term is just the header.
  */
 static inline int term_get_size_from_boxed_header(term header)
@@ -1081,8 +1082,8 @@ static inline term term_create_empty_binary(uint32_t size, Heap *heap, GlobalCon
 * at the bit position starting in offset.
 * @param t a term pointing to binary data. Fails if t is not a binary term.
 * @param offset the bitwise offset in t at which to start writing the integer value
-* @param value the integer value to write
-* @param n the bumber of low-order bits from value to write.
+* @param src binary source to insert binary data into.
+* @param n the number of low-order bits from value to write.
 * @return 0 on success; non-zero value if:
 *           t is not a binary term
 *           n is greater than the number of bits in an integer
@@ -1268,7 +1269,7 @@ static inline term *term_get_list_ptr(term t)
  * @brief Gets list term from pointer
  *
  * @details Return given list term from a list element pointer.
- * @param list_element a pointer to a list element.
+ * @param list_elem a pointer to a list element.
  * @return a list term
  */
 static inline term term_list_from_list_ptr(term *list_elem)
@@ -1420,7 +1421,7 @@ void term_display(FILE *fd, term t, const Context *ctx);
  * @brief Prints a term using given printer fun
  *
  * @details Print any given term using a printer fun
- * @param fd the file where the term will be printed.
+ * @param pf function that will handle printing.
  * @param t the term that will be printed.
  * @param global the \c GlobalContext.
  * @returns the number of printed characters.

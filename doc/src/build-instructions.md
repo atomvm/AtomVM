@@ -461,4 +461,74 @@ Example:
 
 ## Building for STM32
 
-> TODO
+### Prerequisites
+
+* `arm-none-eabi`/`arm-elf` toolchain compatible with your system
+* `cmake`
+* `make`
+* `git`
+* [`libopencm3`](https://github.com/libopencm3/libopencm3)
+
+### Setup libopencm3
+
+Before building for the first time you need to have a compiled clone of the libopencm3 libraries, from inside the AtomVM/src/platforms/stm32 directory:
+
+    $ git clone https://github.com/libopencm3/libopencm3.git
+    $ cd libopencm3 && make -j4 && cd ..
+
+>Note: You can put libopencm3 wherever you want on your PC as long as you update LIBOPENCM3_DIR to point to it. This example assumes it has been cloned into /opt/libopencm3 and built. From inside the AtomVM/src/platforms/stm32 directory:```
+        cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/arm-toolchain.cmake -DLIBOPENCM3_DIR=/opt/libopencm3 ..
+
+### Build AtomVM
+
+    $ mkdir build
+    $ cd build
+    $ cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/arm-toolchain.cmake
+    $ make
+
+### Changing device
+
+The default build is based on the STM32F4Discovery board chip (`stm32f407vgt6`). If you want to target a different
+chip, pass the `-DDEVICE` flag when invoking cmake. For example, to use the STM32F429Discovery, pass
+`-DDEVICE=stm32f429zit6`
+
+If you are building for a different target board the `CLOCK_FREQUENCY` definition in main.c will need to be changed to match the clock frequency (in hertz) of your cpu.
+
+The rcc_clock_setup_XXX_XXX will also need to be changed to match your particular chip-set. Consult [ST's documentation](https://www.st.com/en/microcontrollers-microprocessors/stm32-32-bit-arm-cortex-mcus.html) for appropriate settings.
+
+### Printing
+By default, stdout and stderr are printed on USART2. On the STM32F4Discovery board, you can see them
+using a TTL-USB with the TX pin connected to board's pin PA2 (USART2 RX). Baudrate is 115200 and serial transmission
+is 8N1 with no flow control.
+
+> If building for a different target USART and gpio pins may need to be adjusted in `main.c`.
+
+## Building for Raspberry Pi Pico
+
+### Prerequisites
+
+* `cmake`
+* `ninja`
+* `Erlang/OTP`
+* `Elixir` (optional)
+
+## AtomVM build steps
+
+    cd src/platforms/rp2040/
+    mkdir build
+    cd build
+    cmake .. -G Ninja
+    ninja
+
+> You may want to build with option `AVM_REBOOT_ON_NOT_OK` so Pico restarts on error.
+
+## libAtomVM build steps
+
+Build of standard libraries is part of the generic unix build.
+
+From the root of the project:
+
+    mkdir build
+    cd build
+    cmake .. -G Ninja
+    ninja

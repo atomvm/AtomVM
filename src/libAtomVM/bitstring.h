@@ -478,7 +478,6 @@ static inline bool bitstring_match_utf16(term src_bin, size_t offset, int32_t *c
  * @param offset offset, in bits, to where to insert the character
  * @param c character to encode
  * @param bs_flags flags to encode the character (undefined/little/big/native)
- * @param out_size the size in bytes, on output
  * @return \c true if encoding was successful, \c false if c is not a valid
  * unicode character
  */

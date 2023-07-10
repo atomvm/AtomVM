@@ -139,7 +139,7 @@ typedef struct
 /**
  * @brief Initialize the mailbox
  *
- * @param mbx the mailbox to initialize.
+ * @param mbox the mailbox to initialize.
  */
 void mailbox_init(Mailbox *mbox);
 
@@ -311,7 +311,8 @@ void mailbox_message_dispose(MailboxMessage *m, Heap *heap);
  * @details Discard a term that has been previously queued on a certain process
  * or driver mailbox. To be called from the process only. Term messages are
  * actually added as fragments to the heap and will be gone at next GC.
- * @param mbx the mailbox to remove next message from.
+ * @param mbox the mailbox to remove next message from.
+ * @param heap the heap to add messages to.
  */
 static inline void mailbox_remove_message(Mailbox *mbox, Heap *heap)
 {
