@@ -257,7 +257,7 @@ static void esp32_part_avm_pack_destructor(struct AVMPackData *obj, GlobalContex
     free(obj);
 }
 
-struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *path)
+enum OpenAVMResult sys_open_avm_from_file(GlobalContext *global, const char *path, struct AVMPackData **data)
 {
     TRACE("sys_open_avm_from_file: Going to open: %s\n", path);
 
@@ -271,16 +271,15 @@ struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *pa
         const char *part_name = path + parts_by_name_len;
         const void *part_data = esp32_sys_mmap_partition(part_name, &part_handle, &size);
         if (IS_NULL_PTR(part_data)) {
-            return NULL;
+            return AVM_OPEN_CANNOT_OPEN;
         }
         if (UNLIKELY(!avmpack_is_valid(part_data, size))) {
-            return NULL;
+            return AVM_OPEN_INVALID;
         }
 
         struct ESP32PartAVMPack *part_avm = malloc(sizeof(struct ESP32PartAVMPack));
         if (IS_NULL_PTR(part_avm)) {
-            // use esp_partition_munmap
-            return NULL;
+            return AVM_OPEN_FAILED_ALLOC;
         }
         avmpack_data_init(&part_avm->base, &esp32_part_avm_pack_info);
         part_avm->base.data = part_data;
@@ -290,20 +289,20 @@ struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *pa
     } else {
         struct stat file_stats;
         if (UNLIKELY(stat(path, &file_stats) < 0)) {
-            return NULL;
+            return AVM_OPEN_CANNOT_OPEN;
         }
         // check int max
         int size = file_stats.st_size;
 
         void *file_data = malloc(size);
         if (IS_NULL_PTR(file_data)) {
-            return NULL;
+            return AVM_OPEN_FAILED_ALLOC;
         }
 
         FILE *avm_file = fopen(path, "r");
         if (UNLIKELY(!avm_file)) {
             free(file_data);
-            return NULL;
+            return AVM_OPEN_CANNOT_OPEN;
         }
 
         int bytes_read = fread(file_data, 1, size, avm_file);
@@ -311,25 +310,26 @@ struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *pa
 
         if (UNLIKELY(bytes_read != size)) {
             free(file_data);
-            return NULL;
+            return AVM_OPEN_CANNOT_READ;
         }
 
         if (UNLIKELY(!avmpack_is_valid(file_data, size))) {
             free(file_data);
-            return NULL;
+            return AVM_OPEN_INVALID;
         }
 
         struct InMemoryAVMPack *in_memory_avm = malloc(sizeof(struct InMemoryAVMPack));
         if (IS_NULL_PTR(avmpack_data)) {
             free(file_data);
-            return NULL;
+            return AVM_OPEN_FAILED_ALLOC;
         }
         avmpack_data_init(&in_memory_avm->base, &in_memory_avm_pack_info);
         in_memory_avm->base.data = file_data;
         avmpack_data = &in_memory_avm->base;
     }
 
-    return avmpack_data;
+    *data = avmpack_data;
+    return AVM_OPEN_OK;
 }
 
 Module *sys_load_module_from_file(GlobalContext *global, const char *path)

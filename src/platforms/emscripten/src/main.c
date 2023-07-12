@@ -48,8 +48,8 @@ static int load_module(const char *path)
 {
     const char *ext = strrchr(path, '.');
     if (ext && strcmp(ext, ".avm") == 0) {
-        struct AVMPackData *avmpack_data = sys_open_avm_from_file(global, path);
-        if (IS_NULL_PTR(avmpack_data)) {
+        struct AVMPackData *avmpack_data;
+        if (sys_open_avm_from_file(global, path, &avmpack_data) != AVM_OPEN_OK) {
             fprintf(stderr, "Failed opening %s.\n", path);
             return EXIT_FAILURE;
         }
