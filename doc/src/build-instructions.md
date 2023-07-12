@@ -395,6 +395,38 @@ Applications can be flashed using the `flash.sh` script in the esp32 build direc
 
 > Note.  Since the Erlang core libraries are flashed to the ESP32 device, it is not necessary to include core libraries in your application AVM files.  Users may be interested in using downstream development tools, such as the Elixir <a href="https://github.com/atomvm/ExAtomVM">ExAtomVM Mix task</a>, or the Erlang <a href="https://github.com/atomvm/atomvm_rebar3_plugin">AtomVM Rebar3 Plugin</a> for doing day-to-day development of applications for the AtomVM platform.
 
+#### Flashing the core libraries
+
+If you are doing development work on the core Erlang/Elixir libraries and wish to test changes that do not involve the `C` code in the core VM you may flash `atomvmlib.avm` to the avm.lib partition (offset 0x1D0000) by using the `flash.sh` script in the esp32 build directory as follows:
+
+    shell$ build/flash.sh -l ../../../build/libs/atomvmlib.avm
+    %%
+    %% Flashing ../../../build/libs/atomvmlib.avm (size=116k)
+    %%
+    esptool.py v4.5.1
+    Serial port /dev/ttyUSB0
+    Connecting.....
+    Detecting chip type... Unsupported detection protocol, switching and trying again...
+    Connecting.....
+    Detecting chip type... ESP32
+    Chip is ESP32-D0WD (revision v1.0)
+    Features: WiFi, BT, Dual Core, 240MHz, VRef calibration in efuse, Coding Scheme None
+    Crystal is 40MHz
+    MAC: 1a:57:c5:7f:ac:5b
+    Uploading stub...
+    Running stub...
+    Stub running...
+    Changing baud rate to 921600
+    Changed.
+    Configuring flash size...
+    Auto-detected Flash size: 8MB
+    Flash will be erased from 0x001d0000 to 0x001ecfff...
+    Wrote 131072 bytes at 0x001d0000 in 1.8 seconds (582.1 kbit/s)...
+    Hash of data verified.
+    
+    Leaving...
+    Hard resetting via RTS pin...
+
 ### Adding custom Nifs, Ports, and third-party components
 
 While AtomVM is a functional implementation of the Erlang virtual machine, it is nonetheless designed to allow developers to extend the VM to support additional integrations with peripherals and protocols that are not otherwise supported in the core virtual machine.
