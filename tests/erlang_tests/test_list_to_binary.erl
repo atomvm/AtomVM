@@ -20,13 +20,44 @@
 
 -module(test_list_to_binary).
 
--export([start/0, concat/2, concat2/2, compare_bin/3]).
+-export([start/0, concat/2, concat2/2, compare_bin/3, id/1]).
 
 start() ->
+    ok = test_concat(),
+    ok = test_iolist(),
+    ok = test_iolist_to_binary(),
+    0.
+
+test_concat() ->
     Bin = concat("Hello", "world"),
     Bin2 = concat2("", ""),
     CompRes1 = compare_bin(Bin, <<"Hello world">>) - compare_bin(Bin, <<"HelloXworld">>),
-    CompRes1 + byte_size(Bin2) + invalid(42).
+    1 = CompRes1 + byte_size(Bin2) + invalid(42),
+    ok.
+
+test_iolist() ->
+    <<"Hello world">> = list_to_binary(id([<<"Hello ">>, [<<"wor">>, [$l, $d]]])),
+    ok.
+
+test_iolist_to_binary() ->
+    <<"Hello world">> = iolist_to_binary(id([<<"Hello ">>, [<<"wor">>, [$l, $d]]])),
+    ok =
+        try
+            _ = list_to_binary(id(<<"foo">>)),
+            fail
+        catch
+            error:badarg ->
+                ok
+        end,
+    ok =
+        try
+            <<"foo">> = iolist_to_binary(id(<<"foo">>)),
+            ok
+        catch
+            error:badarg ->
+                fail
+        end,
+    ok.
 
 concat(A, B) ->
     list_to_binary(A ++ " " ++ B).
@@ -55,3 +86,6 @@ compare_bin(Bin1, Bin2, Index) ->
         _Any ->
             0
     end.
+
+id(X) ->
+    X.
