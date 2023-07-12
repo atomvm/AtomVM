@@ -32,6 +32,7 @@ start() ->
         test_gen_udp,
         test_gen_tcp,
         test_io_lib,
+        test_logger,
         test_maps,
         test_proplists,
         test_timer,

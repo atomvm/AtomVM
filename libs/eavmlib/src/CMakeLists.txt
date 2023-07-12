@@ -32,7 +32,7 @@ set(ERLANG_MODULES
     http_server
     json_encoder
     ledc
-    logger
+    logger_manager
     network
     network_fsm
     pico

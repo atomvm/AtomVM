@@ -57,8 +57,6 @@
     mod_state :: term()
 }).
 
--include("logger.hrl").
-
 -type options() :: list({atom(), term()}).
 -type server_ref() :: atom() | pid().
 -type from() :: any().

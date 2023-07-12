@@ -54,8 +54,6 @@
     timer_map = #{} :: map()
 }).
 
--include("logger.hrl").
-
 -type options() :: list({atom(), term()}).
 -type server_ref() :: atom() | pid().
 
