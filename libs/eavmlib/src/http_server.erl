@@ -20,7 +20,7 @@
 
 -module(http_server).
 
--export([start_server/2, reply/3, parse_query_string/1]).
+-export([start_server/2, reply/3, reply/4, parse_query_string/1]).
 
 start_server(Port, Router) ->
     case gen_tcp:listen(Port, []) of
@@ -72,18 +72,42 @@ find_route(Method, Path, [{Target, Mod, _Opts} | T]) ->
             find_route(Method, Path, T)
     end.
 
-reply(StatusCode, Reply, Conn) ->
+reply(StatusCode, ReplyBody, Conn) ->
+    reply(StatusCode, ReplyBody, [<<"Content-Type: text/html\r\nConnection: close\r\n">>], Conn).
+
+reply(StatusCode, ReplyBody, ReplyHeaders, Conn) ->
     Socket = proplists:get_value(socket, Conn),
+    ReplyList =
+        case is_list(ReplyBody) of
+            true -> ReplyBody;
+            false -> [ReplyBody]
+        end,
     FullReply = [
-        <<"HTTP/1.1 ">>,
-        code_to_status_string(StatusCode),
-        "\r\nContent-Type: text/html\r\n\r\n",
-        Reply
+        [
+            <<"HTTP/1.1 ">>,
+            code_to_status_string(StatusCode),
+            <<"\r\n">>,
+            ReplyHeaders,
+            <<"\r\n">>
+        ]
+        | ReplyList
     ],
-    gen_tcp:send(Socket, FullReply),
-    gen_tcp:close(Socket),
-    ClosedConn = [{closed, true} | Conn],
-    {ok, ClosedConn}.
+    case send_reply(Socket, FullReply) of
+        ok ->
+            {ok, Conn};
+        {error, _} ->
+            gen_tcp:close(Socket),
+            ClosedConn = [{closed, true} | Conn],
+            {ok, ClosedConn}
+    end.
+
+send_reply(Socket, [Chunk | Tail]) ->
+    case gen_tcp:send(Socket, Chunk) of
+        ok -> send_reply(Socket, Tail);
+        {error, _} = ErrorTuple -> ErrorTuple
+    end;
+send_reply(_Socket, []) ->
+    ok.
 
 code_to_status_string(200) ->
     <<"200 OK">>;
