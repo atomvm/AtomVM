@@ -224,6 +224,12 @@ TEST_CASE("test_md5", "[test_run]")
     TEST_ASSERT(ret_value == OK_ATOM);
 }
 
+TEST_CASE("test_crypto", "[test_run]")
+{
+    term ret_value = avm_test_case("test_crypto.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+
 TEST_CASE("test_monotonic_time", "[test_run]")
 {
     term ret_value = avm_test_case("test_monotonic_time.beam");

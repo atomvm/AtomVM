@@ -39,7 +39,7 @@ endif()
 idf_component_register(
     SRCS ${AVM_SYS_COMPONENT_SRCS}
     INCLUDE_DIRS "include"
-    REQUIRES "spi_flash" "soc" "newlib" "pthread" "vfs" ${ADDITIONAL_COMPONENTS}
+    REQUIRES "spi_flash" "soc" "newlib" "pthread" "vfs" "mbedtls" ${ADDITIONAL_COMPONENTS}
     PRIV_REQUIRES "libatomvm" "esp_timer" ${ADDITIONAL_PRIV_REQUIRES}
 )
 
