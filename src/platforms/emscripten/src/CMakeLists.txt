@@ -23,13 +23,22 @@ cmake_minimum_required (VERSION 3.13)
 add_executable(AtomVM main.c)
 
 target_compile_features(AtomVM PUBLIC c_std_11)
-target_compile_options(AtomVM PUBLIC -Oz)
 
 add_subdirectory(../../../libAtomVM libAtomVM)
 target_link_libraries(AtomVM PUBLIC libAtomVM)
-target_compile_options(libAtomVM PUBLIC -Oz)
+target_compile_options(libAtomVM PUBLIC -O3 -fno-exceptions -fno-rtti -pthread -sINLINING_LIMIT -sUSE_ZLIB=1)
+target_compile_definitions(libAtomVM PRIVATE WITH_ZLIB)
+target_link_options(AtomVM PRIVATE -sEXPORTED_RUNTIME_METHODS=ccall -sUSE_ZLIB=1 -O3 -pthread -sFETCH --pre-js ${CMAKE_CURRENT_SOURCE_DIR}/atomvm.pre.js)
 
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -sNODERAWFS")
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_link_options(AtomVM PRIVATE -sASSERTIONS=2 -sSAFE_HEAP -sSTACK_OVERFLOW_CHECK)
+endif()
+
+if (AVM_EMSCRIPTEN_ENV STREQUAL "web")
+    target_link_options(AtomVM PRIVATE -lworkerfs.js -sENVIRONMENT=web,worker -sPROXY_TO_PTHREAD)
+else()
+    target_link_options(AtomVM PRIVATE -sNODERAWFS -sENVIRONMENT=node)
+endif()
 
 set(
     PLATFORM_LIB_SUFFIX
@@ -38,3 +47,4 @@ set(
 
 add_subdirectory(lib)
 target_link_libraries(AtomVM PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX})
+target_include_directories(AtomVM PRIVATE lib)

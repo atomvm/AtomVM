@@ -42,28 +42,44 @@ jobs:
       run: sudo apt update
 
     - name: Install required packages
-      run: sudo apt install -y gperf
+      run: sudo apt install -y gperf zlib1g-dev ninja-build
 
-    - name: Compile test modules
+    - name: Compile AtomVM and test modules
       run: |
         set -e
-        mkdir build_tests
-        cd build_tests
-        cmake ..
-        make test_eavmlib
-        make test_alisp
+        mkdir build
+        cd build
+        cmake .. -G Ninja
+        ninja AtomVM atomvmlib test_eavmlib test_alisp hello_world run_script call_cast wasm_webserver
 
-    - name: Upload test modules
+    - name: Upload AtomVM and test modules
       uses: actions/upload-artifact@v3
       with:
-        name: test-modules
+        name: atomvm-and-test-modules
         path: |
-            build_tests/**/*.avm
-            build_tests/**/*.beam
-            build_tests/**/*.hrl
+            build/**/*.avm
+            build/**/*.beam
+            build/src/AtomVM
         retention-days: 1
 
-  wasm:
+    - name: Compile emscripten test modules
+      run: |
+        set -e
+        cd src/platforms/emscripten
+        mkdir -p build/tests/src/
+        cd build/tests/src
+        cmake ../../../tests/src -G Ninja
+        ninja emscripten_erlang_test_modules
+
+    - name: Upload emscripten test modules
+      uses: actions/upload-artifact@v3
+      with:
+        name: emscripten-test-modules
+        path: |
+            src/platforms/emscripten/build/**/*.beam
+        retention-days: 1
+
+  wasm_build_and_test_node:
     needs: compile_tests
     runs-on: ubuntu-latest
     container: emscripten/emsdk
@@ -84,16 +100,84 @@ jobs:
         emcmake cmake ..
         emmake make -j
 
-    - name: Download test modules
+    - name: Download AtomVM and test modules
       uses: actions/download-artifact@v3
       with:
-        name: test-modules
-        path: build_tests
+        name: atomvm-and-test-modules
+        path: build
 
     - name: Test
       shell: bash
       working-directory: ./src/platforms/emscripten/build
       run: |
+        set -euxo pipefail
+        # Test compressed beams
+        node src/AtomVM.js ../../../../build/examples/erlang/hello_world.beam  ../../../../build/libs/eavmlib/src/eavmlib.avm
+        # Run tests that pass
+        node src/AtomVM.js ../../../../build/tests/libs/alisp/test_alisp.avm
+        node src/AtomVM.js ../../../../build/tests/libs/eavmlib/test_eavmlib.avm
+
+  wasm_build_web:
+    runs-on: ubuntu-latest
+    container: emscripten/emsdk
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: "Install deps"
+      run: sudo apt update -y && sudo apt install -y cmake gperf
+
+    - name: Build wasm build for web
+      shell: bash
+      working-directory: ./src/platforms/emscripten/
+      run: |
         set -euo pipefail
-        node src/AtomVM.js ../../../../build_tests/tests/libs/alisp/test_alisp.avm
-        node src/AtomVM.js ../../../../build_tests/tests/libs/eavmlib/test_eavmlib.avm
+        mkdir build
+        cd build
+        emcmake cmake .. -DAVM_EMSCRIPTEN_ENV=web
+        emmake make -j
+
+    - name: Upload wasm build for web
+      uses: actions/upload-artifact@v3
+      with:
+        name: atomvm-js-web
+        path: |
+            src/platforms/emscripten/build/**/*.wasm
+            src/platforms/emscripten/build/**/*.js
+        retention-days: 1
+
+  wasm_test_web:
+    needs: [compile_tests, wasm_build_web]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: Download AtomVM and test modules
+      uses: actions/download-artifact@v3
+      with:
+        name: atomvm-and-test-modules
+        path: build
+
+    - name: Download wasm build for web
+      uses: actions/download-artifact@v3
+      with:
+        name: atomvm-js-web
+        path: src/platforms/emscripten/build
+
+    - name: Download emscripten test modules
+      uses: actions/download-artifact@v3
+      with:
+        name: emscripten-test-modules
+        path: src/platforms/emscripten/build
+
+    - name: Test using cypress
+      shell: bash
+      run: |
+        set -euxo pipefail
+        cd build
+        chmod +x ./src/AtomVM
+        ./src/AtomVM examples/emscripten/wasm_webserver.avm &
+        cd ../src/platforms/emscripten/tests/
+        docker run --network host -v $PWD:/mnt -w /mnt cypress/included:12.17.1 --browser chrome
+        killall AtomVM

@@ -22,29 +22,299 @@
 
 #include <avmpack.h>
 #include <defaultatoms.h>
+#include <globalcontext.h>
+#include <iff.h>
 #include <scheduler.h>
 
+#include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
 
-#include "trace.h"
+#include <emscripten.h>
+#include <emscripten/fetch.h>
+#include <emscripten/promise.h>
+#include <emscripten/threading.h>
+
+#include <erl_nif.h>
+#include <erl_nif_priv.h>
+#include <list.h>
+#include <term.h>
+#include <trace.h>
+
+#include "emscripten_sys.h"
+#include "platform_defaultatoms.h"
+
+/**
+ * @brief resolve a promise with an int value and destroy it
+ * @details called on the main thread using `emscripten_dispatch_to_thread`
+ * @param promise promise to resolve and destroy
+ * @param result `EM_PROMISE_FULFILL` to resolve or `EM_PROMISE_REJECT` to reject
+ * @param value value to resolve or reject to
+ */
+void sys_promise_resolve_int_and_destroy(em_promise_t promise, em_promise_result_t result, int value)
+{
+    if (result == EM_PROMISE_FULFILL) {
+        EM_ASM({
+            promiseMap.get($0).resolve($1);
+        },
+            promise, value);
+    } else {
+        EM_ASM({
+            promiseMap.get($0).reject($1);
+        },
+            promise, value);
+    }
+    emscripten_promise_destroy(promise);
+}
+
+/**
+ * @brief resolve a promise with a string value and destroy it
+ * @details called on the main thread using `emscripten_dispatch_to_thread`
+ * @param promise promise to resolve and destroy
+ * @param result `EM_PROMISE_FULFILL` to resolve or `EM_PROMISE_REJECT` to reject
+ * @param value value to resolve or reject to
+ */
+void sys_promise_resolve_str_and_destroy(em_promise_t promise, em_promise_result_t result, int value)
+{
+    if (result == EM_PROMISE_FULFILL) {
+        EM_ASM({
+            promiseMap.get($0).resolve(UTF8ToString($1));
+        },
+            promise, value);
+    } else {
+        EM_ASM({
+            promiseMap.get($0).reject(UTF8ToString($1));
+        },
+            promise, value);
+    }
+    emscripten_promise_destroy(promise);
+}
+
+static void promise_dtor(ErlNifEnv *caller_env, void *obj)
+{
+    UNUSED(caller_env);
+
+    struct PromiseResource *promise_rsrc = (struct PromiseResource *) obj;
+    if (!promise_rsrc->resolved) {
+        emscripten_dispatch_to_thread(emscripten_main_runtime_thread_id(), EM_FUNC_SIG_VIII, sys_promise_resolve_str_and_destroy, NULL, promise_rsrc->promise, EM_PROMISE_REJECT, "noproc");
+        promise_rsrc->resolved = true;
+    }
+}
+
+static const ErlNifResourceTypeInit promise_resource_type_init = {
+    .members = 1,
+    .dtor = promise_dtor,
+};
 
 void sys_init_platform(GlobalContext *glb)
 {
-    UNUSED(glb);
+    struct EmscriptenPlatformData *platform = malloc(sizeof(struct EmscriptenPlatformData));
+    if (IS_NULL_PTR(platform)) {
+        fprintf(stderr, "Cannot allocate platform data");
+        AVM_ABORT();
+    }
+    if (UNLIKELY(pthread_mutex_init(&platform->poll_mutex, NULL))) {
+        fprintf(stderr, "Cannot initialize pthread_mutex");
+        AVM_ABORT();
+    }
+    if (UNLIKELY(pthread_cond_init(&platform->poll_cond, NULL))) {
+        fprintf(stderr, "Cannot initialize pthread_cond");
+        AVM_ABORT();
+    }
+    list_init(&platform->messages);
+    ErlNifEnv env;
+    erl_nif_env_partial_init_from_globalcontext(&env, glb);
+    platform->promise_resource_type = enif_init_resource_type(&env, "promise", &promise_resource_type_init, ERL_NIF_RT_CREATE, NULL);
+    if (IS_NULL_PTR(platform->promise_resource_type)) {
+        fprintf(stderr, "Cannot initialize promise_resource_type");
+        AVM_ABORT();
+    }
+    glb->platform_data = platform;
 }
 
 void sys_free_platform(GlobalContext *glb)
 {
+    struct EmscriptenPlatformData *platform = glb->platform_data;
+    pthread_cond_destroy(&platform->poll_cond);
+    pthread_mutex_destroy(&platform->poll_mutex);
+    free(platform);
+}
+
+void sys_signal(GlobalContext *glb)
+{
+    struct EmscriptenPlatformData *platform = glb->platform_data;
+    pthread_cond_signal(&platform->poll_cond);
+}
+
+static void sys_enqueue_emscripten_message(GlobalContext *glb, struct EmscriptenMessageBase *message)
+{
+    struct EmscriptenPlatformData *platform = glb->platform_data;
+    pthread_mutex_lock(&platform->poll_mutex);
+    list_append(&platform->messages, &message->message_head);
+    sys_signal(glb);
+    pthread_mutex_unlock(&platform->poll_mutex);
+}
+
+void sys_enqueue_emscripten_cast_message(GlobalContext *glb, const char *target, const char *message_content)
+{
+    struct EmscriptenMessageCast *message = malloc(sizeof(struct EmscriptenMessageCast));
+    if (IS_NULL_PTR(message)) {
+        fprintf(stderr, "Cannot allocate message");
+        AVM_ABORT();
+    }
+    message->base.message_type = Cast;
+    message->target_name = strdup(target);
+    if (IS_NULL_PTR(message->target_name)) {
+        fprintf(stderr, "Cannot copy target name");
+        AVM_ABORT();
+    }
+    message->message = strdup(message_content);
+    if (IS_NULL_PTR(message->message)) {
+        fprintf(stderr, "Cannot copy message content");
+        AVM_ABORT();
+    }
+    sys_enqueue_emscripten_message(glb, &message->base);
+}
+
+em_promise_t sys_enqueue_emscripten_call_message(GlobalContext *glb, const char *target, const char *message_content)
+{
+    em_promise_t promise = emscripten_promise_create();
+    struct EmscriptenMessageCall *message = malloc(sizeof(struct EmscriptenMessageCall));
+    if (IS_NULL_PTR(message)) {
+        fprintf(stderr, "Cannot allocate message");
+        AVM_ABORT();
+    }
+    struct EmscriptenPlatformData *platform = glb->platform_data;
+    struct PromiseResource *promise_rsrc = enif_alloc_resource(platform->promise_resource_type, sizeof(struct PromiseResource));
+    enif_keep_resource(promise_rsrc);
+    promise_rsrc->promise = promise;
+    promise_rsrc->resolved = false;
+    message->promise_rsrc = promise_rsrc;
+    message->target_name = strdup(target);
+    if (IS_NULL_PTR(message->target_name)) {
+        fprintf(stderr, "Cannot copy target name");
+        AVM_ABORT();
+    }
+    message->message = strdup(message_content);
+    if (IS_NULL_PTR(message->message)) {
+        fprintf(stderr, "Cannot copy message content");
+        AVM_ABORT();
+    }
+    message->base.message_type = Call;
+    sys_enqueue_emscripten_message(glb, &message->base);
+    return promise;
+}
+
+static int sys_emscripten_get_target(GlobalContext *glb, const char *target_name)
+{
+    size_t target_name_size = strlen(target_name);
+    char target_atom_str[target_name_size + 1];
+    target_atom_str[0] = target_name_size;
+    memcpy(target_atom_str + 1, target_name, target_name_size);
+    term target_atom = globalcontext_existing_term_from_atom_string(glb, target_atom_str);
+    if (UNLIKELY(!term_is_atom(target_atom))) {
+        return -1;
+    }
+    int target_atom_index = term_to_atom_index(target_atom);
+    return globalcontext_get_registered_process(glb, target_atom_index);
+}
+
+static void sys_emscripten_send_message(GlobalContext *glb, int target_pid, const char *message, struct PromiseResource *promise)
+{
+    // call:
+    // {emscripten, {call, Promise, Message}}
+    // cast:
+    // {emscripten, {cast, Message}}
+    size_t message_len = strlen(message);
+    bool is_call = promise != NULL;
+    Heap heap;
+    if (UNLIKELY(memory_init_heap(&heap, 20 + TUPLE_SIZE(is_call ? 3 : 2) + TUPLE_SIZE(2) + term_binary_heap_size(message_len)) != MEMORY_GC_OK)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        AVM_ABORT();
+    }
+    term message_term = term_alloc_tuple(2, &heap);
+    term_put_tuple_element(message_term, 0, EMSCRIPTEN_ATOM);
+    term payload = term_alloc_tuple(is_call ? 3 : 2, &heap);
+    term_put_tuple_element(message_term, 1, payload);
+    term_put_tuple_element(payload, 0, globalcontext_make_atom(glb, is_call ? ATOM_STR("\x4", "call") : ATOM_STR("\x4", "cast")));
+    if (is_call) {
+        term promise_term = term_from_resource(promise, &heap);
+        term_put_tuple_element(payload, 1, promise_term);
+    }
+    term bin = term_alloc_refc_binary(message_len, false, &heap, glb);
+    void *bin_data = (void *) term_binary_data(bin);
+    memcpy(bin_data, message, message_len);
+    term_put_tuple_element(payload, is_call ? 2 : 1, bin);
+    globalcontext_send_message(glb, target_pid, message_term);
+    memory_destroy_heap(&heap, glb);
+}
+
+static void sys_process_emscripten_message(GlobalContext *glb, struct EmscriptenMessageBase *message)
+{
     UNUSED(glb);
+    switch (message->message_type) {
+        case Cast: {
+            struct EmscriptenMessageCast *message_send = (struct EmscriptenMessageCast *) message;
+            int local_pid = sys_emscripten_get_target(glb, message_send->target_name);
+            if (local_pid > 0) {
+                sys_emscripten_send_message(glb, local_pid, message_send->message, NULL);
+            }
+            free(message_send->target_name);
+            free(message_send->message);
+        } break;
+
+        case Call: {
+            struct EmscriptenMessageCall *message_async_call = (struct EmscriptenMessageCall *) message;
+            int local_pid = sys_emscripten_get_target(glb, message_async_call->target_name);
+            if (local_pid > 0) {
+                sys_emscripten_send_message(glb, local_pid, message_async_call->message, message_async_call->promise_rsrc);
+            } else {
+                emscripten_dispatch_to_thread(emscripten_main_runtime_thread_id(), EM_FUNC_SIG_VIII, sys_promise_resolve_str_and_destroy, NULL, message_async_call->promise_rsrc->promise, EM_PROMISE_REJECT, "noproc");
+                message_async_call->promise_rsrc->resolved = true;
+            }
+            enif_release_resource(message_async_call->promise_rsrc);
+            free(message_async_call->target_name);
+            free(message_async_call->message);
+        } break;
+    }
 }
 
 void sys_poll_events(GlobalContext *glb, int timeout_ms)
 {
-    UNUSED(glb);
-    UNUSED(timeout_ms);
+    struct EmscriptenPlatformData *platform = glb->platform_data;
+    if (timeout_ms > 0) {
+        struct timespec abstime;
+        sys_monotonic_time(&abstime);
+        int timeout_secs_part = timeout_ms / 1000;
+        int timeout_ms_part = timeout_ms - (timeout_secs_part * 1000);
+        abstime.tv_nsec += timeout_ms_part * 1000000;
+        if (abstime.tv_nsec > 1000000000) {
+            timeout_secs_part += 1;
+            abstime.tv_nsec -= 1000000000;
+        }
+        abstime.tv_sec += timeout_secs_part;
+        pthread_mutex_lock(&platform->poll_mutex);
+        pthread_cond_timedwait(&platform->poll_cond, &platform->poll_mutex, &abstime);
+    } else if (timeout_ms < 0) {
+        pthread_mutex_lock(&platform->poll_mutex);
+        pthread_cond_wait(&platform->poll_cond, &platform->poll_mutex);
+    } else {
+        pthread_mutex_lock(&platform->poll_mutex);
+    }
+
+    struct ListHead *messages = &platform->messages;
+    struct ListHead *item;
+    struct ListHead *tmp;
+    MUTABLE_LIST_FOR_EACH (item, tmp, messages) {
+        struct EmscriptenMessageBase *message = GET_LIST_ENTRY(item, struct EmscriptenMessageBase, message_head);
+        sys_process_emscripten_message(glb, message);
+        list_remove(&message->message_head);
+        free(message);
+    }
+    pthread_mutex_unlock(&platform->poll_mutex);
 }
 
 void sys_listener_destroy(struct ListHead *item)
@@ -75,34 +345,78 @@ uint64_t sys_monotonic_millis()
     return (ts.tv_nsec / 1000000UL) + (ts.tv_sec * 1000UL);
 }
 
+static emscripten_fetch_t *fetch_file(const char *url)
+{
+    emscripten_fetch_attr_t attr;
+    emscripten_fetch_attr_init(&attr);
+    strcpy(attr.requestMethod, "GET");
+    attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY | EMSCRIPTEN_FETCH_SYNCHRONOUS;
+    emscripten_fetch_t *fetch = emscripten_fetch(&attr, url);
+    if (fetch->status == 200) {
+        return fetch;
+    } else {
+        printf("Downloading %s failed, HTTP failure status code: %d.\n", fetch->url, fetch->status);
+        emscripten_fetch_close(fetch);
+        return NULL;
+    }
+}
+
+static void *load_or_fetch_file(const char *path, emscripten_fetch_t **fetch, size_t *size)
+{
+    int fd = open(path, O_RDONLY);
+    if (fd >= 0) {
+        off_t fsize = lseek(fd, 0, SEEK_END);
+        lseek(fd, 0, SEEK_SET);
+        void *data = malloc(fsize);
+        if (IS_NULL_PTR(data)) {
+            close(fd);
+            return NULL;
+        }
+
+        size_t r = read(fd, data, fsize);
+        if (UNLIKELY(r != fsize)) {
+            free(data);
+            close(fd);
+            return NULL;
+        }
+        if (size) {
+            *size = fsize;
+        }
+        return data;
+    }
+    if (UNLIKELY(errno != ENOENT)) {
+        return NULL;
+    }
+
+    *fetch = fetch_file(path);
+    if (IS_NULL_PTR(*fetch)) {
+        return NULL;
+    }
+    if (size) {
+        *size = (*fetch)->numBytes;
+    }
+    return (void *) (*fetch)->data;
+}
+
 struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *path)
 {
     TRACE("sys_open_avm_from_file: Going to open: %s\n", path);
 
     UNUSED(global);
 
-    int fd = open(path, O_RDONLY);
-    if (UNLIKELY(fd < 0)) {
-        return NULL;
-    }
-
-    off_t fsize = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    void *data = malloc(fsize);
+    emscripten_fetch_t *fetch = NULL;
+    void *data = load_or_fetch_file(path, &fetch, NULL);
     if (IS_NULL_PTR(data)) {
-        close(fd);
-        return NULL;
-    }
-
-    size_t r = read(fd, data, fsize);
-    if (UNLIKELY(r != fsize)) {
-        free(data);
-        close(fd);
         return NULL;
     }
 
     struct ConstAVMPack *const_avm = malloc(sizeof(struct ConstAVMPack));
     if (IS_NULL_PTR(const_avm)) {
+        if (fetch) {
+            emscripten_fetch_close(fetch);
+        } else {
+            free(data);
+        }
         return NULL;
     }
     avmpack_data_init(&const_avm->base, &const_avm_pack_info);
@@ -113,11 +427,36 @@ struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *pa
 
 Module *sys_load_module_from_file(GlobalContext *global, const char *path)
 {
-    UNUSED(global);
-    UNUSED(path);
+    TRACE("sys_open_avm_from_file: Going to open: %s\n", path);
 
-    // TODO
-    return NULL;
+    size_t size;
+    emscripten_fetch_t *fetch = NULL;
+    void *data = load_or_fetch_file(path, &fetch, &size);
+    if (IS_NULL_PTR(data)) {
+        return NULL;
+    }
+
+    if (UNLIKELY(!iff_is_valid_beam(data))) {
+        fprintf(stderr, "%s is not a valid BEAM file.\n", path);
+        if (fetch) {
+            emscripten_fetch_close(fetch);
+        } else {
+            free(data);
+        }
+        return NULL;
+    }
+    Module *new_module = module_new_from_iff_binary(global, data, size);
+    if (IS_NULL_PTR(new_module)) {
+        if (fetch) {
+            emscripten_fetch_close(fetch);
+        } else {
+            free(data);
+        }
+        return NULL;
+    }
+    new_module->module_platform_data = NULL;
+
+    return new_module;
 }
 
 Module *sys_load_module(GlobalContext *global, const char *module_name)

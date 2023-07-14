@@ -21,6 +21,7 @@
 project(libs)
 
 add_subdirectory(erlang)
+add_subdirectory(emscripten)
 if (Elixir_FOUND)
     add_subdirectory(elixir)
 else()
