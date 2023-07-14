@@ -10,6 +10,10 @@ Welcome to AtomVM `@ATOMVM_VERSION@`
 
 These release notes provide version information about the current release of AtomVM.
 
+```{seealso}
+For a detailed list of changes since the last release consult the [Changelog](./CHANGELOG.md).
+```
+
 ## Required Software
 
 The following software is required to develop Erlang or Elixir applications on AtomVM:
@@ -30,7 +34,9 @@ AtomVM will run BEAM files that have been compiled using the following Erlang an
 | ✅ OTP 25 | ✅ 1.14 |
 | ✅ OTP 26 | ✅ 1.15 |
 
-> Note. Versions of Elixir that are compatible with a particular OTP version may work.  This table reflects the versions that are tested.
+```{note}
+Versions of Elixir that are compatible with a particular OTP version may work.  This table reflects the versions that are tested.
+```
 
 Not all BEAM instructions are supported for every Erlang and Elixir compiler.  For details about which instructions are supported, see the `src/libAtomVM/opcodes.h` header file in the  [AtomVM](https://github.com/atomvm/AtomVM/) github repository corresponding to the current release.
 
@@ -79,7 +85,9 @@ AtomVM has been tested on the following development boards:
 
 Due to the proliferation of boards for the [STMicroelectronics](https://www.st.com) [STM32](https://www.st.com/en/microcontrollers-microprocessors/stm32-32-bit-arm-cortex-mcus.html) platform, AtomVM does not currently support pre-build binaries for STM32.  In order to deploy AtomVM to the STM32 platform, you will need to build AtomVM for STM32 from source.  See the [Build Instructions](build-instructions.md) for information about how to build AtomVM from source code.
 
-> Note.  AtomVM tests this build on the latest Ubuntu github runner.
+```{note}
+AtomVM tests this build on the latest Ubuntu github runner.
+```
 
 ### Raspberry Pi Pico Support
 

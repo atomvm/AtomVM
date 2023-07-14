@@ -1,14 +1,17 @@
-
 .. Copyright 2023 Winford (Uncle Grumpy) <winford@object.stream>
 ..
 .. SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 
+:orphan:
+
+.. c:namespace:: libAtomVM
+
 ------------------
 @SOURCE_FILE@
 ------------------
+
 .. toctree::
    :maxdepth: 3
 
 .. doxygenfile:: @SOURCE_FILE@
-   :outline:
    :allow-dot-graphs:

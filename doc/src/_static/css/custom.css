@@ -1,0 +1,9 @@
+/* SPDX-FileCopyrightText: 2024 Winford (Uncle Grumpy) <winford@object.stream>
+ *
+ * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+*/
+
+/* Fix table widths too wide */
+.wy-table-responsive table td, .wy-table-responsive table th {
+    white-space: inherit;
+}

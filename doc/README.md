@@ -10,7 +10,7 @@ AtomVM documentation is built using the following tools:
 
 * Sphinx, for main HTML, PDF, and ePUB documentation
 * Doxygen, for AtomVMLib API documentation
-* Rebar3, for Erlang library documentation (requires active internet connection during build to retrieve tool dependancies)
+* Rebar3, for Erlang library documentation (requires active internet connection during build to retrieve tool dependencies)
 * Graphviz, for image generation
 
 Dependencies and make files are generated via the standard CMake tooling used in AtomVM builds.  However, the documentation sets are not built by default.  Instead, issue the following make targets after a CMake

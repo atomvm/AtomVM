@@ -2,13 +2,30 @@
 ..
 .. SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 
----------------------
-libAtomVM Index
----------------------
+:orphan:
+
+.. c:namespace:: libAtomVM
+
+-------------------------
+libAtomVM
+-------------------------
+
 .. toctree::
    :maxdepth: 3
+   :caption: C Library APIs
 
-.. doxygenindex::
-   :project: libatomvm
-   :outline:
-   :allow-dot-graphs:
+   functions
+   data_structures
+   types
+   macros
+
+-------------------------
+libAtomVM Header Files
+-------------------------
+
+.. toctree::
+   :maxdepth: 3
+   :caption: Includes
+   :glob:
+
+   src/*
