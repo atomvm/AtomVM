@@ -27,7 +27,7 @@
 char *interop_term_to_string(term t, int *ok)
 {
     if (term_is_list(t)) {
-        return interop_list_to_string(t, ok);
+        return interop_iolist_to_string(t, ok);
 
     } else if (term_is_binary(t)) {
         char *str = interop_binary_to_string(t);
@@ -53,6 +53,44 @@ char *interop_binary_to_string(term binary)
 
     str[len] = 0;
 
+    return str;
+}
+
+char *interop_iolist_to_string(term list, int *ok)
+{
+    size_t len;
+    switch (interop_iolist_size(list, &len)) {
+        case InteropOk:
+            break;
+        case InteropMemoryAllocFail:
+            *ok = 0;
+            return NULL;
+        case InteropBadArg:
+            *ok = 0;
+            return NULL;
+    }
+
+    char *str = malloc(len + 1);
+    if (IS_NULL_PTR(str)) {
+        return NULL;
+    }
+
+    switch (interop_write_iolist(list, str)) {
+        case InteropOk:
+            break;
+        case InteropMemoryAllocFail:
+            free(str);
+            *ok = 0;
+            return NULL;
+        case InteropBadArg:
+            free(str);
+            *ok = 0;
+            return NULL;
+    }
+
+    str[len] = 0;
+
+    *ok = 1;
     return str;
 }
 
