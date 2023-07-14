@@ -22,4 +22,5 @@
 -export([start/0]).
 
 start() ->
-    console:puts("Hello World\n").
+    erlang:display(crypto:hash(sha, <<"foobar">>)),
+    io:format("Hello World\n").

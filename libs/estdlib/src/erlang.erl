@@ -206,7 +206,7 @@ system_flag(_Key, _Value) ->
 %%-----------------------------------------------------------------------------
 -spec md5(Data :: binary()) -> binary().
 md5(Data) when is_binary(Data) ->
-    throw(nif_error).
+    crypto:hash(md5, Data).
 
 %%-----------------------------------------------------------------------------
 %% @param   Module Name of module

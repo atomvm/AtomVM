@@ -34,25 +34,12 @@
 #include <esp_partition.h>
 #include <esp_sleep.h>
 #include <esp_system.h>
+#include <mbedtls/md5.h>
+#include <mbedtls/sha1.h>
+#include <mbedtls/sha256.h>
+#include <mbedtls/sha512.h>
 #include <soc/soc.h>
 #include <stdlib.h>
-#if defined __has_include
-#  if __has_include (<esp_idf_version.h>)
-#    include <esp_idf_version.h>
-#  endif
-#endif
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 3, 0) && CONFIG_IDF_TARGET_ESP32
-#include <esp_rom_md5.h>
-#else
-#include <rom/md5_hash.h>
-#endif
-#if CONFIG_IDF_TARGET_ESP32C3
-#include "esp32c3/rom/md5_hash.h"
-#elif CONFIG_IDF_TARGET_ESP32S2
-#include "esp32s2/rom/md5_hash.h"
-#elif CONFIG_IDF_TARGET_ESP32S3
-#include "esp32s3/rom/md5_hash.h"
-#endif
 
 // introduced starting with 4.4
 #if ESP_IDF_VERSION_MAJOR >= 5
@@ -62,7 +49,7 @@
 //#define ENABLE_TRACE
 #include "trace.h"
 
-#define MD5_DIGEST_LENGTH 16
+#define MAX_MD_SIZE 64
 
 static const char *const esp_rst_unknown_atom   = "\xF"  "esp_rst_unknown";
 static const char *const esp_rst_poweron        = "\xF"  "esp_rst_poweron";
@@ -76,6 +63,61 @@ static const char *const esp_rst_deepsleep      = "\x11" "esp_rst_deepsleep";
 static const char *const esp_rst_brownout       = "\x10" "esp_rst_brownout";
 static const char *const esp_rst_sdio           = "\xC"  "esp_rst_sdio";
 //                                                        123456789ABCDEF01
+
+enum crypto_algorithm
+{
+    CryptoInvalidAlgorithm = 0,
+    CryptoMd5,
+    CryptoSha1,
+    CryptoSha256,
+    CryptoSha512
+};
+
+static const AtomStringIntPair crypto_algorithm_table[] = {
+    { ATOM_STR("\x3", "md5"), CryptoMd5 },
+    { ATOM_STR("\x3", "sha"), CryptoSha1 },
+    { ATOM_STR("\x6", "sha256"), CryptoSha256 },
+    { ATOM_STR("\x6", "sha512"), CryptoSha512 },
+    SELECT_INT_DEFAULT(CryptoInvalidAlgorithm)
+};
+
+#if defined __has_include
+#if __has_include(<esp_idf_version.h>)
+#include <esp_idf_version.h>
+#endif
+#endif
+
+#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 0, 0)
+
+#define MBEDTLS_MD5_STARTS mbedtls_md5_starts_ret
+#define MBEDTLS_MD5_UPDATE mbedtls_md5_update_ret
+#define MBEDTLS_MD5_FINISH mbedtls_md5_finish_ret
+#define MBEDTLS_SHA1_STARTS mbedtls_sha1_starts_ret
+#define MBEDTLS_SHA1_UPDATE mbedtls_sha1_update_ret
+#define MBEDTLS_SHA1_FINISH mbedtls_sha1_finish_ret
+#define MBEDTLS_SHA256_STARTS mbedtls_sha256_starts_ret
+#define MBEDTLS_SHA256_UPDATE mbedtls_sha256_update_ret
+#define MBEDTLS_SHA256_FINISH mbedtls_sha256_finish_ret
+#define MBEDTLS_SHA512_STARTS mbedtls_sha512_starts_ret
+#define MBEDTLS_SHA512_UPDATE mbedtls_sha512_update_ret
+#define MBEDTLS_SHA512_FINISH mbedtls_sha512_finish_ret
+
+#else
+
+#define MBEDTLS_MD5_STARTS mbedtls_md5_starts
+#define MBEDTLS_MD5_UPDATE mbedtls_md5_update
+#define MBEDTLS_MD5_FINISH mbedtls_md5_finish
+#define MBEDTLS_SHA1_STARTS mbedtls_sha1_starts
+#define MBEDTLS_SHA1_UPDATE mbedtls_sha1_update
+#define MBEDTLS_SHA1_FINISH mbedtls_sha1_finish
+#define MBEDTLS_SHA256_STARTS mbedtls_sha256_starts
+#define MBEDTLS_SHA256_UPDATE mbedtls_sha256_update
+#define MBEDTLS_SHA256_FINISH mbedtls_sha256_finish
+#define MBEDTLS_SHA512_STARTS mbedtls_sha512_starts
+#define MBEDTLS_SHA512_UPDATE mbedtls_sha512_update
+#define MBEDTLS_SHA512_FINISH mbedtls_sha512_finish
+
+#endif
 
 //
 // NIFs
@@ -371,27 +413,178 @@ static term nif_esp_sleep_enable_ext1_wakeup(Context *ctx, int argc, term argv[]
 
 #endif
 
-static term nif_rom_md5(Context *ctx, int argc, term argv[])
+static InteropFunctionResult md5_hash_fold_fun(term t, void *accum)
+{
+    mbedtls_md5_context *md_ctx = (mbedtls_md5_context *) accum;
+    if (term_is_integer(t)) {
+        uint8_t val = term_to_uint8(t);
+        MBEDTLS_MD5_UPDATE(md_ctx, &val, 1);
+    } else if (term_is_binary(t)) {
+        MBEDTLS_MD5_UPDATE(md_ctx, (uint8_t *) term_binary_data(t), term_binary_size(t));
+    }
+    return InteropOk;
+}
+
+static bool do_md5_hash(term data, unsigned char *dst)
+{
+    mbedtls_md5_context md_ctx;
+
+    mbedtls_md5_init(&md_ctx);
+    MBEDTLS_MD5_STARTS(&md_ctx);
+
+    InteropFunctionResult result = interop_iolist_fold(data, md5_hash_fold_fun, (void *) &md_ctx);
+    if (UNLIKELY(result != InteropOk)) {
+        return false;
+    }
+
+    if (UNLIKELY(!MBEDTLS_MD5_FINISH(&md_ctx, dst))) {
+        return false;
+    }
+
+    return true;
+}
+
+static InteropFunctionResult sha1_hash_fold_fun(term t, void *accum)
+{
+    mbedtls_sha1_context *md_ctx = (mbedtls_sha1_context *) accum;
+    if (term_is_integer(t)) {
+        uint8_t val = term_to_uint8(t);
+        MBEDTLS_SHA1_UPDATE(md_ctx, &val, 1);
+    } else if (term_is_binary(t)) {
+        MBEDTLS_SHA1_UPDATE(md_ctx, (uint8_t *) term_binary_data(t), term_binary_size(t));
+    }
+    return InteropOk;
+}
+
+static bool do_sha1_hash(term data, unsigned char *dst)
+{
+    mbedtls_sha1_context md_ctx;
+
+    mbedtls_sha1_init(&md_ctx);
+    MBEDTLS_SHA1_STARTS(&md_ctx);
+
+    InteropFunctionResult result = interop_iolist_fold(data, sha1_hash_fold_fun, (void *) &md_ctx);
+    if (UNLIKELY(result != InteropOk)) {
+        return false;
+    }
+
+    if (UNLIKELY(!MBEDTLS_SHA1_FINISH(&md_ctx, dst))) {
+        return false;
+    }
+
+    return true;
+}
+
+static InteropFunctionResult sha256_hash_fold_fun(term t, void *accum)
+{
+    mbedtls_sha256_context *md_ctx = (mbedtls_sha256_context *) accum;
+    if (term_is_integer(t)) {
+        uint8_t val = term_to_uint8(t);
+        MBEDTLS_SHA256_UPDATE(md_ctx, &val, 1);
+    } else if (term_is_binary(t)) {
+        MBEDTLS_SHA256_UPDATE(md_ctx, (uint8_t *) term_binary_data(t), term_binary_size(t));
+    }
+    return InteropOk;
+}
+
+static bool do_sha256_hash(term data, unsigned char *dst)
+{
+    mbedtls_sha256_context md_ctx;
+
+    mbedtls_sha256_init(&md_ctx);
+    MBEDTLS_SHA256_STARTS(&md_ctx, false);
+
+    InteropFunctionResult result = interop_iolist_fold(data, sha256_hash_fold_fun, (void *) &md_ctx);
+    if (UNLIKELY(result != InteropOk)) {
+        return false;
+    }
+
+    if (UNLIKELY(!MBEDTLS_SHA256_FINISH(&md_ctx, dst))) {
+        return false;
+    }
+
+    return true;
+}
+
+static InteropFunctionResult sha512_hash_fold_fun(term t, void *accum)
+{
+    mbedtls_sha512_context *md_ctx = (mbedtls_sha512_context *) accum;
+    if (term_is_integer(t)) {
+        uint8_t val = term_to_uint8(t);
+        MBEDTLS_SHA512_UPDATE(md_ctx, &val, 1);
+    } else if (term_is_binary(t)) {
+        MBEDTLS_SHA512_UPDATE(md_ctx, (uint8_t *) term_binary_data(t), term_binary_size(t));
+    }
+    return InteropOk;
+}
+
+static bool do_sha512_hash(term data, unsigned char *dst)
+{
+    mbedtls_sha512_context md_ctx;
+
+    mbedtls_sha512_init(&md_ctx);
+    MBEDTLS_SHA512_STARTS(&md_ctx, false);
+
+    InteropFunctionResult result = interop_iolist_fold(data, sha512_hash_fold_fun, (void *) &md_ctx);
+    if (UNLIKELY(result != InteropOk)) {
+        return false;
+    }
+
+    if (UNLIKELY(!MBEDTLS_SHA512_FINISH(&md_ctx, dst))) {
+        return false;
+    }
+
+    return true;
+}
+
+static term nif_crypto_hash(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
-    term data = argv[0];
-    VALIDATE_VALUE(data, term_is_binary);
+    term type = argv[0];
+    VALIDATE_VALUE(type, term_is_atom);
+    term data = argv[1];
 
-    unsigned char digest[MD5_DIGEST_LENGTH];
-    struct MD5Context md5;
-    #if __has_include (<esp_idf_version.h>) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 3, 0) && CONFIG_IDF_TARGET_ESP32
-    esp_rom_md5_init(&md5);
-    esp_rom_md5_update(&md5, (const unsigned char *) term_binary_data(data), term_binary_size(data));
-    esp_rom_md5_final(digest, &md5);
-    #else
-    MD5Init(&md5);
-    MD5Update(&md5, (const unsigned char *) term_binary_data(data), term_binary_size(data));
-    MD5Final(digest, &md5);
-    #endif
-    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(MD5_DIGEST_LENGTH)) != MEMORY_GC_OK)) {
+    unsigned char digest[MAX_MD_SIZE];
+    size_t digest_len = 0;
+
+    enum crypto_algorithm algo = interop_atom_term_select_int(crypto_algorithm_table, type, ctx->global);
+    switch (algo) {
+        case CryptoMd5: {
+            if (UNLIKELY(!do_md5_hash(data, digest))) {
+                RAISE_ERROR(BADARG_ATOM)
+            }
+            digest_len = 16;
+            break;
+        }
+        case CryptoSha1: {
+            if (UNLIKELY(!do_sha1_hash(data, digest))) {
+                RAISE_ERROR(BADARG_ATOM)
+            }
+            digest_len = 20;
+            break;
+        }
+        case CryptoSha256: {
+            if (UNLIKELY(!do_sha256_hash(data, digest))) {
+                RAISE_ERROR(BADARG_ATOM)
+            }
+            digest_len = 32;
+            break;
+        }
+        case CryptoSha512: {
+            if (UNLIKELY(!do_sha512_hash(data, digest))) {
+                RAISE_ERROR(BADARG_ATOM)
+            }
+            digest_len = 64;
+            break;
+        }
+        default:
+            RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(digest_len)) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    return term_from_literal_binary(digest, MD5_DIGEST_LENGTH, &ctx->heap, ctx->global);
+    return term_from_literal_binary(digest, digest_len, &ctx->heap, ctx->global);
 }
 
 static term nif_atomvm_platform(Context *ctx, int argc, term argv[])
@@ -403,7 +596,7 @@ static term nif_atomvm_platform(Context *ctx, int argc, term argv[])
 }
 
 //
-// NIF structures and distpatch
+// NIF structures and dispatch
 //
 
 static const struct Nif esp_random_nif =
@@ -463,10 +656,10 @@ static const struct Nif esp_sleep_enable_ext1_wakeup_nif =
     .nif_ptr = nif_esp_sleep_enable_ext1_wakeup
 };
 #endif
-static const struct Nif rom_md5_nif =
+static const struct Nif crypto_hash_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_rom_md5
+    .nif_ptr = nif_crypto_hash
 };
 static const struct Nif atomvm_platform_nif =
 {
@@ -526,9 +719,9 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         return &esp_sleep_enable_ext1_wakeup_nif;
     }
 #endif
-    if (strcmp("erlang:md5/1", nifname) == 0) {
+    if (strcmp("crypto:hash/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
-        return &rom_md5_nif;
+        return &crypto_hash_nif;
     }
     if (strcmp("atomvm:platform/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);

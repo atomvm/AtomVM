@@ -53,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for Raspberry Pi Pico
 - Added support for nodejs with Wasm
 - Added support for a subset of the OTP logger interface
+- Added support for `crypto:hash/2` (ESP32 and generic_unix with openssl)
 
 ### Fixed
 - Fixed issue with formatting integers with io:format() on STM32 platform

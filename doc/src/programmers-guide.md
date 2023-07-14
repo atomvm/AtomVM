@@ -627,11 +627,6 @@ To convert a `datetime()` to convert the number of seconds since midnight Januar
 
 ### Miscellaneous
 
-Use the `erlang:md5/1` function to compute the MD5 hash of an input binary.  The output is a fixed-length binary ()
-
-    %% erlang
-    Hash = erlang:md5(<<foo>>).
-
 Use `atomvm:random/0` to generate a random unsigned 32-bit integer in the range `0..4294967295`:
 
     %% erlang
@@ -800,6 +795,35 @@ The input values for these functions may be `float` or `integer` types.  The ret
 Input values that are out of range for the specific mathematical function or which otherwise are invalid or yield an invalid result (e.g., division by 0) will result in a `badarith` error.
 
 > Note.  If the AtomVM virtual machine is built with floating point arithmetic support disabled, these functions will result in a `badarg` error.
+
+### Cryptographic Operations
+
+You can hash binary date using the `crypto:hash/2` function.
+
+    %% erlang
+    crypto:hash(sha, [<<"Some binary">>, $\s, "data"])
+
+This function takes a hash algorithm, which may be one of:
+
+    -type md_type() :: md5 | sha | sha224 | sha256 | sha384 | sha512.
+
+and an IO list.  The output type is a binary, who's length (in bytes) is dependent on the algorithm chosen:
+
+| Algorithm | Hash Length (bytes) |
+|-----------|-------------|
+| `md5` | 16 |
+| `sha` | 20 |
+| `sha224` | 32 |
+| `sha256` | 32 |
+| `sha384` | 64 |
+| `sha512` | 64 |
+
+> Note.  The `crypto:hash/2` function is currently only supported on the ESP32 and generic UNIX platforms.
+
+You can also use the legacy `erlang:md5/1` function to compute the MD5 hash of an input binary.  The output is a fixed-length binary (16 bytes)
+
+    %% erlang
+    Hash = erlang:md5(<<foo>>).
 
 ## ESP32-specific APIs
 
