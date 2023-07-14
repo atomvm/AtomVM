@@ -41,7 +41,9 @@ Deployment of AtomVM on the ESP32 platform requires the following components:
 * (recommended) For Erlang programs, [`rebar3`](https://rebar3.org);
 * (recommended) For Elixir programs, [`mix`](https://elixir-lang.org/getting-started/mix-otp/introduction-to-mix.html), which ships with the Elixir runtime;
 
+```{seealso}
 For information about specific versions of required software, see the AtomVM [Release Notes](./release-notes.md).
+```
 
 ### ESP32 Deployment Overview
 
@@ -94,7 +96,12 @@ Connect the ESP32 to your development machine (e.g., laptop or PC) via a USB cab
     |               |           +-------+
     +---------------+           ESP32
 
-> Note. There are a wide variety of ESP32 modules, ranging from home-made breadboard solutions to all-in-one development boards.  For simplicity, we assume a development board that can both be powered by a USB cable and which can be simultaneously flashed using the same cable, e.g., the [Espressif ESP32 DevKit](https://www.espressif.com/en/products/devkits/esp32-devkitc).
+```{important}
+There are a wide variety of ESP32 modules, ranging from home-made breadboard solutions to all-in-one development
+boards.  For simplicity, we assume a development board that can both be powered by a USB cable and which can be
+simultaneously flashed using the same cable, e.g., the
+[Espressif ESP32 DevKit](https://www.espressif.com/en/products/devkits/esp32-devkitc).
+```
 
 Consult your local development board documentation for instructions about how to connect your device to your development machine.
 
@@ -111,9 +118,13 @@ Flashing the ESP32 using a pre-built binary image is by far the easiest path to 
 
 We recommend first erasing any existing applications on the ESP32 device.  E.g.,
 
-    shell$ esptool.py --chip auto --port /dev/ttyUSB0 --baud 921600 erase_flash
+```shell
+$ esptool.py --chip auto --port /dev/ttyUSB0 --baud 921600 erase_flash
+```
 
-> Note.  Specify the device port and baud settings and AtomVM image name to suit your particular environment.
+```{note}
+Specify the device port and baud settings and AtomVM image name to suit your particular environment.
+```
 
 > Note. A baud rate of 921600 works well for most ESP32 devices, some can work reliably at higher rates of 1500000, or even 2000000, but some devices (especially those with a 26Mhz crystal frequency, rather than the more common 40 Mhz crystal) may need to use a slower baud rate such as 115200.
 
@@ -121,28 +132,37 @@ Download the latest [release image](https://github.com/atomvm/AtomVM/releases) f
 
 This image will generally take the form:
 
-    Atomvm-<esp32-soc>-<atomvm-version>.img
+>`Atomvm-<esp32-soc>-<atomvm-version>.img`
 
 For example:
 
-    Atomvm-esp32-v0.6.0.img
+>`Atomvm-esp32-v0.6.0.img`
 
 You will also find the sha256 hash for this file, which you should verify using the `sha256sum` command on your local operating system.
 
-> Note.  Alpha and Beta images may be unstable and may result in unpredictable behavior.  You can help solve these bugs by opening a detailed [issue on GitHub](https://github.com/atomvm/AtomVM/issues), if you encounter such problems.
+```{warning}
+Alpha and Beta images may be unstable and may result in unpredictable behavior.  You can help solve these bugs by
+opening a detailed [issue on GitHub](https://github.com/atomvm/AtomVM/issues), if you encounter such problems.
+```
 
 Finally, use the `esptool.py` command to flash the image to the bootloader start address `0x1000` on the ESP32.  E.g.,
 
-    shell$ esptool.py \
-        --chip auto \
-        --port /dev/ttyUSB0 --baud 921600 \
-        --before default_reset --after hard_reset \
-        write_flash -u \
-        --flash_mode dio --flash_freq 40m --flash_size detect \
-        0x1000 \
-        /path/to/Atomvm-esp32-v0.6.0.img
+```shell
+$ esptool.py \
+--chip auto \
+--port /dev/ttyUSB0 --baud 921600 \
+--before default_reset --after hard_reset \
+write_flash -u \
+--flash_mode dio --flash_freq 40m --flash_size detect \
+0x1000 \
+/path/to/Atomvm-esp32-v0.6.0.img
+```
 
-> Note. A baud rate of 921600 works well for most ESP32 devices, some can work reliably at higher rates of 1500000, or even 2000000, but some devices (especially those with a 26Mhz crystal frequency, rather than the more common 40 Mhz crystal) may need to use a slower baud rate such as 115200.
+```{attention}
+A baud rate of 921600 works well for most ESP32 devices, some can work reliably at higher rates of 1500000, or even
+2000000, but some devices (especially those with a 26Mhz crystal frequency, rather than the more common 40 Mhz
+crystal) may need to use a slower baud rate such as 115200.
+```
 
 The chart below lists the bootloader offset for the various ESP32 family of chips:
 
@@ -200,7 +220,10 @@ The following methods can be used to deploy the AtomVM virtual machine to an STM
 
 1. Building from source.
 
-Note.  Due to the very large number of supported chip-sets and the wide variety of board configurations, and the code changes required to support them, pre-built binaries for the stm32 platform are not currently available.
+```{attention}
+Due to the very large number of supported chip-sets and the wide variety of board configurations, and the code
+changes required to support them, pre-built binaries for the stm32 platform are not currently available.
+```
 
 Consult the [STM32 Build Instructions](./build-instructions.md#building-for-stm32) to create a binary compatible with your board.
 
@@ -210,11 +233,17 @@ Once you have created an STM32 binary image, you can flash the image to your STM
 
 To flash your image, use the following command:
 
-    shell$ st-flash --reset write AtomVM-stm32f407vgt6.bin 0x8000000
+```shell
+$ st-flash --reset write AtomVM-stm32f407vgt6.bin 0x8000000
+```
 
 Congratulations!  You have now flashed the AtomVM VM image onto your STM32 device!
 
-> Note. AtomVM expects to find the AVM at the address 0x8080000. On a STM32 Discovery board this means that the 1MB of flash will be split in 512KB available for the program and 512KB available for the packed AVM. For devices with only 512KB of flash the application address is 0x8060000, leaving 128KB of application flash available.
+```{important}
+AtomVM expects to find the AVM at the address 0x8080000. On a STM32 Discovery board this means that the 1MB of flash
+will be split in 512KB available for the program and 512KB available for the packed AVM. For devices with only 512KB
+of flash the application address is 0x8060000, leaving 128KB of application flash available.
+```
 
 #### Console Printing
 
@@ -264,11 +293,11 @@ Download the latest [release image](https://github.com/atomvm/AtomVM/releases) f
 
 This image will generally take the form:
 
-    Atomvm-<raspberry-pico-soc>-<atomvm-version>.uf2
+>`Atomvm-<raspberry-pico-soc>-<atomvm-version>.uf2`
 
 For example:
 
-    Atomvm-pico-v0.6.0.uf2
+>`Atomvm-pico-v0.6.0.uf2`
 
 You will also find the sha256 hash for this file, which you should verify using the `sha256sum` command on your local operating system.
 
@@ -276,17 +305,19 @@ You will also need a copy of the AtomVM core libraries, which include all of the
 
 This library will generally take the form:
 
-    atomvmlib-<atomvm-version>.uf2
+>`atomvmlib-<atomvm-version>.uf2`
 
 For example:
 
-    atomvmlib-v0.6.0.uf2
+>`atomvmlib-v0.6.0.uf2`
 
 You will also find the sha256 hash for this file, which you should verify using the `sha256sum` command on your local operating system.
 
 To flash your Raspberry Pico, you will need to undertake a few steps that interact with your operating file system.
 
-> Note.  It is important that you downloads the `.uf2` versions of these files for the Raspberry Pico platform.
+```{important}
+It is important that you downloads the `.uf2` versions of these files for the Raspberry Pico platform.
+```
 
 For each of the above files, you will start your Raspberry Pico in bootloader mode by pressing the `BOOTSEL` button on the Raspberry Pico dev board, while powering on the device.  Doing so will automatically boot the device and mount the Raspberry Pico on to your file system as a USB device.
 
@@ -300,41 +331,55 @@ On macOS system, the Raspberry Pico will be mounted at `/Volumes/RPI-RP2`.
 
 For example:
 
-    # power on Raspberry Pico with BOOTSEL button pressed
-    shell ls -l /Volumes/RPI-RP2
-    total 16
-    -rwxrwxrwx  1 joe  staff  241 Sep  5  2008 INDEX.HTM*
-    -rwxrwxrwx  1 joe  staff   62 Sep  5  2008 INFO_UF2.TXT*
+>Power on Raspberry Pico with BOOTSEL button pressed
 
-    shell$ cp ~/Downloads/AtomVM-pico-v0.6.0.uf2 /Volumes/RPI-RP2/.
-    ## at this point, the device will auto-unmount
+```shell
+$ ls -l /Volumes/RPI-RP2
+total 16
+-rwxrwxrwx  1 joe  staff  241 Sep  5  2008 INDEX.HTM*
+-rwxrwxrwx  1 joe  staff   62 Sep  5  2008 INFO_UF2.TXT*
+
+$ cp ~/Downloads/AtomVM-pico-v0.6.0.uf2 /Volumes/RPI-RP2/.
+```
+
+... at this point, the device will auto-unmount.
 
 And again for the AtomVM core library (note that previously flashed `.uf2` files have disappeared):
 
-    # power on Raspberry Pico with BOOTSEL button pressed
-    shell ls -l /Volumes/RPI-RP2
-    total 16
-    -rwxrwxrwx  1 joe  staff  241 Sep  5  2008 INDEX.HTM*
-    -rwxrwxrwx  1 joe  staff   62 Sep  5  2008 INFO_UF2.TXT*
+>Power on Raspberry Pico with BOOTSEL button pressed
 
-    shell$ cp ~/Downloads/atomvmlib-v0.6.0.avm /Volumes/RPI-RP2/.
-    ## at this point, the device will auto-unmount
+```shell
+$ ls -l /Volumes/RPI-RP2
+total 16
+-rwxrwxrwx  1 joe  staff  241 Sep  5  2008 INDEX.HTM*
+-rwxrwxrwx  1 joe  staff   62 Sep  5  2008 INFO_UF2.TXT*
+
+$ cp ~/Downloads/atomvmlib-v0.6.0.avm /Volumes/RPI-RP2/.
+```
+
+... and again, at this point, the device will auto-unmount.
 
 ### Potential Issues with macOS
 
 There are known issues copying files to the Pico using macOS, and a lot of literature online. Usually it's best to use the Terminal rather than the Finder because the errors are more explicit.
 Copying may also fail with UF2 files downloaded from the Internet, typically AtomVM release binaries.
 
-    shell$ cp ~/Downloads/AtomVM-pico_w-v0.6.0.uf2 /Volumes/RPI-RP2/.
-    cp: /Volumes/RPI-RP2/AtomVM-pico-v0.6.0.uf2: fcopyfile failed: Operation not permitted
-    cp: /Users/joe/Downloads/AtomVM-pico-v0.6.0.uf2: could not copy extended attributes to /Volumes/RPI-RP2/AtomVM-pico-v0.6.0.uf2: Operation not permitted
+```shell
+$ cp ~/Downloads/AtomVM-pico_w-v0.6.0.uf2 /Volumes/RPI-RP2/.
+cp: /Volumes/RPI-RP2/AtomVM-pico-v0.6.0.uf2: fcopyfile failed: Operation not permitted
+cp: /Users/joe/Downloads/AtomVM-pico-v0.6.0.uf2: could not copy extended attributes to 
+/Volumes/RPI-RP2/AtomVM-pico-v0.6.0.uf2: Operation not permitted
+```
 
 Two issues appear here: one is macOS tries to copy extended attributes and this fails (but this error is not a blocker), and the other is the "Operation not permitted" because the file is quarantined, having been downloaded from the web.
 
 First issue can be solved with `cp -x` if you don't tolerate the error message and second with `xattr -d`.
 
-    shell$ xattr -d com.apple.quarantine ~/Downloads/AtomVM-pico_w-v0.6.0.uf2
-    shell$ cp -x ~/Downloads/AtomVM-pico_w-v0.6.0.uf2 /Volumes/RPI-RP2/.
+```shell
+$ xattr -d com.apple.quarantine ~/Downloads/AtomVM-pico_w-v0.6.0.uf2
+$ cp -x ~/Downloads/AtomVM-pico_w-v0.6.0.uf2 /Volumes/RPI-RP2/.
+$
+```
 
 ### Deploying an AtomVM application for Generic Unix
 
@@ -352,7 +397,10 @@ The AtomVM virtual machine is supported a wide variety of Generic UNIX platforms
 
 These instructions cover how to provision the AtomVM virtual machine onto your development machine.  Running applications locally can sometimes be a useful exercise in debugging.
 
-> Note.  Not all programming interfaces are supported on all platforms.  See the AtomVM [Programmers Guide](./programmers-guide.md) for more information.
+```{caution}
+Not all programming interfaces are supported on all platforms.  See the AtomVM
+[Programmers Guide](./programmers-guide.md) for more information.
+```
 
 For most applications, you should only need to install the VM once (or at least once per desired AtomVM release).  Once the VM is installed, you can then begin development of Erlang or Elixir applications, which can then be flashed as part of your routine development cycle.
 
@@ -383,13 +431,13 @@ Download the latest [release image](https://github.com/atomvm/AtomVM/releases) f
 
 This image will generally take the form:
 
-    Atomvm-linux-<arch>-<atomvm-version>
+>`Atomvm-linux-<arch>-<atomvm-version>`
 
 where `<arch>` is the target architecture.
 
 For example:
 
-    Atomvm-linux-x86_64-v0.6.0
+>`Atomvm-linux-x86_64-v0.6.0`
 
 You will also find the sha256 hash for this file, which you should verify using the `sha256sum` command on your local operating system.
 
@@ -397,15 +445,18 @@ You will also need a copy of the AtomVM core libraries, which include all of the
 
 This library will generally take the form:
 
-    atomvmlib-<atomvm-version>.avm
+>`atomvmlib-<atomvm-version>.avm`
 
 For example:
 
-    atomvmlib-v0.6.0.avm
+>`atomvmlib-v0.6.0.avm`
 
 You will also find the sha256 hash for this file, which you should verify using the `sha256sum` command on your local operating system.
 
-> Note.  [See below](#running-applications-on-the-generic-unix-platform) for instructions about how to run the `AtomVM` binary, together with the AtomVM core libraries on the command line.
+```{seealso}
+[See below](#running-applications-on-the-generic-unix-platform) for instructions about how to run the `AtomVM`
+binary, together with the AtomVM core libraries on the command line.
+```
 
 #### Installation on MacOS
 
@@ -413,25 +464,35 @@ You can install AtomVM for Generic UNIX using [macports](https://www.macports.or
 
 To install via [macports](https://www.macports.org):
 
-    shell$ sudo port install atomvm
+```shell
+$ sudo port install atomvm
+```
 
 Once installed, the `atomvm` executable should be available in your `$PATH` environment variable.
 
-    shell$ which atomvm
-    /opt/local/bin/atomvm
+```shell
+$ which atomvm
+/opt/local/bin/atomvm
+```
 
 To install via [Homebrew](https://brew.sh), you will first need to install the `atomvm` Homebrew Tap:
 
-    shell$ brew tap atomvm/atomvm
+```shell
+$ brew tap atomvm/atomvm
+```
 
 This command will make the `atomvm` [Homebrew](https://brew.sh) formula available to you.
 
-    shell$ brew install atomvm
+```shell
+$ brew install atomvm
+```
 
 Once installed, the `atomvm` executable should be available in your `$PATH` environment variable.
 
-    shell$ which atomvm
-    /usr/local/bin/atomvm
+```shell
+$ which atomvm
+/usr/local/bin/atomvm
+```
 
 #### Building on MacOS from source
 
@@ -445,31 +506,37 @@ AtomVM may be run on UNIX-like platforms using the `atomvm` command.
 
 You may specify one or more AVM files on the command line when running the `atomvm` command.  BEAM modules defined in earlier AVM modules on the command line take higher precedence that BEAM modules included in AVM files later in the argument list.
 
-    shell$ atomvm /path/to/myapp.avm
+```shell
+$ atomvm /path/to/myapp.avm
+```
 
 To get the current version of AtomVM, use the `-v` option, e.g.:
 
-    shell$ atomvm -v
-    0.6.0
+```shell
+$ atomvm -v
+0.6.0
+```
 
 Use the `-h` option to get command line help:
 
-    shell$ atomvm -h
+```shell
+$ atomvm -h
 
-    Syntax:
+Syntax:
 
-        /usr/local/lib/atomvm/AtomVM [-h] [-v] <path-to-avm-file>+
+    /usr/local/lib/atomvm/AtomVM [-h] [-v] <path-to-avm-file>+
 
-    Options:
+Options:
 
-        -h         Print this help and exit.
-        -v         Print the AtomVM version and exit.
+    -h         Print this help and exit.
+    -v         Print the AtomVM version and exit.
 
-    Supply one or more AtomVM packbeam (.avm) files to start your application.
+Supply one or more AtomVM packbeam (.avm) files to start your application.
 
-    Example:
+Example:
 
-        $ /usr/local/lib/atomvm/AtomVM /path/to/my/application.avm /path/to/atomvmlib.avm
+    $ /usr/local/lib/atomvm/AtomVM /path/to/my/application.avm /path/to/atomvmlib.avm
+```
 
 ## Getting Started with AtomVM WebAssembly
 
@@ -481,17 +548,19 @@ Download the latest [release image](https://github.com/atomvm/AtomVM/releases) f
 
 This image will generally take the form:
 
-    Atomvm-node-<atomvm-version>.js
+>`Atomvm-node-<atomvm-version>.js`
 
 For example:
 
-    Atomvm-node-v0.6.0.js
+>`Atomvm-node-v0.6.0.js`
 
 You will also find the sha256 hash for this file, which you should verify using the `sha256sum` command on your local operating system.
 
 AtomVM's WebAssembly port for NodeJS may be run using `node` command and AtomVM.js, AtomVM.worker.js and AtomVM.wasm files.
 
-    shell$ node /path/to/Atomvm-node-v0.6.0.js /path/to/myapp.avm
+```shell
+$ node /path/to/Atomvm-node-v0.6.0.js /path/to/myapp.avm
+```
 
 ### Getting Started with AtomVM WebAssembly port for browsers
 
@@ -501,8 +570,8 @@ Please note that these files are different from the NodeJS ones.
 
 Because AtomVM uses SharedArrayBuffer, to be executed by a browser, these files need to be served:
 
-- on localhost or over HTTPS
-- by a web server that also sends `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers. These headers are also called COOP and COEP headers.
+* on localhost or over HTTPS
+* by a web server that also sends `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers. These headers are also called COOP and COEP headers.
 
 These security requirements are documented in [Mozilla's documentation](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer#security_requirements).
 
@@ -510,7 +579,9 @@ These security requirements are documented in [Mozilla's documentation](https://
 
 If you compile AtomVM for Unix as well as for Node as explained in the [build instructions](./build-instructions.md#building-for-emscripten), you can use an AtomVM-based toy webserver to serve the WebAssembly examples with:
 
-    ./src/AtomVM examples/emscripten/wasm_webserver.avm
+```shell
+$ ./src/AtomVM examples/emscripten/wasm_webserver.avm
+```
 
 This web server serves HTML files from `examples/emscripten/`. It works without HTTPS because files are served on localhost.
 
@@ -520,9 +591,11 @@ You can also host the three files on a hosting service such as Netlify that uses
 
 The file could have the following content:
 
-    /*
-    Cross-Origin-Opener-Policy: same-origin
-    Cross-Origin-Embedder-Policy: require-corp
+```cfg
+/*
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
 
 #### Using web server such as Nginx
 
@@ -530,13 +603,15 @@ You can also host the three files on web server such as Nginx or Apache.
 
 The configuration for Nginx would be:
 
-    server {
-        add_header Cross-Origin-Opener-Policy "same-origin";
-        add_header Cross-Origin-Embedder-Policy "require-corp";
-        location / {
-            ...
-        }
+```cfg
+server {
+    add_header Cross-Origin-Opener-Policy "same-origin";
+    add_header Cross-Origin-Embedder-Policy "require-corp";
+    location / {
+        ...
     }
+}
+```
 
 #### Using Javascript service worker trick
 

@@ -153,7 +153,10 @@ The fundamental unit of memory in AtomVM is the `term` object, which is designed
 
 This section enumerates the AtomVM term types, and how they are represented in memory.
 
-> Note.  The term type is overloaded in some cases to store raw pointers to memory addresses, but this is rare and well controlled.
+```{note}
+The term type is overloaded in some cases to store raw pointers to memory addresses, but this is rare and well
+controlled.
+```
 
 The following term types take up a single word, referred to as "immediates" in the BEAM documentation[1].  The low-order bits of the word are used to represent the type of the term, and the high order bits represent the term contents, in a manner described in the following sections.
 
@@ -170,7 +173,10 @@ An atom is represented as a single word, with the low-order 6 bits having the va
 
 There may therefore only be `2^{word-size-6}` atoms in an AtomVM program (e.g., on a 32-bit platform, `67,108,864`).  Plenty to work with!
 
-> Note. The global atom table is a table of all allocated atoms, and is generally (at least in the limit, as modules are loaded) a fixed size table.  Management of the global atom table is outside of the scope of this document.
+```{note}
+The global atom table is a table of all allocated atoms, and is generally (at least in the limit, as modules are
+loaded) a fixed size table.  Management of the global atom table is outside of the scope of this document.
+```
 
 ### Integers
 
@@ -185,7 +191,9 @@ An integer is represented as a single word, with the low-order 4 bits having the
 
 The magnitude of an integer is therefore limited to `2^{word-size - 4}` in an AtomVM program (e.g., on a 32-bit platform, `+- 134,217,728`).
 
-> Note.  Arbitrarily large integers (bignums) are not currently supported in AtomVM.
+```{attention}
+Arbitrarily large integers (bignums) are not currently supported in AtomVM.
+```
 
 ### nil
 
@@ -196,7 +204,6 @@ The special value `nil` (typically the tail of the tail ... of the tail of a lis
     +================================+
     |                                |
     |<---------- word-size --------->|
-
 
 ### Pids
 
@@ -211,7 +218,10 @@ A Pid is represented as a single word, with the low order 4 bits indicating the 
 
 There may therefore only be `2^{word-size - 4}` Pids in an AtomVM program (e.g., on a 32-bit platform, `268,435,456`).
 
-> Note.  Global process IDs are not currently supported, but they may be in the future, which may result in segmentation of the high order `word-size - 4` bits.
+```{note}
+Global process IDs are not currently supported, but they may be in the future, which may result in segmentation of
+the high order `word-size - 4` bits.
+```
 
 ## Boxed terms
 
@@ -247,7 +257,6 @@ A reference (e.g., created via [`erlang:make_ref/0`](./apidocs/erlang/estdlib/er
     |                                |
     |<---------- word-size --------->|
 
-
 ### Tuples
 
 Tuples are represented as boxed terms containing a boxed header (`boxed[0]`), a type tag of `0x00` (`000000b`), followed by a sequence of `n`-many words, which may either (copies of) single-word terms, or boxed term pointers, where `n` is the arity of the tuple:
@@ -266,7 +275,6 @@ Tuples are represented as boxed terms containing a boxed header (`boxed[0]`), a 
     +================================+
     |                                |
     |<---------- word-size --------->|
-
 
 ### Maps
 
@@ -342,7 +350,10 @@ Heap binaries are represented as boxed terms containing a boxed header (`boxed[0
     |                                |
     |<---------- word-size --------->|
 
-> Note.  If the number of bytes in a binary is not evenly divisible by the machine word size, then the remaining sequence of bytes in the last word are unused.
+```{note}
+If the number of bytes in a binary is not evenly divisible by the machine word size, then the remaining sequence
+of bytes in the last word are unused.
+```
 
 #### Reference Counted Binaries
 
@@ -383,7 +394,11 @@ The reference count is initialized to 1, under the principle that that reference
                                                           |                      |
                                                           +----------------------+
 
-> Note.  The size of a reference counted binary is stored both in the process heap (in the boxed term), as well as in the off-heap storage.  The size count in the off-heap storage is needed in order to report the amount of data in use by binaries (e.g., via [`erlang:memory/0,1`](./apidocs/erlang/estdlib/erlang.md#memory1)).
+```{note}
+The size of a reference counted binary is stored both in the process heap (in the boxed term), as well as in the
+off-heap storage.  The size count in the off-heap storage is needed in order to report the amount of data in use by
+binaries (e.g., via [`erlang:memory/0,1`](./apidocs/erlang/estdlib/erlang.md#memory1)).
+```
 
 In addition, a reference-counted boxed term contains a cons-cell appended to the end of the boxed term, which is used by the garbage collector for tracking references.  The `car` of this cell points to the boxed term, itself, and the `cdr` points to the "previous" cons cell associated with a reference counted binary in the heap, if there is one, or the empty list (`nil`), otherwise.  The cons cell forms an element in the "Mark and Sweep Object" (MSO) list, used to reclaim unreferenced storage during a garbage collection event..  See the Garbage Collection section, below, for more information about the critical role of this structure in the process of reclaiming unused memory in the AtomVM virtual machine.
 
@@ -423,7 +438,10 @@ Match binaries are represented as boxed terms containing a boxed header (`boxed[
 
 Like a reference counted binary, a match binary includes a trailing cons cell, whose `car` element points to the actual referenced binary (if the referenced binary is a reference-counted binary), and whose `cdr` points to the "previous" cons cell associated with a reference counted binary in the heap.
 
-> Note.  If the referenced binary is not reference-counted, the trailing cons cell elements are unused and are initialized to `nil`.
+```{note}
+If the referenced binary is not reference-counted, the trailing cons cell elements are unused and are initialized
+to `nil`.
+```
 
     some
     binary                            |< 6  >|
@@ -482,7 +500,10 @@ A list is, very simply, a cons cell, i.e., a sequence of two words, whose first 
     |                                |
     |<---------- word-size --------->|
 
-> Note.  Lists are typically terminated with the empty list (`[]`), represented by the nil term, described above.  However, nothing in Erlang requires that a sequence of cons cells is `nil`-terminated.
+```{note}
+Lists are typically terminated with the empty list (`[]`), represented by the nil term, described above.  However,
+nothing in Erlang requires that a sequence of cons cells is `nil`-terminated.
+```
 
 Unlike boxed terms, the low-order two bits of list pointers are `0x1` (`01b`):
 
@@ -516,8 +537,9 @@ Strings are just lists of integers, but they are efficiently allocated at creati
     |                                |
     |<---------- word-size --------->|
 
-
-> Note.  String elements may not remain contiguous after a garbage collection event.
+```{note}
+String elements may not remain contiguous after a garbage collection event.
+```
 
 ### Functions
 
@@ -749,7 +771,6 @@ The following sequence of iterative additions to the new heap illustrates this p
               |  scan&copy    |      |               |
               +---------------+      +---------------+
 
-
 At the end of the iterative scan and copy, all reachable terms in the old heap will be copied to the new heap, and no boxed terms in the old heap will contain pointers to terms in the old heap.  Any terms that have not been copied to the new heap are "garbage", as there are no longer any paths to them from the root set, and can therefore be destroyed,
 
 #### MSO Sweep
@@ -796,7 +817,13 @@ The following diagram illustrates a set of two reference counted binaries in a p
 
 After the new heap has been scanned and copied, as described above, the MSO list is traversed to determine if any reference-counted binaries are no longer referenced from the process heap.  If any reference counted binaries in the heap have not been marked as moved from the old heap, they are, effectively, no longer referenced from the root set, and the reference count on the corresponding off-heap binary can be decremented.  Furthermore, when the reference count reaches 0, the binaries can then be deleted.
 
-> Note.  Const binaries, while they have slots for entry into the MSO list, nonetheless are never "stitched" into the MSO list, as the binary data they point to is const, endures for the lifecycle of the program, and is never deleted. Match binaries, on the other hand, do count as references, and can therefore be stitched into the MSO list.  However, when they are, the reference counted binaries they point to are the actual binaries in the process heap, not the match binaries, as with the case of refc binaries on the process heap.
+```{note}
+Const binaries, while they have slots for entry into the MSO list, nonetheless are never "stitched" into the MSO
+list, as the binary data they point to is const, endures for the lifecycle of the program, and is never deleted.
+Match binaries, on the other hand, do count as references, and can therefore be stitched into the MSO list.  However,
+when they are, the reference counted binaries they point to are the actual binaries in the process heap, not the
+match binaries, as with the case of refc binaries on the process heap.
+```
 
 #### Deletion
 

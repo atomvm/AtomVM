@@ -37,7 +37,9 @@ Callback functions can be specified by the following configuration parameters:
 * `{disconnected, fun(() -> term())}` A callback function which will be called when the device disconnects from the target network.
 * `{got_ip, fun((ip_info()) -> term())}` A callback function which will be called when the device obtains an IP address.  In this case, the IPv4 IP address, net mask, and gateway are provided as a parameter to the callback function.
 
-> Note.  IPv6 addresses are not yet supported in AtomVM.
+```{warning}
+IPv6 addresses are not yet supported in AtomVM.
+```
 
 Callback functions are optional, but are highly recommended for building robust WiFi applications.  The return value from callback functions is ignored, and AtomVM provides no guarantees about the execution context (i.e., BEAM process) in which these functions are invoked.
 
@@ -47,31 +49,33 @@ In addition, the following optional parameters can be specified to configure the
 
 The following example illustrates initialization of the WiFi network in STA mode.  The example program will configure the network to connect to a specified network.  Events that occur during the lifecycle of the network will trigger invocations of the specified callback functions.
 
-    %% erlang
-    Config = [
-        {sta, [
-            {ssid, <<"myssid">>},
-            {psk,  <<"mypsk">>},
-            {connected, fun connected/0},
-            {got_ip, fun got_ip/1},
-            {disconnected, fun disconnected/0}
-            {dhcp_hostname, <<"myesp32">>}
-        ]}
-    ],
-    {ok, Pid} = network:start(Config),
-    ...
+```erlang
+Config = [
+    {sta, [
+        {ssid, <<"myssid">>},
+        {psk,  <<"mypsk">>},
+        {connected, fun connected/0},
+        {got_ip, fun got_ip/1},
+        {disconnected, fun disconnected/0}
+        {dhcp_hostname, <<"myesp32">>}
+    ]}
+],
+{ok, Pid} = network:start(Config),
+...
+```
 
 The following callback functions will be called when the corresponding events occur during the lifetime of the network connection.
 
-    %% erlang
-    connected() ->
-        io:format("Connected to AP.~n").
+```erlang
+connected() ->
+    io:format("Connected to AP.~n").
 
-    gotIp(IpInfo) ->
-        io:format("Got IP: ~p~n", [IpInfo]).
+gotIp(IpInfo) ->
+    io:format("Got IP: ~p~n", [IpInfo]).
 
-    disconnected() ->
-        io:format("Disconnected from AP.~n").
+disconnected() ->
+    io:format("Disconnected from AP.~n").
+```
 
 In a typical application, the network should be configured and an IP address should be acquired first, before starting clients or services that have a dependency on the network.
 
@@ -81,18 +85,19 @@ The `network` module supports the [`network:wait_for_sta/1,2`](./apidocs/erlang/
 
 For example:
 
-    %% erlang
-    Config = [
-        {ssid, <<"myssid">>},
-        {psk,  <<"mypsk">>},
-        {dhcp_hostname, <<"mydevice">>}
-    ],
-    case network:wait_for_sta(Config, 15000) of
-        {ok, {Address, _Netmask, _Gateway}} ->
-            io:format("Acquired IP address: ~p~n", [Address]);
-        {error, Reason} ->
-            io:format("Network initialization failed: ~p~n", [Reason])
-    end
+```erlang
+Config = [
+    {ssid, <<"myssid">>},
+    {psk,  <<"mypsk">>},
+    {dhcp_hostname, <<"mydevice">>}
+],
+case network:wait_for_sta(Config, 15000) of
+    {ok, {Address, _Netmask, _Gateway}} ->
+        io:format("Acquired IP address: ~p~n", [Address]);
+    {error, Reason} ->
+        io:format("Network initialization failed: ~p~n", [Reason])
+end
+```
 
 ## AP mode
 
@@ -120,7 +125,9 @@ Callback functions can be specified by the following configuration parameters:
 * `{sta_disconnected, fun((Mac::binary()) -> term())}` A callback function which will be called when a device disconnects from the AP.  The MAC address of the disconnected station, as a 6-byte binary, is passed to the callback function.
 * `{sta_ip_assigned, fun((ipv4_address()) -> term())}` A callback function which will be called when the AP assigns an IP address to a station.  The assigned IP address is passed to the callback function.
 
-> Note.  IPv6 addresses are not yet supported in AtomVM.
+```{warning}
+IPv6 addresses are not yet supported in AtomVM.
+```
 
 Callback functions are completely optional, but are highly recommended for building robust WiFi applications.  The return value from callback functions is ignored, and AtomVM provides no guarantees about the execution context (i.e., BEAM process) in which these functions are invoked.
 
@@ -131,34 +138,36 @@ In addition, the following optional parameters can be specified to configure the
 
 The following example illustrates initialization of the WiFi network in AP mode.  The example program will configure the network to connect to start a WiFi network with the name `myssid` and password `mypsk`.  Events that occur during the lifecycle of the network will trigger invocations of the specified callback functions.
 
-    %% erlang
-    Config = [
-        {ap, [
-            {ssid, <<"myssid">>},
-            {psk,  <<"mypsk">>},
-            {ap_started, fun ap_started/0},
-            {sta_connected, fun sta_connected/1},
-            {sta_ip_assigned, fun sta_ip_assigned/1},
-            {sta_disconnected, fun sta_disconnected/1},
-        ]}
-    ],
-    {ok, Pid} = network:start(Config),
-    ...
+```erlang
+Config = [
+    {ap, [
+        {ssid, <<"myssid">>},
+        {psk,  <<"mypsk">>},
+        {ap_started, fun ap_started/0},
+        {sta_connected, fun sta_connected/1},
+        {sta_ip_assigned, fun sta_ip_assigned/1},
+        {sta_disconnected, fun sta_disconnected/1},
+    ]}
+],
+{ok, Pid} = network:start(Config),
+...
+```
 
 The following callback functions will be called when the corresponding events occur during the lifetime of the network connection.
 
-    %% erlang
-    ap_started() ->
-        io:format("AP started.~n").
+```erlang
+ap_started() ->
+    io:format("AP started.~n").
 
-    sta_connected(Mac) ->
-        io:format("STA connected with mac ~p~n", [Mac]).
+sta_connected(Mac) ->
+    io:format("STA connected with mac ~p~n", [Mac]).
 
-    sta_disconnected(Mac) ->
-        io:format("STA disconnected with mac ~p~n", [Mac]).
+sta_disconnected(Mac) ->
+    io:format("STA disconnected with mac ~p~n", [Mac]).
 
-    sta_ip_assigned(Address) ->
-        io:format("STA assigned address ~p~n", [Address]).
+sta_ip_assigned(Address) ->
+    io:format("STA assigned address ~p~n", [Address]).
+```
 
 In a typical application, the network should be configured and the application should wait for the AP to report that it has started, before starting clients or services that have a dependency on the network.
 
@@ -168,17 +177,17 @@ The `network` module supports the [`network:wait_for_ap/1,2`](./apidocs/erlang/e
 
 For example:
 
-    %% erlang
-    Config = [
-        {psk,  <<"mypsk">>}
-    ],
-    case network:wait_for_ap(Config, 15000) of
-        ok ->
-            io:format("AP network started at 192.168.4.1~n");
-        {error, Reason} ->
-            io:format("Network initialization failed: ~p~n", [Reason])
-    end
-
+```erlang
+Config = [
+    {psk,  <<"mypsk">>}
+],
+case network:wait_for_ap(Config, 15000) of
+    ok ->
+        io:format("AP network started at 192.168.4.1~n");
+    {error, Reason} ->
+        io:format("Network initialization failed: ~p~n", [Reason])
+end
+```
 
 ## STA+AP mode
 
@@ -196,19 +205,24 @@ You can also specify a callback function that will get called when the clock is 
 
 For example:
 
-    %% erlang
-    {sntp, [
-        {host, <<"pool.ntp.org">>},
-        {synchronized, fun sntp_synchronized/1}
-    ]}
+```erlang
+{sntp, [
+    {host, <<"pool.ntp.org">>},
+    {synchronized, fun sntp_synchronized/1}
+]}
+```
 
 where the `sntp_synchronized/1` function is defined as:
 
-    %% erlang
-    sntp_synchronized({TVSec, TVUsec}) ->
-        io:format("Synchronized time with SNTP server. TVSec=~p TVUsec=~p~n", [TVSec, TVUsec]).
+```erlang
+sntp_synchronized({TVSec, TVUsec}) ->
+    io:format("Synchronized time with SNTP server. TVSec=~p TVUsec=~p~n", [TVSec, TVUsec]).
+```
 
-> Note. The device must be in STA mode and connected to an access point in order to use an SNTP server on your network or on the internet.
+```{note}
+The device must be in STA mode and connected to an access point in order to use an SNTP server on your network
+or on the internet.
+```
 
 ## NVS Credentials
 
@@ -216,12 +230,19 @@ It can become tiresome to enter an SSID and password for every application, and 
 
 You may instead store an STA or AP SSID and PSK in [non-volatile storage (NVS)](./programmers-guide.md#non-volatile-storage) on and ESP32 device.
 
-> Note.  Credentials are stored un-encrypted and in plaintext and should not be considered secure.  Future versions may use encrypted NVS storage.
+```{caution}
+Credentials are stored un-encrypted and in plaintext and should not be considered secure.  Future versions may use
+encrypted NVS storage.
+```
 
 ## Stopping the Network
 
 To stop the network and free any resources in use, issue the [`stop/0`](./apidocs/erlang/eavmlib/network.md#stop0) function:
 
-    network:stop().
+```erlang
+network:stop().
+```
 
-> Note.  Stop is currently unimplemented.
+```{caution}
+Stop is currently unimplemented.
+```

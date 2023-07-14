@@ -33,7 +33,7 @@ All AtomVM files begin with the packbeam header, a fixed 24-byte sequence of oct
 
 The ASCII encoding of this sequence is
 
-    #!/usr/bin/env AtomVM\n
+>`#!/usr/bin/env AtomVM\n`
 
 followed by two nil (`0x00`) bytes.
 
@@ -56,7 +56,7 @@ The `size` field indicates the size (in bytes) of the encoded file following the
 
 Currently, the two low-order bits of the `flags` field are used.  `0x02` indicates the file is a BEAM file, and `0x01` indicates that the file contains a `start/0` function, and is therefore suitable as an entrypoint to start code execution.
 
-> When AtomVM starts, it will scan the BEAM files in the AtomVM file, from start to finish, with which it is initialized to find the entrypoint to start code execution.  It will start execution on the first BEAM file with a `start/0` function, i.e., whose flags mask against `0x03`.  It is conventional, but not required, for the first file in an AtomVM file to be a BEAM file that has a `start/0` entrypoint.
+When AtomVM starts, it will scan the BEAM files in the AtomVM file, from start to finish, with which it is initialized to find the entrypoint to start code execution.  It will start execution on the first BEAM file with a `start/0` function, i.e., whose flags mask against `0x03`.  It is conventional, but not required, for the first file in an AtomVM file to be a BEAM file that has a `start/0` entrypoint.
 
 The `reserved` field is currently unused.
 
@@ -90,7 +90,10 @@ In addition, data in the literals table (`LitT`) are uncompressed before inserti
 
 BEAM files may be padded at the end with a sequence of 1-3 null (`0x00`) characters, in order to align on 4-byte boundaries.
 
-> Note.  The `module_name` field in the file header will only contain the "base" name of the BEAM file, i.e., the file name stripped of any path information.
+```{note}
+The `module_name` field in the file header will only contain the "base" name of the BEAM file, i.e., the file name
+stripped of any path information.
+```
 
 ### Normal Files
 
@@ -100,13 +103,18 @@ Normal files contain a 32-bit big-endian size prefix, indicating the size of the
 
 The AtomVM runtime provides access to data files via the [`atomvm:read_priv/2`](./apidocs/erlang/eavmlib/atomvm.md#read-priv2) NIF.  This function will create a path name formed by the `App` (atom) and `Path` (string) terms provided by this function, separated by `"/priv/"`.  For example, the expression
 
-    atomvm:read_priv(mylib, "sample.txt")
+```erlang
+atomvm:read_priv(mylib, "sample.txt")
+```
 
 yields a `binary` containing the contents of `mylib/priv/sample.txt`, if it exists, in the AtomVM packbeam file.
 
 As a consequence, normal files should be included in packbeam files using module names that obey the above patterns.
 
-> Note. Normal file names may encode virtual directory names, such as `mylib/priv/another/sample/text/file`.  There is no requirement that the `Path` component of a normal file be a simple file name.
+```{tip}
+Normal file names may encode virtual directory names, such as `mylib/priv/another/sample/text/file`.  There is no
+requirement that the `Path` component of a normal file be a simple file name.
+```
 
 ### `end` file
 

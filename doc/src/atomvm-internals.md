@@ -14,7 +14,10 @@ AtomVM and virtual machines generally (including, for example, the Java Virtual 
 
 AtomVM is an abstract machine designed to implement the BEAM instruction set, the 170+ (and growing) set of virtual machine instructions implemented in the Erlang/OTP BEAM.
 
-> Note. There is no abstract specification of the BEAM abstract machine and instruction set.  Instead, the BEAM implementation by the Erlang/OTP team is the definitive specification of its behavior.
+```{note}
+There is no abstract specification of the BEAM abstract machine and instruction set.  Instead, the BEAM
+implementation by the Erlang/OTP team is the definitive specification of its behavior.
+```
 
 At a high level, the AtomVM abstract machine is responsible for:
 
@@ -36,7 +39,10 @@ This section describes AtomVM internal data structures that are used to manage t
 
 We start with the top level data structure, the `GlobalContext` struct.  This object is a singleton object (currently, and for the foreseeable future), and represents the root of all data structures in the virtual machine.  It is in essence in 1..1 correspondence with instances of the virtual machine.
 
-> Note. Given the design of the system, it is theoretically possible to run multiple instances of the AtomVM in one process space.  However, no current deployments make use of this capability.
+```{note}
+Given the design of the system, it is theoretically possible to run multiple instances of the AtomVM in one process
+space.  However, no current deployments make use of this capability.
+```
 
 In order to simplify the exposition of this structure, we break the fields of the structure into manageable subsets:
 
@@ -48,7 +54,9 @@ In order to simplify the exposition of this structure, we break the fields of th
 
 These subsets are described in more detail below.
 
-> Note.  Not all fields of the `GlobalContext` structure are described in this document.
+```{warning}
+Not all fields of the `GlobalContext` structure are described in this document.
+```
 
 #### Process Management
 
@@ -65,14 +73,19 @@ Processes are in either `waiting_processes`, `running_processes` or `ready_proce
 
 Each of these fields are doubly-linked list (ring) structures, i.e, structs containing a `prev` and `next` pointer field.  The `Context` data structure begins with two such structures, the first of which links the `Context` struct in the `processes_table` field, and the second of which is used for either the `waiting_processes`, the `ready_processes` or the `running_processes` field.
 
-> Note.  The C programming language treats structures in memory as contiguous sequences of fields of given types.  Structures have no hidden preamble data, such as you might find in C++ or who knows what in even higher level languages.  The size of a struct, therefore, is determined simply by the size of the component fields.
-
+```{tip}
+The C programming language treats structures in memory as contiguous sequences of fields of given types.  Structures
+have no hidden preamble data, such as you might find in C++ or who knows what in even higher level languages.  The
+size of a struct, therefore, is determined simply by the size of the component fields.
+```
 
 The relationship between the `GlobalContext` fields that manage BEAM processes and the `Context` data structures that represent the processes, themselves, is illustrated in the following diagram:
 
 ![GlobalContext Processes](_static/globalcontext-processes.svg)
 
-> Note.  The [`Context`](#contexts) data structure is described in more detail below.
+```{seealso}
+The [Context](#contexts) data structure is described in more detail below.
+```
 
 <!-- TODO: Document and uncomment sections below.
 #### Module Management
@@ -110,13 +123,18 @@ When a sender process sends a message to a recipient process, the message is fir
 
 Sometimes, Erlang processes need to query information from other processes but without sending a regular message, for example when using [`process_info/1,2`](./apidocs/erlang/estdlib/erlang.md#process_info2) nif.  This is handled by signals.  Signals are special messages that are enqueued in the outer mailbox of a process.  Signals are processed by the recipient process when regular messages from the outer mailbox are moved to the inner mailbox.  Signal processing code is part of the main loop and transparent to recipient processes.  Both native handlers and erlang processes can receive signals.  Signals are also used to run specific operation on other processes that cannot be done from another thread.  For example, signals are used to perform garbage collection on another process.
 
-When an Erlang process calls a nif that requires such an information from another process such as `process_info/1,2`, the nif returns a special value and set the Trap flag on the calling process.  The calling process is effectively blocked until the other process is scheduled and the information is sent back using another signal message.  This mechanism can also be used by nifs that want to block until a condition is true.
+When an Erlang process calls a nif that requires such an information from another process such as `process_info/1,2`, the nif returns a special value and set the `Trap` flag on the calling process.  The calling process is effectively blocked until the other process is scheduled and the information is sent back using another signal message.  This mechanism can also be used by nifs that want to block until a condition is true.
 
 ## Stacktraces
 
 Stacktraces are computed from information gathered at load time from BEAM modules loaded into the application, together with information in the runtime stack that is maintained during the execution of a program.  In addition, if a BEAM file contains a `Line` chunk, additional information is added to stack traces, including the file name (as defined at compile time), as well as the line number of a function call.
 
-> Note.  Adding line information to a BEAM file adds non-trivial memory overhead to applications and should only be used when necessary (e.g., during the development process).  For applications to make the best use of memory in tightly constrained environments, packagers should consider removing line information all together from BEAM files and rely instead on logging or other mechanisms for diagnosing problems in the field.
+```{tip}
+Adding line information to a BEAM file adds non-trivial memory overhead to applications and should only be used
+when necessary (e.g., during the development process).  For applications to make the best use of memory in tightly
+constrained environments, packagers should consider removing line information all together from BEAM files and rely
+instead on logging or other mechanisms for diagnosing problems in the field.
+```
 
 Newcomers to Erlang may find stacktraces slightly confusing, because some optimizations taken by the Erlang compiler and runtime can result in stack frames "missing" from stack traces.  For example, tail-recursive function calls, as well as function calls that occur as the last expression in a function clause, don't involve the creation of frames in the runtime stack, and consequently will not appear in a stacktrace.
 

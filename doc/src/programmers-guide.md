@@ -19,12 +19,12 @@ Currently, AtomVM implements a strict subset of the BEAM instruction set.
 A high level overview of the supported language features include:
 
 * All the major Erlang types, including
-    * integers (with size limits)
-    * floats
-    * tuples
-    * [lists](./apidocs/erlang/estdlib/lists.md)
-    * [binaries](./apidocs/erlang/estdlib/binary.md)
-    * [maps](./apidocs/erlang/estdlib/maps.md)
+  * integers (with size limits)
+  * floats
+  * tuples
+  * [lists](./apidocs/erlang/estdlib/lists.md)
+  * [binaries](./apidocs/erlang/estdlib/binary.md)
+  * [maps](./apidocs/erlang/estdlib/maps.md)
 * support for many Erlang BIFs and guard expressions to support the above types
 * pattern matching (case statements, function clause heads, etc)
 * `try ... catch ... finally` constructs
@@ -41,14 +41,14 @@ In addition, several features are supported specifically for integration with mi
 * Wifi networking ([`network`](./network-programming-guide.md))
 * [UDP](#udp) and [TCP/IP](#tcp) support ([`inet`](./apidocs/erlang/estdlib/inet.md), [`gen_tcp`](./apidocs/erlang/estdlib/gen_tcp.md) and [`gen_udp`](./apidocs/erlang/estdlib/gen_udp.md))
 * [Peripheral](#peripherals) and system support on micro-controllers, including
-    * [GPIO](#gpio), including pins reads, writes, and interrupts
-    * [I2C](#i2c) interface
-    * [SPI](#spi) interface
-    * [UART](#uart) interface
-    * [LEDC](#led-control) (PWM)
-    * [non-volatile storage](#non-volatile-storage) (NVS)
-    * [RTC](#rtc-memory) storage
-    * [deep sleep](#restart-and-deep-sleep)
+  * [GPIO](#gpio), including pins reads, writes, and interrupts
+  * [I2C](#i2c) interface
+  * [SPI](#spi) interface
+  * [UART](#uart) interface
+  * [LEDC](#led-control) (PWM)
+  * [non-volatile storage](#non-volatile-storage) (NVS)
+  * [RTC](#rtc-memory) storage
+  * [deep sleep](#restart-and-deep-sleep)
 
 ### Limitations
 
@@ -119,14 +119,16 @@ In order to deploy AtomVM applications to and test on the ESP32 platform, develo
 
 For the majority of users, AtomVM applications are written in the Erlang or Elixir programming language.  These applications are compiled to BEAM (`.beam`) files using standard Erlang or Elixir compiler tool chains (`erlc`, `rebar3`, `mix`, etc).  The generated BEAM files contain byte-code that can be executed by the Erlang/OTP runtime, or by the AtomVM virtual machine.
 
-> Note.  In a small number of cases, it may be useful to write parts of an application in the C programming language, as AtomVM nifs or ports.  However, writing AtomVM nifs and ports is outside of the scope of this document.
+```{note}
+In a small number of cases, it may be useful to write parts of an application in the C programming language, as
+AtomVM nifs or ports.  However, writing AtomVM nifs and ports is outside of the scope of this document.
+```
 
 Once Erlang and/or Elixir files are compiled to BEAM files, AtomVM provides tooling for processing and aggregating BEAM files into AtomVM Packbeam (`.avm`) files, using AtomVM tooling, distributed as part of AtomVM, or as provided through the AtomVM community.
 
 AtomVM packbeam files are the applications and libraries that run on the AtomVM virtual machine.  For micro-controller devices, they are "flashed" or uploaded to the device; for command-line use of AtomVM (e.g., on Linux, FreeBSD, or MacOS), they are supplied as the first parameter to the AtomVM command.
 
 The following diagram illustrates the typical development workflow, starting from Erlang or Elixir source code, and resulting in a deployed Packbeam file:
-
 
     *.erl or *.ex                  *.beam
     +-------+                   +-------+
@@ -155,7 +157,6 @@ The following diagram illustrates the typical development workflow, starting fro
          +-------------------- Micro-controller
                                   device
 
-
 The typical compile-test-debug cycle can be summarized in the following steps:
 
 1. Deploy the AtomVM virtual machine to your device
@@ -169,22 +170,27 @@ Deployment of the AtomVM virtual machine and an AtomVM application currently req
 
 For more information about deploying the AtomVM image and AtomVM applications to your device, see the [Getting Started Guide](./getting-started-guide.md)
 
-
 ## Applications
 
 An AtomVM application is a collection of BEAM files, aggregated into an AtomVM "Packbeam" (`.avm`) file, and typically deployed (flashed) to some device.  These BEAM files be be compiled from Erlang, Elixir, or any other language that targets the Erlang VM.
 
-> Note.  The return value from the `start/0` function is ignored on the the `generic_unix` platform, most MCU platforms have the option of rebooting the device if the `start/0` function returns a value other than `ok`. Consult the [Build Instructions](./build-instructions.md#platform-specific-build-instructions) for your device to see how this is configured.
+```{attention}
+The return value from the `start/0` function is ignored on the the `generic_unix` platform, most MCU platforms have
+the option of rebooting the device if the `start/0` function returns a value other than `ok`. Consult the
+[Build Instructions](./build-instructions.md#platform-specific-build-instructions) for your device to see how this
+is configured.
+```
 
 Here, for example is one of the smallest AtomVM applications you can write:
 
-    %% erlang
-    -module(myapp).
+```erlang
+-module(myapp).
 
-    -export([start/0]).
+-export([start/0]).
 
-    start() ->
-        ok.
+start() ->
+    ok.
+```
 
 This particular application doesn't do much, of course.  The application will start and immediately terminate, with a return value of `ok`.  Typical AtomVM applications will be more complex than this one, and the AVM file that contains the application BEAM files will be considerably larger and more complex than the above program.
 
@@ -193,9 +199,10 @@ wait for certain conditions to apply before terminating, if they terminate at al
 that spawn processes and run forever, you may need to add an empty `receive ... end` block, to
 prevent the AtomVM from terminating prematurely, e.g.,
 
-    %% erlang
-    wait_forever() ->
-        receive X -> X end.
+```erlang
+wait_forever() ->
+    receive X -> X end.
+```
 
 ### Packbeam files
 
@@ -205,61 +212,65 @@ At least one BEAM module in this file must contain an exported `start/0` functio
 
 Not all files in a Packbeam need to be BEAM modules -- you can embed any type of file in a Packbeam file, for consumption by your AtomVM application.
 
-> Note.  The Packbeam format is described in more detail in the AtomVM [PackBEAM format](./packbeam-format.md).
+```{seealso}
+The Packbeam format is described in more detail in the AtomVM [PackBEAM format](./packbeam-format.md).
+```
 
 The AtomVM community has provided several tools for simplifying your experience, as a developer.  These tools allow you to use standard Erlang and Elixir tooling (such as `rebar3` and `mix`) to build Packbeam files and deploy then to your device of choice.
 
-### `packbeam` tool
+### packbeam tool
 
 The `packbeam` tool is a command-line application that can be used to create Packbeam files from a collection of input files:
 
-    shell$ packbeam help
-    packbeam version 0.7.0
-    Syntax:
-        packbeam <sub-command> <options> <args>
+```shell
+$ packbeam help
+packbeam version 0.7.0
+Syntax:
+    packbeam <sub-command> <options> <args>
 
-    The following sub-commands are supported:
+The following sub-commands are supported:
 
-        create <options> <output-avm-file> [<input-file>]+
-            where:
-                <output-avm-file> is the output AVM file,
-                [<input-file>]+ is a list of one or more input files,
-                and <options> are among the following:
-                    [--prune|-p]           Prune dependencies
-                    [--start|-s <module>]  Start module
-                    [--remove_lines|-r]    Remove line number information from AVM files
+    create <options> <output-avm-file> [<input-file>]+
+        where:
+            <output-avm-file> is the output AVM file,
+            [<input-file>]+ is a list of one or more input files,
+            and <options> are among the following:
+                [--prune|-p]           Prune dependencies
+                [--start|-s <module>]  Start module
+                [--remove_lines|-r]    Remove line number information from AVM files
 
-        list <options> <avm-file>
-            where:
-                <avm-file> is an AVM file,
-                and <options> are among the following:
-                    [--format|-f csv|bare|default]  Format output
+    list <options> <avm-file>
+        where:
+            <avm-file> is an AVM file,
+            and <options> are among the following:
+                [--format|-f csv|bare|default]  Format output
 
-        extract <options> <avm-file> [<element>]*
-            where:
-                <avm-file> is an AVM file,
-                [<element>]+ is a list of one or more elements to extract
-                    (if empty, then extract all elements)
-                and <options> are among the following:
-                    [--out|-o <output-directory>]   Output directory into which to write elements
-                    (if unspecified, use the current working directory)
+    extract <options> <avm-file> [<element>]*
+        where:
+            <avm-file> is an AVM file,
+            [<element>]+ is a list of one or more elements to extract
+                (if empty, then extract all elements)
+            and <options> are among the following:
+                [--out|-o <output-directory>]   Output directory into which to write elements
+                (if unspecified, use the current working directory)
 
-        delete <options> <avm-file> [<element>]+
-            where:
-                <avm-file> is an AVM file,
-                [<element>]+ is a list of one or more elements to delete,
-                and <options> are among the following:
-                    [--out|-o <output-avm-file>]    Output AVM file
+    delete <options> <avm-file> [<element>]+
+        where:
+            <avm-file> is an AVM file,
+            [<element>]+ is a list of one or more elements to delete,
+            and <options> are among the following:
+                [--out|-o <output-avm-file>]    Output AVM file
 
-        version
-            Print version and exit
+    version
+        Print version and exit
 
-        help
-            Print this help
+    help
+        Print this help
+```
 
 For more information consult the [packbeam section of AtomVM Tooling](./atomvm-tooling.md#atomvm_packbeam).
 
-### Running AtomVM
+### Running `AtomVM`
 
 AtomVM is executed in different ways, depending on the platform.  On most microcontrollers (e.g., the ESP32), the VM starts when the device is powered on.  On UNIX platforms, the VM is started from the command-line using the `AtomVM` executable.
 
@@ -269,9 +280,14 @@ AtomVM will use the first module in the supplied AVM file that exports a `start/
 
 On UNIX platforms, you can specify a BEAM file or AVM file as the first argument to the executable, e.g.,
 
-    shell$ AtomVM foo.avm
+```shell
+$ AtomVM foo.avm
+```
 
-> Note. If you start the `AtomVM` executable with a BEAM file, then the corresponding module may not make any calls to external function in other modules, with the exception of built-in functions and Nifs that are included in the VM.
+```{important}
+If you start the `AtomVM` executable with a BEAM file, then the corresponding module may not make any calls to
+external function in other modules, with the exception of built-in functions and Nifs that are included in the VM.
+```
 
 ## Core APIs
 
@@ -311,25 +327,29 @@ AtomVM supports the actor concurrency model that is pioneered in the Erlang/OTP 
 
 To spawn a process using a defined or anonymous function, pass the function to the [`spawn/1`](./apidocs/erlang/estdlib/erlang.md#spawn1) function:
 
-    %% erlang
-    Pid = spawn(fun run_some_code/0),
+```erlang
+Pid = spawn(fun run_some_code/0),
+```
 
 The function you pass may admit closures, so for example you can pass variables defined outside of the scope of the function to the anonymous function to pass into `spawn/1`:
 
-    %% erlang
-    Args = ...
-    Pid = spawn(fun() -> run_some_code_with_args(Args) end),
+```erlang
+Args = ...
+Pid = spawn(fun() -> run_some_code_with_args(Args) end),
+```
 
 Alternatively, you can pass a module, function name, and list of arguments to the [`spawn/3`](./apidocs/erlang/estdlib/erlang.md#spawn3) function:
 
-    %% erlang
-    Args = ...
-    Pid = spawn(?MODULE, run_some_code_with_args, [Args]),
+```erlang
+Args = ...
+Pid = spawn(?MODULE, run_some_code_with_args, [Args]),
+```
 
 The [`spawn_opt/2,4`](./apidocs/erlang/estdlib/erlang.md#spawn_opt4) functions can be be used to spawn a function with additional options that control the behavior of the spawned processes, e.g.,
 
-    %% erlang
-    Pid = spawn_opt(fun run_some_code/0, [{min_heap_size, 1342}]),
+```erlang
+Pid = spawn_opt(fun run_some_code/0, [{min_heap_size, 1342}]),
+```
 
 The [options](./apidocs/erlang/estdlib/erlang.md#spawn_option) argument is a properties list containing optionally the following entries:
 
@@ -347,17 +367,21 @@ There are several mechanisms for writing data to the console.
 
 For common debugging, many users will find [`erlang:display/1`](./apidocs/erlang/estdlib/erlang.md#display1) sufficient for debugging:
 
-    %% erlang
-    erlang:display({foo, [{bar, tapas}]}).
+```erlang
+erlang:display({foo, [{bar, tapas}]}).
+```
 
 The output parameter is any Erlang term, and a newline will be appended automatically.
 
 Users may prefer using the [`io:format/1,2`](./apidocs/erlang/estdlib/io.md#format1) functions for more controlled output:
 
-    %% erlang
-    io:format("The ~p did a ~p~n", [friddle, frop]).
+```erlang
+io:format("The ~p did a ~p~n", [friddle, frop]).
+```
 
-> Note. The [`io_lib`](./apidocs/erlang/estdlib/io_lib.md) module can be used to format other kinds of data, as well.
+```{tip}
+The [`io_lib`](./apidocs/erlang/estdlib/io_lib.md) module can be used to format string data, as well.
+```
 
 ### Logging
 
@@ -367,16 +391,21 @@ To log events, you are encouraged to use the logging macros from the OTP `kernel
 
 For example:
 
-    %% erlang
-    -include_lib("kernel/include/logger.hrl").
-    ...
-    ?LOG_NOTICE("Something happened that might require your attention: ~p", [TheThing])
+```erlang
+-include_lib("kernel/include/logger.hrl").
+...
+?LOG_NOTICE("Something happened that might require your attention: ~p", [TheThing])
+```
 
 By default, this will result in a message displayed on the console, with a timestamp, log level, PID of the process that initiated the log message, the module, function, and function arity, together with the supplied log message:
 
-    2023-07-04T18:34:56.387 [notice] <0.1.0> test_logger:test_default_logger/0 Something happened that might require your attention: ThatThingThatHappened
+    2023-07-04T18:34:56.387 [notice] <0.1.0> test_logger:test_default_logger/0 Something
+    happened that might require your attention: ThatThingThatHappened
 
-> Note that log messages need not (and generally should not) include newline separators (`~n`) in log format messages, unless necessary.
+```{tip}
+Note that log messages need not (and generally should not) include newline separators (`~n`) in log format messages,
+unless necessary.
+```
 
 Users may provide a format string, with an optional list of arguments.  Alternatively, users can provide a map encapsulating a "report" in lieu of a format string.  Reports provide a mechanism for supplying a set of structured data directly to log handlers (see below), without necessarily incurring the cost of formatting log messages.
 
@@ -397,28 +426,39 @@ You can use the `logger` interface directly to log messages at different levels,
 
 For example, the expression
 
-    logger:notice("Something happened that might require your attention: ~p", [TheThing])
+```erlang
+logger:notice("Something happened that might require your attention: ~p", [TheThing])
+```
 
 may seem similar to using the `?LOG_NOTICE` macro, but less contextual information will be included in the log event.
 
 For more information about the OTP logging facility, see the Erlang/OTP [Logging](https://www.erlang.org/doc/apps/kernel/logger_chapter.html) chapter.
 
-> Note.  AtomVM does not currently support programmatic configuration of the logging subsystem.  All changes to default behavior should be done via the AtomVM `logger_manager` module (see below).
+```{note}
+AtomVM does not currently support programmatic configuration of the logging subsystem.  All changes to default
+behavior should be done via the AtomVM `logger_manager` module (see below).
+```
 
 #### The `logger_manager`
 
 In order to use the `logger` interface, you will need to first start the AtomVM `logger_manager` service.
 
-> Note.  Future versions of AtomVM may automatically start the logging subsystem as part of a kernel application, but currently, this service must be managed manually.
+```{note}
+Future versions of AtomVM may automatically start the logging subsystem as part of a kernel application, but
+currently, this service must be managed manually.
+```
 
 To start the `logger_manager`, use the `logger_manager:start_link/1` function, passing in a configuration map for the logging subsystem.
 
 For example, the default logging framework can be started via:
 
-    %% erlang
-    {ok, _Pid} = logger_manager:start_link(#{})
+```erlang
+{ok, _Pid} = logger_manager:start_link(#{})
+```
 
-> Note.  The logger_manager is a registered process, so the returned Pid may be ignored.
+```{tip}
+The logger_manager is a registered process, so the returned Pid may be ignored.
+```
 
 The configuration map supplied to the logger_manager may contain the following keys:
 
@@ -430,22 +470,31 @@ The configuration map supplied to the logger_manager may contain the following k
 
 where `log_level()` is defined to be:
 
-    -type log_level() :: emergency | critical | alert | error | warning | notice | info | debug.
+```erlang
+-type log_level() :: emergency | critical | alert | error | warning | notice | info | debug.
+```
 
 and `logger_config()` is defined as follows:
 
-    -type handler_id() :: default | atom().
-    -type handler_config() :: #{
-        id => atom(),
-        module => module(),
-        level => logger:level() | all | none,
-        config => term()
-    }.
-    -type logger_config() :: [
-        {handler, default, undefined} |
-        {handler, HandlerId :: handler_id(), Handler :: module(), HandlerConfig :: handler_config()} |
-        {module_level, logger:level(), [module()]}
-    ].
+```erlang
+-type handler_id() :: default | atom().
+-type handler_config() :: #{
+    id => atom(),
+    module => module(),
+    level => logger:level() | all | none,
+    config => term()
+}.
+-type logger_config() :: [
+    {handler, default, undefined} |
+    {
+        handler,
+        HandlerId :: handler_id(),
+        Handler :: module(),
+        HandlerConfig :: handler_config()
+    } |
+    {module_level, logger:level(), [module()]}
+].
+```
 
 You can set the log level for all log handlers by setting the `log_level` in this configuration map.  Any messages that are logged at levels "higher" than or equal to the configured log level will be logged by all log handlers.
 
@@ -465,8 +514,9 @@ For more information about how to configure the logging subsystem, see the [Kern
 
 You can stop the `logger_manager` via the `logger_manager:stop/0` function:
 
-    %% erlang
-    ok = logger_manager:stop()
+```erlang
+ok = logger_manager:stop()
+```
 
 #### Writing your own log handler
 
@@ -474,18 +524,21 @@ Additional loggers can be enabled via handler specifications.  A handler module 
 
 For example:
 
-    %% erlang
-    -module(my_module).
+```erlang
+-module(my_module).
 
-    -export([..., log/2, ...]).
+-export([..., log/2, ...]).
 
-    log(LogEvent, HandlerConfig) ->
-        %% do something with the log event
-        %% return value is ignored
+log(LogEvent, HandlerConfig) ->
+    %% do something with the log event
+    %% return value is ignored
+```
 
 You can specify this handler in the `logger_manager` configuration (see above) via a stanza such as:
 
-    {handler, my_id, my_module, HandlerConfig}
+```erlang
+{handler, my_id, my_module, HandlerConfig}
+```
 
 A `LogEvent` is a map structure containing the following fields:
 
@@ -511,13 +564,15 @@ The `HandlerConfig` is a map structure containing the id and module of the handl
 
 You can obtain a list of all processes in the system via [`erlang:processes/0`](./apidocs/erlang/estdlib/erlang.md#processes0):
 
-    %% erlang
-    Pids = erlang:processes().
+```erlang
+Pids = erlang:processes().
+```
 
 And for each process, you can get detailed process information via the [`erlang:process_info/2`](./apidocs/erlang/estdlib/erlang.md#process_info2) function:
 
-    %% erlang
-    [io:format("Heap size for Pid ~p: ~p~n", [Pid, erlang:process_info(Pid, heap_size)]) || Pid <- Pids].
+```erlang
+io:format("Heap size for Pid ~p: ~p~n", [Pid, erlang:process_info(Pid, heap_size)]).
+```
 
 The return value is a tuple containing the key passed into the `erlang:process_info/2` function and its associated value.
 
@@ -544,30 +599,35 @@ You can obtain system information about the AtomVM virtual machine via the [`erl
 
 For example,
 
-    %% erlang
-    io:format("Atom Count: ~p~n", [erlang:system_info(atom_count)]).
+```erlang
+io:format("Atom Count: ~p~n", [erlang:system_info(atom_count)]).
+```
 
-> Note.  Additional platform-specific information is supported, depending on the platform type.  See below.
+```{note}
+Additional platform-specific information is supported, depending on the platform type.  See below.
+```
 
 Use the [`atomvm:platform/0`](./apidocs/erlang/eavmlib/atomvm.md#platform0) to obtain the system platform on which your code is running.  The return value of this function is an atom who's value will depend on the platform on which your application is running.
 
-    %% erlang
-    case atomvm:platform() of
-        esp32 ->
-            io:format("I am running on an ESP32!~n");
-        stm32 ->
-            io:format("I am running on an STM32!~n");
-        generic_unix ->
-            io:format("I am running on a UNIX box!~n")
-    end.
+```erlang
+case atomvm:platform() of
+    esp32 ->
+        io:format("I am running on an ESP32!~n");
+    stm32 ->
+        io:format("I am running on an STM32!~n");
+    generic_unix ->
+        io:format("I am running on a UNIX box!~n")
+end.
+```
 
 Use [`erlang:garbage_collect/0`](./apidocs/erlang/estdlib/erlang.md#garbage_collect0) or [`erlang:garbage_collect/1`](./apidocs/erlang/estdlib/erlang.md#garbage_collect1) to force the AtomVM garbage collector to run on a give process.  Garbage collection will in general happen automatically when additional free space is needed and is rarely needed to be called explicitly.
 
 The 0-arity version of this function will run the garbage collector on the currently executing process.
 
-    %% erlang
-    Pid = ... %% get a reference to some pid
-    ok = erlang:garbage_collect(Pid).
+```erlang
+Pid = ... %% get a reference to some pid
+ok = erlang:garbage_collect(Pid).
+```
 
 Use the [`erlang:memory/1`](./apidocs/erlang/estdlib/erlang.md#memory1) function to obtain information about allocated memory.
 
@@ -577,7 +637,9 @@ Currently, AtomVM supports the following types:
 |------|-------------|
 | `binary` | Return the total amount of memory (in bytes) occupied by (reference counted) binaries |
 
-> Note.  Binary data small enough to be stored in the Erlang process heap are not counted in this measurement.
+```{note}
+Binary data small enough to be stored in the Erlang process heap are not counted in this measurement.
+```
 
 ### System Time
 
@@ -585,45 +647,61 @@ AtomVM supports numerous function for accessing the current time on the device.
 
 Use [`erlang:timestamp/0`](./apidocs/erlang/estdlib/erlang.md#timestamp0) to get the current time since the UNIX epoch (Midnight, Jan 1, 1970, UTC), at microsecond granularity, expressed as a triple (mega-seconds, seconds, and micro-seconds):
 
-    %% erlang
-    {MegaSecs, Secs, MicroSecs} = erlang:timestamp().
+```erlang
+{MegaSecs, Secs, MicroSecs} = erlang:timestamp().
+```
 
 Use [`erlang:system_time/1`](./apidocs/erlang/estdlib/erlang.md#system_time1) to obtain the seconds, milliseconds or microseconds since the UNIX epoch (Midnight, Jan 1, 1970, UTC):
 
-    %% erlang
-    Seconds = erlang:system_time(second).
-    MilliSeconds = erlang:system_time(millisecond).
-    MicroSeconds = erlang:system_time(microsecond).
+```erlang
+Seconds = erlang:system_time(second).
+MilliSeconds = erlang:system_time(millisecond).
+MicroSeconds = erlang:system_time(microsecond).
+```
 
 Use [`erlang:monotonic_time/1`](./apidocs/erlang/estdlib/erlang.md#monotonic_time1) to obtain a (possibly not strictly) monotonically increasing time measurement.  Use the same time units to convert to seconds, milliseconds, or microseconds:
 
-    %% erlang
-    Seconds = erlang:monotonic_time(second).
-    MilliSeconds = erlang:monotonic_time(millisecond).
-    MicroSeconds = erlang:monotonic_time(microsecond).
+```erlang
+Seconds = erlang:monotonic_time(second).
+MilliSeconds = erlang:monotonic_time(millisecond).
+MicroSeconds = erlang:monotonic_time(microsecond).
+```
 
-> Note.  `erlang:monotonic_time/1` should not be used to calculate the wall clock time, but instead should be used by applications to compute time differences in a manner that is independent of the system time on the device, which might change, for example, due to NTP, leap seconds, or similar operations that may affect the wall time on the device.
+```{caution}
+Note `erlang:monotonic_time/1` should not be used to calculate the wall clock time, but instead should be used by
+applications to compute time differences in a manner that is independent of the system time on the device, which
+might change, for example, due to NTP, leap seconds, or similar operations that may affect the wall time on the
+device.
+```
 
 Use [`erlang:universaltime/0`](./apidocs/erlang/estdlib/erlang.md#universaltime0) to get the current time at second resolution, to obtain the year, month, day, hour, minute, and second:
 
-    %% erlang
-    {{Year, Month, Day}, {Hour, Minute, Second}} = erlang:universaltime().
+```erlang
+{{Year, Month, Day}, {Hour, Minute, Second}} = erlang:universaltime().
+```
 
 On some platforms, you can use the [`atomvm:posix_clock_settime/2`](./apidocs/erlang/eavmlib/atomvm.md#posix_clock_settime2) to set the system time.  Supply a clock id (currently, the only supported clock id is the atom `realtime`) and a time value as a tuple, containing seconds and nanoseconds since the UNIX epoch (midnight, January 1, 1970).  For example,
 
-    %% erlang
-    SecondsSinceUnixEpoch = ... %% acquire the time
-    atomvm:posix_clock_settime(realtime, {SecondsSinceUnixEpoch, 0})
+```erlang
+SecondsSinceUnixEpoch = ... %% acquire the time
+atomvm:posix_clock_settime(realtime, {SecondsSinceUnixEpoch, 0})
+```
 
-> Note.  This operation is not supported yet on the `stm32` platform.  On most UNIX platforms, you typically need `root` permission to set the system time.
+```{warning}
+This operation is not supported yet on the `stm32` platform.  On most UNIX platforms, you typically need `root`
+permission to set the system time.
+```
 
 On the ESP32 platform, you can use the Wifi network to set the system time automatically.  For information about how to set system time on the ESP32 using SNTP, see the [Network Programming Guide](./network-programming-guide.md).
 
 To convert a time (in seconds, milliseconds, or microseconds from the UNIX epoch) to a date-time, use the [`calendar:system_time_to_universal_time/2`](./apidocs/erlang/estdlib/calendar.md#system_time_to_universal_time2) function.  For example,
 
-    %% erlang
-    Milliseconds = ... %% get milliseconds from the UNIX epoch
-    {{Year, Month, Day}, {Hour, Minute, Second}} = calendar:system_time_to_universal_time(Milliseconds, millisecond).
+```erlang
+Milliseconds = ... %% get milliseconds from the UNIX epoch
+{
+    {Year, Month, Day}, {Hour, Minute, Second}
+} = calendar:system_time_to_universal_time(Milliseconds, millisecond).
+```
 
 Valid time units are `second`, `millisecond`, and `microsecond`.
 
@@ -633,52 +711,67 @@ A [`datetime()`](./apidocs/erlang/estdlib/calendar.md#datetime) is a tuple conta
 
 The following Erlang type specification enumerates this type:
 
-    %% erlang
-    -type year() :: integer().
-    -type month() :: 1..12.
-    -type day() :: 1..31.
-    -type date() :: {year(), month(), day()}.
-    -type gregorian_days() :: integer().
-    -type day_of_week() :: 1..7.
-    -type hour() :: 0..23.
-    -type minute() :: 0..59.
-    -type second() :: 0..59.
-    -type time() :: {hour(), minute(), second()}.
-    -type datetime() :: {date(), time()}.
+```erlang
+-type year() :: integer().
+-type month() :: 1..12.
+-type day() :: 1..31.
+-type date() :: {year(), month(), day()}.
+-type gregorian_days() :: integer().
+-type day_of_week() :: 1..7.
+-type hour() :: 0..23.
+-type minute() :: 0..59.
+-type second() :: 0..59.
+-type time() :: {hour(), minute(), second()}.
+-type datetime() :: {date(), time()}.
+```
 
 Erlang/OTP uses the Christian epoch to count time units from year 0 in the Gregorian calendar.  The, for example, the value 0 in Gregorian seconds represents the date Jan 1, year 0, and midnight (UTC), or in Erlang terms, `{{0, 1, 1}, {0, 0, 0}}`.
 
-> Note.  AtomVM is currently limited to representing integers in at most 64 bits, with one bit representing the sign bit.  However, even with this limitation, AtomVM is able to resolve microsecond values in the Gregorian calendar for over 292,000 years, likely well past the likely lifetime of an AtomVM application (unless perhaps launched on a deep space probe).
+```{attention}
+AtomVM is currently limited to representing integers in at most 64 bits, with one bit representing the sign bit.
+However, even with this limitation, AtomVM is able to resolve microsecond values in the Gregorian calendar for over
+292,000 years, likely well past the likely lifetime of an AtomVM application (unless perhaps launched on a deep
+space probe).
+```
 
 The [`calendar` module](./apidocs/erlang/estdlib/calendar.md) provides useful functions for converting dates to Gregorian days, and date-times to Gregorian seconds.
 
 To convert a [`date()`](./apidocs/erlang/estdlib/calendar.md#date) to the number of days since January 1, year 0, use the [`calendar:date_to_gregorian_days/1`](./apidocs/erlang/estdlib/calendar.md#date_to_gregorian_days1) function, e.g.,
 
-    GregorianDays = calendar:date_to_gregorian_days({2023, 7, 23})
+```erlang
+GregorianDays = calendar:date_to_gregorian_days({2023, 7, 23})
+```
 
 To convert a `datetime()` to convert the number of seconds since midnight January 1, year 0, use the [`calendar:datetime_to_gregorian_seconds/1`](./apidocs/erlang/estdlib/calendar.md#datetime_to_gregorian_seconds1) function, e.g.,
 
-    GregorianSeconds = calendar:datetime_to_gregorian_seconds({{2023, 7, 23}, {13, 31, 7}})
+```erlang
+GregorianSeconds = calendar:datetime_to_gregorian_seconds({{2023, 7, 23}, {13, 31, 7}})
+```
 
-> Note.  The `calendar` module does not support year values before year `0`.
+```{warning}
+The `calendar` module does not support year values before year `0`.
+```
 
 ### Miscellaneous APIs
 
 Use [`atomvm:random/0`](./apidocs/erlang/eavmlib/atomvm.md#random0) to generate a random unsigned 32-bit integer in the range `0..4294967295`:
 
-    %% erlang
-    RandomInteger = atomvm:random().
+```erlang
+RandomInteger = atomvm:random().
+```
 
 Use [`crypto:strong_rand_bytes/1`](./apidocs/erlang/estdlib/crypto.md#strong_rand_bytes1) to return a randomly populated binary of a specified size:
 
-    %% erlang
-    RandomBinary = crypto:strong_rand_bytes(32).
+```erlang
+RandomBinary = crypto:strong_rand_bytes(32).
+```
 
 Use [`base64:encode/1`](./apidocs/erlang/estdlib/base64.md#encode1) and [`base64:decode/1`](./apidocs/erlang/estdlib/base64.md#decode1) to encode to and decode from Base64 format.  The input value to these functions may be a binary or string.  The output value from these functions is an Erlang binary.
 
-    %% erlang
-    Encoded = base64:encode(<<"foo">>).
-    <<"foo">> = base64:decode(Encoded).
+```erlang
+Encoded = base64:encode(<<"foo">>).
+<<"foo">> = base64:decode(Encoded).
+```
 
 You can Use [`base64:encode_to_string/1`](./apidocs/erlang/estdlib/base64.md#encode_to_string1) and [`base64:decode_to_string/1`](./apidocs/erlang/estdlib/base64.md#decode_to_string1) to perform the same encoding, but to return values as Erlang list structures, instead of as binaries.
 
@@ -691,37 +784,53 @@ Currently in AtomVM, stack traces can be obtained in one of following ways:
 * via try-catch blocks
 * via catch blocks, when an error has been raised via the `error` Bif.
 
-> Note.  AtomVM does not support `erlang:get_stacktrace/0` which was deprecated in Erlang/OTP 21 and 22, stopped working in Erlang/OTP 23 and was removed in Erlang/OTP 24.  Support for accessing the current stacktrace via [`erlang:process_info/2`](./apidocs/erlang/estdlib/erlang.md#process_info2) may be added in the future.
+```{note}
+AtomVM does not support `erlang:get_stacktrace/0` which was deprecated in Erlang/OTP 21 and 22, stopped working in
+Erlang/OTP 23 and was removed in Erlang/OTP 24.  Support for accessing the current stacktrace via
+[`erlang:process_info/2`](./apidocs/erlang/estdlib/erlang.md#process_info2) may be added in the future.
+```
 
 For example a stack trace can be bound to a variable in the catch clause in a try-catch block:
 
-    try
-        do_something()
-    catch
-        _Class:_Error:Stacktrace ->
-            io:format("Stacktrace: ~p~n", [Stacktrace])
-    end
+```erlang
+try
+    do_something()
+catch
+    _Class:_Error:Stacktrace ->
+        io:format("Stacktrace: ~p~n", [Stacktrace])
+end
+```
 
 Alternatively, a stack trace can be bound to the result of a `catch` expression, but only when the error is raised by the `error` Bif.  For example,
 
-    {'EXIT', {foo, Stacktrace}} = (catch error(foo)),
-    io:format("Stacktrace: ~p~n", [Stacktrace])
+```erlang
+{'EXIT', {foo, Stacktrace}} = (catch error(foo)),
+io:format("Stacktrace: ~p~n", [Stacktrace])
+```
 
 Stack traces are printed to the console in a crash report, for example, when a process dies unexpectedly.
 
 Stacktrace data is represented as a list of tuples, each of which represents a stack “frame”.  Each tuple is of the form:
 
-    [{Module :: module(), Function :: atom(), Arity :: non_neg_integer(), AuxData :: aux_data()}]
+```erlang
+[{Module :: module(), Function :: atom(), Arity :: non_neg_integer(), AuxData :: aux_data()}]
+```
 
 where `aux_data()` is a (possibly empty) properties list containing the following elements:
 
-    [{file, File :: string(), line, Line :: pos_integer()}]
+```erlang
+[{file, File :: string(), line, Line :: pos_integer()}]
+```
 
 Stack frames are ordered from the frame “closest“ to the point of failure (the “top” of the stack) to the frame furthest from the point of failure (the “bottom” of the stack).
 
 Stack frames will contain file and line information in the AuxData list if the BEAM files (typically embedded in AVM files) include <<“Line”>> chunks generated by the compiler.  Otherwise, the AuxData will be an empty list.
 
-> Note.  Adding line information to BEAM files not only increases the size of BEAM files in storage, but calculation of file and line information can have a non-negligible impact on memory usage.  Memory-sensitive applications should consider not including line information in BEAM files.
+```{tip}
+Adding line information to BEAM files not only increases the size of BEAM files in storage, but calculation of file
+and line information can have a non-negligible impact on memory usage.  Memory-sensitive applications should
+consider not including line information in BEAM files.
+```
 
 The `packbeam` tool does include file and line information in the AVM files it creates by default, but file and line information can be omitted via a command line option.  For information about the packbeam too, see the [`atomvm_packbeam` tool](./atomvm-tooling.md#atomvm_packbeam).
 
@@ -733,18 +842,22 @@ Typically, these files are included from the `priv` directory in a build tree, f
 
 By convention, these files obey the following path in an AVM file:
 
-    <application-name>/priv/<file-path>
+>`<application-name>/priv/<file-path>`
 
 For example, if you wanted to embed `my_file.txt` into your application AVM file (where your application name is, for example, `my_application`), you would use:
 
-    my_application/priv/my_file.txt
+>`my_application/priv/my_file.txt`
 
 The [`atomvm:read_priv/2`](./apidocs/erlang/eavmlib/atomvm.md#read_priv2) function can then be used to extract the contents of this file into a binary, e.g.,
 
-    %% erlang
-    MyFileBin = atomvm:read_priv(my_application, <<"my_file.txt">>)
+```erlang
+MyFileBin = atomvm:read_priv(my_application, <<"my_file.txt">>)
+```
 
-> Note. Embedded files may contain path separators, so for example `<<"my_files/my_file.txt">>` would be used if the AVM file embeds `my_file.txt` using the path `my_application/priv/my_files/my_file.txt`
+```{tip}
+Embedded files may contain path separators, so for example `<<"my_files/my_file.txt">>` would be used if the AVM
+file embeds `my_file.txt` using the path `my_application/priv/my_files/my_file.txt`
+```
 
 For more information about how to embed files into [AVM files](./packbeam-format.md), see the [`atomvm_rebar3_plugin`](https://github.com/atomvm/atomvm_rebar3_plugin), and the [`atomvm_rebar3_plugin`](./atomvm-tooling.md#atomvm_rebar3_plugin) section of the [AtomVM Tooling](./atomvm-tooling.md) guide.
 
@@ -756,48 +869,61 @@ To load an AVM file from binary data, use the [`atomvm:add_avm_pack_binary/2`](.
 
 For example:
 
-    %% erlang
-    AVMData = ... %% load AVM data into memory as a binary
-    ok = atomvm:add_avm_pack_binary(AVMData, [{name, my_avm}])
+```erlang
+AVMData = ... %% load AVM data into memory as a binary
+ok = atomvm:add_avm_pack_binary(AVMData, [{name, my_avm}])
+```
 
 You can also load AVM data from a file (on the `generic_unix` platform) or from a flash partition (on ESP32 platforms) using the [`atomvm:add_avm_pack_file/2`](./apidocs/erlang/eavmlib/atomvm.md#add_avm_pack_file2) function.  Specify a string (or binary) as the path to the AVM file, together with a list of options, such as `name`.
 
 For example:
 
-    %% erlang
-    ok = atomvm:add_avm_pack_file("/path/to/file.avm", [{name, my_avm}])
+```erlang
+ok = atomvm:add_avm_pack_file("/path/to/file.avm", [{name, my_avm}])
+```
 
 On `esp32` platforms, the partition name should be prefixed with the string `/dev/partition/by-name/`.  Thus, for example, if you specify `/dev/partition/by-name/main2.avm` as the partition, the ESP32 flash should contain a data partition with the name `main2.avm`
 
 For example:
 
-    %% erlang
-    ok = atomvm:add_avm_pack_file("/dev/partition/by-name/main2.avm", [])
+```erlang
+ok = atomvm:add_avm_pack_file("/dev/partition/by-name/main2.avm", [])
+```
 
 To close a previous opened AVM by name, use the [`atomvm:close_avm_pack/2`](./apidocs/erlang/eavmlib/atomvm.md#close_avm_pack2) function.  Specify the name of the AVM pack used to add
 
-    %% erlang
-    ok = atomvm:close_avm_pack(my_avm, [])
+```erlang
+ok = atomvm:close_avm_pack(my_avm, [])
+```
 
-> Note.  Currently, the options parameter is ignored, so use the empty list (`[]`) for forward compatibility.
+```{important}
+Currently, the options parameter is ignored, so use the empty list (`[]`) for forward compatibility.
+```
 
 You can load an individual BEAM file using the [`code:load_binary/3`](./apidocs/erlang/estdlib/code.md#load_binary3) function.  Specify the Module name (as an atom), as well as the BEAM data you have loaded into memory.
 
 For Example:
 
-    %% erlang
-    BEAMData = ... %% load BEAM data into memory as a binary
-    {module, Module} = code:load_binary(Module, Filename, BEAMData)
+```erlang
+BEAMData = ... %% load BEAM data into memory as a binary
+{module, Module} = code:load_binary(Module, Filename, BEAMData)
+```
 
-> Note.  The `Filename` parameter is currently ignored.
+```{attention}
+The `Filename` parameter is currently ignored.
+```
 
 You can load an individual BEAM file from the file system using the [`code:load_abs/1`](./apidocs/erlang/estdlib/code.md#load_abs1) function.  Specify the path to the BEAM file.  This path should not include the `.beam` extension, as this extension will be added automatically.
 
 For example:
 
-    {module, Module} = code:load_abs("/path/to/beam/file/without/beam/extension")
+```erlang
+{module, Module} = code:load_abs("/path/to/beam/file/without/beam/extension")
+```
 
-> Note.  This function is currently only supported on the `generic_unix` platform.
+```{attention}
+This function is currently only supported on the `generic_unix` platform.
+```
 
 ### Math
 
@@ -831,18 +957,24 @@ The input values for these functions may be `float` or `integer` types.  The ret
 
 Input values that are out of range for the specific mathematical function or which otherwise are invalid or yield an invalid result (e.g., division by 0) will result in a `badarith` error.
 
-> Note.  If the AtomVM virtual machine is built with floating point arithmetic support disabled, these functions will result in a `badarg` error.
+```{attention}
+If the AtomVM virtual machine is built with floating point arithmetic support disabled, these functions will result
+in a `badarg` error.
+```
 
 ### Cryptographic Operations
 
 You can hash binary date using the [`crypto:hash/2`](./apidocs/erlang/estdlib/crypto.md#hash2) function.
 
-    %% erlang
-    crypto:hash(sha, [<<"Some binary">>, $\s, "data"])
+```erlang
+crypto:hash(sha, [<<"Some binary">>, $\s, "data"])
+```
 
 This function takes a hash algorithm, which may be one of:
 
-    -type md_type() :: md5 | sha | sha224 | sha256 | sha384 | sha512.
+```erlang
+-type md_type() :: md5 | sha | sha224 | sha256 | sha384 | sha512.
+```
 
 and an IO list.  The output type is a binary, who's length (in bytes) is dependent on the algorithm chosen:
 
@@ -855,12 +987,15 @@ and an IO list.  The output type is a binary, who's length (in bytes) is depende
 | `sha384` | 64 |
 | `sha512` | 64 |
 
-> Note.  The `crypto:hash/2` function is currently only supported on the ESP32 and generic UNIX platforms.
+```{attention}
+The `crypto:hash/2` function is currently only supported on the ESP32 and generic UNIX platforms.
+```
 
 You can also use the legacy [`erlang:md5/1`](./apidocs/erlang/estdlib/erlang.md#md51) function to compute the MD5 hash of an input binary.  The output is a fixed-length binary (16 bytes)
 
-    %% erlang
-    Hash = erlang:md5(<<foo>>).
+```erlang
+Hash = erlang:md5(<<foo>>).
+```
 
 On ESP32, you can perform symmetric encryption and decryption of any iodata data using [`crypto_one_time/4,5`](./apidocs/erlang/estdlib/crypto.md#function-index) function.
 
@@ -888,11 +1023,13 @@ The function is implemented using [mbedTLS](https://github.com/Mbed-TLS/mbedtls)
 documentation for further details.
 
 Please refer to
-[Erlang crypto documentation](https://www.erlang.org/doc/man/crypto#crypto_one_time-4) for
+[Erlang crypto documentation](https://www.erlang.org/doc/man/crypto#crypto_one_time4) for
 additional details about these two functions.
 
-> Note: mbedTLS doesn't support padding for ciphers other than CCB, so block size must be accounted
-otherwise output will be truncated.
+```{important}
+Note: mbedTLS doesn't support padding for ciphers other than CCB, so block size must be accounted otherwise output
+will be truncated.
+```
 
 ## ESP32-specific APIs
 
@@ -912,54 +1049,67 @@ You can request ESP32-specific information using using the following input atoms
 
 For example,
 
-    %% erlang
-    FreeHeapSize = erlang:system_info(esp_free_heap_size).
+```erlang
+FreeHeapSize = erlang:system_info(esp_free_heap_size).
+```
 
 ### Non-volatile Storage
 
 AtomVM provides functions for setting, retrieving, and deleting key-value data in binary form in non-volatile storage (NVS) on an ESP device.  Entries in NVS survive reboots of the ESP device, and can be used a limited "persistent store" for key-value data.
 
-> Note.  NVS storage is limited in size, and NVS keys are restricted to 15 characters.  Try to avoid writing frequently to NVS storage, as the flash storage may degrade more rapidly with repeated writes to the medium.
+```{warning}
+NVS storage is limited in size, and NVS keys are restricted to 15 characters.  Try to avoid writing frequently to NVS
+storage, as the flash storage may degrade more rapidly with repeated writes to the medium.
+```
 
 NVS entries are stored under a namespace and key, both of which are expressed as atoms.  AtomVM uses the namespace `atomvm` for entries under its control.  Applications may read from and write to the `atomvm` namespace, but they are strongly discouraged from doing so, except when explicitly stated otherwise.
 
 To set a value in non-volatile storage, use the [`esp:nvs_set_binary/3`](./apidocs/erlang/eavmlib/esp.md#nvs_set_binary3) function, and specify a namespace, key, and value:
 
-    %% erlang
-    Namespace = <<"my-namespace">>,
-    Key = <<"my-key">>,
-    esp:set_binary(Namespace, Key, <<"some-value">>).
+```erlang
+Namespace = <<"my-namespace">>,
+Key = <<"my-key">>,
+esp:set_binary(Namespace, Key, <<"some-value">>).
+```
 
 To retrieve a value in non-volatile storage, use the [`esp:nvs_get_binary/2`](./apidocs/erlang/eavmlib/esp.md#nvs_get_binary2) function, and specify a namespace and key.  You can optionally specify a default value (of any desired type), if an entry does not exist in non-volatile storage:
 
-    %% erlang
-    Value = esp:get_binary(Namespace, Key, <<"default-value">>).
+```erlang
+Value = esp:get_binary(Namespace, Key, <<"default-value">>).
+```
 
 To delete an entry, use the [`esp:nvs_erase_key/2`](./apidocs/erlang/eavmlib/esp.md#nvs_erase_key2) function, and specify a namespace and key:
 
-    %% erlang
-    ok = esp:erase_key(Namespace, Key).
+```erlang
+ok = esp:erase_key(Namespace, Key).
+```
 
 You can delete all entries in a namespace via the [`esp:nvs_erase_all/1`](./apidocs/erlang/eavmlib/esp.md#nvs_erase_all1) function:
 
-    %% erlang
-    ok = es p:erase_all(Namespace).
+```erlang
+ok = esp:erase_all(Namespace).
+```
 
 Finally, you can delete all entries in all namespaces on the NVS partition via the [`esp:nvs_reformat/0`](./apidocs/erlang/eavmlib/esp.md#nvs_reformat0) function:
 
-    %% erlang
-    ok = esp:reformat().
+```erlang
+ok = esp:reformat().
+```
 
 Applications should use the `esp:nvs_reformat/0` function with caution, in case other applications are making using the non-volatile storage.
 
-> Note.  NVS entries are currently stored in plaintext and are not encrypted.  Applications should exercise caution if sensitive security information, such as account passwords, are stored in NVS storage.
+```{caution}
+NVS entries are currently stored in plaintext and are not encrypted.  Applications should exercise caution if
+sensitive security information, such as account passwords, are stored in NVS storage.
+```
 
 ### Restart and Deep Sleep
 
 You can use the [`esp:restart/0`](./apidocs/erlang/eavmlib/esp.md#restart0) function to immediately restart the ESP32 device.  This function does not return a value.
 
-    %% erlang
-    esp:restart().
+```erlang
+esp:restart().
+```
 
 Use the [`esp:reset_reason/0`](./apidocs/erlang/eavmlib/esp.md#reset_reason0) function to obtain the reason for the ESP32 restart.  Possible values include:
 
@@ -977,8 +1127,9 @@ Use the [`esp:reset_reason/0`](./apidocs/erlang/eavmlib/esp.md#reset_reason0) fu
 
 Use the [`esp:deep_sleep/1`](./apidocs/erlang/eavmlib/esp.md#deep_sleep1) function to put the ESP device into deep sleep for a specified number of milliseconds.  Be sure to safely stop any critical processes running before this function is called, as it will cause an immediate shutdown of the device.
 
-    %% erlang
-    esp:deep_sleep(60*1000).
+```erlang
+esp:deep_sleep(60*1000).
+```
 
 Use the [`esp:sleep_get_wakeup_cause/0`](./apidocs/erlang/eavmlib/esp.md#sleep_get_wakeup_cause0) function to inspect the reason for a wakeup.  Possible return values include:
 
@@ -998,43 +1149,49 @@ Use the [`esp:sleep_get_wakeup_cause/0`](./apidocs/erlang/eavmlib/esp.md#sleep_g
 
 The values matches the semantics of [`esp_sleep_get_wakeup_cause`](https://docs.espressif.com/projects/esp-idf/en/release-v4.4/esp32/api-reference/system/sleep_modes.html#_CPPv426esp_sleep_get_wakeup_causev).
 
-    %% erlang
-    case esp:sleep_get_wakeup_cause() of
-        sleep_wakeup_timer ->
-            io:format("Woke up from a timer~n");
-        sleep_wakeup_ext0 ->
-            io:format("Woke up from ext0~n");
-        sleep_wakeup_ext1 ->
-            io:format("Woke up from ext1~n");
-        _ ->
-            io:format("Woke up for some other reason~n")
-    end.
+```erlang
+case esp:sleep_get_wakeup_cause() of
+    sleep_wakeup_timer ->
+        io:format("Woke up from a timer~n");
+    sleep_wakeup_ext0 ->
+        io:format("Woke up from ext0~n");
+    sleep_wakeup_ext1 ->
+        io:format("Woke up from ext1~n");
+    _ ->
+        io:format("Woke up for some other reason~n")
+end.
+```
 
 Use the [`esp:sleep_enable_ext0_wakeup/2`](./apidocs/erlang/eavmlib/esp.md#sleep_enable_ext0_wakeup2) and [`esp:sleep_enable_ext1_wakeup/2`](./apidocs/erlang/eavmlib/esp.md#sleep_enable_ext1_wakeup2) functions to configure ext0 and ext1 wakeup mechanisms. They follow the semantics of [`esp_sleep_enable_ext0_wakeup`](https://docs.espressif.com/projects/esp-idf/en/release-v4.4/esp32/api-reference/system/sleep_modes.html#_CPPv428esp_sleep_enable_ext0_wakeup10gpio_num_ti) and [`esp_sleep_enable_ext1_wakeup`](https://docs.espressif.com/projects/esp-idf/en/release-v4.4/esp32/api-reference/system/sleep_modes.html#_CPPv428esp_sleep_enable_ext1_wakeup8uint64_t28esp_sleep_ext1_wakeup_mode_t).
 
-    %% erlang
-    -spec shutdown() -> no_return().
-    shutdown() ->
-        % Configure wake up when GPIO 37 is set to low (M5StickC main button)
-        ok = esp:sleep_enable_ext0_wakeup(37, 0),
-        % Deep sleep for 1 hour
-        esp:deep_sleep(60*60*1000).
+```erlang
+-spec shutdown() -> no_return().
+shutdown() ->
+    % Configure wake up when GPIO 37 is set to low (M5StickC main button)
+    ok = esp:sleep_enable_ext0_wakeup(37, 0),
+    % Deep sleep for 1 hour
+    esp:deep_sleep(60*60*1000).
+```
 
 #### RTC Memory
 
 On ESP32 systems, you can use (slow) "real-time clock" memory to store data between deep sleeps.  This storage can be useful, for example, to store interim state data in your application.
 
-> Note.  RTC memory is initialized if power is lost.
+```{important}
+RTC memory is initialized if power is lost.
+```
 
 To store data in RTC slow memory, use the [`esp:rtc_slow_set_binary/1`](./apidocs/erlang/eavmlib/esp.md#rtc_slow_set_binary1) function:
 
-    %% erlang
-    esp:rtc_slow_set_binary(<<"some binary data">>)
+```erlang
+esp:rtc_slow_set_binary(<<"some binary data">>)
+```
 
 To retrieve data in RTC slow memory, use the [`esp:rtc_slow_get_binary/0`](./apidocs/erlang/eavmlib/esp.md#rtc_slow_get_binary0) function:
 
-    %% erlang
-    Data = esp:rtc_slow_get_binary()
+```erlang
+Data = esp:rtc_slow_get_binary()
+```
 
 By default, RTC slow memory in AtomVM is limited to 4098 (4k) bytes.  This value can be modified at build time using an IDF SDK `KConfig` setting.  For  instructions about how to build AtomVM, see the AtomVM [Build Instructions](./build-instructions.md#building-for-esp32).
 
@@ -1044,30 +1201,37 @@ By default, RTC slow memory in AtomVM is limited to 4098 (4k) bytes.  This value
 The `esp:freq_hz/0` function can be used to retrieve the clock frequency of the chip.
 * [`esp:partition_list/0`](./apidocs/erlang/eavmlib/esp.md#partition_list0)
 The `esp:partition_list/0` function can be used to retrieve information about the partitions on an ESP32 flash.
-
-The return type is a list of tuples, each of which contains the partition id (as a binary), partition type and sub-type (both of which are represented as integers), the start of the partition as an address along with its size, as well as a list of properties about the partition, as a properties list.
-
-    %% erlang
-    PartitionList = esp:partition_list(),
-    lists:foreach(
-        fun({
-            PartitionId, PartitionType, PartitionSubtype, PartitionAddress, PartitionSize,
-            PartitionProperties
-        }) ->
-            %% ...
-        end,
-        PartitionList
-    )
-
-> Note. The partition properties are currently empty (`[]`).
-
-For information about the encoding of partition types and sub-types, see the IDF SDK partition [type definitions](https://docs.espressif.com/projects/esp-idf/en/v4.4.5/esp32/api-reference/storage/spi_flash.html?highlight=esp_partition_get#id13).
-
+>
+>The return type is a list of tuples, each of which contains the partition id (as a binary), partition type and sub-type (both of which are represented as integers), the start of the partition as an address along with its size, as well as a list of properties about the partition, as a properties list.
+>
+>```erlang
+>PartitionList = esp:partition_list(),
+>lists:foreach(
+>    fun({
+>        PartitionId, PartitionType, PartitionSubtype, PartitionAddress, PartitionSize,
+>        PartitionProperties
+>        }) ->
+>            %% ...
+>        end,
+>        PartitionList
+>    )
+>```
+>
+>```{note}
+>The partition properties are currently empty (`[]`).
+>```
+>
+>```{seealso}
+>For information about the encoding of partition types and sub-types, see the IDF SDK partition
+>[type definitions](https://docs.espressif.com/projects/esp-idf/en/v4.4.5/esp32/api-reference/storage/spi_flash.html?highlight=esp_partition_get#id13).
+>```
+>
 * [`esp:get_mac/1`](./apidocs/erlang/eavmlib/esp.md#get_mac1)
 The `esp:get_mac/1` function can be used to retrieve the network Media Access Control ([MAC](https://en.wikipedia.org/wiki/MAC_address)) address for a given interface, [`wifi_sta`](./network-programming-guide.md#station-sta-mode) or [`wifi_softap`](./network-programming-guide.md#ap-mode).  The return value is a 6-byte binary, in accordance with the [IEEE 802](https://en.wikipedia.org/wiki/IEEE_802) family of specifications.
-
-    %% erlang
-    MacAddress = esp:get_mac(wifi_sta)
+>
+>```erlang
+>MacAddress = esp:get_mac(wifi_sta)
+>```
 
 ## Peripherals
 
@@ -1085,40 +1249,43 @@ To read the value of a GPIO pin (`high` or `low`), use [`gpio:digital_read/1`](.
 
 For ESP32 family:
 
-    %% erlang
-    Pin = 2,
-    gpio:set_direction(Pin, input),
-    case gpio:digital_read(Pin) of
-        high ->
-            io:format("Pin ~p is high ~n", [Pin]);
-        low ->
-            io:format("Pin ~p is low ~n", [Pin])
-    end.
+```erlang
+Pin = 2,
+gpio:set_direction(Pin, input),
+case gpio:digital_read(Pin) of
+    high ->
+        io:format("Pin ~p is high ~n", [Pin]);
+    low ->
+        io:format("Pin ~p is low ~n", [Pin])
+end.
+```
 
 For STM32 only the line with the Pin definition needs to be a tuple:
 
-    %% erlang
-    Pin = {c, 13},
-    gpio:set_direction(Pin, input),
-    case gpio:digital_read(Pin) of
-        high ->
-            io:format("Pin ~p is high ~n", [Pin]);
-        low ->
-            io:format("Pin ~p is low ~n", [Pin])
-    end.
+```erlang
+Pin = {c, 13},
+gpio:set_direction(Pin, input),
+case gpio:digital_read(Pin) of
+    high ->
+        io:format("Pin ~p is high ~n", [Pin]);
+    low ->
+        io:format("Pin ~p is low ~n", [Pin])
+end.
+```
 
 The Pico has an additional initialization step [`gpio:init/1`](./apidocs/erlang/eavmlib/gpio.md#init1) before using a pin for gpio:
 
-    %% erlang
-    Pin = 2,
-    gpio:init(Pin),
-    gpio:set_direction(Pin, input),
-    case gpio:digital_read(Pin) of
-        high ->
-            io:format("Pin ~p is high ~n", [Pin]);
-        low ->
-            io:format("Pin ~p is low ~n", [Pin])
-    end.
+```erlang
+Pin = 2,
+gpio:init(Pin),
+gpio:set_direction(Pin, input),
+case gpio:digital_read(Pin) of
+    high ->
+        io:format("Pin ~p is high ~n", [Pin]);
+    low ->
+        io:format("Pin ~p is low ~n", [Pin])
+end.
+```
 
 #### Digital Write
 
@@ -1126,25 +1293,28 @@ To set the value of a GPIO pin (`high` or `low`), use [`gpio:digital_write/2`](.
 
 For ESP32 family:
 
-    %% erlang
-    Pin = 2,
-    gpio:set_direction(Pin, output),
-    gpio:digital_write(Pin, low).
+```erlang
+Pin = 2,
+gpio:set_direction(Pin, output),
+gpio:digital_write(Pin, low).
+```
 
 For the STM32 use a pin tuple:
 
-    %% erlang
-    Pin = {b, 7},
-    gpio:set_direction(Pin, output),
-    gpio:digital_write(Pin, low).
+```erlang
+Pin = {b, 7},
+gpio:set_direction(Pin, output),
+gpio:digital_write(Pin, low).
+```
 
 Pico needs the extra `gpio:init/1` before `gpio:read/1` too:
 
-    %% erlang
-    Pin = 2,
-    gpio:init(Pin),
-    gpio:set_direction(Pin, output),
-    gpio:digital_write(Pin, low).
+```erlang
+Pin = 2,
+gpio:init(Pin),
+gpio:set_direction(Pin, output),
+gpio:digital_write(Pin, low).
+```
 
 #### Interrupt Handling
 
@@ -1154,44 +1324,49 @@ You can get notified of changes in the state of a GPIO pin by using the [`gpio:s
 
 When a trigger event occurs, such as a pin rising in voltage, a tuple will be delivered to the process that set the interrupt containing the atom `gpio_interrupt` and the pin.
 
-    %% erlang
-    Pin = 2,
-    gpio:set_direction(Pin, input),
-    GPIO = gpio:open(),
-    ok = gpio:set_int(GPIO, Pin, rising),
-    receive
-        {gpio_interrupt, Pin} ->
-            io:format("Pin ~p is rising ~n", [Pin])
-    end.
+```erlang
+Pin = 2,
+gpio:set_direction(Pin, input),
+GPIO = gpio:open(),
+ok = gpio:set_int(GPIO, Pin, rising),
+receive
+    {gpio_interrupt, Pin} ->
+        io:format("Pin ~p is rising ~n", [Pin])
+end.
+```
 
 You can also use the [`gpio:set_int/4`](./apidocs/erlang/eavmlib/gpio.md#set_int4) function, and specify a listener `pid()` or registered name as the recipient of interrupt messages as the fourth parameter.
 
-    %% erlang
-    Pin = 2,
-    gpio:set_direction(Pin, input),
-    Listener = spawn(fun() -> my_gen_statem() end),
-    GPIO = gpio:open(),
-    ok = gpio:set_int(GPIO, Pin, rising, Listener),
-    timer:sleep(infinity).
+```erlang
+Pin = 2,
+gpio:set_direction(Pin, input),
+Listener = spawn(fun() -> my_gen_statem() end),
+GPIO = gpio:open(),
+ok = gpio:set_int(GPIO, Pin, rising, Listener),
+timer:sleep(infinity).
+```
 
 Interrupts can be removed by using the [`gpio:remove_int/2`](./apidocs/erlang/eavmlib/gpio.md#remove_int2) function.
 
 Use the [`gpio:close/1`](./apidocs/erlang/eavmlib/gpio.md#close1) function to close the GPIO driver and free any resources in use by it, supplying a reference to a previously opened GPIO driver instance.  Any references to the closed GPIO instance are no longer valid after a successful call to this function, and all interrupts will be removed.
 
-    %% erlang
-    ok = gpio:close(GPIO).
+```erlang
+ok = gpio:close(GPIO).
+```
 
 Since only one instance of the GPIO driver is allowed, you may also simply use [`gpio:stop/0`](./apidocs/erlang/eavmlib/gpio.md#stop0) to remove all interrupts, free the resources, and close the GPIO driver port.
 
-    %% erlang
-    ok = gpio:stop().
-
+```erlang
+ok = gpio:stop().
+```
 
 ### I2C
 
 The [`i2c` module](./apidocs/erlang/eavmlib/i2c.md) encapsulates functionality associated with the 2-wire Inter-Integrated Circuit (I2C) interface.
 
-> Note.  Information about the ESP32 I2C interface can be found in the IDF SDK [I2C Documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/i2c.html).
+```{seealso}
+Information about the ESP32 I2C interface can be found in the IDF SDK [I2C Documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/i2c.html).
+```
 
 The AtomVM I2C implementation uses the AtomVM Port mechanism and must be initialized using the [`i2c:open/1`](./apidocs/erlang/eavmlib/i2c.md#open1) function.  The single parameter contains a properties list, with the following elements:
 
@@ -1204,10 +1379,9 @@ The AtomVM I2C implementation uses the AtomVM Port mechanism and must be initial
 
 For example,
 
-    %% erlang
-    I2C = i2c:open([
-        {scl, 21}, {sda, 22}, {clock_speed_hz, 40000}
-    ])
+```erlang
+I2C = i2c:open([{scl, 21}, {sda, 22}, {clock_speed_hz, 40000}]),
+```
 
 Once the port is opened, you can use the returned `I2C` instance to read and write bytes to the attached device.
 
@@ -1222,26 +1396,30 @@ There are two patterns for writing data to an I2C device:
 
 The choice of which pattern to use will depend on the device being communicated with.  For example, some devices require a sequence of write operations to be queued and written in one atomic write, in which case the first pattern is appropriate.  E.g.,
 
-    %% erlang
-    ok = i2c:begin_transmission(I2C),
-    ok = i2c:qwrite_bytes(I2C, DeviceAddress, Register1, <<"some sequence of bytes">>),
-    ok = i2c:qwrite_bytes(I2C, DeviceAddress, Register2, <<"some other of bytes">>),
-    ok = i2c:end_transmission(I2C),
+```erlang
+ok = i2c:begin_transmission(I2C),
+ok = i2c:qwrite_bytes(I2C, DeviceAddress, Register1, <<"some sequence of bytes">>),
+ok = i2c:qwrite_bytes(I2C, DeviceAddress, Register2, <<"some other of bytes">>),
+ok = i2c:end_transmission(I2C),
+```
 
 In other cases, you may just need to write a byte or sequence of bytes in one operation to the device:
 
-    %% erlang
-    ok = i2c:write_bytes(I2C, DeviceAddress, Register1, <<"write it all in one go">>),
+```erlang
+ok = i2c:write_bytes(I2C, DeviceAddress, Register1, <<"write it all in one go">>),
+```
 
 Reading bytes is more straightforward.  Simply use [`i2c:read_bytes/3,4`](./apidocs/erlang/eavmlib/i2c.md#read_bytes3), specifying the port instance, device address, optionally a register, and the number of bytes to read:
 
-    %% erlang
-    {ok, BinaryData} = i2c:read_bytes(I2C, DeviceAddress, Register, Len)
+```erlang
+{ok, BinaryData} = i2c:read_bytes(I2C, DeviceAddress, Register, Len)
+```
 
 To close the I2C driver and free any resources in use by it, use the [`i2c:close/1`](./apidocs/erlang/eavmlib/i2c.md#close1) function, supplying a reference to the I2C driver instance created via [`i2c:open/1`](./apidocs/erlang/eavmlib/i2c.md#open1):
 
-    %% erlang
-    ok = i2c:close(I2C)
+```erlang
+ok = i2c:close(I2C)
+```
 
 Once the I2C driver is closed, any calls to [`i2c` functions](./apidocs/erlang/eavmlib/i2c.md#function-index) using a reference to the I2C driver instance should return with the value `{error, noproc}`.
 
@@ -1249,7 +1427,9 @@ Once the I2C driver is closed, any calls to [`i2c` functions](./apidocs/erlang/e
 
 The [`spi` module](./apidocs/erlang/eavmlib/spi.md) encapsulates functionality associated with the 4-wire Serial Peripheral Interface (SPI) in leader mode.
 
-> Note.  Information about the ESP32 SPI leader mode interface can be found in the IDF SDK [SPI Documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/spi_master.html).
+```{seealso}
+Information about the ESP32 SPI leader mode interface can be found in the IDF SDK [SPI Documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/spi_master.html).
+```
 
 The AtomVM SPI implementation uses the AtomVM Port mechanism and must be initialized using the [`spi:open/1`](./apidocs/erlang/eavmlib/spi.md#open1) function.  The single parameter to this function is a properties list containing two elements:
 
@@ -1278,30 +1458,31 @@ Each device configuration is a properties list containing the following entries:
 
 For example,
 
-    %% erlang
-    SPIConfig = [
-        {bus_config, [
-            {miso, 19},
-            {mosi, 27},
-            {sclk, 5}
-        ]},
-        {device_config, [
-            {my_device_1, [
-                {clock_speed_hz, 1000000},
-                {mode, 0},
-                {cs, 18},
-                {address_len_bits, 8}
-            ]}
-            {my_device_2, [
-                {clock_speed_hz, 1000000},
-                {mode, 0},
-                {cs, 15},
-                {address_len_bits, 8}
-            ]}
+```erlang
+SPIConfig = [
+    {bus_config, [
+        {miso, 19},
+        {mosi, 27},
+        {sclk, 5}
+    ]},
+    {device_config, [
+        {my_device_1, [
+            {clock_speed_hz, 1000000},
+            {mode, 0},
+            {cs, 18},
+            {address_len_bits, 8}
         ]}
-    ],
-    SPI = spi:open(SPIConfig),
-    ...
+        {my_device_2, [
+            {clock_speed_hz, 1000000},
+            {mode, 0},
+            {cs, 15},
+            {address_len_bits, 8}
+        ]}
+    ]}
+],
+SPI = spi:open(SPIConfig),
+...
+```
 
 In the above example, there are two SPI devices, one using pin 18 chip select (named `my_device_1`), and once using pin 15 chip select (named `my_device_2`).
 
@@ -1309,15 +1490,20 @@ Once the port is opened, you can use the returned `SPI` instance, along with the
 
 To read a byte at a given address on the device, use the [`spi:read_at/4`](./apidocs/erlang/eavmlib/spi.md#read_at4) function:
 
-    %% erlang
-    {ok, Byte} = spi:read_at(SPI, DeviceName, Address, 8)
+```erlang
+{ok, Byte} = spi:read_at(SPI, DeviceName, Address, 8)
+```
 
 To write a byte at a given address on the device, use the [`spi_write_at/5`](./apidocs/erlang/eavmlib/spi.md#write_at5) function:
 
-    %% erlang
-    write_at(SPI, DeviceName, Address, 8, Byte)
+```erlang
+write_at(SPI, DeviceName, Address, 8, Byte)
+```
 
-> Note.  The `spi:write_at/5` takes integer values as inputs and the `spi:read_at/4` returns integer values. You may read and write up to 32-bit integer values via these functions.
+```{hint}
+The `spi:write_at/5` takes integer values as inputs and the `spi:read_at/4` returns integer values. You may read and
+write up to 32-bit integer values via these functions.
+```
 
 Consult your local device data sheet for information about various device addresses to read from or write to, and their semantics.
 
@@ -1347,31 +1533,40 @@ The following table enumerates the permissible fields in this structure:
 
 To write a blob of data to the SPI device, for example, you would use:
 
-    WriteData = <<"some binary data">>,
-    ok = spi:write(SPI, DeviceName, #{write_data => WriteData})
+```erlang
+WriteData = <<"some binary data">>,
+ok = spi:write(SPI, DeviceName, #{write_data => WriteData})
+```
 
 To write and simultaneously read back a blob of data to the SPI device, you would use:
 
-    {ok, ReadData} = spi:write_read(SPI, DeviceName, #{write_data => WriteData})
+```erlang
+{ok, ReadData} = spi:write_read(SPI, DeviceName, #{write_data => WriteData})
+```
 
 The size of the returned data is the same as the size of the written data, unless otherwise specified by the `read_bits` field.
 
 Use the [`spi:close/1`](./apidocs/erlang/eavmlib/spi.md#close1) function to close the SPI driver and free any resources in use by it, supplying a reference to a previously opened SPI driver instance.  Any references to the closed SPI instance are no longer valid after a successful call to this function.
 
-    %% erlang
-    ok = spi:close(SPI).
+```erlang
+ok = spi:close(SPI).
+```
 
 ### UART
 
 The [`uart` module](./apidocs/erlang/eavmlib/uart.md) encapsulates functionality associated with the Universal Asynchronous Receiver/Transmitter (UART) interface supported on ESP32 devices.  Some devices, such as NMEA GPS receivers, make use of this interface for communicating with an ESP32.
 
-> Note.  Information about the ESP32 UART interface can be found in the IDF SDK [UART Documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/uart.html).
+```{seealso}
+Information about the ESP32 UART interface can be found in the IDF SDK [UART Documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/uart.html).
+```
 
 The AtomVM UART implementation uses the AtomVM Port mechanism and must be initialized using the [`uart:open/2`](./apidocs/erlang/eavmlib/uart.md#open2) function.
 
 The first parameter indicates the ESP32 UART hardware interface.  Legal values are:
 
-    "UART0" | "UART1" | "UART2"
+```erlang
+"UART0" | "UART1" | "UART2"
+```
 
 The selection of the hardware interface dictates the default RX and TX pins on the ESP32:
 
@@ -1393,27 +1588,31 @@ The second parameter is a properties list, containing the following elements:
 
 For example,
 
-    %% erlang
-    UART = uart:open("UART0", [{speed, 9600}])
+```erlang
+UART = uart:open("UART0", [{speed, 9600}])
+```
 
 Once the port is opened, you can use the returned `UART` instance to read and write bytes to the attached device.
 
 To read data from the UART channel, use the [`uart:read/1`](./apidocs/erlang/eavmlib/uart.md#read1) function.  The return value from this function is a binary:
 
-    %% erlang
-    Bin = uart:read(UART)
+```erlang
+Bin = uart:read(UART)
+```
 
 To write data to the UART channel, use the [`uart_write/2`](./apidocs/erlang/eavmlib/uart.md#write2) function.  The input data is any Erlang I/O list:
 
-    %% erlang
-    uart:write(UART, [<<"any">>, $d, $a, $t, $a, "goes", <<"here">>])
+```erlang
+uart:write(UART, [<<"any">>, $d, $a, $t, $a, "goes", <<"here">>])
+```
 
 Consult your local device data sheet for information about the format of data to be read from or written to the UART channel.
 
 To close the UART driver and free any resources in use by it, use the [`uart:close/1`](./apidocs/erlang/eavmlib/uart.md#close1) function, supplying a reference to the UART driver instance created via `uart:open/2`:
 
-    %% erlang
-    ok = uart:close(UART)
+```erlang
+ok = uart:close(UART)
+```
 
 Once the UART driver is closed, any calls to `uart` functions using a reference to the UART driver instance should return with the value `{error, noproc}`.
 
@@ -1425,37 +1624,36 @@ The LEDC API is encapsulated in the [`ledc` module](./apidocs/erlang/eavmlib/led
 
 The `ledc.hrl` module should be used for common modes, channels, duty cycle resolutions, and so forth.
 
-    %% erlang
-    -include("ledc.hrl").
+```erlang
+-include("ledc.hrl").
 
-    ...
+%% create a 5khz timer
+SpeedMode = ?LEDC_HIGH_SPEED_MODE,
+Channel = ?LEDC_CHANNEL_0,
+ledc:timer_config([
+    {duty_resolution, ?LEDC_TIMER_13_BIT},
+    {freq_hz, 5000},
+    {speed_mode, ?LEDC_HIGH_SPEED_MODE},
+    {timer_num, ?LEDC_TIMER_0}
+]).
 
-    %% create a 5khz timer
-    SpeedMode = ?LEDC_HIGH_SPEED_MODE,
-    Channel = ?LEDC_CHANNEL_0,
-    ledc:timer_config([
-        {duty_resolution, ?LEDC_TIMER_13_BIT},
-        {freq_hz, 5000},
-        {speed_mode, ?LEDC_HIGH_SPEED_MODE},
-        {timer_num, ?LEDC_TIMER_0}
-    ]).
+%% bind pin 2 to this timer in a channel
+ledc:channel_config([
+    {channel, Channel},
+    {duty, 0},
+    {gpio_num, 2},
+    {speed_mode, ?LEDC_HIGH_SPEED_MODE},
+    {hpoint, 0},
+    {timer_sel, ?LEDC_TIMER_0}
+]).
 
-    %% bind pin 2 to this timer in a channel
-    ledc:channel_config([
-        {channel, Channel},
-        {duty, 0},
-        {gpio_num, 2},
-        {speed_mode, ?LEDC_HIGH_SPEED_MODE},
-        {hpoint, 0},
-        {timer_sel, ?LEDC_TIMER_0}
-    ]).
-
-    %% set the duty cycle to 0, and fade up to 16000 over 5 seconds
-    ledc:set_duty(SpeedMode, Channel, 0).
-    ledc:update_duty(SpeedMode, Channel).
-    TargetDuty = 16000.
-    FadeMs = 5000.
-    ok = ledc:set_fade_with_time(SpeedMode, Channel, TargetDuty, FadeMs).
+%% set the duty cycle to 0, and fade up to 16000 over 5 seconds
+ledc:set_duty(SpeedMode, Channel, 0).
+ledc:update_duty(SpeedMode, Channel).
+TargetDuty = 16000.
+FadeMs = 5000.
+ok = ledc:set_fade_with_time(SpeedMode, Channel, TargetDuty, FadeMs).
+```
 
 ## Protocols
 
@@ -1473,7 +1671,12 @@ The ESP32 supports WiFi connectivity as part of the built-in WiFi and Bluetooth 
 
 AtomVM supports these modes of operation via the [`network` module](./apidocs/erlang/eavmlib/network.md), which is used to initialize the network and allow applications to respond to events within the network, such as a network disconnect or reconnect, or a connection to the ESP32 from another device.
 
-> Note. Establishment and maintenance of network connections on roaming devices is a complex and subtle art, and the AtomVM `network` module is designed to accommodate as many IoT scenarios as possible.  This section of the programmer's guide is deliberately brief and only addresses the most basic scenarios.  For a more detailed explanation of the AtomVM `network` module and its many use-cases, please refer to the [AtomVM Network Programming Guide](./network-programming-guide.md).
+```{seealso}
+Establishment and maintenance of network connections on roaming devices is a complex and subtle art, and the AtomVM
+`network` module is designed to accommodate as many IoT scenarios as possible.  This section of the programmer's guide
+is deliberately brief and only addresses the most basic scenarios.  For a more detailed explanation of the AtomVM
+`network` module and its many use-cases, please refer to the [AtomVM Network Programming Guide](./network-programming-guide.md).
+```
 
 #### STA mode
 
@@ -1489,24 +1692,28 @@ The station mode configuration supports the following options:
 | `psk` | `string() \| binary()` | yes, if network is encrypted | - | WiFi AP password |
 | `dhcp_hostname` | `string() \| binary()` | no | `atomvm-<MAC>` where `<MAC>` is the factory-assigned MAC-address of the device | DHCP hostname for the connecting device |
 
-> Note.  The WiFi network to which you are connecting must support DHCP and IPv4.  IPv6 addressing is not yet supported on AtomVM.
+```{important}
+The WiFi network to which you are connecting must support DHCP and IPv4. 
+IPv6 addressing is not yet supported on AtomVM.
+```
 
 If the ESP32 device connects to the specified network successfully, the device's assigned address, netmask, and gateway address will be returned in an `{ok, ...}` tuple; otherwise, an error is returned.
 
 For example:
 
-    %% erlang
-    Config = [
-        {ssid, <<"myssid">>},
-        {psk,  <<"mypsk">>},
-        {dhcp_hostname, <<"mydevice">>}
-    ],
-    case network:wait_for_sta(Config, 15000) of
-        {ok, {Address, _Netmask, _Gateway}} ->
-            io:format("Acquired IP address: ~p~n", [Address]);
-        {error, Reason} ->
-            io:format("Network initialization failed: ~p~n", [Reason])
-    end
+```erlang
+Config = [
+    {ssid, <<"myssid">>},
+    {psk,  <<"mypsk">>},
+    {dhcp_hostname, <<"mydevice">>}
+],
+case network:wait_for_sta(Config, 15000) of
+    {ok, {Address, _Netmask, _Gateway}} ->
+        io:format("Acquired IP address: ~p~n", [Address]);
+    {error, Reason} ->
+        io:format("Network initialization failed: ~p~n", [Reason])
+end
+```
 
 Once connected to a WiFi network, you may begin TCP or UDP networking, as described in more detail below.
 
@@ -1531,16 +1738,17 @@ If the ESP32 device starts the AP network successfully, the `ok` atom is returne
 
 For example:
 
-    %% erlang
-    Config = [
-        {psk,  <<"mypsk">>}
-    ],
-    case network:wait_for_ap(Config, 15000) of
-        ok ->
-            io:format("AP network started at 192.168.4.1~n");
-        {error, Reason} ->
-            io:format("Network initialization failed: ~p~n", [Reason])
-    end
+```erlang
+Config = [
+    {psk,  <<"mypsk">>}
+],
+case network:wait_for_ap(Config, 15000) of
+    ok ->
+        io:format("AP network started at 192.168.4.1~n");
+    {error, Reason} ->
+        io:format("Network initialization failed: ~p~n", [Reason])
+end
+```
 
 Once the WiFi network is started, you may begin TCP or UDP networking, as described in more detail below.
 
@@ -1558,105 +1766,125 @@ For information about how to use SNTP to synchronize the clock on your device, s
 
 AtomVM supports network programming using the User Datagram Protocol (UDP) via the [`gen_udp` module](./apidocs/erlang/estdlib/gen_udp).  This modules obeys the syntax and semantics of the Erlang/OTP [`gen_udp`](https://erlang.org/doc/man/gen_udp.html) interface.
 
-> Note.  Not all of the Erlang/OTP `gen_udp` functionality is implemented in AtomVM.  For details, consult the [AtomVM API documentation](./apidocs/erlang/estdlib/gen_udp.md).
+```{attention}
+Not all of the Erlang/OTP `gen_udp` functionality is implemented in AtomVM.  For details, consult the
+[AtomVM API documentation](./apidocs/erlang/estdlib/gen_udp.md).
+```
 
 To open a UDP port, use the [`gen_udp:open/1,2`](./apidocs/erlang/estdlib/gen_udp.md#open1) function.  Supply a port number, and if your application plans to receive UDP messages, specify that the port is active via the `{active, true}` property in the optional properties list.
 
 For example:
 
-    %% erlang
-    Port = 44404,
-    case gen_udp:open(Port, [{active, true}, binary]) of
-        {ok, Socket} ->
-            {ok, SockName} = inet:sockname(Socket)
-            io:format("Opened UDP socket on ~p.~n", [SockName])
-        Error ->
-            io:format("An error occurred opening UDP socket: ~p~n", [Error])
-    end
+```erlang
+Port = 44404,
+case gen_udp:open(Port, [{active, true}, binary]) of
+    {ok, Socket} ->
+        {ok, SockName} = inet:sockname(Socket)
+        io:format("Opened UDP socket on ~p.~n", [SockName])
+    Error ->
+        io:format("An error occurred opening UDP socket: ~p~n", [Error])
+end
+```
 
 If the port is active, you can receive UDP messages in your application.  They will be delivered as a 5-tuple, starting with the `udp` atom, and containing the socket, address and port from which the message was sent, as well as the datagram packet, itself, as a list (by default) or a binary. To choose the format, pass `list` or `binary` in options, as with Erlang/OTP.
 
-    %% erlang
-    receive
-        {udp, _Socket, Address, Port, Packet} ->
-            io:format("Received UDP packet ~p from address ~p port ~p~n", [Packet, Address, Port])
-    end,
-
+```erlang
+receive
+    {udp, _Socket, Addr, Port, Packet} ->
+        io:format("Received UDP packet ~p from address ~p port ~p~n", [Packet, Addr, Port])
+end,
+```
 
 With a reference to a UDP `Socket`, you can send messages to a target UDP endpoint using the [`gen_udp:send/4`](./apidocs/erlang/estdlib/gen_udp.md#send4) function.  Specify the UDP socket returned from `gen_udp:open/1,2`, the address (as a 4-tuple of octets), port number, and the datagram packet to send:
 
-    %% erlang
-    Packet = <<":アトムＶＭ">>,
-    Address = {192, 168, 1, 101},
-    Port = 44404,
-    case gen_udp:send(Socket, Address, Port, Packet) of
-        ok ->
-            io:format("Sent ~p~n", [Packet]);
-        Error ->
-            io:format("An error occurred sending a packet: ~p~n", [Error])
-    end
+```erlang
+Packet = <<":アトムＶＭ">>,
+Address = {192, 168, 1, 101},
+Port = 44404,
+case gen_udp:send(Socket, Address, Port, Packet) of
+    ok ->
+        io:format("Sent ~p~n", [Packet]);
+    Error ->
+        io:format("An error occurred sending a packet: ~p~n", [Error])
+end
+```
 
-> Note.  IPv6 networking is not currently supported in AtomVM.
+```{important}
+IPv6 networking is not currently supported in AtomVM.
+```
 
 ### TCP
 
 AtomVM supports network programming using the Transport Connection Protocol (TCP) via the [`gen_tcp` module](./apidocs/erlang/estdlib/gen_tcp.md).  This modules obeys the syntax and semantics of the Erlang/OTP [`gen_tcp`](https://erlang.org/doc/man/gen_tcp.html) interface.
 
-> Note.  Not all of the Erlang/OTP `gen_tcp` functionality is implemented in AtomVM.  For details, consults the [AtomVM API documentation](./apidocs/erlang/estdlib/gen_tcp.md).
+```{attention}
+Not all of the Erlang/OTP `gen_tcp` functionality is implemented in AtomVM.  For details, consults the
+[AtomVM API documentation](./apidocs/erlang/estdlib/gen_tcp.md).
+```
 
 #### Server-side TCP
 
 Server side TCP requires opening a listening socket, and then waiting to accept connections from remote clients.  Once a connection is established, the application may then use a combination of sending and receiving packets over the established connection to or from the remote client.
 
-> Note.  Programming TCP on the server-side using the [`gen_tcp`](./apidocs/erlang/estdlib/gen_tcp.md) interface is a subtle art, and this portion of the documentation will not go into all of the design choices available when designing a TCP application.
+```{attention}
+Programming TCP on the server-side using the [`gen_tcp`](./apidocs/erlang/estdlib/gen_tcp.md) interface is a subtle
+art, and this portion of the documentation will not go into all of the design choices available when designing a TCP
+application.
+```
 
 Start by opening a listening socket using the [`gen_tcp:listen/2`](./apidocs/erlang/estdlib/gen_tcp.md#listen2) function.  Specify the port number on which the TCP server should be listening:
 
-    %% erlang
-    case gen_tcp:listen(44405, []) of
-        {ok, ListenSocket} ->
-            {ok, SockName} = inet:sockname(Socket),
-            io:format("Listening for connections at address ~p.~n", [SockName]),
-            spawn(fun() -> accept(ListenSocket) end);
-        Error ->
-            io:format("An error occurred listening: ~p~n", [Error])
-    end.
+```erlang
+case gen_tcp:listen(44405, []) of
+    {ok, ListenSocket} ->
+        {ok, SockName} = inet:sockname(Socket),
+        io:format("Listening for connections at address ~p.~n", [SockName]),
+        spawn(fun() -> accept(ListenSocket) end);
+    Error ->
+        io:format("An error occurred listening: ~p~n", [Error])
+end.
+```
 
 In this particular example, the server will spawn a new process to wait to accept a connection from a remote client, by calling the [`gen_tcp:accept/1`](./apidocs/erlang/estdlib/gen_tcp.md#accept1) function, passing in a reference to the listening socket.  This function will block until a client has established a connection with the server.
 
 When a client connects, the function will return a tuple `{ok, Socket}`, where `Socket` is a reference to the connection between the client and server:
 
-    %% erlang
-    accept(ListenSocket) ->
-        io:format("Waiting to accept connection...~n"),
-        case gen_tcp:accept(ListenSocket) of
-            {ok, Socket} ->
-                {ok, SockName} = inet:sockname(Socket),
-                {ok, Peername} = inet:peername(Socket),
-                io:format("Accepted connection.  local: ~p peer: ~p~n", [SockName, Peername]),
-                spawn(fun() -> accept(ListenSocket) end),
-                echo();
-            Error ->
-                io:format("An error occurred accepting connection: ~p~n", [Error])
-        end.
+```erlang
+accept(ListenSocket) ->
+    io:format("Waiting to accept connection...~n"),
+    case gen_tcp:accept(ListenSocket) of
+        {ok, Socket} ->
+            {ok, SockName} = inet:sockname(Socket),
+            {ok, Peername} = inet:peername(Socket),
+            io:format("Accepted connection.  local: ~p peer: ~p~n", [SockName, Peername]),
+            spawn(fun() -> accept(ListenSocket) end),
+            echo();
+        Error ->
+            io:format("An error occurred accepting connection: ~p~n", [Error])
+    end.
+```
 
-> Note that immediately after accepting a connection, this example code will spawn a new process to accept any new connections from other clients.
+```{note}
+Note that immediately after accepting a connection, this example code will spawn a new process to accept any new
+connections from other clients.
+```
 
 The socket returned from `gen_tcp:accept/1` can then be used to send and receive messages to the connected client:
 
-    %% erlang
-    echo() ->
-        io:format("Waiting to receive data...~n"),
-        receive
-            {tcp_closed, _Socket} ->
-                io:format("Connection closed.~n"),
-                ok;
-            {tcp, Socket, Packet} ->
-                {ok, Peername} = inet:peername(Socket),
-                io:format("Received packet ~p from ~p.  Echoing back...~n", [Packet, Peername]),
-                gen_tcp:send(Socket, Packet),
-                echo()
-        end.
+```erlang
+echo() ->
+    io:format("Waiting to receive data...~n"),
+    receive
+        {tcp_closed, _Socket} ->
+            io:format("Connection closed.~n"),
+            ok;
+        {tcp, Socket, Packet} ->
+            {ok, Peername} = inet:peername(Socket),
+            io:format("Received packet ~p from ~p.  Echoing back...~n", [Packet, Peername]),
+            gen_tcp:send(Socket, Packet),
+            echo()
+    end.
+```
 
 In this case, the server program will continuously echo the received input back to the client, until the client closes the connection.
 
@@ -1670,35 +1898,37 @@ Start by opening a connection to another TCP endpoint using the [`gen_tcp:connec
 
 For example:
 
-    %% erlang
-    Address = {192, 168, 1, 101},
-    Port = 44405,
-    case gen_tcp:connect(Address, Port, []) of
-        {ok, Socket} ->
-            {ok, SockName} = inet:sockname(Socket),
-            {ok, Peername} = inet:peername(Socket),
-            io:format("Connected to ~p from ~p~n", [Peername, SockName]);
-        Error ->
-            io:format("An error occurred connecting: ~p~n", [Error])
-    end
+```erlang
+Address = {192, 168, 1, 101},
+Port = 44405,
+case gen_tcp:connect(Address, Port, []) of
+    {ok, Socket} ->
+        {ok, SockName} = inet:sockname(Socket),
+        {ok, Peername} = inet:peername(Socket),
+        io:format("Connected to ~p from ~p~n", [Peername, SockName]);
+    Error ->
+        io:format("An error occurred connecting: ~p~n", [Error])
+end
+```
 
 Once a connection is established, you can use a combination of
 
-    %% erlang
-    SendPacket = <<":アトムＶＭ">>,
-    case gen_tcp:send(Socket, SendPacket) of
-        ok ->
-            receive
-                {tcp_closed, _Socket} ->
-                    io:format("Connection closed.~n"),
-                    ok;
-                {tcp, _Socket, ReceivedPacket} ->
-                    {ok, Peername} = inet:peername(Socket),
-                    io:format("Received ~p from ~p~n", [ReceivedPacket, Peername])
-            end;
-        Error ->
-            io:format("An error occurred sending a packet: ~p~n", [Error])
-    end.
+```erlang
+SendPacket = <<":アトムＶＭ">>,
+case gen_tcp:send(Socket, SendPacket) of
+    ok ->
+        receive
+            {tcp_closed, _Socket} ->
+                io:format("Connection closed.~n"),
+                ok;
+            {tcp, _Socket, ReceivedPacket} ->
+                {ok, Peername} = inet:peername(Socket),
+                io:format("Received ~p from ~p~n", [ReceivedPacket, Peername])
+        end;
+    Error ->
+        io:format("An error occurred sending a packet: ~p~n", [Error])
+end.
+```
 
 For more information about the `gen_tcp` client interface, consults the [AtomVM API documentation](./apidocs/erlang/estdlib/gen_tcp.md).
 
@@ -1710,26 +1940,29 @@ The OTP socket APIs are relatively new (they were introduced in OTP 22 and have 
 
 The following types are relevant to this interface and are referenced in the remainder of this section:
 
-    -type domain() :: inet.
-    -type type() :: stream | dgram.
-    -type protocol() :: tcp | udp.
-    -type socket() :: any().
-    -type sockaddr() :: sockaddr_in().
-    -type sockaddr_in() :: #{
-        family := inet,
-        port := port_number(),
-        addr := any | loopback | in_addr()
-    }.
-    -type in_addr() :: {0..255, 0..255, 0..255, 0..255}.
-    -type port_number() :: 0..65535.
-    -type socket_option() :: {socket, reuseaddr} | {socket, linger}.
+```erlang
+-type domain() :: inet.
+-type type() :: stream | dgram.
+-type protocol() :: tcp | udp.
+-type socket() :: any().
+-type sockaddr() :: sockaddr_in().
+-type sockaddr_in() :: #{
+    family := inet,
+    port := port_number(),
+    addr := any | loopback | in_addr()
+}.
+-type in_addr() :: {0..255, 0..255, 0..255, 0..255}.
+-type port_number() :: 0..65535.
+-type socket_option() :: {socket, reuseaddr} | {socket, linger}.
+```
 
 Create a socket using the [`socket:open/3`](./apidocs/erlang/estdlib/socket.md#open3) function, providing a domain, type, and protocol.  Currently, AtomVM supports the `inet` domain, `stream` and `dgram` types, and `tcp` and `udp` protocols.
 
 For example:
 
-    %% erlang
-    {ok, Socket} = socket:open(inet, stream, tcp),
+```erlang
+{ok, Socket} = socket:open(inet, stream, tcp),
+```
 
 ### Server-side TCP Socket Programming
 
@@ -1745,23 +1978,29 @@ This map may contain the following entries:
 
 For example:
 
-    %% erlang
-    PortNumber = 8080,
-    ok = socket:bind(Socket, #{family => inet, addr => any, port => PortNumber}),
+```erlang
+PortNumber = 8080,
+ok = socket:bind(Socket, #{family => inet, addr => any, port => PortNumber}),
+```
 
 To listen for connections, use the [`socket:listen/1`](./apidocs/erlang/estdlib/socket.md#listen1) function:
 
-    %% erlang
-    ok = socket:listen(Socket),
+```erlang
+ok = socket:listen(Socket),
+```
 
 Once your socket is listening on an interface and port, you can wait to accept a connection from an incoming client using the [`socket:accept/1`](./apidocs/erlang/estdlib/socket.md#accept1) function.
 
 This function will block the current execution context (i.e., Erlang process) until a client establishes a TCP connection with the server:
 
-    %% erlang
-    {ok, ConnectedSocket} = socket:accept(Socket),
+```erlang
+{ok, ConnectedSocket} = socket:accept(Socket),
+```
 
-> Note.  Many applications will spawn processes to listen for socket connections, so that the main execution context of your application is not blocked.
+```{tip}
+Many applications will spawn processes to listen for socket connections, so that the main execution context of your
+application is not blocked.
+```
 
 ### Client-side TCP Socket Programming
 
@@ -1775,8 +2014,9 @@ This map may contain the following entries:
 |  `addr` | `in_addr()` \| `loopback` | | The address to which to connect. The `loopback` value will connect the socket to the loopback interface on the device. |
 |  `port` | `port_num()` |  | The port to which to connect the socket. |
 
-    %% erlang
-    ok = socket:connect(Socket, #{family => inet, addr => loopback, port => 44404})
+```erlang
+ok = socket:connect(Socket, #{family => inet, addr => loopback, port => 44404})
+```
 
 ### Sending and Receiving Data
 
@@ -1786,22 +2026,23 @@ The `socket:send/2` function can take a binary blob of data or an io-list, conta
 
 For example, a process that receives data and echos it back to the connected peer might be implemented as follows:
 
-    %% erlang
-    case socket:recv(ConnectedSocket) of
-        {ok, Data} ->
-            case socket:send(ConnectedSocket, Data) of
-                ok ->
-                    io:format("All data was sent~n");
-                {ok, Rest} ->
-                    io:format("Some data was sent.  Remaining: ~p~n", [Rest]);
-                {error, Reason} ->
-                    io:format("An error occurred sending data: ~p~n", [Reason])
-            end;
-        {error, closed} ->
-            io:format("Connection closed.~n");
-        {error, Reason} ->
-            io:format("An error occurred waiting on a connected socket: ~p~n", [Reason])
-    end.
+```erlang
+case socket:recv(ConnectedSocket) of
+    {ok, Data} ->
+        case socket:send(ConnectedSocket, Data) of
+            ok ->
+                io:format("All data was sent~n");
+            {ok, Rest} ->
+                io:format("Some data was sent.  Remaining: ~p~n", [Rest]);
+            {error, Reason} ->
+                io:format("An error occurred sending data: ~p~n", [Reason])
+        end;
+    {error, closed} ->
+        io:format("Connection closed.~n");
+    {error, Reason} ->
+        io:format("An error occurred waiting on a connected socket: ~p~n", [Reason])
+end.
+```
 
 The `socket:recv/1` function will block the current process until a packet has arrived or until the local or remote socket has been closed, or some other error occurs.
 
@@ -1813,24 +2054,31 @@ You can obtain information about connected sockets using the [`socket:sockname/1
 
 For example:
 
-    {ok, #{addr := LocalAddress, port := LocalPort}} = socket:sockname(ConnectedSocket),
-    {ok, #{addr := PeerAddress, port := PeerPort}} = socket:peername(ConnectedSocket),
+```erlang
+{ok, #{addr := LocalAddress, port := LocalPort}} = socket:sockname(ConnectedSocket),
+{ok, #{addr := PeerAddress, port := PeerPort}} = socket:peername(ConnectedSocket),
+```
 
 ### Closing and Shutting down Sockets
 
 Use the [`socket:close/1`](./apidocs/erlang/estdlib/socket.md#close1) function to close a connected socket:
 
-    %% erlang
-    ok = socket:close(ConnectedSocket)
+```erlang
+ok = socket:close(ConnectedSocket)
+```
 
-> Note.  Data that has been buffered by the operating system may not be delivered, when a socket is closed via the `close/1` operation.
+```{attention}
+Data that has been buffered by the operating system may not be delivered, when a socket is closed via the `close/1`
+operation.
+```
 
 For a more controlled way to close full-duplex connected sockets, use the [`socket:shutdown/2`](./apidocs/erlang/estdlib/socket.md#shutdown2) function.  Provide the atom `read` if you only want to shut down the reads on the socket, `write` if you want to shut down writes on the socket, or `read_write` to shut down both reads and writes on a socket.  Subsequent reads or writes on the socket will result in an `einval` error on the calls, depending on how the socket has been shut down.
 
 For example:
 
-    %% erlang
-    ok = socket:shutdown(Socket, read_write)
+```erlang
+ok = socket:shutdown(Socket, read_write)
+```
 
 ### Setting Socket Options
 
@@ -1846,10 +2094,11 @@ Currently, the following options are supported:
 
 For example:
 
-    %% erlang
-    ok = socket:setopt(Socket, {socket, reuseaddr}, true),
-    ok = socket:setopt(Socket, {socket, linger}, #{onoff => true, linger => 0}),
-    ok = socket:setopt(Socket, {otp, rcvbuf}, 1024),
+```erlang
+ok = socket:setopt(Socket, {socket, reuseaddr}, true),
+ok = socket:setopt(Socket, {socket, linger}, #{onoff => true, linger => 0}),
+ok = socket:setopt(Socket, {otp, rcvbuf}, 1024),
+```
 
 ### UDP Socket Programming
 
@@ -1859,45 +2108,52 @@ To use UDP sockets, open a socket using the `dgram` type and `udp` protocol.
 
 For example:
 
-    %% erlang
-    {ok, Socket} = socket:open(inet, dgram, udp)
+```erlang
+{ok, Socket} = socket:open(inet, dgram, udp)
+```
 
 To listen for UDP connections, use the [`socket:bind/2`](./apidocs/erlang/estdlib/socket.md#bind2) function, as described above.
 
 For example:
 
-    %% erlang
-    PortNumber = 512,
-    ok = socket:bind(Socket, #{family => inet, addr => any, port => PortNumber}),
+```erlang
+PortNumber = 512,
+ok = socket:bind(Socket, #{family => inet, addr => any, port => PortNumber}),
+```
 
 Use the [`socket:recvfrom/1`](./apidocs/erlang/estdlib/socket.md#recvfrom1) function to receive UDP packets from clients on your network.  When a packet arrives, this function will return the received packet, as well as the address of the client that sent the packet.
 
 For example:
 
-    %% erlang
-    case socket:recvfrom(dSocket) of
-        {ok, {From, Packet}} ->
-            io:format("Received packet ~p from ~p~n", [Packet, From]);
-        {error, Reason} ->
-            io:format("Error on recvfrom: ~p~n", [Reason])
-    end;
+```erlang
+case socket:recvfrom(dSocket) of
+    {ok, {From, Packet}} ->
+        io:format("Received packet ~p from ~p~n", [Packet, From]);
+    {error, Reason} ->
+        io:format("Error on recvfrom: ~p~n", [Reason])
+end;
+```
 
-> Note.  The `socket:recvfrom/1` function will block the current process until a packet has arrived or until the local or remote socket has been closed, or some other error occurs.
+```{important}
+The `socket:recvfrom/1` function will block the current process until a packet has arrived or until the local or
+remote socket has been closed, or some other error occurs.
+```
 
 Use the [`socket:sendto/3`](./apidocs/erlang/estdlib/socket.md#sendto3) function to send UDP packets to a specific destination.  Specify the socket, data, and destination address you would like the packet to be delivered to.
 
 For example:
 
-    %% erlang
-    Dest = #{family => inet, addr => loopback, port => 512},
-    case socket:sendto(Socket, Data, Dest) of
-        ok ->
-            io:format("Send packet ~p to ~p.~n", [Data, Dest]);
-        {ok, Rest} ->
-            io:format("Send packet ~p to ~p.  Remaining: ~p~n", [Data, Dest, Rest]);
-        {error, Reason} ->
-            io:format("An error occurred sending a packet: ~p~n", [Reason])
-    end
+```erlang
+Dest = #{family => inet, addr => loopback, port => 512},
+case socket:sendto(Socket, Data, Dest) of
+    ok ->
+        io:format("Send packet ~p to ~p.~n", [Data, Dest]);
+    {ok, Rest} ->
+        io:format("Send packet ~p to ~p.  Remaining: ~p~n", [Data, Dest, Rest]);
+    {error, Reason} ->
+        io:format("An error occurred sending a packet: ~p~n", [Reason])
+end
+```
 
 Close a UDP socket just as you would a TCP socket, as described above.
 
@@ -1905,29 +2161,32 @@ Close a UDP socket just as you would a TCP socket, as described above.
 
 You can retrieve information about hostnames and services using the [`net:getaddrinfo/1`](./apidocs/erlang/estdlib/net.md#getaddrinfo1) and  [`net:getaddrinfo/2`](./apidocs/erlang/estdlib/net.md#getaddrinfo2) functions.  The return value is a list of maps each of which contains address information about the host, including its family (`inet`), protocol (`tcp` or `udp`), type (`stream` or `dgram`), and the address, currently an IPv4 tuple.
 
-> Note.  Currently, the `net:getaddrinfo/1,2` functions only supports reporting of IPv4 addresses.
+```{important}
+Currently, the `net:getaddrinfo/1,2` functions only supports reporting of IPv4 addresses.
+```
 
 For example:
 
-    %% erlang
-    {ok, AddrInfos} = net:getaddrinfo("www.atomvm.net"),
+```erlang
+{ok, AddrInfos} = net:getaddrinfo("www.atomvm.net"),
 
-    lists:foreach(
-        fun(AddrInfo) ->
-            #{
-                family := Family,
-                protocol := Protocol,
-                type := Type,
-                address := Address
-            } = AddrInfo,
+lists:foreach(
+    fun(AddrInfo) ->
+        #{
+            family := Family,
+            protocol := Protocol,
+            type := Type,
+            address := Address
+        } = AddrInfo,
 
-            io:format(
-                "family: ~p protocol: ~p type: ~p address: ~p", [Family, Protocol, Type, Address]
-            )
+        io:format(
+            "family: ~p protocol: ~p type: ~p address: ~p", [Family, Protocol, Type, Address]
+        )
 
-        end,
-        AddrInfos
-    ),
+    end,
+    AddrInfos
+),
+```
 
 The `host` parameter can be a domain name (typically) or a dotted pair IPv4 address.
 
@@ -1935,19 +2194,29 @@ The returned map contains the network family (currently, only `inet` is supporte
 
 The address is itself a map, containing the family, port and IPv4 address of the requested host, e.g.,
 
-    #{family => inet, port => 0, addr => {192, 168, 212, 153}}
+```erlang
+#{family => inet, port => 0, addr => {192, 168, 212, 153}}
+```
 
-> Note.  The [OTP documentation](https://www.erlang.org/doc/man/net#type-address_info) states that the address is returned under the `address` key in the address info map.  However, OTP appears to use `addr` as the key.  For compatibility with OTP 22 ff., AtomVM supports both the `address` and `addr` keys in this map (they reference the same inner map).
+```{note}
+The [OTP documentation](https://www.erlang.org/doc/man/net#type-address_info) states that the address is returned
+under the `address` key in the address info map.  However, OTP appears to use `addr` as the key.  For compatibility
+with OTP 22 ff., AtomVM supports both the `address` and `addr` keys in this map (they reference the same inner map).
+```
 
 If you want to narrow the information you get back to a specific service type, you can specify a service name or port number (as a string value) as the second parameter:
 
-    %% erlang
-    {ok, AddrInfos} = net:getaddrinfo("www.atomvm.net", "https"),
-    ...
+```erlang
+{ok, AddrInfos} = net:getaddrinfo("www.atomvm.net", "https"),
+...
+```
 
 Service names are well-known identifiers on the internet, but they may vary from operating system to operating system.  See the `services(3)` man pages for more information.
 
-> Note.  Narrowing results via the service parameter is not supported on all platforms.  In the case where it is not supported, AtomVM will resort to retrying the request without the service parameter.
+```{note}
+Narrowing results via the service parameter is not supported on all platforms.  In the case where it is not
+supported, AtomVM will resort to retrying the request without the service parameter.
+```
 
 ## Where to go from here
 
