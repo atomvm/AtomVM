@@ -73,7 +73,13 @@ find_route(Method, Path, [{Target, Mod, _Opts} | T]) ->
     end.
 
 reply(StatusCode, ReplyBody, Conn) ->
-    reply(StatusCode, ReplyBody, [<<"Content-Type: text/html\r\nConnection: close\r\n">>], Conn).
+    {ok, Conn} = reply(
+        StatusCode, ReplyBody, [<<"Content-Type: text/html\r\nConnection: close\r\n">>], Conn
+    ),
+    Socket = proplists:get_value(socket, Conn),
+    gen_tcp:close(Socket),
+    ClosedConn = [{closed, true} | Conn],
+    {ok, ClosedConn}.
 
 reply(StatusCode, ReplyBody, ReplyHeaders, Conn) ->
     Socket = proplists:get_value(socket, Conn),
