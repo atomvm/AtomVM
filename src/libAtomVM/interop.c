@@ -176,18 +176,32 @@ term interop_proplist_get_value_default(term list, term key, term default_value)
     return default_value;
 }
 
+static InteropFunctionResult size_fold_fun(term t, void *accum)
+{
+    size_t *size = (size_t *) accum;
+    if (term_is_integer(t)) {
+        *size += 1;
+    } else if (term_is_binary(t)) {
+        *size += term_binary_size(t);
+    }
+    return InteropOk;
+}
+
 InteropFunctionResult interop_iolist_size(term t, size_t *size)
 {
+    *size = 0;
+    return interop_iolist_fold(t, size_fold_fun, (void *) size);
+}
+
+InteropFunctionResult interop_iolist_fold(term t, interop_iolist_fold_fun fold_fun, void *accum)
+{
     if (term_is_binary(t)) {
-        *size = term_binary_size(t);
-        return InteropOk;
+        return fold_fun(t, accum);
     }
 
     if (UNLIKELY(!term_is_list(t))) {
         return InteropBadArg;
     }
-
-    unsigned long acc = 0;
 
     struct TempStack temp_stack;
     if (UNLIKELY(temp_stack_init(&temp_stack) != TempStackOk)) {
@@ -201,8 +215,13 @@ InteropFunctionResult interop_iolist_size(term t, size_t *size)
 
     while (!temp_stack_is_empty(&temp_stack)) {
         if (term_is_integer(t)) {
-            acc++;
-            t = temp_stack_pop(&temp_stack);
+            InteropFunctionResult result = fold_fun(t, accum);
+            if (UNLIKELY(result != InteropOk)) {
+                temp_stack_destroy(&temp_stack);
+                return result;
+            } else {
+                t = temp_stack_pop(&temp_stack);
+            }
 
         } else if (term_is_nil(t)) {
             t = temp_stack_pop(&temp_stack);
@@ -215,8 +234,13 @@ InteropFunctionResult interop_iolist_size(term t, size_t *size)
             t = term_get_list_head(t);
 
         } else if (term_is_binary(t)) {
-            acc += term_binary_size(t);
-            t = temp_stack_pop(&temp_stack);
+            InteropFunctionResult result = fold_fun(t, accum);
+            if (UNLIKELY(result != InteropOk)) {
+                temp_stack_destroy(&temp_stack);
+                return result;
+            } else {
+                t = temp_stack_pop(&temp_stack);
+            }
 
         } else {
             temp_stack_destroy(&temp_stack);
@@ -226,7 +250,6 @@ InteropFunctionResult interop_iolist_size(term t, size_t *size)
 
     temp_stack_destroy(&temp_stack);
 
-    *size = acc;
     return InteropOk;
 }
 
