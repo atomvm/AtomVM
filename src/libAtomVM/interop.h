@@ -56,6 +56,7 @@ typedef struct
 char *interop_term_to_string(term t, int *ok);
 char *interop_binary_to_string(term binary);
 char *interop_list_to_string(term list, int *ok);
+char *interop_iolist_to_string(term list, int *ok);
 char *interop_atom_to_string(Context *ctx, term atom);
 term interop_proplist_get_value(term list, term key);
 term interop_proplist_get_value_default(term list, term key, term default_value);
