@@ -25,13 +25,24 @@ set -e
 : "${FLASH_SERIAL_PORT:=/dev/ttyUSB0}"
 : "${FLASH_OFFSET:=0x210000}"
 
-if [ -z "${IDF_PATH}" ]; then
-    echo "ERROR!  IDF_PATH must be set to root of IDF-SDK to pick up esptool."
+ESP_TOOL=`which esptool.py`
+if [ -z ${ESP_TOOL} ]; then
+    echo "ERROR!  esptool.py not found! IDF_PATH must be set to root of IDF-SDK to pick up esptool. Or install the standalone tool."
     exit -1
 fi
 
 usage() {
-    echo "Usage: $0 [-p <port>] [-b <baud>] <avm_file>"
+    echo "Usage: $ ${0} [-p <port>] [-b <baud>] [-o <offset>] [-l] [-h] <avm_file>"
+    echo "Options:"
+    echo "    -p <port> is the port connected to the device (default: /dev/ttyUSB0)"
+    echo "    -b <baud> is the baud rate (default: 115200)"
+    echo "    -o <offset> is the offset into flash to start writing the AVM file"
+    echo "    -l (without offset) may be used to flash the AtomVM core libraries (<avm_file>)."
+    echo "    -h print this help"
+    echo "    <avm-file> is the path to the AVM file"
+    echo ""
+    echo "Note: '-o' and '-l' should not be used together, both options take precidence over FLASH_OFFSET environment variable."
+    echo "      The '-l' option uses the lib.avm partition offset of 0x1D0000"
 }
 
 if [[ $# -lt 1 ]]; then
@@ -39,13 +50,19 @@ if [[ $# -lt 1 ]]; then
     exit -1
 fi
 
-while getopts 'p:b:h' arg; do
+while getopts 'p:b:o:lh' arg; do
     case ${arg} in
         p)
             FLASH_SERIAL_PORT=${OPTARG}
             ;;
         b)
             FLASH_BAUD_RATE=${OPTARG}
+            ;;
+        o)
+            FLASH_OFFSET=${OPTARG}
+            ;;
+        l)
+            FLASH_OFFSET="0x1D0000"
             ;;
         h)
             usage
