@@ -811,49 +811,12 @@ static term nif_erlang_iolist_size_1(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_iolist_to_binary_1(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
-
     term t = argv[0];
-
     if (term_is_binary(t)) {
         return t;
     }
 
-    size_t bin_size;
-    switch (interop_iolist_size(t, &bin_size)) {
-        case InteropOk:
-            break;
-        case InteropMemoryAllocFail:
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        case InteropBadArg:
-            RAISE_ERROR(BADARG_ATOM);
-    }
-
-    char *bin_buf = malloc(bin_size);
-    if (IS_NULL_PTR(bin_buf)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    switch (interop_write_iolist(t, bin_buf)) {
-        case InteropOk:
-            break;
-        case InteropMemoryAllocFail:
-            free(bin_buf);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        case InteropBadArg:
-            free(bin_buf);
-            RAISE_ERROR(BADARG_ATOM);
-    }
-
-    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(bin_size), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        free(bin_buf);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-    term bin_res = term_from_literal_binary(bin_buf, bin_size, &ctx->heap, ctx->global);
-
-    free(bin_buf);
-
-    return bin_res;
+    return nif_erlang_list_to_binary_1(ctx, argc, argv);
 }
 
 static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
@@ -2319,28 +2282,41 @@ static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
     term t = argv[0];
     VALIDATE_VALUE(t, term_is_list);
 
-    int proper;
-    int len = term_list_length(t, &proper);
-    if (UNLIKELY(!proper)) {
-        RAISE_ERROR(BADARG_ATOM);
+    size_t bin_size;
+    switch (interop_iolist_size(t, &bin_size)) {
+        case InteropOk:
+            break;
+        case InteropMemoryAllocFail:
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        case InteropBadArg:
+            RAISE_ERROR(BADARG_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        RAISE_ERROR(BADARG_ATOM);
+    char *bin_buf = malloc(bin_size);
+    if (IS_NULL_PTR(bin_buf)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    //TODO: avoid this copy: just write to binary memory
-    int ok;
-    char *string = interop_list_to_string(argv[0], &ok);
-    if (UNLIKELY(!ok)) {
-        RAISE_ERROR(BADARG_ATOM);
+    switch (interop_write_iolist(t, bin_buf)) {
+        case InteropOk:
+            break;
+        case InteropMemoryAllocFail:
+            free(bin_buf);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        case InteropBadArg:
+            free(bin_buf);
+            RAISE_ERROR(BADARG_ATOM);
     }
 
-    term bin_term = term_from_literal_binary(string, len, &ctx->heap, ctx->global);
+    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(bin_size), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        free(bin_buf);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term bin_res = term_from_literal_binary(bin_buf, bin_size, &ctx->heap, ctx->global);
 
-    free(string);
+    free(bin_buf);
 
-    return bin_term;
+    return bin_res;
 }
 
 static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
