@@ -544,7 +544,7 @@ is 8N1 with no flow control.
 * `Erlang/OTP`
 * `Elixir` (optional)
 
-## AtomVM build steps
+### AtomVM build steps
 
     cd src/platforms/rp2040/
     mkdir build
@@ -554,7 +554,7 @@ is 8N1 with no flow control.
 
 > You may want to build with option `AVM_REBOOT_ON_NOT_OK` so Pico restarts on error.
 
-## libAtomVM build steps
+### libAtomVM build steps
 
 Build of standard libraries is part of the generic unix build.
 
@@ -564,3 +564,93 @@ From the root of the project:
     cd build
     cmake .. -G Ninja
     ninja
+
+## Building for NodeJS/Web
+
+Two different builds are possible, depending on link options: for NodeJS and
+for the web browser.
+
+### Prerequisites
+
+* [emscripten SDK](https://emscripten.org)
+* `cmake`
+* Erlang/OTP
+* Elixir (optional)
+
+### Building for NodeJS
+
+This is the default. Execute the following commands:
+
+    cd src/platforms/emscripten/
+    mkdir build
+    cd build
+    emcmake cmake ..
+    emmake make -j
+
+AtomVM can then be invoked as on Generic Unix with node:
+
+    node ./src/AtomVM.js
+
+### Running tests with NodeJS
+
+NodeJS build currently does not have dedicated tests. However, you can run
+AtomVM library tests that do not depend on unimplemented APIs.
+
+Build them first by building AtomVM for Generic Unix (see above.)
+Then execute the tests with:
+
+    cd src/platforms/emscripten/build/
+    node ./src/AtomVM.js ../../../../build/tests/libs/eavmlib/test_eavmlib.avm
+    node ./src/AtomVM.js ../../../../build/tests/libs/alisp/test_alisp.avm
+
+### Building for the web
+
+Execute the following commands:
+
+    cd src/platforms/emscripten/
+    mkdir build
+    cd build
+    emcmake cmake .. -DAVM_EMSCRIPTEN_ENV=web
+    emmake make -j
+
+### Running tests with Cypress
+
+AtomVM WebAssembly port on the web uses SharedArrayBuffer feature which is
+restricted by browsers. Tests require an HTTP server that returns the proper
+HTTP headers.
+
+Additionally, tests require [Cypress](https://www.cypress.io). Plus, because of
+a current [bug in Cypress](https://github.com/cypress-io/cypress/issues/19912),
+tests only run with Chrome-based browsers except Electron (Chromium, Chrome or Edge).
+
+Build first AtomVM for Generic Unix (see above). This will include the web
+server.
+
+Then run the web server with:
+
+    cd build
+    ./src/AtomVM examples/emscripten/wasm_webserver.avm
+
+In another terminal, compile specific test modules that are not part of examples.
+
+    cd src/platforms/emscripten/build/
+    make emscripten_erlang_test_modules
+
+Then run tests with Cypress with:
+
+    cd src/platforms/emscripten/tests/
+    npm install cypress
+    npx cypress run --browser chrome
+
+You can alternatvely specify: `chromium` or `edge` depending on what is installed.
+
+Alternatively, on Linux, you can run tests with docker:
+
+    cd src/platforms/emscripten/tests/
+    docker run --network host -v $PWD:/mnt -w /mnt cypress/included:12.17.1 --browser chrome
+
+Or you can open Cypress to interactively run selected test suites.
+
+    cd src/platforms/emscripten/tests/
+    npm install cypress
+    npx cypress open

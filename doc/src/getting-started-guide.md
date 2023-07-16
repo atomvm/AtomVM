@@ -332,3 +332,31 @@ The following resources may be useful for understanding how to develop Erlang or
 
 * [Example Programs](./example-programs.md)
 * [Programmers Guide](./programmers-guide.md)
+
+
+## Getting Started with AtomVM WebAssembly port.
+
+AtomVM may be run on platforms with NodeJS from the AtomVM.js file (with its companion AtomVM.wasm file).
+
+Currently, these files must be built and installed from source.
+
+> See the AtomVM [Build Instructions](./build-instructions.md) for instructions about how to build AtomVM WebAssembly port.
+
+AtomVM may also be run in modern browsers (Safari, Chrome and Chrome-based, Firefox) from the AtomVM.js, AtomVM.worker.js and AtomVM.wasm files.
+
+Currently, these files must be built and installed from source. They also need to be installed on a web server that send `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers as explained in [Mozilla's documentation](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer#security_requirements).
+
+AtomVM comes with a toy web server you can use and run with AtomVM built for Generic Unix with:
+
+```
+./src/AtomVM examples/emscripten/wasm_webserver.avm
+```
+
+This web server serves HTML files from `examples/emscripten/` which you can copy to a webserver along with binaries and built files.
+
+## Where to go from here
+
+The following resources may be useful for understanding how to develop Erlang or Elixir applications for the AtomVM platform:
+
+* [Example Programs](./example-programs.md)
+* [Programmers Guide](./programmers-guide.md)

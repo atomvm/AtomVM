@@ -18,25 +18,19 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-cmake_minimum_required(VERSION 3.13)
+project(tests_emscripten)
 
-project(AtomVM)
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../CMakeModules")
+function(compile_erlang module_name)
+    add_custom_command(
+        OUTPUT ${module_name}.beam
+        COMMAND erlc ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
+        COMMENT "Compiling ${module_name}.erl"
+    )
+endfunction()
 
-# Include an error in case the user forgets to specify emscripten toolchain
-if (NOT CMAKE_TOOLCHAIN_FILE)
-    message(FATAL_ERROR "Cross compiling only. Please use emcmake cmake or use -DCMAKE_TOOLCHAIN_FILE")
-endif ()
+compile_erlang(test_call)
 
-# Options that make sense for this platform
-set(AVM_DISABLE_SMP ON FORCE)
-option(AVM_USE_32BIT_FLOAT "Use 32 bit floats." OFF)
-option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
-
-set(
-    PLATFORM_LIB_SUFFIX
-    ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
+add_custom_target(emscripten_erlang_test_modules DEPENDS
+    test_call.beam
 )
-
-add_subdirectory(src)
-add_subdirectory(tests/src)

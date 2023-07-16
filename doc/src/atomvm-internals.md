@@ -148,3 +148,39 @@ This list is populated at code load time.  When a line reference is encountered 
 The memory cost of this list is `num_line_refs * sizeof(struct LineRefOffset)`, for each loaded module, or 0, if there is no `Line` chunk in the associated BEAM file.
 
 ### Raw Stacktraces
+
+## AtomVM WebAssembly port
+
+WebAssembly or Wasm port of AtomVM relies on Emscripten SDK and library. It currently is single threaded (SMP is disabled), yet it uses pthread library for synchronization and most importantly to sleep when Erlang processes are not running (to not waste CPU cycles).
+
+### NodeJS environment build
+
+The NodeJS environment build of this port is relatively straightforward, featuring NODERAWFS which means it can access files directly like node does.
+
+### Web environment build
+
+The Web environment build of this port is slightly more complex.
+
+Regarding files, `main` function can load modules (beam or AVM packages) using FetchAPI, which means they can be served by the same HTTP server. This is a fallback and users can preload files using Emscripten `file_packager` tool.
+
+The port also uses Emscripten's proxy-to-pthread feature which means AtomVM's `main` function is run in a web worker. The rationale is the browser thread (or main thread) with WebAssembly cannot run a loop such as AtomVM's schedulers. Web workers typically cannot manipulate the DOM and do other things that only the browser's main thread can do. For this purpose, Erlang processes can call `emscripten:run_script/2` function which dispatches the Javascript to execute to the main thread, waiting for completion (with `[main_thread]`) or not waiting for completion  (with `[main_thread, async]`). Waiting for completion of a script on the main thread does not block the Erlang scheduler, other Erlang processes can be scheduled. Execution of Javascript on the worker thread, however, does block the scheduler.
+
+Javascript code can also send messages to Erlang processes using `call` and `cast` functions from `main.c`. These functions are actually wrapped in `atomvm.pre.js`. Usage is demonstrated by `call_cast.html` example.
+
+Cast is straightforward: the message is enqueued and picked up by the scheduler. It is freed when it is processed.
+
+Call allows Javascript code to wait for the result and is based on Javascript promises (related to `async`/`await` syntax).
+
+- A promise is created (in the browser's main thread) in a map to prevent Javascript garbage collection (this is done by Emscripten's promise glue code).
+- An Erlang resource is created to encapsulate the promise so it is properly destroyed when garbage collected
+- A message is enqueued with the resource as well as the registered name of the target process and the content of the message
+- C code returns the handle of the promise (actually the index in the map) to Javascript Module.call wrapper.
+- The `Module.call` wrapper converts the handle into a Promise object and returns it, so Javascript code can await on the promise.
+- A scheduler dequeues the message with the resource, looks up the target process and sends it the resource as a term
+- The target process eventually calls `emscripten:promise_resolve/1,2` or `emscripten:promise_reject/1,2` to resolve or reject the promise.
+- The `emscripten:promise_resolve/1,2` and `emscripten:promise_reject/1,2` nifs dispatch a message in the browser's main thread.
+- The dispatched function retrieves the promise from its index, resolves or rejects it, with the value passed to `emscripten:promise_resolve/2` or `emscripten:promise_reject/2` and destroys it.
+
+Values currently can only be integers or strings.
+
+If the scheduler cannot find the target process, the promise is rejected with "noproc" as a value. As the promise is encapsulated into an Erlang resource, if the resource object's reference count reaches 0, the promise is rejected with "noproc" as the value.
