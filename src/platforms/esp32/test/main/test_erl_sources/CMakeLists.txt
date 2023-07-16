@@ -36,6 +36,7 @@ function(compile_erlang module_name)
     set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/${module_name}.beam")
 endfunction()
 
+compile_erlang(test_esp_partition)
 compile_erlang(test_file)
 compile_erlang(test_md5)
 compile_erlang(test_monotonic_time)
@@ -48,6 +49,7 @@ add_custom_command(
     OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/esp32_test_modules.avm"
     COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/packbeam/PackBEAM -i esp32_test_modules.avm
         HostAtomVM-prefix/src/HostAtomVM-build/libs/atomvmlib.avm
+        test_esp_partition.beam
         test_file.beam
         test_md5.beam
         test_monotonic_time.beam
@@ -57,6 +59,7 @@ add_custom_command(
         test_tz.beam
     DEPENDS
         HostAtomVM
+        "${CMAKE_CURRENT_BINARY_DIR}/test_esp_partition.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_file.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_md5.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_monotonic_time.beam"
