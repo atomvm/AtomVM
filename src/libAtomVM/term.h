@@ -85,6 +85,7 @@ extern "C" {
 #define FLOAT_SIZE (sizeof(float_term_t) / sizeof(term) + 1)
 #define REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
 #define TUPLE_SIZE(elems) ((int) (elems + 1))
+#define CONS_SIZE 2
 #define REFC_BINARY_CONS_OFFET 4
 
 #define TERM_BINARY_SIZE_IS_HEAP(size) ((size) < REFC_BINARY_MIN)
