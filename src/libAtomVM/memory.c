@@ -444,7 +444,7 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
                     TRACE("- Found refc binary.\n");
                     term ref = ((term) ptr) | TERM_BOXED_VALUE_TAG;
                     if (!term_refc_binary_is_const(ref)) {
-                        *mso_list = term_list_init_prepend(ptr + REFC_BINARY_CONS_OFFET, ref, *mso_list);
+                        *mso_list = term_list_init_prepend(ptr + REFC_BINARY_CONS_OFFSET, ref, *mso_list);
                     }
                     break;
                 }
