@@ -17,41 +17,48 @@ limitations under the License.
 
 SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 -->
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" dir="ltr">
   <head>
-    <meta charset="utf-8">
+    <meta charset="utf-8" />
     <title>AtomVM run script example</title>
   </head>
   <body>
     <h1>Run script example</h1>
-    <p>This example demonstrates calling <code>emscripten:run_script/1</code>
-    and <code>emscripten:run_script/2</code> to run Javascript from Erlang.</p>
+    <p>
+      This example demonstrates calling <code>emscripten:run_script/1</code> and
+      <code>emscripten:run_script/2</code> to run Javascript from Erlang.
+    </p>
 
     <p>It displays three alerts:</p>
     <ul>
-        <li>An alert in the main thread, synchronously</li>
-        <li>An alert in the main thread, asynchronously</li>
-        <li>An alert in the worker thread</li>
+      <li>An alert in the main thread, synchronously</li>
+      <li>An alert in the main thread, asynchronously</li>
+      <li>An alert in the worker thread</li>
     </ul>
     <p>Second alert is likely to appear after third alert.</p>
 
-    <p>On non-SMP builds, it demonstrates the fact that Erlang continues to run
-    when <code>emscripten:run_script/2</code> is called with
-    <code>[main_thread]</code> as a counter is incremented while waiting for
-    first alert to complete. The value is
-    <span id="demo-counter">unset</span.</p>
+    <p>
+      On non-SMP builds, it demonstrates the fact that Erlang continues to run
+      when <code>emscripten:run_script/2</code> is called with
+      <code>[main_thread]</code> as a counter is incremented while waiting for
+      first alert to complete. The value is <span id="demo-counter">unset</span>
+    </p>
 
-    <p>Beyond the counter, this example also demonstrates manipulating DOM (in
-    the main thread) using JS function.</p>
+    <p>
+      Beyond the counter, this example also demonstrates manipulating DOM (in
+      the main thread) using JS function.
+    </p>
 
-    <p>Style of this text was <span id="demo-not">not</span> modified by Erlang.</p>
+    <p>
+      Style of this text was <span id="demo-not">not</span> modified by Erlang.
+    </p>
     <script>
-    // Arguments are loaded using fetch API.
-    // wasm_webserver serves under /build/ files in build subdirectory.
-    var Module = {
-        arguments: ['/build/examples/emscripten/run_script.avm']
-    }
+      // Arguments are loaded using fetch API.
+      // wasm_webserver serves under /build/ files in build subdirectory.
+      var Module = {
+        arguments: ["/build/examples/emscripten/run_script.avm"],
+      };
     </script>
     <script async src="/AtomVM.js"></script>
   </body>

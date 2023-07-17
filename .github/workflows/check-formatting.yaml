@@ -48,6 +48,7 @@ jobs:
         ./run-clang-format --style=file --clang-format-executable=clang-format-13 -r src/ tests/
 
     - name: "Check formatting with Erlang fmt"
+      if: success() || failure()
       run: |
         cd ..
         git clone --depth 1 -b v1.1.0 https://github.com/WhatsApp/erlfmt.git
@@ -57,6 +58,13 @@ jobs:
         find . -name *.erl | xargs ../erlfmt/_build/release/bin/erlfmt -c
 
     - name: "Check formatting with Elixir mix format"
+      if: success() || failure()
       run: |
         cd libs/exavmlib/
         mix format --check-formatted
+
+    - name: "Check formatting with prettier"
+      if: success() || failure()
+      run: |
+        npm install prettier
+        find ../src/platforms/emscripten/ ../examples/emscripten/ -name "*.js" -o -name "*.html" | xargs npx prettier -c

@@ -104,9 +104,38 @@ static void promise_dtor(ErlNifEnv *caller_env, void *obj)
     }
 }
 
+static void htmlevent_user_data_dtor(ErlNifEnv *caller_env, void *obj)
+{
+    struct HTMLEventUserDataResource *htmlevent_user_data_rsrc = (struct HTMLEventUserDataResource *) obj;
+    if (!term_is_invalid_term(htmlevent_user_data_rsrc->user_data)) {
+        memory_sweep_mso_list(htmlevent_user_data_rsrc->storage[STORAGE_MSO_LIST_INDEX], caller_env->global);
+        htmlevent_user_data_rsrc->user_data = term_invalid_term();
+    }
+    free(htmlevent_user_data_rsrc->target_element_str);
+    htmlevent_user_data_rsrc->target_element_str = NULL;
+}
+
+static void htmlevent_user_data_down(ErlNifEnv *caller_env, void *obj, ErlNifPid *pid, ErlNifMonitor *mon)
+{
+    UNUSED(pid);
+    UNUSED(mon);
+
+    struct HTMLEventUserDataResource *htmlevent_user_data_rsrc = (struct HTMLEventUserDataResource *) obj;
+    if (!htmlevent_user_data_rsrc->unregistered) {
+        sys_enqueue_emscripten_unregister_htmlevent_message(caller_env->global, htmlevent_user_data_rsrc);
+    }
+}
+
 static const ErlNifResourceTypeInit promise_resource_type_init = {
     .members = 1,
     .dtor = promise_dtor,
+};
+
+static const ErlNifResourceTypeInit htmlevent_user_data_resource_type_init = {
+    .members = 3,
+    .dtor = htmlevent_user_data_dtor,
+    .stop = NULL,
+    .down = htmlevent_user_data_down,
 };
 
 void sys_init_platform(GlobalContext *glb)
@@ -129,6 +158,11 @@ void sys_init_platform(GlobalContext *glb)
     erl_nif_env_partial_init_from_globalcontext(&env, glb);
     platform->promise_resource_type = enif_init_resource_type(&env, "promise", &promise_resource_type_init, ERL_NIF_RT_CREATE, NULL);
     if (IS_NULL_PTR(platform->promise_resource_type)) {
+        fprintf(stderr, "Cannot initialize promise_resource_type");
+        AVM_ABORT();
+    }
+    platform->htmlevent_user_data_resource_type = enif_init_resource_type(&env, "htmlevent_user_data", &htmlevent_user_data_resource_type_init, ERL_NIF_RT_CREATE, NULL);
+    if (IS_NULL_PTR(platform->htmlevent_user_data_resource_type)) {
         fprintf(stderr, "Cannot initialize promise_resource_type");
         AVM_ABORT();
     }
@@ -208,6 +242,161 @@ em_promise_t sys_enqueue_emscripten_call_message(GlobalContext *glb, const char 
     return promise;
 }
 
+void sys_enqueue_emscripten_htmlevent_message(GlobalContext *glb, int32_t target_pid, term message_term, term user_data, HeapFragment *heap)
+{
+    struct EmscriptenMessageHTMLEvent *message = malloc(sizeof(struct EmscriptenMessageHTMLEvent));
+    if (IS_NULL_PTR(message)) {
+        fprintf(stderr, "Cannot allocate message");
+        AVM_ABORT();
+    }
+    message->base.message_type = HTMLEvent;
+    message->target_pid = target_pid;
+    message->message = message_term;
+    message->user_data = user_data;
+    message->message_heap = heap;
+    sys_enqueue_emscripten_message(glb, &message->base);
+}
+
+/**
+ * @brief Enqueue an unregister request
+ * @details To make sure handler's data is not accessed after unregistration,
+ * enqueue the request to unregister it.
+ * @param glb the global context
+ * @param rsrc resource object representing the handler
+ */
+void sys_enqueue_emscripten_unregister_htmlevent_message(GlobalContext *glb, struct HTMLEventUserDataResource *rsrc)
+{
+    struct EmscriptenMessageUnregisterHTMLEvent *message = malloc(sizeof(struct EmscriptenMessageUnregisterHTMLEvent));
+    if (IS_NULL_PTR(message)) {
+        fprintf(stderr, "Cannot allocate message");
+        AVM_ABORT();
+    }
+    message->base.message_type = UnregisterHTMLEvent;
+    message->rsrc = rsrc;
+    sys_enqueue_emscripten_message(glb, &message->base);
+}
+
+/**
+ * @brief Unregister HTML Event handler
+ * @details Actual call to unregister handler must be done on main thread which
+ * has `JSEvents.eventHandlers`
+ * @param rsrc resource object representing the handler
+ */
+static void sys_unregister_htmlevent_handler(struct HTMLEventUserDataResource *rsrc)
+{
+    if (!rsrc->unregistered) {
+        switch (rsrc->event) {
+            case EMSCRIPTEN_EVENT_KEYPRESS:
+                emscripten_set_keypress_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_KEYDOWN:
+                emscripten_set_keydown_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_KEYUP:
+                emscripten_set_keyup_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_CLICK:
+                emscripten_set_click_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_MOUSEDOWN:
+                emscripten_set_mousedown_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_MOUSEUP:
+                emscripten_set_mouseup_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_DBLCLICK:
+                emscripten_set_dblclick_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_MOUSEMOVE:
+                emscripten_set_mousemove_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_WHEEL:
+                emscripten_set_wheel_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_RESIZE:
+                emscripten_set_resize_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_SCROLL:
+                emscripten_set_scroll_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_BLUR:
+                emscripten_set_blur_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_FOCUS:
+                emscripten_set_focus_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_FOCUSIN:
+                emscripten_set_focusin_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_FOCUSOUT:
+                emscripten_set_focusout_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_DEVICEORIENTATION:
+                emscripten_set_deviceorientation_callback_on_thread(NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_DEVICEMOTION:
+                emscripten_set_devicemotion_callback_on_thread(NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_ORIENTATIONCHANGE:
+                emscripten_set_orientationchange_callback_on_thread(NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_FULLSCREENCHANGE:
+                emscripten_set_fullscreenchange_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_POINTERLOCKCHANGE:
+                emscripten_set_pointerlockchange_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_VISIBILITYCHANGE:
+                emscripten_set_visibilitychange_callback_on_thread(NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_TOUCHSTART:
+                emscripten_set_touchstart_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_TOUCHEND:
+                emscripten_set_touchend_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_TOUCHMOVE:
+                emscripten_set_touchmove_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_TOUCHCANCEL:
+                emscripten_set_touchcancel_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_GAMEPADCONNECTED:
+                emscripten_set_gamepadconnected_callback_on_thread(NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_GAMEPADDISCONNECTED:
+                emscripten_set_gamepaddisconnected_callback_on_thread(NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_BEFOREUNLOAD:
+                emscripten_set_beforeunload_callback_on_thread(NULL, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_BATTERYCHARGINGCHANGE:
+                emscripten_set_batterychargingchange_callback_on_thread(NULL, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_BATTERYLEVELCHANGE:
+                emscripten_set_batterylevelchange_callback_on_thread(NULL, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_MOUSEENTER:
+                emscripten_set_mouseenter_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_MOUSELEAVE:
+                emscripten_set_mouseleave_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_MOUSEOVER:
+                emscripten_set_mouseover_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_MOUSEOUT:
+                emscripten_set_mouseout_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+            case EMSCRIPTEN_EVENT_POINTERLOCKERROR:
+                emscripten_set_pointerlockerror_callback_on_thread(rsrc->target_element, NULL, false, NULL, emscripten_main_runtime_thread_id());
+                break;
+        }
+        rsrc->unregistered = true;
+        enif_release_resource(rsrc);
+    }
+}
+
 static int sys_emscripten_get_target(GlobalContext *glb, const char *target_name)
 {
     size_t target_name_size = strlen(target_name);
@@ -231,7 +420,7 @@ static void sys_emscripten_send_message(GlobalContext *glb, int target_pid, cons
     size_t message_len = strlen(message);
     bool is_call = promise != NULL;
     Heap heap;
-    if (UNLIKELY(memory_init_heap(&heap, 20 + TUPLE_SIZE(is_call ? 3 : 2) + TUPLE_SIZE(2) + term_binary_heap_size(message_len)) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_init_heap(&heap, TUPLE_SIZE(is_call ? 3 : 2) + TUPLE_SIZE(2) + (is_call ? TERM_BOXED_RESOURCE_SIZE : 0) + term_binary_heap_size(message_len)) != MEMORY_GC_OK)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         AVM_ABORT();
     }
@@ -244,9 +433,7 @@ static void sys_emscripten_send_message(GlobalContext *glb, int target_pid, cons
         term promise_term = term_from_resource(promise, &heap);
         term_put_tuple_element(payload, 1, promise_term);
     }
-    term bin = term_alloc_refc_binary(message_len, false, &heap, glb);
-    void *bin_data = (void *) term_binary_data(bin);
-    memcpy(bin_data, message, message_len);
+    term bin = term_from_literal_binary(message, message_len, &heap, glb);
     term_put_tuple_element(payload, is_call ? 2 : 1, bin);
     globalcontext_send_message(glb, target_pid, message_term);
     memory_destroy_heap(&heap, glb);
@@ -279,6 +466,29 @@ static void sys_process_emscripten_message(GlobalContext *glb, struct Emscripten
             free(message_async_call->target_name);
             free(message_async_call->message);
         } break;
+
+        case HTMLEvent: {
+            struct EmscriptenMessageHTMLEvent *message_html_event = (struct EmscriptenMessageHTMLEvent *) message;
+            bool has_user_data = !term_is_invalid_term(message_html_event->user_data);
+            BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(3), heap) // one too many if has_user_data is false
+            term message_term = term_alloc_tuple(has_user_data ? 3 : 2, &heap);
+            term_put_tuple_element(message_term, 0, EMSCRIPTEN_ATOM);
+            term_put_tuple_element(message_term, 1, message_html_event->message);
+            if (has_user_data) {
+                term_put_tuple_element(message_term, 2, message_html_event->user_data);
+            }
+            globalcontext_send_message(glb, message_html_event->target_pid, message_term);
+            END_WITH_STACK_HEAP(heap, glb)
+            memory_sweep_mso_list(message_html_event->message_heap->mso_list, glb);
+            memory_destroy_heap_fragment(message_html_event->message_heap);
+        } break;
+
+        case UnregisterHTMLEvent: {
+            struct EmscriptenMessageUnregisterHTMLEvent *message_unregister = (struct EmscriptenMessageUnregisterHTMLEvent *) message;
+            if (!message_unregister->rsrc->unregistered) {
+                emscripten_dispatch_to_thread(emscripten_main_runtime_thread_id(), EM_FUNC_SIG_VI, sys_unregister_htmlevent_handler, NULL, message_unregister->rsrc);
+            }
+        } break;
     }
 }
 
@@ -297,24 +507,34 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
         }
         abstime.tv_sec += timeout_secs_part;
         pthread_mutex_lock(&platform->poll_mutex);
-        pthread_cond_timedwait(&platform->poll_cond, &platform->poll_mutex, &abstime);
+        if (list_is_empty(&platform->messages)) {
+            pthread_cond_timedwait(&platform->poll_cond, &platform->poll_mutex, &abstime);
+        }
     } else if (timeout_ms < 0) {
         pthread_mutex_lock(&platform->poll_mutex);
-        pthread_cond_wait(&platform->poll_cond, &platform->poll_mutex);
+        if (list_is_empty(&platform->messages)) {
+            pthread_cond_wait(&platform->poll_cond, &platform->poll_mutex);
+        }
     } else {
         pthread_mutex_lock(&platform->poll_mutex);
     }
 
-    struct ListHead *messages = &platform->messages;
-    struct ListHead *item;
-    struct ListHead *tmp;
-    MUTABLE_LIST_FOR_EACH (item, tmp, messages) {
-        struct EmscriptenMessageBase *message = GET_LIST_ENTRY(item, struct EmscriptenMessageBase, message_head);
-        sys_process_emscripten_message(glb, message);
-        list_remove(&message->message_head);
-        free(message);
+    if (!list_is_empty(&platform->messages)) {
+        struct ListHead messages = platform->messages;
+        messages.next->prev = &messages;
+        messages.prev->next = &messages;
+        list_init(&platform->messages);
+        pthread_mutex_unlock(&platform->poll_mutex);
+
+        do {
+            struct EmscriptenMessageBase *message = GET_LIST_ENTRY(list_first(&messages), struct EmscriptenMessageBase, message_head);
+            sys_process_emscripten_message(glb, message);
+            list_remove(&message->message_head);
+            free(message);
+        } while (!list_is_empty(&messages));
+    } else {
+        pthread_mutex_unlock(&platform->poll_mutex);
     }
-    pthread_mutex_unlock(&platform->poll_mutex);
 }
 
 void sys_listener_destroy(struct ListHead *item)

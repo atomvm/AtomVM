@@ -17,30 +17,25 @@ limitations under the License.
 
 SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 -->
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en" dir="ltr">
   <head>
-    <meta charset="utf-8" />
-    <title>AtomVM call &amp; cast example</title>
+    <meta charset="utf-8">
   </head>
   <body>
-    <h1>Call &amp; cast example</h1>
-    <p>
-      This example demonstrates sending messages to Erlang from Javascript from
-      events in the main thread.
-    </p>
-
-    <button id="call-button" disabled>Call Button</button>
-    <button id="cast-button" disabled>Cast Button</button>
-    <p>Call button was clicked <span id="call-counter">0</span> time(s).</p>
-    <p>Cast button was clicked <span id="cast-counter">0</span> time(s).</p>
-
+    <button id="memory-binary" disabled>memory binary</button>
+    <div id="gc-and-count-refs" hidden>gc and count refs</div>
+    <div id="register-and-loop" hidden>register and loop</div>
+    <div id="register-once-and-exit" hidden>register once and exit</div>
+    <div id="result"></div>
+    <div id="error"></div>
     <script>
-      // Arguments are loaded using fetch API.
-      // wasm_webserver serves under /build/ files in build subdirectory.
-      var Module = {
-        arguments: ["/build/examples/emscripten/call_cast.avm"],
-      };
+    // Arguments are loaded using fetch API.
+    // wasm_webserver serves under /tests/build/ files in src/platform/escripten/build/tests/src subdirectory
+    // and under /build/ files in build/ subdirectory.
+    var Module = {
+        arguments: ['/tests/build/test_html5.beam', '/build/libs/estdlib/src/estdlib.avm', '/build/libs/eavmlib/src/eavmlib.avm']
+    }
     </script>
     <script async src="/AtomVM.js"></script>
   </body>
