@@ -17,23 +17,28 @@ limitations under the License.
 
 SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 -->
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" dir="ltr">
   <head>
-    <meta charset="utf-8">
+    <meta charset="utf-8" />
     <title>AtomVM hello_world Beam version</title>
   </head>
   <body>
     <h1>Hello world (Beam version)</h1>
-    <p>Beam version demonstrates that you can provide beams as well as avm files in arguments,
-    typically loading AtomVM library as a packed avm file.</p>
+    <p>
+      Beam version demonstrates that you can provide beams as well as avm files
+      in arguments, typically loading AtomVM library as a packed avm file.
+    </p>
     <p>Please check the console for hello_world output.</p>
     <script>
-    // Arguments are loaded using fetch API.
-    // wasm_webserver serves under /build/ files in build subdirectory.
-    var Module = {
-        arguments: ['/build/examples/erlang/hello_world.beam', '/build/libs/atomvmlib.avm']
-    }
+      // Arguments are loaded using fetch API.
+      // wasm_webserver serves under /build/ files in build subdirectory.
+      var Module = {
+        arguments: [
+          "/build/examples/erlang/hello_world.beam",
+          "/build/libs/atomvmlib.avm",
+        ],
+      };
     </script>
     <script async src="/AtomVM.js"></script>
   </body>

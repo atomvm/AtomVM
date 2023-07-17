@@ -50,7 +50,7 @@ jobs:
         mkdir build
         cd build
         cmake .. -G Ninja
-        ninja AtomVM atomvmlib test_eavmlib test_alisp hello_world run_script call_cast wasm_webserver
+        ninja AtomVM atomvmlib test_eavmlib test_alisp hello_world run_script call_cast html5_events wasm_webserver
 
     - name: Upload AtomVM and test modules
       uses: actions/upload-artifact@v3

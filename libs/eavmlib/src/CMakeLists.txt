@@ -26,6 +26,7 @@ set(ERLANG_MODULES
     atomvm
     avm_pubsub
     console
+    emscripten
     esp
     gpio
     i2c
