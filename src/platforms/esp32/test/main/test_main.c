@@ -204,6 +204,12 @@ TEST_CASE("test_file", "[test_run]")
     ESP_LOGI(TAG, "Card unmounted");
 }
 
+TEST_CASE("test_list_to_binary", "[test_run]")
+{
+    term ret_value = avm_test_case("test_list_to_binary.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+
 TEST_CASE("test_md5", "[test_run]")
 {
     term ret_value = avm_test_case("test_md5.beam");

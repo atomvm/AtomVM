@@ -37,6 +37,7 @@ function(compile_erlang module_name)
 endfunction()
 
 compile_erlang(test_file)
+compile_erlang(test_list_to_binary)
 compile_erlang(test_md5)
 compile_erlang(test_monotonic_time)
 compile_erlang(test_rtc_slow)
@@ -49,6 +50,7 @@ add_custom_command(
     COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/packbeam/PackBEAM -i esp32_test_modules.avm
         HostAtomVM-prefix/src/HostAtomVM-build/libs/atomvmlib.avm
         test_file.beam
+        test_list_to_binary.beam
         test_md5.beam
         test_monotonic_time.beam
         test_rtc_slow.beam
@@ -58,6 +60,7 @@ add_custom_command(
     DEPENDS
         HostAtomVM
         "${CMAKE_CURRENT_BINARY_DIR}/test_file.beam"
+        "${CMAKE_CURRENT_BINARY_DIR}/test_list_to_binary.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_md5.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_monotonic_time.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_rtc_slow.beam"
