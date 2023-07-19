@@ -2292,29 +2292,40 @@ static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
             RAISE_ERROR(BADARG_ATOM);
     }
 
-    char *bin_buf = malloc(bin_size);
-    if (IS_NULL_PTR(bin_buf)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    switch (interop_write_iolist(t, bin_buf)) {
-        case InteropOk:
-            break;
-        case InteropMemoryAllocFail:
-            free(bin_buf);
+    char *bin_buf = NULL;
+    bool buf_allocated = true;
+    if (bin_size > 0) {
+        bin_buf = malloc(bin_size);
+        if (IS_NULL_PTR(bin_buf)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        case InteropBadArg:
-            free(bin_buf);
-            RAISE_ERROR(BADARG_ATOM);
+        }
+
+        switch (interop_write_iolist(t, bin_buf)) {
+            case InteropOk:
+                break;
+            case InteropMemoryAllocFail:
+                free(bin_buf);
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            case InteropBadArg:
+                free(bin_buf);
+                RAISE_ERROR(BADARG_ATOM);
+        }
+    } else {
+        bin_buf = "";
+        buf_allocated = false;
     }
 
     if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(bin_size), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        free(bin_buf);
+        if (buf_allocated) {
+            free(bin_buf);
+        }
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term bin_res = term_from_literal_binary(bin_buf, bin_size, &ctx->heap, ctx->global);
 
-    free(bin_buf);
+    if (buf_allocated) {
+        free(bin_buf);
+    }
 
     return bin_res;
 }
