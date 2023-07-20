@@ -177,20 +177,23 @@ void sys_free_platform(GlobalContext *glb)
     free(platform);
 }
 
-void sys_signal(GlobalContext *glb)
-{
-    struct EmscriptenPlatformData *platform = glb->platform_data;
-    pthread_cond_signal(&platform->poll_cond);
-}
-
 static void sys_enqueue_emscripten_message(GlobalContext *glb, struct EmscriptenMessageBase *message)
 {
     struct EmscriptenPlatformData *platform = glb->platform_data;
     pthread_mutex_lock(&platform->poll_mutex);
     list_append(&platform->messages, &message->message_head);
-    sys_signal(glb);
+    pthread_cond_signal(&platform->poll_cond);
     pthread_mutex_unlock(&platform->poll_mutex);
 }
+
+#ifndef AVM_NO_SMP
+void sys_signal(GlobalContext *glb)
+{
+    struct EmscriptenMessageBase *message = malloc(sizeof(struct EmscriptenMessageBase));
+    message->message_type = Signal;
+    sys_enqueue_emscripten_message(glb, message);
+}
+#endif
 
 void sys_enqueue_emscripten_cast_message(GlobalContext *glb, const char *target, const char *message_content)
 {
@@ -489,6 +492,9 @@ static void sys_process_emscripten_message(GlobalContext *glb, struct Emscripten
                 emscripten_dispatch_to_thread(emscripten_main_runtime_thread_id(), EM_FUNC_SIG_VI, sys_unregister_htmlevent_handler, NULL, message_unregister->rsrc);
             }
         } break;
+
+        case Signal:
+            break;
     }
 }
 
