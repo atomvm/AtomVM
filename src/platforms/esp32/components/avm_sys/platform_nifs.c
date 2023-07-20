@@ -250,6 +250,54 @@ static term nif_esp_partition_write(Context *ctx, int argc, term argv[])
     return OK_ATOM;
 }
 
+static term nif_esp_partition_list(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    size_t needed = 0;
+
+    for (esp_partition_iterator_t it
+         = esp_partition_find(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, NULL);
+         it != NULL; it = esp_partition_next(it)) {
+        const esp_partition_t *partition = esp_partition_get(it);
+        // {name, type, subtype, offset, size, props}
+        // TODO: right now props is empty, so it doesn't take space
+        // all integers are < 27 bits, so we are safe
+        // * 2 is for accounting the reversed list
+        int label_len = strlen(partition->label);
+        needed += CONS_SIZE * 2 + TUPLE_SIZE(6) + TERM_BINARY_HEAP_SIZE(label_len);
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, needed) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term l = term_nil();
+    for (esp_partition_iterator_t it
+         = esp_partition_find(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, NULL);
+         it != NULL; it = esp_partition_next(it)) {
+        const esp_partition_t *partition = esp_partition_get(it);
+        // {name, type, subtype, offset, size, props}
+        int len = strlen(partition->label);
+        term label_bin = term_from_literal_binary(partition->label, len, &ctx->heap, ctx->global);
+        term t = term_alloc_tuple(6, &ctx->heap);
+        term_put_tuple_element(t, 0, label_bin);
+        term_put_tuple_element(t, 1, term_from_int(partition->type));
+        term_put_tuple_element(t, 2, term_from_int(partition->subtype));
+        term_put_tuple_element(t, 3, term_from_int(partition->address));
+        term_put_tuple_element(t, 4, term_from_int(partition->size));
+        term_put_tuple_element(t, 5, term_nil());
+        l = term_list_prepend(t, l, &ctx->heap);
+    }
+
+    term return_list = term_nil();
+    for (term li = l; li != term_nil(); li = term_get_list_tail(li)) {
+        return_list = term_list_prepend(term_get_list_head(li), return_list, &ctx->heap);
+    }
+
+    return return_list;
+}
+
 static term nif_esp_deep_sleep(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -441,6 +489,11 @@ static const struct Nif esp_partition_write_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_partition_write
 };
+static const struct Nif esp_partition_list_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_partition_list
+};
 static const struct Nif esp_deep_sleep_nif =
 {
     .base.type = NIFFunctionType,
@@ -507,6 +560,10 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     if (strcmp("esp:partition_write/3", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_partition_write_nif;
+    }
+    if (strcmp("esp:partition_list/0", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_partition_list_nif;
     }
     if (strcmp("esp:deep_sleep/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);

@@ -951,6 +951,23 @@ The `freq_hz` function can be used to retrieve the clock frequency of the chip.
 
 * `esp:freq_hz/0`
 
+The `esp:partition_list/0` function can be used to retrieve information about the paritions on an ESP32 flash.
+
+The return type is a list of tuples, each of which contains the partition id (as a binary), partition type and sub-type (both of which are represented as integers), the start of the partition as an address along with its size, as well as a list of properties about the partition, as a properties list.
+
+    %% erlang
+    PartitionList = esp:partition_list(),
+    lists:foreach(
+        fun({PartitionId, PartitionType, PartitionSubtype, PartitionAddress, PartitionSize, PartitionProperties}) ->
+            %% ...
+        end,
+        PartitionList
+    )
+
+> Note.  The partition properties are currently empty (`[]`).
+
+For information about the encoding of partition types and sub-types, see the IDF SDK partition [type definitions](https://docs.espressif.com/projects/esp-idf/en/v4.4.5/esp32/api-reference/storage/spi_flash.html?highlight=esp_partition_get#id13).
+
 ## Peripherals
 
 The AtomVM virtual machine and libraries support APIs for interfacing with peripheral devices connected to the ESP32.  This section provides information about these APIs.
