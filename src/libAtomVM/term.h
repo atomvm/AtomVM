@@ -1684,6 +1684,10 @@ static inline term term_get_sub_binary_ref(term t)
  * @details This function creates a resource (obtained from `enif_alloc_resource`)
  * on the heap which must have `TERM_BOXED_RESOURCE_SIZE` free terms.
  *
+ * Unlike `enif_make_resource`, this function doesn't increment the reference
+ * counter but instead makes the heap own the resource. It will be garbage
+ * collected when the heap is destroyed.
+ *
  * @param resource resource obtained from `enif_alloc_resource`
  * @param heap the heap to allocate the resource in
  * @return a term pointing to the resource

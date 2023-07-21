@@ -135,6 +135,10 @@ static const char *const info_atom = "\x4" "info";
 
 static const char *const module_atom = "\x06" "module";
 
+static const char *const select_atom = "\x6" "select";
+static const char *const ready_input_atom = "\xB" "ready_input";
+static const char *const ready_output_atom = "\xC" "ready_output";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -253,6 +257,10 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, info_atom) == INFO_ATOM_INDEX;
     
     ok &= globalcontext_insert_atom(glb, module_atom) == MODULE_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, select_atom) == SELECT_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, ready_input_atom) == READY_INPUT_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, ready_output_atom) == READY_OUTPUT_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();

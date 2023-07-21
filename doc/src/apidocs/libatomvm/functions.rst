@@ -58,6 +58,7 @@ Functions
 .. doxygenfunction:: enif_keep_resource
 .. doxygenfunction:: enif_make_resource
 .. doxygenfunction:: enif_release_resource
+.. doxygenfunction:: enif_select
 .. doxygenfunction:: externalterm_from_binary
 .. doxygenfunction:: externalterm_to_binary
 .. doxygenfunction:: externalterm_to_term
@@ -163,6 +164,8 @@ Functions
 .. doxygenfunction:: scheduler_stop_all
 .. doxygenfunction:: scheduler_terminate
 .. doxygenfunction:: scheduler_wait
+.. doxygenfunction:: select_event_count_and_destroy_closed
+.. doxygenfunction:: select_event_notify
 .. doxygenfunction:: smp_condvar_create
 .. doxygenfunction:: smp_condvar_destroy
 .. doxygenfunction:: smp_condvar_signal
@@ -194,14 +197,17 @@ Functions
 .. doxygenfunction:: sys_open_avm_from_file
 .. doxygenfunction:: sys_poll_events
 .. doxygenfunction:: sys_register_listener
+.. doxygenfunction:: sys_register_select_event
 .. doxygenfunction:: sys_signal
 .. doxygenfunction:: sys_time
 .. doxygenfunction:: sys_unregister_listener
+.. doxygenfunction:: sys_unregister_select_event
 .. doxygenfunction:: term_alloc_refc_binary
 .. doxygenfunction:: term_alloc_sub_binary
 .. doxygenfunction:: term_compare
 .. doxygenfunction:: term_display
 .. doxygenfunction:: term_fprint
+.. doxygenfunction:: term_from_resource
 .. doxygenfunction:: term_funprint
 .. doxygenfunction:: term_get_map_assoc
 .. doxygenfunction:: term_snprint

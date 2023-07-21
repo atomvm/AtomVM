@@ -126,6 +126,10 @@ atomvm:posix_open/3, IF_HAVE_OPEN_CLOSE(&atomvm_posix_open_nif)
 atomvm:posix_close/1, IF_HAVE_OPEN_CLOSE(&atomvm_posix_close_nif)
 atomvm:posix_read/2, IF_HAVE_OPEN_CLOSE(&atomvm_posix_read_nif)
 atomvm:posix_write/2, IF_HAVE_OPEN_CLOSE(&atomvm_posix_write_nif)
+atomvm:posix_select_read/3, IF_HAVE_OPEN_CLOSE(&atomvm_posix_select_read_nif)
+atomvm:posix_select_write/3, IF_HAVE_OPEN_CLOSE(&atomvm_posix_select_write_nif)
+atomvm:posix_select_stop/1, IF_HAVE_OPEN_CLOSE(&atomvm_posix_select_stop_nif)
+atomvm:posix_mkfifo/2, IF_HAVE_MKFIFO(&atomvm_posix_mkfifo_nif)
 atomvm:posix_unlink/1, IF_HAVE_UNLINK(&atomvm_posix_unlink_nif)
 code:load_abs/1, &code_load_abs_nif
 code:load_binary/3, &code_load_binary_nif

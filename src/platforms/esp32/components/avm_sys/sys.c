@@ -558,6 +558,20 @@ void sys_unregister_listener(GlobalContext *global, struct EventListener *listen
     synclist_unlock(&global->listeners);
 }
 
+void sys_register_select_event(GlobalContext *global, ErlNifEvent event, bool is_write)
+{
+    UNUSED(global);
+    UNUSED(event);
+    UNUSED(is_write);
+}
+
+void sys_unregister_select_event(GlobalContext *global, ErlNifEvent event, bool is_write)
+{
+    UNUSED(global);
+    UNUSED(event);
+    UNUSED(is_write);
+}
+
 bool event_listener_is_event(EventListener *listener, listener_event_t event)
 {
     return listener->sender == event;

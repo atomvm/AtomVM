@@ -52,6 +52,7 @@ Data Strucures
 .. doxygenstruct:: RegisteredProcess
 .. doxygenstruct:: ResourceType
 .. doxygenstruct:: SnprintfFun
+.. doxygenstruct:: SelectEvent
 .. doxygenstruct:: SpinLock
 .. doxygenstruct:: SyncList
 .. doxygenstruct:: TempStack
@@ -69,6 +70,7 @@ Data Strucures
 .. doxygenenum:: ContextFlags
 .. doxygenenum:: DictionaryFunctionResult
 .. doxygenenum:: ErlNifResourceFlags
+.. doxygenenum:: ErlNifSelectFlags
 .. doxygenenum:: ExternalTermOpts
 .. doxygenenum:: ExternalTermResult
 .. doxygenenum:: FunctionType

@@ -81,6 +81,7 @@ GlobalContext *globalcontext_new()
     synclist_init(&glb->registered_processes);
     synclist_init(&glb->listeners);
     synclist_init(&glb->resource_types);
+    synclist_init(&glb->select_events);
 
     glb->last_process_id = 0;
 
@@ -224,6 +225,13 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
         resource_type_destroy(resource_type);
     }
     synclist_destroy(&glb->resource_types);
+
+    struct ListHead *select_events = synclist_nolock(&glb->select_events);
+    MUTABLE_LIST_FOR_EACH (item, tmp, select_events) {
+        struct SelectEvent *select_event = GET_LIST_ENTRY(item, struct SelectEvent, head);
+        free((void *) select_event);
+    }
+    synclist_destroy(&glb->select_events);
 
     free(glb);
 }

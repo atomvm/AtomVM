@@ -730,6 +730,11 @@ DEFINE_MATH_NIF(tanh)
 #else
 #define IF_HAVE_OPEN_CLOSE(expr) NULL
 #endif
+#if HAVE_MKFIFO
+#define IF_HAVE_MKFIFO(expr) (expr)
+#else
+#define IF_HAVE_MKFIFO(expr) NULL
+#endif
 #if HAVE_UNLINK
 #define IF_HAVE_UNLINK(expr) (expr)
 #else

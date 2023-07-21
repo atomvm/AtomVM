@@ -72,6 +72,20 @@ void sys_listener_destroy(struct ListHead *item)
     UNUSED(item);
 }
 
+void sys_register_select_event(GlobalContext *global, ErlNifEvent event, bool is_write)
+{
+    UNUSED(global);
+    UNUSED(event);
+    UNUSED(is_write);
+}
+
+void sys_unregister_select_event(GlobalContext *global, ErlNifEvent event, bool is_write)
+{
+    UNUSED(global);
+    UNUSED(event);
+    UNUSED(is_write);
+}
+
 void sys_time(struct timespec *t)
 {
     sys_clock_gettime(t);

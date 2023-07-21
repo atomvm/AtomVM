@@ -156,6 +156,7 @@ include(DefineIfExists)
 # HAVE_OPEN & HAVE_CLOSE are used in globalcontext.h
 define_if_function_exists(libAtomVM open "fcntl.h" PUBLIC HAVE_OPEN)
 define_if_function_exists(libAtomVM close "unistd.h" PUBLIC HAVE_CLOSE)
+define_if_function_exists(libAtomVM mkfifo "sys/stat.h" PRIVATE HAVE_MKFIFO)
 define_if_function_exists(libAtomVM unlink "unistd.h" PRIVATE HAVE_UNLINK)
 define_if_symbol_exists(libAtomVM O_CLOEXEC "fcntl.h" PRIVATE HAVE_O_CLOEXEC)
 define_if_symbol_exists(libAtomVM O_DIRECTORY "fcntl.h" PRIVATE HAVE_O_DIRECTORY)

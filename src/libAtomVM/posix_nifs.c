@@ -28,6 +28,10 @@
 #include <fcntl.h>
 #include <unistd.h>
 #endif
+#if HAVE_MKFIFO
+#include <sys/stat.h>
+#include <sys/types.h>
+#endif
 
 #include "defaultatoms.h"
 #include "erl_nif_priv.h"
@@ -111,6 +115,7 @@ term posix_errno_to_term(int err, GlobalContext *glb)
 struct PosixFd
 {
     int fd;
+    bool select;
 };
 
 static void posix_fd_dtor(ErlNifEnv *caller_env, void *obj)
@@ -124,9 +129,20 @@ static void posix_fd_dtor(ErlNifEnv *caller_env, void *obj)
     }
 }
 
+static void posix_fd_stop(ErlNifEnv *caller_env, void *obj, ErlNifEvent event, int is_direct_call)
+{
+    UNUSED(caller_env);
+    UNUSED(event);
+    UNUSED(is_direct_call);
+
+    struct PosixFd *fd_obj = (struct PosixFd *) obj;
+    fd_obj->select = false;
+}
+
 const ErlNifResourceTypeInit posix_fd_resource_type_init = {
-    .members = 1,
+    .members = 2,
     .dtor = posix_fd_dtor,
+    .stop = posix_fd_stop,
 };
 
 #define O_EXEC_ATOM_STR ATOM_STR("\x6", "o_exec")
@@ -254,6 +270,7 @@ static term nif_atomvm_posix_open(Context *ctx, int argc, term argv[])
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         fd_obj->fd = fd;
+        fd_obj->select = false;
         if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2) + TERM_BOXED_RESOURCE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
@@ -278,6 +295,9 @@ static term nif_atomvm_posix_close(Context *ctx, int argc, term argv[])
     }
     struct PosixFd *fd_obj = (struct PosixFd *) fd_obj_ptr;
     if (fd_obj->fd != CLOSED_FD) {
+        if (fd_obj->select) {
+            fprintf(stderr, "Calling close on a selectable posix file, missing call to posix_select_stop?\n");
+        }
         if (UNLIKELY(close(fd_obj->fd) < 0)) {
             fd_obj->fd = CLOSED_FD; // even if bad things happen, do not close twice.
             if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -363,6 +383,92 @@ static term nif_atomvm_posix_write(Context *ctx, int argc, term argv[])
 
     return result;
 }
+
+static term nif_atomvm_posix_select(Context *ctx, term argv[], enum ErlNifSelectFlags mode)
+{
+    term process_pid_term = argv[1];
+    VALIDATE_VALUE(process_pid_term, term_is_pid);
+    int32_t process_pid = term_to_local_process_id(process_pid_term);
+    term select_ref_term = argv[2];
+    if (select_ref_term != UNDEFINED_ATOM) {
+        VALIDATE_VALUE(select_ref_term, term_is_reference);
+    }
+    void *fd_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0], ctx->global->posix_fd_resource_type, &fd_obj_ptr))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    struct PosixFd *fd_obj = (struct PosixFd *) fd_obj_ptr;
+
+    if (UNLIKELY(enif_select(erl_nif_env_from_context(ctx), fd_obj->fd, mode, fd_obj, &process_pid, select_ref_term) < 0)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    fd_obj->select = 1;
+
+    return OK_ATOM;
+}
+
+static term nif_atomvm_posix_select_read(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    return nif_atomvm_posix_select(ctx, argv, ERL_NIF_SELECT_READ);
+}
+
+static term nif_atomvm_posix_select_write(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    return nif_atomvm_posix_select(ctx, argv, ERL_NIF_SELECT_WRITE);
+}
+
+static term nif_atomvm_posix_select_stop(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    void *fd_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0], ctx->global->posix_fd_resource_type, &fd_obj_ptr))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    struct PosixFd *fd_obj = (struct PosixFd *) fd_obj_ptr;
+    if (UNLIKELY(enif_select(erl_nif_env_from_context(ctx), fd_obj->fd, ERL_NIF_SELECT_STOP, fd_obj, NULL, term_nil()) < 0)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    return OK_ATOM;
+}
+#endif
+
+#if HAVE_MKFIFO
+static term nif_atomvm_posix_mkfifo(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term path_term = argv[0];
+    term mode_term = argv[1];
+    VALIDATE_VALUE(mode_term, term_is_integer);
+
+    int ok;
+    const char *path = interop_term_to_string(path_term, &ok);
+    if (UNLIKELY(!ok)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int mode = term_to_int(mode_term);
+
+    term result;
+    int res = mkfifo(path, mode);
+    free((void *) path);
+
+    if (res < 0) {
+        // Return an error.
+        if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        result = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(result, 0, ERROR_ATOM);
+        term_put_tuple_element(result, 1, posix_errno_to_term(errno, ctx->global));
+    } else {
+        result = OK_ATOM;
+    }
+
+    return result;
+}
 #endif
 
 #if HAVE_UNLINK
@@ -409,6 +515,24 @@ const struct Nif atomvm_posix_read_nif = {
 const struct Nif atomvm_posix_write_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_posix_write
+};
+const struct Nif atomvm_posix_select_read_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_posix_select_read
+};
+const struct Nif atomvm_posix_select_write_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_posix_select_write
+};
+const struct Nif atomvm_posix_select_stop_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_posix_select_stop
+};
+#endif
+#if HAVE_MKFIFO
+const struct Nif atomvm_posix_mkfifo_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_posix_mkfifo
 };
 #endif
 #if HAVE_UNLINK

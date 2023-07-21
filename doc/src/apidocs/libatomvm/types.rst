@@ -23,6 +23,7 @@ Types
 .. doxygentypedef:: ErlNifEvent
 .. doxygentypedef:: ErlNifPid
 .. doxygentypedef:: ErlNifResourceDtor
+.. doxygentypedef:: ErlNifResourceStop
 .. doxygentypedef:: ErlNifResourceType
 .. doxygentypedef:: event_handler_t
 .. doxygentypedef:: EventListener
