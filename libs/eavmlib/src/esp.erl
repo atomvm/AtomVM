@@ -37,6 +37,7 @@
     nvs_erase_key/1, nvs_erase_key/2,
     nvs_erase_all/0, nvs_erase_all/1,
     nvs_reformat/0,
+    partition_list/0,
     rtc_slow_get_binary/0,
     rtc_slow_set_binary/1,
     freq_hz/0
@@ -67,6 +68,21 @@
     | sleep_wakeup_cocpu
     | sleep_wakeup_cocpu_trap_trig
     | sleep_wakeup_bt.
+
+-type esp_partition_type() :: 0..254.
+-type esp_partition_subtype() :: 0..254.
+-type esp_partition_address() :: 0..134217728.
+-type esp_partition_size() :: 0..134217728.
+-type esp_partition_props() :: [].
+
+-type esp_partition() :: {
+    binary(),
+    esp_partition_type(),
+    esp_partition_subtype(),
+    esp_partition_address(),
+    esp_partition_size(),
+    esp_partition_props()
+}.
 
 -define(ATOMVM_NVS_NS, atomvm).
 
@@ -227,6 +243,17 @@ nvs_erase_all(Namespace) when is_atom(Namespace) ->
 %%-----------------------------------------------------------------------------
 -spec nvs_reformat() -> ok.
 nvs_reformat() ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @returns List of partitions
+%% @doc     Gets the list of partitions as tuples, such as {name, type, subtype,
+%%          offset, size, props}. Type and subtype are integers as described in
+%%          esp-idf documentation.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec partition_list() -> [esp_partition()].
+partition_list() ->
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------

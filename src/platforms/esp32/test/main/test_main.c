@@ -167,6 +167,12 @@ term avm_test_case(const char *test_module)
     return ret_value;
 }
 
+TEST_CASE("test_esp_partition", "[test_run]")
+{
+    term ret_value = avm_test_case("test_esp_partition.beam");
+    TEST_ASSERT(term_to_int(ret_value) == 0);
+}
+
 TEST_CASE("test_file", "[test_run]")
 {
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
@@ -202,6 +208,12 @@ TEST_CASE("test_file", "[test_run]")
 
     esp_vfs_fat_sdcard_unmount(mount_point, card);
     ESP_LOGI(TAG, "Card unmounted");
+}
+
+TEST_CASE("test_list_to_binary", "[test_run]")
+{
+    term ret_value = avm_test_case("test_list_to_binary.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
 }
 
 TEST_CASE("test_md5", "[test_run]")

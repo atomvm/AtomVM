@@ -31,8 +31,6 @@ jobs:
 
       matrix:
         idf-version:
-        - 4.2.4
-        - 4.3.5
         - 4.4.4
         - 5.0.2
         - 5.1-rc1
