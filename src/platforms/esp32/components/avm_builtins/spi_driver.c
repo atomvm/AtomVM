@@ -162,10 +162,10 @@ static void debug_buscfg(spi_bus_config_t *buscfg)
 {
     TRACE("Bus Config\n");
     TRACE("==========\n");
-    TRACE("    miso_io_num: %i\n", buscfg->miso_io_num);
-    TRACE("    mosi_io_num: %i\n", buscfg->mosi_io_num);
-    TRACE("    sclk_io_num: %i\n", buscfg->sclk_io_num);
-    TRACE("    miso_io_num: %i\n", buscfg->miso_io_num);
+    TRACE("    miso: %i\n", buscfg->miso_io_num);
+    TRACE("    mosi: %i\n", buscfg->mosi_io_num);
+    TRACE("    sclk: %i\n", buscfg->sclk_io_num);
+    TRACE("    miso: %i\n", buscfg->miso_io_num);
     TRACE("    quadwp_io_num: %i\n", buscfg->quadwp_io_num);
     TRACE("    quadhd_io_num: %i\n", buscfg->quadhd_io_num);
 }
@@ -176,7 +176,7 @@ static void debug_devcfg(spi_device_interface_config_t *devcfg)
     TRACE("==========\n");
     TRACE("    clock_speed_hz: %i\n", devcfg->clock_speed_hz);
     TRACE("    mode: %i\n", devcfg->mode);
-    TRACE("    spics_io_num: %i\n", devcfg->spics_io_num);
+    TRACE("    cs: %i\n", devcfg->spics_io_num);
     TRACE("    queue_size: %i\n", devcfg->queue_size);
     TRACE("    address_bits: %i\n", devcfg->address_bits);
 }
@@ -195,16 +195,16 @@ Context *spi_driver_create_port(GlobalContext *global, term opts)
     term hspi_atom = globalcontext_make_atom(global, ATOM_STR("\x4", "hspi"));
 
     term bus_config = interop_kv_get_value(opts, ATOM_STR("\xA", "bus_config"), global);
-    term miso_io_num_term = interop_kv_get_value(bus_config, ATOM_STR("\xB", "miso_io_num"), global);
-    term mosi_io_num_term = interop_kv_get_value(bus_config, ATOM_STR("\xB", "mosi_io_num"), global);
-    term sclk_io_num_term = interop_kv_get_value(bus_config, ATOM_STR("\xB", "sclk_io_num"), global);
-    term spi_peripheral_term = interop_kv_get_value_default(bus_config, ATOM_STR("\xB", "spi_peripheral"), hspi_atom, global);
-    spi_host_device_t host_device = get_spi_host_device(spi_peripheral_term, global);
+    term miso_term = interop_kv_get_value(bus_config, ATOM_STR("\x4", "miso"), global);
+    term mosi_term = interop_kv_get_value(bus_config, ATOM_STR("\x4", "mosi"), global);
+    term sclk_term = interop_kv_get_value(bus_config, ATOM_STR("\x4", "sclk"), global);
+    term peripheral_term = interop_kv_get_value_default(bus_config, ATOM_STR("\xA", "peripheral"), hspi_atom, global);
+    spi_host_device_t host_device = get_spi_host_device(peripheral_term, global);
 
     spi_bus_config_t buscfg = { 0 };
-    buscfg.miso_io_num = term_to_int32(miso_io_num_term);
-    buscfg.mosi_io_num = term_to_int32(mosi_io_num_term);
-    buscfg.sclk_io_num = term_to_int32(sclk_io_num_term);
+    buscfg.miso_io_num = term_to_int32(miso_term);
+    buscfg.mosi_io_num = term_to_int32(mosi_term);
+    buscfg.sclk_io_num = term_to_int32(sclk_term);
     buscfg.quadwp_io_num = -1;
     buscfg.quadhd_io_num = -1;
 
@@ -237,16 +237,16 @@ Context *spi_driver_create_port(GlobalContext *global, term opts)
         term device_name = term_get_tuple_element(device_names, i);
         term device_config = term_get_map_assoc(device_map, device_name, ctx->global);
 
-        term clock_speed_hz_term = interop_kv_get_value(device_config, ATOM_STR("\xC", "spi_clock_hz"), global);
+        term clock_speed_hz_term = interop_kv_get_value(device_config, ATOM_STR("\xE", "clock_speed_hz"), global);
         term mode_term = interop_kv_get_value(device_config, ATOM_STR("\x4", "mode"), global);
-        term spics_io_num_term = interop_kv_get_value(device_config, ATOM_STR("\xD", "spi_cs_io_num"), global);
+        term cs_term = interop_kv_get_value(device_config, ATOM_STR("\x2", "cs"), global);
         term address_bits_term = interop_kv_get_value(device_config, ATOM_STR("\x10", "address_len_bits"), global);
         term command_bits_term = interop_kv_get_value(device_config, ATOM_STR("\x10", "command_len_bits"), global);
 
         spi_device_interface_config_t devcfg = { 0 };
         devcfg.clock_speed_hz = term_to_int32(clock_speed_hz_term);
         devcfg.mode = term_to_int32(mode_term);
-        devcfg.spics_io_num = term_to_int32(spics_io_num_term);
+        devcfg.spics_io_num = term_to_int32(cs_term);
         devcfg.queue_size = 4;
         devcfg.address_bits = term_to_int32(address_bits_term);
         devcfg.command_bits = term_to_int32(command_bits_term);

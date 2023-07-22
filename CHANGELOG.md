@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added `esp:get_default_mac/0` for retrieving the default MAC address on ESP32.
 
+### Changed
+
+- Shorten SPI config options, such as `sclk_io_num` -> `sclk`
+
 ## [0.6.0-alpha.2] - 2023-12-10
 
 ### Fixed

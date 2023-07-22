@@ -42,17 +42,17 @@
 
 -export([open/1, close/1, read_at/4, write_at/5, write/3, write_read/3]).
 
--type spi_peripheral() :: hspi | vspi.
+-type peripheral() :: hspi | vspi.
 -type bus_config() :: [
-    {miso_io_num, non_neg_integer()}
-    | {mosi_io_num, non_neg_integer()}
-    | {sclk_io_num, non_neg_integer()}
-    | {spi_peripheral, spi_peripheral()}
+    {miso, non_neg_integer()}
+    | {mosi, non_neg_integer()}
+    | {sclk, non_neg_integer()}
+    | {peripheral, peripheral()}
 ].
 -type device_config() :: [
     {clock_speed_hz, non_neg_integer()}
     | {mode, 0..3}
-    | {spi_cs_io_num, non_neg_integer()}
+    | {cs, non_neg_integer()}
     | {address_len_bits, 0..64}
     | {command_len_bits, 0..16}
 ].
@@ -93,10 +93,10 @@
 %%
 %% <table>
 %%   <tr> <th>Key</th> <th>Type</th> <th>Default</th> <th>Description</th> </tr>
-%%   <tr> <td>`miso_io_num'</td> <td>`non_neg_integer()'</td> <td>-</td> <td>MISO pin number</td></tr>
-%%   <tr> <td>`mosi_io_num'</td> <td>`non_neg_integer()'</td> <td>-</td> <td>MOSI pin number</td></tr>
-%%   <tr> <td>`sclk_io_num'</td> <td>`non_neg_integer()'</td> <td>-</td> <td>SCLK pin number</td></tr>
-%%   <tr> <td>`spi_peripheral'</td> <td>`hspi | vspi'</td> <td>`hspi'</td> <td>SPI Peripheral (ESP32 only)</td></tr>
+%%   <tr> <td>`miso'</td> <td>`non_neg_integer()'</td> <td>-</td> <td>MISO pin number</td></tr>
+%%   <tr> <td>`mosi'</td> <td>`non_neg_integer()'</td> <td>-</td> <td>MOSI pin number</td></tr>
+%%   <tr> <td>`sclk'</td> <td>`non_neg_integer()'</td> <td>-</td> <td>SCLK pin number</td></tr>
+%%   <tr> <td>`peripheral'</td> <td>`hspi | vspi'</td> <td>`hspi'</td> <td>SPI Peripheral (ESP32 only)</td></tr>
 %% </table>
 %%
 %% Each device configuration is a properties list containing the following entries:
@@ -105,7 +105,7 @@
 %%   <tr> <th>Key</th> <th>Type</th> <th>Default</th> <th>Description</th> </tr>
 %%   <tr> <td>`clock_speed_hz'</td> <td>`non_neg_integer()'</td> <td>`1000000'</td> <td>Clock speed for the SPI device (in hz)</td></tr>
 %%   <tr> <td>`mode'</td> <td>`0..3'</td> <td>`0'</td> <td>SPI device mode</td></tr>
-%%   <tr> <td>`spi_cs_io_num'</td> <td>`non_neg_integer()'</td> <td>-</td> <td>SPI Chip Select pin number</td></tr>
+%%   <tr> <td>`cs'</td> <td>`non_neg_integer()'</td> <td>-</td> <td>SPI Chip Select pin number</td></tr>
 %%   <tr> <td>`address_len_bits'</td> <td>`non_neg_integer()'</td> <td>8</td> <td>Number of bits in the device address</td></tr>
 %% </table>
 %%
@@ -113,16 +113,16 @@
 %% <pre>
 %% Params = [
 %%    {bus_config, [
-%%        {miso_io_num, 16},
-%%        {mosi_io_num, 17},
-%%        {sclk_io_num, 5}
+%%        {miso, 16},
+%%        {mosi, 17},
+%%        {sclk, 5}
 %%    },
 %%    {device_config, [
 %%        {device1, [
-%%            {spi_cs_io_num, 18}
+%%            {cs, 18}
 %%        ]},
 %%        {device2, [
-%%            {spi_cs_io_num, 19}
+%%            {cs, 19}
 %%        ]}
 %%    ]}
 %% ]
@@ -300,10 +300,10 @@ validate_params(Params) ->
 %% @private
 validate_bus_config(BusConfig) when is_map(BusConfig) orelse is_list(BusConfig) ->
     #{
-        miso_io_num => validate_integer_entry(miso_io_num, BusConfig),
-        mosi_io_num => validate_integer_entry(mosi_io_num, BusConfig),
-        sclk_io_num => validate_integer_entry(sclk_io_num, BusConfig),
-        spi_peripheral => validate_spi_peripheral(get_value(spi_peripheral, BusConfig, hspi))
+        miso => validate_integer_entry(miso, BusConfig),
+        mosi => validate_integer_entry(mosi, BusConfig),
+        sclk => validate_integer_entry(sclk, BusConfig),
+        peripheral => validate_peripheral(get_value(peripheral, BusConfig, hspi))
     };
 validate_bus_config(undefined) ->
     throw({badarg, missing_bus_config});
@@ -325,9 +325,9 @@ validate_is_integer(Key, Value) ->
     throw({badarg, {not_an_integer_value, {Key, Value}}}).
 
 %% @private
-validate_spi_peripheral(hspi) -> hspi;
-validate_spi_peripheral(vspi) -> vspi;
-validate_spi_peripheral(Value) -> throw({bardarg, {spi_peripheral, Value}}).
+validate_peripheral(hspi) -> hspi;
+validate_peripheral(vspi) -> vspi;
+validate_peripheral(Value) -> throw({bardarg, {peripheral, Value}}).
 
 %% @private
 validate_device_config(DeviceConfig) when is_map(DeviceConfig) ->
@@ -362,9 +362,9 @@ validate_device_config_fold(E, _Accum) ->
 %% @private
 validate_device_config_entries(Entries) when is_map(Entries) orelse is_list(Entries) ->
     #{
-        spi_clock_hz => validate_integer_entry(spi_clock_hz, Entries),
+        clock_speed_hz => validate_integer_entry(clock_speed_hz, Entries),
         mode => validate_mode(get_value(mode, Entries, undefined)),
-        spi_cs_io_num => validate_integer_entry(spi_cs_io_num, Entries, undefined),
+        cs => validate_integer_entry(cs, Entries, undefined),
         address_len_bits => validate_address_len_bits(
             get_value(address_len_bits, Entries, undefined)
         ),
