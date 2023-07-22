@@ -39,10 +39,6 @@
 start() ->
     console:print(<<"AtomVM init.\n">>),
 
-    avm_pubsub:start(default_pubsub),
-
-    spawn(fun maybe_start_network/0),
-
     io:format("Starting application...~n"),
 
     Exit =
@@ -64,6 +60,10 @@ loop() ->
             loop()
     end.
 
+start_dev_mode() ->
+    avm_pubsub:start(default_pubsub),
+    spawn(fun maybe_start_network/0).
+
 %%
 %% Boot handling
 %%
@@ -74,10 +74,14 @@ loop() ->
 
 boot() ->
     BootPath = get_boot_path(),
-    atomvm:add_avm_pack_file(BootPath, [{name, app}]),
-
-    StartModule = get_start_module(),
-    StartModule:start().
+    case atomvm:add_avm_pack_file(BootPath, [{name, app}]) of
+        ok ->
+            StartModule = get_start_module(),
+            StartModule:start();
+        {error, Reason} ->
+            io:format("Failed app start: ~p.~n", [Reason]),
+            start_dev_mode()
+    end.
 
 get_boot_path() ->
     case esp:nvs_get_binary(atomvm, boot_path) of
