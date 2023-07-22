@@ -60,9 +60,22 @@ loop() ->
             loop()
     end.
 
+maybe_start_dev_mode(SystemStatus) ->
+    case {SystemStatus, esp:nvs_get_binary(atomvm, dev_mode)} of
+        {_, <<"always">>} ->
+            start_dev_mode();
+        {_, <<"never">>} ->
+            not_started;
+        {ok, undefined} ->
+            not_started;
+        {failed_app_start, undefined} ->
+            start_dev_mode()
+    end.
+
 start_dev_mode() ->
     avm_pubsub:start(default_pubsub),
-    spawn(fun maybe_start_network/0).
+    spawn(fun maybe_start_network/0),
+    started.
 
 %%
 %% Boot handling
@@ -77,10 +90,11 @@ boot() ->
     case atomvm:add_avm_pack_file(BootPath, [{name, app}]) of
         ok ->
             StartModule = get_start_module(),
+            maybe_start_dev_mode(ok),
             StartModule:start();
         {error, Reason} ->
             io:format("Failed app start: ~p.~n", [Reason]),
-            start_dev_mode()
+            maybe_start_dev_mode(failed_app_start)
     end.
 
 get_boot_path() ->
