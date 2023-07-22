@@ -298,7 +298,10 @@ validate_params(Params) ->
     throw({error, {not_a_map_or_list, Params}}).
 
 %% @private
-validate_bus_config(BusConfig) when is_map(BusConfig) orelse is_list(BusConfig) ->
+validate_bus_config(MaybeOldBusConfig) when
+    is_map(MaybeOldBusConfig) orelse is_list(MaybeOldBusConfig)
+->
+    BusConfig = migrate_deprecated(MaybeOldBusConfig),
     #{
         miso => validate_integer_entry(miso, BusConfig),
         mosi => validate_integer_entry(mosi, BusConfig),
@@ -309,6 +312,52 @@ validate_bus_config(undefined) ->
     throw({badarg, missing_bus_config});
 validate_bus_config(BusConfig) ->
     throw({badarg, {not_a_map_or_list, BusConfig}}).
+
+%% @private
+migrate_deprecated(MaybeDeprecated) when is_map(MaybeDeprecated) ->
+    Iter = maps:iterator(MaybeDeprecated),
+    migrate_deprecated_iter(maps:next(Iter), #{});
+migrate_deprecated(MaybeDeprecated) when is_list(MaybeDeprecated) ->
+    lists:foldl(
+        fun migrate_deprecated_fold/2,
+        [],
+        MaybeDeprecated
+    );
+migrate_deprecated(MaybeDeprecated) ->
+    throw({bardarg, {not_a_map_or_list, MaybeDeprecated}}).
+
+%% @private
+migrate_deprecated_iter(none, Accum) ->
+    Accum;
+migrate_deprecated_iter({K, V, Iter}, Accum) ->
+    NewK = replace_key(K),
+    warn_deprecated(K, NewK),
+    migrate_deprecated_iter(maps:next(Iter), Accum#{NewK => V}).
+
+%% @private
+migrate_deprecated_fold({K, V}, Accum) ->
+    NewK = replace_key(K),
+    warn_deprecated(K, NewK),
+    [{NewK, V} | Accum];
+migrate_deprecated_fold(E, Accum) ->
+    [E | Accum].
+
+%% @private
+replace_key(Key) ->
+    case Key of
+        miso_io_num -> miso;
+        mosi_io_num -> mosi;
+        sclk_io_num -> sclk;
+        spi_cs_io_num -> cs;
+        spi_clock_hz -> clock_speed_hz;
+        spi_peripheral -> peripheral;
+        Any -> Any
+    end.
+
+warn_deprecated(Key, Key) ->
+    ok;
+warn_deprecated(OldKey, NewKey) ->
+    io:format("SPI: found deprecated ~p, use ~p instead!!!~n", [OldKey, NewKey]).
 
 %% @private
 validate_integer_entry(Key, Map) ->
@@ -360,7 +409,10 @@ validate_device_config_fold(E, _Accum) ->
     throw({bardarg, {not_proplist_entry, E}}).
 
 %% @private
-validate_device_config_entries(Entries) when is_map(Entries) orelse is_list(Entries) ->
+validate_device_config_entries(MaybeOldEntries) when
+    is_map(MaybeOldEntries) orelse is_list(MaybeOldEntries)
+->
+    Entries = migrate_deprecated(MaybeOldEntries),
     #{
         clock_speed_hz => validate_integer_entry(clock_speed_hz, Entries),
         mode => validate_mode(get_value(mode, Entries, undefined)),
