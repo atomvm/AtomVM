@@ -101,12 +101,13 @@ uint64_t sys_monotonic_millis()
     return system_millis;
 }
 
-struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *path)
+enum OpenAVMResult sys_open_avm_from_file(
+    GlobalContext *global, const char *path, struct AVMPackData **data)
 {
     TRACE("sys_open_avm_from_file: Going to open: %s\n", path);
 
     // TODO
-    return NULL;
+    return AVM_OPEN_NOT_SUPPORTED;
 }
 
 Module *sys_load_module_from_file(GlobalContext *global, const char *path)

@@ -365,7 +365,8 @@ uint64_t sys_monotonic_millis()
     return (ts.tv_nsec / 1000000UL) + (ts.tv_sec * 1000UL);
 }
 
-struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *path)
+enum OpenAVMResult sys_open_avm_from_file(
+    GlobalContext *global, const char *path, struct AVMPackData **data)
 {
     TRACE("sys_open_avm_from_file: Going to open: %s\n", path);
 
@@ -373,24 +374,23 @@ struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *pa
 
     MappedFile *mapped = mapped_file_open_beam(path);
     if (IS_NULL_PTR(mapped)) {
-        return NULL;
+        return AVM_OPEN_CANNOT_OPEN;
     }
     if (UNLIKELY(!avmpack_is_valid(mapped->mapped, mapped->size))) {
-        fprintf(stderr, "%s is not a valid AVM Pack file.\n", path);
-        return NULL;
+        return AVM_OPEN_INVALID;
     }
 
     struct MappedFileAVMPack *avmpack_data = malloc(sizeof(struct MappedFileAVMPack));
     if (IS_NULL_PTR(avmpack_data)) {
-        fprintf(stderr, "Memory error: Cannot allocate AVMPackData.\n");
         mapped_file_close(mapped);
-        return NULL;
+        return AVM_OPEN_FAILED_ALLOC;
     }
     avmpack_data_init(&avmpack_data->base, &mapped_file_avm_pack_info);
     avmpack_data->base.data = mapped->mapped;
     avmpack_data->mapped = mapped;
 
-    return &avmpack_data->base;
+    *data = &avmpack_data->base;
+    return AVM_OPEN_OK;
 }
 
 static void mapped_file_avm_pack_destructor(struct AVMPackData *obj, GlobalContext *global)

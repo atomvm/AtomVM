@@ -40,10 +40,22 @@ extern "C" {
 #include <stdint.h>
 #include <time.h>
 
+struct AVMPackData;
+
 enum
 {
     SYS_POLL_EVENTS_DO_NOT_WAIT = 0,
     SYS_POLL_EVENTS_WAIT_FOREVER = -1
+};
+
+enum OpenAVMResult
+{
+    AVM_OPEN_OK = 0,
+    AVM_OPEN_FAILED_ALLOC = 1,
+    AVM_OPEN_INVALID = 2,
+    AVM_OPEN_CANNOT_OPEN = 3,
+    AVM_OPEN_CANNOT_READ = 4,
+    AVM_OPEN_NOT_SUPPORTED = 5
 };
 
 /**
@@ -182,7 +194,8 @@ void sys_signal(GlobalContext *glb);
 
 #endif
 
-struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *path);
+enum OpenAVMResult sys_open_avm_from_file(
+    GlobalContext *global, const char *path, struct AVMPackData **data);
 
 /**
  * @brief gets wall clock time

@@ -3439,6 +3439,38 @@ static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
     return OK_ATOM;
 }
 
+static term open_avm_error_tuple(Context *ctx, enum OpenAVMResult result)
+{
+    term reason = UNDEFINED_ATOM;
+    switch (result) {
+        case AVM_OPEN_FAILED_ALLOC:
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            break;
+        case AVM_OPEN_INVALID:
+            reason = globalcontext_make_atom(ctx->global, ATOM_STR("\xB", "invalid_avm"));
+            break;
+        case AVM_OPEN_CANNOT_OPEN:
+            reason = globalcontext_make_atom(ctx->global, ATOM_STR("\xB", "cannot_open"));
+            break;
+        case AVM_OPEN_CANNOT_READ:
+            reason = globalcontext_make_atom(ctx->global, ATOM_STR("\xB", "cannot_read"));
+            break;
+        case AVM_OPEN_NOT_SUPPORTED:
+            reason = globalcontext_make_atom(ctx->global, ATOM_STR("\xD", "not_supported"));
+            break;
+        case AVM_OPEN_OK:
+            __builtin_unreachable();
+    }
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term error_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+    term_put_tuple_element(error_tuple, 1, reason);
+
+    return error_tuple;
+}
+
 // AtomVM extension
 static term nif_atomvm_add_avm_pack_file(Context *ctx, int argc, term argv[])
 {
@@ -3457,10 +3489,11 @@ static term nif_atomvm_add_avm_pack_file(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    struct AVMPackData *avmpack_data = sys_open_avm_from_file(ctx->global, abs);
-    if (IS_NULL_PTR(avmpack_data)) {
+    struct AVMPackData *avmpack_data;
+    enum OpenAVMResult result = sys_open_avm_from_file(ctx->global, abs, &avmpack_data);
+    if (UNLIKELY(result != AVM_OPEN_OK)) {
         free(abs);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        return open_avm_error_tuple(ctx, result);
     }
 
     term name = interop_kv_get_value_default(opts, ATOM_STR("\x4", "name"), UNDEFINED_ATOM, ctx->global);

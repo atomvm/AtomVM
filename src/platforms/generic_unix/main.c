@@ -54,8 +54,8 @@ int main(int argc, char **argv)
     for (int i = 1; i < argc; ++i) {
         const char *ext = strrchr(argv[i], '.');
         if (ext && strcmp(ext, ".avm") == 0) {
-            struct AVMPackData *avmpack_data = sys_open_avm_from_file(glb, argv[i]);
-            if (IS_NULL_PTR(avmpack_data)) {
+            struct AVMPackData *avmpack_data;
+            if (UNLIKELY(sys_open_avm_from_file(glb, argv[i], &avmpack_data) != AVM_OPEN_OK)) {
                 fprintf(stderr, "Failed opening %s.\n", argv[i]);
                 return EXIT_FAILURE;
             }
