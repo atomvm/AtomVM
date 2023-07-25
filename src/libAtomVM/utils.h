@@ -259,4 +259,11 @@ static inline __attribute__((always_inline)) void *cast_func_to_void_ptr(func_pt
     #define NO_DISCARD(...)
 #endif
 
+#ifdef __GNUC__
+    #define UNREACHABLE() \
+        __builtin_unreachable()
+#else
+    #define UNREACHABLE(...)
+#endif
+
 #endif

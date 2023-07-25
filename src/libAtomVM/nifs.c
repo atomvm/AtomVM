@@ -3465,7 +3465,7 @@ static term open_avm_error_tuple(Context *ctx, enum OpenAVMResult result)
             reason = globalcontext_make_atom(ctx->global, ATOM_STR("\xD", "not_supported"));
             break;
         case AVM_OPEN_OK:
-            __builtin_unreachable();
+            UNREACHABLE();
     }
     if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
