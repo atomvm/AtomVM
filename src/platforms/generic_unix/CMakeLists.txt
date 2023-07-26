@@ -21,7 +21,7 @@
 cmake_minimum_required (VERSION 3.13)
 
 add_executable(AtomVM main.c)
-set_target_properties(AtomVM PROPERTIES RUNTIME_OUTPUT_DIRECTORY ../../)
+set_target_properties(AtomVM PROPERTIES RUNTIME_OUTPUT_DIRECTORY ../../ ENABLE_EXPORTS ON)
 target_compile_features(AtomVM PUBLIC c_std_11)
 if(CMAKE_COMPILER_IS_GNUCC)
     target_compile_options(AtomVM PUBLIC -Wall -pedantic -Wextra -ggdb)
