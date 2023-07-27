@@ -413,14 +413,7 @@ static wifi_config_t *get_sta_wifi_config(term sta_config, GlobalContext *global
 static char *get_default_device_name(esp_mac_type_t interface)
 {
     uint8_t mac[6];
-// Support actually begins with IDF v4.3
-#if ESP_IDF_VERSION_MAJOR == 5
     esp_read_mac(mac, interface);
-// TODO: remove this conditional when IDF 4.2 is dropped.
-#else
-    UNUSED(interface);
-    esp_efuse_mac_get_default(mac);
-#endif
 
     size_t buf_size = strlen("atomvm-") + 12 + 1;
     char *buf = malloc(buf_size);

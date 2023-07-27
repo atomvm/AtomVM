@@ -48,10 +48,6 @@ jobs:
         idf.py build
         idf.py size
     - name: Print component size info with idf.py
-      # size-components doesn't work with a .noinit section on 4.2.x branch.
-      # The bug was fixed on later versions and didn't occur on 4.0.x & 3.x
-      # https://github.com/espressif/esp-idf/issues/8428
-      if: matrix.build-system == 'idf' && matrix.idf-version != '4.2.3'
       shell: bash
       working-directory: ./src/platforms/esp32/
       run: |
