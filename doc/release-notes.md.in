@@ -47,10 +47,9 @@ AtomVM currently supports the following versions of ESP-IDF:
 
 | Espressif supported versions | AtomVM support |
 |------------------------------|----------------|
-| ESP-IDF v4.2 | ✅ |
-| ESP-IDF v4.3 | ✅ |
 | ESP-IDF v4.4 | ✅ |
 | ESP-IDF v5.0 | ✅ |
+| ESP-IDF v5.1 | ✅ |
 
 Building the AtomVM virtual machine for ESP32 is optional.  In most cases, you can simply download a release image from the AtomVM [release](https://github.com/atomvm/AtomVM/releases) repository.  If you wish to work on development of the VM or use one on the additional drivers that are available in the ([AtomVM repositories](https://github.com/atomvm)) you will need a compatible version of ([Espressif's](https:/espressif.com)) ESP-IDF.  Espressif provides excellent [installation documentation](https://docs.espressif.com/projects/esp-idf/en/release-v4.4/esp32/get-started/index.html).
 
