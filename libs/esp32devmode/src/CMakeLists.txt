@@ -18,12 +18,8 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-project(esp32boot)
+project(esp32devmode)
 
 include(BuildErlang)
 
-if (Elixir_FOUND)
-    pack_runnable(esp32boot esp32init esp32devmode eavmlib estdlib alisp exavmlib)
-else()
-    pack_runnable(esp32boot esp32init esp32devmode eavmlib estdlib alisp)
-endif()
+pack_archive(esp32devmode esp32devmode)

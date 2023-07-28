@@ -26,6 +26,7 @@ add_subdirectory(eavmlib/src)
 add_subdirectory(alisp/src)
 add_subdirectory(etest/src)
 add_subdirectory(esp32boot)
+add_subdirectory(esp32devmode/src)
 
 if (Elixir_FOUND)
     add_subdirectory(exavmlib/lib)
