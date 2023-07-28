@@ -24,6 +24,8 @@
 #include <math.h>
 
 #include "dictionary.h"
+#include "erl_nif.h"
+#include "erl_nif_priv.h"
 #include "globalcontext.h"
 #include "list.h"
 #include "mailbox.h"
@@ -272,68 +274,97 @@ bool context_get_process_info(Context *ctx, term *out, term atom_key)
 
 static void context_monitors_handle_terminate(Context *ctx)
 {
+    GlobalContext *glb = ctx->global;
     struct ListHead *item;
     struct ListHead *tmp;
     MUTABLE_LIST_FOR_EACH (item, tmp, &ctx->monitors_head) {
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
-        int local_process_id = term_to_local_process_id(monitor->monitor_pid);
-        Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
-        if (IS_NULL_PTR(target)) {
-            // TODO: we should scan for existing monitors when a context is destroyed
-            // otherwise memory might be wasted for long living processes
-            free(monitor);
-            continue;
-        }
+        if (monitor->ref_ticks && term_is_boxed(monitor->monitor_obj)) {
+            // Resource monitor
+            struct ResourceMonitor *resource_monitor = (struct ResourceMonitor *) monitor;
+            void *resource = term_to_term_ptr(monitor->monitor_obj);
+            struct RefcBinary *refc = refc_binary_from_data(resource);
+            ErlNifEnv env;
+            erl_nif_env_partial_init_from_globalcontext(&env, glb);
+            refc->resource_type->down(&env, resource, &ctx->process_id, &monitor->ref_ticks);
 
-        if (monitor->linked && (ctx->exit_reason != NORMAL_ATOM || target->trap_exit)) {
-            if (target->trap_exit) {
-                if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
+            struct ListHead *processes_table_list = synclist_wrlock(&glb->processes_table);
+            UNUSED(processes_table_list);
+            list_remove(&resource_monitor->resource_list_head);
+            synclist_unlock(&glb->processes_table);
+        } else {
+            int local_process_id = term_to_local_process_id(monitor->monitor_obj);
+            Context *target = globalcontext_get_process_lock(glb, local_process_id);
+            if (IS_NULL_PTR(target)) {
+                // TODO: we should scan for existing monitors when a context is destroyed
+                // otherwise memory might be wasted for long living processes
+                free(monitor);
+                continue;
+            }
+
+            if (monitor->ref_ticks == 0 && (ctx->exit_reason != NORMAL_ATOM || target->trap_exit)) {
+                if (target->trap_exit) {
+                    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
+                        // TODO: handle out of memory here
+                        fprintf(stderr, "Cannot handle out of memory.\n");
+                        globalcontext_get_process_unlock(glb, target);
+                        AVM_ABORT();
+                    }
+
+                    // Prepare the message on ctx's heap which will be freed afterwards.
+                    term info_tuple = term_alloc_tuple(3, &ctx->heap);
+                    term_put_tuple_element(info_tuple, 0, EXIT_ATOM);
+                    term_put_tuple_element(info_tuple, 1, term_from_local_process_id(ctx->process_id));
+                    term_put_tuple_element(info_tuple, 2, ctx->exit_reason);
+                    mailbox_send(target, info_tuple);
+                } else {
+                    mailbox_send_term_signal(target, KillSignal, ctx->exit_reason);
+                }
+            } else if (monitor->ref_ticks) {
+                int required_terms = REF_SIZE + TUPLE_SIZE(5);
+                if (UNLIKELY(memory_ensure_free(ctx, required_terms) != MEMORY_GC_OK)) {
                     // TODO: handle out of memory here
                     fprintf(stderr, "Cannot handle out of memory.\n");
-                    globalcontext_get_process_unlock(ctx->global, target);
+                    globalcontext_get_process_unlock(glb, target);
                     AVM_ABORT();
                 }
 
                 // Prepare the message on ctx's heap which will be freed afterwards.
-                term info_tuple = term_alloc_tuple(3, &ctx->heap);
-                term_put_tuple_element(info_tuple, 0, EXIT_ATOM);
-                term_put_tuple_element(info_tuple, 1, term_from_local_process_id(ctx->process_id));
-                term_put_tuple_element(info_tuple, 2, ctx->exit_reason);
+                term ref = term_from_ref_ticks(monitor->ref_ticks, &ctx->heap);
+
+                term info_tuple = term_alloc_tuple(5, &ctx->heap);
+                term_put_tuple_element(info_tuple, 0, DOWN_ATOM);
+                term_put_tuple_element(info_tuple, 1, ref);
+                if (ctx->native_handler != NULL) {
+                    term_put_tuple_element(info_tuple, 2, PORT_ATOM);
+                } else {
+                    term_put_tuple_element(info_tuple, 2, PROCESS_ATOM);
+                }
+                term_put_tuple_element(info_tuple, 3, term_from_local_process_id(ctx->process_id));
+                term_put_tuple_element(info_tuple, 4, ctx->exit_reason);
+
                 mailbox_send(target, info_tuple);
-            } else {
-                mailbox_send_term_signal(target, KillSignal, ctx->exit_reason);
             }
-        } else if (!monitor->linked) {
-            int required_terms = REF_SIZE + TUPLE_SIZE(5);
-            if (UNLIKELY(memory_ensure_free(ctx, required_terms) != MEMORY_GC_OK)) {
-                // TODO: handle out of memory here
-                fprintf(stderr, "Cannot handle out of memory.\n");
-                globalcontext_get_process_unlock(ctx->global, target);
-                AVM_ABORT();
-            }
-
-            // Prepare the message on ctx's heap which will be freed afterwards.
-            term ref = term_from_ref_ticks(monitor->ref_ticks, &ctx->heap);
-
-            term info_tuple = term_alloc_tuple(5, &ctx->heap);
-            term_put_tuple_element(info_tuple, 0, DOWN_ATOM);
-            term_put_tuple_element(info_tuple, 1, ref);
-            if (ctx->native_handler != NULL) {
-                term_put_tuple_element(info_tuple, 2, PORT_ATOM);
-            } else {
-                term_put_tuple_element(info_tuple, 2, PROCESS_ATOM);
-            }
-            term_put_tuple_element(info_tuple, 3, term_from_local_process_id(ctx->process_id));
-            term_put_tuple_element(info_tuple, 4, ctx->exit_reason);
-
-            mailbox_send(target, info_tuple);
+            globalcontext_get_process_unlock(glb, target);
         }
-        globalcontext_get_process_unlock(ctx->global, target);
         free(monitor);
     }
 }
 
-uint64_t context_monitor(Context *ctx, term monitor_pid, bool linked)
+int context_link(Context *ctx, term link_pid)
+{
+    struct Monitor *monitor = malloc(sizeof(struct Monitor));
+    if (IS_NULL_PTR(monitor)) {
+        return -1;
+    }
+    monitor->monitor_obj = link_pid;
+    monitor->ref_ticks = 0;
+    list_append(&ctx->monitors_head, &monitor->monitor_list_head);
+
+    return 0;
+}
+
+uint64_t context_monitor(Context *ctx, term monitor_pid)
 {
     uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
 
@@ -341,20 +372,35 @@ uint64_t context_monitor(Context *ctx, term monitor_pid, bool linked)
     if (IS_NULL_PTR(monitor)) {
         return 0;
     }
-    monitor->monitor_pid = monitor_pid;
+    monitor->monitor_obj = monitor_pid;
     monitor->ref_ticks = ref_ticks;
-    monitor->linked = linked;
     list_append(&ctx->monitors_head, &monitor->monitor_list_head);
 
     return ref_ticks;
 }
 
-void context_demonitor(Context *ctx, term monitor_pid, bool linked)
+struct ResourceMonitor *context_resource_monitor(Context *ctx, void *resource)
+{
+    uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+
+    struct ResourceMonitor *monitor = malloc(sizeof(struct ResourceMonitor));
+    if (IS_NULL_PTR(monitor)) {
+        return NULL;
+    }
+    // Not really boxed, but sufficient to distinguish from pids
+    monitor->base.monitor_obj = ((term) resource) | TERM_BOXED_VALUE_TAG;
+    monitor->base.ref_ticks = ref_ticks;
+    list_append(&ctx->monitors_head, &monitor->base.monitor_list_head);
+
+    return monitor;
+}
+
+void context_unlink(Context *ctx, term link_pid)
 {
     struct ListHead *item;
     LIST_FOR_EACH (item, &ctx->monitors_head) {
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
-        if ((monitor->monitor_pid == monitor_pid) && (monitor->linked == linked)) {
+        if ((monitor->monitor_obj == link_pid) && (monitor->ref_ticks == 0)) {
             list_remove(&monitor->monitor_list_head);
             free(monitor);
             return;

@@ -388,8 +388,16 @@ Module *globalcontext_get_module_by_index(GlobalContext *global, int index);
  */
 Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_atom);
 
+/**
+ * @brief remove a monitor
+ *
+ * @details iterate on the list of all processes and then on each monitor
+ * to find a given monitor, and remove it
+ * @param global the global context
+ * @param ref_ticks the reference to the monitor
+ * @return true if the monitor was found
+ */
 bool globalcontext_demonitor(GlobalContext *global, uint64_t ref_ticks);
-void globalcontext_unlink(GlobalContext *global, term pid);
 
 #ifndef __cplusplus
 static inline uint64_t globalcontext_get_ref_ticks(GlobalContext *global)

@@ -50,8 +50,10 @@ struct ResourceType
     struct ListHead head;
     const char *name;
     GlobalContext *global;
+    struct ListHead monitors;
     ErlNifResourceDtor *dtor;
     ErlNifResourceStop *stop;
+    ErlNifResourceDown *down;
 };
 
 /**
@@ -106,6 +108,14 @@ bool select_event_notify(ErlNifEvent event, bool is_read, bool is_write, GlobalC
  * @param global the global context
  */
 void select_event_count_and_destroy_closed(size_t *read, size_t *write, size_t *either, GlobalContext *global);
+
+/**
+ * @brief Destroy monitors associated with a resource.
+ *
+ * @param resource resource to destroy monitors for
+ * @param global the global context
+ */
+void destroy_resource_monitors(struct RefcBinary *resource, GlobalContext *global);
 
 #ifdef __cplusplus
 }

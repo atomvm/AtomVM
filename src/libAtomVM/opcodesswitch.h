@@ -1110,9 +1110,13 @@ COLD_FUNC static void dump(Context *ctx)
     struct ListHead *item;
     LIST_FOR_EACH (item, &ctx->monitors_head) {
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
-        term_display(stderr, monitor->monitor_pid, ctx);
+        if (term_is_pid(monitor->monitor_obj)) {
+            term_display(stderr, monitor->monitor_obj, ctx);
+        } else {
+            fprintf(stderr, "<resource %p>", (void *) term_to_const_term_ptr(monitor->monitor_obj));
+        }
         fprintf(stderr, " ");
-        if (monitor->linked) {
+        if (monitor->ref_ticks == 0) {
             fprintf(stderr, "<");
         }
         fprintf(stderr, "---> ");
