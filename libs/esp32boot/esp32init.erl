@@ -24,38 +24,26 @@
 
 start() ->
     console:print(<<"AtomVM init.\n">>),
+    boot().
 
-    io:format("Starting application...~n"),
-
-    Exit =
-        try boot() of
-            Result -> {exit, Result}
-        catch
-            Error -> {crash, Error}
-        end,
-    erlang:display(Exit),
-
-    io:format("Looping...~n"),
-
-    loop().
-
-loop() ->
-    receive
-        Msg ->
-            erlang:display({received_message, Msg}),
-            loop()
+is_dev_mode_enabled(SystemStatus) ->
+    case {SystemStatus, esp:nvs_get_binary(atomvm, dev_mode)} of
+        {_, <<"always">>} ->
+            true;
+        {_, <<"never">>} ->
+            false;
+        {ok, undefined} ->
+            false;
+        {app_exit, undefined} ->
+            false;
+        {app_fail, undefined} ->
+            true
     end.
 
 maybe_start_dev_mode(SystemStatus) ->
-    case {SystemStatus, esp:nvs_get_binary(atomvm, dev_mode)} of
-        {_, <<"always">>} ->
-            ep32devmode:start_dev_mode();
-        {_, <<"never">>} ->
-            not_started;
-        {ok, undefined} ->
-            not_started;
-        {failed_app_start, undefined} ->
-            esp32devmode:start_dev_mode()
+    case is_dev_mode_enabled(SystemStatus) of
+        true -> esp32devmode:start_dev_mode();
+        false -> not_started
     end.
 
 % TODO: add support for multiple apps
@@ -67,11 +55,29 @@ boot() ->
     case atomvm:add_avm_pack_file(BootPath, [{name, app}]) of
         ok ->
             StartModule = get_start_module(),
-            maybe_start_dev_mode(ok),
-            StartModule:start();
+            DevOnExit = is_dev_mode_enabled(app_exit),
+            StartedDevMode = maybe_start_dev_mode(ok),
+
+            io:format("Starting application...~n"),
+            case DevOnExit of
+                true ->
+                    try StartModule:start() of
+                        Result -> io:format("Exited: ~p.~n", [Result])
+                    catch
+                        Error -> io:format("Crashed: ~p.~n", [Error])
+                    end,
+                    case StartedDevMode of
+                        started -> ok;
+                        _NotStarted -> maybe_start_dev_mode(app_exit)
+                    end,
+                    timer:sleep(infinity);
+                false ->
+                    StartModule:start()
+            end;
         {error, Reason} ->
             io:format("Failed app start: ~p.~n", [Reason]),
-            maybe_start_dev_mode(failed_app_start)
+            maybe_start_dev_mode(app_fail),
+            timer:sleep(infinity)
     end.
 
 get_boot_path() ->
