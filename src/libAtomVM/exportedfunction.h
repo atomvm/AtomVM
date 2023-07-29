@@ -37,7 +37,6 @@ struct Module;
 typedef struct Module Module;
 #endif
 
-typedef term (*BifImpl)();
 typedef term (*BifImpl0)(Context *ctx);
 typedef term (*BifImpl1)(Context *ctx, term arg1);
 typedef term (*BifImpl2)(Context *ctx, term arg1, term arg2);
@@ -53,12 +52,36 @@ enum FunctionType
     InvalidFunctionType = 0,
     NIFFunctionType = 2,
     UnresolvedFunctionCall = 3,
-    ModuleFunction = 4
+    ModuleFunction = 4,
+    BIFFunctionType = 5,
+    GCBIFFunctionType = 6
 };
 
 struct ExportedFunction
 {
     enum FunctionType type;
+};
+
+struct Bif
+{
+    struct ExportedFunction base;
+    union
+    {
+        BifImpl0 bif0_ptr;
+        BifImpl1 bif1_ptr;
+        BifImpl2 bif2_ptr;
+    };
+};
+
+struct GCBif
+{
+    struct ExportedFunction base;
+    union
+    {
+        GCBifImpl1 gcbif1_ptr;
+        GCBifImpl2 gcbif2_ptr;
+        GCBifImpl3 gcbif3_ptr;
+    };
 };
 
 struct Nif
@@ -82,6 +105,12 @@ struct ModuleFunction
     int label;
 };
 
+#define EXPORTED_FUNCTION_TO_BIF(func) \
+    ((const struct Bif *) (((char *) (func)) - ((unsigned long) &((const struct Bif *) 0)->base)))
+
+#define EXPORTED_FUNCTION_TO_GCBIF(func) \
+    ((const struct GCBif *) (((char *) (func)) - ((unsigned long) &((const struct GCBif *) 0)->base)))
+
 #define EXPORTED_FUNCTION_TO_NIF(func) \
     ((const struct Nif *) (((char *) (func)) - ((unsigned long) &((const struct Nif *) 0)->base)))
 
@@ -90,11 +119,5 @@ struct ModuleFunction
 
 #define EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func) \
     ((const struct ModuleFunction *) (((char *) (func)) - ((unsigned long) &((const struct ModuleFunction *) 0)->base)))
-
-union imported_func
-{
-    const struct ExportedFunction *func;
-    BifImpl bif;
-};
 
 #endif

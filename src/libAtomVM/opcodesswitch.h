@@ -1259,41 +1259,37 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
 static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString function_name, int arity,
     term *return_value)
 {
-    BifImpl bif = bif_registry_get_handler(module_name, function_name, arity);
-    if (bif) {
-        if (bif_registry_is_gc_bif(module_name, function_name, arity)) {
+    const struct ExportedFunction *exported_bif = bif_registry_get_handler(module_name, function_name, arity);
+    if (exported_bif) {
+        if (exported_bif->type == GCBIFFunctionType) {
+            const struct GCBif *gcbif = EXPORTED_FUNCTION_TO_GCBIF(exported_bif);
             switch (arity) {
                 case 1: {
-                    GCBifImpl1 gcbif1 = (GCBifImpl1) bif;
-                    *return_value = gcbif1(ctx, 0, ctx->x[0]);
+                    *return_value = gcbif->gcbif1_ptr(ctx, 0, ctx->x[0]);
                     return true;
                 }
                 case 2: {
-                    GCBifImpl2 gcbif2 = (GCBifImpl2) bif;
-                    *return_value = gcbif2(ctx, 0, ctx->x[0], ctx->x[1]);
+                    *return_value = gcbif->gcbif2_ptr(ctx, 0, ctx->x[0], ctx->x[1]);
                     return true;
                 }
                 case 3: {
-                    GCBifImpl3 gcbif3 = (GCBifImpl3) bif;
-                    *return_value = gcbif3(ctx, 0, ctx->x[0], ctx->x[1], ctx->x[2]);
+                    *return_value = gcbif->gcbif3_ptr(ctx, 0, ctx->x[0], ctx->x[1], ctx->x[2]);
                     return true;
                 }
             }
         } else {
+            const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(exported_bif);
             switch (arity) {
                 case 0: {
-                    BifImpl0 bif0 = (BifImpl0) bif;
-                    *return_value = bif0(ctx);
+                    *return_value = bif->bif0_ptr(ctx);
                     return true;
                 }
                 case 1: {
-                    BifImpl1 bif1 = (BifImpl1) bif;
-                    *return_value = bif1(ctx, ctx->x[0]);
+                    *return_value = bif->bif1_ptr(ctx, ctx->x[0]);
                     return true;
                 }
                 case 2: {
-                    BifImpl2 bif2 = (BifImpl2) bif;
-                    *return_value = bif2(ctx, ctx->x[0], ctx->x[1]);
+                    *return_value = bif->bif2_ptr(ctx, ctx->x[0], ctx->x[1]);
                     return true;
                 }
             }
@@ -1724,6 +1720,26 @@ schedule_in:
 
                             break;
                         }
+                        case BIFFunctionType: {
+                            // Support compilers < OTP26 that generate CALL_EXT
+                            // for min/2 and max/2
+                            const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(func);
+                            switch (arity) {
+                                case 0:
+                                    ctx->x[0] = bif->bif0_ptr(ctx);
+                                    break;
+                                case 1:
+                                    ctx->x[0] = bif->bif1_ptr(ctx, ctx->x[0]);
+                                    break;
+                                case 2:
+                                    ctx->x[0] = bif->bif2_ptr(ctx, ctx->x[0], ctx->x[1]);
+                                    break;
+                                default:
+                                    fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
+                            }
+
+                            break;
+                        }
                         default: {
                             fprintf(stderr, "Invalid function type %i at index: %" PRIu32 "\n", func->type, index);
                             AVM_ABORT();
@@ -1800,6 +1816,32 @@ schedule_in:
 
                             break;
                         }
+                        case BIFFunctionType: {
+                            // Support compilers < OTP26 that generate CALL_EXT_LAST
+                            // for min/2 and max/2
+                            // These are safe regarding otp issue #7152
+                            ctx->cp = ctx->e[n_words];
+                            ctx->e += (n_words + 1);
+
+                            const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(func);
+                            switch (arity) {
+                                case 0:
+                                    ctx->x[0] = bif->bif0_ptr(ctx);
+                                    break;
+                                case 1:
+                                    ctx->x[0] = bif->bif1_ptr(ctx, ctx->x[0]);
+                                    break;
+                                case 2:
+                                    ctx->x[0] = bif->bif2_ptr(ctx, ctx->x[0], ctx->x[1]);
+                                    break;
+                                default:
+                                    fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
+                            }
+
+                            DO_RETURN();
+
+                            break;
+                        }
                         default: {
                             fprintf(stderr, "Invalid function type %i at index: %" PRIu32 "\n", func->type, index);
                             AVM_ABORT();
@@ -1827,7 +1869,8 @@ schedule_in:
                 USED_BY_TRACE(dreg);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    BifImpl0 func = (BifImpl0) mod->imported_funcs[bif].bif;
+                    const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
+                    BifImpl0 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif0_ptr;
                     DEBUG_FAIL_NULL(func);
                     term ret = func(ctx);
 
@@ -1860,7 +1903,8 @@ schedule_in:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    BifImpl1 func = (BifImpl1) mod->imported_funcs[bif].bif;
+                    const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
+                    BifImpl1 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif1_ptr;
                     DEBUG_FAIL_NULL(func);
                     term ret = func(ctx, arg1);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
@@ -1899,7 +1943,8 @@ schedule_in:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    BifImpl2 func = (BifImpl2) mod->imported_funcs[bif].bif;
+                    const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
+                    BifImpl2 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif2_ptr;
                     DEBUG_FAIL_NULL(func);
                     term ret = func(ctx, arg1, arg2);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
@@ -3455,6 +3500,28 @@ wait_timeout_trap_handler:
                             code = mod->code->code;
 
                             JUMP_TO_ADDRESS(mod->labels[jump->label]);
+
+                            break;
+                        }
+                        case BIFFunctionType: {
+                            // Support compilers < OTP26 that generate CALL_EXT_ONLY
+                            // for min/2 and max/2
+                            const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(func);
+                            switch (arity) {
+                                case 0:
+                                    ctx->x[0] = bif->bif0_ptr(ctx);
+                                    break;
+                                case 1:
+                                    ctx->x[0] = bif->bif1_ptr(ctx, ctx->x[0]);
+                                    break;
+                                case 2:
+                                    ctx->x[0] = bif->bif2_ptr(ctx, ctx->x[0], ctx->x[1]);
+                                    break;
+                                default:
+                                    fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
+                            }
+
+                            DO_RETURN();
 
                             break;
                         }
@@ -5298,7 +5365,8 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("gc_bif1/5 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, dest=%c%i\n", f_label, live, bif, arg1, T_DEST_REG(dreg_type, dreg));
 
-                    GCBifImpl1 func = (GCBifImpl1) mod->imported_funcs[bif].bif;
+                    const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
+                    GCBifImpl1 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif1_ptr;
                     term ret = func(ctx, live, arg1);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
                         HANDLE_ERROR();
@@ -5342,7 +5410,8 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("gc_bif2/6 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, arg2=0x%lx, dest=%c%i\n", f_label, live, bif, arg1, arg2, T_DEST_REG(dreg_type, dreg));
 
-                    GCBifImpl2 func = (GCBifImpl2) mod->imported_funcs[bif].bif;
+                    const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
+                    GCBifImpl2 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif2_ptr;
                     term ret = func(ctx, live, arg1, arg2);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
                         HANDLE_ERROR();
@@ -5416,7 +5485,8 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("gc_bif3/7 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, arg2=0x%lx, arg3=0x%lx, dest=%c%i\n", f_label, live, bif, arg1, arg2, arg3, T_DEST_REG(dreg_type, dreg));
 
-                    GCBifImpl3 func = (GCBifImpl3) mod->imported_funcs[bif].bif;
+                    const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
+                    GCBifImpl3 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif3_ptr;
                     term ret = func(ctx, live, arg1, arg2, arg3);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
                         HANDLE_ERROR();

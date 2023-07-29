@@ -500,6 +500,8 @@ struct Test tests[] = {
     TEST_CASE_COND(test_stacktrace, 0, SKIP_STACKTRACES),
     TEST_CASE(small_big_ext),
 
+    TEST_CASE(test_min_max_guard),
+
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 
     { NULL, 0, false, false }
