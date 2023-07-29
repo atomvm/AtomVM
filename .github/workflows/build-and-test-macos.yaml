@@ -26,7 +26,7 @@ jobs:
     strategy:
       matrix:
         os: ["macos-11"]
-        otp: ["23", "24", "25"]
+        otp: ["24", "25", "26"]
 
     steps:
     # Setup
