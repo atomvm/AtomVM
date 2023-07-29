@@ -291,8 +291,17 @@ stop(Name, Reason, Timeout) when is_atom(Name) ->
             stop(Pid, Reason, Timeout)
     end;
 stop(Pid, Reason, Timeout) when is_pid(Pid) ->
-    Ref = erlang:make_ref(),
-    call_internal(Pid, {'$stop', {self(), Ref}, Reason}, Timeout).
+    MonitorRef = monitor(process, Pid),
+    Pid ! {'$stop', Reason},
+    receive
+        {'DOWN', MonitorRef, process, Pid, Reason} ->
+            ok;
+        {'DOWN', MonitorRef, process, Pid, AnotherReason} ->
+            erlang:exit(AnotherReason)
+    after Timeout ->
+        demonitor(MonitorRef, [flush]),
+        erlang:exit(timeout)
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @equiv   call(ServerRef, Request, 5000)
@@ -321,13 +330,27 @@ call(ServerRef, Request) ->
 call(Name, Request, TimeoutMs) when is_atom(Name) ->
     case erlang:whereis(Name) of
         undefined ->
-            {error, undefined};
+            erlang:exit({noproc, {?MODULE, ?FUNCTION_NAME, [Name, Request]}});
         Pid when is_pid(Pid) ->
             call(Pid, Request, TimeoutMs)
     end;
 call(Pid, Request, TimeoutMs) when is_pid(Pid) ->
-    Ref = erlang:make_ref(),
-    call_internal(Pid, {'$call', {self(), Ref}, Request}, TimeoutMs).
+    MonitorRef = monitor(process, Pid),
+    Pid ! {'$call', {self(), MonitorRef}, Request},
+    receive
+        {'DOWN', MonitorRef, process, Pid, {E, []} = _Reason} ->
+            erlang:exit({E, {?MODULE, ?FUNCTION_NAME, [Pid, Request]}});
+        {'DOWN', MonitorRef, process, Pid, {_E, _L} = Reason} ->
+            erlang:exit(Reason);
+        {'DOWN', MonitorRef, process, Pid, Atom} when is_atom(Atom) ->
+            erlang:exit({Atom, {?MODULE, ?FUNCTION_NAME, [Pid, Request]}});
+        {MonitorRef, Reply} ->
+            demonitor(MonitorRef, [flush]),
+            Reply
+    after TimeoutMs ->
+        demonitor(MonitorRef, [flush]),
+        erlang:exit({timeout, {?MODULE, ?FUNCTION_NAME, [Pid, Request]}})
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   ServerRef a reference to the gen_server acquired via start
@@ -372,17 +395,6 @@ reply({Pid, Ref}, Reply) ->
 %%
 
 %% @private
-call_internal(Pid, {_Tag, From, _Term} = Msg, TimeoutMs) ->
-    Pid ! Msg,
-    wait_reply(From, TimeoutMs).
-
-wait_reply({_Pid, Ref}, TimeoutMs) ->
-    receive
-        {Ref, Reply} -> Reply
-    after TimeoutMs -> exit(timeout)
-    end.
-
-%% @private
 loop(#state{mod = Mod, mod_state = ModState} = State, Timeout) ->
     receive
         {'$call', {_Pid, _Ref} = From, Request} ->
@@ -416,9 +428,8 @@ loop(#state{mod = Mod, mod_state = ModState} = State, Timeout) ->
                 _ ->
                     do_terminate(State, {error, unexpected_reply}, ModState)
             end;
-        {'$stop', {_Pid, _Ref} = From, Reason} ->
-            do_terminate(State, Reason, ModState),
-            ok = reply(From, ok);
+        {'$stop', Reason} ->
+            do_terminate(State, Reason, ModState);
         Info ->
             case Mod:handle_info(Info, ModState) of
                 {noreply, NewModState} ->
