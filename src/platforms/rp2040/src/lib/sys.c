@@ -135,13 +135,14 @@ uint64_t sys_monotonic_millis()
     return usec / 1000;
 }
 
-struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *path)
+enum OpenAVMResult sys_open_avm_from_file(
+    GlobalContext *global, const char *path, struct AVMPackData **data)
 {
     UNUSED(global);
     UNUSED(path);
 
-    // No file support on pico.
-    return NULL;
+    // TODO
+    return AVM_OPEN_NOT_SUPPORTED;
 }
 
 Module *sys_load_module_from_file(GlobalContext *global, const char *path)

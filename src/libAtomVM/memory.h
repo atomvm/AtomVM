@@ -122,7 +122,7 @@ typedef struct Heap Heap;
  *
  * @param heap heap to initialize.
  * @param root fragment root.
- * @param size capacity of the heap to create, including the mso_list.
+ * @param size capacity of the heap to create, not including the mso_list.
  */
 void memory_init_heap_root_fragment(Heap *heap, HeapFragment *root, size_t size);
 
@@ -130,7 +130,7 @@ void memory_init_heap_root_fragment(Heap *heap, HeapFragment *root, size_t size)
  * @brief Initialize a root heap.
  *
  * @param heap heap to initialize.
- * @param size capacity of the heap to create, including the mso_list.
+ * @param size capacity of the heap to create, not including the mso_list.
  * @returns MEMORY_GC_OK or MEMORY_GC_ERROR_FAILED_ALLOCATION depending on the outcome.
  */
 enum MemoryGCResult memory_init_heap(Heap *heap, size_t size) MUST_CHECK;

@@ -23,6 +23,7 @@
 #include <erl_nif_priv.h>
 #include <globalcontext.h>
 #include <interop.h>
+#include <memory.h>
 #include <nifs.h>
 #include <term.h>
 #include <term_typedef.h>
@@ -32,6 +33,8 @@
 #include <emscripten/promise.h>
 #include <emscripten/proxying.h>
 #include <emscripten/threading.h>
+
+#include <math.h>
 
 //#define ENABLE_TRACE
 #include <trace.h>
@@ -47,6 +50,20 @@ static term nif_atomvm_platform(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
     return EMSCRIPTEN_ATOM;
+}
+
+static term nif_atomvm_random(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
+    float val1 = emscripten_random();
+    float val2 = emscripten_random();
+    uint32_t result = ((uint32_t) floor(val1 * (1 << 16))) << 16 | ((uint32_t) floor(val2 * (1 << 16)));
+    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    return term_make_maybe_boxed_int64(result, &ctx->heap);
 }
 
 static void do_run_script(GlobalContext *global, char *script, int sync, int sync_caller_pid)
@@ -141,6 +158,10 @@ static term nif_emscripten_promise_reject(Context *ctx, int argc, term argv[])
 static const struct Nif atomvm_platform_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_platform
+};
+static const struct Nif atomvm_random_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_random
 };
 static const struct Nif emscripten_run_script_nif = {
     .base.type = NIFFunctionType,
@@ -741,6 +762,9 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
 {
     if (strcmp("atomvm:platform/0", nifname) == 0) {
         return &atomvm_platform_nif;
+    }
+    if (strcmp("atomvm:random/0", nifname) == 0) {
+        return &atomvm_random_nif;
     }
     if (memcmp("emscripten:", nifname, strlen("emscripten:"))) {
         return NULL;

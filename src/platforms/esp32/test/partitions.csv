@@ -3,6 +3,9 @@
 #
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 
+# UPDATE ALSO "test_erl_sources/test_esp_partition.erl" WHEN UPDATING THIS FILE
+# OTHERWISE "test_esp_partition.erl" TEST WILL ALWAYS FAIL.
+
 # Name,   Type, SubType, Offset,  Size, Flags
 # Note: if you change the phy_init or app partition offset, make sure to change the offset in Kconfig.projbuild
 nvs,      data, nvs,       0x9000,     0x6000,

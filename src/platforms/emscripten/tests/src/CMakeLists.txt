@@ -29,10 +29,12 @@ function(compile_erlang module_name)
     )
 endfunction()
 
+compile_erlang(test_atomvm)
 compile_erlang(test_call)
 compile_erlang(test_html5)
 
 add_custom_target(emscripten_erlang_test_modules DEPENDS
+    test_atomvm.beam
     test_call.beam
     test_html5.beam
 )

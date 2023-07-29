@@ -26,6 +26,7 @@ start() ->
     ok = test_concat(),
     ok = test_iolist(),
     ok = test_iolist_to_binary(),
+    ok = test_empty_list_to_binary(),
     0.
 
 test_concat() ->
@@ -57,6 +58,10 @@ test_iolist_to_binary() ->
             error:badarg ->
                 fail
         end,
+    ok.
+
+test_empty_list_to_binary() ->
+    <<"">> = erlang:list_to_binary([]),
     ok.
 
 concat(A, B) ->

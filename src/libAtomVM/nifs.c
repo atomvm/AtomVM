@@ -153,6 +153,7 @@ static term nif_erlang_unlink(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_add_avm_pack_file(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_close_avm_pack(Context *ctx, int argc, term argv[]);
+static term nif_atomvm_get_start_beam(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[]);
 static term nif_console_print(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode(Context *ctx, int argc, term argv[]);
@@ -647,6 +648,11 @@ static const struct Nif atomvm_close_avm_pack_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_close_avm_pack
+};
+static const struct Nif atomvm_get_start_beam_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_get_start_beam
 };
 static const struct Nif atomvm_read_priv_nif =
 {
@@ -2295,29 +2301,40 @@ static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
             RAISE_ERROR(BADARG_ATOM);
     }
 
-    char *bin_buf = malloc(bin_size);
-    if (IS_NULL_PTR(bin_buf)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    switch (interop_write_iolist(t, bin_buf)) {
-        case InteropOk:
-            break;
-        case InteropMemoryAllocFail:
-            free(bin_buf);
+    char *bin_buf = NULL;
+    bool buf_allocated = true;
+    if (bin_size > 0) {
+        bin_buf = malloc(bin_size);
+        if (IS_NULL_PTR(bin_buf)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        case InteropBadArg:
-            free(bin_buf);
-            RAISE_ERROR(BADARG_ATOM);
+        }
+
+        switch (interop_write_iolist(t, bin_buf)) {
+            case InteropOk:
+                break;
+            case InteropMemoryAllocFail:
+                free(bin_buf);
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            case InteropBadArg:
+                free(bin_buf);
+                RAISE_ERROR(BADARG_ATOM);
+        }
+    } else {
+        bin_buf = "";
+        buf_allocated = false;
     }
 
     if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(bin_size), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        free(bin_buf);
+        if (buf_allocated) {
+            free(bin_buf);
+        }
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term bin_res = term_from_literal_binary(bin_buf, bin_size, &ctx->heap, ctx->global);
 
-    free(bin_buf);
+    if (buf_allocated) {
+        free(bin_buf);
+    }
 
     return bin_res;
 }
@@ -3425,6 +3442,38 @@ static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
     return OK_ATOM;
 }
 
+static term open_avm_error_tuple(Context *ctx, enum OpenAVMResult result)
+{
+    term reason = UNDEFINED_ATOM;
+    switch (result) {
+        case AVM_OPEN_FAILED_ALLOC:
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            break;
+        case AVM_OPEN_INVALID:
+            reason = globalcontext_make_atom(ctx->global, ATOM_STR("\xB", "invalid_avm"));
+            break;
+        case AVM_OPEN_CANNOT_OPEN:
+            reason = globalcontext_make_atom(ctx->global, ATOM_STR("\xB", "cannot_open"));
+            break;
+        case AVM_OPEN_CANNOT_READ:
+            reason = globalcontext_make_atom(ctx->global, ATOM_STR("\xB", "cannot_read"));
+            break;
+        case AVM_OPEN_NOT_SUPPORTED:
+            reason = globalcontext_make_atom(ctx->global, ATOM_STR("\xD", "not_supported"));
+            break;
+        case AVM_OPEN_OK:
+            UNREACHABLE();
+    }
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term error_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+    term_put_tuple_element(error_tuple, 1, reason);
+
+    return error_tuple;
+}
+
 // AtomVM extension
 static term nif_atomvm_add_avm_pack_file(Context *ctx, int argc, term argv[])
 {
@@ -3443,10 +3492,11 @@ static term nif_atomvm_add_avm_pack_file(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    struct AVMPackData *avmpack_data = sys_open_avm_from_file(ctx->global, abs);
-    if (IS_NULL_PTR(avmpack_data)) {
+    struct AVMPackData *avmpack_data;
+    enum OpenAVMResult result = sys_open_avm_from_file(ctx->global, abs, &avmpack_data);
+    if (UNLIKELY(result != AVM_OPEN_OK)) {
         free(abs);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        return open_avm_error_tuple(ctx, result);
     }
 
     term name = interop_kv_get_value_default(opts, ATOM_STR("\x4", "name"), UNDEFINED_ATOM, ctx->global);
@@ -3495,6 +3545,64 @@ static term nif_atomvm_close_avm_pack(Context *ctx, int argc, term argv[])
     }
 
     return OK_ATOM;
+}
+
+// AtomVM extension
+static term nif_atomvm_get_start_beam(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term name = argv[0];
+    if (UNLIKELY(!term_is_atom(name))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int name_atom_id = term_to_atom_index(name);
+
+    struct ListHead *open_avm_packs = synclist_wrlock(&ctx->global->avmpack_data);
+    struct ListHead *item;
+    LIST_FOR_EACH (item, open_avm_packs) {
+        struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
+        if (avmpack_data->name_atom_id == name_atom_id) {
+            uint32_t size;
+            const void *beam;
+            const char *module_name;
+            if (!avmpack_find_section_by_flag(avmpack_data->data, BEAM_START_FLAG, &beam, &size, &module_name)) {
+                synclist_unlock(&ctx->global->avmpack_data);
+                if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                term no_start = globalcontext_make_atom(ctx->global, ATOM_STR("\xD", "no_start_beam"));
+                term result = term_alloc_tuple(2, &ctx->heap);
+                term_put_tuple_element(result, 0, ERROR_ATOM);
+                term_put_tuple_element(result, 1, no_start);
+                return result;
+            }
+
+            int module_name_len = strlen(module_name);
+            int needed = TUPLE_SIZE(2) + term_binary_heap_size(module_name_len);
+            if (UNLIKELY(memory_ensure_free(ctx, needed) != MEMORY_GC_OK)) {
+                synclist_unlock(&ctx->global->avmpack_data);
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            term start_bin = term_from_literal_binary(module_name, module_name_len, &ctx->heap, ctx->global);
+            term result = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(result, 0, OK_ATOM);
+            term_put_tuple_element(result, 1, start_bin);
+            synclist_unlock(&ctx->global->avmpack_data);
+            return result;
+        }
+    }
+    synclist_unlock(&ctx->global->avmpack_data);
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term not_found = globalcontext_make_atom(ctx->global, ATOM_STR("\x12", "avm_pack_not_found"));
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, ERROR_ATOM);
+    term_put_tuple_element(result, 1, not_found);
+    return result;
 }
 
 // AtomVM extension

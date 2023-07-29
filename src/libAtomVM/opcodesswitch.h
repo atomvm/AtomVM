@@ -295,7 +295,7 @@ typedef union
             off += 1 + sz;                                                                          \
             break;                                                                                  \
         }                                                                                           \
-        default: __builtin_unreachable(); /* help gcc 8.4 */                                        \
+        default: UNREACHABLE(); /* help gcc 8.4 */                                                  \
     }                                                                                               \
 }
 
@@ -626,7 +626,7 @@ typedef union
             off += 1 + sz;                                                                          \
             break;                                                                                  \
         }                                                                                           \
-        default: __builtin_unreachable(); /* help gcc 8.4 */                                        \
+        default: UNREACHABLE(); /* help gcc 8.4 */                                                  \
     }                                                                                               \
 }
 
@@ -754,7 +754,7 @@ typedef union
                     break;                                                                      \
                 }                                                                               \
                 case NormalMessage: {                                                           \
-                    __builtin_unreachable();                                                    \
+                    UNREACHABLE();                                                              \
                 }                                                                               \
             }                                                                                   \
             MailboxMessage *next = signal_message->next;                                        \

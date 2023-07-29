@@ -632,7 +632,8 @@ static void *load_or_fetch_file(const char *path, emscripten_fetch_t **fetch, si
     return (void *) (*fetch)->data;
 }
 
-struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *path)
+enum OpenAVMResult sys_open_avm_from_file(
+    GlobalContext *global, const char *path, struct AVMPackData **avm_data)
 {
     TRACE("sys_open_avm_from_file: Going to open: %s\n", path);
 
@@ -641,7 +642,7 @@ struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *pa
     emscripten_fetch_t *fetch = NULL;
     void *data = load_or_fetch_file(path, &fetch, NULL);
     if (IS_NULL_PTR(data)) {
-        return NULL;
+        return AVM_OPEN_CANNOT_OPEN;
     }
 
     struct ConstAVMPack *const_avm = malloc(sizeof(struct ConstAVMPack));
@@ -651,12 +652,13 @@ struct AVMPackData *sys_open_avm_from_file(GlobalContext *global, const char *pa
         } else {
             free(data);
         }
-        return NULL;
+        return AVM_OPEN_FAILED_ALLOC;
     }
     avmpack_data_init(&const_avm->base, &const_avm_pack_info);
     const_avm->base.data = (const uint8_t *) data;
 
-    return &const_avm->base;
+    *avm_data = &const_avm->base;
+    return AVM_OPEN_OK;
 }
 
 Module *sys_load_module_from_file(GlobalContext *global, const char *path)
