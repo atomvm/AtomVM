@@ -102,7 +102,7 @@ static enum ModuleLoadResult module_build_imported_functions_table(Module *this_
 {
     int functions_count = READ_32_ALIGNED(table_data + 8);
 
-    this_module->imported_funcs = calloc(functions_count, sizeof(void *));
+    this_module->imported_funcs = calloc(functions_count, sizeof(struct ExportedFunction *));
     if (IS_NULL_PTR(this_module->imported_funcs)) {
         fprintf(stderr, "Cannot allocate memory while loading module (line: %i).\n", __LINE__);
         return MODULE_ERROR_FAILED_ALLOCATION;
@@ -115,15 +115,15 @@ static enum ModuleLoadResult module_build_imported_functions_table(Module *this_
         AtomString function_atom = module_get_atom_string_by_id(this_module, local_function_atom_index);
         uint32_t arity = READ_32_ALIGNED(table_data + i * 12 + 8 + 12);
 
-        BifImpl bif_handler = bif_registry_get_handler(module_atom, function_atom, arity);
+        const struct ExportedFunction *bif = bif_registry_get_handler(module_atom, function_atom, arity);
 
-        if (bif_handler) {
-            this_module->imported_funcs[i].bif = bif_handler;
+        if (bif) {
+            this_module->imported_funcs[i] = bif;
         } else {
-            this_module->imported_funcs[i].func = &nifs_get(module_atom, function_atom, arity)->base;
+            this_module->imported_funcs[i] = &nifs_get(module_atom, function_atom, arity)->base;
         }
 
-        if (!this_module->imported_funcs[i].func) {
+        if (!this_module->imported_funcs[i]) {
             struct UnresolvedFunctionCall *unresolved = malloc(sizeof(struct UnresolvedFunctionCall));
             if (IS_NULL_PTR(unresolved)) {
                 fprintf(stderr, "Cannot allocate memory while loading module (line: %i).\n", __LINE__);
@@ -134,7 +134,7 @@ static enum ModuleLoadResult module_build_imported_functions_table(Module *this_
             unresolved->function_atom_index = this_module->local_atoms_to_global_table[local_function_atom_index];
             unresolved->arity = arity;
 
-            this_module->imported_funcs[i].func = &unresolved->base;
+            this_module->imported_funcs[i] = &unresolved->base;
         }
     }
 
@@ -411,7 +411,7 @@ const struct ExportedFunction *module_resolve_function0(Module *mod, int import_
         mfunc->label = exported_label;
 
         free(unresolved);
-        mod->imported_funcs[import_table_index].func = &mfunc->base;
+        mod->imported_funcs[import_table_index] = &mfunc->base;
         return &mfunc->base;
     } else {
         char buf[256];

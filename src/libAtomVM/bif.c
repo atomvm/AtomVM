@@ -49,7 +49,7 @@
 #define INT64_MIN_AS_FLOAT (1.0 * INT64_MIN)
 #define INT64_MAX_AS_FLOAT (1.0 * INT64_MAX)
 
-BifImpl bif_registry_get_handler(AtomString module, AtomString function, int arity)
+const struct ExportedFunction *bif_registry_get_handler(AtomString module, AtomString function, int arity)
 {
     char bifname[MAX_BIF_NAME_LEN];
 
@@ -59,20 +59,7 @@ BifImpl bif_registry_get_handler(AtomString module, AtomString function, int ari
         return NULL;
     }
 
-    return nameAndPtr->function;
-}
-
-bool bif_registry_is_gc_bif(AtomString module, AtomString function, int arity)
-{
-    char bifname[MAX_BIF_NAME_LEN];
-
-    atom_write_mfa(bifname, MAX_BIF_NAME_LEN, module, function, arity);
-    const BifNameAndPtr *nameAndPtr = in_word_set(bifname, strlen(bifname));
-    if (!nameAndPtr) {
-        return NULL;
-    }
-
-    return nameAndPtr->gc_bif;
+    return &nameAndPtr->bif.base;
 }
 
 term bif_erlang_self_0(Context *ctx)
@@ -1445,4 +1432,22 @@ term bif_erlang_get_1(Context *ctx, term arg1)
     }
 
     return value;
+}
+
+term bif_erlang_min_2(Context *ctx, term arg1, term arg2)
+{
+    TermCompareResult r = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
+    if (UNLIKELY(r == TermCompareMemoryAllocFail)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);       
+    }
+    return r == TermLessThan ? arg1 : arg2;
+}
+
+term bif_erlang_max_2(Context *ctx, term arg1, term arg2)
+{
+    TermCompareResult r = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
+    if (UNLIKELY(r == TermCompareMemoryAllocFail)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);       
+    }
+    return r == TermGreaterThan ? arg1 : arg2;
 }

@@ -472,6 +472,8 @@ compile_erlang(test_add_avm_pack_binary)
 compile_erlang(test_add_avm_pack_file)
 compile_erlang(test_close_avm_pack)
 
+compile_erlang(test_min_max_guard)
+
 add_custom_target(erlang_test_modules DEPENDS
     code_load_files
 
@@ -907,4 +909,6 @@ add_custom_target(erlang_test_modules DEPENDS
     test_add_avm_pack_binary.beam
     test_add_avm_pack_file.beam
     test_close_avm_pack.beam
+
+    test_min_max_guard.beam
 )

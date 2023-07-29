@@ -113,7 +113,7 @@ struct Module
     struct ModuleFilename *filenames;
     struct ListHead line_ref_offsets;
 
-    union imported_func *imported_funcs;
+    const struct ExportedFunction **imported_funcs;
 
     void **labels;
 
@@ -254,7 +254,7 @@ static inline const struct ExportedFunction *module_resolve_function(Module *mod
     // We cannot optimistically read the unresolved function call.
     // While reads of imported_funcs can happen outside the lock, read of the func
     // pointer itself cannot, as UnresolvedFunctionCall pointers are freed.
-    struct ExportedFunction *func = (struct ExportedFunction *) mod->imported_funcs[import_table_index].func;
+    const struct ExportedFunction *func = mod->imported_funcs[import_table_index];
     if (func->type != UnresolvedFunctionCall) {
         SMP_MODULE_UNLOCK(mod);
         return func;
