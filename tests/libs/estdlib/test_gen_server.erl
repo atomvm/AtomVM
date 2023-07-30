@@ -27,7 +27,8 @@
     num_casts = 0,
     num_infos = 0,
     num_timeouts = 0,
-    info_timeout = none
+    info_timeout = none,
+    crash_in_terminate = false
 }).
 
 test() ->
@@ -42,6 +43,13 @@ test() ->
     ok = test_timeout_cast(),
     ok = test_timeout_info(),
     ok = test_register(),
+    ok = test_call_unregistered(),
+    ok = test_normal_exit_call(),
+    ok = test_abnormal_exit_call(),
+    ok = test_crash_call(),
+    ok = test_crash_in_terminate(),
+    ok = test_call_noproc(),
+    ok = test_stop_noproc(),
     ok.
 
 test_call() ->
@@ -121,11 +129,7 @@ test_late_reply() ->
         try gen_server:call(Pid, {reply_after, 300, ok}, 200) of
             unexpected -> unexpected
         catch
-            % estdlib
-            exit:timeout ->
-                timeout;
-            % OTP
-            exit:{timeout, _} ->
+            exit:{timeout, _Location} ->
                 timeout;
             T:V ->
                 erlang:display({unexpected, T, V}),
@@ -254,6 +258,92 @@ test_register() ->
     %   gen_server:stop(Pid2),
     ok.
 
+test_call_unregistered() ->
+    {ok, Pid} = gen_server:start(?MODULE, [], []),
+
+    try
+        gen_server:call(?MODULE, foo),
+        fail
+    catch
+        exit:{noproc, _Location} ->
+            % erlang:display({C, E}),
+            ok
+    after
+        ok = gen_server:stop(Pid)
+    end.
+
+test_normal_exit_call() ->
+    {ok, Pid} = gen_server:start(?MODULE, [], []),
+
+    try
+        gen_server:call(Pid, normal_exit),
+        fail
+    catch
+        exit:{normal, _Location} ->
+            ok
+    end.
+
+test_abnormal_exit_call() ->
+    {ok, Pid} = gen_server:start(?MODULE, [], []),
+
+    try
+        gen_server:call(Pid, abnormal_exit),
+        fail
+    catch
+        exit:{abnormal, _Location} ->
+            ok
+    end.
+
+test_crash_call() ->
+    {ok, Pid} = gen_server:start(?MODULE, [], []),
+
+    try
+        gen_server:call(Pid, crash_me),
+        fail
+    catch
+        exit:{crash_me, _Location} ->
+            ok
+    end.
+
+test_crash_in_terminate() ->
+    {ok, Pid} = gen_server:start(?MODULE, [], []),
+
+    ok = gen_server:call(Pid, crash_in_terminate),
+
+    try
+        gen_server:stop(Pid),
+        fail
+    catch
+        exit:{crash_in_terminate, _Location} ->
+            ok
+    end.
+
+test_call_noproc() ->
+    {ok, Pid} = gen_server:start(?MODULE, [], []),
+
+    ok = gen_server:stop(Pid),
+
+    try
+        gen_server:call(Pid, ping),
+        fail
+    catch
+        exit:{noproc, _Location} ->
+            ok
+    end.
+
+test_stop_noproc() ->
+    {ok, Pid} = gen_server:start(?MODULE, [], []),
+
+    ok = gen_server:stop(Pid),
+
+    try
+        gen_server:stop(Pid),
+        fail
+    catch
+        exit:noproc ->
+            ok
+    end.
+
 %%
 %% callbacks
 %%
@@ -288,7 +378,16 @@ handle_call(get_num_timeouts, _From, State) ->
 handle_call({call_reply_timeout, Timeout}, _From, State) ->
     {reply, ok, State, Timeout};
 handle_call({call_noreply_timeout, Timeout}, _From, State) ->
-    {noreply, State, Timeout}.
+    {noreply, State, Timeout};
+handle_call(normal_exit, _From, State) ->
+    {stop, normal, State};
+handle_call(abnormal_exit, _From, State) ->
+    {stop, abnormal, State};
+handle_call(crash_me, _From, State) ->
+    exit(crash_me),
+    {reply, noop, State};
+handle_call(crash_in_terminate, _From, State) ->
+    {reply, ok, State#state{crash_in_terminate = true}}.
 
 handle_cast(crash, _State) ->
     throw(test_crash);
@@ -325,5 +424,7 @@ handle_info(_Info, #state{info_timeout = InfoTimeout} = State) ->
             {noreply, State, Other}
     end.
 
+terminate(_Reason, #state{crash_in_terminate = true} = _State) ->
+    error(crash_in_terminate);
 terminate(_Reason, _State) ->
     ok.
