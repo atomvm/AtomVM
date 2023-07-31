@@ -17,50 +17,50 @@
  *
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
-describe('call', () => {
-    beforeEach(() => {
-        cy.visit('/tests/src/test_call.html')
-    })
+describe("call", () => {
+  beforeEach(() => {
+    cy.visit("/tests/src/test_call.html");
+  });
 
-    it('should resolve an integer', () => {
-        cy.get('#target-input').type('main')
-        cy.get('#message-input').type('resolve-42')
-        cy.get('#call-button').click()
-        cy.get('#result').should('contain', '42')
-    })
+  it("should resolve an integer", () => {
+    cy.get("#target-input").type("main");
+    cy.get("#message-input").type("resolve-42");
+    cy.get("#call-button").click();
+    cy.get("#result").should("contain", "42");
+  });
 
-    it('should resolve a string', () => {
-        cy.get('#target-input').type('main')
-        cy.get('#message-input').type('resolve-ok')
-        cy.get('#call-button').click()
-        cy.get('#result').should('contain', 'ok')
-    })
+  it("should resolve a string", () => {
+    cy.get("#target-input").type("main");
+    cy.get("#message-input").type("resolve-ok");
+    cy.get("#call-button").click();
+    cy.get("#result").should("contain", "ok");
+  });
 
-    it('should reject an integer', () => {
-        cy.get('#target-input').type('main')
-        cy.get('#message-input').type('reject-42')
-        cy.get('#call-button').click()
-        cy.get('#error').should('contain', '42')
-    })
+  it("should reject an integer", () => {
+    cy.get("#target-input").type("main");
+    cy.get("#message-input").type("reject-42");
+    cy.get("#call-button").click();
+    cy.get("#error").should("contain", "42");
+  });
 
-    it('should reject a string', () => {
-        cy.get('#target-input').type('main')
-        cy.get('#message-input').type('reject-ok')
-        cy.get('#call-button').click()
-        cy.get('#error').should('contain', 'ok')
-    })
+  it("should reject a string", () => {
+    cy.get("#target-input").type("main");
+    cy.get("#message-input").type("reject-ok");
+    cy.get("#call-button").click();
+    cy.get("#error").should("contain", "ok");
+  });
 
-    it('should reject an unknown process', () => {
-        cy.get('#target-input').type('unknown')
-        cy.get('#message-input').type('resolve-ok')
-        cy.get('#call-button').click()
-        cy.get('#error').should('contain', 'noproc')
-    })
+  it("should reject an unknown process", () => {
+    cy.get("#target-input").type("unknown");
+    cy.get("#message-input").type("resolve-ok");
+    cy.get("#call-button").click();
+    cy.get("#error").should("contain", "noproc");
+  });
 
-    it('should reject a garbage collected promise', () => {
-        cy.get('#target-input').type('main')
-        cy.get('#message-input').type('ignore')
-        cy.get('#call-button').click()
-        cy.get('#error').should('contain', 'noproc')
-    })
+  it("should reject a garbage collected promise", () => {
+    cy.get("#target-input").type("main");
+    cy.get("#message-input").type("ignore");
+    cy.get("#call-button").click();
+    cy.get("#error").should("contain", "noproc");
+  });
 });
