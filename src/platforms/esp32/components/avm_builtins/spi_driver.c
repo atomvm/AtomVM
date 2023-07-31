@@ -219,7 +219,7 @@ Context *spi_driver_create_port(GlobalContext *global, term opts)
         term device_config = term_get_map_assoc(device_map, device_name, ctx->global);
 
         term clock_speed_hz_term = interop_kv_get_value(device_config, ATOM_STR("\xC", "spi_clock_hz"), global);
-        term mode_term = interop_kv_get_value(device_config, ATOM_STR("\x8", "spi_mode"), global);
+        term mode_term = interop_kv_get_value(device_config, ATOM_STR("\x4", "mode"), global);
         term spics_io_num_term = interop_kv_get_value(device_config, ATOM_STR("\xD", "spi_cs_io_num"), global);
         term address_bits_term = interop_kv_get_value(device_config, ATOM_STR("\x10", "address_len_bits"), global);
         term command_bits_term = interop_kv_get_value(device_config, ATOM_STR("\x10", "command_len_bits"), global);
