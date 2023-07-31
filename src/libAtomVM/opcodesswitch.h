@@ -1107,6 +1107,9 @@ COLD_FUNC static void dump(Context *ctx)
     mailbox_crashdump(ctx);
 
     fprintf(stderr, "\n\nMonitors\n--------\n");
+    // Lock processes table to make sure any dying process will not modify monitors
+    struct ListHead *processes_table = synclist_rdlock(&ctx->global->processes_table);
+    UNUSED(processes_table);
     struct ListHead *item;
     LIST_FOR_EACH (item, &ctx->monitors_head) {
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
@@ -1123,7 +1126,7 @@ COLD_FUNC static void dump(Context *ctx)
         term_display(stderr, term_from_local_process_id(ctx->process_id), ctx);
         fprintf(stderr, "\n");
     }
-
+    synclist_unlock(&ctx->global->processes_table);
     fprintf(stderr, "\n\n**End Of Crash Report**\n");
 }
 
