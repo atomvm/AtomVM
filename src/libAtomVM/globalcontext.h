@@ -247,7 +247,7 @@ bool globalcontext_register_process(GlobalContext *glb, int atom_index, int loca
 int globalcontext_get_registered_process(GlobalContext *glb, int atom_index);
 
 /**
- * @brief Unregister a process
+ * @brief Unregister a process by name
  *
  * @details Unregister a process with a certain name (atom).
  * @param glb the global context, each registered process will be globally available for that context.
@@ -257,15 +257,14 @@ int globalcontext_get_registered_process(GlobalContext *glb, int atom_index);
 bool globalcontext_unregister_process(GlobalContext *glb, int atom_index);
 
 /**
- * @brief Remove entry from registered atoms by process id
+ * @brief Remove entry(ies) from registered atoms by process id
  *
  * @details Unregister a process with a certain process id. This is used when a process dies to ensure
  * the process is not registered and remove it from the registered atoms table if it is.
  * @param glb the global context, each registered process will be globally available for that context.
  * @param process_id the process id of the entry to remove.
- * @returns \c true if the process was unregistered, \c false otherwise
  */
-bool globalcontext_maybe_unregister_process_id(GlobalContext *glb, int process_id);
+void globalcontext_maybe_unregister_process_id(GlobalContext *glb, int process_id);
 
 /**
  * @brief equivalent to globalcontext_insert_atom_maybe_copy(glb, atom_string, 0);

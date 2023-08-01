@@ -23,10 +23,34 @@
 -export([start/0]).
 
 start() ->
-    spawn(fun() -> register(foo, self()) end),
-    result_to_int(whereis(foo)).
+    ok = test_one_name(),
+    ok = test_two_names(),
+    0.
 
-result_to_int(undefined) ->
-    0;
-result_to_int(_) ->
-    1.
+test_one_name() ->
+    test_names([foo]).
+
+test_two_names() ->
+    test_names([foo, bar]).
+
+test_names(Names) ->
+    Pid = spawn(fun() -> do_register(Names) end),
+    Monitor = monitor(process, Pid),
+    ok =
+        receive
+            {'DOWN', Monitor, process, Pid, _} -> ok
+        after 500 -> timeout
+        end,
+    ok = test_unregistered(Names).
+
+test_unregistered([]) ->
+    ok;
+test_unregistered([Name | T]) ->
+    undefined = whereis(Name),
+    test_unregistered(T).
+
+do_register([]) ->
+    ok;
+do_register([Name | T]) ->
+    register(Name, self()),
+    do_register(T).
