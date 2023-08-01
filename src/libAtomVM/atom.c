@@ -26,27 +26,27 @@
 
 #include "utils.h"
 
-void atom_string_to_c(AtomString atom_string, char *buf, int bufsize)
+void atom_string_to_c(AtomString atom_string, char *buf, size_t bufsize)
 {
-    int atom_len = *((uint8_t *) atom_string);
+    size_t atom_len = *((const uint8_t *) atom_string);
 
     if (bufsize < atom_len) {
         atom_len = bufsize - 1;
     }
-    memcpy(buf, ((uint8_t *) atom_string) + 1, atom_len);
+    memcpy(buf, ((const uint8_t *) atom_string) + 1, atom_len);
     buf[atom_len] = '\0';
 }
 
 int atom_are_equals(AtomString a, AtomString b)
 {
-    int atom_len_a = *((const uint8_t *) a);
-    int atom_len_b = *((const uint8_t *) b);
+    size_t atom_len_a = *((const uint8_t *) a);
+    size_t atom_len_b = *((const uint8_t *) b);
 
     if (atom_len_a != atom_len_b) {
         return 0;
     }
 
-    if (!memcmp((uint8_t *) a + 1, (uint8_t *) b + 1, atom_len_a)) {
+    if (!memcmp((const uint8_t *) a + 1, (const uint8_t *) b + 1, atom_len_a)) {
         return 1;
 
     } else {
@@ -54,14 +54,14 @@ int atom_are_equals(AtomString a, AtomString b)
     }
 }
 
-void atom_write_mfa(char *buf, size_t buf_size, AtomString module, AtomString function, int arity)
+void atom_write_mfa(char *buf, size_t buf_size, AtomString module, AtomString function, unsigned int arity)
 {
-    unsigned int module_name_len = atom_string_len(module);
+    size_t module_name_len = atom_string_len(module);
     memcpy(buf, atom_string_data(module), module_name_len);
 
     buf[module_name_len] = ':';
 
-    unsigned int function_name_len = atom_string_len(function);
+    size_t function_name_len = atom_string_len(function);
     if (UNLIKELY((arity > 9) || (module_name_len + function_name_len + 4 > buf_size))) {
         fprintf(stderr, "Insufficient room to write mfa.\n");
         AVM_ABORT();
@@ -70,6 +70,6 @@ void atom_write_mfa(char *buf, size_t buf_size, AtomString module, AtomString fu
 
     // TODO: handle functions with more than 9 parameters
     buf[module_name_len + function_name_len + 1] = '/';
-    buf[module_name_len + function_name_len + 2] = '0' + arity;
+    buf[module_name_len + function_name_len + 2] = (char) ('0' + arity);
     buf[module_name_len + function_name_len + 3] = 0;
 }

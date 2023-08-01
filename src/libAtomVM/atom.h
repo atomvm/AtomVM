@@ -51,7 +51,7 @@ typedef const void *AtomString;
  * @param buf the buffer where the C string will be written.
  * @param bufsize available buf size.
  */
-void atom_string_to_c(AtomString atom_string, char *buf, int bufsize);
+void atom_string_to_c(AtomString atom_string, char *buf, size_t bufsize);
 
 /**
  * @brief Check for equality two AtomStrings
@@ -70,7 +70,7 @@ int atom_are_equals(AtomString a, AtomString b);
  * @param atom_str the atom string.
  * @returns the specified atom string length.
  */
-static inline int atom_string_len(AtomString atom_str)
+static inline size_t atom_string_len(AtomString atom_str)
 {
     return *((const uint8_t *) atom_str);
 }
@@ -99,7 +99,7 @@ static inline const void *atom_string_data(AtomString atom_str)
  * @param   function the function name
  * @param   arity the function arity
  */
-void atom_write_mfa(char *buf, size_t buf_size, AtomString module, AtomString function, int arity);
+void atom_write_mfa(char *buf, size_t buf_size, AtomString module, AtomString function, unsigned int arity);
 
 #ifdef __cplusplus
 }
