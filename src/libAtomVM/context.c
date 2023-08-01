@@ -114,13 +114,14 @@ void context_destroy(Context *ctx)
 
     list_remove(&ctx->processes_table_head);
 
-    // When monitor message is sent, process is no longer in the table.
+    // Ensure process is not registered
+    globalcontext_maybe_unregister_process_id(ctx->global, ctx->process_id);
+
+    // When monitor message is sent, process is no longer in the table
+    // and is no longer registered either.
     context_monitors_handle_terminate(ctx);
 
     synclist_unlock(&ctx->global->processes_table);
-
-    // Ensure process is not registered
-    globalcontext_maybe_unregister_process_id(ctx->global, ctx->process_id);
 
     // Any other process released our mailbox, so we can clear it.
     mailbox_destroy(&ctx->mailbox, &ctx->heap);
