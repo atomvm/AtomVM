@@ -1108,7 +1108,7 @@ Each device configuration is a properties list containing the following entries:
 | Key | Value Type | Required | Description |
 |-----|------------|----------|---|
 | `spi_clock_hz` | `integer()` | yes | SPI clock frequency (in hertz) |
-| `spi_mode` | `0..3` | yes | SPI mode, indicating clock polarity (`CPOL`) and clock phase (`CPHA`).  Consult the SPI specification and data sheet for your device, for more information about how to control the behavior of the SPI clock. |
+| `mode` | `0..3` | yes | SPI mode, indicating clock polarity (`CPOL`) and clock phase (`CPHA`).  Consult the SPI specification and data sheet for your device, for more information about how to control the behavior of the SPI clock. |
 | `spi_cs_io_num` | `integer()` | yes | SPI chip select pin (CS) |
 | `address_len_bits` | `0..64` | yes | number of bits in the address field of a read/write operation (for example, 8, if the transaction address field is a single byte) |
 | `command_len_bits` | `0..16` | default: 0 | number of bits in the command field of a read/write operation (for example, 8, if the transaction command field is a single byte) |
@@ -1125,13 +1125,13 @@ For example,
         {device_config, [
             {my_device_1, [
                 {spi_clock_hz, 1000000},
-                {spi_mode, 0},
+                {mode, 0},
                 {spi_cs_io_num, 18},
                 {address_len_bits, 8}
             ]}
             {my_device_2, [
                 {spi_clock_hz, 1000000},
-                {spi_mode, 0},
+                {mode, 0},
                 {spi_cs_io_num, 15},
                 {address_len_bits, 8}
             ]}
