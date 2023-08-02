@@ -84,12 +84,21 @@ jobs:
             pytest-embedded-idf==1.2.5 \
             pytest-embedded-qemu==1.2.5
 
-    - name: Patch esp-idf to fix race condition that affects qemu under heavy load
+    - name: Patch esp-idf 4.4.5 to fix race condition that affects qemu under heavy load
       working-directory: ./src/platforms/esp32/test/
       if: matrix.idf-version == '4.4.5'
       run: |
         set -e
         PATCH=$PWD/esp_ipc_isr.patch
+        cd $IDF_PATH
+        patch -p1 < $PATCH
+
+    - name: Patch esp-idf 5.1 to fix race condition that affects qemu under heavy load
+      working-directory: ./src/platforms/esp32/test/
+      if: matrix.idf-version == '5.1'
+      run: |
+        set -e
+        PATCH=$PWD/esp_ipc_isr_5.1.patch
         cd $IDF_PATH
         patch -p1 < $PATCH
 
