@@ -92,7 +92,7 @@ typedef union
 #define SET_ERROR(error_type_atom)   \
     ctx->x[0] = ERROR_ATOM;                                        \
     ctx->x[1] = error_type_atom;                                   \
-    ctx->x[2] = stacktrace_create_raw(ctx, mod, i);                \
+    ctx->x[2] = stacktrace_create_raw(ctx, mod, i, ERROR_ATOM);    \
 
 // Override nifs.h RAISE_ERROR macro
 #ifdef RAISE_ERROR
@@ -812,8 +812,8 @@ typedef union
 #define POINTER_TO_II(instruction_pointer) \
     (((uint8_t *) (instruction_pointer)) - code)
 
-#define HANDLE_ERROR()                                     \
-    ctx->x[2] = stacktrace_create_raw(ctx, mod, i);        \
+#define HANDLE_ERROR()                                         \
+    ctx->x[2] = stacktrace_create_raw(ctx, mod, i, ctx->x[0]); \
     goto handle_error;
 
 #define VERIFY_IS_INTEGER(t, opcode_name)                  \
@@ -3645,22 +3645,24 @@ wait_timeout_trap_handler:
                 int next_off = 1;
                 term stacktrace;
                 DECODE_COMPACT_TERM(stacktrace, code, i, next_off);
-                UNUSED(stacktrace);
                 term exc_value;
                 DECODE_COMPACT_TERM(exc_value, code, i, next_off);
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("raise/2\n");
+                    UNUSED(stacktrace);
                     UNUSED(exc_value);
+                    NEXT_INSTRUCTION(next_off);
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("raise/2 stacktrace=0x%lx exc_value=0x%lx\n", stacktrace, exc_value);
-
-                    RAISE_ERROR(exc_value);
+                    ctx->x[0] = stacktrace_exception_class(stacktrace);
+                    ctx->x[1] = exc_value;
+                    ctx->x[2] = stacktrace_create_raw(ctx, mod, i, ctx->x[0]);
+                    goto handle_error;
                 #endif
 
-                NEXT_INSTRUCTION(next_off);
                 break;
             }
 

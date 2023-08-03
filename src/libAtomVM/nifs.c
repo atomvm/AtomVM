@@ -2927,7 +2927,11 @@ static term nif_erlang_raise(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-    ctx->x[0] = argv[0];
+    term ex_class = argv[0];
+    if (UNLIKELY(ex_class != ERROR_ATOM && ex_class != LOWERCASE_EXIT_ATOM && ex_class != THROW_ATOM)) {
+        return BADARG_ATOM;
+    }
+    ctx->x[0] = ex_class;
     ctx->x[1] = argv[1];
     ctx->x[2] = term_nil();
     return term_invalid_term();

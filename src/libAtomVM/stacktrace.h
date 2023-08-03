@@ -29,8 +29,9 @@ extern "C" {
 #include "module.h"
 #include "term.h"
 
-term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset);
+term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term exception_class);
 term stacktrace_build(Context *ctx, term *stack_info);
+term stacktrace_exception_class(term stack_info);
 
 #ifdef __cplusplus
 }

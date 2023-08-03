@@ -23,12 +23,12 @@
 
 #ifndef AVM_CREATE_STACKTRACES
 
-term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset)
+term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term exception_class)
 {
     UNUSED(ctx);
     UNUSED(mod);
     UNUSED(current_offset);
-    return UNDEFINED_ATOM;
+    return exception_class;
 }
 
 term stacktrace_build(Context *ctx, term *stack_info)
@@ -36,6 +36,11 @@ term stacktrace_build(Context *ctx, term *stack_info)
     UNUSED(ctx);
     UNUSED(stack_info);
     return UNDEFINED_ATOM;
+}
+
+term stacktrace_exception_class(term stack_info)
+{
+    return stack_info;
 }
 
 #else
@@ -77,7 +82,7 @@ static bool is_module_member(Module *mod, Module **mods, unsigned long len)
     return false;
 }
 
-term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset)
+term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term exception_class)
 {
     unsigned int num_frames = 0;
     unsigned int num_aux_terms = 0;
@@ -155,7 +160,7 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset)
     free(modules);
 
     // {num_frames, num_aux_terms, filename_lens, num_mods, [{module, offset}, ...]}
-    size_t requested_size = TUPLE_SIZE(5) + num_frames * (2 + TUPLE_SIZE(2));
+    size_t requested_size = TUPLE_SIZE(6) + num_frames * (2 + TUPLE_SIZE(2));
     if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
         fprintf(stderr, "WARNING: Unable to allocate heap space for raw stacktrace\n");
         return OUT_OF_MEMORY_ATOM;
@@ -215,14 +220,20 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset)
         ct++;
     }
 
-    term stack_info = term_alloc_tuple(5, &ctx->heap);
+    term stack_info = term_alloc_tuple(6, &ctx->heap);
     term_put_tuple_element(stack_info, 0, term_from_int(num_frames));
     term_put_tuple_element(stack_info, 1, term_from_int(num_aux_terms));
     term_put_tuple_element(stack_info, 2, term_from_int(filename_lens));
     term_put_tuple_element(stack_info, 3, term_from_int(num_mods));
     term_put_tuple_element(stack_info, 4, raw_stacktrace);
+    term_put_tuple_element(stack_info, 5, exception_class);
 
     return stack_info;
+}
+
+term stacktrace_exception_class(term stack_info)
+{
+    return term_get_tuple_element(stack_info, 5);
 }
 
 struct ModulePathPair
