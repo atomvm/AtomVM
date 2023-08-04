@@ -355,6 +355,7 @@ execute(Pid, Fun) ->
             _:Error ->
                 {error, Error}
         end,
+    erlang:garbage_collect(),
     Pid ! Result.
 
 id(X) -> X.
