@@ -26,7 +26,7 @@ jobs:
   clang-format-check:
     runs-on: ubuntu-20.04
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
     - uses: erlef/setup-beam@v1
       with:
