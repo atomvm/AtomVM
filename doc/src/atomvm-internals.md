@@ -151,7 +151,7 @@ The memory cost of this list is `num_line_refs * sizeof(struct LineRefOffset)`, 
 
 ## AtomVM WebAssembly port
 
-WebAssembly or Wasm port of AtomVM relies on Emscripten SDK and library. It currently is single threaded (SMP is disabled), yet it uses pthread library for synchronization and most importantly to sleep when Erlang processes are not running (to not waste CPU cycles).
+WebAssembly or Wasm port of AtomVM relies on Emscripten SDK and library. Even when SMP is disabled (with `-DAVM_DISABLE_SMP=On`), it uses pthread library to sleep when Erlang processes are not running (to not waste CPU cycles).
 
 ### NodeJS environment build
 

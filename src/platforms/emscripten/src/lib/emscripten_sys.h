@@ -56,7 +56,8 @@ enum EmscriptenMessageType
     Cast,
     Call,
     HTMLEvent,
-    UnregisterHTMLEvent
+    UnregisterHTMLEvent,
+    Signal
 };
 
 struct EmscriptenMessageBase

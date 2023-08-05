@@ -28,6 +28,7 @@ set(HEADER_FILES
 set(SOURCE_FILES
     platform_defaultatoms.c
     platform_nifs.c
+    smp.c
     sys.c
 )
 
