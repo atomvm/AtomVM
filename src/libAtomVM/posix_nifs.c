@@ -35,6 +35,7 @@
 
 #include "defaultatoms.h"
 #include "erl_nif_priv.h"
+#include "globalcontext.h"
 #include "interop.h"
 #include "nifs.h"
 #include "posix_nifs.h"
@@ -115,7 +116,8 @@ term posix_errno_to_term(int err, GlobalContext *glb)
 struct PosixFd
 {
     int fd;
-    bool select;
+    int32_t selecting_process_id;
+    ErlNifMonitor selecting_process_monitor;
 };
 
 static void posix_fd_dtor(ErlNifEnv *caller_env, void *obj)
@@ -131,18 +133,32 @@ static void posix_fd_dtor(ErlNifEnv *caller_env, void *obj)
 
 static void posix_fd_stop(ErlNifEnv *caller_env, void *obj, ErlNifEvent event, int is_direct_call)
 {
-    UNUSED(caller_env);
     UNUSED(event);
     UNUSED(is_direct_call);
 
     struct PosixFd *fd_obj = (struct PosixFd *) obj;
-    fd_obj->select = false;
+    if (fd_obj->selecting_process_id != INVALID_PROCESS_ID) {
+        enif_demonitor_process(caller_env, fd_obj, &fd_obj->selecting_process_monitor);
+        fd_obj->selecting_process_id = INVALID_PROCESS_ID;
+    }
+}
+
+static void posix_fd_down(ErlNifEnv *caller_env, void *obj, ErlNifPid *pid, ErlNifMonitor *mon)
+{
+    UNUSED(pid);
+    UNUSED(mon);
+    struct PosixFd *fd_obj = (struct PosixFd *) obj;
+    if (fd_obj->selecting_process_id != INVALID_PROCESS_ID) {
+        fd_obj->selecting_process_id = INVALID_PROCESS_ID;
+        enif_select(caller_env, fd_obj->fd, ERL_NIF_SELECT_STOP, fd_obj, NULL, term_nil());
+    }
 }
 
 const ErlNifResourceTypeInit posix_fd_resource_type_init = {
-    .members = 2,
+    .members = 3,
     .dtor = posix_fd_dtor,
     .stop = posix_fd_stop,
+    .down = posix_fd_down,
 };
 
 #define O_EXEC_ATOM_STR ATOM_STR("\x6", "o_exec")
@@ -270,7 +286,7 @@ static term nif_atomvm_posix_open(Context *ctx, int argc, term argv[])
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         fd_obj->fd = fd;
-        fd_obj->select = false;
+        fd_obj->selecting_process_id = INVALID_PROCESS_ID;
         if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2) + TERM_BOXED_RESOURCE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
@@ -295,7 +311,7 @@ static term nif_atomvm_posix_close(Context *ctx, int argc, term argv[])
     }
     struct PosixFd *fd_obj = (struct PosixFd *) fd_obj_ptr;
     if (fd_obj->fd != CLOSED_FD) {
-        if (fd_obj->select) {
+        if (fd_obj->selecting_process_id != INVALID_PROCESS_ID) {
             fprintf(stderr, "Calling close on a selectable posix file, missing call to posix_select_stop?\n");
         }
         if (UNLIKELY(close(fd_obj->fd) < 0)) {
@@ -398,11 +414,26 @@ static term nif_atomvm_posix_select(Context *ctx, term argv[], enum ErlNifSelect
         RAISE_ERROR(BADARG_ATOM);
     }
     struct PosixFd *fd_obj = (struct PosixFd *) fd_obj_ptr;
-
-    if (UNLIKELY(enif_select(erl_nif_env_from_context(ctx), fd_obj->fd, mode, fd_obj, &process_pid, select_ref_term) < 0)) {
+    ErlNifEnv *env = erl_nif_env_from_context(ctx);
+    if (fd_obj->selecting_process_id != process_pid && fd_obj->selecting_process_id != INVALID_PROCESS_ID) {
+        if (UNLIKELY(enif_demonitor_process(env, fd_obj, &fd_obj->selecting_process_monitor) != 0)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        fd_obj->selecting_process_id = INVALID_PROCESS_ID;
+    }
+    // Monitor first as select is less likely to fail and it's less expensive to demonitor
+    // if select fails than to stop select if monitor fails
+    if (fd_obj->selecting_process_id != process_pid) {
+        if (UNLIKELY(enif_monitor_process(env, fd_obj, &process_pid, &fd_obj->selecting_process_monitor) != 0)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        fd_obj->selecting_process_id = process_pid;
+    }
+    if (UNLIKELY(enif_select(env, fd_obj->fd, mode, fd_obj, &process_pid, select_ref_term) < 0)) {
+        enif_demonitor_process(env, fd_obj, &fd_obj->selecting_process_monitor);
+        fd_obj->selecting_process_id = INVALID_PROCESS_ID;
         RAISE_ERROR(BADARG_ATOM);
     }
-    fd_obj->select = 1;
 
     return OK_ATOM;
 }
