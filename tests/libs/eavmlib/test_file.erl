@@ -29,6 +29,8 @@ test() ->
     ok = test_basic_file(),
     ok = test_fifo_select(HasSelect),
     ok = test_gc(HasSelect),
+    ok = test_crash_no_leak(HasSelect),
+    ok = test_select_with_gone_process(HasSelect),
     ok.
 
 test_basic_file() ->
@@ -83,7 +85,26 @@ test_fifo_select(_HasSelect) ->
             M2 -> {unexpected, M2}
         after 200 -> fail
         end,
-    ok = atomvm:posix_select_stop(RdFd),
+    Parent = self(),
+    Child = spawn(fun() ->
+        ChildRef = make_ref(),
+        ok = atomvm:posix_select_read(RdFd, self(), ChildRef),
+        ok =
+            receive
+                {select, RdFd, ChildRef, ready_input} -> ok;
+                M3 -> {unexpected, M3}
+            after 200 -> fail
+            end,
+        ok = atomvm:posix_select_stop(RdFd),
+        {ok, <<" World">>} = atomvm:posix_read(RdFd, 10),
+        Parent ! {self(), world}
+    end),
+    ok =
+        receive
+            {Child, world} -> ok;
+            M4 -> {unexpected, M4}
+        after 200 -> fail
+        end,
     ok =
         receive
             Message -> {unexpected, Message}
@@ -179,3 +200,70 @@ gc_loop(Path, File) ->
         {Caller, quit} ->
             Caller ! {self(), quit}
     end.
+
+% Test is based on the fact that `erlang:memory(binary)` count resources.
+test_crash_no_leak(false) ->
+    ok;
+test_crash_no_leak(true) ->
+    Before = erlang:memory(binary),
+    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    Pid = spawn(fun() -> crash_leak(Path) end),
+    Ref = monitor(process, Pid),
+    ok =
+        receive
+            {'DOWN', Ref, process, Pid, _} -> ok
+        after 5000 -> timeout
+        end,
+    % Make sure sys_poll_events is called so selected resource is
+    % properly disposed. This also gives time to context_destroy to
+    % sweep mso after DOWN message is sent
+    receive
+    after 100 -> ok
+    end,
+    After = erlang:memory(binary),
+    0 = After - Before,
+    ok = atomvm:posix_unlink(Path),
+    ok.
+
+crash_leak(Path) ->
+    ok = setup_and_forget(Path),
+    % We don't really need to crash here
+    % the test consists in not calling select_stop
+    ok.
+
+setup_and_forget(Path) ->
+    {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644),
+    ok = atomvm:posix_select_write(Fd, self(), undefined),
+    ok.
+
+test_select_with_gone_process(false) ->
+    ok;
+test_select_with_gone_process(true) ->
+    Before = erlang:memory(binary),
+    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    test_select_with_gone_process0(Path),
+    % GC so Fd's ref count is decremented
+    erlang:garbage_collect(),
+    After = erlang:memory(binary),
+    0 = After - Before,
+    ok = atomvm:posix_unlink(Path),
+    ok.
+
+test_select_with_gone_process0(Path) ->
+    GonePid = spawn(fun() -> ok end),
+    Ref = monitor(process, GonePid),
+    ok =
+        receive
+            {'DOWN', Ref, process, GonePid, _} -> ok
+        after 5000 -> timeout
+        end,
+    {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644),
+    ok =
+        try
+            atomvm:posix_select_write(Fd, GonePid, undefined),
+            fail
+        catch
+            error:badarg -> ok
+        end,
+    ok = atomvm:posix_close(Fd),
+    ok.
