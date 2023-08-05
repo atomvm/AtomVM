@@ -111,6 +111,7 @@ void context_destroy(Context *ctx)
 {
     // Another process can get an access to our mailbox until this point.
     struct ListHead *processes_table_list = synclist_wrlock(&ctx->global->processes_table);
+    UNUSED(processes_table_list);
 
     list_remove(&ctx->processes_table_head);
 
