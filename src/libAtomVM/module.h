@@ -40,6 +40,7 @@ extern "C" {
 #include "context.h"
 #include "exportedfunction.h"
 #include "globalcontext.h"
+#include "term.h"
 #include "valueshashtable.h"
 
 #ifndef AVM_NO_SMP
@@ -160,6 +161,18 @@ void module_get_imported_function_module_and_name(const Module *this_module, int
 #endif
 
 /**
+ * @brief Count exported functions of a given module
+ *
+ * @details Get the number of exported functions.
+ * This function is used to compute the required heap size of the list of
+ * exported functions.
+ *
+ * @param this_module the module to count exported functions of
+ * @return the number of exported functions
+ */
+size_t module_get_exported_functions_count(Module *this_module);
+
+/**
  * @brief Gets exported function index by searching it by function name and arity
  *
  * @details Gets exported function index by searching it by function name and arity
@@ -168,6 +181,30 @@ void module_get_imported_function_module_and_name(const Module *this_module, int
  * @param func_arity function arity.
  */
 uint32_t module_search_exported_function(Module *this_module, AtomString func_name, int func_arity);
+
+/**
+ * @brief Determine heap size of exported functions list.
+ *
+ * @param this_module the module to count exported functions of
+ * @return the size, in terms, of the exported function list
+ */
+static inline size_t module_get_exported_functions_list_size(Module *this_module)
+{
+    return (TUPLE_SIZE(2) + CONS_SIZE) * module_get_exported_functions_count(this_module);
+}
+
+/**
+ * @brief Get the list of exported functions
+ * @details Create a list of exported functions of the form `{FunctionName, Arity}`
+ * To create this list, the heap must be grown by `module_get_exported_functions_list_size`
+ * terms.
+ *
+ * @param this_module the module to count exported functions of
+ * @param heap heap to allocate tuples
+ * @param global global context to fetch atoms
+ * @return a list of exported functions
+ */
+term module_get_exported_functions(Module *this_module, Heap *heap, GlobalContext *global);
 
 /***
  * @brief Destoys an existing Module

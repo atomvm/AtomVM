@@ -487,6 +487,8 @@ struct Test tests[] = {
     TEST_CASE_ATOMVM_ONLY(test_add_avm_pack_file, 24),
     TEST_CASE_ATOMVM_ONLY(test_close_avm_pack, 0),
 
+    TEST_CASE(test_module_info),
+
     // noisy tests, keep them at the end
     TEST_CASE_EXPECTED(spawn_opt_monitor_normal, 1),
     TEST_CASE_EXPECTED(spawn_opt_link_normal, 1),
