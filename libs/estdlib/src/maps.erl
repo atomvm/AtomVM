@@ -171,7 +171,7 @@ iterator(Map) ->
 -spec next(Iterator :: iterator()) ->
     {Key :: key(), Value :: value(), NextIterator :: iterator()} | none.
 next([_Pos | _Map] = _Iterator) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @returns a new map

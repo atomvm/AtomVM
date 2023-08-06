@@ -88,7 +88,7 @@
 %%-----------------------------------------------------------------------------
 -spec channel_config(Config :: channel_config()) -> ok | {error, ledc_error_code()}.
 channel_config(_Config) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Config      timer configuration
@@ -100,7 +100,7 @@ channel_config(_Config) ->
 %%-----------------------------------------------------------------------------
 -spec timer_config(Config :: timer_config()) -> ok | {error, ledc_error_code()}.
 timer_config(_Config) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Flags   Flags used to allocate the interrupt. One (or multiple, using
@@ -114,7 +114,7 @@ timer_config(_Config) ->
 %%-----------------------------------------------------------------------------
 -spec fade_func_install(Flags :: non_neg_integer()) -> ok | {error, ledc_error_code()}.
 fade_func_install(_Flags) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @returns ok
@@ -123,7 +123,7 @@ fade_func_install(_Flags) ->
 %%-----------------------------------------------------------------------------
 -spec fade_func_uninstall() -> ok.
 fade_func_uninstall() ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   SpeedMode   Select the LEDC channel group with specified speed mode.
@@ -146,7 +146,7 @@ fade_func_uninstall() ->
 ) ->
     ok | {error, ledc_error_code()}.
 set_fade_with_time(_SpeedMode, _Channel, _TargetDuty, _MaxFadeTimeMs) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   SpeedMode   Select the LEDC channel group with specified speed mode.
@@ -170,7 +170,7 @@ set_fade_with_time(_SpeedMode, _Channel, _TargetDuty, _MaxFadeTimeMs) ->
     CycleNum :: non_neg_integer()
 ) -> ok | {error, ledc_error_code()}.
 set_fade_with_step(_SpeedMode, _Channel, _TargetDuty, _Scale, _CycleNum) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   SpeedMode   Select the LEDC channel group with specified speed mode.
@@ -187,7 +187,7 @@ set_fade_with_step(_SpeedMode, _Channel, _TargetDuty, _Scale, _CycleNum) ->
 -spec fade_start(SpeedMode :: speed_mode(), Channel :: channel(), FadeMode :: fade_mode()) ->
     ok | {error, ledc_error_code()}.
 fade_start(_SpeedMode, _Channel, _FadeMode) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   SpeedMode   Select the LEDC channel group with specified speed mode.
@@ -199,7 +199,7 @@ fade_start(_SpeedMode, _Channel, _FadeMode) ->
 %%-----------------------------------------------------------------------------
 -spec get_duty(SpeedMode :: speed_mode(), Channel :: channel()) -> ok | {error, ledc_error_code()}.
 get_duty(_SpeedMode, _Channel) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   SpeedMode   Select the LEDC channel group with specified speed mode.
@@ -213,7 +213,7 @@ get_duty(_SpeedMode, _Channel) ->
 -spec set_duty(SpeedMode :: speed_mode(), Channel :: channel(), Duty :: non_neg_integer()) ->
     ok | {error, ledc_error_code()}.
 set_duty(_SpeedMode, _Channel, _Duty) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   SpeedMode   Select the LEDC channel group with specified speed mode.
@@ -226,7 +226,7 @@ set_duty(_SpeedMode, _Channel, _Duty) ->
 -spec update_duty(SpeedMode :: speed_mode(), Channel :: channel()) ->
     ok | {error, ledc_error_code()}.
 update_duty(_SpeedMode, _Channel) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   SpeedMode   Select the LEDC channel group with specified speed mode.
@@ -238,7 +238,7 @@ update_duty(_SpeedMode, _Channel) ->
 -spec get_freq(SpeedMode :: speed_mode(), TimerNum :: timer_num()) ->
     ok | {error, ledc_error_code()}.
 get_freq(_SpeedMode, _TimerNum) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   SpeedMode   Select the LEDC channel group with specified speed mode.
@@ -251,7 +251,7 @@ get_freq(_SpeedMode, _TimerNum) ->
 -spec set_freq(SpeedMode :: speed_mode(), TimerNum :: timer_num(), FreqHz :: non_neg_integer()) ->
     ok | {error, ledc_error_code()}.
 set_freq(_SpeedMode, _TimerNum, _FreqHz) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   SpeedMode   Select the LEDC channel group with specified speed mode.
@@ -265,4 +265,4 @@ set_freq(_SpeedMode, _TimerNum, _FreqHz) ->
 -spec stop(SpeedMode :: speed_mode(), Channel :: channel(), IdleLevel :: non_neg_integer()) ->
     ok | {error, ledc_error_code()}.
 stop(_SpeedMode, _Channel, _IdleLevel) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).

@@ -286,7 +286,7 @@
 %% @equiv run_script(_Script, [])
 -spec run_script(iodata()) -> ok.
 run_script(_Script) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Run a script.
 %% By default, the script is run in the current worker thread, which arguably
@@ -300,12 +300,12 @@ run_script(_Script) ->
 %% @returns ok
 -spec run_script(iodata(), [run_script_opt()]) -> ok.
 run_script(_Script, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv promise_resolve(_Promise, 0)
 -spec promise_resolve(promise()) -> ok.
 promise_resolve(_Promise) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Successfully resolve a promise with a given result.
 %% A promise is currently only obtained through synchronous calls using
@@ -326,12 +326,12 @@ promise_resolve(_Promise) ->
 %% @param _Value Value to send to Javascript, must be an integer or a string.
 -spec promise_resolve(promise(), integer() | iodata()) -> ok.
 promise_resolve(_Promise, _Value) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv promise_reject(_Promise, 0)
 -spec promise_reject(promise()) -> ok.
 promise_reject(_Promise) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Reject a promise with a given result.
 %% This is similar to `promise_resolve' except the promise is rejected.
@@ -339,12 +339,12 @@ promise_reject(_Promise) ->
 %% @param _Value Value to send to Javascript, must be an integer or a string.
 -spec promise_reject(promise(), integer() | iodata()) -> ok.
 promise_reject(_Promise, _Value) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_keypress_callback(_Target, [])
 -spec register_keypress_callback(html5_target()) -> register_result().
 register_keypress_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for keypress events.
 %% This function registers with no user data and events are sent as:
@@ -354,7 +354,7 @@ register_keypress_callback(_Target) ->
 %% @see register_keypress_callback/3
 -spec register_keypress_callback(html5_target(), register_options()) -> register_result().
 register_keypress_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for keypress events.
 %% This function registers keypress events on a given target.
@@ -385,7 +385,7 @@ register_keypress_callback(_Target, _Options) ->
 %% @param _UserData user data passed back
 -spec register_keypress_callback(html5_target(), register_options(), any()) -> register_result().
 register_keypress_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a keypress listener.
 %%
@@ -408,60 +408,60 @@ register_keypress_callback(_Target, _Options, _UserData) ->
 -spec unregister_keypress_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_keypress_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_keydown_callback(_Target, [])
 -spec register_keydown_callback(html5_target()) -> register_result().
 register_keydown_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for keydown events.
 %% @see register_keypress_callback/2
 -spec register_keydown_callback(html5_target(), register_options()) -> register_result().
 register_keydown_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for keydown events.
 %% @see register_keypress_callback/2
 -spec register_keydown_callback(html5_target(), register_options(), any()) -> register_result().
 register_keydown_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a keydown event handler.
 %% @see unregister_keypress_callback/1
 -spec unregister_keydown_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_keydown_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_keyup_callback(_Target, [])
 -spec register_keyup_callback(html5_target()) -> register_result().
 register_keyup_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for keyup events.
 %% @see register_keypress_callback/2
 -spec register_keyup_callback(html5_target(), register_options()) -> register_result().
 register_keyup_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for keyup events.
 %% @see register_keypress_callback/2
 -spec register_keyup_callback(html5_target(), register_options(), any()) -> register_result().
 register_keyup_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a keyup event handler.
 %% @see unregister_keypress_callback/1
 -spec unregister_keyup_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_keyup_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_click_callback(_Target, [])
 -spec register_click_callback(html5_target()) -> register_result().
 register_click_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for click events.
 %% Events are sent as:
@@ -471,7 +471,7 @@ register_click_callback(_Target) ->
 %% @see register_keypress_callback/2
 -spec register_click_callback(html5_target(), register_options()) -> register_result().
 register_click_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for click events.
 %% Events are sent as:
@@ -481,211 +481,211 @@ register_click_callback(_Target, _Options) ->
 %% @see register_keypress_callback/2
 -spec register_click_callback(html5_target(), register_options(), any()) -> register_result().
 register_click_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a click event handler.
 %% @see unregister_keypress_callback/1
 -spec unregister_click_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_click_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_mousedown_callback(_Target, [])
 -spec register_mousedown_callback(html5_target()) -> register_result().
 register_mousedown_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for mousedown events.
 %% @see register_click_callback/2
 -spec register_mousedown_callback(html5_target(), register_options()) -> register_result().
 register_mousedown_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for mousedown events.
 %% @see register_click_callback/2
 -spec register_mousedown_callback(html5_target(), register_options(), any()) -> register_result().
 register_mousedown_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a mousedown event handler.
 %% @see unregister_click_callback/1
 -spec unregister_mousedown_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_mousedown_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_mouseup_callback(_Target, [])
 -spec register_mouseup_callback(html5_target()) -> register_result().
 register_mouseup_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for mouseup events.
 %% @see register_click_callback/2
 -spec register_mouseup_callback(html5_target(), register_options()) -> register_result().
 register_mouseup_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for mouseup events.
 %% @see register_click_callback/2
 -spec register_mouseup_callback(html5_target(), register_options(), any()) -> register_result().
 register_mouseup_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a mouseup event handler.
 %% @see unregister_click_callback/1
 -spec unregister_mouseup_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_mouseup_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_dblclick_callback(_Target, [])
 -spec register_dblclick_callback(html5_target()) -> register_result().
 register_dblclick_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for dblclick events.
 %% @see register_click_callback/2
 -spec register_dblclick_callback(html5_target(), register_options()) -> register_result().
 register_dblclick_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for dblclick events.
 %% @see register_click_callback/2
 -spec register_dblclick_callback(html5_target(), register_options(), any()) -> register_result().
 register_dblclick_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a dblclick event handler.
 %% @see unregister_click_callback/1
 -spec unregister_dblclick_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_dblclick_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_mousemove_callback(_Target, [])
 -spec register_mousemove_callback(html5_target()) -> register_result().
 register_mousemove_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for mousemove events.
 %% @see register_click_callback/2
 -spec register_mousemove_callback(html5_target(), register_options()) -> register_result().
 register_mousemove_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for mousemove events.
 %% @see register_click_callback/2
 -spec register_mousemove_callback(html5_target(), register_options(), any()) -> register_result().
 register_mousemove_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a mousemove event handler.
 %% @see unregister_click_callback/1
 -spec unregister_mousemove_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_mousemove_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_mouseenter_callback(_Target, [])
 -spec register_mouseenter_callback(html5_target()) -> register_result().
 register_mouseenter_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for mouseenter events.
 %% @see register_click_callback/2
 -spec register_mouseenter_callback(html5_target(), register_options()) -> register_result().
 register_mouseenter_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for mouseenter events.
 %% @see register_click_callback/2
 -spec register_mouseenter_callback(html5_target(), register_options(), any()) -> register_result().
 register_mouseenter_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a mouseenter event handler.
 %% @see unregister_click_callback/1
 -spec unregister_mouseenter_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_mouseenter_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_mouseleave_callback(_Target, [])
 -spec register_mouseleave_callback(html5_target()) -> register_result().
 register_mouseleave_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for mouseleave events.
 %% @see register_click_callback/2
 -spec register_mouseleave_callback(html5_target(), register_options()) -> register_result().
 register_mouseleave_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for mouseleave events.
 %% @see register_click_callback/2
 -spec register_mouseleave_callback(html5_target(), register_options(), any()) -> register_result().
 register_mouseleave_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a mouseleave event handler.
 %% @see unregister_click_callback/1
 -spec unregister_mouseleave_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_mouseleave_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_mouseover_callback(_Target, [])
 -spec register_mouseover_callback(html5_target()) -> register_result().
 register_mouseover_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for mouseover events.
 %% @see register_click_callback/2
 -spec register_mouseover_callback(html5_target(), register_options()) -> register_result().
 register_mouseover_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for mouseover events.
 %% @see register_click_callback/2
 -spec register_mouseover_callback(html5_target(), register_options(), any()) -> register_result().
 register_mouseover_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a mouseover event handler.
 %% @see unregister_click_callback/1
 -spec unregister_mouseover_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_mouseover_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_mouseout_callback(_Target, [])
 -spec register_mouseout_callback(html5_target()) -> register_result().
 register_mouseout_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for mouseout events.
 %% @see register_click_callback/2
 -spec register_mouseout_callback(html5_target(), register_options()) -> register_result().
 register_mouseout_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for mouseout events.
 %% @see register_click_callback/2
 -spec register_mouseout_callback(html5_target(), register_options(), any()) -> register_result().
 register_mouseout_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a mouseout event handler.
 %% @see unregister_click_callback/1
 -spec unregister_mouseout_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_mouseout_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_wheel_callback(_Target, [])
 -spec register_wheel_callback(html5_target()) -> register_result().
 register_wheel_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for wheel events.
 %% Events are sent as:
@@ -695,7 +695,7 @@ register_wheel_callback(_Target) ->
 %% @see register_keypress_callback/2
 -spec register_wheel_callback(html5_target(), register_options()) -> register_result().
 register_wheel_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for wheel events.
 %% Events are sent as:
@@ -705,19 +705,19 @@ register_wheel_callback(_Target, _Options) ->
 %% @see register_keypress_callback/2
 -spec register_wheel_callback(html5_target(), register_options(), any()) -> register_result().
 register_wheel_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a wheel event handler.
 %% @see unregister_keypress_callback/1
 -spec unregister_wheel_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_wheel_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_resize_callback(_Target, [])
 -spec register_resize_callback(html5_target()) -> register_result().
 register_resize_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for resize events.
 %% Events are sent as:
@@ -727,7 +727,7 @@ register_resize_callback(_Target) ->
 %% @see register_keypress_callback/2
 -spec register_resize_callback(html5_target(), register_options()) -> register_result().
 register_resize_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for resize events.
 %% Events are sent as:
@@ -737,43 +737,43 @@ register_resize_callback(_Target, _Options) ->
 %% @see register_keypress_callback/2
 -spec register_resize_callback(html5_target(), register_options(), any()) -> register_result().
 register_resize_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a resize event handler.
 %% @see unregister_keypress_callback/1
 -spec unregister_resize_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_resize_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_scroll_callback(_Target, [])
 -spec register_scroll_callback(html5_target()) -> register_result().
 register_scroll_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for scroll events.
 %% @see register_resize_callback/2
 -spec register_scroll_callback(html5_target(), register_options()) -> register_result().
 register_scroll_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for scroll events.
 %% @see register_resize_callback/2
 -spec register_scroll_callback(html5_target(), register_options(), any()) -> register_result().
 register_scroll_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a scroll event handler.
 %% @see unregister_resize_callback/1
 -spec unregister_scroll_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_scroll_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_blur_callback(_Target, [])
 -spec register_blur_callback(html5_target()) -> register_result().
 register_blur_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for blur events.
 %% Events are sent as:
@@ -783,7 +783,7 @@ register_blur_callback(_Target) ->
 %% @see register_keypress_callback/2
 -spec register_blur_callback(html5_target(), register_options()) -> register_result().
 register_blur_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for blur events.
 %% Events are sent as:
@@ -793,91 +793,91 @@ register_blur_callback(_Target, _Options) ->
 %% @see register_keypress_callback/2
 -spec register_blur_callback(html5_target(), register_options(), any()) -> register_result().
 register_blur_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a blur event handler.
 %% @see unregister_keypress_callback/1
 -spec unregister_blur_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_blur_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_focus_callback(_Target, [])
 -spec register_focus_callback(html5_target()) -> register_result().
 register_focus_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for focus events.
 %% @see register_blur_callback/2
 -spec register_focus_callback(html5_target(), register_options()) -> register_result().
 register_focus_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for focus events.
 %% @see register_blur_callback/2
 -spec register_focus_callback(html5_target(), register_options(), any()) -> register_result().
 register_focus_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a focus event handler.
 %% @see unregister_blur_callback/1
 -spec unregister_focus_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_focus_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_focusin_callback(_Target, [])
 -spec register_focusin_callback(html5_target()) -> register_result().
 register_focusin_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for focusin events.
 %% @see register_blur_callback/2
 -spec register_focusin_callback(html5_target(), register_options()) -> register_result().
 register_focusin_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for focusin events.
 %% @see register_blur_callback/2
 -spec register_focusin_callback(html5_target(), register_options(), any()) -> register_result().
 register_focusin_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a focusin event handler.
 %% @see unregister_blur_callback/1
 -spec unregister_focusin_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_focusin_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_focusout_callback(_Target, [])
 -spec register_focusout_callback(html5_target()) -> register_result().
 register_focusout_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for focusout events.
 %% @see register_blur_callback/2
 -spec register_focusout_callback(html5_target(), register_options()) -> register_result().
 register_focusout_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for focusout events.
 %% @see register_blur_callback/2
 -spec register_focusout_callback(html5_target(), register_options(), any()) -> register_result().
 register_focusout_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a focusout event handler.
 %% @see unregister_blur_callback/1
 -spec unregister_focusout_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_focusout_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_touchstart_callback(_Target, [])
 -spec register_touchstart_callback(html5_target()) -> register_result().
 register_touchstart_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for touchstart events.
 %% Events are sent as:
@@ -887,7 +887,7 @@ register_touchstart_callback(_Target) ->
 %% @see register_keypress_callback/2
 -spec register_touchstart_callback(html5_target(), register_options()) -> register_result().
 register_touchstart_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for touchstart events.
 %% Events are sent as:
@@ -897,83 +897,83 @@ register_touchstart_callback(_Target, _Options) ->
 %% @see register_keypress_callback/2
 -spec register_touchstart_callback(html5_target(), register_options(), any()) -> register_result().
 register_touchstart_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a touchstart event handler.
 %% @see unregister_keypress_callback/1
 -spec unregister_touchstart_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_touchstart_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_touchend_callback(_Target, [])
 -spec register_touchend_callback(html5_target()) -> register_result().
 register_touchend_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for touchend events.
 %% @see register_touchstart_callback/2
 -spec register_touchend_callback(html5_target(), register_options()) -> register_result().
 register_touchend_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for touchend events.
 %% @see register_touchstart_callback/2
 -spec register_touchend_callback(html5_target(), register_options(), any()) -> register_result().
 register_touchend_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a touchend event handler.
 %% @see unregister_touchstart_callback/1
 -spec unregister_touchend_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_touchend_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_touchmove_callback(_Target, [])
 -spec register_touchmove_callback(html5_target()) -> register_result().
 register_touchmove_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for touchmove events.
 %% @see register_touchstart_callback/2
 -spec register_touchmove_callback(html5_target(), register_options()) -> register_result().
 register_touchmove_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for touchmove events.
 %% @see register_touchstart_callback/2
 -spec register_touchmove_callback(html5_target(), register_options(), any()) -> register_result().
 register_touchmove_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a touchmove event handler.
 %% @see unregister_touchstart_callback/1
 -spec unregister_touchmove_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_touchmove_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @equiv register_touchcancel_callback(_Target, [])
 -spec register_touchcancel_callback(html5_target()) -> register_result().
 register_touchcancel_callback(_Target) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for touchcancel events.
 %% @see register_touchstart_callback/2
 -spec register_touchcancel_callback(html5_target(), register_options()) -> register_result().
 register_touchcancel_callback(_Target, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Register for touchcancel events.
 %% @see register_touchstart_callback/2
 -spec register_touchcancel_callback(html5_target(), register_options(), any()) -> register_result().
 register_touchcancel_callback(_Target, _Options, _UserData) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% @doc Unregister a touchcancel event handler.
 %% @see unregister_touchstart_callback/1
 -spec unregister_touchcancel_callback(html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_touchcancel_callback(_TargetOrHandle) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).

@@ -61,6 +61,40 @@
 -type server_ref() :: atom() | pid().
 -type from() :: any().
 
+-type init_result(StateType) ::
+    {ok, State :: StateType}
+    | {ok, State :: StateType, timeout()}
+    | {stop, Reason :: any()}.
+
+-type handle_call_result(StateType) ::
+    {reply, Reply :: any(), NewState :: StateType}
+    | {reply, Reply :: any(), NewState :: StateType, timeout()}
+    | {noreply, NewState :: StateType}
+    | {noreply, NewState :: StateType, timeout()}
+    | {stop, Reason :: any(), Reply :: any(), NewState :: StateType}
+    | {stop, Reason :: any(), NewState :: StateType}.
+
+-type handle_cast_result(StateType) ::
+    {noreply, NewState :: StateType}
+    | {noreply, NewState :: StateType, timeout()}
+    | {stop, Reason :: any(), NewState :: StateType}.
+
+-type handle_info(StateType) ::
+    {noreply, NewState :: StateType}
+    | {noreply, NewState :: StateType, timeout()}
+    | {stop, Reason :: any(), NewState :: StateType}.
+
+-callback init(Args :: any()) ->
+    init_result(any()).
+-callback handle_call(Request :: any(), From :: {pid(), Tag :: any()}, State :: StateType) ->
+    handle_call_result(StateType).
+-callback handle_cast(Request :: any(), State :: StateType) ->
+    handle_cast_result(StateType).
+-callback handle_info(Info :: timeout() | any(), State :: StateType) ->
+    handle_info(StateType).
+-callback terminate(Reason :: normal | any(), State :: any()) ->
+    any().
+
 %% @private
 do_spawn(Module, Args, Options, SpawnOpts) ->
     Pid = spawn_opt(?MODULE, init_it, [self(), Module, Args, Options], SpawnOpts),
@@ -308,7 +342,7 @@ stop(Pid, Reason, Timeout) when is_pid(Pid) ->
 %% @doc     Send a request to a gen_server instance, and wait for a reply.
 %% @end
 %%-----------------------------------------------------------------------------
--spec call(ServerRef :: server_ref(), Request :: term) ->
+-spec call(ServerRef :: server_ref(), Request :: term()) ->
     Reply :: term() | {error, Reason :: term()}.
 call(ServerRef, Request) ->
     call(ServerRef, Request, 5000).
@@ -385,7 +419,7 @@ cast(Pid, Request) when is_pid(Pid) ->
 %%          function can be safely ignored.
 %% @end
 %%-----------------------------------------------------------------------------
--spec reply(From :: from(), Reply :: term) -> term().
+-spec reply(From :: from(), Reply :: term()) -> term().
 reply({Pid, Ref}, Reply) ->
     Pid ! {Ref, Reply},
     ok.

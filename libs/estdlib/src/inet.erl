@@ -27,8 +27,9 @@
 -type address() :: ipv4_address().
 -type ipv4_address() :: {octet(), octet(), octet(), octet()}.
 -type octet() :: 0..255.
+-type hostname() :: iodata().
 
--export_type([socket/0, port_number/0, address/0, ipv4_address/0, octet/0]).
+-export_type([socket/0, port_number/0, address/0, ipv4_address/0, octet/0, hostname/0]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket from which to obtain the port number

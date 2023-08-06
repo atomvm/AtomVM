@@ -38,7 +38,9 @@
 
 -type platform_name() ::
     generic_unix
+    | emscripten
     | esp32
+    | pico
     | stm32.
 
 -type avm_path() :: string() | binary().
@@ -52,7 +54,7 @@
 %%-----------------------------------------------------------------------------
 -spec platform() -> platform_name().
 platform() ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @returns random 32-bit integer.
@@ -63,7 +65,7 @@ platform() ->
 %%-----------------------------------------------------------------------------
 -spec random() -> integer().
 random() ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Len non-negative integer
@@ -76,7 +78,7 @@ random() ->
 %%-----------------------------------------------------------------------------
 -spec rand_bytes(Len :: non_neg_integer()) -> binary().
 rand_bytes(_Len) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   App application name.
@@ -87,7 +89,7 @@ rand_bytes(_Len) ->
 %%-----------------------------------------------------------------------------
 -spec read_priv(App :: atom(), Path :: list()) -> binary().
 read_priv(_App, _Path) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   AVMData AVM data.
@@ -104,7 +106,7 @@ read_priv(_App, _Path) ->
 %%-----------------------------------------------------------------------------
 -spec add_avm_pack_binary(AVMData :: binary(), Options :: [{name, Name :: atom()}]) -> ok.
 add_avm_pack_binary(_AVMData, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   AVMPath Path to AVM data.
@@ -131,7 +133,7 @@ add_avm_pack_binary(_AVMData, _Options) ->
 %%-----------------------------------------------------------------------------
 -spec add_avm_pack_file(AVMPath :: avm_path(), Options :: []) -> ok.
 add_avm_pack_file(_AVMPath, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   name the AVM name.
@@ -148,4 +150,4 @@ add_avm_pack_file(_AVMPath, _Options) ->
 %%-----------------------------------------------------------------------------
 -spec close_avm_pack(Name :: atom(), Options :: []) -> ok | error.
 close_avm_pack(_Name, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).

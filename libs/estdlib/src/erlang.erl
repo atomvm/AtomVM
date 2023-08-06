@@ -179,7 +179,7 @@ send_after(Time, Dest, Msg) ->
 %%-----------------------------------------------------------------------------
 -spec process_info(Pid :: pid(), Key :: atom()) -> term().
 process_info(_Pid, _Key) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Key key used to find system information.
@@ -217,7 +217,7 @@ process_info(_Pid, _Key) ->
 %%-----------------------------------------------------------------------------
 -spec system_info(Key :: atom()) -> term().
 system_info(_Key) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Key key used to change system flag.
@@ -239,7 +239,7 @@ system_info(_Key) ->
 %%-----------------------------------------------------------------------------
 -spec system_flag(Key :: atom(), term()) -> term().
 system_flag(_Key, _Value) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Data data to compute hash of, as a binary.
@@ -250,7 +250,7 @@ system_flag(_Key, _Value) ->
 %%-----------------------------------------------------------------------------
 -spec md5(Data :: binary()) -> binary().
 md5(Data) when is_binary(Data) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Module Name of module
@@ -299,7 +299,7 @@ apply(Module, Function, Args) ->
 %%-----------------------------------------------------------------------------
 -spec is_map(Map :: map()) -> boolean().
 is_map(_Map) ->
-    throw(bif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Map the map
@@ -314,7 +314,7 @@ is_map(_Map) ->
 %%-----------------------------------------------------------------------------
 -spec map_size(Map :: map()) -> non_neg_integer().
 map_size(_Map) ->
-    throw(bif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Key     the key to get
@@ -331,7 +331,7 @@ map_size(_Map) ->
 %%-----------------------------------------------------------------------------
 -spec map_get(Key :: term(), Map :: map()) -> Value :: term().
 map_get(_Key, _Map) ->
-    throw(bif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Key     the key
@@ -347,7 +347,7 @@ map_get(_Key, _Map) ->
 %%-----------------------------------------------------------------------------
 -spec map_is_key(Key :: term(), Map :: map()) -> boolean().
 map_is_key(_Key, _Map) ->
-    throw(bif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   A   any term
@@ -361,7 +361,7 @@ map_is_key(_Key, _Map) ->
 %%-----------------------------------------------------------------------------
 -spec min(A :: any(), B :: any()) -> any().
 min(_A, _B) ->
-    throw(bif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   A   any term
@@ -375,7 +375,7 @@ min(_A, _B) ->
 %%-----------------------------------------------------------------------------
 -spec max(A :: any(), B :: any()) -> any().
 max(_A, _B) ->
-    throw(bif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Type the type of memory to request
@@ -386,7 +386,7 @@ max(_A, _B) ->
 %%-----------------------------------------------------------------------------
 -spec memory(Type :: mem_type()) -> non_neg_integer().
 memory(_Type) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Unit    time unit
@@ -407,7 +407,7 @@ memory(_Type) ->
 %%-----------------------------------------------------------------------------
 -spec monotonic_time(Unit :: time_unit()) -> integer().
 monotonic_time(_Unit) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Key     key in the process dictionary
@@ -417,7 +417,7 @@ monotonic_time(_Unit) ->
 %%-----------------------------------------------------------------------------
 -spec get(Key :: any()) -> any().
 get(_Key) ->
-    throw(bif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Key     key to add to the process dictionary
@@ -428,7 +428,7 @@ get(_Key) ->
 %%-----------------------------------------------------------------------------
 -spec put(Key :: any(), Value :: any()) -> any().
 put(_Key, _Value) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Key     key to erase from the process dictionary
@@ -438,7 +438,7 @@ put(_Key, _Value) ->
 %%-----------------------------------------------------------------------------
 -spec erase(Key :: any()) -> any().
 erase(_Key) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Module      module to test
@@ -450,7 +450,7 @@ erase(_Key) ->
 %%-----------------------------------------------------------------------------
 -spec function_exported(Module :: module(), Function :: atom(), Arity :: arity()) -> boolean().
 function_exported(_Module, _Function, _Arity) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Term    term to print
@@ -460,7 +460,7 @@ function_exported(_Module, _Function, _Arity) ->
 %%-----------------------------------------------------------------------------
 -spec display(Term :: any()) -> true.
 display(_Term) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   String  string to convert to an atom
@@ -474,7 +474,7 @@ display(_Term) ->
 %%-----------------------------------------------------------------------------
 -spec list_to_atom(String :: string()) -> atom().
 list_to_atom(_String) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   List    list to convert to binary
@@ -485,7 +485,7 @@ list_to_atom(_String) ->
 %%-----------------------------------------------------------------------------
 -spec list_to_binary(List :: [byte()]) -> binary().
 list_to_binary(_String) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   String  string to convert to integer
@@ -494,9 +494,9 @@ list_to_binary(_String) ->
 %% Errors with `badarg' if the string is not a representation of an integer.
 %% @end
 %%-----------------------------------------------------------------------------
--spec list_to_integer(String :: string()) -> tuple().
+-spec list_to_integer(String :: string()) -> integer().
 list_to_integer(_String) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   List    list to convert to tuple
@@ -506,7 +506,7 @@ list_to_integer(_String) ->
 %%-----------------------------------------------------------------------------
 -spec list_to_tuple(List :: [any()]) -> tuple().
 list_to_tuple(_List) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   IOList  IO list to convert to binary
@@ -516,7 +516,7 @@ list_to_tuple(_List) ->
 %%-----------------------------------------------------------------------------
 -spec iolist_to_binary(IOList :: iolist()) -> binary().
 iolist_to_binary(_IOList) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Binary  Binary to convert to list
@@ -526,7 +526,7 @@ iolist_to_binary(_IOList) ->
 %%-----------------------------------------------------------------------------
 -spec binary_to_list(Binary :: binary()) -> [byte()].
 binary_to_list(_Binary) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Atom        Atom to convert
@@ -538,7 +538,7 @@ binary_to_list(_Binary) ->
 %%-----------------------------------------------------------------------------
 -spec atom_to_binary(Atom :: atom(), Encoding :: latin1) -> binary().
 atom_to_binary(_Atom, _Encoding) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Atom    Atom to convert
@@ -548,7 +548,7 @@ atom_to_binary(_Atom, _Encoding) ->
 %%-----------------------------------------------------------------------------
 -spec atom_to_list(Atom :: atom()) -> string().
 atom_to_list(_Atom) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -type float_format_option() ::
     {decimals, Decimals :: 0..57}
@@ -563,7 +563,7 @@ atom_to_list(_Atom) ->
 %%-----------------------------------------------------------------------------
 -spec float_to_binary(Float :: float()) -> binary().
 float_to_binary(_Float) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Float   Float to convert
@@ -574,7 +574,7 @@ float_to_binary(_Float) ->
 %%-----------------------------------------------------------------------------
 -spec float_to_binary(Float :: float(), Options :: [float_format_option()]) -> binary().
 float_to_binary(_Float, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Float   Float to convert
@@ -584,7 +584,7 @@ float_to_binary(_Float, _Options) ->
 %%-----------------------------------------------------------------------------
 -spec float_to_list(Float :: float()) -> string().
 float_to_list(_Float) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Float   Float to convert
@@ -595,7 +595,7 @@ float_to_list(_Float) ->
 %%-----------------------------------------------------------------------------
 -spec float_to_list(Float :: float(), Options :: [float_format_option()]) -> string().
 float_to_list(_Float, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Integer integer to convert to a binary
@@ -605,7 +605,7 @@ float_to_list(_Float, _Options) ->
 %%-----------------------------------------------------------------------------
 -spec integer_to_binary(Integer :: integer()) -> binary().
 integer_to_binary(_Integer) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Integer integer to convert to a string
@@ -615,7 +615,7 @@ integer_to_binary(_Integer) ->
 %%-----------------------------------------------------------------------------
 -spec integer_to_list(Integer :: integer()) -> string().
 integer_to_list(_Integer) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Integer integer to convert to a string
@@ -626,7 +626,7 @@ integer_to_list(_Integer) ->
 %%-----------------------------------------------------------------------------
 -spec integer_to_list(Integer :: integer(), Base :: 2..36) -> string().
 integer_to_list(_Integer, _Base) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun     function to convert to a string
@@ -636,7 +636,7 @@ integer_to_list(_Integer, _Base) ->
 %%-----------------------------------------------------------------------------
 -spec fun_to_list(Fun :: function()) -> string().
 fun_to_list(_Fun) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pid     pid to convert to a string
@@ -646,7 +646,7 @@ fun_to_list(_Fun) ->
 %%-----------------------------------------------------------------------------
 -spec pid_to_list(Pid :: pid()) -> string().
 pid_to_list(_Pid) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Ref     reference to convert to a string
@@ -656,7 +656,7 @@ pid_to_list(_Pid) ->
 %%-----------------------------------------------------------------------------
 -spec ref_to_list(Ref :: reference()) -> string().
 ref_to_list(_Ref) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Name    name of the process to register
@@ -670,7 +670,7 @@ ref_to_list(_Ref) ->
 %%-----------------------------------------------------------------------------
 -spec register(Name :: atom(), Pid :: pid()) -> true.
 register(_Name, _Pid) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Name    name to unregister
@@ -682,7 +682,7 @@ register(_Name, _Pid) ->
 %%-----------------------------------------------------------------------------
 -spec unregister(Name :: atom()) -> true.
 unregister(_Name) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Name    name of the process to locate
@@ -692,7 +692,7 @@ unregister(_Name) ->
 %%-----------------------------------------------------------------------------
 -spec whereis(Name :: atom()) -> pid() | undefined.
 whereis(_Name) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Function    function to create a process from
@@ -702,7 +702,7 @@ whereis(_Name) ->
 %%-----------------------------------------------------------------------------
 -spec spawn(Function :: function()) -> pid().
 spawn(_Name) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Module      module of the function to create a process from
@@ -714,13 +714,13 @@ spawn(_Name) ->
 %%-----------------------------------------------------------------------------
 -spec spawn(Module :: module(), Function :: atom(), Args :: [any()]) -> pid().
 spawn(_Module, _Function, _Args) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -type spawn_option() ::
     {min_heap_size, pos_integer()}
     | {max_heap_size, pos_integer()}
-    | {link, boolean()}
-    | {monitor, boolean()}.
+    | link
+    | monitor.
 
 %%-----------------------------------------------------------------------------
 %% @param   Function    function to create a process from
@@ -731,7 +731,7 @@ spawn(_Module, _Function, _Args) ->
 %%-----------------------------------------------------------------------------
 -spec spawn_opt(Function :: function(), Options :: [{max_heap_size, integer()}]) -> pid().
 spawn_opt(_Name, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Module      module of the function to create a process from
@@ -746,7 +746,7 @@ spawn_opt(_Name, _Options) ->
     Module :: module(), Function :: atom(), Args :: [any()], Options :: [spawn_option()]
 ) -> pid().
 spawn_opt(_Module, _Function, _Args, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @returns a new reference
@@ -755,24 +755,24 @@ spawn_opt(_Module, _Function, _Args, _Options) ->
 %%-----------------------------------------------------------------------------
 -spec make_ref() -> reference().
 make_ref() ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Type    type of monitor to create
 %% @param   Pid     pid of the object to monitor
 %% @returns a monitor reference
-%% @doc     Create a monitor on a process.
-%% When the process dies, the following message is sent to the caller of this
-%% function:
+%% @doc     Create a monitor on a process or on a port.
+%% When the process or the port terminates, the following message is sent to
+%% the caller of this function:
 %% ```
-%% {'DOWN', MonitorRef, process, Pid, Reason}
+%% {'DOWN', MonitorRef, Type, Pid, Reason}
 %% '''
-%% Unlike Erlang/OTP, monitors are only supported for processes.
+%% Unlike Erlang/OTP, monitors are only supported for processes and ports.
 %% @end
 %%-----------------------------------------------------------------------------
--spec monitor(Type :: process, Pid :: pid()) -> reference().
+-spec monitor(Type :: process | port, Pid :: pid()) -> reference().
 monitor(_Type, _Pid) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Monitor reference of monitor to remove
@@ -782,7 +782,7 @@ monitor(_Type, _Pid) ->
 %%-----------------------------------------------------------------------------
 -spec demonitor(Monitor :: reference()) -> true.
 demonitor(_Monitor) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -type demonitor_option() :: flush | {flush, boolean()} | info | {info, boolean()}.
 
@@ -797,7 +797,7 @@ demonitor(_Monitor) ->
 %%-----------------------------------------------------------------------------
 -spec demonitor(Monitor :: reference(), Options :: [demonitor_option()]) -> boolean().
 demonitor(_Monitor, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   PortName    Tuple {spawn, Name} identifying the port
@@ -809,7 +809,7 @@ demonitor(_Monitor, _Options) ->
 %%-----------------------------------------------------------------------------
 -spec open_port(PortName :: {spawn, iodata()}, Options :: [any()] | map()) -> pid().
 open_port(_PortName, _Options) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Unit    Unit to return system time in
@@ -819,7 +819,7 @@ open_port(_PortName, _Options) ->
 %%-----------------------------------------------------------------------------
 -spec system_time(Unit :: time_unit()) -> non_neg_integer().
 system_time(_Unit) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @returns Pid of group leader or self() if no group leader is set.
@@ -828,7 +828,7 @@ system_time(_Unit) ->
 %%-----------------------------------------------------------------------------
 -spec group_leader() -> pid().
 group_leader() ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Flag    flag to change
@@ -845,7 +845,7 @@ group_leader() ->
 %%-----------------------------------------------------------------------------
 -spec process_flag(Flag :: trap_exit, Value :: boolean()) -> pid().
 process_flag(_Flag, _Value) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Module  module to get info for
@@ -858,7 +858,7 @@ process_flag(_Flag, _Value) ->
 %%-----------------------------------------------------------------------------
 -spec get_module_info(Module :: atom()) -> [{atom(), any()}].
 get_module_info(_Module) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Module  module to get info for
@@ -873,4 +873,4 @@ get_module_info(_Module) ->
 %%-----------------------------------------------------------------------------
 -spec get_module_info(Module :: atom(), InfoKey :: atom()) -> any().
 get_module_info(_Module, _InfoKey) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).

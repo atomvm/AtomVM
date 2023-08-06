@@ -72,7 +72,7 @@ flush(Console) ->
 %%-----------------------------------------------------------------------------
 -spec print(string()) -> ok | {error, term()}.
 print(_String) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %% Internal operations
 

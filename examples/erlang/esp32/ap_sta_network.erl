@@ -36,7 +36,7 @@ start() ->
             {sta_connected, fun sta_connected/1},
             {sta_ip_assigned, fun sta_ip_assigned/1},
             {sta_disconnected, fun sta_disconnected/1},
-            {ap_sta_ip_assigned, fun ap_sta_ip_assigned/1}
+            {sta_ip_assigned, fun ap_sta_ip_assigned/1}
         ]},
         {sta, [
             {ssid, <<"myssid">>},

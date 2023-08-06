@@ -165,4 +165,4 @@ day_of_the_week(Y, M, D) ->
 -spec system_time_to_universal_time(Time :: integer(), TimeUnit :: erlang:time_unit()) ->
     datetime().
 system_time_to_universal_time(_Time, _TimeUnit) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).

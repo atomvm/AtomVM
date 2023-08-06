@@ -49,9 +49,10 @@
 -type option() ::
     {active, boolean()}
     | {buffer, pos_integer()}
-    | {timeout, pos_integer() | infinity}
+    | {timeout, timeout()}
     | list
-    | binary.
+    | binary
+    | {binary, boolean()}.
 
 -type listen_option() :: option().
 -type connect_option() :: option().
@@ -84,7 +85,11 @@
 %%          in order to receive data on the socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec connect(Address :: inet:address(), Port :: inet:port_number(), Options :: [connect_option()]) ->
+-spec connect(
+    Address :: inet:address() | inet:hostname(),
+    Port :: inet:port_number(),
+    Options :: [connect_option()]
+) ->
     {ok, Socket :: inet:socket()} | {error, Reason :: reason()}.
 connect(Address, Port, Params0) ->
     Socket = open_port({spawn, "socket"}, []),
@@ -194,7 +199,7 @@ accept(ListenSocket) ->
 %% @doc     Accept a connection on a listening socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec accept(ListenSocket :: inet:socket(), Timeout :: non_neg_integer()) ->
+-spec accept(ListenSocket :: inet:socket(), Timeout :: timeout()) ->
     {ok, Socket :: inet:socket()} | {error, Reason :: reason()}.
 accept(ListenSocket, Timeout) ->
     case call(ListenSocket, {accept, Timeout}) of

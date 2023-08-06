@@ -57,7 +57,7 @@ call(Port, Message) ->
 %%-----------------------------------------------------------------------------
 %% @param   Pid Pid to which to send messages
 %% @param   Message the message to send
-%% @param   TimeoutMs the timeout value in milliseconds
+%% @param   Timeout the timeout value in milliseconds
 %% @returns term() | {error, Reason}.
 %% @doc     Send a message to a given port driver pid with a timeout.
 %%
@@ -65,11 +65,10 @@ call(Port, Message) ->
 %% a term or `{error, Reason}', or`{error, timeout}' if the TimeoutMs is reached first.
 %% @end
 %%-----------------------------------------------------------------------------
--spec call(pid(), Message :: term(), TimeoutMs :: non_neg_integer()) -> term() | {error, timeout}.
-call(Port, Message, TimeoutMs) ->
-    Ref = erlang:make_ref(),
+-spec call(pid(), Message :: term(), Timeout :: timeout()) -> term() | {error, timeout}.
+call(Port, Message, Timeout) ->
     MonitorRef = monitor(port, Port),
-    Port ! {self(), Ref, Message},
+    Port ! {self(), MonitorRef, Message},
     Result =
         receive
             {'DOWN', MonitorRef, port, Port, normal} ->
@@ -78,9 +77,9 @@ call(Port, Message, TimeoutMs) ->
                 {error, Reason};
             out_of_memory ->
                 out_of_memory;
-            {Ref, Ret} ->
+            {MonitorRef, Ret} ->
                 Ret
-        after TimeoutMs ->
+        after Timeout ->
             {error, timeout}
         end,
     demonitor(MonitorRef, [flush]),

@@ -47,91 +47,91 @@
 
 -spec cos(X :: number()) -> float().
 cos(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec acos(X :: number()) -> float().
 acos(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec acosh(X :: number()) -> float().
 acosh(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec asin(X :: number()) -> float().
 asin(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec asinh(X :: number()) -> float().
 asinh(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec atan(X :: number()) -> float().
 atan(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec atan2(Y :: number(), X :: number()) -> float().
 atan2(_Y, _X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec atanh(X :: number()) -> float().
 atanh(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec ceil(X :: number()) -> float().
 ceil(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec cosh(X :: number()) -> float().
 cosh(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec exp(X :: number()) -> float().
 exp(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec floor(X :: number()) -> float().
 floor(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec fmod(X :: number(), Y :: number()) -> float().
 fmod(_X, _Y) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec log(X :: number()) -> float().
 log(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec log10(X :: number()) -> float().
 log10(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec log2(X :: number()) -> float().
 log2(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec pow(X :: number(), Y :: number()) -> float().
 pow(_X, _Y) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec sin(X :: number()) -> float().
 sin(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec sinh(X :: number()) -> float().
 sinh(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec sqrt(X :: number()) -> float().
 sqrt(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec tan(X :: number()) -> float().
 tan(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec tanh(X :: number()) -> float().
 tanh(_X) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 -spec pi() -> float().
 pi() ->

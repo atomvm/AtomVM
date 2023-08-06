@@ -57,6 +57,19 @@
 -type options() :: list({atom(), term()}).
 -type server_ref() :: atom() | pid().
 
+-type action() ::
+    {reply, From :: pid(), Reply :: any()}
+    | {state_timeout, Timeout :: timeout(), Msg :: any()}.
+
+-type init_result(StateType, DataType) ::
+    {ok, State :: StateType, Data :: DataType}
+    | {ok, State :: StateType, Data :: DataType, Actions :: [action()]}
+    | {stop, Reason :: any()}.
+
+-callback init(Args :: any()) -> init_result(any(), any()).
+-callback terminate(Reason :: normal | any(), State :: any(), Data :: any()) ->
+    any().
+
 %%-----------------------------------------------------------------------------
 %% @param   ServerName the name with which to register the gen_statem
 %% @param   Module the module in which the gen_statem callbacks are defined
@@ -174,7 +187,7 @@ stop(ServerRef, Reason, Timeout) ->
 %% @doc     Send a request to a gen_statem instance, and wait for a reply.
 %% @end
 %%-----------------------------------------------------------------------------
--spec call(ServerRef :: server_ref(), Request :: term) ->
+-spec call(ServerRef :: server_ref(), Request :: term()) ->
     Reply :: term() | {error, Reason :: term()}.
 call(ServerRef, Request) ->
     call(ServerRef, Request, 5000).
