@@ -146,6 +146,7 @@ static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_function_exported(Context *ctx, int argc, term argv[]);
 static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[]);
 static term nif_erlang_group_leader(Context *ctx, int argc, term argv[]);
+static term nif_erlang_get_module_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_memory(Context *ctx, int argc, term argv[]);
 static term nif_erlang_monitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[]);
@@ -626,6 +627,12 @@ static const struct Nif group_leader_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_group_leader
+};
+
+static const struct Nif get_module_info_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_get_module_info
 };
 
 static const struct Nif raise_nif =
@@ -3346,6 +3353,66 @@ static term nif_erlang_group_leader(Context *ctx, int argc, term argv[])
         globalcontext_get_process_unlock(ctx->global, target);
         return TRUE_ATOM;
     }
+}
+
+static term nif_erlang_get_module_info(Context *ctx, int argc, term argv[])
+{
+    VALIDATE_VALUE(argv[0], term_is_atom);
+    if (argc == 2) {
+        VALIDATE_VALUE(argv[1], term_is_atom);
+    }
+    term module = argv[0];
+    AtomString module_name = globalcontext_atomstring_from_term(ctx->global, module);
+    Module *target_module = globalcontext_get_module(ctx->global, module_name);
+    if (IS_NULL_PTR(target_module)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (argc == 2) {
+        term key = argv[1];
+        if (key == MODULE_ATOM) {
+            return argv[0];
+        }
+        if (key == ATTRIBUTES_ATOM || key == COMPILE_ATOM) {
+            return term_nil();
+        }
+        if (key != EXPORTS_ATOM) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
+    size_t info_size = module_get_exported_functions_list_size(target_module);
+    if (argc == 1) {
+        info_size += TUPLE_SIZE(2) + 3 * (TUPLE_SIZE(2) + CONS_SIZE);
+    }
+    if (UNLIKELY(memory_ensure_free(ctx, info_size) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term exports = module_get_exported_functions(target_module, &ctx->heap, ctx->global);
+    if (argc == 2) {
+        return exports;
+    }
+    term result = term_nil();
+
+    term compile_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(compile_tuple, 0, COMPILE_ATOM);
+    term_put_tuple_element(compile_tuple, 1, term_nil());
+    result = term_list_prepend(compile_tuple, result, &ctx->heap);
+
+    term attributes_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(attributes_tuple, 0, ATTRIBUTES_ATOM);
+    term_put_tuple_element(attributes_tuple, 1, term_nil());
+    result = term_list_prepend(attributes_tuple, result, &ctx->heap);
+
+    term exports_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(exports_tuple, 0, EXPORTS_ATOM);
+    term_put_tuple_element(exports_tuple, 1, exports);
+    result = term_list_prepend(exports_tuple, result, &ctx->heap);
+
+    term module_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(module_tuple, 0, MODULE_ATOM);
+    term_put_tuple_element(module_tuple, 1, module);
+    result = term_list_prepend(module_tuple, result, &ctx->heap);
+
+    return result;
 }
 
 struct RefcBinaryAVMPack

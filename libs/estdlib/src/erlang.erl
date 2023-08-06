@@ -79,7 +79,9 @@
     open_port/2,
     system_time/1,
     group_leader/0,
-    process_flag/2
+    process_flag/2,
+    get_module_info/1,
+    get_module_info/2
 ]).
 
 -export_type([
@@ -843,4 +845,32 @@ group_leader() ->
 %%-----------------------------------------------------------------------------
 -spec process_flag(Flag :: trap_exit, Value :: boolean()) -> pid().
 process_flag(_Flag, _Value) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Module  module to get info for
+%% @returns A list of module info tuples
+%% @doc     Get info for a given module.
+%% This function is not meant to be called directly but through
+%% `Module:module_info/0' exported function.
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_module_info(Module :: atom()) -> [{atom(), any()}].
+get_module_info(_Module) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Module  module to get info for
+%% @param   InfoKey info to get
+%% @returns A term representing info for given module
+%% @doc     Get specific info for a given module.
+%% This function is not meant to be called directly but through
+%% `Module:module_info/1' exported function.
+%% Supported info keys are `module', `exports', `compile' and `attributes'.
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_module_info(Module :: atom(), InfoKey :: atom()) -> any().
+get_module_info(_Module, _InfoKey) ->
     throw(nif_error).
