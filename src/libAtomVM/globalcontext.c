@@ -188,22 +188,8 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
 {
     sys_free_platform(glb);
 
-#ifndef AVM_NO_SMP
-    smp_condvar_destroy(glb->schedulers_cv);
-    smp_mutex_destroy(glb->schedulers_mutex);
-    smp_rwlock_destroy(glb->modules_lock);
-#endif
-    synclist_destroy(&glb->registered_processes);
-    synclist_destroy(&glb->processes_table);
-    // Destroy every remaining refc binaries.
     struct ListHead *item;
     struct ListHead *tmp;
-    struct ListHead *refc_binaries = synclist_nolock(&glb->refc_binaries);
-    MUTABLE_LIST_FOR_EACH (item, tmp, refc_binaries) {
-        struct RefcBinary *refc = GET_LIST_ENTRY(item, struct RefcBinary, head);
-        refc_binary_destroy(refc, glb);
-    }
-    synclist_destroy(&glb->refc_binaries);
 
     struct ListHead *open_avm_packs = synclist_nolock(&glb->avmpack_data);
     MUTABLE_LIST_FOR_EACH (item, tmp, open_avm_packs) {
@@ -218,6 +204,22 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
     }
     synclist_destroy(&glb->listeners);
 
+    // Destroy select events before resources
+    struct ListHead *select_events = synclist_nolock(&glb->select_events);
+    MUTABLE_LIST_FOR_EACH (item, tmp, select_events) {
+        struct SelectEvent *select_event = GET_LIST_ENTRY(item, struct SelectEvent, head);
+        free((void *) select_event);
+    }
+    synclist_destroy(&glb->select_events);
+
+    // Destroy refc binaries including resources
+    struct ListHead *refc_binaries = synclist_nolock(&glb->refc_binaries);
+    MUTABLE_LIST_FOR_EACH (item, tmp, refc_binaries) {
+        struct RefcBinary *refc = GET_LIST_ENTRY(item, struct RefcBinary, head);
+        refc_binary_destroy(refc, glb);
+    }
+    synclist_destroy(&glb->refc_binaries);
+
     // Destroy resource types
     struct ListHead *resource_types = synclist_nolock(&glb->resource_types);
     MUTABLE_LIST_FOR_EACH (item, tmp, resource_types) {
@@ -226,12 +228,13 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
     }
     synclist_destroy(&glb->resource_types);
 
-    struct ListHead *select_events = synclist_nolock(&glb->select_events);
-    MUTABLE_LIST_FOR_EACH (item, tmp, select_events) {
-        struct SelectEvent *select_event = GET_LIST_ENTRY(item, struct SelectEvent, head);
-        free((void *) select_event);
-    }
-    synclist_destroy(&glb->select_events);
+#ifndef AVM_NO_SMP
+    smp_condvar_destroy(glb->schedulers_cv);
+    smp_mutex_destroy(glb->schedulers_mutex);
+    smp_rwlock_destroy(glb->modules_lock);
+#endif
+    synclist_destroy(&glb->registered_processes);
+    synclist_destroy(&glb->processes_table);
 
     free(glb);
 }
