@@ -56,7 +56,7 @@
 %%          send or receive UDP messages.
 %% @end
 %%-----------------------------------------------------------------------------
--spec open(PortNum :: inet:port()) -> {ok, inet:socket()} | {error, Reason :: reason()}.
+-spec open(PortNum :: inet:port_number()) -> {ok, inet:socket()} | {error, Reason :: reason()}.
 open(PortNum) ->
     open(PortNum, []).
 
@@ -76,7 +76,7 @@ open(PortNum) ->
 %%          <em><b>Note.</b>  The Params argument is currently ignored.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec open(PortNum :: inet:port(), Options :: proplist()) ->
+-spec open(PortNum :: inet:port_number(), Options :: proplist()) ->
     {ok, inet:socket()} | {error, Reason :: reason()}.
 open(PortNum, Options) ->
     DriverPid = open_port({spawn, "socket"}, []),
@@ -97,7 +97,7 @@ open(PortNum, Options) ->
 -spec send(
     Socket :: inet:socket(),
     Address :: inet:address(),
-    PortNum :: inet:port(),
+    PortNum :: inet:port_number(),
     Packet :: packet()
 ) -> ok | {error, reason()}.
 send(Socket, Address, PortNum, Packet) ->
@@ -114,7 +114,7 @@ send(Socket, Address, PortNum, Packet) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec recv(Socket :: inet:socket(), Length :: non_neg_integer()) ->
-    {ok, {inet:address(), inet:port(), packet()}} | {error, reason()}.
+    {ok, {inet:address(), inet:port_number(), packet()}} | {error, reason()}.
 recv(Socket, Length) ->
     recv(Socket, Length, infinity).
 
@@ -136,7 +136,7 @@ recv(Socket, Length) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec recv(Socket :: inet:socket(), Length :: non_neg_integer(), Timeout :: non_neg_integer()) ->
-    {ok, {inet:address(), inet:port(), packet()}} | {error, reason()}.
+    {ok, {inet:address(), inet:port_number(), packet()}} | {error, reason()}.
 recv(Socket, Length, Timeout) ->
     call(Socket, {recvfrom, Length, Timeout}).
 
