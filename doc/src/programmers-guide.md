@@ -968,6 +968,13 @@ The return type is a list of tuples, each of which contains the partition id (as
 
 For information about the encoding of partition types and sub-types, see the IDF SDK partition [type definitions](https://docs.espressif.com/projects/esp-idf/en/v4.4.5/esp32/api-reference/storage/spi_flash.html?highlight=esp_partition_get#id13).
 
+* `esp:get_mac/1`
+
+The `esp:get_mac/1` function can be used to retrieve the network Media Access Control ([MAC](https://en.wikipedia.org/wiki/MAC_address)) address for a given interface, `wifi_sta` or `wifi_softap`.  The return value is a 6-byte binary, in accordance with the [IEEE 802](https://en.wikipedia.org/wiki/IEEE_802) family of specifications.
+
+    %% erlang
+    MacAddress = esp:get_mac(wifi_sta)
+
 ## Peripherals
 
 The AtomVM virtual machine and libraries support APIs for interfacing with peripheral devices connected to the ESP32.  This section provides information about these APIs.

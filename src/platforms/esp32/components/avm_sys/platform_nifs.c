@@ -31,6 +31,8 @@
 #include "platform_defaultatoms.h"
 #include "term.h"
 
+#include "esp_log.h"
+#include "esp_mac.h"
 #include <esp_partition.h>
 #include <esp_sleep.h>
 #include <esp_system.h>
@@ -62,6 +64,8 @@
 //#define ENABLE_TRACE
 #include "trace.h"
 
+#define TAG "atomvm"
+
 #define MD5_DIGEST_LENGTH 16
 
 static const char *const esp_rst_unknown_atom   = "\xF"  "esp_rst_unknown";
@@ -76,6 +80,18 @@ static const char *const esp_rst_deepsleep      = "\x11" "esp_rst_deepsleep";
 static const char *const esp_rst_brownout       = "\x10" "esp_rst_brownout";
 static const char *const esp_rst_sdio           = "\xC"  "esp_rst_sdio";
 //                                                        123456789ABCDEF01
+
+enum NetworkInterface {
+    WifiSTAInterface,
+    WifiSoftAPInterface,
+    InvalidInterface
+};
+
+static const AtomStringIntPair interface_table[] = {
+    { ATOM_STR("\x8", "wifi_sta"), WifiSTAInterface },
+    { ATOM_STR("\xB", "wifi_softap"), WifiSoftAPInterface },
+    SELECT_INT_DEFAULT(InvalidInterface)
+};
 
 //
 // NIFs
@@ -450,8 +466,42 @@ static term nif_atomvm_platform(Context *ctx, int argc, term argv[])
     return ESP32_ATOM;
 }
 
+static term nif_esp_get_mac(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    GlobalContext *global = ctx->global;
+
+    int network_interface = interop_atom_term_select_int(interface_table, argv[0], global);
+    esp_mac_type_t interface;
+    switch (network_interface) {
+        case WifiSTAInterface:
+           interface = ESP_MAC_WIFI_STA;
+           break;
+        case WifiSoftAPInterface:
+           interface = ESP_MAC_WIFI_SOFTAP;
+           break;
+        default:
+            // TODO add support for BT, ETH, etc
+            RAISE_ERROR(BADARG_ATOM);
+    }
+
+    uint8_t mac[6];
+    esp_err_t err = esp_read_mac(mac, interface);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Unable to read mac.  err=%i", err);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(6)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return term_from_literal_binary(mac, 6, &ctx->heap, ctx->global);
+}
+
 //
-// NIF structures and distpatch
+// NIF structures and dispatch
 //
 
 static const struct Nif esp_random_nif =
@@ -526,6 +576,11 @@ static const struct Nif atomvm_platform_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_platform
 };
+static const struct Nif esp_get_mac_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_get_mac
+};
 
 const struct Nif *platform_nifs_get_nif(const char *nifname)
 {
@@ -590,6 +645,10 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     if (strcmp("atomvm:platform/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &atomvm_platform_nif;
+    }
+    if (strcmp("esp:get_mac/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_get_mac_nif;
     }
     const struct Nif *nif = nif_collection_resolve_nif(nifname);
     if (nif) {
