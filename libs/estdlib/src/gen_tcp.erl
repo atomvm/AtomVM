@@ -46,6 +46,17 @@
 
 -type reason() :: term().
 
+-type option() ::
+    {active, boolean()}
+    | {buffer, pos_integer()}
+    | {timeout, pos_integer() | infinity}
+    | list
+    | binary.
+
+-type listen_option() :: option().
+-type connect_option() :: option().
+-type packet() :: string() | binary().
+
 -define(DEFAULT_PARAMS, [{active, true}, {buffer, 512}, {timeout, infinity}]).
 
 %%-----------------------------------------------------------------------------
@@ -73,7 +84,7 @@
 %%          in order to receive data on the socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec connect(Address :: inet:address(), Port :: inet:port(), Options :: inet:opts()) ->
+-spec connect(Address :: inet:address(), Port :: inet:port_number(), Options :: [connect_option()]) ->
     {ok, Socket :: inet:socket()} | {error, Reason :: reason()}.
 connect(Address, Port, Params0) ->
     Socket = open_port({spawn, "socket"}, []),
@@ -90,7 +101,7 @@ connect(Address, Port, Params0) ->
 %%          otherwise, an error with a reason.
 %% @end
 %%-----------------------------------------------------------------------------
--spec send(Socket :: inet:socket(), Packet :: inet:packet()) -> ok | {error, Reason :: reason()}.
+-spec send(Socket :: inet:socket(), Packet :: packet()) -> ok | {error, Reason :: reason()}.
 send(Socket, Packet) ->
     case call(Socket, {send, Packet}) of
         {ok, _Len} ->
@@ -105,7 +116,7 @@ send(Socket, Packet) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec recv(Socket :: inet:socket(), Length :: non_neg_integer()) ->
-    {ok, inet:packet()} | {error, Reason :: reason()}.
+    {ok, packet()} | {error, Reason :: reason()}.
 recv(Socket, Length) ->
     recv(Socket, Length, infinity).
 
@@ -129,7 +140,7 @@ recv(Socket, Length) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec recv(Socket :: inet:socket(), Length :: non_neg_integer(), Timeout :: non_neg_integer()) ->
-    {ok, inet:packet()} | {error, Reason :: reason()}.
+    {ok, packet()} | {error, Reason :: reason()}.
 recv(Socket, Length, Timeout) ->
     call(Socket, {recv, Length, Timeout}).
 
@@ -144,7 +155,7 @@ recv(Socket, Length, Timeout) ->
 %%          This function is currently unimplemented
 %% @end
 %%-----------------------------------------------------------------------------
--spec listen(Port :: inet:port(), Options :: inet:opts()) ->
+-spec listen(Port :: inet:port_number(), Options :: [listen_option()]) ->
     {ok, ListeningSocket :: inet:socket()} | {error, Reason :: reason()}.
 listen(Port, Options) ->
     Socket = open_port({spawn, "socket"}, []),

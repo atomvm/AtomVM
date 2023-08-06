@@ -56,9 +56,12 @@
     atom_to_binary/2,
     atom_to_list/1,
     float_to_binary/1,
+    float_to_binary/2,
     float_to_list/1,
+    float_to_list/2,
     integer_to_binary/1,
     integer_to_list/1,
+    integer_to_list/2,
     fun_to_list/1,
     pid_to_list/1,
     ref_to_list/1,
@@ -77,6 +80,10 @@
     system_time/1,
     group_leader/0,
     process_flag/2
+]).
+
+-export_type([
+    time_unit/0
 ]).
 
 %%
@@ -541,6 +548,11 @@ atom_to_binary(_Atom, _Encoding) ->
 atom_to_list(_Atom) ->
     throw(nif_error).
 
+-type float_format_option() ::
+    {decimals, Decimals :: 0..57}
+    | {scientific, Decimals :: 0..57}
+    | compact.
+
 %%-----------------------------------------------------------------------------
 %% @param   Float   Float to convert
 %% @returns a binary with a text representation of the float
@@ -553,12 +565,34 @@ float_to_binary(_Float) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Float   Float to convert
+%% @param   Options Options for conversion
+%% @returns a binary with a text representation of the float
+%% @doc     Convert a float to a binary.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec float_to_binary(Float :: float(), Options :: [float_format_option()]) -> binary().
+float_to_binary(_Float, _Options) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Float   Float to convert
 %% @returns a string with a text representation of the float
 %% @doc     Convert a float to a string.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec float_to_list(Float :: float()) -> string().
 float_to_list(_Float) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Float   Float to convert
+%% @param   Options Options for conversion
+%% @returns a string with a text representation of the float
+%% @doc     Convert a float to a string.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec float_to_list(Float :: float(), Options :: [float_format_option()]) -> string().
+float_to_list(_Float, _Options) ->
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------
@@ -579,6 +613,17 @@ integer_to_binary(_Integer) ->
 %%-----------------------------------------------------------------------------
 -spec integer_to_list(Integer :: integer()) -> string().
 integer_to_list(_Integer) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Integer integer to convert to a string
+%% @param   Base    base for representation
+%% @returns a string representation of the integer
+%% @doc     Convert an integer to a string.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec integer_to_list(Integer :: integer(), Base :: 2..36) -> string().
+integer_to_list(_Integer, _Base) ->
     throw(nif_error).
 
 %%-----------------------------------------------------------------------------

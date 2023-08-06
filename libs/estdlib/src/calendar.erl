@@ -45,6 +45,8 @@
     system_time_to_universal_time/2
 ]).
 
+-export_type([datetime/0]).
+
 %%-----------------------------------------------------------------------------
 %% @doc Year cannot be abbreviated.
 %%
@@ -65,7 +67,6 @@
 -type date() :: {year(), month(), day()}.
 -type time() :: {hour(), minute(), second()}.
 -type datetime() :: {date(), time()}.
--type time_unit() :: second | millisecond | microsecond.
 
 %%-----------------------------------------------------------------------------
 %% @equiv date_to_gregorian_days(Year, M, D)
@@ -161,7 +162,7 @@ day_of_the_week(Y, M, D) ->
 %% @doc     Convert an integer time value to a date and time in UTC.
 %% @end
 %%-----------------------------------------------------------------------------
--spec system_time_to_universal_time(Time :: integer(), TimeUnit :: time_unit()) ->
+-spec system_time_to_universal_time(Time :: integer(), TimeUnit :: erlang:time_unit()) ->
     datetime().
 system_time_to_universal_time(_Time, _TimeUnit) ->
     throw(nif_error).
