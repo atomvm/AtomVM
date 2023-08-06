@@ -1,7 +1,7 @@
 #
 # This file is part of AtomVM.
 #
-# Copyright 2018 Fred Dushin <fred@dushin.net>
+# Copyright 2023 Davide Bettio <davide@uninstall.it>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,30 +18,12 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-cmake_minimum_required (VERSION 3.12)
-project(libs)
+project(esp32boot)
 
-add_subdirectory(estdlib/src)
-add_subdirectory(eavmlib/src)
-add_subdirectory(alisp/src)
-add_subdirectory(etest/src)
-add_subdirectory(esp32boot)
-add_subdirectory(esp32devmode/src)
+include(BuildErlang)
 
 if (Elixir_FOUND)
-    add_subdirectory(exavmlib/lib)
+    pack_runnable(esp32boot esp32init esp32devmode eavmlib estdlib alisp exavmlib)
 else()
-    message("Unable to find elixirc -- skipping Elixir libs")
+    pack_runnable(esp32boot esp32init esp32devmode eavmlib estdlib alisp)
 endif()
-
-if (Elixir_FOUND)
-    pack_lib(atomvmlib eavmlib estdlib alisp exavmlib)
-else()
-    pack_lib(atomvmlib eavmlib estdlib alisp)
-endif()
-
-install(
-    FILES ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.avm
-    DESTINATION lib/atomvm
-    RENAME atomvm.avm
-)

@@ -65,7 +65,11 @@ void app_main()
 
     spi_flash_mmap_handle_t handle;
     int size;
-    const void *main_avm = esp32_sys_mmap_partition("main.avm", &handle, &size);
+    const void *startup_avm = esp32_sys_mmap_partition("boot.avm", &handle, &size);
+    if (IS_NULL_PTR(startup_avm)) {
+        ESP_LOGI(TAG, "Trying deprecated main.avm partition.");
+        startup_avm = esp32_sys_mmap_partition("main.avm", &handle, &size);
+    }
 
     uint32_t startup_beam_size;
     const void *startup_beam;
@@ -76,12 +80,12 @@ void app_main()
     port_driver_init_all(glb);
     nif_collection_init_all(glb);
 
-    if (!avmpack_is_valid(main_avm, size)) {
-        ESP_LOGE(TAG, "Invalid main.avm packbeam.  size=%u", size);
+    if (!avmpack_is_valid(startup_avm, size)) {
+        ESP_LOGE(TAG, "Invalid startup avmpack. size=%u", size);
         AVM_ABORT();
     }
-    if (!avmpack_find_section_by_flag(main_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
-        ESP_LOGE(TAG, "Error: Failed to locate start module in main.avm packbeam.  (Did you flash a library by mistake?)");
+    if (!avmpack_find_section_by_flag(startup_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
+        ESP_LOGE(TAG, "Error: Failed to locate start module in startup partition. (Did you flash a library by mistake?)");
         AVM_ABORT();
     }
     ESP_LOGI(TAG, "Found startup beam %s", startup_module_name);
@@ -92,7 +96,7 @@ void app_main()
     }
     avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
     avmpack_data->base.in_use = true;
-    avmpack_data->base.data = main_avm;
+    avmpack_data->base.data = startup_avm;
     synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
 
     const void *lib_avm = esp32_sys_mmap_partition("lib.avm", &handle, &size);
@@ -106,7 +110,7 @@ void app_main()
         avmpack_data->base.data = lib_avm;
         synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
     } else {
-        ESP_LOGW(TAG, "Unable to mount lib.avm partition.  Hopefully the AtomVM core libraries are included in your application.");
+        ESP_LOGI(TAG, "Unable to mount lib.avm partition. Hopefully the AtomVM core libraries are included in your application.");
     }
 
     Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
