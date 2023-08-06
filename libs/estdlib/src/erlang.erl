@@ -41,7 +41,42 @@
     monotonic_time/1,
     min/2,
     max/2,
-    memory/1
+    memory/1,
+    get/1,
+    put/2,
+    erase/1,
+    function_exported/3,
+    display/1,
+    list_to_atom/1,
+    list_to_binary/1,
+    list_to_integer/1,
+    list_to_tuple/1,
+    iolist_to_binary/1,
+    binary_to_list/1,
+    atom_to_binary/2,
+    atom_to_list/1,
+    float_to_binary/1,
+    float_to_list/1,
+    integer_to_binary/1,
+    integer_to_list/1,
+    fun_to_list/1,
+    pid_to_list/1,
+    ref_to_list/1,
+    register/2,
+    unregister/1,
+    whereis/1,
+    spawn/1,
+    spawn/3,
+    spawn_opt/2,
+    spawn_opt/4,
+    make_ref/0,
+    monitor/2,
+    demonitor/1,
+    demonitor/2,
+    open_port/2,
+    system_time/1,
+    group_leader/0,
+    process_flag/2
 ]).
 
 %%
@@ -363,4 +398,404 @@ memory(_Type) ->
 %%-----------------------------------------------------------------------------
 -spec monotonic_time(Unit :: time_unit()) -> integer().
 monotonic_time(_Unit) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Key     key in the process dictionary
+%% @returns value associated with this key or undefined
+%% @doc     Return a value associated with a given key in the process dictionary
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get(Key :: any()) -> any().
+get(_Key) ->
+    throw(bif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Key     key to add to the process dictionary
+%% @param   Value   value to store in the process dictionary
+%% @returns the previous value associated with this key or undefined
+%% @doc     Store a value with a given key in the process dictionary.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec put(Key :: any(), Value :: any()) -> any().
+put(_Key, _Value) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Key     key to erase from the process dictionary
+%% @returns the previous value associated with this key or undefined
+%% @doc     Erase a key from the process dictionary.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec erase(Key :: any()) -> any().
+erase(_Key) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Module      module to test
+%% @param   Function    function to test
+%% @param   Arity       arity to test
+%% @returns `true' if Module exports a Function with this Arity
+%% @doc     Determine if a function is exported
+%% @end
+%%-----------------------------------------------------------------------------
+-spec function_exported(Module :: module(), Function :: atom(), Arity :: arity()) -> boolean().
+function_exported(_Module, _Function, _Arity) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Term    term to print
+%% @returns `true'
+%% @doc     Print a term to stdout.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec display(Term :: any()) -> true.
+display(_Term) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   String  string to convert to an atom
+%% @returns an atom from the string
+%% @doc     Convert a string into an atom.
+%% Unlike Erlang/OTP 20+, atoms are limited to ISO-8859-1 characters. The VM
+%% currently aborts if passed unicode characters.
+%% Atoms are also limited to 255 characters. Errors with system_limit_atom if
+%% the passed string is longer.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec list_to_atom(String :: string()) -> atom().
+list_to_atom(_String) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   List    list to convert to binary
+%% @returns a binary composed of bytes from the list
+%% @doc     Convert a list of bytes into a binary.
+%% Errors with `badarg' if the list is not a list of bytes.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec list_to_binary(List :: [byte()]) -> binary().
+list_to_binary(_String) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   String  string to convert to integer
+%% @returns an integer value from its string representation
+%% @doc     Convert a string (list of characters) to integer.
+%% Errors with `badarg' if the string is not a representation of an integer.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec list_to_integer(String :: string()) -> tuple().
+list_to_integer(_String) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   List    list to convert to tuple
+%% @returns a tuple with elements of the list
+%% @doc     Convert a list to a tuple with the same size.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec list_to_tuple(List :: [any()]) -> tuple().
+list_to_tuple(_List) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   IOList  IO list to convert to binary
+%% @returns a binary with the bytes of the IO list
+%% @doc     Convert an IO list to binary.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec iolist_to_binary(IOList :: iolist()) -> binary().
+iolist_to_binary(_IOList) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Binary  Binary to convert to list
+%% @returns a list of bytes from the binary
+%% @doc     Convert a binary to a list of bytes.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec binary_to_list(Binary :: binary()) -> [byte()].
+binary_to_list(_Binary) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Atom        Atom to convert
+%% @param   Encoding    Encoding for conversion
+%% @returns a binary with the atom's name
+%% @doc     Convert an atom to a binary.
+%% Only latin1 encoding is supported.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec atom_to_binary(Atom :: atom(), Encoding :: latin1) -> binary().
+atom_to_binary(_Atom, _Encoding) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Atom    Atom to convert
+%% @returns a string with the atom's name
+%% @doc     Convert an atom to a string.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec atom_to_list(Atom :: atom()) -> string().
+atom_to_list(_Atom) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Float   Float to convert
+%% @returns a binary with a text representation of the float
+%% @doc     Convert a float to a binary.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec float_to_binary(Float :: float()) -> binary().
+float_to_binary(_Float) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Float   Float to convert
+%% @returns a string with a text representation of the float
+%% @doc     Convert a float to a string.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec float_to_list(Float :: float()) -> string().
+float_to_list(_Float) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Integer integer to convert to a binary
+%% @returns a binary with a text representation of the integer
+%% @doc     Convert an integer to a binary.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec integer_to_binary(Integer :: integer()) -> binary().
+integer_to_binary(_Integer) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Integer integer to convert to a string
+%% @returns a string representation of the integer
+%% @doc     Convert an integer to a string.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec integer_to_list(Integer :: integer()) -> string().
+integer_to_list(_Integer) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Fun     function to convert to a string
+%% @returns a string representation of the function
+%% @doc     Create a string representing a function.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec fun_to_list(Fun :: function()) -> string().
+fun_to_list(_Fun) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Pid     pid to convert to a string
+%% @returns a string representation of the pid
+%% @doc     Create a string representing a pid.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec pid_to_list(Pid :: pid()) -> string().
+pid_to_list(_Pid) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Ref     reference to convert to a string
+%% @returns a string representation of the reference
+%% @doc     Create a string representing a reference.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec ref_to_list(Ref :: reference()) -> string().
+ref_to_list(_Ref) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Name    name of the process to register
+%% @param   Pid     pid of the process to register
+%% @returns `true'
+%% @doc     Register a name for a given process.
+%% Processes can be registered with several names.
+%% Unlike Erlang/OTP, ports are not distinguished from processes.
+%% Errors with `badarg' if the name is already registered.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec register(Name :: atom(), Pid :: pid()) -> true.
+register(_Name, _Pid) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Name    name to unregister
+%% @returns `true'
+%% @doc     Lookup a process by name.
+%% Unlike Erlang/OTP, ports are not distinguished from processes.
+%% Errors with `badarg' if the name is not registered.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec unregister(Name :: atom()) -> true.
+unregister(_Name) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Name    name of the process to locate
+%% @returns `undefined' or the pid of the registered process
+%% @doc     Lookup a process by name.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec whereis(Name :: atom()) -> pid() | undefined.
+whereis(_Name) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Function    function to create a process from
+%% @returns pid of the new process
+%% @doc     Create a new process
+%% @end
+%%-----------------------------------------------------------------------------
+-spec spawn(Function :: function()) -> pid().
+spawn(_Name) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Module      module of the function to create a process from
+%% @param   Function    name of the function to create a process from
+%% @param   Args        arguments to pass to the function to create a process from
+%% @returns pid of the new process
+%% @doc     Create a new process by calling exported Function from Module with Args.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec spawn(Module :: module(), Function :: atom(), Args :: [any()]) -> pid().
+spawn(_Module, _Function, _Args) ->
+    throw(nif_error).
+
+-type spawn_option() ::
+    {min_heap_size, pos_integer()}
+    | {max_heap_size, pos_integer()}
+    | {link, boolean()}
+    | {monitor, boolean()}.
+
+%%-----------------------------------------------------------------------------
+%% @param   Function    function to create a process from
+%% @param   Options     additional options.
+%% @returns pid of the new process
+%% @doc     Create a new process.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec spawn_opt(Function :: function(), Options :: [{max_heap_size, integer()}]) -> pid().
+spawn_opt(_Name, _Options) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Module      module of the function to create a process from
+%% @param   Function    name of the function to create a process from
+%% @param   Args        arguments to pass to the function to create a process from
+%% @param   Options     additional options.
+%% @returns pid of the new process
+%% @doc     Create a new process by calling exported Function from Module with Args.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec spawn_opt(
+    Module :: module(), Function :: atom(), Args :: [any()], Options :: [spawn_option()]
+) -> pid().
+spawn_opt(_Module, _Function, _Args, _Options) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @returns a new reference
+%% @doc     Create a new reference
+%% @end
+%%-----------------------------------------------------------------------------
+-spec make_ref() -> reference().
+make_ref() ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Type    type of monitor to create
+%% @param   Pid     pid of the object to monitor
+%% @returns a monitor reference
+%% @doc     Create a monitor on a process.
+%% When the process dies, the following message is sent to the caller of this
+%% function:
+%% ```
+%% {'DOWN', MonitorRef, process, Pid, Reason}
+%% '''
+%% Unlike Erlang/OTP, monitors are only supported for processes.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec monitor(Type :: process, Pid :: pid()) -> reference().
+monitor(_Type, _Pid) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Monitor reference of monitor to remove
+%% @returns `true'
+%% @doc     Remove a monitor
+%% @end
+%%-----------------------------------------------------------------------------
+-spec demonitor(Monitor :: reference()) -> true.
+demonitor(_Monitor) ->
+    throw(nif_error).
+
+-type demonitor_option() :: flush | {flush, boolean()} | info | {info, boolean()}.
+
+%%-----------------------------------------------------------------------------
+%% @param   Monitor reference of monitor to remove
+%% @returns `true'
+%% @doc     Remove a monitor, with options.
+%% If `flush', monitor messages are flushed and guaranteed to not be received.
+%% If `info', return `true' if monitor was removed, `false' if it was not found.
+%% If both options are provivded, return `false' if flush was needed.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec demonitor(Monitor :: reference(), Options :: [demonitor_option()]) -> boolean().
+demonitor(_Monitor, _Options) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   PortName    Tuple {spawn, Name} identifying the port
+%% @param   Options     Options, meaningful for the port
+%% @returns A pid identifying the open port
+%% @doc     Open a port.
+%% Unlike Erlang/OTP, ports are identified by pids.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec open_port(PortName :: {spawn, iodata()}, Options :: [any()] | map()) -> pid().
+open_port(_PortName, _Options) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Unit    Unit to return system time in
+%% @returns An integer representing system time
+%% @doc     Get the current system time in provided unit.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec system_time(Unit :: time_unit()) -> non_neg_integer().
+system_time(_Unit) ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @returns Pid of group leader or self() if no group leader is set.
+%% @doc     Return the pid of the group leader of caller.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec group_leader() -> pid().
+group_leader() ->
+    throw(nif_error).
+
+%%-----------------------------------------------------------------------------
+%% @param   Flag    flag to change
+%% @param   Value   new value of the flag
+%% @returns Previous value of the flag
+%% @doc     Set a flag for the current process.
+%% When `trap_exit' is true, exit signals are converted to messages
+%% ```
+%% {'EXIT', From, Reason}
+%% '''
+%% and the process does not exit if `Reason' is not `normal'.
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-spec process_flag(Flag :: trap_exit, Value :: boolean()) -> pid().
+process_flag(_Flag, _Value) ->
     throw(nif_error).

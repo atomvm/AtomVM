@@ -41,6 +41,7 @@ start() ->
     _ = stringize(111222),
     _ = stringize(333222),
     "undefined" = erlang:atom_to_list(the_erase(6)),
+    ok = test_put_get_erase(),
     W.
 
 put_int(N) ->
@@ -70,3 +71,12 @@ the_erase(N) when is_integer(N) ->
     erase(N);
 the_erase(_X) ->
     "0".
+
+test_put_get_erase() ->
+    undefined = put({any_term}, 1),
+    1 = get({any_term}),
+    1 = apply(erlang, list_to_atom("put"), [{any_term}, 2]),
+    2 = apply(erlang, list_to_atom("get"), [{any_term}]),
+    2 = apply(erlang, list_to_atom("erase"), [{any_term}]),
+    undefined = erase({any_term}),
+    ok.
