@@ -92,7 +92,7 @@
 %%-----------------------------------------------------------------------------
 -spec restart() -> ok.
 restart() ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @returns the reason for the restart
@@ -101,7 +101,7 @@ restart() ->
 %%-----------------------------------------------------------------------------
 -spec reset_reason() -> esp_reset_reason().
 reset_reason() ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @returns the cause for the wake up
@@ -110,7 +110,7 @@ reset_reason() ->
 %%-----------------------------------------------------------------------------
 -spec wakeup_cause() -> undefined | esp_wakeup_cause() | error.
 wakeup_cause() ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @returns Configure ext0 wakeup
@@ -118,7 +118,7 @@ wakeup_cause() ->
 %%-----------------------------------------------------------------------------
 -spec sleep_enable_ext0_wakeup(Pin :: pos_integer(), Level :: 0..1) -> ok | error.
 sleep_enable_ext0_wakeup(_Pin, _Level) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @returns Configure ext1 wakeup
@@ -126,7 +126,7 @@ sleep_enable_ext0_wakeup(_Pin, _Level) ->
 %%-----------------------------------------------------------------------------
 -spec sleep_enable_ext1_wakeup(Mask :: non_neg_integer(), Mode :: 0..1) -> ok | error.
 sleep_enable_ext1_wakeup(_Mask, _Mode) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @doc Equivalent to nvs_get_binary(?ATOMVM_NVS_NS, Key).
@@ -147,7 +147,7 @@ nvs_get_binary(Key) when is_atom(Key) ->
 %%-----------------------------------------------------------------------------
 -spec nvs_get_binary(Namespace :: atom(), Key :: atom()) -> binary() | undefined.
 nvs_get_binary(Namespace, Key) when is_atom(Namespace) andalso is_atom(Key) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Namespace NVS namespace
@@ -192,7 +192,7 @@ nvs_set_binary(Key, Value) when is_atom(Key) andalso is_binary(Value) ->
 nvs_set_binary(Namespace, Key, Value) when
     is_atom(Namespace) andalso is_atom(Key) andalso is_binary(Value)
 ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Key NVS key
@@ -214,7 +214,7 @@ nvs_erase_key(Key) when is_atom(Key) ->
 %%-----------------------------------------------------------------------------
 -spec nvs_erase_key(Namespace :: atom(), Key :: atom()) -> ok.
 nvs_erase_key(Namespace, Key) when is_atom(Namespace) andalso is_atom(Key) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @doc Equivalent to nvs_erase_all(?ATOMVM_NVS_NS).
@@ -232,7 +232,7 @@ nvs_erase_all() ->
 %%-----------------------------------------------------------------------------
 -spec nvs_erase_all(Namespace :: atom()) -> ok.
 nvs_erase_all(Namespace) when is_atom(Namespace) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @returns ok
@@ -243,7 +243,7 @@ nvs_erase_all(Namespace) when is_atom(Namespace) ->
 %%-----------------------------------------------------------------------------
 -spec nvs_reformat() -> ok.
 nvs_reformat() ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @returns List of partitions
@@ -254,7 +254,7 @@ nvs_reformat() ->
 %%-----------------------------------------------------------------------------
 -spec partition_list() -> [esp_partition()].
 partition_list() ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @returns the currently stored binary in RTC slow memory.
@@ -266,7 +266,7 @@ partition_list() ->
 %%-----------------------------------------------------------------------------
 -spec rtc_slow_get_binary() -> binary().
 rtc_slow_get_binary() ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Bin binary to be stored in RTC slow memory
@@ -277,7 +277,7 @@ rtc_slow_get_binary() ->
 %%-----------------------------------------------------------------------------
 -spec rtc_slow_set_binary(Bin :: binary()) -> ok.
 rtc_slow_set_binary(Bin) when is_binary(Bin) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @returns Clock frequency (in hz)
@@ -286,4 +286,4 @@ rtc_slow_set_binary(Bin) when is_binary(Bin) ->
 %%-----------------------------------------------------------------------------
 -spec freq_hz() -> non_neg_integer().
 freq_hz() ->
-    throw(nif_error).
+    erlang:nif_error(undefined).

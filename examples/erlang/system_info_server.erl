@@ -33,8 +33,8 @@ start() ->
             {disconnected, fun() -> Self ! disconnected end}
         ]}
     ],
-    case network_fsm:start(Config) of
-        ok ->
+    case network:start(Config) of
+        {ok, _Pid} ->
             wait_for_message();
         Error ->
             io:format("An error occurred starting network: ~p~n", [Error])

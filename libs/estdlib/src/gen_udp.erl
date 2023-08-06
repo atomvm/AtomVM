@@ -43,9 +43,16 @@
 
 -export([open/1, open/2, send/4, recv/2, recv/3, close/1, controlling_process/2]).
 
--type proplist() :: [{atom(), any()}].
 -type packet() :: string() | binary().
 -type reason() :: term().
+
+-type option() ::
+    {active, boolean()}
+    | {buffer, pos_integer()}
+    | {timeout, timeout()}
+    | list
+    | binary
+    | {binary, boolean()}.
 
 -define(DEFAULT_PARAMS, [{active, true}, {buffer, 128}, {timeout, infinity}]).
 
@@ -76,7 +83,7 @@ open(PortNum) ->
 %%          <em><b>Note.</b>  The Params argument is currently ignored.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec open(PortNum :: inet:port_number(), Options :: proplist()) ->
+-spec open(PortNum :: inet:port_number(), Options :: [option()]) ->
     {ok, inet:socket()} | {error, Reason :: reason()}.
 open(PortNum, Options) ->
     DriverPid = open_port({spawn, "socket"}, []),
@@ -135,7 +142,7 @@ recv(Socket, Length) ->
 %%          is limited to 128 bytes.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec recv(Socket :: inet:socket(), Length :: non_neg_integer(), Timeout :: non_neg_integer()) ->
+-spec recv(Socket :: inet:socket(), Length :: non_neg_integer(), Timeout :: timeout()) ->
     {ok, {inet:address(), inet:port_number(), packet()}} | {error, reason()}.
 recv(Socket, Length, Timeout) ->
     call(Socket, {recvfrom, Length, Timeout}).

@@ -37,4 +37,4 @@
 %%-----------------------------------------------------------------------------
 -spec rtc_set_datetime(calendar:datetime()) -> ok.
 rtc_set_datetime(_Datetime) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).

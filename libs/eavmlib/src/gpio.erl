@@ -224,7 +224,7 @@ deinit(_Pin) ->
 %%-----------------------------------------------------------------------------
 -spec set_pin_mode(Pin :: pin(), Direction :: direction()) -> ok | error.
 set_pin_mode(_Pin, _Mode) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number to set internal resistor direction
@@ -238,7 +238,7 @@ set_pin_mode(_Pin, _Mode) ->
 %%-----------------------------------------------------------------------------
 -spec set_pin_pull(Pin :: pin(), Pull :: pull()) -> ok | error.
 set_pin_pull(_Pin, _Pull) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number of the pin to be held
@@ -262,7 +262,7 @@ set_pin_pull(_Pin, _Pull) ->
 %%-----------------------------------------------------------------------------
 -spec hold_en(Pin :: pin()) -> ok | error.
 hold_en(_Pin) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number of the pin to be released
@@ -282,7 +282,7 @@ hold_en(_Pin) ->
 %%-----------------------------------------------------------------------------
 -spec hold_dis(Pin :: pin()) -> ok | error.
 hold_dis(_Pin) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @returns ok
@@ -305,7 +305,7 @@ hold_dis(_Pin) ->
 %%-----------------------------------------------------------------------------
 -spec deep_sleep_hold_en() -> ok.
 deep_sleep_hold_en() ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @returns ok
@@ -314,7 +314,7 @@ deep_sleep_hold_en() ->
 %%-----------------------------------------------------------------------------
 -spec deep_sleep_hold_dis() -> ok.
 deep_sleep_hold_dis() ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number of the pin to write
@@ -327,7 +327,7 @@ deep_sleep_hold_dis() ->
 %%-----------------------------------------------------------------------------
 -spec digital_write(Pin :: pin(), Level :: level()) -> ok | error.
 digital_write(_Pin, _Level) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number of the pin to read
@@ -341,7 +341,7 @@ digital_write(_Pin, _Level) ->
 %%-----------------------------------------------------------------------------
 -spec digital_read(Pin :: pin()) -> high | low.
 digital_read(_Pin) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number of the pin to set the interrupt on

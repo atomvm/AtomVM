@@ -59,7 +59,7 @@
 %%-----------------------------------------------------------------------------
 -spec encode(binary() | iolist()) -> binary().
 encode(Data) when is_binary(Data) orelse is_list(Data) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Data the data to encode
@@ -69,7 +69,7 @@ encode(Data) when is_binary(Data) orelse is_list(Data) ->
 %%-----------------------------------------------------------------------------
 -spec encode_to_string(binary() | iolist()) -> string().
 encode_to_string(Data) when is_binary(Data) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Data the data to decode
@@ -82,7 +82,7 @@ encode_to_string(Data) when is_binary(Data) ->
 %%-----------------------------------------------------------------------------
 -spec decode(binary() | iolist()) -> binary().
 decode(Data) when is_binary(Data) orelse is_list(Data) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Data the data to decode
@@ -95,4 +95,4 @@ decode(Data) when is_binary(Data) orelse is_list(Data) ->
 %%-----------------------------------------------------------------------------
 -spec decode_to_string(binary() | iolist()) -> string().
 decode_to_string(Data) when is_binary(Data) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).

@@ -76,7 +76,7 @@
     | ap_sta_connected_config()
     | ap_sta_disconnected_config()
     | ap_sta_ip_assigned_config().
--type ap_config() :: {sta, [ap_config_property()]}.
+-type ap_config() :: {ap, [ap_config_property()]}.
 
 -type sntp_host_config() :: {host, string() | binary()}.
 -type sntp_synchronized_config() ::
@@ -209,7 +209,7 @@ wait_for_ap(ApConfig, Timeout) ->
 %%          FSM Programming Manual for more information.
 %% @end
 %%-----------------------------------------------------------------------------
--spec start(Config :: network_config()) -> ok | {error, Reason :: term()}.
+-spec start(Config :: network_config()) -> {ok, pid()} | {error, Reason :: term()}.
 start(Config) ->
     case gen_server:start({local, ?MODULE}, ?MODULE, Config, []) of
         {ok, Pid} = R ->
@@ -223,7 +223,7 @@ start(Config) ->
             Error
     end.
 
--spec start_link(Config :: network_config()) -> ok | {error, Reason :: term()}.
+-spec start_link(Config :: network_config()) -> {ok, pid()} | {error, Reason :: term()}.
 start_link(Config) ->
     case gen_server:start_link({local, ?MODULE}, ?MODULE, Config, []) of
         {ok, Pid} = R ->

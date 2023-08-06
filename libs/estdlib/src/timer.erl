@@ -37,7 +37,7 @@
 %%      milliseconds, or forever, using `infinity' as the parameter.
 %% @end
 %%-----------------------------------------------------------------------------
--spec sleep(Timeout :: non_neg_integer() | infinity) -> ok.
+-spec sleep(Timeout :: timeout()) -> ok.
 sleep(Timeout) ->
     receive
     after Timeout ->
