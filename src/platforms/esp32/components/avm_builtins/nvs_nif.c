@@ -84,7 +84,7 @@ static term nif_esp_nvs_get_binary(Context *ctx, int argc, term argv[])
             RAISE_ERROR(term_from_int(err));
     }
 
-    if (UNLIKELY(memory_ensure_free(ctx, size + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(size)) != MEMORY_GC_OK)) {
         TRACE("Unabled to ensure free space for binary.  namespace='%s' key='%s' size=%i\n", namespace, key, size);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
