@@ -53,6 +53,8 @@ typedef struct
     int i_val;
 } AtomStringIntPair;
 
+typedef InteropFunctionResult (*interop_iolist_fold_fun)(term t, void *accum);
+
 char *interop_term_to_string(term t, int *ok);
 char *interop_binary_to_string(term binary);
 char *interop_list_to_string(term list, int *ok);
@@ -65,6 +67,7 @@ term interop_map_get_value_default(GlobalContext *glb, term map, term key, term 
 
 NO_DISCARD InteropFunctionResult interop_iolist_size(term t, size_t *size);
 NO_DISCARD InteropFunctionResult interop_write_iolist(term t, char *p);
+NO_DISCARD InteropFunctionResult interop_iolist_fold(term t, interop_iolist_fold_fun fold_fun, void *accum);
 
 /**
  * @brief Finds on a table the first matching atom string.
