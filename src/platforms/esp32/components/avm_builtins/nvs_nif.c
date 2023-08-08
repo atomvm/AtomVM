@@ -121,7 +121,7 @@ static term nif_esp_nvs_get_binary(Context *ctx, int argc, term argv[])
     }
 }
 
-static term nif_esp_nvs_set_binary(Context *ctx, int argc, term argv[])
+static term nif_esp_nvs_put_binary(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
     VALIDATE_VALUE(argv[0], term_is_atom);
@@ -260,9 +260,9 @@ static const struct Nif esp_nvs_get_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_nvs_get_binary
 };
-static const struct Nif esp_nvs_set_binary_nif = {
+static const struct Nif esp_nvs_put_binary_nif = {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_esp_nvs_set_binary
+    .nif_ptr = nif_esp_nvs_put_binary
 };
 static const struct Nif esp_nvs_erase_key_nif = {
     .base.type = NIFFunctionType,
@@ -294,9 +294,9 @@ const struct Nif *nvs_nif_get_nif(const char *nifname)
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_nvs_get_binary_nif;
     }
-    if (strcmp("esp:nvs_set_binary/3", nifname) == 0) {
+    if (strcmp("esp:nvs_put_binary/3", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
-        return &esp_nvs_set_binary_nif;
+        return &esp_nvs_put_binary_nif;
     }
     if (strcmp("esp:nvs_erase_key/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);

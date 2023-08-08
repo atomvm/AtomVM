@@ -35,6 +35,7 @@
     nvs_fetch_binary/2,
     nvs_get_binary/1, nvs_get_binary/2, nvs_get_binary/3,
     nvs_set_binary/2, nvs_set_binary/3,
+    nvs_put_binary/3,
     nvs_erase_key/1, nvs_erase_key/2,
     nvs_erase_all/0, nvs_erase_all/1,
     nvs_reformat/0,
@@ -44,6 +45,8 @@
     freq_hz/0,
     get_mac/1
 ]).
+
+-deprecated([{nvs_set_binary, 2, next_version}, {nvs_set_binary, 3, next_version}]).
 
 -type esp_reset_reason() ::
     esp_rst_unknown
@@ -197,6 +200,7 @@ nvs_get_binary(Namespace, Key, Default) when
 
 %%-----------------------------------------------------------------------------
 %% @doc Equivalent to nvs_set_binary(?ATOMVM_NVS_NS, Key, Value).
+%% @deprecated Please use nvs_put_binary instead.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec nvs_set_binary(Key :: atom(), Value :: binary()) -> ok.
@@ -210,10 +214,26 @@ nvs_set_binary(Key, Value) when is_atom(Key) andalso is_binary(Value) ->
 %% @returns ok
 %% @doc     Set an binary value associated with a key.  If a value exists
 %%          for the specified key, it is over-written.
+%% @deprecated Please use nvs_put_binary instead.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec nvs_set_binary(Namespace :: atom(), Key :: atom(), Value :: binary()) -> ok.
 nvs_set_binary(Namespace, Key, Value) when
+    is_atom(Namespace) andalso is_atom(Key) andalso is_binary(Value)
+->
+    nvs_put_binary(Namespace, Key, Value).
+
+%%-----------------------------------------------------------------------------
+%% @param   Namespace NVS namespace
+%% @param   Key NVS key
+%% @param   Value binary value
+%% @returns ok
+%% @doc     Set an binary value associated with a key.  If a value exists
+%%          for the specified key, it is over-written.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec nvs_put_binary(Namespace :: atom(), Key :: atom(), Value :: binary()) -> ok.
+nvs_put_binary(Namespace, Key, Value) when
     is_atom(Namespace) andalso is_atom(Key) andalso is_binary(Value)
 ->
     erlang:nif_error(undefined).

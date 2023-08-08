@@ -231,13 +231,13 @@ If set in NVS storage, you may remove the corresponding `ssid` and `psk` paramet
 
 You can set these credentials once, as follows:
 
-    esp:nvs_set_binary(atomvm, sta_ssid, <<"myssid">>).
-    esp:nvs_set_binary(atomvm, sta_psk, <<"mypsk">>).
+    esp:nvs_put_binary(atomvm, sta_ssid, <<"myssid">>).
+    esp:nvs_put_binary(atomvm, sta_psk, <<"mypsk">>).
 
 or
 
-    esp:nvs_set_binary(atomvm, ap_ssid, <<"myssid">>).
-    esp:nvs_set_binary(atomvm, ap_psk, <<"mypsk">>).
+    esp:nvs_put_binary(atomvm, ap_ssid, <<"myssid">>).
+    esp:nvs_put_binary(atomvm, ap_psk, <<"mypsk">>).
 
 With these settings, you can run ESP programs that initialize the network without configuring your SSID and PSK explicitly in source code.
 
