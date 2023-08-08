@@ -40,7 +40,8 @@
     partition_list/0,
     rtc_slow_get_binary/0,
     rtc_slow_set_binary/1,
-    freq_hz/0
+    freq_hz/0,
+    get_mac/1
 ]).
 
 -type esp_reset_reason() ::
@@ -83,6 +84,9 @@
     esp_partition_size(),
     esp_partition_props()
 }.
+
+-type interface() :: wifi_sta | wifi_softap.
+-type mac() :: binary().
 
 -define(ATOMVM_NVS_NS, atomvm).
 
@@ -286,4 +290,17 @@ rtc_slow_set_binary(Bin) when is_binary(Bin) ->
 %%-----------------------------------------------------------------------------
 -spec freq_hz() -> non_neg_integer().
 freq_hz() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param Interface the ESP32 network interface
+%% @returns The network MAC address of the specified interface
+%% @doc     Return the network MAC address of the specified interface.
+%%
+%%          The mac address is returned as a 6-byte binary, per the
+%%          IEEE 802 family of specifications.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_mac(Interface :: interface()) -> mac().
+get_mac(_Interface) ->
     erlang:nif_error(undefined).
