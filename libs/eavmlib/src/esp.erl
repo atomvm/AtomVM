@@ -46,7 +46,13 @@
     get_mac/1
 ]).
 
--deprecated([{nvs_set_binary, 2, next_version}, {nvs_set_binary, 3, next_version}]).
+-deprecated([
+    {nvs_get_binary, 1, next_version},
+    {nvs_erase_key, 1, next_version},
+    {nvs_erase_all, 0, next_version},
+    {nvs_set_binary, 2, next_version},
+    {nvs_set_binary, 3, next_version}
+]).
 
 -type esp_reset_reason() ::
     esp_rst_unknown
@@ -153,6 +159,7 @@ nvs_fetch_binary(Namespace, Key) when is_atom(Namespace) andalso is_atom(Key) ->
 
 %%-----------------------------------------------------------------------------
 %% @doc Equivalent to nvs_get_binary(?ATOMVM_NVS_NS, Key).
+%% @deprecated Please do not use this function.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec nvs_get_binary(Key :: atom()) -> binary() | undefined.
@@ -242,6 +249,7 @@ nvs_put_binary(Namespace, Key, Value) when
 %% @param   Key NVS key
 %% @returns ok
 %% @doc Equivalent to nvs_erase_key(?ATOMVM_NVS_NS, Key).
+%% @deprecated Please do not use this function.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec nvs_erase_key(Key :: atom()) -> ok.
@@ -262,6 +270,7 @@ nvs_erase_key(Namespace, Key) when is_atom(Namespace) andalso is_atom(Key) ->
 
 %%-----------------------------------------------------------------------------
 %% @doc Equivalent to nvs_erase_all(?ATOMVM_NVS_NS).
+%% @deprecated Please do not use this function.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec nvs_erase_all() -> ok.
