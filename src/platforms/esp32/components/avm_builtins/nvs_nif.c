@@ -63,12 +63,20 @@ static term nif_esp_nvs_get_binary(Context *ctx, int argc, term argv[])
     switch (err) {
         case ESP_OK:
             break;
-        case ESP_ERR_NVS_NOT_FOUND:
+        case ESP_ERR_NVS_NOT_FOUND: {
             TRACE("No such namespace.  namespace='%s'\n", namespace);
-            return UNDEFINED_ATOM;
+            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            term error_tuple = term_alloc_tuple(2, &ctx->heap);
+            term ns_not_found = globalcontext_make_atom(ctx->global, ATOM_STR("\x13", "namespace_not_found"));
+            term_put_tuple_element(error_tuple, 0, OK_ATOM);
+            term_put_tuple_element(error_tuple, 1, ns_not_found);
+            return error_tuple;
+        }
         default:
-            fprintf(stderr, "Unable to open NVS. namespace '%s' err=%i\n", namespace, err);
-            RAISE_ERROR(term_from_int(err));
+            TRACE("Unable to open NVS. namespace '%s' err=%i\n", namespace, err);
+            RAISE_ERROR(esp_err_to_term(ctx->global, err));
     }
 
     size_t size = 0;
@@ -76,15 +84,23 @@ static term nif_esp_nvs_get_binary(Context *ctx, int argc, term argv[])
     switch (err) {
         case ESP_OK:
             break;
-        case ESP_ERR_NVS_NOT_FOUND:
+        case ESP_ERR_NVS_NOT_FOUND: {
             TRACE("No such entry.  namespace='%s' key='%s'\n", namespace, key);
-            return UNDEFINED_ATOM;
+            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            term error_tuple = term_alloc_tuple(2, &ctx->heap);
+            term not_found = globalcontext_make_atom(ctx->global, ATOM_STR("\x9", "not_found"));
+            term_put_tuple_element(error_tuple, 0, OK_ATOM);
+            term_put_tuple_element(error_tuple, 1, not_found);
+            return error_tuple;
+        }
         default:
-            fprintf(stderr, "Unable to get NVS blob size. namespace '%s'  key='%s' err=%i\n", namespace, key, err);
-            RAISE_ERROR(term_from_int(err));
+            TRACE("Unable to get NVS blob size. namespace '%s'  key='%s' err=%i\n", namespace, key, err);
+            RAISE_ERROR(esp_err_to_term(ctx->global, err));
     }
 
-    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(size)) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(size) + TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
         TRACE("Unabled to ensure free space for binary.  namespace='%s' key='%s' size=%i\n", namespace, key, size);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
@@ -95,7 +111,10 @@ static term nif_esp_nvs_get_binary(Context *ctx, int argc, term argv[])
     switch (err) {
         case ESP_OK:
             TRACE("Found data for key.  namespace='%s' key='%s' size='%i'\n", namespace, key, size);
-            return binary;
+            term result_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(result_tuple, 0, OK_ATOM);
+            term_put_tuple_element(result_tuple, 1, binary);
+            return result_tuple;
         default:
             fprintf(stderr, "Unable to get NVS blob. namespace='%s' key='%s' err=%i\n", namespace, key, err);
             RAISE_ERROR(term_from_int(err));

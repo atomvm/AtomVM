@@ -32,6 +32,7 @@
     wakeup_cause/0,
     sleep_enable_ext0_wakeup/2,
     sleep_enable_ext1_wakeup/2,
+    nvs_fetch_binary/2,
     nvs_get_binary/1, nvs_get_binary/2, nvs_get_binary/3,
     nvs_set_binary/2, nvs_set_binary/3,
     nvs_erase_key/1, nvs_erase_key/2,
@@ -133,6 +134,21 @@ sleep_enable_ext1_wakeup(_Mask, _Mode) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   Namespace NVS namespace
+%% @param   Key NVS key
+%% @returns tagged tuple with binary value associated with this key in NV
+%%          storage, {error, not_found} if there is no value associated with
+%%          this key, or in general {error, Reason} for any other error.
+%% @doc     Get the binary value associated with a key, or undefined, if
+%%          there is no value associated with this key.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec nvs_fetch_binary(Namespace :: atom(), Key :: atom()) ->
+    {ok, binary()} | {error, not_found} | {error, atom()}.
+nvs_fetch_binary(Namespace, Key) when is_atom(Namespace) andalso is_atom(Key) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @doc Equivalent to nvs_get_binary(?ATOMVM_NVS_NS, Key).
 %% @end
 %%-----------------------------------------------------------------------------
@@ -151,7 +167,11 @@ nvs_get_binary(Key) when is_atom(Key) ->
 %%-----------------------------------------------------------------------------
 -spec nvs_get_binary(Namespace :: atom(), Key :: atom()) -> binary() | undefined.
 nvs_get_binary(Namespace, Key) when is_atom(Namespace) andalso is_atom(Key) ->
-    erlang:nif_error(undefined).
+    case nvs_fetch_binary(Namespace, Key) of
+        {ok, Result} -> Result;
+        {errror, not_found} -> undefined;
+        {error, OtherError} -> throw(OtherError)
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   Namespace NVS namespace
