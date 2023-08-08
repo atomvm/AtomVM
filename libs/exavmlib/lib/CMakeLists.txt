@@ -29,6 +29,7 @@ set(ELIXIR_MODULES
     Console
     GPIO
     I2C
+    Integer
     LEDC
     Access
     Enum

@@ -22,6 +22,21 @@ defmodule Kernel do
   # This avoids crashing the compiler at build time
   @compile {:autoload, false}
 
+  @doc """
+  Returns an integer which is the arithmetical absolute value of `number`.
+
+  ## Examples
+    iex> abs(3)
+    3
+    iex> abs(-3)
+    3
+  """
+  def abs(number), do: :erlang.abs(number)
+
+  def div(dividend, divisor), do: :erlang.div(dividend, divisor)
+
+  def rem(dividend, divisor), do: :erlang.rem(dividend, divisor)
+
   def inspect(term, opts \\ []) when is_list(opts) do
     case term do
       t when is_atom(t) ->
