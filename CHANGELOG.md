@@ -54,6 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for nodejs with Wasm
 - Added support for a subset of the OTP logger interface
 - Added `esp:partition_list/0` function
+- Added `esp:nvs_fetch_binary/2` and `nvs_put_binary/3` functions (`esp:nvs_set_binary` and
+functions that default to `?ATOMVM_NVS_NS` are deprecated now).
 
 ### Fixed
 - Fixed issue with formatting integers with io:format() on STM32 platform

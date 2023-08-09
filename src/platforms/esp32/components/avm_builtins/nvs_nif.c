@@ -63,12 +63,20 @@ static term nif_esp_nvs_get_binary(Context *ctx, int argc, term argv[])
     switch (err) {
         case ESP_OK:
             break;
-        case ESP_ERR_NVS_NOT_FOUND:
+        case ESP_ERR_NVS_NOT_FOUND: {
             TRACE("No such namespace.  namespace='%s'\n", namespace);
-            return UNDEFINED_ATOM;
+            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            term error_tuple = term_alloc_tuple(2, &ctx->heap);
+            term ns_not_found = globalcontext_make_atom(ctx->global, ATOM_STR("\x13", "namespace_not_found"));
+            term_put_tuple_element(error_tuple, 0, OK_ATOM);
+            term_put_tuple_element(error_tuple, 1, ns_not_found);
+            return error_tuple;
+        }
         default:
-            fprintf(stderr, "Unable to open NVS. namespace '%s' err=%i\n", namespace, err);
-            RAISE_ERROR(term_from_int(err));
+            TRACE("Unable to open NVS. namespace '%s' err=%i\n", namespace, err);
+            RAISE_ERROR(esp_err_to_term(ctx->global, err));
     }
 
     size_t size = 0;
@@ -76,15 +84,23 @@ static term nif_esp_nvs_get_binary(Context *ctx, int argc, term argv[])
     switch (err) {
         case ESP_OK:
             break;
-        case ESP_ERR_NVS_NOT_FOUND:
+        case ESP_ERR_NVS_NOT_FOUND: {
             TRACE("No such entry.  namespace='%s' key='%s'\n", namespace, key);
-            return UNDEFINED_ATOM;
+            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            term error_tuple = term_alloc_tuple(2, &ctx->heap);
+            term not_found = globalcontext_make_atom(ctx->global, ATOM_STR("\x9", "not_found"));
+            term_put_tuple_element(error_tuple, 0, OK_ATOM);
+            term_put_tuple_element(error_tuple, 1, not_found);
+            return error_tuple;
+        }
         default:
-            fprintf(stderr, "Unable to get NVS blob size. namespace '%s'  key='%s' err=%i\n", namespace, key, err);
-            RAISE_ERROR(term_from_int(err));
+            TRACE("Unable to get NVS blob size. namespace '%s'  key='%s' err=%i\n", namespace, key, err);
+            RAISE_ERROR(esp_err_to_term(ctx->global, err));
     }
 
-    if (UNLIKELY(memory_ensure_free(ctx, size + BINARY_HEADER_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(size) + TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
         TRACE("Unabled to ensure free space for binary.  namespace='%s' key='%s' size=%i\n", namespace, key, size);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
@@ -95,14 +111,17 @@ static term nif_esp_nvs_get_binary(Context *ctx, int argc, term argv[])
     switch (err) {
         case ESP_OK:
             TRACE("Found data for key.  namespace='%s' key='%s' size='%i'\n", namespace, key, size);
-            return binary;
+            term result_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(result_tuple, 0, OK_ATOM);
+            term_put_tuple_element(result_tuple, 1, binary);
+            return result_tuple;
         default:
             fprintf(stderr, "Unable to get NVS blob. namespace='%s' key='%s' err=%i\n", namespace, key, err);
             RAISE_ERROR(term_from_int(err));
     }
 }
 
-static term nif_esp_nvs_set_binary(Context *ctx, int argc, term argv[])
+static term nif_esp_nvs_put_binary(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
     VALIDATE_VALUE(argv[0], term_is_atom);
@@ -241,9 +260,9 @@ static const struct Nif esp_nvs_get_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_nvs_get_binary
 };
-static const struct Nif esp_nvs_set_binary_nif = {
+static const struct Nif esp_nvs_put_binary_nif = {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_esp_nvs_set_binary
+    .nif_ptr = nif_esp_nvs_put_binary
 };
 static const struct Nif esp_nvs_erase_key_nif = {
     .base.type = NIFFunctionType,
@@ -275,9 +294,9 @@ const struct Nif *nvs_nif_get_nif(const char *nifname)
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_nvs_get_binary_nif;
     }
-    if (strcmp("esp:nvs_set_binary/3", nifname) == 0) {
+    if (strcmp("esp:nvs_put_binary/3", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
-        return &esp_nvs_set_binary_nif;
+        return &esp_nvs_put_binary_nif;
     }
     if (strcmp("esp:nvs_erase_key/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
