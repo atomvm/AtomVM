@@ -182,7 +182,7 @@ close(SPI) ->
 -spec read_at(
     SPI :: spi(), DeviceName :: device_name(), Address :: address(), Len :: non_neg_integer()
 ) ->
-    {ok, integer()} | error.
+    {ok, integer()} | {error, Reason :: term()}.
 read_at(SPI, DeviceName, Address, Len) ->
     port:call(SPI, {read_at, DeviceName, Address, Len}).
 
@@ -207,7 +207,7 @@ read_at(SPI, DeviceName, Address, Len) ->
     Len :: non_neg_integer(),
     Data :: integer()
 ) ->
-    {ok, integer()} | error.
+    {ok, integer()} | {error, Reason :: term()}.
 write_at(SPI, DeviceName, Address, Len, Data) ->
     port:call(SPI, {write_at, DeviceName, Address bor 16#80, Len, Data}).
 
@@ -271,7 +271,7 @@ write(SPI, DeviceName, Transaction) when
 %% @end
 %%-----------------------------------------------------------------------------
 -spec write_read(SPI :: spi(), DeviceName :: device_name(), Transaction :: transaction()) ->
-    {ok, ReadData :: binary()} | error.
+    {ok, ReadData :: binary()} | {error, Reason :: term()}.
 write_read(SPI, DeviceName, Transaction) when
     is_pid(SPI) andalso is_atom(DeviceName) andalso is_map(Transaction)
 ->

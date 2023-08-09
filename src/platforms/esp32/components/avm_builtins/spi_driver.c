@@ -78,7 +78,7 @@ struct SPIData
 };
 
 static NativeHandlerResult spidriver_consume_mailbox(Context *ctx);
-static uint32_t spidriver_transfer_at(struct SPIDevice *device, uint64_t address, int data_len, uint32_t data, bool *ok);
+static uint32_t spidriver_transfer_at(struct SPIDevice *device, uint64_t address, int data_len, uint32_t data, esp_err_t *err);
 static term create_pair(Context *ctx, term term1, term term2);
 
 static const char *const spi_driver_atom = "\xA" "spi_driver";
@@ -266,6 +266,14 @@ static term device_not_found_error(Context *ctx)
     return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, device_not_found_atom));
 }
 
+static term esp_err_tuple(esp_err_t err, Context *ctx)
+{
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        return OUT_OF_MEMORY_ATOM;
+    }
+    return create_pair(ctx, ERROR_ATOM, esp_err_to_term(ctx->global, err));
+}
+
 static term spidriver_close(Context *ctx)
 {
     TRACE("spidriver_close\n");
@@ -296,7 +304,7 @@ static term spidriver_close(Context *ctx)
     return OK_ATOM;
 }
 
-static uint32_t spidriver_transfer_at(struct SPIDevice *device, uint64_t address, int data_len, uint32_t data, bool *ok)
+static uint32_t spidriver_transfer_at(struct SPIDevice *device, uint64_t address, int data_len, uint32_t data, esp_err_t *err)
 {
     TRACE("--- SPI transfer ---\n");
     TRACE("spi: address: %x, tx: %x\n", (int) address, (int) data);
@@ -313,9 +321,8 @@ static uint32_t spidriver_transfer_at(struct SPIDevice *device, uint64_t address
     transaction.tx_data[3] = (tx_data >> 24) & 0xFF;
 
     //TODO: int ret = spi_device_queue_trans(device->handle, &transaction, portMAX_DELAY);
-    int ret = spi_device_polling_transmit(device->handle, &transaction);
-    if (UNLIKELY(ret != ESP_OK)) {
-        *ok = false;
+    *err = spi_device_polling_transmit(device->handle, &transaction);
+    if (UNLIKELY(*err != ESP_OK)) {
         return 0;
     }
 
@@ -330,7 +337,6 @@ static uint32_t spidriver_transfer_at(struct SPIDevice *device, uint64_t address
     TRACE("spi: rx: %x\n", (int) rx_data);
     TRACE("--- end of transfer ---\n");
 
-    *ok = true;
     return SPI_SWAP_DATA_RX(rx_data, data_len);
 }
 
@@ -377,10 +383,10 @@ static term spidriver_read_at(Context *ctx, term req)
     avm_int64_t address = term_maybe_unbox_int64(address_term);
     avm_int_t data_len = term_to_int(len_term);
 
-    bool ok;
-    uint32_t read_value = spidriver_transfer_at(device, address, data_len, 0, &ok);
-    if (UNLIKELY(!ok)) {
-        return ERROR_ATOM;
+    esp_err_t err;
+    uint32_t read_value = spidriver_transfer_at(device, address, data_len, 0, &err);
+    if (UNLIKELY(err != ESP_OK)) {
+        return esp_err_tuple(err, ctx);
     }
 
     return make_read_result_tuple(read_value, ctx);
@@ -406,10 +412,10 @@ static term spidriver_write_at(Context *ctx, term req)
     avm_int_t data_len = term_to_int(len_term);
     avm_int_t data = term_maybe_unbox_int(data_term);
 
-    bool ok;
-    uint32_t read_value = spidriver_transfer_at(device, address, data_len, data, &ok);
-    if (UNLIKELY(!ok)) {
-        return ERROR_ATOM;
+    esp_err_t err;
+    uint32_t read_value = spidriver_transfer_at(device, address, data_len, data, &err);
+    if (UNLIKELY(err != ESP_OK)) {
+        return esp_err_tuple(err, ctx);
     }
 
     return make_read_result_tuple(read_value, ctx);
@@ -616,7 +622,11 @@ static NativeHandlerResult spidriver_consume_mailbox(Context *ctx)
 
         default:
             TRACE("spi: error: unrecognized command.\n");
-            ret = ERROR_ATOM;
+            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                return OUT_OF_MEMORY_ATOM;
+            }
+            term unkn_a = globalcontext_make_atom(ctx->global, ATOM_STR("\xF", "unknown_command"));
+            return create_pair(ctx, ERROR_ATOM, esp_err_to_term(ctx->global, unkn_a));
     }
 
     term ret_msg;
