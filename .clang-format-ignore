@@ -7,7 +7,6 @@
 # We have a number of existing files that are quite "re-format unfriendly"
 # Let's ignore all of them
 src/libAtomVM/bif.c
-src/libAtomVM/bitstring.c
 src/libAtomVM/bitstring.h
 src/libAtomVM/debug.h
 src/libAtomVM/defaultatoms.c

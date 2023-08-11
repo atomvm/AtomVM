@@ -42,6 +42,7 @@ set(ERLANG_MODULES
     proplists
     string
     timer
+    unicode
     erlang
 )
 

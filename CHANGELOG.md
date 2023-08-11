@@ -38,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for Erlang `gpio:close/1` and Elixir `GPIO.close/1` for ESP32
 - Added support for the Erlang `gen_event` module
 - Added `start_link` support for the `network` module
-- Added support for `erlang:monotomic_time/1`
+- Added support for `erlang:monotonic_time/1`
 - Added `start_link` support for the `gen_statem` module
 - Added support for serializing floats in erlang external term encoding
 - Added support for the `SMALL_BIG_EXT` erlang external term encoding
@@ -56,6 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `esp:partition_list/0` function
 - Added `esp:nvs_fetch_binary/2` and `nvs_put_binary/3` functions (`esp:nvs_set_binary` and
 functions that default to `?ATOMVM_NVS_NS` are deprecated now).
+- Added most format possibilities to `io:format/2` and `io_lib:format/2`
+- Added `unicode` module with `characters_to_list/1,2` and `characters_to_binary/1,2,3` functions
 
 ### Fixed
 - Fixed issue with formatting integers with io:format() on STM32 platform

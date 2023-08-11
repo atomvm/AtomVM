@@ -265,6 +265,7 @@ compile_erlang(test_integer_to_binary)
 compile_erlang(test_list_to_binary)
 compile_erlang(test_binary_to_list)
 compile_erlang(test_atom_to_binary)
+compile_erlang(test_unicode)
 
 compile_erlang(test_binary_part)
 compile_erlang(test_binary_split)
@@ -702,6 +703,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_list_to_binary.beam
     test_binary_to_list.beam
     test_atom_to_binary.beam
+    test_unicode.beam
 
     test_binary_part.beam
     test_binary_split.beam

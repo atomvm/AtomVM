@@ -3954,7 +3954,7 @@ wait_timeout_trap_handler:
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
 
-                    int32_t val = 0;
+                    uint32_t val = 0;
                     size_t out_size = 0;
                     bool is_valid = bitstring_match_utf8(src_bin, (size_t) offset_bits, &val, &out_size);
 
@@ -3994,7 +3994,7 @@ wait_timeout_trap_handler:
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
 
-                    int32_t c = 0;
+                    uint32_t c = 0;
                     size_t out_size = 0;
                     bool is_valid = bitstring_match_utf8(src_bin, (size_t) offset_bits, &c, &out_size);
 

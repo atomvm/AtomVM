@@ -99,6 +99,13 @@ enum BitstringFlags
 #endif
 };
 
+enum UnicodeTransformDecodeResult
+{
+    UnicodeTransformDecodeSuccess,
+    UnicodeTransformDecodeFail,
+    UnicodeTransformDecodeIncomplete
+};
+
 union maybe_unsigned_int8
 {
     uint8_t u;
@@ -320,10 +327,12 @@ bool bitstring_utf8_encode(avm_int_t c, uint8_t *buf, size_t *out_size);
  * @param len the length (in bytes) of the bytes in buf
  * @param c int value to decode to or NULL to only compute the size.
  * @param out_size the size in bytes, on output (if not NULL)
- * @return \c true if decoding was successful, \c false if character starting at buf is not a valid
- * unicode character
+ * @return \c UnicodeTransformDecodeSuccess if decoding was successful,
+ * \c UnicodeTransformDecodeFail if character starting at buf is not a valid
+ * unicode character or \c UnicodeTransformDecodeIncomplete if character
+ * starting at buf is a valid but incomplete transformation
  */
-bool bitstring_utf8_decode(const uint8_t *buf, size_t len, int32_t *c, size_t *out_size);
+enum UnicodeTransformDecodeResult bitstring_utf8_decode(const uint8_t *buf, size_t len, uint32_t *c, size_t *out_size);
 
 /**
  * @brief Encode a character to UTF-16.
@@ -428,11 +437,11 @@ static inline bool bitstring_insert_utf8(term dst_bin, size_t offset, avm_int_t 
  * @return \c true if encoding was successful, \c false if src_bin at offset is not a valid
  * unicode character
  */
-static inline bool bitstring_match_utf8(term src_bin, size_t offset, int32_t *c, size_t *out_size)
+static inline bool bitstring_match_utf8(term src_bin, size_t offset, uint32_t *c, size_t *out_size)
 {
     size_t byte_offset = offset >> 3; // divide by 8
     const uint8_t *src = (const uint8_t *) term_binary_data(src_bin) + byte_offset;
-    return bitstring_utf8_decode(src, term_binary_size(src_bin) - byte_offset, c, out_size);
+    return bitstring_utf8_decode(src, term_binary_size(src_bin) - byte_offset, c, out_size) == UnicodeTransformDecodeSuccess;
 }
 
 /**
