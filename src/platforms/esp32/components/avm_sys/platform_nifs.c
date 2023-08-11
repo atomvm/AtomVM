@@ -454,9 +454,13 @@ static term nif_esp_sleep_enable_ext1_wakeup(Context *ctx, int argc, term argv[]
     {                                                                                                          \
         mbedtls_##ALGORITHM##_context *md_ctx = (mbedtls_##ALGORITHM##_context *) accum;                       \
         if (term_is_integer(t)) {                                                                              \
-            uint8_t val = term_to_uint8(t);                                                                    \
+            avm_int64_t tmp = term_maybe_unbox_int64(t);                                                       \
+            if (tmp < 0 || tmp > 255) {                                                                        \
+                return InteropBadArg;                                                                          \
+            }                                                                                                  \
+            uint8_t val = (uint8_t) tmp;                                                                       \
             mbedtls_##ALGORITHM##_update##SUFFIX(md_ctx, &val, 1);                                             \
-        } else if (term_is_binary(t)) {                                                                        \
+        } else /* term_is_binary(t) */ {                                                                       \
             mbedtls_##ALGORITHM##_update(md_ctx, (uint8_t *) term_binary_data(t), term_binary_size(t));        \
         }                                                                                                      \
         return InteropOk;                                                                                      \
@@ -492,7 +496,7 @@ static term nif_esp_sleep_enable_ext1_wakeup(Context *ctx, int argc, term argv[]
             }                                                                                                  \
             uint8_t val = (avm_int64_t) tmp;                                                                   \
             mbedtls_##ALGORITHM##_update##SUFFIX(md_ctx, &val, 1);                                             \
-        } else if (term_is_binary(t)) {                                                                        \
+        } else /* term_is_binary(t) */ {                                                                       \
             mbedtls_##ALGORITHM##_update(md_ctx, (uint8_t *) term_binary_data(t), term_binary_size(t));        \
         }                                                                                                      \
         return InteropOk;                                                                                      \
