@@ -164,6 +164,8 @@ static term nif_base64_decode_to_string(Context *ctx, int argc, term argv[]);
 static term nif_code_load_abs(Context *ctx, int argc, term argv[]);
 static term nif_code_load_binary(Context *ctx, int argc, term argv[]);
 static term nif_maps_next(Context *ctx, int argc, term argv[]);
+static term nif_unicode_characters_to_list(Context *ctx, int argc, term argv[]);
+static term nif_unicode_characters_to_binary(Context *ctx, int argc, term argv[]);
 
 #define DECLARE_MATH_NIF_FUN(moniker) \
     static term nif_math_##moniker(Context *ctx, int argc, term argv[]);
@@ -705,6 +707,16 @@ static const struct Nif maps_next_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_maps_next
+};
+static const struct Nif unicode_characters_to_list_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_unicode_characters_to_list
+};
+static const struct Nif unicode_characters_to_binary_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_unicode_characters_to_binary
 };
 
 #define DEFINE_MATH_NIF(moniker)                    \
@@ -4214,6 +4226,118 @@ static term nif_maps_next(Context *ctx, int argc, term argv[])
     term_put_tuple_element(ret, 2, next_iterator);
 
     return ret;
+}
+
+static term nif_unicode_characters_to_list(Context *ctx, int argc, term argv[])
+{
+    enum CharDataEncoding in_encoding = UTF8Encoding;
+    if (argc == 2) {
+        if (argv[1] == LATIN1_ATOM) {
+            in_encoding = Latin1Encoding;
+        } else if (UNLIKELY((argv[1] != UTF8_ATOM))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
+    size_t size;
+    size_t rest_size;
+    enum UnicodeConversionResult conv_result = interop_chardata_to_bytes_size(argv[0], &size, &rest_size, in_encoding, UCS4NativeEncoding);
+    if (UNLIKELY(conv_result == UnicodeMemoryAllocFail)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    if (UNLIKELY(conv_result == UnicodeBadArg)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    size_t len = size / sizeof(uint32_t);
+    uint32_t *chars = malloc(size);
+    if (IS_NULL_PTR(chars)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    size_t needed_terms = CONS_SIZE * len;
+    if (UNLIKELY(conv_result == UnicodeError || conv_result == UnicodeIncompleteTransform)) {
+        needed_terms += rest_size + TUPLE_SIZE(3);
+    }
+    if (UNLIKELY(conv_result == UnicodeBadArg)) {
+        free(chars);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (UNLIKELY(memory_ensure_free(ctx, needed_terms) != MEMORY_GC_OK)) {
+        free(chars);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term rest;
+    conv_result = interop_chardata_to_bytes(argv[0], (uint8_t *) chars, &rest, in_encoding, UCS4NativeEncoding, &ctx->heap);
+    if (UNLIKELY(conv_result == UnicodeMemoryAllocFail)) {
+        free(chars);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term result = term_nil();
+    uint32_t *crsr = chars + len - 1;
+    for (size_t index_list = len; index_list > 0; index_list--) {
+        result = term_list_prepend(term_from_int(*crsr--), result, &ctx->heap);
+    }
+    free(chars);
+    if (LIKELY(conv_result == UnicodeOk)) {
+        return result;
+    }
+    term result_tuple = term_alloc_tuple(3, &ctx->heap);
+    term_put_tuple_element(result_tuple, 0, conv_result == UnicodeError ? ERROR_ATOM : INCOMPLETE_ATOM);
+    term_put_tuple_element(result_tuple, 1, result);
+    term_put_tuple_element(result_tuple, 2, rest);
+    return result_tuple;
+}
+
+static term nif_unicode_characters_to_binary(Context *ctx, int argc, term argv[])
+{
+    enum CharDataEncoding in_encoding = UTF8Encoding;
+    enum CharDataEncoding out_encoding = UTF8Encoding;
+    if (argc > 1) {
+        if (argv[1] == LATIN1_ATOM) {
+            in_encoding = Latin1Encoding;
+        } else if (UNLIKELY((argv[1] != UTF8_ATOM))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        if (argc == 3) {
+            if (argv[2] == LATIN1_ATOM) {
+                out_encoding = Latin1Encoding;
+            } else if (UNLIKELY((argv[2] != UTF8_ATOM))) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+        }
+    }
+    size_t len;
+    size_t rest_size;
+    enum UnicodeConversionResult conv_result = interop_chardata_to_bytes_size(argv[0], &len, &rest_size, in_encoding, out_encoding);
+    if (UNLIKELY(conv_result == UnicodeMemoryAllocFail)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    if (UNLIKELY(conv_result == UnicodeBadArg)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    size_t needed_terms = term_binary_data_size_in_terms(len);
+    if (UNLIKELY(conv_result == UnicodeError || conv_result == UnicodeIncompleteTransform)) {
+        needed_terms += TUPLE_SIZE(3) + rest_size;
+    }
+    if (UNLIKELY(conv_result == UnicodeBadArg)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (UNLIKELY(memory_ensure_free(ctx, needed_terms) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term result = term_create_uninitialized_binary(len, &ctx->heap, ctx->global);
+    uint8_t *binary_data = (uint8_t *) term_binary_data(result);
+    term rest;
+    conv_result = interop_chardata_to_bytes(argv[0], binary_data, &rest, in_encoding, out_encoding, &ctx->heap);
+    if (UNLIKELY(conv_result == UnicodeMemoryAllocFail)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    if (LIKELY(conv_result == UnicodeOk)) {
+        return result;
+    }
+    term result_tuple = term_alloc_tuple(3, &ctx->heap);
+    term_put_tuple_element(result_tuple, 0, conv_result == UnicodeError ? ERROR_ATOM : INCOMPLETE_ATOM);
+    term_put_tuple_element(result_tuple, 1, result);
+    term_put_tuple_element(result_tuple, 2, rest);
+    return result_tuple;
 }
 
 //

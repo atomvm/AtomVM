@@ -142,6 +142,11 @@ base64:decode/1, &base64_decode_nif
 base64:encode_to_string/1, &base64_encode_to_string_nif
 base64:decode_to_string/1, &base64_decode_to_string_nif
 maps:next/1, &maps_next_nif
+unicode:characters_to_list/1, &unicode_characters_to_list_nif
+unicode:characters_to_list/2, &unicode_characters_to_list_nif
+unicode:characters_to_binary/1, &unicode_characters_to_binary_nif
+unicode:characters_to_binary/2, &unicode_characters_to_binary_nif
+unicode:characters_to_binary/3, &unicode_characters_to_binary_nif
 math:acos/1, &math_acos_nif
 math:acosh/1, &math_acosh_nif
 math:asin/1, &math_asin_nif

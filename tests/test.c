@@ -281,6 +281,7 @@ struct Test tests[] = {
     TEST_CASE(test_list_to_binary),
     TEST_CASE_EXPECTED(test_binary_to_list, 0),
     TEST_CASE_EXPECTED(test_atom_to_binary, 1),
+    TEST_CASE(test_unicode),
 
     TEST_CASE_EXPECTED(test_binary_part, 12),
     TEST_CASE_EXPECTED(test_binary_split, 16),

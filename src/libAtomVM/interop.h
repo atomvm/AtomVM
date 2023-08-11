@@ -35,6 +35,15 @@ typedef enum
     InteropBadArg
 } InteropFunctionResult;
 
+enum UnicodeConversionResult
+{
+    UnicodeOk = InteropOk,
+    UnicodeMemoryAllocFail = InteropMemoryAllocFail,
+    UnicodeBadArg = InteropBadArg,
+    UnicodeError,
+    UnicodeIncompleteTransform
+};
+
 /**
  * An idiomatic macro for marking an AtomStringIntPair table entry as a
  * interop_atom_term_select_int default.
@@ -53,7 +62,8 @@ typedef struct
     int i_val;
 } AtomStringIntPair;
 
-typedef InteropFunctionResult (*interop_iolist_fold_fun)(term t, void *accum);
+typedef InteropFunctionResult (*interop_chardata_fold_fun)(term t, void *accum);
+typedef void (*interop_chardata_rest_fun)(term t, void *accum);
 
 char *interop_term_to_string(term t, int *ok);
 char *interop_binary_to_string(term binary);
@@ -67,7 +77,17 @@ term interop_map_get_value_default(GlobalContext *glb, term map, term key, term 
 
 NO_DISCARD InteropFunctionResult interop_iolist_size(term t, size_t *size);
 NO_DISCARD InteropFunctionResult interop_write_iolist(term t, char *p);
-NO_DISCARD InteropFunctionResult interop_iolist_fold(term t, interop_iolist_fold_fun fold_fun, void *accum);
+NO_DISCARD InteropFunctionResult interop_chardata_fold(term t, interop_chardata_fold_fun fold_fun, interop_chardata_rest_fun rest_fun, void *accum);
+
+enum CharDataEncoding
+{
+    Latin1Encoding,
+    UTF8Encoding,
+    UCS4NativeEncoding // Only available for output for characters_to_list
+};
+
+NO_DISCARD enum UnicodeConversionResult interop_chardata_to_bytes_size(term t, size_t *size, size_t *rest_size, enum CharDataEncoding in_encoding, enum CharDataEncoding out_encoding);
+NO_DISCARD enum UnicodeConversionResult interop_chardata_to_bytes(term t, uint8_t *output, term *rest, enum CharDataEncoding in_encoding, enum CharDataEncoding out_encoding, Heap *heap);
 
 /**
  * @brief Finds on a table the first matching atom string.

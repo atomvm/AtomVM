@@ -23,9 +23,7 @@
 
 static inline uint64_t from_le64(uint64_t value)
 {
-    return ((((value) & 0xFF) << 56) | (((value) & 0xFF00) << 40) | (((value) & 0xFF0000) << 24) | \
-        (((value) & 0xFF000000) << 8) | (((value) & 0xFF00000000) >> 8) | (((value) & 0xFF0000000000) >> 24) |  \
-         (((value) & 0xFF000000000000) >> 40) | (((value) & 0xFF00000000000000) >> 56));
+    return ((((value) &0xFF) << 56) | (((value) &0xFF00) << 40) | (((value) &0xFF0000) << 24) | (((value) &0xFF000000) << 8) | (((value) &0xFF00000000) >> 8) | (((value) &0xFF0000000000) >> 24) | (((value) &0xFF000000000000) >> 40) | (((value) &0xFF00000000000000) >> 56));
 }
 
 bool bitstring_extract_any_integer(const uint8_t *src, size_t offset, avm_int_t n,
@@ -140,12 +138,12 @@ bool bitstring_utf8_encode(avm_int_t c, uint8_t *buf, size_t *out_size)
     return true;
 }
 
-bool bitstring_utf8_decode(const uint8_t *buf, size_t len, int32_t *c, size_t *out_size)
+enum UnicodeTransformDecodeResult bitstring_utf8_decode(const uint8_t *buf, size_t len, uint32_t *c, size_t *out_size)
 {
     if (len == 0) {
-        return false;
+        return UnicodeTransformDecodeFail;
     } else if (len >= 4 && (buf[0] & 0xF8) == 0xF0 && ((buf[1] & 0xC0) == 0x80) && ((buf[2] & 0xC0) == 0x80) && ((buf[3] & 0xC0) == 0x80)) {
-        int32_t v = 0;
+        uint32_t v = 0;
         v |= (buf[0] & 0x07) << 18;
         v |= (buf[1] & 0x3F) << 12;
         v |= (buf[2] & 0x3F) << 6;
@@ -156,9 +154,9 @@ bool bitstring_utf8_decode(const uint8_t *buf, size_t len, int32_t *c, size_t *o
         }
         *c = v;
         *out_size = 4;
-        return true;
+        return UnicodeTransformDecodeSuccess;
     } else if (len >= 3 && (buf[0] & 0xF0) == 0xE0 && ((buf[1] & 0xC0) == 0x80) && ((buf[2] & 0xC0) == 0x80)) {
-        int32_t v = 0;
+        uint32_t v = 0;
         v |= (buf[0] & 0x0F) << 12;
         v |= (buf[1] & 0x3F) << 6;
         v |= (buf[2] & 0x3F);
@@ -168,9 +166,9 @@ bool bitstring_utf8_decode(const uint8_t *buf, size_t len, int32_t *c, size_t *o
         }
         *c = v;
         *out_size = 3;
-        return true;
+        return UnicodeTransformDecodeSuccess;
     } else if (len >= 2 && (buf[0] & 0xE0) == 0xC0 && ((buf[1] & 0xC0) == 0x80)) {
-        int32_t v = 0;
+        uint32_t v = 0;
         v |= (buf[0] & 0x1F) << 6;
         v |= (buf[1] & 0x3F);
         // overlong encoding
@@ -179,16 +177,28 @@ bool bitstring_utf8_decode(const uint8_t *buf, size_t len, int32_t *c, size_t *o
         }
         *c = v;
         *out_size = 2;
-        return true;
+        return UnicodeTransformDecodeSuccess;
     } else if ((*buf & 0x80) == 0) {
-        int32_t v = 0;
+        uint32_t v = 0;
         v |= (buf[0] & 0x7F);
         *c = v;
         *out_size = 1;
-        return true;
+        return UnicodeTransformDecodeSuccess;
+    } else if (len == 3 && (buf[0] & 0xF8) == 0xF0 && ((buf[1] & 0xC0) == 0x80) && ((buf[2] & 0xC0) == 0x80)) {
+        return UnicodeTransformDecodeIncomplete;
+    } else if (len == 2 && (buf[0] & 0xF8) == 0xF0 && ((buf[1] & 0xC0) == 0x80)) {
+        return UnicodeTransformDecodeIncomplete;
+    } else if (len == 1 && (buf[0] & 0xF8) == 0xF0) {
+        return UnicodeTransformDecodeIncomplete;
+    } else if (len == 2 && (buf[0] & 0xF0) == 0xE0 && ((buf[1] & 0xC0) == 0x80)) {
+        return UnicodeTransformDecodeIncomplete;
+    } else if (len == 1 && (buf[0] & 0xF0) == 0xE0) {
+        return UnicodeTransformDecodeIncomplete;
+    } else if (len == 1 && (buf[0] & 0xE0) == 0xC0) {
+        return UnicodeTransformDecodeIncomplete;
     }
 
-    return false;
+    return UnicodeTransformDecodeFail;
 }
 
 // UTF-16 encoding, when U in U+010000 to U+10FFFF:
@@ -321,7 +331,7 @@ bool bitstring_utf32_decode(const uint8_t *buf, size_t len, int32_t *c, enum Bit
         v |= (buf[3] & 0xFF) << 24;
         v |= (buf[2] & 0xFF) << 16;
         v |= (buf[1] & 0xFF) << 8;
-        v |=  buf[0] & 0xFF;
+        v |= buf[0] & 0xFF;
         if (is_invalid_codepoint(v)) {
             return false;
         }
@@ -332,7 +342,7 @@ bool bitstring_utf32_decode(const uint8_t *buf, size_t len, int32_t *c, enum Bit
         v |= (buf[0] & 0xFF) << 24;
         v |= (buf[1] & 0xFF) << 16;
         v |= (buf[2] & 0xFF) << 8;
-        v |=  buf[3] & 0xFF;
+        v |= buf[3] & 0xFF;
         if (is_invalid_codepoint(v)) {
             return false;
         }
