@@ -81,7 +81,10 @@
     group_leader/0,
     process_flag/2,
     get_module_info/1,
-    get_module_info/2
+    get_module_info/2,
+    processes/0,
+    binary_to_term/1,
+    term_to_binary/1
 ]).
 
 -export_type([
@@ -873,4 +876,40 @@ get_module_info(_Module) ->
 %%-----------------------------------------------------------------------------
 -spec get_module_info(Module :: atom(), InfoKey :: atom()) -> any().
 get_module_info(_Module, _InfoKey) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns A list of pids of all processes
+%% @doc     Return a list of all current processes.
+%% Compared to Erlang/OTP, this function also returns native processes (ports).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec processes() -> [pid()].
+processes() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns A term decoded from passed binary
+%% @param   Binary  binary to decode
+%% @doc Decode a term that was previously encodes with `term_to_binary/1'
+%% This function should be mostly compatible with its Erlang/OTP counterpart.
+%% Unlike modern Erlang/OTP, resources are currently serialized as empty
+%% binaries and cannot be unserialized.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec binary_to_term(Binary :: binary()) -> any().
+binary_to_term(_Binary) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns A binary encoding passed term.
+%% @param   Term    term to encode
+%% @doc Encode a term to a binary that can later be decoded with `binary_to_term/1'.
+%% This function should be mostly compatible with its Erlang/OTP counterpart.
+%% Unlike modern Erlang/OTP, resources are currently serialized as empty
+%% binaries.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec term_to_binary(Term :: any()) -> binary().
+term_to_binary(_Term) ->
     erlang:nif_error(undefined).
