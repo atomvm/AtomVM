@@ -40,6 +40,7 @@ compile_erlang(test_esp_partition)
 compile_erlang(test_file)
 compile_erlang(test_list_to_binary)
 compile_erlang(test_md5)
+compile_erlang(test_crypto)
 compile_erlang(test_monotonic_time)
 compile_erlang(test_rtc_slow)
 compile_erlang(test_select)
@@ -55,6 +56,7 @@ add_custom_command(
         test_file.beam
         test_list_to_binary.beam
         test_md5.beam
+        test_crypto.beam
         test_monotonic_time.beam
         test_rtc_slow.beam
         test_select.beam
@@ -67,6 +69,7 @@ add_custom_command(
         "${CMAKE_CURRENT_BINARY_DIR}/test_file.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_list_to_binary.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_md5.beam"
+        "${CMAKE_CURRENT_BINARY_DIR}/test_crypto.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_monotonic_time.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_rtc_slow.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_select.beam"

@@ -467,6 +467,7 @@ compile_erlang(trap_exit_flag)
 
 compile_erlang(test_stacktrace)
 compile_erlang(small_big_ext)
+compile_erlang(test_crypto)
 
 compile_erlang(test_code_load_binary)
 compile_erlang(test_code_load_abs)
@@ -906,8 +907,9 @@ add_custom_target(erlang_test_modules DEPENDS
     trap_exit_flag.beam
 
     test_stacktrace.beam
-    
+
     small_big_ext.beam
+    test_crypto.beam
 
     test_code_load_binary.beam
     test_code_load_abs.beam

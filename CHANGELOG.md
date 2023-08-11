@@ -58,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 functions that default to `?ATOMVM_NVS_NS` are deprecated now).
 - Added most format possibilities to `io:format/2` and `io_lib:format/2`
 - Added `unicode` module with `characters_to_list/1,2` and `characters_to_binary/1,2,3` functions
+- Added support for `crypto:hash/2` (ESP32 and generic_unix with openssl)
 
 ### Fixed
 - Fixed issue with formatting integers with io:format() on STM32 platform
