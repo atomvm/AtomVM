@@ -20,7 +20,7 @@ This example program prints the string "Hello World" and quits.
 The `hello_world.avm` file will get created as part of a build.  This file may be supplied as an argument to the `AtomVM` command:
 
     shell$ ./src/AtomVM ./examples/erlang/hello_world.avm
-    Hello World
+    hello_world
     Return value: ok
 
 ### `udp_server`
