@@ -40,6 +40,19 @@ else()
     pack_lib(atomvmlib eavmlib estdlib alisp)
 endif()
 
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.plt
+    DEPENDS atomvmlib
+    COMMAND dialyzer --build_plt --output_plt ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.plt
+        -r ${CMAKE_CURRENT_BINARY_DIR}/estdlib/src/beams
+        -r ${CMAKE_CURRENT_BINARY_DIR}/eavmlib/src/beams
+        -r ${CMAKE_CURRENT_BINARY_DIR}/alisp/src/beams
+)
+
+add_custom_target(atomvmlib_plt ALL
+    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.plt
+)
+
 install(
     FILES ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.avm
     DESTINATION lib/atomvm
