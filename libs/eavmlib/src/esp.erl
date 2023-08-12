@@ -177,9 +177,9 @@ nvs_get_binary(Key) when is_atom(Key) ->
 %%-----------------------------------------------------------------------------
 -spec nvs_get_binary(Namespace :: atom(), Key :: atom()) -> binary() | undefined.
 nvs_get_binary(Namespace, Key) when is_atom(Namespace) andalso is_atom(Key) ->
-    case nvs_fetch_binary(Namespace, Key) of
+    case esp:nvs_fetch_binary(Namespace, Key) of
         {ok, Result} -> Result;
-        {errror, not_found} -> undefined;
+        {error, not_found} -> undefined;
         {error, OtherError} -> throw(OtherError)
     end.
 

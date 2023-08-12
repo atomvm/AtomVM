@@ -43,7 +43,7 @@ static const struct Nif *nvs_nif_get_nif(const char *nifname);
 
 static int write_atom_c_string(Context *ctx, char *buf, size_t bufsize, term t);
 
-static term nif_esp_nvs_get_binary(Context *ctx, int argc, term argv[])
+static term nif_esp_nvs_fetch_binary(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
     VALIDATE_VALUE(argv[0], term_is_atom);
@@ -70,7 +70,7 @@ static term nif_esp_nvs_get_binary(Context *ctx, int argc, term argv[])
             }
             term error_tuple = term_alloc_tuple(2, &ctx->heap);
             term ns_not_found = globalcontext_make_atom(ctx->global, ATOM_STR("\x13", "namespace_not_found"));
-            term_put_tuple_element(error_tuple, 0, OK_ATOM);
+            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
             term_put_tuple_element(error_tuple, 1, ns_not_found);
             return error_tuple;
         }
@@ -91,7 +91,7 @@ static term nif_esp_nvs_get_binary(Context *ctx, int argc, term argv[])
             }
             term error_tuple = term_alloc_tuple(2, &ctx->heap);
             term not_found = globalcontext_make_atom(ctx->global, ATOM_STR("\x9", "not_found"));
-            term_put_tuple_element(error_tuple, 0, OK_ATOM);
+            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
             term_put_tuple_element(error_tuple, 1, not_found);
             return error_tuple;
         }
@@ -256,9 +256,9 @@ static term nif_esp_nvs_reformat(Context *ctx, int argc, term argv[])
     }
 }
 
-static const struct Nif esp_nvs_get_binary_nif = {
+static const struct Nif esp_nvs_fetch_binary_nif = {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_esp_nvs_get_binary
+    .nif_ptr = nif_esp_nvs_fetch_binary
 };
 static const struct Nif esp_nvs_put_binary_nif = {
     .base.type = NIFFunctionType,
@@ -290,9 +290,9 @@ void nvs_nif_init(GlobalContext *gloabl)
 
 const struct Nif *nvs_nif_get_nif(const char *nifname)
 {
-    if (strcmp("esp:nvs_get_binary/2", nifname) == 0) {
+    if (strcmp("esp:nvs_fetch_binary/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
-        return &esp_nvs_get_binary_nif;
+        return &esp_nvs_fetch_binary_nif;
     }
     if (strcmp("esp:nvs_put_binary/3", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
