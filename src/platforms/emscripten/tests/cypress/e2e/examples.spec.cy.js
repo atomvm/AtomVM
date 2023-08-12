@@ -35,7 +35,7 @@ describe("emscripten hello world AVM", () => {
         cy.stub(win.console, "error").as("consoleError");
       },
     });
-    cy.get("@consoleLog").should("be.calledWith", "Hello World");
+    cy.get("@consoleLog").should("be.calledWith", "hello_world");
     cy.get("@consoleLog").should("be.calledWith", "Return value: ok");
     cy.get("@consoleError").should("not.be.called");
   });
@@ -49,7 +49,7 @@ describe("emscripten hello world BEAM", () => {
         cy.stub(win.console, "error").as("consoleError");
       },
     });
-    cy.get("@consoleLog").should("be.calledWith", "Hello World");
+    cy.get("@consoleLog").should("be.calledWith", "hello_world");
     cy.get("@consoleLog").should("be.calledWith", "Return value: ok");
     cy.get("@consoleError").should("not.be.called");
   });
