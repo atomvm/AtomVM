@@ -33,6 +33,7 @@ option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
 option(AVM_RELEASE "Build an AtomVM release" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 option(COVERAGE "Build for code coverage" OFF)
+option(RUN_DIALYZER "Run dialyzer on BEAM modules" ON)
 
 if((${CMAKE_SYSTEM_NAME} STREQUAL "Darwin") OR
    (${CMAKE_SYSTEM_NAME} STREQUAL "Linux") OR

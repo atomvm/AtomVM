@@ -40,7 +40,7 @@ else()
     pack_lib(atomvmlib eavmlib estdlib alisp)
 endif()
 
-if (Dialyzer_FOUND)
+if (Dialyzer_FOUND AND RUN_DIALYZER)
     add_custom_command(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.plt
         DEPENDS atomvmlib
@@ -54,7 +54,7 @@ if (Dialyzer_FOUND)
         DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.plt
     )
 else()
-    message("Unable to find dialyzer -- skipping PLT build")
+    message("Dialyzer is not enabled -- skipping PLT build")
 endif()
 
 install(
