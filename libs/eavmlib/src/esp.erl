@@ -213,7 +213,7 @@ nvs_get_binary(Namespace, Key, Default) when
 %%-----------------------------------------------------------------------------
 -spec nvs_set_binary(Key :: atom(), Value :: binary()) -> ok.
 nvs_set_binary(Key, Value) when is_atom(Key) andalso is_binary(Value) ->
-    esp:nvs_set_binary(?ATOMVM_NVS_NS, Key, Value).
+    nvs_set_binary(?ATOMVM_NVS_NS, Key, Value).
 
 %%-----------------------------------------------------------------------------
 %% @param   Namespace NVS namespace
@@ -229,7 +229,7 @@ nvs_set_binary(Key, Value) when is_atom(Key) andalso is_binary(Value) ->
 nvs_set_binary(Namespace, Key, Value) when
     is_atom(Namespace) andalso is_atom(Key) andalso is_binary(Value)
 ->
-    nvs_put_binary(Namespace, Key, Value).
+    esp:nvs_put_binary(Namespace, Key, Value).
 
 %%-----------------------------------------------------------------------------
 %% @param   Namespace NVS namespace
