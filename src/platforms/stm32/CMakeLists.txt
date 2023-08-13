@@ -20,20 +20,43 @@
 
 cmake_minimum_required (VERSION 3.13)
 project(AtomVM)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../CMakeModules")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-
 
 # Options that make sense for this platform
 option(AVM_USE_32BIT_FLOAT "Use 32 bit floats." OFF)
 option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 option(AVM_NEWLIB_NANO "Use 'nano' newlib. Saves 46kB, no `long long` support" OFF)
+option(AVM_LOG_DISABLE "Disable log output" OFF)
+option(AVM_ENABLE_LOG_COLOR "Use color log output" OFF)
+option(AVM_ENABLE_LOG_LINES "Include source and line info for all enbled levels" OFF)
 
 set(AVM_DISABLE_SMP ON FORCE)
 
 if (AVM_NEWLIB_NANO)
     set(LINKER_FLAGS "${LINKER_FLAGS} -specs=nano.specs")
+    set(AVM_LOG_DISABLE ON FORCE)
+endif()
+
+# Configure logging
+if (AVM_LOG_DISABLE)
+    add_compile_definitions(AVM_LOG_DISABLE)
+elseif (AVM_LOG_LEVEL_MAX)
+    set(CONFIG_LOG_LEVEL_MAX ${AVM_LOG_LEVEL_MAX} CACHE STRING "AtomVM max log level")
+else()
+    set(CONFIG_LOG_LEVEL_MAX LOG_INFO CACHE STRING "AtomVM max log level")
+endif()
+if (CONFIG_LOG_LEVEL_MAX)
+    set_property(CACHE CONFIG_LOG_LEVEL_MAX PROPERTY STRINGS LOG_NONE LOG_ERROR LOG_WARN LOG_INFO LOG_DEBUG)
+    add_compile_definitions(CONFIG_LOG_LEVEL_MAX=${CONFIG_LOG_LEVEL_MAX})
+endif()
+if (AVM_ENABLE_LOG_COLOR)
+    add_compile_definitions(ENABLE_LOG_COLOR)
+endif()
+if (AVM_ENABLE_LOG_LINES)
+    add_compile_definitions(ENABLE_LOG_LINE_INFO)
 endif()
 
 # Include an error in case the user forgets to specify ARM as a toolchain

@@ -19,23 +19,45 @@
  */
 
 #include <errno.h>
+#include <stdio.h>
+#include <unistd.h>
+
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/cm3/systick.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/usart.h>
-#include <stdio.h>
-#include <unistd.h>
 
 #include <avmpack.h>
 #include <context.h>
 #include <globalcontext.h>
 #include <module.h>
+#include <utils.h>
+#include <version.h>
+
+#include "lib/avm_log.h"
 
 #define USART_CONSOLE USART2
 #define AVM_ADDRESS (0x8080000)
 #define AVM_FLASH_MAX_SIZE (0x80000)
 #define CLOCK_FREQUENCY (168000000)
+
+#define TAG "AtomVM"
+
+#define ATOMVM_BANNER                                                   \
+    "\n"                                                                \
+    "    ###########################################################\n" \
+    "\n"                                                                \
+    "       ###    ########  #######  ##     ## ##     ## ##     ## \n" \
+    "      ## ##      ##    ##     ## ###   ### ##     ## ###   ### \n" \
+    "     ##   ##     ##    ##     ## #### #### ##     ## #### #### \n" \
+    "    ##     ##    ##    ##     ## ## ### ## ##     ## ## ### ## \n" \
+    "    #########    ##    ##     ## ##     ##  ##   ##  ##     ## \n" \
+    "    ##     ##    ##    ##     ## ##     ##   ## ##   ##     ## \n" \
+    "    ##     ##    ##     #######  ##     ##    ###    ##     ## \n" \
+    "\n"                                                                \
+    "    ###########################################################\n" \
+    "\n"
 
 int _write(int file, char *ptr, int len);
 
@@ -106,6 +128,10 @@ int main()
     systick_setup();
     usart_setup();
 
+    fprintf(stdout, "%s", ATOMVM_BANNER);
+    AVM_LOGI(TAG, "Starting AtomVM revision " ATOMVM_VERSION);
+    AVM_LOGD(TAG, "Using usart mapped at register 0x%x for stdout/stderr.", USART_CONSOLE);
+
     const void *flashed_avm = (void *) AVM_ADDRESS;
     uint32_t size = AVM_FLASH_MAX_SIZE;
 
@@ -113,19 +139,20 @@ int main()
     const void *startup_beam;
     const char *startup_module_name;
 
-    printf("Booting file mapped at: %p, size: %li\n", flashed_avm, size);
+    AVM_LOGD(TAG, "Maximum application size: %lu", size);
 
     GlobalContext *glb = globalcontext_new();
 
     if (!avmpack_is_valid(flashed_avm, size) || !avmpack_find_section_by_flag(flashed_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
-        fprintf(stderr, "error: invalid AVM Pack\n");
-        return 1;
+        AVM_LOGE(TAG, "Invalid AVM Pack");
+        AVM_ABORT();
     }
+    AVM_LOGI(TAG, "Booting file mapped at: %p, size: %lu", flashed_avm, startup_beam_size);
 
     struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
     if (IS_NULL_PTR(avmpack_data)) {
-        fprintf(stderr, "Memory error: Cannot allocate AVMPackData.\n");
-        return 1;
+        AVM_LOGE(TAG, "Memory error: Cannot allocate AVMPackData.");
+        AVM_ABORT();
     }
     avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
     avmpack_data->base.data = flashed_avm;
@@ -136,10 +163,9 @@ int main()
     globalcontext_insert_module(glb, mod);
     Context *ctx = context_new(glb);
 
-    printf("Starting: %s...\n", startup_module_name);
-    printf("---\n");
+    AVM_LOGI(TAG, "Starting: %s...\n", startup_module_name);
     context_execute_loop(ctx, mod, "start", 0);
-    printf("Return value: %lx\n", (long) term_to_int32(ctx->x[0]));
+    AVM_LOGI(TAG, "Return value: %lx", (long) term_to_int32(ctx->x[0]));
 
     while (1)
         ;
