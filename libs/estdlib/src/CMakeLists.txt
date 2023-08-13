@@ -24,6 +24,7 @@ include(BuildErlang)
 
 set(ERLANG_MODULES
     base64
+    binary
     calendar
     crypto
     gen_event
