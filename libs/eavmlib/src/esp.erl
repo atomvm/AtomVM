@@ -180,6 +180,7 @@ nvs_get_binary(Namespace, Key) when is_atom(Namespace) andalso is_atom(Key) ->
     case esp:nvs_fetch_binary(Namespace, Key) of
         {ok, Result} -> Result;
         {error, not_found} -> undefined;
+        {error, namespace_not_found} -> undefined;
         {error, OtherError} -> throw(OtherError)
     end.
 
