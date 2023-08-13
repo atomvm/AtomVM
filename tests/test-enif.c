@@ -25,6 +25,7 @@
 #include "erl_nif.h"
 #include "erl_nif_priv.h"
 #include "globalcontext.h"
+#include "scheduler.h"
 #include "utils.h"
 
 static uint32_t cb_read_resource = 0;
@@ -87,7 +88,7 @@ void test_resource()
 
     assert(cb_read_resource == 0);
 
-    context_destroy(ctx);
+    scheduler_terminate(ctx);
     assert(cb_read_resource == 42);
     cb_read_resource = 0;
 
@@ -116,7 +117,7 @@ void test_resource_destroyed_with_global()
     uint32_t *resource = (uint32_t *) ptr;
     *resource = 42;
 
-    context_destroy(ctx);
+    scheduler_terminate(ctx);
     assert(cb_read_resource == 0);
 
     globalcontext_destroy(glb);
@@ -163,7 +164,7 @@ void test_resource_keep_release()
 
     cb_read_resource = 0;
 
-    context_destroy(ctx);
+    scheduler_terminate(ctx);
     globalcontext_destroy(glb);
 
     assert(cb_read_resource == 0);
@@ -205,7 +206,7 @@ void test_resource_monitor()
     assert(monitor_result == 0);
     assert(cb_read_resource == 0);
 
-    context_destroy(ctx);
+    scheduler_terminate(ctx);
     assert(cb_read_resource == 42);
     assert(down_pid == pid);
     assert(enif_compare_monitors(&mon, &down_mon) == 0);
@@ -223,7 +224,7 @@ void test_resource_monitor()
     monitor_result = enif_demonitor_process(&env, ptr, &mon);
     assert(monitor_result == 0);
 
-    context_destroy(ctx);
+    scheduler_terminate(ctx);
     assert(cb_read_resource == 0);
     assert(down_pid == 0);
 
@@ -243,7 +244,7 @@ void test_resource_monitor()
 
     cb_read_resource = 0;
 
-    context_destroy(ctx);
+    scheduler_terminate(ctx);
     assert(cb_read_resource == 0);
     assert(down_pid == 0);
 

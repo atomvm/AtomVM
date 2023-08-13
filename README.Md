@@ -58,6 +58,8 @@ $ ./src/AtomVM ./examples/erlang/hello_world.avm
 Run tests within build directory with:
 ```
 $ ./tests/test-erlang
+$ ./tests/test-enif
+$ ./tests/test-mailbox
 $ ./tests/test-structs
 $ ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
 $ ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
