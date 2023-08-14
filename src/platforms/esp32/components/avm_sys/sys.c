@@ -627,9 +627,10 @@ static void *select_thread_loop(void *arg)
         int fd_index;
         if (select_events_poll_count < 0) {
             // Means it is dirty and should be rebuilt.
+            struct ListHead *select_events = synclist_wrlock(&glb->select_events);
             size_t select_events_new_count;
             if (select_events_poll_count < 0) {
-                select_event_count_and_destroy_closed(NULL, NULL, &select_events_new_count, glb);
+                select_event_count_and_destroy_closed(select_events, NULL, NULL, &select_events_new_count, glb);
             } else {
                 select_events_new_count = select_events_poll_count;
             }
@@ -643,7 +644,6 @@ static void *select_thread_loop(void *arg)
             fd_index = poll_count;
 
             struct ListHead *item;
-            struct ListHead *select_events = synclist_rdlock(&glb->select_events);
             LIST_FOR_EACH (item, select_events) {
                 struct SelectEvent *select_event = GET_LIST_ENTRY(item, struct SelectEvent, head);
                 if (select_event->read || select_event->write) {

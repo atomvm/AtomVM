@@ -266,7 +266,7 @@ static inline void select_event_destroy(struct SelectEvent *select_event, Global
     free((void *) select_event);
 }
 
-void select_event_count_and_destroy_closed(size_t *read, size_t *write, size_t *either, GlobalContext *global)
+void select_event_count_and_destroy_closed(struct ListHead *select_events, size_t *read, size_t *write, size_t *either, GlobalContext *global)
 {
     size_t read_count = 0;
     size_t write_count = 0;
@@ -274,7 +274,6 @@ void select_event_count_and_destroy_closed(size_t *read, size_t *write, size_t *
 
     struct ListHead *item;
     struct ListHead *tmp;
-    struct ListHead *select_events = synclist_wrlock(&global->select_events);
     MUTABLE_LIST_FOR_EACH (item, tmp, select_events) {
         struct SelectEvent *select_event = GET_LIST_ENTRY(item, struct SelectEvent, head);
         if (select_event->close) {
@@ -292,7 +291,6 @@ void select_event_count_and_destroy_closed(size_t *read, size_t *write, size_t *
             }
         }
     }
-    synclist_unlock(&global->select_events);
     if (read) {
         *read = read_count;
     }

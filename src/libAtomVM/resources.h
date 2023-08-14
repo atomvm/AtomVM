@@ -102,12 +102,13 @@ bool select_event_notify(ErlNifEvent event, bool is_read, bool is_write, GlobalC
  * events marked for close.
  * @details Convenience function that can be called by `sys_poll_events` and
  * iterates on events to be closed and count them.
+ * @param select_events list of events, with a write lock
  * @param read on output number of events with read = 1, can be NULL
  * @param write on output number of events with write = 1, can be NULL
  * @param either on output number of events with either read = 1 or write = 1, can be NULL
  * @param global the global context
  */
-void select_event_count_and_destroy_closed(size_t *read, size_t *write, size_t *either, GlobalContext *global);
+void select_event_count_and_destroy_closed(struct ListHead *select_events, size_t *read, size_t *write, size_t *either, GlobalContext *global);
 
 /**
  * @brief Destroy monitors associated with a resource.
