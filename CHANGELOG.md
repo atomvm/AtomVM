@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0-alpha.1] - Unreleased
 
+### Fixed
+
+- Fixed `esp:nvs_set_binary` functions.
+
 ## [0.6.0-alpha.0] - 2023-08-13
 
 ### Added
