@@ -45,6 +45,7 @@
 #include "posix_nifs.h"
 #include "scheduler.h"
 #include "smp.h"
+#include "synclist.h"
 #include "sys.h"
 #include "term.h"
 #include "utils.h"
@@ -3590,7 +3591,7 @@ static term nif_atomvm_add_avm_pack_file(Context *ctx, int argc, term argv[])
     if (name != UNDEFINED_ATOM) {
         avmpack_data->name_atom_id = term_to_atom_index(name);
     }
-    synclist_append(&ctx->global->avmpack_data, &avmpack_data->avmpack_head);
+    synclist_prepend(&ctx->global->avmpack_data, &avmpack_data->avmpack_head);
 
     return OK_ATOM;
 }
