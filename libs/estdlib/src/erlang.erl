@@ -52,6 +52,8 @@
     list_to_integer/1,
     list_to_tuple/1,
     iolist_to_binary/1,
+    binary_to_atom/2,
+    binary_to_integer/1,
     binary_to_list/1,
     atom_to_binary/2,
     atom_to_list/1,
@@ -488,14 +490,14 @@ list_to_atom(_String) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @param   List    list to convert to binary
-%% @returns a binary composed of bytes from the list
-%% @doc     Convert a list of bytes into a binary.
-%% Errors with `badarg' if the list is not a list of bytes.
+%% @param   IOList   iolist to convert to binary
+%% @returns a binary composed of bytes and binaries from the list
+%% @doc     Convert a list into a binary.
+%% Errors with `badarg' if the list is not an iolist.
 %% @end
 %%-----------------------------------------------------------------------------
--spec list_to_binary(List :: [byte()]) -> binary().
-list_to_binary(_String) ->
+-spec list_to_binary(IOList :: iolist()) -> binary().
+list_to_binary(_IOList) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -527,6 +529,28 @@ list_to_tuple(_List) ->
 %%-----------------------------------------------------------------------------
 -spec iolist_to_binary(IOList :: iolist()) -> binary().
 iolist_to_binary(_IOList) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Binary  Binary to convert to atom
+%% @param   Encoding encoding for conversion
+%% @returns an atom from passed binary
+%% @doc     Convert a binary to atom.
+%% Only latin1 encoded is supported.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec binary_to_atom(Binary :: binary(), Encoding :: latin1) -> atom().
+binary_to_atom(_Binary, _Encoding) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Binary  Binary to parse for integer
+%% @returns the integer represented by the binary
+%% @doc     Parse the text in a given binary as an integer.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec binary_to_integer(Binary :: binary()) -> integer().
+binary_to_integer(_Binary) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

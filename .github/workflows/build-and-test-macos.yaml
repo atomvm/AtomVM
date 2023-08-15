@@ -65,6 +65,12 @@ jobs:
         export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
         ninja
 
+    - name: "Build: run dialyzer"
+      working-directory: build
+      run: |
+        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
+        ninja dialyzer
+
     # Test
     - name: "Test: test-erlang"
       timeout-minutes: 10

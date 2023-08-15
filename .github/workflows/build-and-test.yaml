@@ -235,6 +235,10 @@ jobs:
       working-directory: build
       run: make
 
+    - name: "Build: run dialyzer"
+      working-directory: build
+      run: make dialyzer
+
     # Test
     - name: "Test: test-erlang"
       timeout-minutes: 10

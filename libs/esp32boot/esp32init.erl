@@ -35,9 +35,7 @@ is_dev_mode_enabled(SystemStatus) ->
         {ok, undefined} ->
             false;
         {app_exit, undefined} ->
-            false;
-        {app_fail, undefined} ->
-            true
+            false
     end.
 
 maybe_start_dev_mode(SystemStatus) ->
@@ -92,7 +90,7 @@ get_start_module() ->
     case esp:nvs_get_binary(atomvm, start_module) of
         undefined ->
             case atomvm:get_start_beam(app) of
-                error ->
+                {error, not_found} ->
                     main;
                 {ok, ModuleNameWithExt} when is_binary(ModuleNameWithExt) ->
                     Len = byte_size(ModuleNameWithExt) - byte_size(<<".beam">>),

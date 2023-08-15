@@ -24,7 +24,7 @@
 %%-----------------------------------------------------------------------------
 -module(binary).
 
--export([at/2]).
+-export([at/2, part/3]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Binary binary to get a byte from
@@ -35,4 +35,17 @@
 %%-----------------------------------------------------------------------------
 -spec at(Binary :: binary(), Index :: non_neg_integer()) -> byte().
 at(_Binary, _Index) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Binary binary to extract a subbinary from
+%% @param   Pos    0-based index of the subbinary to extract
+%% @param   Len    length, in bytes, of the subbinary to extract.
+%% @return a subbinary from Binary
+%% @doc Get the part of a given binary.
+%% A negative length can be passed to count bytes backwards.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec part(Binary :: binary(), Pos :: non_neg_integer(), Len :: integer()) -> binary().
+part(_Binary, _Pos, _Len) ->
     erlang:nif_error(undefined).

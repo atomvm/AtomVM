@@ -401,7 +401,7 @@ filter(Pred, [H | T], Accum) ->
 %% @doc     Inserts Sep between every element of List.
 %% @end
 %%-----------------------------------------------------------------------------
--spec join(Sep :: list(), List :: list()) -> list().
+-spec join(Sep :: any(), List :: list()) -> list().
 join(Sep, L) ->
     join(L, Sep, []).
 

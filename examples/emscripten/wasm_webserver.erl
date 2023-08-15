@@ -24,6 +24,7 @@
 
 -export([start/0, handle_req/3]).
 
+-spec start() -> no_return().
 start() ->
     Router = [
         {"*", ?MODULE, []}

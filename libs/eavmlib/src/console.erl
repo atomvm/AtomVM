@@ -27,7 +27,7 @@
 -export([start/0, puts/1, puts/2, flush/0, flush/1, print/1]).
 
 %%-----------------------------------------------------------------------------
-%% @param   String the string data to write to the console
+%% @param   Text the string data to write to the console
 %% @returns ok if the data was written, or {error, Reason}, if there was
 %%          an error.
 %% @see     erlang:display/1
@@ -38,14 +38,14 @@
 %%          To print an erlang term, use erlang:display/1.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec puts(string()) -> ok | {error, term()}.
-puts(String) ->
-    puts(get_pid(), String).
+-spec puts(iodata()) -> ok | {error, term()}.
+puts(Text) ->
+    puts(get_pid(), Text).
 
 %% @hidden
--spec puts(pid(), string()) -> ok.
-puts(Console, String) ->
-    port:call(Console, {puts, String}).
+-spec puts(pid(), iodata()) -> ok.
+puts(Console, Text) ->
+    port:call(Console, {puts, Text}).
 
 %%-----------------------------------------------------------------------------
 %% @returns ok if the data was written, or {error, Reason}, if there was
@@ -63,15 +63,15 @@ flush(Console) ->
     port:call(Console, flush).
 
 %%-----------------------------------------------------------------------------
-%% @param   String the string data to write to the console
+%% @param   Text the data to write to the console
 %% @returns ok if the data was written, or {error, Reason}, if there was
 %%          an error.
 %% @see     erlang:display/1
 %% @doc     Write a string to the console.
 %% @end
 %%-----------------------------------------------------------------------------
--spec print(string()) -> ok | {error, term()}.
-print(_String) ->
+-spec print(Text :: iodata()) -> ok | {error, term()}.
+print(_Text) ->
     erlang:nif_error(undefined).
 
 %% Internal operations

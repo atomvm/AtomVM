@@ -33,7 +33,18 @@
     read_priv/2,
     add_avm_pack_binary/2,
     add_avm_pack_file/2,
-    close_avm_pack/2
+    close_avm_pack/2,
+    get_start_beam/1,
+    posix_open/2,
+    posix_open/3,
+    posix_close/1,
+    posix_read/2,
+    posix_write/2
+]).
+
+-export_type([
+    posix_fd/0,
+    posix_open_flag/0
 ]).
 
 -type platform_name() ::
@@ -43,7 +54,30 @@
     | pico
     | stm32.
 
--type avm_path() :: string() | binary().
+-type avm_path() :: iodata().
+
+-opaque posix_fd() :: binary().
+-type posix_open_flag() ::
+    o_exec
+    | o_rdonly
+    | o_rdwr
+    | o_search
+    | o_wronly
+    | o_append
+    | o_cloexec
+    | o_creat
+    | o_directory
+    | o_dsync
+    | o_excl
+    | o_noctty
+    | o_nofollow
+    | o_rsync
+    | o_sync
+    | o_trunc
+    | o_tty_atom.
+-type posix_error() ::
+    atom()
+    | integer().
 
 %%-----------------------------------------------------------------------------
 %% @returns The platform name.
@@ -104,7 +138,8 @@ read_priv(_App, _Path) ->
 %%          Failure to properly load AVM data is result in a runtime `error'
 %% @end
 %%-----------------------------------------------------------------------------
--spec add_avm_pack_binary(AVMData :: binary(), Options :: [{name, Name :: atom()}]) -> ok.
+-spec add_avm_pack_binary(AVMData :: binary(), Options :: [{name, Name :: atom()}]) ->
+    ok | {error, any()}.
 add_avm_pack_binary(_AVMData, _Options) ->
     erlang:nif_error(undefined).
 
@@ -131,7 +166,8 @@ add_avm_pack_binary(_AVMData, _Options) ->
 %%          Failure to properly load AVM path is result in a runtime `error'
 %% @end
 %%-----------------------------------------------------------------------------
--spec add_avm_pack_file(AVMPath :: avm_path(), Options :: []) -> ok.
+-spec add_avm_pack_file(AVMPath :: avm_path(), Options :: [{name, Name :: atom()}]) ->
+    ok | {error, any()}.
 add_avm_pack_file(_AVMPath, _Options) ->
     erlang:nif_error(undefined).
 
@@ -150,4 +186,84 @@ add_avm_pack_file(_AVMPath, _Options) ->
 %%-----------------------------------------------------------------------------
 -spec close_avm_pack(Name :: atom(), Options :: []) -> ok | error.
 close_avm_pack(_Name, _Options) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   AVM     Name of avm (atom)
+%% @returns the name of the start module (with suffix)
+%% @doc     Get the start beam for a given avm
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_start_beam(AVM :: atom()) -> {ok, binary()} | {error, not_found}.
+get_start_beam(_AVM) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Path    Path to the file to open
+%% @param   Flags   List of flags passed to `open(3)'.
+%% @returns A tuple with a file descriptor or an error tuple.
+%% @doc     Open a file (on platforms that have `open(3)').
+%% The file is automatically closed when the file descriptor is garbage
+%% collected.
+%%
+%% Files are automatically opened with `O_NONBLOCK'. Other flags can be passed.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_open(Path :: iodata(), Flags :: [posix_open_flag()]) ->
+    {ok, posix_fd()} | {error, posix_error()}.
+posix_open(_Path, _Flags) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Path    Path to the file to open
+%% @param   Flags   List of flags passed to `open(3)'.
+%% @param   Mode    Mode passed to `open(3)' for created file.
+%% @returns A tuple with a file descriptor or an error tuple.
+%% @doc     Open a file (on platforms that have `open(3)').
+%% This variant can be used to specify the mode for new file.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_open(Path :: iodata(), Flags :: [posix_open_flag()], Mode :: non_neg_integer()) ->
+    {ok, posix_fd()} | {error, posix_error()}.
+posix_open(_Path, _Flags, _Mode) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   File    Descriptor to a file to close
+%% @returns `ok' or an error tuple
+%% @doc     Close a file that was opened with `posix_open/2,3'
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_close(File :: posix_fd()) -> ok | {error, posix_error()}.
+posix_close(_File) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   File    Descriptor to an open file
+%% @param   Count   Maximum number of bytes to read
+%% @returns a tuple with read bytes, `eof' or an error tuple
+%% @doc     Read at most `Count' bytes from a file.
+%% Files are open non-blocking. ˋatomvm:posix_select_read/3' can be used to
+%% determine if the file can be read.
+%% `eof' is returned if no more data can be read because the file cursor
+%% reached the end.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_read(File :: posix_fd(), Count :: non_neg_integer()) ->
+    {ok, binary()} | eof | {error, posix_error()}.
+posix_read(_File, _Count) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   File    Descriptor to an open file
+%% @param   Data    Data to write
+%% @returns a tuple with the number of written bytes or an error tuple
+%% @doc     Write data to a file.
+%% Files are open non-blocking. ˋatomvm:posix_select_write/3' can be used to
+%% determine if the file can be written.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_write(File :: posix_fd(), Data :: binary()) ->
+    {ok, non_neg_integer()} | {error, posix_error()}.
+posix_write(_File, _Data) ->
     erlang:nif_error(undefined).
