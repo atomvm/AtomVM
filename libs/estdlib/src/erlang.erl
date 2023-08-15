@@ -79,16 +79,21 @@
     open_port/2,
     system_time/1,
     group_leader/0,
+    group_leader/2,
     process_flag/2,
     get_module_info/1,
     get_module_info/2,
     processes/0,
     binary_to_term/1,
-    term_to_binary/1
+    term_to_binary/1,
+    timestamp/0,
+    universaltime/0,
+    localtime/0
 ]).
 
 -export_type([
-    time_unit/0
+    time_unit/0,
+    timestamp/0
 ]).
 
 %%
@@ -100,6 +105,9 @@
 
 -type mem_type() :: binary().
 -type time_unit() :: second | millisecond | microsecond.
+-type timestamp() :: {
+    MegaSecs :: non_neg_integer(), Secs :: non_neg_integer(), MicroSecs :: non_neg_integer
+}.
 
 %%-----------------------------------------------------------------------------
 %% @param   Time time in milliseconds after which to send the timeout message.
@@ -834,6 +842,17 @@ group_leader() ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   Leader  pid of process to set as leader
+%% @param   Pid     pid of process to set a Leader
+%% @returns `true'
+%% @doc Set the group leader for a given process.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec group_leader(Leader :: pid(), Pid :: pid()) -> true.
+group_leader(_Leader, _Pid) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   Flag    flag to change
 %% @param   Value   new value of the flag
 %% @returns Previous value of the flag
@@ -912,4 +931,37 @@ binary_to_term(_Binary) ->
 %%-----------------------------------------------------------------------------
 -spec term_to_binary(Term :: any()) -> binary().
 term_to_binary(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns A tuple representing the current timestamp.
+%% @see monotonic_time/1
+%% @see system_time/1
+%% @doc Return the timestamp in `{MegaSec, Sec, MicroSec}' format.
+%% This the old format returned by `erlang:now/0'. Please note that the latter
+%% which is deprecated in Erlang/OTP is not implemented by AtomVM.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec timestamp() -> erlang:timestamp().
+timestamp() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns A tuple representing the current universal time.
+%% @see localtime/0
+%% @doc Return the current time and day for UTC.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec universaltime() -> calendar:datetime().
+universaltime() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns A tuple representing the current local time.
+%% @see universaltime/0
+%% @doc Return the current time and day for system local timezone.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec localtime() -> calendar:datetime().
+localtime() ->
     erlang:nif_error(undefined).

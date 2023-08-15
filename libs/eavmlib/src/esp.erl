@@ -29,9 +29,10 @@
 -export([
     restart/0,
     reset_reason/0,
-    wakeup_cause/0,
+    sleep_get_wakeup_cause/0,
     sleep_enable_ext0_wakeup/2,
     sleep_enable_ext1_wakeup/2,
+    deep_sleep/1,
     nvs_fetch_binary/2,
     nvs_get_binary/1, nvs_get_binary/2, nvs_get_binary/3,
     nvs_set_binary/2, nvs_set_binary/3,
@@ -122,8 +123,8 @@ reset_reason() ->
 %% @doc     Returns the cause for the wakeup
 %% @end
 %%-----------------------------------------------------------------------------
--spec wakeup_cause() -> undefined | esp_wakeup_cause() | error.
-wakeup_cause() ->
+-spec sleep_get_wakeup_cause() -> undefined | esp_wakeup_cause() | error.
+sleep_get_wakeup_cause() ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -140,6 +141,18 @@ sleep_enable_ext0_wakeup(_Pin, _Level) ->
 %%-----------------------------------------------------------------------------
 -spec sleep_enable_ext1_wakeup(Mask :: non_neg_integer(), Mode :: 0..1) -> ok | error.
 sleep_enable_ext1_wakeup(_Mask, _Mode) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   SleepMS time to deep sleep in milliseconds
+%% @doc Put the esp32 into deep sleep.
+%% This function never returns. Program is restarted and wake up reason can be
+%% inspected to determine if the esp32 was woken by the timeout or by another
+%% cause.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec deep_sleep(SleepMS :: non_neg_integer()) -> no_return().
+deep_sleep(_SleepMS) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
