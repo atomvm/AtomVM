@@ -72,6 +72,13 @@ static inline void synclist_unlock(struct SyncList *synclist)
     smp_rwlock_unlock(synclist->lock);
 }
 
+static inline void synclist_prepend(struct SyncList *synclist, struct ListHead *new_item)
+{
+    struct ListHead *head = synclist_wrlock(synclist);
+    list_prepend(head, new_item);
+    synclist_unlock(synclist);
+}
+
 static inline void synclist_append(struct SyncList *synclist, struct ListHead *new_item)
 {
     struct ListHead *head = synclist_wrlock(synclist);
@@ -104,6 +111,7 @@ static inline int synclist_is_empty(struct SyncList *synclist)
 #define synclist_nolock(list) list
 #define synclist_unlock(list) UNUSED(list)
 #define synclist_destroy(list) UNUSED(list)
+#define synclist_prepend(list, new_item) list_prepend(list, new_item)
 #define synclist_append(list, new_item) list_append(list, new_item)
 #define synclist_remove(list, new_item) list_remove(new_item)
 #define synclist_is_empty(list) list_is_empty(list)
