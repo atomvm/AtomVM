@@ -48,6 +48,7 @@
     function_exported/3,
     display/1,
     list_to_atom/1,
+    list_to_existing_atom/1,
     list_to_binary/1,
     list_to_integer/1,
     list_to_tuple/1,
@@ -62,6 +63,7 @@
     float_to_list/1,
     float_to_list/2,
     integer_to_binary/1,
+    integer_to_binary/2,
     integer_to_list/1,
     integer_to_list/2,
     fun_to_list/1,
@@ -74,7 +76,10 @@
     spawn/3,
     spawn_opt/2,
     spawn_opt/4,
+    link/1,
+    unlink/1,
     make_ref/0,
+    send/2,
     monitor/2,
     demonitor/1,
     demonitor/2,
@@ -86,6 +91,9 @@
     get_module_info/1,
     get_module_info/2,
     processes/0,
+    is_process_alive/1,
+    garbage_collect/0,
+    garbage_collect/1,
     binary_to_term/1,
     term_to_binary/1,
     timestamp/0,
@@ -105,7 +113,7 @@
 %% * review API documentation for timer functions in this module
 %%
 
--type mem_type() :: binary().
+-type mem_type() :: binary.
 -type time_unit() :: second | millisecond | microsecond.
 -type timestamp() :: {
     MegaSecs :: non_neg_integer(), Secs :: non_neg_integer(), MicroSecs :: non_neg_integer
@@ -478,6 +486,7 @@ display(_Term) ->
 %%-----------------------------------------------------------------------------
 %% @param   String  string to convert to an atom
 %% @returns an atom from the string
+%% @see     list_to_existing_atom/1
 %% @doc     Convert a string into an atom.
 %% Unlike Erlang/OTP 20+, atoms are limited to ISO-8859-1 characters. The VM
 %% currently aborts if passed unicode characters.
@@ -487,6 +496,18 @@ display(_Term) ->
 %%-----------------------------------------------------------------------------
 -spec list_to_atom(String :: string()) -> atom().
 list_to_atom(_String) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   String  string to convert to an atom
+%% @returns an atom from the string
+%% @see     list_to_atom/1
+%% @doc     Convert a string into an atom.
+%% This function will error with badarg if the atom does not exist
+%% @end
+%%-----------------------------------------------------------------------------
+-spec list_to_existing_atom(String :: string()) -> atom().
+list_to_existing_atom(_String) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -643,6 +664,17 @@ integer_to_binary(_Integer) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   Integer integer to convert to a binary
+%% @param   Base    base for representation
+%% @returns a binary with a text representation of the integer
+%% @doc     Convert an integer to a binary.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec integer_to_binary(Integer :: integer(), Base :: 2..36) -> binary().
+integer_to_binary(_Integer, _Base) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   Integer integer to convert to a string
 %% @returns a string representation of the integer
 %% @doc     Convert an integer to a string.
@@ -764,7 +796,8 @@ spawn(_Module, _Function, _Args) ->
 %% @doc     Create a new process.
 %% @end
 %%-----------------------------------------------------------------------------
--spec spawn_opt(Function :: function(), Options :: [{max_heap_size, integer()}]) -> pid().
+-spec spawn_opt(Function :: function(), Options :: [{max_heap_size, integer()}]) ->
+    pid() | {pid(), reference()}.
 spawn_opt(_Name, _Options) ->
     erlang:nif_error(undefined).
 
@@ -779,8 +812,28 @@ spawn_opt(_Name, _Options) ->
 %%-----------------------------------------------------------------------------
 -spec spawn_opt(
     Module :: module(), Function :: atom(), Args :: [any()], Options :: [spawn_option()]
-) -> pid().
+) -> pid() | {pid(), reference()}.
 spawn_opt(_Module, _Function, _Args, _Options) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Pid         process to link to
+%% @returns `true'
+%% @doc     Link current process with a given process.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec link(Pid :: pid()) -> true.
+link(_Pid) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Pid         process to unlink from
+%% @returns `true'
+%% @doc     Unlink current process from a given process.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec unlink(Pid :: pid()) -> true.
+unlink(_Pid) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -790,6 +843,17 @@ spawn_opt(_Module, _Function, _Args, _Options) ->
 %%-----------------------------------------------------------------------------
 -spec make_ref() -> reference().
 make_ref() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Pid     process to send the message to
+%% @param   Message message to send
+%% @returns the sent message
+%% @doc     Send a message to a given process
+%% @end
+%%-----------------------------------------------------------------------------
+-spec send(Pid :: pid(), Message :: Message) -> Message.
+send(_Pid, _Message) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -929,6 +993,36 @@ get_module_info(_Module, _InfoKey) ->
 %%-----------------------------------------------------------------------------
 -spec processes() -> [pid()].
 processes() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns `true' if the process is alive, `false' otherwise
+%% @param   Pid     pid of the process to test
+%% @doc     Determine if a process is alive
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_process_alive(Pid :: pid()) -> boolean().
+is_process_alive(_Pid) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns `true'
+%% @doc     Run a garbage collect in current process
+%% @end
+%%-----------------------------------------------------------------------------
+-spec garbage_collect() -> true.
+garbage_collect() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns `true' or `false' if the process no longer exists
+%% @param   Pid     pid of the process to garbage collect
+%% @doc     Run a garbage collect in a given process.
+%% The function returns before the garbage collect actually happens.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec garbage_collect(Pid :: pid()) -> boolean().
+garbage_collect(_Pid) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

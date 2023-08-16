@@ -67,7 +67,9 @@
 %% @param Data data to convert to Unicode
 %% @return a list of characters or a tuple if conversion failed.
 -spec characters_to_list(Data :: chardata() | latin1_chardata()) ->
-    list() | {error, list(), chardata() | latin1_chardata()} | {incomplete, list(), binary()}.
+    list()
+    | {error, list(), chardata() | latin1_chardata() | list()}
+    | {incomplete, list(), chardata() | latin1_chardata()}.
 characters_to_list(_Data) ->
     erlang:nif_error(undefined).
 
@@ -78,7 +80,7 @@ characters_to_list(_Data) ->
 %% @return a list of characters or a tuple if conversion failed.
 -spec characters_to_list(Data :: chardata() | latin1_chardata(), Encoding :: encoding()) ->
     list()
-    | {error, list(), chardata() | latin1_chardata()}
+    | {error, list(), chardata() | latin1_chardata() | list()}
     | {incomplete, list(), chardata() | latin1_chardata()}.
 characters_to_list(_Data, _Encoding) ->
     erlang:nif_error(undefined).
@@ -89,7 +91,7 @@ characters_to_list(_Data, _Encoding) ->
 %% @return an utf8 binary or a tuple if conversion failed.
 -spec characters_to_binary(Data :: chardata() | latin1_chardata()) ->
     unicode_binary()
-    | {error, list(), chardata() | latin1_chardata()}
+    | {error, list(), chardata() | latin1_chardata() | list()}
     | {incomplete, unicode_binary(), chardata() | latin1_chardata()}.
 characters_to_binary(_Data) ->
     erlang:nif_error(undefined).
@@ -101,7 +103,7 @@ characters_to_binary(_Data) ->
 %% @return an utf8 binary or a tuple if conversion failed.
 -spec characters_to_binary(Data :: chardata() | latin1_chardata(), InEncoding :: encoding()) ->
     unicode_binary()
-    | {error, list(), chardata() | latin1_chardata()}
+    | {error, list(), chardata() | latin1_chardata() | list()}
     | {incomplete, unicode_binary(), chardata() | latin1_chardata()}.
 characters_to_binary(_Data, _InEncoding) ->
     erlang:nif_error(undefined).
@@ -123,7 +125,7 @@ characters_to_binary(_Data, _InEncoding) ->
     Data :: chardata() | latin1_chardata(), InEncoding :: encoding(), OutEncoding :: encoding()
 ) ->
     unicode_binary()
-    | {error, list(), chardata() | latin1_chardata()}
+    | {error, list(), chardata() | latin1_chardata() | list()}
     | {incomplete, unicode_binary(), chardata() | latin1_chardata()}.
 characters_to_binary(_Data, _InEncoding, _OutEncoding) ->
     erlang:nif_error(undefined).
