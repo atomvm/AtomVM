@@ -28,12 +28,12 @@ macro(pack_archive avm_name)
             COMMENT "Compiling ${module_name}.erl"
             VERBATIM
         )
-        set(BEAMS ${BEAMS} ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam)
+        set(pack_archive_${avm_name}_beams ${pack_archive_${avm_name}_beams} ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam)
     endforeach()
 
     add_custom_target(
         ${avm_name}_beams ALL
-        DEPENDS ${BEAMS}
+        DEPENDS ${pack_archive_${avm_name}_beams}
     )
 
     if(AVM_RELEASE)
@@ -45,8 +45,8 @@ macro(pack_archive avm_name)
     add_custom_target(
         ${avm_name} ALL
         DEPENDS ${avm_name}_beams PackBEAM
-        #DEPENDS ${BEAMS}
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${BEAMS}
+        #DEPENDS ${pack_archive_${avm_name}_beams}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${pack_archive_${avm_name}_beams}
         COMMENT "Packing archive ${avm_name}.avm"
         VERBATIM
     )
@@ -59,11 +59,11 @@ macro(pack_lib avm_name)
 
     foreach(archive_name ${ARGN})
         if(NOT ${archive_name} STREQUAL "exavmlib")
-            set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
+            set(pack_lib_${avm_name}_archives ${pack_lib_${avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
         else()
-            set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/lib/${archive_name}.avm)
+            set(pack_lib_${avm_name}_archives ${pack_lib_${avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/lib/${archive_name}.avm)
         endif()
-        set(ARCHIVE_TARGETS ${ARCHIVE_TARGETS} ${archive_name})
+        set(pack_lib_${avm_name}_archive_targets ${pack_lib_${avm_name}_archive_targets} ${archive_name})
     endforeach()
 
     if(AVM_RELEASE)
@@ -74,11 +74,11 @@ macro(pack_lib avm_name)
 
     add_custom_target(
         ${avm_name} ALL
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${ARCHIVES}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${pack_lib_${avm_name}_archives}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
-    add_dependencies(${avm_name} ${ARCHIVE_TARGETS} PackBEAM)
+    add_dependencies(${avm_name} ${pack_lib_${avm_name}_archive_targets} PackBEAM)
     if(TARGET ${avm_name}_main)
         add_dependencies(${avm_name} ${avm_name}_main)
     endif()
@@ -111,12 +111,25 @@ macro(pack_runnable avm_name main)
 
     foreach(archive_name ${ARGN})
         if(NOT ${archive_name} STREQUAL "exavmlib")
-            set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
+            set(pack_runnable_${avm_name}_archives ${pack_runnable_${avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
+            if(NOT ${archive_name} MATCHES "^eavmlib|estdlib|alisp$")
+                set(${avm_name}_dialyzer_beams_opt ${${avm_name}_dialyzer_beams_opt} "-r" ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/beams/)
+            endif()
         else()
-            set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/lib/${archive_name}.avm)
+            set(pack_runnable_${avm_name}_archives ${pack_runnable_${avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/lib/${archive_name}.avm)
         endif()
-        set(ARCHIVE_TARGETS ${ARCHIVE_TARGETS} ${archive_name})
+        set(pack_runnable_${avm_name}_archive_targets ${pack_runnable_${avm_name}_archive_targets} ${archive_name})
     endforeach()
+
+    if (Dialyzer_FOUND)
+        add_custom_target(
+            ${avm_name}_dialyzer
+            DEPENDS ${avm_name}_main
+            COMMAND dialyzer --plt ${CMAKE_BINARY_DIR}/libs/atomvmlib.plt -c ${main}.beam ${${avm_name}_dialyzer_beams_opt}
+        )
+        add_dependencies(${avm_name}_dialyzer atomvmlib_plt ${pack_runnable_${avm_name}_archive_targets})
+        add_dependencies(dialyzer ${avm_name}_dialyzer)
+    endif()
 
     if(AVM_RELEASE)
         set(INCLUDE_LINES "")
@@ -126,22 +139,21 @@ macro(pack_runnable avm_name main)
 
     add_custom_target(
         ${avm_name} ALL
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${avm_name}.avm ${main}.beam ${ARCHIVES}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${avm_name}.avm ${main}.beam ${pack_runnable_${avm_name}_archives}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
-    add_dependencies(${avm_name} ${avm_name}_main ${ARCHIVE_TARGETS} PackBEAM)
-
+    add_dependencies(${avm_name} ${avm_name}_main ${pack_runnable_${avm_name}_archive_targets} PackBEAM)
 endmacro()
 
 
 macro(pack_test test_avm_name)
 
-    set(ARCHIVES ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}_lib.avm)
-    set(ARCHIVE_TARGETS ${test_avm_name}_lib)
+    set(pack_test_${test_avm_name}_archives ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}_lib.avm)
+    set(pack_test_${test_avm_name}_archive_targets ${test_avm_name}_lib)
     foreach(archive_name ${ARGN})
-        set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
-        set(ARCHIVE_TARGETS ${ARCHIVE_TARGETS} ${archive_name})
+        set(pack_test_${test_avm_name}_archives ${pack_test_${test_avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
+        set(pack_test_${test_avm_name}_archive_targets ${pack_test_${test_avm_name}_archive_targets} ${archive_name})
     endforeach()
 
     if(AVM_RELEASE)
@@ -153,12 +165,12 @@ macro(pack_test test_avm_name)
     add_custom_target(
         ${test_avm_name} ALL
         COMMAND erlc +debug_info -I ${CMAKE_SOURCE_DIR}/libs/include ${CMAKE_CURRENT_SOURCE_DIR}/tests.erl
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}.avm ${CMAKE_CURRENT_BINARY_DIR}/tests.beam ${ARCHIVES}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}.avm ${CMAKE_CURRENT_BINARY_DIR}/tests.beam ${pack_test_${test_avm_name}_archives}
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests.erl
         COMMENT "Packing runnable ${test_avm_name}.avm"
         VERBATIM
     )
-    add_dependencies(${test_avm_name} ${ARCHIVE_TARGETS} PackBEAM)
+    add_dependencies(${test_avm_name} ${pack_test_${test_avm_name}_archive_targets} PackBEAM)
 
 endmacro()
 
@@ -179,20 +191,20 @@ macro(pack_uf2 avm_name main)
 
     foreach(archive_name ${ARGN})
         if(NOT ${archive_name} STREQUAL "exavmlib")
-            set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
+            set(pack_uf2_${avm_name}_archives ${pack_uf2_${avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
         else()
-            set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/lib/${archive_name}.avm)
+            set(pack_uf2_${avm_name}_archives ${pack_uf2_${avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/lib/${archive_name}.avm)
         endif()
-        set(ARCHIVE_TARGETS ${ARCHIVE_TARGETS} ${archive_name})
+        set(pack_uf2_${avm_name}_archive_targets ${pack_uf2_${avm_name}_archive_targets} ${archive_name})
     endforeach()
 
     add_custom_target(
         ${avm_name}.avm ALL
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${avm_name}.avm ${main}.beam ${ARCHIVES}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${avm_name}.avm ${main}.beam ${pack_uf2_${avm_name}_archives}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
-    add_dependencies(${avm_name}.avm ${avm_name}_main ${ARCHIVE_TARGETS} PackBEAM)
+    add_dependencies(${avm_name}.avm ${avm_name}_main ${pack_uf2_${avm_name}_archive_targets} PackBEAM)
 
     add_custom_target(
         ${avm_name}.uf2 ALL
