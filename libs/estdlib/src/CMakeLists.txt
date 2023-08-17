@@ -26,7 +26,9 @@ set(ERLANG_MODULES
     base64
     binary
     calendar
+    code
     crypto
+    erts_debug
     gen_event
     gen_server
     gen_statem

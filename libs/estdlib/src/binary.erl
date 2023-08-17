@@ -24,7 +24,7 @@
 %%-----------------------------------------------------------------------------
 -module(binary).
 
--export([at/2, part/3]).
+-export([at/2, part/3, split/2]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Binary binary to get a byte from
@@ -48,4 +48,17 @@ at(_Binary, _Index) ->
 %%-----------------------------------------------------------------------------
 -spec part(Binary :: binary(), Pos :: non_neg_integer(), Len :: integer()) -> binary().
 part(_Binary, _Pos, _Len) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Binary  binary to split
+%% @param   Pattern pattern to perform the split
+%% @return a list composed of one or two binaries
+%% @doc Split a binary according to pattern.
+%% If pattern is not found, returns a singleton list with the passed binary.
+%% Unlike Erlang/OTP, pattern must be a binary.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec split(Binary :: binary(), Pattern :: binary()) -> [binary()].
+split(_Binary, _Pattern) ->
     erlang:nif_error(undefined).
