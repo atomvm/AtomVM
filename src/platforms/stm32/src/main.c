@@ -42,7 +42,7 @@ int _write(int file, char *ptr, int len);
 static void clock_setup()
 {
     // Use external clock, set divider for 168 MHz clock frequency
-    rcc_clock_setup_hse_3v3(&rcc_hse_8mhz_3v3[RCC_CLOCK_3V3_168MHZ]);
+    rcc_clock_setup_pll(&rcc_hse_8mhz_3v3[RCC_CLOCK_3V3_168MHZ]);
 
     // Enable clock for USART2 GPIO
     rcc_periph_clock_enable(RCC_GPIOA);
@@ -74,9 +74,10 @@ static void usart_setup()
 // The handler is in sys.c
 static void systick_setup()
 {
-    // clock rate / 1000 to get 1ms interrupt rate
-    systick_set_reload(CLOCK_FREQUENCY / 1000);
+    // ((clock rate / 1000) - 1) to get 1ms interrupt rate
     systick_set_clocksource(STK_CSR_CLKSOURCE_AHB);
+    systick_set_reload((CLOCK_FREQUENCY / 1000) - 1);
+    systick_clear();
     systick_counter_enable();
     systick_interrupt_enable();
 }
