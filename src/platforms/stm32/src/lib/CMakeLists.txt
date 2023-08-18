@@ -23,16 +23,14 @@ project (libAtomVMPlatformSTM32)
 
 set(HEADER_FILES
     avm_log.h
-    gpiodriver.h
-    platform_defaultatoms.h
+    gpio_driver.h
     stm_sys.h
     ../../../../libAtomVM/platform_nifs.h
     ../../../../libAtomVM/sys.h
 )
 
 set(SOURCE_FILES
-    gpiodriver.c
-    platform_defaultatoms.c
+    gpio_driver.c
     platform_nifs.c
     sys.c
 )

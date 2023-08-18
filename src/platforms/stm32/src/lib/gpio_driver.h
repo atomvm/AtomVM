@@ -1,7 +1,7 @@
 /*
  * This file is part of AtomVM.
  *
- * Copyright 2018 Riccardo Binetti <rbino@gmx.com>
+ * Copyright 2023 Winford (Uncle Grumpy) <winford@object.stream>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,11 +18,21 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#ifndef _GPIODRIVER_H_
-#define _GPIODRIVER_H_
+#ifndef _GPIO_DRIVER_H_
+#define _GPIO_DRIVER_H_
 
-#include <context.h>
+#include "stm_sys.h"
+#include <globalcontext.h>
+#include <nifs.h>
+#include <platform_nifs.h>
 
-void gpiodriver_init(Context *ctx);
-
+#ifndef AVM_DISABLE_GPIO_NIFS
+static const struct Nif *gpio_nif_get_nif(const char *nifname);
 #endif
+
+#ifndef AVM_DISABLE_GPIO_PORT_DRIVER
+static Context *gpio_driver_create_port(GlobalContext *global, term opts);
+void gpiodriver_init(GlobalContext *glb);
+#endif
+
+#endif /* _GPIO_DRIVER_H_ */

@@ -33,6 +33,8 @@ option(AVM_LOG_DISABLE "Disable log output" OFF)
 option(AVM_ENABLE_LOG_COLOR "Use color log output" OFF)
 option(AVM_ENABLE_LOG_LINES "Include source and line info for all enbled levels" OFF)
 option(AVM_CONFIG_REBOOT_ON_NOT_OK "Reboot when application exits with non 'ok' return" OFF)
+option(AVM_DISABLE_GPIO_NIFS "Disable GPIO nifs (input and output)" OFF)
+option(AVM_DISABLE_GPIO_PORT_DRIVER "Disable GPIO 'port' driver (input, output, and interrupts)" OFF)
 
 set(AVM_DISABLE_SMP ON FORCE)
 
@@ -62,6 +64,14 @@ if (AVM_ENABLE_LOG_COLOR)
 endif()
 if (AVM_ENABLE_LOG_LINES)
     add_compile_definitions(ENABLE_LOG_LINE_INFO)
+endif()
+
+# Configure Drivers
+if (AVM_DISABLE_GPIO_NIFS)
+    add_compile_definitions(AVM_DISABLE_GPIO_NIFS)
+endif()
+if (AVM_DISABLE_GPIO_PORT_DRIVER)
+    add_compile_definitions(AVM_DISABLE_GPIO_PORT_DRIVER)
 endif()
 
 # Include an error in case the user forgets to specify ARM as a toolchain

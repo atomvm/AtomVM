@@ -32,10 +32,11 @@
 #include <libopencm3/stm32/flash.h>
 
 #include "avm_log.h"
-#include "gpiodriver.h"
 #include "stm_sys.h"
 
 #define TAG "sys"
+
+static const char *const stm32_atom = ATOM_STR("\x5", "stm32");
 
 struct PortDriverDefListItem *port_driver_list;
 struct NifCollectionDefListItem *nif_collection_list;
@@ -61,9 +62,18 @@ static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *
     return (int32_t) ((timespec1->tv_sec - timespec2->tv_sec) * 1000 + (timespec1->tv_nsec - timespec2->tv_nsec) / 1000000);
 }
 
-void sys_init_platform(GlobalContext *glb)
+/* TODO: Needed because `defaultatoms_init` in libAtomVM/defaultatoms.c calls this function.
+ * We should be able to remove this after `platform_defaulatoms.{c,h}` are removed on all platforms
+ * and `defaultatoms_init` is no longer called.
+ */
+void platform_defaultatoms_init(GlobalContext *glb)
 {
     UNUSED(glb);
+}
+
+void sys_init_platform(GlobalContext *glb)
+{
+    globalcontext_make_atom(glb, stm32_atom);
 }
 
 void sys_free_platform(GlobalContext *glb)

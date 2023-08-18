@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for the OTP `socket` interface.
 - Enhancd performance of STM32 by enabling flash cache and i-cache with branch prediction.
 - Added cmake configuration option `AVM_CONFIG_REBOOT_ON_NOT_OK` for STM32
+- New gpio driver for STM32 with nif and port support for read and write functions.
 
 ## [0.6.0-alpha.1] - 2023-10-09
 
