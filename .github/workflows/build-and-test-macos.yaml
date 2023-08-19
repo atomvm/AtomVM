@@ -13,12 +13,14 @@ on:
       - 'src/platforms/stm32/**'
       - 'doc/**'
       - 'LICENSES/**'
+      - '*.Md'
   pull_request:
     paths-ignore:
       - 'src/platforms/esp32/**'
       - 'src/platforms/stm32/**'
       - 'doc/**'
       - 'LICENSES/**'
+      - '*.Md'
 
 jobs:
   build-and-test:
