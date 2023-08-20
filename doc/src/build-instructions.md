@@ -529,6 +529,8 @@ If you are building for a different target board the `CLOCK_FREQUENCY` definitio
 The rcc_clock_setup_XXX_XXX will also need to be changed to match your particular chip-set. Consult [ST's documentation](https://www.st.com/en/microcontrollers-microprocessors/stm32-32-bit-arm-cortex-mcus.html) for appropriate settings.
 
 ### Printing
+AtomVM is built with standard `newlib` to support `long long` integers (`signed` and `unsigned`). If you are building for a device with extremely limited flash space the `nano` version of `newlib` can be used instead. This will save approximately 46kB of flash. This may be done by passing `-DAVM_NEWLIB_NANO=on`.
+
 By default, stdout and stderr are printed on USART2. On the STM32F4Discovery board, you can see them
 using a TTL-USB with the TX pin connected to board's pin PA2 (USART2 RX). Baudrate is 115200 and serial transmission
 is 8N1 with no flow control.
