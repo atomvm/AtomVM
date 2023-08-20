@@ -30,20 +30,20 @@ typedef enum
     TempStackFailedAlloc = 1
 } TempStackResult;
 
+#define MIN_STACK_SIZE 8
+
 struct TempStack
 {
-    term *stack_end;
+    term *stack_start;
     term *stack_pos;
-    int size;
+    term *stack_end;
+    term min_stack[MIN_STACK_SIZE];
 };
 
 NO_DISCARD static inline TempStackResult temp_stack_init(struct TempStack *temp_stack)
 {
-    temp_stack->size = 8;
-    temp_stack->stack_end = ((term *) malloc(temp_stack->size * sizeof(term))) + temp_stack->size;
-    if (IS_NULL_PTR(temp_stack->stack_end)) {
-        return TempStackFailedAlloc;
-    }
+    temp_stack->stack_start = temp_stack->min_stack;
+    temp_stack->stack_end = temp_stack->stack_start + MIN_STACK_SIZE;
     temp_stack->stack_pos = temp_stack->stack_end;
 
     return TempStackOk;
@@ -51,40 +51,49 @@ NO_DISCARD static inline TempStackResult temp_stack_init(struct TempStack *temp_
 
 static inline void temp_stack_destroy(struct TempStack *temp_stack)
 {
-    free(temp_stack->stack_end - temp_stack->size);
+    if (temp_stack->stack_start != temp_stack->min_stack) {
+        free(temp_stack->stack_start);
+    }
 }
 
 NO_DISCARD static TempStackResult temp_stack_grow(struct TempStack *temp_stack)
 {
-    int old_used_size = temp_stack->stack_end - temp_stack->stack_pos;
-    int new_size = temp_stack->size * 2;
-    term *new_stack_end = ((term *) malloc(new_size * sizeof(term))) + new_size;
-    if (IS_NULL_PTR(new_stack_end)) {
+    size_t old_used_size = temp_stack->stack_end - temp_stack->stack_start;
+    size_t new_size = old_used_size * 2;
+    term *new_stack_start = ((term *) malloc(new_size * sizeof(term)));
+    if (IS_NULL_PTR(new_stack_start)) {
         return TempStackFailedAlloc;
     }
-    term *new_stack_pos = new_stack_end - old_used_size;
-    memcpy(new_stack_pos, temp_stack->stack_pos, old_used_size * sizeof(term));
+    term *new_stack_end = new_stack_start + new_size;
+    term *new_stack_pos = new_stack_end;
+    if (temp_stack->stack_start != temp_stack->min_stack) {
+        memcpy((term *) new_stack_start + new_size - old_used_size, (const term *) temp_stack->stack_start, old_used_size * sizeof(term));
+        free(temp_stack->stack_start);
+        new_stack_pos -= old_used_size;
+    }
 
-    free(temp_stack->stack_end - temp_stack->size);
     temp_stack->stack_end = new_stack_end;
     temp_stack->stack_pos = new_stack_pos;
-    temp_stack->size = new_size;
+    temp_stack->stack_start = new_stack_start;
 
     return TempStackOk;
 }
 
 static inline int temp_stack_is_empty(const struct TempStack *temp_stack)
 {
-    return temp_stack->stack_end == temp_stack->stack_pos;
+    return temp_stack->stack_pos == temp_stack->min_stack + MIN_STACK_SIZE;
 }
 
 NO_DISCARD static inline TempStackResult temp_stack_push(struct TempStack *temp_stack, term value)
 {
-    if (temp_stack->stack_end - temp_stack->stack_pos == temp_stack->size - 1) {
+    if (temp_stack->stack_pos == temp_stack->stack_start) {
         TempStackResult ret = temp_stack_grow(temp_stack);
         if (UNLIKELY(ret != TempStackOk)) {
             return ret;
         }
+    } else if (temp_stack->stack_pos == temp_stack->min_stack) {
+        // We reached the end of min_stack but we already had an allocated buffer
+        temp_stack->stack_pos = temp_stack->stack_end;
     }
 
     temp_stack->stack_pos--;
@@ -97,6 +106,11 @@ static inline term temp_stack_pop(struct TempStack *temp_stack)
 {
     term value = *temp_stack->stack_pos;
     temp_stack->stack_pos++;
+
+    if (temp_stack->stack_pos == temp_stack->stack_end && temp_stack->stack_end != temp_stack->min_stack + MIN_STACK_SIZE) {
+        // Transition to C-stack based buffer
+        temp_stack->stack_pos = temp_stack->min_stack;
+    }
 
     return value;
 }
