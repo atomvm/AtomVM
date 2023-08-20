@@ -453,7 +453,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             for (int i = 0; i < arity; i++) {
                 size_t element_size;
                 term put_value = parse_external_terms(external_term_buf + buf_pos, &element_size, copy, heap, glb);
-                if (term_is_invalid_term(put_value)) {
+                if (UNLIKELY(term_is_invalid_term(put_value))) {
                     return put_value;
                 }
                 term_put_tuple_element(tuple, i, put_value);
@@ -487,7 +487,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             for (unsigned int i = 0; i < list_len; i++) {
                 size_t item_size;
                 term head = parse_external_terms(external_term_buf + buf_pos, &item_size, copy, heap, glb);
-                if (term_is_invalid_term(head)) {
+                if (UNLIKELY(term_is_invalid_term(head))) {
                     return head;
                 }
                 term *new_list_item = term_list_alloc(heap);
@@ -507,7 +507,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             if (prev_term) {
                 size_t tail_size;
                 term tail = parse_external_terms(external_term_buf + buf_pos, &tail_size, copy, heap, glb);
-                if (term_is_invalid_term(tail)) {
+                if (UNLIKELY(term_is_invalid_term(tail))) {
                     return tail;
                 }
                 prev_term[0] = tail;
@@ -533,12 +533,21 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             size_t element_size;
 
             term m = parse_external_terms(external_term_buf + buf_pos, &element_size, copy, heap, glb);
+            if (UNLIKELY(term_is_invalid_term(m))) {
+                return m;
+            }
             buf_pos += element_size;
 
             term f = parse_external_terms(external_term_buf + buf_pos, &element_size, copy, heap, glb);
+            if (UNLIKELY(term_is_invalid_term(f))) {
+                return f;
+            }
             buf_pos += element_size;
 
             term a = parse_external_terms(external_term_buf + buf_pos, &element_size, copy, heap, glb);
+            if (UNLIKELY(term_is_invalid_term(a))) {
+                return a;
+            }
             buf_pos += element_size;
 
             *eterm_size = buf_pos;
@@ -552,14 +561,14 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             for (uint32_t i = 0; i < size; ++i) {
                 size_t key_size;
                 term key = parse_external_terms(external_term_buf + buf_pos, &key_size, copy, heap, glb);
-                if (term_is_invalid_term(key)) {
+                if (UNLIKELY(term_is_invalid_term(key))) {
                     return key;
                 }
                 buf_pos += key_size;
 
                 size_t value_size;
                 term value = parse_external_terms(external_term_buf + buf_pos, &value_size, copy, heap, glb);
-                if (term_is_invalid_term(value)) {
+                if (UNLIKELY(term_is_invalid_term(value))) {
                     return value;
                 }
                 buf_pos += value_size;

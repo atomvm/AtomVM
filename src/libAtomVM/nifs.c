@@ -3468,6 +3468,11 @@ static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
+    term name = interop_kv_get_value_default(opts, ATOM_STR("\x4", "name"), UNDEFINED_ATOM, ctx->global);
+    if (!term_is_atom(name)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
     struct AVMPackData *avmpack_data = NULL;
     if (term_is_refc_binary(binary)) {
         if (!term_refc_binary_is_const(binary)) {
@@ -3510,11 +3515,6 @@ static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
         in_memory_avm->base.data = (const uint8_t *) allocated_data;
 
         avmpack_data = &in_memory_avm->base;
-    }
-
-    term name = interop_kv_get_value_default(opts, ATOM_STR("\x4", "name"), UNDEFINED_ATOM, ctx->global);
-    if (!term_is_atom(name)) {
-        RAISE_ERROR(BADARG_ATOM);
     }
 
     if (name != UNDEFINED_ATOM) {
@@ -3716,9 +3716,11 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
     int ok;
     char *path = interop_term_to_string(path_term, &ok);
     if (UNLIKELY(!ok)) {
+        free(app);
         RAISE_ERROR(BADARG_ATOM);
     }
     if (UNLIKELY(!path)) {
+        free(app);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -3746,7 +3748,6 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
                 synclist_unlock(&glb->avmpack_data);
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
-            prev_in_use = true;
             result = term_from_const_binary(((uint8_t *) bin_data) + sizeof(uint32_t), file_size, &ctx->heap, ctx->global);
             break;
         } else {
@@ -3873,6 +3874,7 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
     if (UNLIKELY(memory_ensure_free_opt(ctx, heap_free, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
+    // src may have been invalidated by GC
     if (term_is_binary(argv[0])) {
         src_pos = (uint8_t *) term_binary_data(argv[0]);
     }
@@ -4040,6 +4042,8 @@ static term base64_decode(Context *ctx, int argc, term argv[], bool return_binar
     for (size_t i = 0; i < n; ++i) {
         uint8_t octet = find_index(src_pos[i]);
         if (octet == NOT_FOUND) {
+            free(src_buf);
+            free(dst_buf);
             RAISE_ERROR(BADARG_ATOM);
         }
         switch (i & 0x03) {
