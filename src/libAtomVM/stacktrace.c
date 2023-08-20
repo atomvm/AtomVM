@@ -20,6 +20,7 @@
 
 #include "stacktrace.h"
 #include "defaultatoms.h"
+#include "globalcontext.h"
 
 #ifndef AVM_CREATE_STACKTRACES
 
@@ -47,7 +48,8 @@ term stacktrace_exception_class(term stack_info)
 
 static void cp_to_mod_lbl_off(term cp, Context *ctx, Module **cp_mod, int *label, int *l_off, long *mod_offset)
 {
-    Module *mod = ctx->global->modules_by_index[cp >> 24];
+    int module_index = cp >> 24;
+    Module *mod = globalcontext_get_module_by_index(ctx->global, module_index);
     *mod_offset = (cp & 0xFFFFFF) >> 2;
 
     *cp_mod = mod;
@@ -127,7 +129,7 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
             int module_index;
             int label = term_to_catch_label_and_module(*ct, &module_index);
 
-            Module *cl_mod = ctx->global->modules_by_index[module_index];
+            Module *cl_mod = globalcontext_get_module_by_index(ctx->global, module_index);
             uint8_t *code = &cl_mod->code->code[0];
             int mod_offset = ((uint8_t *) cl_mod->labels[label] - code);
 
@@ -201,7 +203,7 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
 
             int module_index;
             int label = term_to_catch_label_and_module(*ct, &module_index);
-            Module *cl_mod = ctx->global->modules_by_index[module_index];
+            Module *cl_mod = globalcontext_get_module_by_index(ctx->global, module_index);
             uint8_t *code = &cl_mod->code->code[0];
             int mod_offset = ((uint8_t *) cl_mod->labels[label] - code);
 
@@ -331,7 +333,7 @@ term stacktrace_build(Context *ctx, term *stack_info)
 
         AtomString function_name = NULL;
         int arity = 0;
-        bool result = module_get_function_from_label(cp_mod, label, &function_name, &arity);
+        bool result = module_get_function_from_label(cp_mod, label, &function_name, &arity, glb);
 
         if (LIKELY(result)) {
             term_put_tuple_element(frame_i, 1, globalcontext_make_atom(glb, function_name));

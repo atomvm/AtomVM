@@ -1182,7 +1182,7 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
     if (UNLIKELY(!proper)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-    int label = module_search_exported_function(found_module, function_string, args_len);
+    int label = module_search_exported_function(found_module, function_string, args_len, ctx->global);
     //TODO: fail here if no function has been found
     if (UNLIKELY(label == 0)) {
         AVM_ABORT();
@@ -3091,7 +3091,7 @@ static term nif_erlang_function_exported(Context *ctx, int argc, term argv[])
         return FALSE_ATOM;
     }
 
-    int target_label = module_search_exported_function(target_module, function_name, arity);
+    int target_label = module_search_exported_function(target_module, function_name, arity, ctx->global);
     if (target_label == 0) {
         return FALSE_ATOM;
     }

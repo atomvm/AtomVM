@@ -460,7 +460,7 @@ term globalcontext_existing_term_from_atom_string(GlobalContext *glb, AtomString
 int globalcontext_insert_module(GlobalContext *global, Module *module)
 {
     SMP_RWLOCK_WRLOCK(global->modules_lock);
-    AtomString module_name_atom = module_get_atom_string_by_id(module, 1);
+    AtomString module_name_atom = module_get_atom_string_by_id(module, 1, global);
     if (!atomshashtable_insert(global->modules_table, module_name_atom, TO_ATOMSHASHTABLE_VALUE(module))) {
         SMP_RWLOCK_UNLOCK(global->modules_lock);
         return -1;
