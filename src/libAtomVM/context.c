@@ -66,6 +66,7 @@ Context *context_new(GlobalContext *glb)
 
     ctx->min_heap_size = 0;
     ctx->max_heap_size = 0;
+    ctx->heap_growth_strategy = BoundedFreeHeapGrowth;
     ctx->has_min_heap_size = 0;
     ctx->has_max_heap_size = 0;
 
@@ -236,6 +237,7 @@ bool context_get_process_info(Context *ctx, term *out, term atom_key)
     size_t ret_size;
     switch (atom_key) {
         case HEAP_SIZE_ATOM:
+        case TOTAL_HEAP_SIZE_ATOM:
         case STACK_SIZE_ATOM:
         case MESSAGE_QUEUE_LEN_ATOM:
         case MEMORY_ATOM:
@@ -268,7 +270,15 @@ bool context_get_process_info(Context *ctx, term *out, term atom_key)
         // heap_size size in words of the heap of the process
         case HEAP_SIZE_ATOM: {
             term_put_tuple_element(ret, 0, HEAP_SIZE_ATOM);
-            unsigned long value = memory_heap_memory_size(&ctx->heap) - context_stack_size(ctx);
+            unsigned long value = memory_heap_youngest_size(&ctx->heap);
+            term_put_tuple_element(ret, 1, term_from_int32(value));
+            break;
+        }
+
+        // total_heap_size size in words of the heap of the process, including fragments
+        case TOTAL_HEAP_SIZE_ATOM: {
+            term_put_tuple_element(ret, 0, TOTAL_HEAP_SIZE_ATOM);
+            unsigned long value = memory_heap_memory_size(&ctx->heap);
             term_put_tuple_element(ret, 1, term_from_int32(value));
             break;
         }

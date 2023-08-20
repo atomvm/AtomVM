@@ -1078,6 +1078,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, term opts_term)
     term max_heap_size_term = interop_proplist_get_value(opts_term, MAX_HEAP_SIZE_ATOM);
     term link_term = interop_proplist_get_value(opts_term, LINK_ATOM);
     term monitor_term = interop_proplist_get_value(opts_term, MONITOR_ATOM);
+    term heap_growth_strategy = interop_proplist_get_value_default(opts_term, ATOMVM_HEAP_GROWTH_ATOM, BOUNDED_FREE_ATOM);
 
     if (min_heap_size_term != term_nil()) {
         if (UNLIKELY(!term_is_integer(min_heap_size_term))) {
@@ -1087,8 +1088,6 @@ static term do_spawn(Context *ctx, Context *new_ctx, term opts_term)
         }
         new_ctx->has_min_heap_size = 1;
         new_ctx->min_heap_size = term_to_int(min_heap_size_term);
-    } else {
-        min_heap_size_term = term_from_int(0);
     }
     if (max_heap_size_term != term_nil()) {
         if (UNLIKELY(!term_is_integer(max_heap_size_term))) {
@@ -1100,12 +1099,26 @@ static term do_spawn(Context *ctx, Context *new_ctx, term opts_term)
     }
 
     if (new_ctx->has_min_heap_size && new_ctx->has_max_heap_size) {
-        if (term_to_int(min_heap_size_term) > term_to_int(max_heap_size_term)) {
+        if (new_ctx->min_heap_size > new_ctx->max_heap_size) {
             context_destroy(new_ctx);
             RAISE_ERROR(BADARG_ATOM);
         }
     }
 
+    switch (heap_growth_strategy) {
+        case BOUNDED_FREE_ATOM:
+            new_ctx->heap_growth_strategy = BoundedFreeHeapGrowth;
+            break;
+        case MINIMUM_ATOM:
+            new_ctx->heap_growth_strategy = MinimumHeapGrowth;
+            break;
+        case FIBONACCI_ATOM:
+            new_ctx->heap_growth_strategy = FibonacciHeapGrowth;
+            break;
+        default:
+            context_destroy(new_ctx);
+            RAISE_ERROR(BADARG_ATOM);
+    }
     uint64_t ref_ticks = 0;
 
     if (link_term == TRUE_ATOM) {
@@ -1254,8 +1267,11 @@ static term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
             RAISE_ERROR(BADARG_ATOM);
         }
         min_heap_size = term_to_int(min_heap_size_term);
+        new_ctx->has_min_heap_size = true;
+        new_ctx->min_heap_size = min_heap_size;
     }
-    avm_int_t size = MAX(min_heap_size, memory_estimate_usage(args_term));
+
+    avm_int_t size = memory_estimate_usage(args_term);
     if (UNLIKELY(memory_ensure_free_opt(new_ctx, size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         // Context was not scheduled yet, we can destroy it.
         context_destroy(new_ctx);

@@ -20,53 +20,37 @@
 
 -module(test_min_heap_size).
 
--export([start/0, loop/1]).
+-export([start/0]).
 
 start() ->
-    Self = self(),
-    Pid1 = spawn_opt(?MODULE, loop, [Self], []),
-    receive
-        ok -> ok
-    end,
-    receive
-    after 100 ->
-        ok
-    end,
-    {memory, Pid1MemorySize} = process_info(Pid1, memory),
-    case erlang:system_info(machine) of
-        "BEAM" -> ok;
-        _ -> assert(Pid1MemorySize < 1024)
-    end,
-    Pid2 = spawn_opt(?MODULE, loop, [Self], [{min_heap_size, 1024}]),
-    receive
-        ok -> ok
-    end,
-    receive
-    after 100 ->
-        ok
-    end,
-    {memory, Pid2MemorySize} = process_info(Pid2, memory),
-    assert(1024 =< Pid2MemorySize),
-    Pid1 ! {Self, stop},
-    receive
-        ok -> ok
-    end,
-    Pid2 ! {Self, stop},
-    receive
-        ok -> ok
-    end,
+    ok = test_min_heap_size(1000),
+    ok = test_min_heap_size(5000),
     0.
 
-loop(undefined) ->
-    receive
-        {Pid, stop} ->
-            Pid ! ok
-    after 10 ->
-        erlang:garbage_collect(),
-        loop(undefined)
-    end;
-loop(Pid) ->
-    Pid ! ok,
-    loop(undefined).
+test_min_heap_size(MinSize) ->
+    {Pid1, Ref1} = spawn_opt(
+        fun() ->
+            % Heap size is set to minimum at first GC/Heap growth
+            alloc_some_heap_words(),
+            {total_heap_size, TotalHeapSize} = process_info(self(), total_heap_size),
+            case erlang:system_info(machine) of
+                "BEAM" ->
+                    true = TotalHeapSize >= MinSize;
+                _ ->
+                    TotalHeapSize = MinSize
+            end
+        end,
+        [monitor, {min_heap_size, MinSize}]
+    ),
+    ok =
+        receive
+            {'DOWN', Ref1, process, Pid1, normal} -> ok
+        after 500 -> timeout
+        end,
+    ok.
 
-assert(true) -> ok.
+alloc_some_heap_words() ->
+    alloc_some_heap_words(20, []).
+
+alloc_some_heap_words(0, _Acc) -> ok;
+alloc_some_heap_words(N, Acc) -> alloc_some_heap_words(N - 1, [N | Acc]).

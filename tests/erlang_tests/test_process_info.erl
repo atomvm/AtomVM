@@ -51,6 +51,7 @@ test_message_queue_len(Pid, Self) ->
     {message_queue_len, MessageQueueLen} = process_info(Pid, message_queue_len),
     {memory, Memory} = process_info(Pid, memory),
     {heap_size, HeapSize} = process_info(Pid, heap_size),
+    {total_heap_size, TotalHeapSize} = process_info(Pid, total_heap_size),
     Pid ! incr,
     Pid ! incr,
     Pid ! incr,
@@ -61,15 +62,20 @@ test_message_queue_len(Pid, Self) ->
     receive
         pong -> ok
     end,
+    {total_heap_size, TotalHeapSize2} = process_info(Pid, total_heap_size),
     {heap_size, HeapSize2} = process_info(Pid, heap_size),
     assert(MessageQueueLen < MessageQueueLen2),
     case erlang:system_info(machine) of
         "BEAM" ->
             assert(Memory =< Memory2),
-            assert(HeapSize =< HeapSize2);
+            assert(HeapSize =< TotalHeapSize),
+            assert(HeapSize2 =< TotalHeapSize2),
+            assert(TotalHeapSize =< TotalHeapSize2);
         _ ->
             assert(Memory < Memory2),
-            assert(HeapSize < HeapSize2)
+            assert(HeapSize =< TotalHeapSize),
+            assert(HeapSize2 =< TotalHeapSize2),
+            assert(TotalHeapSize < TotalHeapSize2)
     end.
 
 loop(undefined, Accum) ->

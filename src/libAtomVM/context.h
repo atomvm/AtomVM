@@ -67,6 +67,13 @@ enum ContextFlags
     Trap = 32,
 };
 
+enum HeapGrowthStrategy
+{
+    BoundedFreeHeapGrowth = 0,
+    MinimumHeapGrowth,
+    FibonacciHeapGrowth
+};
+
 // Max number of x(N) & fr(N) registers
 // BEAM sets this to 1024.
 #define MAX_REG 16
@@ -92,6 +99,7 @@ struct Context
 
     size_t min_heap_size;
     size_t max_heap_size;
+    enum HeapGrowthStrategy heap_growth_strategy;
 
     unsigned long cp;
 

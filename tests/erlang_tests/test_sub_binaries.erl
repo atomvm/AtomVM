@@ -29,6 +29,8 @@
     "01234567890123456789012345678901234567890123456789"
     "01234567890123456789012345678901234567890123456789"
     "01234567890123456789012345678901234567890123456789"
+    "01234567890123456789012345678901234567890123456789"
+    "01234567890123456789012345678901234567890123456789"
 >>).
 
 -record(state, {
@@ -291,7 +293,7 @@ get_largest_heap_binary_size() ->
 
 get_heap_size() ->
     erlang:garbage_collect(),
-    {heap_size, Size} = erlang:process_info(self(), heap_size),
+    {total_heap_size, Size} = erlang:process_info(self(), total_heap_size),
     Size * erlang:system_info(wordsize).
 
 get_heap_size(Pid) ->
