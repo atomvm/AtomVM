@@ -114,7 +114,7 @@ struct Module
 
     const struct ExportedFunction **imported_funcs;
 
-    void **labels;
+    const uint8_t **labels;
 
     void *literals_data;
 

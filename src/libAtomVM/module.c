@@ -60,7 +60,7 @@
     static void *module_uncompress_literals(const uint8_t *litT, int size);
 #endif
 static struct LiteralEntry *module_build_literals_table(const void *literalsBuf);
-static void module_add_label(Module *mod, int index, void *ptr);
+static void module_add_label(Module *mod, int index, const uint8_t *ptr);
 static enum ModuleLoadResult module_build_imported_functions_table(Module *this_module, uint8_t *table_data, GlobalContext *glb);
 static void parse_line_table(uint16_t **line_refs, struct ModuleFilename **filenames, uint8_t *data, size_t len);
 
@@ -235,7 +235,7 @@ term module_get_exported_functions(Module *this_module, Heap *heap, GlobalContex
     return result_list;
 }
 
-static void module_add_label(Module *mod, int index, void *ptr)
+static void module_add_label(Module *mod, int index, const uint8_t *ptr)
 {
     mod->labels[index] = ptr;
 }
