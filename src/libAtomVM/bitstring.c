@@ -101,7 +101,7 @@ static bool is_invalid_codepoint(int32_t v)
 // +----------+----------+----------+----------+----------+
 //
 
-bool bitstring_utf8_encode(avm_int_t c, uint8_t *buf, size_t *out_size)
+bool bitstring_utf8_encode(uint32_t c, uint8_t *buf, size_t *out_size)
 {
     size_t sz = 0;
     if (is_invalid_codepoint(c)) {
@@ -207,7 +207,7 @@ enum UnicodeTransformDecodeResult bitstring_utf8_decode(const uint8_t *buf, size
 //  W1 = 110110yyyyyyyyyy      // 0xD800 + yyyyyyyyyy
 //  W2 = 110111xxxxxxxxxx      // 0xDC00 + xxxxxxxxxx
 
-bool bitstring_utf16_encode(avm_int_t c, uint8_t *buf, enum BitstringFlags bs_flags, size_t *out_size)
+bool bitstring_utf16_encode(uint32_t c, uint8_t *buf, enum BitstringFlags bs_flags, size_t *out_size)
 {
     size_t sz = 0;
     if (is_invalid_codepoint(c)) {
@@ -302,7 +302,7 @@ bool bitstring_utf16_decode(const uint8_t *buf, size_t len, int32_t *c, size_t *
     return false;
 }
 
-bool bitstring_utf32_encode(avm_int_t c, uint8_t *buf, enum BitstringFlags bs_flags)
+bool bitstring_utf32_encode(uint32_t c, uint8_t *buf, enum BitstringFlags bs_flags)
 {
     UNUSED(bs_flags);
     if (is_invalid_codepoint(c)) {

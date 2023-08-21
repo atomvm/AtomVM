@@ -85,6 +85,8 @@ typedef uint64_t avm_uint64_t;
     #error "term size must be either 32 bit or 64 bit."
 #endif
 
+#define UNICODE_CHAR_MAX 0x10FFFF
+
 #define MIN_NOT_BOXED_INT (AVM_INT_MIN >> 4)
 #define MAX_NOT_BOXED_INT (AVM_INT_MAX >> 4)
 
