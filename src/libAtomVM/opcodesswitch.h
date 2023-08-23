@@ -1594,9 +1594,6 @@ schedule_in:
 
         switch (*pc++) {
             case OP_LABEL: {
-                #ifdef IMPL_CODE_LOADER
-                    const uint8_t* saved_pc = pc - 1;
-                #endif
                 uint32_t label;
                 DECODE_LITERAL(label, pc)
 
@@ -1604,8 +1601,8 @@ schedule_in:
                 USED_BY_TRACE(label);
 
                 #ifdef IMPL_CODE_LOADER
-                    TRACE("Mark label %i here at %" PRIuPTR "\n", label, saved_pc - code);
-                    module_add_label(mod, label, saved_pc);
+                    TRACE("Mark label %i here at %" PRIuPTR "\n", label, pc - code);
+                    module_add_label(mod, label, pc);
                 #endif
                 break;
             }
