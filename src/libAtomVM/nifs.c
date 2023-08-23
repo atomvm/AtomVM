@@ -1399,7 +1399,7 @@ term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[])
     UNUSED(argv);
 
     // a ref is 64 bits, hence 8 bytes
-    if (UNLIKELY(memory_ensure_free_opt(ctx, (8 / TERM_BYTES) + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -3233,7 +3233,8 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
         if (UNLIKELY(memory_ensure_free_opt(ctx, res_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        term ref = nif_erlang_make_ref_0(ctx, argc, argv);
+        uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+        term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
         term down_message_tuple = term_alloc_tuple(5, &ctx->heap);
         term_put_tuple_element(down_message_tuple, 0, DOWN_ATOM);
         term_put_tuple_element(down_message_tuple, 1, ref);
