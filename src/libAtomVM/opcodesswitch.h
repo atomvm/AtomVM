@@ -1515,7 +1515,7 @@ schedule_in:
 #endif
 
     while (1) {
-    TRACE("-- loop -- i = %d\n", (int) i);
+    TRACE("-- loop -- i = %d\n", i);
 
         switch (code[i]) {
             case OP_LABEL: {
@@ -1527,7 +1527,7 @@ schedule_in:
                 USED_BY_TRACE(label);
 
                 #ifdef IMPL_CODE_LOADER
-                    TRACE("Mark label %i here at %i\n", label, (int) i);
+                    TRACE("Mark label %i here at %i\n", label, i);
                     module_add_label(mod, label, &code[i]);
                 #endif
 
@@ -3243,21 +3243,17 @@ wait_timeout_trap_handler:
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
 
 #ifdef IMPL_EXECUTE_LOOP
-                // MEMORY_NO_SHRINK because put_list is classified as put in beam_ssa_codegen.erl
-                if (UNLIKELY(memory_ensure_free_opt(ctx, CONS_SIZE, MEMORY_NO_SHRINK) != MEMORY_GC_OK)) {
-                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                }
                 term *list_elem = term_list_alloc(&ctx->heap);
 #endif
 
+                TRACE("put_list/3\n");
+
                 #ifdef IMPL_CODE_LOADER
-                    TRACE("put_list/3\n");
                     UNUSED(head);
                     UNUSED(tail);
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("put_list/3 dreg=%c%i\n", T_DEST_REG(dreg_type, dreg));
                     term t = term_list_init_prepend(list_elem, head, tail);
                     WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
@@ -3278,10 +3274,6 @@ wait_timeout_trap_handler:
                 USED_BY_TRACE(dreg);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    // MEMORY_NO_SHRINK because put_tuple is classified as put in beam_ssa_codegen.erl
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(size), MEMORY_NO_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
                     term t = term_alloc_tuple(size, &ctx->heap);
                     WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
@@ -3311,8 +3303,7 @@ wait_timeout_trap_handler:
 
             case OP_BADMATCH: {
                 #ifdef IMPL_EXECUTE_LOOP
-                    // We can gc as we are raising
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, 3, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
@@ -3330,6 +3321,7 @@ wait_timeout_trap_handler:
                     TRACE("badmatch/1, v=0x%lx\n", arg1);
 
                     term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
+                    //TODO: check alloc
                     term_put_tuple_element(new_error_tuple, 0, BADMATCH_ATOM);
                     term_put_tuple_element(new_error_tuple, 1, arg1);
 
@@ -3362,8 +3354,7 @@ wait_timeout_trap_handler:
 
             case OP_CASE_END: {
                 #ifdef IMPL_EXECUTE_LOOP
-                    // We can gc as we are raising
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, 3, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
@@ -3381,6 +3372,7 @@ wait_timeout_trap_handler:
                     TRACE("case_end/1, v=0x%lx\n", arg1);
 
                     term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
+                    //TODO: reserve memory before
                     term_put_tuple_element(new_error_tuple, 0, CASE_CLAUSE_ATOM);
                     term_put_tuple_element(new_error_tuple, 1, arg1);
 
@@ -3410,7 +3402,6 @@ wait_timeout_trap_handler:
 
                     term fun = ctx->x[args_count];
                     if (UNLIKELY(!term_is_function(fun))) {
-                        // We can gc as we are raising
                         if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
@@ -3621,8 +3612,7 @@ wait_timeout_trap_handler:
 
             case OP_TRY_CASE_END: {
                 #ifdef IMPL_EXECUTE_LOOP
-                    // We can gc as we are raising
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, 3, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
@@ -3640,6 +3630,7 @@ wait_timeout_trap_handler:
                     TRACE("try_case_end/1, val=%lx\n", arg1);
 
                     term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
+                    //TODO: ensure memory before
                     term_put_tuple_element(new_error_tuple, 0, TRY_CLAUSE_ATOM);
                     term_put_tuple_element(new_error_tuple, 1, arg1);
 
@@ -3714,8 +3705,8 @@ wait_timeout_trap_handler:
 
                         case ERROR_ATOM_INDEX: {
                             ctx->x[2] = stacktrace_build(ctx, &ctx->x[2]);
-                            // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
-                            if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2) * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+
+                            if (UNLIKELY(memory_ensure_free_opt(ctx, 6, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
                             term reason_tuple = term_alloc_tuple(2, &ctx->heap);
@@ -3729,8 +3720,7 @@ wait_timeout_trap_handler:
                             break;
                         }
                         case LOWERCASE_EXIT_ATOM_INDEX: {
-                            // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
-                            if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                            if (UNLIKELY(memory_ensure_free_opt(ctx, 3, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
                             term exit_tuple = term_alloc_tuple(2, &ctx->heap);
@@ -4538,7 +4528,7 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     if (UNLIKELY(!term_is_binary(ctx->bs))) {
-                        TRACE("bs_put_string: Bad state.  ctx->bs is not a binary.\n");
+                        TRACE("bs_put_binary: Bad state.  ctx->bs is not a binary.\n");
                         RAISE_ERROR(BADARG_ATOM);
                     }
                     if (ctx->bs_offset % 8 != 0) {
@@ -4546,12 +4536,10 @@ wait_timeout_trap_handler:
                         RAISE_ERROR(UNSUPPORTED_ATOM);
                     }
 
-                    TRACE("bs_put_string/2, size=%u offset=%u\n", size, offset);
-
                     size_t remaining = 0;
                     const uint8_t *str = module_get_str(mod, offset, &remaining);
                     if (UNLIKELY(IS_NULL_PTR(str))) {
-                        TRACE("bs_put_string: Bad offset in strings table.\n");
+                        TRACE("bs_put_binary: Bad offset in strings table.\n");
                         RAISE_ERROR(BADARG_ATOM);
                     }
 
@@ -4582,7 +4570,6 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     int slots = term_to_int(slots_term);
 
-                    // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
                     if (memory_ensure_free_opt(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE + slots, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
@@ -4614,7 +4601,6 @@ wait_timeout_trap_handler:
             }
 
             case OP_BS_START_MATCH3: {
-                // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
                 #ifdef IMPL_EXECUTE_LOOP
                     if (memory_ensure_free_opt(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -5651,7 +5637,6 @@ wait_timeout_trap_handler:
                     size_t new_map_size = src_size + new_entries;
                     bool is_shared = new_entries == 0;
                     size_t heap_needed = term_map_size_in_terms_maybe_shared(new_map_size, is_shared);
-                    // MEMORY_CAN_SHRINK because put_map is classified as gc in beam_ssa_codegen.erl
                     if (memory_ensure_free_opt(ctx, heap_needed, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
@@ -5780,7 +5765,6 @@ wait_timeout_trap_handler:
                     // Maybe GC, and reset the src term in case it changed
                     //
                     size_t src_size = term_get_map_size(src);
-                    // MEMORY_CAN_SHRINK because put_map is classified as gc in beam_ssa_codegen.erl
                     if (memory_ensure_free_opt(ctx, term_map_size_in_terms_maybe_shared(src_size, true), MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
@@ -6301,10 +6285,6 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    // MEMORY_NO_SHRINK because put_tuple is classified as put in beam_ssa_codegen.erl
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(size), MEMORY_NO_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
                     term t = term_alloc_tuple(size, &ctx->heap);
                 #endif
 
@@ -6356,7 +6336,6 @@ wait_timeout_trap_handler:
 
             case OP_BS_START_MATCH4: {
                 #ifdef IMPL_EXECUTE_LOOP
-                    // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
                     if (memory_ensure_free_opt(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
@@ -6672,7 +6651,7 @@ wait_timeout_trap_handler:
                                 VERIFY_IS_INTEGER(size, "bs_create_bin/6");
                                 avm_int_t signed_size_value = term_to_int(size);
                                 if (UNLIKELY(signed_size_value < 0)) {
-                                    TRACE("bs_create_bin/6: size value less than 0: %i\n", (int) signed_size_value);
+                                    TRACE("bs_create_bin/6: size value less than 0: %i\n", signed_size_value);
                                     RAISE_ERROR(BADARG_ATOM);
                                 }
                                 size_value = (size_t) signed_size_value;
@@ -6744,7 +6723,7 @@ wait_timeout_trap_handler:
                                     VERIFY_IS_INTEGER(size, "bs_create_bin/6");
                                     avm_int_t signed_size_value = term_to_int(size);
                                     if (UNLIKELY(signed_size_value < 0)) {
-                                        TRACE("bs_create_bin/6: size value less than 0: %i\n", (int) signed_size_value);
+                                        TRACE("bs_create_bin/6: size value less than 0: %i\n", signed_size_value);
                                         RAISE_ERROR(BADARG_ATOM);
                                     }
                                     size_value = (size_t) signed_size_value;
@@ -6788,7 +6767,6 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     if (UNLIKELY(!term_is_function(fun))) {
-                        // We can gc as we are raising
                         if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
@@ -6814,7 +6792,6 @@ wait_timeout_trap_handler:
                 TRACE("badrecord/1\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    // We can gc as we are raising
                     if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
@@ -6848,10 +6825,6 @@ wait_timeout_trap_handler:
                 int size;
                 DECODE_LITERAL(size, code, i, next_off);
                 #ifdef IMPL_EXECUTE_LOOP
-                    // MEMORY_NO_SHRINK because update_record is classified as put in beam_ssa_codegen.erl
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(size), MEMORY_NO_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
                     term dst;
                     dst = term_alloc_tuple(size, &ctx->heap);
                 #endif
