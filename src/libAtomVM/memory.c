@@ -248,13 +248,6 @@ static enum MemoryGCResult memory_gc(Context *ctx, size_t new_size, size_t num_r
     term *new_heap = ctx->heap.heap_start;
     TRACE("- Allocated %i words for new heap at address 0x%p\n", (int) new_size, (void *) new_heap);
 
-    TRACE("- Running copy GC on registers\n");
-    for (int i = 0; i < MAX_REG; i++) {
-        term new_root = memory_shallow_copy_term(old_root_fragment, ctx->x[i], &ctx->heap.heap_ptr, true);
-        ctx->x[i] = new_root;
-    }
-    TRACE("- after registers, heap.heap_ptr now is at %p, heap.heap_start = %p\n", (void *) ctx->heap.heap_ptr, (void *) ctx->heap.heap_start);
-
     TRACE("- Running copy GC on stack (stack size: %i)\n", (int) (old_stack_ptr - ctx->e));
     term *stack_ptr = new_heap + new_size;
     while (old_stack_ptr > ctx->e) {
