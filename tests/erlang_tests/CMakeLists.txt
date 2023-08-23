@@ -388,6 +388,7 @@ compile_erlang(bin2float)
 compile_erlang(list2float)
 
 compile_erlang(test_fp_allocate_heap_zero)
+compile_erlang(test_bs_init2_heap_allocation)
 
 compile_erlang(improper_concat)
 compile_erlang(improper_cmp)
@@ -828,6 +829,7 @@ add_custom_target(erlang_test_modules DEPENDS
     list2float.beam
 
     test_fp_allocate_heap_zero.beam
+    test_bs_init2_heap_allocation.beam
 
     improper_concat.beam
     improper_cmp.beam
