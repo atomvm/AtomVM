@@ -95,11 +95,24 @@ test_is_map_key_bif() ->
         end,
     ok =
         try
-            _ = is_map_key(b, id(foo)),
-            fail
+            case is_map_key(b, id(foo)) of
+                true -> fail;
+                false -> fail_as_well
+            end
         catch
             _:{badmap, _} ->
                 ok
+        end,
+    ok =
+        try
+            NotAMap = id(foo),
+            if
+                is_map_key(b, NotAMap) -> fail;
+                true -> ok
+            end
+        catch
+            _:{badmap, _} ->
+                fail
         end.
 
 test_map_get_bif() ->

@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0-alpha.2] - Unreleased
 
+### Fixed
+
+- Fixed a bug where guards would raise exceptions instead of just being false
+
 ## [0.6.0-alpha.1] - 2023-10-09
 
 ### Added

@@ -107,6 +107,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(guards3, 405),
     TEST_CASE_EXPECTED(guards4, 16),
     TEST_CASE_EXPECTED(guards5, 3),
+    TEST_CASE(test_guards_do_not_raise),
     TEST_CASE_EXPECTED(prime, 1999),
     TEST_CASE_COND(prime_smp, 0, SKIP_SMP),
     TEST_CASE_EXPECTED(match, 5),
@@ -509,11 +510,8 @@ struct Test tests[] = {
     TEST_CASE_COND(test_stacktrace, 0, SKIP_STACKTRACES),
     TEST_CASE(small_big_ext),
     TEST_CASE(test_crypto),
-
     TEST_CASE(test_min_max_guard),
-
     TEST_CASE(int64_build_binary),
-
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 
     { NULL, 0, false, false }
