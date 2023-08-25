@@ -3395,7 +3395,7 @@ static term nif_erlang_get_module_info(Context *ctx, int argc, term argv[])
     }
     size_t info_size = module_get_exported_functions_list_size(target_module);
     if (argc == 1) {
-        info_size += TUPLE_SIZE(2) + 3 * (TUPLE_SIZE(2) + CONS_SIZE);
+        info_size += 4 * (TUPLE_SIZE(2) + CONS_SIZE);
     }
     if (UNLIKELY(memory_ensure_free(ctx, info_size) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
