@@ -193,7 +193,7 @@ This command, once completed, will create the Espressif bootloader, partition ta
 	-z --flash_mode dio --flash_freq 40m --flash_size detect
 	0x1000 /path-to-atomvm-source-tree/Atomvm/src/platforms/esp32/build/bootloader/bootloader.bin
 	0x10000 /path-to-atomvm-source-tree/Atomvm/src/platforms/esp32/build/atomvm-esp32.bin
-	0x8000 /path-to-atomvm-source-tree/Atomvm/src/platforms/esp32/build/partitions.bin
+	0x8000 /path-to-atomvm-source-tree/Atomvm/src/platforms/esp32/build/partition_table/partition-table.bin
 
 At this point, you can run `idf.py flash` to upload the 3 binaries up to your ESP32 device, and in some development scenarios, this is a preferable shortcut.
 
