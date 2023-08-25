@@ -166,6 +166,7 @@ static term nif_base64_encode_to_string(Context *ctx, int argc, term argv[]);
 static term nif_base64_decode_to_string(Context *ctx, int argc, term argv[]);
 static term nif_code_load_abs(Context *ctx, int argc, term argv[]);
 static term nif_code_load_binary(Context *ctx, int argc, term argv[]);
+static term nif_lists_reverse(Context *ctx, int argc, term argv[]);
 static term nif_maps_next(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_list(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_binary(Context *ctx, int argc, term argv[]);
@@ -693,6 +694,11 @@ static const struct Nif code_load_binary_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_load_binary
+};
+static const struct Nif lists_reverse_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_lists_reverse
 };
 static const struct Nif maps_next_nif =
 {
@@ -4239,6 +4245,34 @@ static term nif_code_load_binary(Context *ctx, int argc, term argv[])
     term_put_tuple_element(result, 0, MODULE_ATOM);
     term_put_tuple_element(result, 1, module_name);
 
+    return result;
+}
+
+static term nif_lists_reverse(Context *ctx, int argc, term argv[])
+{
+    // Compared to erlang version, compute the length of the list and allocate
+    // at once the space for the reverse.
+    int proper;
+    size_t len = term_list_length(argv[0], &proper);
+    if (UNLIKELY(!proper)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, len * CONS_SIZE, 2, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result = term_nil();
+    if (argc == 2) {
+        result = argv[1];
+    }
+    term list_crsr = argv[0];
+    while (!term_is_nil(list_crsr)) {
+        // term is a proper list as verified above
+        term *list_ptr = term_get_list_ptr(list_crsr);
+        result = term_list_prepend(list_ptr[LIST_HEAD_INDEX], result, &ctx->heap);
+        list_crsr = list_ptr[LIST_TAIL_INDEX];
+    }
     return result;
 }
 

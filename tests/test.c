@@ -155,6 +155,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_tl, 5),
     TEST_CASE_EXPECTED(test_list_to_atom, 9),
     TEST_CASE_EXPECTED(test_list_to_existing_atom, 9),
+    TEST_CASE(test_lists_reverse),
     TEST_CASE_EXPECTED(test_binary_to_atom, 9),
     TEST_CASE_EXPECTED(test_binary_to_existing_atom, 9),
     TEST_CASE_EXPECTED(test_atom_to_list, 1),

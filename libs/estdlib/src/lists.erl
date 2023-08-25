@@ -33,6 +33,7 @@
     member/2,
     delete/2,
     reverse/1,
+    reverse/2,
     foreach/2,
     keydelete/3,
     keyfind/3,
@@ -111,28 +112,63 @@ delete(E, L) ->
 
 %% @private
 delete(_, [], Accum) ->
-    reverse(Accum);
+    ?MODULE:reverse(Accum);
 delete(E, [E | T], Accum) ->
-    reverse(Accum) ++ T;
+    ?MODULE:reverse(Accum) ++ T;
 delete(E, [H | T], Accum) ->
     delete(E, T, [H | Accum]).
 
 %%-----------------------------------------------------------------------------
 %% @param   L the list to reverse
 %% @returns the elements of L in reverse order
-%% @doc     Reverse the elements of L.
+%% @equiv lists:reverse(L, [])
+%% @doc Erlang/OTP implementation of this function actually handles few simple
+%% cases and calls lists:reverse/2 for the more genertic case. Consequently,
+%% calling `lists:reverse/1` without a list or with an improper list of two
+%% elements will fail with a function clause exception on Erlang/OTP and with a
+%% badarg exception with this implementation.
 %% @end
 %%-----------------------------------------------------------------------------
--spec reverse(list()) -> list().
-reverse(L) ->
-    %% TODO this should be done in unit time in a BIF
-    reverse(L, []).
+-spec reverse(L :: list()) -> list().
+reverse(_L) ->
+    erlang:nif_error(undefined).
 
-%% @private
-reverse([], Accum) ->
-    Accum;
-reverse([H | T], Accum) ->
-    reverse(T, [H | Accum]).
+%%-----------------------------------------------------------------------------
+%% @param   L the list to reverse
+%% @param   T the tail to append to the reversed list
+%% @returns the elements of L in reverse order followed by T
+%% @doc     Reverse the elements of L, folled by T.
+%% If T is not a list or not a proper list, it is appended anyway and the result
+%% will be an improper list.
+%%
+%% If L is not a proper list, the function fails with badarg.
+%%
+%% Following Erlang/OTP tradition, `lists:reverse/1,2` is a nif. It computes
+%% the length and then allocates memory for the list at once (2 * n terms).
+%%
+%% While this is much faster with AtomVM as allocations are expensive with
+%% default heap growth strategy, it can consume more memory until the list
+%% passed is garbage collected, as opposed to a recursive implementation where
+%% the process garbage collect part of the input list during the reversal.
+%%
+%% Consequently, tail-recursive implementations calling `lists:reverse/2`
+%% can be as expensive or more expensive in memory than list comprehensions or
+%% non-tail recursive versions depending on the number of terms saved on the
+%% stack between calls.
+%%
+%% For example, a non-tail recursive join/2 implementation requires two terms
+%% on stack for each iteration, so when it returns it will use
+%% `n * 3' (stack) + `n * 4' (result list)
+%% a tail recursive version will use, on last iteration:
+%% `n * 4' (reversed list) + n * 4' (result list)
+%% @end
+%%-----------------------------------------------------------------------------
+-spec reverse
+    (L :: nonempty_list(E), T :: list(E)) -> nonempty_list(E);
+    (L :: nonempty_list(), T :: any()) -> maybe_improper_list();
+    (L :: [], T) -> T when T :: any().
+reverse(_L, _T) ->
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun the predicate to evaluate
@@ -162,13 +198,13 @@ keydelete(K, I, L) ->
 
 %% @private
 keydelete(_K, _I, [], L) ->
-    reverse(L);
+    ?MODULE:reverse(L);
 keydelete(K, I, [H | T], L2) when is_tuple(H) ->
     case I =< tuple_size(H) of
         true ->
             case element(I, H) of
                 K ->
-                    reverse(L2) ++ T;
+                    ?MODULE:reverse(L2, T);
                 _ ->
                     keydelete(K, I, T, [H | L2])
             end;
@@ -256,7 +292,7 @@ keyreplace(K, I, [H | T], L, NewTuple, NewList) when is_tuple(H) andalso is_tupl
         true ->
             case element(I, H) of
                 K ->
-                    reverse(NewList) ++ [NewTuple | T];
+                    ?MODULE:reverse(NewList, [NewTuple | T]);
                 _ ->
                     keyreplace(K, I, T, L, NewTuple, [H | NewList])
             end;
@@ -298,7 +334,7 @@ foldl(Fun, Acc0, [H | T]) ->
     List :: list()
 ) -> Acc1 :: term().
 foldr(Fun, Acc0, List) ->
-    foldl(Fun, Acc0, reverse(List)).
+    foldl(Fun, Acc0, ?MODULE:reverse(List)).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun the predicate to evaluate
@@ -381,19 +417,8 @@ search(Pred, [H | T]) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec filter(Pred :: fun((Elem :: term()) -> boolean()), List :: list()) -> list().
-filter(Pred, L) ->
-    filter(Pred, L, []).
-
-%% @private
-filter(_Pred, [], Accum) ->
-    reverse(Accum);
-filter(Pred, [H | T], Accum) ->
-    case Pred(H) of
-        true ->
-            filter(Pred, T, [H | Accum]);
-        _ ->
-            filter(Pred, T, Accum)
-    end.
+filter(Pred, L) when is_function(Pred, 1) ->
+    [X || X <- L, Pred(X)].
 
 %%-----------------------------------------------------------------------------
 %% @param   Sep the separator
@@ -403,16 +428,16 @@ filter(Pred, [H | T], Accum) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec join(Sep :: any(), List :: list()) -> list().
-join(Sep, L) ->
-    join(L, Sep, []).
+join(_Sep, []) ->
+    [];
+join(Sep, [H | Tail]) ->
+    [H | join_1(Sep, Tail)].
 
 %% @private
-join([], _Sep, Accum) ->
-    lists:reverse(Accum);
-join([E | R], Sep, []) ->
-    join(R, Sep, [E]);
-join([E | R], Sep, Accum) ->
-    join(R, Sep, [E, Sep | Accum]).
+join_1(Sep, [H | Tail]) ->
+    [Sep, H | join_1(Sep, Tail)];
+join_1(_Sep, []) ->
+    [].
 
 %%-----------------------------------------------------------------------------
 %% @param   From    from integer
@@ -424,8 +449,8 @@ join([E | R], Sep, Accum) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec seq(From :: integer(), To :: integer()) -> list().
-seq(From, To) ->
-    seq(From, To, 1).
+seq(From, To) when is_integer(From) andalso is_integer(To) andalso From =< To ->
+    seq_r(From, To, 1, []).
 
 %%-----------------------------------------------------------------------------
 %% @param   From    from integer
@@ -447,16 +472,12 @@ seq(From, To, Incr) when
 seq(To, To, 0) ->
     [To];
 seq(From, To, Incr) ->
-    seq(From, To, Incr, []).
+    Last = From + ((To - From) div Incr) * Incr,
+    seq_r(From, Last, Incr, []).
 
 %% @private
-seq(From, To, Incr, Accum) when
-    (Incr > 0 andalso From > To) orelse
-        (Incr < 0 andalso To > From)
-->
-    reverse(Accum);
-seq(From, To, Incr, Accum) ->
-    seq(From + Incr, To, Incr, [From | Accum]).
+seq_r(From, From, _Incr, Acc) -> [From | Acc];
+seq_r(From, To, Incr, Acc) -> seq_r(From, To - Incr, Incr, [To | Acc]).
 
 %%-----------------------------------------------------------------------------
 %% @param   List a list
@@ -523,20 +544,16 @@ unique(Sorted) ->
     unique(Sorted, fun(X, Y) -> X =< Y end).
 
 %% @private
-unique(Sorted, Fun) ->
-    unique(Sorted, Fun, []).
-
-%% @private
-unique([], _Fun, []) ->
+unique([], _Fun) ->
     [];
-unique([X], _Fun, Acc) ->
-    lists:reverse([X | Acc]);
-unique([X, Y | Tail], Fun, Acc) ->
+unique([X], _Fun) ->
+    [X];
+unique([X, Y | Tail], Fun) ->
     case Fun(X, Y) andalso Fun(Y, X) of
         true ->
-            unique([Y | Tail], Fun, Acc);
+            unique([Y | Tail], Fun);
         false ->
-            unique([Y | Tail], Fun, [X | Acc])
+            [X | unique([Y | Tail], Fun)]
     end.
 
 %%-----------------------------------------------------------------------------
@@ -563,9 +580,9 @@ duplicate(Count, Elem, Acc) -> duplicate(Count - 1, Elem, [Elem | Acc]).
 %%-----------------------------------------------------------------------------
 -spec sublist([Elem], integer()) -> [Elem].
 sublist(List, Len) when is_integer(Len) andalso Len >= 0 ->
-    sublist0(List, Len, []).
+    sublist0(List, Len).
 
 %% @private
-sublist0(_List, 0, Acc) -> reverse(Acc);
-sublist0([], _, Acc) -> reverse(Acc);
-sublist0([H | Tail], Len, Acc) -> sublist0(Tail, Len - 1, [H | Acc]).
+sublist0([], _Len) -> [];
+sublist0(_, 0) -> [];
+sublist0([H | Tail], Len) -> [H | sublist0(Tail, Len - 1)].
