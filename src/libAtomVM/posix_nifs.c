@@ -268,6 +268,10 @@ static term nif_atomvm_posix_open(Context *ctx, int argc, term argv[])
         int mode = term_to_int(mode_term);
         fd = open(path, posix_flags, mode);
     } else {
+        if (UNLIKELY(posix_flags & O_CREAT)) {
+            free(path);
+            RAISE_ERROR(BADARG_ATOM);
+        }
         fd = open(path, posix_flags);
     }
     free(path);
