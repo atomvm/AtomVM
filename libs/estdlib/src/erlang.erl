@@ -85,6 +85,8 @@
     monitor/2,
     demonitor/1,
     demonitor/2,
+    exit/1,
+    exit/2,
     open_port/2,
     system_time/1,
     group_leader/0,
@@ -927,6 +929,53 @@ demonitor(_Monitor) ->
 %%-----------------------------------------------------------------------------
 -spec demonitor(Monitor :: reference(), Options :: [demonitor_option()]) -> boolean().
 demonitor(_Monitor, _Options) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Reason  reason for exit
+%% @doc     Raises an exception of class `exit' with reason `Reason'.
+%% The exception can be caught. If it is not, the process exits.
+%% If the exception is not caught the signal is sent to linked processes.
+%% In this case, if `Reason' is `kill', it is not transformed into `killed' and
+%% linked processes can trap it (unlike `exit/2').
+%% @end
+%%-----------------------------------------------------------------------------
+-spec exit(Reason :: any()) -> no_return().
+exit(_Reason) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Process target process
+%% @param   Reason  reason for exit
+%% @returns `true'
+%% @doc     Send an exit signal to target process.
+%% The consequences of the exit signal depends on `Reason', on whether
+%% `Process' is self() or another process and whether target process is
+%% trapping exit.
+%% If `Reason' is not `kill' nor `normal':
+%% <ul>
+%%     <li>If target process is not trapping exits, it exits with `Reason'</li>
+%%     <li>If traget process is trapping exits, it receives a message
+%%         ``{'EXIT', From, Reason}'' where `From' is the caller of `exit/2'.</li>
+%% </ul>
+%% If `Reason' is `kill', the target process exits with `Reason' changed to
+%% `killed'.
+%% If `Reason' is `normal' and `Process' is not `self()':
+%% <ul>
+%%     <li>If target process is not trapping exits, nothing happens.</li>
+%%     <li>If traget process is trapping exits, it receives a message
+%%         ``{'EXIT', From, normal}'' where `From' is the caller of `exit/2'.</li>
+%% </ul>
+%% If `Reason' is `normal' and `Process' is `self()':
+%% <ul>
+%%     <li>If target process is not trapping exits, it exits with `normal'.</li>
+%%     <li>If traget process is trapping exits, it receives a message
+%%         ``{'EXIT', From, normal}'' where `From' is the caller of `exit/2'.</li>
+%% </ul>
+%% @end
+%%-----------------------------------------------------------------------------
+-spec exit(Process :: pid(), Reason :: any()) -> true.
+exit(_Process, _Reason) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

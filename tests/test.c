@@ -503,6 +503,8 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(link_throw, 1),
     TEST_CASE_EXPECTED(unlink_error, 1),
     TEST_CASE(trap_exit_flag),
+    TEST_CASE(test_exit1),
+    TEST_CASE(test_exit2),
     TEST_CASE_COND(test_stacktrace, 0, SKIP_STACKTRACES),
     TEST_CASE(small_big_ext),
     TEST_CASE(test_crypto),

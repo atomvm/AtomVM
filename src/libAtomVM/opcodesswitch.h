@@ -7169,9 +7169,14 @@ handle_error:
             }
         }
 
-        dump(ctx);
+        // Do not print crash dump if reason is normal.
+        if (ctx->x[0] != LOWERCASE_EXIT_ATOM || ctx->x[1] != NORMAL_ATOM) {
+            dump(ctx);
+        }
 
-        {
+        if (ctx->x[0] == LOWERCASE_EXIT_ATOM) {
+            ctx->exit_reason = ctx->x[1];
+        } else {
             bool throw = ctx->x[0] == THROW_ATOM;
 
             int exit_reason_tuple_size = (throw ? TUPLE_SIZE(2) : 0) + TUPLE_SIZE(2);
@@ -7184,6 +7189,7 @@ handle_error:
                     term_put_tuple_element(error_term, 0, NOCATCH_ATOM);
                     term_put_tuple_element(error_term, 1, ctx->x[1]);
                 } else {
+                    // error
                     error_term = ctx->x[1];
                 }
 
