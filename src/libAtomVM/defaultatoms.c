@@ -145,6 +145,8 @@ static const char *const exports_atom = "\x7" "exports";
 
 static const char *const incomplete_atom = "\xA" "incomplete";
 
+static const char *const links_atom = "\x5" "links";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -273,6 +275,8 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, exports_atom) == EXPORTS_ATOM_INDEX;
 
     ok &= globalcontext_insert_atom(glb, incomplete_atom) == INCOMPLETE_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, links_atom) == LINKS_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();

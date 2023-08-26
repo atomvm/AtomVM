@@ -32,6 +32,8 @@
 #include "smp.h"
 #include "synclist.h"
 #include "sys.h"
+#include "term.h"
+#include "utils.h"
 
 #define IMPL_EXECUTE_LOOP
 #include "opcodesswitch.h"
@@ -231,7 +233,32 @@ size_t context_size(Context *ctx)
 
 bool context_get_process_info(Context *ctx, term *out, term atom_key)
 {
-    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+    size_t ret_size;
+    switch (atom_key) {
+        case HEAP_SIZE_ATOM:
+        case STACK_SIZE_ATOM:
+        case MESSAGE_QUEUE_LEN_ATOM:
+        case MEMORY_ATOM:
+            ret_size = TUPLE_SIZE(2);
+            break;
+        case LINKS_ATOM: {
+            struct ListHead *item;
+            size_t links_count = 0;
+            LIST_FOR_EACH (item, &ctx->monitors_head) {
+                struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
+                if (monitor->ref_ticks == 0) {
+                    links_count++;
+                }
+            }
+            ret_size = TUPLE_SIZE(2) + CONS_SIZE * links_count;
+            break;
+        }
+        default:
+            *out = BADARG_ATOM;
+            return false;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, ret_size) != MEMORY_GC_OK)) {
         *out = OUT_OF_MEMORY_ATOM;
         return false;
     }
@@ -270,9 +297,24 @@ bool context_get_process_info(Context *ctx, term *out, term atom_key)
             break;
         }
 
+        // pids of linked processes
+        case LINKS_ATOM: {
+            term_put_tuple_element(ret, 0, LINKS_ATOM);
+            term list = term_nil();
+            struct ListHead *item;
+            LIST_FOR_EACH (item, &ctx->monitors_head) {
+                struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
+                // Links are struct Monitor entries with ref_ticks equal to 0
+                if (monitor->ref_ticks == 0) {
+                    list = term_list_prepend(monitor->monitor_obj, list, &ctx->heap);
+                }
+            }
+            term_put_tuple_element(ret, 1, list);
+            break;
+        }
+
         default:
-            *out = BADARG_ATOM;
-            return false;
+            UNREACHABLE();
     }
     *out = ret;
     return true;
