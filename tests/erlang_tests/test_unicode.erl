@@ -36,6 +36,7 @@ test_to_list_latin1() ->
     "hé" = unicode:characters_to_list(<<"hé">>, latin1),
     {error, "h", [-1]} = unicode:characters_to_list([$h, -1], latin1),
     {error, "h", [-1 | "ello"]} = unicode:characters_to_list([$h, -1 | "ello"], latin1),
+    {error, "h", [16#110000]} = unicode:characters_to_list([$h, 16#110000], latin1),
     {error, "fooh", [[-1 | "ello"], "bar"]} = unicode:characters_to_list(
         ["foo", [$h, -1 | "ello"], "bar"], latin1
     ),
@@ -55,6 +56,8 @@ test_to_list_utf8() ->
     "hé" = unicode:characters_to_list("hé"),
     "hé" = unicode:characters_to_list(<<"hé"/utf8>>, utf8),
     {error, "h", [-1]} = unicode:characters_to_list([$h, -1], utf8),
+    [$h, 16#10ffff] = unicode:characters_to_list([$h, 16#10ffff], utf8),
+    {error, "h", [16#110000]} = unicode:characters_to_list([$h, 16#110000], utf8),
     {incomplete, "h", <<"é">>} = unicode:characters_to_list(<<"hé">>),
     {error, [], <<16#A0, 16#A1>>} = unicode:characters_to_list(<<16#A0, 16#A1>>),
     % Erlang/OTP documentation writes: "The last part is mostly for debugging"
@@ -91,6 +94,12 @@ test_to_binary_latin1() ->
                 {error, <<"h">>, [-1]} = unicode:characters_to_binary([$h, -1], latin1, latin1),
                 ok
         end,
+    Expected0 =
+        case erlang:system_info(machine) of
+            "BEAM" -> [[16#110000]];
+            "ATOM" -> [16#110000]
+        end,
+    {error, <<"h">>, Expected0} = unicode:characters_to_binary([$h, 16#110000], latin1, latin1),
     Expected1 =
         case erlang:system_info(machine) of
             "BEAM" -> [[2000]];
@@ -128,6 +137,8 @@ test_to_binary_utf8() ->
     <<"hé"/utf8>> = unicode:characters_to_binary(<<"hé"/utf8>>, utf8),
     <<"hé"/utf8>> = unicode:characters_to_binary(<<"hé"/utf8>>),
     {error, <<"h">>, [-1]} = unicode:characters_to_binary([$h, -1]),
+    <<"h", 244, 143, 191, 191>> = unicode:characters_to_binary([$h, 16#10FFFF]),
+    {error, <<"h">>, [16#110000]} = unicode:characters_to_binary([$h, 16#110000]),
     {incomplete, <<"h">>, <<"é">>} = unicode:characters_to_binary(<<"hé">>),
     {error, <<>>, <<16#A0, 16#A1>>} = unicode:characters_to_binary(<<16#A0, 16#A1>>),
     Expected1 =

@@ -74,6 +74,9 @@ characters_to_list(_Data) ->
     erlang:nif_error(undefined).
 
 %% @doc Convert UTF-8 or Latin1 data to a list of Unicode characters.
+%% Following Erlang/OTP, if input encoding is latin1, this function returns
+%% an error tuple if a character > 255 is passed (in a list). Otherwise, it
+%% will accept any character within Unicode range (0-0x10FFFF).
 %% @see characters_to_list/1
 %% @param Data data to convert
 %% @param Encoding encoding of data to convert

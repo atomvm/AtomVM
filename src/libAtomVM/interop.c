@@ -389,7 +389,7 @@ static InteropFunctionResult chardata_to_bytes_size_fold_fun(term t, void *accum
         }
     } else /* term_is_integer(t) */ {
         avm_int_t c = term_to_int(t);
-        if (c < 0) {
+        if (c < 0 || c > UNICODE_CHAR_MAX) {
             return InteropBadArg;
         }
         switch (acc->out_encoding) {
@@ -401,7 +401,7 @@ static InteropFunctionResult chardata_to_bytes_size_fold_fun(term t, void *accum
             } break;
             case UTF8Encoding: {
                 size_t char_size;
-                if (UNLIKELY(!bitstring_utf8_encode(c, NULL, &char_size))) {
+                if (UNLIKELY(!bitstring_utf8_encode((uint32_t) c, NULL, &char_size))) {
                     return InteropBadArg;
                 }
                 acc->size += char_size;
@@ -485,7 +485,7 @@ static InteropFunctionResult chardata_to_bytes_fold_fun(term t, void *accum)
         }
     } else /* term_is_integer(t) */ {
         avm_int_t c = term_to_int(t);
-        if (c < 0) {
+        if (c < 0 || c > UNICODE_CHAR_MAX) {
             if (acc->rest) {
                 *acc->rest = t;
             }
@@ -503,7 +503,7 @@ static InteropFunctionResult chardata_to_bytes_fold_fun(term t, void *accum)
             } break;
             case UTF8Encoding: {
                 size_t char_size;
-                if (UNLIKELY(!bitstring_utf8_encode(c, acc->output, &char_size))) {
+                if (UNLIKELY(!bitstring_utf8_encode((uint32_t) c, acc->output, &char_size))) {
                     if (acc->rest) {
                         *acc->rest = t;
                     }
@@ -512,7 +512,14 @@ static InteropFunctionResult chardata_to_bytes_fold_fun(term t, void *accum)
                 acc->output += char_size;
             } break;
             case UCS4NativeEncoding: {
-                *((uint32_t *) acc->output) = c;
+                // Special case: if input encoding is latin1, only accept characters < 256.
+                if (acc->in_encoding == Latin1Encoding && c > 255) {
+                    if (acc->rest) {
+                        *acc->rest = t;
+                    }
+                    return InteropBadArg;
+                }
+                *((uint32_t *) acc->output) = (uint32_t) c;
                 acc->output += sizeof(uint32_t);
             } break;
         }
