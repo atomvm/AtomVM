@@ -23,7 +23,7 @@
 -export([start/0, sort/1, insert/2, loop/0]).
 
 start() ->
-    Pid = spawn(?MODULE, loop, []),
+    Pid = spawn_opt(fun loop/0, []),
     Ref = make_ref(),
     Ref2 = make_ref(),
     Pid !

@@ -106,7 +106,7 @@ test_send() ->
     Bin = create_binary(1024),
     ?VERIFY(MemoryBinarySize + 1024 =< erlang:memory(binary)),
 
-    Pid = erlang:spawn(fun() -> loop(#state{}) end),
+    Pid = spawn_opt(fun() -> loop(#state{}) end, []),
     PidHeapSize0 = get_heap_size(Pid),
     %%
     %% Send the process a refc binary, and check heap size
@@ -134,7 +134,7 @@ test_spawn() ->
     %%
     %% Spawn a function, passing a refc binary through the args
     %%
-    Pid = erlang:spawn(?MODULE, loop, [#state{bin = Bin}]),
+    Pid = spawn_opt(?MODULE, loop, [#state{bin = Bin}], []),
     PidHeapSize0 = get_heap_size(Pid),
     %%
     %% Make sure we can get what we spawned
@@ -154,7 +154,7 @@ test_spawn_fun() ->
     %%
     %% Spawn a function, passing a refc binary through the args
     %%
-    Pid = erlang:spawn(fun() -> loop(#state{bin = Bin}) end),
+    Pid = spawn_opt(fun() -> loop(#state{bin = Bin}) end, []),
     PidHeapSize0 = get_heap_size(Pid),
     %%
     %% Make sure we can get what we spawned
@@ -227,7 +227,7 @@ create_string(N, Accum) ->
 
 run_test(Fun) ->
     Self = self(),
-    _Pid = spawn(fun() -> execute(Self, Fun) end),
+    _Pid = spawn_opt(fun() -> execute(Self, Fun) end, []),
     receive
         ok ->
             ok;

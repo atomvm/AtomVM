@@ -20,18 +20,22 @@
 
 -module(test_is_process_alive).
 
--export([start/0, fact/1, no_loop/0]).
+-export([start/0, fact/1]).
 
 start() ->
-    Pid = spawn(?MODULE, no_loop, []),
+    {Pid, Monitor} = spawn_opt(fun no_loop/0, [monitor]),
     A = g(is_process_alive(Pid)),
     Pid ! {self(), 5},
     Fact =
         receive
-            Result ->
+            {Pid, Result} ->
                 Result
         end,
-    sleep(50),
+    ok =
+        receive
+            {'DOWN', Monitor, process, Pid, normal} -> ok
+        after 500 -> timeout
+        end,
     case is_process_alive(Pid) of
         false ->
             Fact + A;
@@ -42,20 +46,15 @@ start() ->
 no_loop() ->
     receive
         {Pid, AnyInteger} when is_integer(AnyInteger) ->
-            Pid ! fact(AnyInteger);
+            Pid ! {self(), fact(AnyInteger)};
         {Pid, _AnyVal} ->
-            Pid ! error
+            Pid ! {self(), error}
     end.
 
 fact(0) ->
     1;
 fact(N) ->
     N * fact(N - 1).
-
-sleep(MSecs) ->
-    receive
-    after MSecs -> ok
-    end.
 
 g(true) ->
     1;

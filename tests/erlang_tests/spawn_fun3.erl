@@ -30,7 +30,7 @@ start() ->
                 Pid ! sum(L)
         end
     end,
-    Pid = spawn(Fun),
+    Pid = spawn_opt(Fun, []),
     Pid ! {self(), sum},
     receive
         N -> N

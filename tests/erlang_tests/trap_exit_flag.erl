@@ -20,41 +20,60 @@
 
 -module(trap_exit_flag).
 
--export([start/0, sum/1, proc/1]).
+-export([start/0]).
 
 start() ->
-    L = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    Pid = spawn(?MODULE, proc, [L]),
     false = erlang:process_flag(trap_exit, true),
+    ok = test_nocatch(),
+    ok = test_normal(),
+    true = erlang:process_flag(trap_exit, false),
+    ok = test_trap_exit_false(),
+    0.
+
+test_nocatch() ->
+    Pid = spawn_opt(fun proc/0, []),
     erlang:link(Pid),
-    Pid ! {self(), sum},
-    receive
-        {'EXIT', Pid, {{nocatch, test}, EL}} when is_pid(Pid) andalso is_list(EL) ->
-            1;
-        {'EXIT', _, normal} = T ->
-            erlang:display(T),
-            2;
-        {'EXIT', _, _} = T ->
-            erlang:display(T),
-            3;
-        T when is_tuple(T) ->
-            erlang:display(T),
-            4;
-        T ->
-            erlang:display(T),
-            5
-    after 30000 ->
-        erlang:display(timeout),
-        6
-    end.
+    Pid ! do_throw,
+    ok =
+        receive
+            {'EXIT', Pid, {{nocatch, test}, EL}} when is_list(EL) ->
+                ok;
+            Other ->
+                {unexpected, Other}
+        after 500 ->
+            timeout
+        end.
 
-proc(_L) ->
-    receive
-        {_Pid, sum} ->
-            throw(test)
-    end.
+test_normal() ->
+    Pid = spawn_opt(fun proc/0, []),
+    erlang:link(Pid),
+    Pid ! exit_normally,
+    ok =
+        receive
+            {'EXIT', Pid, normal} ->
+                ok;
+            Other ->
+                {unexpected, Other}
+        after 500 ->
+            timeout
+        end.
 
-sum([]) ->
-    0;
-sum([H | T]) ->
-    H + sum(T).
+test_trap_exit_false() ->
+    Pid = spawn_opt(fun proc/0, []),
+    erlang:link(Pid),
+    Pid ! exit_normally,
+    ok =
+        receive
+            Other ->
+                {unexpected, Other}
+        after 500 ->
+            ok
+        end.
+
+proc() ->
+    receive
+        do_throw ->
+            throw(test);
+        exit_normally ->
+            ok
+    end.

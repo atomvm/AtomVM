@@ -24,8 +24,8 @@
 
 start() ->
     Echo = echo:start(),
-    Pong = spawn(?MODULE, pong, [Echo, self()]),
-    spawn(?MODULE, ping, [Echo, Pong]),
+    Pong = spawn_opt(?MODULE, pong, [Echo, self()], []),
+    spawn_opt(?MODULE, ping, [Echo, Pong], []),
     receive
         exit -> 1;
         _Any -> 0

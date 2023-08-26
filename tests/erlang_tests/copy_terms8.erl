@@ -20,10 +20,10 @@
 
 -module(copy_terms8).
 
--export([start/0, loop/0]).
+-export([start/0]).
 
 start() ->
-    Pid = spawn(?MODULE, loop, []),
+    Pid = spawn_opt(fun loop/0, []),
     Pid ! {test, self(), 2},
     Res =
         receive

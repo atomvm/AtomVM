@@ -34,7 +34,7 @@ test_two_names() ->
     test_names([foo, bar]).
 
 test_names(Names) ->
-    Pid = spawn(fun() -> do_register(Names) end),
+    Pid = spawn_opt(fun() -> do_register(Names) end, []),
     Monitor = monitor(process, Pid),
     ok =
         receive

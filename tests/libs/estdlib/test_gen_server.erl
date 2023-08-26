@@ -67,12 +67,15 @@ test_start_link() ->
 
     pong = gen_server:call(Pid, ping),
     pong = gen_server:call(Pid, reply_ping),
-    erlang:process_flag(trap_exit, true),
+    false = erlang:process_flag(trap_exit, true),
     ok = gen_server:cast(Pid, crash),
-    receive
-        {'EXIT', Pid, _Reason} -> ok
-    after 30000 -> timeout
-    end.
+    ok =
+        receive
+            {'EXIT', Pid, _Reason} -> ok
+        after 30000 -> timeout
+        end,
+    true = erlang:process_flag(trap_exit, false),
+    ok.
 
 test_cast() ->
     {ok, Pid} = gen_server:start(?MODULE, [], []),

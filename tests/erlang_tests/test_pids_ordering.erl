@@ -23,12 +23,12 @@
 -export([start/0, sort/1, insert/2, check/2]).
 
 start() ->
-    P1 = spawn(?MODULE, sort, [[]]),
-    P2 = spawn(?MODULE, sort, [[1]]),
-    P3 = spawn(?MODULE, sort, [[2, 1]]),
-    P4 = spawn(?MODULE, sort, [[3]]),
-    P5 = spawn(?MODULE, sort, [[4, 1]]),
-    P6 = spawn(?MODULE, sort, [[]]),
+    P1 = spawn_opt(?MODULE, sort, [[]], []),
+    P2 = spawn_opt(?MODULE, sort, [[1]], []),
+    P3 = spawn_opt(?MODULE, sort, [[2, 1]], []),
+    P4 = spawn_opt(?MODULE, sort, [[3]], []),
+    P5 = spawn_opt(?MODULE, sort, [[4, 1]], []),
+    P6 = spawn_opt(?MODULE, sort, [[]], []),
     Sorted = sort([P3, P4, P1, P5, P2]),
     check(Sorted, [P1, P2, P3, P4, P5]) +
         bool_to_n(Sorted < [P6]) * 2 +

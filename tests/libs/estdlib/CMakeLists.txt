@@ -33,6 +33,7 @@ set(ERLANG_MODULES
     test_lists
     test_logger
     test_maps
+    test_spawn
     test_string
     test_proplists
     test_timer

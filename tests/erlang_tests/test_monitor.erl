@@ -33,7 +33,7 @@ start() ->
     0.
 
 test_monitor_normal() ->
-    Pid = spawn(fun() -> normal_loop() end),
+    Pid = spawn_opt(fun() -> normal_loop() end, []),
     Ref = monitor(process, Pid),
     Pid ! {self(), quit},
     ok =
@@ -51,7 +51,7 @@ test_monitor_normal() ->
     ok.
 
 test_monitor_demonitor() ->
-    Pid = spawn(fun() -> normal_loop() end),
+    Pid = spawn_opt(fun() -> normal_loop() end, []),
     Ref = monitor(process, Pid),
     true = demonitor(Ref),
     Pid ! {self(), quit},
@@ -69,10 +69,12 @@ test_monitor_demonitor() ->
     ok.
 
 test_monitor_noproc() ->
-    Pid = spawn(fun() -> ok end),
-    receive
-    after 100 -> ok
-    end,
+    {Pid, Monitor} = spawn_opt(fun() -> ok end, [monitor]),
+    ok =
+        receive
+            {'DOWN', Monitor, process, Pid, normal} -> ok
+        after 500 -> timeout
+        end,
     Ref = monitor(process, Pid),
     ok =
         receive
@@ -83,7 +85,7 @@ test_monitor_noproc() ->
     ok.
 
 test_monitor_demonitor_flush() ->
-    Pid = spawn(fun() -> normal_loop() end),
+    Pid = spawn_opt(fun() -> normal_loop() end, []),
     Ref = monitor(process, Pid),
     Pid ! {self(), quit},
     receive
@@ -104,7 +106,7 @@ test_monitor_demonitor_flush() ->
     ok.
 
 test_monitor_demonitor_info() ->
-    Pid = spawn(fun() -> normal_loop() end),
+    Pid = spawn_opt(fun() -> normal_loop() end, []),
     Ref = monitor(process, Pid),
     true = demonitor(Ref, [info]),
     Pid ! {self(), quit},
@@ -123,7 +125,7 @@ test_monitor_demonitor_info() ->
     ok.
 
 test_monitor_demonitor_flush_info_true() ->
-    Pid = spawn(fun() -> normal_loop() end),
+    Pid = spawn_opt(fun() -> normal_loop() end, []),
     Ref = monitor(process, Pid),
     Pid ! {self(), quit},
     receive
@@ -144,7 +146,7 @@ test_monitor_demonitor_flush_info_true() ->
     ok.
 
 test_monitor_demonitor_flush_info_false() ->
-    Pid = spawn(fun() -> normal_loop() end),
+    Pid = spawn_opt(fun() -> normal_loop() end, []),
     Ref = monitor(process, Pid),
     true = demonitor(Ref, [flush, info]),
     Pid ! {self(), quit},

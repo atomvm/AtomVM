@@ -93,12 +93,15 @@ test_start_link() ->
 
     pong = gen_statem:call(Pid, ping),
 
-    erlang:process_flag(trap_exit, true),
+    false = erlang:process_flag(trap_exit, true),
     ok = gen_statem:cast(Pid, crash),
-    receive
-        {'EXIT', Pid, _Reason} -> ok
-    after 30000 -> timeout
-    end.
+    ok =
+        receive
+            {'EXIT', Pid, _Reason} -> ok
+        after 30000 -> timeout
+        end,
+    true = erlang:process_flag(trap_exit, false),
+    ok.
 
 %%
 %% callbacks

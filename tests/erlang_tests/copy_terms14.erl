@@ -20,10 +20,10 @@
 
 -module(copy_terms14).
 
--export([start/0, loop/0]).
+-export([start/0]).
 
 start() ->
-    Pid = spawn(?MODULE, loop, []),
+    Pid = spawn_opt(fun loop/0, []),
     Ref = make_ref(),
     Pid ! {det, Ref, self(), {{2, 2, 3, 9}, {1, 1, 3, 4}, {2, 0, 1, 7}, {11, 3, 4, 8}}},
     Res =

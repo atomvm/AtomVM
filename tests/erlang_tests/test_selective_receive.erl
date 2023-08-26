@@ -29,21 +29,30 @@ start() ->
 
 test_selective_receive() ->
     Self = self(),
-    spawn(fun() ->
-        Self ! three
-    end),
-    spawn(fun() ->
-        receive
-        after 250 -> ok
+    spawn_opt(
+        fun() ->
+            Self ! three
         end,
-        Self ! two
-    end),
-    spawn(fun() ->
-        receive
-        after 500 -> ok
+        []
+    ),
+    spawn_opt(
+        fun() ->
+            receive
+            after 250 -> ok
+            end,
+            Self ! two
         end,
-        Self ! one
-    end),
+        []
+    ),
+    spawn_opt(
+        fun() ->
+            receive
+            after 500 -> ok
+            end,
+            Self ! one
+        end,
+        []
+    ),
     receive
         one ->
             ok
@@ -59,15 +68,21 @@ test_selective_receive() ->
 
 test_selective_receive_with_timeout() ->
     Self = self(),
-    spawn(fun() ->
-        Self ! two
-    end),
-    spawn(fun() ->
-        receive
-        after 500 -> ok
+    spawn_opt(
+        fun() ->
+            Self ! two
         end,
-        Self ! one
-    end),
+        []
+    ),
+    spawn_opt(
+        fun() ->
+            receive
+            after 500 -> ok
+            end,
+            Self ! one
+        end,
+        []
+    ),
     ok =
         receive
             one ->

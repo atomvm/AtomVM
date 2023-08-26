@@ -22,7 +22,7 @@ project(examples_emscripten)
 
 include(BuildErlang)
 
-pack_runnable(run_script run_script eavmlib)
+pack_runnable(run_script run_script estdlib eavmlib)
 pack_runnable(call_cast call_cast eavmlib)
 pack_runnable(html5_events html5_events estdlib eavmlib)
 pack_runnable(wasm_webserver wasm_webserver estdlib eavmlib)

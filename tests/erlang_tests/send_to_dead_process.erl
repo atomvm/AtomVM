@@ -20,10 +20,10 @@
 
 -module(send_to_dead_process).
 
--export([start/0, double_and_terminate/0]).
+-export([start/0]).
 
 start() ->
-    Pid = spawn(?MODULE, double_and_terminate, []),
+    Pid = spawn_opt(fun double_and_terminate/0, []),
     Pid ! {self(), 10},
     Result =
         receive

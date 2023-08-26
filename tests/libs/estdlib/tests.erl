@@ -36,5 +36,6 @@ start() ->
         test_maps,
         test_proplists,
         test_timer,
+        test_spawn,
         test_supervisor
     ]).

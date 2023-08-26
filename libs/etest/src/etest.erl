@@ -119,8 +119,35 @@ assert_failure(F, E) ->
 
 %% @private
 run_test(Test) ->
+    Parent = self(),
+    {Pid, Ref} = spawn_opt(
+        fun() ->
+            Result = do_run_test(Test),
+            Parent ! {self(), Result}
+        end,
+        [monitor]
+    ),
+    receive
+        {Pid, Result} ->
+            receive
+                {'DOWN', Ref, process, Pid, normal} -> ok
+            after 0 -> ok
+            end,
+            Result;
+        {'DOWN', Ref, process, Pid, Reason} ->
+            {error, Reason}
+    end.
+
+do_run_test(Test) ->
     try
         Result = Test:test(),
+        Value = process_flag(trap_exit, false),
+        case Value of
+            true ->
+                erlang:display({test, Test, unexpected_trap_exit});
+            false ->
+                ok
+        end,
         case erlang:system_info(machine) of
             "BEAM" ->
                 io:format("+");

@@ -27,8 +27,8 @@ start() ->
 
 test_infinity() ->
     Parent = self(),
-    _Pid1 = spawn(fun() -> waiter1(Parent) end),
-    _Pid2 = spawn(fun() -> waiter2(Parent) end),
+    _Pid1 = spawn_opt(fun() -> waiter1(Parent) end, []),
+    _Pid2 = spawn_opt(fun() -> waiter2(Parent) end, []),
     receive
         _ -> 1
         % wait 2 secs as with bug we waited few ms

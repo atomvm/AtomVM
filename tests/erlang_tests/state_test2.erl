@@ -23,7 +23,7 @@
 -export([start/0, loop/1]).
 
 start() ->
-    Pid = spawn(state_test2, loop, [initial_state()]),
+    Pid = spawn_opt(state_test2, loop, [initial_state()], []),
     state_test2_sender:send_msgs(Pid).
 
 initial_state() ->

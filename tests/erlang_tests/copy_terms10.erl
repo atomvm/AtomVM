@@ -22,7 +22,6 @@
 
 -export([
     start/0,
-    loop/0,
     compute/1,
     compute_tree/1,
     a/0,
@@ -52,7 +51,7 @@
 ]).
 
 start() ->
-    Pid = spawn(?MODULE, loop, []),
+    Pid = spawn_opt(fun loop/0, []),
     Pid ! {self(), z()},
     Res =
         receive

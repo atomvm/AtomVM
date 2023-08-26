@@ -51,7 +51,7 @@ start() ->
 
 start2() ->
     L = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    Pid = spawn(?MODULE, proc, [L]),
+    Pid = spawn_opt(?MODULE, proc, [L], []),
     erlang:link(Pid),
     erlang:unlink(Pid),
     Pid ! {self(), sum},

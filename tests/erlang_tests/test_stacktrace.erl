@@ -190,7 +190,7 @@ test_body_recursive_throw() ->
 
 test_spawned_throw() ->
     Self = self(),
-    spawn(
+    spawn_opt(
         fun() ->
             try
                 do_some_stuff(blah),
@@ -208,7 +208,8 @@ test_spawned_throw() ->
                     ),
                     Self ! Result
             end
-        end
+        end,
+        []
     ),
     receive
         Result ->

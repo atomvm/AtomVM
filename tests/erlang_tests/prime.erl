@@ -23,9 +23,9 @@
 -export([start/0, is_prime/1, calculate_list/2]).
 
 start() ->
-    spawn(prime, calculate_list, num_range(2, 100)),
-    spawn(prime, calculate_list, num_range(100, 400)),
-    spawn(prime, calculate_list, num_range(500, 1500)),
+    spawn_opt(prime, calculate_list, num_range(2, 100), []),
+    spawn_opt(prime, calculate_list, num_range(100, 400), []),
+    spawn_opt(prime, calculate_list, num_range(500, 1500), []),
     all_primes_test(2000) -
         all_primes_test(2000) +
         all_primes_test(2000) -

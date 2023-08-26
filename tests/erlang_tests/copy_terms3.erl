@@ -20,10 +20,10 @@
 
 -module(copy_terms3).
 
--export([start/0, loop/0, count_nestings/1]).
+-export([start/0, count_nestings/1]).
 
 start() ->
-    Pid = spawn(?MODULE, loop, []),
+    Pid = spawn_opt(fun loop/0, []),
     Pid ! {self(), {{{{{{}}}}}}},
     Count =
         receive

@@ -23,7 +23,7 @@
 -export([start/0]).
 
 start() ->
-    Pid = spawn(fun() -> loop(0) end),
+    Pid = spawn_opt(fun() -> loop(0) end, []),
     Tick = fun() -> Pid ! tick end,
     foo = tryit(
         fun() -> foo end,
