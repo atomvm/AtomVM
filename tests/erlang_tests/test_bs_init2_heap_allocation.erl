@@ -18,7 +18,7 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module(test_put_without_heap_allocation).
+-module(test_bs_init2_heap_allocation).
 
 -export([start/0]).
 
@@ -33,9 +33,10 @@ start() ->
 
 %% Because of integer_to_binary, the size of the binary is computed
 %% with byte_size which is a gc bif. As a consequence, put_tuple2 and put_list
-%% are not preceded by a test_heap opcode.
-%% This code crashed when compiled with OTP24 before put_tuple2 and put_list
-%% opcode implementation did check for free memory
+%% are not preceded by a test_heap opcode. Instead, the amount of required
+%% memory is encoded in bs_init2.
+%% This code crashed when compiled with OTP24 before bs_init2 actually ensured
+%% the required amount of words.
 disp(Display, Num) ->
     Bin = integer_to_binary(Num),
     Scene = [

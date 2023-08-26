@@ -414,7 +414,7 @@ struct Test tests[] = {
 
     TEST_CASE(test_fp_allocate_heap_zero),
 
-    TEST_CASE(test_put_without_heap_allocation),
+    TEST_CASE(test_bs_init2_heap_allocation),
 
     TEST_CASE_EXPECTED(improper_concat, 7),
     TEST_CASE_EXPECTED(improper_cmp, 3),

@@ -3243,10 +3243,6 @@ wait_timeout_trap_handler:
                 DECODE_DEST_REGISTER(dreg, dreg_type, code, i, next_off);
 
 #ifdef IMPL_EXECUTE_LOOP
-                // MEMORY_NO_SHRINK because put_list is classified as put in beam_ssa_codegen.erl
-                if (UNLIKELY(memory_ensure_free_opt(ctx, CONS_SIZE, MEMORY_NO_SHRINK) != MEMORY_GC_OK)) {
-                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                }
                 term *list_elem = term_list_alloc(&ctx->heap);
 #endif
 
@@ -3278,10 +3274,6 @@ wait_timeout_trap_handler:
                 USED_BY_TRACE(dreg);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    // MEMORY_NO_SHRINK because put_tuple is classified as put in beam_ssa_codegen.erl
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(size), MEMORY_NO_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
                     term t = term_alloc_tuple(size, &ctx->heap);
                     WRITE_REGISTER(dreg_type, dreg, t);
                 #endif
@@ -3785,7 +3777,6 @@ wait_timeout_trap_handler:
                 term size;
                 DECODE_COMPACT_TERM(size, code, i, next_off)
                 uint32_t words;
-                UNUSED(words);
                 DECODE_LITERAL(words, code, i, next_off)
                 uint32_t regs;
                 UNUSED(regs);
@@ -3807,7 +3798,7 @@ wait_timeout_trap_handler:
 
                     TRACE("bs_init2/6, fail=%u size=%li words=%u regs=%u dreg=%c%i\n", (unsigned) fail, size_val, (unsigned) words, (unsigned) regs, T_DEST_REG(dreg_type, dreg));
 
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(size_val), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, words + term_binary_heap_size(size_val), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     term t = term_create_empty_binary(size_val, &ctx->heap, ctx->global);
@@ -3856,7 +3847,7 @@ wait_timeout_trap_handler:
 
                     TRACE("bs_init_bits/6, fail=%i size=%li words=%i regs=%i dreg=%c%i\n", fail, size_val, words, regs, T_DEST_REG(dreg_type, dreg));
 
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(size_val / 8), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, words + term_binary_heap_size(size_val / 8), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     term t = term_create_empty_binary(size_val / 8, &ctx->heap, ctx->global);
@@ -6301,10 +6292,6 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    // MEMORY_NO_SHRINK because put_tuple is classified as put in beam_ssa_codegen.erl
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(size), MEMORY_NO_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
                     term t = term_alloc_tuple(size, &ctx->heap);
                 #endif
 
@@ -6848,10 +6835,6 @@ wait_timeout_trap_handler:
                 int size;
                 DECODE_LITERAL(size, code, i, next_off);
                 #ifdef IMPL_EXECUTE_LOOP
-                    // MEMORY_NO_SHRINK because update_record is classified as put in beam_ssa_codegen.erl
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(size), MEMORY_NO_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
                     term dst;
                     dst = term_alloc_tuple(size, &ctx->heap);
                 #endif
