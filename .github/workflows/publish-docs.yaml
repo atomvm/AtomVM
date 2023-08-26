@@ -60,8 +60,8 @@ jobs:
 
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: "24"
-          elixir-version: "1.14"
+          otp-version: "25"
+          elixir-version: "1.15"
 
       - name: Install rebar3
         working-directory: /tmp
@@ -69,11 +69,6 @@ jobs:
           wget https://s3.amazonaws.com/rebar3/rebar3 && chmod +x rebar3
           ./rebar3 local install
           echo "/home/runner/.cache/rebar3/bin" >> ${GITHUB_PATH}
-
-      - uses: erlef/setup-beam@v1
-        with:
-          otp-version: "24"
-          elixir-version: "1.14"
 
       - uses: actions/checkout@v3
         with:
