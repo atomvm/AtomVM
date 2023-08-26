@@ -41,6 +41,10 @@ if (AVM_REBOOT_ON_NOT_OK)
     target_compile_definitions(AtomVM PRIVATE CONFIG_REBOOT_ON_NOT_OK)
 endif()
 
+if (AVM_WAIT_FOR_USB_CONNECT)
+    target_compile_definitions(AtomVM PRIVATE PICO_STDIO_USB_CONNECT_WAIT_TIMEOUT_MS=-1)
+endif()
+
 set(
     PLATFORM_LIB_SUFFIX
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
