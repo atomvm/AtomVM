@@ -21,3 +21,6 @@ src/platforms/esp32/sdkconfig
 !src/platforms/esp32/components/libatomvm/**
 .idea/**
 .vscode/**
+.DS_Store
+.cache
+.clang-tidy
