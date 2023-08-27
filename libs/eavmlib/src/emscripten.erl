@@ -358,7 +358,7 @@ register_keypress_callback(_Target, _Options) ->
 
 %% @doc Register for keypress events.
 %% This function registers keypress events on a given target.
-%% Target can be specified as special atoms `window' for Javacsript's window,
+%% Target can be specified as special atoms `window' for Javascript's window,
 %% `document' for window.document. `screen' is also supported, but it doesn't
 %% seem to work, see [https://github.com/emscripten-core/emscripten/issues/19865]
 %%
