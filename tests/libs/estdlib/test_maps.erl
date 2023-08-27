@@ -37,6 +37,7 @@ test() ->
     ok = test_find(),
     ok = test_filter(),
     ok = test_fold(),
+    ok = test_foreach(),
     ok = test_map(),
     ok = test_merge(),
     ok = test_remove(),
@@ -142,6 +143,42 @@ test_fold() ->
     ok = check_bad_map_or_badarg(fun() -> maps:fold(not_a_function, any, id(not_a_map)) end),
     ?ASSERT_ERROR(maps:fold(not_a_function, any, maps:new()), badarg),
     ok.
+
+collect_foreach(Acc) ->
+    Self = self(),
+    receive
+        {Self, Key, Value} ->
+            collect_foreach([{Key, Value} | Acc])
+    after 0 -> Acc
+    end.
+
+test_foreach() ->
+    % maps:foreach/2 was introduced with OTP 24.
+    HasForeach =
+        case erlang:system_info(machine) of
+            "BEAM" -> erlang:function_exported(maps, foreach, 2);
+            "ATOM" -> true
+        end,
+    if
+        HasForeach ->
+            Self = self(),
+            Fun = fun(Key, Value) -> Self ! {self(), Key, Value} end,
+            ok = maps:foreach(Fun, maps:new()),
+            ?ASSERT_EQUALS(collect_foreach([]), []),
+            ok =
+                receive
+                    {Self, _, _} -> fail
+                after 0 -> ok
+                end,
+            ok = maps:foreach(Fun, #{a => 1, b => 2, c => 3}),
+            ?ASSERT_EQUALS(lists:sort(collect_foreach([])), [{a, 1}, {b, 2}, {c, 3}]),
+            ok = check_bad_map(fun() -> maps:foreach(Fun, id(not_a_map)) end),
+            ok = check_bad_map_or_badarg(fun() -> maps:foreach(not_a_function, id(not_a_map)) end),
+            ?ASSERT_ERROR(maps:foreach(not_a_function, maps:new()), badarg),
+            ok;
+        true ->
+            ok
+    end.
 
 test_map() ->
     Fun = fun(_Key, Value) -> 2 * Value end,

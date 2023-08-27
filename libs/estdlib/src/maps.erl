@@ -50,6 +50,7 @@
     find/2,
     filter/2,
     fold/3,
+    foreach/2,
     map/2,
     merge/2,
     remove/2,
@@ -336,6 +337,33 @@ fold(_Fun, _Init, _Map) ->
     error(badarg).
 
 %%-----------------------------------------------------------------------------
+%% @param   Fun     function to call with every key-value pair
+%% @param   MapOrIterator the map or map iterator over which to iterate
+%% @returns `ok'
+%% @doc Iterate over the entries in a map.
+%%
+%% This function takes a function used to iterate over all entries in a map.
+%%
+%% This function raises a `badmap' error if `Map' is not a map or map iterator,
+%% and a `badarg' error if the input function is not a function.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec foreach(
+    Fun :: fun((Key :: key(), Value :: value()) -> any()),
+    MapOrIterator :: map_or_iterator()
+) -> ok.
+foreach(Fun, Map) when is_function(Fun, 2) andalso is_map(Map) ->
+    iterate_foreach(Fun, maps:next(maps:iterator(Map)));
+foreach(Fun, [Pos | Map] = Iterator) when
+    is_function(Fun, 2) andalso is_integer(Pos) andalso is_map(Map)
+->
+    iterate_foreach(Fun, maps:next(Iterator));
+foreach(_Fun, Map) when not is_map(Map) ->
+    error({badmap, Map});
+foreach(_Fun, _Map) ->
+    error(badarg).
+
+%%-----------------------------------------------------------------------------
 %% @param   Fun     the function to apply to every entry in the map
 %% @param   Map     the map to which to apply the map function
 %% @returns the result of applying `Fun' to every entry in `Map'
@@ -462,6 +490,13 @@ iterate_fold(_Fun, none, Accum) ->
 iterate_fold(Fun, {Key, Value, Iterator}, Accum) ->
     NewAccum = Fun(Key, Value, Accum),
     iterate_fold(Fun, maps:next(Iterator), NewAccum).
+
+%% @private
+iterate_foreach(_Fun, none) ->
+    ok;
+iterate_foreach(Fun, {Key, Value, Iterator}) ->
+    _ = Fun(Key, Value),
+    iterate_foreach(Fun, maps:next(Iterator)).
 
 %% @private
 iterate_map(_Fun, none, Accum) ->
