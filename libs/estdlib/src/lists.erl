@@ -468,7 +468,7 @@ seq(From, To, Incr) when
         (To > (From - Incr) andalso Incr < 0) orelse
         (Incr =:= 0 andalso From =/= To)
 ->
-    throw(badarg);
+    error(badarg);
 seq(To, To, 0) ->
     [To];
 seq(From, To, Incr) ->

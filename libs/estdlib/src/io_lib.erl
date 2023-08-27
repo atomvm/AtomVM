@@ -47,7 +47,7 @@ format(Format, Args) ->
         true ->
             interleave(FormatTokens, Instr, Args, []);
         false ->
-            throw(badarg)
+            error(badarg)
     end.
 
 %%
@@ -145,7 +145,7 @@ parse_format_control([$+ | Rest], Format) -> {Format#format{control = '+'}, Rest
 parse_format_control([$e | Rest], Format) -> {Format#format{control = e}, Rest};
 parse_format_control([$f | Rest], Format) -> {Format#format{control = f}, Rest};
 parse_format_control([$g | Rest], Format) -> {Format#format{control = g}, Rest};
-parse_format_control(_String, _Format) -> throw({badarg, _String}).
+parse_format_control(_String, _Format) -> error({badarg, _String}).
 
 %% @private
 parse_integer([$- | Tail]) ->
@@ -251,8 +251,8 @@ format_spw(#format{control = Control, mod = undefined}, T) when is_binary(T) ->
 format_spw(#format{control = s, mod = Mod}, L) when is_list(L) ->
     Flatten = lists:flatten(L),
     case {Mod, test_string_class(Flatten)} of
-        {_, not_a_string} -> throw(badarg);
-        {undefined, unicode} -> throw(badarg);
+        {_, not_a_string} -> error(badarg);
+        {undefined, unicode} -> error(badarg);
         {_, _} -> Flatten
     end;
 format_spw(#format{control = p} = Format, L) when is_list(L) ->
@@ -263,7 +263,7 @@ format_spw(#format{control = p} = Format, L) when is_list(L) ->
 format_spw(#format{control = w} = Format, L) when is_list(L) ->
     [$[, lists:join($,, [format_spw(Format, E) || E <- L]), $]];
 format_spw(#format{control = s}, _) ->
-    throw(badarg);
+    error(badarg);
 format_spw(_Format, T) when is_integer(T) ->
     erlang:integer_to_list(T);
 format_spw(_Format, T) when is_float(T) ->
@@ -317,7 +317,7 @@ format_integer(#format{control = 'B', precision = Base}, T) when is_integer(T) -
 format_integer(#format{control = b, precision = Base}, T) when is_integer(T) ->
     string:to_lower(integer_to_list(T, Base));
 format_integer(_Format, _) ->
-    throw(badarg).
+    error(badarg).
 
 %% @private
 format_float(#format{control = f, precision = undefined}, T) when is_float(T) ->
@@ -341,7 +341,7 @@ format_float(#format{control = C, precision = Precision}, T) when
 ->
     format_scientific(T, Precision, 0);
 format_float(_Format, _) ->
-    throw(badarg).
+    error(badarg).
 
 %% @private
 format_scientific(T, Precision, E) when (T < 1 andalso T > 0) orelse (T > -1 andalso T < 0) ->
@@ -366,7 +366,7 @@ format_char(#format{precision = Precision} = Format, T) when Precision =/= undef
     [Ch] = format_char(Format#format{field_width = undefined, precision = undefined}, T),
     lists:duplicate(Precision, Ch);
 format_char(_, _) ->
-    throw(badarg).
+    error(badarg).
 
 %% @private
 %% String classes:

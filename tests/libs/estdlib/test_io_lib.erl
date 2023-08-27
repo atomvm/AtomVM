@@ -52,10 +52,10 @@ test() ->
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [[1, 2, 3]])), "foo: [1,2,3]\n"),
     % unprintable lists
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [[-1]])), "foo: [-1]\n"),
-    ?ASSERT_FAILURE(io_lib:format("foo: ~s~n", [[-1]]), badarg),
+    ?ASSERT_ERROR(io_lib:format("foo: ~s~n", [[-1]]), badarg),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [[-1]])), "foo: [-1]\n"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [[256]])), "foo: [256]\n"),
-    ?ASSERT_FAILURE(io_lib:format("foo: ~s~n", [[256]]), badarg),
+    ?ASSERT_ERROR(io_lib:format("foo: ~s~n", [[256]]), badarg),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [[256]])), "foo: [256]\n"),
     % escapable strings
     ?ASSERT_MATCH(
@@ -99,10 +99,10 @@ test() ->
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [[1, 2, [3]]])), "foo: [1,2,[3]]\n"),
     % integers
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [123])), "foo: 123\n"),
-    ?ASSERT_FAILURE(io_lib:format("foo: ~s~n", [123]), badarg),
+    ?ASSERT_ERROR(io_lib:format("foo: ~s~n", [123]), badarg),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [123])), "foo: 123\n"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [-123])), "foo: -123\n"),
-    ?ASSERT_FAILURE(io_lib:format("foo: ~s~n", [-123]), badarg),
+    ?ASSERT_ERROR(io_lib:format("foo: ~s~n", [-123]), badarg),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [-123])), "foo: -123\n"),
     ?ASSERT_MATCH(
         ?FLT(io_lib:format("foo: ~p~n", [[65, 116, 111, 109, 86, 77]])), "foo: \"AtomVM\"\n"
@@ -128,9 +128,9 @@ test() ->
     ),
     ?ASSERT_MATCH(?FLT(io_lib:format("escape ~~p~n", [])), "escape ~p\n"),
 
-    ?ASSERT_FAILURE(io_lib:format("no pattern", id([foo])), badarg),
-    ?ASSERT_FAILURE(io_lib:format("too ~p many ~p patterns", id([foo])), badarg),
-    ?ASSERT_FAILURE(io_lib:format("not enough ~p patterns", id([foo, bar])), badarg),
+    ?ASSERT_ERROR(io_lib:format("no pattern", id([foo])), badarg),
+    ?ASSERT_ERROR(io_lib:format("too ~p many ~p patterns", id([foo])), badarg),
+    ?ASSERT_ERROR(io_lib:format("not enough ~p patterns", id([foo, bar])), badarg),
 
     %   ?ASSERT_MATCH(?FLT(io_lib:format("~*.*.0f~n", [9, 5, 3.14159265])), "003.14159\n"),
     %   ?ASSERT_MATCH(?FLT(io_lib:format("~*.*.*f~n", [9, 5, $*, 3.14159265])), "**3.14159\n"),

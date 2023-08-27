@@ -48,23 +48,39 @@
             )
     end
 ).
--define(ASSERT_FAILURE(A),
-    case etest:assert_failure(fun() -> A end) of
+-define(ASSERT_EXCEPTION(A),
+    case etest:assert_exception(fun() -> A end) of
         ok ->
             ok;
         fail ->
             throw(
-                {failed_assert_failure, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, A}
+                {failed_assert_exception, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, A}
             )
     end
 ).
--define(ASSERT_FAILURE(A, E),
-    case etest:assert_failure(fun() -> A end, E) of
+-define(ASSERT_EXCEPTION(A, C),
+    case etest:assert_exception(fun() -> A end, C) of
         ok ->
             ok;
         fail ->
             throw(
-                {failed_assert_failure, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, A, E}
+                {failed_assert_exception, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, A}
             )
     end
 ).
+-define(ASSERT_EXCEPTION(A, C, E),
+    case etest:assert_exception(fun() -> A end, C, E) of
+        ok ->
+            ok;
+        fail ->
+            throw(
+                {failed_assert_exception, {?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE}, A}
+            )
+    end
+).
+-define(ASSERT_EXIT(A), ?ASSERT_EXCEPTION(A, exit)).
+-define(ASSERT_EXIT(A, E), ?ASSERT_EXCEPTION(A, exit, E)).
+-define(ASSERT_ERROR(A), ?ASSERT_EXCEPTION(A, error)).
+-define(ASSERT_ERROR(A, E), ?ASSERT_EXCEPTION(A, error, E)).
+-define(ASSERT_THROW(A), ?ASSERT_EXCEPTION(A, throw)).
+-define(ASSERT_THROW(A, E), ?ASSERT_EXCEPTION(A, throw, E)).

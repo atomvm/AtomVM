@@ -49,15 +49,15 @@ test_get() ->
     ok = check_bad_key(fun() -> maps:get(bar, id(#{foo => bar})) end, bar),
 
     ?ASSERT_MATCH(maps:get(gnu, id(#{foo => bar}), gnat), gnat),
-    ?ASSERT_FAILURE(maps:get({hello}, id(#{foo => bar})), {badkey, {hello}}),
-    ?ASSERT_FAILURE(maps:get(gnu, id({hello})), {badmap, {hello}}),
+    ?ASSERT_ERROR(maps:get({hello}, id(#{foo => bar})), {badkey, {hello}}),
+    ?ASSERT_ERROR(maps:get(gnu, id({hello})), {badmap, {hello}}),
     ok.
 
 test_is_key() ->
     ?ASSERT_MATCH(maps:is_key(foo, id(#{foo => bar})), true),
     ok = check_bad_map(fun() -> maps:is_key(bar, id(not_a_map)) end),
     ?ASSERT_MATCH(maps:is_key(bar, id(#{foo => bar})), false),
-    ?ASSERT_FAILURE(maps:is_key(gnu, id({hello})), {badmap, {hello}}),
+    ?ASSERT_ERROR(maps:is_key(gnu, id({hello})), {badmap, {hello}}),
     ok.
 
 test_put() ->
@@ -105,14 +105,14 @@ test_to_list() ->
 test_from_list() ->
     ?ASSERT_EQUALS(maps:from_list([]), #{}),
     ?ASSERT_EQUALS(maps:from_list([{a, 1}, {b, 2}, {c, 3}]), #{a => 1, b => 2, c => 3}),
-    ok = etest:assert_failure(fun() -> maps:from_list(id(foo)) end, badarg),
-    ok = etest:assert_failure(fun() -> maps:from_list(id([improper | list])) end, badarg),
+    ?ASSERT_ERROR(maps:from_list(id(foo)), badarg),
+    ?ASSERT_ERROR(maps:from_list(id([improper | list])), badarg),
     ok.
 
 test_size() ->
     ?ASSERT_MATCH(maps:size(maps:new()), 0),
     ?ASSERT_MATCH(maps:size(#{a => 1, b => 2, c => 3}), 3),
-    ?ASSERT_FAILURE(maps:size({hello}), {badmap, {hello}}),
+    ?ASSERT_ERROR(maps:size({hello}), {badmap, {hello}}),
     ok = check_bad_map(fun() -> maps:size(id(not_a_map)) end),
     ok.
 
@@ -131,7 +131,7 @@ test_filter() ->
     ?ASSERT_EQUALS(maps:filter(Filter, #{a => 1, b => 2, c => 3}), #{b => 2}),
     ok = check_bad_map(fun() -> maps:filter(Filter, id(not_a_map)) end),
     ok = check_bad_map_or_badarg(fun() -> maps:filter(not_a_function, id(not_a_map)) end),
-    ?ASSERT_FAILURE(maps:filter(not_a_function, maps:new()), badarg),
+    ?ASSERT_ERROR(maps:filter(not_a_function, maps:new()), badarg),
     ok.
 
 test_fold() ->
@@ -140,7 +140,7 @@ test_fold() ->
     ?ASSERT_EQUALS(maps:fold(Fun, 0, #{a => 1, b => 2, c => 3}), 6),
     ok = check_bad_map(fun() -> maps:fold(Fun, any, id(not_a_map)) end),
     ok = check_bad_map_or_badarg(fun() -> maps:fold(not_a_function, any, id(not_a_map)) end),
-    ?ASSERT_FAILURE(maps:fold(not_a_function, any, maps:new()), badarg),
+    ?ASSERT_ERROR(maps:fold(not_a_function, any, maps:new()), badarg),
     ok.
 
 test_map() ->
@@ -149,7 +149,7 @@ test_map() ->
     ?ASSERT_EQUALS(maps:map(Fun, #{a => 1, b => 2, c => 3}), #{a => 2, b => 4, c => 6}),
     ok = check_bad_map(fun() -> maps:map(Fun, id(not_a_map)) end),
     ok = check_bad_map_or_badarg(fun() -> maps:map(not_a_function, id(not_a_map)) end),
-    ?ASSERT_FAILURE(maps:map(not_a_function, maps:new()), badarg),
+    ?ASSERT_ERROR(maps:map(not_a_function, maps:new()), badarg),
     ok.
 
 test_merge() ->
@@ -176,13 +176,13 @@ test_remove() ->
     ok.
 
 test_update() ->
-    ?ASSERT_FAILURE(maps:update(foo, bar, maps:new()), {badkey, foo}),
+    ?ASSERT_ERROR(maps:update(foo, bar, maps:new()), {badkey, foo}),
     ?ASSERT_EQUALS(maps:update(a, 10, #{a => 1, b => 2, c => 3}), #{a => 10, b => 2, c => 3}),
     ?ASSERT_EQUALS(maps:update(b, 20, #{a => 1, b => 2, c => 3}), #{a => 1, b => 20, c => 3}),
     ?ASSERT_EQUALS(maps:update(c, 30, #{a => 1, b => 2, c => 3}), #{a => 1, b => 2, c => 30}),
-    ?ASSERT_FAILURE(maps:update(d, 40, #{a => 1, b => 2, c => 3}), {badkey, d}),
-    ?ASSERT_FAILURE(maps:update({hello}, 40, #{a => 1, b => 2, c => 3}), {badkey, {hello}}),
-    ?ASSERT_FAILURE(maps:update(a, 40, {hello}), {badmap, {hello}}),
+    ?ASSERT_ERROR(maps:update(d, 40, #{a => 1, b => 2, c => 3}), {badkey, d}),
+    ?ASSERT_ERROR(maps:update({hello}, 40, #{a => 1, b => 2, c => 3}), {badkey, {hello}}),
+    ?ASSERT_ERROR(maps:update(a, 40, {hello}), {badmap, {hello}}),
     ok = check_bad_map(fun() -> maps:update(foo, bar, id(not_a_map)) end),
     ok.
 
@@ -193,7 +193,7 @@ check_bad_map(F) ->
         F(),
         fail
     catch
-        _:{badmap, _} -> ok
+        error:{badmap, _} -> ok
     end.
 
 check_bad_map_or_badarg(F) ->
@@ -206,7 +206,7 @@ check_bad_map_or_badarg(F) ->
         F(),
         fail
     catch
-        _:{badmap, _} when not BadargFirst -> ok;
+        error:{badmap, _} when not BadargFirst -> ok;
         error:badarg when BadargFirst -> ok
     end.
 
@@ -216,6 +216,6 @@ check_bad_key(F, _Key) ->
         fail
     catch
         %% TODO OTP23 compiler compiles to erlang:map_ equivalents
-        _:{badkey, _} ->
+        error:{badkey, _} ->
             ok
     end.

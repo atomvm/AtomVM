@@ -67,11 +67,10 @@
 %% @param   Key     the key to get
 %% @param   Map     the map from which to get the value
 %% @returns the value in `Map' associated with `Key', if it exists.
-%% @throws  {badkey, Key} | {badmap, Map}
 %% @doc     Get the value in `Map' associated with `Key', if it exists.
 %%
-%% This function throws a `{badkey, Key}' exception if 'Key' does not occur in `Map' or
-%% a `{badmap, Map}' if `Map' is not a map.
+%% This function raises a `{badkey, Key}' error if 'Key' does not occur in
+%% `Map' or a `{badmap, Map}' error if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec get(Key :: key(), Map :: map()) -> Value :: value().
@@ -82,13 +81,12 @@ get(Key, Map) ->
 %% @param   Key     the key
 %% @param   Map     the map
 %% @param   Default default value
-%% @throws  {badmap, Map}
 %% @returns the value in `Map' associated with `Key', or `Default', if
 %%          the key is not associated with a value in `Map'.
 %% @doc     Get the value in `Map' associated with `Key', or `Default', if
 %%          the key is not associated with a value in `Map'.
 %%
-%% This function throws a `{badmap, Map}' exception if `Map' is not a map.
+%% This function raises a `{badmap, Map}' error if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec get(Key :: key(), Map :: map(), Default :: term()) -> Value :: value().
@@ -96,7 +94,7 @@ get(Key, Map, Default) ->
     try
         ?MODULE:get(Key, Map)
     catch
-        _:{badkey, _} ->
+        error:{badkey, _} ->
             Default
     end.
 
@@ -104,10 +102,9 @@ get(Key, Map, Default) ->
 %% @param   Key     the key
 %% @param   Map     the map
 %% @returns `true' if `Key' is associated with a value in `Map'; `false', otherwise.
-%% @throws  {badmap, Map}
 %% @doc     Return `true' if `Key' is associated with a value in `Map'; `false', otherwise.
 %%
-%% This function throws a `{badmap, Map}' exception if `Map' is not a map.
+%% This function raises a `{badmap, Map}' error if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec is_key(Key :: key(), Map :: map()) -> boolean().
@@ -119,26 +116,24 @@ is_key(Key, Map) ->
 %% @param   Value   the value
 %% @param   Map     the map
 %% @returns A copy of `Map' containing the `{Key, Value}' association.
-%% @throws  {badmap, Map}
 %% @doc     Return the map containing the `{Key, Value}' association.
 %%
 %% If `Key' occurs in `Map' then it will be over-written.  Otherwise, the
 %% returned map will contain the new association.
 %%
-%% This function throws a `{badmap, Map}' exception if `Map' is not a map.
+%% This function raises a `{badmap, Map}' error if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec put(Key :: key(), Value :: value(), Map :: map()) -> map().
 put(Key, Value, Map) when is_map(Map) ->
     Map#{Key => Value};
 put(_Key, _Value, Map) when not is_map(Map) ->
-    throw({badmap, Map}).
+    error({badmap, Map}).
 
 %%-----------------------------------------------------------------------------
 %% @param   Map     the map
 %% @returns an iterator structure that can be used to iterate over associations
 %% in a map.
-%% @throws  {badmap, Map}
 %% @see next/1
 %% @doc Return an iterator structure that can be used to iterate over associations
 %% in a map.
@@ -146,24 +141,23 @@ put(_Key, _Value, Map) when not is_map(Map) ->
 %% In general, users should make no assumptions about the order in which entries
 %% appear in an iterator.  The order of entries in a map is implementation-defined.
 %%
-%% This function throws a `{badmap, Map}' exception if `Map' is not a map.
+%% This function raises a `{badmap, Map}' error if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec iterator(Map :: map()) -> iterator().
 iterator(Map) when is_map(Map) ->
     [0 | Map];
 iterator(Map) ->
-    throw({badmap, Map}).
+    error({badmap, Map}).
 
 %%-----------------------------------------------------------------------------
 %% @param   Iterator a map iterator
 %% @returns the key and value, along with the next iterator in the map, or the
 %%          atom `none' if there are no more items over which to iterate.
-%% @throws  badarg
 %% @doc Returns the next key and value in the map, along with
 %% a new iterator that can be used to iterate over the remainder of the map.
 %%
-%% This function throws a `badarg' exception if the supplied iterator is not
+%% This function raises a `badarg' error if the supplied iterator is not
 %% of the expected type.  Only use iterators that are returned from functions
 %% in this module.
 %% @end
@@ -185,36 +179,34 @@ new() ->
 %%-----------------------------------------------------------------------------
 %% @param   Map     the map
 %% @returns the list of keys that occur in this map.
-%% @throws  {badmap, Map}
 %% @doc Returns the list of keys that occur in this map.
 %%
 %% No guarantees are provided about the order of keys returned from this function.
 %%
-%% This function throws a `{badmap, Map}' exception if `Map' is not a map.
+%% This function raises a `{badmap, Map}' error if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec keys(Map :: map()) -> [key()].
 keys(Map) when is_map(Map) ->
     iterate_keys(maps:next(maps:iterator(Map)), []);
 keys(Map) ->
-    throw({badmap, Map}).
+    error({badmap, Map}).
 
 %%-----------------------------------------------------------------------------
 %% @param   Map     the map
 %% @returns the list of values that occur in this map.
-%% @throws  {badmap, Map}
 %% @doc Returns the list of values that occur in this map.
 %%
 %% No guarantees are provided about the order of values returned from this function.
 %%
-%% This function throws a `{badmap, Map}' exception if `Map' is not a map.
+%% This function raises a `{badmap, Map}' error if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec values(Map :: map()) -> [key()].
 values(Map) when is_map(Map) ->
     iterate_values(maps:next(maps:iterator(Map)), []);
 values(Map) ->
-    throw({badmap, Map}).
+    error({badmap, Map}).
 
 %%-----------------------------------------------------------------------------
 %% @param   Map     the map
@@ -223,25 +215,24 @@ values(Map) ->
 %%
 %% No guarantees are provided about the order of entries returned from this function.
 %%
-%% This function throws a `{badmap, Map}' exception if `Map' is not a map.
+%% This function raises a `{badmap, Map}' error if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec to_list(Map :: map()) -> [key()].
 to_list(Map) when is_map(Map) ->
     iterate_entries(maps:next(maps:iterator(Map)), []);
 to_list(Map) ->
-    throw({badmap, Map}).
+    error({badmap, Map}).
 
 %%-----------------------------------------------------------------------------
 %% @param   List a list of `[{Key, Value}]' pairs
 %% @returns the map containing the entries from the list of supplied key-value pairs.
-%% @throws badarg
 %% @doc This function constructs a map from the supplied list of key-value pairs.
 %%
 %% If the input list contains duplicate keys, the returned map will contain the
 %% right-most entry.
 %%
-%% This function will raise a `badarg' exception if the input is not a proper
+%% This function will raise a `badarg' error if the input is not a proper
 %% list or contains an element that is not a key-value pair.
 %% @end
 %%-----------------------------------------------------------------------------
@@ -249,31 +240,29 @@ to_list(Map) ->
 from_list(List) when is_list(List) ->
     iterate_from_list(List, ?MODULE:new());
 from_list(_List) ->
-    throw(badarg).
+    error(badarg).
 
 %%-----------------------------------------------------------------------------
 %% @param   Map the map
 %% @returns the size of the map
-%% @throws {badmap, Map}
 %% @doc Returns the size of (i.e., the number of entries in) the map
 %%
-%% This function throws a `{badmap, Map}' exception if `Map' is not a map.
+%% This function raises a `{badmap, Map}' error if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec size(Map :: map()) -> non_neg_integer().
 size(Map) when is_map(Map) ->
     erlang:map_size(Map);
 size(Map) ->
-    throw({badmap, Map}).
+    error({badmap, Map}).
 
 %%-----------------------------------------------------------------------------
 %% @param   Key     the key to find
 %% @param   Map     the map in which to search
 %% @returns `{ok, Value}' if `Key' is in `Map'; `error', otherwise.
-%% @throws {badmap, Map}
 %% @doc Returns `{ok, Value}' if `Key' is in `Map'; `error', otherwise.
 %%
-%% This function throws a `{badmap, Map}' exception if `Map' is not a map.
+%% This function raises a `{badmap, Map}' error if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec find(Key :: key(), Map :: map()) -> {ok, Value :: value()} | error.
@@ -289,7 +278,6 @@ find(Key, Map) ->
 %% @param   Pred    a function used to filter entries from the map
 %% @param   MapOrIterator the map or map iterator to filter
 %% @returns a map containing all elements in `MapOrIterator' that satisfy `Pred'
-%% @throws {badmap, Map} | badarg
 %% @doc Return a map who's entries are filtered by the supplied predicate.
 %%
 %% This function returns a new map containing all elements from the input
@@ -297,8 +285,8 @@ find(Key, Map) ->
 %%
 %% The supplied predicate is a function from key-value inputs to a boolean value.
 %%
-%% This function throws a `{badmap, Map}' exception if `Map' is not a map or map iterator,
-%% and a `badarg' exception if the input predicate is not a function.
+%% This function raises a `{badmap, Map}' error if `Map' is not a map or map
+%% iterator, and a `badarg' error if the input predicate is not a function.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec filter(
@@ -312,24 +300,23 @@ filter(Pred, [Pos | Map] = Iterator) when
 ->
     iterate_filter(Pred, maps:next(Iterator), ?MODULE:new());
 filter(_Pred, Map) when not is_map(Map) ->
-    throw({badmap, Map});
+    error({badmap, Map});
 filter(_Pred, _Map) ->
-    throw(badarg).
+    error(badarg).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun     function over which to fold values
 %% @param   Init    the initial value of the fold accumulator
 %% @param   MapOrIterator the map or map iterator over which to fold
 %% @returns the result of folding over all elements of the supplied map.
-%% @throws {badmap, Map} | badarg
 %% @doc Fold over the entries in a map.
 %%
 %% This function takes a function used to fold over all entries in a map
 %% and an initial accumulator value to use as the value supplied to the
 %% first entry in the map.
 %%
-%% This function throws a `badmap' exception if `Map' is not a map or map iterator,
-%% and a `badarg' exception if the input function is not a function.
+%% This function raises a `badmap' error if `Map' is not a map or map iterator,
+%% and a `badarg' error if the input function is not a function.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec fold(
@@ -344,19 +331,18 @@ fold(Fun, Init, [Pos | Map] = Iterator) when
 ->
     iterate_fold(Fun, maps:next(Iterator), Init);
 fold(_Fun, _Init, Map) when not is_map(Map) ->
-    throw({badmap, Map});
+    error({badmap, Map});
 fold(_Fun, _Init, _Map) ->
-    throw(badarg).
+    error(badarg).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun     the function to apply to every entry in the map
 %% @param   Map     the map to which to apply the map function
 %% @returns the result of applying `Fun' to every entry in `Map'
-%% @throws {badmap, Map} | badarg
 %% @doc Returns the result of applying a function to every element of a map.
 %%
-%% This function throws a `badmap' exception if `Map' is not a map or map iterator,
-%% and a `badarg' exception if the input function is not a function.
+%% This function raises a `badmap' error if `Map' is not a map or map iterator,
+%% and a `badarg' error if the input function is not a function.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec map(Fun :: fun((Key :: key(), Value :: value()) -> value()), Map :: map_or_iterator()) ->
@@ -368,35 +354,33 @@ map(Fun, [Pos | Map] = Iterator) when
 ->
     iterate_map(Fun, maps:next(Iterator), ?MODULE:new());
 map(_Fun, Map) when not is_map(Map) ->
-    throw({badmap, Map});
+    error({badmap, Map});
 map(_Fun, _Map) ->
-    throw(badarg).
+    error(badarg).
 
 %%-----------------------------------------------------------------------------
 %% @param   Map1  a map
 %% @param   Map2  a mpa
 %% @returns the result of merging entries from `Map1' and `Map2'.
-%% @throws {badmap, Map}
 %% @doc Merge two maps to yield a new map.
 %%
 %% If `Map1' and `Map2' contain the same key, then the value from `Map2' will be used.
 %%
-%% This function throws a `badmap' exception if neither `Map1' nor `Map2' is a map.
+%% This function raises a `badmap' error if neither `Map1' nor `Map2' is a map.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec merge(Map1 :: map(), Map2 :: map()) -> map().
 merge(Map1, Map2) when is_map(Map1) andalso is_map(Map2) ->
     iterate_merge(maps:next(maps:iterator(Map2)), Map1);
 merge(Map1, _Map2) when not is_map(Map1) ->
-    throw({badmap, Map1});
+    error({badmap, Map1});
 merge(_Map1, Map2) when not is_map(Map2) ->
-    throw({badmap, Map2}).
+    error({badmap, Map2}).
 
 %%-----------------------------------------------------------------------------
 %% @param   Key     the key to remove
 %% @param   MapOrIterator     the map or map iterator from which to remove the key
 %% @returns a new map without `Key' as an entry.
-%% @throws {badmap, Map}
 %% @doc Remove an entry from a map using a key.
 %%
 %% If `Key' does not occur in `Map', then the returned Map has the same
@@ -405,7 +389,7 @@ merge(_Map1, Map2) when not is_map(Map2) ->
 %% Note.  This function extends the functionality of the OTP `remove/2' function,
 %% since the OTP interface only takes a map as input.
 %%
-%% This function throws a `badmap' exception if `Map' is not a map or map iterator.
+%% This function raises a `badmap' error if `Map' is not a map or map iterator.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec remove(Key :: key(), MapOrIterator :: map_or_iterator()) -> map().
@@ -419,17 +403,16 @@ remove(Key, Map) when is_map(Map) ->
 remove(Key, [Pos | Map] = Iterator) when is_integer(Pos) andalso is_map(Map) ->
     iterate_remove(Key, maps:next(Iterator), ?MODULE:new());
 remove(_Key, Map) when not is_map(Map) ->
-    throw({badmap, Map}).
+    error({badmap, Map}).
 
 %%-----------------------------------------------------------------------------
 %% @param   Key     the key to update
 %% @param   Value   the value to update
 %% @param   Map     the map to update
 %% @returns a new map, with `Key' updated with `Value'
-%% @throws {badmap, Map}
 %% @doc Returns a new map with an updated key-value association.
 %%
-%% This function throws a `badmap' exception if `Map' is not a map and
+%% This function raises a `badmap' error if `Map' is not a map and
 %% `{badkey, Key}` if key doesn't exist
 %% @end
 %%-----------------------------------------------------------------------------
@@ -507,4 +490,4 @@ iterate_from_list([], Accum) ->
 iterate_from_list([{Key, Value} | T], Accum) ->
     iterate_from_list(T, Accum#{Key => Value});
 iterate_from_list(_List, _Accum) ->
-    throw(badarg).
+    error(badarg).
