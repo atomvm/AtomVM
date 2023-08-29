@@ -193,12 +193,18 @@ send_after(Time, Dest, Msg) ->
 %%      <li><b>stack_size</b> the number of words used in the stack (integer)</li>
 %%      <li><b>message_queue_len</b> the number of messages enqueued for the process (integer)</li>
 %%      <li><b>memory</b> the estimated total number of bytes in use by the process (integer)</li>
+%%      <li><b>links</b> the list of linked processes</li>
 %% </ul>
 %% Specifying an unsupported term or atom raises a bad_arg error.
 %%
 %% @end
 %%-----------------------------------------------------------------------------
--spec process_info(Pid :: pid(), Key :: atom()) -> term().
+-spec process_info
+    (Pid :: pid(), heap_size) -> {heap_size, non_neg_integer()};
+    (Pid :: pid(), stack_size) -> {stack_size, non_neg_integer()};
+    (Pid :: pid(), message_queue_len) -> {message_queue_len, non_neg_integer()};
+    (Pid :: pid(), memory) -> {memory, non_neg_integer()};
+    (Pid :: pid(), links) -> {links, [pid()]}.
 process_info(_Pid, _Key) ->
     erlang:nif_error(undefined).
 

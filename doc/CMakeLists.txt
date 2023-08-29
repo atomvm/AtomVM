@@ -40,7 +40,7 @@ endforeach(SOURCE_TARGET)
 
 # Support for edoc -> markdown.
 add_custom_target(edown-escript
-    COMMAND rebar3 get-deps co edown edoc && rebar3 escriptize edown edoc
+    COMMAND rebar3 compile
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/edoc/edown_dep
     COMMENT "Preparing edown escript" VERBATIM
 )

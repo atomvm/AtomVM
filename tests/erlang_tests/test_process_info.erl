@@ -29,6 +29,11 @@ start() ->
         ok -> ok
     end,
     test_message_queue_len(Pid, Self),
+    {links, []} = process_info(Pid, links),
+    link(Pid),
+    {links, [Self]} = process_info(Pid, links),
+    unlink(Pid),
+    {links, []} = process_info(Pid, links),
     Pid ! {Self, stop},
     _Accum =
         receive
