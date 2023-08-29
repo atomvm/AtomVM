@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0-alpha.1] - Unreleased
 
+### Added
+
+- Added configurable logging macros to stm32 platform
+
 ### Fixed
 
 - Fixed `esp:nvs_set_binary` functions.

@@ -145,7 +145,7 @@ message(STATUS "Generated Linker File   : ${CMAKE_CURRENT_BINARY_DIR}/${LINKER_S
 # ARCH_FLAGS has to be passed as a string here
 JOIN("${ARCH_FLAGS}" " " ARCH_FLAGS)
 # Set linker flags
-set(LINKER_FLAGS "${LINKER_FLAGS} -specs=nosys.specs -specs=nano.specs -nostartfiles -Wl,--undefined,_printf_float -Wl,--undefined,_scanf_float -T${CMAKE_CURRENT_BINARY_DIR}/${LINKER_SCRIPT} ${ARCH_FLAGS}")
+set(LINKER_FLAGS "${LINKER_FLAGS} -specs=nosys.specs -nostartfiles -Wl,--undefined,_printf_float -Wl,--undefined,_scanf_float -T${CMAKE_CURRENT_BINARY_DIR}/${LINKER_SCRIPT} ${ARCH_FLAGS}")
 message(STATUS "Linker Flags            : ${LINKER_FLAGS}")
 
 # Compiler flags

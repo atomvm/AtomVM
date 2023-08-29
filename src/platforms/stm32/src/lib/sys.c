@@ -18,15 +18,17 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#include <sys.h>
-
 #include <avmpack.h>
 #include <defaultatoms.h>
 #include <scheduler.h>
+#include <sys.h>
 
+#include <trace.h>
+
+#include "avm_log.h"
 #include "gpiodriver.h"
 
-#include "trace.h"
+#define TAG "sys"
 
 void sys_tick_handler();
 
@@ -107,6 +109,7 @@ enum OpenAVMResult sys_open_avm_from_file(
     TRACE("sys_open_avm_from_file: Going to open: %s\n", path);
 
     // TODO
+    AVM_LOGW(TAG, "Open from file not supported on this platform.");
     return AVM_OPEN_NOT_SUPPORTED;
 }
 
@@ -133,7 +136,7 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
     synclist_unlock(&global->avmpack_data);
 
     if (IS_NULL_PTR(beam_module)) {
-        fprintf(stderr, "Failed to open module: %s\n", module_name);
+        AVM_LOGE(TAG, "Failed to open module: %s.", module_name);
         return NULL;
     }
 
