@@ -685,11 +685,19 @@ typedef union
 #define NEXT_INSTRUCTION(operands_size) \
     i += operands_size
 
+#define JUMP_TO_LABEL(module, label)    \
+    if (module != mod) {                \
+        prev_mod = mod;                 \
+        mod = module;                   \
+        code = mod->code->code;         \
+    }                                   \
+    JUMP_TO_ADDRESS(mod->labels[label])
+
 #ifndef TRACE_JUMP
     #define JUMP_TO_ADDRESS(address) \
         i = ((uint8_t *) (address)) - code
 #else
-    #define JUMP_TO_ADDRESS(address) \
+    #define JUMP_TO_ADDRESS(address)        \
         i = ((uint8_t *) (address)) - code; \
         fprintf(stderr, "going to jump to %i\n", i)
 #endif
@@ -804,10 +812,21 @@ typedef union
 #define INSTRUCTION_POINTER() \
     ((const void *) &code[i])
 
-#define DO_RETURN()                                     \
-    mod = globalcontext_get_module_by_index(mod->global, ctx->cp >> 24); \
-    code = mod->code->code;                             \
-    i = (ctx->cp & 0xFFFFFF) >> 2;
+#define DO_RETURN()                                                     \
+    {                                                                   \
+        int module_index = ctx->cp >> 24;                               \
+        if (module_index == prev_mod->module_index) {                   \
+            Module *t = mod;                                            \
+            mod = prev_mod;                                             \
+            prev_mod = t;                                               \
+            code = mod->code->code;                                     \
+        } else if (module_index != mod->module_index) {                 \
+            prev_mod = mod;                                             \
+            mod = globalcontext_get_module_by_index(glb, module_index); \
+            code = mod->code->code;                                     \
+        }                                                               \
+        i = (ctx->cp & 0xFFFFFF) >> 2;                                  \
+    }
 
 #define POINTER_TO_II(instruction_pointer) \
     (((uint8_t *) (instruction_pointer)) - code)
@@ -856,8 +875,8 @@ typedef union
     if (term_is_atom(index_or_function)) {                              \
         term module = boxed_value[1];                                   \
         fun_arity = term_to_int(boxed_value[3]);                        \
-        AtomString module_name = globalcontext_atomstring_from_term(mod->global, module); \
-        AtomString function_name = globalcontext_atomstring_from_term(mod->global, index_or_function); \
+        AtomString module_name = globalcontext_atomstring_from_term(glb, module); \
+        AtomString function_name = globalcontext_atomstring_from_term(glb, index_or_function); \
         struct Nif *nif = (struct Nif *) nifs_get(module_name, function_name, fun_arity); \
         if (!IS_NULL_PTR(nif)) {                                        \
             term return_value = nif->nif_ptr(ctx, fun_arity, ctx->x);   \
@@ -875,7 +894,7 @@ typedef union
             if (IS_NULL_PTR(fun_module)) {                              \
                 HANDLE_ERROR();                                         \
             }                                                           \
-            label = module_search_exported_function(fun_module, function_name, fun_arity); \
+            label = module_search_exported_function(fun_module, function_name, fun_arity, glb); \
             if (UNLIKELY(label == 0)) {                                 \
                 HANDLE_ERROR();                                         \
             }                                                           \
@@ -896,9 +915,7 @@ typedef union
     }                                                                   \
     NEXT_INSTRUCTION(next_off);                                         \
     ctx->cp = module_address(mod->module_index, i);                     \
-    mod = fun_module;                                                   \
-    code = mod->code->code;                                             \
-    JUMP_TO_ADDRESS(mod->labels[label]);
+    JUMP_TO_LABEL(fun_module, label);
 
 #define DECODE_FLAGS_LIST(flags_value, flags, opcode)                   \
     flags_value = 0;                                                    \
@@ -1441,7 +1458,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
         tmp_atom_name[0] = function_len;
         memcpy(tmp_atom_name + 1, function_name, function_len);
 
-        int label = module_search_exported_function(mod, tmp_atom_name, arity);
+        int label = module_search_exported_function(mod, tmp_atom_name, arity, ctx->global);
         free(tmp_atom_name);
 
         if (UNLIKELY(!label)) {
@@ -1481,6 +1498,7 @@ HOT_FUNC int scheduler_entry_point(GlobalContext *glb)
 #ifdef IMPL_EXECUTE_LOOP
     uint8_t *code;
     Module *mod;
+    Module *prev_mod;
     term *x_regs;
     uintptr_t i;
     int remaining_reductions;
@@ -1492,6 +1510,7 @@ schedule_in:
     TRACE("scheduling in, ctx = %p\n", ctx);
     if (ctx == NULL) return 0;
     mod = ctx->saved_module;
+    prev_mod = mod;
     code = mod->code->code;
     x_regs = ctx->x;
     JUMP_TO_ADDRESS(ctx->saved_ip);
@@ -1695,7 +1714,7 @@ schedule_in:
 
                     TRACE_CALL_EXT(ctx, mod, "call_ext", index, arity);
 
-                    const struct ExportedFunction *func = module_resolve_function(mod, index);
+                    const struct ExportedFunction *func = module_resolve_function(mod, index, glb);
                     if (IS_NULL_PTR(func)) {
                             RAISE_ERROR(UNDEF_ATOM);
                     }
@@ -1717,9 +1736,7 @@ schedule_in:
                             const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
 
                             ctx->cp = module_address(mod->module_index, i);
-                            mod = jump->target;
-                            code = mod->code->code;
-                            JUMP_TO_ADDRESS(mod->labels[jump->label]);
+                            JUMP_TO_LABEL(jump->target, jump->label);
 
                             break;
                         }
@@ -1775,7 +1792,7 @@ schedule_in:
 
                     TRACE_CALL_EXT(ctx, mod, "call_ext_last", index, arity);
 
-                    const struct ExportedFunction *func = module_resolve_function(mod, index);
+                    const struct ExportedFunction *func = module_resolve_function(mod, index, glb);
                     if (IS_NULL_PTR(func)) {
                         RAISE_ERROR(UNDEF_ATOM);
                     }
@@ -1812,10 +1829,7 @@ schedule_in:
                             ctx->e += (n_words + 1);
 
                             const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
-
-                            mod = jump->target;
-                            code = mod->code->code;
-                            JUMP_TO_ADDRESS(mod->labels[jump->label]);
+                            JUMP_TO_LABEL(jump->target, jump->label);
 
                             break;
                         }
@@ -3472,7 +3486,7 @@ wait_timeout_trap_handler:
 
                     TRACE_CALL_EXT(ctx, mod, "call_ext_only", index, arity);
 
-                    const struct ExportedFunction *func = module_resolve_function(mod, index);
+                    const struct ExportedFunction *func = module_resolve_function(mod, index, glb);
                     if (IS_NULL_PTR(func)) {
                         RAISE_ERROR(UNDEF_ATOM);
                     }
@@ -3499,11 +3513,7 @@ wait_timeout_trap_handler:
                         }
                         case ModuleFunction: {
                             const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
-
-                            mod = jump->target;
-                            code = mod->code->code;
-
-                            JUMP_TO_ADDRESS(mod->labels[jump->label]);
+                            JUMP_TO_LABEL(jump->target, jump->label);
 
                             break;
                         }
@@ -5188,8 +5198,8 @@ wait_timeout_trap_handler:
                     RAISE_ERROR(BADARG_ATOM);
                 }
 
-                AtomString module_name = globalcontext_atomstring_from_term(mod->global, module);
-                AtomString function_name = globalcontext_atomstring_from_term(mod->global, function);
+                AtomString module_name = globalcontext_atomstring_from_term(glb, module);
+                AtomString function_name = globalcontext_atomstring_from_term(glb, function);
 
                 TRACE_APPLY(ctx, "apply", module_name, function_name, arity);
 
@@ -5204,15 +5214,13 @@ wait_timeout_trap_handler:
                         i = orig_i;
                         HANDLE_ERROR();
                     }
-                    int target_label = module_search_exported_function(target_module, function_name, arity);
+                    int target_label = module_search_exported_function(target_module, function_name, arity, glb);
                     if (target_label == 0) {
                         i = orig_i;
                         HANDLE_ERROR();
                     }
                     ctx->cp = module_address(mod->module_index, i);
-                    mod = target_module;
-                    code = mod->code->code;
-                    JUMP_TO_ADDRESS(mod->labels[target_label]);
+                    JUMP_TO_LABEL(target_module, target_label);
                 }
 #endif
 #ifdef IMPL_CODE_LOADER
@@ -5245,8 +5253,8 @@ wait_timeout_trap_handler:
                     RAISE_ERROR(BADARG_ATOM);
                 }
 
-                AtomString module_name = globalcontext_atomstring_from_term(mod->global, module);
-                AtomString function_name = globalcontext_atomstring_from_term(mod->global, function);
+                AtomString module_name = globalcontext_atomstring_from_term(glb, module);
+                AtomString function_name = globalcontext_atomstring_from_term(glb, function);
 
                 TRACE_APPLY(ctx, "apply_last", module_name, function_name, arity);
 
@@ -5261,13 +5269,11 @@ wait_timeout_trap_handler:
                     if (IS_NULL_PTR(target_module)) {
                         HANDLE_ERROR();
                     }
-                    int target_label = module_search_exported_function(target_module, function_name, arity);
+                    int target_label = module_search_exported_function(target_module, function_name, arity, glb);
                     if (target_label == 0) {
                         HANDLE_ERROR();
                     }
-                    mod = target_module;
-                    code = mod->code->code;
-                    JUMP_TO_ADDRESS(mod->labels[target_label]);
+                    JUMP_TO_LABEL(target_module, target_label);
                 }
 #endif
 #ifdef IMPL_CODE_LOADER

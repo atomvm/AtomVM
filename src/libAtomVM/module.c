@@ -61,7 +61,7 @@
 #endif
 static struct LiteralEntry *module_build_literals_table(const void *literalsBuf);
 static void module_add_label(Module *mod, int index, void *ptr);
-static enum ModuleLoadResult module_build_imported_functions_table(Module *this_module, uint8_t *table_data);
+static enum ModuleLoadResult module_build_imported_functions_table(Module *this_module, uint8_t *table_data, GlobalContext *glb);
 static void parse_line_table(uint16_t **line_refs, struct ModuleFilename **filenames, uint8_t *data, size_t len);
 
 #define IMPL_CODE_LOADER 1
@@ -69,7 +69,7 @@ static void parse_line_table(uint16_t **line_refs, struct ModuleFilename **filen
 #undef TRACE
 #undef IMPL_CODE_LOADER
 
-static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, uint8_t *table_data)
+static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, uint8_t *table_data, GlobalContext *glb)
 {
     int atoms_count = READ_32_ALIGNED(table_data + 8);
     const char *current_atom = (const char *) table_data + 12;
@@ -86,7 +86,7 @@ static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, ui
         int atom_len = *current_atom;
         atom = current_atom;
 
-        int global_atom_id = globalcontext_insert_atom(this_module->global, (AtomString) atom);
+        int global_atom_id = globalcontext_insert_atom(glb, (AtomString) atom);
         if (UNLIKELY(global_atom_id < 0)) {
             fprintf(stderr, "Cannot allocate memory while loading module (line: %i).\n", __LINE__);
             return MODULE_ERROR_FAILED_ALLOCATION;
@@ -100,7 +100,7 @@ static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, ui
     return MODULE_LOAD_OK;
 }
 
-static enum ModuleLoadResult module_build_imported_functions_table(Module *this_module, uint8_t *table_data)
+static enum ModuleLoadResult module_build_imported_functions_table(Module *this_module, uint8_t *table_data, GlobalContext *glb)
 {
     int functions_count = READ_32_ALIGNED(table_data + 8);
 
@@ -113,8 +113,8 @@ static enum ModuleLoadResult module_build_imported_functions_table(Module *this_
     for (int i = 0; i < functions_count; i++) {
         int local_module_atom_index = READ_32_ALIGNED(table_data + i * 12 + 12);
         int local_function_atom_index = READ_32_ALIGNED(table_data + i * 12 + 4 + 12);
-        AtomString module_atom = module_get_atom_string_by_id(this_module, local_module_atom_index);
-        AtomString function_atom = module_get_atom_string_by_id(this_module, local_function_atom_index);
+        AtomString module_atom = module_get_atom_string_by_id(this_module, local_module_atom_index, glb);
+        AtomString function_atom = module_get_atom_string_by_id(this_module, local_function_atom_index, glb);
         uint32_t arity = READ_32_ALIGNED(table_data + i * 12 + 8 + 12);
 
         const struct ExportedFunction *bif = bif_registry_get_handler(module_atom, function_atom, arity);
@@ -144,7 +144,7 @@ static enum ModuleLoadResult module_build_imported_functions_table(Module *this_
 }
 
 #ifdef ENABLE_ADVANCED_TRACE
-void module_get_imported_function_module_and_name(const Module *this_module, int index, AtomString *module_atom, AtomString *function_atom)
+void module_get_imported_function_module_and_name(const Module *this_module, int index, AtomString *module_atom, AtomString *function_atom, GlobalContext *glb)
 {
     const uint8_t *table_data = (const uint8_t *) this_module->import_table;
     int functions_count = READ_32_ALIGNED(table_data + 8);
@@ -154,12 +154,12 @@ void module_get_imported_function_module_and_name(const Module *this_module, int
     }
     int local_module_atom_index = READ_32_ALIGNED(table_data + index * 12 + 12);
     int local_function_atom_index = READ_32_ALIGNED(table_data + index * 12 + 4 + 12);
-    *module_atom = module_get_atom_string_by_id(this_module, local_module_atom_index);
-    *function_atom = module_get_atom_string_by_id(this_module, local_function_atom_index);
+    *module_atom = module_get_atom_string_by_id(this_module, local_module_atom_index, glb);
+    *function_atom = module_get_atom_string_by_id(this_module, local_function_atom_index, glb);
 }
 #endif
 
-bool module_get_function_from_label(Module *this_module, int label, AtomString *function_name, int *arity)
+bool module_get_function_from_label(Module *this_module, int label, AtomString *function_name, int *arity, GlobalContext *glb)
 {
     int best_label = -1;
     const uint8_t *export_table_data = (const uint8_t *) this_module->export_table;
@@ -171,7 +171,7 @@ bool module_get_function_from_label(Module *this_module, int label, AtomString *
         if (fun_label <= label && best_label < fun_label) {
             best_label = fun_label;
             *arity = fun_arity;
-            *function_name = module_get_atom_string_by_id(this_module, fun_atom_index);
+            *function_name = module_get_atom_string_by_id(this_module, fun_atom_index, glb);
         }
     }
 
@@ -184,7 +184,7 @@ bool module_get_function_from_label(Module *this_module, int label, AtomString *
         if (fun_label <= label && best_label < fun_label) {
             best_label = fun_label;
             *arity = fun_arity;
-            *function_name = module_get_atom_string_by_id(this_module, fun_atom_index);
+            *function_name = module_get_atom_string_by_id(this_module, fun_atom_index, glb);
         }
     }
     if (UNLIKELY(best_label == -1)) {
@@ -201,13 +201,13 @@ size_t module_get_exported_functions_count(Module *this_module)
     return functions_count;
 }
 
-uint32_t module_search_exported_function(Module *this_module, AtomString func_name, int func_arity)
+uint32_t module_search_exported_function(Module *this_module, AtomString func_name, int func_arity, GlobalContext *glb)
 {
     size_t functions_count = module_get_exported_functions_count(this_module);
 
     const uint8_t *table_data = (const uint8_t *) this_module->export_table;
     for (unsigned int i = 0; i < functions_count; i++) {
-        AtomString function_atom = module_get_atom_string_by_id(this_module, READ_32_ALIGNED(table_data + i * 12 + 12));
+        AtomString function_atom = module_get_atom_string_by_id(this_module, READ_32_ALIGNED(table_data + i * 12 + 12), glb);
         int32_t arity = READ_32_ALIGNED(table_data + i * 12 + 4 + 12);
         if ((func_arity == arity) && atom_are_equals(func_name, function_atom)) {
             uint32_t label = READ_32_ALIGNED(table_data + i * 12 + 8 + 12);
@@ -218,17 +218,17 @@ uint32_t module_search_exported_function(Module *this_module, AtomString func_na
     return 0;
 }
 
-term module_get_exported_functions(Module *this_module, Heap *heap, GlobalContext *global)
+term module_get_exported_functions(Module *this_module, Heap *heap, GlobalContext *glb)
 {
     size_t functions_count = module_get_exported_functions_count(this_module);
     term result_list = term_nil();
 
     const uint8_t *table_data = (const uint8_t *) this_module->export_table;
     for (unsigned int i = 0; i < functions_count; i++) {
-        AtomString function_atom = module_get_atom_string_by_id(this_module, READ_32_ALIGNED(table_data + i * 12 + 12));
+        AtomString function_atom = module_get_atom_string_by_id(this_module, READ_32_ALIGNED(table_data + i * 12 + 12), glb);
         int32_t arity = READ_32_ALIGNED(table_data + i * 12 + 4 + 12);
         term function_tuple = term_alloc_tuple(2, heap);
-        term_put_tuple_element(function_tuple, 0, globalcontext_existing_term_from_atom_string(global, function_atom));
+        term_put_tuple_element(function_tuple, 0, globalcontext_existing_term_from_atom_string(glb, function_atom));
         term_put_tuple_element(function_tuple, 1, term_from_int(arity));
         result_list = term_list_prepend(function_tuple, result_list, heap);
     }
@@ -256,19 +256,18 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     memset(mod, 0, sizeof(Module));
 
     mod->module_index = -1;
-    mod->global = global;
 
 #ifndef AVM_NO_SMP
     mod->mutex = smp_mutex_create();
 #endif
 
-    if (UNLIKELY(module_populate_atoms_table(mod, beam_file + offsets[AT8U]) != MODULE_LOAD_OK)) {
+    if (UNLIKELY(module_populate_atoms_table(mod, beam_file + offsets[AT8U], global) != MODULE_LOAD_OK)) {
         fprintf(stderr, "Error: Failed to populate atoms table: %s:%i.\n", __FILE__, __LINE__);
         module_destroy(mod);
         return NULL;
     }
 
-    if (UNLIKELY(module_build_imported_functions_table(mod, beam_file + offsets[IMPT]) != MODULE_LOAD_OK)) {
+    if (UNLIKELY(module_build_imported_functions_table(mod, beam_file + offsets[IMPT], global) != MODULE_LOAD_OK)) {
         fprintf(stderr, "Error: Failed to build imported functions table: %s:%i.\n", __FILE__, __LINE__);
         module_destroy(mod);
         return NULL;
@@ -410,17 +409,17 @@ term module_load_literal(Module *mod, int index, Context *ctx)
     return t;
 }
 
-const struct ExportedFunction *module_resolve_function0(Module *mod, int import_table_index, struct UnresolvedFunctionCall *unresolved)
+const struct ExportedFunction *module_resolve_function0(Module *mod, int import_table_index, struct UnresolvedFunctionCall *unresolved, GlobalContext *glb)
 {
 
-    AtomString module_name_atom = (AtomString) valueshashtable_get_value(mod->global->atoms_ids_table, unresolved->module_atom_index, (unsigned long) NULL);
-    AtomString function_name_atom = (AtomString) valueshashtable_get_value(mod->global->atoms_ids_table, unresolved->function_atom_index, (unsigned long) NULL);
+    AtomString module_name_atom = (AtomString) valueshashtable_get_value(glb->atoms_ids_table, unresolved->module_atom_index, (unsigned long) NULL);
+    AtomString function_name_atom = (AtomString) valueshashtable_get_value(glb->atoms_ids_table, unresolved->function_atom_index, (unsigned long) NULL);
     int arity = unresolved->arity;
 
-    Module *found_module = globalcontext_get_module(mod->global, module_name_atom);
+    Module *found_module = globalcontext_get_module(glb, module_name_atom);
 
     if (LIKELY(found_module != NULL)) {
-        int exported_label = module_search_exported_function(found_module, function_name_atom, arity);
+        int exported_label = module_search_exported_function(found_module, function_name_atom, arity, glb);
         if (exported_label == 0) {
             char buf[256];
             atom_write_mfa(buf, 256, module_name_atom, function_name_atom, arity);

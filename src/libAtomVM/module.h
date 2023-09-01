@@ -96,8 +96,6 @@ struct LineRefOffset
 
 struct Module
 {
-    GlobalContext *global;
-
 #ifdef ENABLE_ADVANCED_TRACE
     void *import_table;
 #endif
@@ -179,8 +177,9 @@ size_t module_get_exported_functions_count(Module *this_module);
  * @param this_module the module on which the function will be searched.
  * @param func_name function name atom string.
  * @param func_arity function arity.
+ * @param glb the global context
  */
-uint32_t module_search_exported_function(Module *this_module, AtomString func_name, int func_arity);
+uint32_t module_search_exported_function(Module *this_module, AtomString func_name, int func_arity, GlobalContext *glb);
 
 /**
  * @brief Determine heap size of exported functions list.
@@ -242,10 +241,10 @@ term module_load_literal(Module *mod, int index, Context *ctx);
  * @param local_atom_id module atom table index.
  * @return the AtomString for the given module atom index.
  */
-static inline AtomString module_get_atom_string_by_id(const Module *mod, int local_atom_id)
+static inline AtomString module_get_atom_string_by_id(const Module *mod, int local_atom_id, GlobalContext *glb)
 {
     int global_id = mod->local_atoms_to_global_table[local_atom_id];
-    return (AtomString) valueshashtable_get_value(mod->global->atoms_ids_table, global_id, (unsigned long) NULL);
+    return (AtomString) valueshashtable_get_value(glb->atoms_ids_table, global_id, (unsigned long) NULL);
 }
 
 /**
@@ -262,7 +261,7 @@ static inline term module_get_atom_term_by_id(const Module *mod, int local_atom_
     return term_from_atom_index(global_id);
 }
 
-const struct ExportedFunction *module_resolve_function0(Module *mod, int import_table_index, struct UnresolvedFunctionCall *unresolved);
+const struct ExportedFunction *module_resolve_function0(Module *mod, int import_table_index, struct UnresolvedFunctionCall *unresolved, GlobalContext *glb);
 
 /**
  * @brief Get the module name, as an atom term.
@@ -284,8 +283,9 @@ static inline term module_get_name(const Module *mod)
  * also it loads the referenced module if it hasn't been loaded yet.
  * @param mod the module containing the function to resolve.
  * @param import_table_index the unresolved function index.
+ * @param glb the global context
  */
-static inline const struct ExportedFunction *module_resolve_function(Module *mod, int import_table_index)
+static inline const struct ExportedFunction *module_resolve_function(Module *mod, int import_table_index, GlobalContext *glb)
 {
     SMP_MODULE_LOCK(mod);
     // We cannot optimistically read the unresolved function call.
@@ -297,7 +297,7 @@ static inline const struct ExportedFunction *module_resolve_function(Module *mod
         return func;
     }
     struct UnresolvedFunctionCall *unresolved = EXPORTED_FUNCTION_TO_UNRESOLVED_FUNCTION_CALL(func);
-    const struct ExportedFunction *result = module_resolve_function0(mod, import_table_index, unresolved);
+    const struct ExportedFunction *result = module_resolve_function0(mod, import_table_index, unresolved, glb);
     SMP_MODULE_UNLOCK(mod);
     return result;
 }
@@ -370,8 +370,9 @@ static inline const uint8_t *module_get_str(Module *mod, size_t offset, size_t *
  * @param label the current label used to look up the function/arity
  * @param function_name (output) the function name, as an AtomString.
  * @param arity (output) the function arity
+ * @param glb the global context
  */
-bool module_get_function_from_label(Module *this_module, int label, AtomString *function_name, int *arity);
+bool module_get_function_from_label(Module *this_module, int label, AtomString *function_name, int *arity, GlobalContext *glb);
 
 /*
  * @brief Insert the instruction offset for a given module at a line reference instruction.
