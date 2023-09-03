@@ -42,3 +42,20 @@ jobs:
         cd build
         cmake .. -G Ninja
         ninja
+
+    - name: Install nvm and nodejs 20
+      run: |
+        set -euo pipefail
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash
+        source $HOME/.nvm/nvm.sh
+        nvm install 20
+
+    - name: Run tests with rp2040js
+      shell: bash
+      working-directory: ./src/platforms/rp2040/tests
+      run: |
+        set -euo pipefail
+        source $HOME/.nvm/nvm.sh
+        nvm use node
+        npm install
+        npx tsx run-tests.ts ../build/tests/rp2040_tests.uf2
