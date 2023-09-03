@@ -1,0 +1,12 @@
+{
+  "name": "rp2040_tests",
+  "description": "Tests using rp2040js emulator",
+  "dependencies": {
+    "@tsconfig/node20": "^20.1.2",
+    "rp2040js": "github:mingpepe/rp2040js#core1",
+    "sync-fetch": "^0.5.2",
+    "tsx": "^3.12.8",
+    "typescript": "^5.2.2",
+    "uf2": "^1.0.0"
+  }
+}

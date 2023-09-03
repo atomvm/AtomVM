@@ -581,6 +581,24 @@ From the root of the project:
     cmake .. -G Ninja
     ninja
 
+### Running tests
+
+Tests for Pico/RP2040 are run on the desktop (or CI) using [rp2040js](https://github.com/wokwi/rp2040js).
+Running tests currently require nodejs 20.
+
+Change directory to the `src/platforms/rp2040/tests` directory under the AtomVM source tree root:
+
+	shell$ cd <atomvm-source-tree-root>
+	shell$ cd src/platforms/rp2040/tests
+
+Install the emulator and required Javascript dependencies:
+
+	shell$ npm install
+
+We are assuming tests were built as part of regular build of AtomVM. Run them with the commands:
+
+	shell$ npx tsx run-tests.ts ../build/tests/rp2040_tests.uf2
+
 ## Building for NodeJS/Web
 
 Two different builds are possible, depending on link options: for NodeJS and
