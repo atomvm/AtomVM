@@ -29,6 +29,7 @@
 #pragma GCC diagnostic ignored "-Wpedantic"
 
 #include <hardware/rtc.h>
+#include <sys/time.h>
 
 #pragma GCC diagnostic pop
 
@@ -96,15 +97,39 @@ static term nif_pico_rtc_set_datetime(Context *ctx, int argc, term argv[])
     pico_datetime.year = term_to_int(year);
     pico_datetime.month = term_to_int(month);
     pico_datetime.day = term_to_int(day);
+    pico_datetime.dotw = 0;
     pico_datetime.hour = term_to_int(hour);
     pico_datetime.min = term_to_int(min);
     pico_datetime.sec = term_to_int(sec);
 
+    if (UNLIKELY(!rtc_running())) {
+        rtc_init();
+    }
     if (UNLIKELY(!rtc_set_datetime(&pico_datetime))) {
+        printf("rtc_set_datetime failed\n");
         argv[0] = ERROR_ATOM;
         argv[1] = BADARG_ATOM;
         return term_invalid_term();
     }
+    // Wait until RTC is done
+    sleep_us(64);
+
+    // Update epoch_time_us_since_boot
+    rtc_get_datetime(&pico_datetime);
+    struct tm c11_time;
+    memset(&c11_time, 0, sizeof(c11_time));
+    c11_time.tm_sec = pico_datetime.sec;
+    c11_time.tm_min = pico_datetime.min;
+    c11_time.tm_hour = pico_datetime.hour;
+    c11_time.tm_mday = pico_datetime.day;
+    c11_time.tm_mon = pico_datetime.month - 1;
+    c11_time.tm_year = pico_datetime.year - 1900;
+    c11_time.tm_wday = pico_datetime.dotw;
+
+    struct timeval tv;
+    tv.tv_sec = mktime(&c11_time);
+    tv.tv_usec = 0;
+    settimeofday(&tv, NULL);
 
     return OK_ATOM;
 }

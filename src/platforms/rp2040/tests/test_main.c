@@ -39,7 +39,7 @@
 #include <globalcontext.h>
 #include <iff.h>
 #include <module.h>
-#include <version.h>
+#include <sys.h>
 
 #include "platform_defaultatoms.h"
 #include "rp2040_sys.h"
@@ -89,6 +89,47 @@ static void unity_run_all_tests()
     }
 }
 
+#define MAIN_AVM ((void *) 0x100A0000)
+
+static term avm_test_case(const char *test_module)
+{
+    GlobalContext *glb = globalcontext_new();
+    TEST_ASSERT_NOT_NULL(glb);
+
+    nif_collection_init_all(glb);
+
+    if (!avmpack_is_valid(MAIN_AVM, XIP_SRAM_BASE - (uintptr_t) MAIN_AVM)) {
+        TEST_FAIL_MESSAGE("Fatal error: invalid main.avm packbeam");
+        return term_invalid_term();
+    }
+
+    struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
+    TEST_ASSERT_NOT_NULL(avmpack_data);
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
+    avmpack_data->base.data = MAIN_AVM;
+    avmpack_data->base.in_use = true;
+
+    synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
+
+    Module *mod = sys_load_module(glb, test_module);
+    TEST_ASSERT(mod != NULL);
+
+    globalcontext_insert_module(glb, mod);
+
+    Context *ctx = context_new(glb);
+    TEST_ASSERT(ctx != NULL);
+    ctx->leader = 1;
+
+    context_execute_loop(ctx, mod, "start", 0);
+    term ret_value = ctx->x[0];
+
+    nif_collection_destroy_all(glb);
+
+    globalcontext_destroy(glb);
+
+    return ret_value;
+}
+
 TEST_CASE(test_atomvm_platform0)
 {
     const struct Nif *nif = platform_nifs_get_nif("atomvm:platform/0");
@@ -108,6 +149,18 @@ TEST_CASE(atomvm_smp_0)
     TEST_ASSERT_EQUAL_INT(2, cores);
 }
 #endif
+
+TEST_CASE(test_clocks)
+{
+    term ret_value = avm_test_case("test_clocks.beam");
+    TEST_ASSERT_EQUAL_INT(OK_ATOM, ret_value);
+}
+
+TEST_CASE(test_smp)
+{
+    term ret_value = avm_test_case("test_smp.beam");
+    TEST_ASSERT_EQUAL_INT(OK_ATOM, ret_value);
+}
 
 /* newlib stubs to get AVM_ABORT to work */
 pid_t _getpid()

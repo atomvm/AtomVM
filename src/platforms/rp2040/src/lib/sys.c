@@ -30,6 +30,7 @@
 #include <hardware/rtc.h>
 #include <pico/multicore.h>
 #include <pico/time.h>
+#include <sys/time.h>
 
 #pragma GCC diagnostic pop
 
@@ -101,31 +102,18 @@ void sys_unregister_select_event(GlobalContext *global, ErlNifEvent event, bool 
 
 void sys_time(struct timespec *t)
 {
-    if (!rtc_running()) {
-        rtc_init();
-        sleep_us(64);
-    }
-    datetime_t pico_datetime;
-    rtc_get_datetime(&pico_datetime);
-    struct tm c11_time;
-    memset(&c11_time, 0, sizeof(c11_time));
-    c11_time.tm_sec = pico_datetime.sec;
-    c11_time.tm_min = pico_datetime.min;
-    c11_time.tm_hour = pico_datetime.hour;
-    c11_time.tm_mday = pico_datetime.day;
-    c11_time.tm_mon = pico_datetime.month - 1;
-    c11_time.tm_year = pico_datetime.year - 1900;
-    c11_time.tm_wday = pico_datetime.dotw;
-    t->tv_sec = mktime(&c11_time);
-
-    absolute_time_t now = get_absolute_time();
-    uint64_t usec = to_us_since_boot(now);
-    t->tv_nsec = (usec % 1000000) * 1000;
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    t->tv_sec = tv.tv_sec;
+    t->tv_nsec = tv.tv_usec * 1000;
 }
 
 void sys_monotonic_time(struct timespec *t)
 {
-    sys_time(t);
+    absolute_time_t now = get_absolute_time();
+    uint64_t usec = to_us_since_boot(now);
+    t->tv_nsec = (usec % 1000000) * 1000;
+    t->tv_sec = (usec / 1000000);
 }
 
 uint64_t sys_monotonic_millis()
@@ -140,6 +128,7 @@ enum OpenAVMResult sys_open_avm_from_file(
 {
     UNUSED(global);
     UNUSED(path);
+    UNUSED(data);
 
     // TODO
     return AVM_OPEN_NOT_SUPPORTED;
@@ -162,7 +151,7 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
     struct ListHead *item;
     struct ListHead *avmpack_data = synclist_rdlock(&global->avmpack_data);
     LIST_FOR_EACH (item, avmpack_data) {
-        struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
+        struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
         if (avmpack_find_section_by_name(avmpack_data->data, module_name, &beam_module, &beam_module_size)) {
             break;
         }

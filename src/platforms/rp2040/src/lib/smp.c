@@ -35,6 +35,7 @@
 
 #pragma GCC diagnostic pop
 
+#include <scheduler.h>
 #include <utils.h>
 
 struct Mutex
@@ -56,7 +57,8 @@ static void scheduler_core1_entry_point(void)
 {
     _Static_assert(sizeof(uintptr_t) == sizeof(uint32_t), "Expected pointers to be 32 bits");
     uint32_t ctx_int = multicore_fifo_pop_blocking();
-    return scheduler_entry_point((GlobalContext *) ctx_int);
+    int result = scheduler_entry_point((GlobalContext *) ctx_int);
+    UNUSED(result);
 }
 
 void smp_scheduler_start(GlobalContext *ctx)

@@ -597,7 +597,7 @@ Install the emulator and required Javascript dependencies:
 
 We are assuming tests were built as part of regular build of AtomVM. Run them with the commands:
 
-	shell$ npx tsx run-tests.ts ../build/tests/rp2040_tests.uf2
+	shell$ npx tsx run-tests.ts ../build/tests/rp2040_tests.uf2 ../build/tests/test_erl_sources/rp2040_test_modules.uf2
 
 ## Building for NodeJS/Web
 

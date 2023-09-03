@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fixed `esp:nvs_set_binary` functions.
+- Fixed `monotonic_time/1` and `system_time/1` functions for Raspberry Pi Pico
 
 ## [0.6.0-alpha.0] - 2023-08-13
 
