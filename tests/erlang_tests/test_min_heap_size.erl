@@ -24,7 +24,7 @@
 
 start() ->
     Self = self(),
-    Pid1 = spawn(?MODULE, loop, [Self]),
+    Pid1 = spawn_opt(?MODULE, loop, [Self], []),
     receive
         ok -> ok
     end,

@@ -76,7 +76,7 @@ start_link() ->
 
 fake_start() ->
     {ok, InitialState} = init(initial_state()),
-    spawn(?MODULE, loop, [InitialState]).
+    spawn_opt(?MODULE, loop, [InitialState], []).
 
 init(Initial) ->
     {ok, Initial}.

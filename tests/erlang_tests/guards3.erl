@@ -24,7 +24,7 @@
 
 start() ->
     Port = do_open_port("echo", []),
-    Pid = spawn(guards3, loop, [initial_state()]),
+    Pid = spawn_opt(guards3, loop, [initial_state()], []),
     do_something(Port) + do_something(Pid) * 3 + do_something(2) * 100.
 
 do_open_port(PortName, Param) ->

@@ -23,7 +23,12 @@
 -export([start/0]).
 
 start() ->
-    Dead = spawn(fun() -> ok end),
+    {Dead, DeadMonitor} = spawn_opt(fun() -> ok end, [monitor]),
+    ok =
+        receive
+            {'DOWN', DeadMonitor, process, Dead, normal} -> ok
+        after 500 -> timeout
+        end,
     Sent = send(self(), 32),
     receive
         Sent ->

@@ -23,7 +23,7 @@
 -export([start/0, loop/0]).
 
 start() ->
-    Pid = spawn(fun loop/0),
+    Pid = spawn_opt(fun loop/0, []),
     Pid ! {self(), 21},
     Double =
         receive

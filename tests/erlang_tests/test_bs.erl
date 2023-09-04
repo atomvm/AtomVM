@@ -20,7 +20,7 @@
 
 -module(test_bs).
 
--export([start/0]).
+-export([start/0, id/1]).
 
 start() ->
     test_pack_small_ints({2, 61, 20}, <<23, 180>>),
@@ -368,12 +368,4 @@ test_large() ->
     true = id(X) =:= <<42:1024>>,
     ok.
 
-% Prevent optimization from the compiler
-id(X) ->
-    Self = self(),
-    Pid = spawn(fun() ->
-        Self ! {self(), X}
-    end),
-    receive
-        {Pid, R} -> R
-    end.
+id(X) -> X.

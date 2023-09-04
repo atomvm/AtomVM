@@ -42,10 +42,13 @@ spawn_sleeping_processes([], Pids) ->
     Pids;
 spawn_sleeping_processes([Timeout | T], Acc) ->
     Parent = self(),
-    Pid = spawn(fun() ->
-        ok = sub_sleep(Timeout),
-        Parent ! {self(), ok}
-    end),
+    Pid = spawn_opt(
+        fun() ->
+            ok = sub_sleep(Timeout),
+            Parent ! {self(), ok}
+        end,
+        []
+    ),
     spawn_sleeping_processes(T, [Pid | Acc]).
 
 wait_for_sleeping_processes([]) ->

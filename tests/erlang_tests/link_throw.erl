@@ -20,10 +20,10 @@
 
 -module(link_throw).
 
--export([start/0, start2/0, sum/1, proc/1]).
+-export([start/0, sum/1, proc/1]).
 
 start() ->
-    {Pid, Ref} = spawn_opt(?MODULE, start2, [], [monitor]),
+    {Pid, Ref} = spawn_opt(fun start2/0, [monitor]),
     Pid ! {self(), sum},
     CM =
         receive
@@ -52,7 +52,7 @@ start2() ->
         receive
             {ParentPid, sum} -> ParentPid
         end,
-    Pid = spawn(?MODULE, proc, [L]),
+    Pid = spawn_opt(?MODULE, proc, [L], []),
     erlang:link(Pid),
     Pid ! {self(), sum},
     receive

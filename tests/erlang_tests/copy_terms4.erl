@@ -20,10 +20,10 @@
 
 -module(copy_terms4).
 
--export([start/0, loop/0]).
+-export([start/0]).
 
 start() ->
-    Pid = spawn(?MODULE, loop, []),
+    Pid = spawn_opt(fun loop/0, []),
     Pid ! {self(), {[{1, 0}, {2, 1}, {3, 4}], [{4, 2}, {5, 5}, {6, 1}]}},
     Res =
         receive

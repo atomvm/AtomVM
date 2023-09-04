@@ -20,11 +20,11 @@
 
 -module(copy_terms15).
 
--export([start/0, sort/1, insert/2, check/1, loop/0]).
+-export([start/0, sort/1, insert/2, check/1]).
 
 %% erlfmt-ignore
 start() ->
-    Pid = spawn(?MODULE, loop, []),
+    Pid = spawn_opt(fun loop/0, []),
     Ref = make_ref(),
     Pid ! {sort, Ref, self(), [5, 7, 9, 15, 18, 22, 4, 11, 89, 94, 1, 0, 5, 8, 9, 3, 4, 5, 35, 12, 93, 29, 39, 29,
           22, 93, 23, 28, 98, 32, 32, 42, 91, 83, 38, 18, 98, 10, 12, 39, 14, 12, 93, 32, 23,

@@ -20,10 +20,10 @@
 
 -module(copy_terms16).
 
--export([start/0, find/2, loop/0]).
+-export([start/0, find/2]).
 
 start() ->
-    Pid = spawn(?MODULE, loop, []),
+    Pid = spawn_opt(fun loop/0, []),
     Ref = make_ref(),
     Pid ! {find, Ref, self(), [<<"Hello">>, <<"Ciao">>, <<"Hola">>, <<"Hi">>, <<"Bonjur">>]},
     Res =

@@ -25,7 +25,7 @@
 start() ->
     Father = self(),
     Fun = fun() -> Father ! 33 end,
-    spawn(Fun),
+    spawn_opt(Fun, []),
     Result =
         receive
             Any -> Any

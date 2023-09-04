@@ -20,10 +20,10 @@
 
 -module(spawn_opt_link_normal).
 
--export([start/0, start2/0, sum/1, proc/1]).
+-export([start/0, sum/1, proc/1]).
 
 start() ->
-    {Pid, Ref} = spawn_opt(?MODULE, start2, [], [monitor]),
+    {Pid, Ref} = spawn_opt(fun start2/0, [monitor]),
     CM =
         receive
             N2 -> N2

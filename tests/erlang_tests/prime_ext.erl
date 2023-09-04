@@ -30,9 +30,9 @@
 ]).
 
 start() ->
-    spawn(?MODULE, calculate_list, num_range(2, 100)),
-    spawn(?MODULE, calculate_list, num_range(100, 400)),
-    spawn(?MODULE, calculate_list, num_range(500, 1500)),
+    spawn_opt(?MODULE, calculate_list, num_range(2, 100), []),
+    spawn_opt(?MODULE, calculate_list, num_range(100, 400), []),
+    spawn_opt(?MODULE, calculate_list, num_range(500, 1500), []),
     ?MODULE:all_primes_test(2000) -
         ?MODULE:all_primes_test(2000) +
         ?MODULE:all_primes_test(2000) -

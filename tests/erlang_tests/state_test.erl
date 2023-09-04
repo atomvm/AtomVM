@@ -23,7 +23,7 @@
 -export([start/0, loop/1]).
 
 start() ->
-    Pid = spawn(state_test, loop, [initial_state()]),
+    Pid = spawn_opt(state_test, loop, [initial_state()], []),
     send_integer(Pid, 1),
     send_integer(Pid, 2),
     send_integer(Pid, 3),

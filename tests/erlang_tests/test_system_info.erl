@@ -80,7 +80,7 @@ test_process_count(_) ->
 test_process_count() ->
     Count = erlang:system_info(process_count),
     Self = self(),
-    Pid = spawn(?MODULE, loop, [Self]),
+    Pid = spawn_opt(?MODULE, loop, [Self], []),
     receive
         ok -> ok
     end,

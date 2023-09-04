@@ -20,10 +20,10 @@
 
 -module(link_kill_parent).
 
--export([start/0, start2/0, sum/1, proc/1]).
+-export([start/0, sum/1, proc/1]).
 
 start() ->
-    Pid = spawn(?MODULE, start2, []),
+    Pid = spawn_opt(fun start2/0, []),
     Pid ! {monitor, self()},
     CP =
         receive

@@ -121,8 +121,8 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_unregister_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_send_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_setelement_3(Context *ctx, int argc, term argv[]);
-static term nif_erlang_spawn(Context *ctx, int argc, term argv[]);
-static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[]);
+static term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[]);
+static term nif_erlang_spawn_fun_opt(Context *ctx, int argc, term argv[]);
 static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_time_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_tuple_to_list_1(Context *ctx, int argc, term argv[]);
@@ -410,28 +410,16 @@ static const struct Nif unregister_nif =
     .nif_ptr = nif_erlang_unregister_1
 };
 
-static const struct Nif spawn_nif =
-{
-    .base.type = NIFFunctionType,
-    .nif_ptr = nif_erlang_spawn
-};
-
 static const struct Nif spawn_opt_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_erlang_spawn
-};
-
-static const struct Nif spawn_fun_nif =
-{
-    .base.type = NIFFunctionType,
-    .nif_ptr = nif_erlang_spawn_fun
+    .nif_ptr = nif_erlang_spawn_opt
 };
 
 static const struct Nif spawn_fun_opt_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_erlang_spawn_fun
+    .nif_ptr = nif_erlang_spawn_fun_opt
 };
 
 static const struct Nif send_nif =
@@ -1081,19 +1069,97 @@ static NativeHandlerResult process_console_mailbox(Context *ctx)
     return result;
 }
 
-static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])
+// Common handling of spawn/1, spawn/3, spawn_opt/2, spawn_opt/4
+// opts_term is [] for spawn/1,3
+static term do_spawn(Context *ctx, Context *new_ctx, term opts_term)
 {
+    term min_heap_size_term = interop_proplist_get_value(opts_term, MIN_HEAP_SIZE_ATOM);
+    term max_heap_size_term = interop_proplist_get_value(opts_term, MAX_HEAP_SIZE_ATOM);
+    term link_term = interop_proplist_get_value(opts_term, LINK_ATOM);
+    term monitor_term = interop_proplist_get_value(opts_term, MONITOR_ATOM);
+
+    if (min_heap_size_term != term_nil()) {
+        if (UNLIKELY(!term_is_integer(min_heap_size_term))) {
+            // Context was not scheduled yet, we can destroy it.
+            context_destroy(new_ctx);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        new_ctx->has_min_heap_size = 1;
+        new_ctx->min_heap_size = term_to_int(min_heap_size_term);
+    } else {
+        min_heap_size_term = term_from_int(0);
+    }
+    if (max_heap_size_term != term_nil()) {
+        if (UNLIKELY(!term_is_integer(max_heap_size_term))) {
+            context_destroy(new_ctx);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        new_ctx->has_max_heap_size = 1;
+        new_ctx->max_heap_size = term_to_int(max_heap_size_term);
+    }
+
+    if (new_ctx->has_min_heap_size && new_ctx->has_max_heap_size) {
+        if (term_to_int(min_heap_size_term) > term_to_int(max_heap_size_term)) {
+            context_destroy(new_ctx);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
+
+    uint64_t ref_ticks = 0;
+
+    if (link_term == TRUE_ATOM) {
+        if (UNLIKELY(context_link(new_ctx, term_from_local_process_id(ctx->process_id)) < 0)) {
+            context_destroy(new_ctx);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        // This is a really simple hack to get the parent - child linking
+        // I don't really like how it is implemented but it works nicely.
+        // I think it should be implemented adding a parent field to Context.
+        if (UNLIKELY(context_link(ctx, term_from_local_process_id(new_ctx->process_id)) < 0)) {
+            context_destroy(new_ctx);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+    }
+    if (monitor_term == TRUE_ATOM) {
+        ref_ticks = context_monitor(new_ctx, term_from_local_process_id(ctx->process_id));
+        if (UNLIKELY(ref_ticks == 0)) {
+            context_destroy(new_ctx);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+    }
+
+    term new_pid = term_from_local_process_id(new_ctx->process_id);
+
+    if (ref_ticks) {
+        int res_size = REF_SIZE + TUPLE_SIZE(2);
+        if (UNLIKELY(memory_ensure_free_opt(ctx, res_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            context_destroy(new_ctx);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+
+        scheduler_init_ready(new_ctx);
+
+        term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
+
+        term pid_ref_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(pid_ref_tuple, 0, new_pid);
+        term_put_tuple_element(pid_ref_tuple, 1, ref);
+
+        return pid_ref_tuple;
+    } else {
+        scheduler_init_ready(new_ctx);
+        return new_pid;
+    }
+}
+
+static term nif_erlang_spawn_fun_opt(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
     term fun_term = argv[0];
     term opts_term = argv[1];
     VALIDATE_VALUE(fun_term, term_is_function);
-
-    if (argc == 2) {
-        // spawn_opt has been called
-        VALIDATE_VALUE(opts_term, term_is_list);
-    } else {
-        // regular spawn
-        opts_term = term_nil();
-    }
+    VALIDATE_VALUE(opts_term, term_is_list);
 
     Context *new_ctx = context_new(ctx->global);
     new_ctx->group_leader = ctx->group_leader;
@@ -1134,22 +1200,13 @@ static term nif_erlang_spawn_fun(Context *ctx, int argc, term argv[])
     new_ctx->saved_ip = fun_module->labels[label];
     new_ctx->cp = module_address(fun_module->module_index, fun_module->end_instruction_ii);
 
-    term max_heap_size_term = interop_proplist_get_value(opts_term, MAX_HEAP_SIZE_ATOM);
-    if (max_heap_size_term != term_nil()) {
-        new_ctx->has_max_heap_size = 1;
-        //TODO: check type, make sure max_heap_size_term is an int32
-        new_ctx->max_heap_size = term_to_int(max_heap_size_term);
-    }
-
-    term result = term_from_local_process_id(new_ctx->process_id);
-
-    scheduler_init_ready(new_ctx);
-
-    return result;
+    return do_spawn(ctx, new_ctx, opts_term);
 }
 
-static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
+static term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
 {
+    UNUSED(argc);
+
     term module_term = argv[0];
     term function_term = argv[1];
     term args_term = argv[2];
@@ -1157,14 +1214,7 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(module_term, term_is_atom);
     VALIDATE_VALUE(function_term, term_is_atom);
     VALIDATE_VALUE(args_term, term_is_list);
-
-    if (argc == 4) {
-        // spawn_opt has been called
-        VALIDATE_VALUE(opts_term, term_is_list);
-    } else {
-        // regular spawn
-        opts_term = term_nil();
-    }
+    VALIDATE_VALUE(opts_term, term_is_list);
 
     Context *new_ctx = context_new(ctx->global);
     new_ctx->group_leader = ctx->group_leader;
@@ -1191,99 +1241,37 @@ static term nif_erlang_spawn(Context *ctx, int argc, term argv[])
     new_ctx->saved_ip = found_module->labels[label];
     new_ctx->cp = module_address(found_module->module_index, found_module->end_instruction_ii);
 
-    term min_heap_size_term = interop_proplist_get_value(opts_term, MIN_HEAP_SIZE_ATOM);
-    term max_heap_size_term = interop_proplist_get_value(opts_term, MAX_HEAP_SIZE_ATOM);
-    term link_term = interop_proplist_get_value(opts_term, LINK_ATOM);
-    term monitor_term = interop_proplist_get_value(opts_term, MONITOR_ATOM);
-
-    if (min_heap_size_term != term_nil()) {
-        if (UNLIKELY(!term_is_integer(min_heap_size_term))) {
-            //TODO: gracefully handle this error
-            AVM_ABORT();
-        }
-        new_ctx->has_min_heap_size = 1;
-        new_ctx->min_heap_size = term_to_int(min_heap_size_term);
-    } else {
-        min_heap_size_term = term_from_int(0);
-    }
-    if (max_heap_size_term != term_nil()) {
-        if (UNLIKELY(!term_is_integer(max_heap_size_term))) {
-            //TODO: gracefully handle this error
-            AVM_ABORT();
-        }
-        new_ctx->has_max_heap_size = 1;
-        new_ctx->max_heap_size = term_to_int(max_heap_size_term);
-    }
-
-    if (new_ctx->has_min_heap_size && new_ctx->has_max_heap_size) {
-        if (term_to_int(min_heap_size_term) > term_to_int(max_heap_size_term)) {
-            RAISE_ERROR(BADARG_ATOM);
-        }
-    }
-
-    uint64_t ref_ticks = 0;
-
-    if (link_term == TRUE_ATOM) {
-        if (UNLIKELY(context_link(new_ctx, term_from_local_process_id(ctx->process_id)) < 0)) {
-            fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
-            AVM_ABORT();
-        }
-        // This is a really simple hack to get the parent - child linking
-        // I don't really like how it is implemented but it works nicely.
-        // I think it should be implemented adding a parent field to Context.
-        if (UNLIKELY(context_link(ctx, term_from_local_process_id(new_ctx->process_id)) < 0)) {
-            fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
-            AVM_ABORT();
-        }
-    } else if (monitor_term == TRUE_ATOM) {
-        ref_ticks = context_monitor(new_ctx, term_from_local_process_id(ctx->process_id));
-        if (UNLIKELY(ref_ticks == 0)) {
-            fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
-            AVM_ABORT();
-        }
-    }
-
     //TODO: check available registers count
     int reg_index = 0;
-    term t = argv[2];
-    avm_int_t size = MAX((unsigned long) term_to_int(min_heap_size_term), memory_estimate_usage(t));
-    if (UNLIKELY(memory_ensure_free_opt(new_ctx, size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        //TODO: new process should be terminated, however a new pid is returned anyway
-        fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
-        AVM_ABORT();
+
+    size_t min_heap_size = 0;
+    term min_heap_size_term = interop_proplist_get_value(opts_term, MIN_HEAP_SIZE_ATOM);
+    if (min_heap_size_term != term_nil()) {
+        if (UNLIKELY(!term_is_integer(min_heap_size_term))) {
+            // Context was not scheduled yet, we can destroy it.
+            context_destroy(new_ctx);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        min_heap_size = term_to_int(min_heap_size_term);
     }
-    while (term_is_nonempty_list(t)) {
-        new_ctx->x[reg_index] = memory_copy_term_tree(&new_ctx->heap, term_get_list_head(t));
+    avm_int_t size = MAX(min_heap_size, memory_estimate_usage(args_term));
+    if (UNLIKELY(memory_ensure_free_opt(new_ctx, size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        // Context was not scheduled yet, we can destroy it.
+        context_destroy(new_ctx);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    while (term_is_nonempty_list(args_term)) {
+        new_ctx->x[reg_index] = memory_copy_term_tree(&new_ctx->heap, term_get_list_head(args_term));
         reg_index++;
 
-        t = term_get_list_tail(t);
-        if (!term_is_list(t)) {
+        args_term = term_get_list_tail(args_term);
+        if (!term_is_list(args_term)) {
+            context_destroy(new_ctx);
             RAISE_ERROR(BADARG_ATOM);
         }
     }
 
-    term new_pid = term_from_local_process_id(new_ctx->process_id);
-
-    scheduler_init_ready(new_ctx);
-
-    if (ref_ticks) {
-        int res_size = REF_SIZE + TUPLE_SIZE(2);
-        if (UNLIKELY(memory_ensure_free_opt(ctx, res_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            //TODO: new process should be terminated, however a new pid is returned anyway
-            fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
-            AVM_ABORT();
-        }
-
-        term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
-
-        term pid_ref_tuple = term_alloc_tuple(2, &ctx->heap);
-        term_put_tuple_element(pid_ref_tuple, 0, new_pid);
-        term_put_tuple_element(pid_ref_tuple, 1, ref);
-
-        return pid_ref_tuple;
-    } else {
-        return new_pid;
-    }
+    return do_spawn(ctx, new_ctx, opts_term);
 }
 
 static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
