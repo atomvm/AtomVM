@@ -48,6 +48,7 @@
     join/2,
     seq/2, seq/3,
     sort/1, sort/2,
+    usort/1, usort/2,
     duplicate/2,
     sublist/2
 ]).
@@ -464,6 +465,7 @@ seq(From, To, Incr, Accum) ->
 %%
 %% @end
 %%-----------------------------------------------------------------------------
+-spec sort(List :: [T]) -> [T].
 sort(List) when is_list(List) ->
     sort(fun lt/2, List).
 
@@ -475,6 +477,7 @@ sort(List) when is_list(List) ->
 %%
 %% @end
 %%-----------------------------------------------------------------------------
+-spec sort(Fun :: fun((T, T) -> boolean()), List :: [T]) -> [T].
 sort(Fun, List) when is_function(Fun), is_list(List) ->
     quick_sort(Fun, List).
 
@@ -489,6 +492,52 @@ quick_sort(_Fun, []) ->
 
 %% @private
 lt(A, B) -> A < B.
+
+%%-----------------------------------------------------------------------------
+%% @param   List a list
+%% @returns Sorted list with duplicates removed, ordered by `<'
+%% @see sort/1
+%% @doc     Returns a unique, sorted list, using `<' operator to determine sort order.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec usort(List :: [T]) -> [T].
+usort(List) ->
+    Sorted = sort(List),
+    unique(Sorted).
+
+%%-----------------------------------------------------------------------------
+%% @param   Fun sort function
+%% @param   List a list
+%% @returns Sorted list with duplicates removed, ordered by Fun.
+%% @see sort/2
+%% @doc     Returns a unique, sorted list.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec usort(Fun :: fun((T, T) -> boolean()), List :: [T]) -> [T].
+usort(Fun, List) ->
+    Sorted = sort(Fun, List),
+    unique(Sorted, Fun).
+
+%% @private
+unique(Sorted) ->
+    unique(Sorted, fun(X, Y) -> X =< Y end).
+
+%% @private
+unique(Sorted, Fun) ->
+    unique(Sorted, Fun, []).
+
+%% @private
+unique([], _Fun, []) ->
+    [];
+unique([X], _Fun, Acc) ->
+    lists:reverse([X | Acc]);
+unique([X, Y | Tail], Fun, Acc) ->
+    case Fun(X, Y) andalso Fun(Y, X) of
+        true ->
+            unique([Y | Tail], Fun, Acc);
+        false ->
+            unique([Y | Tail], Fun, [X | Acc])
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   Elem the element to duplicate

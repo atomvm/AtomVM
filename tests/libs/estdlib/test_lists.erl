@@ -42,6 +42,7 @@ test() ->
     ok = test_join(),
     ok = test_seq(),
     ok = test_sort(),
+    ok = test_usort(),
     ok.
 
 test_nth() ->
@@ -208,14 +209,31 @@ test_sort() ->
     ?ASSERT_MATCH(lists:sort([]), []),
     ?ASSERT_MATCH(lists:sort([1]), [1]),
     ?ASSERT_MATCH(lists:sort([1, 3, 5, 2, 4]), [1, 2, 3, 4, 5]),
+    ?ASSERT_MATCH(lists:sort([1, 3, 5, 2, 3, 4]), [1, 2, 3, 3, 4, 5]),
     ?ASSERT_MATCH(lists:sort([c, a, b, d]), [a, b, c, d]),
     ?ASSERT_MATCH(lists:sort([#{}, z]), [z, #{}]),
 
-    ?ASSERT_MATCH(lists:sort(fun(A, B) -> A > B end, [1, 2, 3, 4, 5]), [5, 4, 3, 2, 1]),
+    ?ASSERT_MATCH(lists:sort(fun(A, B) -> A > B end, [1, 2, 3, 4, 3, 5]), [5, 4, 3, 3, 2, 1]),
 
     ?ASSERT_FAILURE(lists:sort(1), function_clause),
     ?ASSERT_FAILURE(lists:sort(fun(A, B) -> A > B end, 1), function_clause),
     ?ASSERT_FAILURE(lists:sort(1, [1]), function_clause),
+
+    ok.
+
+test_usort() ->
+    ?ASSERT_MATCH(lists:usort([]), []),
+    ?ASSERT_MATCH(lists:usort([1]), [1]),
+    ?ASSERT_MATCH(lists:usort([1, 3, 5, 2, 3, 4]), [1, 2, 3, 4, 5]),
+    ?ASSERT_MATCH(lists:usort([1, 3, 5, 2, 1, 4]), [1, 2, 3, 4, 5]),
+    ?ASSERT_MATCH(lists:usort([1, 3, 5, 2, 5, 4]), [1, 2, 3, 4, 5]),
+
+    ?ASSERT_MATCH(lists:usort(fun(A, B) -> A > B end, [1, 2, 3, 4, 3, 5]), [5, 4, 3, 3, 2, 1]),
+    ?ASSERT_MATCH(lists:usort(fun(A, B) -> A >= B end, [1, 2, 3, 4, 3, 5]), [5, 4, 3, 2, 1]),
+
+    ?ASSERT_FAILURE(lists:usort(1), function_clause),
+    ?ASSERT_FAILURE(lists:usort(fun(A, B) -> A > B end, 1), function_clause),
+    ?ASSERT_FAILURE(lists:usort(1, [1]), function_clause),
 
     ok.
 

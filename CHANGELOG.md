@@ -70,6 +70,7 @@ functions that default to `?ATOMVM_NVS_NS` are deprecated now).
 - Added `unicode` module with `characters_to_list/1,2` and `characters_to_binary/1,2,3` functions
 - Added support for `crypto:hash/2` (ESP32 and generic_unix with openssl)
 - Added links to process_info/2
+- Added lists:usort/1,2
 
 ### Fixed
 - Fixed issue with formatting integers with io:format() on STM32 platform
