@@ -22,6 +22,10 @@ on:
       - 'src/platforms/emscripten/**'
       - 'src/libAtomVM/**'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/master' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
 env:
   otp_version: 24
   elixir_version: 1.14

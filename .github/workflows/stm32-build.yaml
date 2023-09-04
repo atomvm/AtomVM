@@ -20,6 +20,10 @@ on:
       - 'src/platforms/stm32/**'
       - 'src/libAtomVM/**'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/master' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   stm32:
     runs-on: ubuntu-latest
