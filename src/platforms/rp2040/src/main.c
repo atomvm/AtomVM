@@ -101,21 +101,23 @@ static int app_main()
         AVM_ABORT();
     }
 
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
     avmpack_data->base.data = MAIN_AVM;
     avmpack_data->base.in_use = true;
 
-    synclist_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
+    synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
 
     if (avmpack_is_valid(LIB_AVM, (uintptr_t) MAIN_AVM - (uintptr_t) LIB_AVM)) {
-        avmpack_data = malloc(sizeof(struct AVMPackData));
+        avmpack_data = malloc(sizeof(struct ConstAVMPack));
         if (IS_NULL_PTR(avmpack_data)) {
             sleep_ms(5000);
             fprintf(stderr, "Memory error: Cannot allocate AVMPackData for lib.avm.");
             AVM_ABORT();
         }
+        avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
         avmpack_data->base.data = LIB_AVM;
         avmpack_data->base.in_use = true;
-        synclist_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
+        synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
     } else {
         fprintf(stderr, "Warning: invalid lib.avm packbeam\n");
     }

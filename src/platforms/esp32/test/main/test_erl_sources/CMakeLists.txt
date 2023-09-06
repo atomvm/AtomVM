@@ -22,6 +22,7 @@ add_library(esp32_test_modules)
 
 ExternalProject_Add(HostAtomVM
     SOURCE_DIR ../../../../../../../../
+    INSTALL_COMMAND cmake -E echo "Skipping install step."
 )
 
 function(compile_erlang module_name)

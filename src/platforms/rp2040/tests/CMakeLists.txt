@@ -52,3 +52,6 @@ pico_enable_stdio_uart(AtomVM 1)
 
 # create map/bin/hex/uf2 file in addition to ELF.
 pico_add_extra_outputs(rp2040_tests)
+
+add_subdirectory(test_erl_sources)
+add_dependencies(rp2040_tests rp2040_test_modules)
