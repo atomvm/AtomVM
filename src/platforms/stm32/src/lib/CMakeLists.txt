@@ -22,9 +22,11 @@ cmake_minimum_required (VERSION 3.13)
 project (libAtomVMPlatformSTM32)
 
 set(HEADER_FILES
+    avm_log.h
     gpiodriver.h
     platform_defaultatoms.h
-    avm_log.h
+    stm_sys.h
+    ../../../../libAtomVM/platform_nifs.h
     ../../../../libAtomVM/sys.h
 )
 
@@ -47,6 +49,7 @@ if(CMAKE_COMPILER_IS_GNUCC)
 endif()
 
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC libAtomVM)
+target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${LINK_OPTIONS} -Wl,--whole-archive ${CMAKE_CURRENT_BINARY_DIR}/liblibAtomVMGeneric-arm.a -Wl,--no-whole-archive)
 
 target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} SYSTEM PUBLIC ${OPENCM3_INCLUDE})
 target_link_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${OPENCM3_LIB})
