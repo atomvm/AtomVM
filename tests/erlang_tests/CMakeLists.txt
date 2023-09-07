@@ -465,6 +465,8 @@ compile_erlang(link_kill_parent)
 compile_erlang(link_throw)
 compile_erlang(unlink_error)
 compile_erlang(trap_exit_flag)
+compile_erlang(test_exit1)
+compile_erlang(test_exit2)
 
 compile_erlang(test_stacktrace)
 compile_erlang(small_big_ext)
@@ -907,6 +909,8 @@ add_custom_target(erlang_test_modules DEPENDS
     link_throw.beam
     unlink_error.beam
     trap_exit_flag.beam
+    test_exit1.beam
+    test_exit2.beam
 
     test_stacktrace.beam
 

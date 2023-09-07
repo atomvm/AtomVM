@@ -37,6 +37,7 @@
 #include "defaultatoms.h"
 #include "dictionary.h"
 #include "externalterm.h"
+#include "globalcontext.h"
 #include "interop.h"
 #include "mailbox.h"
 #include "module.h"
@@ -3132,11 +3133,48 @@ static term nif_erlang_error(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_exit(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
+    if (argc == 1) {
+        term reason = argv[0];
+        RAISE(LOWERCASE_EXIT_ATOM, reason);
+    } else {
+        term target_process = argv[0];
+        VALIDATE_VALUE(target_process, term_is_pid);
+        term reason = argv[1];
+        GlobalContext *glb = ctx->global;
+        Context *target = globalcontext_get_process_lock(glb, term_to_local_process_id(target_process));
+        bool self_is_signaled = false;
+        if (LIKELY(target)) {
+            if (reason == KILL_ATOM) {
+                mailbox_send_term_signal(target, KillSignal, KILLED_ATOM);
+                self_is_signaled = target == ctx;
+            } else {
+                if (target->trap_exit) {
+                    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
+                        globalcontext_get_process_unlock(glb, target);
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
 
-    term reason = argv[0];
-    ctx->exit_reason = reason;
-    RAISE(LOWERCASE_EXIT_ATOM, reason);
+                    term info_tuple = term_alloc_tuple(3, &ctx->heap);
+                    term_put_tuple_element(info_tuple, 0, EXIT_ATOM);
+                    term_put_tuple_element(info_tuple, 1, term_from_local_process_id(ctx->process_id));
+                    term_put_tuple_element(info_tuple, 2, reason);
+                    mailbox_send(target, info_tuple);
+                } else if (ctx == target) {
+                    mailbox_send_term_signal(target, KillSignal, reason);
+                    self_is_signaled = target == ctx;
+                } else if (reason != NORMAL_ATOM){
+                    mailbox_send_term_signal(target, KillSignal, reason);
+                    self_is_signaled = target == ctx;
+                } // else there is no effect
+            }
+            globalcontext_get_process_unlock(glb, target);
+        }
+        if (self_is_signaled) {
+            context_update_flags(ctx, ~NoFlags, Trap);
+            return term_invalid_term();
+        }
+        return TRUE_ATOM;
+    }
 }
 
 static term nif_erlang_make_fun_3(Context *ctx, int argc, term argv[])
