@@ -163,6 +163,7 @@ int main()
     Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
     globalcontext_insert_module(glb, mod);
     Context *ctx = context_new(glb);
+    ctx->leader = 1;
 
     AVM_LOGI(TAG, "Starting: %s...\n", startup_module_name);
     context_execute_loop(ctx, mod, "start", 0);
