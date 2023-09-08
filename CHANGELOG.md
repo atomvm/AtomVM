@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added configurable logging macros to stm32 platform
+- Added support for ULP wakeup on ESP32
 
 ### Fixed
 

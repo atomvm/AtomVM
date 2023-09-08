@@ -330,23 +330,28 @@ static term nif_esp_partition_list(Context *ctx, int argc, term argv[])
 
 static term nif_esp_deep_sleep(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
+    if (argc == 1) {
+        VALIDATE_VALUE(argv[0], term_is_any_integer);
+        avm_int64_t msecs = term_maybe_unbox_int64(argv[0]);
 
-    VALIDATE_VALUE(argv[0], term_is_any_integer);
-    avm_int64_t msecs = term_maybe_unbox_int64(argv[0]);
-
-    esp_deep_sleep(msecs * 1000ULL);
+        esp_deep_sleep(msecs * 1000ULL);
+    } else {
+        esp_deep_sleep_start();
+    }
 
     // technically, this function does not return
     return OK_ATOM;
 }
+
 #if SOC_PM_SUPPORT_EXT_WAKEUP
 static const char *const sleep_wakeup_ext0_atom = "\x11" "sleep_wakeup_ext0";
 static const char *const sleep_wakeup_ext1_atom = "\x11" "sleep_wakeup_ext1";
 #endif
 static const char *const sleep_wakeup_timer_atom = "\x12" "sleep_wakeup_timer";
 static const char *const sleep_wakeup_touchpad_atom = "\x15" "sleep_wakeup_touchpad";
+#if SOC_ULP_SUPPORTED
 static const char *const sleep_wakeup_ulp_atom = "\x10" "sleep_wakeup_ulp";
+#endif
 static const char *const sleep_wakeup_gpio_atom = "\x11" "sleep_wakeup_gpio";
 static const char *const sleep_wakeup_uart_atom = "\x11" "sleep_wakeup_uart";
 #ifdef ESP_SLEEP_WAKEUP_WIFI
@@ -382,8 +387,10 @@ static term nif_esp_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[])
             return globalcontext_make_atom(ctx->global, sleep_wakeup_timer_atom);
         case ESP_SLEEP_WAKEUP_TOUCHPAD:
             return globalcontext_make_atom(ctx->global, sleep_wakeup_touchpad_atom);
+#if SOC_ULP_SUPPORTED
         case ESP_SLEEP_WAKEUP_ULP:
             return globalcontext_make_atom(ctx->global, sleep_wakeup_ulp_atom);
+#endif
         case ESP_SLEEP_WAKEUP_GPIO:
             return globalcontext_make_atom(ctx->global, sleep_wakeup_gpio_atom);
         case ESP_SLEEP_WAKEUP_UART:
@@ -441,6 +448,22 @@ static term nif_esp_sleep_enable_ext1_wakeup(Context *ctx, int argc, term argv[]
     if (UNLIKELY(err == ESP_ERR_INVALID_ARG)) {
         RAISE_ERROR(BADARG_ATOM);
     }
+    if (UNLIKELY(err != ESP_OK)) {
+        return ERROR_ATOM;
+    }
+    return OK_ATOM;
+}
+
+#endif
+
+#if SOC_ULP_SUPPORTED
+
+static term nif_esp_sleep_enable_ulp_wakeup(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    esp_err_t err = esp_sleep_enable_ulp_wakeup();
     if (UNLIKELY(err != ESP_OK)) {
         return ERROR_ATOM;
     }
@@ -713,6 +736,13 @@ static const struct Nif esp_sleep_enable_ext1_wakeup_nif =
     .nif_ptr = nif_esp_sleep_enable_ext1_wakeup
 };
 #endif
+#if SOC_ULP_SUPPORTED
+static const struct Nif esp_sleep_ulp_wakeup_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_sleep_enable_ulp_wakeup
+};
+#endif
 static const struct Nif crypto_hash_nif =
 {
     .base.type = NIFFunctionType,
@@ -767,6 +797,10 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_partition_list_nif;
     }
+    if (strcmp("esp:deep_sleep/0", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_deep_sleep_nif;
+    }
     if (strcmp("esp:deep_sleep/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_deep_sleep_nif;
@@ -783,6 +817,12 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     if (strcmp("esp:sleep_enable_ext1_wakeup/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_sleep_enable_ext1_wakeup_nif;
+    }
+#endif
+#if SOC_ULP_SUPPORTED
+    if (strcmp("esp:sleep_ulp_wakeup/0", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_sleep_ulp_wakeup_nif;
     }
 #endif
     if (strcmp("crypto:hash/2", nifname) == 0) {
