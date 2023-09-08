@@ -32,6 +32,8 @@
     sleep_get_wakeup_cause/0,
     sleep_enable_ext0_wakeup/2,
     sleep_enable_ext1_wakeup/2,
+    sleep_enable_ulp_wakeup/0,
+    deep_sleep/0,
     deep_sleep/1,
     nvs_fetch_binary/2,
     nvs_get_binary/1, nvs_get_binary/2, nvs_get_binary/3,
@@ -141,6 +143,24 @@ sleep_enable_ext0_wakeup(_Pin, _Level) ->
 %%-----------------------------------------------------------------------------
 -spec sleep_enable_ext1_wakeup(Mask :: non_neg_integer(), Mode :: 0..1) -> ok | error.
 sleep_enable_ext1_wakeup(_Mask, _Mode) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns Enable ulp wakeup
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sleep_enable_ulp_wakeup() -> ok | error.
+sleep_enable_ulp_wakeup() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @doc Put the esp32 into deep sleep.
+%% This function never returns. Program is restarted and wake up reason can be
+%% inspected to determine how the esp32 was woken up.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec deep_sleep() -> no_return().
+deep_sleep() ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
