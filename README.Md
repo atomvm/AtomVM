@@ -26,9 +26,16 @@ might be supported in a near future.
 
 Getting Started
 ===============
-There is much more information, including a more complete (["Getting Started Guide"](https://www.atomvm.net/doc/master/getting-started-guide.html)), ([extensive documentation](https://www.atomvm.net/doc/master/build-instructions.html)), ([examples](https://www.atomvm.net/sample-code)), detailed ([build instructions](https://www.atomvm.net/doc/master/build-instructions.html)) and ([contact information](https://www.atomvm.net/contact)) available on the [AtomVM](https://atomvm.net) project website.
+There is much more information, including a more complete
+["Getting Started Guide"](https://www.atomvm.net/doc/master/getting-started-guide.html),
+[extensive documentation](https://www.atomvm.net/doc/master/build-instructions.html),
+[examples](https://www.atomvm.net/sample-code),
+detailed [build instructions](https://www.atomvm.net/doc/master/build-instructions.html),
+and [contact information](https://www.atomvm.net/contact) available on the
+[AtomVM](https://atomvm.net) project website.
 
-> Don't forget to check out the ([examples repository](https://github.com/atomvm/atomvm_examples)) to help get you started on your next IoT project.
+>Don't forget to check out the [examples repository](https://github.com/atomvm/atomvm_examples) to
+>help get you started on your next IoT project.
 
 Dependencies
 ------------
@@ -67,8 +74,14 @@ $ ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 $ ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
 ```
 
-See also [README.ESP32.Md](README.ESP32.Md) and [README.STM32.Md](README.STM32.Md) for platform
-specific build instructions.
+Complete [Build Instructions](https://www.atomvm.net/doc/master/build-instructions.html) are
+available in the documentation for
+[Generic UNIX](https://www.atomvm.net/doc/master/build-instructions.html) (Linux, MacOS, FreeBSD),
+[ESP32](https://www.atomvm.net/doc/master/build-instructions.html#building-for-esp32),
+[STM32](https://www.atomvm.net/doc/master/build-instructions.html#building-for-stm32),
+[Raspberry Pi Pico](https://www.atomvm.net/doc/master/build-instructions.html#building-for-raspberry-pi-pico)
+(rp2040), and
+[WASM](https://www.atomvm.net/doc/master/build-instructions.html#building-for-nodejs-web) (NodeJS/Web).
 
 Project Status
 ==============
