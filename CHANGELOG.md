@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added configurable logging macros to stm32 platform
 - Added support for ULP wakeup on ESP32
 - Added heap growth strategies as a fine-tuning option to `spawn_opt/2,4`
+- Added `crypto:crypto_one_time/5` on ESP32
 
 ### Fixed
 

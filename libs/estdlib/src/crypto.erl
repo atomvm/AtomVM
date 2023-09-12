@@ -26,6 +26,22 @@
 -type hash_algorithm() :: md5 | sha | sha224 | sha256 | sha384 | sha512.
 -type digest() :: binary().
 
+-type cipher_iv() ::
+    aes_128_cbc
+    | aes_192_cbc
+    | aes_256_cbc
+    | aes_128_cfb128
+    | aes_192_cfb128
+    | aes_256_cfb128
+    | aes_128_ctr
+    | aes_192_ctr
+    | aes_256_ctr.
+
+-type padding() :: none | pkcs_padding.
+
+-type crypto_opt() :: {encrypt, boolean()} | {padding, padding()}.
+-type crypto_opts() :: [crypto_opt()].
+
 %%-----------------------------------------------------------------------------
 %% @param   Type the hash algorithm
 %% @param   Data the data to hash
@@ -36,4 +52,25 @@
 %%-----------------------------------------------------------------------------
 -spec hash(Type :: hash_algorithm(), Data :: iolist()) -> digest().
 hash(_Type, _Data) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Cipher a supported cipher that makes use of IV
+%% @param   Key the encryption / decryption key
+%% @param   IV an initialization vector
+%% @param   Data to be crypted or encrypted
+%% @param   FlagOrOptions either just true for encryption (or false for decryption), or a proplist
+%%          for any additional option such as padding.
+%% @returns Returns crypted or encrypted data.
+%% @doc     Encrypted/decrypt data using given cipher, key, IV.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec crypto_one_time(
+    Cipher :: cipher_iv(),
+    Key :: iodata(),
+    IV :: iodata(),
+    Data :: iodata(),
+    FlagOrOptions :: crypto_opts()
+) -> binary().
+crypto_one_time(Cipher, Key, IV, Data, FlagOrOptions) ->
     erlang:nif_error(undefined).
