@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `esp:get_default_mac/0` for retrieving the default MAC address on ESP32.
 - Added support for `pico` and `poci` as an alternative to `mosi` and `miso` for SPI
 - ESP32: Added support to SPI peripherals other than hspi and vspi
+- Added `gpio:set_int/4`, with the 4th parameter being the pid() or registered name of the process to receive interrupt messages
 
 ### Changed
 

@@ -71,6 +71,7 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx);
 static const char *const gpio_atom = ATOM_STR("\x4", "gpio");
 static const char *const gpio_interrupt_atom = ATOM_STR("\xE", "gpio_interrupt");
 static const char *const invalid_trigger_atom = ATOM_STR("\xF", "invalid_trigger");
+static const char *const invalid_listener_atom = ATOM_STR("\x10", "invalid_listener");
 
 #define INVALID_EXTI_TRIGGER 0xEE
 
@@ -748,6 +749,8 @@ static bool gpiodriver_is_gpio_attached(struct GPIOData *gpio_data, term gpio_ba
 
 static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
 {
+    int32_t target_local_pid;
+
     term gpio_tuple = term_get_tuple_element(cmd, 1);
     if (UNLIKELY(!term_is_tuple(gpio_tuple))) {
         AVM_LOGE(TAG, "Invalid GPIO Pin tuple, expect {Bank, Pin}.");
@@ -789,6 +792,27 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
         return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_trigger_atom));
     }
 
+    if (term_get_tuple_arity(cmd) == 4) {
+        term pid = term_get_tuple_element(cmd, 3);
+        if (UNLIKELY(!term_is_pid(pid) && !term_is_atom(pid))) {
+            AVM_LOGE(TAG, "Invalid listener parameter, must be a pid() or registered process!");
+            return create_pair(ctx, ERROR_ATOM, invalid_listener_atom);
+        }
+        if (term_is_pid(pid)) {
+            target_local_pid = term_to_local_process_id(pid);
+        } else {
+            int pid_atom_index = term_to_atom_index(pid);
+            int32_t registered_process = (int32_t) globalcontext_get_registered_process(ctx->global, pid_atom_index);
+            if (UNLIKELY(registered_process == 0)) {
+                AVM_LOGE(TAG, "Invalid listener parameter, atom() is not a registered process name!");
+                return create_pair(ctx, ERROR_ATOM, NOPROC_ATOM);
+            }
+            target_local_pid = registered_process;
+        }
+    } else {
+        target_local_pid = target_pid;
+    }
+
     uint32_t exti = 1U << gpio_pin;
 
     if (!list_is_empty(&gpio_data->gpio_listeners)) {
@@ -816,7 +840,7 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
         AVM_ABORT();
     }
     list_append(&gpio_data->gpio_listeners, &data->gpio_listener_list_head);
-    data->target_local_pid = target_pid;
+    data->target_local_pid = target_local_pid;
     data->bank_atom = gpio_bank_atom;
     data->gpio_pin = gpio_pin;
     data->exti = exti;

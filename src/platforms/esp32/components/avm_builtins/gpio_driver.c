@@ -32,7 +32,6 @@
 #include "atom.h"
 #include "bif.h"
 #include "context.h"
-#include "scheduler.h"
 #include "debug.h"
 #include "defaultatoms.h"
 #include "globalcontext.h"
@@ -41,6 +40,7 @@
 #include "module.h"
 #include "nifs.h"
 #include "platform_defaultatoms.h"
+#include "scheduler.h"
 #include "term.h"
 #include "utils.h"
 
@@ -132,6 +132,8 @@ struct GPIOData
 {
     struct ListHead gpio_listeners;
 };
+
+/* TODO: Change error returns to {error, Reason} (See: https://github.com/atomvm/AtomVM/issues/894) */
 
 static inline term gpio_set_pin_mode(Context *ctx, term gpio_num_term, term mode_term)
 {
@@ -343,16 +345,38 @@ static bool gpiodriver_is_gpio_attached(struct GPIOData *gpio_data, int gpio_num
 static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
 {
     GlobalContext *glb = ctx->global;
+    int32_t target_local_pid;
 
     struct GPIOData *gpio_data = ctx->platform_data;
 
     int32_t gpio_num = term_to_int32(term_get_tuple_element(cmd, 1));
     term trigger = term_get_tuple_element(cmd, 2);
+    if (term_get_tuple_arity(cmd) == 4) {
+        term pid = term_get_tuple_element(cmd, 3);
+        if (UNLIKELY(!term_is_pid(pid) && !term_is_atom(pid))) {
+            ESP_LOGE(TAG, "Invalid listener parameter, must be a pid() or registered process!");
+            return ERROR_ATOM;
+        }
+        if (term_is_pid(pid)) {
+            target_local_pid = term_to_local_process_id(pid);
+        } else {
+            int pid_atom_index = term_to_atom_index(pid);
+            int32_t registered_process = (int32_t) globalcontext_get_registered_process(ctx->global, pid_atom_index);
+            if (UNLIKELY(registered_process == 0)) {
+                ESP_LOGE(TAG, "Invalid listener parameter, atom() is not a registered process name!");
+                return ERROR_ATOM;
+            }
+            target_local_pid = registered_process;
+        }
+    } else {
+        target_local_pid = target_pid;
+    }
 
     if (gpiodriver_is_gpio_attached(gpio_data, gpio_num)) {
         return ERROR_ATOM;
     }
 
+    /* TODO: GPIO specific atoms should be removed from platform_defaultatoms and constructed within this driver */
     gpio_int_type_t interrupt_type;
     switch (trigger) {
         case NONE_ATOM:
@@ -397,7 +421,7 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
     }
     list_append(&gpio_data->gpio_listeners, &data->gpio_listener_list_head);
     data->gpio = gpio_num;
-    data->target_local_pid = target_pid;
+    data->target_local_pid = target_local_pid;
     sys_register_listener(glb, &data->listener);
     data->listener.sender = data;
     data->listener.handler = gpio_interrupt_callback;
@@ -522,6 +546,8 @@ REGISTER_PORT_DRIVER(gpio, gpio_driver_init, NULL, gpio_driver_create_port)
 //
 
 #ifdef CONFIG_AVM_ENABLE_GPIO_NIFS
+
+/* TODO: in the case of {error, Return} we should RAISE_ERROR(Reason) */
 
 static term nif_gpio_set_pin_mode(Context *ctx, int argc, term argv[])
 {
