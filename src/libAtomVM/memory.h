@@ -152,6 +152,18 @@ static inline size_t memory_heap_fragment_memory_size(const HeapFragment *fragme
 }
 
 /**
+ * @brief return the size of the youngest generation of the heap.
+ * @details in some condition, this function returns the size of a fragment
+ * where the stack is not.
+ * @param heap the heap to get the youngest size of
+ * @returns the size in terms
+ */
+static inline size_t memory_heap_youngest_size(const Heap *heap)
+{
+    return heap->heap_end - heap->heap_start;
+}
+
+/**
  * @brief return the total memory size of a heap, including fragments.
  *
  * @param heap the heap to get the size of
@@ -159,7 +171,7 @@ static inline size_t memory_heap_fragment_memory_size(const HeapFragment *fragme
  */
 static inline size_t memory_heap_memory_size(const Heap *heap)
 {
-    size_t result = heap->heap_end - heap->heap_start;
+    size_t result = memory_heap_youngest_size(heap);
     if (heap->root->next) {
         result += memory_heap_fragment_memory_size(heap->root->next);
     }

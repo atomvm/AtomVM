@@ -149,6 +149,12 @@ static const char *const kill_atom = "\x4" "kill";
 static const char *const killed_atom = "\x6" "killed";
 static const char *const links_atom = "\x5" "links";
 
+static const char *const total_heap_size_atom = "\xF" "total_heap_size";
+static const char *const atomvm_heap_growth_atom = "\x12" "atomvm_heap_growth";
+static const char *const bounded_free_atom = "\xC" "bounded_free";
+static const char *const minimum_atom = "\x7" "minimum";
+static const char *const fibonacci_atom = "\x9" "fibonacci";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -281,6 +287,12 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, kill_atom) == KILL_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, killed_atom) == KILLED_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, links_atom) == LINKS_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, total_heap_size_atom) == TOTAL_HEAP_SIZE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, atomvm_heap_growth_atom) == ATOMVM_HEAP_GROWTH_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, bounded_free_atom) == BOUNDED_FREE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, minimum_atom) == MINIMUM_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, fibonacci_atom) == FIBONACCI_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();

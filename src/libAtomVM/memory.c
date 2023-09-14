@@ -34,6 +34,7 @@
 //#define ENABLE_TRACE
 
 #include "trace.h"
+#include "utils.h"
 
 #ifndef MAX
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -101,6 +102,22 @@ enum MemoryGCResult memory_erl_nif_env_ensure_free(ErlNifEnv *env, size_t size)
     return MEMORY_GC_OK;
 }
 
+// Follow Erlang/OTP 18 fibonacci series.
+static size_t next_fibonacci_heap_size(size_t size)
+{
+    static const size_t fib_seq[] = { 12, 38, 51, 90, 142, 233, 376, 610, 987, 1598, 2586, 4185, 6772, 10958,
+        17731, 28690, 46422, 75113, 121536, 196650, 318187, 514838, 833026,
+        1347865, 2180892, 3528758, 5709651 };
+    for (size_t i = 0; i < sizeof(fib_seq) / sizeof(fib_seq[0]); i++) {
+        if (size <= fib_seq[i]) {
+            return fib_seq[i];
+        }
+    }
+    return size + size / 5;
+}
+
+#define FIBONACCI_HEAP_GROWTH_REDUCTION_THRESHOLD 10000
+
 enum MemoryGCResult memory_ensure_free_with_roots(Context *c, size_t size, size_t num_roots, term *roots, enum MemoryAllocMode alloc_mode)
 {
     size_t free_space = context_avail_free_memory(c);
@@ -109,22 +126,87 @@ enum MemoryGCResult memory_ensure_free_with_roots(Context *c, size_t size, size_
             return memory_heap_alloc_new_fragment(&c->heap, size);
         }
     } else {
-        size_t maximum_free_space = 2 * (size + MIN_FREE_SPACE_SIZE);
-        if (free_space < size || (alloc_mode == MEMORY_FORCE_SHRINK) || ((alloc_mode == MEMORY_CAN_SHRINK) && free_space > maximum_free_space)) {
-            size_t memory_size = memory_heap_memory_size(&c->heap);
-            if (UNLIKELY(memory_gc(c, memory_size + size + MIN_FREE_SPACE_SIZE, num_roots, roots) != MEMORY_GC_OK)) {
-                // TODO: handle this more gracefully
-                TRACE("Unable to allocate memory for GC.  memory_size=%zu size=%u\n", memory_size, size);
-                return MEMORY_GC_ERROR_FAILED_ALLOCATION;
+        // Target heap size depends on:
+        // - alloc_mode (MEMORY_FORCE_SHRINK takes precedence)
+        // - heap growth strategy
+        bool should_gc = free_space < size || (alloc_mode == MEMORY_FORCE_SHRINK);
+        size_t memory_size = 0;
+        if (!should_gc) {
+            switch (c->heap_growth_strategy) {
+                case BoundedFreeHeapGrowth: {
+                    size_t maximum_free_space = 2 * (size + MIN_FREE_SPACE_SIZE);
+                    should_gc = ((alloc_mode == MEMORY_CAN_SHRINK) && free_space - size > maximum_free_space);
+                } break;
+                case MinimumHeapGrowth:
+                    should_gc = ((alloc_mode == MEMORY_CAN_SHRINK) && free_space - size > 0);
+                    break;
+                case FibonacciHeapGrowth: {
+                    memory_size = memory_heap_memory_size(&c->heap);
+                    should_gc = ((alloc_mode == MEMORY_CAN_SHRINK) && free_space - size > 3 * memory_size / 4);
+                    break;
+                }
             }
-            if (alloc_mode != MEMORY_NO_SHRINK) {
+        }
+        if (should_gc) {
+            if (memory_size == 0) {
+                memory_size = memory_heap_memory_size(&c->heap);
+            }
+            size_t target_size;
+            switch (c->heap_growth_strategy) {
+                case BoundedFreeHeapGrowth:
+                    if (free_space < size) {
+                        target_size = memory_size + size + MIN_FREE_SPACE_SIZE;
+                    } else {
+                        size_t maximum_free_space = 2 * (size + MIN_FREE_SPACE_SIZE);
+                        target_size = memory_size - free_space + maximum_free_space;
+                    }
+                    break;
+                case MinimumHeapGrowth:
+                    target_size = memory_size - free_space + size;
+                    break;
+                case FibonacciHeapGrowth:
+                    target_size = next_fibonacci_heap_size(memory_size - free_space + size);
+                    break;
+                default:
+                    UNREACHABLE();
+            }
+            target_size = MAX(c->has_min_heap_size ? c->min_heap_size : 0, target_size);
+            if (target_size != memory_size) {
+                if (UNLIKELY(memory_gc(c, target_size, num_roots, roots) != MEMORY_GC_OK)) {
+                    // TODO: handle this more gracefully
+                    TRACE("Unable to allocate memory for GC.  target_size=%zu\n", target_size);
+                    return MEMORY_GC_ERROR_FAILED_ALLOCATION;
+                }
+                should_gc = alloc_mode == MEMORY_FORCE_SHRINK;
+                size_t new_memory_size = memory_heap_memory_size(&c->heap);
+                size_t new_target_size = new_memory_size;
                 size_t new_free_space = context_avail_free_memory(c);
-                if (new_free_space > maximum_free_space) {
-                    size_t new_memory_size = memory_heap_memory_size(&c->heap);
-                    size_t new_requested_size = (new_memory_size - new_free_space) + maximum_free_space;
-                    if (!c->has_min_heap_size || (c->min_heap_size < new_requested_size)) {
-                        if (UNLIKELY(memory_gc(c, new_requested_size, num_roots, roots) != MEMORY_GC_OK)) {
-                            TRACE("Unable to allocate memory for GC shrink.  new_memory_size=%zu new_free_space=%zu new_minimum_free_space=%zu size=%u\n", new_memory_size, new_free_space, maximum_free_space, size);
+                switch (c->heap_growth_strategy) {
+                    case BoundedFreeHeapGrowth: {
+                        size_t maximum_free_space = 2 * (size + MIN_FREE_SPACE_SIZE);
+                        should_gc = should_gc || (alloc_mode != MEMORY_NO_SHRINK && new_free_space > maximum_free_space);
+                        if (should_gc) {
+                            new_target_size = (new_memory_size - new_free_space) + maximum_free_space;
+                        }
+                    } break;
+                    case MinimumHeapGrowth:
+                        should_gc = should_gc || (alloc_mode != MEMORY_NO_SHRINK && new_free_space > 0);
+                        if (should_gc) {
+                            new_target_size = new_memory_size - new_free_space + size;
+                        }
+                        break;
+                    case FibonacciHeapGrowth:
+                        should_gc = should_gc || (new_memory_size > FIBONACCI_HEAP_GROWTH_REDUCTION_THRESHOLD && new_free_space >= 3 * new_memory_size / 4);
+                        if (should_gc) {
+                            new_target_size = next_fibonacci_heap_size(new_memory_size - new_free_space + size);
+                        }
+                        break;
+                }
+                if (should_gc) {
+                    new_target_size = MAX(c->has_min_heap_size ? c->min_heap_size : 0, new_target_size);
+                    if (new_target_size != new_memory_size) {
+                        if (UNLIKELY(memory_gc(c, new_target_size, num_roots, roots) != MEMORY_GC_OK)) {
+                            TRACE("Unable to allocate memory for GC shrink.  new_memory_size=%zu new_free_space=%zu size=%u\n", new_memory_size, new_free_space, size);
                             return MEMORY_GC_ERROR_FAILED_ALLOCATION;
                         }
                     }

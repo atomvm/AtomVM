@@ -26,7 +26,7 @@ The heap and stack for each AtomVM process are stored in a single allocated bloc
 
 The heap contains all of the allocated terms in an execution context.  In some cases, the terms occupy more than one word of memory (e.g., a tuple), but in general, the heap contains a record of memory in use by the program.
 
-The heap grows incrementally, as memory is allocated, and terms are allocated sequentially, in increasing memory addresses.  There is, therefore, no memory fragmentation, properly speaking, at least insofar as a portion of memory might be in use and then freed.  However, it is possible that previously allocated blocks of memory in the context heap are no longer referenced by the program.  In this case, the allocated blocks are "garbage", and are reclaimed at the next garbage collection.
+The heap grows incrementally, as memory is allocated, and terms are allocated sequentially, in increasing memory addresses.  There is, therefore, no memory fragmentation, properly speaking, at least insofar as a portion of memory might be in use and then freed.  However, it is possible that previously allocated blocks of memory in the context heap are no longer referenced by the program.  In this case, the allocated blocks are "garbage", and are reclaimed at the next garbage collection. The actual growth of the heap is controlled by a heap growth strategy (`heap_growth` spawn option) as described below.
 
 > Note. It is possible for the AtomVM heap, as provided by the underlying operating system, to become fragmented, as the execution context stack and heap are allocated via `malloc` or equiv.  But that is a different kind of fragmentation that does not refer to the allocated block used by an individual AtomVM process.
 
@@ -64,7 +64,19 @@ The following diagram illustrates an allocated block of memory that stores terms
     |           word[n-1]            |      v      v
     +================================+ <- stack_base --
 
-The initial size of the allocated block for the stack and heap in AtomVM is 8 words.  As heap and stack allocations grow, eventually, the amount of free space will decrease to the point where a garbage collection is required.  In this case, a new but larger (typically by 2x) block of memory is allocated by the AtomVM OS process, and terms are copied from the old stack and heap to the new stack and heap.  Garbage collection is described in more detail below.
+The initial size of the allocated block for the stack and heap in AtomVM is 8 words.  As heap and stack allocations grow, eventually, the amount of free space will decrease to the point where a garbage collection is required.  In this case, a new but larger block of memory is allocated by the AtomVM OS process, and terms are copied from the old stack and heap to the new stack and heap.  Garbage collection is described in more detail below.
+
+### Heap growth strategies
+
+AtomVM aims at minimizing memory footprint and several heap growth strategies are available. The heap is grown or shrunk when an allocation is required and the current execution context allows for a garbage collection (that will move data structures), allows for shrinking or forces shrinking (typically in the case of a call to `erlang:garbage_collect/0,1`).
+
+Each strategy is set at the process level.
+
+Default strategy is bounded free (`{heap_growth, bounded_free}`). In this strategy, when more memory is required, the allocator keeps the free amount between fixed boundaries (currently 16 and 32 terms). If no allocation is required but free space is larger than boundary, a garbage collection is triggered. After copying data to a new heap, if the free space is larger than the maximum, the heap is shrunk within the boundaries.
+
+With minimum strategy (`{heap_growth, minimum}`), when an allocation can happen, it is always adjusted to have the free space at 0.
+
+With fibonacci strategy (`{heap_growth, fibonacci}`), heap size grows following a variation of fibonacci until a large value and then grows by 20%. If free space is larger than 75% of heap size, the heap is shrunk. This strategy is inspired from Erlang/OTP's implementation.
 
 ### Registers
 
