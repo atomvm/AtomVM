@@ -4646,10 +4646,6 @@ wait_timeout_trap_handler:
                         TRACE("bs_put_string: Bad state.  ctx->bs is not a binary.\n");
                         RAISE_ERROR(BADARG_ATOM);
                     }
-                    if (ctx->bs_offset % 8 != 0) {
-                        TRACE("bs_put_string: Unsupported bit syntax operation.  Writing strings must be byte-aligend.\n");
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
 
                     TRACE("bs_put_string/2, size=%u offset=%u\n", size, offset);
 
@@ -4660,8 +4656,10 @@ wait_timeout_trap_handler:
                         RAISE_ERROR(BADARG_ATOM);
                     }
 
-                    memcpy((char *) term_binary_data(ctx->bs) + ctx->bs_offset / 8, str, size);
-                    ctx->bs_offset += 8 * size;
+                    size_t size_in_bits = size * 8;
+                    uint8_t *dst = (uint8_t *) term_binary_data(ctx->bs);
+                    bitstring_copy_bits(dst, ctx->bs_offset, str, size_in_bits);
+                    ctx->bs_offset += size_in_bits;
                 #endif
                 NEXT_INSTRUCTION(next_off);
                 break;
@@ -6798,15 +6796,11 @@ wait_timeout_trap_handler:
                                 break;
                             }
                             case STRING_ATOM: {
-                                if (offset % 8) {
-                                    TRACE("bs_create_bin/6: current offset (%li) is not evenly divisible by 8\n", offset);
-                                    RAISE_ERROR(UNSUPPORTED_ATOM);
-                                }
-                                uint8_t *dst = (uint8_t *) term_binary_data(t) + (offset / 8);
+                                uint8_t *dst = (uint8_t *) term_binary_data(t);
                                 size_t remaining = 0;
                                 const uint8_t *str = module_get_str(mod, src_value, &remaining);
                                 segment_size = size_value * segment_unit;
-                                memcpy(dst, str, segment_size / 8);
+                                bitstring_copy_bits(dst, offset, str, segment_size);
                                 break;
                             }
                             case APPEND_ATOM:

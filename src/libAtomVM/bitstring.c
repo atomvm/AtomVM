@@ -350,3 +350,42 @@ bool bitstring_utf32_decode(const uint8_t *buf, size_t len, int32_t *c, enum Bit
         return true;
     }
 }
+
+void bitstring_copy_bits_incomplete_bytes(uint8_t *dst, size_t bits_offset, const uint8_t *src, size_t bits_count)
+{
+    size_t byte_offset = bits_offset / 8;
+    size_t bit_offset = bits_offset - (8 * byte_offset);
+    if (bits_offset % 8 == 0 && bits_count >= 8) {
+        size_t bytes_count = bits_count / 8;
+        memcpy(dst + byte_offset, src, bytes_count);
+        src += bytes_count;
+        byte_offset += bytes_count;
+        bits_count -= bytes_count * 8;
+    }
+    // Eventually copy bit by bit
+    dst += byte_offset;
+    uint8_t dest_byte = *dst;
+    uint8_t src_byte = *src++;
+    int dest_bit_ix = 7 - bit_offset;
+    int src_bit_ix = 7;
+    while (bits_count > 0) {
+        if (src_byte & (1 << src_bit_ix)) {
+            dest_byte |= 1 << dest_bit_ix;
+        } else {
+            dest_byte &= ~(1 << dest_bit_ix);
+        }
+        if (dest_bit_ix == 0) {
+            *dst++ = dest_byte;
+            dest_byte = *dst;
+            dest_bit_ix = 8;
+        }
+        if (src_bit_ix == 0) {
+            src_byte = *src++;
+            src_bit_ix = 8;
+        }
+        dest_bit_ix--;
+        src_bit_ix--;
+        bits_count--;
+    }
+    *dst = dest_byte;
+}
