@@ -122,6 +122,10 @@ test_crypto_one_time() ->
         ]
     ),
 
+    <<218, 189, 18, 174, 31, 123, 37, 254, 119, 34, 71, 35, 219, 0, 185, 153>> = crypto:crypto_one_time(
+        aes_256_ecb, <<5, 1:240, 7>>, <<"Test1234567890ab">>, [{encrypt, true}]
+    ),
+
     {badarg, {File, Line}, Message} = get_error(fun() ->
         crypto:crypto_one_time(bad, <<1:128>>, <<0:128>>, <<"Test">>, true)
     end),

@@ -26,6 +26,11 @@
 -type hash_algorithm() :: md5 | sha | sha224 | sha256 | sha384 | sha512.
 -type digest() :: binary().
 
+-type cipher_no_iv() ::
+    aes_128_ecb
+    | aes_192_ecb
+    | aes_256_ecb.
+
 -type cipher_iv() ::
     aes_128_cbc
     | aes_192_cbc
@@ -52,6 +57,25 @@
 %%-----------------------------------------------------------------------------
 -spec hash(Type :: hash_algorithm(), Data :: iolist()) -> digest().
 hash(_Type, _Data) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Cipher a supported cipher
+%% @param   Key the encryption / decryption key
+%% @param   Data to be crypted or encrypted
+%% @param   FlagOrOptions either just true for encryption (or false for decryption), or a proplist
+%%          for any additional option
+%% @returns Returns crypted or encrypted data.
+%% @doc     Encrypted/decrypt data using given cipher and key
+%% @end
+%%-----------------------------------------------------------------------------
+-spec crypto_one_time(
+    Cipher :: cipher_no_iv(),
+    Key :: iodata(),
+    Data :: iodata(),
+    FlagOrOptions :: crypto_opts()
+) -> binary().
+crypto_one_time(Cipher, Key, Data, FlagOrOptions) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

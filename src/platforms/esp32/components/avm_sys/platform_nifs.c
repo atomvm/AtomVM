@@ -629,6 +629,13 @@ static term nif_crypto_hash(Context *ctx, int argc, term argv[])
     return term_from_literal_binary(digest, digest_len, &ctx->heap, ctx->global);
 }
 
+static const AtomStringIntPair cipher_no_iv_table[] = {
+    { ATOM_STR("\xB", "aes_128_ecb"), MBEDTLS_CIPHER_AES_128_ECB },
+    { ATOM_STR("\xB", "aes_192_ecb"), MBEDTLS_CIPHER_AES_192_ECB },
+    { ATOM_STR("\xB", "aes_256_ecb"), MBEDTLS_CIPHER_AES_256_ECB },
+    SELECT_INT_DEFAULT(MBEDTLS_CIPHER_NONE)
+};
+
 static const AtomStringIntPair cipher_iv_table[] = {
     { ATOM_STR("\xB", "aes_128_cbc"), MBEDTLS_CIPHER_AES_128_CBC },
     { ATOM_STR("\xB", "aes_192_cbc"), MBEDTLS_CIPHER_AES_192_CBC },
@@ -729,11 +736,28 @@ static term make_crypto_error(const char *file, int line, const char *message, C
 
 static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
+    bool has_iv = argc == 5;
+    const AtomStringIntPair *cipher_table;
+    term key;
+    term iv;
+    term data;
+    term flag_or_options;
+    if (has_iv) {
+        cipher_table = cipher_iv_table;
+        key = argv[1];
+        iv = argv[2];
+        data = argv[3];
+        flag_or_options = argv[4];
+    } else {
+        cipher_table = cipher_no_iv_table;
+        key = argv[1];
+        data = argv[2];
+        flag_or_options = argv[3];
+    }
 
     term cipher_term = argv[0];
     mbedtls_cipher_type_t cipher
-        = interop_atom_term_select_int(cipher_iv_table, cipher_term, ctx->global);
+        = interop_atom_term_select_int(cipher_table, cipher_term, ctx->global);
     if (UNLIKELY(cipher == MBEDTLS_CIPHER_NONE)) {
         RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unknown cipher", ctx));
     }
@@ -745,7 +769,6 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     void *allocated_iv_data = NULL;
     void *allocated_data_data = NULL;
 
-    term key = argv[1];
     const void *key_data;
     size_t key_len;
     term result_t = handle_iodata(key, &key_data, &key_len, &allocated_key_data);
@@ -754,16 +777,16 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
         goto raise_error;
     }
 
-    term iv = argv[2];
-    const void *iv_data;
-    size_t iv_len;
-    result_t = handle_iodata(iv, &iv_data, &iv_len, &allocated_iv_data);
-    if (UNLIKELY(result_t != OK_ATOM)) {
-        error_atom = result_t;
-        goto raise_error;
+    const void *iv_data = NULL;
+    size_t iv_len = 0;
+    if (has_iv) {
+        result_t = handle_iodata(iv, &iv_data, &iv_len, &allocated_iv_data);
+        if (UNLIKELY(result_t != OK_ATOM)) {
+            error_atom = result_t;
+            goto raise_error;
+        }
     }
 
-    term data = argv[3];
     const void *data_data;
     size_t data_size;
     result_t = handle_iodata(data, &data_data, &data_size, &allocated_data_data);
@@ -772,7 +795,6 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
         goto raise_error;
     }
 
-    term flag_or_options = argv[4];
     mbedtls_operation_t operation;
     mbedtls_cipher_padding_t padding = MBEDTLS_PADDING_NONE;
     bool padding_has_been_set = false;
@@ -1091,6 +1113,10 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     if (strcmp("crypto:hash/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &crypto_hash_nif;
+    }
+    if (strcmp("crypto:crypto_one_time/4", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &crypto_crypto_one_time_nif;
     }
     if (strcmp("crypto:crypto_one_time/5", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
