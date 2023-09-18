@@ -85,6 +85,9 @@ GlobalContext *globalcontext_new()
 
     glb->last_process_id = 0;
 
+#ifndef AVM_NO_SMP
+    smp_spinlock_init(&glb->atom_insert_lock);
+#endif
     glb->atoms_table = atomshashtable_new();
     if (IS_NULL_PTR(glb->atoms_table)) {
         free(glb);
@@ -415,13 +418,20 @@ int globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_str
             memcpy(buf, atom_string, 1 + len);
             atom_string = buf;
         }
+        // TODO: This lock can be avoided by returning from a new atomshashtable_get_or_insert
+        // function the new atom index, and using it when calling valueshashtable_insert.
+        // See also https://github.com/atomvm/AtomVM/pull/812 discussion
+        SMP_SPINLOCK_LOCK(&glb->atom_insert_lock);
         atom_index = htable->count;
         if (!atomshashtable_insert(htable, atom_string, atom_index)) {
+            SMP_SPINLOCK_UNLOCK(&glb->atom_insert_lock);
             return -1;
         }
         if (!valueshashtable_insert(glb->atoms_ids_table, atom_index, (unsigned long) atom_string)) {
+            SMP_SPINLOCK_UNLOCK(&glb->atom_insert_lock);
             return -1;
         }
+        SMP_SPINLOCK_UNLOCK(&glb->atom_insert_lock);
     }
 
     return (int) atom_index;
