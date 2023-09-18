@@ -825,6 +825,39 @@ You can also use the legacy `erlang:md5/1` function to compute the MD5 hash of a
     %% erlang
     Hash = erlang:md5(<<foo>>).
 
+On ESP32, you can perform symetric encryption and decryption of any iodata data using
+`crypto_one_time/4,5` function.
+
+Following ciphers are supported:
+
+Without IV (using `crypto_one_time/4`):
+
+- `aes_128_ecb`
+- `aes_192_ecb`
+- `aes_256_ecb`
+
+With IV (using `crypto_one_time/5`):
+
+- `aes_128_cbc`
+- `aes_192_cbc`
+- `aes_256_cbc`
+- `aes_128_cfb128`
+- `aes_192_cfb128`
+- `aes_256_cfb128`
+- `aes_128_ctr`
+- `aes_192_ctr`
+- `aes_256_ctr`
+
+The function is implemented using [mbedTLS](https://github.com/Mbed-TLS/mbedtls), so please to its
+documentation for further details.
+
+Please refer to
+[Erlang crypto documentation](https://www.erlang.org/doc/man/crypto#crypto_one_time-4) for
+additional details about these two functions.
+
+> Note: mbedTLS doesn't support padding for ciphers other than CCB, so block size must be accounted
+> otherwise output will be truncated.
+
 ## ESP32-specific APIs
 
 Certain APIs are specific to and only supported on the ESP32 platform.  This section describes these APIs.
