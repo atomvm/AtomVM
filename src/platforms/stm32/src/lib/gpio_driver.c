@@ -23,6 +23,8 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include <libopencm3/cm3/nvic.h>
+#include <libopencm3/stm32/exti.h>
 #include <libopencm3/stm32/gpio.h>
 
 #include <atom.h>
@@ -60,15 +62,36 @@
 #define INVALID_PULL_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\xC", "invalid_pull"))
 #define INVALID_RATE_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\xC", "invalid_rate"))
 #define INVALID_LEVEL_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\xD", "invalid_level"))
+#define INVALID_IRQ_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\xB", "invalid_irq"))
+#define INVALID_TRIGGER_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\xF", "invalid_trigger"))
 
 // Port driver specific  data structures and definitions
 #ifndef AVM_DISABLE_GPIO_PORT_DRIVER
+
 static NativeHandlerResult consume_gpio_mailbox(Context *ctx);
 
 static const char *const gpio_atom = ATOM_STR("\x4", "gpio");
 static const char *const gpio_driver_atom = ATOM_STR("\xB", "gpio_driver");
 
+#define INVALID_EXTI_TRIGGER 0xEE
+#define GPIO_INTERRUPT_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\xE", "gpio_interrupt"))
+
 static term gpio_driver;
+
+struct GPIOListenerData
+{
+    struct ListHead gpio_listener_list_head;
+    int32_t target_local_pid;
+    term bank_atom;
+    uint16_t gpio_pin;
+    uint32_t exti;
+    uint8_t exti_irq;
+};
+
+struct GPIOData
+{
+    struct ListHead gpio_listeners;
+};
 
 enum gpio_cmd
 {
@@ -81,6 +104,13 @@ enum gpio_cmd
     GPIOCloseCmd
 };
 
+static const AtomStringIntPair exti_trigger_table[] = {
+    { ATOM_STR("\x6", "rising"), EXTI_TRIGGER_RISING },
+    { ATOM_STR("\x7", "falling"), EXTI_TRIGGER_FALLING },
+    { ATOM_STR("\x4", "both"), EXTI_TRIGGER_BOTH },
+    SELECT_INT_DEFAULT(INVALID_EXTI_TRIGGER)
+};
+
 static const AtomStringIntPair gpio_cmd_table[] = {
     { ATOM_STR("\x9", "set_level"), GPIOSetLevelCmd },
     { ATOM_STR("\x4", "read"), GPIOReadCmd },
@@ -90,6 +120,7 @@ static const AtomStringIntPair gpio_cmd_table[] = {
     { ATOM_STR("\x5", "close"), GPIOCloseCmd },
     SELECT_INT_DEFAULT(GPIOInvalidCmd)
 };
+
 #endif /* NOT defined AVM_DISABLE_GPIO_PORT_DRIVER */
 
 enum gpio_pin_state
@@ -145,6 +176,49 @@ static const AtomStringIntPair pull_mode_table[] = {
     { ATOM_STR("\x8", "floating"), GPIO_PUPD_NONE },
     SELECT_INT_DEFAULT(GPIO_PUPD_NONE)
 };
+
+#ifndef AVM_DISABLE_GPIO_PORT_DRIVER
+// Obtain the IRQ interrupt associated with a pin number
+static uint8_t pin_num_to_exti_irq(uint16_t pin_num)
+{
+    switch (pin_num) {
+        case 0:
+            return NVIC_EXTI0_IRQ;
+        case 1:
+            return NVIC_EXTI1_IRQ;
+        case 2:
+            return NVIC_EXTI2_IRQ;
+        case 3:
+            return NVIC_EXTI3_IRQ;
+        case 4:
+            return NVIC_EXTI4_IRQ;
+        case 5:
+            return NVIC_EXTI9_5_IRQ;
+        case 6:
+            return NVIC_EXTI9_5_IRQ;
+        case 7:
+            return NVIC_EXTI9_5_IRQ;
+        case 8:
+            return NVIC_EXTI9_5_IRQ;
+        case 9:
+            return NVIC_EXTI9_5_IRQ;
+        case 10:
+            return NVIC_EXTI15_10_IRQ;
+        case 11:
+            return NVIC_EXTI15_10_IRQ;
+        case 12:
+            return NVIC_EXTI15_10_IRQ;
+        case 13:
+            return NVIC_EXTI15_10_IRQ;
+        case 14:
+            return NVIC_EXTI15_10_IRQ;
+        case 15:
+            return NVIC_EXTI15_10_IRQ;
+        default:
+            return 0;
+    }
+}
+#endif /* NOT defined AVM_DISABLE_GPIO_PORT_DRIVER */
 
 static term create_pair(Context *ctx, term term1, term term2)
 {
@@ -417,8 +491,11 @@ static Context *gpio_driver_create_port(GlobalContext *global, term opts)
 {
     Context *ctx = context_new(global);
 
+    struct GPIOData *gpio_data = malloc(sizeof(struct GPIOData));
+    list_init(&gpio_data->gpio_listeners);
+
     ctx->native_handler = consume_gpio_mailbox;
-    ctx->platform_data = NULL;
+    ctx->platform_data = gpio_data;
 
     term reg_name_term = globalcontext_make_atom(global, gpio_atom);
     int atom_index = term_to_atom_index(reg_name_term);
@@ -442,11 +519,168 @@ static term gpiodriver_close(Context *ctx)
         return create_pair(ctx, ERROR_ATOM, NOPROC_ATOM);
     }
 
-    ctx->platform_data = NULL;
+    struct GPIOData *gpio_data = ctx->platform_data;
+
+    struct ListHead *item;
+    struct ListHead *tmp;
+    if (!list_is_empty(&gpio_data->gpio_listeners)) {
+        MUTABLE_LIST_FOR_EACH (item, tmp, &gpio_data->gpio_listeners) {
+            struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
+            uint32_t exti = gpio_listener->exti;
+            uint8_t irqn = pin_num_to_exti_irq(gpio_listener->gpio_pin);
+            nvic_disable_irq(irqn);
+            exti_disable_request(exti);
+            list_remove(&gpio_listener->gpio_listener_list_head);
+            free(gpio_listener);
+        }
+    }
 
     globalcontext_unregister_process(glb, gpio_atom_index);
+    free(gpio_data);
 
     return OK_ATOM;
+}
+
+void gpio_interrupt_callback(Context *ctx, uint32_t exti)
+{
+    int32_t listening_pid;
+    term gpio_bank;
+    uint16_t gpio_pin;
+
+    struct GPIOData *gpio_data = ctx->platform_data;
+    struct ListHead *item;
+    struct ListHead *tmp;
+    MUTABLE_LIST_FOR_EACH (item, tmp, &gpio_data->gpio_listeners) {
+        struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
+        if (gpio_listener->exti == exti) {
+            listening_pid = gpio_listener->target_local_pid;
+            gpio_bank = gpio_listener->bank_atom;
+            gpio_pin = gpio_listener->gpio_pin;
+
+            // 1 header + 2 elements, second element is tuple with 2 elements
+            BEGIN_WITH_STACK_HEAP(1 + 2 + 2, heap);
+
+            term int_msg = term_alloc_tuple(2, &heap);
+            term gpio_tuple = term_alloc_tuple(2, &heap);
+            term_put_tuple_element(int_msg, 0, GPIO_INTERRUPT_ATOM);
+            term_put_tuple_element(gpio_tuple, 0, gpio_bank);
+            term_put_tuple_element(gpio_tuple, 1, term_from_int32((int32_t) gpio_pin));
+            term_put_tuple_element(int_msg, 1, gpio_tuple);
+
+            globalcontext_send_message(ctx->global, listening_pid, int_msg);
+
+            END_WITH_STACK_HEAP(heap, ctx->global);
+        }
+    }
+}
+
+// This function is used to store the local Context pointer during gpiodriver_set_int and to relay messages to the interrupt_callback
+// from the exti#_isr interrupt handlers (defined in libopencm3/stm32/CHIP-SERIES/nvic.h) that have no access to the context.
+void isr_handler(Context *ctx, uint32_t exti)
+{
+    static Context *local_ctx;
+    if (ctx != NULL) {
+        UNUSED(exti);
+        local_ctx = ctx;
+        TRACE("gpio_driver: GlobalContext stored in isr_handler\n");
+    } else {
+        UNUSED(ctx);
+        TRACE("gpio_driver: isr_handler relaying exti to gpio_interrupt_callback\n");
+        gpio_interrupt_callback(local_ctx, exti);
+    }
+}
+
+void exti0_isr()
+{
+    exti_reset_request(EXTI0);
+    TRACE("gpio_driver: exti0 interrupt triggered.\n");
+    isr_handler(NULL, EXTI0);
+}
+
+void exti1_isr()
+{
+    exti_reset_request(EXTI1);
+    TRACE("gpio_driver: exti1 interrupt triggered\n");
+    isr_handler(NULL, EXTI1);
+}
+
+void exti2_isr()
+{
+    exti_reset_request(EXTI2);
+    TRACE("gpio_driver: exti2 interrupt triggered\n");
+    isr_handler(NULL, EXTI2);
+}
+
+void exti3_isr()
+{
+    exti_reset_request(EXTI3);
+    TRACE("gpio_driver: exti3 interrupt triggered\n");
+    isr_handler(NULL, EXTI3);
+}
+
+void exti4_isr()
+{
+    exti_reset_request(EXTI4);
+    TRACE("gpio_driver: exti4 interrupt triggered\n");
+    isr_handler(NULL, EXTI4);
+}
+
+void exti9_5_isr()
+{
+    if (exti_get_flag_status(EXTI5) == EXTI5) {
+        exti_reset_request(EXTI5);
+        isr_handler(NULL, EXTI5);
+        TRACE("gpio_driver: exti5 interrupt triggered\n");
+    } else if (exti_get_flag_status(EXTI6) == EXTI6) {
+        exti_reset_request(EXTI6);
+        isr_handler(NULL, EXTI6);
+        TRACE("gpio_driver: exti6 interrupt triggered\n");
+    } else if (exti_get_flag_status(EXTI7) == EXTI7) {
+        exti_reset_request(EXTI7);
+        isr_handler(NULL, EXTI7);
+        TRACE("gpio_driver: exti7 interrupt triggered\n");
+    } else if (exti_get_flag_status(EXTI8) == EXTI8) {
+        exti_reset_request(EXTI8);
+        isr_handler(NULL, EXTI8);
+        TRACE("gpio_driver: exti8 interrupt triggered\n");
+    } else if (exti_get_flag_status(EXTI9) == EXTI9) {
+        exti_reset_request(EXTI9);
+        isr_handler(NULL, EXTI9);
+        TRACE("gpio_driver: exti9 interrupt triggered\n");
+    } else {
+        AVM_LOGE(TAG, "exti9_5_isr triggered, but no match found!");
+    }
+}
+
+void exti15_10_isr()
+{
+    if (exti_get_flag_status(EXTI10)) {
+        exti_reset_request(EXTI10);
+        isr_handler(NULL, EXTI10);
+        TRACE("gpio_driver: exti10 interrupt triggered\n");
+    } else if (exti_get_flag_status(EXTI11)) {
+        exti_reset_request(EXTI11);
+        isr_handler(NULL, EXTI11);
+        TRACE("gpio_driver: exti11 interrupt triggered\n");
+    } else if (exti_get_flag_status(EXTI12)) {
+        exti_reset_request(EXTI12);
+        isr_handler(NULL, EXTI12);
+        TRACE("gpio_driver: exti12 interrupt triggered\n");
+    } else if (exti_get_flag_status(EXTI13)) {
+        exti_reset_request(EXTI13);
+        isr_handler(NULL, EXTI13);
+        TRACE("gpio_driver: exti13 interrupt triggered\n");
+    } else if (exti_get_flag_status(EXTI14)) {
+        exti_reset_request(EXTI14);
+        isr_handler(NULL, EXTI14);
+        TRACE("gpio_driver: exti14 interrupt triggered\n");
+    } else if (exti_get_flag_status(EXTI15)) {
+        exti_reset_request(EXTI15);
+        isr_handler(NULL, EXTI15);
+        TRACE("gpio_driver: exti15 interrupt triggered\n");
+    } else {
+        AVM_LOGE(TAG, "exti15_10_isr triggered, but no match found!");
+    }
 }
 
 static term gpiodriver_set_level(Context *ctx, term cmd)
@@ -469,6 +703,167 @@ static term gpiodriver_read(Context *ctx, term cmd)
 {
     term gpio_pin_tuple = term_get_tuple_element(cmd, 1);
     return gpio_digital_read(ctx, gpio_pin_tuple);
+}
+
+static bool gpiodriver_is_gpio_attached(struct GPIOData *gpio_data, term gpio_bank_atom, uint16_t pin)
+{
+    struct ListHead *item;
+    LIST_FOR_EACH (item, &gpio_data->gpio_listeners) {
+        struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
+        if ((gpio_listener->gpio_pin == pin) && (gpio_listener->bank_atom == gpio_bank_atom)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
+{
+    term gpio_tuple = term_get_tuple_element(cmd, 1);
+    if (UNLIKELY(!term_is_tuple(gpio_tuple))) {
+        AVM_LOGE(TAG, "Invalid GPIO Pin tuple, expect {Bank, Pin}.");
+        return create_pair(ctx, ERROR_ATOM, BADARG_ATOM);
+    }
+    term gpio_bank_atom = term_get_tuple_element(gpio_tuple, 0);
+    if (UNLIKELY(!term_is_atom(gpio_bank_atom))) {
+        AVM_LOGE(TAG, "Bank parameter of pin tuple must be an atom!");
+        return create_pair(ctx, ERROR_ATOM, INVALID_BANK_ATOM);
+    }
+    uint32_t gpio_bank = (uint32_t) interop_atom_term_select_int(gpio_bank_table, gpio_bank_atom, ctx->global);
+    if (UNLIKELY(gpio_bank == GPIOInvalidBank)) {
+        char *bank_string = interop_atom_to_string(ctx, gpio_bank_atom);
+        AVM_LOGE(TAG, "Invalid GPIO bank '%s' in pin tuple", bank_string);
+        free(bank_string);
+        return create_pair(ctx, ERROR_ATOM, INVALID_BANK_ATOM);
+    }
+
+    uint16_t gpio_pin = (uint16_t) term_to_int32(term_get_tuple_element(gpio_tuple, 1));
+
+    struct GPIOData *gpio_data = ctx->platform_data;
+    if (gpiodriver_is_gpio_attached(gpio_data, gpio_bank_atom, gpio_pin)) {
+        char *bank_string = interop_atom_to_string(ctx, gpio_bank_atom);
+        AVM_LOGW(TAG, "GPIO pin %c%u interrupt already attached.", bank_string, gpio_pin);
+        free(bank_string);
+        return OK_ATOM;
+    }
+
+    term trigger = term_get_tuple_element(cmd, 2);
+    if (UNLIKELY(!term_is_atom(trigger))) {
+        AVM_LOGE(TAG, "GPIO interrupt trigger must be an atom ('rising', 'falling', or 'both').");
+        return create_pair(ctx, ERROR_ATOM, INVALID_TRIGGER_ATOM);
+    }
+    enum exti_trigger_type interrupt_type = interop_atom_term_select_int(exti_trigger_table, trigger, ctx->global);
+    if (UNLIKELY(interrupt_type == INVALID_EXTI_TRIGGER)) {
+        char *trigger_string = interop_atom_to_string(ctx, trigger);
+        AVM_LOGE(TAG, "Interrupt type %s not supported on stm32 platform.", trigger_string);
+        free(trigger_string);
+        return create_pair(ctx, ERROR_ATOM, INVALID_TRIGGER_ATOM);
+    }
+
+    uint32_t exti = 1U << gpio_pin;
+
+    if (!list_is_empty(&gpio_data->gpio_listeners)) {
+        struct ListHead *item;
+        struct ListHead *tmp;
+        MUTABLE_LIST_FOR_EACH (item, tmp, &gpio_data->gpio_listeners) {
+            struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
+            if (gpio_listener->exti == exti) {
+                char *bank_string = interop_atom_to_string(ctx, gpio_bank_atom);
+                AVM_LOGE(TAG, "Cannot set interrupt for pin %c%u, exti%u device already in use!", bank_string, gpio_pin, gpio_pin);
+                free(bank_string);
+                return create_pair(ctx, ERROR_ATOM, INVALID_IRQ_ATOM);
+            }
+        }
+    }
+
+    uint8_t exti_irq = pin_num_to_exti_irq(gpio_pin);
+    if (UNLIKELY(exti_irq == 0)) {
+        AVM_LOGE(TAG, "BUG: No valid exti irq found!");
+        return create_pair(ctx, ERROR_ATOM, INVALID_IRQ_ATOM);
+    }
+
+    struct GPIOListenerData *data = malloc(sizeof(struct GPIOListenerData));
+    if (UNLIKELY(IS_NULL_PTR(data))) {
+        AVM_LOGE(TAG, "Out of memory!");
+        AVM_ABORT();
+    }
+    list_append(&gpio_data->gpio_listeners, &data->gpio_listener_list_head);
+    data->target_local_pid = target_pid;
+    data->bank_atom = gpio_bank_atom;
+    data->gpio_pin = gpio_pin;
+    data->exti = exti;
+    data->exti_irq = exti_irq;
+
+    AVM_LOGD(TAG, "Installing interrupt type 0x%02X with exti%u for bank 0x%08lX pin %u.", interrupt_type, gpio_pin, gpio_bank, gpio_pin);
+
+    exti_disable_request(exti);
+    exti_select_source(exti, gpio_bank);
+    exti_set_trigger(exti, interrupt_type);
+    // Store the Context pointer in the isr_handler
+    isr_handler(ctx, 0x0000U);
+    exti_enable_request(exti);
+    if (!nvic_get_irq_enabled(exti_irq)) {
+        nvic_enable_irq(exti_irq);
+    }
+    nvic_set_priority(exti_irq, 1);
+
+    return OK_ATOM;
+}
+
+static term gpiodriver_remove_int(Context *ctx, term cmd)
+{
+    struct GPIOData *gpio_data = ctx->platform_data;
+    bool int_removed = false;
+    bool stop_irq = true;
+
+    term gpio_tuple = term_get_tuple_element(cmd, 1);
+    if (UNLIKELY(!term_is_tuple(gpio_tuple))) {
+        AVM_LOGE(TAG, "Invalid GPIO Pin tuple, expect {Bank, Pin}.");
+        return create_pair(ctx, ERROR_ATOM, BADARG_ATOM);
+    }
+    term target_bank_atom = term_get_tuple_element(gpio_tuple, 0);
+    if (UNLIKELY(!term_is_atom(target_bank_atom))) {
+        AVM_LOGE(TAG, "Bank parameter of pin tuple must be an atom!");
+        return create_pair(ctx, ERROR_ATOM, INVALID_BANK_ATOM);
+    }
+    uint32_t target_bank = (uint32_t) interop_atom_term_select_int(gpio_bank_table, target_bank_atom, ctx->global);
+    if (UNLIKELY(target_bank == GPIOInvalidBank)) {
+        char *bank_string = interop_atom_to_string(ctx, target_bank_atom);
+        AVM_LOGE(TAG, "Invalid GPIO bank %s in pin tuple", bank_string);
+        free(bank_string);
+        return create_pair(ctx, ERROR_ATOM, INVALID_BANK_ATOM);
+    }
+    uint16_t target_num = (uint16_t) term_to_int32(term_get_tuple_element(gpio_tuple, 1));
+    uint8_t target_irq = pin_num_to_exti_irq(target_num);
+
+    struct ListHead *item;
+    struct ListHead *tmp;
+    if (!list_is_empty(&gpio_data->gpio_listeners)) {
+        MUTABLE_LIST_FOR_EACH (item, tmp, &gpio_data->gpio_listeners) {
+            struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
+            if ((gpio_listener->gpio_pin == target_num) && (gpio_listener->bank_atom == target_bank_atom)) {
+                uint16_t exti = gpio_listener->exti;
+                uint8_t irqn = pin_num_to_exti_irq(gpio_listener->gpio_pin);
+                list_remove(&gpio_listener->gpio_listener_list_head);
+                exti_disable_request(exti);
+                free(gpio_listener);
+                int_removed = true;
+                // some pins share irqs - don't stop the irq if another pin is still using it.
+            } else if (gpio_listener->exti_irq == target_irq) {
+                stop_irq = false;
+            }
+        }
+        if (stop_irq) {
+            nvic_disable_irq(target_irq);
+        }
+        if (int_removed == false) {
+            AVM_LOGW(TAG, "No interrupt removed, match not found for bank 0x%08lX pin %u.", target_bank, target_num);
+        }
+    } else {
+        AVM_LOGW(TAG, "No interrupts have been previously set.");
+    }
+
+    return OK_ATOM;
 }
 
 static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
@@ -498,13 +893,11 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
             break;
 
         case GPIOSetIntCmd:
-            AVM_LOGE(TAG, "set_int not yet supported on stm32");
-            ret = create_pair(ctx, ERROR_ATOM, UNSUPPORTED_ATOM);
+            ret = gpiodriver_set_int(ctx, local_process_id, req);
             break;
 
         case GPIORemoveIntCmd:
-            AVM_LOGE(TAG, "remove_int not yet supported on stm32");
-            ret = create_pair(ctx, ERROR_ATOM, UNSUPPORTED_ATOM);
+            ret = gpiodriver_remove_int(ctx, req);
             break;
 
         case GPIOCloseCmd:

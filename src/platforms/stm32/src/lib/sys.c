@@ -78,6 +78,10 @@ void sys_enable_core_periph_clocks()
     for (int i = 0; i < sizeof(list) / sizeof(list[0]); i++) {
         rcc_periph_clock_enable((enum rcc_periph_clken) list[i]);
     }
+#ifndef AVM_DISABLE_GPIO_PORT_DRIVER
+    // This clock enables the syscfg manger for external gpio interupts & ethernet PHY interface.
+    rcc_periph_clock_enable(RCC_SYSCFG);
+#endif
 }
 
 bool sys_lock_pin(GlobalContext *glb, uint32_t gpio_bank, uint16_t pin_num)
