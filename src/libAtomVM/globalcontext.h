@@ -82,6 +82,10 @@ struct GlobalContext
 
     int32_t last_process_id;
 
+    // TODO: this SpinLock should be removed
+#ifndef AVM_NO_SMP
+    SpinLock atom_insert_lock;
+#endif
     struct AtomsHashTable *atoms_table;
     struct ValuesHashTable *atoms_ids_table;
     struct AtomsHashTable *modules_table;

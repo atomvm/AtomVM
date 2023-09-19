@@ -23,6 +23,7 @@
 
 start() ->
     ok = test_hash(),
+    ok = test_crypto_one_time(),
     ok.
 
 test_hash() ->
@@ -90,4 +91,93 @@ expect(Error, F) ->
                 _ when Error == E ->
                     ok
             end
+    end.
+
+test_crypto_one_time() ->
+    <<50, 136, 204, 108, 55>> = crypto:crypto_one_time(
+        aes_128_ctr,
+        <<0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15>>,
+        <<1:120, 5:8>>,
+        <<"Hello">>,
+        true
+    ),
+
+    % No padding is used so output will be truncated
+    <<231, 108, 83, 104, 188, 131, 182, 65, 2, 128, 78, 162, 210, 149, 128, 248>> = crypto:crypto_one_time(
+        aes_128_cbc, <<1:128>>, <<0:128>>, <<"First bytesSecond bytes">>, true
+    ),
+
+    % Previous test, but with iolist
+    <<231, 108, 83, 104, 188, 131, 182, 65, 2, 128, 78, 162, 210, 149, 128, 248>> = crypto:crypto_one_time(
+        aes_128_cbc,
+        <<1:128>>,
+        <<0:128>>,
+        [<<"First ">>, $b, $y, <<"tes">>, [<<"Second ">>, <<"bytes">>]],
+        true
+    ),
+
+    <<117, 16, 152, 235, 154, 151, 58, 120, 64, 65, 33, 201, 242, 240, 41, 177>> = crypto:crypto_one_time(
+        aes_256_cbc, <<5, 1:240, 7>>, <<1:120, 7:8>>, <<"Test">>, [
+            {encrypt, true}, {padding, pkcs_padding}
+        ]
+    ),
+
+    <<218, 189, 18, 174, 31, 123, 37, 254, 119, 34, 71, 35, 219, 0, 185, 153>> = crypto:crypto_one_time(
+        aes_256_ecb, <<5, 1:240, 7>>, <<"Test1234567890ab">>, [{encrypt, true}]
+    ),
+
+    {badarg, {File, Line}, Message} = get_error(fun() ->
+        crypto:crypto_one_time(bad, <<1:128>>, <<0:128>>, <<"Test">>, true)
+    end),
+    true = is_list(File),
+    true = is_integer(Line),
+    true = is_list(Message),
+
+    % Invalid key
+    {badarg, {File1, Line1}, Message1} = get_error(fun() ->
+        crypto:crypto_one_time(
+            aes_128_ctr,
+            <<>>,
+            <<1:120, 5:8>>,
+            <<"Hello">>,
+            true
+        )
+    end),
+    true = is_list(File1),
+    true = is_integer(Line1),
+    true = is_list(Message1),
+
+    % Invalid IV
+    {badarg, {File2, Line2}, Message2} = get_error(fun() ->
+        crypto:crypto_one_time(
+            aes_128_ctr,
+            <<0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15>>,
+            <<5>>,
+            <<"Hello">>,
+            true
+        )
+    end),
+    true = is_list(File2),
+    true = is_integer(Line2),
+    true = is_list(Message2),
+
+    % Invalid opts
+    badarg = get_error(fun() ->
+        crypto:crypto_one_time(
+            aes_128_ctr,
+            <<0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15>>,
+            <<1:120, 5:8>>,
+            <<"Hello">>,
+            {bad}
+        )
+    end),
+
+    ok.
+
+get_error(F) ->
+    try
+        F(),
+        fail
+    catch
+        _:E -> E
     end.
