@@ -25,12 +25,12 @@
 
 #include <trace.h>
 
+#include <libopencm3/cm3/nvic.h>
+
 #include "avm_log.h"
 #include "gpiodriver.h"
 
 #define TAG "sys"
-
-void sys_tick_handler();
 
 // Monotonically increasing number of milliseconds from reset
 static volatile uint64_t system_millis;
