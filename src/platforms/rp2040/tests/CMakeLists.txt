@@ -35,7 +35,7 @@ endif()
 set(HAVE_PLATFORM_SMP_H ON)
 target_link_libraries(rp2040_tests PUBLIC libAtomVM)
 # Also add lib where platform_smp.h header is
-target_include_directories(libAtomVM PUBLIC ../src/lib)
+target_include_directories(rp2040_tests PUBLIC ../src/lib)
 
 target_link_libraries(rp2040_tests PUBLIC hardware_regs pico_stdlib pico_binary_info unity)
 
@@ -47,8 +47,8 @@ set(
 target_link_libraries(rp2040_tests PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX})
 
 # could not get rp2040js to work with stdio USB
-pico_enable_stdio_usb(AtomVM 0)
-pico_enable_stdio_uart(AtomVM 1)
+pico_enable_stdio_usb(rp2040_tests 0)
+pico_enable_stdio_uart(rp2040_tests 1)
 
 # create map/bin/hex/uf2 file in addition to ELF.
 pico_add_extra_outputs(rp2040_tests)
