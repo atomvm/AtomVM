@@ -20,7 +20,9 @@
 -module(crypto).
 
 -export([
-    hash/2
+    hash/2,
+    crypto_one_time/4,
+    crypto_one_time/5
 ]).
 
 -type hash_algorithm() :: md5 | sha | sha224 | sha256 | sha384 | sha512.
@@ -75,7 +77,7 @@ hash(_Type, _Data) ->
     Data :: iodata(),
     FlagOrOptions :: crypto_opts()
 ) -> binary().
-crypto_one_time(Cipher, Key, Data, FlagOrOptions) ->
+crypto_one_time(_Cipher, _Key, _Data, _FlagOrOptions) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -96,5 +98,5 @@ crypto_one_time(Cipher, Key, Data, FlagOrOptions) ->
     Data :: iodata(),
     FlagOrOptions :: crypto_opts()
 ) -> binary().
-crypto_one_time(Cipher, Key, IV, Data, FlagOrOptions) ->
+crypto_one_time(_Cipher, _Key, _IV, _Data, _FlagOrOptions) ->
     erlang:nif_error(undefined).
