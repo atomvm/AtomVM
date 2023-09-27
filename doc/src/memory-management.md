@@ -26,7 +26,7 @@ The heap and stack for each AtomVM process are stored in a single allocated bloc
 
 The heap contains all of the allocated terms in an execution context.  In some cases, the terms occupy more than one word of memory (e.g., a tuple), but in general, the heap contains a record of memory in use by the program.
 
-The heap grows incrementally, as memory is allocated, and terms are allocated sequentially, in increasing memory addresses.  There is, therefore, no memory fragmentation, properly speaking, at least insofar as a portion of memory might be in use and then freed.  However, it is possible that previously allocated blocks of memory in the context heap are no longer referenced by the program.  In this case, the allocated blocks are "garbage", and are reclaimed at the next garbage collection. The actual growth of the heap is controlled by a heap growth strategy (`heap_growth` spawn option) as described below.
+The heap grows incrementally, as memory is allocated, and terms are allocated sequentially, in increasing memory addresses.  There is, therefore, no memory fragmentation, properly speaking, at least insofar as a portion of memory might be in use and then freed.  However, it is possible that previously allocated blocks of memory in the context heap are no longer referenced by the program.  In this case, the allocated blocks are "garbage", and are reclaimed at the next garbage collection. The actual growth of the heap is controlled by a heap growth strategy (`atomvm_heap_growth` spawn option) as described [below](#heap-growth-strategies).
 
 > Note. It is possible for the AtomVM heap, as provided by the underlying operating system, to become fragmented, as the execution context stack and heap are allocated via `malloc` or equiv.  But that is a different kind of fragmentation that does not refer to the allocated block used by an individual AtomVM process.
 
@@ -72,11 +72,11 @@ AtomVM aims at minimizing memory footprint and several heap growth strategies ar
 
 Each strategy is set at the process level.
 
-Default strategy is bounded free (`{heap_growth, bounded_free}`). In this strategy, when more memory is required, the allocator keeps the free amount between fixed boundaries (currently 16 and 32 terms). If no allocation is required but free space is larger than boundary, a garbage collection is triggered. After copying data to a new heap, if the free space is larger than the maximum, the heap is shrunk within the boundaries.
+Default strategy is bounded free (`{atomvm_heap_growth, bounded_free}`). In this strategy, when more memory is required, the allocator keeps the free amount between fixed boundaries (currently 16 and 32 terms). If no allocation is required but free space is larger than boundary, a garbage collection is triggered. After copying data to a new heap, if the free space is larger than the maximum, the heap is shrunk within the boundaries.
 
-With minimum strategy (`{heap_growth, minimum}`), when an allocation can happen, it is always adjusted to have the free space at 0.
+With minimum strategy (`{atomvm_heap_growth, minimum}`), when an allocation can happen, it is always adjusted to have the free space at 0.
 
-With fibonacci strategy (`{heap_growth, fibonacci}`), heap size grows following a variation of fibonacci until a large value and then grows by 20%. If free space is larger than 75% of heap size, the heap is shrunk. This strategy is inspired from Erlang/OTP's implementation.
+With fibonacci strategy (`{atomvm_heap_growth, fibonacci}`), heap size grows following a variation of fibonacci until a large value and then grows by 20%. If free space is larger than 75% of heap size, the heap is shrunk. This strategy is inspired from Erlang/OTP's implementation.
 
 ### Registers
 
@@ -571,7 +571,7 @@ Module and catch label indices are stored outside of the process heap and are ou
 
 Garbage collection refers to the process of removing no-longer referenced term data stored in the heap, making room for new storage, as the program requires.  AtomVM implements [Tracing Garbage Collection](https://en.wikipedia.org/wiki/Tracing_garbage_collection), as does [Erlang Garbage Collection](https://erlang.org/doc/apps/erts/GarbageCollection.html).  Unlike some garbage collection systems (e.g., as implemented by the Java Virtual Machine), garbage collection in Erlang-based systems, is performed independently on the heap allocated for each active Erlang process; there is no single shared heap for all running Erlang processes.
 
-A given process heap and stack occupy a single region of malloc'd memory, and it is the job of the Erlang VM to manage memory within the allocated regions.  Because this region is fixed, every allocation in the heap or stack results in less free space for the Erlang process.  When free space reaches a limit, AtomVM will run a garbage collection event, which will allocate a new block of memory to hold the new heap and stack (typically, enough to allocate a requested object, plus a little extra), and then copy terms from the old heap and stack to the new heap and stack.  Any terms that no longer have references from term pointers in the old stack or registers are not copied to the new stack, and are therefore "collected" as garbage.  In addition, any objects in the old heap that reference objects in shared memory (see reference counted binaries, above) are also managed as part of this process, in a manner described below.
+A given process heap and stack occupy a single region of malloc'd memory, and it is the job of the Erlang VM to manage memory within the allocated regions.  Because this region is fixed, every allocation in the heap or stack results in less free space for the Erlang process.  When free space reaches a limit, AtomVM will run a garbage collection event, which will allocate a new block of memory to hold the new heap and stack (the actual allocation depends on the heap growth strategy [as explained above](#heap-growth-strategies)), and then copy terms from the old heap and stack to the new heap and stack.  Any terms that no longer have references from term pointers in the old stack or registers are not copied to the new stack, and are therefore "collected" as garbage.  In addition, any objects in the old heap that reference objects in shared memory (see reference counted binaries, above) are also managed as part of this process, in a manner described below.
 
                                   +---------+ ------
                                   |   new   |    ^
