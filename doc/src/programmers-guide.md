@@ -307,6 +307,7 @@ The options argument is a properties list containing optionally the following en
 | `max_heap_size` | `non_neg_integer()` | unbounded | Maximum heap size of the process.  The heap will grow no larger than this size. |
 | `link` | `boolean()` | `false` | Whether to link the spawned process to the spawning process. |
 | `monitor` | `boolean()` | `false` | Whether to link the spawning process should monitor the spawned process. |
+| `atomvm_heap_growth` | `bounded_free | minimum | fibonacci` | `bounded_free` | [Strategy](memory-management.md#heap-growth-strategies) to grow the heap of the process. |
 
 ### Console Output
 
