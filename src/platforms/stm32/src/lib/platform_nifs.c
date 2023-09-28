@@ -18,14 +18,16 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#include "platform_nifs.h"
-#include "defaultatoms.h"
-#include "nifs.h"
-#include "platform_defaultatoms.h"
-#include "term.h"
+#include <defaultatoms.h>
+#include <nifs.h>
+#include <platform_nifs.h>
+#include <term.h>
 
 //#define ENABLE_TRACE
-#include "trace.h"
+#include <trace.h>
+
+#include "platform_defaultatoms.h"
+#include "stm_sys.h"
 
 static term nif_atomvm_platform(Context *ctx, int argc, term argv[])
 {
@@ -46,6 +48,10 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     if (strcmp("atomvm:platform/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &atomvm_platform_nif;
+    }
+    const struct Nif *nif = nif_collection_resolve_nif(nifname);
+    if (nif) {
+        return nif;
     }
     return NULL;
 }

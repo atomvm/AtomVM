@@ -36,6 +36,7 @@
 #include <version.h>
 
 #include "lib/avm_log.h"
+#include "lib/stm_sys.h"
 
 #define USART_CONSOLE USART2
 #define AVM_ADDRESS (0x8080000)
@@ -143,6 +144,8 @@ int main()
     AVM_LOGD(TAG, "Maximum application size: %lu", size);
 
     GlobalContext *glb = globalcontext_new();
+    port_driver_init_all(glb);
+    nif_collection_init_all(glb);
 
     if (!avmpack_is_valid(flashed_avm, size) || !avmpack_find_section_by_flag(flashed_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
         AVM_LOGE(TAG, "Invalid AVM Pack");

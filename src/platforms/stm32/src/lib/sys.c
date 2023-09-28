@@ -17,20 +17,26 @@
  *
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
+#include <time.h>
 
 #include <avmpack.h>
 #include <defaultatoms.h>
 #include <scheduler.h>
 #include <sys.h>
 
+// #define ENABLE_TRACE
 #include <trace.h>
 
 #include <libopencm3/cm3/nvic.h>
 
 #include "avm_log.h"
 #include "gpiodriver.h"
+#include "stm_sys.h"
 
 #define TAG "sys"
+
+struct PortDriverDefListItem *port_driver_list;
+struct NifCollectionDefListItem *nif_collection_list;
 
 // Monotonically increasing number of milliseconds from reset
 static volatile uint64_t system_millis;
@@ -148,19 +154,74 @@ Module *sys_load_module(GlobalContext *global, const char *module_name)
 
 Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 {
-    Context *new_ctx = context_new(glb);
-
-    if (!strcmp(driver_name, "gpio")) {
-        gpiodriver_init(new_ctx);
-    } else {
-        context_destroy(new_ctx);
-        return NULL;
+    Context *new_ctx = port_driver_create_port(driver_name, glb, opts);
+    if (IS_NULL_PTR(new_ctx)) {
+        AVM_LOGE(TAG, "Failed to load port \"%s\".  Ensure the port is configured properly in the build.", driver_name);
+        new_ctx = NULL;
     }
-
     return new_ctx;
 }
 
 term sys_get_info(Context *ctx, term key)
 {
     return UNDEFINED_ATOM;
+}
+
+void port_driver_init_all(GlobalContext *global)
+{
+    for (struct PortDriverDefListItem *item = port_driver_list; item != NULL; item = item->next) {
+        if (item->def->port_driver_init_cb) {
+            item->def->port_driver_init_cb(global);
+        }
+    }
+}
+
+void port_driver_destroy_all(GlobalContext *global)
+{
+    for (struct PortDriverDefListItem *item = port_driver_list; item != NULL; item = item->next) {
+        if (item->def->port_driver_destroy_cb) {
+            item->def->port_driver_destroy_cb(global);
+        }
+    }
+}
+
+static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts)
+{
+    for (struct PortDriverDefListItem *item = port_driver_list; item != NULL; item = item->next) {
+        if (strcmp(port_name, item->def->port_driver_name) == 0) {
+            return item->def->port_driver_create_port_cb(global, opts);
+        }
+    }
+
+    return NULL;
+}
+
+void nif_collection_init_all(GlobalContext *global)
+{
+    for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
+        if (item->def->nif_collection_init_cb) {
+            item->def->nif_collection_init_cb(global);
+        }
+    }
+}
+
+void nif_collection_destroy_all(GlobalContext *global)
+{
+    for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
+        if (item->def->nif_collection_destroy_cb) {
+            item->def->nif_collection_destroy_cb(global);
+        }
+    }
+}
+
+const struct Nif *nif_collection_resolve_nif(const char *name)
+{
+    for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
+        const struct Nif *res = item->def->nif_collection_resove_nif_cb(name);
+        if (res) {
+            return res;
+        }
+    }
+
+    return NULL;
 }
