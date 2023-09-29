@@ -503,11 +503,23 @@ int globalcontext_insert_module(GlobalContext *global, Module *module)
 
 Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_atom)
 {
+    SMP_RWLOCK_RDLOCK(global->modules_lock);
     Module *found_module = (Module *) atomshashtable_get_value(global->modules_table, module_name_atom, (unsigned long) NULL);
 
     if (!found_module) {
+        SMP_RWLOCK_UNLOCK(global->modules_lock);
+        // during this short time a module might be inserted, so we'll need to check that again
+        SMP_RWLOCK_WRLOCK(global->modules_lock);
+
+        found_module = (Module *) atomshashtable_get_value(global->modules_table, module_name_atom, (unsigned long) NULL);
+        if (UNLIKELY(found_module != NULL)) {
+            SMP_RWLOCK_UNLOCK(global->modules_lock);
+            return found_module;
+        }
+
         char *module_name = malloc(256 + 5);
         if (IS_NULL_PTR(module_name)) {
+            SMP_RWLOCK_UNLOCK(global->modules_lock);
             return NULL;
         }
 
@@ -517,12 +529,15 @@ Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_a
         free(module_name);
 
         if (UNLIKELY(!loaded_module || (globalcontext_insert_module(global, loaded_module) < 0))) {
+            SMP_RWLOCK_UNLOCK(global->modules_lock);
             return NULL;
         }
 
+        SMP_RWLOCK_UNLOCK(global->modules_lock);
         return loaded_module;
     }
 
+    SMP_RWLOCK_UNLOCK(global->modules_lock);
     return found_module;
 }
 
