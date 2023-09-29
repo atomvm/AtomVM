@@ -422,6 +422,15 @@ int globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_str
         // function the new atom index, and using it when calling valueshashtable_insert.
         // See also https://github.com/atomvm/AtomVM/pull/812 discussion
         SMP_SPINLOCK_LOCK(&glb->atom_insert_lock);
+
+        // things might have changed in the meantime, so let's check this again now that there is
+        // a lock.
+        atom_index = atomshashtable_get_value(htable, atom_string, ULONG_MAX);
+        if (atom_index != ULONG_MAX) {
+            SMP_SPINLOCK_UNLOCK(&glb->atom_insert_lock);
+            return atom_index;
+        }
+
         atom_index = htable->count;
         if (!atomshashtable_insert(htable, atom_string, atom_index)) {
             SMP_SPINLOCK_UNLOCK(&glb->atom_insert_lock);
