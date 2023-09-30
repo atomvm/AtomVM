@@ -10,8 +10,12 @@ name: Publish Docs
 
 # Controls when the workflow will run
 on:
-  # Triggers the workflow on push request events for all branches
+  # Triggers the workflow on push request and tag events on master branch
   push:
+    tags:
+      - '*'
+    branches:
+      - 'master'
     paths:
       - '.github/workflows/**'
       - 'CMakeLists.txt'
@@ -91,8 +95,8 @@ jobs:
         run: |
           . /home/runner/python-env/sphinx/bin/activate
           if [ ${GITHUB_REPOSITORY} == 'atomvm/AtomVM' ]; then {
-            for remote in `git branch -r | grep -v "/HEAD\|${{ github.ref_name }}"`; do git checkout --track $remote; done
-            git switch ${{ github.ref_name }}
+            for remote in `git tag -l | grep -v "/HEAD\|${{ github.ref_name }}"`; do git checkout --track $remote; done
+            git checkout ${{ github.ref_name }}
           };
           fi
           mkdir build
