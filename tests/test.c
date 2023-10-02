@@ -519,6 +519,7 @@ struct Test tests[] = {
     TEST_CASE(test_atomvm_random),
 #endif
 
+    TEST_CASE(float_decode),
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 
     { NULL, 0, false, false }

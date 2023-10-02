@@ -4761,6 +4761,72 @@ wait_timeout_trap_handler:
                 break;
             }
 
+            case OP_BS_GET_FLOAT2: {
+                uint32_t fail;
+                DECODE_LABEL(fail, pc)
+                term src;
+                DECODE_COMPACT_TERM(src, pc);
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, pc);
+                term size;
+                DECODE_COMPACT_TERM(size, pc);
+                uint32_t unit;
+                DECODE_LITERAL(unit, pc);
+                uint32_t flags_value;
+                DECODE_LITERAL(flags_value, pc);
+
+                #ifdef IMPL_CODE_LOADER
+                    TRACE("bs_get_float2/7\n");
+                #endif
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_float");
+                    VERIFY_IS_INTEGER(size,     "bs_get_float");
+
+                    avm_int_t size_val = term_to_int(size);
+
+                    TRACE("bs_get_float2/7, fail=%u src=%p size=%u unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned) size_val, (unsigned) unit, (int) flags_value);
+
+                    avm_int_t increment = size_val * unit;
+                    avm_float_t value;
+                    term bs_bin = term_get_match_state_binary(src);
+                    avm_int_t bs_offset = term_get_match_state_offset(src);
+                    bool status;
+                    switch (size_val) {
+                        case 32:
+                            status = bitstring_extract_f32(bs_bin, bs_offset, increment, flags_value, &value);
+                            break;
+                        case 64:
+                            status = bitstring_extract_f64(bs_bin, bs_offset, increment, flags_value, &value);
+                            break;
+                        default:
+                            TRACE("bs_get_float2: error extracting float.\n");
+                            status = false;
+                            JUMP_TO_ADDRESS(mod->labels[fail]);
+                            break;
+                    }
+                    if (UNLIKELY(!status)) {
+                        TRACE("bs_get_float2: error extracting float.\n");
+                        JUMP_TO_ADDRESS(mod->labels[fail]);
+                    } else {
+                        term_set_match_state_offset(src, bs_offset + increment);
+
+                        if (UNLIKELY(memory_ensure_free_opt(ctx, FLOAT_SIZE, MEMORY_NO_GC) != MEMORY_GC_OK)) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        }
+                        term t = term_from_float(value, &ctx->heap);
+                #endif
+
+                DEST_REGISTER(dreg);
+                DECODE_DEST_REGISTER(dreg, pc);
+
+                #ifdef IMPL_EXECUTE_LOOP
+                        WRITE_REGISTER(dreg, t);
+                    }
+                #endif
+                break;
+            }
+
             case OP_BS_GET_BINARY2: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)

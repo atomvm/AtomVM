@@ -21,6 +21,9 @@
 
 #include "bitstring.h"
 
+#include <assert.h>
+#include <math.h>
+
 static inline uint64_t from_le64(uint64_t value)
 {
     return ((((value) &0xFF) << 56) | (((value) &0xFF00) << 40) | (((value) &0xFF0000) << 24) | (((value) &0xFF000000) << 8) | (((value) &0xFF00000000) >> 8) | (((value) &0xFF0000000000) >> 24) | (((value) &0xFF000000000000) >> 40) | (((value) &0xFF00000000000000) >> 56));
@@ -388,4 +391,81 @@ void bitstring_copy_bits_incomplete_bytes(uint8_t *dst, size_t bits_offset, cons
         bits_count--;
     }
     *dst = dest_byte;
+}
+
+bool bitstring_extract_f32(
+    term src_bin, size_t offset, avm_int_t n, enum BitstringFlags bs_flags, avm_float_t *dst)
+{
+    unsigned long capacity = term_binary_size(src_bin);
+    if (8 * capacity - offset < (unsigned long) n) {
+        return false;
+    }
+
+    if ((offset & 0x7) == 0) {
+        int byte_offset = offset >> 3;
+        const uint8_t *src = (const uint8_t *) term_binary_data(src_bin) + byte_offset;
+
+        _Static_assert(sizeof(float) == 4, "Unsupported float size");
+
+        union
+        {
+            uint32_t bits;
+            float fvalue;
+        } f32;
+
+        if (bs_flags & LittleEndianIntegerMask) {
+            f32.bits = READ_32LE_UNALIGNED(src);
+        } else {
+            f32.bits = READ_32_UNALIGNED(src);
+        }
+        if (UNLIKELY(!isfinite(f32.fvalue))) {
+            return false;
+        }
+        *dst = f32.fvalue;
+        return true;
+    } else {
+        // TODO: add support to doubles not aligned to byte boundary
+        return false;
+    }
+}
+
+bool bitstring_extract_f64(
+    term src_bin, size_t offset, avm_int_t n, enum BitstringFlags bs_flags, avm_float_t *dst)
+{
+    unsigned long capacity = term_binary_size(src_bin);
+    if (8 * capacity - offset < (unsigned long) n) {
+        return false;
+    }
+
+    if ((offset & 0x7) == 0) {
+        int byte_offset = offset >> 3;
+        const uint8_t *src = (const uint8_t *) term_binary_data(src_bin) + byte_offset;
+
+        uint64_t bin64;
+        if (bs_flags & LittleEndianIntegerMask) {
+            bin64 = READ_64LE_UNALIGNED(src);
+        } else {
+            bin64 = READ_64_UNALIGNED(src);
+        }
+
+        _Static_assert(sizeof(double) == 8, "Unsupported double size");
+
+        union
+        {
+            uint64_t bits;
+            double fvalue;
+        } f64;
+
+        f64.bits = bin64;
+        if (UNLIKELY(!isfinite(f64.fvalue))) {
+            return false;
+        }
+        *dst = f64.fvalue;
+
+        return true;
+
+    } else {
+        // TODO: add support to doubles not aligned to byte boundary
+        return false;
+    }
 }

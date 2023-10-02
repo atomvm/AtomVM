@@ -541,6 +541,11 @@ static inline void bitstring_copy_bits(uint8_t *dst, size_t bits_offset, const u
     }
 }
 
+bool bitstring_extract_f32(
+    term src_bin, size_t offset, avm_int_t n, enum BitstringFlags bs_flags, avm_float_t *dst);
+bool bitstring_extract_f64(
+    term src_bin, size_t offset, avm_int_t n, enum BitstringFlags bs_flags, avm_float_t *dst);
+
 #ifdef __cplusplus
 }
 #endif
