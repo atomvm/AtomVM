@@ -6,16 +6,19 @@
 # This is a workflow for atomvm/AtomVM to Publish API documentation and other content from the `doc` directory to
 # atomvm.net hosted on GitHub Pages
 
-name: Publish Docs
+name: Build Docs
 
 # Controls when the workflow will run
 on:
   # Triggers the workflow on push request and tag events on master branch
+  pull_request:
+    branches:
+      - 'master'
   push:
     tags:
       - '*'
     branches:
-      - 'master'
+      - '!master'
     paths:
       - '.github/workflows/**'
       - 'CMakeLists.txt'
@@ -83,46 +86,12 @@ jobs:
           repository: ${{ vars.GITHUB_REPOSITORY }}
           fetch-depth: 0
 
-      - uses: actions/checkout@v3
-        id: checkout-production
-        with:
-          repository: atomvm/atomvm_www
-          ref: Production
-          path: /home/runner/work/AtomVM/AtomVM/www
-
       - name: Build Site
         shell: bash
         run: |
           . /home/runner/python-env/sphinx/bin/activate
-          if [ ${GITHUB_REPOSITORY} == 'atomvm/AtomVM' ]; then {
-            for remote in `git tag -l | grep -v "/HEAD\|${{ github.ref_name }}"`; do git checkout --track $remote; done
-            git checkout ${{ github.ref_name }}
-          };
-          fi
           mkdir build
           cd build
           cmake ..
           cd doc
           make GitHub_CI_Publish_Docs
-
-      - name: Commit files
-        if: github.repository == 'atomvm/AtomVM'
-        working-directory: /home/runner/work/AtomVM/AtomVM/www
-        run: |
-          git checkout Production
-          git config --local user.email "atomvm-doc-bot@users.noreply.github.com"
-          git config --local user.name "AtomVM Doc Bot"
-          git add .
-          git commit -m "Update Documentation"
-      - name: Push changes
-        if: github.repository == 'atomvm/AtomVM'
-        working-directory: /home/runner/work/AtomVM/AtomVM/www
-        run: |
-          eval `ssh-agent -t 60 -s`
-          echo "${{ secrets.PUBLISH_ACTION_KEY }}" | ssh-add -
-          mkdir -p ~/.ssh/
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
-          git remote add push_dest "git@github.com:atomvm/atomvm_www.git"
-          git fetch push_dest
-          git push --set-upstream push_dest Production
-

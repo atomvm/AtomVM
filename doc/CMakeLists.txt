@@ -45,8 +45,11 @@ add_custom_target(edown-escript
     COMMENT "Preparing edown escript" VERBATIM
 )
 
-# Get branch name replacing any `/` with `-` in name for URLs.
-execute_process(COMMAND "bash" "-c" "sed -e 'y/\\//-/' <<< `git branch --show-current`" OUTPUT_VARIABLE BRANCH_NAME OUTPUT_STRIP_TRAILING_WHITESPACE)
+# Get the version tree name, tag if this is a tagged commit, otherwise master.
+execute_process(COMMAND "bash" "-c" "tag=$(git for-each-ref --points-at=HEAD --format='%(refname:lstrip=2)' refs/tags); ( [ $tag ] && echo $tag ) || echo 'master'"
+                OUTPUT_VARIABLE
+                DOC_TREE_VERSION
+                OUTPUT_STRIP_TRAILING_WHITESPACE )
 
 ##
 ## Erlang API documentation
@@ -120,17 +123,17 @@ if(SPHINX_FOUND)
     add_custom_target(sphinx-epub
         ${SPHINX_BUILD_EXECUTABLE} -D exclude_patterns=**/c_api_docs.rst,**/libatomvm/** -b epub -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/epub/
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-        COMMENT "Generating Sphinx PDF documentation" VERBATIM
+        COMMENT "Generating Sphinx EPub documentation" VERBATIM
         DEPENDS ${ERLANG_DOTFILE_TARGETS} ${ERLANG_EDOC_TARGETS} ${CMAKE_CURRENT_BINARY_DIR}/conf.py
     )
 
     ## This target is intended for CI `Publish Docs` workflow.
     if ($ENV{CI})
         add_custom_target(GitHub_CI_Publish_Docs
-            COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_BINARY_DIR}/html /home/runner/work/AtomVM/AtomVM/www/doc/${BRANCH_NAME}
+            COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_BINARY_DIR}/html /home/runner/work/AtomVM/AtomVM/www/doc/${DOC_TREE_VERSION}
             WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-            COMMENT "Copying html docs to publish location /home/runner/work/AtomVM/AtomVM/www/doc/${BRANCH_NAME}." VERBATIM
-            DEPENDS doc /home/runner/work/AtomVM/AtomVM/www/doc $ENV{BRANCH_NAME}
+            COMMENT "Copying html docs to publish location /home/runner/work/AtomVM/AtomVM/www/doc/${DOC_TREE_VERSION}." VERBATIM
+            DEPENDS doc /home/runner/work/AtomVM/AtomVM/www/doc $ENV{DOC_TREE_VERSION}
         )
     endif()
 
@@ -163,18 +166,18 @@ if (TARGET GitHub_CI_Publish_Docs)
 
     file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/pdf)
     add_custom_command(TARGET sphinx-pdf POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/pdf/AtomVM-${BRANCH_NAME}.pdf ${CMAKE_CURRENT_BINARY_DIR}/html/pdf/
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/pdf/AtomVM-${DOC_TREE_VERSION}.pdf ${CMAKE_CURRENT_BINARY_DIR}/html/pdf/
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/pdf
         COMMENT "Copying pdf to download location" VERBATIM
-        DEPENDS $ENV{BRANCH_NAME}
+        DEPENDS $ENV{DOC_TREE_VERSION}
     )
 
     file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/epub)
     add_custom_command(TARGET sphinx-epub POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_BINARY_DIR}/epub/AtomVM-${BRANCH_NAME}.epub" "${CMAKE_CURRENT_BINARY_DIR}/html/epub/"
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/epub/AtomVM-${DOC_TREE_VERSION}.epub ${CMAKE_CURRENT_BINARY_DIR}/html/epub/
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/epub
         COMMENT "Copying epub to download location." VERBATIM
-        DEPENDS $ENV{BRANCH_NAME}
+        DEPENDS $ENV{DOC_TREE_VERSION}
     )
 
     add_custom_command(TARGET sphinx-html POST_BUILD
