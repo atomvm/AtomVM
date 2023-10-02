@@ -94,11 +94,6 @@ jobs:
         shell: bash
         run: |
           . /home/runner/python-env/sphinx/bin/activate
-          if [ ${GITHUB_REPOSITORY} == 'atomvm/AtomVM' ]; then {
-            for remote in `git tag -l | grep -v "/HEAD\|${{ github.ref_name }}"`; do git checkout --track $remote; done
-            git checkout ${{ github.ref_name }}
-          };
-          fi
           mkdir build
           cd build
           cmake ..
