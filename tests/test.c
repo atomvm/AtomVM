@@ -512,6 +512,8 @@ struct Test tests[] = {
 
     TEST_CASE(test_min_max_guard),
 
+    TEST_CASE(int64_build_binary),
+
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 
     { NULL, 0, false, false }
