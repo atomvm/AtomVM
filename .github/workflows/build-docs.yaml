@@ -14,11 +14,15 @@ on:
   pull_request:
     branches:
       - 'master'
+    paths:
+      - '.github/workflows/**'
+      - 'CMakeLists.txt'
+      - 'doc/**'
+      - 'libs/**'
+      - 'src/libAtomVM/**'
   push:
-    tags:
-      - '*'
-    branches:
-      - '!master'
+    repositories:
+      - '!atomvm/AtomVM'
     paths:
       - '.github/workflows/**'
       - 'CMakeLists.txt'
