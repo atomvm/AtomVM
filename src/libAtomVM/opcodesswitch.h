@@ -6720,7 +6720,7 @@ wait_timeout_trap_handler:
                         DECODE_COMPACT_TERM(size, code, i, list_off);
                         size_t segment_size;
                         avm_int_t flags_value = 0;
-                        avm_int_t src_value = 0;
+                        avm_int64_t src_value = 0;
                         size_t size_value = 0;
                         switch (atom_type) {
                             case UTF16_ATOM:
