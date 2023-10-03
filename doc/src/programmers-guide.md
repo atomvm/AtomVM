@@ -581,7 +581,15 @@ Use `erlang:universaltime/0` to get the current time at second resolution, to ob
     %% erlang
     {{Year, Month, Day}, {Hour, Minute, Second}} = erlang:universaltime().
 
-> Note.  Setting the system time is done in a platform-specific manner.  For information about how to set system time on the ESP32, see the [Network Programming Guide](./network-programming-guide.md).
+On some platforms, you can use the `atomvm:posix_clock_settime/2` to set the system time.  Supply a clock id (currently, the only supported clock id is the atom `realtime`) and a time value as a tuple, containing seconds and nanoseconds since the UNIX epoch (midnight, January 1, 1970).  For example,
+
+    %% erlang
+    SecondsSinceUnixEpoch = ... %% acquire the time
+    atomvm:posix_clock_settime(realtime, {SecondsSinceUnixEpoch, 0})
+
+> Note.  This operation is not supported yet on the `stm32` platform.  On most UNIX platforms, you typically need `root` permission to set the system time.
+
+On the ESP32 platform, you can use the Wifi network to set the system time automatically.  For information about how to set system time on the ESP32 using SNTP, see the [Network Programming Guide](./network-programming-guide.md).
 
 To convert a time (in seconds, milliseconds, or microseconds from the UNIX epoch) to a date-time, use the `calendar:system_time_to_universal_time/2` function.  For example,
 

@@ -39,7 +39,8 @@
     posix_open/3,
     posix_close/1,
     posix_read/2,
-    posix_write/2
+    posix_write/2,
+    posix_clock_settime/2
 ]).
 
 -export_type([
@@ -266,4 +267,26 @@ posix_read(_File, _Count) ->
 -spec posix_write(File :: posix_fd(), Data :: binary()) ->
     {ok, non_neg_integer()} | {error, posix_error()}.
 posix_write(_File, _Data) ->
+    erlang:nif_error(undefined).
+
+%%
+%% @param   ClockId The clock id
+%% @param   ValueSinceUnixEpoch The value, in specified seconds and nanoseconds,
+%% since the UNIX epoch (Jan 1, 1970)
+%% @return  `ok' or an error tuple
+%% @doc Set the system time.
+%%
+%% This function sets the system time to the specified value, expressed as a
+%% tuple containing seconds and nanoseconds since the UNIX epoch (Jan 1, 1970).
+%% Coordinates are all in UTC.
+%%
+%% Note.  Some systems may require special permissions to call this function.
+%% @end
+%%
+-spec posix_clock_settime(
+    ClockId :: realtime,
+    ValueSinceUnixEpoch :: {Seconds :: integer(), Nanoseconds :: integer()}
+) ->
+    ok | {error, Reason :: posix_error()}.
+posix_clock_settime(_ClockId, _Time) ->
     erlang:nif_error(undefined).
