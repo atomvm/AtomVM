@@ -33,6 +33,12 @@
 #include <sys/types.h>
 #endif
 
+#if HAVE_CLOCK_SETTIME
+#include <time.h>
+#elif HAVE_SETTIMEOFDAY
+#include <sys/time.h>
+#endif
+
 #include "defaultatoms.h"
 #include "erl_nif_priv.h"
 #include "globalcontext.h"
@@ -534,6 +540,59 @@ static term nif_atomvm_posix_unlink(Context *ctx, int argc, term argv[])
 }
 #endif
 
+#if defined(HAVE_CLOCK_SETTIME) || defined(HAVE_SETTIMEOFDAY)
+static term nif_atomvm_posix_clock_settime(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    VALIDATE_VALUE(argv[0], term_is_atom);
+    if (!globalcontext_is_term_equal_to_atom_string(ctx->global, argv[0], ATOM_STR("\x8", "realtime"))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    VALIDATE_VALUE(argv[1], term_is_tuple);
+    if (term_get_tuple_arity(argv[1]) != 2) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    term secs = term_get_tuple_element(argv[1], 0);
+    VALIDATE_VALUE(secs, term_is_any_integer);
+    avm_int64_t s = term_maybe_unbox_int64(secs);
+
+    term nsecs = term_get_tuple_element(argv[1], 1);
+    VALIDATE_VALUE(nsecs, term_is_any_integer);
+    avm_int64_t ns = term_maybe_unbox_int64(nsecs);
+
+#ifdef HAVE_CLOCK_SETTIME
+    struct timespec tp = {
+        .tv_sec = s,
+        .tv_nsec = ns
+    };
+
+    int res = clock_settime(CLOCK_REALTIME, &tp);
+#else
+    // Use settimeofday as a fallback
+    struct timeval tv = {
+        .tv_sec = s,
+        .tv_usec = ns / 1000
+    };
+
+    int res = settimeofday(&tv, NULL);
+#endif
+    if (res != 0) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term error = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(error, 0, ERROR_ATOM);
+        term_put_tuple_element(error, 1, posix_errno_to_term(errno, ctx->global));
+        return error;
+    } else {
+        return OK_ATOM;
+    }
+}
+#endif
+
 #if HAVE_OPEN && HAVE_CLOSE
 const struct Nif atomvm_posix_open_nif = {
     .base.type = NIFFunctionType,
@@ -574,5 +633,11 @@ const struct Nif atomvm_posix_mkfifo_nif = {
 const struct Nif atomvm_posix_unlink_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_posix_unlink
+};
+#endif
+#if defined(HAVE_CLOCK_SETTIME) || defined(HAVE_SETTIMEOFDAY)
+const struct Nif atomvm_posix_clock_settime_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_posix_clock_settime
 };
 #endif

@@ -22,19 +22,23 @@ include(CheckSymbolExists)
 include(CheckCSourceCompiles)
 
 function(define_if_symbol_exists target symbol header scope macro)
-    check_symbol_exists(${symbol} ${header} ${macro})
-    if (${macro})
-        target_compile_definitions(${target} ${scope} ${macro})
-    endif(${macro})
+    if (NOT DEFINED ${macro})
+        check_symbol_exists(${symbol} ${header} ${macro})
+        if (${macro})
+            target_compile_definitions(${target} ${scope} ${macro})
+        endif(${macro})
+    endif()
 endfunction()
 function(define_if_function_exists target symbol header scope macro)
-    check_c_source_compiles("
-    #include <${header}>
-    int main(int argc)
-    {
-          return ((int*)(&${symbol}))[argc];
-    }" ${macro})
-    if (${macro})
-        target_compile_definitions(${target} ${scope} ${macro})
-    endif(${macro})
+    if (NOT DEFINED ${macro})
+        check_c_source_compiles("
+        #include <${header}>
+        int main(int argc)
+        {
+              return ((int*)(&${symbol}))[argc];
+        }" ${macro})
+        if (${macro})
+            target_compile_definitions(${target} ${scope} ${macro})
+        endif(${macro})
+    endif()
 endfunction()
