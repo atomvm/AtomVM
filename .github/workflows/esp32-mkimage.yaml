@@ -20,6 +20,11 @@ on:
       - '.github/workflows/**'
       - 'src/platforms/esp32/**'
       - 'src/libAtomVM/**'
+    tags:
+      - '*'
+
+permissions:
+  contents: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/master' && github.ref || github.run_id }}
@@ -103,6 +108,13 @@ jobs:
       run: |
         make
 
+    - name: "Use release defaults"
+      if: startsWith(github.ref, 'refs/tags/')
+      shell: bash
+      working-directory: ./src/platforms/esp32/
+      run: |
+        cp sdkconfig.release-defaults sdkconfig.defaults
+
     - name: "Build ${{ matrix.soc }} with idf.py"
       shell: bash
       working-directory: ./src/platforms/esp32/
@@ -118,6 +130,8 @@ jobs:
       run: |
         ./mkimage.sh
         ls -l *.img
+        IMG_FILE=$(echo *.img)
+        sha256sum $IMG_FILE > "${IMG_FILE}.sha256"
 
     - name: "Upload ${{ matrix.soc }} artifacts"
       uses: actions/upload-artifact@v3
@@ -125,3 +139,13 @@ jobs:
         name: atomvm-${{ matrix.soc }}-image
         path: ./src/platforms/esp32/build/atomvm-${{ matrix.soc }}-*.img
         if-no-files-found: error
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        draft: true
+        fail_on_unmatched_files: true
+        files: |
+          src/platforms/esp32/build/atomvm-${{ matrix.soc }}-*.img
+          src/platforms/esp32/build/atomvm-${{ matrix.soc }}-*.img.sha256
