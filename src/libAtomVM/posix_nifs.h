@@ -50,6 +50,9 @@ extern const struct Nif atomvm_posix_mkfifo_nif;
 #if HAVE_UNLINK
 extern const struct Nif atomvm_posix_unlink_nif;
 #endif
+#if defined(HAVE_CLOCK_SETTIME) || defined(HAVE_SETTIMEOFDAY)
+extern const struct Nif atomvm_posix_clock_settime_nif;
+#endif
 
 /**
  * @brief Convenient function to return posix errors as atom.

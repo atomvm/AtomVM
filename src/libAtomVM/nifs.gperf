@@ -133,7 +133,7 @@ atomvm:posix_select_write/3, IF_HAVE_OPEN_CLOSE(&atomvm_posix_select_write_nif)
 atomvm:posix_select_stop/1, IF_HAVE_OPEN_CLOSE(&atomvm_posix_select_stop_nif)
 atomvm:posix_mkfifo/2, IF_HAVE_MKFIFO(&atomvm_posix_mkfifo_nif)
 atomvm:posix_unlink/1, IF_HAVE_UNLINK(&atomvm_posix_unlink_nif)
-atomvm:posix_clock_settime/2, &atomvm_posix_clock_settime_nif
+atomvm:posix_clock_settime/2, IF_HAVE_CLOCK_SETTIME_OR_SETTIMEOFDAY(&atomvm_posix_clock_settime_nif)
 code:load_abs/1, &code_load_abs_nif
 code:load_binary/3, &code_load_binary_nif
 console:print/1, &console_print_nif

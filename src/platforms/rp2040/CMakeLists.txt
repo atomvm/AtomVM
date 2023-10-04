@@ -21,7 +21,6 @@
 cmake_minimum_required(VERSION 3.13)
 
 set(PICO_SDK_FETCH_FROM_GIT on)
-set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
 
 # pico_sdk_import.cmake is a single file copied from this SDK
 # note: this must happen before project()
@@ -40,9 +39,13 @@ CMAKE_DETERMINE_COMPILE_FEATURES(C)
 enable_language( C CXX ASM )
 
 # Pico SDK currently forces -nostdlib when using TRY_COMPILE
-# This will make test of availability of POSIX functions fail but open and close
-# are implemented to always return -1 anyway.
-set(CMAKE_TRY_COMPILE_TARGET_TYPE EXECUTABLE)
+# So we don't try to link.
+set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
+
+# mkfifo is defined in newlib header but not implemented
+set(HAVE_MKFIFO NO)
+# also avoid exposing unlink to silence warning that it will always fail
+set(HAVE_UNLINK NO)
 
 # Options that make sense for this platform
 option(AVM_DISABLE_SMP "Disable SMP support." OFF)

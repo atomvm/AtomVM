@@ -21,6 +21,12 @@
 cmake_minimum_required (VERSION 3.13)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
+# Don't try to link when testing availability of functions
+set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
+
+# mkfifo is defined in newlib header but not implemented
+set(HAVE_MKFIFO NO)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../CMakeModules")
 
 # Disable SMP with esp32 socs that have only one core

@@ -22,6 +22,7 @@
 -export([start/0]).
 
 -define(START_DATE, {{2023, 9, 3}, {21, 30, 00}}).
+-define(BEFORE_START_DATE, 1693769340).
 
 start() ->
     test_clock(system_time, fun() -> erlang:system_time(millisecond) end),
@@ -38,6 +39,14 @@ start() ->
     if
         NewDate >= ?START_DATE -> ok;
         true -> throw({unexpected_date, NewDate})
+    end,
+    atomvm:posix_clock_settime(realtime, {?BEFORE_START_DATE, 0}),
+    PostSetDate = erlang:universaltime(),
+    if
+        PostSetDate >= ?START_DATE ->
+            throw({unexpected_date, NewDate});
+        true ->
+            ok
     end,
     ok.
 
