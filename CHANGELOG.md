@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added erlang:spawn_link/1,3
+- Added erlang:exit/2
+- Added links to process_info/2
+- Added lists:usort/1,2
+- Added missing documentation and specifications for available nifs
 - Added configurable logging macros to stm32 platform
 - Added support for ULP wakeup on ESP32
 - Added heap growth strategies as a fine-tuning option to `spawn_opt/2,4`
@@ -17,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed incorrect exit reason for exceptions of class exit
+- Fixed several incorrect type specifications
 - Fixed `esp:nvs_set_binary` functions.
 - Fixed `monotonic_time/1` and `system_time/1` functions for Raspberry Pi Pico
 - Fixed race conditions in atoms table.
@@ -78,11 +85,6 @@ functions that default to `?ATOMVM_NVS_NS` are deprecated now).
 - Added most format possibilities to `io:format/2` and `io_lib:format/2`
 - Added `unicode` module with `characters_to_list/1,2` and `characters_to_binary/1,2,3` functions
 - Added support for `crypto:hash/2` (ESP32 and generic_unix with openssl)
-- Added erlang:spawn_link/1,3
-- Added erlang:exit/2
-- Added links to process_info/2
-- Added lists:usort/1,2
-- Added missing documentation and specifications for available nifs
 
 ### Fixed
 - Fixed issue with formatting integers with io:format() on STM32 platform
@@ -92,8 +94,6 @@ functions that default to `?ATOMVM_NVS_NS` are deprecated now).
 - Fixed numerous bugs in memory allocations that could crash the VM
 - Fixed SNTP support that had been broken in IDF 4.x builds
 - Fixed `erlang:send/2` not sending to registered name
-- Fixed incorrect exit reason for exceptions of class exit
-- Fixed several incorrect type specifications
 
 ### Breaking Changes
 
