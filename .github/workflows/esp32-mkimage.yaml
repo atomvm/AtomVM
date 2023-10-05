@@ -15,13 +15,13 @@ on:
       - 'src/platforms/esp32/**'
       - 'src/libAtomVM/**'
       - 'tools/packbeam/**'
+    tags:
+      - '*'
   pull_request:
     paths:
       - '.github/workflows/**'
       - 'src/platforms/esp32/**'
       - 'src/libAtomVM/**'
-    tags:
-      - '*'
 
 permissions:
   contents: write
