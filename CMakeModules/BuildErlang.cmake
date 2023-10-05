@@ -85,7 +85,7 @@ macro(pack_lib avm_name)
 
     add_custom_target(
         ${avm_name}.uf2 ALL
-        COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}.uf2 -s 0x10080000 ${avm_name}.avm
+        COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}.uf2 -s 0x10100000 ${avm_name}.avm
         COMMENT "Creating UF2 file ${avm_name}.uf2"
         VERBATIM
     )
@@ -208,7 +208,7 @@ macro(pack_uf2 avm_name main)
 
     add_custom_target(
         ${avm_name}.uf2 ALL
-        COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}.uf2 -s 0x100A0000 ${avm_name}.avm
+        COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}.uf2 -s 0x10180000 ${avm_name}.avm
         COMMENT "Creating UF2 file ${avm_name}.uf2"
         VERBATIM
     )

@@ -58,14 +58,14 @@ if (NOT PICO_SDK_PATH)
             FetchContent_Declare(
                     pico_sdk
                     GIT_REPOSITORY https://github.com/pguyot/pico-sdk   # revert to raspberrypi once PR 1101 is merged
-                    GIT_TAG w46/condition-variables                     # revert to master once PR 1101 is merged
+                    GIT_TAG v1.5.1+conditional-variables                # revert to master once PR 1101 is merged
                     GIT_SUBMODULES_RECURSE FALSE
             )
         else ()
             FetchContent_Declare(
                     pico_sdk
                     GIT_REPOSITORY https://github.com/pguyot/pico-sdk   # revert to raspberrypi once PR 1101 is merged
-                    GIT_TAG w46/condition-variables                     # revert to master once PR 1101 is merged
+                    GIT_TAG v1.5.1+conditional-variables                # revert to master once PR 1101 is merged
             )
         endif ()
 

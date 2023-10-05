@@ -64,4 +64,8 @@ if (NOT AVM_USE_32BIT_FLOAT)
     target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC pico_double)
 endif()
 
+if (PICO_CYW43_SUPPORTED)
+    target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC pico_cyw43_arch_lwip_threadsafe_background)
+endif()
+
 target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC -Wl,-u -Wl,gpio_nif)

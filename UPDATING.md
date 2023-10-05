@@ -10,4 +10,5 @@
 
 - **Libraries (or boot .avm file) from latest version must be used**. Standard library from
 `v0.6.0-alpha.0` cannot work on top of latest version.
-
+- Address (offset) of programs for Pico was changed from 0x100A0000 to 0x10100000. UF2
+binaries need to be rebuilt with the proper offset using `uf2tool`.

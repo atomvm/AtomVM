@@ -306,9 +306,9 @@ or
     rebar3 packbeam -p -i packed.avm module.beam
 
 Then the BEAM file must be converted to UF2.
-The VM currently expects the application to be loaded at address 0x100A0000.
+The VM currently expects the application to be loaded at address 0x10100000.
 
-    ./uf2tool create -o packed.uf2 -s 0x100A0000 packed.avm
+    ./uf2tool create -o packed.uf2 -s 0x10100000 packed.avm
 
 Copy this UF2 to the Pico after you copied the VM (`AtomVM.uf2`) and the
 standard libraries (`atomvmlib.uf2`).

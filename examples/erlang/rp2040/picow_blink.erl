@@ -1,7 +1,7 @@
 %
 % This file is part of AtomVM.
 %
-% Copyright 2018-2020 Davide Bettio <davide@uninstall.it>
+% Copyright 2023 Paul Guyot <pguyot@kallisys.net>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -18,23 +18,17 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module(pico_blink).
+-module(picow_blink).
 -export([start/0]).
 
-% 25 is on-board led on Pico
-% This code will not work on Pico-W where GPIO 25 has another purpose.
--define(GPIO_NUM, 25).
+% 0 is CYW43 GPIO for on-board led
+% This code will not work on Pico
+-define(GPIO_NUM, 0).
 
 start() ->
-    gpio:init(?GPIO_NUM),
-    gpio:set_pin_mode(?GPIO_NUM, output),
-    loop(off).
+    loop(0).
 
-loop(off) ->
-    gpio:digital_write(?GPIO_NUM, low),
+loop(N) ->
+    pico:cyw43_arch_gpio_put(?GPIO_NUM, N),
     timer:sleep(1000),
-    loop(on);
-loop(on) ->
-    gpio:digital_write(?GPIO_NUM, high),
-    timer:sleep(1000),
-    loop(off).
+    loop((N + 1) rem 2).

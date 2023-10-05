@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `crypto:crypto_one_time/4,5` on ESP32
 - Improved nif and port support on STM32
 - Added support for `atomvm:posix_clock_settime/2`
+- Added support initial for Pico-W with the on-board LED
+- Changed offset of atomvmlib and of program on Pico. See also UPDATING.md.
 
 ### Fixed
 
