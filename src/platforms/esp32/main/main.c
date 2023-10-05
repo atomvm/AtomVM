@@ -99,20 +99,6 @@ void app_main()
     avmpack_data->base.data = startup_avm;
     synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
 
-    const void *lib_avm = esp32_sys_mmap_partition("lib.avm", &handle, &size);
-    if (!IS_NULL_PTR(lib_avm) && avmpack_is_valid(lib_avm, size)) {
-        avmpack_data = malloc(sizeof(struct ConstAVMPack));
-        if (IS_NULL_PTR(avmpack_data)) {
-            ESP_LOGE(TAG, "Memory error: Cannot allocate AVMPackData for lib.avm.");
-            AVM_ABORT();
-        }
-        avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
-        avmpack_data->base.data = lib_avm;
-        synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
-    } else {
-        ESP_LOGI(TAG, "Unable to mount lib.avm partition. Hopefully the AtomVM core libraries are included in your application.");
-    }
-
     Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
     if (IS_NULL_PTR(mod)) {
         ESP_LOGE(TAG, "Error!  Unable to load startup module %s", startup_module_name);
