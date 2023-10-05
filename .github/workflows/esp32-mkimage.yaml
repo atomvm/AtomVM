@@ -130,15 +130,22 @@ jobs:
       run: |
         ./mkimage.sh
         ls -l *.img
-        IMG_FILE=$(echo *.img)
-        sha256sum $IMG_FILE > "${IMG_FILE}.sha256"
 
     - name: "Upload ${{ matrix.soc }} artifacts"
       uses: actions/upload-artifact@v3
       with:
         name: atomvm-${{ matrix.soc }}-image
-        path: ./src/platforms/esp32/build/atomvm-${{ matrix.soc }}-*.img
+        path: ./src/platforms/esp32/build/atomvm-${{ matrix.soc }}.img
         if-no-files-found: error
+
+    - name: "Rename and write sha256sum"
+      if: startsWith(github.ref, 'refs/tags/')
+      shell: bash
+      working-directory: src/platforms/esp32/build
+      run: |
+        ATOMVM_IMG="AtomVM-${{ matrix.soc }}-${{ github.ref_name }}.img"
+        mv atomvm-${{ matrix.soc }}.img "${ATOMVM_IMG}"
+        sha256sum "${ATOMVM_IMG}" > "${ATOMVM_IMG}.sha256"
 
     - name: Release
       uses: softprops/action-gh-release@v1
@@ -147,5 +154,5 @@ jobs:
         draft: true
         fail_on_unmatched_files: true
         files: |
-          src/platforms/esp32/build/atomvm-${{ matrix.soc }}-*.img
-          src/platforms/esp32/build/atomvm-${{ matrix.soc }}-*.img.sha256
+          src/platforms/esp32/build/AtomVM-${{ matrix.soc }}-${{ github.ref_name }}.img
+          src/platforms/esp32/build/AtomVM-${{ matrix.soc }}-${{ github.ref_name }}.img.sha256
