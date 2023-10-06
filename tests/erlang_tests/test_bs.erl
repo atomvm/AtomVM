@@ -93,6 +93,8 @@ start() ->
 
     ok = test_large(),
 
+    ok = test_copy_bits_string(),
+
     0.
 
 test_pack_small_ints({A, B, C}, Expect) ->
@@ -366,6 +368,18 @@ traverse(<<H:8, T/binary>>, Accum) -> traverse(T, Accum ++ [H]).
 test_large() ->
     X = <<42:1024>>,
     true = id(X) =:= <<42:1024>>,
+    ok.
+
+% From OTP22, the sequence 1:1,11:4,3:3 is converted to a string of 1 byte
+% OTP 25-26 use OP_BS_CREATE_BIN with STRING
+% OTP 22-24 use OP_BS_PUT_STRING
+% OTP 21 uses OP_BS_PUT_INTEGER
+test_copy_bits_string() ->
+    A = id(42),
+    X1 = id(0),
+    X2 = id(0),
+    Y1 = <<A:16/little, X1:7, 1:1, 11:4, 3:3, X2:1>>,
+    <<42, 0, 1, 182>> = Y1,
     ok.
 
 id(X) -> X.

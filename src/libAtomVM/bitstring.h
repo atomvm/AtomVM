@@ -513,6 +513,34 @@ static inline bool bitstring_match_utf32(term src_bin, size_t offset, int32_t *c
     return bitstring_utf32_decode(src, term_binary_size(src_bin) - byte_offset, c, bs_flags);
 }
 
+/**
+ * @brief Copy bits_count bits from src to dst[bits_offset..]
+ * @details Called by bitstring_copy_bits when bytes are not complete.
+ *
+ * @param dst           destination buffer
+ * @param bits_offset   offset in bits in destination buffer
+ * @param src           source buffer
+ * @param bits_count    number of bits
+ */
+void bitstring_copy_bits_incomplete_bytes(uint8_t *dst, size_t bits_offset, const uint8_t *src, size_t bits_count);
+
+/**
+ * @brief Copy bits_count bits from src to dst[bits_offset..]
+ *
+ * @param dst           destination buffer
+ * @param bits_offset   offset in bits in destination buffer
+ * @param src           source buffer
+ * @param bits_count    number of bits
+ */
+static inline void bitstring_copy_bits(uint8_t *dst, size_t bits_offset, const uint8_t *src, size_t bits_count)
+{
+    if (bits_offset % 8 == 0 && bits_count % 8 == 0) {
+        memcpy(dst + (bits_offset / 8), src, bits_count / 8);
+    } else {
+        bitstring_copy_bits_incomplete_bytes(dst, bits_offset, src, bits_count);
+    }
+}
+
 #ifdef __cplusplus
 }
 #endif
