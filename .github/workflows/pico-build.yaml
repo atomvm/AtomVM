@@ -66,7 +66,7 @@ jobs:
       shell: bash
       working-directory: ./src/platforms/rp2040/tests
       # Unfortunately, rp2040js doesn't support cyw43 and cyw43_arch_init panics
-      if: success() && matrix.board != "pico_w"
+      if: ${{ success() && matrix.board != 'pico_w' }}
       run: |
         set -euo pipefail
         source $HOME/.nvm/nvm.sh
