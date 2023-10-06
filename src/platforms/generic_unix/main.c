@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "atom.h"
 #include "avmpack.h"
@@ -37,11 +38,51 @@
 #include "sys.h"
 #include "term.h"
 #include "utils.h"
+#include "version.h"
+
+void print_help(const char *program_name)
+{
+    printf(
+        "\n"
+        "Syntax:\n"
+        "\n"
+        "    %s [-h] [-v] <path-to-avm-file>+\n"
+        "\n"
+        "Options:\n"
+        "\n"
+        "    -h         Print this help and exit.\n"
+        "    -v         Print the AtomVM version and exit.\n"
+        "\n"
+        "Supply one or more AtomVM packbeam (.avm) files to start your application.\n"
+        "\n"
+        "Example:\n"
+        "\n"
+        "    $ %s /path/to/my/application.avm /path/to/atomvmlib.avm\n"
+        "\n",
+        program_name, program_name);
+}
 
 int main(int argc, char **argv)
 {
+    int c;
+    while ((c = getopt(argc, argv, "hv")) != -1) {
+        switch (c) {
+            case 'h':
+                print_help(argv[0]);
+                return EXIT_SUCCESS;
+
+            case 'v':
+                printf(ATOMVM_VERSION "\n");
+                return EXIT_SUCCESS;
+
+            default:
+                break;
+        }
+    }
+
     if (argc < 2) {
-        printf("Need .beam or .avm files\n");
+        printf("Syntax Error!  Missing .beam or .avm files.\n");
+        print_help(argv[0]);
         return EXIT_FAILURE;
     }
 

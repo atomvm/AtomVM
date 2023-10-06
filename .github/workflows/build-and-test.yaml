@@ -298,3 +298,5 @@ jobs:
       run: |
         sudo PATH=${PATH} make install
         atomvm examples/erlang/hello_world.avm
+        atomvm -v
+        atomvm -h
