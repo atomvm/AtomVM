@@ -89,7 +89,7 @@ static void unity_run_all_tests()
     }
 }
 
-#define MAIN_AVM ((void *) 0x100A0000)
+#define MAIN_AVM ((void *) 0x10100000)
 
 static term avm_test_case(const char *test_module)
 {

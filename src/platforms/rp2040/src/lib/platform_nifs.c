@@ -31,6 +31,10 @@
 #include <hardware/rtc.h>
 #include <sys/time.h>
 
+#ifdef LIB_PICO_CYW43_ARCH
+#include <pico/cyw43_arch.h>
+#endif
+
 #pragma GCC diagnostic pop
 
 #include "gpiodriver.h"
@@ -134,6 +138,27 @@ static term nif_pico_rtc_set_datetime(Context *ctx, int argc, term argv[])
     return OK_ATOM;
 }
 
+#ifdef LIB_PICO_CYW43_ARCH
+static term nif_pico_cyw43_arch_gpio_get(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(ctx);
+    VALIDATE_VALUE(argv[0], term_is_integer);
+    bool val = cyw43_arch_gpio_get(term_to_int(argv[0]));
+    return term_from_int(val);
+}
+
+static term nif_pico_cyw43_arch_gpio_put(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(ctx);
+    VALIDATE_VALUE(argv[0], term_is_integer);
+    VALIDATE_VALUE(argv[1], term_is_integer);
+    cyw43_arch_gpio_put(term_to_int(argv[0]), term_to_int(argv[1]));
+    return OK_ATOM;
+}
+#endif
+
 static const struct Nif atomvm_platform_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_platform
@@ -142,6 +167,16 @@ static const struct Nif pico_rtc_set_datetime_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_pico_rtc_set_datetime
 };
+#ifdef LIB_PICO_CYW43_ARCH
+static const struct Nif pico_cyw43_arch_gpio_get_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_pico_cyw43_arch_gpio_get
+};
+static const struct Nif pico_cyw43_arch_gpio_put_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_pico_cyw43_arch_gpio_put
+};
+#endif
 
 const struct Nif *platform_nifs_get_nif(const char *nifname)
 {
@@ -153,6 +188,15 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &pico_rtc_set_datetime_nif;
     }
-
+#ifdef LIB_PICO_CYW43_ARCH
+    if (strcmp("pico:cyw43_arch_gpio_get/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &pico_cyw43_arch_gpio_get_nif;
+    }
+    if (strcmp("pico:cyw43_arch_gpio_put/2", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &pico_cyw43_arch_gpio_put_nif;
+    }
+#endif
     return nif_collection_resolve_nif(nifname);
 }

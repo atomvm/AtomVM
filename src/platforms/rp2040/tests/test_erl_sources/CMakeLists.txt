@@ -59,7 +59,7 @@ add_custom_command(
     COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/uf2tool/uf2tool
         create
         -o rp2040_test_modules.uf2
-        -s 0x100A0000 "${CMAKE_CURRENT_BINARY_DIR}/rp2040_test_modules.avm"
+        -s 0x10100000 "${CMAKE_CURRENT_BINARY_DIR}/rp2040_test_modules.avm"
     DEPENDS
         HostAtomVM
         "${CMAKE_CURRENT_BINARY_DIR}/rp2040_test_modules.avm"

@@ -32,6 +32,10 @@
 #include <pico/time.h>
 #include <sys/time.h>
 
+#ifdef LIB_PICO_CYW43_ARCH
+#include <pico/cyw43_arch.h>
+#endif
+
 #pragma GCC diagnostic pop
 
 // libAtomVM
@@ -49,10 +53,18 @@ void sys_init_platform(GlobalContext *glb)
     glb->platform_data = platform;
     mutex_init(&platform->event_poll_mutex);
     cond_init(&platform->event_poll_cond);
+
+#ifdef LIB_PICO_CYW43_ARCH
+    cyw43_arch_init();
+#endif
 }
 
 void sys_free_platform(GlobalContext *glb)
 {
+#ifdef LIB_PICO_CYW43_ARCH
+    cyw43_arch_deinit();
+#endif
+
     struct RP2040PlatformData *platform = glb->platform_data;
     free(platform);
 }

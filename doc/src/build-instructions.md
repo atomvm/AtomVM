@@ -560,12 +560,22 @@ is 8N1 with no flow control.
 * `Erlang/OTP`
 * `Elixir` (optional)
 
-### AtomVM build steps
+### AtomVM build steps (Pico)
 
     cd src/platforms/rp2040/
     mkdir build
     cd build
     cmake .. -G Ninja
+    ninja
+
+> You may want to build with option `AVM_REBOOT_ON_NOT_OK` so Pico restarts on error.
+
+### AtomVM build steps (Pico-W)
+
+    cd src/platforms/rp2040/
+    mkdir build
+    cd build
+    cmake .. -G Ninja -DPICO_BOARD=pico_w
     ninja
 
 > You may want to build with option `AVM_REBOOT_ON_NOT_OK` so Pico restarts on error.

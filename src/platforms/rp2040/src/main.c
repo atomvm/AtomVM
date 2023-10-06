@@ -43,8 +43,8 @@
 
 extern char __flash_binary_end;
 
-#define LIB_AVM ((void *) 0x10080000)
-#define MAIN_AVM ((void *) 0x100A0000)
+#define LIB_AVM ((void *) 0x10100000)
+#define MAIN_AVM ((void *) 0x10180000)
 
 #define ATOMVM_BANNER                                                   \
     "\n"                                                                \

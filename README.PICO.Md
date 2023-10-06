@@ -22,6 +22,20 @@ ninja
 You may want to build with option `AVM_REBOOT_ON_NOT_OK` so Pico restarts on
 error.
 
+
+Building AtomVM for Raspberry Pico-W
+==================================
+
+To build for Pico-W, pass the board to cmake as follows:
+
+```
+cd src/platforms/rp2040/
+mkdir build
+cd build
+cmake .. -G Ninja -DPICO_BOARD=pico_w
+ninja
+```
+
 Installing AtomVM and programs on Raspberry Pico
 ================================================
 
@@ -89,10 +103,10 @@ You need to create an avm file using PackBEAM binary (or rebar3 plugin).
 ```
 
 Then the BEAM file must be converted to UF2.
-The VM currently expects the application to be loaded at address 0x100A0000.
+The VM currently expects the application to be loaded at address 0x10100000.
 
 ```sh
-./uf2tool create -o packed.uf2 -s 0x100A0000 packed.avm
+./uf2tool create -o packed.uf2 -s 0x10100000 packed.avm
 ```
 
 Copy this UF2 to the Pico after you copied the VM (`AtomVM.uf2`) and the

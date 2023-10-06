@@ -27,7 +27,9 @@
 -module(pico).
 
 -export([
-    rtc_set_datetime/1
+    rtc_set_datetime/1,
+    cyw43_arch_gpio_get/1,
+    cyw43_arch_gpio_put/2
 ]).
 
 %%-----------------------------------------------------------------------------
@@ -37,4 +39,27 @@
 %%-----------------------------------------------------------------------------
 -spec rtc_set_datetime(calendar:datetime()) -> ok.
 rtc_set_datetime(_Datetime) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   GPIO pin to read
+%% @returns the level of the GPIO pin
+%% @doc     Read a GPIO of the CYW43.
+%%          This function is only available on Pico-W.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec cyw43_arch_gpio_get(GPIO :: 0..2) -> 0..1.
+cyw43_arch_gpio_get(_GPIO) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   GPIO pin to write
+%% @param   Level value to write
+%% @doc     Write a GPIO of the CYW43.
+%%          This function is only available on Pico-W. It is typically used to
+%%          drive the on-board LED.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec cyw43_arch_gpio_put(GPIO :: 0..2, Level :: 0..1) -> ok.
+cyw43_arch_gpio_put(_GPIO, _Level) ->
     erlang:nif_error(undefined).
