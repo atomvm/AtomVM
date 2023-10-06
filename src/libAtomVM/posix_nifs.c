@@ -24,7 +24,6 @@
  */
 
 #if HAVE_OPEN && HAVE_CLOSE
-#include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 #endif
@@ -39,6 +38,10 @@
 #include <sys/time.h>
 #endif
 
+#if HAVE_OPEN && HAVE_CLOSE || defined(HAVE_CLOCK_SETTIME) || defined(HAVE_SETTIMEOFDAY)
+#include <errno.h>
+#endif
+
 #include "defaultatoms.h"
 #include "erl_nif_priv.h"
 #include "globalcontext.h"
@@ -48,7 +51,7 @@
 
 term posix_errno_to_term(int err, GlobalContext *glb)
 {
-#if HAVE_OPEN && HAVE_CLOSE
+#if HAVE_OPEN && HAVE_CLOSE || defined(HAVE_CLOCK_SETTIME) || defined(HAVE_SETTIMEOFDAY)
     // These are defined in SUSv1
     switch (err) {
         case EACCES:
