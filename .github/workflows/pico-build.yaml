@@ -14,6 +14,8 @@ on:
       - 'libs/**'
       - 'src/platforms/rp2040/**'
       - 'src/libAtomVM/**'
+    tags:
+      - '*'
   pull_request:
     paths:
       - '.github/workflows/**'
@@ -21,6 +23,9 @@ on:
       - 'libs/**'
       - 'src/platforms/rp2040/**'
       - 'src/libAtomVM/**'
+
+permissions:
+  contents: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/master' && github.ref || github.run_id }}
@@ -62,3 +67,40 @@ jobs:
         nvm use node
         npm install
         npx tsx run-tests.ts ../build/tests/rp2040_tests.uf2 ../build/tests/test_erl_sources/rp2040_test_modules.uf2
+
+    - name: Build atomvmlib.uf2
+      if: startsWith(github.ref, 'refs/tags/')
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir build
+        cd build
+        cmake ..
+        make atomvmlib.uf2
+
+    - name: Rename and write sha256sum
+      if: startsWith(github.ref, 'refs/tags/')
+      shell: bash
+      run: |
+        pushd src/platforms/rp2040/build
+        ATOMVM_UF2=AtomVM-${{ github.ref_name }}.uf2
+        mv src/AtomVM.uf2 "src/${ATOMVM_UF2}"
+        sha256sum "src/${ATOMVM_UF2}" > "src/${ATOMVM_UF2}.sha256"
+        popd
+        pushd build/libs
+        ATOMVMLIB_FILE=atomvmlib-${{ github.ref_name }}.uf2
+        mv atomvmlib.uf2 "${ATOMVMLIB_FILE}"
+        sha256sum "${ATOMVMLIB_FILE}" > "${ATOMVMLIB_FILE}.sha256"
+        popd
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        draft: true
+        fail_on_unmatched_files: true
+        files: |
+          src/platforms/rp2040/build/src/AtomVM-${{ github.ref_name }}.uf2
+          src/platforms/rp2040/build/src/AtomVM-${{ github.ref_name }}.uf2.sha256
+          build/libs/atomvmlib-${{ github.ref_name }}.uf2
+          build/libs/atomvmlib-${{ github.ref_name }}.uf2.sha256

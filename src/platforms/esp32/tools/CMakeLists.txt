@@ -21,30 +21,6 @@
 cmake_minimum_required (VERSION 3.13)
 project (ReleaseEsp32)
 
-## Configure version info for tools
-## TODO the following is the contents of AtomVM/CMakeModules/GetVersion.cmake rather than duplicate
-## the code here .../GetVersion.cmake and AtomVM/version.cmake should be reworked so they can be used
-## here as well as for the "generic_unix" port.
-
-include(${CMAKE_CURRENT_SOURCE_DIR}/../../../../version.cmake)
-
-if (ATOMVM_DEV)
-    set(ATOMVM_GIT_REVISION "<unknown>")
-    execute_process(
-        COMMAND git rev-parse --short HEAD
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        OUTPUT_VARIABLE ATOMVM_GIT_REVISION
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    if (NOT ATOMVM_GIT_REVISION STREQUAL "")
-        set(ATOMVM_VERSION "${ATOMVM_BASE_VERSION}+git.${ATOMVM_GIT_REVISION}")
-    else()
-        set(ATOMVM_VERSION ${ATOMVM_BASE_VERSION})
-    endif()
-else()
-    set(ATOMVM_VERSION ${ATOMVM_BASE_VERSION})
-endif()
-
 ## Build image tools for target chip
 
 set(BOOTLOADER_OFFSET "0x1000")

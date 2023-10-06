@@ -22,4 +22,4 @@
 THIS_DIR="$(cd $(dirname $0) && pwd)"
 ROOT_DIR="$(cd "${THIS_DIR}/../../../.." && pwd)"
 
-FLASH_OFFSET="@BOOTLOADER_OFFSET@" ${ROOT_DIR}/src/platforms/esp32/build/flash.sh $@ "${ROOT_DIR}/src/platforms/esp32/build/atomvm-@CONFIG_IDF_TARGET@-@ATOMVM_VERSION@.img"
+FLASH_OFFSET="@BOOTLOADER_OFFSET@" ${ROOT_DIR}/src/platforms/esp32/build/flash.sh $@ "${ROOT_DIR}/src/platforms/esp32/build/atomvm-@CONFIG_IDF_TARGET@.img"
