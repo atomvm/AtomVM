@@ -259,8 +259,7 @@ init(Config) ->
 handle_call(start, From, #state{config = Config} = State) ->
     Port = get_port(),
     Ref = make_ref(),
-    DriverConfig = get_driver_config(Config),
-    Port ! {self(), Ref, {start, DriverConfig}},
+    Port ! {self(), Ref, {start, Config}},
     wait_start_reply(Ref, From, Port, State);
 handle_call(_Msg, _From, State) ->
     {reply, {error, unknown_message}, State}.
@@ -318,42 +317,6 @@ terminate(_Reason, _State) ->
 %%
 %% Internal operations
 %%
-
-%% @private
-get_driver_config(Config) ->
-    Config1 =
-        case proplists:get_value(sta, Config) of
-            undefined ->
-                Config;
-            StaConfig ->
-                NewStaConfig1 = maybe_add_nvs_entry(ssid, StaConfig, sta_ssid),
-                NewStaConfig2 = maybe_add_nvs_entry(psk, NewStaConfig1, sta_psk),
-                [{sta, NewStaConfig2} | lists:keydelete(sta, 1, Config)]
-        end,
-    Config2 =
-        case proplists:get_value(ap, Config1) of
-            undefined ->
-                Config1;
-            ApConfig ->
-                NewApConfig1 = maybe_add_nvs_entry(ssid, ApConfig, ap_ssid),
-                NewApConfig2 = maybe_add_nvs_entry(psk, NewApConfig1, ap_psk),
-                [{ap, NewApConfig2} | lists:keydelete(ap, 1, Config1)]
-        end,
-    Config2.
-
-%% @private
-maybe_add_nvs_entry(Key, List, NVSKey) ->
-    case proplists:get_value(Key, List) of
-        undefined ->
-            case esp:nvs_get_binary(atomvm, NVSKey) of
-                undefined ->
-                    List;
-                NVSValue ->
-                    [{Key, NVSValue} | List]
-            end;
-        _Value ->
-            List
-    end.
 
 %% @private
 maybe_sta_connected_callback(Config) ->
