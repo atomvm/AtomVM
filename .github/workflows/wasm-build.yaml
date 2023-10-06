@@ -9,7 +9,7 @@ name: Wasm Build
 on:
   push:
     paths:
-      - '.github/workflows/**'
+      - '.github/workflows/wasm-build.yaml'
       - 'CMakeLists.txt'
       - 'libs/**'
       - 'src/platforms/emscripten/**'
@@ -18,7 +18,7 @@ on:
       - '*'
   pull_request:
     paths:
-      - '.github/workflows/**'
+      - '.github/workflows/wasm-build.yaml'
       - 'CMakeLists.txt'
       - 'libs/**'
       - 'src/platforms/emscripten/**'

@@ -17,7 +17,7 @@ on:
     branches:
       - 'master'
     paths:
-      - '.github/workflows/**'
+      - '.github/workflows/publish-docs.yaml'
       - 'CMakeLists.txt'
       - 'doc/**'
       - 'libs/**'

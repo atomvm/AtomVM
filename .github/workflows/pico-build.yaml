@@ -9,7 +9,7 @@ name: Pico Build
 on:
   push:
     paths:
-      - '.github/workflows/**'
+      - '.github/workflows/pico-build.yaml'
       - 'CMakeLists.txt'
       - 'libs/**'
       - 'src/platforms/rp2040/**'
@@ -18,7 +18,7 @@ on:
       - '*'
   pull_request:
     paths:
-      - '.github/workflows/**'
+      - '.github/workflows/pico-build.yaml'
       - 'CMakeLists.txt'
       - 'libs/**'
       - 'src/platforms/rp2040/**'

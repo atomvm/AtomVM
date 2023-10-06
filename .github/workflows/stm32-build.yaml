@@ -9,13 +9,13 @@ name: STM32 Build
 on:
   push:
     paths:
-      - '.github/workflows/**'
+      - '.github/workflows/stm32-build.yaml'
       - 'CMakeLists.txt'
       - 'src/platforms/stm32/**'
       - 'src/libAtomVM/**'
   pull_request:
     paths:
-      - '.github/workflows/**'
+      - '.github/workflows/stm32-build.yaml'
       - 'CMakeLists.txt'
       - 'src/platforms/stm32/**'
       - 'src/libAtomVM/**'

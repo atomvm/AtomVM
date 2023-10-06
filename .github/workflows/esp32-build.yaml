@@ -9,7 +9,7 @@ name: ESP32 Builds
 on:
   push:
     paths:
-      - '.github/workflows/**'
+      - '.github/workflows/esp32-build.yaml'
       - 'CMakeLists.txt'
       - 'libs/**'
       - 'src/platforms/esp32/**'
@@ -17,7 +17,7 @@ on:
       - 'tools/packbeam/**'
   pull_request:
     paths:
-      - '.github/workflows/**'
+      - '.github/workflows/esp32-build.yaml'
       - 'src/platforms/esp32/**'
       - 'src/libAtomVM/**'
 
