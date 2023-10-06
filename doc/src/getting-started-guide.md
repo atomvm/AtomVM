@@ -318,9 +318,33 @@ standard libraries (`atomvmlib.uf2`).
 
 AtomVM may be run on UNIX-like platforms using the `atomvm` command.
 
-You may specify one or more AVM files on the command line when running the `atom` command.  BEAM modules defined in earlier AVM modules on the command line take higher precedence that BEAM modules included in AVM files later in the argument list.
+You may specify one or more AVM files on the command line when running the `atomvm` command.  BEAM modules defined in earlier AVM modules on the command line take higher precedence that BEAM modules included in AVM files later in the argument list.
 
     shell$ atomvm /path/to/myapp.avm
+
+To get the current version of AtomVM, use the `-v` option, e.g.:
+
+    shell$ atomvm -v
+    0.6.1
+
+Use the `-h` option to get command line help:
+
+    shell$ atomvm -h
+
+    Syntax:
+
+        /usr/local/lib/atomvm/AtomVM [-h] [-v] <path-to-avm-file>+
+
+    Options:
+
+        -h         Print this help and exit.
+        -v         Print the AtomVM version and exit.
+
+    Supply one or more AtomVM packbeam (.avm) files to start your application.
+
+    Example:
+
+        $ /usr/local/lib/atomvm/AtomVM /path/to/my/application.avm /path/to/atomvmlib.avm
 
 Currently, the `atomvm` command and libraries must be built and installed from source.
 

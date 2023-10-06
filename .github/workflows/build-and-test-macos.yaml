@@ -124,3 +124,5 @@ jobs:
         export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
         sudo ninja install
         atomvm examples/erlang/hello_world.avm
+        atomvm -v
+        atomvm -h
