@@ -30,6 +30,7 @@
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/cm3/scb.h>
 #include <libopencm3/stm32/flash.h>
+#include <libopencm3/stm32/rcc.h>
 
 #include "avm_log.h"
 #include "stm_sys.h"
@@ -69,6 +70,60 @@ static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *
 void platform_defaultatoms_init(GlobalContext *glb)
 {
     UNUSED(glb);
+}
+
+void sys_enable_core_periph_clocks()
+{
+    uint32_t list[] = GPIO_CLOCK_LIST;
+    for (int i = 0; i < sizeof(list) / sizeof(list[0]); i++) {
+        rcc_periph_clock_enable((enum rcc_periph_clken) list[i]);
+    }
+}
+
+bool sys_lock_pin(GlobalContext *glb, uint32_t gpio_bank, uint16_t pin_num)
+{
+    struct STM32PlatformData *platform_data = glb->platform_data;
+    struct ListHead *item;
+    struct ListHead *tmp;
+    if (!list_is_empty(&platform_data->locked_pins)) {
+        MUTABLE_LIST_FOR_EACH (item, tmp, &platform_data->locked_pins) {
+            struct LockedPin *gpio_pin = GET_LIST_ENTRY(item, struct LockedPin, locked_pins_list_head);
+            if ((gpio_pin->gpio_bank == gpio_bank) && (gpio_pin->pin_num == pin_num)) {
+                AVM_LOGW(TAG, "Pin is already reserved by the system!");
+                return false;
+            }
+        }
+    }
+
+    struct LockedPin *data = malloc(sizeof(struct LockedPin));
+    if (UNLIKELY(IS_NULL_PTR(data))) {
+        AVM_LOGE(TAG, "Out of memory!");
+        AVM_ABORT();
+    }
+    list_append(&platform_data->locked_pins, &data->locked_pins_list_head);
+    data->gpio_bank = gpio_bank;
+    data->pin_num = pin_num;
+
+    return true;
+}
+
+bool sys_unlock_pin(GlobalContext *glb, uint32_t gpio_bank, uint16_t pin_num)
+{
+    struct STM32PlatformData *platform_data = glb->platform_data;
+    struct ListHead *item;
+    struct ListHead *tmp;
+    if (!list_is_empty(&platform_data->locked_pins)) {
+        MUTABLE_LIST_FOR_EACH (item, tmp, &platform_data->locked_pins) {
+            struct LockedPin *gpio_pin = GET_LIST_ENTRY(item, struct LockedPin, locked_pins_list_head);
+            if ((gpio_pin->gpio_bank == gpio_bank) && (gpio_pin->pin_num == pin_num)) {
+                list_remove(item);
+                free(gpio_pin);
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 void sys_init_platform(GlobalContext *glb)

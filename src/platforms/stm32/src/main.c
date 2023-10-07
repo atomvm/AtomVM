@@ -72,18 +72,16 @@ static void clock_setup()
 {
     // Use external clock, set divider for 168 MHz clock frequency
     rcc_clock_setup_pll(&rcc_hse_8mhz_3v3[RCC_CLOCK_3V3_168MHZ]);
-
-    // Enable clock for USART2 GPIO
-    rcc_periph_clock_enable(RCC_GPIOA);
-
-    // Enable clock for USART2
-    rcc_periph_clock_enable(RCC_USART2);
 }
 
-static void usart_setup()
+static void usart_setup(GlobalContext *glb)
 {
+    // Enable clock for USART2
+    rcc_periph_clock_enable(RCC_USART2);
+
     // Setup GPIO pins for USART2 transmit
     gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO2);
+    sys_lock_pin(glb, GPIOA, GPIO2);
 
     // Setup USART2 TX pin as alternate function
     gpio_set_af(GPIOA, GPIO_AF7, GPIO2);
@@ -162,7 +160,12 @@ int main()
     sys_init_icache();
     clock_setup();
     systick_setup();
-    usart_setup();
+    // Start core peripheral clocks now so there are no accidental resets of peripherals that share a clock later.
+    sys_enable_core_periph_clocks();
+
+    GlobalContext *glb = globalcontext_new();
+
+    usart_setup(glb);
 
     fprintf(stdout, "%s", ATOMVM_BANNER);
     AVM_LOGI(TAG, "Starting AtomVM revision " ATOMVM_VERSION);
@@ -177,7 +180,6 @@ int main()
 
     AVM_LOGD(TAG, "Maximum application size: %lu", size);
 
-    GlobalContext *glb = globalcontext_new();
     port_driver_init_all(glb);
     nif_collection_init_all(glb);
 
