@@ -126,6 +126,35 @@ jobs:
         node src/AtomVM.js ../../../../build/tests/libs/alisp/test_alisp.avm
         node src/AtomVM.js ../../../../build/tests/libs/eavmlib/test_eavmlib.avm
 
+    - name: "Rename and write sha256sum (node)"
+      if: startsWith(github.ref, 'refs/tags/')
+      shell: bash
+      working-directory: src/platforms/emscripten/build/src
+      run: |
+        ATOMVM_JS=AtomVM-node-${{ github.ref_name }}.js
+        mv AtomVM.js "${ATOMVM_JS}"
+        sha256sum "${ATOMVM_JS}" > "${ATOMVM_JS}.sha256"
+        ATOMVM_WORKER_JS=AtomVM.worker-node-${{ github.ref_name }}.js
+        mv AtomVM.worker.js "${ATOMVM_WORKER_JS}"
+        sha256sum "${ATOMVM_WORKER_JS}" > "${ATOMVM_WORKER_JS}.sha256"
+        ATOMVM_WASM=AtomVM-node-${{ github.ref_name }}.wasm
+        mv AtomVM.wasm "${ATOMVM_WASM}"
+        sha256sum "${ATOMVM_WASM}" > "${ATOMVM_WASM}.sha256"
+
+    - name: "Release (node)"
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        draft: true
+        fail_on_unmatched_files: true
+        files: |
+          src/platforms/emscripten/build/src/AtomVM-node-${{ github.ref_name }}.js
+          src/platforms/emscripten/build/src/AtomVM-node-${{ github.ref_name }}.js.sha256
+          src/platforms/emscripten/build/src/AtomVM.worker-node-${{ github.ref_name }}.js
+          src/platforms/emscripten/build/src/AtomVM.worker-node-${{ github.ref_name }}.js.sha256
+          src/platforms/emscripten/build/src/AtomVM-node-${{ github.ref_name }}.wasm
+          src/platforms/emscripten/build/src/AtomVM-node-${{ github.ref_name }}.wasm.sha256
+
   wasm_build_web:
     runs-on: ubuntu-latest
     container: emscripten/emsdk
@@ -191,28 +220,31 @@ jobs:
         docker run --network host -v $PWD:/mnt -w /mnt cypress/included:12.17.1 --browser chrome
         killall AtomVM
 
-    - name: "Rename and write sha256sum"
+    - name: "Rename and write sha256sum (web)"
       if: startsWith(github.ref, 'refs/tags/')
       shell: bash
+      working-directory: src/platforms/emscripten/build/src
       run: |
-        pushd src/platforms/emscripten/build/src &&
-        ATOMVM_JS=AtomVM-${{ github.ref_name }}.js &&
-        mv AtomVM.js "${ATOMVM_JS}" &&
-        sha256sum "${ATOMVM_JS}" > "${ATOMVM_JS}.sha256" &&
-        popd &&
-        pushd build/examples/emscripten/ &&
-        SERVER_FILE=wasm_webserver-${{ github.ref_name }}.avm &&
-        mv wasm_webserver.avm "${SERVER_FILE}" &&
-        sha256sum "${SERVER_FILE}" > "${SERVER_FILE}.sha256"
+        ATOMVM_JS=AtomVM-web-${{ github.ref_name }}.js
+        mv AtomVM.js "${ATOMVM_JS}"
+        sha256sum "${ATOMVM_JS}" > "${ATOMVM_JS}.sha256"
+        ATOMVM_WORKER_JS=AtomVM.worker-web-${{ github.ref_name }}.js
+        mv AtomVM.worker.js "${ATOMVM_WORKER_JS}"
+        sha256sum "${ATOMVM_WORKER_JS}" > "${ATOMVM_WORKER_JS}.sha256"
+        ATOMVM_WASM=AtomVM-web-${{ github.ref_name }}.wasm
+        mv AtomVM.wasm "${ATOMVM_WASM}"
+        sha256sum "${ATOMVM_WASM}" > "${ATOMVM_WASM}.sha256"
 
-    - name: Release
+    - name: "Release (web)"
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
       with:
         draft: true
         fail_on_unmatched_files: true
         files: |
-          src/platforms/emscripten/build/src/AtomVM-${{ github.ref_name }}.js
-          src/platforms/emscripten/build/src/AtomVM-${{ github.ref_name }}.js.sha256
-          build/examples/emscripten/wasm_webserver-${{ github.ref_name }}.avm
-          build/examples/emscripten/wasm_webserver-${{ github.ref_name }}.avm.sha256
+          src/platforms/emscripten/build/src/AtomVM-web-${{ github.ref_name }}.js
+          src/platforms/emscripten/build/src/AtomVM-web-${{ github.ref_name }}.js.sha256
+          src/platforms/emscripten/build/src/AtomVM.worker-web-${{ github.ref_name }}.js
+          src/platforms/emscripten/build/src/AtomVM.worker-web-${{ github.ref_name }}.js.sha256
+          src/platforms/emscripten/build/src/AtomVM-web-${{ github.ref_name }}.wasm
+          src/platforms/emscripten/build/src/AtomVM-web-${{ github.ref_name }}.wasm.sha256
