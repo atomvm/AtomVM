@@ -35,7 +35,9 @@ is_dev_mode_enabled(SystemStatus) ->
         {ok, undefined} ->
             false;
         {app_exit, undefined} ->
-            false
+            false;
+        {app_fail, undefined} ->
+            true
     end.
 
 maybe_start_dev_mode(SystemStatus) ->
