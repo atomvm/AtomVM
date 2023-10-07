@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed race conditions in atoms table.
 - Fixed a bug in the STM32 port that caused the final result to never be returned.
 - Fix bug when building a binary using a 64-bit integer on a 32-bit CPU.
+- Fix (using 'auto' option)  SPI on ESP32 models other than ESP32, such as ESP32S2, ESP32C3, ...
 
 ## [0.6.0-alpha.0] - 2023-08-13
 
