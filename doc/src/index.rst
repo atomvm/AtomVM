@@ -40,6 +40,7 @@ AtomVM includes many advanced features, including process spawning, monitoring, 
 
    CONTRIBUTING.md
    CHANGELOG.md
+   UPDATING.md
 
 
 Indices and tables
