@@ -196,7 +196,12 @@ Context *spi_driver_create_port(GlobalContext *global, term opts)
 
     debug_buscfg(&buscfg);
 
-    esp_err_t err = spi_bus_initialize(host_device, &buscfg, 1);
+    // TODO: workaround until a proper semantic is investigated
+    #ifdef CONFIG_IDF_TARGET_ESP32
+        esp_err_t err = spi_bus_initialize(host_device, &buscfg, 1);
+    #else
+        esp_err_t err = spi_bus_initialize(host_device, &buscfg, SPI_DMA_CH_AUTO);
+    #endif
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "SPI Bus initialization failed with error=%i", err);
         context_destroy(ctx);
