@@ -194,16 +194,17 @@ jobs:
     - name: "Rename and write sha256sum"
       if: startsWith(github.ref, 'refs/tags/')
       shell: bash
+      working-directory: src/platforms/emscripten/build/src
       run: |
-        pushd src/platforms/emscripten/build/src
         ATOMVM_JS=AtomVM-${{ github.ref_name }}.js
         mv AtomVM.js "${ATOMVM_JS}"
         sha256sum "${ATOMVM_JS}" > "${ATOMVM_JS}.sha256"
-        popd
-        pushd build/examples/emscripten/
-        SERVER_FILE=wasm_webserver-${{ github.ref_name }}.avm
-        mv wasm_webserver.avm "${SERVER_FILE}"
-        sha256sum "${SERVER_FILE}" > "${SERVER_FILE}.sha256"
+        ATOMVM_WORKER_JS=AtomVM.worker-${{ github.ref_name }}.js
+        mv AtomVM.worker.js "${ATOMVM_WORKER_JS}"
+        sha256sum "${ATOMVM_WORKER_JS}" > "${ATOMVM_WORKER_JS}.sha256"
+        ATOMVM_WASM=AtomVM-${{ github.ref_name }}.wasm
+        mv AtomVM.wasm "${ATOMVM_WASM}"
+        sha256sum "${ATOMVM_WASM}" > "${ATOMVM_WASM}.sha256"
 
     - name: Release
       uses: softprops/action-gh-release@v1
@@ -214,5 +215,7 @@ jobs:
         files: |
           src/platforms/emscripten/build/src/AtomVM-${{ github.ref_name }}.js
           src/platforms/emscripten/build/src/AtomVM-${{ github.ref_name }}.js.sha256
-          build/examples/emscripten/wasm_webserver-${{ github.ref_name }}.avm
-          build/examples/emscripten/wasm_webserver-${{ github.ref_name }}.avm.sha256
+          src/platforms/emscripten/build/src/AtomVM.worker-${{ github.ref_name }}.js
+          src/platforms/emscripten/build/src/AtomVM.worker-${{ github.ref_name }}.js.sha256
+          src/platforms/emscripten/build/src/AtomVM-${{ github.ref_name }}.wasm
+          src/platforms/emscripten/build/src/AtomVM-${{ github.ref_name }}.wasm.sha256
