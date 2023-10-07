@@ -34,7 +34,7 @@ AtomVM will run BEAM files that have been compiled using the following Erlang an
 
 Not all BEAM instructions are supported for every Erlang and Elixir compiler.  For details about which instructions are supported, see the `src/libAtomVM/opcodes.h` header file in the  [AtomVM](https://github.com/atomvm/AtomVM/) github repository corresponding to the current release.
 
-For detailed information about features and bug fixes in the current release, see the AtomVM [Change Log](CHANGELOG.md).
+For detailed information about features and bug fixes in the current release, see the AtomVM [Change Log](CHANGELOG.md).  For information about how to update from previous versions of AtomVM, see the AtomVM [Updating](UPDATING.md) page.
 
 ### ESP32 Support
 
