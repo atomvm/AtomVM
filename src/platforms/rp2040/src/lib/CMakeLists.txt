@@ -29,6 +29,7 @@ set(HEADER_FILES
 
 set(SOURCE_FILES
     gpiodriver.c
+    networkdriver.c
     platform_defaultatoms.c
     platform_nifs.c
     smp.c
@@ -66,6 +67,7 @@ endif()
 
 if (PICO_CYW43_SUPPORTED)
     target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC pico_cyw43_arch_lwip_threadsafe_background)
+    target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,networkregister_port_driver")
 endif()
 
-target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC -Wl,-u -Wl,gpio_nif)
+target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,gpio_nif")

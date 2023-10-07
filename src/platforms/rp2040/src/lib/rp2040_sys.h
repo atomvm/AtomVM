@@ -25,8 +25,28 @@
 
 #include <pico/cond.h>
 
+#include "sys.h"
+
 // Because pico sdk uses -gc-section, it is required to add -Wl,-u NAME_nif
-// to make sure a given module nif is linked in.
+// to make sure a given module nif or port are linked in.
+
+#define REGISTER_PORT_DRIVER(NAME, INIT_CB, DESTROY_CB, CREATE_CB)    \
+    struct PortDriverDef NAME##_port_driver_def = {                   \
+        .port_driver_name = #NAME,                                    \
+        .port_driver_init_cb = INIT_CB,                               \
+        .port_driver_destroy_cb = DESTROY_CB,                         \
+        .port_driver_create_port_cb = CREATE_CB                       \
+    };                                                                \
+                                                                      \
+    struct PortDriverDefListItem NAME##_port_driver_def_list_item = { \
+        .def = &NAME##_port_driver_def                                \
+    };                                                                \
+                                                                      \
+    __attribute__((constructor)) void NAME##register_port_driver()    \
+    {                                                                 \
+        NAME##_port_driver_def_list_item.next = port_driver_list;     \
+        port_driver_list = &NAME##_port_driver_def_list_item;         \
+    }
 
 #define REGISTER_NIF_COLLECTION(NAME, INIT_CB, DESTROY_CB, RESOLVE_NIF_CB)  \
     struct NifCollectionDef NAME##_nif_collection_def = {                   \
@@ -51,6 +71,24 @@ struct RP2040PlatformData
     cond_t event_poll_cond;
 };
 
+typedef void (*port_driver_init_t)(GlobalContext *global);
+typedef void (*port_driver_destroy_t)(GlobalContext *global);
+typedef Context *(*port_driver_create_port_t)(GlobalContext *global, term opts);
+
+struct PortDriverDef
+{
+    const char *port_driver_name;
+    const port_driver_init_t port_driver_init_cb;
+    const port_driver_destroy_t port_driver_destroy_cb;
+    const port_driver_create_port_t port_driver_create_port_cb;
+};
+
+struct PortDriverDefListItem
+{
+    struct PortDriverDefListItem *next;
+    const struct PortDriverDef *const def;
+};
+
 typedef void (*nif_collection_init_t)(GlobalContext *global);
 typedef void (*nif_collection_destroy_t)(GlobalContext *global);
 typedef const struct Nif *(*nif_collection_resolve_nif_t)(const char *name);
@@ -68,8 +106,11 @@ struct NifCollectionDefListItem
     const struct NifCollectionDef *const def;
 };
 
+extern struct PortDriverDefListItem *port_driver_list;
 extern struct NifCollectionDefListItem *nif_collection_list;
 
+void port_driver_init_all(GlobalContext *global);
+void port_driver_destroy_all(GlobalContext *global);
 void nif_collection_init_all(GlobalContext *global);
 void nif_collection_destroy_all(GlobalContext *global);
 const struct Nif *nif_collection_resolve_nif(const char *name);
