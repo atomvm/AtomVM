@@ -35,8 +35,7 @@ start() ->
             {ap_started, fun ap_started/0},
             {sta_connected, fun sta_connected/1},
             {sta_ip_assigned, fun sta_ip_assigned/1},
-            {sta_disconnected, fun sta_disconnected/1},
-            {sta_ip_assigned, fun ap_sta_ip_assigned/1}
+            {sta_disconnected, fun sta_disconnected/1}
         ]},
         {sta, [
             {ssid, <<"myssid">>},
@@ -77,9 +76,6 @@ got_ip(IpInfo) ->
 
 disconnected() ->
     io:format("STA disconnected.~n").
-
-ap_sta_ip_assigned(Address) ->
-    io:format("AP assigned STA address ~p~n", [Address]).
 
 sntp_synchronized({TVSec, TVUsec}) ->
     io:format("Synchronized time with SNTP server. TVSec=~p TVUsec=~p~n", [TVSec, TVUsec]).
