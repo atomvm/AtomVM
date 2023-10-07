@@ -38,6 +38,9 @@
 #define PORT_REPLY_SIZE (TUPLE_SIZE(2) + REF_SIZE)
 
 static const char *const ap_atom = ATOM_STR("\x2", "ap");
+static const char *const ap_sta_connected_atom = ATOM_STR("\x10", "ap_sta_connected");
+static const char *const ap_sta_disconnected_atom = ATOM_STR("\x13", "ap_sta_disconnected");
+static const char *const ap_started_atom = ATOM_STR("\xA", "ap_started");
 static const char *const psk_atom = ATOM_STR("\x3", "psk");
 static const char *const ssid_atom = ATOM_STR("\x4", "ssid");
 static const char *const sta_atom = ATOM_STR("\x3", "sta");
@@ -63,6 +66,8 @@ struct NetworkDriverData
     uint32_t owner_process_id;
     uint64_t ref_ticks;
     int link_status;
+    int stas_count;
+    uint8_t *stas_mac;
 };
 
 // Callbacks do not allow for user data
@@ -70,6 +75,7 @@ struct NetworkDriverData
 static struct NetworkDriverData *driver_data;
 
 static void network_driver_netif_status_cb(struct netif *netif);
+static void network_driver_cyw43_assoc_cb(bool assoc);
 
 static term tuple_from_addr(Heap *heap, uint32_t addr)
 {
@@ -129,6 +135,38 @@ static void send_got_ip(struct netif *netif)
     END_WITH_STACK_HEAP(heap, driver_data->global);
 }
 
+static void send_ap_started()
+{
+    // {Ref, ap_started}
+    BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
+    {
+        send_term(&heap, globalcontext_make_atom(driver_data->global, ap_started_atom));
+    }
+    END_WITH_STACK_HEAP(heap, driver_data->global);
+}
+
+static void send_atom_mac(term atom, uint8_t *mac)
+{
+    // {Ref, {ap_connected | ap_disconnected, <<1,2,3,4,5,6>>}}
+    BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + TERM_BINARY_HEAP_SIZE(6), heap);
+    {
+        term mac_term = term_from_literal_binary(mac, 6, &heap, driver_data->global);
+        term reply = port_heap_create_tuple2(&heap, atom, mac_term);
+        send_term(&heap, reply);
+    }
+    END_WITH_STACK_HEAP(heap, driver_data->global);
+}
+
+static void send_ap_sta_connected(uint8_t *mac)
+{
+    send_atom_mac(globalcontext_make_atom(driver_data->global, ap_sta_connected_atom), mac);
+}
+
+static void send_ap_sta_disconnected(uint8_t *mac)
+{
+    send_atom_mac(globalcontext_make_atom(driver_data->global, ap_sta_disconnected_atom), mac);
+}
+
 static term start_sta(term sta_config, GlobalContext *global)
 {
     term ssid_term = interop_kv_get_value(sta_config, ssid_atom, global);
@@ -171,31 +209,123 @@ static term start_sta(term sta_config, GlobalContext *global)
     return OK_ATOM;
 }
 
-static term start_ap(term ap_config, GlobalContext *glb)
+static char *get_default_device_name()
 {
-    UNUSED(ap_config);
-    UNUSED(glb);
-    return BADARG_ATOM;
+    uint8_t mac[6];
+    int err = cyw43_wifi_get_mac(&cyw43_state, CYW43_ITF_STA, mac);
+    if (err) {
+        return NULL;
+    }
+
+    size_t buf_size = strlen("atomvm-") + 12 + 1;
+    char *buf = malloc(buf_size);
+    if (IS_NULL_PTR(buf)) {
+        return NULL;
+    }
+    snprintf(buf, buf_size,
+        "atomvm-%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    return buf;
+}
+
+static void network_driver_cyw43_assoc_cb(bool assoc)
+{
+    UNUSED(assoc);
+
+    int max_stas;
+    cyw43_wifi_ap_get_max_stas(&cyw43_state, &max_stas);
+    uint8_t *new_macs = malloc(6 * max_stas);
+    int nb_stas;
+    cyw43_wifi_ap_get_stas(&cyw43_state, &nb_stas, new_macs);
+    // Determine new macs.
+    for (int i = 0; i < nb_stas; i++) {
+        bool new_mac = true;
+        for (int j = 0; j < driver_data->stas_count; j++) {
+            if (memcmp(&driver_data->stas_mac[6 * j], &new_macs[6 * i], 6) == 0) {
+                new_mac = false;
+                break;
+            }
+        }
+        if (new_mac) {
+            send_ap_sta_connected(&new_macs[6 * i]);
+        }
+    }
+    // Determine old macs
+    for (int j = 0; j < driver_data->stas_count; j++) {
+        bool old_mac = true;
+        for (int i = 0; i < nb_stas; i++) {
+            if (memcmp(&driver_data->stas_mac[6 * j], &new_macs[6 * i], 6) == 0) {
+                old_mac = false;
+                break;
+            }
+        }
+        if (old_mac) {
+            send_ap_sta_disconnected(&driver_data->stas_mac[6 * j]);
+        }
+    }
+    free(driver_data->stas_mac);
+    new_macs = realloc(new_macs, 6 * nb_stas);
+    driver_data->stas_mac = new_macs;
+    driver_data->stas_count = nb_stas;
+}
+
+static term start_ap(term ap_config, GlobalContext *global)
+{
+    term ssid_term = interop_kv_get_value(ap_config, ssid_atom, global);
+    term pass_term = interop_kv_get_value(ap_config, psk_atom, global);
+
+    //
+    // Check parameters
+    //
+    char *ssid = NULL;
+    if (term_is_invalid_term(ssid_term)) {
+        ssid = get_default_device_name();
+    } else {
+        int ok = 0;
+        ssid = interop_term_to_string(ssid_term, &ok);
+        if (!ok || IS_NULL_PTR(ssid)) {
+            return BADARG_ATOM;
+        }
+    }
+    char *psk = NULL;
+    if (!term_is_invalid_term(pass_term)) {
+        int ok = 0;
+        psk = interop_term_to_string(pass_term, &ok);
+        if (strlen(psk) < 8) {
+            free(ssid);
+            return BADARG_ATOM;
+        }
+        if (!ok) {
+            free(ssid);
+            return BADARG_ATOM;
+        }
+    }
+
+    uint32_t auth = (psk == NULL) ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_AES_PSK;
+    cyw43_state.assoc_cb = network_driver_cyw43_assoc_cb;
+    cyw43_arch_enable_ap_mode(ssid, psk, auth);
+    send_ap_started();
+    free(ssid);
+    free(psk);
+
+    return OK_ATOM;
 }
 
 static void network_driver_netif_status_cb(struct netif *netif)
 {
-    if (netif == &cyw43_state.netif[CYW43_ITF_STA]) {
-        // We don't really need to lock to call cyw43_tcpip_link_status
-        // However, we take advantage of this lock to protect driver_data->link_status.
-        cyw43_arch_lwip_begin();
-        int link_status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA);
-        int previous_link_status = driver_data->link_status;
-        driver_data->link_status = link_status;
-        cyw43_arch_lwip_end();
-        if (link_status != previous_link_status) {
-            if (link_status == CYW43_LINK_DOWN) {
-                send_sta_disconnected();
-            } else if (link_status == CYW43_LINK_JOIN) {
-                send_sta_connected();
-            } else if (link_status == CYW43_LINK_UP) {
-                send_got_ip(netif);
-            }
+    // We don't really need to lock to call cyw43_tcpip_link_status
+    // However, we take advantage of this lock to protect driver_data->link_status.
+    cyw43_arch_lwip_begin();
+    int link_status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA);
+    int previous_link_status = driver_data->link_status;
+    driver_data->link_status = link_status;
+    cyw43_arch_lwip_end();
+    if (link_status != previous_link_status) {
+        if (link_status == CYW43_LINK_DOWN) {
+            send_sta_disconnected();
+        } else if (link_status == CYW43_LINK_JOIN) {
+            send_sta_connected();
+        } else if (link_status == CYW43_LINK_UP) {
+            send_got_ip(netif);
         }
     }
 }
@@ -210,11 +340,15 @@ static void start_network(Context *ctx, term pid, term ref, term config)
 
     if (driver_data == NULL) {
         driver_data = malloc(sizeof(struct NetworkDriverData));
+        driver_data->stas_mac = NULL;
     }
     driver_data->global = ctx->global;
     driver_data->owner_process_id = term_to_local_process_id(pid);
     driver_data->ref_ticks = term_to_ref_ticks(ref);
     driver_data->link_status = CYW43_LINK_DOWN;
+    free(driver_data->stas_mac);
+    driver_data->stas_count = 0;
+    driver_data->stas_mac = NULL;
 
     //
     // Get the STA and AP config, if set
@@ -317,6 +451,9 @@ void network_driver_destroy(GlobalContext *global)
 {
     UNUSED(global);
 
+    if (driver_data) {
+        free(driver_data->stas_mac);
+    }
     free(driver_data);
     driver_data = NULL;
 }
