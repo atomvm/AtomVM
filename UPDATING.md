@@ -12,3 +12,5 @@
 `v0.6.0-alpha.0` cannot work on top of latest version.
 - Address (offset) of programs for Pico was changed from 0x100A0000 to 0x10100000. UF2
 binaries need to be rebuilt with the proper offset using `uf2tool`.
+- On ESP32, SSID and PSK stored in NVS are no longer read by network module. Applications
+must fetch the values and pass them to `network:start/1` or `network:start_link/1`.
