@@ -18,6 +18,8 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#ifdef LIB_PICO_CYW43_ARCH
+
 #include <globalcontext.h>
 #include <interop.h>
 #include <mailbox.h>
@@ -32,8 +34,6 @@
 #include <pico/cyw43_arch.h>
 
 #pragma GCC diagnostic pop
-
-#ifdef LIB_PICO_CYW43_ARCH
 
 #define PORT_REPLY_SIZE (TUPLE_SIZE(2) + REF_SIZE)
 
