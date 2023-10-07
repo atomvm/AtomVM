@@ -456,6 +456,7 @@ static wifi_config_t *get_ap_wifi_config(term ap_config, GlobalContext *global)
         int ok = 0;
         psk = interop_term_to_string(pass_term, &ok);
         if (strlen(psk) < 8) {
+            free(ssid);
             ESP_LOGE(TAG, "get_ap_wifi_config: AP PSK must be length 8 or more");
             return NULL;
         }
