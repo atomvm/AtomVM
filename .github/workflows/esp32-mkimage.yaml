@@ -9,7 +9,7 @@ name: esp32-mkimage
 on:
   push:
     paths:
-      - '.github/workflows/**'
+      - '.github/workflows/esp32-mkimage.yaml'
       - 'CMakeLists.txt'
       - 'libs/**'
       - 'src/platforms/esp32/**'
@@ -19,7 +19,7 @@ on:
       - '*'
   pull_request:
     paths:
-      - '.github/workflows/**'
+      - '.github/workflows/esp32-mkimage.yaml'
       - 'src/platforms/esp32/**'
       - 'src/libAtomVM/**'
 
