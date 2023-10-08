@@ -59,5 +59,4 @@ endif()
 install(
     FILES ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.avm
     DESTINATION lib/atomvm
-    RENAME atomvm.avm
 )

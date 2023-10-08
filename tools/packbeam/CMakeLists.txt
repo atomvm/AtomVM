@@ -53,8 +53,6 @@ target_link_libraries(PackBEAM PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX})
 target_include_directories(PackBEAM PUBLIC ../../src/libAtomVM)
 target_link_libraries(PackBEAM PRIVATE libAtomVM)
 
-install(TARGETS PackBEAM DESTINATION bin)
-
 if (COVERAGE)
     include(CodeCoverage)
     append_coverage_compiler_flags_to_target(PackBEAM)

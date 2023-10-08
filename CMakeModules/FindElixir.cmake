@@ -21,6 +21,7 @@
 find_program(ELIXIRC_PATH elixirc)
 
 if (ELIXIRC_PATH)
+    message("Found Elixir")
     set(Elixir_FOUND TRUE)
 elseif(Elixir_FIND_REQUIRED)
     message(FATAL_ERROR "Elixir compiler not found")
