@@ -30,6 +30,10 @@ start() ->
             {connected, fun connected/0},
             {got_ip, fun got_ip/1},
             {disconnected, fun disconnected/0}
+        ]},
+        {sntp, [
+            {host, "pool.ntp.org"},
+            {synchronized, fun sntp_synchronized/1}
         ]}
     ],
     case network:start(Config) of
@@ -47,3 +51,6 @@ got_ip({IPv4, Netmask, Gateway}) ->
 
 disconnected() ->
     io:format("Disconnected from access point.\n").
+
+sntp_synchronized({TVSec, TVUsec}) ->
+    io:format("Synchronized time with SNTP server. TVSec=~p TVUsec=~p\n", [TVSec, TVUsec]).

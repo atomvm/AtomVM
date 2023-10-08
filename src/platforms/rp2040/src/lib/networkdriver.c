@@ -32,6 +32,8 @@
 
 #include <cyw43.h>
 #include <dhserver.h>
+#include <hardware/rtc.h>
+#include <lwip/apps/sntp.h>
 #include <pico/cyw43_arch.h>
 
 #pragma GCC diagnostic pop
@@ -42,7 +44,10 @@ static const char *const ap_atom = ATOM_STR("\x2", "ap");
 static const char *const ap_sta_connected_atom = ATOM_STR("\x10", "ap_sta_connected");
 static const char *const ap_sta_disconnected_atom = ATOM_STR("\x13", "ap_sta_disconnected");
 static const char *const ap_started_atom = ATOM_STR("\xA", "ap_started");
+static const char *const host_atom = ATOM_STR("\x4", "host");
 static const char *const psk_atom = ATOM_STR("\x3", "psk");
+static const char *const sntp_atom = ATOM_STR("\x4", "sntp");
+static const char *const sntp_sync_atom = ATOM_STR("\x9", "sntp_sync");
 static const char *const ssid_atom = ATOM_STR("\x4", "ssid");
 static const char *const sta_atom = ATOM_STR("\x3", "sta");
 static const char *const sta_connected_atom = ATOM_STR("\xD", "sta_connected");
@@ -67,6 +72,7 @@ struct NetworkDriverData
     uint32_t owner_process_id;
     uint64_t ref_ticks;
     int link_status;
+    char *sntp_hostname;
     int stas_count;
     uint8_t *stas_mac;
     struct dhcp_config *dhcp_config;
@@ -167,6 +173,18 @@ static void send_ap_sta_connected(uint8_t *mac)
 static void send_ap_sta_disconnected(uint8_t *mac)
 {
     send_atom_mac(globalcontext_make_atom(driver_data->global, ap_sta_disconnected_atom), mac);
+}
+
+static void send_sntp_sync(struct timeval *tv)
+{
+    // {Ref, {sntp_sync, {TVSec, TVUsec}}}
+    BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) * 2 + BOXED_INT64_SIZE * 2, heap);
+    {
+        term tv_tuple = port_heap_create_tuple2(&heap, term_make_maybe_boxed_int64(tv->tv_sec, &heap), term_make_maybe_boxed_int64(tv->tv_usec, &heap));
+        term reply = port_heap_create_tuple2(&heap, globalcontext_make_atom(driver_data->global, sntp_sync_atom), tv_tuple);
+        send_term(&heap, reply);
+    }
+    END_WITH_STACK_HEAP(heap, driver_data->global);
 }
 
 static term start_sta(term sta_config, GlobalContext *global)
@@ -374,6 +392,52 @@ static term start_ap(term ap_config, GlobalContext *global)
     return setup_dhcp_server();
 }
 
+void sntp_set_system_time_us(unsigned long sec, unsigned long usec)
+{
+    struct timeval tv;
+    tv.tv_sec = sec;
+    tv.tv_usec = usec;
+    settimeofday(&tv, NULL);
+
+    send_sntp_sync(&tv);
+
+    // We also set RTC time.
+    if (UNLIKELY(!rtc_running())) {
+        rtc_init();
+    }
+    gettimeofday(&tv, NULL);
+    struct tm utc;
+    gmtime_r(&tv.tv_sec, &utc);
+    datetime_t pico_datetime;
+    pico_datetime.year = utc.tm_year + 1900;
+    pico_datetime.month = utc.tm_mon + 1;
+    pico_datetime.day = utc.tm_mday;
+    pico_datetime.dotw = 0;
+    pico_datetime.hour = utc.tm_hour;
+    pico_datetime.min = utc.tm_min;
+    pico_datetime.sec = utc.tm_sec;
+    rtc_set_datetime(&pico_datetime);
+}
+
+static void setup_sntp(term sntp_config, GlobalContext *global)
+{
+    if (!term_is_invalid_term(interop_kv_get_value(sntp_config, host_atom, global))) {
+        int ok;
+        driver_data->sntp_hostname = interop_term_to_string(interop_kv_get_value(sntp_config, host_atom, global), &ok);
+        if (LIKELY(ok)) {
+            sntp_setoperatingmode(SNTP_OPMODE_POLL);
+            sntp_setservername(0, driver_data->sntp_hostname);
+            sntp_init();
+        } else {
+            free(driver_data->sntp_hostname);
+        }
+    } else {
+        sntp_setoperatingmode(SNTP_OPMODE_POLL);
+        sntp_servermode_dhcp(1);
+        sntp_init();
+    }
+}
+
 static void network_driver_netif_status_cb(struct netif *netif)
 {
     // We don't really need to lock to call cyw43_tcpip_link_status
@@ -404,6 +468,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
 
     if (driver_data == NULL) {
         driver_data = malloc(sizeof(struct NetworkDriverData));
+        driver_data->sntp_hostname = NULL;
         driver_data->stas_mac = NULL;
         driver_data->dhcp_config = NULL;
     }
@@ -411,6 +476,8 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     driver_data->owner_process_id = term_to_local_process_id(pid);
     driver_data->ref_ticks = term_to_ref_ticks(ref);
     driver_data->link_status = CYW43_LINK_DOWN;
+    free(driver_data->sntp_hostname);
+    driver_data->sntp_hostname = NULL;
     free(driver_data->stas_mac);
     free(driver_data->dhcp_config);
     driver_data->stas_count = 0;
@@ -427,7 +494,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         return;
     }
 
-    if (sta_config) {
+    if (!term_is_invalid_term(sta_config)) {
         term result_atom = start_sta(sta_config, ctx->global);
         if (result_atom != OK_ATOM) {
             term error = port_create_error_tuple(ctx, result_atom);
@@ -440,7 +507,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         cyw43_arch_enable_sta_mode();
     }
 
-    if (ap_config) {
+    if (!term_is_invalid_term(ap_config)) {
         term result_atom = start_ap(ap_config, ctx->global);
         if (result_atom != OK_ATOM) {
             term error = port_create_error_tuple(ctx, result_atom);
@@ -453,6 +520,11 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         }
     } else {
         cyw43_arch_disable_ap_mode();
+    }
+
+    term sntp_config = interop_kv_get_value_default(config, sntp_atom, term_invalid_term(), ctx->global);
+    if (!term_is_invalid_term(sntp_config)) {
+        setup_sntp(sntp_config, ctx->global);
     }
 
     //
@@ -524,6 +596,7 @@ void network_driver_destroy(GlobalContext *global)
     UNUSED(global);
 
     if (driver_data) {
+        free(driver_data->sntp_hostname);
         free(driver_data->stas_mac);
         if (driver_data->dhcp_config) {
             dhserv_free();
