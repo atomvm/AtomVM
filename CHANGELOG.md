@@ -22,9 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for creations of binaries with unaligned strings
 - Added `-h` and `-v` flags to generic_unix AtomVM command
 - Removed support to ESP32 NVS from network module in order to make it generic. See also [UPDATING.md].
-- Added initial support for Pico-W: on-board LED, connection to wifi network.
+- Added initial support for Pico-W: on-board LED, Wifi (STA and AP modes).
 
 ### Changed
+
 - Changed offset of atomvmlib and of program on Pico. See also [UPDATING.md].
 
 ### Fixed
