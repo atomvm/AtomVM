@@ -31,6 +31,7 @@
 #pragma GCC diagnostic ignored "-Wpedantic"
 
 #include <cyw43.h>
+#include <dhserver.h>
 #include <pico/cyw43_arch.h>
 
 #pragma GCC diagnostic pop
@@ -68,6 +69,7 @@ struct NetworkDriverData
     int link_status;
     int stas_count;
     uint8_t *stas_mac;
+    struct dhcp_config *dhcp_config;
 };
 
 // Callbacks do not allow for user data
@@ -212,7 +214,9 @@ static term start_sta(term sta_config, GlobalContext *global)
 static char *get_default_device_name()
 {
     uint8_t mac[6];
-    int err = cyw43_wifi_get_mac(&cyw43_state, CYW43_ITF_STA, mac);
+    // Device name is used for AP mode. It seems the interface parameter is
+    // ignored and both interfaces have the same MAC address.
+    int err = cyw43_wifi_get_mac(&cyw43_state, CYW43_ITF_AP, mac);
     if (err) {
         return NULL;
     }
@@ -268,6 +272,64 @@ static void network_driver_cyw43_assoc_cb(bool assoc)
     driver_data->stas_count = nb_stas;
 }
 
+static term setup_dhcp_server()
+{
+    int max_stas;
+    // Supposedly, max_stas doesn't change.
+    cyw43_wifi_ap_get_max_stas(&cyw43_state, &max_stas);
+    // max_stas is 10, but let's work for up to 253.
+    // we do networking on a /24 and we reserve 0, 255 (broadcast) and our own address.
+    if (max_stas > 253) {
+        max_stas = 253;
+    }
+
+    size_t dhcp_config_size = sizeof(struct dhcp_config) + max_stas * sizeof(struct dhcp_entry);
+    driver_data->dhcp_config = malloc(dhcp_config_size);
+    bzero(driver_data->dhcp_config, dhcp_config_size);
+    driver_data->dhcp_config->num_entry = max_stas;
+    driver_data->dhcp_config->entries = (dhcp_entry_t *) ((uint8_t *) driver_data->dhcp_config + sizeof(struct dhcp_config));
+    uint32_t ip_addr4 = ntohl(ip4_addr_get_u32(netif_ip4_addr(&cyw43_state.netif[CYW43_ITF_AP])));
+    driver_data->dhcp_config->addr[0] = ip_addr4 >> 24;
+    driver_data->dhcp_config->addr[1] = (ip_addr4 >> 16) & 0xFF;
+    driver_data->dhcp_config->addr[2] = (ip_addr4 >> 8) & 0xFF;
+    driver_data->dhcp_config->addr[3] = ip_addr4 & 0xFF;
+
+    int self_last_ip_byte = ip_addr4 & 0xFF;
+    int dhcp_client_addr = 0;
+
+    for (int i = 0; i < max_stas; i++) {
+        driver_data->dhcp_config->entries[i].addr[0] = ip_addr4 >> 24;
+        driver_data->dhcp_config->entries[i].addr[1] = (ip_addr4 >> 16) & 0xFF;
+        driver_data->dhcp_config->entries[i].addr[2] = (ip_addr4 >> 8) & 0xFF;
+        dhcp_client_addr++;
+        if (dhcp_client_addr == self_last_ip_byte) {
+            dhcp_client_addr++;
+        }
+        driver_data->dhcp_config->entries[i].addr[3] = dhcp_client_addr;
+        driver_data->dhcp_config->entries[i].subnet[0] = 255;
+        driver_data->dhcp_config->entries[i].subnet[1] = 255;
+        driver_data->dhcp_config->entries[i].subnet[2] = 255;
+        driver_data->dhcp_config->entries[i].subnet[3] = 0;
+        driver_data->dhcp_config->entries[i].lease = 86400;
+    }
+
+    // We don't have a DNS server yet but we can't route anything either.
+    driver_data->dhcp_config->dns[0] = ip_addr4 >> 24;
+    driver_data->dhcp_config->dns[1] = (ip_addr4 >> 16) & 0xFF;
+    driver_data->dhcp_config->dns[2] = (ip_addr4 >> 8) & 0xFF;
+    driver_data->dhcp_config->dns[3] = ip_addr4 & 0xFF;
+    driver_data->dhcp_config->port = 67;
+
+    err_t err = dhserv_init(driver_data->dhcp_config);
+    if (err) {
+        free(driver_data->dhcp_config);
+        driver_data->dhcp_config = NULL;
+        return BADARG_ATOM;
+    }
+
+    return OK_ATOM;
+}
+
 static term start_ap(term ap_config, GlobalContext *global)
 {
     term ssid_term = interop_kv_get_value(ap_config, ssid_atom, global);
@@ -307,7 +369,9 @@ static term start_ap(term ap_config, GlobalContext *global)
     free(ssid);
     free(psk);
 
-    return OK_ATOM;
+    // We need to start dhcp server after tcp/ip is setup on AP.
+    // There can be a race condition here, but clients will retry resending DHCP Requests
+    return setup_dhcp_server();
 }
 
 static void network_driver_netif_status_cb(struct netif *netif)
@@ -341,12 +405,14 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     if (driver_data == NULL) {
         driver_data = malloc(sizeof(struct NetworkDriverData));
         driver_data->stas_mac = NULL;
+        driver_data->dhcp_config = NULL;
     }
     driver_data->global = ctx->global;
     driver_data->owner_process_id = term_to_local_process_id(pid);
     driver_data->ref_ticks = term_to_ref_ticks(ref);
     driver_data->link_status = CYW43_LINK_DOWN;
     free(driver_data->stas_mac);
+    free(driver_data->dhcp_config);
     driver_data->stas_count = 0;
     driver_data->stas_mac = NULL;
 
@@ -369,7 +435,9 @@ static void start_network(Context *ctx, term pid, term ref, term config)
             return;
         }
     } else {
-        cyw43_arch_disable_sta_mode();
+        // Always enable sta mode so the bus is initialized and we get a MAC
+        // address.
+        cyw43_arch_enable_sta_mode();
     }
 
     if (ap_config) {
@@ -378,6 +446,10 @@ static void start_network(Context *ctx, term pid, term ref, term config)
             term error = port_create_error_tuple(ctx, result_atom);
             port_send_reply(ctx, pid, ref, error);
             return;
+        }
+        if (!sta_config) {
+            // We can disable sta mode now.
+            cyw43_arch_disable_sta_mode();
         }
     } else {
         cyw43_arch_disable_ap_mode();
@@ -453,6 +525,10 @@ void network_driver_destroy(GlobalContext *global)
 
     if (driver_data) {
         free(driver_data->stas_mac);
+        if (driver_data->dhcp_config) {
+            dhserv_free();
+        }
+        free(driver_data->dhcp_config);
     }
     free(driver_data);
     driver_data = NULL;
