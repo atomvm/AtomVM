@@ -76,7 +76,7 @@ if (PICO_CYW43_SUPPORTED)
     target_include_directories(pan_lwip_dhserver INTERFACE
         ${BTSTACK_3RD_PARTY_PATH}/lwip/dhcp-server
     )
-    target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC pico_cyw43_arch_lwip_threadsafe_background INTERFACE pan_lwip_dhserver)
+    target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC pico_cyw43_arch_lwip_threadsafe_background pico_lwip_sntp INTERFACE pan_lwip_dhserver)
     target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,networkregister_port_driver")
 endif()
 

@@ -100,4 +100,9 @@
 #define SLIP_DEBUG LWIP_DBG_OFF
 #define DHCP_DEBUG LWIP_DBG_OFF
 
+#define SNTP_GET_SERVERS_FROM_DHCP 1
+#define SNTP_SERVER_DNS 1
+void sntp_set_system_time_us(unsigned long sec, unsigned long usec);
+#define SNTP_SET_SYSTEM_TIME_US(sec, usec) sntp_set_system_time_us(sec, usec)
+
 #endif /* __LWIPOPTS_H__ */
