@@ -18,5 +18,5 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-set(ATOMVM_BASE_VERSION "0.6.0-alpha.1")
-set(ATOMVM_DEV FALSE)
+set(ATOMVM_BASE_VERSION "0.6.0-alpha.2")
+set(ATOMVM_DEV TRUE)
