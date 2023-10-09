@@ -274,6 +274,25 @@ We provide an escript-based (what else?) tool to build uf2 files called
 
 If you need to upgrade AtomVM or the standard libraries, simply copy them again.
 
+### Issues with macOS
+
+There are known issues copying files to the Pico using macOS, and a lot of literature online. Usually it's best to use the Terminal rather than the Finder because the errors are more explicit.
+Copying may also fail with UF2 files downloaded from the Internet, typically AtomVM release binaries.
+
+```shell
+$ cp ~/Downloads/AtomVM-pico_w-v0.6.0-alpha1-test2.uf2 /Volumes/RPI-RP2/
+cp: /Volumes/RPI-RP2/AtomVM-pico_w-v0.6.0-alpha1-test2.uf2: fcopyfile failed: Operation not permitted
+cp: /Users/paul/Downloads/AtomVM-pico_w-v0.6.0-alpha1-test2.uf2: could not copy extended attributes to /Volumes/RPI-RP2/AtomVM-pico_w-v0.6.0-alpha1-test2.uf2: Operation not permitted
+```
+
+Two issues appear here: one is macOS tries to copy extended attributes and this fails (but this error is not a blocker), and the other is the "Operation not permitted" because the file is quarantined, having been downloaded from the web.
+First issue can be solved with `cp -x` if you don't tolerate the error message and second with `xattr -d`.
+
+```shell
+$ xattr -d com.apple.quarantine ~/Downloads/AtomVM-pico_w-v0.6.0-alpha1-test2.uf2
+$ cp -x ~/Downloads/AtomVM-pico_w-v0.6.0-alpha1-test2.uf2 /Volumes/RPI-RP2/
+```
+
 ### Installing AtomVM on Raspberry Pico
 
 VM binary is file `AtomVM.uf2` - `src/platforms/rp2040/build/src/AtomVM.uf2` if build from source. Simply copy it
