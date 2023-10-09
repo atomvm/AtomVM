@@ -37,7 +37,7 @@ jobs:
 
     strategy:
       matrix:
-        idf-version: ["4.4.3"]
+        idf-version: ["4.4.6"]
         cc: ["clang-10"]
         cxx: ["clang++-10"]
         cflags: ["-O3"]
