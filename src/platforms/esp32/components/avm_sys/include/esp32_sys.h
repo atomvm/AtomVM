@@ -21,17 +21,17 @@
 #ifndef _ESP32_SYS_H_
 #define _ESP32_SYS_H_
 
+#include "esp_pthread.h"
 #include "freertos/FreeRTOS.h"
 #include <esp_partition.h>
 #include <freertos/queue.h>
-#include "esp_pthread.h"
 
 #if ESP_IDF_VERSION_MAJOR >= 5
 #include <spi_flash_mmap.h>
 #endif
 
-#include <time.h>
 #include <sys/poll.h>
+#include <time.h>
 
 #include "sys.h"
 
@@ -57,7 +57,7 @@
     struct NifCollectionDef NAME##_nif_collection_def = {                   \
         .nif_collection_init_cb = INIT_CB,                                  \
         .nif_collection_destroy_cb = DESTROY_CB,                            \
-        .nif_collection_resove_nif_cb = RESOLVE_NIF_CB                      \
+        .nif_collection_resolve_nif_cb = RESOLVE_NIF_CB                     \
     };                                                                      \
                                                                             \
     struct NifCollectionDefListItem NAME##_nif_collection_def_list_item = { \
@@ -122,7 +122,7 @@ struct NifCollectionDef
 {
     const nif_collection_init_t nif_collection_init_cb;
     const nif_collection_destroy_t nif_collection_destroy_cb;
-    const nif_collection_resolve_nif_t nif_collection_resove_nif_cb;
+    const nif_collection_resolve_nif_t nif_collection_resolve_nif_cb;
 };
 
 struct NifCollectionDefListItem

@@ -45,7 +45,7 @@
     struct NifCollectionDef NAME##_nif_collection_def = {                   \
         .nif_collection_init_cb = INIT_CB,                                  \
         .nif_collection_destroy_cb = DESTROY_CB,                            \
-        .nif_collection_resove_nif_cb = RESOLVE_NIF_CB                      \
+        .nif_collection_resolve_nif_cb = RESOLVE_NIF_CB                     \
     };                                                                      \
                                                                             \
     struct NifCollectionDefListItem NAME##_nif_collection_def_list_item = { \
@@ -84,7 +84,7 @@ struct NifCollectionDef
 {
     const nif_collection_init_t nif_collection_init_cb;
     const nif_collection_destroy_t nif_collection_destroy_cb;
-    const nif_collection_resolve_nif_t nif_collection_resove_nif_cb;
+    const nif_collection_resolve_nif_t nif_collection_resolve_nif_cb;
 };
 
 struct NifCollectionDefListItem
