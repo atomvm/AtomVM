@@ -42,7 +42,7 @@
 #define DEFAULT_STACK_SIZE 8
 #define BYTES_PER_TERM (TERM_BITS / 8)
 
-static void context_monitors_handle_terminate(Context *ctx);
+static struct ResourceMonitor *context_monitors_handle_terminate(Context *ctx);
 
 Context *context_new(GlobalContext *glb)
 {
@@ -123,9 +123,30 @@ void context_destroy(Context *ctx)
 
     // When monitor message is sent, process is no longer in the table
     // and is no longer registered either.
-    context_monitors_handle_terminate(ctx);
+    struct ResourceMonitor *resource_monitor = context_monitors_handle_terminate(ctx);
 
     synclist_unlock(&ctx->global->processes_table);
+
+    // Eventually call resource monitors handlers after the processes table was unlocked
+    // The monitors were removed from the list of monitors.
+    if (resource_monitor) {
+        ErlNifEnv env;
+        erl_nif_env_partial_init_from_globalcontext(&env, ctx->global);
+
+        struct ListHead monitors;
+        list_prepend(&resource_monitor->base.monitor_list_head, &monitors);
+
+        struct ListHead *item;
+        struct ListHead *tmp;
+        MUTABLE_LIST_FOR_EACH (item, tmp, &monitors) {
+            struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
+            resource_monitor = CONTAINER_OF(monitor, struct ResourceMonitor, base);
+            void *resource = term_to_term_ptr(monitor->monitor_obj);
+            struct RefcBinary *refc = refc_binary_from_data(resource);
+            refc->resource_type->down(&env, resource, &ctx->process_id, &monitor->ref_ticks);
+            free(monitor);
+        }
+    }
 
     // Any other process released our mailbox, so we can clear it.
     mailbox_destroy(&ctx->mailbox, &ctx->heap);
@@ -330,23 +351,27 @@ bool context_get_process_info(Context *ctx, term *out, term atom_key)
     return true;
 }
 
-static void context_monitors_handle_terminate(Context *ctx)
+static struct ResourceMonitor *context_monitors_handle_terminate(Context *ctx)
 {
     GlobalContext *glb = ctx->global;
     struct ListHead *item;
     struct ListHead *tmp;
+    struct ResourceMonitor *result = NULL;
     MUTABLE_LIST_FOR_EACH (item, tmp, &ctx->monitors_head) {
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
         if (monitor->ref_ticks && term_is_boxed(monitor->monitor_obj)) {
             // Resource monitor
-            struct ResourceMonitor *resource_monitor = (struct ResourceMonitor *) monitor;
-            void *resource = term_to_term_ptr(monitor->monitor_obj);
-            struct RefcBinary *refc = refc_binary_from_data(resource);
-            ErlNifEnv env;
-            erl_nif_env_partial_init_from_globalcontext(&env, glb);
-            refc->resource_type->down(&env, resource, &ctx->process_id, &monitor->ref_ticks);
-
+            struct ResourceMonitor *resource_monitor = CONTAINER_OF(monitor, struct ResourceMonitor, base);
+            // remove the monitor from the list of the resource
             list_remove(&resource_monitor->resource_list_head);
+            list_init(&resource_monitor->resource_list_head);
+            // remove it from the list we are iterating on
+            if (result == NULL) {
+                list_init(&resource_monitor->base.monitor_list_head);
+                result = resource_monitor;
+            } else {
+                list_append(&result->base.monitor_list_head, &resource_monitor->base.monitor_list_head);
+            }
         } else {
             int local_process_id = term_to_local_process_id(monitor->monitor_obj);
             Context *target = globalcontext_get_process_nolock(glb, local_process_id);
@@ -400,9 +425,10 @@ static void context_monitors_handle_terminate(Context *ctx)
 
                 mailbox_send(target, info_tuple);
             }
+            free(monitor);
         }
-        free(monitor);
     }
+    return result;
 }
 
 int context_link(Context *ctx, term link_pid)

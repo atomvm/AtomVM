@@ -32,6 +32,12 @@ static uint32_t cb_read_resource = 0;
 static int32_t down_pid = 0;
 static ErlNifMonitor down_mon = 0;
 
+static uint32_t cb_read_resource_two = 0;
+static int32_t down_pid_two = 0;
+static ErlNifMonitor down_mon_two = 0;
+
+static int32_t lockable_pid = 0;
+
 static void resource_dtor(ErlNifEnv *env, void *resource)
 {
     UNUSED(env);
@@ -46,6 +52,34 @@ static void resource_down(ErlNifEnv *env, void *resource, ErlNifPid *pid, ErlNif
     cb_read_resource = *((uint32_t *) resource);
     down_pid = *pid;
     down_mon = *mon;
+}
+
+static void resource_down_two(ErlNifEnv *env, void *resource, ErlNifPid *pid, ErlNifMonitor *mon)
+{
+    UNUSED(env);
+
+    cb_read_resource_two = *((uint32_t *) resource);
+    down_pid_two = *pid;
+    down_mon_two = *mon;
+}
+
+// down handlers should be able to acquire the process tables lock, e.g. to send
+// a message.
+static void resource_down_acquiring_lock(ErlNifEnv *env, void *resource, ErlNifPid *pid, ErlNifMonitor *mon)
+{
+    UNUSED(env);
+    UNUSED(resource);
+    UNUSED(pid);
+    UNUSED(mon);
+
+    Context *target = globalcontext_get_process_lock(env->global, lockable_pid);
+    assert(target != NULL);
+
+    cb_read_resource = *((uint32_t *) resource);
+    down_pid = *pid;
+    down_mon = *mon;
+
+    globalcontext_get_process_unlock(env->global, target);
 }
 
 void test_resource()
@@ -253,6 +287,141 @@ void test_resource_monitor()
     assert(cb_read_resource == 0);
 }
 
+void test_resource_monitor_handler_can_lock()
+{
+    GlobalContext *glb = globalcontext_new();
+    ErlNifEnv env;
+    erl_nif_env_partial_init_from_globalcontext(&env, glb);
+
+    ErlNifResourceTypeInit init;
+    init.members = 3;
+    init.dtor = resource_dtor;
+    init.stop = NULL;
+    init.down = resource_down_acquiring_lock;
+    ErlNifResourceFlags flags;
+
+    ErlNifResourceType *resource_type = enif_init_resource_type(&env, "test_resource", &init, ERL_NIF_RT_CREATE, &flags);
+    assert(resource_type != NULL);
+    assert(flags == ERL_NIF_RT_CREATE);
+
+    void *ptr = enif_alloc_resource(resource_type, sizeof(uint32_t));
+    uint32_t *resource = (uint32_t *) ptr;
+    *resource = 42;
+
+    ErlNifMonitor mon;
+    Context *ctx;
+    Context *another_ctx;
+    int32_t pid;
+    int monitor_result;
+
+    // Monitor called on destroy
+    cb_read_resource = 0;
+    down_pid = 0;
+    down_mon = 0;
+    ctx = context_new(glb);
+    another_ctx = context_new(glb);
+    lockable_pid = another_ctx->process_id;
+    pid = ctx->process_id;
+    monitor_result = enif_monitor_process(&env, ptr, &pid, &mon);
+    assert(monitor_result == 0);
+    assert(cb_read_resource == 0);
+
+    scheduler_terminate(ctx);
+    assert(cb_read_resource == 42);
+    assert(down_pid == pid);
+    assert(enif_compare_monitors(&mon, &down_mon) == 0);
+
+    scheduler_terminate(another_ctx);
+
+    globalcontext_destroy(glb);
+}
+
+void test_resource_monitor_two_resources_two_processes()
+{
+    GlobalContext *glb = globalcontext_new();
+    ErlNifEnv env;
+    erl_nif_env_partial_init_from_globalcontext(&env, glb);
+
+    ErlNifResourceTypeInit init_1;
+    init_1.members = 3;
+    init_1.dtor = resource_dtor;
+    init_1.stop = NULL;
+    init_1.down = resource_down;
+    ErlNifResourceFlags flags;
+
+    ErlNifResourceType *resource_type_1 = enif_init_resource_type(&env, "test_resource_1", &init_1, ERL_NIF_RT_CREATE, &flags);
+    assert(resource_type_1 != NULL);
+    assert(flags == ERL_NIF_RT_CREATE);
+
+    void *ptr_1 = enif_alloc_resource(resource_type_1, sizeof(uint32_t));
+    uint32_t *resource_1 = (uint32_t *) ptr_1;
+    *resource_1 = 42;
+
+    ErlNifResourceTypeInit init_2;
+    init_2.members = 3;
+    init_2.dtor = resource_dtor;
+    init_2.stop = NULL;
+    init_2.down = resource_down_two;
+
+    ErlNifResourceType *resource_type_2 = enif_init_resource_type(&env, "test_resource_2", &init_2, ERL_NIF_RT_CREATE, &flags);
+    assert(resource_type_1 != NULL);
+    assert(flags == ERL_NIF_RT_CREATE);
+
+    void *ptr_2 = enif_alloc_resource(resource_type_2, sizeof(uint32_t));
+    uint32_t *resource_2 = (uint32_t *) ptr_2;
+    *resource_2 = 43;
+
+    ErlNifMonitor mon_1, mon_2, mon_3;
+    Context *ctx_1;
+    Context *ctx_2;
+    int32_t pid_1;
+    int32_t pid_2;
+    int monitor_result;
+
+    cb_read_resource = 0;
+    down_pid = 0;
+    down_pid_two = 0;
+    down_mon = 0;
+    down_mon_two = 0;
+    ctx_1 = context_new(glb);
+    ctx_2 = context_new(glb);
+    pid_1 = ctx_1->process_id;
+    pid_2 = ctx_2->process_id;
+
+    // Both resources monitor process 1.
+    // Resource 1 also monitors process 2.
+    monitor_result = enif_monitor_process(&env, ptr_1, &pid_1, &mon_1);
+    assert(monitor_result == 0);
+    monitor_result = enif_monitor_process(&env, ptr_2, &pid_1, &mon_2);
+    assert(monitor_result == 0);
+    monitor_result = enif_monitor_process(&env, ptr_1, &pid_2, &mon_3);
+    assert(monitor_result == 0);
+
+    // Process #1 terminates, mon_1 & mon_2 are fired.
+    assert(cb_read_resource == 0);
+    assert(cb_read_resource_two == 0);
+    scheduler_terminate(ctx_1);
+    assert(cb_read_resource == 42);
+    assert(cb_read_resource_two == 43);
+    assert(down_pid == pid_1);
+    assert(down_pid_two == pid_1);
+    assert(enif_compare_monitors(&mon_1, &down_mon) == 0);
+    assert(enif_compare_monitors(&mon_2, &down_mon_two) == 0);
+
+    cb_read_resource = 0;
+    cb_read_resource_two = 0;
+    down_pid = 0;
+    down_mon = 0;
+
+    // Process #2 terminates, mon_3 is fired.
+    scheduler_terminate(ctx_2);
+    assert(cb_read_resource == 42);
+    assert(cb_read_resource_two == 0);
+    assert(down_pid == pid_2);
+    assert(enif_compare_monitors(&mon_3, &down_mon) == 0);
+
+    globalcontext_destroy(glb);
+}
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -262,6 +431,8 @@ int main(int argc, char **argv)
     test_resource_destroyed_with_global();
     test_resource_keep_release();
     test_resource_monitor();
+    test_resource_monitor_handler_can_lock();
+    test_resource_monitor_two_resources_two_processes();
 
     return EXIT_SUCCESS;
 }
