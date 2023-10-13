@@ -6,24 +6,31 @@
 
 # Getting Started Guide
 
+Welcome to the AtomVM Getting Started Guide.  This document is intended to get you started so that you can run Erlang or Elixir programs on the AtomVM platform as quickly as possible.
+
+In order to do so, you will need to provision your device (depending on the device type) with the AtomVM virtual machine.  Typically, you only need to do this once (or at least once per release of the VM you would like to use).  Once the VM is provisioned on the device, you can then deploy your application onto the device, and we expect this process to your typical "deploy, test, debug" development lifecycle.  The subsequent chapter on [AtomVM Tooling](atomvm-tooling.md) will help you understand that process.
+
 The getting started is broken up into the following sections:
 
 * [Getting Started on the ESP32 platform](#getting-started-on-the-esp32-platform)
 * [Getting Started on the STM32 platform](#getting-started-on-the-stm32-platform)
 * [Getting Started on the Raspberry Pi Pico platform](#getting-started-on-the-raspberry-pi-pico-platform)
 * [Getting Started on the Generic UNIX platform](#getting-started-on-the-generic-unix-platform)
+* [Getting Started with AtomVM WebAssembly](#getting-started-with-atomvm-webassembly)
+
+Please use the appropriate section for the device type you intend to use.
 
 ## Getting Started on the ESP32 platform
 
-The AtomVM virtual machine is supported on the [Espressif](https://www.espressif.com) [ESP32](https://www.espressif.com/en/products/socs/esp32) platform, allowing users to write Erlang and Elixir programs and deploy them to the ESP32 micro-controller.
+The AtomVM virtual machine is supported on the [Espressif](https://www.espressif.com) [ESP32](https://www.espressif.com/en/products/socs/esp32) platform, allowing users to write Erlang and Elixir programs and deploy them to the ESP32 micro-controller.  For specific information about which ESP32 boards and chip-sets are supported, please refer to the AtomVM [Release Notes](release-notes.md).
 
-These instructions cover how to get the AtomVM virtual machine flashed to your ESP32 device, as well as how to flash your Erlang and Elixir programs that will be executed by the virtual machine running on the device.
+These instructions cover how to provision the AtomVM virtual machine flashed to your ESP32 device.
 
 For most applications, you should only need to install the VM once (or at least once per desired AtomVM release).  Once the VM is uploaded, you can then begin development of Erlang or Elixir applications, which can then be flashed as part of your routine development cycle.
 
 ### Requirements
 
-Deployment of AtomVM applications requires the following components:
+Deployment of AtomVM on the ESP32 platform requires the following components:
 
 * A computer running MacOS or Linux (Windows support is not currently supported);
 * An ESP32 module with a USB/UART connector (typically part of an ESP32 development board);
@@ -34,9 +41,9 @@ Deployment of AtomVM applications requires the following components:
 * (recommended) For Erlang programs, [`rebar3`](https://rebar3.org);
 * (recommended) For Elixir programs, [`mix`](https://elixir-lang.org/getting-started/mix-otp/introduction-to-mix.html), which ships with the Elixir runtime;
 
-For information about specific versions of required software, see the [Release Notes](./release-notes.md).
+For information about specific versions of required software, see the AtomVM [Release Notes](./release-notes.md).
 
-### Deployment Overview
+### ESP32 Deployment Overview
 
 The ES32 AtomVM virtual machine is an IDF application that runs on the ESP32 platform.  As an IDF application, it provides the object code to boot the ESP device and execute the AtomVM virtual machine code, which in turn is responsible for execution of an Erlang/Elixir application.
 
@@ -98,28 +105,41 @@ The following methods can be used to deploy the AtomVM virtual machine to an ESP
 1. Flashing a binary image;
 1. Building from source.
 
-#### Flashing a binary images
+#### Flashing a binary image
 
 Flashing the ESP32 using a pre-built binary image is by far the easiest path to getting started with development on the ESP32.  Binary images contain the virtual machine image and all of the necessary components to run your application.
 
 We recommend first erasing any existing applications on the ESP32 device.  E.g.,
 
-    shell$ esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 115200 erase_flash
+    shell$ esptool.py --chip auto --port /dev/ttyUSB0 --baud 115200 erase_flash
     ...
 
 > Note.  Specify the device port and baud settings and AtomVM image name to suit your particular environment.
 
-Next, download a stable or latest development ESP32 [release image](https://github.com/atomvm/AtomVM/releases).
+Download the latest [release image](https://github.com/atomvm/AtomVM/releases) for ESP32.
 
-> Note.  Development images may be unstable and may result in unpredictable behavior.
+This image will generally take the form:
 
-Finally, use the `esptool` to flash the image to the start address `0x1000` on the ESP32.  E.g.,
+    Atomvm-<esp32-soc>-<atomvm-version>.img
 
-    shell$ esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 115200 \
+For example:
+
+    Atomvm-esp32-v0.6.0.img
+
+You will also find the sha256 hash for this file, which you should verify using the `sha256sum` command on your local operating system.
+
+> Note.  Alpha and Beta images may be unstable and may result in unpredictable behavior.
+
+Finally, use the `esptool.py` command to flash the image to the start address `0x1000` on the ESP32.  E.g.,
+
+    shell$ esptool.py \
+        --chip auto \
+        --port /dev/ttyUSB0 --baud 115200 \
         --before default_reset --after hard_reset \
-        write_flash -u --flash_mode dio --flash_freq 40m --flash_size detect \
-        0x1000 atomvm-esp32-v0.1.0.bin
-    ...
+        write_flash -u \
+        --flash_mode dio --flash_freq 40m --flash_size detect \
+        0x1000 \
+        /path/to/Atomvm-esp32-v0.6.0.img
 
 Once completed, your ESP32 device is ready to run Erlang or Elixir programs targeted for AtomVM.
 
@@ -137,203 +157,269 @@ When the AtomVM virtual machine starts, it will search for the first module that
 
 AtomVM applications can be written in Erlang or Elixir, or a combination of both.  The AtomVM community has provided tooling for both platforms, making deployment of AtomVM applications as seamless as possible.
 
-This section describes both Erlang and Elixir tooling for deploying AtomVM applications to ESP32 devices.
-
-#### Erlang Tooling
-
-Deployment of AtomVM applications written in the Erlang programming language is supported via the [`atomvm_rebar3_plugin`](https://github.com/atomvm/atomvm_rebar3_plugin) plugin, a community-supported plugin to the [`rebar3`](https://rebar3.org) Erlang build tool.
-
-You can generate a simple application from scratch using the `atomvm_rebar3_plugin` template, as follows:
-
-Edit or create the `$HOME/.config/rebar3/rebar.config` file to include the `atomvm_rebar3_plugin` plugin:
-
-    %% $HOME/.config/rebar3/rebar.config
-    {plugins, [
-        atomvm_rebar3_plugin,
-        ...
-    ]}.
-
-In any directory in which you have write permission, issue
-
-    shell$ rebar3 new atomvm_app <app-name>
-
-where `<app-name>` is the name of the application you would like to create (e.g., `myapp`).  This command will generate a rebar project under the directory `<app-name>`.
-
-The generated application will contain the proper `rebar.config` configuration and will contain the `<app-name>.erl` module, which exports the `start/0` function with a stubbed implementation.
-
-Specifically, note the following stanza in the generated `rebar.config` file:
-
-    %% rebar.config
-    {plugins, [
-        atomvm_rebar3_plugin,
-        ...
-    ]}.
-
-And note the `myapp` application exports a `start/0` function, e.g.,
-
-    %% erlang
-    -module(myapp).
-    -export([start/0]).
-
-    start() ->
-        ok.
-
-With this plugin installed, you have access to the `esp32_flash` target, which will build an AtomVM packbeam
-
-    shell$ rebar3 esp32_flash --port /dev/ttyUSB0
-    ===> Fetching atomvm_rebar3_plugin v0.6.0
-    ===> Fetching rebar3_hex v6.11.3
-    ===> Fetching hex_core v0.7.1
-    ===> Fetching verl v1.0.2
-    ===> Analyzing applications...
-    ===> Compiling verl
-    ===> Compiling hex_core
-    ===> Compiling rebar3_hex
-    ===> Fetching atomvm_packbeam v0.6.0
-    ===> Analyzing applications...
-    ===> Compiling atomvm_rebar3_plugin
-    ===> Compiling packbeam
-    ===> Verifying dependencies...
-    ===> Analyzing applications...
-    ===> Compiling myapp
-    ===> AVM file written to : myapp.avm
-    ===> esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 115200 --before default_reset --after hard_reset write_flash -u --flash_mode dio --flash_freq 40m --flash_size detect 0x210000 /home/frege/myapp/_build/default/lib/myapp.avm
-
-> Note. Consult the the [`atomvm_rebar3_plugin`](https://github.com/atomvm/atomvm_rebar3_plugin) plugin documentation, for more detailed information about how to use this tool.
-
-Once the application has been flashed, you may connect to the ESP32 over the serial port using `minicom`, `screen`, or equivalent.
-
-#### Elixir Tooling
-
-> TODO mix + https://github.com/atomvm/ExAtomVM + hex
+For information about how to flash your application to your ESP32, see the [AtomVM Tooling](atomvm-tooling.md) chapter.
 
 ## Getting Started on the STM32 platform
 
-AtomVM can run on a wide variety of STM32 chipsets available from [STMicroelectronics](https://www.st.com). The support is not nearly as mature as for the ESP32 platform, but work is ongoing, and pull requests are always welcome. At this time AtomVM will work on any board with a minimum of around 128k ram and 512k (1M recommended) flash. Simple applications and tests have been successfully run on a stm32f411ceu6 (A.K.A. Black Pill V2). These minimum requirements may need to be raised as platform support matures.
+AtomVM can run on a wide variety of STM32 chip-sets available from [STMicroelectronics](https://www.st.com). The support is not nearly as mature as for the ESP32 platform, but work is ongoing, and pull requests are always welcome. At this time AtomVM will work on any board with a minimum of around 128k ram and 512k (1M recommended) flash. Simple applications and tests have been successfully run on a stm32f411ceu6 (A.K.A. Black Pill V2). These minimum requirements may need to be raised as platform support matures.
 
-### Prerequisites
+### Requirements
 
+Deployment of AtomVM on the STM32 platform requires the following components:
+
+* A computer running MacOS or Linux (Windows support is not currently supported);
+* An STM32 module with a USB/UART connector (typically part of an STM32 development board);
+* A USB cable capable of connecting the STM32 module or board to your development machine (laptop or PC);
 * [st-flash](https://github.com/texane/stlink), to flash both AtomVM and your packed AVM applications. Make sure to follow its [installation procedure](https://github.com/texane/stlink#installation) before proceeding further.
-* [`packbeam`](https://github.com/atomvm/atomvm_packbeam) the AtomVM for packing and stripping `*.beam` files into the AtomVM `*.avm` format.
+* To use jtag for flashing and console output debugging, you will need a [st-link v2](https://www.st.com/en/development-tools/st-link-v2.html) or [st-link v3](https://www.st.com/en/development-tools/stlink-v3set.html) device (typically already included on Nucleo and Discovery boards).
 * A serial console program, such as `minicom` or `screen`, so that you can view console output from your AtomVM application.
+* (recommended) For Erlang programs, [`rebar3`](https://rebar3.org);
+* (recommended) For Elixir programs, [`mix`](https://elixir-lang.org/getting-started/mix-otp/introduction-to-mix.html), which ships with the Elixir runtime;
 
-### Build an AtomVM binary
-You will first need to build a binary configured for your processor and board layout. Consult the [Build Instruction for STM32](./build-instructions#building-for-stm32)
+### Deploying the AtomVM virtual machine
 
-### Flashing
-To flash AtomVM, use
+The following methods can be used to deploy the AtomVM virtual machine to an STM32 device:
 
-    $ st-flash --reset write AtomVM-stm32f407vgt6.bin 0x8000000
+1. Building from source.
 
-To flash your packed AVM, use
+Note.  Due to the very large number of supported chip-sets and the wide variety of board configurations, and the code changes required to support them, pre-built binaries for the stm32 platform are not currently available.
 
-    $ st-flash --reset write /path/to/your/packed.avm 0x8080000
+Consult the [Build Instructions](build-instructions.md) to create a binary compatible with your board.
 
-You must include the atomvmlib.avm with your application when using [packbeam](https://github.com/atomvm/atomvm_packbeam), and it should be pruned:
+#### Flashing a binary image
 
-	$ packbeam create -p -i application.avm application.beam /path/to/AtomVM/build/libs/atomvmlib.avm
+Once you have created an STM32 binary image, you can flash the image to your STM32 device using the `st-flash` application.
 
-> Note: The option`-i` will instruct packbeam to include file names and line numbers in stack traces. This makes debugging applications far easier, but also increases size, so it may be omitted if desired. The `-p` option should be used, it instructs packbeam to prune the unused functions from the packed `.avm` file, and is strongly recommended.
+To flash your image, use the following command:
 
-AtomVM expects to find the AVM at the address 0x808000. On a STM32 Discovery board this means that the 1MB of flash will be split in 512KB available for the program and 512KB available for the packed AVM. If for any reason you want to modify this, you can change `AVM_ADDRESS` and `AVM_FLASH_MAX_SIZE` defines in `main.c`.
+    shell$ st-flash --reset write AtomVM-stm32f407vgt6.bin 0x8000000
 
-### Printing
-By default, stdout and stderr are printed on USART2. On the STM32F4Discovery board, you can see them
-using a TTL-USB with the TX pin connected to board's pin PA2 (USART2 RX). Baudrate is 115200 and serial transmission
-is 8N1 with no flow control.
+Congratulations!  You have now flashed the AtomVM VM image onto your STM32 device!
 
-### Distributed Binaries
-Due to the very large number of supported chipsets, the wide variety of board configurations, and the code changes required to support them, it is unlikely pre-built binaries will be available for the stm32 platform in the near future. Consult the [Build Instruction](./build-instructions#building-for-stm32) to create a binary compatible with your board.
+> Note. AtomVM expects to find the AVM at the address 0x808000. On a STM32 Discovery board this means that the 1MB of flash will be split in 512KB available for the program and 512KB available for the packed AVM. If for any reason you want to modify this, you can change `AVM_ADDRESS` and `AVM_FLASH_MAX_SIZE` defines in `main.c`.
+
+#### Printing
+
+By default, stdout and stderr are printed on USART2. On the STM32F4Discovery board, you can see them using a TTL-USB with the TX pin connected to board's pin PA2 (USART2 RX). Baudrate is 115200 and serial transmission is 8N1 with no flow control.
+
+### Deploying an AtomVM application
+
+An AtomVM application is a collection of BEAM files, which have been compiled using the Erlang or Elixir compiler.  These BEAM files are assembled into an AtomVM "packbeam" (`.avm`) file, which in turn is flashed to the `main` data partition on the STM32 flash module, starting at address `0x210000`.
+
+When the AtomVM virtual machine starts, it will search for the first module that contains an exported `start/0` function in this partition, and it will begin execution of the BEAM bytecode at that function.
+
+AtomVM applications can be written in Erlang or Elixir, or a combination of both.  The AtomVM community has provided tooling for both platforms, making deployment of AtomVM applications as seamless as possible.
+
+For information about how to flash your application to your STM32, see the [AtomVM Tooling](atomvm-tooling.md) chapter.
 
 ## Getting Started on the Raspberry Pi Pico platform
 
-### Prerequisites
+AtomVM supports deployment of the VM and applications onto the [Raspberry Pi Pico](https://www.raspberrypi.com/products/raspberry-pi-pico/) platform.  For information about supported boards, please refer to the AtomVM [Release Notes](release-notes.md).
 
-None of these tools are strictly required, but all are recommended for easier development:
-* [`rebar3`](https://rebar3.org)
-* [`atomvm_rebar3_plugin`](https://github.com/atomvm/atomvm_rebar3_plugin)
-* [`packbeam`](https://github.com/atomvm/atomvm_packbeam) the AtomVM for packing and stripping `*.beam` files into the AtomVM `*.avm` format. (included as part of the `atomvm_rebar3_plugin`)
+The following instructions show you how to install the AtomVM onto one of the [Raspberry Pi Pico](https://www.raspberrypi.com/products/raspberry-pi-pico/) boards.
+
+### Requirements
+
+Deployment of AtomVM on the Raspberry Pico platform requires the following components:
+
+* A computer running MacOS or Linux (Windows support is not currently supported);
+* A Raspberry Pico board with a USB/UART connector (typically part of a development board);
+* A USB cable capable of connecting the Raspberry Pico module or board to your development machine (laptop or PC);
 * A serial console program, such as `minicom` or `screen`, so that you can view console output from your AtomVM application.
+* (recommended) For Erlang programs, [`rebar3`](https://rebar3.org);
+* (recommended) For Elixir programs, [`mix`](https://elixir-lang.org/getting-started/mix-otp/introduction-to-mix.html), which ships with the Elixir runtime;
 
-### Building AtomVM for Raspberry Pico
+### Deploying the AtomVM virtual machine
 
-If you want to use a custom built VM for testing consult the [Build Instructions for Raspberry Pi Pico](./build-instructions#building-for-raspberry-pi-pico)
+The following methods can be used to deploy the AtomVM virtual machine to a Raspberry Pico device:
 
-### Installing AtomVM and programs on Raspberry Pico
+1. Flashing a binary image;
+1. Building from source.
 
-The approach consists in installing various uf2 files which include the
-address they should be loaded to.
+#### Flashing a binary image
 
-You typically need three uf2 files:
-- `AtomVM.uf2` for the VM
-- `atomvmlib.uf2` for the standard libraries
-- your application's uf2.
+Flashing the Raspberry Pico using a pre-built binary image is by far the easiest path to getting started with development on the Raspberry Pico.  Binary images contain the virtual machine image and all of the necessary components to run your application.
 
-We provide an escript-based (what else?) tool to build uf2 files called
-`uf2tool` that you can use to bundle your `avm` into uf2.
+Download the latest [release image](https://github.com/atomvm/AtomVM/releases) for Raspberry Pico.
 
-If you need to upgrade AtomVM or the standard libraries, simply copy them again.
+This image will generally take the form:
 
-### Issues with macOS
+    Atomvm-<raspberry-pico-soc>-<atomvm-version>.uf2
+
+For example:
+
+    Atomvm-pico-v0.6.0.uf2
+
+You will also find the sha256 hash for this file, which you should verify using the `sha256sum` command on your local operating system.
+
+You will also need a copy of the AtomVM core libraries, which include all of the compiled Erlang and Elixir needed to run parts of the VM.
+
+This library will generally take the form:
+
+    atomvmlib-<atomvm-version>.uf2
+
+For example:
+
+    atomvmlib-v0.6.0.uf2
+
+You will also find the sha256 hash for this file, which you should verify using the `sha256sum` command on your local operating system.
+
+To flash your Raspberry Pico, you will need to undertake a few steps that interact with your operating file system.
+
+> Note.  It is important that you downloads the `.uf2` versions of these files for the Raspbery Pico platform.
+
+For each of the above files, you will start your Rapberry Pico in bootloader mode by pressing the `BOOTSEL` button on the Raspberry Pico dev board, while powering on the device.  Doing so will automatically boot the device and mount the Raspberry Pico on to your file system as a USB device.
+
+You can then use normal operating system commands (such as `cp`, or even drag-and-drop) to copy the above files to the mounted USB volume.
+
+Note, however, that in general the USB device will auto-unmount after each file has been copied, so you will need to repeat the procedure for each of the above two files.
+
+On most Linux systems, the Raspberry Pico will be mounted at `/run/media/${USER}/RPI-RP2`.
+
+On macOS system, the Raspberry Pico will be mounted at `/Volumes/RPI-RP2`.
+
+For example:
+
+    # power on Raspberry Pico with BOOTSEL button pressed
+    shell ls -l /Volumes/RPI-RP2
+    total 16
+    -rwxrwxrwx  1 joe  staff  241 Sep  5  2008 INDEX.HTM*
+    -rwxrwxrwx  1 joe  staff   62 Sep  5  2008 INFO_UF2.TXT*
+
+    shell$ cp ~/Downloads/AtomVM-pico-v0.6.0.uf2 /Volumes/RPI-RP2/.
+    ## at this point, the device will auto-unmount
+
+And again for the AtomVM core library (note that previously flashed `.uf2` files have disappeared):
+
+    # power on Raspberry Pico with BOOTSEL button pressed
+    shell ls -l /Volumes/RPI-RP2
+    total 16
+    -rwxrwxrwx  1 joe  staff  241 Sep  5  2008 INDEX.HTM*
+    -rwxrwxrwx  1 joe  staff   62 Sep  5  2008 INFO_UF2.TXT*
+
+    shell$ cp ~/Downloads/atomvmlib-v0.6.0.avm /Volumes/RPI-RP2/.
+    ## at this point, the device will auto-unmount
+
+### Potential Issues with macOS
 
 There are known issues copying files to the Pico using macOS, and a lot of literature online. Usually it's best to use the Terminal rather than the Finder because the errors are more explicit.
 Copying may also fail with UF2 files downloaded from the Internet, typically AtomVM release binaries.
 
-```shell
-$ cp ~/Downloads/AtomVM-pico_w-v0.6.0-alpha1-test2.uf2 /Volumes/RPI-RP2/
-cp: /Volumes/RPI-RP2/AtomVM-pico_w-v0.6.0-alpha1-test2.uf2: fcopyfile failed: Operation not permitted
-cp: /Users/paul/Downloads/AtomVM-pico_w-v0.6.0-alpha1-test2.uf2: could not copy extended attributes to /Volumes/RPI-RP2/AtomVM-pico_w-v0.6.0-alpha1-test2.uf2: Operation not permitted
-```
+    shell$ cp ~/Downloads/AtomVM-pico_w-v0.6.0.uf2 /Volumes/RPI-RP2/.
+    cp: /Volumes/RPI-RP2/AtomVM-pico-v0.6.0.uf2: fcopyfile failed: Operation not permitted
+    cp: /Users/joe/Downloads/AtomVM-pico-v0.6.0.uf2: could not copy extended attributes to /Volumes/RPI-RP2/AtomVM-pico-v0.6.0.uf2: Operation not permitted
 
 Two issues appear here: one is macOS tries to copy extended attributes and this fails (but this error is not a blocker), and the other is the "Operation not permitted" because the file is quarantined, having been downloaded from the web.
+
 First issue can be solved with `cp -x` if you don't tolerate the error message and second with `xattr -d`.
 
-```shell
-$ xattr -d com.apple.quarantine ~/Downloads/AtomVM-pico_w-v0.6.0-alpha1-test2.uf2
-$ cp -x ~/Downloads/AtomVM-pico_w-v0.6.0-alpha1-test2.uf2 /Volumes/RPI-RP2/
-```
+    shell$ xattr -d com.apple.quarantine ~/Downloads/AtomVM-pico_w-v0.6.0.uf2
+    shell$ cp -x ~/Downloads/AtomVM-pico_w-v0.6.0.uf2 /Volumes/RPI-RP2/.
 
-### Installing AtomVM on Raspberry Pico
+### Deploying an AtomVM application
 
-VM binary is file `AtomVM.uf2` - `src/platforms/rp2040/build/src/AtomVM.uf2` if build from source. Simply copy it
-to the pico. The VM will crash because there is no application.
+An AtomVM application is a collection of BEAM files, which have been compiled using the Erlang or Elixir compiler.  These BEAM files are assembled into an AtomVM "packbeam" (`.avm`) file, which in turn can be provided to the `atomvm` executable on the command line.
 
-### Installing atomvm library to Raspberry Pico
+When the AtomVM virtual machine starts, it will search for the first module that contains an exported `start/0` function in this partition, and it will begin execution of the BEAM bytecode at that function.
 
-AtomVM library must be installed as well. For Build instructions consult the Raspberry Pi Pico [libAtomVM build steps](./build-instructions#libatomvm-build-steps)
+AtomVM applications can be written in Erlang or Elixir, or a combination of both.  The AtomVM community has provided tooling for both platforms, making deployment of AtomVM applications as seamless as possible.
 
-#### Installing it
-
-The library to install is `atomvmlib.uf2`, `build/libs/atomvmlib.uf2` if build from source. Copy the library to the pico.
-
-### Running Hello Pico
-
-This example will print a Hello Pico message repeatedly.
-
-It is built into `build/examples/erlang/rp2040/hello_pico.uf2`.
-
-You can install it and then connect to the serial port with minicom.
-
-### Running your own BEAM code on Raspberry Pico
-
-You need to create an avm file using the `packbeam` tool the [`atomvm_rebar3_plugin`](https://github.com/atomvm/atomvm_rebar3_plugin).
-
-    packbeam create -p -i packed.avm module.beam
-
-or
-
-    rebar3 packbeam -p -i packed.avm module.beam
-
-Then the BEAM file must be converted to UF2.
-The VM currently expects the application to be loaded at address 0x10100000.
-
-    ./uf2tool create -o packed.uf2 -s 0x10100000 packed.avm
-
-Copy this UF2 to the Pico after you copied the VM (`AtomVM.uf2`) and the
-standard libraries (`atomvmlib.uf2`).
-
+For information about how to flash your application to your Raspberry Pico, see the [AtomVM Tooling](atomvm-tooling.md) chapter.
 
 ## Getting Started on the Generic UNIX platform
+
+The AtomVM virtual machine is supported a wide variety of Generic UNIX platforms, including many Linux kernels and target architectures, FreeBSD, and MacOS, allowing users to write Erlang and Elixir programs and run them on a local development machine.  For specific information about which Generic UNIX versions and architectures are supported, please refer to the AtomVM [Release Notes](release-notes.md).
+
+These instructions cover how to provision the AtomVM virtual machine onto your development machine.  Running applications locally can sometimes be a useful exercise in debugging.
+
+> Note.  Not all programming interfaces are supported on all platforms.  See the AtomVM [Programmers Guide](programmers-guide.md) for more information.
+
+For most applications, you should only need to install the VM once (or at least once per desired AtomVM release).  Once the VM is installed, you can then begin development of Erlang or Elixir applications, which can then be flashed as part of your routine development cycle.
+
+### Requirements
+
+Deployment of AtomVM on the Generic UNIX platform requires the following components:
+
+* A computer running MacOS or Linux (Windows support is not currently supported);
+* An [Erlang/OTP](https://erlang.org) and compatible [Elixir](https://elixir-lang.org) runtime;
+* (recommended) For Erlang programs, [`rebar3`](https://rebar3.org);
+* (recommended) For Elixir programs, [`mix`](https://elixir-lang.org/getting-started/mix-otp/introduction-to-mix.html), which ships with the Elixir runtime;
+
+For information about specific versions of required software, see the AtomVM [Release Notes](./release-notes.md).
+
+### Installing the AtomVM virtual machine
+
+The following methods can be used to install the AtomVM virtual machine on the Generic UNIX platform:
+
+1. Download Linux Binaries
+1. (MacOS only) Installing via [macports](https://www.macports.org) or [Homebrew](https://brew.sh);
+1. Building from source.
+
+#### Installation on Linux Platforms
+
+Downloading a pre-built binary image for Linux is by far the easiest path to getting started with development on a Linux development machine.  Binary images contain the virtual machine.
+
+Download the latest [release image](https://github.com/atomvm/AtomVM/releases) for Linux.
+
+This image will generally take the form:
+
+    Atomvm-linux-<arch>-<atomvm-version>
+
+where `<arch>` is the target architecture.
+
+For example:
+
+    Atomvm-linux-x86_64-v0.6.0
+
+You will also find the sha256 hash for this file, which you should verify using the `sha256sum` command on your local operating system.
+
+You will also need a copy of the AtomVM core libraries, which include all of the compiled Erlang and Elixir needed to run parts of the VM.
+
+This library will generally take the form:
+
+    atomvmlib-<atomvm-version>.avm
+
+For example:
+
+    atomvmlib-v0.6.0.avm
+
+You will also find the sha256 hash for this file, which you should verify using the `sha256sum` command on your local operating system.
+
+> Note.  See the AtomVM [Build Instructions](./build-instructions.md) for instructions about how to run the `AtomVM` binary, together with the AtomVM core libraries on the command line.
+
+#### Installation on MacOS
+
+You can install AtomVM for Generic UNIX using [macports](https://www.macports.org) or [Homebrew](https://brew.sh).  This instructions assume you are familiar with these package managers.
+
+To install via [macports](https://www.macports.org):
+
+    shell$ sudo port install atomvm
+
+Once installed, the `atomvm` executable should be available in your `$PATH` environment variable.
+
+    shell$ which atomvm
+    /opt/local/bin/atomvm
+
+To install via [Homebrew](https://brew.sh), you will first need to install the `atomvm` Homebrew Tap:
+
+    shell$ brew tap atomvm/atomvm
+
+This command will make the `atomvm` [Homebrew](https://brew.sh) formula available to you.
+
+    shell$ brew install atomvm
+
+Once installed, the `atomvm` executable should be available in your `$PATH` environment variable.
+
+    shell$ which atomvm
+    /usr/local/bin/atomvm
+
+#### Building from source
+
+You may optionally build AtomVM from source and install the AtomVM virtual machine to your development machine.  Building AtomVM from source is slightly more involved, as it requires the installation of third party libraries and is typically recommended only for users who are doing development on the AtomVM virtual machine, or for developers implementing custom Nifs or ports.
+
+Instructions for building AtomVM from source are covered in the AtomVM [Build Instructions](./build-instructions.md).
+
+### Running applications on the Generic UNIX platform
 
 AtomVM may be run on UNIX-like platforms using the `atomvm` command.
 
@@ -344,7 +430,7 @@ You may specify one or more AVM files on the command line when running the `atom
 To get the current version of AtomVM, use the `-v` option, e.g.:
 
     shell$ atomvm -v
-    0.6.1
+    0.6.0
 
 Use the `-h` option to get command line help:
 
@@ -365,75 +451,74 @@ Use the `-h` option to get command line help:
 
         $ /usr/local/lib/atomvm/AtomVM /path/to/my/application.avm /path/to/atomvmlib.avm
 
-Currently, the `atomvm` command and libraries must be built and installed from source.
+## Getting Started with AtomVM WebAssembly
 
-> See the AtomVM [Build Instructions](./build-instructions.md) for instructions about how to build AtomVM on the Generic UNIX platform.
+You can run AtomVM for WebAssembly with NodeJS or within common browsers (Safari, Chrome and Chrome-based, Firefox).
 
-## Where to go from here
+### Getting Started with AtomVM WebAssembly port for NodeJS
 
-The following resources may be useful for understanding how to develop Erlang or Elixir applications for the AtomVM platform:
+Download the latest [release image](https://github.com/atomvm/AtomVM/releases) for Node.
 
-* [Example Programs](./example-programs.md)
-* [Programmers Guide](./programmers-guide.md)
+This image will generally take the form:
 
+    Atomvm-node-<atomvm-version>.js
 
-## Getting Started with AtomVM WebAssembly port for NodeJS
+For example:
+
+    Atomvm-node-v0.6.0.js
+
+You will also find the sha256 hash for this file, which you should verify using the `sha256sum` command on your local operating system.
 
 AtomVM's WebAssembly port for NodeJS may be run using `node` command and AtomVM.js, AtomVM.worker.js and AtomVM.wasm files.
 
-    shell$ node /path/to/AtomVM.js /path/to/myapp.avm
+    shell$ node /path/to/Atomvm-node-v0.6.0.js /path/to/myapp.avm
 
-## Getting Started with AtomVM WebAssembly port for browsers
+### Getting Started with AtomVM WebAssembly port for browsers
 
 AtomVM may also be run in modern browsers (Safari, Chrome and Chrome-based, Firefox) using AtomVM.js, AtomVM.worker.js and AtomVM.wasm files.
 
 Please note that these files are different from the NodeJS ones.
 
 Because AtomVM uses SharedArrayBuffer, to be executed by a browser, these files need to be served:
+
 - on localhost or over HTTPS
 - by a web server that also sends `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers. These headers are also called COOP and COEP headers.
 
 These security requirements are documented in [Mozilla's documentation](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer#security_requirements).
 
-### Trying locally from AtomVM source tree
+#### Trying locally from AtomVM source tree
 
 If you compile AtomVM for Unix as well as for Node as explained in the [build instructions](./build-instructions.md), you can use an AtomVM-based toy webserver to serve the WebAssembly examples with:
 
-```
-./src/AtomVM examples/emscripten/wasm_webserver.avm
-```
+    ./src/AtomVM examples/emscripten/wasm_webserver.avm
 
 This web server serves HTML files from `examples/emscripten/`. It works without HTTPS because files are served on localhost.
 
-### Using a hosting service with a `_headers` file
+#### Using a hosting service with a `_headers` file
 
 You can also host the three files on a hosting service such as Netlify that uses `_headers` files.
 
 The file could have the following content:
 
-```
-/*
-  Cross-Origin-Opener-Policy: same-origin
-  Cross-Origin-Embedder-Policy: require-corp
-```
+    /*
+    Cross-Origin-Opener-Policy: same-origin
+    Cross-Origin-Embedder-Policy: require-corp
 
-### Using web server such as Nginx
+#### Using web server such as Nginx
 
 You can also host the three files on web server such as Nginx or Apache.
 
 The configuration for Nginx would be:
 
-```
-server {
-   add_header Cross-Origin-Opener-Policy "same-origin";
-   add_header Cross-Origin-Embedder-Policy "require-corp";
-   location / {
-       ...
-   }
-}
-```
+    server {
+        add_header Cross-Origin-Opener-Policy "same-origin";
+        add_header Cross-Origin-Embedder-Policy "require-corp";
+        location / {
+            ...
+        }
+    }
 
-### Using Javascript service worker trick
+#### Using Javascript service worker trick
 
 If you have no possibility to modify the headers, for example with GitHub pages, you can still get AtomVM to run in the browser using a Javascript service worker trick.
 
@@ -443,5 +528,6 @@ We did successfully use [coi-serviceworker](https://github.com/gzuidhof/coi-serv
 
 The following resources may be useful for understanding how to develop Erlang or Elixir applications for the AtomVM platform:
 
-* [Example Programs](./example-programs.md)
-* [Programmers Guide](./programmers-guide.md)
+* [AtomVM Tooling](atomvm-tooling.md)
+* [Example Programs](https://github.com/atomvm/atomvm_examples)
+* [Programmers Guide](programmers-guide.md)
