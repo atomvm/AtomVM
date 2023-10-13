@@ -26,8 +26,9 @@ AtomVM includes many advanced features, including process spawning, monitoring, 
    welcome-to-atomvm
    release-notes.md
    getting-started-guide
-   programmers-guide
+   atomvm-tooling.md
    example-programs
+   programmers-guide
    network-programming-guide
    build-instructions
    atomvm-internals
