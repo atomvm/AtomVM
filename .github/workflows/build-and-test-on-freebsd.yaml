@@ -41,6 +41,7 @@ jobs:
     - name: Build and Test on FreeBSD
       id: build-and-test-on-freebsd
       uses: vmactions/freebsd-vm@v0
+      timeout-minutes: 20
       with:
         envs: 'ATOMVM_EXAMPLE'
         usesh: true
