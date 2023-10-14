@@ -35,7 +35,7 @@
 #define ATOMIC
 
 #define ATOMIC_COMPARE_EXCHANGE_WEAK(object, expected, desired) \
-    smp_atomic_compare_exchange_weak(object, expected, desired, sizeof(desired))
+    smp_atomic_compare_exchange_weak(object, expected, (uint64_t) desired, sizeof(desired))
 
 #ifndef TYPEDEF_SPINLOCK
 #define TYPEDEF_SPINLOCK
@@ -77,11 +77,27 @@ static inline void smp_spinlock_unlock(SpinLock *lock)
     mutex_exit(&lock->mutex);
 }
 
+static critical_section_t atomic_cas_section;
+
+/**
+ * @brief Initialize structures of SMP functions
+ */
+static inline void smp_init()
+{
+    critical_section_init(&atomic_cas_section);
+}
+
+/**
+ * @brief Free structures for SMP functions
+ */
+static inline void smp_free()
+{
+    critical_section_deinit(&atomic_cas_section);
+}
+
 static inline bool smp_atomic_compare_exchange_weak(void *object, void *expected, uint64_t desired, size_t desired_len)
 {
-    critical_section_t crit_sec;
-    critical_section_init(&crit_sec);
-    critical_section_enter_blocking(&crit_sec);
+    critical_section_enter_blocking(&atomic_cas_section);
 
     bool result;
     switch (desired_len) {
@@ -131,8 +147,7 @@ static inline bool smp_atomic_compare_exchange_weak(void *object, void *expected
         }
     }
 
-    critical_section_exit(&crit_sec);
-    critical_section_deinit(&crit_sec);
+    critical_section_exit(&atomic_cas_section);
     return result;
 }
 

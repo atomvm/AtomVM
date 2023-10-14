@@ -52,8 +52,11 @@ void sys_init_platform(GlobalContext *glb)
 {
     struct RP2040PlatformData *platform = malloc(sizeof(struct RP2040PlatformData));
     glb->platform_data = platform;
+#ifndef AVM_NO_SMP
     mutex_init(&platform->event_poll_mutex);
     cond_init(&platform->event_poll_cond);
+    smp_init();
+#endif
 
 #ifdef LIB_PICO_CYW43_ARCH
     cyw43_arch_init();
@@ -68,6 +71,10 @@ void sys_free_platform(GlobalContext *glb)
 
     struct RP2040PlatformData *platform = glb->platform_data;
     free(platform);
+
+#ifndef AVM_NO_SMP
+    smp_free();
+#endif
 }
 
 #ifndef AVM_NO_SMP

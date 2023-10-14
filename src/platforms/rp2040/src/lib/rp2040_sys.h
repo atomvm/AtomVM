@@ -67,8 +67,10 @@
 
 struct RP2040PlatformData
 {
+#ifndef AVM_NO_SMP
     mutex_t event_poll_mutex;
     cond_t event_poll_cond;
+#endif
 };
 
 typedef void (*port_driver_init_t)(GlobalContext *global);
