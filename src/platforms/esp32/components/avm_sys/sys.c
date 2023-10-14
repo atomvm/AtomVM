@@ -550,7 +550,7 @@ void nif_collection_destroy_all(GlobalContext *global)
 const struct Nif *nif_collection_resolve_nif(const char *name)
 {
     for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
-        const struct Nif *res = item->def->nif_collection_resove_nif_cb(name);
+        const struct Nif *res = item->def->nif_collection_resolve_nif_cb(name);
         if (res) {
             return res;
         }
