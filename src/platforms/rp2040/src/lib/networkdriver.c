@@ -76,6 +76,25 @@ struct NetworkDriverData
     int stas_count;
     uint8_t *stas_mac;
     struct dhcp_config *dhcp_config;
+    queue_t queue;
+};
+
+enum NetworkDriverEventType
+{
+    NetworkDriverEventTypeCyw43Assoc,
+    NetworkDriverEventTypeSTADisconnected,
+    NetworkDriverEventTypeSTAConnected,
+    NetworkDriverEventTypeGotIP,
+};
+
+struct NetworkDriverEvent
+{
+    enum NetworkDriverEventType type;
+    // Union of parameters
+    union
+    {
+        struct netif *netif;
+    };
 };
 
 // Callbacks do not allow for user data
@@ -84,6 +103,8 @@ static struct NetworkDriverData *driver_data;
 
 static void network_driver_netif_status_cb(struct netif *netif);
 static void network_driver_cyw43_assoc_cb(bool assoc);
+
+static void network_driver_do_cyw43_assoc(GlobalContext *glb);
 
 static term tuple_from_addr(Heap *heap, uint32_t addr)
 {
@@ -107,27 +128,27 @@ static void send_term(Heap *heap, term t)
     port_send_message(driver_data->global, term_from_local_process_id(driver_data->owner_process_id), msg);
 }
 
-static void send_sta_connected()
+static void send_sta_connected(GlobalContext *glb)
 {
     // {Ref, sta_connected}
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
     {
-        send_term(&heap, globalcontext_make_atom(driver_data->global, sta_connected_atom));
+        send_term(&heap, globalcontext_make_atom(glb, sta_connected_atom));
     }
-    END_WITH_STACK_HEAP(heap, driver_data->global);
+    END_WITH_STACK_HEAP(heap, glb);
 }
 
-static void send_sta_disconnected()
+static void send_sta_disconnected(GlobalContext *glb)
 {
     // {Ref, sta_disconnected}
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
     {
-        send_term(&heap, globalcontext_make_atom(driver_data->global, sta_disconnected_atom));
+        send_term(&heap, globalcontext_make_atom(glb, sta_disconnected_atom));
     }
-    END_WITH_STACK_HEAP(heap, driver_data->global);
+    END_WITH_STACK_HEAP(heap, glb);
 }
 
-static void send_got_ip(struct netif *netif)
+static void send_got_ip(struct netif *netif, GlobalContext *glb)
 {
     // {Ref, {sta_got_ip, {{192, 168, 1, 2}, {255, 255, 255, 0}, {192, 168, 1, 1}}}}
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(3) + TUPLE_SIZE(4) * 3, heap);
@@ -137,23 +158,23 @@ static void send_got_ip(struct netif *netif)
         term gw = tuple_from_addr(&heap, ntohl(ip4_addr_get_u32(netif_ip4_gw(netif))));
 
         term ip_info = port_heap_create_tuple3(&heap, ip, netmask, gw);
-        term reply = port_heap_create_tuple2(&heap, globalcontext_make_atom(driver_data->global, sta_got_ip_atom), ip_info);
+        term reply = port_heap_create_tuple2(&heap, globalcontext_make_atom(glb, sta_got_ip_atom), ip_info);
         send_term(&heap, reply);
     }
-    END_WITH_STACK_HEAP(heap, driver_data->global);
+    END_WITH_STACK_HEAP(heap, glb);
 }
 
-static void send_ap_started()
+static void send_ap_started(GlobalContext *glb)
 {
     // {Ref, ap_started}
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
     {
-        send_term(&heap, globalcontext_make_atom(driver_data->global, ap_started_atom));
+        send_term(&heap, globalcontext_make_atom(glb, ap_started_atom));
     }
-    END_WITH_STACK_HEAP(heap, driver_data->global);
+    END_WITH_STACK_HEAP(heap, glb);
 }
 
-static void send_atom_mac(term atom, uint8_t *mac)
+static void send_atom_mac(term atom, uint8_t *mac, GlobalContext *glb)
 {
     // {Ref, {ap_connected | ap_disconnected, <<1,2,3,4,5,6>>}}
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + TERM_BINARY_HEAP_SIZE(6), heap);
@@ -162,17 +183,17 @@ static void send_atom_mac(term atom, uint8_t *mac)
         term reply = port_heap_create_tuple2(&heap, atom, mac_term);
         send_term(&heap, reply);
     }
-    END_WITH_STACK_HEAP(heap, driver_data->global);
+    END_WITH_STACK_HEAP(heap, glb);
 }
 
-static void send_ap_sta_connected(uint8_t *mac)
+static void send_ap_sta_connected(uint8_t *mac, GlobalContext *glb)
 {
-    send_atom_mac(globalcontext_make_atom(driver_data->global, ap_sta_connected_atom), mac);
+    send_atom_mac(globalcontext_make_atom(glb, ap_sta_connected_atom), mac, glb);
 }
 
-static void send_ap_sta_disconnected(uint8_t *mac)
+static void send_ap_sta_disconnected(uint8_t *mac, GlobalContext *glb)
 {
-    send_atom_mac(globalcontext_make_atom(driver_data->global, ap_sta_disconnected_atom), mac);
+    send_atom_mac(globalcontext_make_atom(glb, ap_sta_disconnected_atom), mac, glb);
 }
 
 static void send_sntp_sync(struct timeval *tv)
@@ -249,10 +270,8 @@ static char *get_default_device_name()
     return buf;
 }
 
-static void network_driver_cyw43_assoc_cb(bool assoc)
+static void network_driver_do_cyw43_assoc(GlobalContext *glb)
 {
-    UNUSED(assoc);
-
     int max_stas;
     cyw43_wifi_ap_get_max_stas(&cyw43_state, &max_stas);
     uint8_t *new_macs = malloc(6 * max_stas);
@@ -268,7 +287,7 @@ static void network_driver_cyw43_assoc_cb(bool assoc)
             }
         }
         if (new_mac) {
-            send_ap_sta_connected(&new_macs[6 * i]);
+            send_ap_sta_connected(&new_macs[6 * i], glb);
         }
     }
     // Determine old macs
@@ -281,13 +300,22 @@ static void network_driver_cyw43_assoc_cb(bool assoc)
             }
         }
         if (old_mac) {
-            send_ap_sta_disconnected(&driver_data->stas_mac[6 * j]);
+            send_ap_sta_disconnected(&driver_data->stas_mac[6 * j], glb);
         }
     }
     free(driver_data->stas_mac);
     new_macs = realloc(new_macs, 6 * nb_stas);
     driver_data->stas_mac = new_macs;
     driver_data->stas_count = nb_stas;
+}
+
+static void network_driver_cyw43_assoc_cb(bool assoc)
+{
+    UNUSED(assoc);
+
+    struct NetworkDriverEvent event;
+    event.type = NetworkDriverEventTypeCyw43Assoc;
+    sys_try_post_listener_event_from_isr(driver_data->global, &driver_data->queue, &event);
 }
 
 static term setup_dhcp_server()
@@ -383,7 +411,7 @@ static term start_ap(term ap_config, GlobalContext *global)
     uint32_t auth = (psk == NULL) ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_AES_PSK;
     cyw43_state.assoc_cb = network_driver_cyw43_assoc_cb;
     cyw43_arch_enable_ap_mode(ssid, psk, auth);
-    send_ap_started();
+    send_ap_started(global);
     free(ssid);
     free(psk);
 
@@ -449,13 +477,58 @@ static void network_driver_netif_status_cb(struct netif *netif)
     cyw43_arch_lwip_end();
     if (link_status != previous_link_status) {
         if (link_status == CYW43_LINK_DOWN) {
-            send_sta_disconnected();
+            struct NetworkDriverEvent event;
+            event.type = NetworkDriverEventTypeSTADisconnected;
+            sys_try_post_listener_event_from_isr(driver_data->global, &driver_data->queue, &event);
         } else if (link_status == CYW43_LINK_JOIN) {
-            send_sta_connected();
+            struct NetworkDriverEvent event;
+            event.type = NetworkDriverEventTypeSTAConnected;
+            sys_try_post_listener_event_from_isr(driver_data->global, &driver_data->queue, &event);
         } else if (link_status == CYW43_LINK_UP) {
-            send_got_ip(netif);
+            struct NetworkDriverEvent event;
+            event.type = NetworkDriverEventTypeGotIP;
+            event.netif = netif;
+            sys_try_post_listener_event_from_isr(driver_data->global, &driver_data->queue, &event);
         }
     }
+}
+
+static EventListener *network_events_handler(GlobalContext *glb, EventListener *listener)
+{
+    struct NetworkDriverEvent event;
+    while (queue_try_remove(listener->queue, &event)) {
+        switch (event.type) {
+            case NetworkDriverEventTypeCyw43Assoc:
+                network_driver_do_cyw43_assoc(glb);
+                break;
+            case NetworkDriverEventTypeSTADisconnected:
+                send_sta_disconnected(glb);
+                break;
+            case NetworkDriverEventTypeSTAConnected:
+                send_sta_connected(glb);
+                break;
+            case NetworkDriverEventTypeGotIP:
+                send_got_ip(event.netif, glb);
+                break;
+        }
+    }
+    return listener;
+}
+
+static void init_driver_data(GlobalContext *glb)
+{
+    driver_data = malloc(sizeof(struct NetworkDriverData));
+    driver_data->sntp_hostname = NULL;
+    driver_data->stas_mac = NULL;
+    driver_data->dhcp_config = NULL;
+    driver_data->global = glb;
+    queue_init(&driver_data->queue, sizeof(struct NetworkDriverEvent), EVENT_QUEUE_LEN);
+
+    EventListener *network_listener = malloc(sizeof(EventListener));
+
+    network_listener->handler = network_events_handler;
+    network_listener->queue = &driver_data->queue;
+    sys_register_listener(glb, network_listener);
 }
 
 static void start_network(Context *ctx, term pid, term ref, term config)
@@ -467,12 +540,8 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     }
 
     if (driver_data == NULL) {
-        driver_data = malloc(sizeof(struct NetworkDriverData));
-        driver_data->sntp_hostname = NULL;
-        driver_data->stas_mac = NULL;
-        driver_data->dhcp_config = NULL;
+        init_driver_data(ctx->global);
     }
-    driver_data->global = ctx->global;
     driver_data->owner_process_id = term_to_local_process_id(pid);
     driver_data->ref_ticks = term_to_ref_ticks(ref);
     driver_data->link_status = CYW43_LINK_DOWN;
@@ -593,8 +662,6 @@ void network_driver_init(GlobalContext *global)
 
 void network_driver_destroy(GlobalContext *global)
 {
-    UNUSED(global);
-
     if (driver_data) {
         free(driver_data->sntp_hostname);
         free(driver_data->stas_mac);
@@ -602,6 +669,8 @@ void network_driver_destroy(GlobalContext *global)
             dhserv_free();
         }
         free(driver_data->dhcp_config);
+        sys_unregister_listener_from_event(global, &driver_data->queue);
+        queue_free(&driver_data->queue);
     }
     free(driver_data);
     driver_data = NULL;

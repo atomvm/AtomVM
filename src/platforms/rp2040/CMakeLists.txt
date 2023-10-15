@@ -43,9 +43,9 @@ enable_language( C CXX ASM )
 set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
 
 # mkfifo is defined in newlib header but not implemented
-set(HAVE_MKFIFO NO)
+set(HAVE_MKFIFO "" CACHE INTERNAL "Have symbol mkfifo" FORCE)
 # also avoid exposing unlink to silence warning that it will always fail
-set(HAVE_UNLINK NO)
+set(HAVE_UNLINK "" CACHE INTERNAL "Have symbol unlink" FORCE)
 
 # Options that make sense for this platform
 option(AVM_DISABLE_SMP "Disable SMP support." OFF)

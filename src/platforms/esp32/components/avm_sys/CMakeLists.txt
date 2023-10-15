@@ -60,9 +60,8 @@ list(TRANSFORM soc_include_dirs PREPEND ${soc_dir}/)
 list(TRANSFORM newlib_include_dirs PREPEND ${newlib_dir}/)
 list(TRANSFORM pthread_include_dirs PREPEND ${pthread_dir}/)
 
-set(CMAKE_REQUIRED_INCLUDES ${soc_target_include_dir} ${soc_include_dirs} ${newlib_include_dirs} ${pthread_include_dirs} ${CMAKE_BINARY_DIR}/config/)
+set(CMAKE_REQUIRED_INCLUDES ${CMAKE_REQUIRED_INCLUDES} ${soc_target_include_dir} ${soc_include_dirs} ${newlib_include_dirs} ${pthread_include_dirs} ${CMAKE_BINARY_DIR}/config/)
 
-include(CheckIncludeFile)
 include(CheckSymbolExists)
 include(CheckCSourceCompiles)
 

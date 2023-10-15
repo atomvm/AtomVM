@@ -21,6 +21,7 @@
 #include <sys.h>
 
 // C11
+#include <stdio.h>
 #include <time.h>
 
 // Pico SDK
@@ -30,6 +31,7 @@
 #include <hardware/rtc.h>
 #include <pico/multicore.h>
 #include <pico/time.h>
+#include <pico/util/queue.h>
 #include <sys/time.h>
 
 #ifdef LIB_PICO_CYW43_ARCH
@@ -38,12 +40,22 @@
 
 #pragma GCC diagnostic pop
 
+#ifdef LIB_PICO_CYW43_ARCH
+#include <otp_socket.h>
+#endif
+
 // libAtomVM
 #include <avmpack.h>
 #include <defaultatoms.h>
 #include <utils.h>
 
 #include "rp2040_sys.h"
+
+// #define ENABLE_TRACE
+#include "trace.h"
+
+// Platform uses listeners
+#include "listeners.h"
 
 struct PortDriverDefListItem *port_driver_list;
 struct NifCollectionDefListItem *nif_collection_list;
@@ -57,9 +69,11 @@ void sys_init_platform(GlobalContext *glb)
     cond_init(&platform->event_poll_cond);
     smp_init();
 #endif
+    queue_init(&platform->event_queue, sizeof(queue_t *), EVENT_QUEUE_LEN);
 
 #ifdef LIB_PICO_CYW43_ARCH
     cyw43_arch_init();
+    otp_socket_init(glb);
 #endif
 }
 
@@ -70,6 +84,7 @@ void sys_free_platform(GlobalContext *glb)
 #endif
 
     struct RP2040PlatformData *platform = glb->platform_data;
+    queue_free(&platform->event_queue);
     free(platform);
 
 #ifndef AVM_NO_SMP
@@ -77,34 +92,53 @@ void sys_free_platform(GlobalContext *glb)
 #endif
 }
 
+bool sys_try_post_listener_event_from_isr(GlobalContext *glb, listener_event_t listener_queue, const void *event)
+{
+    struct RP2040PlatformData *platform = glb->platform_data;
+    if (UNLIKELY(!queue_try_add(listener_queue, event))) {
+        fprintf(stderr, "Lost event from ISR as listener queue is full. System is overloaded or EVENT_QUEUE_LEN is too low\n");
+        return false;
+    }
+
+    if (UNLIKELY(!queue_try_add(&platform->event_queue, &listener_queue))) {
+        fprintf(stderr, "Lost event from ISR as global event queue is full. System is overloaded or EVENT_QUEUE_LEN is too low\n");
+        return false;
+    }
+
 #ifndef AVM_NO_SMP
+    sys_signal(glb);
+#endif
+
+    return true;
+}
+
 void sys_poll_events(GlobalContext *glb, int timeout_ms)
 {
+    struct RP2040PlatformData *platform = glb->platform_data;
+#ifndef AVM_NO_SMP
     if (timeout_ms > 0) {
-        struct RP2040PlatformData *platform = glb->platform_data;
         mutex_enter_blocking(&platform->event_poll_mutex);
         cond_wait_timeout_ms(&platform->event_poll_cond, &platform->event_poll_mutex, timeout_ms);
         mutex_exit(&platform->event_poll_mutex);
     }
+#endif
+    queue_t *event = NULL;
+    while (queue_try_remove(&platform->event_queue, &event)) {
+        struct ListHead *listeners = synclist_wrlock(&glb->listeners);
+        if (!process_listener_handler(glb, event, listeners, NULL, NULL)) {
+            TRACE("sys: handler not found for: %p\n", (void *) event);
+        }
+        synclist_unlock(&glb->listeners);
+    }
 }
 
+#ifndef AVM_NO_SMP
 void sys_signal(GlobalContext *glb)
 {
     struct RP2040PlatformData *platform = glb->platform_data;
     cond_signal(&platform->event_poll_cond);
 }
-#else
-void sys_poll_events(GlobalContext *glb, int timeout_ms)
-{
-    UNUSED(glb);
-    UNUSED(timeout_ms);
-}
 #endif
-
-void sys_listener_destroy(struct ListHead *item)
-{
-    UNUSED(item);
-}
 
 void sys_register_select_event(GlobalContext *global, ErlNifEvent event, bool is_write)
 {
@@ -253,4 +287,59 @@ const struct Nif *nif_collection_resolve_nif(const char *name)
     }
 
     return NULL;
+}
+
+static void event_listener_add_to_polling_set(struct EventListener *listener, GlobalContext *glb)
+{
+    UNUSED(listener);
+    UNUSED(glb);
+}
+
+static void listener_event_remove_from_polling_set(listener_event_t event, GlobalContext *glb)
+{
+    UNUSED(event);
+    UNUSED(glb);
+}
+
+static bool event_listener_is_event(EventListener *listener, listener_event_t event)
+{
+    return listener->queue == event;
+}
+
+void sys_register_listener(GlobalContext *global, struct EventListener *listener)
+{
+    struct ListHead *listeners = synclist_wrlock(&global->listeners);
+#ifndef AVM_NO_SMP
+    sys_signal(global);
+#endif
+    list_append(listeners, &listener->listeners_list_head);
+    synclist_unlock(&global->listeners);
+}
+
+void sys_unregister_listener(GlobalContext *global, struct EventListener *listener)
+{
+    struct ListHead *dummy = synclist_wrlock(&global->listeners);
+    UNUSED(dummy);
+#ifndef AVM_NO_SMP
+    sys_signal(global);
+#endif
+    list_remove(&listener->listeners_list_head);
+    synclist_unlock(&global->listeners);
+}
+
+void sys_unregister_listener_from_event(GlobalContext *global, listener_event_t event)
+{
+    struct ListHead *list = synclist_wrlock(&global->listeners);
+#ifndef AVM_NO_SMP
+    sys_signal(global);
+#endif
+    struct ListHead *item;
+    LIST_FOR_EACH (item, list) {
+        struct EventListener *listener = GET_LIST_ENTRY(item, struct EventListener, listeners_list_head);
+        if (event_listener_is_event(listener, event)) {
+            list_remove(&listener->listeners_list_head);
+            break;
+        }
+    }
+    synclist_unlock(&global->listeners);
 }

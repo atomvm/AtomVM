@@ -30,7 +30,11 @@
     sockname/1,
     peername/1,
     recv/1,
+    recv/2,
+    recv/3,
     recvfrom/1,
+    recvfrom/2,
+    recvfrom/3,
     send/2,
     sendto/3,
     setopt/3,
@@ -42,8 +46,8 @@
 -export([
     nif_select_read/3,
     nif_accept/1,
-    nif_recv/1,
-    nif_recvfrom/1,
+    nif_recv/2,
+    nif_recvfrom/2,
     nif_select_stop/1,
     nif_send/2,
     nif_sendto/3
@@ -248,6 +252,12 @@ accept(Socket, Timeout) ->
                             R
                     end;
                 {closed, Ref} ->
+                    % socket was closed by another process
+                    % TODO: we need to handle:
+                    % (a) SELECT_STOP being scheduled
+                    % (b) flush of messages as we can have both
+                    % {closed, Ref} and {select, _, Ref, _} in the
+                    % queue
                     {error, closed}
             after Timeout ->
                 {error, timeout}
@@ -257,30 +267,39 @@ accept(Socket, Timeout) ->
     end.
 
 %%-----------------------------------------------------------------------------
-%% @equiv socket:recv(Socket, infinity)
+%% @equiv socket:recv(Socket, 0)
 %% @end
 %%-----------------------------------------------------------------------------
 -spec recv(Socket :: socket()) -> {ok, Data :: binary()} | {error, Reason :: term()}.
 recv(Socket) ->
-    recv(Socket, infinity).
+    recv(Socket, 0, infinity).
+
+%%-----------------------------------------------------------------------------
+%% @equiv socket:recv(Socket, Length, infinity)
+%% @end
+%%-----------------------------------------------------------------------------
+-spec recv(Socket :: socket(), Length :: non_neg_integer()) ->
+    {ok, Data :: binary()} | {error, Reason :: term()}.
+recv(Socket, Length) ->
+    recv(Socket, Length, infinity).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
+%% @param   Length number of bytes to receive
 %% @param   Timeout timeout (in milliseconds)
 %% @returns `{ok, Data}' if successful; `{error, Reason}', otherwise.
 %% @doc     Receive data on the specified socket.
 %%
-%%          Note that this function will block until data is received
-%%          on the socket.
+%% This function is equivalent to `recvfrom/3' except for the return type.
 %%
 %% Example:
 %%
 %%          `{ok, Data} = socket:recv(ConnectedSocket)'
 %% @end
 %%-----------------------------------------------------------------------------
--spec recv(Socket :: socket(), Timeout :: timeout()) ->
+-spec recv(Socket :: socket(), Length :: non_neg_integer(), Timeout :: timeout()) ->
     {ok, Data :: binary()} | {error, Reason :: term()}.
-recv(Socket, Timeout) ->
+recv(Socket, Length, Timeout) ->
     Self = self(),
     Ref = erlang:make_ref(),
     ?TRACE("select read for recv.  self=~p ref=~p~n", [Self, Ref]),
@@ -288,14 +307,18 @@ recv(Socket, Timeout) ->
         ok ->
             receive
                 {select, _AcceptedSocket, Ref, ready_input} ->
-                    case ?MODULE:nif_recv(Socket) of
-                        {error, closed} = E ->
+                    case ?MODULE:nif_recv(Socket, Length) of
+                        {error, _} = E ->
                             ?MODULE:nif_select_stop(Socket),
                             E;
-                        R ->
-                            R
+                        % TODO: Assemble data to have more if Length > byte_size(Data)
+                        % as long as timeout did not expire
+                        {ok, Data} ->
+                            {ok, Data}
                     end;
                 {closed, Ref} ->
+                    % socket was closed by another process
+                    % TODO: see above in accept/2
                     {error, closed}
             after Timeout ->
                 {error, timeout}
@@ -305,16 +328,26 @@ recv(Socket, Timeout) ->
     end.
 
 %%-----------------------------------------------------------------------------
-%% @equiv socket:recvfrom(Socket, infinity)
+%% @equiv socket:recvfrom(Socket, 0)
 %% @end
 %%-----------------------------------------------------------------------------
 -spec recvfrom(Socket :: socket()) ->
     {ok, {Address :: sockaddr(), Data :: binary()}} | {error, Reason :: term()}.
 recvfrom(Socket) ->
-    recvfrom(Socket, infinity).
+    recvfrom(Socket, 0).
+
+%%-----------------------------------------------------------------------------
+%% @equiv socket:recvfrom(Socket, Length, infinity)
+%% @end
+%%-----------------------------------------------------------------------------
+-spec recvfrom(Socket :: socket(), Length :: non_neg_integer()) ->
+    {ok, {Address :: sockaddr(), Data :: binary()}} | {error, Reason :: term()}.
+recvfrom(Socket, Length) ->
+    recvfrom(Socket, Length, infinity).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
+%% @param   Length number of bytes to receive
 %% @param   Timeout timeout (in milliseconds)
 %% @returns `{ok, {Address, Data}}' if successful; `{error, Reason}', otherwise.
 %% @doc     Receive data on the specified socket, returning the from address.
@@ -325,11 +358,20 @@ recvfrom(Socket) ->
 %% Example:
 %%
 %%          `{ok, {Address, Data}} = socket:recvfrom(ConnectedSocket)'
+%%
+%% If socket is UDP, the function retrieves the first available packet and
+%% truncate it to Length bytes, unless Length is 0 in which case it returns
+%% the whole packet ("all available").
+%%
+%% If socket is TCP and Length is 0, this function retrieves all available
+%% data without waiting (using peek if the platform allows it).
+%% If socket is TCP and Length is not 0, this function waits until Length
+%% bytes are available and return these bytes.
 %% @end
 %%-----------------------------------------------------------------------------
--spec recvfrom(Socket :: socket(), Timeout :: timeout()) ->
+-spec recvfrom(Socket :: socket(), Length :: non_neg_integer(), Timeout :: timeout()) ->
     {ok, {Address :: sockaddr(), Data :: binary()}} | {error, Reason :: term()}.
-recvfrom(Socket, Timeout) ->
+recvfrom(Socket, Length, Timeout) ->
     Self = self(),
     Ref = erlang:make_ref(),
     ?TRACE("select read for recvfrom.  self=~p ref=~p", [Self, Ref]),
@@ -337,14 +379,18 @@ recvfrom(Socket, Timeout) ->
         ok ->
             receive
                 {select, _AcceptedSocket, Ref, ready_input} ->
-                    case ?MODULE:nif_recvfrom(Socket) of
-                        {error, closed} = E ->
+                    case ?MODULE:nif_recvfrom(Socket, Length) of
+                        {error, _} = E ->
                             ?MODULE:nif_select_stop(Socket),
                             E;
-                        R ->
-                            R
+                        % TODO: Assemble data to have more if Length > byte_size(Data)
+                        % as long as timeout did not expire
+                        {ok, {Address, Data}} ->
+                            {ok, {Address, Data}}
                     end;
                 {closed, Ref} ->
+                    % socket was closed by another process
+                    % TODO: see above in accept/2
                     {error, closed}
             after Timeout ->
                 {error, timeout}
@@ -475,11 +521,11 @@ nif_accept(_Socket) ->
     erlang:nif_error(undefined).
 
 %% @private
-nif_recv(_Socket) ->
+nif_recv(_Socket, _Length) ->
     erlang:nif_error(undefined).
 
 %% @private
-nif_recvfrom(_Socket) ->
+nif_recvfrom(_Socket, _Length) ->
     erlang:nif_error(undefined).
 
 %% @private

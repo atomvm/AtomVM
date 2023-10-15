@@ -112,6 +112,12 @@ term posix_errno_to_term(int err, GlobalContext *glb)
             return globalcontext_make_atom(glb, ATOM_STR("\x5", "esrch"));
         case EXDEV:
             return globalcontext_make_atom(glb, ATOM_STR("\x5", "exdev"));
+        case EPROTOTYPE:
+            return globalcontext_make_atom(glb, ATOM_STR("\x8", "eprototype"));
+        case ENOTCONN:
+            return globalcontext_make_atom(glb, ATOM_STR("\x8", "enotconn"));
+        case EOPNOTSUPP:
+            return globalcontext_make_atom(glb, ATOM_STR("\xA", "eopnotsupp"));
     }
 #else
     UNUSED(glb);

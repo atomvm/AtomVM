@@ -25,6 +25,7 @@
 
 #include "erl_nif.h"
 #include "list.h"
+#include "memory.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -66,7 +67,6 @@ struct SelectEvent
     struct RefcBinary *resource;
     bool read;
     bool write;
-    bool undefined_ref;
     bool close;
     int32_t local_pid;
     uint64_t ref_ticks;
@@ -117,6 +117,18 @@ void select_event_count_and_destroy_closed(struct ListHead *select_events, size_
  * @param global the global context
  */
 void destroy_resource_monitors(struct RefcBinary *resource, GlobalContext *global);
+
+#define SELECT_EVENT_NOTIFICATION_SIZE (TUPLE_SIZE(4) + REF_SIZE + TERM_BOXED_RESOURCE_SIZE)
+
+/**
+ * @brief Build a select event notification.
+ * @param rsrc_obj the resource to build the notification for
+ * @param ref_ticks the reference or 0 if it's undefined
+ * @param is_write if the notification is for a write or a read
+ * @param heap the heap to create the notification in, should have enough memory
+ * available (see SELECT_EVENT_NOTIFICATION_SIZE)
+ */
+term select_event_make_notification(void *rsrc_obj, uint64_t ref_ticks, bool is_write, Heap *heap);
 
 #ifdef __cplusplus
 }

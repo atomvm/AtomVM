@@ -32,6 +32,25 @@ set(TEST_COMPONENTS "testable" CACHE STRING "List of components to test")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../../CMakeModules")
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+
+# Don't try to link when testing availability of functions
+set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
+
+# mkfifo is defined in newlib header but not implemented
+set(HAVE_MKFIFO NO)
+set(HAVE_MKFIFO "" CACHE INTERNAL "Have symbol mkfifo" FORCE)
+# Force HAVE_SOCKET
+# Automatically detecting it requires to put too many components include dirs
+# in CMAKE_REQUIRED_INCLUDES as lwip includes freetos and many esp system components
+set(HAVE_SOCKET ON)
+set(HAVE_SOCKET 1 CACHE INTERNAL "Have symbol socket" FORCE)
+
+# Disable SMP with esp32 socs that have only one core
+if (${IDF_TARGET} MATCHES "esp32s2|esp32c3|esp32h2")
+    message("Disabling SMP as selected target only has one core")
+    set(AVM_DISABLE_SMP YES FORCE)
+endif()
+
 project(atomvm-esp32-test)
 
 # esp-idf does not use compile_feature but instead sets version in

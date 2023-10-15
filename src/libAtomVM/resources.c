@@ -184,10 +184,8 @@ int enif_select(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSelectFlags mode, 
     // Second read or second write overwrite ref & pid.
     if (ref == UNDEFINED_ATOM) {
         select_event->ref_ticks = 0;
-        select_event->undefined_ref = 1;
     } else {
         select_event->ref_ticks = term_to_ref_ticks(ref);
-        select_event->undefined_ref = 0;
     }
     select_event->local_pid = *pid;
     select_event->read = mode & ERL_NIF_SELECT_READ;
@@ -203,21 +201,28 @@ int enif_select(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSelectFlags mode, 
     return 0;
 }
 
-static void select_event_send_notification(struct SelectEvent *select_event, bool is_write, GlobalContext *global)
+term select_event_make_notification(void *rsrc_obj, uint64_t ref_ticks, bool is_write, Heap *heap)
 {
-    BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(4) + REF_SIZE + TERM_BOXED_REFC_BINARY_SIZE, heap)
-    term notification = term_alloc_tuple(4, &heap);
+    term notification = term_alloc_tuple(4, heap);
     term_put_tuple_element(notification, 0, SELECT_ATOM);
-    term_put_tuple_element(notification, 1, term_from_resource(select_event->resource->data, &heap));
-    refc_binary_increment_refcount(select_event->resource);
+    term_put_tuple_element(notification, 1, term_from_resource(rsrc_obj, heap));
+    struct RefcBinary *rsrc_refc = refc_binary_from_data(rsrc_obj);
+    refc_binary_increment_refcount(rsrc_refc);
     term ref;
-    if (select_event->undefined_ref) {
+    if (ref_ticks == 0) {
         ref = UNDEFINED_ATOM;
     } else {
-        ref = term_from_ref_ticks(select_event->ref_ticks, &heap);
+        ref = term_from_ref_ticks(ref_ticks, heap);
     }
     term_put_tuple_element(notification, 2, ref);
     term_put_tuple_element(notification, 3, is_write ? READY_OUTPUT_ATOM : READY_INPUT_ATOM);
+    return notification;
+}
+
+static void select_event_send_notification(struct SelectEvent *select_event, bool is_write, GlobalContext *global)
+{
+    BEGIN_WITH_STACK_HEAP(SELECT_EVENT_NOTIFICATION_SIZE, heap)
+    term notification = select_event_make_notification(select_event->resource->data, select_event->ref_ticks, is_write, &heap);
     globalcontext_send_message(global, select_event->local_pid, notification);
     if (is_write) {
         select_event->write = 0;
