@@ -36,6 +36,14 @@ void port_send_message_nolock(GlobalContext *glb, term pid, term msg)
     globalcontext_send_message_nolock(glb, local_process_id, msg);
 }
 
+#ifdef AVM_TASK_DRIVER_ENABLED
+void port_send_message_from_task(GlobalContext *glb, term pid, term msg)
+{
+    int local_process_id = term_to_local_process_id(pid);
+    globalcontext_send_message_from_task(glb, local_process_id, NormalMessage, msg);
+}
+#endif
+
 void port_ensure_available(Context *ctx, size_t size)
 {
     if (context_avail_free_memory(ctx) < size) {

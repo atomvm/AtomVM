@@ -27,8 +27,6 @@ extern "C" {
 
 #include <esp_log.h>
 
-#define TAG "otp_socket"
-
 #define AVM_LOGD(tag, format, ...) \
     ;
 

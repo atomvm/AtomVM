@@ -21,6 +21,7 @@
 #include "smp.h"
 
 #ifndef AVM_NO_SMP
+#include <errno.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -195,6 +196,18 @@ void smp_rwlock_rdlock(RWLock *lock)
     if (UNLIKELY(pthread_rwlock_rdlock(&lock->lock))) {
         AVM_ABORT();
     }
+}
+
+bool smp_rwlock_tryrdlock(RWLock *lock)
+{
+    int r = pthread_rwlock_tryrdlock(&lock->lock);
+    if (r == EBUSY) {
+        return false;
+    }
+    if (UNLIKELY(r)) {
+        AVM_ABORT();
+    }
+    return true;
 }
 
 void smp_rwlock_wrlock(RWLock *lock)

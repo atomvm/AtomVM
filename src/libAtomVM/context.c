@@ -35,6 +35,15 @@
 #include "term.h"
 #include "utils.h"
 
+#ifdef HAVE_PLATFORM_ATOMIC_H
+#include "platform_atomic.h"
+#else
+#if defined(HAVE_ATOMIC)
+#include <stdatomic.h>
+#define ATOMIC_COMPARE_EXCHANGE_WEAK_INT atomic_compare_exchange_weak
+#endif
+#endif
+
 #define IMPL_EXECUTE_LOOP
 #include "opcodesswitch.h"
 #undef IMPL_EXECUTE_LOOP
@@ -235,7 +244,7 @@ void context_update_flags(Context *ctx, int mask, int value) CLANG_THREAD_SANITI
     enum ContextFlags desired;
     do {
         desired = (expected & mask) | value;
-    } while (!ATOMIC_COMPARE_EXCHANGE_WEAK(&ctx->flags, &expected, desired));
+    } while (!ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&ctx->flags, &expected, desired));
 #else
     ctx->flags = (ctx->flags & mask) | value;
 #endif

@@ -108,7 +108,7 @@ static void htmlevent_user_data_dtor(ErlNifEnv *caller_env, void *obj)
 {
     struct HTMLEventUserDataResource *htmlevent_user_data_rsrc = (struct HTMLEventUserDataResource *) obj;
     if (!term_is_invalid_term(htmlevent_user_data_rsrc->user_data)) {
-        memory_sweep_mso_list(htmlevent_user_data_rsrc->storage[STORAGE_MSO_LIST_INDEX], caller_env->global);
+        memory_sweep_mso_list(htmlevent_user_data_rsrc->storage[STORAGE_MSO_LIST_INDEX], caller_env->global, false);
         htmlevent_user_data_rsrc->user_data = term_invalid_term();
     }
     free(htmlevent_user_data_rsrc->target_element_str);
@@ -482,7 +482,7 @@ static void sys_process_emscripten_message(GlobalContext *glb, struct Emscripten
             }
             globalcontext_send_message(glb, message_html_event->target_pid, message_term);
             END_WITH_STACK_HEAP(heap, glb)
-            memory_sweep_mso_list(message_html_event->message_heap->mso_list, glb);
+            memory_sweep_mso_list(message_html_event->message_heap->mso_list, glb, false);
             memory_destroy_heap_fragment(message_html_event->message_heap);
         } break;
 

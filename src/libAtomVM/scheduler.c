@@ -28,22 +28,11 @@
 #include "sys.h"
 #include "utils.h"
 
-#ifndef AVM_NO_SMP
-#define SMP_SPINLOCK_LOCK(spinlock) smp_spinlock_lock(spinlock)
-#define SMP_SPINLOCK_UNLOCK(spinlock) smp_spinlock_unlock(spinlock)
-#define SMP_MUTEX_LOCK(mtx) smp_mutex_lock(mtx)
-#define SMP_MUTEX_TRYLOCK(mtx) smp_mutex_trylock(mtx)
-#define SMP_MUTEX_UNLOCK(mtx) smp_mutex_unlock(mtx)
-#else
-#define SMP_SPINLOCK_LOCK(spinlock)
-#define SMP_SPINLOCK_UNLOCK(spinlock)
-#define SMP_MUTEX_LOCK(mtx)
-#define SMP_MUTEX_TRYLOCK(mtx) 1
-#define SMP_MUTEX_UNLOCK(mtx)
-#endif
-
 static void scheduler_timeout_callback(struct TimerListItem *it);
 static void scheduler_make_ready(Context *ctx);
+#ifdef AVM_TASK_DRIVER_ENABLED
+static void scheduler_make_ready_from_task(Context *ctx);
+#endif
 
 static int update_timer_list(GlobalContext *global)
 {
@@ -212,6 +201,9 @@ static Context *scheduler_run0(GlobalContext *global)
         } else {
             sys_poll_events(global, SYS_POLL_EVENTS_DO_NOT_WAIT);
         }
+#ifdef AVM_TASK_DRIVER_ENABLED
+        globalcontext_process_task_driver_queues(global);
+#endif
         SMP_MUTEX_LOCK(global->schedulers_mutex);
     } while (result == NULL);
 
@@ -332,6 +324,23 @@ static void scheduler_make_ready(Context *ctx)
 #endif
 }
 
+#ifdef AVM_TASK_DRIVER_ENABLED
+static void scheduler_make_ready_from_task(Context *ctx)
+{
+    GlobalContext *global = ctx->global;
+    if (context_get_flags(ctx, Killed)) {
+        return;
+    }
+    list_remove(&ctx->processes_list_head);
+    // Move to ready queue (from waiting or running)
+    // The process may be running (it would be signaled), so mark it
+    // as ready
+    context_update_flags(ctx, ~NoFlags, Ready);
+    list_append(&global->ready_processes, &ctx->processes_list_head);
+    sys_signal(global);
+}
+#endif
+
 void scheduler_init_ready(Context *c)
 {
     scheduler_make_ready(c);
@@ -341,6 +350,13 @@ void scheduler_signal_message(Context *c)
 {
     scheduler_make_ready(c);
 }
+
+#ifdef AVM_TASK_DRIVER_ENABLED
+void scheduler_signal_message_from_task(Context *c)
+{
+    scheduler_make_ready_from_task(c);
+}
+#endif
 
 void scheduler_terminate(Context *ctx)
 {

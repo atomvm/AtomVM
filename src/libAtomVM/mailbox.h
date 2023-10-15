@@ -36,9 +36,19 @@ extern "C" {
 #include <stdbool.h>
 
 #include "list.h"
-#include "smp.h"
 #include "term_typedef.h"
 #include "utils.h"
+
+#ifdef HAVE_PLATFORM_ATOMIC_H
+#include "platform_atomic.h"
+#endif
+
+#if defined(HAVE_ATOMIC) && !defined(__cplusplus)
+#include <stdatomic.h>
+#define ATOMIC _Atomic
+#else
+#define ATOMIC
+#endif
 
 struct Context;
 
@@ -54,8 +64,12 @@ struct Heap;
 typedef struct Heap Heap;
 #endif
 
-typedef struct Message Message;
+#ifndef TYPEDEF_MAILBOXMESSAGE
+#define TYPEDEF_MAILBOXMESSAGE
 typedef struct MailboxMessage MailboxMessage;
+#endif
+
+typedef struct Message Message;
 
 enum MessageType
 {
@@ -172,7 +186,7 @@ MailboxMessage *mailbox_process_outer_list(Mailbox *mbox);
  * @brief Sends a message to a certain mailbox.
  *
  * @details Sends a term to a certain process or port mailbox. Can be called
- * from another process.
+ * from another process. Cannot be called from a task or from ISR.
  * @param c the process context.
  * @param t the term that will be sent.
  */
@@ -223,6 +237,19 @@ void mailbox_send_ref_signal(Context *c, enum MessageType type, uint64_t ref_tic
  * @param type the type of the signal
  */
 void mailbox_send_empty_body_signal(Context *c, enum MessageType type);
+
+#ifdef AVM_TASK_DRIVER_ENABLED
+/**
+ * @brief Enqueue message
+ *
+ * @details This function does not signal the process to be ready and is only
+ * meant to be called from a task by `globalcontext_send_message_from_task`.
+ *
+ * @param c the process context.
+ * @param m the message to enqueue
+ */
+void mailbox_enqueue_message(Context *c, MailboxMessage *m);
+#endif
 
 /**
  * @brief Reset mailbox receive pointer.
@@ -293,6 +320,15 @@ Message *mailbox_first(Mailbox *mbox);
  * @param heap the heap to add messages to.
  */
 void mailbox_destroy(Mailbox *mbox, Heap *heap);
+
+/**
+ * @brief Allocate and serialize a term to a mailbox message.
+ *
+ * @details Can be called from a task or even ISR (provided malloc works).
+ * @param type the message type, can be NormalMessage or a signal type
+ * @param t the term that will be sent
+ */
+MailboxMessage *mailbox_message_create_from_term(enum MessageType type, term t);
 
 /**
  * @brief Dispose a (processed) mailbox message. The message will be freed or

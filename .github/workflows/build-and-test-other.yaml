@@ -88,7 +88,7 @@ jobs:
         - arch: "arm32v5"
           platform: "arm/v5"
           cflags: "-O2 -mthumb -mthumb-interwork -march=armv4t"
-          cmake_opts: "-DAVM_DISABLE_SMP=On"
+          cmake_opts: "-DAVM_DISABLE_SMP=On -DAVM_DISABLE_TASK_DRIVER=On"
           tag: "stretch"
           sources: |
             deb [trusted=yes] http://archive.debian.org/debian/ stretch-backports main
