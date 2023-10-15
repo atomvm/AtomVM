@@ -19,6 +19,7 @@
  */
 
 #include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -61,6 +62,8 @@
     "\n"
 
 int _write(int file, char *ptr, int len);
+pid_t _getpid(void);
+int _kill(pid_t pid, int sig);
 
 static void clock_setup()
 {
@@ -124,6 +127,30 @@ int _write(int file, char *ptr, int len)
     return -1;
 }
 
+// newlib stubs to support AVM_ABORT
+pid_t _getpid()
+{
+    return 1;
+}
+
+int _kill(pid_t pid, int sig)
+{
+    UNUSED(pid);
+    if (sig == SIGABRT) {
+        fprintf(stderr, "Aborted\n");
+    } else {
+        fprintf(stderr, "Unknown signal %d\n", sig);
+    }
+    errno = EINVAL;
+    return -1;
+}
+
+// Redefine weak linked while(1) loop from libopencm3/cm3/nvic.h.
+void hard_fault_handler() {
+    fprintf(stderr, "\nHard Fault detected!\n");
+    AVM_ABORT();
+}
+
 int main()
 {
     // Flash cache must be enabled before system clock is activated
@@ -172,6 +199,8 @@ int main()
     ctx->leader = 1;
 
     AVM_LOGI(TAG, "Starting: %s...\n", startup_module_name);
+    fprintf(stdout, "---\n");
+
     context_execute_loop(ctx, mod, "start", 0);
     AVM_LOGI(TAG, "Return value: %lx", (long) term_to_int32(ctx->x[0]));
 
