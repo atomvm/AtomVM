@@ -59,5 +59,7 @@ test_clock(Case, Fun) ->
     Delta = EndTime - StartTime,
     if
         Delta >= 100 andalso Delta < 500 -> ok;
+        % Emulator sometimes gives us 99
+        Delta =:= 99 -> ok;
         true -> throw({unexpected_delta, Delta, Case, StartTime, EndTime})
     end.

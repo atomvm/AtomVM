@@ -37,6 +37,7 @@ extern "C" {
 #include "atom.h"
 #include "erl_nif.h"
 #include "list.h"
+#include "mailbox.h"
 #include "smp.h"
 #include "synclist.h"
 #include "term.h"
@@ -63,6 +64,18 @@ typedef struct Module Module;
 typedef struct GlobalContext GlobalContext;
 #endif
 
+#ifndef TYPEDEF_MAILBOXMESSAGE
+#define TYPEDEF_MAILBOXMESSAGE
+typedef struct MailboxMessage MailboxMessage;
+#endif
+
+struct MessageQueueItem
+{
+    struct MessageQueueItem *next;
+    MailboxMessage *message;
+    int32_t process_id;
+};
+
 struct GlobalContext
 {
     struct ListHead ready_processes;
@@ -72,6 +85,10 @@ struct GlobalContext
     // when running native handlers.
 #ifndef AVM_NO_SMP
     SpinLock processes_spinlock;
+#endif
+#ifndef AVM_NO_ISR
+    // Queue of messages that could not be sent from ISR
+    struct MessageQueueItem *ATOMIC message_queue;
 #endif
     struct SyncList refc_binaries;
     struct SyncList processes_table;
@@ -218,6 +235,33 @@ void globalcontext_send_message(GlobalContext *glb, int32_t process_id, term t);
  * @param t the message to send.
  */
 void globalcontext_send_message_nolock(GlobalContext *glb, int32_t process_id, term t);
+
+#ifndef AVM_NO_ISR
+/**
+ * @brief Send a message to a process identified by its id. This variant is to
+ * be used from Interrupt Service Routines. It tries to acquire the necessary
+ * locks and if it fails, it enqueues the message which will be delivered on
+ * the next scheduler context switch.
+ *
+ * @details Safely send a message to the process, doing nothing if the process
+ * cannot be found.
+ *
+ * @param glb the global context (that owns the process table).
+ * @param process_id the target process id.
+ * @param type the type of message to send, can be NormalMessage or a signal
+ * @param t the message to send.
+ */
+void globalcontext_send_message_from_isr(GlobalContext *glb, int32_t process_id, enum MessageType type, term t);
+
+/**
+ * @brief Process queue of message enqueued from ISR.
+ *
+ * @details This function is called from the scheduler.
+ *
+ * @param glb the global context (that owns the process table).
+ */
+void globalcontext_process_message_queue(GlobalContext *glb);
+#endif
 
 /**
  * @brief Initialize a new process, providing it with a process id.

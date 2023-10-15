@@ -43,6 +43,7 @@
 #include <defaultatoms.h>
 #include <utils.h>
 
+#include "platform_atomic.h"
 #include "rp2040_sys.h"
 
 struct PortDriverDefListItem *port_driver_list;
@@ -55,8 +56,9 @@ void sys_init_platform(GlobalContext *glb)
 #ifndef AVM_NO_SMP
     mutex_init(&platform->event_poll_mutex);
     cond_init(&platform->event_poll_cond);
-    smp_init();
 #endif
+
+    atomic_init();
 
 #ifdef LIB_PICO_CYW43_ARCH
     cyw43_arch_init();
@@ -72,9 +74,7 @@ void sys_free_platform(GlobalContext *glb)
     struct RP2040PlatformData *platform = glb->platform_data;
     free(platform);
 
-#ifndef AVM_NO_SMP
-    smp_free();
-#endif
+    atomic_free();
 }
 
 #ifndef AVM_NO_SMP
@@ -98,6 +98,12 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
 {
     UNUSED(glb);
     UNUSED(timeout_ms);
+    // Immediately returns
+}
+
+void sys_signal(GlobalContext *glb)
+{
+    UNUSED(glb);
 }
 #endif
 

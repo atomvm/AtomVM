@@ -96,7 +96,7 @@ static term tuple_from_addr(Heap *heap, uint32_t addr)
     return port_heap_create_tuple_n(heap, 4, terms);
 }
 
-static void send_term(Heap *heap, term t)
+static void send_term(Heap *heap, term t, bool from_isr)
 {
     term ref = term_from_ref_ticks(driver_data->ref_ticks, heap);
     term msg = term_alloc_tuple(2, heap);
@@ -104,30 +104,34 @@ static void send_term(Heap *heap, term t)
     term_put_tuple_element(msg, 1, t);
 
     // Pid ! {Ref, T}
-    port_send_message(driver_data->global, term_from_local_process_id(driver_data->owner_process_id), msg);
+    if (from_isr) {
+        globalcontext_send_message_from_isr(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+    } else {
+        globalcontext_send_message(driver_data->global, driver_data->owner_process_id, msg);
+    }
 }
 
-static void send_sta_connected()
+static void send_sta_connected_from_isr()
 {
     // {Ref, sta_connected}
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
     {
-        send_term(&heap, globalcontext_make_atom(driver_data->global, sta_connected_atom));
+        send_term(&heap, globalcontext_make_atom(driver_data->global, sta_connected_atom), true);
     }
     END_WITH_STACK_HEAP(heap, driver_data->global);
 }
 
-static void send_sta_disconnected()
+static void send_sta_disconnected_from_isr()
 {
     // {Ref, sta_disconnected}
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
     {
-        send_term(&heap, globalcontext_make_atom(driver_data->global, sta_disconnected_atom));
+        send_term(&heap, globalcontext_make_atom(driver_data->global, sta_disconnected_atom), true);
     }
     END_WITH_STACK_HEAP(heap, driver_data->global);
 }
 
-static void send_got_ip(struct netif *netif)
+static void send_got_ip_from_isr(struct netif *netif)
 {
     // {Ref, {sta_got_ip, {{192, 168, 1, 2}, {255, 255, 255, 0}, {192, 168, 1, 1}}}}
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(3) + TUPLE_SIZE(4) * 3, heap);
@@ -138,7 +142,7 @@ static void send_got_ip(struct netif *netif)
 
         term ip_info = port_heap_create_tuple3(&heap, ip, netmask, gw);
         term reply = port_heap_create_tuple2(&heap, globalcontext_make_atom(driver_data->global, sta_got_ip_atom), ip_info);
-        send_term(&heap, reply);
+        send_term(&heap, reply, true);
     }
     END_WITH_STACK_HEAP(heap, driver_data->global);
 }
@@ -148,41 +152,41 @@ static void send_ap_started()
     // {Ref, ap_started}
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
     {
-        send_term(&heap, globalcontext_make_atom(driver_data->global, ap_started_atom));
+        send_term(&heap, globalcontext_make_atom(driver_data->global, ap_started_atom), false);
     }
     END_WITH_STACK_HEAP(heap, driver_data->global);
 }
 
-static void send_atom_mac(term atom, uint8_t *mac)
+static void send_atom_mac_from_isr(term atom, uint8_t *mac)
 {
     // {Ref, {ap_connected | ap_disconnected, <<1,2,3,4,5,6>>}}
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + TERM_BINARY_HEAP_SIZE(6), heap);
     {
         term mac_term = term_from_literal_binary(mac, 6, &heap, driver_data->global);
         term reply = port_heap_create_tuple2(&heap, atom, mac_term);
-        send_term(&heap, reply);
+        send_term(&heap, reply, true);
     }
     END_WITH_STACK_HEAP(heap, driver_data->global);
 }
 
-static void send_ap_sta_connected(uint8_t *mac)
+static void send_ap_sta_connected_from_isr(uint8_t *mac)
 {
-    send_atom_mac(globalcontext_make_atom(driver_data->global, ap_sta_connected_atom), mac);
+    send_atom_mac_from_isr(globalcontext_make_atom(driver_data->global, ap_sta_connected_atom), mac);
 }
 
-static void send_ap_sta_disconnected(uint8_t *mac)
+static void send_ap_sta_disconnected_from_isr(uint8_t *mac)
 {
-    send_atom_mac(globalcontext_make_atom(driver_data->global, ap_sta_disconnected_atom), mac);
+    send_atom_mac_from_isr(globalcontext_make_atom(driver_data->global, ap_sta_disconnected_atom), mac);
 }
 
-static void send_sntp_sync(struct timeval *tv)
+static void send_sntp_sync_from_isr(struct timeval *tv)
 {
     // {Ref, {sntp_sync, {TVSec, TVUsec}}}
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) * 2 + BOXED_INT64_SIZE * 2, heap);
     {
         term tv_tuple = port_heap_create_tuple2(&heap, term_make_maybe_boxed_int64(tv->tv_sec, &heap), term_make_maybe_boxed_int64(tv->tv_usec, &heap));
         term reply = port_heap_create_tuple2(&heap, globalcontext_make_atom(driver_data->global, sntp_sync_atom), tv_tuple);
-        send_term(&heap, reply);
+        send_term(&heap, reply, true);
     }
     END_WITH_STACK_HEAP(heap, driver_data->global);
 }
@@ -268,7 +272,7 @@ static void network_driver_cyw43_assoc_cb(bool assoc)
             }
         }
         if (new_mac) {
-            send_ap_sta_connected(&new_macs[6 * i]);
+            send_ap_sta_connected_from_isr(&new_macs[6 * i]);
         }
     }
     // Determine old macs
@@ -281,7 +285,7 @@ static void network_driver_cyw43_assoc_cb(bool assoc)
             }
         }
         if (old_mac) {
-            send_ap_sta_disconnected(&driver_data->stas_mac[6 * j]);
+            send_ap_sta_disconnected_from_isr(&driver_data->stas_mac[6 * j]);
         }
     }
     free(driver_data->stas_mac);
@@ -399,7 +403,7 @@ void sntp_set_system_time_us(unsigned long sec, unsigned long usec)
     tv.tv_usec = usec;
     settimeofday(&tv, NULL);
 
-    send_sntp_sync(&tv);
+    send_sntp_sync_from_isr(&tv);
 
     // We also set RTC time.
     if (UNLIKELY(!rtc_running())) {
@@ -449,11 +453,11 @@ static void network_driver_netif_status_cb(struct netif *netif)
     cyw43_arch_lwip_end();
     if (link_status != previous_link_status) {
         if (link_status == CYW43_LINK_DOWN) {
-            send_sta_disconnected();
+            send_sta_disconnected_from_isr();
         } else if (link_status == CYW43_LINK_JOIN) {
-            send_sta_connected();
+            send_sta_connected_from_isr();
         } else if (link_status == CYW43_LINK_UP) {
-            send_got_ip(netif);
+            send_got_ip_from_isr(netif);
         }
     }
 }

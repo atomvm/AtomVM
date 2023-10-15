@@ -175,24 +175,31 @@ void sys_unregister_listener(GlobalContext *global, EventListener *listener);
  */
 void sys_listener_destroy(struct ListHead *item);
 
-#ifndef AVM_NO_SMP
-
 /**
  * @brief Interrupt the wait in `sys_poll_events`.
  *
  * @details This function should signal the thread that is waiting in
- * `sys_poll_events` so it returns before the timeout. It is only used
- * for SMP builds.
+ * `sys_poll_events` so it returns before the timeout. It is mostly used for
+ * SMP builds, but also to abort sleep because of interruptions.
  *
  * Please note that this function may be called while no thread is waiting in
  * sys_poll_events and this should have no effect. This function is called in
- * scheduler loop (internal function `scheduler_run0`).
+ * scheduler loop (internal function `scheduler_run0`) and when scheduling
+ * processes.
  *
  * @param glb the global context.
  */
 void sys_signal(GlobalContext *glb);
 
-#endif
+/**
+ * @brief Determine if code is executed from ISR
+ *
+ * @details This function should return true if the code is executed from an
+ * interrupt service routine.
+ *
+ * @return true if CPU is from an ISR
+ */
+bool sys_check_if_in_isr();
 
 enum OpenAVMResult sys_open_avm_from_file(
     GlobalContext *global, const char *path, struct AVMPackData **data);

@@ -29,30 +29,24 @@
 #include "defaultatoms.h"
 #include "erl_nif_priv.h"
 #include "list.h"
+#include "mailbox.h"
 #include "posix_nifs.h"
 #include "refc_binary.h"
 #include "resources.h"
+#include "scheduler.h"
+#include "smp.h"
 #include "synclist.h"
 #include "sys.h"
 #include "utils.h"
 #include "valueshashtable.h"
 
-#ifndef AVM_NO_SMP
-#define SMP_SPINLOCK_LOCK(spinlock) smp_spinlock_lock(spinlock)
-#define SMP_SPINLOCK_UNLOCK(spinlock) smp_spinlock_unlock(spinlock)
-#define SMP_MUTEX_LOCK(mutex) smp_mutex_lock(mutex)
-#define SMP_MUTEX_UNLOCK(mutex) smp_mutex_unlock(mutex)
-#define SMP_RWLOCK_RDLOCK(lock) smp_rwlock_rdlock(lock)
-#define SMP_RWLOCK_WRLOCK(lock) smp_rwlock_wrlock(lock)
-#define SMP_RWLOCK_UNLOCK(lock) smp_rwlock_unlock(lock)
-#else
-#define SMP_SPINLOCK_LOCK(spinlock)
-#define SMP_SPINLOCK_UNLOCK(spinlock)
-#define SMP_MUTEX_LOCK(mutex)
-#define SMP_MUTEX_UNLOCK(mutex)
-#define SMP_RWLOCK_RDLOCK(lock)
-#define SMP_RWLOCK_WRLOCK(lock)
-#define SMP_RWLOCK_UNLOCK(lock)
+#ifdef HAVE_PLATFORM_ATOMIC_H
+#include "platform_atomic.h"
+#endif
+
+#if defined(HAVE_ATOMIC)
+#include <stdatomic.h>
+#define ATOMIC_COMPARE_EXCHANGE_WEAK_PTR atomic_compare_exchange_weak
 #endif
 
 struct RegisteredProcess
@@ -74,6 +68,9 @@ GlobalContext *globalcontext_new()
     list_init(&glb->waiting_processes);
 #ifndef AVM_NO_SMP
     smp_spinlock_init(&glb->processes_spinlock);
+#endif
+#ifndef AVM_NO_ISR
+    glb->message_queue = NULL;
 #endif
     synclist_init(&glb->avmpack_data);
     synclist_init(&glb->refc_binaries);
@@ -277,6 +274,29 @@ Context *globalcontext_get_process_lock(GlobalContext *glb, int32_t process_id)
     return NULL;
 }
 
+#ifndef AVM_NO_SMP
+static bool globalcontext_get_process_trylock(GlobalContext *glb, int32_t process_id, Context **output)
+{
+    struct ListHead *item;
+    Context *p = NULL;
+
+    struct ListHead *processes_table_list = synclist_tryrdlock(&glb->processes_table);
+    if (processes_table_list == NULL) {
+        return false;
+    }
+    LIST_FOR_EACH (item, processes_table_list) {
+        p = GET_LIST_ENTRY(item, Context, processes_table_head);
+
+        if (p->process_id == process_id) {
+            *output = p;
+        }
+    }
+    synclist_unlock(&glb->processes_table);
+
+    return true;
+}
+#endif
+
 void globalcontext_get_process_unlock(GlobalContext *glb, Context *c)
 {
     if (c) {
@@ -307,6 +327,78 @@ void globalcontext_send_message_nolock(GlobalContext *glb, int32_t process_id, t
         mailbox_send(p, t);
     }
 }
+
+#ifndef AVM_NO_ISR
+void globalcontext_send_message_from_isr(GlobalContext *glb, int32_t process_id, enum MessageType type, term t)
+{
+    MailboxMessage *message = NULL;
+    bool postponed = false;
+#ifndef AVM_NO_SMP
+    Context *p = NULL;
+    if (globalcontext_get_process_trylock(glb, process_id, &p)) {
+        if (p) {
+            message = mailbox_message_create_from_term(type, t);
+            // Ensure we can acquire the spinlock
+            if (smp_spinlock_trylock(&glb->processes_spinlock)) {
+                // We can send the message.
+                mailbox_enqueue_message(p, message);
+                scheduler_signal_message_from_isr(p);
+                smp_spinlock_unlock(&glb->processes_spinlock);
+            } else {
+                postponed = true;
+            }
+            globalcontext_get_process_unlock(glb, p);
+        }
+    } else {
+        postponed = true;
+    }
+#else
+    // Without SMP, we have no lock, so we must always enqueue.
+    postponed = true;
+#endif
+    if (postponed) {
+        if (message == NULL) {
+            message = mailbox_message_create_from_term(type, t);
+        }
+        struct MessageQueueItem *queued_item = malloc(sizeof(struct MessageQueueItem));
+        if (IS_NULL_PTR(queued_item)) {
+            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            AVM_ABORT();
+        }
+        queued_item->message = message;
+        queued_item->process_id = process_id;
+
+        struct MessageQueueItem *current_first = NULL;
+        do {
+            queued_item->next = current_first;
+        } while (!ATOMIC_COMPARE_EXCHANGE_WEAK_PTR(&glb->message_queue, &current_first, queued_item));
+        // Make sure the scheduler is busy
+        sys_signal(glb);
+    }
+}
+
+void globalcontext_process_message_queue(GlobalContext *glb)
+{
+    struct MessageQueueItem *current = glb->message_queue;
+    // Empty outer list using CAS
+    if (current) {
+        while (!ATOMIC_COMPARE_EXCHANGE_WEAK_PTR(&glb->message_queue, &current, NULL)) {
+        };
+        (void) synclist_rdlock(&glb->processes_table);
+        while (current) {
+            Context *context = globalcontext_get_process_nolock(glb, current->process_id);
+            if (context) {
+                mailbox_enqueue_message(context, current->message);
+                scheduler_signal_message(context);
+            }
+            struct MessageQueueItem *old = current;
+            current = old->next;
+            free(old);
+        }
+        synclist_unlock(&glb->processes_table);
+    }
+}
+#endif
 
 void globalcontext_init_process(GlobalContext *glb, Context *ctx)
 {

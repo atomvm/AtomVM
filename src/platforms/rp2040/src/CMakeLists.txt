@@ -28,11 +28,12 @@ if(CMAKE_COMPILER_IS_GNUCC)
     target_compile_options(AtomVM PRIVATE -Wall -pedantic -Wextra)
 endif()
 
-# libAtomVM needs to find Pico's platform_smp.h header
+# libAtomVM needs to find Pico's platform_smp.h and platform_atomic.h headers
 set(HAVE_PLATFORM_SMP_H ON)
+set(HAVE_PLATFORM_ATOMIC_H ON)
 add_subdirectory(../../../libAtomVM libAtomVM)
 target_link_libraries(AtomVM PUBLIC libAtomVM)
-# Also add lib where platform_smp.h header is
+# Also add lib where platform_smp.h and platform_atomic headers are
 target_include_directories(libAtomVM PUBLIC lib)
 
 target_link_libraries(AtomVM PUBLIC hardware_regs pico_stdlib pico_binary_info)

@@ -61,10 +61,18 @@ void scheduler_init_ready(Context *c);
 
 /**
  * @brief Signal a process that a message was inserted in the mailbox.
+ * @details Cannot be called from ISR
  *
  * @param c the process context.
  */
 void scheduler_signal_message(Context *c);
+
+/**
+ * @brief Signal a process that a message was inserted in the mailbox.
+ * @details Must only be called while global->processes_spinlock is acquired.
+ * @param c the process context.
+ */
+void scheduler_signal_message_from_isr(Context *c);
 
 /**
  * @brief Signal a process that it was killed.

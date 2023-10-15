@@ -144,6 +144,11 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
     UNUSED(timeout_ms);
 }
 
+void sys_signal(GlobalContext *glb)
+{
+    UNUSED(glb);
+}
+
 void sys_listener_destroy(struct ListHead *item)
 {
     UNUSED(item);
