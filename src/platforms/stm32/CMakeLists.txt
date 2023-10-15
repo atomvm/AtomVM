@@ -32,6 +32,7 @@ option(AVM_NEWLIB_NANO "Use 'nano' newlib. Saves 46kB, no `long long` support" O
 option(AVM_LOG_DISABLE "Disable log output" OFF)
 option(AVM_ENABLE_LOG_COLOR "Use color log output" OFF)
 option(AVM_ENABLE_LOG_LINES "Include source and line info for all enbled levels" OFF)
+option(AVM_CONFIG_REBOOT_ON_NOT_OK "Reboot when application exits with non 'ok' return" OFF)
 
 set(AVM_DISABLE_SMP ON FORCE)
 
@@ -40,7 +41,11 @@ if (AVM_NEWLIB_NANO)
     set(AVM_LOG_DISABLE ON FORCE)
 endif()
 
-# Configure logging
+if (AVM_CONFIG_REBOOT_ON_NOT_OK)
+    add_compile_definitions(CONFIG_REBOOT_ON_NOT_OK)
+endif()
+
+    # Configure logging
 if (AVM_LOG_DISABLE)
     add_compile_definitions(AVM_LOG_DISABLE)
 elseif (AVM_LOG_LEVEL_MAX)

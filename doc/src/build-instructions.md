@@ -551,6 +551,9 @@ is 8N1 with no flow control.
 
 > If building for a different target USART and gpio pins may need to be adjusted in `main.c`.
 
+### Configuring for "deployment"
+After your application has been tested (_and debugged_) and is ready to put into active use you may want to tune the build of AtomVM.  For instance disabling logging with `-DAVM_LOG_DISABLE=on` as a `cmake` configuration option may result in slightly better performance. This will have no affect on the console output of your application, just disable low level log messages from the AtomVM system. You may also want to enabling automatic reboot in the case that your application ever exits with a return other than `ok`. This can be enabled with the `cmake` option `-DAVM_CONFIG_REBOOT_ON_NOT_OK=on`.
+
 ## Building for Raspberry Pi Pico
 
 ### Prerequisites
