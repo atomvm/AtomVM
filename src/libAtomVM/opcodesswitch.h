@@ -1918,7 +1918,6 @@ schedule_in:
                 break;
             }
 
-            //TODO: implement me
             case OP_BIF1: {
                 uint32_t fail_label;
                 DECODE_LABEL(fail_label, pc);
@@ -1943,7 +1942,12 @@ schedule_in:
                     DEBUG_FAIL_NULL(func);
                     term ret = func(ctx, arg1);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
-                        HANDLE_ERROR();
+                        if (fail_label) {
+                            pc = mod->labels[fail_label];
+                            break;
+                        } else {
+                            HANDLE_ERROR();
+                        }
                     }
 
                     WRITE_REGISTER(dreg, ret);
@@ -1951,7 +1955,6 @@ schedule_in:
                 break;
             }
 
-            //TODO: implement me
             case OP_BIF2: {
                 uint32_t fail_label;
                 DECODE_LABEL(fail_label, pc);
@@ -1979,7 +1982,12 @@ schedule_in:
                     DEBUG_FAIL_NULL(func);
                     term ret = func(ctx, arg1, arg2);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
-                        HANDLE_ERROR();
+                        if (fail_label) {
+                            pc = mod->labels[fail_label];
+                            break;
+                        } else {
+                            HANDLE_ERROR();
+                        }
                     }
 
                     WRITE_REGISTER(dreg, ret);
@@ -5048,8 +5056,8 @@ wait_timeout_trap_handler:
             }
 
             case OP_GC_BIF1: {
-                uint32_t f_label;
-                DECODE_LABEL(f_label, pc);
+                uint32_t fail_label;
+                DECODE_LABEL(fail_label, pc);
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
                 uint32_t bif;
@@ -5062,7 +5070,12 @@ wait_timeout_trap_handler:
                     GCBifImpl1 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif1_ptr;
                     term ret = func(ctx, live, arg1);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
-                        HANDLE_ERROR();
+                        if (fail_label) {
+                            pc = mod->labels[fail_label];
+                            break;
+                        } else {
+                            HANDLE_ERROR();
+                        }
                     }
                 #endif
 
@@ -5070,27 +5083,25 @@ wait_timeout_trap_handler:
                 DECODE_DEST_REGISTER(dreg, pc);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("gc_bif1/5 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, dest=%c%i\n", f_label, live, bif, arg1, T_DEST_REG(dreg));
+                    TRACE("gc_bif1/5 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, dest=%c%i\n", fail_label, live, bif, arg1, T_DEST_REG(dreg));
                     WRITE_REGISTER(dreg, ret);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("gc_bif1/5\n");
 
-                    UNUSED(f_label)
+                    UNUSED(fail_label)
                     UNUSED(live)
                     UNUSED(bif)
                     UNUSED(arg1)
                     UNUSED(dreg)
                 #endif
-
-                UNUSED(f_label)
                 break;
             }
 
             case OP_GC_BIF2: {
-                uint32_t f_label;
-                DECODE_LABEL(f_label, pc);
+                uint32_t fail_label;
+                DECODE_LABEL(fail_label, pc);
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
                 uint32_t bif;
@@ -5105,7 +5116,12 @@ wait_timeout_trap_handler:
                     GCBifImpl2 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif2_ptr;
                     term ret = func(ctx, live, arg1, arg2);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
-                        HANDLE_ERROR();
+                        if (fail_label) {
+                            pc = mod->labels[fail_label];
+                            break;
+                        } else {
+                            HANDLE_ERROR();
+                        }
                     }
                 #endif
 
@@ -5113,22 +5129,20 @@ wait_timeout_trap_handler:
                 DECODE_DEST_REGISTER(dreg, pc);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("gc_bif2/6 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, arg2=0x%lx, dest=%c%i\n", f_label, live, bif, arg1, arg2, T_DEST_REG(dreg));
+                    TRACE("gc_bif2/6 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, arg2=0x%lx, dest=%c%i\n", fail_label, live, bif, arg1, arg2, T_DEST_REG(dreg));
                     WRITE_REGISTER(dreg, ret);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("gc_bif2/6\n");
 
-                    UNUSED(f_label)
+                    UNUSED(fail_label)
                     UNUSED(live)
                     UNUSED(bif)
                     UNUSED(arg1)
                     UNUSED(arg2)
                     UNUSED(dreg)
                 #endif
-
-                UNUSED(f_label)
                 break;
             }
 
@@ -5153,9 +5167,11 @@ wait_timeout_trap_handler:
                 break;
             }
 
+            // TODO: This opcode is currently uncovered by tests.
+            // We need to implement GC bifs with arity 3, e.g. binary_part/3.
             case OP_GC_BIF3: {
-                uint32_t f_label;
-                DECODE_LABEL(f_label, pc);
+                uint32_t fail_label;
+                DECODE_LABEL(fail_label, pc);
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
                 uint32_t bif;
@@ -5172,7 +5188,12 @@ wait_timeout_trap_handler:
                     GCBifImpl3 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif3_ptr;
                     term ret = func(ctx, live, arg1, arg2, arg3);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
-                        HANDLE_ERROR();
+                        if (fail_label) {
+                            pc = mod->labels[fail_label];
+                            break;
+                        } else {
+                            HANDLE_ERROR();
+                        }
                     }
                 #endif
 
@@ -5180,14 +5201,14 @@ wait_timeout_trap_handler:
                 DECODE_DEST_REGISTER(dreg, pc);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("gc_bif3/7 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, arg2=0x%lx, arg3=0x%lx, dest=%c%i\n", f_label, live, bif, arg1, arg2, arg3, T_DEST_REG(dreg));
+                    TRACE("gc_bif3/7 fail_lbl=%i, live=%i, bif=%i, arg1=0x%lx, arg2=0x%lx, arg3=0x%lx, dest=%c%i\n", fail_label, live, bif, arg1, arg2, arg3, T_DEST_REG(dreg));
                     WRITE_REGISTER(dreg, ret);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("gc_bif2/6\n");
 
-                    UNUSED(f_label)
+                    UNUSED(fail_label)
                     UNUSED(live)
                     UNUSED(bif)
                     UNUSED(arg1)
@@ -5195,8 +5216,6 @@ wait_timeout_trap_handler:
                     UNUSED(arg3)
                     UNUSED(dreg)
                 #endif
-
-                UNUSED(f_label)
                 break;
             }
 
@@ -5674,11 +5693,21 @@ wait_timeout_trap_handler:
                     ctx->fr[freg3] = ctx->fr[freg1] + ctx->fr[freg2];
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         if (fetestexcept(FE_OVERFLOW)) {
-                            RAISE_ERROR(BADARITH_ATOM);
+                            if (fail_label) {
+                                // Not sure this can happen, float operations
+                                // in guards are translated to gc_bif calls
+                                pc = mod->labels[fail_label];
+                            } else {
+                                RAISE_ERROR(BADARITH_ATOM);
+                            }
                         }
                     #else
                         if (!isfinite(ctx->fr[freg3])) {
-                            RAISE_ERROR(BADARITH_ATOM);
+                            if (fail_label) {
+                                pc = mod->labels[fail_label];
+                            } else {
+                                RAISE_ERROR(BADARITH_ATOM);
+                            }
                         }
                     #endif
                 #endif
@@ -5711,11 +5740,21 @@ wait_timeout_trap_handler:
                     ctx->fr[freg3] = ctx->fr[freg1] - ctx->fr[freg2];
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         if (fetestexcept(FE_OVERFLOW)) {
-                            RAISE_ERROR(BADARITH_ATOM);
+                            if (fail_label) {
+                                // Not sure this can happen, float operations
+                                // in guards are translated to gc_bif calls
+                                pc = mod->labels[fail_label];
+                            } else {
+                                RAISE_ERROR(BADARITH_ATOM);
+                            }
                         }
                     #else
                         if (!isfinite(ctx->fr[freg3])) {
-                            RAISE_ERROR(BADARITH_ATOM);
+                            if (fail_label) {
+                                pc = mod->labels[fail_label];
+                            } else {
+                                RAISE_ERROR(BADARITH_ATOM);
+                            }
                         }
                     #endif
                 #endif
@@ -5748,11 +5787,21 @@ wait_timeout_trap_handler:
                     ctx->fr[freg3] = ctx->fr[freg1] * ctx->fr[freg2];
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         if (fetestexcept(FE_OVERFLOW)) {
-                            RAISE_ERROR(BADARITH_ATOM);
+                            if (fail_label) {
+                                // Not sure this can happen, float operations
+                                // in guards are translated to gc_bif calls
+                                pc = mod->labels[fail_label];
+                            } else {
+                                RAISE_ERROR(BADARITH_ATOM);
+                            }
                         }
                     #else
                         if (!isfinite(ctx->fr[freg3])) {
-                            RAISE_ERROR(BADARITH_ATOM);
+                            if (fail_label) {
+                                pc = mod->labels[fail_label];
+                            } else {
+                                RAISE_ERROR(BADARITH_ATOM);
+                            }
                         }
                     #endif
                 #endif
@@ -5785,11 +5834,21 @@ wait_timeout_trap_handler:
                     ctx->fr[freg3] = ctx->fr[freg1] / ctx->fr[freg2];
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         if (fetestexcept(FE_OVERFLOW | FE_DIVBYZERO)) {
-                            RAISE_ERROR(BADARITH_ATOM);
+                            if (fail_label) {
+                                // Not sure this can happen, float operations
+                                // in guards are translated to gc_bif calls
+                                pc = mod->labels[fail_label];
+                            } else {
+                                RAISE_ERROR(BADARITH_ATOM);
+                            }
                         }
                     #else
                         if (!isfinite(ctx->fr[freg3])) {
-                            RAISE_ERROR(BADARITH_ATOM);
+                            if (fail_label) {
+                                pc = mod->labels[fail_label];
+                            } else {
+                                RAISE_ERROR(BADARITH_ATOM);
+                            }
                         }
                     #endif
                 #endif
@@ -5963,7 +6022,11 @@ wait_timeout_trap_handler:
 
                     if (!(term_is_binary(src) || term_is_match_state(src))) {
                         WRITE_REGISTER(dreg, src);
-                        pc = mod->labels[fail];
+                        if (term_is_integer(fail)) {
+                            pc = mod->labels[term_to_int(fail)];
+                        } else {
+                            RAISE_ERROR(BADARG_ATOM);
+                        }
                     } else {
                         term match_state = term_alloc_bin_match_state(src, 0, &ctx->heap);
 
