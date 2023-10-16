@@ -41,12 +41,10 @@
     #include "stacktrace.h"
 #endif
 
-#define ENABLE_OTP21
-#define ENABLE_OTP22
-#define ENABLE_OTP23
-#define ENABLE_OTP24
-#define ENABLE_OTP25
-#define ENABLE_OTP26
+// These constants can be used to reduce the size of the VM for a specific
+// range of compiler versions
+#define MINIMUM_OTP_COMPILER_VERSION 21
+#define MAXIMUM_OTP_COMPILER_VERSION 26
 
 //#define ENABLE_TRACE
 
@@ -2086,6 +2084,7 @@ schedule_in:
                 break;
             }
 
+#if MINIMUM_OTP_COMPILER_VERSION <= 23
             case OP_ALLOCATE_HEAP_ZERO: {
                 uint32_t stack_need;
                 DECODE_LITERAL(stack_need, pc);
@@ -2121,6 +2120,7 @@ schedule_in:
                 #endif
                 break;
             }
+#endif
 
             case OP_TEST_HEAP: {
                 uint32_t heap_need;
@@ -3072,6 +3072,7 @@ wait_timeout_trap_handler:
                 break;
             }
 
+#if MINIMUM_OTP_COMPILER_VERSION <= 25
             case OP_SET_TUPLE_ELEMENT: {
                 term new_element;
                 DECODE_COMPACT_TERM(new_element, pc);
@@ -3097,6 +3098,7 @@ wait_timeout_trap_handler:
 #endif
                 break;
             }
+#endif
 
             case OP_PUT_LIST: {
 
@@ -3126,6 +3128,7 @@ wait_timeout_trap_handler:
                 break;
             }
 
+#if MINIMUM_OTP_COMPILER_VERSION <= 21
             case OP_PUT_TUPLE: {
                 uint32_t size;
                 DECODE_LITERAL(size, pc);
@@ -3163,6 +3166,7 @@ wait_timeout_trap_handler:
                 }
                 break;
             }
+#endif
 
             case OP_BADMATCH: {
                 #ifdef IMPL_EXECUTE_LOOP
@@ -3572,6 +3576,7 @@ wait_timeout_trap_handler:
                 break;
             }
 
+#if MINIMUM_OTP_COMPILER_VERSION <= 24
             case OP_BS_INIT2: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
@@ -3719,6 +3724,7 @@ wait_timeout_trap_handler:
                 #endif
                 break;
             }
+#endif
 
             case OP_BS_GET_UTF8: {
                 uint32_t fail;
@@ -3795,7 +3801,8 @@ wait_timeout_trap_handler:
                 break;
             }
 
-           case OP_BS_UTF16_SIZE: {
+#if MINIMUM_OTP_COMPILER_VERSION <= 24
+            case OP_BS_UTF16_SIZE: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
                 term src;
@@ -3854,6 +3861,7 @@ wait_timeout_trap_handler:
                 #endif
                 break;
             }
+#endif
 
             case OP_BS_GET_UTF16: {
                 uint32_t fail;
@@ -3930,6 +3938,7 @@ wait_timeout_trap_handler:
                 break;
             }
 
+#if MINIMUM_OTP_COMPILER_VERSION <= 24
             case OP_BS_PUT_UTF32: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
@@ -3965,6 +3974,7 @@ wait_timeout_trap_handler:
                 #endif
                 break;
             }
+#endif
 
             case OP_BS_GET_UTF32: {
                 uint32_t fail;
@@ -4056,6 +4066,7 @@ wait_timeout_trap_handler:
                 break;
             }
 
+#if MINIMUM_OTP_COMPILER_VERSION <= 24
             case OP_BS_APPEND: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
@@ -4301,7 +4312,9 @@ wait_timeout_trap_handler:
                 #endif
                 break;
             }
+#endif
 
+#if MINIMUM_OTP_COMPILER_VERSION <= 21
             case OP_BS_START_MATCH2: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
@@ -4345,7 +4358,9 @@ wait_timeout_trap_handler:
                 #endif
                 break;
             }
+#endif
 
+#if MAXIMUM_OTP_COMPILER_VERSION >= 22
             case OP_BS_START_MATCH3: {
                 // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
                 #ifdef IMPL_EXECUTE_LOOP
@@ -4477,7 +4492,9 @@ wait_timeout_trap_handler:
                 #endif
                 break;
             }
+#endif
 
+#if MINIMUM_OTP_COMPILER_VERSION <= 25
             case OP_BS_MATCH_STRING: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
@@ -4526,7 +4543,9 @@ wait_timeout_trap_handler:
                 #endif
                 break;
             }
+#endif
 
+#if MINIMUM_OTP_COMPILER_VERSION <= 21
             case OP_BS_SAVE2: {
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
@@ -4583,6 +4602,7 @@ wait_timeout_trap_handler:
                 #endif
                 break;
             }
+#endif
 
             case OP_BS_SKIP_BITS2: {
                 uint32_t fail;
@@ -4625,6 +4645,7 @@ wait_timeout_trap_handler:
                 break;
             }
 
+#if MINIMUM_OTP_COMPILER_VERSION <= 24
             case OP_BS_TEST_UNIT: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
@@ -4678,6 +4699,7 @@ wait_timeout_trap_handler:
                 #endif
                 break;
             }
+#endif
 
             case OP_BS_GET_INTEGER2: {
                 uint32_t fail;
@@ -5198,6 +5220,7 @@ wait_timeout_trap_handler:
                 break;
             }
 
+#if MINIMUM_OTP_COMPILER_VERSION <= 23
             //TODO: stub, implement recv_mark/1
             //it looks like it can be safely left unimplemented
             case OP_RECV_MARK: {
@@ -5219,6 +5242,7 @@ wait_timeout_trap_handler:
                 USED_BY_TRACE(label);
                 break;
             }
+#endif
 
             case OP_LINE: {
                 #ifdef IMPL_CODE_LOADER
@@ -5559,6 +5583,7 @@ wait_timeout_trap_handler:
                 break;
             }
 
+#if MINIMUM_OTP_COMPILER_VERSION <= 23
             case OP_FCLEARERROR: {
                 // This can be a noop as we raise from bifs
                 TRACE("fclearerror/0\n");
@@ -5571,6 +5596,7 @@ wait_timeout_trap_handler:
                 DECODE_LABEL(fail_label, pc);
                 break;
             }
+#endif
 
             case OP_FMOVE: {
                 if (IS_EXTENDED_FP_REGISTER(pc)) {
@@ -5809,7 +5835,6 @@ wait_timeout_trap_handler:
                 break;
             }
 
-#ifdef ENABLE_OTP21
             case OP_GET_HD: {
                 term src_value;
                 DECODE_COMPACT_TERM(src_value, pc)
@@ -5851,9 +5876,8 @@ wait_timeout_trap_handler:
                 #endif
                 break;
             }
-#endif
 
-#ifdef ENABLE_OTP22
+#if MAXIMUM_OTP_COMPILER_VERSION >= 22
             case OP_PUT_TUPLE2: {
                 dreg_gc_safe_t dreg;
                 DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
@@ -5892,7 +5916,7 @@ wait_timeout_trap_handler:
             }
 #endif
 
-#ifdef ENABLE_OTP23
+#if MAXIMUM_OTP_COMPILER_VERSION >= 23
             case OP_SWAP: {
                 dreg_t reg_a;
                 DECODE_DEST_REGISTER(reg_a, pc);
@@ -5950,7 +5974,7 @@ wait_timeout_trap_handler:
             }
 #endif
 
-#ifdef ENABLE_OTP24
+#if MAXIMUM_OTP_COMPILER_VERSION >= 24
             case OP_MAKE_FUN3: {
                 uint32_t fun_index;
                 DECODE_LITERAL(fun_index, pc);
@@ -6034,7 +6058,7 @@ wait_timeout_trap_handler:
             }
 #endif
 
-#ifdef ENABLE_OTP25
+#if MAXIMUM_OTP_COMPILER_VERSION >= 25
             case OP_BS_CREATE_BIN: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc);
@@ -6352,7 +6376,7 @@ wait_timeout_trap_handler:
             }
 #endif
 
-#ifdef ENABLE_OTP26
+#if MAXIMUM_OTP_COMPILER_VERSION >= 26
             case OP_UPDATE_RECORD: {
                 #ifdef IMPL_CODE_LOADER
                     TRACE("update_record/5\n");
