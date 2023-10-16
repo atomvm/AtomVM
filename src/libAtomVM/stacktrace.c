@@ -58,7 +58,7 @@ static void cp_to_mod_lbl_off(term cp, Context *ctx, Module **cp_mod, int *label
     int labels_count = ENDIAN_SWAP_32(mod->code->labels);
 
     int i = 1;
-    uint8_t *l = mod->labels[1];
+    const uint8_t *l = mod->labels[1];
     while (*mod_offset > l - code) {
         i++;
         if (i >= labels_count) {
@@ -71,7 +71,7 @@ static void cp_to_mod_lbl_off(term cp, Context *ctx, Module **cp_mod, int *label
     }
 
     *label = i - 1;
-    *l_off = *mod_offset - ((uint8_t *) mod->labels[*label] - code);
+    *l_off = *mod_offset - (mod->labels[*label] - code);
 }
 
 static bool is_module_member(Module *mod, Module **mods, unsigned long len)
@@ -131,7 +131,7 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
 
             Module *cl_mod = globalcontext_get_module_by_index(ctx->global, module_index);
             uint8_t *code = &cl_mod->code->code[0];
-            int mod_offset = ((uint8_t *) cl_mod->labels[label] - code);
+            int mod_offset = cl_mod->labels[label] - code;
 
             if (!(prev_mod == cl_mod && mod_offset == prev_mod_offset)) {
                 ++num_frames;
@@ -205,7 +205,7 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
             int label = term_to_catch_label_and_module(*ct, &module_index);
             Module *cl_mod = globalcontext_get_module_by_index(ctx->global, module_index);
             uint8_t *code = &cl_mod->code->code[0];
-            int mod_offset = ((uint8_t *) cl_mod->labels[label] - code);
+            int mod_offset = cl_mod->labels[label] - code;
 
             if (!(prev_mod == cl_mod && mod_offset == prev_mod_offset)) {
 
