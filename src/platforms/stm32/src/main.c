@@ -126,6 +126,9 @@ int _write(int file, char *ptr, int len)
 
 int main()
 {
+    // Flash cache must be enabled before system clock is activated
+    sys_enable_flash_cache();
+    sys_init_icache();
     clock_setup();
     systick_setup();
     usart_setup();
