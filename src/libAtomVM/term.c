@@ -21,10 +21,10 @@
 #include "term.h"
 
 #include "atom.h"
+#include "atom_table.h"
 #include "context.h"
 #include "interop.h"
 #include "tempstack.h"
-#include "valueshashtable.h"
 
 #include <ctype.h>
 #include <inttypes.h>
@@ -113,8 +113,7 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
 {
     if (term_is_atom(t)) {
         int atom_index = term_to_atom_index(t);
-        AtomString atom_string = (AtomString) valueshashtable_get_value(
-            global->atoms_ids_table, atom_index, (unsigned long) NULL);
+        AtomString atom_string = atom_table_get_atom_string(global->atom_table, atom_index);
         return fun->print(fun, "%.*s", (int) atom_string_len(atom_string),
             (char *) atom_string_data(atom_string));
 
@@ -607,15 +606,15 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
 
         } else if (term_is_atom(t) && term_is_atom(other)) {
             int t_atom_index = term_to_atom_index(t);
-            AtomString t_atom_string = (AtomString) valueshashtable_get_value(global->atoms_ids_table,
-                t_atom_index, (unsigned long) NULL);
+            AtomString t_atom_string = atom_table_get_atom_string(global->atom_table,
+                t_atom_index);
 
             int t_atom_len = atom_string_len(t_atom_string);
             const char *t_atom_data = (const char *) atom_string_data(t_atom_string);
 
             int other_atom_index = term_to_atom_index(other);
-            AtomString other_atom_string = (AtomString) valueshashtable_get_value(global->atoms_ids_table,
-                other_atom_index, (unsigned long) NULL);
+            AtomString other_atom_string = atom_table_get_atom_string(global->atom_table,
+                other_atom_index);
 
             int other_atom_len = atom_string_len(other_atom_string);
             const char *other_atom_data = (const char *) atom_string_data(other_atom_string);

@@ -20,6 +20,7 @@
 
 #include "interop.h"
 
+#include "atom_table.h"
 #include "bitstring.h"
 #include "defaultatoms.h"
 #include "tempstack.h"
@@ -140,7 +141,7 @@ char *interop_list_to_string(term list, int *ok)
 char *interop_atom_to_string(Context *ctx, term atom)
 {
     int atom_index = term_to_atom_index(atom);
-    AtomString atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table, atom_index, (unsigned long) NULL);
+    AtomString atom_string = atom_table_get_atom_string(ctx->global->atom_table, atom_index);
     int len = atom_string_len(atom_string);
 
     char *str = malloc(len + 1);

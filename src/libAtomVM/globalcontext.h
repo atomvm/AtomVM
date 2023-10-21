@@ -35,6 +35,7 @@ extern "C" {
 #include <stdint.h>
 
 #include "atom.h"
+#include "atom_table.h"
 #include "erl_nif.h"
 #include "list.h"
 #include "smp.h"
@@ -82,12 +83,7 @@ struct GlobalContext
 
     int32_t last_process_id;
 
-    // TODO: this SpinLock should be removed
-#ifndef AVM_NO_SMP
-    SpinLock atom_insert_lock;
-#endif
-    struct AtomsHashTable *atoms_table;
-    struct ValuesHashTable *atoms_ids_table;
+    struct AtomTable *atom_table;
     struct AtomsHashTable *modules_table;
 
 #ifndef AVM_NO_SMP

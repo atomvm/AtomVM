@@ -31,7 +31,7 @@
 #include <string.h>
 #include <time.h>
 
-#include "atomshashtable.h"
+#include "atom_table.h"
 #include "avmpack.h"
 #include "bif.h"
 #include "context.h"
@@ -1956,8 +1956,9 @@ static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
     ((uint8_t *) atom)[0] = atom_string_len;
     memcpy(((char *) atom) + 1, atom_string, atom_string_len);
 
-    unsigned long global_atom_index = atomshashtable_get_value(ctx->global->atoms_table, atom, ULONG_MAX);
-    int has_atom = (global_atom_index != ULONG_MAX);
+    // FIXME: here there is a potential race condition
+    long global_atom_index = atom_table_get_index(ctx->global->atom_table, atom);
+    bool has_atom = (global_atom_index != ATOM_TABLE_NOT_FOUND);
 
     if (create_new || has_atom) {
         if (!has_atom) {
@@ -2006,8 +2007,9 @@ term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
     ((uint8_t *) atom)[0] = atom_string_len;
     memcpy(((char *) atom) + 1, atom_string, atom_string_len);
 
-    unsigned long global_atom_index = atomshashtable_get_value(ctx->global->atoms_table, atom, ULONG_MAX);
-    int has_atom = (global_atom_index != ULONG_MAX);
+    // FIXME: here there is a potential race condition
+    long global_atom_index = atom_table_get_index(ctx->global->atom_table, atom);
+    bool has_atom = (global_atom_index != ATOM_TABLE_NOT_FOUND);
 
     if (create_new || has_atom) {
         if (!has_atom) {
@@ -2035,7 +2037,7 @@ static term nif_erlang_atom_to_binary_2(Context *ctx, int argc, term argv[])
     }
 
     int atom_index = term_to_atom_index(atom_term);
-    AtomString atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table, atom_index, (unsigned long) NULL);
+    AtomString atom_string = atom_table_get_atom_string(ctx->global->atom_table, atom_index);
 
     int atom_len = atom_string_len(atom_string);
 
@@ -2055,7 +2057,7 @@ static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(atom_term, term_is_atom);
 
     int atom_index = term_to_atom_index(atom_term);
-    AtomString atom_string = (AtomString) valueshashtable_get_value(ctx->global->atoms_ids_table, atom_index, (unsigned long) NULL);
+    AtomString atom_string = atom_table_get_atom_string(ctx->global->atom_table, atom_index);
 
     int atom_len = atom_string_len(atom_string);
 
@@ -2667,7 +2669,7 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
         return term_from_int32(nif_num_ports(ctx->global));
     }
     if (key == ATOM_COUNT_ATOM) {
-        return term_from_int32(ctx->global->atoms_table->count);
+        return term_from_int32(atom_table_count(ctx->global->atom_table));
     }
     if (key == WORDSIZE_ATOM) {
         return term_from_int32(TERM_BYTES);
@@ -3756,8 +3758,7 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
     }
 
     int atom_index = term_to_atom_index(app_term);
-    AtomString atom_string = (AtomString) valueshashtable_get_value(glb->atoms_ids_table,
-        atom_index, (unsigned long) NULL);
+    AtomString atom_string = atom_table_get_atom_string(glb->atom_table, atom_index);
 
     int app_len = atom_string_len(atom_string);
     char *app = malloc(app_len + 1);

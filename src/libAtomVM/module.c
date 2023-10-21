@@ -412,8 +412,8 @@ term module_load_literal(Module *mod, int index, Context *ctx)
 const struct ExportedFunction *module_resolve_function0(Module *mod, int import_table_index, struct UnresolvedFunctionCall *unresolved, GlobalContext *glb)
 {
 
-    AtomString module_name_atom = (AtomString) valueshashtable_get_value(glb->atoms_ids_table, unresolved->module_atom_index, (unsigned long) NULL);
-    AtomString function_name_atom = (AtomString) valueshashtable_get_value(glb->atoms_ids_table, unresolved->function_atom_index, (unsigned long) NULL);
+    AtomString module_name_atom = atom_table_get_atom_string(glb->atom_table, unresolved->module_atom_index);
+    AtomString function_name_atom = atom_table_get_atom_string(glb->atom_table, unresolved->function_atom_index);
     int arity = unresolved->arity;
 
     Module *found_module = globalcontext_get_module(glb, module_name_atom);
