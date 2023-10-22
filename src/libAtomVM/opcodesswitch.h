@@ -119,6 +119,9 @@ typedef dreg_t dreg_gc_safe_t;
 
 #endif
 
+// This macro does not decode all cases but cases we actually observe in opcodes
+// below. More specific decoding is performed when we know the type of the
+// argument
 #define DECODE_COMPACT_TERM(dest_term, decode_pc)                                       \
 {                                                                                       \
     uint8_t first_byte = *(decode_pc)++;                                                \
@@ -169,11 +172,6 @@ typedef dreg_t dreg_gc_safe_t;
                     } else if (ext != 0) {                                              \
                         AVM_ABORT();                                                    \
                     }                                                                   \
-                    break;                                                              \
-                }                                                                       \
-                case COMPACT_EXTENDED_ALLOCATION_LIST: {                                \
-                    uint8_t len = (*(decode_pc)++) >> 4;                                \
-                    (decode_pc) += (--len * 2);                                         \
                     break;                                                              \
                 }                                                                       \
                 case COMPACT_EXTENDED_TYPED_REGISTER: {                                 \
