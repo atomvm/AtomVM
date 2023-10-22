@@ -108,11 +108,11 @@ jobs:
           tag: "bullseye"
           cflags: "-O2"
 
-        # It looks like we don't really support big-endian
-        # - arch: "powerpc"
-        #  distro: "jessie"
-        #  base_url: "http://archive.debian.org/debian"
-        #  cflags: "-std=gnu99 -Os"
+        # Required for testing big endian archs
+        - arch: "s390x"
+          platform: "s390x"
+          tag: "bullseye"
+          cflags: "-O2"
 
     steps:
     - name: Checkout repo
