@@ -66,4 +66,8 @@ config AVM_ENABLE_UART_PORT_DRIVER
     bool "Enable UART port driver"
     default y
 
+config AVM_ENABLE_OTP_SOCKET_NIFS
+    bool "Enable OTP Socket NIFs"
+    default y
+
 endmenu

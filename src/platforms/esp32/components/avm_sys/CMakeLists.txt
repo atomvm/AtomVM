@@ -25,6 +25,7 @@ set(AVM_SYS_COMPONENT_SRCS
     "sys.c"
     "platform_nifs.c"
     "platform_defaultatoms.c"
+    "../../../../libAtomVM/otp_socket.c"
 )
 
 if (IDF_VERSION_MAJOR GREATER_EQUAL 5)
