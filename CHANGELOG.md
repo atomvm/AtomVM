@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fixed a bug where guards would raise exceptions instead of just being false
+- Fixed support for big endian CPUs (such as some MIPS CPUs).
 
 ### Added
 
