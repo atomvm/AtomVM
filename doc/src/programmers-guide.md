@@ -1008,7 +1008,7 @@ To retrieve data in RTC slow memory, use the `esp:rtc_slow_get_binary/0` functio
     %% erlang
     Data = esp:rtc_slow_get_binary()
 
-By default, RTC slow memory in AtomVM is limited to 4098 (4k) bytes.  This value can be modified at build time using an IDF SDK `KConfig` setting.  For  instructions about how to build AtomVM, see the AtomVM [Build Instructions](./build-instructions.html).
+By default, RTC slow memory in AtomVM is limited to 4098 (4k) bytes.  This value can be modified at build time using an IDF SDK `KConfig` setting.  For  instructions about how to build AtomVM, see the AtomVM [Build Instructions](./build-instructions.md).
 
 
 ### Miscellaneous
