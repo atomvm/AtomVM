@@ -62,17 +62,25 @@ jobs:
         source $HOME/.nvm/nvm.sh
         nvm install 20
 
+    - name: Build tests (without SMP)
+      shell: bash
+      working-directory: ./src/platforms/rp2040/
+      run: |
+        set -euo pipefail
+        mkdir build.nosmp
+        cd build.nosmp
+        cmake .. -G Ninja -DPICO_BOARD=${{ matrix.board }} -DAVM_DISABLE_SMP=1
+        cmake --build . --target=rp2040_tests
+
     - name: Run tests with rp2040js
       shell: bash
       working-directory: ./src/platforms/rp2040/tests
-      # Unfortunately, rp2040js doesn't support cyw43 and cyw43_arch_init panics
-      if: ${{ success() && matrix.board != 'pico_w' }}
       run: |
         set -euo pipefail
         source $HOME/.nvm/nvm.sh
         nvm use node
         npm install
-        npx tsx run-tests.ts ../build/tests/rp2040_tests.uf2 ../build/tests/test_erl_sources/rp2040_test_modules.uf2
+        npx tsx run-tests.ts ../build.nosmp/tests/rp2040_tests.uf2 ../build.nosmp/tests/test_erl_sources/rp2040_test_modules.uf2
 
     - name: Build atomvmlib.uf2
       if: startsWith(github.ref, 'refs/tags/')
