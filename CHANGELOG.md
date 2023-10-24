@@ -10,11 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed a bug where guards would raise exceptions instead of just being false
 - Fixed support for big endian CPUs (such as some MIPS CPUs).
+- Fixed STM32 not aborting when `AVM_ABORT()` is used
+- Fixed a bug that would leave the STM32 trapped in a loop on hard faults, rather than aborting
 
 ### Added
 
 - Added support for the OTP `socket` interface.
 - Enhancd performance of STM32 by enabling flash cache and i-cache with branch prediction.
+- Added cmake configuration option `AVM_CONFIG_REBOOT_ON_NOT_OK` for STM32
 
 ## [0.6.0-alpha.1] - 2023-10-09
 

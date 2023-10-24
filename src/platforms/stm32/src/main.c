@@ -19,10 +19,13 @@
  */
 
 #include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
 
+#include <libopencm3/cm3/cortex.h>
 #include <libopencm3/cm3/nvic.h>
+#include <libopencm3/cm3/scb.h>
 #include <libopencm3/cm3/systick.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/rcc.h>
@@ -30,6 +33,7 @@
 
 #include <avmpack.h>
 #include <context.h>
+#include <defaultatoms.h>
 #include <globalcontext.h>
 #include <module.h>
 #include <utils.h>
@@ -61,6 +65,8 @@
     "\n"
 
 int _write(int file, char *ptr, int len);
+pid_t _getpid(void);
+int _kill(pid_t pid, int sig);
 
 static void clock_setup()
 {
@@ -124,6 +130,31 @@ int _write(int file, char *ptr, int len)
     return -1;
 }
 
+// newlib stubs to support AVM_ABORT
+pid_t _getpid()
+{
+    return 1;
+}
+
+int _kill(pid_t pid, int sig)
+{
+    UNUSED(pid);
+    if (sig == SIGABRT) {
+        fprintf(stderr, "Aborted\n");
+    } else {
+        fprintf(stderr, "Unknown signal %d\n", sig);
+    }
+    errno = EINVAL;
+    return -1;
+}
+
+// Redefine weak linked while(1) loop from libopencm3/cm3/nvic.h.
+void hard_fault_handler()
+{
+    fprintf(stderr, "\nHard Fault detected!\n");
+    AVM_ABORT();
+}
+
 int main()
 {
     // Flash cache must be enabled before system clock is activated
@@ -172,11 +203,35 @@ int main()
     ctx->leader = 1;
 
     AVM_LOGI(TAG, "Starting: %s...\n", startup_module_name);
+    fprintf(stdout, "---\n");
+
     context_execute_loop(ctx, mod, "start", 0);
-    AVM_LOGI(TAG, "Return value: %lx", (long) term_to_int32(ctx->x[0]));
 
-    while (1)
-        ;
+    term ret_value = ctx->x[0];
+    char *ret_atom_string = interop_atom_to_string(ctx, ret_value);
+    if (ret_atom_string != NULL) {
+        AVM_LOGI(TAG, "Exited with return: %s", ret_atom_string);
+    } else {
+        AVM_LOGI(TAG, "Exited with return value: %lx", (long) term_to_int32(ret_value));
+    }
+    free(ret_atom_string);
 
+    bool reboot_on_not_ok =
+#if defined(CONFIG_REBOOT_ON_NOT_OK)
+        CONFIG_REBOOT_ON_NOT_OK ? true : false;
+#else
+        false;
+#endif
+    if (reboot_on_not_ok && ret_value != OK_ATOM) {
+        AVM_LOGE(TAG, "AtomVM application terminated with non-ok return value.  Rebooting ...");
+        scb_reset_system();
+    } else {
+        AVM_LOGI(TAG, "AtomVM application terminated.  Going to sleep forever ...");
+        // Disable all interrupts
+        cm_disable_interrupts();
+        while (1) {
+            ;
+        }
+    }
     return 0;
 }
