@@ -23,6 +23,32 @@
 #include <interop.h>
 #include <sys.h>
 
+/*  Only on ARMv7EM and above
+ *  TODO: These definitions are back-ported from libopencm3 `master`, if they ever release a new version this section should
+ *  be removed, along with the included headers and replaced with only the following inclusion:
+ *  `#include <libopencm3/cm3/scb.h>`
+ */
+#if defined(__ARM_ARCH_7EM__)
+
+#include <libopencm3/cm3/common.h>
+#include <libopencm3/cm3/memorymap.h>
+
+/** ICIALLU: I-cache invalidate all to Point of Unification */
+#define SCB_ICIALLU MMIO32(SCB_BASE + 0x250)
+/** BPIALL: Branch predictor invalidate all */
+#define SCB_BPIALL MMIO32(SCB_BASE + 0x278)
+
+#endif /* __ARM_ARCH_7EM__ */
+
+/* Define macros for data and instruction barriers for sys_init_icache()
+ * See: ARM V7-M Architecture Reference Manual :: https://static.docs.arm.com/ddi0403/eb/DDI0403E_B_armv7m_arm.pdf */
+// Ensure write is visible
+#define __dsb asm __volatile__("dsb" :: \
+                                   : "memory");
+// Synchronize fetched instruction stream
+#define __isb asm __volatile__("isb" :: \
+                                   : "memory");
+
 #define REGISTER_PORT_DRIVER(NAME, INIT_CB, DESTROY_CB, CREATE_CB)    \
     struct PortDriverDef NAME##_port_driver_def = {                   \
         .port_driver_name = #NAME,                                    \
@@ -103,5 +129,8 @@ void port_driver_destroy_all(GlobalContext *global);
 const struct Nif *nif_collection_resolve_nif(const char *name);
 void nif_collection_init_all(GlobalContext *global);
 void nif_collection_destroy_all(GlobalContext *global);
+
+void sys_init_icache(void);
+void sys_enable_flash_cache(void);
 
 #endif /* _STM_SYS_H_ */

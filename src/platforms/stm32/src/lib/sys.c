@@ -28,6 +28,8 @@
 #include <trace.h>
 
 #include <libopencm3/cm3/nvic.h>
+#include <libopencm3/cm3/scb.h>
+#include <libopencm3/stm32/flash.h>
 
 #include "avm_log.h"
 #include "gpiodriver.h"
@@ -165,6 +167,35 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 term sys_get_info(Context *ctx, term key)
 {
     return UNDEFINED_ATOM;
+}
+
+void sys_enable_flash_cache()
+{
+    flash_unlock_option_bytes();
+    flash_set_ws(FLASH_ACR_LATENCY_5WS);
+    flash_prefetch_enable();
+}
+
+/* See: ARM V7-M Architecture Reference Manual :: https://static.docs.arm.com/ddi0403/eb/DDI0403E_B_armv7m_arm.pdf */
+void sys_init_icache()
+{
+    // Synchronize data and instruction barriers
+    __dsb;
+    __isb;
+    // Invalidate the instruction cache
+    SCB_ICIALLU = 0UL;
+    // Invalidate all branch predictors
+    SCB_BPIALL = 0UL;
+    // Re-synchronize
+    __dsb;
+    __isb;
+    // Enable the I-cache
+    SCB_CCR |= (1 << 17);
+    // Enable branch prediction
+    SCB_CCR |= (1 << 18);
+    // Force a final resync and clear of the instruction pipeline
+    __dsb;
+    __isb;
 }
 
 void port_driver_init_all(GlobalContext *global)

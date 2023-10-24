@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added support for the OTP `socket` interface.
+- Enhancd performance of STM32 by enabling flash cache and i-cache with branch prediction.
 
 ## [0.6.0-alpha.1] - 2023-10-09
 
