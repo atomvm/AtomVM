@@ -82,6 +82,8 @@ GlobalContext *globalcontext_new()
     synclist_init(&glb->resource_types);
     synclist_init(&glb->select_events);
 
+    ets_init(&glb->ets);
+
     glb->last_process_id = 0;
 
     glb->atom_table = atom_table_new();
@@ -199,6 +201,8 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
         free((void *) select_event);
     }
     synclist_destroy(&glb->select_events);
+
+    ets_destroy(&glb->ets, glb);
 
     // Destroy refc binaries including resources
     // (this list should be empty if resources were properly refcounted)

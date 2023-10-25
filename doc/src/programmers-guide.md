@@ -854,6 +854,85 @@ consider not including line information in BEAM files.
 
 The `packbeam` tool does include file and line information in the AVM files it creates by default, but file and line information can be omitted via a command line option.  For information about the packbeam too, see the [`atomvm_packbeam` tool](./atomvm-tooling.md#atomvm_packbeam).
 
+### ETS Tables
+
+AtomVM includes a limited implementation of the Erlang [`ets`](https://www.erlang.org/doc/man/ets) interface, allowing applications to efficiently store term data in a potentially shared key-value store.  Conceptually, and ETS table is a collection of key-value pairs (represented as Erlang tuples), which can be efficiently stored, retrieved, and deleted using insertion, lookup, and deletion functions across processes.  Storage and retrieval of data in ETS tables is typically faster than communicating with a process which stores state, but still comes at a cost of copying data in and out of the ETS tables.
+
+The current AtomVM implementation of ETS is limited to the `set` table type, meaning that all entries in an ETS table are unique, and that the entries in the ETS table are unordered, when enumerated.
+
+> The `ordered_set`, `bag`, and `duplicate_bag` OTP ETS types are not currently supported.
+
+The lifecycle of an ETS table is associated with the lifecycle of the Erlang process that created it.  An Erlang process may create as many ETS tables as memory permits, but ETS tables are automatically destroyed when the process with which they are associated terminates.
+
+> Note.  AtomVM does not currently support transfer of ETS table ownership across processes.
+
+To create an ETS table, use the `ets:new/2` function:
+
+```erlang
+TableId = ets:new(my_table, [])
+```
+
+The first argument is the table name, which may be optionally registered internally.  The second parameter is a list of configuration options.  The return value is an opaque reference to the table, which can be used in subsequent ETS operations.  If the table is specified as a named table (see below), then the return value is the atom used to name the table (i.e., the first parameter to the `ets:new/2` function).
+
+The process that creates an ETS table becomes the "owner" of the ETS table. ETS tables owned by a process are automatically destroyed when the process terminates.
+
+The following configuration options are supported:
+
+| Access Type | Description |
+|-------------|-------------|
+| `named_table` | If set, the table name is registered internally and can be used as the table id for subsequent ETS operations.  If this option is set, the return value from `ets:new/2` is the table name specified in the first parameter.  By default, ETS tables are not named. |
+| `{keypos, K}` | The position of the key field in table entries (Erlang tuples).  Key position values should be in the range `{1..n}`, where `n` is the minimum arity of any entry in the table.  If unspecified, the default key position is `1`.  An attempt to insert an entry into a ETS table whose arity is less than the specified key position will result in a `badarg` error. |
+| `private`   | Only the owning process may read from or write to the ETS table. |
+| `protected` | The owning process may read and write to the ETS table; any other process can only read from the ETS table. |
+| `public` | Any process may read from or write to the ETS table. |
+
+Note that the `keypos`, `private`, `protected`, and `public` fields should only be specified once in configuration.  The presence of more than one key position or protection field results in behavior that is _undefined_.
+
+In the absence of any protection field, tables are marked `protected`.
+
+To insert an entry into an ETS table, use the `ets:insert/2` function:
+
+```erlang
+true = ets:insert(TableId, {foo, bar})
+```
+
+Specify the table identifier returned from `ets:new/2`, as well as the tuple data you would like to store in the ETS table.  The `keypos`'th field of the tuple can be used for subsequent retrieval or deletion.
+
+If the arity of the supplied tuple entry is less than the configured key position for the ETS table, the `ets:insert/2` function will raise a `badarg` error.
+
+> Note that the fields of a tuple entry, whether they are designated key fields or arbitrary data, can be any term type, not just atoms, as in this example.
+
+If an entry already exists with the same key field, the entry will be over-written in the table.
+
+The return type from this function is the atom `true`.  Any errors in insertion will resulting in raising an `error` with an appropriate reason, e.g., `badarg`.
+
+> Note that a process may only insert values into an ETS table if they are permitted; i.e., either they are the owner of the table, or if the table is `public`.
+
+To retrieve an entry from an ETS table, use the `ets:lookup/2` function:
+
+```erlang
+[{foo, bar}] = ets:lookup(TableId, foo)
+```
+Specify the table identifier returned from `ets:new/2`, as well as a key with which you would like to search the table.  This function will search the ETS table using the `keypos`'th field of tuples in the ETS table for retrieval.
+
+The return value is a list containing the found object(s).  An empty list (`[]`) indicates that there is no such entry in the specified ETS table.
+
+> Note.  Since the only table type currently supported is `set`, the return value will only contain a singleton value, if an entry exists in the table under the specified key.
+
+> Note that a process may only look up values from an ETS table if they are permitted; i.e., either they are the owner of the table, or if the table is `protected` or `public`.
+
+To delete an entry from an ETS table, use the `ets:delete/2` function:
+
+```erlang
+true = ets:delete(Table, foo)
+```
+
+Specify the table identifier returned from `ets:new/2`, as well as a key with which you would like to search the table to delete the entry.  This function will search the ETS table using the `keypos`'th field of tuples in the ETS table for retrieval.
+
+The return value from this function is the atom `true`, regardless of whether the entry existed previously.  Any errors in deletion will resulting in raising an `error` with an appropriate reason, e.g., `badarg`.
+
+> Note that a process may only delete values from an ETS table if they are permitted; i.e., either they are the owner of the table, or if the table is `public`.
+
 ### Reading data from AVM files
 
 AVM files are generally packed BEAM files, but they can also contain non-BEAM files, such as plain text files, binary data, or even encoded Erlang terms.

@@ -37,6 +37,7 @@ extern "C" {
 #include "atom.h"
 #include "atom_table.h"
 #include "erl_nif.h"
+#include "ets.h"
 #include "list.h"
 #include "mailbox.h"
 #include "smp.h"
@@ -105,6 +106,8 @@ struct GlobalContext
     struct SyncList listeners;
     struct SyncList resource_types;
     struct SyncList select_events;
+
+    struct Ets ets;
 
     int32_t last_process_id;
 
