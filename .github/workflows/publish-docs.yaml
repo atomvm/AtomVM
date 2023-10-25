@@ -53,7 +53,7 @@ jobs:
           key: ${{ runner.os }}-sphinx-install
 
       - name: Install Sphinx
-        if: steps.cache.outputs.sphinx-cache-hit != 'true'
+        if: ${{ steps.sphinx-cache.outputs.cache-hit != 'true' }}
         run: |
           python3 -m venv /home/runner/python-env/sphinx
           . /home/runner/python-env/sphinx/bin/activate
