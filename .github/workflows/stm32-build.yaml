@@ -28,21 +28,33 @@ jobs:
   stm32:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout repo
-      uses: actions/checkout@v3
+    - uses: actions/cache@v3
+      id: builddeps-cache
+      with:
+        path: |
+              /home/runner/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi
+              /home/runner/libopencm3
+        key: ${{ runner.os }}-build-deps
 
     - name: Install arm-embedded toolchain
+      if: ${{ steps.builddeps-cache.outputs.cache-hit != 'true' }}
+      working-directory: /home/runner
       run: |
         set -euo pipefail
-        cd $RUNNER_TEMP
-        wget https://developer.arm.com/-/media/Files/downloads/gnu/11.3.rel1/binrel/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi.tar.xz
-        tar xJf arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi.tar.xz
+        cd /home/runner
+        wget https://developer.arm.com/-/media/Files/downloads/gnu/11.3.rel1/binrel/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi.tar.xz \
+        --output-document=$RUNNER_TEMP/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi.tar.xz
+        tar xJf $RUNNER_TEMP/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi.tar.xz
+        pwd && ls
 
     - name: Checkout and build libopencm3
+      if: ${{ steps.builddeps-cache.outputs.cache-hit != 'true' }}
+      working-directory: /home/runner
       run: |
         set -euo pipefail
-        export PATH=$RUNNER_TEMP/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi/bin:${PATH}
-        cd src/platforms/stm32
+        cd /home/runner
+        test -d libopencm3 && rm -fr libopencm3
+        export PATH=/home/runner/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi/bin:${PATH}
         git clone https://github.com/libopencm3/libopencm3.git -b v0.8.0
         cd libopencm3
         make
@@ -50,13 +62,16 @@ jobs:
     - name: "Install deps"
       run: sudo apt install -y cmake gperf
 
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
     - name: Build
       shell: bash
       working-directory: ./src/platforms/stm32/
       run: |
         set -euo pipefail
-        export PATH=$RUNNER_TEMP/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi/bin:${PATH}
+        export PATH=/home/runner/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi/bin:${PATH}
         mkdir build
         cd build
-        cmake .. -DCMAKE_TOOLCHAIN_FILE=cmake/arm-toolchain.cmake
+        cmake .. -DCMAKE_TOOLCHAIN_FILE=cmake/arm-toolchain.cmake -DLIBOPENCM3_DIR=/home/runner/libopencm3
         make -j
