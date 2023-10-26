@@ -579,43 +579,43 @@ void isr_handler(Context *ctx, uint32_t exti)
         TRACE("gpio_driver: GlobalContext stored in isr_handler\n");
     } else {
         UNUSED(ctx);
-        TRACE("gpio_driver: isr_handler relaying exti to gpio_interrupt_callback\n");
+        TRACE("gpio_driver: isr_handler relaying exti 0x%08lX to gpio_interrupt_callback\n", exti);
         gpio_interrupt_callback(local_ctx, exti);
     }
+}
+
+void isr_error_handler(const char *isr_name)
+{
+    AVM_LOGE(TAG, "%s triggered, but no match found!", isr_name);
 }
 
 void exti0_isr()
 {
     exti_reset_request(EXTI0);
-    TRACE("gpio_driver: exti0 interrupt triggered.\n");
     isr_handler(NULL, EXTI0);
 }
 
 void exti1_isr()
 {
     exti_reset_request(EXTI1);
-    TRACE("gpio_driver: exti1 interrupt triggered\n");
     isr_handler(NULL, EXTI1);
 }
 
 void exti2_isr()
 {
     exti_reset_request(EXTI2);
-    TRACE("gpio_driver: exti2 interrupt triggered\n");
     isr_handler(NULL, EXTI2);
 }
 
 void exti3_isr()
 {
     exti_reset_request(EXTI3);
-    TRACE("gpio_driver: exti3 interrupt triggered\n");
     isr_handler(NULL, EXTI3);
 }
 
 void exti4_isr()
 {
     exti_reset_request(EXTI4);
-    TRACE("gpio_driver: exti4 interrupt triggered\n");
     isr_handler(NULL, EXTI4);
 }
 
@@ -624,25 +624,21 @@ void exti9_5_isr()
     if (exti_get_flag_status(EXTI5) == EXTI5) {
         exti_reset_request(EXTI5);
         isr_handler(NULL, EXTI5);
-        TRACE("gpio_driver: exti5 interrupt triggered\n");
     } else if (exti_get_flag_status(EXTI6) == EXTI6) {
         exti_reset_request(EXTI6);
         isr_handler(NULL, EXTI6);
-        TRACE("gpio_driver: exti6 interrupt triggered\n");
     } else if (exti_get_flag_status(EXTI7) == EXTI7) {
         exti_reset_request(EXTI7);
         isr_handler(NULL, EXTI7);
-        TRACE("gpio_driver: exti7 interrupt triggered\n");
     } else if (exti_get_flag_status(EXTI8) == EXTI8) {
         exti_reset_request(EXTI8);
         isr_handler(NULL, EXTI8);
-        TRACE("gpio_driver: exti8 interrupt triggered\n");
     } else if (exti_get_flag_status(EXTI9) == EXTI9) {
         exti_reset_request(EXTI9);
         isr_handler(NULL, EXTI9);
-        TRACE("gpio_driver: exti9 interrupt triggered\n");
     } else {
-        AVM_LOGE(TAG, "exti9_5_isr triggered, but no match found!");
+        static const char *const isr_name = "exti9_5_isr";
+        isr_error_handler(isr_name);
     }
 }
 
@@ -651,29 +647,24 @@ void exti15_10_isr()
     if (exti_get_flag_status(EXTI10)) {
         exti_reset_request(EXTI10);
         isr_handler(NULL, EXTI10);
-        TRACE("gpio_driver: exti10 interrupt triggered\n");
     } else if (exti_get_flag_status(EXTI11)) {
         exti_reset_request(EXTI11);
         isr_handler(NULL, EXTI11);
-        TRACE("gpio_driver: exti11 interrupt triggered\n");
     } else if (exti_get_flag_status(EXTI12)) {
         exti_reset_request(EXTI12);
         isr_handler(NULL, EXTI12);
-        TRACE("gpio_driver: exti12 interrupt triggered\n");
     } else if (exti_get_flag_status(EXTI13)) {
         exti_reset_request(EXTI13);
         isr_handler(NULL, EXTI13);
-        TRACE("gpio_driver: exti13 interrupt triggered\n");
     } else if (exti_get_flag_status(EXTI14)) {
         exti_reset_request(EXTI14);
         isr_handler(NULL, EXTI14);
-        TRACE("gpio_driver: exti14 interrupt triggered\n");
     } else if (exti_get_flag_status(EXTI15)) {
         exti_reset_request(EXTI15);
         isr_handler(NULL, EXTI15);
-        TRACE("gpio_driver: exti15 interrupt triggered\n");
     } else {
-        AVM_LOGE(TAG, "exti15_10_isr triggered, but no match found!");
+        static const char *const isr_name = "exti15_10_isr";
+        isr_error_handler(isr_name);
     }
 }
 
