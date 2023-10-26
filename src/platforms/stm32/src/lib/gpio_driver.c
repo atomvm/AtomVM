@@ -727,7 +727,7 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
     struct GPIOData *gpio_data = ctx->platform_data;
     if (gpiodriver_is_gpio_attached(gpio_data, gpio_bank_atom, gpio_pin)) {
         char *bank_string = interop_atom_to_string(ctx, gpio_bank_atom);
-        AVM_LOGW(TAG, "GPIO pin %c%u interrupt already attached.", bank_string, gpio_pin);
+        AVM_LOGW(TAG, "GPIO pin %s%u interrupt already attached.", bank_string, gpio_pin);
         free(bank_string);
         return OK_ATOM;
     }
@@ -754,7 +754,7 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
             struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
             if (gpio_listener->exti == exti) {
                 char *bank_string = interop_atom_to_string(ctx, gpio_bank_atom);
-                AVM_LOGE(TAG, "Cannot set interrupt for pin %c%u, exti%u device already in use!", bank_string, gpio_pin, gpio_pin);
+                AVM_LOGE(TAG, "Cannot set interrupt for pin %s%u, exti%u device already in use!", bank_string, gpio_pin, gpio_pin);
                 free(bank_string);
                 return create_pair(ctx, ERROR_ATOM, INVALID_IRQ_ATOM);
             }
