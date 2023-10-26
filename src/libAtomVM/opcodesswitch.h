@@ -198,12 +198,17 @@ typedef dreg_t dreg_gc_safe_t;
                 case COMPACT_11BITS_VALUE:                                              \
                     (decode_pc)++;                                                      \
                     break;                                                              \
-                                                                                        \
-                case COMPACT_NBITS_VALUE:                                               \
-                    /* TODO: when first_byte >> 5 is 7, a different encoding is used */ \
-                    (decode_pc) += (first_byte >> 5) + 2;                               \
+                case COMPACT_NBITS_VALUE:{                                              \
+                    int sz = (first_byte >> 5) + 2;                                     \
+                    if (UNLIKELY(sz > 8)) {                                             \
+                        /* TODO: when first_byte >> 5 is 7, a different encoding is used */ \
+                        fprintf(stderr, "Unexpected nbits vaue @ %" PRIuPTR "\n", (uintptr_t) ((decode_pc) - 1)); \
+                        AVM_ABORT();                                                    \
+                        break;                                                          \
+                    }                                                                   \
+                    (decode_pc) += sz;                                                  \
                     break;                                                              \
-                                                                                        \
+                }                                                                       \
                 default:                                                                \
                     assert((first_byte & 0x30) != COMPACT_LARGE_INTEGER);               \
                     break;                                                              \
@@ -240,7 +245,7 @@ typedef dreg_t dreg_gc_safe_t;
         case COMPACT_XREG:                                                                          \
         case COMPACT_YREG:                                                                          \
             (dreg).index = first_byte >> 4;                                                         \
--            break;                                                                                 \
+             break;                                                                                 \
         case COMPACT_LARGE_YREG:                                                                    \
             (dreg).index = (((first_byte & 0xE0) << 3) | *(decode_pc)++);                           \
             break;                                                                                  \
