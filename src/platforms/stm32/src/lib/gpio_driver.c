@@ -557,8 +557,7 @@ void gpio_interrupt_callback(Context *ctx, uint32_t exti)
             gpio_bank = gpio_listener->bank_atom;
             gpio_pin = gpio_listener->gpio_pin;
 
-            // 1 header + 2 elements, second element is tuple with 2 elements
-            BEGIN_WITH_STACK_HEAP(1 + 2 + 2, heap);
+            BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(2) + TUPLE_SIZE(2), heap);
 
             term int_msg = term_alloc_tuple(2, &heap);
             term gpio_tuple = term_alloc_tuple(2, &heap);
