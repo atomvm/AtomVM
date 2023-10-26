@@ -590,42 +590,42 @@ void isr_handler(Context *ctx, uint32_t exti)
     }
 }
 
-void exti0_isr()
+void __attribute__((section("ccm"))) exti0_isr()
 {
     exti_reset_request(EXTI0);
     TRACE("gpio_driver: exti0 interrupt triggered.\n");
     isr_handler(NULL, EXTI0);
 }
 
-void exti1_isr()
+void __attribute__((section("ccm"))) exti1_isr()
 {
     exti_reset_request(EXTI1);
     TRACE("gpio_driver: exti1 interrupt triggered\n");
     isr_handler(NULL, EXTI1);
 }
 
-void exti2_isr()
+void __attribute__((section("ccm"))) exti2_isr()
 {
     exti_reset_request(EXTI2);
     TRACE("gpio_driver: exti2 interrupt triggered\n");
     isr_handler(NULL, EXTI2);
 }
 
-void exti3_isr()
+void __attribute__((section("ccm"))) exti3_isr()
 {
     exti_reset_request(EXTI3);
     TRACE("gpio_driver: exti3 interrupt triggered\n");
     isr_handler(NULL, EXTI3);
 }
 
-void exti4_isr()
+void __attribute__((section("ccm"))) exti4_isr()
 {
     exti_reset_request(EXTI4);
     TRACE("gpio_driver: exti4 interrupt triggered\n");
     isr_handler(NULL, EXTI4);
 }
 
-void exti9_5_isr()
+void __attribute__((section("ccm"))) exti9_5_isr()
 {
     if (exti_get_flag_status(EXTI5) == EXTI5) {
         exti_reset_request(EXTI5);
@@ -652,7 +652,7 @@ void exti9_5_isr()
     }
 }
 
-void exti15_10_isr()
+void __attribute__((section("ccm"))) exti15_10_isr()
 {
     if (exti_get_flag_status(EXTI10)) {
         exti_reset_request(EXTI10);

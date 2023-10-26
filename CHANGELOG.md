@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for interrupts to STM32 GPIO port driver.
 - Enabled Core Coupled Memory on stm32 for VM stack, interrupt handler functions, and the .data and .bss segments
 
+### Changed
+
+- Moved GPIO interrupt handlers from flash to CCM for lower latency
+
 ## [0.6.0-alpha.1] - 2023-10-09
 
 ### Added
