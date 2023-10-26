@@ -4,6 +4,10 @@
  * Copyright (C) 2009 Uwe Hermann <uwe@hermann-uwe.de>
  * Copyright (C) 2013 Frantisek Burian <BuFran@seznam.cz>
  *
+ * This file is customized for AtomVM.
+ *
+ * Copyright (C) 2023 Winford (Uncle Grumpy) <winford@object.stream>
+ *
  * This library is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -16,6 +20,8 @@
  *
  * You should have received a copy of the GNU Lesser General Public License
  * along with this library.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 /* Generic linker script for all targets using libopencm3. */
@@ -70,6 +76,12 @@ MEMORY
 /* Define sections. */
 SECTIONS
 {
+#if defined(_CCM)
+	.ccm : {
+		*(.ccmram*)
+		. = ALIGN(4);
+	} >ccm
+#endif
 	.text : {
 		*(.vectors)	/* Vector table */
 		*(.text*)	/* Program code */
@@ -123,7 +135,11 @@ SECTIONS
 		*(.data*)	/* Read-write initialized data */
 		. = ALIGN(4);
 		_edata = .;
+#if defined(_CCM)
+	} >ccm AT >rom
+#else
 	} >ram AT >rom
+#endif
 	_data_loadaddr = LOADADDR(.data);
 
 	.bss : {
@@ -131,15 +147,11 @@ SECTIONS
 		*(COMMON)
 		. = ALIGN(4);
 		_ebss = .;
-	} >ram
-
 #if defined(_CCM)
-	.ccm : {
-		*(.ccmram*)
-		. = ALIGN(4);
 	} >ccm
+#else
+	} >ram
 #endif
-
 #if defined(_RAM1)
 	.ram1 : {
 		*(.ram1*)
@@ -192,5 +204,8 @@ SECTIONS
 	end = .;
 }
 
+#if defined(_CCM)
+PROVIDE(_stack = ORIGIN(ccm) + LENGTH(ccm));
+#else
 PROVIDE(_stack = ORIGIN(ram) + LENGTH(ram));
-
+#endif

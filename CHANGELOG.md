@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added cmake configuration option `AVM_CONFIG_REBOOT_ON_NOT_OK` for STM32
 - New gpio driver for STM32 with nif and port support for read and write functions.
 - Added support for interrupts to STM32 GPIO port driver.
+- Enabled Core Coupled Memory on stm32 for VM stack, interrupt handler functions, and the .data and .bss segments
 
 ## [0.6.0-alpha.1] - 2023-10-09
 

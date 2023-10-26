@@ -46,7 +46,7 @@ struct NifCollectionDefListItem *nif_collection_list;
 static volatile uint64_t system_millis;
 
 // Called when systick fires
-void sys_tick_handler()
+void __attribute__((section("ccm"))) sys_tick_handler()
 {
     system_millis++;
 }

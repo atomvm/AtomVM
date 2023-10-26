@@ -136,7 +136,7 @@ JOIN("${ARCH_FLAGS}" " " ARCH_FLAGS)
 string(REPLACE " " ";" ARCH_FLAGS ${ARCH_FLAGS})
 # ------------------
 execute_process(
-    COMMAND ${ARM_CXX} ${ARCH_FLAGS} ${GENLINK_DEFS} "-P" "-E" "${LIBOPENCM3_DIR}/ld/linker.ld.S"
+    COMMAND ${ARM_CXX} ${ARCH_FLAGS} ${GENLINK_DEFS} "-P" "-E" "${CMAKE_SOURCE_DIR}/ld/linker.ld.S"
     OUTPUT_FILE "${CMAKE_CURRENT_BINARY_DIR}/${LINKER_SCRIPT}"
 )
 message("-----------Target Specific Info---------")
