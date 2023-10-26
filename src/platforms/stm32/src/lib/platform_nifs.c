@@ -26,7 +26,6 @@
 //#define ENABLE_TRACE
 #include <trace.h>
 
-#include "platform_defaultatoms.h"
 #include "stm_sys.h"
 
 static term nif_atomvm_platform(Context *ctx, int argc, term argv[])

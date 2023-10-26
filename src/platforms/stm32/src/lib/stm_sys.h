@@ -23,6 +23,8 @@
 #include <interop.h>
 #include <sys.h>
 
+#define STM32_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "stm32"))
+
 /*  Only on ARMv7EM and above
  *  TODO: These definitions are back-ported from libopencm3 `master`, if they ever release a new version this section should
  *  be removed, along with the included headers and replaced with only the following inclusion:
@@ -32,6 +34,7 @@
 
 #include <libopencm3/cm3/common.h>
 #include <libopencm3/cm3/memorymap.h>
+#include <libopencm3/stm32/rcc.h>
 
 /** ICIALLU: I-cache invalidate all to Point of Unification */
 #define SCB_ICIALLU MMIO32(SCB_BASE + 0x250)
@@ -84,6 +87,30 @@
         nif_collection_list = &NAME##_nif_collection_def_list_item;         \
     }
 
+#ifdef LIBOPENCM3_GPIO_COMMON_F24_H
+#define GPIO_CLOCK_LIST                                                                                                         \
+    {                                                                                                                           \
+        RCC_GPIOA, RCC_GPIOB, RCC_GPIOC, RCC_GPIOD, RCC_GPIOE, RCC_GPIOF, RCC_GPIOG, RCC_GPIOH, RCC_GPIOI, RCC_GPIOJ, RCC_GPIOK \
+    }
+#else
+#define GPIO_CLOCK_LIST                                                                        \
+    {                                                                                          \
+        RCC_GPIOA, RCC_GPIOB, RCC_GPIOC, RCC_GPIOD, RCC_GPIOE, RCC_GPIOF, RCC_GPIOG, RCC_GPIOH \
+    }
+#endif
+
+struct LockedPin
+{
+    struct ListHead locked_pins_list_head;
+    uint32_t gpio_bank;
+    uint16_t pin_num;
+};
+
+struct STM32PlatformData
+{
+    struct ListHead locked_pins;
+};
+
 typedef void (*port_driver_init_t)(GlobalContext *global);
 typedef void (*port_driver_destroy_t)(GlobalContext *global);
 typedef Context *(*port_driver_create_port_t)(GlobalContext *global, term opts);
@@ -121,6 +148,9 @@ struct NifCollectionDefListItem
 
 extern struct PortDriverDefListItem *port_driver_list;
 extern struct NifCollectionDefListItem *nif_collection_list;
+
+void sys_enable_core_periph_clocks(void);
+bool sys_lock_pin(GlobalContext *glb, uint32_t gpio_bank, uint16_t pin_num);
 
 static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts);
 void port_driver_init_all(GlobalContext *global);

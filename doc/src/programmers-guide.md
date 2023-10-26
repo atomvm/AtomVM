@@ -1043,13 +1043,19 @@ The `esp:get_mac/1` function can be used to retrieve the network Media Access Co
 
 ## Peripherals
 
-The AtomVM virtual machine and libraries support APIs for interfacing with peripheral devices connected to the ESP32.  This section provides information about these APIs.
+The AtomVM virtual machine and libraries support APIs for interfacing with peripheral devices connected to the ESP32 and other supported microcontrollers.  This section provides information about these APIs.  Unless otherwise stated the documentation for these peripherals is specific to the ESP32, most peripherals are not yet supported on rp2040 or stm32 devices - but work is on-going to expand support on these platforms.
 
 ### GPIO
 
+The GPIO peripheral has nif support on all platforms. One notable difference on the STM32 platform is that `Pin`s are defined as a tuple consisting of the bank (a.k.a. port) and pin number.  For example a pin labeled PB7 on your board would be `{b,7}`.
+
 You can read and write digital values on GPIO pins using the `gpio` module, using the `digital_read/1` and `digital_write/2` functions.  You must first set the direction of the pin using the `gpio:set_direction/2` function, using `input` or `output` as the direction parameter.
 
-To read the value of a GPIO pin (`high` or `low`), use `gpio:digital_read/1`:
+#### Digital Read
+
+To read the value of a GPIO pin (`high` or `low`), use `gpio:digital_read/1`.
+
+For ESP32 family:
 
     %% erlang
     Pin = 2,
@@ -1061,14 +1067,60 @@ To read the value of a GPIO pin (`high` or `low`), use `gpio:digital_read/1`:
             io:format("Pin ~p is low ~n", [Pin])
     end.
 
-To set the value of a GPIO pin (`high` or `low`), use `gpio:digital_write/2`:
+For STM32 only the line with the Pin definition needs to be a tuple:
+
+    %% erlang
+    Pin = {c, 13},
+    gpio:set_direction(Pin, input),
+    case gpio:digital_read(Pin) of
+        high ->
+            io:format("Pin ~p is high ~n", [Pin]);
+        low ->
+            io:format("Pin ~p is low ~n", [Pin])
+    end.
+
+The Pico has an additional initialization step `gpio:init/1` before using a pin for gpio:
+
+    %% erlang
+    Pin = 2,
+    gpio:init(Pin),
+    gpio:set_direction(Pin, input),
+    case gpio:digital_read(Pin) of
+        high ->
+            io:format("Pin ~p is high ~n", [Pin]);
+        low ->
+            io:format("Pin ~p is low ~n", [Pin])
+    end.
+
+#### Digital Write
+
+To set the value of a GPIO pin (`high` or `low`), use `gpio:digital_write/2`.
+
+For ESP32 family:
 
     %% erlang
     Pin = 2,
     gpio:set_direction(Pin, output),
     gpio:digital_write(Pin, low).
 
+For the STM32 use a pin tuple:
+
+    %% erlang
+    Pin = {b, 7},
+    gpio:set_direction(Pin, output),
+    gpio:digital_write(Pin, low).
+
+Pico needs the extra `gpio:init/1` before `gpio:read/1` too:
+
+    %% erlang
+    Pin = 2,
+    gpio:init(Pin),
+    gpio:set_direction(Pin, output),
+    gpio:digital_write(Pin, low).
+
 #### Interrupt Handling
+
+Interrupts are supported on both the ESP32 and STM32 platforms.
 
 You can get notified of changes in the state of a GPIO pin by using the `gpio:set_int/2` function.  This function takes a reference to a GPIO Pin and a trigger.  Allowable triggers are `rising`, `falling`, `both`, `low`, `high`, and `none` (to disable an interrupt).
 
