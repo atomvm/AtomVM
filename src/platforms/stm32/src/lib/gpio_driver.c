@@ -71,12 +71,9 @@
 static NativeHandlerResult consume_gpio_mailbox(Context *ctx);
 
 static const char *const gpio_atom = ATOM_STR("\x4", "gpio");
-static const char *const gpio_driver_atom = ATOM_STR("\xB", "gpio_driver");
 
 #define INVALID_EXTI_TRIGGER 0xEE
 #define GPIO_INTERRUPT_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\xE", "gpio_interrupt"))
-
-static term gpio_driver;
 
 struct GPIOListenerData
 {
@@ -483,8 +480,7 @@ static term gpio_digital_read(Context *ctx, term gpio_pin_tuple)
 
 void gpiodriver_init(GlobalContext *glb)
 {
-    int index = globalcontext_insert_atom(glb, gpio_driver_atom);
-    gpio_driver = term_from_atom_index(index);
+    UNUSED(glb);
 }
 
 static Context *gpio_driver_create_port(GlobalContext *global, term opts)
