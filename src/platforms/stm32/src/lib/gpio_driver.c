@@ -545,8 +545,7 @@ void gpio_interrupt_callback(Context *ctx, uint32_t exti)
 
     struct GPIOData *gpio_data = ctx->platform_data;
     struct ListHead *item;
-    struct ListHead *tmp;
-    MUTABLE_LIST_FOR_EACH (item, tmp, &gpio_data->gpio_listeners) {
+    LIST_FOR_EACH (item, &gpio_data->gpio_listeners) {
         struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
         if (gpio_listener->exti == exti) {
             listening_pid = gpio_listener->target_local_pid;
