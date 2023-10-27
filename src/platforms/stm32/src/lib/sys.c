@@ -37,8 +37,6 @@
 
 #define TAG "sys"
 
-static const char *const stm32_atom = ATOM_STR("\x5", "stm32");
-
 struct PortDriverDefListItem *port_driver_list;
 struct NifCollectionDefListItem *nif_collection_list;
 
@@ -100,7 +98,7 @@ bool sys_lock_pin(GlobalContext *glb, uint32_t gpio_bank, uint16_t pin_num)
     }
 
     struct LockedPin *data = malloc(sizeof(struct LockedPin));
-    if (UNLIKELY(IS_NULL_PTR(data))) {
+    if (IS_NULL_PTR(data)) {
         AVM_LOGE(TAG, "Out of memory!");
         AVM_ABORT();
     }
@@ -132,7 +130,7 @@ bool sys_unlock_pin(GlobalContext *glb, uint32_t gpio_bank, uint16_t pin_num)
 
 void sys_init_platform(GlobalContext *glb)
 {
-    globalcontext_make_atom(glb, stm32_atom);
+    UNUSED(glb);
 }
 
 void sys_free_platform(GlobalContext *glb)

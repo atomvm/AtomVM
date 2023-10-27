@@ -71,12 +71,9 @@
 static NativeHandlerResult consume_gpio_mailbox(Context *ctx);
 
 static const char *const gpio_atom = ATOM_STR("\x4", "gpio");
-static const char *const gpio_driver_atom = ATOM_STR("\xB", "gpio_driver");
 
 #define INVALID_EXTI_TRIGGER 0xEE
 #define GPIO_INTERRUPT_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\xE", "gpio_interrupt"))
-
-static term gpio_driver;
 
 struct GPIOListenerData
 {
@@ -483,8 +480,7 @@ static term gpio_digital_read(Context *ctx, term gpio_pin_tuple)
 
 void gpiodriver_init(GlobalContext *glb)
 {
-    int index = globalcontext_insert_atom(glb, gpio_driver_atom);
-    gpio_driver = term_from_atom_index(index);
+    UNUSED(glb);
 }
 
 static Context *gpio_driver_create_port(GlobalContext *global, term opts)
@@ -549,16 +545,14 @@ void gpio_interrupt_callback(Context *ctx, uint32_t exti)
 
     struct GPIOData *gpio_data = ctx->platform_data;
     struct ListHead *item;
-    struct ListHead *tmp;
-    MUTABLE_LIST_FOR_EACH (item, tmp, &gpio_data->gpio_listeners) {
+    LIST_FOR_EACH (item, &gpio_data->gpio_listeners) {
         struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
         if (gpio_listener->exti == exti) {
             listening_pid = gpio_listener->target_local_pid;
             gpio_bank = gpio_listener->bank_atom;
             gpio_pin = gpio_listener->gpio_pin;
 
-            // 1 header + 2 elements, second element is tuple with 2 elements
-            BEGIN_WITH_STACK_HEAP(1 + 2 + 2, heap);
+            BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(2) + TUPLE_SIZE(2), heap);
 
             term int_msg = term_alloc_tuple(2, &heap);
             term gpio_tuple = term_alloc_tuple(2, &heap);
