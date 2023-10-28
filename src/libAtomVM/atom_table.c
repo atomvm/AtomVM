@@ -268,3 +268,50 @@ long atom_table_ensure_atom(struct AtomTable *table, AtomString string)
     SMP_UNLOCK(table);
     return new_index;
 }
+
+void atom_table_ensure_atoms(
+    struct AtomTable *table, const void *atoms, int count, int *translate_table)
+{
+    SMP_WRLOCK(table);
+
+    int new_atoms_count = 0;
+
+    const uint8_t *current_atom = atoms;
+
+    for (int i = 0; i < count; i++) {
+        struct HNode *node = get_node(table, current_atom);
+        if (node) {
+            translate_table[i] = node->index;
+        } else {
+            new_atoms_count++;
+            translate_table[i] = ATOM_TABLE_NOT_FOUND;
+        }
+
+        uint8_t atom_len = current_atom[0];
+        current_atom += 1 + atom_len;
+    }
+
+    current_atom = atoms;
+    int remaining_atoms = new_atoms_count;
+    struct HNodeGroup *node_group = table->last_node_group;
+    for (int i = 0; i < count; i++) {
+        if (translate_table[i] == ATOM_TABLE_NOT_FOUND) {
+            if (!node_group->avail) {
+                node_group = new_node_group(table, remaining_atoms);
+            }
+
+            unsigned long hash = sdbm_hash(current_atom, atom_string_len(current_atom));
+            unsigned long bucket_index = hash % table->capacity;
+
+            translate_table[i] = insert_node(table, node_group, bucket_index, current_atom);
+            remaining_atoms--;
+            if (remaining_atoms == 0) {
+                break;
+            }
+        }
+        uint8_t atom_len = current_atom[0];
+        current_atom += 1 + atom_len;
+    }
+
+    SMP_UNLOCK(table);
+}

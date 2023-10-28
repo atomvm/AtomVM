@@ -36,4 +36,7 @@ long atom_table_ensure_atom(struct AtomTable *table, AtomString string);
 AtomString atom_table_get_atom_string(struct AtomTable *table, long index);
 long atom_table_get_index(struct AtomTable *table, AtomString string);
 
+void atom_table_ensure_atoms(
+    struct AtomTable *table, const void *atoms, int count, int *translate_table);
+
 #endif
