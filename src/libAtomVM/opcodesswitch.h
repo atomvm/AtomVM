@@ -4308,7 +4308,7 @@ wait_timeout_trap_handler:
 
                     size_t remaining = 0;
                     const uint8_t *str = module_get_str(mod, offset, &remaining);
-                    if (UNLIKELY(IS_NULL_PTR(str))) {
+                    if (IS_NULL_PTR(str)) {
                         TRACE("bs_put_string: Bad offset in strings table.\n");
                         RAISE_ERROR(BADARG_ATOM);
                     }
@@ -4538,7 +4538,7 @@ wait_timeout_trap_handler:
 
                     size_t remaining = 0;
                     const uint8_t *str = module_get_str(mod, offset, &remaining);
-                    if (UNLIKELY(IS_NULL_PTR(str))) {
+                    if (IS_NULL_PTR(str)) {
                         TRACE("bs_match_string: Bad offset in strings table.\n");
                         RAISE_ERROR(BADARG_ATOM);
                     }
