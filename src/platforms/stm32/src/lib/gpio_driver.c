@@ -264,7 +264,15 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
         }
         while (term_is_nonempty_list(pin_term)) {
             term gpio_pin_term = term_get_list_head(pin_term);
+            if (UNLIKELY(!term_is_any_integer(gpio_pin_term))) {
+                AVM_LOGE(TAG, "Pin numbers must be between 0 and 15!");
+                return create_pair(ctx, ERROR_ATOM, INVALID_PIN_ATOM);
+            }
             uint16_t gpio_pin_num = ((uint16_t) term_to_int32(gpio_pin_term));
+            if (UNLIKELY(gpio_pin_num > 15)) {
+                AVM_LOGE(TAG, "Pin numbers must be between 0 and 15!");
+                return create_pair(ctx, ERROR_ATOM, INVALID_PIN_ATOM);
+            }
             gpio_pin_mask = 1U << gpio_pin_num | gpio_pin_mask;
             pin_term = term_get_list_tail(pin_term);
         }
@@ -277,9 +285,10 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
             gpio_pin_mask = 1U << gpio_pin_num | gpio_pin_mask;
         }
     } else if (term_is_atom(pin_term)) {
-        if (pin_term == ALL_ATOM) {
-            gpio_pin_mask = GPIO_ALL;
+        if (pin_term != ALL_ATOM) {
+            return create_pair(ctx, ERROR_ATOM, INVALID_PIN_ATOM);
         }
+        gpio_pin_mask = GPIO_ALL;
     } else {
         return create_pair(ctx, ERROR_ATOM, INVALID_PIN_ATOM);
     }
@@ -302,11 +311,10 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
             if (gpio_mode == GPIO_MODE_OUTPUT_OD) {
                 gpio_mode = GPIO_MODE_OUTPUT;
                 out_type = GPIO_OTYPE_OD;
-                setup_output = true;
             } else {
                 out_type = GPIO_OTYPE_PP;
-                setup_output = true;
             }
+            setup_output = true;
         }
 
         pull_atom = term_get_tuple_element(mode_term, 1);
@@ -348,8 +356,15 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
             return create_pair(ctx, ERROR_ATOM, INVALID_MODE_ATOM);
         }
         pull_up_down = GPIO_PUPD_NONE;
-        if (setup_output) {
+        if ((gpio_mode == GPIO_MODE_OUTPUT) || (gpio_mode == GPIO_MODE_OUTPUT_OD)) {
+            if (gpio_mode == GPIO_MODE_OUTPUT_OD) {
+                gpio_mode = GPIO_MODE_OUTPUT;
+                out_type = GPIO_OTYPE_OD;
+            } else {
+                out_type = GPIO_OTYPE_PP;
+            }
             output_speed = GPIO_OSPEED_2MHZ;
+            setup_output = true;
         }
     }
 
@@ -396,7 +411,14 @@ static term gpio_digital_write(Context *ctx, term gpio_pin_tuple, term level_ter
         }
         while (term_is_nonempty_list(pin_term)) {
             term gpio_pin_term = term_get_list_head(pin_term);
+            if (UNLIKELY(!term_is_integer(gpio_pin_term))) {
+                return create_pair(ctx, ERROR_ATOM, INVALID_PIN_ATOM);
+            }
             uint16_t gpio_pin_num = ((uint16_t) term_to_int32(gpio_pin_term));
+            if (UNLIKELY(gpio_pin_num > 15)) {
+                AVM_LOGE(TAG, "Pin numbers must be between 0 and 15!");
+                return create_pair(ctx, ERROR_ATOM, INVALID_PIN_ATOM);
+            }
             gpio_pin_mask = 1U << gpio_pin_num | gpio_pin_mask;
             pin_term = term_get_list_tail(pin_term);
         }
@@ -409,9 +431,12 @@ static term gpio_digital_write(Context *ctx, term gpio_pin_tuple, term level_ter
             gpio_pin_mask = 1U << gpio_pin_num | gpio_pin_mask;
         }
     } else if (term_is_atom(pin_term)) {
-        if (pin_term == ALL_ATOM) {
-            gpio_pin_mask = GPIO_ALL;
+        if (UNLIKELY(pin_term != ALL_ATOM)) {
+
+            AVM_LOGE(TAG, "Pin number must be between 0 and 15!");
+            return create_pair(ctx, ERROR_ATOM, INVALID_PIN_ATOM);
         }
+        gpio_pin_mask = GPIO_ALL;
     } else {
         return create_pair(ctx, ERROR_ATOM, INVALID_PIN_ATOM);
     }
@@ -905,7 +930,7 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
 
     term ret_msg;
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, 3, 1, &ret, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        ret_msg = create_pair(ctx, ERROR_ATOM, OUT_OF_MEMORY_ATOM);
+        ret_msg = OUT_OF_MEMORY_ATOM;
     } else {
         term ref = term_get_tuple_element(msg, 1);
         ret_msg = create_pair(ctx, ref, ret);
