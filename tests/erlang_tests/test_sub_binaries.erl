@@ -56,6 +56,7 @@ start() ->
 
 test_common() ->
     ok = run_test(fun() -> test_count_binary() end),
+    ok = run_test(fun() -> test_sub_sub_binary() end),
     ok.
 
 test_atom() ->
@@ -70,6 +71,14 @@ test_atom() ->
     ok = run_test(fun() -> test_split_sub_binary() end),
     ok = run_test(fun() -> test_bit_syntax_tail() end),
     ok = run_test(fun() -> test_bit_syntax_get_binary() end),
+    ok.
+
+test_sub_sub_binary() ->
+    Bin = create_binary(get_largest_heap_binary_size()),
+
+    SubBin = binary:part(Bin, 1, 7),
+    <<2, 3, 4, 5, 6, 7, 8>> = SubBin,
+    <<4, 5, 6, 7, 8>> = binary:part(SubBin, 2, 5),
     ok.
 
 test_heap_sub_binary() ->
@@ -104,11 +113,19 @@ test_const_sub_binary() ->
 
     LargeSubBin = binary:part(?LITERAL_BIN, 1, BinarySize - 1),
     HeapSize2 = get_heap_size(),
-    ?VERIFY(HeapSize2 < HeapSize1 + erlang:byte_size(LargeSubBin)),
+    ?VERIFY((HeapSize2 - HeapSize1) >= 8),
+    ?VERIFY((HeapSize2 - HeapSize1) < BinarySize div 4),
+    ?VERIFY(MemoryBinarySize == erlang:memory(binary)),
+
+    SubSubBin = binary:part(LargeSubBin, 0, BinarySize - 2),
+    HeapSize3 = get_heap_size(),
+    ?VERIFY((HeapSize3 - HeapSize2) >= 8),
+    ?VERIFY((HeapSize3 - HeapSize2) < BinarySize div 4),
     ?VERIFY(MemoryBinarySize == erlang:memory(binary)),
 
     id(SmallSubBin),
     id(LargeSubBin),
+    id(SubSubBin),
     ok.
 
 test_non_const_sub_binary() ->
@@ -126,7 +143,7 @@ test_non_const_sub_binary() ->
 
     LargeSubBin = binary:part(Bin, 1, BinarySize - 1),
     HeapSize3 = get_heap_size(),
-    ?VERIFY(HeapSize3 < HeapSize2 + erlang:byte_size(LargeSubBin)),
+    ?VERIFY((HeapSize3 - HeapSize2) < BinarySize div 4),
     ?VERIFY(MemoryBinarySize + 1024 == erlang:memory(binary)),
 
     id(String),
