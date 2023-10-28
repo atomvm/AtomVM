@@ -66,5 +66,5 @@ The following guides provide more detailed information about getting started wit
 
 * [Getting Started Guide](./getting-started-guide.md)
 * [Programmers Guide](./programmers-guide.md)
-* [Example Programs](./example-programs.md)
+* [Example Programs](https://github.com/atomvm/atomvm_examples)
 * [Build Instructions](./build-instructions.md)

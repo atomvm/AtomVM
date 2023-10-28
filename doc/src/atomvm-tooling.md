@@ -130,9 +130,13 @@ Edit the `rebar.config` so that it includes the following `atomvm_rebar3_plugin`
 
 This stanza will guarantee that the generated packbeam file will be pruned when created.
 
+You will need to first build a packbeam file that includes the AtomVM core libraries.  Use the `packbeam` task in the `atomvm` namespace, and specify the path to the `atomvmlib.avm` file you created as part of the build.
+
+    shell$ rebar3 atomvm packbeam -e /path/to/atomvmlib.avm
+
 You may now flash your application to your STM32 device:
 
-    shell$ rebar3 atomvm stm32_flash -e /path/to/atomvmlib.avm
+    shell$ rebar3 atomvm stm32_flash
     ...
     ===> st-flash --reset write /path/to/atomvm_examples/erlang/hello_world/_build/default/lib/hello_world.avm 0x8080000
 
@@ -468,4 +472,4 @@ To get help about `packbeam` syntax, use the `help` subcommand:
 
 ## Where to go from here
 
-With knowledge of AtomVM tooling, you can more easily follow the AtomVM [Example Programs](example-programs.md)
+With knowledge of AtomVM tooling, you can more easily follow the AtomVM [Example Programs](https://github.com/atomvm/atomvm_examples)
