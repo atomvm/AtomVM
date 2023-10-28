@@ -140,7 +140,7 @@ static term nif_esp_random_bytes(Context *ctx, int argc, term argv[])
         return binary;
     } else {
         uint8_t *buf = malloc(len);
-        if (UNLIKELY(IS_NULL_PTR(buf))) {
+        if (IS_NULL_PTR(buf)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         esp_fill_random(buf, len);

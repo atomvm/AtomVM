@@ -777,7 +777,7 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
     }
 
     struct GPIOListenerData *data = malloc(sizeof(struct GPIOListenerData));
-    if (UNLIKELY(IS_NULL_PTR(data))) {
+    if (IS_NULL_PTR(data)) {
         AVM_LOGE(TAG, "Out of memory!");
         AVM_ABORT();
     }

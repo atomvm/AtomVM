@@ -595,7 +595,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
 
     wifi_config_t *sta_wifi_config = get_sta_wifi_config(sta_config, ctx->global);
     wifi_config_t *ap_wifi_config = get_ap_wifi_config(ap_config, ctx->global);
-    if (UNLIKELY(IS_NULL_PTR(sta_wifi_config) && IS_NULL_PTR(ap_wifi_config))) {
+    if (IS_NULL_PTR(sta_wifi_config) && IS_NULL_PTR(ap_wifi_config)) {
         ESP_LOGE(TAG, "Unable to get STA or AP configuration");
         term error = port_create_error_tuple(ctx, BADARG_ATOM);
         port_send_reply(ctx, pid, ref, error);

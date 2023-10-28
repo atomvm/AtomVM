@@ -411,7 +411,7 @@ int globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_str
         if (copy) {
             uint8_t len = *((uint8_t *) atom_string);
             uint8_t *buf = malloc(1 + len);
-            if (UNLIKELY(IS_NULL_PTR(buf))) {
+            if (IS_NULL_PTR(buf)) {
                 fprintf(stderr, "Unable to allocate memory for atom string\n");
                 AVM_ABORT();
             }

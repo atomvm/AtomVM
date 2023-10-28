@@ -173,7 +173,7 @@ static term nif_openssl_rand_bytes(Context *ctx, int argc, term argv[])
     avm_int_t n = term_maybe_unbox_int(t);
 
     char *buf = malloc(n);
-    if (UNLIKELY(IS_NULL_PTR(buf))) {
+    if (IS_NULL_PTR(buf)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 

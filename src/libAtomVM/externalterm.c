@@ -139,7 +139,7 @@ enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term b
     size_t len = term_binary_size(binary);
     const uint8_t *data = (const uint8_t *) term_binary_data(binary);
     uint8_t *buf = malloc(len);
-    if (UNLIKELY(IS_NULL_PTR(buf))) {
+    if (IS_NULL_PTR(buf)) {
         fprintf(stderr, "Unable to allocate %zu bytes for binary buffer.\n", len);
         return EXTERNAL_TERM_MALLOC;
     }
@@ -161,7 +161,7 @@ static int externalterm_from_term(uint8_t **buf, size_t *len, term t, GlobalCont
 {
     *len = compute_external_size(t, glb) + 1;
     *buf = malloc(*len);
-    if (UNLIKELY(IS_NULL_PTR(*buf))) {
+    if (IS_NULL_PTR(*buf)) {
         fprintf(stderr, "Unable to allocate %zu bytes for externalized term.\n", *len);
         AVM_ABORT();
     }
