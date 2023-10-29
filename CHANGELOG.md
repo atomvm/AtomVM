@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added STM32 cmake option `-DAVM_CFG_CONSOLE=` to select a different uart peripheral for the system console
 - Added `crypto:strong_rand_bytes/1` using Mbed-TLS (only on generic_unix, ESP32 and RP2040
   platforms)
+- Added support for setting the default receive buffer size for sockets via `socket:setopt/3`
 
 ### Removed
 

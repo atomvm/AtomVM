@@ -26,6 +26,8 @@ test() ->
     ok = test_echo_server(),
     ok = test_shutdown(),
     ok = test_close_by_another_process(),
+    ok = test_buf_size(),
+    ok = test_override_buf_size(),
     case get_otp_version() of
         atomvm ->
             ok = test_abandon_select();
@@ -56,13 +58,15 @@ test_shutdown() ->
 
     ok = test_shutdown_of_client_sockets(Port),
 
-    ok = close_listen_socket(ListenSocket).
+    ok = close_listen_socket(ListenSocket),
+
+    id(ok).
 
 test_shutdown_of_client_sockets(Port) ->
     ok = test_shutdown_of_side(Port, write),
     ok = test_shutdown_of_side(Port, read_write),
     ok = test_shutdown_of_side(Port, read),
-    ok.
+    id(ok).
 
 test_shutdown_of_side(Port, Side) ->
     {ok, Socket} = socket:open(inet, stream, tcp),
@@ -95,7 +99,107 @@ test_shutdown_of_side(Port, Side) ->
     end,
 
     ok = close_client_socket(Socket),
-    ok.
+
+    id(ok).
+
+test_close_by_another_process() ->
+    % socket:recv is blocking and the only way to interrupt it is to close
+    % the socket.
+    etest:flush_msg_queue(),
+
+    Port = 44404,
+    ListenSocket = start_echo_server(Port),
+
+    {ok, ClientSocket1} = socket:open(inet, stream, tcp),
+    ok = try_connect(ClientSocket1, Port, 10),
+
+    spawn_link(fun() ->
+        timer:sleep(500),
+        ok = socket:close(ClientSocket1)
+    end),
+    % recv is blocking
+    {error, closed} = socket:recv(ClientSocket1, 0, 5000),
+
+    timer:sleep(10),
+
+    ok = close_listen_socket(ListenSocket),
+
+    id(ok).
+
+check_receive(Socket, Packet, Length, Expect) ->
+    case socket:send(Socket, Packet) of
+        ok ->
+            ok =
+                case socket:recv(Socket, Length) of
+                    {ok, Expect} ->
+                        ok;
+                    Error ->
+                        io:format("Unexpected value on recv: ~p~n", [Error]),
+                        Error
+                end;
+        {error, Reason} = Error ->
+            io:format("Error on send: ~p~n", [Reason]),
+            Error
+    end.
+
+test_buf_size() ->
+    etest:flush_msg_queue(),
+
+    Port = 44404,
+    ListenSocket = start_echo_server(Port),
+
+    {ok, Socket} = socket:open(inet, stream, tcp),
+    ok = try_connect(Socket, Port, 10),
+
+    %% try a few failures first
+    {error, _} = socket:setopt(Socket, {otp, badopt}, any_value),
+    {error, _} = socket:setopt(Socket, {otp, rcvbuf}, not_an_int),
+    {error, _} = socket:setopt(Socket, {otp, rcvbuf}, -1),
+
+    %% limit the recv buffer size to 10 bytes
+    ok = socket:setopt(Socket, {otp, rcvbuf}, 10),
+
+    Packet = "012345678901234567890123456789",
+
+    %% we should only be able to receive
+    ok = check_receive(Socket, Packet, 0, <<"0123456789">>),
+    ok = check_receive(Socket, Packet, 0, <<"0123456789">>),
+    ok = check_receive(Socket, Packet, 0, <<"0123456789">>),
+
+    timer:sleep(10),
+
+    ok = close_client_socket(Socket),
+
+    ok = close_listen_socket(ListenSocket),
+
+    id(ok).
+
+test_override_buf_size() ->
+    etest:flush_msg_queue(),
+
+    Port = 44404,
+    ListenSocket = start_echo_server(Port),
+
+    {ok, Socket} = socket:open(inet, stream, tcp),
+    ok = try_connect(Socket, Port, 10),
+
+    %% limit the recv buffer size to 10 bytes
+    ok = socket:setopt(Socket, {otp, rcvbuf}, 10),
+
+    Packet = "012345678901234567890123456789",
+
+    %% verify that the socket:recv length parameter takes
+    %% precedence over the default
+    ok = check_receive(Socket, Packet, 15, <<"012345678901234">>),
+    ok = check_receive(Socket, Packet, 15, <<"567890123456789">>),
+
+    timer:sleep(10),
+
+    ok = close_client_socket(Socket),
+
+    ok = close_listen_socket(ListenSocket),
+
+    id(ok).
 
 %%
 %% echo_server
@@ -171,10 +275,18 @@ close_listen_socket(ListenSocket) ->
     %%
     ok = socket:close(ListenSocket),
     receive
-        accept_terminated -> ok
+        accept_terminated ->
+            ok
     after 1000 ->
-        %% TODO failing to receive accept_terminated message
-        erlang:display({timeout, waiting, accept_terminated})
+        %%
+        %% Closing the listening socket from another process may in some
+        %% cases not result in the blocking accept to break out of its
+        %% call with an expected return value.  In this case, we will
+        %% allow the wait for the `accept_terminated` message to fail
+        %% and simply warn the user.  See TODO comment to this effect in
+        %% `nif_socket_close` function in `otp_socket.c`
+        %%
+        erlang:display({warning, timeout, waiting, accept_terminated})
         % throw({timeout, waiting, accept_terminated})
     end,
 
@@ -273,26 +385,6 @@ test_abandon_select() ->
     erlang:garbage_collect(),
     ok.
 
-test_close_by_another_process() ->
-    % socket:recv is blocking and the only way to interrupt it is to close
-    % the socket.
-    etest:flush_msg_queue(),
-
-    Port = 44404,
-    ListenSocket = start_echo_server(Port),
-
-    {ok, ClientSocket1} = socket:open(inet, stream, tcp),
-    ok = try_connect(ClientSocket1, Port, 10),
-
-    spawn_link(fun() ->
-        timer:sleep(500),
-        ok = socket:close(ClientSocket1)
-    end),
-    % recv is blocking
-    {error, closed} = socket:recv(ClientSocket1, 0, 5000),
-
-    close_listen_socket(ListenSocket).
-
 get_otp_version() ->
     case erlang:system_info(machine) of
         "BEAM" ->
@@ -300,3 +392,6 @@ get_otp_version() ->
         _ ->
             atomvm
     end.
+
+id(X) ->
+    X.
