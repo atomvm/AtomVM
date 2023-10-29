@@ -15,8 +15,6 @@ on:
       - 'src/platforms/esp32/**'
       - 'src/libAtomVM/**'
       - 'tools/packbeam/**'
-    tags:
-      - '*'
   pull_request:
     paths:
       - '.github/workflows/esp32-mkimage.yaml'

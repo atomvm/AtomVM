@@ -12,6 +12,8 @@ name: Build Docs
 on:
   # Triggers the workflow on push request and tag events on master branch
   pull_request:
+    tag:
+      - '**'
     branches:
       - 'master'
     paths:
