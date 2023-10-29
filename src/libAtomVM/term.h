@@ -1040,6 +1040,9 @@ static inline term term_maybe_create_sub_binary(term binary, size_t offset, size
 {
     if (term_is_refc_binary(binary) && len >= SUB_BINARY_MIN) {
         return term_alloc_sub_binary(binary, offset, len, heap);
+    } else if (term_is_sub_binary(binary) && len >= SUB_BINARY_MIN) {
+        const term *boxed_value = term_to_const_term_ptr(binary);
+        return term_alloc_sub_binary(boxed_value[3], boxed_value[2] + offset, len, heap);
     } else {
         const char *data = term_binary_data(binary);
         return term_from_literal_binary(data + offset, len, heap, glb);
