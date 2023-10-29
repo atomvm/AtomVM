@@ -774,8 +774,7 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
 
     if (!list_is_empty(&gpio_data->gpio_listeners)) {
         struct ListHead *item;
-        struct ListHead *tmp;
-        MUTABLE_LIST_FOR_EACH (item, tmp, &gpio_data->gpio_listeners) {
+        LIST_FOR_EACH (item, &gpio_data->gpio_listeners) {
             struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
             if (gpio_listener->exti == exti) {
                 char *bank_string = interop_atom_to_string(ctx, gpio_bank_atom);
