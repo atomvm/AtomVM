@@ -1956,22 +1956,16 @@ static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
     ((uint8_t *) atom)[0] = atom_string_len;
     memcpy(((char *) atom) + 1, atom_string, atom_string_len);
 
-    // FIXME: here there is a potential race condition
-    long global_atom_index = atom_table_get_index(ctx->global->atom_table, atom);
-    bool has_atom = (global_atom_index != ATOM_TABLE_NOT_FOUND);
-
-    if (create_new || has_atom) {
-        if (!has_atom) {
-            global_atom_index = globalcontext_insert_atom(ctx->global, atom);
-        } else {
-            free((void *) atom);
-        }
-        return term_from_atom_index(global_atom_index);
-
-    } else {
-        free((void *) atom);
+    enum AtomTableCopyOpt atom_opts = AtomTableCopyAtom;
+    if (!create_new) {
+        atom_opts |= AtomTableAlreadyExisting;
+    }
+    long global_atom_index = atom_table_ensure_atom(ctx->global->atom_table, atom, atom_opts);
+    free((void *) atom);
+    if (UNLIKELY(global_atom_index == ATOM_TABLE_NOT_FOUND)) {
         RAISE_ERROR(BADARG_ATOM);
     }
+    return term_from_atom_index(global_atom_index);
 }
 
 term nif_erlang_list_to_atom_1(Context *ctx, int argc, term argv[])
@@ -2007,22 +2001,16 @@ term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
     ((uint8_t *) atom)[0] = atom_string_len;
     memcpy(((char *) atom) + 1, atom_string, atom_string_len);
 
-    // FIXME: here there is a potential race condition
-    long global_atom_index = atom_table_get_index(ctx->global->atom_table, atom);
-    bool has_atom = (global_atom_index != ATOM_TABLE_NOT_FOUND);
-
-    if (create_new || has_atom) {
-        if (!has_atom) {
-            global_atom_index = globalcontext_insert_atom(ctx->global, atom);
-        } else {
-            free((void *) atom);
-        }
-        return term_from_atom_index(global_atom_index);
-
-    } else {
-        free((void *) atom);
+    enum AtomTableCopyOpt atom_opts = AtomTableCopyAtom;
+    if (!create_new) {
+        atom_opts |= AtomTableAlreadyExisting;
+    }
+    long global_atom_index = atom_table_ensure_atom(ctx->global->atom_table, atom, atom_opts);
+    free((void *) atom);
+    if (UNLIKELY(global_atom_index == ATOM_TABLE_NOT_FOUND)) {
         RAISE_ERROR(BADARG_ATOM);
     }
+    return term_from_atom_index(global_atom_index);
 }
 
 static term nif_erlang_atom_to_binary_2(Context *ctx, int argc, term argv[])
