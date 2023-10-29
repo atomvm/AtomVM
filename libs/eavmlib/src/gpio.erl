@@ -59,11 +59,11 @@
 -type gpio() :: pid().
 %% This is the pid returned by `gpio:start/0'.
 -type pin() :: non_neg_integer() | pin_tuple().
-%% The pin definition for ESP32 and PR2040 is a non-negative integer, on the STM32 platform it is a tuple.
+%% The pin definition for ESP32 and PR2040 is a non-negative integer. A tuple is used on the STM32 platform and for the extra "WL" pins on the Pico-W.
 -type pin_tuple() :: {gpio_bank(), 0..15}.
-%% A pin parameter on STM32 is a tuple consisting of a GPIO bank and pin number.
--type gpio_bank() :: a | b | c | d | e | f | g | h | i | j | k.
-%% STM32 gpio banks vary by board, some only break out `a' thru `h'.
+%% A pin parameter on STM32 is a tuple consisting of a GPIO bank and pin number, also used on the Pico-W for the extra "WL" pins `0..2'.
+-type gpio_bank() :: a | b | c | d | e | f | g | h | i | j | k | wl.
+%% STM32 gpio banks vary by board, some only break out `a' thru `h'. The extra "WL" pins on Pico-W use bank `wl'.
 -type direction() :: input | output | output_od | mode_config().
 %% The direction is used to set the mode of operation for a GPIO pin, either as an input, an output, or output with open drain.
 %% On the STM32 platform pull mode and output_speed must be set at the same time as direction. See @type mode_config()
@@ -438,6 +438,9 @@ deep_sleep_hold_dis() ->
 %%          on a specific bank the atom `all' may be used, this will have no effect on any pins on the
 %%          same bank that have been configured as inputs, so it is safe to use with mixed direction
 %%          modes on a bank.
+%%
+%%          The LED pin on the Pico-W can be controlled on the extended pin `{wl, 0}', and does not
+%%          require or accept `set_pin_mode' or `set_pin_pull' before use.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec digital_write(Pin :: pin(), Level :: level()) -> ok | {error, Reason :: atom()} | error.
@@ -452,6 +455,9 @@ digital_write(_Pin, _Level) ->
 %%          Read if an input pin state is high or low.
 %%          Warning: if the pin was not previously configured as an input using
 %%          `gpio:set_pin_mode/2' it will always read as low.
+%%
+%%          The VBUS detect pin on the Pico-W can be read on the extended pin `{wl, 2}',
+%%          and does not require or accept `set_pin_mode' or `set_pin_pull' before use.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec digital_read(Pin :: pin()) -> high | low | {error, Reason :: atom()} | error.
