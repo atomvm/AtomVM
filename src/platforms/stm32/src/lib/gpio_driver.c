@@ -215,6 +215,10 @@ static uint8_t pin_num_to_exti_irq(uint16_t pin_num)
             return 0;
     }
 }
+
+void gpio_interrupt_callback(Context *ctx, uint32_t exti);
+void isr_handler(Context *ctx, uint32_t exti);
+void isr_error_handler(const char *isr_name);
 #endif /* NOT defined AVM_DISABLE_GPIO_PORT_DRIVER */
 
 static term create_pair(Context *ctx, term term1, term term2)
