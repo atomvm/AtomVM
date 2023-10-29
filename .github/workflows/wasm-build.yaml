@@ -14,8 +14,6 @@ on:
       - 'libs/**'
       - 'src/platforms/emscripten/**'
       - 'src/libAtomVM/**'
-    tags:
-      - '*'
   pull_request:
     paths:
       - '.github/workflows/wasm-build.yaml'

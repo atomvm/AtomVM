@@ -9,7 +9,7 @@ name: Build Libraries
 on:
   push:
     tags:
-      - '*'
+      - '**'
 
 permissions:
   contents: write

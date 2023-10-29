@@ -10,10 +10,10 @@ name: Publish Docs
 
 # Controls when the workflow will run
 on:
-  # Triggers the workflow on push request and tag events on master branch
+  # Triggers the workflow on pull request, tag events and pushes on master
   push:
     tags:
-      - '*'
+      - '**'
     branches:
       - 'master'
     paths:
