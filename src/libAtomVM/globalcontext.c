@@ -386,7 +386,7 @@ int globalcontext_get_registered_process(GlobalContext *glb, int atom_index)
 
 int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string)
 {
-    long index = atom_table_ensure_atom(glb->atom_table, atom_string);
+    long index = atom_table_ensure_atom(glb->atom_table, atom_string, AtomTableNoOpts);
     if (UNLIKELY(index == ATOM_TABLE_NOT_FOUND)) {
         abort();
     }
@@ -395,19 +395,8 @@ int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string)
 
 int globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_string, int copy)
 {
-    // TODO: this leaks, fix it
-    if (copy) {
-        uint8_t len = *((uint8_t *) atom_string);
-        uint8_t *buf = malloc(1 + len);
-        if (UNLIKELY(IS_NULL_PTR(buf))) {
-            fprintf(stderr, "Unable to allocate memory for atom string\n");
-            AVM_ABORT();
-        }
-        memcpy(buf, atom_string, 1 + len);
-        atom_string = buf;
-    }
-
-    long index = atom_table_ensure_atom(glb->atom_table, atom_string);
+    long index = atom_table_ensure_atom(
+        glb->atom_table, atom_string, copy ? AtomTableCopyAtom : AtomTableNoOpts);
     return index;
 }
 

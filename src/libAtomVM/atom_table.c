@@ -246,7 +246,8 @@ static inline long insert_node(struct AtomTable *table, struct HNodeGroup *node_
     return new_index;
 }
 
-long atom_table_ensure_atom(struct AtomTable *table, AtomString string)
+long atom_table_ensure_atom(
+    struct AtomTable *table, AtomString string, enum AtomTableCopyOpt opts)
 {
     unsigned long hash = sdbm_hash(string, atom_string_len(string));
     SMP_WRLOCK(table);
@@ -257,13 +258,27 @@ long atom_table_ensure_atom(struct AtomTable *table, AtomString string)
         SMP_UNLOCK(table);
         return node->index;
     }
+    if (opts & AtomTableAlreadyExisting) {
+        SMP_UNLOCK(table);
+        return ATOM_TABLE_NOT_FOUND;
+    }
 
     struct HNodeGroup *node_group = table->last_node_group;
     if (!node_group->avail) {
         node_group = new_node_group(table, DEFAULT_SIZE);
     }
 
-    long new_index = insert_node(table, node_group, bucket_index, string);
+    AtomString maybe_copied = string;
+    if (opts & AtomTableCopyAtom) {
+        uint8_t len = *((uint8_t *) string);
+        uint8_t *buf = malloc(1 + len);
+        if (IS_NULL_PTR(buf)) {
+            AVM_ABORT();
+        }
+        memcpy(buf, string, 1 + len);
+        maybe_copied = buf;
+    }
+    long new_index = insert_node(table, node_group, bucket_index, maybe_copied);
 
     SMP_UNLOCK(table);
     return new_index;

@@ -278,140 +278,140 @@ int insert_atoms_into_atom_table(struct AtomTable *table)
 {
     int decimals_index;
 
-    atom_table_ensure_atom(table, false_atom);
-    atom_table_ensure_atom(table, true_atom);
+    atom_table_ensure_atom(table, false_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, true_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, ok_atom);
-    atom_table_ensure_atom(table, error_atom);
+    atom_table_ensure_atom(table, ok_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, error_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, undefined_atom);
+    atom_table_ensure_atom(table, undefined_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, badarg_atom);
-    atom_table_ensure_atom(table, badarith_atom);
-    atom_table_ensure_atom(table, badarity_atom);
-    atom_table_ensure_atom(table, badfun_atom);
-    atom_table_ensure_atom(table, function_clause_atom);
-    atom_table_ensure_atom(table, try_clause_atom);
-    atom_table_ensure_atom(table, out_of_memory_atom);
-    atom_table_ensure_atom(table, overflow_atom);
-    atom_table_ensure_atom(table, system_limit_atom);
+    atom_table_ensure_atom(table, badarg_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, badarith_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, badarity_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, badfun_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, function_clause_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, try_clause_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, out_of_memory_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, overflow_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, system_limit_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, flush_atom);
-    atom_table_ensure_atom(table, heap_size_atom);
-    atom_table_ensure_atom(table, latin1_atom);
-    atom_table_ensure_atom(table, max_heap_size_atom);
-    atom_table_ensure_atom(table, memory_atom);
-    atom_table_ensure_atom(table, message_queue_len_atom);
-    atom_table_ensure_atom(table, puts_atom);
-    atom_table_ensure_atom(table, stack_size_atom);
-    atom_table_ensure_atom(table, min_heap_size_atom);
-    atom_table_ensure_atom(table, process_count_atom);
-    atom_table_ensure_atom(table, port_count_atom);
-    atom_table_ensure_atom(table, atom_count_atom);
-    atom_table_ensure_atom(table, system_architecture_atom);
-    atom_table_ensure_atom(table, wordsize_atom);
+    atom_table_ensure_atom(table, flush_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, heap_size_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, latin1_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, max_heap_size_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, memory_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, message_queue_len_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, puts_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, stack_size_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, min_heap_size_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, process_count_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, port_count_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, atom_count_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, system_architecture_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, wordsize_atom, AtomTableNoOpts);
 
-    decimals_index = atom_table_ensure_atom(table, decimals_atom);
-    atom_table_ensure_atom(table, scientific_atom);
-    atom_table_ensure_atom(table, compact_atom);
+    decimals_index = atom_table_ensure_atom(table, decimals_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, scientific_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, compact_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, badmatch_atom);
-    atom_table_ensure_atom(table, case_clause_atom);
-    atom_table_ensure_atom(table, if_clause_atom);
-    atom_table_ensure_atom(table, throw_atom);
-    atom_table_ensure_atom(table, low_entropy_atom);
-    atom_table_ensure_atom(table, unsupported_atom);
-    atom_table_ensure_atom(table, used_atom);
-    atom_table_ensure_atom(table, all_atom);
-    atom_table_ensure_atom(table, start_atom);
+    atom_table_ensure_atom(table, badmatch_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, case_clause_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, if_clause_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, throw_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, low_entropy_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, unsupported_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, used_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, all_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, start_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, undef_atom);
-    atom_table_ensure_atom(table, vm_abort_atom);
+    atom_table_ensure_atom(table, undef_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, vm_abort_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, link_atom);
-    atom_table_ensure_atom(table, monitor_atom);
-    atom_table_ensure_atom(table, normal_atom);
-    atom_table_ensure_atom(table, down_atom);
-    atom_table_ensure_atom(table, process_atom);
-    atom_table_ensure_atom(table, nocatch_atom);
-    atom_table_ensure_atom(table, refc_binary_info_atom);
+    atom_table_ensure_atom(table, link_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, monitor_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, normal_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, down_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, process_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, nocatch_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, refc_binary_info_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, noproc_atom);
-    atom_table_ensure_atom(table, trap_exit_atom);
-    atom_table_ensure_atom(table, exit_atom);
+    atom_table_ensure_atom(table, noproc_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, trap_exit_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, exit_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, badmap_atom);
-    atom_table_ensure_atom(table, badkey_atom);
-    atom_table_ensure_atom(table, none_atom);
+    atom_table_ensure_atom(table, badmap_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, badkey_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, none_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, io_request_atom);
-    atom_table_ensure_atom(table, io_reply_atom);
-    atom_table_ensure_atom(table, put_chars_atom);
+    atom_table_ensure_atom(table, io_request_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, io_reply_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, put_chars_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, lowercase_exit_atom);
-    atom_table_ensure_atom(table, atomvm_version_atom);
+    atom_table_ensure_atom(table, lowercase_exit_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, atomvm_version_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, second_atom);
-    atom_table_ensure_atom(table, millisecond_atom);
-    atom_table_ensure_atom(table, microsecond_atom);
+    atom_table_ensure_atom(table, second_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, millisecond_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, microsecond_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, infinity_atom);
-    atom_table_ensure_atom(table, timeout_value_atom);
+    atom_table_ensure_atom(table, infinity_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, timeout_value_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, schedulers_atom);
-    atom_table_ensure_atom(table, schedulers_online_atom);
+    atom_table_ensure_atom(table, schedulers_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, schedulers_online_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, append_atom);
-    atom_table_ensure_atom(table, private_append_atom);
-    atom_table_ensure_atom(table, binary_atom);
-    atom_table_ensure_atom(table, integer_atom);
-    atom_table_ensure_atom(table, little_atom);
-    atom_table_ensure_atom(table, native_atom);
-    atom_table_ensure_atom(table, string_atom);
-    atom_table_ensure_atom(table, utf8_atom);
-    atom_table_ensure_atom(table, utf16_atom);
-    atom_table_ensure_atom(table, utf32_atom);
-    atom_table_ensure_atom(table, badrecord_atom);
+    atom_table_ensure_atom(table, append_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, private_append_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, binary_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, integer_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, little_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, native_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, string_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, utf8_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, utf16_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, utf32_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, badrecord_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, copy_atom);
-    atom_table_ensure_atom(table, reuse_atom);
-    atom_table_ensure_atom(table, ensure_at_least_atom);
-    atom_table_ensure_atom(table, ensure_exactly_atom);
-    atom_table_ensure_atom(table, skip_atom);
-    atom_table_ensure_atom(table, get_tail_atom);
-    atom_table_ensure_atom(table, equal_colon_equal_atom);
-    atom_table_ensure_atom(table, signed_atom);
+    atom_table_ensure_atom(table, copy_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, reuse_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, ensure_at_least_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, ensure_exactly_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, skip_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, get_tail_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, equal_colon_equal_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, signed_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, machine_atom);
-    atom_table_ensure_atom(table, avm_floatsize_atom);
+    atom_table_ensure_atom(table, machine_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, avm_floatsize_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, close_atom);
-    atom_table_ensure_atom(table, closed_atom);
-    atom_table_ensure_atom(table, port_atom);
+    atom_table_ensure_atom(table, close_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, closed_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, port_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, info_atom);
+    atom_table_ensure_atom(table, info_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, module_atom);
+    atom_table_ensure_atom(table, module_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, select_atom);
-    atom_table_ensure_atom(table, ready_input_atom);
-    atom_table_ensure_atom(table, ready_output_atom);
+    atom_table_ensure_atom(table, select_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, ready_input_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, ready_output_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, attributes_atom);
-    atom_table_ensure_atom(table, compile_atom);
-    atom_table_ensure_atom(table, exports_atom);
+    atom_table_ensure_atom(table, attributes_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, compile_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, exports_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, incomplete_atom);
+    atom_table_ensure_atom(table, incomplete_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, kill_atom);
-    atom_table_ensure_atom(table, killed_atom);
-    atom_table_ensure_atom(table, links_atom);
+    atom_table_ensure_atom(table, kill_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, killed_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, links_atom, AtomTableNoOpts);
 
-    atom_table_ensure_atom(table, total_heap_size_atom);
-    atom_table_ensure_atom(table, atomvm_heap_growth_atom);
-    atom_table_ensure_atom(table, bounded_free_atom);
-    atom_table_ensure_atom(table, minimum_atom);
-    atom_table_ensure_atom(table, fibonacci_atom);
+    atom_table_ensure_atom(table, total_heap_size_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, atomvm_heap_growth_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, bounded_free_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, minimum_atom, AtomTableNoOpts);
+    atom_table_ensure_atom(table, fibonacci_atom, AtomTableNoOpts);
 
     return decimals_index;
 }
@@ -422,10 +422,10 @@ void test_atom_table()
 
     assert(atom_table_get_index(table, "\x4" "ciao") == ATOM_TABLE_NOT_FOUND);
 
-    assert(atom_table_ensure_atom(table, "\x3" "bar") == 0);
-    assert(atom_table_ensure_atom(table, "\x4" "ciao") == 1);
-    assert(atom_table_ensure_atom(table, "\x3" "foo") == 2);
-    assert(atom_table_ensure_atom(table, "\x3" "foo") == 2);
+    assert(atom_table_ensure_atom(table, "\x3" "bar", AtomTableNoOpts) == 0);
+    assert(atom_table_ensure_atom(table, "\x4" "ciao", AtomTableNoOpts) == 1);
+    assert(atom_table_ensure_atom(table, "\x3" "foo", AtomTableNoOpts) == 2);
+    assert(atom_table_ensure_atom(table, "\x3" "foo", AtomTableNoOpts) == 2);
 
     assert(atom_table_get_index(table, "\x4" "ciao") == 1);
 
@@ -434,7 +434,7 @@ void test_atom_table()
     int decimals_index = insert_atoms_into_atom_table(table);
 
     assert(atom_table_get_index(table, "\x8" "decimals") == decimals_index);
-    assert(atom_table_ensure_atom(table, "\x8" "decimals") == decimals_index);
+    assert(atom_table_ensure_atom(table, "\x8" "decimals", AtomTableNoOpts) == decimals_index);
 
     atom_table_destroy(table);
 }

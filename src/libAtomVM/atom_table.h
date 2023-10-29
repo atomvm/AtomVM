@@ -27,12 +27,20 @@
 
 struct AtomTable;
 
+enum AtomTableCopyOpt
+{
+    AtomTableNoOpts = 0,
+    AtomTableCopyAtom = 1,
+    AtomTableAlreadyExisting = 2
+};
+
 struct AtomTable *atom_table_new();
 void atom_table_destroy(struct AtomTable *table);
 
 int atom_table_count(struct AtomTable *table);
 
-long atom_table_ensure_atom(struct AtomTable *table, AtomString string);
+long atom_table_ensure_atom(
+    struct AtomTable *table, AtomString string, enum AtomTableCopyOpt opts);
 AtomString atom_table_get_atom_string(struct AtomTable *table, long index);
 long atom_table_get_index(struct AtomTable *table, AtomString string);
 

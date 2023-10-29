@@ -252,7 +252,7 @@ Context *gpio_driver_create_port(GlobalContext *global, term opts)
 static term gpiodriver_close(Context *ctx)
 {
     GlobalContext *glb = ctx->global;
-    int gpio_atom_index = atom_table_ensure_atom(glb->atom_table, gpio_atom);
+    int gpio_atom_index = atom_table_ensure_atom(glb->atom_table, gpio_atom, AtomTableNoOpts);
     if (UNLIKELY(!globalcontext_get_registered_process(glb, gpio_atom_index))) {
         return ERROR_ATOM;
     }
