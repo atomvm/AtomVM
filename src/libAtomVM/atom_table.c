@@ -53,6 +53,7 @@ struct AtomTable
 {
     int capacity;
     int count;
+    int last_node_group_avail;
 #ifndef AVM_NO_SMP
     RWLock *lock;
 #endif
@@ -67,7 +68,6 @@ struct HNodeGroup
     struct HNodeGroup *next;
     long first_index;
     uint16_t len;
-    uint16_t avail;
 
     struct HNode nodes[];
 };
@@ -132,12 +132,12 @@ static struct HNodeGroup *new_node_group(struct AtomTable *table, int len)
     new_group->next = NULL;
     new_group->first_index = table->count;
     new_group->len = len;
-    new_group->avail = len;
 
     if (LIKELY(table->last_node_group != NULL)) {
         table->last_node_group->next = new_group;
     }
     table->last_node_group = new_group;
+    table->last_node_group_avail = len;
 
     return new_group;
 }
@@ -201,15 +201,15 @@ AtomString atom_table_get_atom_string(struct AtomTable *table, long index)
 {
     SMP_RDLOCK(table);
 
+    if (UNLIKELY(index >= table->count)) {
+        SMP_UNLOCK(table);
+        return NULL;
+    }
+
     struct HNodeGroup *node_group = table->first_node_group;
     while (node_group) {
         long first_index = node_group->first_index;
         if (first_index + node_group->len > index) {
-            if (index - first_index > (node_group->len - node_group->avail)) {
-                SMP_UNLOCK(table);
-                return NULL;
-            }
-
             SMP_UNLOCK(table);
             return node_group->nodes[index - first_index].key;
         }
@@ -242,7 +242,7 @@ static inline long insert_node(struct AtomTable *table, struct HNodeGroup *node_
     table->count++;
 
     struct HNode *node = &node_group->nodes[new_index - node_group->first_index];
-    node_group->avail--;
+    table->last_node_group_avail--;
     init_node(node, string, new_index);
     insert_node_into_bucket(table, bucket_index, node);
 
@@ -266,7 +266,7 @@ long atom_table_ensure_atom(struct AtomTable *table, AtomString string, enum Ato
     }
 
     struct HNodeGroup *node_group = table->last_node_group;
-    if (!node_group->avail) {
+    if (!table->last_node_group_avail) {
         node_group = new_node_group(table, DEFAULT_SIZE);
         if (IS_NULL_PTR(node_group)) {
             SMP_UNLOCK(table);
@@ -318,7 +318,7 @@ int atom_table_ensure_atoms(
     struct HNodeGroup *node_group = table->last_node_group;
     for (int i = 0; i < count; i++) {
         if (translate_table[i] == ATOM_TABLE_NOT_FOUND) {
-            if (!node_group->avail) {
+            if (!table->last_node_group_avail) {
                 node_group = new_node_group(table, remaining_atoms);
                 if (IS_NULL_PTR(node_group)) {
                     SMP_UNLOCK(table);
