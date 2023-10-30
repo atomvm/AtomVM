@@ -76,8 +76,16 @@ if (PICO_CYW43_SUPPORTED)
     target_include_directories(pan_lwip_dhserver INTERFACE
         ${BTSTACK_3RD_PARTY_PATH}/lwip/dhcp-server
     )
+    target_compile_options(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE -DHAVE_LWIP_RAW=1)
+    target_sources(
+        libAtomVM${PLATFORM_LIB_SUFFIX}
+        PRIVATE
+            otp_socket_platform.c
+            ../../../../libAtomVM/otp_socket.c
+            otp_socket_platform.h
+            ../../../../libAtomVM/otp_socket.h)
     target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC pico_cyw43_arch_lwip_threadsafe_background pico_lwip_sntp INTERFACE pan_lwip_dhserver)
-    target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,networkregister_port_driver")
+    target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,networkregister_port_driver -Wl,-u -Wl,otp_socket_nif")
 endif()
 
 target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,gpio_nif")

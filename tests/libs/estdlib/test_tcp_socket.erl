@@ -25,6 +25,7 @@
 test() ->
     ok = test_echo_server(),
     ok = test_shutdown(),
+    ok = test_close_by_another_process(),
     case get_otp_version() of
         atomvm ->
             ok = test_abandon_select();
@@ -271,6 +272,26 @@ test_abandon_select() ->
 
     erlang:garbage_collect(),
     ok.
+
+test_close_by_another_process() ->
+    % socket:recv is blocking and the only way to interrupt it is to close
+    % the socket.
+    etest:flush_msg_queue(),
+
+    Port = 44404,
+    ListenSocket = start_echo_server(Port),
+
+    {ok, ClientSocket1} = socket:open(inet, stream, tcp),
+    ok = try_connect(ClientSocket1, Port, 10),
+
+    spawn_link(fun() ->
+        timer:sleep(500),
+        ok = socket:close(ClientSocket1)
+    end),
+    % recv is blocking
+    {error, closed} = socket:recv(ClientSocket1, 0, 5000),
+
+    close_listen_socket(ListenSocket).
 
 get_otp_version() ->
     case erlang:system_info(machine) of

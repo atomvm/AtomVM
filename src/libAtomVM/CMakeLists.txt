@@ -168,6 +168,8 @@ define_if_symbol_exists(libAtomVM O_SEARCH "fcntl.h" PRIVATE HAVE_O_SEARCH)
 define_if_symbol_exists(libAtomVM O_TTY_INIT "fcntl.h" PRIVATE HAVE_O_TTY_INIT)
 define_if_symbol_exists(libAtomVM clock_settime "time.h" PRIVATE HAVE_CLOCK_SETTIME)
 define_if_symbol_exists(libAtomVM settimeofday "sys/time.h" PRIVATE HAVE_SETTIMEOFDAY)
+define_if_symbol_exists(libAtomVM socket "sys/socket.h" PUBLIC HAVE_SOCKET)
+define_if_symbol_exists(libAtomVM select "sys/select.h" PUBLIC HAVE_SELECT)
 
 if (AVM_USE_32BIT_FLOAT)
     target_compile_definitions(libAtomVM PUBLIC AVM_USE_SINGLE_PRECISION)
