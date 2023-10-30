@@ -126,6 +126,9 @@ int atom_table_count(struct AtomTable *table)
 static struct HNodeGroup *new_node_group(struct AtomTable *table, int len)
 {
     struct HNodeGroup *new_group = malloc(sizeof(struct HNodeGroup) + sizeof(struct HNode) * len);
+    if (IS_NULL_PTR(new_group)) {
+        return NULL;
+    }
     new_group->next = NULL;
     new_group->first_index = table->count;
     new_group->len = len;
@@ -246,8 +249,7 @@ static inline long insert_node(struct AtomTable *table, struct HNodeGroup *node_
     return new_index;
 }
 
-long atom_table_ensure_atom(
-    struct AtomTable *table, AtomString string, enum AtomTableCopyOpt opts)
+long atom_table_ensure_atom(struct AtomTable *table, AtomString string, enum AtomTableCopyOpt opts)
 {
     unsigned long hash = sdbm_hash(string, atom_string_len(string));
     SMP_WRLOCK(table);
@@ -266,6 +268,10 @@ long atom_table_ensure_atom(
     struct HNodeGroup *node_group = table->last_node_group;
     if (!node_group->avail) {
         node_group = new_node_group(table, DEFAULT_SIZE);
+        if (IS_NULL_PTR(node_group)) {
+            SMP_UNLOCK(table);
+            return ATOM_TABLE_ALLOC_FAIL;
+        }
     }
 
     AtomString maybe_copied = string;
@@ -273,7 +279,8 @@ long atom_table_ensure_atom(
         uint8_t len = *((uint8_t *) string);
         uint8_t *buf = malloc(1 + len);
         if (IS_NULL_PTR(buf)) {
-            AVM_ABORT();
+            SMP_UNLOCK(table);
+            return ATOM_TABLE_ALLOC_FAIL;
         }
         memcpy(buf, string, 1 + len);
         maybe_copied = buf;
@@ -284,7 +291,7 @@ long atom_table_ensure_atom(
     return new_index;
 }
 
-void atom_table_ensure_atoms(
+int atom_table_ensure_atoms(
     struct AtomTable *table, const void *atoms, int count, int *translate_table)
 {
     SMP_WRLOCK(table);
@@ -313,6 +320,10 @@ void atom_table_ensure_atoms(
         if (translate_table[i] == ATOM_TABLE_NOT_FOUND) {
             if (!node_group->avail) {
                 node_group = new_node_group(table, remaining_atoms);
+                if (IS_NULL_PTR(node_group)) {
+                    SMP_UNLOCK(table);
+                    return ATOM_TABLE_ALLOC_FAIL;
+                }
             }
 
             unsigned long hash = sdbm_hash(current_atom, atom_string_len(current_atom));
@@ -329,4 +340,6 @@ void atom_table_ensure_atoms(
     }
 
     SMP_UNLOCK(table);
+
+    return 0;
 }

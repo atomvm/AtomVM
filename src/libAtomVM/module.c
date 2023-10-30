@@ -80,9 +80,12 @@ static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, ui
         return MODULE_ERROR_FAILED_ALLOCATION;
     }
 
-    // TODO check return value
-    atom_table_ensure_atoms(
+    long ensure_result = atom_table_ensure_atoms(
         glb->atom_table, current_atom, atoms_count, this_module->local_atoms_to_global_table + 1);
+    if (ensure_result == ATOM_TABLE_ALLOC_FAIL) {
+        fprintf(stderr, "Cannot allocate memory while loading module (line: %i).\n", __LINE__);
+        return MODULE_ERROR_FAILED_ALLOCATION;
+    }
 
     return MODULE_LOAD_OK;
 }

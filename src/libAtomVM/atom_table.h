@@ -24,6 +24,7 @@
 #include "atom.h"
 
 #define ATOM_TABLE_NOT_FOUND -1
+#define ATOM_TABLE_ALLOC_FAIL -2
 
 struct AtomTable;
 
@@ -39,12 +40,11 @@ void atom_table_destroy(struct AtomTable *table);
 
 int atom_table_count(struct AtomTable *table);
 
-long atom_table_ensure_atom(
-    struct AtomTable *table, AtomString string, enum AtomTableCopyOpt opts);
+long atom_table_ensure_atom(struct AtomTable *table, AtomString string, enum AtomTableCopyOpt opts);
 AtomString atom_table_get_atom_string(struct AtomTable *table, long index);
 long atom_table_get_index(struct AtomTable *table, AtomString string);
 
-void atom_table_ensure_atoms(
+int atom_table_ensure_atoms(
     struct AtomTable *table, const void *atoms, int count, int *translate_table);
 
 #endif
