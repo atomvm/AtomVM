@@ -213,8 +213,9 @@ AtomString atom_table_get_atom_string(struct AtomTable *table, long index)
     while (node_group) {
         long first_index = node_group->first_index;
         if (first_index + node_group->len > index) {
+            AtomString found_key = node_group->nodes[index - first_index].key;
             SMP_UNLOCK(table);
-            return node_group->nodes[index - first_index].key;
+            return found_key;
         }
 
         node_group = node_group->next;
