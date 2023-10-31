@@ -52,7 +52,14 @@ struct HNode
     long index;
 };
 
-struct HNodeGroup;
+struct HNodeGroup
+{
+    struct HNodeGroup *next;
+    long first_index;
+    uint16_t len;
+
+    struct HNode nodes[];
+};
 
 struct AtomTable
 {
@@ -66,15 +73,6 @@ struct AtomTable
 
     struct HNodeGroup *first_node_group;
     struct HNodeGroup *last_node_group;
-};
-
-struct HNodeGroup
-{
-    struct HNodeGroup *next;
-    long first_index;
-    uint16_t len;
-
-    struct HNode nodes[];
 };
 
 static struct HNodeGroup *new_node_group(struct AtomTable *table, int len);
