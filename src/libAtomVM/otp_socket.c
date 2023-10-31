@@ -468,6 +468,17 @@ static inline int get_protocol(GlobalContext *global, term protocol_term, bool *
     }
 }
 
+/**
+ * @brief Allocate memory on ctx and make and return an error tuple from immediate
+ * term reason.
+ * @param reason the reason, should be an immediate (atom or integer)
+ * @param ctx the current context
+ * @returns a term
+ * @details This function is meant to be called from a nif that should return
+ * its result directly, to allow for further processing of a possible out of
+ * memory exception.
+ * @end
+ */
 static inline term make_error_tuple(term reason, Context *ctx)
 {
     if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
@@ -481,6 +492,9 @@ static inline term make_error_tuple(term reason, Context *ctx)
 }
 
 #if OTP_SOCKET_BSD
+/**
+ * @brief Like make_error_tuple but using errno converted to an atom or an int
+ */
 static term make_errno_tuple(Context *ctx)
 {
     return make_error_tuple(posix_errno_to_term(errno, ctx->global), ctx);
