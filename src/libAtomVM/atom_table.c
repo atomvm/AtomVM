@@ -20,6 +20,7 @@
 
 #include "atom_table.h"
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,6 +40,10 @@
 #endif
 
 #define DEFAULT_SIZE 8
+#define CAPACITY_INCREASE 8
+
+#define ATOM_TABLE_THRESHOLD(capacity) (capacity + (capacity >> 2))
+#define ATOM_TABLE_NEW_CAPACITY(new_count) (new_count + CAPACITY_INCREASE)
 
 struct HNode
 {
@@ -249,6 +254,56 @@ static inline long insert_node(struct AtomTable *table, struct HNodeGroup *node_
     return new_index;
 }
 
+static bool do_rehash(struct AtomTable *table, int new_capacity)
+{
+    int new_size_bytes = sizeof(struct HNode *) * new_capacity;
+    struct HNode **new_buckets = realloc(table->buckets, new_size_bytes);
+    if (IS_NULL_PTR(new_buckets)) {
+        // Allocation failure can be ignored, the hash table will continue with the previous bucket
+        return false;
+    }
+    memset(new_buckets, 0, new_size_bytes);
+    table->buckets = new_buckets;
+    table->capacity = new_capacity;
+
+    struct HNodeGroup *group = table->first_node_group;
+
+    while (group) {
+        int group_count;
+        if (group == table->last_node_group) {
+            group_count = group->len - table->last_node_group_avail;
+        } else {
+            group_count = group->len;
+        }
+
+        for (int i = 0; i < group_count; i++) {
+            struct HNode *node = &group->nodes[i];
+            AtomString key = node->key;
+
+            unsigned long hash = sdbm_hash(key, atom_string_len(key));
+            unsigned long bucket_index = hash % table->capacity;
+
+            insert_node_into_bucket(table, bucket_index, node);
+        }
+
+        group = group->next;
+    }
+
+    return true;
+}
+
+static inline bool maybe_rehash(struct AtomTable *table, int new_entries)
+{
+    int new_count = table->count + new_entries;
+    int threshold = ATOM_TABLE_THRESHOLD(table->capacity);
+    if (new_count > threshold) {
+        return false;
+    }
+
+    int new_capacity = ATOM_TABLE_NEW_CAPACITY(new_count);
+    return do_rehash(table, new_capacity);
+}
+
 long atom_table_ensure_atom(struct AtomTable *table, AtomString string, enum AtomTableCopyOpt opts)
 {
     unsigned long hash = sdbm_hash(string, atom_string_len(string));
@@ -285,6 +340,11 @@ long atom_table_ensure_atom(struct AtomTable *table, AtomString string, enum Ato
         memcpy(buf, string, 1 + len);
         maybe_copied = buf;
     }
+
+    if (maybe_rehash(table, 1)) {
+        bucket_index = hash % table->capacity;
+    }
+
     long new_index = insert_node(table, node_group, bucket_index, maybe_copied);
 
     SMP_UNLOCK(table);
@@ -312,6 +372,8 @@ int atom_table_ensure_atoms(
         uint8_t atom_len = current_atom[0];
         current_atom += 1 + atom_len;
     }
+
+    maybe_rehash(table, new_atoms_count);
 
     current_atom = atoms;
     int remaining_atoms = new_atoms_count;
