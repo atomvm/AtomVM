@@ -125,8 +125,8 @@ struct UDPReceivedItem
 {
     struct ListHead list_head;
     struct pbuf *buf;
-    const ip_addr_t *addr;
-    u16_t port;
+    uint32_t addr;
+    uint16_t port;
 };
 
 static err_t tcp_recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
@@ -869,6 +869,8 @@ static void udp_recv_handler(struct LWIPEvent *event)
 
 static void udp_recv_cb(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr, u16_t port)
 {
+    TRACE("udp_recv_cb\n");
+
     UNUSED(pcb);
 
     struct SocketResource *rsrc_obj = (struct SocketResource *) arg;
@@ -877,7 +879,10 @@ static void udp_recv_cb(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip
         event.handler = udp_recv_handler;
         event.udp_recv.rsrc_obj = rsrc_obj;
         event.udp_recv.buf = p;
-        event.udp_recv.addr = addr;
+        // Convert IPv4 address as it may be invalid after this function returns
+        // (lwIP documentation mentions it may be in pbuf but experience shows
+        // it can be invalid even if p is not freed)
+        event.udp_recv.addr = ntohl(ip_addr_get_ip4_u32(addr));
         event.udp_recv.port = port;
         otp_socket_lwip_enqueue(&event);
     } // Otherwise socket was closed.
@@ -1796,7 +1801,7 @@ static term nif_socket_recv_lwip(Context *ctx, struct SocketResource *rsrc_obj, 
         struct UDPReceivedItem *first_item = CONTAINER_OF(list_first(&rsrc_obj->udp_received_list), struct UDPReceivedItem, list_head);
         copy_pbuf_data(first_item->buf, 0, remaining, ptr);
         if (is_recvfrom) {
-            ip4_u32 = ntohl(ip_addr_get_ip4_u32(first_item->addr));
+            ip4_u32 = first_item->addr;
             port_u16 = first_item->port;
         }
         list_remove(&first_item->list_head);
