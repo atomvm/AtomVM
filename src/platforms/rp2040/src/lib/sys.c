@@ -100,10 +100,37 @@ bool sys_try_post_listener_event_from_isr(GlobalContext *glb, listener_event_t l
         return false;
     }
 
+#ifndef AVM_NO_SMP
+    uint32_t owner;
+    bool acquired_mutex = mutex_try_enter(&platform->event_poll_mutex, &owner);
+    // We're from an ISR, so we cannot wait for the interrupted code (running
+    // on the same core as we do) to release the mutex.
+    if (!acquired_mutex) {
+        // If this core is not the owner, wait for the other core to release
+        // the mutex.
+        // TODO: implement queue_try_remove_wait_timeout_ms in Pico SDK to
+        // simplify this logic
+        uint32_t caller = (uint32_t) lock_get_caller_owner_id(); // same cast exists in mutex_try_enter
+        if (caller != owner) {
+            mutex_enter_blocking(&platform->event_poll_mutex);
+            acquired_mutex = true;
+        }
+    }
+#endif
     if (UNLIKELY(!queue_try_add(&platform->event_queue, &listener_queue))) {
+#ifndef AVM_NO_SMP
+        if (acquired_mutex) {
+            mutex_exit(&platform->event_poll_mutex);
+        }
+#endif
         fprintf(stderr, "Lost event from ISR as global event queue is full. System is overloaded or EVENT_QUEUE_LEN is too low\n");
         return false;
     }
+#ifndef AVM_NO_SMP
+    if (acquired_mutex) {
+        mutex_exit(&platform->event_poll_mutex);
+    }
+#endif
 
 #ifndef AVM_NO_SMP
     sys_signal(glb);
@@ -116,9 +143,15 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
 {
     struct RP2040PlatformData *platform = glb->platform_data;
 #ifndef AVM_NO_SMP
-    if (timeout_ms > 0) {
+    if (timeout_ms != 0) {
         mutex_enter_blocking(&platform->event_poll_mutex);
-        cond_wait_timeout_ms(&platform->event_poll_cond, &platform->event_poll_mutex, timeout_ms);
+        if (queue_is_empty(&platform->event_queue)) {
+            if (timeout_ms > 0) {
+                cond_wait_timeout_ms(&platform->event_poll_cond, &platform->event_poll_mutex, timeout_ms);
+            } else {
+                cond_wait(&platform->event_poll_cond, &platform->event_poll_mutex);
+            }
+        }
         mutex_exit(&platform->event_poll_mutex);
     }
 #endif
