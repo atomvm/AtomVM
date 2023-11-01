@@ -952,7 +952,7 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    TRACE("nif_socket_select: Setting pid for socket fd %i to %i\n", rsrc_obj->fd, process_pid);
+    TRACE("nif_socket_select: Setting pid for socket fd %i to %i\n", (int) rsrc_obj->fd, (int) process_pid);
 
 #elif OTP_SOCKET_LWIP
     GlobalContext *global = ctx->global;
@@ -1582,9 +1582,10 @@ static term nif_socket_recv_with_peek(Context *ctx, struct SocketResource *rsrc_
     } else {
         ssize_t buffer_size = len == 0 ? (ssize_t) res : MIN((size_t) res, len);
 
-        // {ok, Data :: binary()}}
+        // {ok, Data :: binary()}
+        // {ok, {Source :: #{addr => Address :: {0..255, 0..255, 0..255, 0..255}, port => Port :: non_neg_integer()}, Data :: binary()}}
         size_t ensure_packet_avail = term_binary_data_size_in_terms(buffer_size) + BINARY_HEADER_SIZE;
-        size_t requested_size = ensure_packet_avail + (is_recvfrom ? (TUPLE_SIZE(2) + term_map_size_in_terms(2)) : 0);
+        size_t requested_size = TUPLE_SIZE(2) + ensure_packet_avail + (is_recvfrom ? (TUPLE_SIZE(2) + TUPLE_SIZE(4) + term_map_size_in_terms(2)) : 0);
 
         if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
             AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
@@ -1664,8 +1665,10 @@ static term nif_socket_recv_without_peek(Context *ctx, struct SocketResource *rs
             size_t len = (size_t) res;
             TRACE("otp_socket.recv_handler: received data on fd: %i len=%lu\n", rsrc_obj->fd, (unsigned long) len);
 
+            // {ok, Data :: binary()}
+            // {ok, {Source :: #{addr => Address :: {0..255, 0..255, 0..255, 0..255}, port => Port :: non_neg_integer()}, Data :: binary()}}
             size_t ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
-            size_t requested_size = REF_SIZE + 2 * TUPLE_SIZE(2) + ensure_packet_avail + (is_recvfrom ? (TUPLE_SIZE(2) + term_map_size_in_terms(2)) : 0);
+            size_t requested_size = TUPLE_SIZE(2) + ensure_packet_avail + (is_recvfrom ? (TUPLE_SIZE(2) + TUPLE_SIZE(4) + term_map_size_in_terms(2)) : 0);
 
             if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
                 AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
