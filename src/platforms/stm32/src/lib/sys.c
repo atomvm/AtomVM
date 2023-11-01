@@ -130,7 +130,9 @@ bool sys_unlock_pin(GlobalContext *glb, uint32_t gpio_bank, uint16_t pin_num)
 
 void sys_init_platform(GlobalContext *glb)
 {
-    UNUSED(glb);
+    struct STM32PlatformData *platform = malloc(sizeof(struct STM32PlatformData));
+    glb->platform_data = platform;
+    list_init(&platform->locked_pins);
 }
 
 void sys_free_platform(GlobalContext *glb)
