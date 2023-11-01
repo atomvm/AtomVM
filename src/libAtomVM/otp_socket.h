@@ -52,7 +52,7 @@ struct LWIPEvent
         {
             struct SocketResource *rsrc_obj;
             struct tcp_pcb *newpcb;
-        } accept_make_resource;
+        } tcp_accept;
         struct
         {
             struct tcp_pcb *tpcb;

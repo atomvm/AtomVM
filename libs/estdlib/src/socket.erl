@@ -44,7 +44,7 @@
 
 %% internal nifs
 -export([
-    nif_select_read/3,
+    nif_select_read/2,
     nif_accept/1,
     nif_recv/2,
     nif_recvfrom/2,
@@ -237,10 +237,9 @@ accept(Socket) ->
 -spec accept(Socket :: socket(), Timeout :: timeout()) ->
     {ok, Connection :: socket()} | {error, Reason :: term()}.
 accept(Socket, Timeout) ->
-    Self = self(),
     Ref = erlang:make_ref(),
-    ?TRACE("select read for accept.  self=~p ref=~p~n", [Self, Ref]),
-    case ?MODULE:nif_select_read(Socket, Self, Ref) of
+    ?TRACE("select read for accept.  self=~p ref=~p~n", [self(), Ref]),
+    case ?MODULE:nif_select_read(Socket, Ref) of
         ok ->
             receive
                 {select, _AcceptedSocket, Ref, ready_input} ->
@@ -300,10 +299,9 @@ recv(Socket, Length) ->
 -spec recv(Socket :: socket(), Length :: non_neg_integer(), Timeout :: timeout()) ->
     {ok, Data :: binary()} | {error, Reason :: term()}.
 recv(Socket, Length, Timeout) ->
-    Self = self(),
     Ref = erlang:make_ref(),
-    ?TRACE("select read for recv.  self=~p ref=~p~n", [Self, Ref]),
-    case ?MODULE:nif_select_read(Socket, Self, Ref) of
+    ?TRACE("select read for recv.  self=~p ref=~p~n", [self(), Ref]),
+    case ?MODULE:nif_select_read(Socket, Ref) of
         ok ->
             receive
                 {select, _AcceptedSocket, Ref, ready_input} ->
@@ -372,10 +370,9 @@ recvfrom(Socket, Length) ->
 -spec recvfrom(Socket :: socket(), Length :: non_neg_integer(), Timeout :: timeout()) ->
     {ok, {Address :: sockaddr(), Data :: binary()}} | {error, Reason :: term()}.
 recvfrom(Socket, Length, Timeout) ->
-    Self = self(),
     Ref = erlang:make_ref(),
-    ?TRACE("select read for recvfrom.  self=~p ref=~p", [Self, Ref]),
-    case ?MODULE:nif_select_read(Socket, Self, Ref) of
+    ?TRACE("select read for recvfrom.  self=~p ref=~p", [self(), Ref]),
+    case ?MODULE:nif_select_read(Socket, Ref) of
         ok ->
             receive
                 {select, _AcceptedSocket, Ref, ready_input} ->
@@ -513,7 +510,7 @@ shutdown(_Socket, _How) ->
 %%
 
 %% @private
-nif_select_read(_Socket, _Self, _Ref) ->
+nif_select_read(_Socket, _Ref) ->
     erlang:nif_error(undefined).
 
 %% @private
