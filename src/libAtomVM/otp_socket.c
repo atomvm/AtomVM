@@ -958,48 +958,58 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
     GlobalContext *global = ctx->global;
 
     LWIP_BEGIN();
-    if (rsrc_obj->socket_state == SocketStateTCPListening) {
-        rsrc_obj->socket_state = SocketStateTCPSelectingAccept;
-        tcp_accept(rsrc_obj->tcp_pcb, tcp_selecting_accept_cb);
-        // No longer delay processing of incoming connections
-        tcp_backlog_accepted(rsrc_obj->tcp_pcb);
-    } else if (rsrc_obj->socket_state == SocketStateTCPSelectingAccept) {
-        // noop
-    } else if (rsrc_obj->socket_state == SocketStateTCPSelectingOneClient || rsrc_obj->socket_state == SocketStateTCPSelectStopOneClient) {
-        rsrc_obj->socket_state = SocketStateTCPSelectingOneClient;
-        // Resend notification
-        if (ctx->process_id == process_pid) {
-            select_event_send_notification_from_nif(rsrc_obj, ctx);
-        } else {
-            Context *target = globalcontext_get_process_lock(global, process_pid);
-            if (target) {
+    switch (rsrc_obj->socket_state) {
+        case SocketStateTCPListening: {
+            rsrc_obj->socket_state = SocketStateTCPSelectingAccept;
+            tcp_accept(rsrc_obj->tcp_pcb, tcp_selecting_accept_cb);
+            // No longer delay processing of incoming connections
+            tcp_backlog_accepted(rsrc_obj->tcp_pcb);
+        } break;
+        case SocketStateTCPSelectingAccept:
+            // noop
+            break;
+        case SocketStateTCPSelectingOneClient:
+        case SocketStateTCPSelectStopOneClient: {
+            rsrc_obj->socket_state = SocketStateTCPSelectingOneClient;
+            // Resend notification
+            if (ctx->process_id == process_pid) {
                 select_event_send_notification_from_nif(rsrc_obj, ctx);
-                globalcontext_get_process_unlock(global, target);
+            } else {
+                Context *target = globalcontext_get_process_lock(global, process_pid);
+                if (target) {
+                    select_event_send_notification_from_nif(rsrc_obj, ctx);
+                    globalcontext_get_process_unlock(global, target);
+                }
             }
+        } break;
+        case SocketStateTCPConnected: {
+            if (!list_is_empty(&rsrc_obj->tcp_received_list)) {
+                // Send (or resend) notification
+                select_event_send_notification_from_nif(rsrc_obj, ctx);
+            } else {
+                // Set flag to send it when a package will arrive.
+                rsrc_obj->socket_state = SocketStateTCPSelectingRead;
+            }
+        } break;
+        case SocketStateTCPSelectingRead:
+            // noop
+            break;
+        case SocketStateUDPIdle: {
+            if (!list_is_empty(&rsrc_obj->udp_received_list)) {
+                // Send (or resend) notification
+                select_event_send_notification_from_nif(rsrc_obj, ctx);
+            } else {
+                rsrc_obj->socket_state = SocketStateUDPSelectingRead;
+            }
+            break;
+            case SocketStateUDPSelectingRead:
+                // noop
+                break;
+            default:
+                enif_demonitor_process(env, rsrc_obj, &rsrc_obj->selecting_process_monitor);
+                LWIP_END();
+                RAISE_ERROR(BADARG_ATOM);
         }
-    } else if (rsrc_obj->socket_state == SocketStateTCPConnected) {
-        if (!list_is_empty(&rsrc_obj->tcp_received_list)) {
-            // Send (or resend) notification
-            select_event_send_notification_from_nif(rsrc_obj, ctx);
-        } else {
-            // Set flag to send it when a package will arrive.
-            rsrc_obj->socket_state = SocketStateTCPSelectingRead;
-        }
-    } else if (rsrc_obj->socket_state == SocketStateTCPSelectingRead) {
-        // noop
-    } else if (rsrc_obj->socket_state == SocketStateUDPIdle) {
-        if (!list_is_empty(&rsrc_obj->udp_received_list)) {
-            // Send (or resend) notification
-            select_event_send_notification_from_nif(rsrc_obj, ctx);
-        } else {
-            rsrc_obj->socket_state = SocketStateUDPSelectingRead;
-        }
-    } else if (rsrc_obj->socket_state == SocketStateUDPSelectingRead) {
-        // noop
-    } else {
-        enif_demonitor_process(env, rsrc_obj, &rsrc_obj->selecting_process_monitor);
-        LWIP_END();
-        RAISE_ERROR(BADARG_ATOM);
     }
     LWIP_END();
 #endif
@@ -2106,6 +2116,7 @@ static err_t tcp_connected_cb(void *arg, struct tcp_pcb *tpcb, err_t err)
     GlobalContext *global = rsrc_refc->resource_type->global;
     int32_t target_pid = rsrc_obj->selecting_process_id;
     rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
+    rsrc_obj->socket_state = SocketStateTCPConnected;
     if (target_pid != INVALID_PROCESS_ID) {
         if (err == ERR_OK) {
             struct LWIPEvent event;
