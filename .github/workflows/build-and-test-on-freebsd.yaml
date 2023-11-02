@@ -40,17 +40,14 @@ jobs:
 
     - name: Build and Test on FreeBSD
       id: build-and-test-on-freebsd
-      uses: vmactions/freebsd-vm@v0
+      uses: cross-platform-actions/action@v0.21.0
       timeout-minutes: 20
       with:
-        envs: 'ATOMVM_EXAMPLE'
-        usesh: true
-        sync: rsync
-        copyback: false
-
-        prepare: |
-          pkg install -y curl cmake gperf erlang elixir
-
+        memory: 1024
+        shell: sh
+        operating_system: freebsd
+        version: '13.2'
+        environment_variables: 'ATOMVM_EXAMPLE'
         run: |
 
           echo "%%"
@@ -58,6 +55,7 @@ jobs:
           echo "%%"
           echo "**freebsd-version:**"
           freebsd-version
+          sudo pkg install -y curl cmake gperf erlang elixir
           echo "**uname:**"
           uname -a
           echo "**C Compiler version:**"
@@ -118,7 +116,7 @@ jobs:
           echo "%%"
           echo "%% Running install ..."
           echo "%%"
-          make install
+          sudo make install
           atomvm examples/erlang/hello_world.avm
           atomvm -v
           atomvm -h
