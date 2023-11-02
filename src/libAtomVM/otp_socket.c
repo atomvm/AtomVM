@@ -58,6 +58,13 @@
 // #define ENABLE_TRACE
 #include <trace.h>
 
+// Check some LWIP options
+#if OTP_SOCKET_LWIP
+#if !TCP_LISTEN_BACKLOG
+#error TCP_LISTEN_BACKLOG is undefined
+#endif
+#endif
+
 // To factorize parsing of erlang term options, we define few constants for lwIP.
 #if OTP_SOCKET_LWIP
 enum ShutdownHow
@@ -95,23 +102,23 @@ enum SocketState
     SocketStateUDP = 1 << 1,
     SocketStateTCP = 1 << 2,
     SocketStateSelectingRead = 1 << 3,
-    SocketStateSelectedOneClient = 1 << 4,
-    SocketStateConnected = 1 << 5,
-    SocketStateListening = 1 << 6,
-    SocketStateTrapped = 1 << 7,
+    SocketStateConnected = 1 << 4,
+    SocketStateListening = 1 << 5,
 
     // Actual states
     SocketStateUDPIdle = SocketStateUDP,
     SocketStateUDPSelectingRead = SocketStateUDP | SocketStateSelectingRead,
     SocketStateTCPNew = SocketStateTCP,
     SocketStateTCPConnected = SocketStateTCP | SocketStateConnected,
-    SocketStateTCPConnecting = SocketStateTCPConnected | SocketStateTrapped,
     SocketStateTCPSelectingRead = SocketStateTCPConnected | SocketStateSelectingRead,
     SocketStateTCPListening = SocketStateTCP | SocketStateListening,
-    SocketStateTCPAccepting = SocketStateTCPListening | SocketStateTrapped,
     SocketStateTCPSelectingAccept = SocketStateTCPListening | SocketStateSelectingRead,
-    SocketStateTCPSelectingOneClient = SocketStateTCPListening | SocketStateSelectingRead | SocketStateSelectedOneClient,
-    SocketStateTCPSelectStopOneClient = SocketStateTCPListening | SocketStateSelectedOneClient,
+};
+
+struct TCPAcceptedItem
+{
+    struct ListHead list_head;
+    struct tcp_pcb *newpcb;
 };
 
 struct TCPReceivedItem
@@ -157,12 +164,7 @@ struct SocketResource
     bool linger_on;
     int linger_sec;
     size_t pos;
-    union
-    {
-        struct ListHead tcp_received_list;
-        struct ListHead udp_received_list;
-        struct SocketResource *selected_client;
-    };
+    struct ListHead received_list;
 };
 #endif
 
@@ -572,14 +574,13 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
         rsrc_obj->linger_on = false;
         rsrc_obj->linger_sec = 0;
         rsrc_obj->pos = 0;
+        list_init(&rsrc_obj->received_list);
         if (rsrc_obj->socket_state & SocketStateTCP) {
-            list_init(&rsrc_obj->tcp_received_list);
             LWIP_BEGIN();
             tcp_arg(rsrc_obj->tcp_pcb, rsrc_obj);
             tcp_recv(rsrc_obj->tcp_pcb, tcp_recv_cb);
             LWIP_END();
         } else {
-            list_init(&rsrc_obj->udp_received_list);
             LWIP_BEGIN();
             udp_recv(rsrc_obj->udp_pcb, udp_recv_cb, rsrc_obj);
             LWIP_END();
@@ -764,50 +765,64 @@ static term nif_socket_close(Context *ctx, int argc, term argv[])
 static struct SocketResource *make_accepted_socket_resource(struct tcp_pcb *newpcb)
 {
     struct SocketResource *conn_rsrc_obj = enif_alloc_resource(socket_resource_type, sizeof(struct SocketResource));
+    if (IS_NULL_PTR(conn_rsrc_obj)) {
+        return NULL;
+    }
     conn_rsrc_obj->socket_state = SocketStateTCPConnected;
     conn_rsrc_obj->tcp_pcb = newpcb;
     conn_rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
     conn_rsrc_obj->pos = 0;
     conn_rsrc_obj->linger_on = false;
     conn_rsrc_obj->linger_sec = 0;
-    list_init(&conn_rsrc_obj->tcp_received_list);
+    list_init(&conn_rsrc_obj->received_list);
 
     tcp_arg(newpcb, conn_rsrc_obj);
     tcp_recv(newpcb, tcp_recv_cb);
     return conn_rsrc_obj;
 }
 
-static void tcp_selecting_accept_make_resource_handler(struct LWIPEvent *event)
+static void tcp_accept_handler(struct LWIPEvent *event)
 {
-    struct SocketResource *rsrc_obj = event->accept_make_resource.rsrc_obj;
-    struct SocketResource *conn_rsrc_obj = make_accepted_socket_resource(event->accept_make_resource.newpcb);
-    rsrc_obj->selected_client = conn_rsrc_obj;
-    rsrc_obj->socket_state = SocketStateTCPSelectingOneClient;
-    select_event_send_notification_from_handler(rsrc_obj, rsrc_obj->selecting_process_id);
+    struct SocketResource *rsrc_obj = event->tcp_accept.rsrc_obj;
+    struct TCPAcceptedItem *new_item = malloc(sizeof(struct TCPAcceptedItem));
+    list_append(&rsrc_obj->received_list, &new_item->list_head);
+    new_item->newpcb = event->tcp_accept.newpcb;
+
+    // Send notification if we are selecting.
+    if (rsrc_obj->socket_state & SocketStateSelectingRead) {
+        // Clear flag to avoid sending a message again.
+        rsrc_obj->socket_state &= ~SocketStateSelectingRead;
+        if (rsrc_obj->selecting_process_id != INVALID_PROCESS_ID) {
+            select_event_send_notification_from_handler(rsrc_obj, rsrc_obj->selecting_process_id);
+        } // otherwise, selecting process died but we can just wait for monitor to handle it
+    }
 }
 
-static err_t tcp_selecting_accept_cb(void *arg, struct tcp_pcb *newpcb, err_t err)
+static err_t tcp_accept_cb(void *arg, struct tcp_pcb *newpcb, err_t err)
 {
     UNUSED(err);
 
     struct SocketResource *rsrc_obj = (struct SocketResource *) arg;
     if (rsrc_obj->selecting_process_id != INVALID_PROCESS_ID) {
         if (newpcb != NULL) {
-            // Delay accepting of further clients
-            tcp_backlog_delayed(rsrc_obj->tcp_pcb);
             // Because data can come in, we need to immediately set the receive callback
             // However, we cannot allocate the resource because we can't call malloc from ISR.
             tcp_arg(newpcb, NULL);
             tcp_recv(newpcb, tcp_recv_cb);
 
+            // Delay accepting
+            tcp_backlog_delayed(newpcb);
+
             // Enqueue an event to further process accept
             struct LWIPEvent event;
-            event.handler = tcp_selecting_accept_make_resource_handler;
-            event.accept_make_resource.rsrc_obj = rsrc_obj;
-            event.accept_make_resource.newpcb = newpcb;
+            event.handler = tcp_accept_handler;
+            event.tcp_accept.rsrc_obj = rsrc_obj;
+            event.tcp_accept.newpcb = newpcb;
             otp_socket_lwip_enqueue(&event);
         } else {
-            // Ignore errors for now (we are still accepting).
+            if (err == ERR_MEM) {
+                AVM_LOGW(TAG, "Insufficient memory to accept connections, client will have to resend SYN.");
+            }
         }
         return ERR_OK;
     } else {
@@ -832,7 +847,7 @@ static void tcp_recv_handler(struct LWIPEvent *event)
         TRACE("Unexpected null resource in tcp_recv_handler -- buf = %p\n", (void *) event->tcp_recv.buf);
     } else {
         struct TCPReceivedItem *new_item = malloc(sizeof(struct TCPReceivedItem));
-        list_append(&rsrc_obj->tcp_received_list, &new_item->list_head);
+        list_append(&rsrc_obj->received_list, &new_item->list_head);
         new_item->buf = event->tcp_recv.buf;
         new_item->err = event->tcp_recv.err;
 
@@ -866,7 +881,7 @@ static void udp_recv_handler(struct LWIPEvent *event)
 {
     struct SocketResource *rsrc_obj = event->udp_recv.rsrc_obj;
     struct UDPReceivedItem *new_item = malloc(sizeof(struct UDPReceivedItem));
-    list_append(&rsrc_obj->tcp_received_list, &new_item->list_head);
+    list_append(&rsrc_obj->received_list, &new_item->list_head);
     new_item->buf = event->udp_recv.buf;
     new_item->addr = event->udp_recv.addr;
     new_item->port = event->udp_recv.port;
@@ -911,12 +926,7 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
 
     VALIDATE_VALUE(argv[0], term_is_socket);
 
-    term process_pid_term = argv[1];
-    VALIDATE_VALUE(process_pid_term, term_is_pid);
-    int32_t process_pid = term_to_local_process_id(process_pid_term);
-    TRACE("process_pid=%i\n", (int) process_pid);
-
-    term select_ref_term = argv[2];
+    term select_ref_term = argv[1];
     if (select_ref_term != UNDEFINED_ATOM) {
         VALIDATE_VALUE(select_ref_term, term_is_reference);
     }
@@ -927,18 +937,18 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
     struct SocketResource *rsrc_obj = (struct SocketResource *) rsrc_obj_ptr;
 
     ErlNifEnv *env = erl_nif_env_from_context(ctx);
-    if (rsrc_obj->selecting_process_id != process_pid && rsrc_obj->selecting_process_id != INVALID_PROCESS_ID) {
+    if (rsrc_obj->selecting_process_id != ctx->process_id && rsrc_obj->selecting_process_id != INVALID_PROCESS_ID) {
         // demonitor can fail if process is gone.
         enif_demonitor_process(env, rsrc_obj, &rsrc_obj->selecting_process_monitor);
         rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
     }
     // Monitor first as select is less likely to fail and it's less expensive to demonitor
     // if select fails than to stop select if monitor fails
-    if (rsrc_obj->selecting_process_id != process_pid) {
-        if (UNLIKELY(enif_monitor_process(env, rsrc_obj, &process_pid, &rsrc_obj->selecting_process_monitor) != 0)) {
+    if (rsrc_obj->selecting_process_id != ctx->process_id) {
+        if (UNLIKELY(enif_monitor_process(env, rsrc_obj, &ctx->process_id, &rsrc_obj->selecting_process_monitor) != 0)) {
             RAISE_ERROR(NOPROC_ATOM);
         }
-        rsrc_obj->selecting_process_id = process_pid;
+        rsrc_obj->selecting_process_id = ctx->process_id;
     }
 
     rsrc_obj->ref_ticks = (select_ref_term == UNDEFINED_ATOM) ? 0 : term_to_ref_ticks(select_ref_term);
@@ -946,48 +956,35 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
 #if OTP_SOCKET_BSD
     TRACE("rsrc_obj->fd=%i\n", (int) rsrc_obj->fd);
 
-    if (UNLIKELY(enif_select(erl_nif_env_from_context(ctx), rsrc_obj->fd, ERL_NIF_SELECT_READ, rsrc_obj, &process_pid, select_ref_term) < 0)) {
+    if (UNLIKELY(enif_select(erl_nif_env_from_context(ctx), rsrc_obj->fd, ERL_NIF_SELECT_READ, rsrc_obj, &ctx->process_id, select_ref_term) < 0)) {
         enif_demonitor_process(env, rsrc_obj, &rsrc_obj->selecting_process_monitor);
         rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    TRACE("nif_socket_select: Setting pid for socket fd %i to %i\n", (int) rsrc_obj->fd, (int) process_pid);
+    TRACE("nif_socket_select: Setting pid for socket fd %i to %i\n", (int) rsrc_obj->fd, (int) ctx->process_id);
 
 #elif OTP_SOCKET_LWIP
-    GlobalContext *global = ctx->global;
-
     LWIP_BEGIN();
     switch (rsrc_obj->socket_state) {
         case SocketStateTCPListening: {
-            rsrc_obj->socket_state = SocketStateTCPSelectingAccept;
-            tcp_accept(rsrc_obj->tcp_pcb, tcp_selecting_accept_cb);
-            // No longer delay processing of incoming connections
-            tcp_backlog_accepted(rsrc_obj->tcp_pcb);
+            if (!list_is_empty(&rsrc_obj->received_list)) {
+                // Send (or resend) notification
+                select_event_send_notification_from_nif(rsrc_obj, ctx);
+            } else {
+                // Set flag to send it when a packet will arrive.
+                rsrc_obj->socket_state = SocketStateTCPSelectingAccept;
+            }
         } break;
         case SocketStateTCPSelectingAccept:
             // noop
             break;
-        case SocketStateTCPSelectingOneClient:
-        case SocketStateTCPSelectStopOneClient: {
-            rsrc_obj->socket_state = SocketStateTCPSelectingOneClient;
-            // Resend notification
-            if (ctx->process_id == process_pid) {
-                select_event_send_notification_from_nif(rsrc_obj, ctx);
-            } else {
-                Context *target = globalcontext_get_process_lock(global, process_pid);
-                if (target) {
-                    select_event_send_notification_from_nif(rsrc_obj, ctx);
-                    globalcontext_get_process_unlock(global, target);
-                }
-            }
-        } break;
         case SocketStateTCPConnected: {
-            if (!list_is_empty(&rsrc_obj->tcp_received_list)) {
+            if (!list_is_empty(&rsrc_obj->received_list)) {
                 // Send (or resend) notification
                 select_event_send_notification_from_nif(rsrc_obj, ctx);
             } else {
-                // Set flag to send it when a package will arrive.
+                // Set flag to send it when a packet will arrive.
                 rsrc_obj->socket_state = SocketStateTCPSelectingRead;
             }
         } break;
@@ -995,21 +992,20 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
             // noop
             break;
         case SocketStateUDPIdle: {
-            if (!list_is_empty(&rsrc_obj->udp_received_list)) {
+            if (!list_is_empty(&rsrc_obj->received_list)) {
                 // Send (or resend) notification
                 select_event_send_notification_from_nif(rsrc_obj, ctx);
             } else {
                 rsrc_obj->socket_state = SocketStateUDPSelectingRead;
             }
+        } break;
+        case SocketStateUDPSelectingRead:
+            // noop
             break;
-            case SocketStateUDPSelectingRead:
-                // noop
-                break;
-            default:
-                enif_demonitor_process(env, rsrc_obj, &rsrc_obj->selecting_process_monitor);
-                LWIP_END();
-                RAISE_ERROR(BADARG_ATOM);
-        }
+        default:
+            enif_demonitor_process(env, rsrc_obj, &rsrc_obj->selecting_process_monitor);
+            LWIP_END();
+            RAISE_ERROR(BADARG_ATOM);
     }
     LWIP_END();
 #endif
@@ -1037,12 +1033,8 @@ static term nif_socket_select_stop(Context *ctx, int argc, term argv[])
     return OK_ATOM;
 #elif OTP_SOCKET_LWIP
     LWIP_BEGIN();
-    if (rsrc_obj->socket_state == SocketStateTCPSelectingAccept) {
-        rsrc_obj->socket_state = SocketStateTCPListening;
-        // Suspend processing of incoming connections
-        tcp_backlog_delayed(rsrc_obj->tcp_pcb);
-    } else if (rsrc_obj->socket_state == SocketStateTCPSelectingOneClient) {
-        rsrc_obj->socket_state = SocketStateTCPSelectStopOneClient;
+    if (rsrc_obj->socket_state & SocketStateSelectingRead) {
+        rsrc_obj->socket_state &= ~SocketStateSelectingRead;
     }
     LWIP_END();
 
@@ -1439,8 +1431,8 @@ static term nif_socket_listen(Context *ctx, int argc, term argv[])
     if (new_pcb == NULL) {
         return make_lwip_err_tuple(err, ctx);
     }
-    // Do not accept until we select/accept
-    tcp_backlog_delayed(new_pcb);
+    // Define accept callback
+    tcp_accept(new_pcb, tcp_accept_cb);
     rsrc_obj->tcp_pcb = new_pcb;
     rsrc_obj->socket_state = SocketStateTCPListening;
     return OK_ATOM;
@@ -1490,11 +1482,8 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
     if (rsrc_obj->socket_state & SocketStateUDP) {
         return make_error_tuple(posix_errno_to_term(EOPNOTSUPP, global), ctx);
     }
-    // Only three states are allowed:
-    // - SocketStateTCPListening => block to accept (not used by otp_socket.erl)
-    // - SocketStateTCPSelectingOneClient => was selected, we have one in buffer
-    // - SocketStateTCPSelectStopOneClient => was selected, stop selecting, but we still have one in buffer
-    if (rsrc_obj->socket_state != SocketStateTCPListening && rsrc_obj->socket_state != SocketStateTCPSelectingOneClient && rsrc_obj->socket_state != SocketStateTCPSelectStopOneClient) {
+    // Only listening is allowed
+    if ((rsrc_obj->socket_state & SocketStateTCPListening) != SocketStateTCPListening) {
         return make_error_tuple(posix_errno_to_term(EINVAL, global), ctx);
     }
 #endif
@@ -1539,23 +1528,26 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
 #elif OTP_SOCKET_LWIP
     term result;
     LWIP_BEGIN();
-    if (rsrc_obj->socket_state & SocketStateSelectedOneClient) {
+    if (!list_is_empty(&rsrc_obj->received_list)) {
+        struct TCPAcceptedItem *first_item = CONTAINER_OF(list_first(&rsrc_obj->received_list), struct TCPAcceptedItem, list_head);
+        struct SocketResource *new_resource = make_accepted_socket_resource(first_item->newpcb);
+        if (IS_NULL_PTR(new_resource)) {
+            AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
+            LWIP_END();
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
         size_t requested_size = TERM_BOXED_RESOURCE_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2) + REF_SIZE;
         if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
             AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
             LWIP_END();
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        term socket_term = make_accepted_socket_term(rsrc_obj->selected_client, &ctx->heap, global);
-        rsrc_obj->selected_client = NULL;
-        if (rsrc_obj->socket_state == SocketStateTCPSelectStopOneClient) {
-            rsrc_obj->socket_state = SocketStateTCPListening;
-        } else {
-            rsrc_obj->socket_state = SocketStateTCPSelectingAccept;
-            // No longer delay processing of incoming connections
-            tcp_backlog_accepted(rsrc_obj->tcp_pcb);
-        }
 
+        tcp_backlog_accepted(first_item->newpcb);
+        list_remove(&first_item->list_head);
+        free(first_item);
+
+        term socket_term = make_accepted_socket_term(new_resource, &ctx->heap, global);
         result = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(result, 0, OK_ATOM);
         term_put_tuple_element(result, 1, socket_term);
@@ -1728,6 +1720,8 @@ static size_t copy_pbuf_data(struct pbuf *src, size_t offset, size_t count, uint
 
 static term nif_socket_recv_lwip(Context *ctx, struct SocketResource *rsrc_obj, size_t len, bool is_recvfrom)
 {
+    TRACE("nif_socket_recv_lwip\n");
+
     GlobalContext *global = ctx->global;
 
     size_t buffer_size = 0;
@@ -1738,7 +1732,7 @@ static term nif_socket_recv_lwip(Context *ctx, struct SocketResource *rsrc_obj, 
     if (rsrc_obj->socket_state & SocketStateTCP) {
         // TCP: we return up to len bytes or all available (if len == 0)
         struct ListHead *item;
-        LIST_FOR_EACH (item, &rsrc_obj->tcp_received_list) {
+        LIST_FOR_EACH (item, &rsrc_obj->received_list) {
             struct TCPReceivedItem *received_item = GET_LIST_ENTRY(item, struct TCPReceivedItem, list_head);
             if (received_item->buf == NULL || received_item->err != ERR_OK) {
                 closed = received_item->buf == NULL;
@@ -1754,8 +1748,8 @@ static term nif_socket_recv_lwip(Context *ctx, struct SocketResource *rsrc_obj, 
         }
     } else {
         // UDP: we return the first message and truncate it to len if len != 0
-        if (!list_is_empty(&rsrc_obj->udp_received_list)) {
-            struct UDPReceivedItem *first_item = CONTAINER_OF(list_first(&rsrc_obj->udp_received_list), struct UDPReceivedItem, list_head);
+        if (!list_is_empty(&rsrc_obj->received_list)) {
+            struct UDPReceivedItem *first_item = CONTAINER_OF(list_first(&rsrc_obj->received_list), struct UDPReceivedItem, list_head);
             buffer_size = first_item->buf->tot_len;
             if (len > 0 && buffer_size > len) {
                 buffer_size = len;
@@ -1795,7 +1789,7 @@ static term nif_socket_recv_lwip(Context *ctx, struct SocketResource *rsrc_obj, 
         size_t pos = rsrc_obj->pos;
         struct ListHead *item;
         struct ListHead *tmp;
-        MUTABLE_LIST_FOR_EACH (item, tmp, &rsrc_obj->tcp_received_list) {
+        MUTABLE_LIST_FOR_EACH (item, tmp, &rsrc_obj->received_list) {
             struct TCPReceivedItem *received_item = GET_LIST_ENTRY(item, struct TCPReceivedItem, list_head);
             if (received_item->buf == NULL || received_item->err != ERR_OK) {
                 break;
@@ -1825,7 +1819,7 @@ static term nif_socket_recv_lwip(Context *ctx, struct SocketResource *rsrc_obj, 
             port_u16 = rsrc_obj->tcp_pcb->remote_port;
         }
     } else {
-        struct UDPReceivedItem *first_item = CONTAINER_OF(list_first(&rsrc_obj->udp_received_list), struct UDPReceivedItem, list_head);
+        struct UDPReceivedItem *first_item = CONTAINER_OF(list_first(&rsrc_obj->received_list), struct UDPReceivedItem, list_head);
         copy_pbuf_data(first_item->buf, 0, remaining, ptr);
         if (is_recvfrom) {
             ip4_u32 = first_item->addr;
@@ -2414,7 +2408,7 @@ const struct Nif *otp_socket_nif_get_nif(const char *nifname)
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &socket_peername_nif;
         }
-        if (strcmp("nif_select_read/3", rest) == 0) {
+        if (strcmp("nif_select_read/2", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &socket_select_read_nif;
         }

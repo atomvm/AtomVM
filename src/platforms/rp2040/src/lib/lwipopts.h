@@ -105,4 +105,5 @@
 void sntp_set_system_time_us(unsigned long sec, unsigned long usec);
 #define SNTP_SET_SYSTEM_TIME_US(sec, usec) sntp_set_system_time_us(sec, usec)
 
+#define TCP_LISTEN_BACKLOG 1
 #endif /* __LWIPOPTS_H__ */

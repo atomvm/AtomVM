@@ -254,7 +254,7 @@ test_abandon_select() ->
 
     Owner = self(),
     spawn(fun() ->
-        socket:nif_select_read(ListenSocket, self(), erlang:make_ref()),
+        socket:nif_select_read(ListenSocket, erlang:make_ref()),
         Owner ! done
     end),
 
