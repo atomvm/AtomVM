@@ -80,7 +80,17 @@ get_id() ->
 
 %% @hidden
 allow(Level, Module) ->
-    gen_server:call(?MODULE, {allow, Level, Module}).
+    %% if the logger manager has not been instantiated, then
+    %% "fail" silently (i.e., log nothing).  The logger manager
+    %% either needs to be instantiated manually, or it is be done
+    %% so automatically in OTP-style deployment when the kernel
+    %% is started by init.
+    case erlang:whereis(?MODULE) of
+        undefined ->
+            false;
+        _ ->
+            gen_server:call(?MODULE, {allow, Level, Module})
+    end.
 
 %%
 %% gen_server callbacks

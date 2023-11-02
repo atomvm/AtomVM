@@ -46,7 +46,11 @@ test_logger() ->
     ok.
 
 test_default_logger() ->
-    ?ASSERT_FAILURE(?LOG_NOTICE("Tried to log before starting log_manager!")),
+    %% silent "failure" (nothing will be logged) if the
+    %% logger manager has not been instantiated.  In OTP-style
+    %% deployment, the logger manager is initialized in
+    %% the kernel application.
+    ok = ?LOG_NOTICE("Tried to log before starting log_manager!"),
 
     {ok, _Pid} = logger_manager:start_link(#{}),
 
