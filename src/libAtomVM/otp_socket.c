@@ -23,6 +23,7 @@
 #include <dictionary.h>
 #include <erl_nif_priv.h>
 #include <globalcontext.h>
+#include <inet.h>
 #include <interop.h>
 #include <list.h>
 #include <mailbox.h>
@@ -182,45 +183,6 @@ static const char *const reuseaddr_atom = ATOM_STR("\x9", "reuseaddr");
 #define CLOSE_INTERNAL_ATOM globalcontext_make_atom(global, close_internal_atom)
 #define ACCEPT_ATOM globalcontext_make_atom(global, accept_atom)
 #define RECV_ATOM globalcontext_make_atom(global, recv_atom)
-
-enum otp_socket_domain
-{
-    OtpSocketInvalidDomain = 0,
-    OtpSocketInetDomain
-};
-
-static const AtomStringIntPair otp_socket_domain_table[] = {
-    { ATOM_STR("\x4", "inet"), OtpSocketInetDomain },
-    SELECT_INT_DEFAULT(OtpSocketInvalidDomain)
-};
-
-enum otp_socket_type
-{
-    OtpSocketInvalidType = 0,
-    OtpSocketStreamType,
-    OtpSocketDgramType
-};
-
-static const AtomStringIntPair otp_socket_type_table[] = {
-    { ATOM_STR("\x6", "stream"), OtpSocketStreamType },
-    { ATOM_STR("\x5", "dgram"), OtpSocketDgramType },
-    SELECT_INT_DEFAULT(OtpSocketInvalidType)
-};
-
-enum otp_socket_protocol
-{
-    OtpSocketInvalidProtocol = 0,
-    OtpSocketIpProtocol,
-    OtpSocketTcpProtocol,
-    OtpSocketUdpProtocol
-};
-
-static const AtomStringIntPair otp_socket_protocol_table[] = {
-    { ATOM_STR("\x2", "ip"), OtpSocketIpProtocol },
-    { ATOM_STR("\x3", "tcp"), OtpSocketTcpProtocol },
-    { ATOM_STR("\x3", "udp"), OtpSocketUdpProtocol },
-    SELECT_INT_DEFAULT(OtpSocketInvalidProtocol)
-};
 
 enum otp_socket_shutdown_direction
 {
@@ -391,33 +353,14 @@ void otp_socket_init(GlobalContext *global)
 // socket operations
 //
 
-static uint32_t socket_tuple_to_addr(term addr_tuple)
-{
-    return ((term_to_int32(term_get_tuple_element(addr_tuple, 0)) & 0xFF) << 24)
-        | ((term_to_int32(term_get_tuple_element(addr_tuple, 1)) & 0xFF) << 16)
-        | ((term_to_int32(term_get_tuple_element(addr_tuple, 2)) & 0xFF) << 8)
-        | (term_to_int32(term_get_tuple_element(addr_tuple, 3)) & 0xFF);
-}
-
-static term socket_tuple_from_addr(Context *ctx, uint32_t addr)
-{
-    term terms[4];
-    terms[0] = term_from_int32((addr >> 24) & 0xFF);
-    terms[1] = term_from_int32((addr >> 16) & 0xFF);
-    terms[2] = term_from_int32((addr >> 8) & 0xFF);
-    terms[3] = term_from_int32(addr & 0xFF);
-
-    return port_create_tuple_n(ctx, 4, terms);
-}
-
 static inline int get_domain(GlobalContext *global, term domain_term, bool *ok)
 {
     *ok = true;
 
-    int val = interop_atom_term_select_int(otp_socket_domain_table, domain_term, global);
+    int val = inet_atom_to_domain(domain_term, global);
     switch (val) {
 
-        case OtpSocketInetDomain:
+        case InetDomain:
             return PF_INET;
 
         default:
@@ -431,13 +374,13 @@ static inline int get_type(GlobalContext *global, term type_term, bool *ok)
 {
     *ok = true;
 
-    int val = interop_atom_term_select_int(otp_socket_type_table, type_term, global);
+    int val = inet_atom_to_type(type_term, global);
     switch (val) {
 
-        case OtpSocketStreamType:
+        case InetStreamType:
             return SOCK_STREAM;
 
-        case OtpSocketDgramType:
+        case InetDgramType:
             return SOCK_DGRAM;
 
         default:
@@ -451,16 +394,16 @@ static inline int get_protocol(GlobalContext *global, term protocol_term, bool *
 {
     *ok = true;
 
-    int val = interop_atom_term_select_int(otp_socket_protocol_table, protocol_term, global);
+    int val = inet_atom_to_protocol(protocol_term, global);
     switch (val) {
 
-        case OtpSocketIpProtocol:
+        case InetIpProtocol:
             return IPPROTO_IP;
 
-        case OtpSocketTcpProtocol:
+        case InetTcpProtocol:
             return IPPROTO_TCP;
 
-        case OtpSocketUdpProtocol:
+        case InetUdpProtocol:
             return IPPROTO_UDP;
 
         default:
@@ -1186,7 +1129,7 @@ static term nif_socket_sockname(Context *ctx, int argc, term argv[])
         AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     } else {
-        term address = socket_tuple_from_addr(ctx, ip4_u32);
+        term address = inet_make_addr4(ip4_u32, &ctx->heap);
         term port_number = term_from_int(port_u16);
 
         term map = term_alloc_map(2, &ctx->heap);
@@ -1256,7 +1199,7 @@ static term nif_socket_peername(Context *ctx, int argc, term argv[])
         AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     } else {
-        term address = socket_tuple_from_addr(ctx, ip4_u32);
+        term address = inet_make_addr4(ip4_u32, &ctx->heap);
         term port_number = term_from_int(port_u16);
 
         term map = term_alloc_map(2, &ctx->heap);
@@ -1339,9 +1282,9 @@ static term nif_socket_bind(Context *ctx, int argc, term argv[])
 #endif
         } else {
 #if OTP_SOCKET_BSD
-            serveraddr.sin_addr.s_addr = htonl(socket_tuple_to_addr(addr));
+            serveraddr.sin_addr.s_addr = htonl(inet_addr4_to_uint32(addr));
 #elif OTP_SOCKET_LWIP
-            ip_addr_set_ip4_u32(&ip_addr, htonl(socket_tuple_to_addr(addr)));
+            ip_addr_set_ip4_u32(&ip_addr, htonl(inet_addr4_to_uint32(addr)));
 #endif
         }
     }
@@ -1608,7 +1551,7 @@ static term nif_socket_recv_with_peek(Context *ctx, struct SocketResource *rsrc_
 
         term payload = term_invalid_term();
         if (is_recvfrom) {
-            term address = socket_tuple_from_addr(ctx, ntohl(addr.sin_addr.s_addr));
+            term address = inet_make_addr4(ntohl(addr.sin_addr.s_addr), &ctx->heap);
             term port_number = term_from_int(ntohs(addr.sin_port));
 
             term map = term_alloc_map(2, &ctx->heap);
@@ -1680,7 +1623,7 @@ static term nif_socket_recv_without_peek(Context *ctx, struct SocketResource *rs
             term data = term_from_literal_binary(buffer, len, &ctx->heap, global);
 
             if (is_recvfrom) {
-                term address = socket_tuple_from_addr(ctx, ntohl(addr.sin_addr.s_addr));
+                term address = inet_make_addr4(ntohl(addr.sin_addr.s_addr), &ctx->heap);
                 term port_number = term_from_int(ntohs(addr.sin_port));
 
                 term map = term_alloc_map(2, &ctx->heap);
@@ -1834,7 +1777,7 @@ static term nif_socket_recv_lwip(Context *ctx, struct SocketResource *rsrc_obj, 
     term payload;
 
     if (is_recvfrom) {
-        term address = socket_tuple_from_addr(ctx, ip4_u32);
+        term address = inet_make_addr4(ip4_u32, &ctx->heap);
         term port_number = term_from_int(port_u16);
 
         term map = term_alloc_map(2, &ctx->heap);
@@ -1963,7 +1906,7 @@ static term nif_socket_send_internal(Context *ctx, int argc, term argv[], bool i
         if (globalcontext_is_term_equal_to_atom_string(global, addr, loopback_atom)) {
             destaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         } else {
-            destaddr.sin_addr.s_addr = htonl(socket_tuple_to_addr(addr));
+            destaddr.sin_addr.s_addr = htonl(inet_addr4_to_uint32(addr));
         }
 
         sent_data = sendto(rsrc_obj->fd, buf, len, 0, (struct sockaddr *) &destaddr, sizeof(destaddr));
@@ -1988,7 +1931,7 @@ static term nif_socket_send_internal(Context *ctx, int argc, term argv[], bool i
         if (globalcontext_is_term_equal_to_atom_string(global, addr, loopback_atom)) {
             ip_addr_set_loopback(false, &ip_addr);
         } else {
-            ip_addr_set_ip4_u32(&ip_addr, htonl(socket_tuple_to_addr(addr)));
+            ip_addr_set_ip4_u32(&ip_addr, htonl(inet_addr4_to_uint32(addr)));
         }
     }
 
@@ -2182,7 +2125,7 @@ static term nif_socket_connect(Context *ctx, int argc, term argv[])
         address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     } else {
         // TODO more validation on addr tuple
-        address.sin_addr.s_addr = htonl(socket_tuple_to_addr(addr));
+        address.sin_addr.s_addr = htonl(inet_addr4_to_uint32(addr));
     }
 
     socklen_t addr_len = sizeof(struct sockaddr_in);
@@ -2205,7 +2148,7 @@ static term nif_socket_connect(Context *ctx, int argc, term argv[])
     }
 #elif OTP_SOCKET_LWIP
     ip_addr_t ip_addr;
-    ip_addr_set_ip4_u32(&ip_addr, htonl(socket_tuple_to_addr(addr)));
+    ip_addr_set_ip4_u32(&ip_addr, htonl(inet_addr4_to_uint32(addr)));
     err_t err;
     LWIP_BEGIN();
     if (rsrc_obj->socket_state & SocketStateUDP) {

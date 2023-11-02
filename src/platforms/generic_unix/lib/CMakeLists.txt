@@ -38,6 +38,7 @@ set(SOURCE_FILES
     smp.c
     socket_driver.c
     sys.c
+    ../../../libAtomVM/inet.c
     ../../../libAtomVM/otp_net.c
     ../../../libAtomVM/otp_socket.c
 )

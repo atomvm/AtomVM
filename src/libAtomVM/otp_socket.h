@@ -80,6 +80,13 @@ struct LWIPEvent
         {
             struct SocketResource *rsrc_obj;
         } finalize_close;
+        // Used by otp_net
+        struct
+        {
+            void *callback_arg;
+            bool success;
+            uint32_t addr;
+        } dns_gethostbyname;
     };
 };
 
