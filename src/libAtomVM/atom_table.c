@@ -225,6 +225,33 @@ AtomString atom_table_get_atom_string(struct AtomTable *table, long index)
     return NULL;
 }
 
+int atom_table_cmp_using_atom_index(struct AtomTable *table, int t_atom_index, int other_atom_index)
+{
+    AtomString t_atom_string = atom_table_get_atom_string(table, t_atom_index);
+
+    int t_atom_len = atom_string_len(t_atom_string);
+    const char *t_atom_data = (const char *) atom_string_data(t_atom_string);
+
+    AtomString other_atom_string = atom_table_get_atom_string(table, other_atom_index);
+
+    int other_atom_len = atom_string_len(other_atom_string);
+    const char *other_atom_data = (const char *) atom_string_data(other_atom_string);
+
+    int cmp_size = (t_atom_len > other_atom_len) ? other_atom_len : t_atom_len;
+
+    int memcmp_result = memcmp(t_atom_data, other_atom_data, cmp_size);
+
+    if (memcmp_result == 0) {
+        if (t_atom_len == other_atom_len) {
+            return 0;
+        } else {
+            return (t_atom_len > other_atom_len) ? 1 : -1;
+        }
+    }
+
+    return memcmp_result;
+}
+
 static inline void init_node(struct HNode *node, AtomString atom, long index)
 {
     node->key = atom;

@@ -47,4 +47,7 @@ long atom_table_get_index(struct AtomTable *table, AtomString string);
 int atom_table_ensure_atoms(
     struct AtomTable *table, const void *atoms, int count, int *translate_table);
 
+int atom_table_cmp_using_atom_index(
+    struct AtomTable *table, int t_atom_index, int other_atom_index);
+
 #endif
