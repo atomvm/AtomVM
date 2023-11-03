@@ -611,3 +611,24 @@ term interop_kv_get_value_default(term kv, AtomString key, term default_value, G
         return default_value;
     }
 }
+
+term interop_atom_term_select_atom(const AtomStringIntPair *table, int value, GlobalContext *global)
+{
+    for (int i = 0; table[i].as_val != NULL; i++) {
+        if (value == table[i].i_val) {
+            int global_atom_index = globalcontext_insert_atom(global, table[i].as_val);
+            return term_from_atom_index(global_atom_index);
+        }
+    }
+    return term_invalid_term();
+}
+
+term interop_chars_to_list(const char *chars, size_t len, Heap *heap)
+{
+    term ret = term_nil();
+    for (int i = (int) len - 1; i >= 0; --i) {
+        term c_term = term_from_int(chars[i]);
+        ret = term_list_prepend(c_term, ret, heap);
+    }
+    return ret;
+}

@@ -25,6 +25,7 @@
 #include "interop.h"
 #include "memory.h"
 #include "nifs.h"
+#include "otp_net.h"
 #include "otp_socket.h"
 #include "platform_defaultatoms.h"
 #include "term.h"
@@ -261,5 +262,10 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &atomvm_platform_nif;
     }
-    return otp_socket_nif_get_nif(nifname);
+    const struct Nif *nif = otp_net_nif_get_nif(nifname);
+    if (nif == NULL) {
+        return otp_socket_nif_get_nif(nifname);
+    } else {
+        return nif;
+    }
 }

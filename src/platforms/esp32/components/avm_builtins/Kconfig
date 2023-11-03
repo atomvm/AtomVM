@@ -70,4 +70,8 @@ config AVM_ENABLE_OTP_SOCKET_NIFS
     bool "Enable OTP Socket NIFs"
     default y
 
+config AVM_ENABLE_OTP_NET_NIFS
+    bool "Enable OTP Net NIFs"
+    default y
+
 endmenu

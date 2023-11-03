@@ -87,6 +87,7 @@ extern "C" {
 #define TUPLE_SIZE(elems) ((int) (elems + 1))
 #define CONS_SIZE 2
 #define REFC_BINARY_CONS_OFFSET 4
+#define LIST_SIZE(num_elements, element_size) ((num_elements) * ((element_size) + CONS_SIZE))
 
 #define TERM_BINARY_SIZE_IS_HEAP(size) ((size) < REFC_BINARY_MIN)
 

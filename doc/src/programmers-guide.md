@@ -1860,3 +1860,49 @@ For example:
     end
 
 Close a UDP socket just as you would a TCP socket, as described above.
+
+### Miscellaneous Networking APIs
+
+You can retrieve information about hostnames and services using the `net:getaddrinfo/1` and  `net:getaddrinfo/2` functions.  The return value is a list of maps each of which contains address information about the host, including its family (`inet`), protocol (`tcp` or `udp`), type (`stream` or `dgram`), and the address, currently an IPv4 tuple.
+
+> Note.  Currently, the `net:getaddrinfo/1,2` functions only supports reporting of IPv4 addresses.
+
+For example:
+
+    %% erlang
+    {ok, AddrInfos} = net:getaddrinfo("www.atomvm.net"),
+
+    lists:foreach(
+        fun(AddrInfo) ->
+            #{
+                family := Family,
+                protocol := Protocol,
+                type := Type,
+                address := Address
+            } = AddrInfo,
+
+            io:format("family: ~p prototcol: ~p type: ~p address: ~p", [Family, Protocol, Type, Address])
+
+        end,
+        AddrInfos
+    ),
+
+The `host` parameter can be a domain name (typically) or a dotted pair IPv4 address.
+
+The returned map contains the network family (currently, only `inet` is supported), the protocol, type, and address of the host.
+
+The address is itself a map, containing the family, port and IPv4 address of the requested host, e.g.,
+
+    #{family => inet, port => 0, addr => {192, 168, 212, 153}}
+
+> Note.  The [OTP documentation](https://www.erlang.org/doc/man/net#type-address_info) states that the address is returned under the `address` key in the address info map.  However, OTP appears to use `addr` as the key.  For compatibility with OTP 22 ff., AtomVM supports both the `address` and `addr` keys in this map (they reference the same inner map).
+
+If you want to narrow the information you get back to a specific service type, you can specify a service name or port number (as a string value) as the second parameter:
+
+    %% erlang
+    {ok, AddrInfos} = net:getaddrinfo("www.atomvm.net", "https"),
+    ...
+
+Service names are well-known identifiers on the internet, but they may vary from operating system to operating system.  See the `services(3)` man pages for more information.
+
+> Note.  Narrowing results via the service parameter is not supported on all platforms.  In the case where it is not supported, AtomVM will resort to retrying the request without the service parameter.
