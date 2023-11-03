@@ -88,6 +88,8 @@ extern "C" {
 #define CONS_SIZE 2
 #define REFC_BINARY_CONS_OFFSET 4
 #define LIST_SIZE(num_elements, element_size) ((num_elements) * ((element_size) + CONS_SIZE))
+#define TERM_MAP_SIZE(num_elements) (3 + 2 * (num_elements))
+#define TERM_MAP_SHARED_SIZE(num_elements) (2 + (num_elements))
 
 #define TERM_BINARY_SIZE_IS_HEAP(size) ((size) < REFC_BINARY_MIN)
 
@@ -1593,12 +1595,12 @@ static inline size_t term_get_map_value_offset()
 
 static inline int term_map_size_in_terms_maybe_shared(size_t num_entries, bool is_shared)
 {
-    return 2 + (is_shared ? 0 : (1 + num_entries)) + num_entries;
+    return is_shared ? TERM_MAP_SHARED_SIZE(num_entries) : TERM_MAP_SIZE(num_entries);
 }
 
 static inline int term_map_size_in_terms(size_t num_entries)
 {
-    return term_map_size_in_terms_maybe_shared(num_entries, false);
+    return TERM_MAP_SIZE(num_entries);
 }
 
 static inline term term_alloc_map_maybe_shared(avm_uint_t size, term keys, Heap *heap)

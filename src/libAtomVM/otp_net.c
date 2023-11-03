@@ -21,6 +21,7 @@
 #include <context.h>
 #include <defaultatoms.h>
 #include <globalcontext.h>
+#include <inet.h>
 #include <interop.h>
 #include <nifs.h>
 #include <otp_net.h>
@@ -52,17 +53,6 @@ static const AtomStringIntPair type_table[] = {
 //
 // utilities
 //
-
-static term socket_tuple_from_addr(Context *ctx, uint32_t addr)
-{
-    term terms[4];
-    terms[0] = term_from_int32((addr >> 24) & 0xFF);
-    terms[1] = term_from_int32((addr >> 16) & 0xFF);
-    terms[2] = term_from_int32((addr >> 8) & 0xFF);
-    terms[3] = term_from_int32(addr & 0xFF);
-
-    return port_create_tuple_n(ctx, 4, terms);
-}
 
 static inline term make_error_tuple(term reason, Context *ctx)
 {
@@ -107,7 +97,7 @@ static term eai_errno_to_term(int err, GlobalContext *glb)
 
 static inline term make_address(Context *ctx, struct sockaddr_in *addr)
 {
-    return socket_tuple_from_addr(ctx, ntohl(addr->sin_addr.s_addr));
+    return inet_make_addr4(ntohl(addr->sin_addr.s_addr), &ctx->heap);
 }
 
 //
