@@ -25,14 +25,14 @@
 start() ->
     case gen_udp:open(0, [{active, false}, binary]) of
         {ok, Socket} ->
-            io:format("Opened UDP socket on ~p.~n", [local_address(Socket)]),
+            io:format("Opened UDP socket on ~s.~n", [local_address(Socket)]),
             loop(Socket);
         Error ->
             io:format("An error occurred opening UDP socket: ~p~n", [Error])
     end.
 
 loop(Socket) ->
-    Packet = <<":アトムＶＭ">>,
+    Packet = <<"AtomVM">>,
     case gen_udp:send(Socket, {127, 0, 0, 1}, 44404, Packet) of
         ok ->
             io:format("Sent ~p~n", [Packet]);
