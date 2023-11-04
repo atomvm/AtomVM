@@ -44,7 +44,7 @@ jobs:
         submodules: 'recursive'
 
     - name: "Install deps"
-      run: brew install gperf doxygen erlang@${{ matrix.otp }} ninja
+      run: brew install gperf doxygen erlang@${{ matrix.otp }} ninja mbedtls
 
     # Builder info
     - name: "System info"

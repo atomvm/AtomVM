@@ -86,7 +86,7 @@
 %% @end
 %%-----------------------------------------------------------------------------
 -spec connect(
-    Address :: inet:address() | inet:hostname(),
+    Address :: inet:ip_address() | inet:hostname(),
     Port :: inet:port_number(),
     Options :: [connect_option()]
 ) ->

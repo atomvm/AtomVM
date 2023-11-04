@@ -36,7 +36,7 @@ get_otp_version() ->
 get_tests(OTPVersion) when
     (is_integer(OTPVersion) andalso OTPVersion >= 24) orelse OTPVersion == atomvm
 ->
-    [test_tcp_socket, test_udp_socket, test_net | get_tests(undefined)];
+    [test_tcp_socket, test_udp_socket, test_net, test_ssl | get_tests(undefined)];
 get_tests(_OTPVersion) ->
     [
         test_lists,

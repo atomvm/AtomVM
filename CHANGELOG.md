@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for interrupts to STM32 GPIO port driver.
 - Added suppoprt for PicoW extra gpio pins (led) to the gpio driver.
 - Added support for `net:getaddrinfo/1,2`
+- Added minimal support for the OTP `ssl` interface.
 
 ## [0.6.0-alpha.1] - 2023-10-09
 

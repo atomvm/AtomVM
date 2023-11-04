@@ -103,7 +103,7 @@ open(PortNum, Options) ->
 %%-----------------------------------------------------------------------------
 -spec send(
     Socket :: inet:socket(),
-    Address :: inet:address(),
+    Address :: inet:ip_address(),
     PortNum :: inet:port_number(),
     Packet :: packet()
 ) -> ok | {error, reason()}.
@@ -121,7 +121,7 @@ send(Socket, Address, PortNum, Packet) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec recv(Socket :: inet:socket(), Length :: non_neg_integer()) ->
-    {ok, {inet:address(), inet:port_number(), packet()}} | {error, reason()}.
+    {ok, {inet:ip_address(), inet:port_number(), packet()}} | {error, reason()}.
 recv(Socket, Length) ->
     recv(Socket, Length, infinity).
 
@@ -143,7 +143,7 @@ recv(Socket, Length) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec recv(Socket :: inet:socket(), Length :: non_neg_integer(), Timeout :: timeout()) ->
-    {ok, {inet:address(), inet:port_number(), packet()}} | {error, reason()}.
+    {ok, {inet:ip_address(), inet:port_number(), packet()}} | {error, reason()}.
 recv(Socket, Length, Timeout) ->
     call(Socket, {recvfrom, Length, Timeout}).
 

@@ -74,4 +74,8 @@ config AVM_ENABLE_OTP_NET_NIFS
     bool "Enable OTP Net NIFs"
     default y
 
+config AVM_ENABLE_OTP_SSL_NIFS
+    bool "Enable OTP SSL NIFs"
+    default y
+
 endmenu
