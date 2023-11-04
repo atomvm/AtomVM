@@ -33,6 +33,9 @@
 
 #define TAG "otp_socket"
 
+#define AVM_LOGD(tag, format, ...) \
+    ;
+
 #define AVM_LOGI(tag, format, ...) \
     printf("I %s: " format " (%s:%i)\n", tag, ##__VA_ARGS__, __FILE__, __LINE__);
 

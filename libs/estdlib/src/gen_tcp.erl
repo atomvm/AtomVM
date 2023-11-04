@@ -52,13 +52,14 @@
     | {timeout, timeout()}
     | list
     | binary
-    | {binary, boolean()}.
+    | {binary, boolean()}
+    | {inet_backend, inet | socket}.
 
 -type listen_option() :: option().
 -type connect_option() :: option().
 -type packet() :: string() | binary().
 
--define(DEFAULT_PARAMS, [{active, true}, {buffer, 512}, {timeout, infinity}]).
+-include("inet-priv.hrl").
 
 %%-----------------------------------------------------------------------------
 %% @param   Address the address to which to connect
@@ -91,10 +92,14 @@
     Options :: [connect_option()]
 ) ->
     {ok, Socket :: inet:socket()} | {error, Reason :: reason()}.
-connect(Address, Port, Params0) ->
-    Socket = open_port({spawn, "socket"}, []),
-    Params = merge(Params0, ?DEFAULT_PARAMS),
-    connect(Socket, normalize_address(Address), Port, Params).
+connect(Address, Port, Options) ->
+    Module = get_inet_backend_module(Options),
+    case Module:connect(Address, Port, Options) of
+        {ok, Socket} ->
+            {ok, {?GEN_TCP_MONIKER, Socket, Module}};
+        Other ->
+            Other
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket The Socket obtained via connect/3
@@ -107,13 +112,8 @@ connect(Address, Port, Params0) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec send(Socket :: inet:socket(), Packet :: packet()) -> ok | {error, Reason :: reason()}.
-send(Socket, Packet) ->
-    case call(Socket, {send, Packet}) of
-        {ok, _Len} ->
-            ok;
-        Error ->
-            Error
-    end.
+send({?GEN_TCP_MONIKER, Socket, Module}, Packet) ->
+    Module:send(Socket, Packet).
 
 %%-----------------------------------------------------------------------------
 %% @equiv   recv(Socket, Length, infinity)
@@ -122,8 +122,8 @@ send(Socket, Packet) ->
 %%-----------------------------------------------------------------------------
 -spec recv(Socket :: inet:socket(), Length :: non_neg_integer()) ->
     {ok, packet()} | {error, Reason :: reason()}.
-recv(Socket, Length) ->
-    recv(Socket, Length, infinity).
+recv({?GEN_TCP_MONIKER, Socket, Module}, Length) ->
+    Module:recv(Socket, Length).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket over which to receive a packet
@@ -146,8 +146,8 @@ recv(Socket, Length) ->
 %%-----------------------------------------------------------------------------
 -spec recv(Socket :: inet:socket(), Length :: non_neg_integer(), Timeout :: non_neg_integer()) ->
     {ok, packet()} | {error, Reason :: reason()}.
-recv(Socket, Length, Timeout) ->
-    call(Socket, {recv, Length, Timeout}).
+recv({?GEN_TCP_MONIKER, Socket, Module}, Length, Timeout) ->
+    Module:recv(Socket, Length, Timeout).
 
 %%-----------------------------------------------------------------------------
 %% @param   Port the port number on which to listen.  Specify 0 to use an OS-assigned
@@ -161,24 +161,14 @@ recv(Socket, Length, Timeout) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec listen(Port :: inet:port_number(), Options :: [listen_option()]) ->
-    {ok, ListeningSocket :: inet:socket()} | {error, Reason :: reason()}.
+    {ok, Socket :: inet:socket()} | {error, Reason :: reason()}.
 listen(Port, Options) ->
-    Socket = open_port({spawn, "socket"}, []),
-    Params = merge(Options, ?DEFAULT_PARAMS),
-    InitParams = [
-        {proto, tcp},
-        {listen, true},
-        {controlling_process, self()},
-        {port, Port},
-        {backlog, 5}
-        | Params
-    ],
-    case call(Socket, {init, InitParams}) of
-        ok ->
-            {ok, Socket};
-        ErrorReason ->
-            %% TODO close port
-            ErrorReason
+    Module = get_inet_backend_module(Options),
+    case Module:listen(Port, Options) of
+        {ok, Socket} ->
+            {ok, {?GEN_TCP_MONIKER, Socket, Module}};
+        Other ->
+            Other
     end.
 
 %%-----------------------------------------------------------------------------
@@ -187,10 +177,15 @@ listen(Port, Options) ->
 %% @doc     Accept a connection on a listening socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec accept(ListenSocket :: inet:socket()) ->
+-spec accept(Socket :: inet:socket()) ->
     {ok, Socket :: inet:socket()} | {error, Reason :: reason()}.
-accept(ListenSocket) ->
-    accept(ListenSocket, infinity).
+accept({?GEN_TCP_MONIKER, Socket, Module}) ->
+    case Module:accept(Socket, infinity) of
+        {ok, ConnectedSocket} ->
+            {ok, {?GEN_TCP_MONIKER, ConnectedSocket, Module}};
+        Error ->
+            Error
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   ListenSocket the listening socket.
@@ -199,15 +194,14 @@ accept(ListenSocket) ->
 %% @doc     Accept a connection on a listening socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec accept(ListenSocket :: inet:socket(), Timeout :: timeout()) ->
+-spec accept(Socket :: inet:socket(), Timeout :: timeout()) ->
     {ok, Socket :: inet:socket()} | {error, Reason :: reason()}.
-accept(ListenSocket, Timeout) ->
-    case call(ListenSocket, {accept, Timeout}) of
-        {ok, Socket} when is_pid(Socket) ->
-            {ok, Socket};
-        ErrorReason ->
-            %% TODO close port
-            ErrorReason
+accept({?GEN_TCP_MONIKER, Socket, Module}, Timeout) ->
+    case Module:accept(Socket, Timeout) of
+        {ok, ConnectedSocket} ->
+            {ok, {?GEN_TCP_MONIKER, ConnectedSocket, Module}};
+        Error ->
+            Error
     end.
 
 %%-----------------------------------------------------------------------------
@@ -217,8 +211,8 @@ accept(ListenSocket, Timeout) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec close(Socket :: inet:socket()) -> ok.
-close(Socket) ->
-    inet:close(Socket).
+close({?GEN_TCP_MONIKER, Socket, Module}) ->
+    Module:close(Socket).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket to which to assign the pid
@@ -236,77 +230,20 @@ close(Socket) ->
 %%-----------------------------------------------------------------------------
 -spec controlling_process(Socket :: inet:socket(), Pid :: pid()) ->
     ok | {error, Reason :: reason()}.
-controlling_process(Socket, Pid) ->
-    call(Socket, {controlling_process, Pid}).
+controlling_process({?GEN_TCP_MONIKER, Socket, Module}, Pid) ->
+    Module:controlling_process(Socket, Pid).
 
-%% internal operations
-
-%% @private
-connect(DriverPid, Address, Port, Params) ->
-    InitParams = [
-        {proto, tcp},
-        {connect, true},
-        {controlling_process, self()},
-        {address, Address},
-        {port, Port}
-        | Params
-    ],
-    case call(DriverPid, {init, InitParams}) of
-        ok ->
-            {ok, DriverPid};
-        ErrorReason ->
-            %% TODO close port
-            ErrorReason
-    end.
-
-%% TODO implement this in lists
+%%
+%% Internal implementation
+%%
 
 %% @private
-merge(Config, Defaults) ->
-    merge(Config, Defaults, []) ++ Config.
-
-%% @private
-merge(_Config, [], Accum) ->
-    Accum;
-merge(Config, [H | T], Accum) ->
-    Key =
-        case H of
-            {K, _V} -> K;
-            K -> K
-        end,
-    case proplists:get_value(Key, Config) of
+get_inet_backend_module(Options) ->
+    case proplists:get_value(inet_backend, Options) of
         undefined ->
-            merge(Config, T, [H | Accum]);
-        Value ->
-            merge(Config, T, [{Key, Value} | Accum])
-    end.
-
-%% @private
-normalize_address(localhost) ->
-    "127.0.0.1";
-normalize_address(loopback) ->
-    "127.0.0.1";
-normalize_address(Address) when is_list(Address) ->
-    Address;
-normalize_address({A, B, C, D}) when
-    is_integer(A) and is_integer(B) and is_integer(C) and is_integer(D)
-->
-    integer_to_list(A) ++
-        "." ++
-        integer_to_list(B) ++
-        "." ++
-        integer_to_list(C) ++
-        "." ++ integer_to_list(D).
-
-%% TODO IPv6
-
-%%
-%% Internal operations
-%%
-
-call(Port, Msg) ->
-    case port:call(Port, Msg) of
-        {error, noproc} -> {error, closed};
-        out_of_memory -> {error, enomem};
-        Result -> Result
+            gen_tcp_inet;
+        inet ->
+            gen_tcp_inet;
+        socket ->
+            gen_tcp_socket
     end.

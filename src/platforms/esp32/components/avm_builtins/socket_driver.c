@@ -68,7 +68,31 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx);
 
 static const char *const tcp_error_atom = "\x9" "tcp_error";
 
-static const char *const netconn_event_internal = "\x14" "$atomvm_netconn_event_internal";
+static const char *const netconn_event_internal = ATOM_STR("\x14", "$atomvm_netconn_event_internal");
+static const char *gen_tcp_moniker_atom = ATOM_STR("\xC", "$avm_gen_tcp");
+static const char *native_tcp_module_atom = ATOM_STR("\xC", "gen_tcp_inet");
+static const char *gen_udp_moniker_atom = ATOM_STR("\xC", "$avm_gen_udp");
+static const char *native_udp_module_atom = ATOM_STR("\xC", "gen_udp_inet");
+
+static inline term create_socket_wrapper(term pid, const char *moniker_atom, const char *module_atom, Heap *heap, GlobalContext *global)
+{
+    term tuple = term_alloc_tuple(3, heap);
+    term_put_tuple_element(tuple, 0, globalcontext_make_atom(global, moniker_atom));
+    term_put_tuple_element(tuple, 1, pid);
+    term_put_tuple_element(tuple, 2, globalcontext_make_atom(global, module_atom));
+
+    return tuple;
+}
+
+static inline term create_tcp_socket_wrapper(term pid, Heap *heap, GlobalContext *global)
+{
+    return create_socket_wrapper(pid, gen_tcp_moniker_atom, native_tcp_module_atom, heap, global);
+}
+
+static inline term create_udp_socket_wrapper(term pid, Heap *heap, GlobalContext *global)
+{
+    return create_socket_wrapper(pid, gen_udp_moniker_atom, native_udp_module_atom, heap, global);
+}
 
 uint32_t socket_tuple_to_addr(term addr_tuple)
 {
@@ -544,13 +568,16 @@ static void do_send_socket_error(Context *ctx, err_t status)
     if (socket_data->active) {
         // udp active sockets do not send errors
         if (socket_data->type != UDPSocket) {
-            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
+            // {tcp_error, {Moniker :: atom(), Socket :: pid(), Module :: module()}, Reason :: atom()}
+            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3) + TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
                 AVM_ABORT();
             }
             term reason_atom = lwip_error_atom(glb, status);
             term result_tuple = term_alloc_tuple(3, &ctx->heap);
             term_put_tuple_element(result_tuple, 0, globalcontext_make_atom(glb, tcp_error_atom));
-            term_put_tuple_element(result_tuple, 1, term_from_local_process_id(ctx->process_id));
+            term socket_pid = term_from_local_process_id(ctx->process_id);
+            term socket_wrapper = create_tcp_socket_wrapper(socket_pid, &ctx->heap, glb);
+            term_put_tuple_element(result_tuple, 1, socket_wrapper);
             term_put_tuple_element(result_tuple, 2, reason_atom);
             globalcontext_send_message(glb, socket_data->controlling_process_pid, result_tuple);
         }
@@ -566,12 +593,15 @@ static void do_send_tcp_closed(Context *ctx)
     GlobalContext *glb = ctx->global;
     struct SocketData *socket_data = ctx->platform_data;
     if (socket_data->active) {
-        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
+        // {tcp_closed, {Moniker :: atom(), Socket :: pid(), Module :: module()}}
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
             AVM_ABORT();
         }
         term result_tuple = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(result_tuple, 0, TCP_CLOSED_ATOM);
-        term_put_tuple_element(result_tuple, 1, term_from_local_process_id(ctx->process_id));
+        term socket_pid = term_from_local_process_id(ctx->process_id);
+        term socket_wrapper = create_tcp_socket_wrapper(socket_pid, &ctx->heap, glb);
+        term_put_tuple_element(result_tuple, 1, socket_wrapper);
         globalcontext_send_message(glb, socket_data->controlling_process_pid, result_tuple);
     } else {
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + REPLY_SIZE) != MEMORY_GC_OK)) {
@@ -659,7 +689,8 @@ static NativeHandlerResult do_receive_data(Context *ctx)
     int tuples_size;
     if (socket_data->active) {
         // tuples_size = 4 (result_tuple size)
-        tuples_size = TUPLE_SIZE(3);
+        // add 3-tuple for {Moniker :: atom(), Socket :: pid(), Module :: module()}
+        tuples_size = TUPLE_SIZE(3) + TUPLE_SIZE(3);
     } else {
         // tuples_size = 3 (ok_tuple size)
         tuples_size = TUPLE_SIZE(2) + REPLY_SIZE;
@@ -708,7 +739,12 @@ static NativeHandlerResult do_receive_data(Context *ctx)
     if (socket_data->active) {
         term active_tuple = term_alloc_tuple(socket_data->type == TCPClientSocket ? 3 : 5, &ctx->heap);
         term_put_tuple_element(active_tuple, 0, socket_data->type == TCPClientSocket ? TCP_ATOM : UDP_ATOM);
-        term_put_tuple_element(active_tuple, 1, term_from_local_process_id(ctx->process_id));
+        term socket_pid = term_from_local_process_id(ctx->process_id);
+        term socket_wrapper =
+            socket_data->type == UDPSocket ?
+                create_udp_socket_wrapper(socket_pid, &ctx->heap, ctx->global) :
+                create_tcp_socket_wrapper(socket_pid, &ctx->heap, ctx->global);
+        term_put_tuple_element(active_tuple, 1, socket_wrapper);
         if (socket_data->type == TCPClientSocket) {
             term_put_tuple_element(active_tuple, 2, recv_term);
         } else {

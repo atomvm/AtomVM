@@ -22,8 +22,12 @@
 
 -export([port/1, close/1, sockname/1, peername/1]).
 
+-include("inet-priv.hrl").
+
+-type moniker() :: ?GEN_TCP_MONIKER | ?GEN_UDP_MONIKER.
+-type socket_impl() :: any().
+-type socket() :: {moniker(), socket_impl(), module()}.
 -type port_number() :: 0..65535.
--type socket() :: pid().
 -type ip_address() :: ip4_address().
 -type ip4_address() :: {0..255, 0..255, 0..255, 0..255}.
 -type hostname() :: iodata().
@@ -39,8 +43,10 @@
 %% @end
 %%-----------------------------------------------------------------------------
 -spec port(Socket :: socket()) -> port_number().
-port(Socket) ->
-    call(Socket, {get_port}).
+port({Moniker, Socket, Module}) when
+    Moniker =:= ?GEN_TCP_MONIKER orelse Moniker =:= ?GEN_UDP_MONIKER
+->
+    Module:port(Socket).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket to close
@@ -49,9 +55,10 @@ port(Socket) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec close(Socket :: socket()) -> ok.
-close(Socket) ->
-    call(Socket, {close}),
-    ok.
+close({Moniker, Socket, Module}) when
+    Moniker =:= ?GEN_TCP_MONIKER orelse Moniker =:= ?GEN_UDP_MONIKER
+->
+    Module:close(Socket).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
@@ -62,8 +69,10 @@ close(Socket) ->
 %%-----------------------------------------------------------------------------
 -spec sockname(Socket :: socket()) ->
     {ok, {ip_address(), port_number()}} | {error, Reason :: term()}.
-sockname(Socket) ->
-    call(Socket, {sockname}).
+sockname({Moniker, Socket, Module}) when
+    Moniker =:= ?GEN_TCP_MONIKER orelse Moniker =:= ?GEN_UDP_MONIKER
+->
+    Module:sockname(Socket).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
@@ -74,16 +83,5 @@ sockname(Socket) ->
 %%-----------------------------------------------------------------------------
 -spec peername(Socket :: socket()) ->
     {ok, {ip_address(), port_number()}} | {error, Reason :: term()}.
-peername(Socket) ->
-    call(Socket, {peername}).
-
-%%
-%% Internal operations
-%%
-
-call(Port, Msg) ->
-    case port:call(Port, Msg) of
-        {error, noproc} -> {error, einval};
-        out_of_memory -> {error, enomem};
-        Result -> Result
-    end.
+peername({?GEN_TCP_MONIKER, Socket, Module}) ->
+    Module:peername(Socket).
