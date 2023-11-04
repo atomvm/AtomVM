@@ -140,6 +140,12 @@ You may now flash your application to your STM32 device:
     ...
     ===> st-flash --reset write /path/to/atomvm_examples/erlang/hello_world/_build/default/lib/hello_world.avm 0x8080000
 
+For devices with only 512KB of flash the application address is different and must be specified:
+
+    shell$ rebar3 atomvm stm32_flash -o 0x8060000
+    ...
+    ===> st-flash --reset write /path/to/atomvm_examples/erlang/hello_world/_build/default/lib/hello_world.avm 0x8060000
+
 See the [`atomvm_rebar3_plugin`](https://atomvm.github.io/atomvm_rebar3_plugin) page for more detailed instructions about how to use the `stm32_flash` target.
 
 You can now use a serial console program such as [minicom](https://en.wikipedia.org/wiki/Minicom) or [screen](https://en.wikipedia.org/wiki/GNU_Screen) to view console output from a device.

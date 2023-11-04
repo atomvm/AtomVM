@@ -81,8 +81,7 @@ execute_process(
     COMMAND "${PYTHON}" "${GENLINK_SCRIPT}" "${DEVICES_DATA}" "${DEVICE}" "DEFS"
     OUTPUT_VARIABLE GENLINK_DEFS
 )
-message("----------------------------------------")
-message(STATUS "Device      : ${DEVICE}")
+
 message("-----------Device Linker Info-----------")
 message(STATUS "Family      : ${GENLINK_FAMILY}")
 message(STATUS "Sub-family  : ${GENLINK_SUBFAMILY}")

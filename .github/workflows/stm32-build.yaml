@@ -36,6 +36,10 @@ jobs:
               /home/runner/libopencm3
         key: ${{ runner.os }}-build-deps
 
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: "26"
+
     - name: Install arm-embedded toolchain
       if: ${{ steps.builddeps-cache.outputs.cache-hit != 'true' }}
       working-directory: /home/runner

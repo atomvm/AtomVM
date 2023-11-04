@@ -94,6 +94,9 @@ if (NOT DEVICE)
     set(DEVICE stm32f407vgt6)
 endif ()
 
+# Include auto-device configuration
+include(cmake/atomvm_dev_config.cmake)
+
 # Include libopencm3
 include(cmake/libopencm3.cmake)
 

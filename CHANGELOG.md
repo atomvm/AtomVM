@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed a bug that would leave the STM32 trapped in a loop on hard faults, rather than aborting
 - Fixed a bug that would make the VM to loop and failing to process selected fds on Linux
 - Fixed classes of exceptions in estdlib.
+- Fixed STM32 code that was hard coded to the default target device, now configured based on the `cmake -DDEVICE=` parameter
 
 ### Changed
 
@@ -30,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for `net:getaddrinfo/1,2`
 - Added minimal support for the OTP `ssl` interface.
 - Added support for `crypto:one_time/4,5` on Unix and Pico as well as for `crypto:hash/2` on Pico
+- Added ability to configure STM32 Nucleo boards onboard UART->USB-COM using the `-DBOARD=nucleo` cmake option
+- Added STM32 cmake option `-DAVM_CFG_CONSOLE=` to select a different uart peripheral for the system console
 
 ## [0.6.0-alpha.1] - 2023-10-09
 

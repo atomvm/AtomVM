@@ -75,6 +75,7 @@ AtomVM has been tested on the following development boards:
 |------------------------------|----------------|
 | [Nucleo-F429ZI](https://www.st.com/en/evaluation-tools/nucleo-f429zi.html) | ✅ |
 | [STM32F4Discovery](https://www.st.com/en/evaluation-tools/stm32f4discovery.html) | ✅ |
+| [BlackPill V2.0](https://stm32-base.org/boards/STM32F411CEU6-WeAct-Black-Pill-V2.0) | ✅ |
 
 Due to the proliferation of boards for the [STMicroelectronics](https://www.st.com) [STM32](https://www.st.com/en/microcontrollers-microprocessors/stm32-32-bit-arm-cortex-mcus.html) platform, AtomVM does not currently support pre-build binaries for STM32.  In order to deploy AtomVM to the STM32 platform, you will need to build AtomVM for STM32 from source.  See the [Build Instructions](build-instructions.md) for information about how to build AtomVM from source code.
 
