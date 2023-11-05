@@ -39,7 +39,7 @@
 
 #include "gpiodriver.h"
 
-//#define ENABLE_TRACE
+// #define ENABLE_TRACE
 #include "trace.h"
 
 #define VALIDATE_VALUE(value, verify_function) \

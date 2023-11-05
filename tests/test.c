@@ -48,19 +48,19 @@ struct Test
 // Favor modules that return 0
 #define TEST_CASE(module)        \
     {                            \
-#module, 0, false, false \
+        #module, 0, false, false \
     }
 #define TEST_CASE_EXPECTED(module, expected) \
     {                                        \
-#module, expected, false, false      \
+        #module, expected, false, false      \
     }
 #define TEST_CASE_ATOMVM_ONLY(module, expected) \
     {                                           \
-#module, expected, false, true          \
+        #module, expected, false, true          \
     }
 #define TEST_CASE_COND(module, expected, skip) \
     {                                          \
-#module, expected, skip, false         \
+        #module, expected, skip, false         \
     }
 
 #ifndef AVM_NO_SMP
