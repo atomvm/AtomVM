@@ -40,16 +40,16 @@ jobs:
     - name: "Install run-clang-format"
       run: |
         wget -q -O - https://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
-        echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-13 main" | sudo tee -a /etc/apt/sources.list
-        echo "deb-src http://apt.llvm.org/focal/ llvm-toolchain-focal-13 main" | sudo tee -a /etc/apt/sources.list
+        echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-16 main" | sudo tee -a /etc/apt/sources.list
+        echo "deb-src http://apt.llvm.org/focal/ llvm-toolchain-focal-16 main" | sudo tee -a /etc/apt/sources.list
         sudo apt-get update
-        sudo apt-get install -y clang-format-13
+        sudo apt-get install -y clang-format-16
         curl -sSfL https://raw.githubusercontent.com/Sarcasm/run-clang-format/master/run-clang-format.py -o run-clang-format
         chmod +x run-clang-format
 
     - name: "Check formatting with clang-format"
       run: |
-        ./run-clang-format --style=file --clang-format-executable=clang-format-13 -r src/ tests/
+        ./run-clang-format --style=file --clang-format-executable=clang-format-16 -r src/ tests/
 
     - name: "Check formatting with Erlang fmt"
       if: success() || failure()

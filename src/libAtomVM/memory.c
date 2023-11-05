@@ -31,7 +31,7 @@
 #include "tempstack.h"
 #include "term.h"
 
-//#define ENABLE_TRACE
+// #define ENABLE_TRACE
 
 #include "trace.h"
 #include "utils.h"

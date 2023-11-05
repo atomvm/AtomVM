@@ -36,7 +36,7 @@
 
 #include <math.h>
 
-//#define ENABLE_TRACE
+// #define ENABLE_TRACE
 #include <trace.h>
 
 #include "emscripten_sys.h"
