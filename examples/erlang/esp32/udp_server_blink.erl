@@ -28,13 +28,13 @@
 
 start() ->
     Creds = [
-        {ssid, esp:nvs_get_binary(atomvm, sta_ssid, <<"myssid">>)},
-        {psk, esp:nvs_get_binary(atomvm, sta_psk, <<"mypsk">>)}
+        {ssid, "myssid"},
+        {psk, "mypsk"}
     ],
     case network:wait_for_sta(Creds, 30000) of
         {ok, {Address, Netmask, Gateway}} ->
             io:format(
-                "Acquired IP address: ~p Netmask: ~p Gateway: ~p~n",
+                "Acquired IP address: ~s Netmask: ~s Gateway: ~s~n",
                 [to_string(Address), to_string(Netmask), to_string(Gateway)]
             ),
             udp_server_start();
@@ -45,7 +45,7 @@ start() ->
 udp_server_start() ->
     case gen_udp:open(44404, [{active, true}]) of
         {ok, Socket} ->
-            io:format("Opened UDP socket on ~p.~n", [local_address(Socket)]),
+            io:format("Opened UDP socket on ~s.~n", [local_address(Socket)]),
             Gpio = gpio:open(),
             gpio:set_direction(Gpio, ?PIN, output),
             loop(Socket, Gpio, 0);
@@ -58,7 +58,7 @@ loop(Socket, Gpio, PinState) ->
     gpio:set_level(Gpio, ?PIN, PinState),
     receive
         {udp, _Socket, Address, Port, Packet} ->
-            io:format("Received UDP packet ~p from ~p~n", [Packet, to_string({Address, Port})])
+            io:format("Received UDP packet ~p from ~s~n", [Packet, to_string({Address, Port})])
     end,
     loop(Socket, Gpio, 1 - PinState).
 

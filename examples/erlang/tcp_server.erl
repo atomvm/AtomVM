@@ -36,7 +36,7 @@ accept(ListenSocket) ->
     io:format("Waiting to accept connection...~n"),
     case gen_tcp:accept(ListenSocket) of
         {ok, Socket} ->
-            io:format("Accepted connection.  local: ~p peer: ~p~n", [
+            io:format("Accepted connection.  local: ~s peer: ~s~n", [
                 local_address(Socket), peer_address(Socket)
             ]),
             spawn(fun() -> accept(ListenSocket) end),
@@ -52,7 +52,7 @@ echo() ->
             io:format("Connection closed.~n"),
             ok;
         {tcp, Socket, Packet} ->
-            io:format("Received packet ~p from ~p.  Echoing back...~n", [
+            io:format("Received packet ~p from ~s.  Echoing back...~n", [
                 Packet, peer_address(Socket)
             ]),
             gen_tcp:send(Socket, Packet),

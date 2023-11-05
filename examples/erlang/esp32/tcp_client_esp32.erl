@@ -24,8 +24,8 @@
 
 start() ->
     Creds = [
-        {ssid, esp:nvs_get_binary(atomvm, sta_ssid, <<"myssid">>)},
-        {psk, esp:nvs_get_binary(atomvm, sta_psk, <<"mypsk">>)}
+        {ssid, "myssid"},
+        {psk, "mypsk"}
     ],
     case network:wait_for_sta(Creds, 30000) of
         {ok, {Address, Netmask, Gateway}} ->

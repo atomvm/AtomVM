@@ -26,13 +26,13 @@
 
 start() ->
     Creds = [
-        {ssid, esp:nvs_get_binary(atomvm, sta_ssid, <<"myssid">>)},
-        {psk, esp:nvs_get_binary(atomvm, sta_psk, <<"mypsk">>)}
+        {ssid, "myssid"},
+        {psk, "mypsk"}
     ],
     case network:wait_for_sta(Creds, 30000) of
         {ok, {Address, Netmask, Gateway}} ->
             io:format(
-                "Acquired IP address: ~p Netmask: ~p Gateway: ~p~n",
+                "Acquired IP address: ~s Netmask: ~s Gateway: ~s~n",
                 [to_string(Address), to_string(Netmask), to_string(Gateway)]
             ),
             tcp_server_start();
@@ -56,7 +56,7 @@ accept(ListenSocket, Gpio) ->
     io:format("Waiting to accept connection...~n"),
     case gen_tcp:accept(ListenSocket) of
         {ok, Socket} ->
-            io:format("Accepted connection.  local: ~p peer: ~p~n", [
+            io:format("Accepted connection.  local: ~s peer: ~s~n", [
                 local_address(Socket), peer_address(Socket)
             ]),
             spawn(fun() -> accept(ListenSocket, Gpio) end),
@@ -73,7 +73,7 @@ echo(Gpio, PinState) ->
             io:format("Connection closed.~n"),
             ok;
         {tcp, Socket, Packet} ->
-            io:format("Received packet ~p from ~p.  Echoing back...~n", [
+            io:format("Received packet ~p from ~s.  Echoing back...~n", [
                 Packet, peer_address(Socket)
             ]),
             gen_tcp:send(Socket, Packet),

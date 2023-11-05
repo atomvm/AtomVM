@@ -25,7 +25,7 @@
 start() ->
     case gen_udp:open(44404, [{active, true}, binary]) of
         {ok, Socket} ->
-            io:format("Opened UDP socket on ~p.~n", [local_address(Socket)]),
+            io:format("Opened UDP socket on ~s.~n", [local_address(Socket)]),
             active_loop();
         Error ->
             io:format("An error occurred opening UDP socket: ~p~n", [Error])
@@ -35,7 +35,7 @@ active_loop() ->
     io:format("Waiting to receive data...~n"),
     receive
         {udp, _Socket, Address, Port, Packet} ->
-            io:format("Received UDP packet ~p from ~p~n", [Packet, to_string({Address, Port})])
+            io:format("Received UDP packet ~p from ~s~n", [Packet, to_string({Address, Port})])
     end,
     active_loop().
 
