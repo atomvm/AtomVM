@@ -36,17 +36,19 @@ jobs:
       ATOMVM_EXAMPLE: "atomvm-example"
     steps:
 
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Build and Test on FreeBSD
       id: build-and-test-on-freebsd
-      uses: cross-platform-actions/action@v0.21.0
-      timeout-minutes: 20
+      uses: cross-platform-actions/action@v0.21.1
+      timeout-minutes: 25
       with:
-        memory: 1024
+        memory: 8G
+        hypervisor: qemu
         shell: sh
         operating_system: freebsd
         version: '13.2'
+        sync_files: runner-to-vm
         environment_variables: 'ATOMVM_EXAMPLE'
         run: |
 
@@ -55,7 +57,7 @@ jobs:
           echo "%%"
           echo "**freebsd-version:**"
           freebsd-version
-          sudo pkg install -y curl cmake gperf erlang elixir
+          sudo pkg install -y cmake gperf erlang elixir
           echo "**uname:**"
           uname -a
           echo "**C Compiler version:**"
