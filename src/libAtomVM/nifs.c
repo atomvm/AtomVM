@@ -2024,17 +2024,19 @@ static term nif_erlang_atom_to_binary_2(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    int atom_index = term_to_atom_index(atom_term);
-    AtomString atom_string = atom_table_get_atom_string(ctx->global->atom_table, atom_index);
+    GlobalContext *glb = ctx->global;
 
-    int atom_len = atom_string_len(atom_string);
+    int atom_index = term_to_atom_index(atom_term);
+    size_t atom_len;
+    atom_ref_t atom_ref = atom_table_get_atom_ptr_and_len(glb->atom_table, atom_index, &atom_len);
 
     if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(atom_len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    const char *atom_data = (const char *) atom_string_data(atom_string);
-    return term_from_literal_binary(atom_data, atom_len, &ctx->heap, ctx->global);
+    term binary = term_create_uninitialized_binary(atom_len, &ctx->heap, glb);
+    atom_table_write_bytes(glb->atom_table, atom_ref, atom_len, (char *) term_binary_data(binary));
+    return binary;
 }
 
 static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
@@ -2045,19 +2047,30 @@ static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(atom_term, term_is_atom);
 
     int atom_index = term_to_atom_index(atom_term);
-    AtomString atom_string = atom_table_get_atom_string(ctx->global->atom_table, atom_index);
+    size_t atom_len;
 
-    int atom_len = atom_string_len(atom_string);
+    atom_ref_t atom_ref
+        = atom_table_get_atom_ptr_and_len(ctx->global->atom_table, atom_index, &atom_len);
+
+    // TODO: use stack for smaller atoms
+    char *atom_buf = malloc(atom_len);
+    if (IS_NULL_PTR(atom_buf)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
 
     if (UNLIKELY(memory_ensure_free_opt(ctx, atom_len * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
+    atom_table_write_bytes(ctx->global->atom_table, atom_ref, atom_len, atom_buf);
+
     term prev = term_nil();
     for (int i = atom_len - 1; i >= 0; i--) {
-        char c = ((const char *) atom_string_data(atom_string))[i];
+        char c = atom_buf[i];
         prev = term_list_prepend(term_from_int11(c), prev, &ctx->heap);
     }
+
+    free(atom_buf);
 
     return prev;
 }
@@ -3746,12 +3759,10 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
     }
 
     int atom_index = term_to_atom_index(app_term);
-    AtomString atom_string = atom_table_get_atom_string(glb->atom_table, atom_index);
-
-    int app_len = atom_string_len(atom_string);
+    size_t app_len;
+    atom_ref_t atom_ref = atom_table_get_atom_ptr_and_len(glb->atom_table, atom_index, &app_len);
     char *app = malloc(app_len + 1);
-    memcpy(app, (const char *) atom_string_data(atom_string), app_len);
-    app[app_len] = '\0';
+    atom_table_write_cstring(glb->atom_table, atom_ref, app_len + 1, app);
 
     int ok;
     char *path = interop_term_to_string(path_term, &ok);

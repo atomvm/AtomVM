@@ -199,13 +199,10 @@ long atom_table_get_index(struct AtomTable *table, AtomString string)
     return result;
 }
 
-// TODO: this function needs to be optimized
-AtomString atom_table_get_atom_string(struct AtomTable *table, long index)
+// TODO: this function needs use an efficient structure such as a skip list
+static struct HNode *get_node_using_index(struct AtomTable *table, long index)
 {
-    SMP_RDLOCK(table);
-
     if (UNLIKELY(index >= table->count)) {
-        SMP_UNLOCK(table);
         return NULL;
     }
 
@@ -213,16 +210,29 @@ AtomString atom_table_get_atom_string(struct AtomTable *table, long index)
     while (node_group) {
         long first_index = node_group->first_index;
         if (first_index + node_group->len > index) {
-            AtomString found_key = node_group->nodes[index - first_index].key;
-            SMP_UNLOCK(table);
-            return found_key;
+            return &node_group->nodes[index - first_index];
         }
 
         node_group = node_group->next;
     }
 
-    SMP_UNLOCK(table);
     return NULL;
+}
+
+AtomString atom_table_get_atom_string(struct AtomTable *table, long index)
+{
+    SMP_RDLOCK(table);
+
+    struct HNode *node = get_node_using_index(table, index);
+    if (IS_NULL_PTR(node)) {
+        SMP_UNLOCK(table);
+        return NULL;
+    }
+
+    AtomString found_key = node->key;
+
+    SMP_UNLOCK(table);
+    return found_key;
 }
 
 int atom_table_cmp_using_atom_index(struct AtomTable *table, int t_atom_index, int other_atom_index)
@@ -250,6 +260,48 @@ int atom_table_cmp_using_atom_index(struct AtomTable *table, int t_atom_index, i
     }
 
     return memcmp_result;
+}
+
+atom_ref_t atom_table_get_atom_ptr_and_len(struct AtomTable *table, long index, size_t *out_len)
+{
+    SMP_RDLOCK(table);
+
+    struct HNode *node = get_node_using_index(table, index);
+    if (IS_NULL_PTR(node)) {
+        SMP_RDLOCK(table);
+        return NULL;
+    }
+
+    *out_len = atom_string_len(node->key);
+
+    SMP_UNLOCK(table);
+    return node;
+}
+
+void atom_table_write_bytes(struct AtomTable *table, atom_ref_t atom, size_t buf_len, void *outbuf)
+{
+    SMP_RDLOCK(table);
+
+    struct HNode *node = (struct HNode *) atom;
+    size_t len = atom_string_len(node->key);
+    if (len > buf_len) {
+        len = buf_len;
+    }
+
+    memcpy(outbuf, atom_string_data(node->key), len);
+
+    SMP_UNLOCK(table);
+}
+
+void atom_table_write_cstring(
+    struct AtomTable *table, atom_ref_t atom, size_t buf_len, char *outbuf)
+{
+    SMP_RDLOCK(table);
+
+    struct HNode *node = (struct HNode *) atom;
+    atom_string_to_c(node->key, outbuf, buf_len);
+
+    SMP_UNLOCK(table);
 }
 
 static inline void init_node(struct HNode *node, AtomString atom, long index)
