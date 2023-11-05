@@ -96,9 +96,57 @@ static term eai_errno_to_term(int err, GlobalContext *glb)
     return term_from_int(err);
 }
 
-static inline term make_address(Context *ctx, struct sockaddr_in *addr)
+/**
+ * @brief Make a getaddrino result item as part of the iteration
+ * @param keys pointer to a term to store the keys of the map. If it's
+ *             invalid_term, a non-shared map will be created and the keys term
+ *             will be updated. Otherwise, it's used to create a shared map
+ * @param ai_protocol protocol field of the addrinfo
+ * @param ai_socktype socktype field of the addrinfo
+ * @param inner_addr IP address  that will be stored in both address and addr
+ *             entries of the map
+ * @param global the global context
+ * @returrn the getaddrinfo result item term
+ * @param heap the heap to create terms in, should have sufficient free space
+ * @details This function is called in a loop to create optimized maps that
+ * share keys.
+ * @end
+ */
+static term make_getaddrinfo_result(term *keys, int ai_protocol, int ai_socktype, term inner_addr, GlobalContext *global, Heap *heap)
 {
-    return inet_make_addr4(ntohl(addr->sin_addr.s_addr), &ctx->heap);
+    term result_map;
+    if (term_is_invalid_term(*keys)) {
+        result_map = term_alloc_map(5, heap);
+    } else {
+        result_map = term_alloc_map_maybe_shared(5, *keys, heap);
+    }
+
+    // in the current implementation, this will always be `inet`
+    term family_atom = globalcontext_make_atom(global, ATOM_STR("\x6", "family"));
+    term family = globalcontext_make_atom(global, ATOM_STR("\x4", "inet"));
+    term_set_map_assoc(result_map, 0, family_atom, family);
+
+    term protocol_atom = globalcontext_make_atom(global, ATOM_STR("\x8", "protocol"));
+    term protocol = interop_atom_term_select_atom(protocol_table, ai_protocol, global);
+    term_set_map_assoc(result_map, 1, protocol_atom, term_is_invalid_term(protocol) ? UNDEFINED_ATOM : protocol);
+
+    term type_atom = globalcontext_make_atom(global, ATOM_STR("\x4", "type"));
+    term type = interop_atom_term_select_atom(type_table, ai_socktype, global);
+    term_set_map_assoc(result_map, 2, type_atom, term_is_invalid_term(type) ? UNDEFINED_ATOM : type);
+
+    // embed the inner_addr, but reference it from both address and addr
+    // for compatibility with OTP
+    term address_atom = globalcontext_make_atom(global, ATOM_STR("\x7", "address"));
+    term_set_map_assoc(result_map, 3, address_atom, inner_addr);
+
+    term addr_atom = globalcontext_make_atom(global, ATOM_STR("\x4", "addr"));
+    term_set_map_assoc(result_map, 4, addr_atom, inner_addr);
+
+    if (term_is_invalid_term(*keys)) {
+        *keys = term_get_map_keys(result_map);
+    }
+
+    return result_map;
 }
 
 //
@@ -199,59 +247,69 @@ static term nif_net_getaddrinfo(Context *ctx, int argc, term argv[])
     //          }
     // }]}
     // Note.  We might over-allocate for some more esoteric calls
-    size_t requested_size = TUPLE_SIZE(2) + LIST_SIZE(num_addrinfos, (term_map_size_in_terms(4) + term_map_size_in_terms(3) + TUPLE_SIZE(4)));
+
+    // Determine the number of entries, if we have ai_protocol or ai_socktype as unspec, return two
+    size_t nb_results = 0;
+    size_t requested_size = TUPLE_SIZE(2); // {ok, _}
+    for (struct addrinfo *p = host_info; p != NULL; p = p->ai_next) {
+        // Each list item is:
+        // 1 CONS
+        // 1 IPv4 address
+        // 1 map with 5 items (family, protocol, type, address, addr)
+        // 1 map with 3 items (addr, port, family)
+        requested_size += CONS_SIZE + INET_ADDR4_TUPLE_SIZE;
+        // First result: regular maps
+        // Subsequent results: shared maps
+        if (nb_results) {
+            requested_size += TERM_MAP_SHARED_SIZE(5) + TERM_MAP_SHARED_SIZE(3);
+        } else {
+            requested_size += TERM_MAP_SIZE(5) + TERM_MAP_SIZE(3);
+        }
+        nb_results++;
+        // If protocol or socktype are unspecified (what esp-idf returns), add
+        // another entry so we'll have tcp and udp
+        if (p->ai_protocol == 0 || p->ai_socktype == 0) {
+            nb_results++;
+            // We only need cons and shared maps here as the IP address will be shared
+            requested_size += CONS_SIZE + TERM_MAP_SHARED_SIZE(5) + TERM_MAP_SHARED_SIZE(3);
+        }
+    }
     if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
+
     term infos = term_nil();
+    term result_keys = term_invalid_term();
+    term addrinfo_keys = term_invalid_term();
+    term family_atom = globalcontext_make_atom(global, ATOM_STR("\x6", "family"));
+    term inet_atom = globalcontext_make_atom(global, ATOM_STR("\x4", "inet"));
     for (struct addrinfo *p = host_info; p != NULL; p = p->ai_next) {
-
-        // the number of elements in the outer map.  Add 1 because address and addr will point to the same (inner) map
-        // for compatibility with OTP behavior
-        // Cf. https://erlangforums.com/t/discrepancy-in-type-spec-for-net-getaddrinfo/2984
-        int num_elts = (p->ai_family != 0) + (p->ai_protocol != 0) + (p->ai_socktype != 0) + (p->ai_addrlen != 0) + 1;
-        term elt = term_alloc_map(num_elts, &ctx->heap);
-
-        // in the current implementation, this will always be `inet`
-        term family_atom = globalcontext_make_atom(global, ATOM_STR("\x6", "family"));
-        term family = globalcontext_make_atom(global, ATOM_STR("\x4", "inet"));
-        int i = 0;
-        term_set_map_assoc(elt, i++, family_atom, family);
-
-        if (p->ai_protocol) {
-            term protocol_atom = globalcontext_make_atom(global, ATOM_STR("\x8", "protocol"));
-            term protocol = interop_atom_term_select_atom(protocol_table, p->ai_protocol, global);
-            term_set_map_assoc(elt, i++, protocol_atom, term_is_invalid_term(protocol) ? UNDEFINED_ATOM : protocol);
+        term addrinfo_map;
+        if (term_is_invalid_term(addrinfo_keys)) {
+            addrinfo_map = term_alloc_map(3, &ctx->heap);
         } else {
-            TRACE("No protocol defined\n");
+            addrinfo_map = term_alloc_map_maybe_shared(3, addrinfo_keys, &ctx->heap);
+        }
+        // The inner addr contains a family, port, and addr
+        term addr_atom = globalcontext_make_atom(global, ATOM_STR("\x4", "addr"));
+        term_set_map_assoc(addrinfo_map, 0, family_atom, inet_atom);
+        term_set_map_assoc(addrinfo_map, 1, PORT_ATOM, term_from_int(port));
+        term address = inet_make_addr4(ntohl(((struct sockaddr_in *) p->ai_addr)->sin_addr.s_addr), &ctx->heap);
+        term_set_map_assoc(addrinfo_map, 2, addr_atom, address);
+
+        if (term_is_invalid_term(addrinfo_keys)) {
+            addrinfo_keys = term_get_map_keys(addrinfo_map);
         }
 
-        if (p->ai_socktype) {
-            term type_atom = globalcontext_make_atom(global, ATOM_STR("\x4", "type"));
-            term type = interop_atom_term_select_atom(type_table, p->ai_socktype, global);
-            term_set_map_assoc(elt, i++, type_atom, term_is_invalid_term(type) ? UNDEFINED_ATOM : type);
+        if (p->ai_protocol != 0 && p->ai_socktype != 0) {
+            term result_map = make_getaddrinfo_result(&result_keys, p->ai_protocol, p->ai_socktype, addrinfo_map, ctx->global, &ctx->heap);
+            infos = term_list_prepend(result_map, infos, &ctx->heap);
         } else {
-            TRACE("No socket type defined\n");
+            term tcp_map = make_getaddrinfo_result(&result_keys, IPPROTO_TCP, SOCK_STREAM, addrinfo_map, ctx->global, &ctx->heap);
+            infos = term_list_prepend(tcp_map, infos, &ctx->heap);
+            term udp_map = make_getaddrinfo_result(&result_keys, IPPROTO_UDP, SOCK_DGRAM, addrinfo_map, ctx->global, &ctx->heap);
+            infos = term_list_prepend(udp_map, infos, &ctx->heap);
         }
-
-        if (p->ai_addrlen == sizeof(struct sockaddr_in)) {
-            // The inner addr contains a family, port, and addr
-            term addr_atom = globalcontext_make_atom(global, ATOM_STR("\x4", "addr"));
-            term inner_addr = term_alloc_map(3, &ctx->heap);
-            term_set_map_assoc(inner_addr, 0, family_atom, family);
-            term_set_map_assoc(inner_addr, 1, PORT_ATOM, term_from_int(port));
-            term address = make_address(ctx, (struct sockaddr_in *) p->ai_addr);
-            term_set_map_assoc(inner_addr, 2, addr_atom, address);
-
-            // embed the inner_addr, but reference it from both address and addr
-            // for compatibility with OTP
-            term address_atom = globalcontext_make_atom(global, ATOM_STR("\x7", "address"));
-            term_set_map_assoc(elt, i++, address_atom, inner_addr);
-            term_set_map_assoc(elt, i++, addr_atom, inner_addr);
-        } else {
-            TRACE("No address defined\n");
-        }
-        infos = term_list_prepend(elt, infos, &ctx->heap);
     }
     freeaddrinfo(host_info);
 
