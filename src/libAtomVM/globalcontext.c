@@ -216,9 +216,17 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
     synclist_destroy(&glb->select_events);
 
     // Destroy refc binaries including resources
+    // (this list should be empty if resources were properly refcounted)
     struct ListHead *refc_binaries = synclist_nolock(&glb->refc_binaries);
     MUTABLE_LIST_FOR_EACH (item, tmp, refc_binaries) {
         struct RefcBinary *refc = GET_LIST_ENTRY(item, struct RefcBinary, head);
+#ifndef NDEBUG
+        if (refc->resource_type) {
+            fprintf(stderr, "Warning, dangling resource of type %s, ref_count = %d\n", refc->resource_type->name, (int) refc->ref_count);
+        } else {
+            fprintf(stderr, "Warning, dangling refc binary, ref_count = %d\n", (int) refc->ref_count);
+        }
+#endif
         refc_binary_destroy(refc, glb);
     }
     synclist_destroy(&glb->refc_binaries);

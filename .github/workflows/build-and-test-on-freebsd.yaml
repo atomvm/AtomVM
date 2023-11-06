@@ -57,7 +57,7 @@ jobs:
           echo "%%"
           echo "**freebsd-version:**"
           freebsd-version
-          sudo pkg install -y cmake gperf erlang elixir
+          sudo pkg install -y cmake gperf erlang elixir mbedtls
           echo "**uname:**"
           uname -a
           echo "**C Compiler version:**"
@@ -73,7 +73,7 @@ jobs:
           echo "%%"
           mkdir build
           cd build
-          cmake ..
+          cmake .. -DMBEDTLS_ROOT_DIR=/usr/local
 
           echo "%%"
           echo "%% Building AtomVM ..."

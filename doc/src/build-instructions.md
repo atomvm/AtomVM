@@ -58,6 +58,7 @@ The following software is required in order to build AtomVM in generic UNIX syst
 * `make`
 * `gperf`
 * `zlib`
+* `Mbed TLS`
 * Erlang/OTP compiler (`erlc`)
 * Elixir compiler
 

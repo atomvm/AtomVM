@@ -27,6 +27,7 @@
 #include "nifs.h"
 #include "otp_net.h"
 #include "otp_socket.h"
+#include "otp_ssl.h"
 #include "platform_defaultatoms.h"
 #include "term.h"
 #include <stdlib.h>
@@ -263,9 +264,15 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         return &atomvm_platform_nif;
     }
     const struct Nif *nif = otp_net_nif_get_nif(nifname);
-    if (nif == NULL) {
-        return otp_socket_nif_get_nif(nifname);
-    } else {
+    if (nif) {
         return nif;
     }
+    nif = otp_socket_nif_get_nif(nifname);
+#if defined ATOMVM_HAS_MBEDTLS
+    if (nif) {
+        return nif;
+    }
+    nif = otp_ssl_nif_get_nif(nifname);
+#endif
+    return nif;
 }

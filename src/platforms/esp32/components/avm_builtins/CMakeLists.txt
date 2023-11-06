@@ -30,12 +30,17 @@ set(AVM_BUILTIN_COMPONENT_SRCS
     "uart_driver.c"
     "otp_net_platform.c"
     "otp_socket_platform.c"
+    "otp_ssl_platform.c"
 )
 
 if (IDF_VERSION_MAJOR GREATER_EQUAL 5)
     set(ADDITIONAL_PRIV_REQUIRES "esp_hw_support" "efuse")
 else()
     set(ADDITIONAL_PRIV_REQUIRES "")
+endif()
+
+if(CONFIG_AVM_ENABLE_OTP_SSL_NIFS)
+   set(ADDITIONAL_PRIV_REQUIRES ${ADDITIONAL_PRIV_REQUIRES} "mbedtls")
 endif()
 
 # WHOLE_ARCHIVE option is supported only with esp-idf 5.x

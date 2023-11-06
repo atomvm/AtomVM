@@ -31,6 +31,10 @@
 #include "smp.h"
 #include "utils.h"
 
+#if ATOMVM_HAS_MBEDTLS
+#include "otp_ssl.h"
+#endif
+
 #include <fcntl.h>
 #include <limits.h>
 #include <signal.h>
@@ -562,6 +566,9 @@ void sys_init_platform(GlobalContext *global)
 
     otp_net_init(global);
     otp_socket_init(global);
+#if ATOMVM_HAS_MBEDTLS
+    otp_ssl_init(global);
+#endif
 
     global->platform_data = platform;
 }

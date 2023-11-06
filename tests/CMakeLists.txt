@@ -54,6 +54,14 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
     endif()
 endif()
 
+include(MbedTLS)
+if (MbedTLS_FOUND)
+    target_link_libraries(test-erlang PRIVATE MbedTLS::mbedtls)
+    target_link_libraries(test-enif PRIVATE MbedTLS::mbedtls)
+    target_link_libraries(test-mailbox PRIVATE MbedTLS::mbedtls)
+    target_link_libraries(test-structs PRIVATE MbedTLS::mbedtls)
+endif()
+
 set(
     PLATFORM_LIB_SUFFIX
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}

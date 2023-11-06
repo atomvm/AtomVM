@@ -61,6 +61,20 @@ define_if_function_exists(libAtomVM${PLATFORM_LIB_SUFFIX} getservbyname "netdb.h
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC libAtomVM)
 include_directories(${CMAKE_SOURCE_DIR}/src/platforms/generic_unix/lib)
 
+include(MbedTLS)
+if (MbedTLS_FOUND)
+    target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC MbedTLS::mbedtls)
+    target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ATOMVM_HAS_MBEDTLS)
+    target_sources(libAtomVM${PLATFORM_LIB_SUFFIX}
+        PRIVATE
+        ../../../libAtomVM/otp_ssl.c
+        ../../../libAtomVM/otp_ssl.h
+    )
+else()
+    message("WARNING:  Could NOT find MbedTLS, SSL will not be supported. Install MbedTLS 3.x or try to set MBEDTLS_ROOT_DIR to installation prefix of MbedTLS 2.x")
+endif()
+
+# For now we still use OpenSSL for random and crypto
 find_package(OpenSSL)
 if (${OPENSSL_FOUND} STREQUAL TRUE)
     target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${OPENSSL_INCLUDE_DIR})

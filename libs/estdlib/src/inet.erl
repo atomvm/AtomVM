@@ -24,12 +24,11 @@
 
 -type port_number() :: 0..65535.
 -type socket() :: pid().
--type address() :: ipv4_address().
--type ipv4_address() :: {octet(), octet(), octet(), octet()}.
--type octet() :: 0..255.
+-type ip_address() :: ip4_address().
+-type ip4_address() :: {0..255, 0..255, 0..255, 0..255}.
 -type hostname() :: iodata().
 
--export_type([socket/0, port_number/0, address/0, ipv4_address/0, octet/0, hostname/0]).
+-export_type([socket/0, port_number/0, ip_address/0, ip4_address/0, hostname/0]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket from which to obtain the port number
@@ -61,7 +60,8 @@ close(Socket) ->
 %%          This function should be called on a running socket instance.
 %% @end
 %%-----------------------------------------------------------------------------
--spec sockname(Socket :: socket()) -> {ok, {address(), port_number()}} | {error, Reason :: term()}.
+-spec sockname(Socket :: socket()) ->
+    {ok, {ip_address(), port_number()}} | {error, Reason :: term()}.
 sockname(Socket) ->
     call(Socket, {sockname}).
 
@@ -72,7 +72,8 @@ sockname(Socket) ->
 %%          This function should be called on a running socket instance.
 %% @end
 %%-----------------------------------------------------------------------------
--spec peername(Socket :: socket()) -> {ok, {address(), port_number()}} | {error, Reason :: term()}.
+-spec peername(Socket :: socket()) ->
+    {ok, {ip_address(), port_number()}} | {error, Reason :: term()}.
 peername(Socket) ->
     call(Socket, {peername}).
 

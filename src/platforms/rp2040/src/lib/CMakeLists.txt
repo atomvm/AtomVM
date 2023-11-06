@@ -83,13 +83,16 @@ if (PICO_CYW43_SUPPORTED)
             ../../../../libAtomVM/inet.c
             otp_socket_platform.c
             ../../../../libAtomVM/otp_socket.c
+            otp_ssl_platform.c
+            ../../../../libAtomVM/otp_ssl.c
             ../../../../libAtomVM/inet.h
             otp_socket_platform.h
             ../../../../libAtomVM/otp_socket.h
+            ../../../../libAtomVM/otp_ssl.h
             otp_net_lwip_raw.c
             otp_net_lwip_raw.h)
-    target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC pico_cyw43_arch_lwip_threadsafe_background pico_lwip_sntp INTERFACE pan_lwip_dhserver)
-    target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,networkregister_port_driver -Wl,-u -Wl,otp_socket_nif -Wl,-u -Wl,otp_net_nif")
+    target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC pico_cyw43_arch_lwip_threadsafe_background pico_lwip_sntp pico_mbedtls INTERFACE pan_lwip_dhserver)
+    target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,networkregister_port_driver -Wl,-u -Wl,otp_socket_nif -Wl,-u -Wl,otp_net_nif -Wl,-u -Wl,otp_ssl_nif")
 endif()
 
 target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,gpio_nif")
