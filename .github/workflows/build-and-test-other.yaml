@@ -148,7 +148,7 @@ jobs:
             ${{ matrix.install_deps }}
         else
             apt update &&
-            apt install -y file gcc g++ binutils cmake make doxygen gperf zlib1g-dev libssl-dev
+            apt install -y file gcc g++ binutils cmake make doxygen gperf zlib1g-dev libssl-dev libmbedtls-dev
         fi &&
         file /bin/bash &&
         uname -a &&
