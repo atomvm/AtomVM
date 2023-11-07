@@ -91,6 +91,9 @@ extern "C" {
 #define TERM_MAP_SIZE(num_elements) (3 + 2 * (num_elements))
 #define TERM_MAP_SHARED_SIZE(num_elements) (2 + (num_elements))
 
+#define LIST_HEAD_INDEX 1
+#define LIST_TAIL_INDEX 0
+
 #define TERM_BINARY_SIZE_IS_HEAP(size) ((size) < REFC_BINARY_MIN)
 
 #if TERM_BYTES == 4
@@ -1294,7 +1297,7 @@ static inline term term_list_from_list_ptr(term *list_elem)
 static inline term term_get_list_head(term t)
 {
     term *list_ptr = term_get_list_ptr(t);
-    return list_ptr[1];
+    return list_ptr[LIST_HEAD_INDEX];
 }
 
 /**
@@ -1306,7 +1309,7 @@ static inline term term_get_list_head(term t)
 static inline term term_get_list_tail(term t)
 {
     term *list_ptr = term_get_list_ptr(t);
-    return *list_ptr;
+    return list_ptr[LIST_TAIL_INDEX];
 }
 
 /**
@@ -1318,7 +1321,7 @@ static inline term term_get_list_tail(term t)
  */
 MALLOC_LIKE static inline term *term_list_alloc(Heap *heap)
 {
-    return memory_heap_alloc(heap, 2);
+    return memory_heap_alloc(heap, CONS_SIZE);
 }
 
 /**

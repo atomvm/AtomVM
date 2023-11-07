@@ -3040,11 +3040,10 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("get_list/3 %lx, %c%i, %c%i\n", src_value, T_DEST_REG(head_dreg), T_DEST_REG(tail_dreg));
 
-                    term head = term_get_list_head(src_value);
-                    term tail = term_get_list_tail(src_value);
+                    term *list_ptr = term_get_list_ptr(src_value);
 
-                    WRITE_REGISTER(head_dreg, head);
-                    WRITE_REGISTER(tail_dreg, tail);
+                    WRITE_REGISTER(head_dreg, list_ptr[LIST_HEAD_INDEX]);
+                    WRITE_REGISTER(tail_dreg, list_ptr[LIST_TAIL_INDEX]);
                 #endif
 
                 #ifdef IMPL_CODE_LOADER

@@ -141,6 +141,8 @@ base64:encode/1, &base64_encode_nif
 base64:decode/1, &base64_decode_nif
 base64:encode_to_string/1, &base64_encode_to_string_nif
 base64:decode_to_string/1, &base64_decode_to_string_nif
+lists:reverse/1, &lists_reverse_nif
+lists:reverse/2, &lists_reverse_nif
 maps:next/1, &maps_next_nif
 unicode:characters_to_list/1, &unicode_characters_to_list_nif
 unicode:characters_to_list/2, &unicode_characters_to_list_nif

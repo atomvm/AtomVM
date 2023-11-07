@@ -27,7 +27,6 @@
 test() ->
     ok = test_nth(),
     ok = test_member(),
-    ok = test_reverse(),
     ok = test_delete(),
     ok = test_keyfind(),
     ok = test_keydelete(),
@@ -49,18 +48,7 @@ test_nth() ->
     ?ASSERT_MATCH(lists:nth(1, [a, b, c]), a),
     ?ASSERT_MATCH(lists:nth(2, [a, b, c]), b),
     ?ASSERT_MATCH(lists:nth(3, [a, b, c]), c),
-    % try
-    %     lists:nth(-1, [a,b,c]),
-    %     throw(failure)
-    % catch
-    %     _:_ -> ok
-    % end,
-    ok.
-
-test_reverse() ->
-    ?ASSERT_MATCH(lists:reverse([]), []),
-    ?ASSERT_MATCH(lists:reverse([a]), [a]),
-    ?ASSERT_MATCH(lists:reverse([a, b]), [b, a]),
+    ?ASSERT_FAILURE(lists:nth(-1, [a, b, c]), function_clause),
     ok.
 
 test_member() ->
@@ -193,6 +181,7 @@ test_seq() ->
     ?ASSERT_MATCH(lists:seq(-1, 2, 3), [-1, 2]),
     ?ASSERT_MATCH(lists:seq(5, 1, -1), [5, 4, 3, 2, 1]),
     ?ASSERT_MATCH(lists:seq(1, 1, 0), [1]),
+    ?ASSERT_MATCH(lists:seq(1, 1), [1]),
 
     ?ASSERT_FAILURE(lists:seq(foo, 1)),
     ?ASSERT_FAILURE(lists:seq(1, bar)),
