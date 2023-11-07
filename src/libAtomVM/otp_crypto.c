@@ -287,14 +287,10 @@ static term nif_crypto_hash(Context *ctx, int argc, term argv[])
     return term_from_literal_binary(digest, digest_len, &ctx->heap, ctx->global);
 }
 
-static const AtomStringIntPair cipher_no_iv_table[] = {
+static const AtomStringIntPair cipher_table[] = {
     { ATOM_STR("\xB", "aes_128_ecb"), MBEDTLS_CIPHER_AES_128_ECB },
     { ATOM_STR("\xB", "aes_192_ecb"), MBEDTLS_CIPHER_AES_192_ECB },
     { ATOM_STR("\xB", "aes_256_ecb"), MBEDTLS_CIPHER_AES_256_ECB },
-    SELECT_INT_DEFAULT(MBEDTLS_CIPHER_NONE)
-};
-
-static const AtomStringIntPair cipher_iv_table[] = {
     { ATOM_STR("\xB", "aes_128_cbc"), MBEDTLS_CIPHER_AES_128_CBC },
     { ATOM_STR("\xB", "aes_192_cbc"), MBEDTLS_CIPHER_AES_192_CBC },
     { ATOM_STR("\xB", "aes_256_cbc"), MBEDTLS_CIPHER_AES_256_CBC },
@@ -395,19 +391,16 @@ static term make_crypto_error(const char *file, int line, const char *message, C
 static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
 {
     bool has_iv = argc == 5;
-    const AtomStringIntPair *cipher_table;
     term key;
     term iv;
     term data;
     term flag_or_options;
     if (has_iv) {
-        cipher_table = cipher_iv_table;
         key = argv[1];
         iv = argv[2];
         data = argv[3];
         flag_or_options = argv[4];
     } else {
-        cipher_table = cipher_no_iv_table;
         key = argv[1];
         data = argv[2];
         flag_or_options = argv[3];
