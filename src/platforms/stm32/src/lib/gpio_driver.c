@@ -240,6 +240,14 @@ static inline term level_to_atom(Context *ctx, uint16_t level)
     return level_atom;
 }
 
+static term get_error_type(term error_tuple)
+{
+    if ((term_is_tuple(error_tuple)) && (term_get_tuple_element(error_tuple, 0) == ERROR_ATOM)) {
+        return term_get_tuple_element(error_tuple, 1);
+    }
+    return OK_ATOM;
+}
+
 // Common setup function used by nif and port driver
 static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
 {
@@ -968,7 +976,11 @@ REGISTER_PORT_DRIVER(gpio, gpiodriver_init, NULL, gpio_driver_create_port)
 static term nif_gpio_set_pin_mode(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
-    return setup_gpio_pin(ctx, argv[0], argv[1]);
+    term ret = setup_gpio_pin(ctx, argv[0], argv[1]);
+    if (UNLIKELY(get_error_type(ret) != OK_ATOM)) {
+        RAISE_ERROR(ret);
+    }
+    return ret;
 }
 
 static term nif_gpio_set_pin_pull(Context *ctx, int argc, term argv[])
@@ -976,19 +988,27 @@ static term nif_gpio_set_pin_pull(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
     AVM_LOGW(TAG, "Pull mode must be set using `gpio:set_pin_mode/2` arg #2 i.e. {Mode,PullMode}");
-    return ERROR_ATOM;
+    return UNDEF_ATOM;
 }
 
 static term nif_gpio_digital_write(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
-    return gpio_digital_write(ctx, argv[0], argv[1]);
+    term ret = gpio_digital_write(ctx, argv[0], argv[1]);
+    if (UNLIKELY(get_error_type(ret) != OK_ATOM)) {
+        RAISE_ERROR(ret);
+    }
+    return ret;
 }
 
 static term nif_gpio_digital_read(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
-    return gpio_digital_read(ctx, argv[0]);
+    term ret = gpio_digital_read(ctx, argv[0]);
+    if (UNLIKELY(get_error_type(ret) != OK_ATOM)) {
+        RAISE_ERROR(ret);
+    }
+    return ret;
 }
 
 static const struct Nif gpio_set_pin_mode_nif = {
