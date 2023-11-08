@@ -124,7 +124,7 @@ delete(E, [H | T], Accum) ->
 %% @equiv lists:reverse(L, [])
 %% @doc Erlang/OTP implementation of this function actually handles few simple
 %% cases and calls lists:reverse/2 for the more genertic case. Consequently,
-%% calling `lists:reverse/1` without a list or with an improper list of two
+%% calling `lists:reverse/1' without a list or with an improper list of two
 %% elements will fail with a function clause exception on Erlang/OTP and with a
 %% badarg exception with this implementation.
 %% @end
@@ -143,7 +143,7 @@ reverse(_L) ->
 %%
 %% If L is not a proper list, the function fails with badarg.
 %%
-%% Following Erlang/OTP tradition, `lists:reverse/1,2` is a nif. It computes
+%% Following Erlang/OTP tradition, `lists:reverse/1,2' is a nif. It computes
 %% the length and then allocates memory for the list at once (2 * n terms).
 %%
 %% While this is much faster with AtomVM as allocations are expensive with
@@ -151,7 +151,7 @@ reverse(_L) ->
 %% passed is garbage collected, as opposed to a recursive implementation where
 %% the process garbage collect part of the input list during the reversal.
 %%
-%% Consequently, tail-recursive implementations calling `lists:reverse/2`
+%% Consequently, tail-recursive implementations calling `lists:reverse/2'
 %% can be as expensive or more expensive in memory than list comprehensions or
 %% non-tail recursive versions depending on the number of terms saved on the
 %% stack between calls.
