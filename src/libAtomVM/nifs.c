@@ -1941,14 +1941,9 @@ static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    char *atom_string = interop_binary_to_string(a_binary);
-    if (IS_NULL_PTR(atom_string)) {
-        fprintf(stderr, "Failed to alloc temporary string\n");
-        AVM_ABORT();
-    }
-    int atom_string_len = strlen(atom_string);
+    const char *atom_string = term_binary_data(a_binary);
+    size_t atom_string_len = term_binary_size(a_binary);
     if (UNLIKELY(atom_string_len > 255)) {
-        free(atom_string);
         RAISE_ERROR(SYSTEM_LIMIT_ATOM);
     }
 
@@ -1964,6 +1959,8 @@ static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
     free((void *) atom);
     if (UNLIKELY(global_atom_index == ATOM_TABLE_NOT_FOUND)) {
         RAISE_ERROR(BADARG_ATOM);
+    } else if (UNLIKELY(global_atom_index == ATOM_TABLE_ALLOC_FAIL)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     return term_from_atom_index(global_atom_index);
 }
@@ -1988,8 +1985,7 @@ term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
     int ok;
     char *atom_string = interop_list_to_string(a_list, &ok);
     if (UNLIKELY(!ok)) {
-        fprintf(stderr, "Failed to alloc temporary string\n");
-        AVM_ABORT();
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     int atom_string_len = strlen(atom_string);
     if (UNLIKELY(atom_string_len > 255)) {
@@ -1998,8 +1994,13 @@ term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
     }
 
     AtomString atom = malloc(atom_string_len + 1);
+    if (IS_NULL_PTR(atom)) {
+        free(atom_string);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
     ((uint8_t *) atom)[0] = atom_string_len;
     memcpy(((char *) atom) + 1, atom_string, atom_string_len);
+    free(atom_string);
 
     enum AtomTableCopyOpt atom_opts = AtomTableCopyAtom;
     if (!create_new) {
@@ -2009,6 +2010,8 @@ term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
     free((void *) atom);
     if (UNLIKELY(global_atom_index == ATOM_TABLE_NOT_FOUND)) {
         RAISE_ERROR(BADARG_ATOM);
+    } else if (UNLIKELY(global_atom_index == ATOM_TABLE_ALLOC_FAIL)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     return term_from_atom_index(global_atom_index);
 }
