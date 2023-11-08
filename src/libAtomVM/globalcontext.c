@@ -384,22 +384,6 @@ int globalcontext_get_registered_process(GlobalContext *glb, int atom_index)
     return 0;
 }
 
-int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string)
-{
-    long index = atom_table_ensure_atom(glb->atom_table, atom_string, AtomTableNoOpts);
-    if (UNLIKELY(index == ATOM_TABLE_NOT_FOUND)) {
-        abort();
-    }
-    return index;
-}
-
-int globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_string, int copy)
-{
-    long index = atom_table_ensure_atom(
-        glb->atom_table, atom_string, copy ? AtomTableCopyAtom : AtomTableNoOpts);
-    return index;
-}
-
 bool globalcontext_is_atom_index_equal_to_atom_string(GlobalContext *glb, int atom_index_a, AtomString atom_string_b)
 {
     AtomString atom_string_a;
