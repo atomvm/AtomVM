@@ -156,6 +156,12 @@ TEST_CASE(test_clocks)
     TEST_ASSERT_EQUAL_INT(OK_ATOM, ret_value);
 }
 
+TEST_CASE(test_crypto)
+{
+    term ret_value = avm_test_case("test_crypto.beam");
+    TEST_ASSERT_EQUAL_INT(OK_ATOM, ret_value);
+}
+
 TEST_CASE(test_smp)
 {
     term ret_value = avm_test_case("test_smp.beam");

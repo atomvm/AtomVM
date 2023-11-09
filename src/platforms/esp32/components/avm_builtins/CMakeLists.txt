@@ -28,6 +28,7 @@ set(AVM_BUILTIN_COMPONENT_SRCS
     "socket_driver.c"
     "spi_driver.c"
     "uart_driver.c"
+    "otp_crypto_platform.c"
     "otp_net_platform.c"
     "otp_socket_platform.c"
     "otp_ssl_platform.c"
@@ -39,7 +40,7 @@ else()
     set(ADDITIONAL_PRIV_REQUIRES "")
 endif()
 
-if(CONFIG_AVM_ENABLE_OTP_SSL_NIFS)
+if(CONFIG_AVM_ENABLE_OTP_SSL_NIFS OR CONFIG_AVM_ENABLE_OTP_CRYPTO_NIFS)
    set(ADDITIONAL_PRIV_REQUIRES ${ADDITIONAL_PRIV_REQUIRES} "mbedtls")
 endif()
 

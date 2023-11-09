@@ -26,8 +26,13 @@
 // Protocols
 #define MBEDTLS_SSL_PROTO_TLS1_2
 
-// Options that enable ciphersuites
+// Options for ciphers, required for otp_crypto
 #define MBEDTLS_CIPHER_MODE_CBC
+#define MBEDTLS_CIPHER_MODE_CFB
+#define MBEDTLS_CIPHER_MODE_CTR
+#define MBEDTLS_CIPHER_PADDING_PKCS7
+
+// Options that enable ciphersuites
 #define MBEDTLS_ECP_DP_SECP192R1_ENABLED
 #define MBEDTLS_ECP_DP_SECP224R1_ENABLED
 #define MBEDTLS_ECP_DP_SECP256R1_ENABLED

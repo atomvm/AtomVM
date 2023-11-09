@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed STM32 not aborting when `AVM_ABORT()` is used
 - Fixed a bug that would leave the STM32 trapped in a loop on hard faults, rather than aborting
 
+### Changed
+
+- Crypto functions on generic_unix platform now rely on MbedTLS instead of OpenSSL
+
 ### Added
 
 - Added support for the OTP `socket` interface.
@@ -23,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added suppoprt for PicoW extra gpio pins (led) to the gpio driver.
 - Added support for `net:getaddrinfo/1,2`
 - Added minimal support for the OTP `ssl` interface.
+- Added support for `crypto:one_time/4,5` on Unix and Pico as well as for `crypto:hash/2` on Pico
 
 ## [0.6.0-alpha.1] - 2023-10-09
 
