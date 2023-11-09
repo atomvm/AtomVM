@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New gpio driver for STM32 with nif and port support for read and write functions.
 - Added support for interrupts to STM32 GPIO port driver.
 
+## Changed
+- New atom table, which uses less memory, has improved performances and better code.
+
 ## [0.6.0-alpha.1] - 2023-10-09
 
 ### Added
