@@ -173,26 +173,27 @@ static inline struct HNode *get_node_from_bucket(
     return NULL;
 }
 
+static inline struct HNode *get_node_with_hash(
+    const struct AtomTable *hash_table, AtomString string, unsigned long hash)
+{
+    unsigned long bucket_index = hash % hash_table->capacity;
+    return get_node_from_bucket(hash_table, bucket_index, string);
+}
+
 static inline struct HNode *get_node(const struct AtomTable *hash_table, AtomString string)
 {
     unsigned long hash = sdbm_hash(string, atom_string_len(string));
 
-    unsigned long bucket_index = hash % hash_table->capacity;
-    return get_node_from_bucket(hash_table, bucket_index, string);
-}
-
-static inline struct HNode *lock_and_get_node(struct AtomTable *hash_table, AtomString string)
-{
-    unsigned long hash = sdbm_hash(string, atom_string_len(string));
-
-    SMP_RDLOCK(hash_table);
-    unsigned long bucket_index = hash % hash_table->capacity;
-    return get_node_from_bucket(hash_table, bucket_index, string);
+    return get_node_with_hash(hash_table, string, hash);
 }
 
 long atom_table_get_index(struct AtomTable *table, AtomString string)
 {
-    struct HNode *node = lock_and_get_node(table, string);
+    unsigned long hash = sdbm_hash(string, atom_string_len(string));
+
+    SMP_RDLOCK(table);
+
+    struct HNode *node = get_node_with_hash(table, string, hash);
     long result = (node != NULL) ? node->index : ATOM_TABLE_NOT_FOUND;
 
     SMP_UNLOCK(table);
