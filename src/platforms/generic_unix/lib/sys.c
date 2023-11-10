@@ -178,6 +178,10 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
     int fd_index;
     if (listeners_poll_count < 0 || select_events_poll_count < 0) {
         // Means it is dirty and should be rebuilt.
+        // The array of polling fds is composed of, in this order:
+        // - the signaling fd (for SMP), which is eventfd or a pipe
+        // - the listeners fd
+        // - the sockets fd
         struct ListHead *select_events = synclist_wrlock(&glb->select_events);
         size_t select_events_new_count;
         if (select_events_poll_count < 0) {
@@ -189,6 +193,7 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
         size_t listeners_new_count = 0;
         struct ListHead *listeners = NULL;
         struct ListHead *item;
+        // We avoid acquiring a lock on the list of listeners and rebuild the list of fds for listeners if we can
         if (listeners_poll_count < 0) {
             listeners = synclist_rdlock(&glb->listeners);
             LIST_FOR_EACH (item, listeners) {
@@ -217,6 +222,7 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
 
         fd_index = poll_count;
 
+        // Rebuild the list of fds for listeners if it is dirty
         if (listeners_poll_count < 0) {
             // We put listeners first
             LIST_FOR_EACH (item, listeners) {
@@ -231,6 +237,9 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
                 }
             }
             synclist_unlock(&glb->listeners);
+        } else {
+            // Else we can reuse the previous list
+            fd_index += listeners_new_count;
         }
 
         // We put select events next
@@ -255,6 +264,9 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
     poll_count += listeners_poll_count + select_events_poll_count;
 
     int nb_descriptors = poll(fds, poll_count, timeout_ms);
+
+    // After poll, process the list of fds in order, using fd_index as the index
+    // on the list and nb_descriptors as the number of fds to process left
     fd_index = 0;
 #ifndef AVM_NO_SMP
     if (nb_descriptors > 0) {
