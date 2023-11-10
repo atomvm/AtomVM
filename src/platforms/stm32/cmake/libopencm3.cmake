@@ -53,6 +53,7 @@ find_program(PYTHON python)
 if (NOT PYTHON)
     message(FATAL_ERROR "python is required to generate the linker script, please install it.")
 endif ()
+mark_as_advanced(PYTHON)
 
 set(GENLINK_SCRIPT "${LIBOPENCM3_DIR}/scripts/genlink.py")
 set(DEVICES_DATA "${LIBOPENCM3_DIR}/ld/devices.data")
