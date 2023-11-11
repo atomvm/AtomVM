@@ -34,7 +34,7 @@ concurrency:
 
 jobs:
   build-and-test-on-freebsd:
-    runs-on: macos-12
+    runs-on: ubuntu-22.04
     name: Build and test AtomVM on FreeBSD
     env:
       ATOMVM_EXAMPLE: "atomvm-example"
@@ -44,16 +44,18 @@ jobs:
 
     - name: Build and Test on FreeBSD
       id: build-and-test-on-freebsd
-      uses: cross-platform-actions/action@v0.21.1
-      timeout-minutes: 25
+      uses: vmactions/freebsd-vm@v1
+      timeout-minutes: 20
       with:
-        memory: 8G
-        hypervisor: qemu
-        shell: sh
-        operating_system: freebsd
-        version: '13.2'
-        sync_files: runner-to-vm
-        environment_variables: 'ATOMVM_EXAMPLE'
+        release: 13.2
+        envs: 'ATOMVM_EXAMPLE'
+        usesh: true
+        sync: rsync
+        copyback: false
+
+        prepare: |
+          pkg install -y curl cmake gperf erlang elixir mbedtls
+
         run: |
 
           echo "%%"
@@ -61,7 +63,6 @@ jobs:
           echo "%%"
           echo "**freebsd-version:**"
           freebsd-version
-          sudo pkg install -y cmake gperf erlang elixir mbedtls
           echo "**uname:**"
           uname -a
           echo "**C Compiler version:**"
@@ -122,7 +123,7 @@ jobs:
           echo "%%"
           echo "%% Running install ..."
           echo "%%"
-          sudo make install
+          make install
           atomvm examples/erlang/hello_world.avm
           atomvm -v
           atomvm -h
