@@ -31,6 +31,7 @@ test() ->
     ok = test_gc(HasSelect),
     ok = test_crash_no_leak(HasSelect),
     ok = test_select_with_gone_process(HasSelect),
+    ok = test_select_with_listeners(HasSelect),
     ok.
 
 test_basic_file() ->
@@ -266,4 +267,47 @@ test_select_with_gone_process0(Path) ->
             error:badarg -> ok
         end,
     ok = atomvm:posix_close(Fd),
+    ok.
+
+test_select_with_listeners(false) ->
+    ok;
+test_select_with_listeners(_HasSelect) ->
+    % Create listeners with a udp socket of the inet driver
+    Port = open_port({spawn, "socket"}, []),
+    ok =
+        case
+            port:call(
+                Port,
+                {init, [
+                    {proto, udp},
+                    {port, 0},
+                    {controlling_process, self()},
+                    {active, true},
+                    {buffer, 128},
+                    {timeout, infinity}
+                ]}
+            )
+        of
+            {error, noproc} -> {error, closed};
+            out_of_memory -> {error, enomem};
+            Result -> Result
+        end,
+    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    ok = atomvm:posix_mkfifo(Path, 8#644),
+    {ok, RdFd} = atomvm:posix_open(Path, [o_rdonly]),
+    {ok, WrFd} = atomvm:posix_open(Path, [o_wronly]),
+    SelectReadRef = make_ref(),
+    ok = atomvm:posix_select_read(RdFd, self(), SelectReadRef),
+    ok =
+        receive
+            {select, RdFd, SelectReadRef, _} -> fail
+        after 200 -> ok
+        end,
+    {ok, 6} = atomvm:posix_write(WrFd, <<" World">>),
+    ok =
+        receive
+            {select, RdFd, SelectReadRef, ready_input} -> ok;
+            M2 -> {unexpected, M2}
+        after 200 -> fail
+        end,
     ok.
