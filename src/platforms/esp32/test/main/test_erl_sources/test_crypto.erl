@@ -202,6 +202,13 @@ test_available_ciphers() ->
         crypto:crypto_one_time(aes_192_ecb, <<1:192>>, <<2:128>>, false),
     <<9, 134, 59, 77, 138, 44, 15, 97, 69, 171, 187, 23, 29, 143, 25, 227>> =
         crypto:crypto_one_time(aes_256_ecb, <<1:256>>, <<2:128>>, false),
+    % Erlang/OTP also allows to call aes_*_ecb with an iv
+    <<171, 29, 253, 3, 110, 255, 225, 168, 40, 2, 92, 101, 18, 22, 104, 91>> =
+        crypto:crypto_one_time(aes_128_ecb, <<1:128>>, <<2:128>>, <<3:128>>, false),
+    <<172, 173, 71, 170, 66, 92, 132, 117, 22, 33, 191, 18, 17, 207, 171, 236>> =
+        crypto:crypto_one_time(aes_192_ecb, <<1:192>>, <<2:128>>, <<3:128>>, false),
+    <<33, 51, 81, 23, 26, 72, 178, 26, 115, 82, 208, 26, 225, 24, 76, 247>> =
+        crypto:crypto_one_time(aes_256_ecb, <<1:256>>, <<2:128>>, <<3:128>>, false),
     ok.
 
 get_error(F) ->
