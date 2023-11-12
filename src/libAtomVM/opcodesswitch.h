@@ -6132,7 +6132,7 @@ wait_timeout_trap_handler:
                 DECODE_LITERAL(unit, pc);
                 dreg_gc_safe_t dreg;
                 DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
-                TRACE("bs_create_bin/6 fail=%i, alloc=%i live=%i unit=%i dreg=%c%i\n", fail, alloc, live, unit, T_DEST_REG_UNSAFE(dreg));
+                TRACE("bs_create_bin/6 fail=%i, alloc=%i live=%i unit=%i dreg=%c%i\n", fail, alloc, live, unit, T_DEST_REG_GC_SAFE(dreg));
                 DECODE_EXTENDED_LIST_TAG(pc);
                 uint32_t list_len;
                 DECODE_LITERAL(list_len, pc);
