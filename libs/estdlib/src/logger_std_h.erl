@@ -25,11 +25,13 @@
     log/2
 ]).
 
+%% @private
 format_msg({report, Report}) when is_map(Report) ->
     io_lib:format("~p", [Report]);
 format_msg({Format, Args}) when is_list(Format) andalso is_list(Args) ->
     io_lib:format(Format, Args).
 
+%% @hidden
 log(LogEvent, _Config) ->
     #{
         level := Level,
@@ -38,14 +40,16 @@ log(LogEvent, _Config) ->
         timestamp := Timestamp,
         meta := MetaData
     } = LogEvent,
-    io:format("~s [~p] ~p ~s~s~n", [
+    io:format("~s [~p] ~p ~s~s~s~n", [
         make_timestamp(Timestamp),
         Level,
         Pid,
         maybe_format_mfa(MetaData),
+        maybe_format_file_line(MetaData),
         format_msg(Msg)
     ]).
 
+%% @private
 make_timestamp(Timestamp) ->
     {{Year, Month, Day}, {Hour, Minute, Second}} =
         calendar:system_time_to_universal_time(Timestamp, microsecond),
@@ -59,11 +63,13 @@ make_timestamp(Timestamp) ->
         maybe_pad_100((Timestamp rem 1000000) div 1000)
     ]).
 
+%% @private
 maybe_pad(N) when N >= 0 andalso N < 10 ->
     [$0 | integer_to_list(N)];
 maybe_pad(N) ->
     integer_to_list(N).
 
+%% @private
 maybe_pad_100(N) when N >= 0 andalso N < 10 ->
     [$0, $0 | integer_to_list(N)];
 maybe_pad_100(N) when N >= 0 andalso N < 100 ->
@@ -71,7 +77,14 @@ maybe_pad_100(N) when N >= 0 andalso N < 100 ->
 maybe_pad_100(N) ->
     integer_to_list(N).
 
+%% @private
 maybe_format_mfa(#{location := #{mfa := {Module, FunctionName, FunctionArity}}} = _MetaData) ->
     io_lib:format("~p:~p/~p ", [Module, FunctionName, FunctionArity]);
 maybe_format_mfa(_MetaData) ->
+    "".
+
+%% @private
+maybe_format_file_line(#{location := #{file := File, line := Line}} = _MetaData) ->
+    io_lib:format("(~s:~p) ", [File, Line]);
+maybe_format_file_line(_MetaData) ->
     "".
