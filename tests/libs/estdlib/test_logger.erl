@@ -63,10 +63,10 @@ test_default_logger() ->
     ok = ?LOG_INFO("Info!"),
     ok = ?LOG_DEBUG("Debug!"),
 
-    ?ASSERT_FAILURE(logger:log(bad_level, "foo")),
-    ?ASSERT_FAILURE(logger:log(notice, not_a_list)),
-    ?ASSERT_FAILURE(logger:log(notice, "", not_a_list)),
-    ?ASSERT_FAILURE(logger:log(notice, "", [], not_a_map)),
+    ?ASSERT_ERROR(logger:log(bad_level, "foo")),
+    ?ASSERT_ERROR(logger:log(notice, not_a_list)),
+    ?ASSERT_ERROR(logger:log(notice, "", not_a_list)),
+    ?ASSERT_ERROR(logger:log(notice, "", [], not_a_map)),
 
     logger_manager:stop(),
 

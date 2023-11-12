@@ -338,7 +338,7 @@ apply(Module, Function, Args) ->
         [Arg1, Arg2, Arg3, Arg4, Arg5, Arg6] ->
             Module:Function(Arg1, Arg2, Arg3, Arg4, Arg5, Arg6);
         _ ->
-            throw(badarg)
+            error(badarg)
     end.
 
 %%-----------------------------------------------------------------------------
@@ -356,10 +356,9 @@ is_map(_Map) ->
 %%-----------------------------------------------------------------------------
 %% @param   Map the map
 %% @returns the size of the map
-%% @throws {badmap, Map}
 %% @doc Returns the size of (i.e., the number of entries in) the map
 %%
-%% This function throws a `{badmap, Map}' exception if `Map' is not a map.
+%% This function raises a `{badmap, Map}' error if `Map' is not a map.
 %%
 %% This function may be used in a guard expression.
 %% @end
@@ -372,11 +371,10 @@ map_size(_Map) ->
 %% @param   Key     the key to get
 %% @param   Map     the map from which to get the value
 %% @returns the value in `Map' associated with `Key', if it exists.
-%% @throws  {badkey, Key} | {badmap, Map}
 %% @doc     Get the value in `Map' associated with `Key', if it exists.
 %%
-%% This function throws a `{badkey, Key}' exception if 'Key' does not occur in `Map' or
-%% a `{badmap, Map}' if `Map' is not a map.
+%% This function raises a `{badkey, Key}' error if 'Key' does not occur in
+%% `Map' or a `{badmap, Map}' if `Map' is not a map.
 %%
 %% This function may be used in a guard expression.
 %% @end
@@ -389,10 +387,9 @@ map_get(_Key, _Map) ->
 %% @param   Key     the key
 %% @param   Map     the map
 %% @returns `true' if `Key' is associated with a value in `Map'; `false', otherwise.
-%% @throws  {badmap, Map}
 %% @doc     Return `true' if `Key' is associated with a value in `Map'; `false', otherwise.
 %%
-%% This function throws a `{badmap, Map}' exception if `Map' is not a map.
+%% This function raises a `{badmap, Map}' error if `Map' is not a map.
 %%
 %% This function may be used in a guard expression.
 %% @end

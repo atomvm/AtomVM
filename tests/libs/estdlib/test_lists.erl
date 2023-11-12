@@ -48,7 +48,7 @@ test_nth() ->
     ?ASSERT_MATCH(lists:nth(1, [a, b, c]), a),
     ?ASSERT_MATCH(lists:nth(2, [a, b, c]), b),
     ?ASSERT_MATCH(lists:nth(3, [a, b, c]), c),
-    ?ASSERT_FAILURE(lists:nth(-1, [a, b, c]), function_clause),
+    ?ASSERT_ERROR(lists:nth(-1, [a, b, c]), function_clause),
     ok.
 
 test_member() ->
@@ -183,14 +183,14 @@ test_seq() ->
     ?ASSERT_MATCH(lists:seq(1, 1, 0), [1]),
     ?ASSERT_MATCH(lists:seq(1, 1), [1]),
 
-    ?ASSERT_FAILURE(lists:seq(foo, 1)),
-    ?ASSERT_FAILURE(lists:seq(1, bar)),
-    ?ASSERT_FAILURE(lists:seq(foo, bar)),
-    ?ASSERT_FAILURE(lists:seq(1, 2, tapas)),
-    ?ASSERT_FAILURE(lists:seq(1, -1)),
-    ?ASSERT_FAILURE(lists:seq(-1, 1, -1)),
-    ?ASSERT_FAILURE(lists:seq(1, -1, 1)),
-    ?ASSERT_FAILURE(lists:seq(1, 2, 0)),
+    ?ASSERT_ERROR(lists:seq(foo, 1)),
+    ?ASSERT_ERROR(lists:seq(1, bar)),
+    ?ASSERT_ERROR(lists:seq(foo, bar)),
+    ?ASSERT_ERROR(lists:seq(1, 2, tapas)),
+    ?ASSERT_ERROR(lists:seq(1, -1)),
+    ?ASSERT_ERROR(lists:seq(-1, 1, -1)),
+    ?ASSERT_ERROR(lists:seq(1, -1, 1)),
+    ?ASSERT_ERROR(lists:seq(1, 2, 0)),
 
     ok.
 
@@ -204,9 +204,9 @@ test_sort() ->
 
     ?ASSERT_MATCH(lists:sort(fun(A, B) -> A > B end, [1, 2, 3, 4, 3, 5]), [5, 4, 3, 3, 2, 1]),
 
-    ?ASSERT_FAILURE(lists:sort(1), function_clause),
-    ?ASSERT_FAILURE(lists:sort(fun(A, B) -> A > B end, 1), function_clause),
-    ?ASSERT_FAILURE(lists:sort(1, [1]), function_clause),
+    ?ASSERT_ERROR(lists:sort(1), function_clause),
+    ?ASSERT_ERROR(lists:sort(fun(A, B) -> A > B end, 1), function_clause),
+    ?ASSERT_ERROR(lists:sort(1, [1]), function_clause),
 
     ok.
 
@@ -220,9 +220,9 @@ test_usort() ->
     ?ASSERT_MATCH(lists:usort(fun(A, B) -> A > B end, [1, 2, 3, 4, 3, 5]), [5, 4, 3, 3, 2, 1]),
     ?ASSERT_MATCH(lists:usort(fun(A, B) -> A >= B end, [1, 2, 3, 4, 3, 5]), [5, 4, 3, 2, 1]),
 
-    ?ASSERT_FAILURE(lists:usort(1), function_clause),
-    ?ASSERT_FAILURE(lists:usort(fun(A, B) -> A > B end, 1), function_clause),
-    ?ASSERT_FAILURE(lists:usort(1, [1]), function_clause),
+    ?ASSERT_ERROR(lists:usort(1), function_clause),
+    ?ASSERT_ERROR(lists:usort(fun(A, B) -> A > B end, 1), function_clause),
+    ?ASSERT_ERROR(lists:usort(1, [1]), function_clause),
 
     ok.
 

@@ -544,9 +544,7 @@ validate_level(Level) when
         Level == info orelse
         Level == debug
 ->
-    Level;
-validate_level(Level) ->
-    throw({unsupported_level, Level}).
+    Level.
 
 %% @private
 to_int_level(emergency) ->
