@@ -161,7 +161,7 @@ For information about how to flash your application to your ESP32, see the [Atom
 
 ## Getting Started on the STM32 platform
 
-AtomVM can run on a wide variety of STM32 chip-sets available from [STMicroelectronics](https://www.st.com). The support is not nearly as mature as for the ESP32 platform, but work is ongoing, and pull requests are always welcome. At this time AtomVM will work on any board with a minimum of around 128k ram and 512k (1M recommended) flash. Simple applications and tests have been successfully run on a stm32f411ceu6 (A.K.A. Black Pill V2). These minimum requirements may need to be raised as platform support matures.
+AtomVM can run on a wide variety of STM32 chip-sets available from [STMicroelectronics](https://www.st.com). The support is not nearly as mature as for the ESP32 platform, but work is ongoing, and pull requests are always welcome. At this time AtomVM will work on any board with a minimum of around 128KB ram and 512KB (1M recommended) flash. Simple applications and tests have been successfully run on a stm32f411ceu6 (A.K.A. Black Pill V2). These minimum requirements may need to be raised as platform support matures.
 
 ### Requirements
 
@@ -196,15 +196,17 @@ To flash your image, use the following command:
 
 Congratulations!  You have now flashed the AtomVM VM image onto your STM32 device!
 
-> Note. AtomVM expects to find the AVM at the address 0x808000. On a STM32 Discovery board this means that the 1MB of flash will be split in 512KB available for the program and 512KB available for the packed AVM. If for any reason you want to modify this, you can change `AVM_ADDRESS` and `AVM_FLASH_MAX_SIZE` defines in `main.c`.
+> Note. AtomVM expects to find the AVM at the address 0x8080000. On a STM32 Discovery board this means that the 1MB of flash will be split in 512KB available for the program and 512KB available for the packed AVM. For devices with only 512KB of flash the application address is 0x8060000, leaving 128KB of application flash available.
 
 #### Printing
 
 By default, stdout and stderr are printed on USART2. On the STM32F4Discovery board, you can see them using a TTL-USB with the TX pin connected to board's pin PA2 (USART2 RX). Baudrate is 115200 and serial transmission is 8N1 with no flow control.
 
+For Nucleo boards the on board USB-COM to USART may be used by configuring your build with a BOARD parameter, see the [STM32 Build Instructions](./build-instructions.md#building-for-stm32) for [Configuring the Console](./build-instructions.md#configuring-the-console).
+
 ### Deploying an AtomVM application
 
-An AtomVM application is a collection of BEAM files, which have been compiled using the Erlang or Elixir compiler.  These BEAM files are assembled into an AtomVM "packbeam" (`.avm`) file, which in turn is flashed to the `main` data partition on the STM32 flash module, starting at address `0x210000`.
+An AtomVM application is a collection of BEAM files, which have been compiled using the Erlang or Elixir compiler.  These BEAM files are assembled into an AtomVM "packbeam" (`.avm`) file, which in turn is flashed to the `main` data partition on the STM32 flash module, starting at address `0x8080000`, for boards with 512KB of flash the address is `0x8060000`.
 
 When the AtomVM virtual machine starts, it will search for the first module that contains an exported `start/0` function in this partition, and it will begin execution of the BEAM bytecode at that function.
 

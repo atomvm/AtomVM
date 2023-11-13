@@ -39,13 +39,17 @@
 #include <utils.h>
 #include <version.h>
 
+#include "lib/avm_devcfg.h"
 #include "lib/avm_log.h"
 #include "lib/stm_sys.h"
 
-#define USART_CONSOLE USART2
-#define AVM_ADDRESS (0x8080000)
-#define AVM_FLASH_MAX_SIZE (0x80000)
-#define CLOCK_FREQUENCY (168000000)
+#define USART_CONSOLE (AVM_CONSOLE)
+#define USART_TX (AVM_CONSOLE_TX)
+#define USART_GPIO (AVM_CONSOLE_GPIO)
+#define USART_RCC (AVM_CONSOLE_RCC)
+#define AVM_ADDRESS (AVM_APP_ADDRESS)
+#define AVM_FLASH_END (CFG_FLASH_END)
+#define CLOCK_FREQUENCY (AVM_CLOCK_HZ)
 
 #define TAG "AtomVM"
 
@@ -70,21 +74,21 @@ int _kill(pid_t pid, int sig);
 
 static void clock_setup()
 {
-    // Use external clock, set divider for 168 MHz clock frequency
-    rcc_clock_setup_pll(&rcc_hse_8mhz_3v3[RCC_CLOCK_3V3_168MHZ]);
+    // Setup external clock, set divider for device clock frequency
+    rcc_clock_setup_pll(AVM_CLOCK_CONFIGURATION);
 }
 
 static void usart_setup(GlobalContext *glb)
 {
-    // Enable clock for USART2
-    rcc_periph_clock_enable(RCC_USART2);
+    // Enable clock for USART
+    rcc_periph_clock_enable(USART_RCC);
 
-    // Setup GPIO pins for USART2 transmit
-    gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO2);
-    sys_lock_pin(glb, GPIOA, GPIO2);
+    // Setup GPIO pins for USART transmit
+    gpio_mode_setup(USART_GPIO, GPIO_MODE_AF, GPIO_PUPD_NONE, USART_TX);
+    sys_lock_pin(glb, USART_GPIO, USART_TX);
 
-    // Setup USART2 TX pin as alternate function
-    gpio_set_af(GPIOA, GPIO_AF7, GPIO2);
+    // Setup USART TX pin as alternate function
+    gpio_set_af(USART_GPIO, GPIO_AF7, USART_TX);
 
     usart_set_baudrate(USART_CONSOLE, 115200);
     usart_set_databits(USART_CONSOLE, 8);
@@ -103,7 +107,7 @@ static void systick_setup()
 {
     // ((clock rate / 1000) - 1) to get 1ms interrupt rate
     systick_set_clocksource(STK_CSR_CLKSOURCE_AHB);
-    systick_set_reload((CLOCK_FREQUENCY / 1000) - 1);
+    systick_set_reload((CLOCK_FREQUENCY / 1000U) - 1U);
     systick_clear();
     systick_counter_enable();
     systick_interrupt_enable();
@@ -172,13 +176,13 @@ int main()
     AVM_LOGD(TAG, "Using usart mapped at register 0x%x for stdout/stderr.", USART_CONSOLE);
 
     const void *flashed_avm = (void *) AVM_ADDRESS;
-    uint32_t size = AVM_FLASH_MAX_SIZE;
+    uint32_t size = (AVM_FLASH_END - AVM_ADDRESS);
 
     uint32_t startup_beam_size;
     const void *startup_beam;
     const char *startup_module_name;
 
-    AVM_LOGD(TAG, "Maximum application size: %lu", size);
+    AVM_LOGD(TAG, "Maximum application size: %lu KiB", (size / 1024));
 
     port_driver_init_all(glb);
     nif_collection_init_all(glb);
@@ -188,6 +192,7 @@ int main()
         AVM_ABORT();
     }
     AVM_LOGI(TAG, "Booting file mapped at: %p, size: %lu", flashed_avm, startup_beam_size);
+    AVM_LOGD(TAG, "Free application flash space: %lu KiB", ((size - startup_beam_size) / 1024));
 
     struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
     if (IS_NULL_PTR(avmpack_data)) {

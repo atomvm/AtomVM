@@ -505,10 +505,10 @@ The following software is required to build AtomVM for the STM32 platform:
 * `cmake`
 * `make`
 * `git`
+* `python`
+* Erlang/OTP `escript`
 
 > Note.  AtomVM tests this build on the latest Ubuntu github runner.
-
-
 
 ### Setup libopencm3
 
@@ -530,12 +530,30 @@ Before building for the first time you need to have a compiled clone of the libo
 ### Changing device
 
 The default build is based on the STM32F4Discovery board chip (`stm32f407vgt6`). If you want to target a different
-chip, pass the `-DDEVICE` flag when invoking cmake. For example, to use the STM32F429Discovery, pass
-`-DDEVICE=stm32f429zit6`
+chip, pass the `-DDEVICE` flag when invoking cmake. For example, to use the BlackPill V2.0, pass `-DDEVICE=STM32F411CEU6`. At this time any `STM32F4` or `STM32F7` device with 512KB or more of on package flash should work with AtomVM. If an unsupported device is passed with the `DEVICE` parameter the configuration will fail. For devices with either 512KB or 768KB of flash the available application flash space will be limited to 128KB. Devices with only 512KB of flash may also suffer from slightly reduced performance because the compiler must optimize for size rather than performance.
 
-If you are building for a different target board the `CLOCK_FREQUENCY` definition in main.c will need to be changed to match the clock frequency (in hertz) of your cpu.
+>Important Note: for devices with only 512KB of flash the application address is different and must be adjusted when flashing your application with st-flash, or using the recommended `atomvm_rebar3_plugin`. The application address for these devices is `0x8060000`.
 
-The rcc_clock_setup_XXX_XXX will also need to be changed to match your particular chip-set. Consult [ST's documentation](https://www.st.com/en/microcontrollers-microprocessors/stm32-32-bit-arm-cortex-mcus.html) for appropriate settings.
+### Configuring the Console
+
+The default build for any `DEVICE` will use `USART2` and output will be on `PA2`. This default will work well for most `Discovery` and generic boards that do not have an on-board TTL to USB-COM support (including the `STM32F411CEU6` A.K.A. `BlackPill V2.0`). For `Nucleo` boards that do have on board UART to USB-COM support you may pass the `cmake` parameter `-DBOARD=nucleo` to have the correct USART and TX pins configured automatically. The `Nucleo-144` series use `USART3` and `PD8`, while the supported `Nucleo-64` boards use `USART2`, but passing the `BOARD` parameter along with `DEVICE` will configure the correct `USART` for your model. If any other boards are discovered to have on board USB UART support pull requests, or opening issues with the details, are more than welcome.
+
+Example to configure a `NUCLEO-F429ZI`:
+
+    $ cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/arm-toolchain.cmake -DDEVICE=stm32f429zit6 -DBOARD=nucleo
+
+The AtomVM system console `USART` may also be configured to a specific uart peripheral. Pass one of the parameters from the chart below with the `cmake` option `-DAVM_CFG_CONSOLE=CONSOLE_#`, using the desired console parameter in place of `CONSOLE_#`. Not all UARTs are available on every supported board, but most will have several options that are not already used by other on board peripherals. Consult your data sheets for your device to select an appropriate console.
+
+| Parameter | USART | TX Pin | AtomVM Default | Nucleo-144 | Nucleo-64 |
+|-----------|-------|--------|----------------|------------|-----------|
+| `CONSOLE_1` | `USART1` | `PA9` |   |   |   |
+| `CONSOLE_2` | `USART2` | `PA2` | ✅ |   | ✅ |
+| `CONSOLE_3` | `USART3` | `PD8` |   | ✅ |   |
+| `CONSOLE_4` | `UART4` | `PC10` |   |   |   |
+| `CONSOLE_5` | `UART5` | `PC12` |   |   |   |
+| `CONSOLE_6` | `USART6` | `PC6` |   |   |   |
+| `CONSOLE_7` | `UART7` | `PF7` |   |   |   |
+| `CONSOLE_8` | `UART8` | `PJ8` |   |   |   |
 
 ### Configure logging with `cmake`
 The default maximum log level is `LOG_INFO`. To change the maximum level displayed pass `-DAVM_LOG_LEVEL_MAX="{level}"` to `cmake`, with one of `LOG_ERROR`, `LOG_WARN`, `LOG_INFO`, or `LOG_DEBUG` (listed from least to most verbose). Log messages can be completely disabled by using `-DAVM_LOG_DISABLE=on`.
@@ -558,7 +576,7 @@ By default, stdout and stderr are printed on USART2. On the STM32F4Discovery boa
 using a TTL-USB with the TX pin connected to board's pin PA2 (USART2 RX). Baudrate is 115200 and serial transmission
 is 8N1 with no flow control.
 
-> If building for a different target USART and gpio pins may need to be adjusted in `main.c`.
+> If building for a different target USART may be configure as explained above in [Configuring the Console](#configuring-the-console).
 
 ### Configuring for "deployment"
 After your application has been tested (_and debugged_) and is ready to put into active use you may want to tune the build of AtomVM.  For instance disabling logging with `-DAVM_LOG_DISABLE=on` as a `cmake` configuration option may result in slightly better performance. This will have no affect on the console output of your application, just disable low level log messages from the AtomVM system. You may also want to enabling automatic reboot in the case that your application ever exits with a return other than `ok`. This can be enabled with the `cmake` option `-DAVM_CONFIG_REBOOT_ON_NOT_OK=on`.

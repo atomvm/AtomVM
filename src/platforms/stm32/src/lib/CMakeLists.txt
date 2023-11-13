@@ -22,6 +22,7 @@ cmake_minimum_required (VERSION 3.13)
 project (libAtomVMPlatformSTM32)
 
 set(HEADER_FILES
+    avm_devcfg.h
     avm_log.h
     gpio_driver.h
     stm_sys.h

@@ -79,6 +79,7 @@ if (NOT CMAKE_TOOLCHAIN_FILE)
     message(FATAL_ERROR "Cross compiling only. Please use -DCMAKE_TOOLCHAIN_FILE=cmake/arm-toolchain.cmake or use\
     your own toolchain file")
 endif ()
+mark_as_advanced(CMAKE_TOOLCHAIN_FILE)
 
 if ((NOT ${CMAKE_C_COMPILER_ID} STREQUAL "GNU") OR
     (NOT ${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU") OR
@@ -92,6 +93,9 @@ endif()
 if (NOT DEVICE)
     set(DEVICE stm32f407vgt6)
 endif ()
+
+# Include auto-device configuration
+include(cmake/atomvm_dev_config.cmake)
 
 # Include libopencm3
 include(cmake/libopencm3.cmake)

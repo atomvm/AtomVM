@@ -28,6 +28,8 @@ find_program(ARM_CXX arm-none-eabi-g++)
 find_program(ARM_OBJCOPY arm-none-eabi-objcopy)
 find_program(ARM_SIZE arm-none-eabi-size)
 
+mark_as_advanced(ARM_CC ARM_CXX ARM_OBJCOPY ARM_SIZE)
+
 SET(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 set(CMAKE_C_COMPILER ${ARM_CC})
 set(CMAKE_CXX_COMPILER ${ARM_CXX})
