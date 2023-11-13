@@ -74,9 +74,7 @@ enum HeapGrowthStrategy
     FibonacciHeapGrowth
 };
 
-// Max number of x(N) & fr(N) registers
-// BEAM sets this to 1024.
-#define MAX_REG 16
+#define MAX_REG 1024
 
 struct Context
 {
@@ -84,7 +82,10 @@ struct Context
     GlobalContext *global;
     Heap heap;
     term *e;
-    term x[MAX_REG];
+    term *saved_x;
+    avm_float_t *fr;
+    uint16_t xregs_count;
+    uint16_t fpregs_count;
 
     struct ListHead processes_list_head;
 
@@ -94,8 +95,6 @@ struct Context
     struct TimerListItem timer_list_head;
 
     struct ListHead monitors_head;
-
-    avm_float_t *fr;
 
     size_t min_heap_size;
     size_t max_heap_size;
@@ -189,18 +188,69 @@ Context *context_new(GlobalContext *glb);
 void context_destroy(Context *c);
 
 /**
- * @brief Ensure we have FP registers, allocating them if necessary.
- * @param c context fo allocate FP registers for
+ * @brief Ensure at least a given number of FP registers are available,
+ * allocating them if necessary.
+ * @param c context to allocate FP registers for
+ * @param n_regs number of registers to allocate
  */
-static inline void context_ensure_fpregs(Context *c)
+static inline void context_ensure_fpregs(Context *c, uint16_t n_regs)
 {
-    if (UNLIKELY(c->fr == NULL)) {
-        c->fr = (avm_float_t *) malloc(sizeof(avm_float_t) * MAX_REG);
-        if (UNLIKELY(c->fr == NULL)) {
-            fprintf(stderr, "Could not allocate FP registers\n");
-            AVM_ABORT();
+    if (n_regs > c->fpregs_count) {
+        size_t new_size = sizeof(avm_float_t) * n_regs;
+        if (IS_NULL_PTR(c->fr)) {
+            c->fr = (avm_float_t *) malloc(new_size);
+            if (IS_NULL_PTR(c->fr)) {
+                fprintf(stderr, "Could not allocate FP registers\n");
+                AVM_ABORT();
+            }
+        } else {
+            c->fr = realloc(c->fr, new_size);
+            if (IS_NULL_PTR(c->fr)) {
+                fprintf(stderr, "Could not allocate FP registers\n");
+                AVM_ABORT();
+            }
+        }
+        c->fpregs_count = n_regs;
+    }
+}
+
+/**
+ * @brief Saved registers before context switching.
+ * @param c context to save registers to
+ * @param x_regs registers to save
+ * @param n_regs number of registers to save
+ */
+static inline void context_save_xregs(Context *c, term *x_regs, uint16_t n_regs)
+{
+    size_t new_size = sizeof(term) * n_regs;
+    if (n_regs > c->xregs_count) {
+        if (UNLIKELY(c->saved_x == NULL)) {
+            c->saved_x = (term *) malloc(new_size);
+            if (IS_NULL_PTR(c->saved_x)) {
+                fprintf(stderr, "Could not allocate X registers\n");
+                AVM_ABORT();
+            }
+        } else {
+            c->saved_x = realloc(c->saved_x, new_size);
+            if (IS_NULL_PTR(c->saved_x)) {
+                fprintf(stderr, "Could not allocate X registers\n");
+                AVM_ABORT();
+            }
         }
     }
+    memcpy(c->saved_x, x_regs, new_size);
+    c->xregs_count = n_regs;
+}
+
+/**
+ * @brief Restore registers after context switching.
+ * @param c context to restore registers from
+ * @param x_regs registers to restore
+ */
+static inline void context_restore_xregs(Context *c, term *x_regs)
+{
+    size_t size = sizeof(term) * c->xregs_count;
+    memcpy(x_regs, c->saved_x, size);
 }
 
 /**
@@ -225,20 +275,6 @@ int context_execute_loop(Context *ctx, Module *mod, const char *function_name, i
 static inline int context_is_port_driver(const Context *ctx)
 {
     return ctx->native_handler != NULL;
-}
-
-/**
- * @brief Cleans up unused registers
- *
- * @details Sets to NIL unused registers, x[0] - x[live - 1] will not be overwritten.
- * @param ctx a valid context
- * @param live number of used registers
- */
-static inline void context_clean_registers(Context *ctx, int live)
-{
-    for (int i = live; i < MAX_REG; i++) {
-        ctx->x[i] = term_nil();
-    }
 }
 
 /**
@@ -368,19 +404,21 @@ void context_process_process_info_request_signal(Context *ctx, struct BuiltInAto
  * @brief Process a trap answer signal.
  *
  * @param ctx the context being executed
+ * @param x_regs the current x registers
  * @param signal the answer message
  * @return \c true if successful, \c false in case of memory error
  */
-bool context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal);
+bool context_process_signal_trap_answer(Context *ctx, term *x_regs, struct TermSignal *signal);
 
 /**
  * @brief Process a flush monitor signal.
  *
  * @param ctx the context being executed
+ * @param x_regs the current x registers
  * @param ref_ticks the monitor reference
  * @param info whether to return FALSE_ATOM if no message was flushed.
  */
-void context_process_flush_monitor_signal(Context *ctx, uint64_t ref_ticks, bool info);
+void context_process_flush_monitor_signal(Context *ctx, term *x_regs, uint64_t ref_ticks, bool info);
 
 /**
  * @brief Get process information.

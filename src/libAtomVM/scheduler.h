@@ -113,6 +113,7 @@ void scheduler_cancel_timeout(Context *ctx);
  * @brief Entry point for schedulers.
  *
  * @param glb the global context.
+ * @return the result of the execution, 0 on success and 1 on error
  */
 int scheduler_entry_point(GlobalContext *glb);
 

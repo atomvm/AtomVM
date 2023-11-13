@@ -275,7 +275,7 @@ int main()
 
     context_execute_loop(ctx, mod, "start", 0);
 
-    term ret_value = ctx->x[0];
+    term ret_value = ctx->saved_x[0];
     char *ret_atom_string = interop_atom_to_string(ctx, ret_value);
     if (ret_atom_string != NULL) {
         AVM_LOGI(TAG, "Exited with return: %s", ret_atom_string);

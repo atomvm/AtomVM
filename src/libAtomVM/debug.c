@@ -76,13 +76,6 @@ COLD_FUNC void debug_dump_memory(Context *ctx, term *start, term *end, const cha
     fprintf(stderr, "DEBUG:\n");
 }
 
-COLD_FUNC void debug_dump_context(Context *ctx)
-{
-    debug_dump_heap(ctx);
-    debug_dump_stack(ctx);
-    debug_dump_registers(ctx);
-}
-
 COLD_FUNC void debug_dump_heap(Context *ctx)
 {
     debug_dump_memory(ctx, ctx->heap.heap_start, ctx->heap.heap_ptr, "heap");
@@ -92,11 +85,6 @@ COLD_FUNC void debug_dump_stack(Context *ctx)
 {
     term *stack_base = context_stack_base(ctx);
     debug_dump_memory(ctx, ctx->e, stack_base, "stack");
-}
-
-COLD_FUNC void debug_dump_registers(Context *ctx)
-{
-    debug_dump_memory(ctx, ctx->x, ctx->x + 16, "register");
 }
 
 COLD_FUNC void debug_print_processes_list(struct ListHead *processes)
@@ -127,6 +115,9 @@ COLD_FUNC char reg_type_c(int reg_type)
 
         case 4:
             return 'y';
+
+        case 11:
+            return 'x';
 
         case 12:
             return 'y';

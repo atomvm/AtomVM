@@ -252,7 +252,7 @@ static bool get_register_callback_parameters(Context *ctx, int argc, term argv[]
     return true;
 }
 
-static term term_from_emscripten_result(EMSCRIPTEN_RESULT em_result, Context *ctx)
+static term term_from_emscripten_result(EMSCRIPTEN_RESULT em_result, Context *ctx, term argv[])
 {
     if (em_result == EMSCRIPTEN_RESULT_SUCCESS) {
         return OK_ATOM;
@@ -677,7 +677,7 @@ static EM_BOOL html5api_touch_callback(int eventType, const EmscriptenTouchEvent
         resource->event = event_constant;                                                                                                                                                \
         EMSCRIPTEN_RESULT result = emscripten_set_##callback##_callback_on_thread(target, resource, use_capture, html5api_##event_type##_callback, emscripten_main_runtime_thread_id()); \
         if (result != EMSCRIPTEN_RESULT_SUCCESS && result != EMSCRIPTEN_RESULT_DEFERRED) {                                                                                               \
-            return term_from_emscripten_result(result, ctx);                                                                                                                             \
+            return term_from_emscripten_result(result, ctx, argv);                                                                                                                       \
         }                                                                                                                                                                                \
         term resource_term = enif_make_resource(erl_nif_env_from_context(ctx), resource);                                                                                                \
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(3), 1, &resource_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {                                                         \
@@ -713,7 +713,7 @@ static EM_BOOL html5api_touch_callback(int eventType, const EmscriptenTouchEvent
         }                                                                                                                                                                                \
         EMSCRIPTEN_RESULT result = emscripten_set_##callback##_callback_on_thread(target, NULL, false, NULL, emscripten_main_runtime_thread_id());                                       \
         free(str);                                                                                                                                                                       \
-        return term_from_emscripten_result(result, ctx);                                                                                                                                 \
+        return term_from_emscripten_result(result, ctx, argv);                                                                                                                           \
     }                                                                                                                                                                                    \
     static const struct Nif emscripten_unregister_##callback##_callback_nif = {                                                                                                          \
         .base.type = NIFFunctionType,                                                                                                                                                    \

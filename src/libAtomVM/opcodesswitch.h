@@ -60,6 +60,7 @@
 #define COMPACT_LARGE_LITERAL 8
 #define COMPACT_LARGE_INTEGER 9
 #define COMPACT_LARGE_ATOM 10
+#define COMPACT_LARGE_XREG 11
 #define COMPACT_LARGE_YREG 12
 
 // OTP-20+ format
@@ -82,7 +83,7 @@
 #define SET_ERROR(error_type_atom)                                      \
     x_regs[0] = ERROR_ATOM;                                             \
     x_regs[1] = error_type_atom;                                        \
-    x_regs[2] = stacktrace_create_raw(ctx, mod, pc - code, ERROR_ATOM);
+    x_regs[2] = stacktrace_create_raw(ctx, x_regs, mod, pc - code, ERROR_ATOM);
 
 // Override nifs.h RAISE_ERROR macro
 #ifdef RAISE_ERROR
@@ -95,6 +96,10 @@
 #define VM_ABORT() \
     goto do_abort;
 
+#endif
+
+#ifndef MAX
+#define MAX(x, y) (x) > (y) ? (x) : (y)
 #endif
 
 #ifdef IMPL_CODE_LOADER
@@ -218,6 +223,7 @@ typedef dreg_t dreg_gc_safe_t;
             }                                                                           \
             break;                                                                      \
                                                                                         \
+        case COMPACT_LARGE_XREG:                                                        \
         case COMPACT_LARGE_YREG:                                                        \
             (decode_pc)++;                                                              \
             break;                                                                      \
@@ -257,6 +263,7 @@ typedef dreg_t dreg_gc_safe_t;
         case COMPACT_YREG:                                                                          \
             (dreg).index = first_byte >> 4;                                                         \
              break;                                                                                 \
+        case COMPACT_LARGE_XREG:                                                                    \
         case COMPACT_LARGE_YREG:                                                                    \
             (dreg).index = (((first_byte & 0xE0) << 3) | *(decode_pc)++);                           \
             break;                                                                                  \
@@ -278,6 +285,7 @@ typedef dreg_t dreg_gc_safe_t;
         case COMPACT_XREG:                                                                          \
         case COMPACT_YREG:                                                                          \
             break;                                                                                  \
+        case COMPACT_LARGE_XREG:                                                                    \
         case COMPACT_LARGE_YREG:                                                                    \
             (decode_pc)++;                                                                          \
             break;                                                                                  \
@@ -567,7 +575,7 @@ typedef struct
                                                                                                                         \
                 case COMPACT_NBITS_VALUE: {                                                                             \
                     size_t num_bytes = (first_byte >> 5) + 2;                                                           \
-                    dest_term = large_integer_to_term(ctx, num_bytes, decode_pc);                                       \
+                    dest_term = large_integer_to_term(ctx, x_regs, num_bytes, decode_pc);                               \
                     if (UNLIKELY(term_is_invalid_term(dest_term))) {                                                    \
                         HANDLE_ERROR();                                                                                 \
                     }                                                                                                   \
@@ -577,6 +585,14 @@ typedef struct
                 default:                                                                                                \
                     VM_ABORT();                                                                                         \
                     break;                                                                                              \
+            }                                                                                                           \
+            break;                                                                                                      \
+                                                                                                                        \
+        case COMPACT_LARGE_XREG:                                                                                        \
+            if (LIKELY((first_byte & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE)) {                                \
+                dest_term = x_regs[((first_byte & 0xE0) << 3) | *(decode_pc)++];                                        \
+            } else {                                                                                                    \
+                VM_ABORT();                                                                                             \
             }                                                                                                           \
             break;                                                                                                      \
                                                                                                                         \
@@ -635,9 +651,18 @@ typedef struct
         case COMPACT_YREG:                                                                                      \
             (dreg) = ctx->e + reg_index;                                                                        \
             break;                                                                                              \
+        case COMPACT_LARGE_XREG:                                                                                \
+            if (LIKELY((first_byte & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE)) {                        \
+                uint16_t large_reg_index = (((first_byte & 0xE0) << 3) | *(decode_pc)++);                       \
+                (dreg) = x_regs + large_reg_index;                                                              \
+            } else {                                                                                            \
+                VM_ABORT();                                                                                     \
+            }                                                                                                   \
+            break;                                                                                              \
         case COMPACT_LARGE_YREG:                                                                                \
             if (LIKELY((first_byte & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE)) {                        \
-                (dreg) = ctx->e + (((first_byte & 0xE0) << 3) | *(decode_pc)++);                                \
+                uint16_t large_reg_index = (((first_byte & 0xE0) << 3) | *(decode_pc)++);                       \
+                (dreg) = ctx->e + large_reg_index;                                                              \
             } else {                                                                                            \
                 VM_ABORT();                                                                                     \
             }                                                                                                   \
@@ -661,10 +686,20 @@ typedef struct
             (dreg_gc_safe).base = ctx->e;                                                                       \
             (dreg_gc_safe).index = reg_index;                                                                   \
             break;                                                                                              \
+        case COMPACT_LARGE_XREG:                                                                                \
+            if (LIKELY((first_byte & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE)) {                        \
+                uint16_t large_reg_index = (((first_byte & 0xE0) << 3) | *(decode_pc)++);                       \
+                (dreg_gc_safe).base = x_regs;                                                                   \
+                (dreg_gc_safe).index = large_reg_index;                                                         \
+            } else {                                                                                            \
+                VM_ABORT();                                                                                     \
+            }                                                                                                   \
+            break;                                                                                              \
         case COMPACT_LARGE_YREG:                                                                                \
             if (LIKELY((first_byte & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE)) {                        \
+                uint16_t large_reg_index = (((first_byte & 0xE0) << 3) | *(decode_pc)++);                       \
                 (dreg_gc_safe).base = ctx->e;                                                                   \
-                (dreg_gc_safe).index = (((first_byte & 0xE0) << 3) | *(decode_pc)++);                           \
+                (dreg_gc_safe).index = large_reg_index;                                                         \
             } else {                                                                                            \
                 VM_ABORT();                                                                                     \
             }                                                                                                   \
@@ -674,21 +709,11 @@ typedef struct
     }                                                                                                           \
 }
 
-// MAX_REG is enforced at decode time
-#if MAX_REG <= 16
-#define DECODE_FP_REGISTER(freg, decode_pc)                                                         \
-{                                                                                                   \
-    (decode_pc)++;                                                                                  \
-    uint8_t first_byte = *(decode_pc)++;                                                            \
-    freg = first_byte >> 4;                                                                         \
-}
-#else
 #define DECODE_FP_REGISTER(freg, decode_pc)                                                         \
 {                                                                                                   \
     (decode_pc)++;                                                                                  \
     DECODE_LITERAL(freg, decode_pc);                                                                \
 }
-#endif
 
 #define DECODE_VALUE(val, decode_pc)                                                                \
 {                                                                                                   \
@@ -732,17 +757,8 @@ typedef struct
 #define DECODE_INTEGER(integer, decode_pc) \
     DECODE_VALUE(integer, decode_pc)
 
-// MAX_REG is enforced at decode time
-#if MAX_REG <= 16
-#define DECODE_XREG(reg, decode_pc)                                                                 \
-{                                                                                                   \
-    uint8_t first_byte = *(decode_pc)++;                                                            \
-    reg = first_byte >> 4;                                                                          \
-}
-#else
 #define DECODE_XREG(reg, decode_pc)                                                                 \
     DECODE_VALUE(reg, decode_pc)
-#endif
 
 #define DECODE_YREG(reg, decode_pc) \
     DECODE_VALUE(reg, decode_pc)
@@ -798,6 +814,7 @@ typedef struct
     {                                                                                             \
         ctx->saved_ip = restore_to;                                                               \
         ctx->saved_module = restore_mod;                                                          \
+        context_save_xregs(ctx, x_regs, live);                                                    \
         ctx = scheduler_next(ctx->global, ctx);                                                   \
         goto schedule_in;                                                                         \
     }
@@ -832,7 +849,7 @@ typedef struct
                 case TrapAnswerSignal: {                                                        \
                     struct TermSignal *trap_answer                                              \
                         = CONTAINER_OF(signal_message, struct TermSignal, base);                \
-                    if (UNLIKELY(!context_process_signal_trap_answer(ctx, trap_answer))) {      \
+                    if (UNLIKELY(!context_process_signal_trap_answer(ctx, x_regs, trap_answer))) { \
                         SET_ERROR(OUT_OF_MEMORY_ATOM);                                          \
                         next_label = &&handle_error;                                            \
                     }                                                                           \
@@ -850,7 +867,7 @@ typedef struct
                     struct RefSignal *flush_signal                                              \
                         = CONTAINER_OF(signal_message, struct RefSignal, base);                 \
                     bool info = signal_message->type == FlushInfoMonitorSignal;                 \
-                    context_process_flush_monitor_signal(ctx, flush_signal->ref_ticks, info);   \
+                    context_process_flush_monitor_signal(ctx, x_regs, flush_signal->ref_ticks, info);   \
                     break;                                                                      \
                 }                                                                               \
                 case NormalMessage: {                                                           \
@@ -917,8 +934,9 @@ typedef struct
         pc = code + ((ctx->cp & 0xFFFFFF) >> 2);                        \
     }
 
+
 #define HANDLE_ERROR()                                                  \
-    x_regs[2] = stacktrace_create_raw(ctx, mod, pc - code, x_regs[0]);  \
+    x_regs[2] = stacktrace_create_raw(ctx, x_regs, mod, pc - code, x_regs[0]);  \
     goto handle_error;
 
 #define VERIFY_IS_INTEGER(t, opcode_name)                  \
@@ -1145,7 +1163,7 @@ COLD_FUNC static void cp_to_mod_lbl_off(term cp, Context *ctx, Module **cp_mod, 
     *l_off = mod_offset - (mod->labels[*label] - code);
 }
 
-COLD_FUNC static void dump(Context *ctx)
+COLD_FUNC static void dump(Context *ctx, term *x_regs)
 {
     fprintf(stderr, "CRASH \n======\n");
 
@@ -1154,7 +1172,7 @@ COLD_FUNC static void dump(Context *ctx)
     fprintf(stderr, "\n");
 
     fprintf(stderr, "\nStacktrace:\n");
-    term_display(stderr, stacktrace_build(ctx, &ctx->x[2], 3), ctx);
+    term_display(stderr, stacktrace_build(ctx, x_regs, &x_regs[2], 3), ctx);
     fprintf(stderr, "\n\n");
 
     {
@@ -1167,11 +1185,11 @@ COLD_FUNC static void dump(Context *ctx)
     }
 
     fprintf(stderr, "x[0]: ");
-    term_display(stderr, ctx->x[0], ctx);
+    term_display(stderr, x_regs[0], ctx);
     fprintf(stderr, "\nx[1]: ");
-    term_display(stderr, ctx->x[1], ctx);
+    term_display(stderr, x_regs[1], ctx);
     fprintf(stderr, "\nx[2]: ");
-    term_display(stderr, ctx->x[2], ctx);
+    term_display(stderr, x_regs[2], ctx);
     fprintf(stderr, "\n\nStack \n------\n\n");
 
     term *ct = ctx->e;
@@ -1224,13 +1242,13 @@ COLD_FUNC static void dump(Context *ctx)
     fprintf(stderr, "\n\n**End Of Crash Report**\n");
 }
 
-static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
+static term maybe_alloc_boxed_integer_fragment(Context *ctx, term *x_regs, avm_int64_t value)
 {
 #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
     if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
         if (UNLIKELY(memory_ensure_free_opt(ctx, BOXED_INT64_SIZE, MEMORY_NO_GC) != MEMORY_GC_OK)) {
-            ctx->x[0] = ERROR_ATOM;
-            ctx->x[1] = OUT_OF_MEMORY_ATOM;
+            x_regs[0] = ERROR_ATOM;
+            x_regs[1] = OUT_OF_MEMORY_ATOM;
             return term_invalid_term();
         }
         return term_make_boxed_int64(value, &ctx->heap);
@@ -1238,8 +1256,8 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 #endif
     if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
         if (UNLIKELY(memory_ensure_free_opt(ctx, BOXED_INT_SIZE, MEMORY_NO_GC) != MEMORY_GC_OK)) {
-            ctx->x[0] = ERROR_ATOM;
-            ctx->x[1] = OUT_OF_MEMORY_ATOM;
+            x_regs[0] = ERROR_ATOM;
+            x_regs[1] = OUT_OF_MEMORY_ATOM;
             return term_invalid_term();
         }
         return term_make_boxed_int(value, &ctx->heap);
@@ -1248,34 +1266,34 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
     }
 }
 
-static inline term maybe_alloc_boxed_integer_fragment_helper(Context *ctx, avm_int64_t value, unsigned int bytes_count)
+static inline term maybe_alloc_boxed_integer_fragment_helper(Context *ctx, term *x_regs, avm_int64_t value, unsigned int bytes_count)
 {
     if (bytes_count < sizeof(avm_int_t)) {
         return term_from_int(value);
     } else {
-        return maybe_alloc_boxed_integer_fragment(ctx, value);
+        return maybe_alloc_boxed_integer_fragment(ctx, x_regs, value);
     }
 }
 
-static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *compact_term)
+static term large_integer_to_term(Context *ctx, term *x_regs, int num_bytes, const uint8_t *compact_term)
 {
     switch (num_bytes) {
         case 2: {
             int16_t ret_val16 = ((int16_t) compact_term[0]) << 8 | compact_term[1];
-            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val16, 2);
+            return maybe_alloc_boxed_integer_fragment_helper(ctx, x_regs, ret_val16, 2);
         }
 
         case 3: {
             struct Int24 ret_val24;
             ret_val24.val24 = ((int32_t) compact_term[0]) << 16 | ((int32_t) compact_term[1] << 8) | compact_term[2];
-            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val24.val24, 3);
+            return maybe_alloc_boxed_integer_fragment_helper(ctx, x_regs, ret_val24.val24, 3);
         }
 
         case 4: {
             int32_t ret_val32;
             ret_val32 = ((int32_t) compact_term[0]) << 24 | ((int32_t) compact_term[1] << 16)
                 | ((int32_t) compact_term[2] << 8) | compact_term[3];
-            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val32, 4);
+            return maybe_alloc_boxed_integer_fragment_helper(ctx, x_regs, ret_val32, 4);
         }
 
         case 5: {
@@ -1284,7 +1302,7 @@ static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *co
                 | ((int64_t) compact_term[2] << 16) | ((int64_t) compact_term[3] << 8)
                 | (int64_t) compact_term[4];
 
-            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val40.val40, 5);
+            return maybe_alloc_boxed_integer_fragment_helper(ctx, x_regs, ret_val40.val40, 5);
         }
 
         case 6: {
@@ -1293,7 +1311,7 @@ static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *co
                 | ((int64_t) compact_term[2] << 24) | ((int64_t) compact_term[3] << 16)
                 | ((int64_t) compact_term[4] << 8) | (int64_t) compact_term[5];
 
-            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val48.val48, 6);
+            return maybe_alloc_boxed_integer_fragment_helper(ctx, x_regs, ret_val48.val48, 6);
         }
 
         case 7: {
@@ -1303,7 +1321,7 @@ static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *co
                 | ((int64_t) compact_term[4] << 16) | ((int64_t) compact_term[5] << 8)
                 | (int64_t) compact_term[6];
 
-            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val56.val56, 7);
+            return maybe_alloc_boxed_integer_fragment_helper(ctx, x_regs, ret_val56.val56, 7);
         }
 
         case 8: {
@@ -1313,12 +1331,12 @@ static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *co
                 | ((int64_t) compact_term[4] << 24) | ((int64_t) compact_term[5] << 16)
                 | ((int64_t) compact_term[6] << 8) | (int64_t) compact_term[7];
 
-            return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val64, 8);
+            return maybe_alloc_boxed_integer_fragment_helper(ctx, x_regs, ret_val64, 8);
         }
 
         default:
-            ctx->x[0] = ERROR_ATOM;
-            ctx->x[1] = OVERFLOW_ATOM;
+            x_regs[0] = ERROR_ATOM;
+            x_regs[1] = OVERFLOW_ATOM;
             return term_invalid_term();
     }
 }
@@ -1344,7 +1362,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index, term argv[])
     return ((term) boxed_func) | TERM_BOXED_VALUE_TAG;
 }
 
-static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString function_name, int arity,
+static bool maybe_call_native(Context *ctx, term *x_regs, AtomString module_name, AtomString function_name, int arity,
     term *return_value)
 {
     const struct ExportedFunction *exported_bif = bif_registry_get_handler(module_name, function_name, arity);
@@ -1353,15 +1371,15 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             const struct GCBif *gcbif = EXPORTED_FUNCTION_TO_GCBIF(exported_bif);
             switch (arity) {
                 case 1: {
-                    *return_value = gcbif->gcbif1_ptr(ctx, 0, ctx->x[0]);
+                    *return_value = gcbif->gcbif1_ptr(ctx, x_regs, 0, x_regs[0]);
                     return true;
                 }
                 case 2: {
-                    *return_value = gcbif->gcbif2_ptr(ctx, 0, ctx->x[0], ctx->x[1]);
+                    *return_value = gcbif->gcbif2_ptr(ctx, x_regs, 0, x_regs[0], x_regs[1]);
                     return true;
                 }
                 case 3: {
-                    *return_value = gcbif->gcbif3_ptr(ctx, 0, ctx->x[0], ctx->x[1], ctx->x[2]);
+                    *return_value = gcbif->gcbif3_ptr(ctx, x_regs, 0, x_regs[0], x_regs[1], x_regs[2]);
                     return true;
                 }
             }
@@ -1369,15 +1387,15 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(exported_bif);
             switch (arity) {
                 case 0: {
-                    *return_value = bif->bif0_ptr(ctx);
+                    *return_value = bif->bif0_ptr(ctx, x_regs);
                     return true;
                 }
                 case 1: {
-                    *return_value = bif->bif1_ptr(ctx, ctx->x[0]);
+                    *return_value = bif->bif1_ptr(ctx, x_regs, x_regs[0]);
                     return true;
                 }
                 case 2: {
-                    *return_value = bif->bif2_ptr(ctx, ctx->x[0], ctx->x[1]);
+                    *return_value = bif->bif2_ptr(ctx, x_regs, x_regs[0], x_regs[1]);
                     return true;
                 }
             }
@@ -1386,7 +1404,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
     struct Nif *nif = (struct Nif *) nifs_get(module_name, function_name, arity);
     if (nif) {
-        *return_value = nif->nif_ptr(ctx, arity, ctx->x);
+        *return_value = nif->nif_ptr(ctx, arity, x_regs);
         return true;
     }
 
@@ -1394,11 +1412,11 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 }
 
 #ifdef ENABLE_ADVANCED_TRACE
-    static void print_function_args(const Context *ctx, int arity)
+    static void print_function_args(const Context *ctx, term *x_regs, int arity)
     {
         for (int i = 0; i < arity; i++) {
             printf("DBG: <0.%i.0> -- arg%i: ", ctx->process_id, i);
-            term_display(stdout, ctx->x[i], ctx);
+            term_display(stdout, x_regs[i], ctx);
             printf("\n");
         }
     }
@@ -1442,11 +1460,11 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
         }
     }
 
-    static void trace_return(const Context *ctx)
+    static void trace_return(const Context *ctx, term *x_regs)
     {
         if (UNLIKELY(ctx->trace_returns)) {
             printf("DBG: <0.%i.0> - return, value: ", ctx->process_id);
-            term_display(stdout, ctx->x[0], ctx);
+            term_display(stdout, x_regs[0], ctx);
             printf(".\n");
         }
     }
@@ -1565,20 +1583,25 @@ HOT_FUNC int scheduler_entry_point(GlobalContext *glb)
     const uint8_t *code;
     Module *mod;
     Module *prev_mod;
-    term *x_regs;
+    term *x_regs = malloc(MAX_REG * sizeof(term));
     const uint8_t *pc;
     int remaining_reductions;
+    uint32_t live;
 
     Context *ctx = scheduler_run(glb);
 
 // This is where loop starts after context switching.
 schedule_in:
     TRACE("scheduling in, ctx = %p\n", ctx);
-    if (ctx == NULL) return 0;
+    if (ctx == NULL) {
+        free(x_regs);
+        return 0;
+    }
     mod = ctx->saved_module;
     prev_mod = mod;
     code = mod->code->code;
-    x_regs = ctx->x;
+    live = ctx->xregs_count;
+    context_restore_xregs(ctx, x_regs);
     JUMP_TO_ADDRESS(ctx->saved_ip);
     remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;
 
@@ -1597,6 +1620,8 @@ schedule_in:
     SMP_MODULE_LOCK(mod);
     const uint8_t *code = mod->code->code;
     const uint8_t *pc = code;
+    uint32_t live;
+    UNUSED(live);
 #endif
 
     while (1) {
@@ -1667,6 +1692,7 @@ schedule_in:
                         TRACE_CALL(ctx, mod, "call", label, arity);
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
+                        live = MAX(live, arity);
                         SCHEDULE_NEXT(mod, mod->labels[label]);
                     }
                 #endif
@@ -1698,6 +1724,7 @@ schedule_in:
                         TRACE_CALL(ctx, mod, "call_last", label, arity);
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
+                        live = MAX(live, arity);
                         SCHEDULE_NEXT(mod, mod->labels[label]);
                     }
                 #endif
@@ -1720,6 +1747,7 @@ schedule_in:
                         TRACE_CALL(ctx, mod, "call_only", label, arity);
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
+                        live = MAX(live, arity);
                         SCHEDULE_NEXT(mod, mod->labels[label]);
                     }
                 #endif
@@ -1730,14 +1758,16 @@ schedule_in:
                 #ifdef IMPL_EXECUTE_LOOP
                     // save pc in case of error
                     const uint8_t *orig_pc = pc - 1;
-
-                    remaining_reductions--;
-                    if (UNLIKELY(!remaining_reductions)) {
-                        SCHEDULE_NEXT(mod, orig_pc);
-                    }
                 #endif
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc);
+                #ifdef IMPL_EXECUTE_LOOP
+                    remaining_reductions--;
+                    if (UNLIKELY(!remaining_reductions)) {
+                        live = MAX(live, arity);
+                        SCHEDULE_NEXT(mod, orig_pc);
+                    }
+                #endif
                 uint32_t index;
                 DECODE_LITERAL(index, pc);
 
@@ -1781,13 +1811,13 @@ schedule_in:
                             const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(func);
                             switch (arity) {
                                 case 0:
-                                    x_regs[0] = bif->bif0_ptr(ctx);
+                                    x_regs[0] = bif->bif0_ptr(ctx, x_regs);
                                     break;
                                 case 1:
-                                    x_regs[0] = bif->bif1_ptr(ctx, x_regs[0]);
+                                    x_regs[0] = bif->bif1_ptr(ctx, x_regs, x_regs[0]);
                                     break;
                                 case 2:
-                                    x_regs[0] = bif->bif2_ptr(ctx, x_regs[0], x_regs[1]);
+                                    x_regs[0] = bif->bif2_ptr(ctx, x_regs, x_regs[0], x_regs[1]);
                                     break;
                                 default:
                                     fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
@@ -1809,14 +1839,16 @@ schedule_in:
                 #ifdef IMPL_EXECUTE_LOOP
                     // save pc in case of error
                     const uint8_t *orig_pc = pc - 1;
-
-                    remaining_reductions--;
-                    if (UNLIKELY(!remaining_reductions)) {
-                        SCHEDULE_NEXT(mod, orig_pc);
-                    }
                 #endif
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc);
+                #ifdef IMPL_EXECUTE_LOOP
+                    remaining_reductions--;
+                    if (UNLIKELY(!remaining_reductions)) {
+                        live = MAX(live, arity);
+                        SCHEDULE_NEXT(mod, orig_pc);
+                    }
+                #endif
                 uint32_t index;
                 DECODE_LITERAL(index, pc);
                 uint32_t n_words;
@@ -1881,13 +1913,13 @@ schedule_in:
                             const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(func);
                             switch (arity) {
                                 case 0:
-                                    x_regs[0] = bif->bif0_ptr(ctx);
+                                    x_regs[0] = bif->bif0_ptr(ctx, x_regs);
                                     break;
                                 case 1:
-                                    x_regs[0] = bif->bif1_ptr(ctx, x_regs[0]);
+                                    x_regs[0] = bif->bif1_ptr(ctx, x_regs, x_regs[0]);
                                     break;
                                 case 2:
-                                    x_regs[0] = bif->bif2_ptr(ctx, x_regs[0], x_regs[1]);
+                                    x_regs[0] = bif->bif2_ptr(ctx, x_regs, x_regs[0], x_regs[1]);
                                     break;
                                 default:
                                     fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
@@ -1919,7 +1951,7 @@ schedule_in:
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     BifImpl0 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif0_ptr;
                     DEBUG_FAIL_NULL(func);
-                    term ret = func(ctx);
+                    term ret = func(ctx, x_regs);
 
                     WRITE_REGISTER(dreg, ret);
                 #endif
@@ -1947,7 +1979,7 @@ schedule_in:
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     BifImpl1 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif1_ptr;
                     DEBUG_FAIL_NULL(func);
-                    term ret = func(ctx, arg1);
+                    term ret = func(ctx, x_regs, arg1);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
                         if (fail_label) {
                             pc = mod->labels[fail_label];
@@ -1986,7 +2018,7 @@ schedule_in:
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     BifImpl2 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif2_ptr;
                     DEBUG_FAIL_NULL(func);
-                    term ret = func(ctx, arg1, arg2);
+                    term ret = func(ctx, x_regs, arg1, arg2);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
                         if (fail_label) {
                             pc = mod->labels[fail_label];
@@ -2004,11 +2036,9 @@ schedule_in:
             case OP_ALLOCATE: {
                 uint32_t stack_need;
                 DECODE_LITERAL(stack_need, pc);
-                uint32_t live;
                 DECODE_LITERAL(live, pc);
                 TRACE("allocate/2 stack_need=%i, live=%i\n" , stack_need, live);
                 USED_BY_TRACE(stack_need);
-                USED_BY_TRACE(live);
 
                 #ifdef IMPL_CODE_LOADER
                     if (live > MAX_REG) {
@@ -2034,12 +2064,10 @@ schedule_in:
                 DECODE_LITERAL(stack_need, pc);
                 uint32_t heap_need;
                 DECODE_ALLOCATOR_LIST(heap_need, pc);
-                uint32_t live;
                 DECODE_LITERAL(live, pc);
                 TRACE("allocate_heap/2 stack_need=%i, heap_need=%i, live=%i\n", stack_need, heap_need, live);
                 USED_BY_TRACE(stack_need);
                 USED_BY_TRACE(heap_need);
-                USED_BY_TRACE(live);
 
                 #ifdef IMPL_CODE_LOADER
                     if (live > MAX_REG) {
@@ -2063,11 +2091,9 @@ schedule_in:
             case OP_ALLOCATE_ZERO: {
                 uint32_t stack_need;
                 DECODE_LITERAL(stack_need, pc);
-                uint32_t live;
                 DECODE_LITERAL(live, pc);
                 TRACE("allocate_zero/2 stack_need=%i, live=%i\n", stack_need, live);
                 USED_BY_TRACE(stack_need);
-                USED_BY_TRACE(live);
 
                 #ifdef IMPL_CODE_LOADER
                     if (live > MAX_REG) {
@@ -2098,12 +2124,10 @@ schedule_in:
                 DECODE_LITERAL(stack_need, pc);
                 uint32_t heap_need;
                 DECODE_ALLOCATOR_LIST(heap_need, pc);
-                uint32_t live;
                 DECODE_LITERAL(live, pc);
                 TRACE("allocate_heap_zero/3 stack_need=%i, heap_need=%i, live=%i\n", stack_need, heap_need, live);
                 USED_BY_TRACE(stack_need);
                 USED_BY_TRACE(heap_need);
-                USED_BY_TRACE(live);
 
                 #ifdef IMPL_CODE_LOADER
                     if (live > MAX_REG) {
@@ -2131,24 +2155,22 @@ schedule_in:
             case OP_TEST_HEAP: {
                 uint32_t heap_need;
                 DECODE_ALLOCATOR_LIST(heap_need, pc);
-                uint32_t live_registers;
-                DECODE_LITERAL(live_registers, pc);
+                DECODE_LITERAL(live, pc);
 
-                TRACE("test_heap/2 heap_need=%i, live_registers=%i\n", heap_need, live_registers);
+                TRACE("test_heap/2 heap_need=%i, live=%i\n", heap_need, live);
                 USED_BY_TRACE(heap_need);
-                USED_BY_TRACE(live_registers);
 
                 #ifdef IMPL_EXECUTE_LOOP
                     size_t heap_free = context_avail_free_memory(ctx);
                     // if we need more heap space than is currently free, then try to GC the needed space
                     if (heap_free < heap_need) {
-                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need, live_registers, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     // otherwise, there is enough space for the needed heap, but there might
                     // more more than necessary.  In that case, try to shrink the heap.
                     } else if (heap_free > heap_need * HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF) {
-                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need * (HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF / 2), live_registers, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need * (HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF / 2), live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             TRACE("Unable to ensure free memory.  heap_need=%i\n", heap_need);
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
@@ -2199,6 +2221,8 @@ schedule_in:
                     TRACE_RETURN(ctx);
 
                     if ((long) ctx->cp == -1) {
+                        context_save_xregs(ctx, x_regs, 1);
+                        free(x_regs);
                         return 0;
                     }
 
@@ -2308,6 +2332,7 @@ schedule_in:
                     // and the outer list will be processed.
                     ctx->saved_ip = mod->labels[label];
                     ctx->saved_module = mod;
+                    context_save_xregs(ctx, x_regs, live);
                     ctx = scheduler_wait(ctx);
                     goto schedule_in;
                 #endif
@@ -2360,6 +2385,7 @@ schedule_in:
                         ctx->restore_trap_handler = &&wait_timeout_trap_handler;
 #pragma GCC diagnostic pop
                         ctx->saved_module = mod;
+                        context_save_xregs(ctx, x_regs, live);
                         ctx = scheduler_wait(ctx);
                         goto schedule_in;
                     }
@@ -2395,6 +2421,7 @@ wait_timeout_trap_handler:
                     if (UNLIKELY(!mailbox_has_next(&ctx->mailbox))) {
                         // No message is here.
                         // We were signaled for another reason.
+                        context_save_xregs(ctx, x_regs, live);
                         ctx = scheduler_wait(ctx);
                         goto schedule_in;
                     } else {
@@ -2998,6 +3025,7 @@ wait_timeout_trap_handler:
                     } else {
                         ctx->saved_ip = mod->labels[label];
                         ctx->saved_module = mod;
+                        context_save_xregs(ctx, x_regs, live);
                         ctx = scheduler_next(ctx->global, ctx);
                         goto schedule_in;
                     }
@@ -3235,13 +3263,18 @@ wait_timeout_trap_handler:
 
             case OP_CALL_FUN: {
                 #ifdef IMPL_EXECUTE_LOOP
-                    remaining_reductions--;
-                    if (UNLIKELY(!remaining_reductions)) {
-                        SCHEDULE_NEXT(mod, pc - 1);
-                    }
+                    // pc before arity
+                    const uint8_t *orig_pc = pc - 1;
                 #endif
                 uint32_t args_count;
                 DECODE_LITERAL(args_count, pc)
+                #ifdef IMPL_EXECUTE_LOOP
+                    remaining_reductions--;
+                    if (UNLIKELY(!remaining_reductions)) {
+                        live = MAX(live, args_count + 1);
+                        SCHEDULE_NEXT(mod, orig_pc);
+                    }
+                #endif
 
                 TRACE("call_fun/1, args_count=%i\n", args_count);
                 USED_BY_TRACE(args_count);
@@ -3290,13 +3323,18 @@ wait_timeout_trap_handler:
 
             case OP_CALL_EXT_ONLY: {
                 #ifdef IMPL_EXECUTE_LOOP
-                    remaining_reductions--;
-                    if (UNLIKELY(!remaining_reductions)) {
-                        SCHEDULE_NEXT(mod, pc - 1);
-                    }
+                    // pc before arity
+                    const uint8_t *orig_pc = pc - 1;
                 #endif
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc);
+                #ifdef IMPL_EXECUTE_LOOP
+                    remaining_reductions--;
+                    if (UNLIKELY(!remaining_reductions)) {
+                        live = MAX(live, arity);
+                        SCHEDULE_NEXT(mod, orig_pc);
+                    }
+                #endif
                 uint32_t index;
                 DECODE_LITERAL(index, pc);
 
@@ -3324,6 +3362,8 @@ wait_timeout_trap_handler:
                                 }
                             }
                             if ((long) ctx->cp == -1) {
+                                context_save_xregs(ctx, x_regs, 1);
+                                free(x_regs);
                                 return 0;
                             }
 
@@ -3343,13 +3383,13 @@ wait_timeout_trap_handler:
                             const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(func);
                             switch (arity) {
                                 case 0:
-                                    x_regs[0] = bif->bif0_ptr(ctx);
+                                    x_regs[0] = bif->bif0_ptr(ctx, x_regs);
                                     break;
                                 case 1:
-                                    x_regs[0] = bif->bif1_ptr(ctx, x_regs[0]);
+                                    x_regs[0] = bif->bif1_ptr(ctx, x_regs, x_regs[0]);
                                     break;
                                 case 2:
-                                    x_regs[0] = bif->bif2_ptr(ctx, x_regs[0], x_regs[1]);
+                                    x_regs[0] = bif->bif2_ptr(ctx, x_regs, x_regs[0], x_regs[1]);
                                     break;
                                 default:
                                     fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
@@ -3471,7 +3511,7 @@ wait_timeout_trap_handler:
                     TRACE("raise/2 stacktrace=0x%lx exc_value=0x%lx\n", stacktrace, exc_value);
                     x_regs[0] = stacktrace_exception_class(stacktrace);
                     x_regs[1] = exc_value;
-                    x_regs[2] = stacktrace_create_raw(ctx, mod, saved_pc - code, x_regs[0]);
+                    x_regs[2] = stacktrace_create_raw(ctx, x_regs, mod, saved_pc - code, x_regs[0]);
                     goto handle_error;
                 #endif
 
@@ -3510,7 +3550,7 @@ wait_timeout_trap_handler:
                             break;
 
                         case ERROR_ATOM_INDEX: {
-                            x_regs[2] = stacktrace_build(ctx, &x_regs[2], 3);
+                            x_regs[2] = stacktrace_build(ctx, x_regs, &x_regs[2], 3);
                             // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
                             if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2) * 2, 2, x_regs + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -3579,7 +3619,6 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(size, pc)
                 uint32_t words;
                 DECODE_LITERAL(words, pc)
-                uint32_t live;
                 DECODE_LITERAL(live, pc)
                 term flags;
                 UNUSED(flags);
@@ -3619,7 +3658,6 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(size, pc)
                 uint32_t words;
                 DECODE_LITERAL(words, pc)
-                uint32_t live;
                 DECODE_LITERAL(live, pc)
                 uint32_t flags_value;
                 DECODE_LITERAL(flags_value, pc)
@@ -4069,8 +4107,6 @@ wait_timeout_trap_handler:
                 term extra;
                 UNUSED(extra);
                 DECODE_COMPACT_TERM(extra, pc)
-                uint32_t live;
-                UNUSED(live);
                 DECODE_LITERAL(live, pc);
                 uint32_t unit;
                 DECODE_LITERAL(unit, pc);
@@ -4314,7 +4350,6 @@ wait_timeout_trap_handler:
                 DECODE_LABEL(fail, pc)
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
-                uint32_t live;
                 DECODE_LITERAL(live, pc);
                 term slots_term;
                 DECODE_COMPACT_TERM(slots_term, pc);
@@ -4357,7 +4392,6 @@ wait_timeout_trap_handler:
                 DECODE_LABEL(fail, pc)
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
-                uint32_t live;
                 DECODE_LITERAL(live, pc);
                 GC_SAFE_DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
@@ -4375,7 +4409,7 @@ wait_timeout_trap_handler:
                         }
                         src = x_regs[live];
                     #endif
-                    TRACE("bs_start_match3/4, fail=%i src=0x%lx live=%u dreg=%c%i\n", fail, src, live, T_DEST_REG_UNSAFE(dreg));
+                    TRACE("bs_start_match3/4, fail=%i src=0x%lx live=%u dreg=%c%i\n", fail, src, live, T_DEST_REG_GC_SAFE(dreg));
                     if (!(term_is_binary(src) || term_is_match_state(src))) {
                         WRITE_REGISTER_GC_SAFE(dreg, src);
                         pc = mod->labels[fail];
@@ -4394,8 +4428,6 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
                 // TODO: determine why we're not GC-ing here as we have live
-                uint32_t live;
-                UNUSED(live);
                 DECODE_LITERAL(live, pc);
 
                 #ifdef IMPL_CODE_LOADER
@@ -4420,7 +4452,6 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(src, pc);
                 GC_SAFE_DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
-                uint32_t live;
                 DECODE_LITERAL(live, pc);
 
                 #ifdef IMPL_CODE_LOADER
@@ -4697,7 +4728,6 @@ wait_timeout_trap_handler:
                 DECODE_LABEL(fail, pc)
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
-                uint32_t live;
                 DECODE_LITERAL(live, pc);
                 term size;
                 DECODE_COMPACT_TERM(size, pc);
@@ -4729,7 +4759,7 @@ wait_timeout_trap_handler:
                     } else {
                         term_set_match_state_offset(src, bs_offset + increment);
 
-                        term t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
+                        term t = maybe_alloc_boxed_integer_fragment(ctx, x_regs, value.s);
                         if (UNLIKELY(term_is_invalid_term(t))) {
                             HANDLE_ERROR();
                         }
@@ -4819,7 +4849,6 @@ wait_timeout_trap_handler:
                     const uint8_t *src_pc = pc;
                 #endif
                 DECODE_COMPACT_TERM(src, pc);
-                uint32_t live;
                 DECODE_LITERAL(live, pc);
                 term size;
                 DECODE_COMPACT_TERM(size, pc);
@@ -4928,14 +4957,16 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     // save pc in case of error
                     const uint8_t *orig_pc = pc - 1;
-
-                    remaining_reductions--;
-                    if (UNLIKELY(!remaining_reductions)) {
-                        SCHEDULE_NEXT(mod, orig_pc);
-                    }
                 #endif
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc)
+                #ifdef IMPL_EXECUTE_LOOP
+                    remaining_reductions--;
+                    if (UNLIKELY(!remaining_reductions)) {
+                        live = MAX(live, arity + 2);
+                        SCHEDULE_NEXT(mod, orig_pc);
+                    }
+                #endif
 #ifdef IMPL_EXECUTE_LOOP
                 term module = x_regs[arity];
                 term function = x_regs[arity + 1];
@@ -4951,7 +4982,7 @@ wait_timeout_trap_handler:
                 TRACE_APPLY(ctx, "apply", module_name, function_name, arity);
 
                 term native_return;
-                if (maybe_call_native(ctx, module_name, function_name, arity, &native_return)) {
+                if (maybe_call_native(ctx, x_regs, module_name, function_name, arity, &native_return)) {
                     PROCESS_MAYBE_TRAP_RETURN_VALUE_RESTORE_PC(native_return, orig_pc);
                     x_regs[0] = native_return;
 
@@ -4978,13 +5009,18 @@ wait_timeout_trap_handler:
 
             case OP_APPLY_LAST: {
                 #ifdef IMPL_EXECUTE_LOOP
-                    remaining_reductions--;
-                    if (UNLIKELY(!remaining_reductions)) {
-                        SCHEDULE_NEXT(mod, pc - 1);
-                    }
+                    // pc before arity
+                    const uint8_t *orig_pc = pc - 1;
                 #endif
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc)
+                #ifdef IMPL_EXECUTE_LOOP
+                    remaining_reductions--;
+                    if (UNLIKELY(!remaining_reductions)) {
+                        live = MAX(live, arity + 2);
+                        SCHEDULE_NEXT(mod, orig_pc);
+                    }
+                #endif
                 uint32_t n_words;
                 DECODE_LITERAL(n_words, pc);
 #ifdef IMPL_EXECUTE_LOOP
@@ -5005,7 +5041,7 @@ wait_timeout_trap_handler:
                 TRACE_APPLY(ctx, "apply_last", module_name, function_name, arity);
 
                 term native_return;
-                if (maybe_call_native(ctx, module_name, function_name, arity, &native_return)) {
+                if (maybe_call_native(ctx, x_regs, module_name, function_name, arity, &native_return)) {
                     PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(native_return);
                     x_regs[0] = native_return;
                     DO_RETURN();
@@ -5104,7 +5140,6 @@ wait_timeout_trap_handler:
             case OP_GC_BIF1: {
                 uint32_t fail_label;
                 DECODE_LABEL(fail_label, pc);
-                uint32_t live;
                 DECODE_LITERAL(live, pc);
                 uint32_t bif;
                 DECODE_LITERAL(bif, pc); //s?
@@ -5114,7 +5149,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     GCBifImpl1 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif1_ptr;
-                    term ret = func(ctx, live, arg1);
+                    term ret = func(ctx, x_regs, live, arg1);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
                         if (fail_label) {
                             pc = mod->labels[fail_label];
@@ -5137,7 +5172,6 @@ wait_timeout_trap_handler:
                     TRACE("gc_bif1/5\n");
 
                     UNUSED(fail_label)
-                    UNUSED(live)
                     UNUSED(bif)
                     UNUSED(arg1)
                 #endif
@@ -5147,7 +5181,6 @@ wait_timeout_trap_handler:
             case OP_GC_BIF2: {
                 uint32_t fail_label;
                 DECODE_LABEL(fail_label, pc);
-                uint32_t live;
                 DECODE_LITERAL(live, pc);
                 uint32_t bif;
                 DECODE_LITERAL(bif, pc); //s?
@@ -5159,7 +5192,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     GCBifImpl2 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif2_ptr;
-                    term ret = func(ctx, live, arg1, arg2);
+                    term ret = func(ctx, x_regs, live, arg1, arg2);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
                         if (fail_label) {
                             pc = mod->labels[fail_label];
@@ -5182,7 +5215,6 @@ wait_timeout_trap_handler:
                     TRACE("gc_bif2/6\n");
 
                     UNUSED(fail_label)
-                    UNUSED(live)
                     UNUSED(bif)
                     UNUSED(arg1)
                     UNUSED(arg2)
@@ -5216,7 +5248,6 @@ wait_timeout_trap_handler:
             case OP_GC_BIF3: {
                 uint32_t fail_label;
                 DECODE_LABEL(fail_label, pc);
-                uint32_t live;
                 DECODE_LITERAL(live, pc);
                 uint32_t bif;
                 DECODE_LITERAL(bif, pc); //s?
@@ -5230,7 +5261,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     GCBifImpl3 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif3_ptr;
-                    term ret = func(ctx, live, arg1, arg2, arg3);
+                    term ret = func(ctx, x_regs, live, arg1, arg2, arg3);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
                         if (fail_label) {
                             pc = mod->labels[fail_label];
@@ -5253,7 +5284,6 @@ wait_timeout_trap_handler:
                     TRACE("gc_bif2/6\n");
 
                     UNUSED(fail_label)
-                    UNUSED(live)
                     UNUSED(bif)
                     UNUSED(arg1)
                     UNUSED(arg2)
@@ -5328,7 +5358,6 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(src, pc);
                 GC_SAFE_DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
-                uint32_t live;
                 DECODE_LITERAL(live, pc);
 
                 TRACE("put_map_assoc/5: label: %i src: 0x%lx dest=%c%i live: %i\n", label, src, T_DEST_REG_GC_SAFE(dreg), live);
@@ -5457,7 +5486,6 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(src, pc);
                 GC_SAFE_DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
-                uint32_t live;
                 DECODE_LITERAL(live, pc);
 
                 TRACE("put_map_exact/5: label: %i src: 0x%lx dest=%c%i live: %i\n", label, src, T_DEST_REG_GC_SAFE(dreg), live);
@@ -5665,7 +5693,7 @@ wait_timeout_trap_handler:
                     #ifdef IMPL_EXECUTE_LOOP
                         TRACE("fmove/2 fp%i, %c%i\n", freg, T_DEST_REG(dreg));
                         // Space should be available on heap as compiler added an allocate opcode
-                        context_ensure_fpregs(ctx);
+                        context_ensure_fpregs(ctx, freg + 1);
                         term float_value = term_from_float(ctx->fr[freg], &ctx->heap);
                         WRITE_REGISTER(dreg, float_value);
                     #endif
@@ -5680,7 +5708,7 @@ wait_timeout_trap_handler:
                     DECODE_FP_REGISTER(freg, pc);
                     #ifdef IMPL_EXECUTE_LOOP
                         TRACE("fmove/2 %lx, fp%i\n", src_value, freg);
-                        context_ensure_fpregs(ctx);
+                        context_ensure_fpregs(ctx, freg + 1);
                         ctx->fr[freg] = term_to_float(src_value);
                     #endif
                     #ifdef IMPL_CODE_LOADER
@@ -5700,7 +5728,7 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("fconv/2 %lx, fp%i\n", src_value, freg);
-                    context_ensure_fpregs(ctx);
+                    context_ensure_fpregs(ctx, freg + 1);
                     ctx->fr[freg] = term_conv_to_float(src_value);
                 #endif
 
@@ -5727,7 +5755,7 @@ wait_timeout_trap_handler:
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         feclearexcept(FE_OVERFLOW);
                     #endif
-                    context_ensure_fpregs(ctx);
+                    context_ensure_fpregs(ctx, MAX(MAX(freg1, freg2), freg3) + 1);
                     ctx->fr[freg3] = ctx->fr[freg1] + ctx->fr[freg2];
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         if (fetestexcept(FE_OVERFLOW)) {
@@ -5774,7 +5802,7 @@ wait_timeout_trap_handler:
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         feclearexcept(FE_OVERFLOW);
                     #endif
-                    context_ensure_fpregs(ctx);
+                    context_ensure_fpregs(ctx, MAX(MAX(freg1, freg2), freg3) + 1);
                     ctx->fr[freg3] = ctx->fr[freg1] - ctx->fr[freg2];
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         if (fetestexcept(FE_OVERFLOW)) {
@@ -5821,7 +5849,7 @@ wait_timeout_trap_handler:
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         feclearexcept(FE_OVERFLOW);
                     #endif
-                    context_ensure_fpregs(ctx);
+                    context_ensure_fpregs(ctx, MAX(MAX(freg1, freg2), freg3) + 1);
                     ctx->fr[freg3] = ctx->fr[freg1] * ctx->fr[freg2];
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         if (fetestexcept(FE_OVERFLOW)) {
@@ -5868,7 +5896,7 @@ wait_timeout_trap_handler:
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         feclearexcept(FE_OVERFLOW | FE_DIVBYZERO);
                     #endif
-                    context_ensure_fpregs(ctx);
+                    context_ensure_fpregs(ctx, MAX(MAX(freg1, freg2), freg3) + 1);
                     ctx->fr[freg3] = ctx->fr[freg1] / ctx->fr[freg2];
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         if (fetestexcept(FE_OVERFLOW | FE_DIVBYZERO)) {
@@ -5908,7 +5936,7 @@ wait_timeout_trap_handler:
                 DECODE_FP_REGISTER(freg2, pc);
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("fnegate/2 fp%i, fp%i\n", freg1, freg2);
-                    context_ensure_fpregs(ctx);
+                    context_ensure_fpregs(ctx, MAX(freg1, freg2) + 1);
                     ctx->fr[freg2] = - ctx->fr[freg1];
                 #endif
 
@@ -5926,7 +5954,7 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
 
-                    x_regs[0] = stacktrace_build(ctx, &x_regs[0], 1);
+                    x_regs[0] = stacktrace_build(ctx, x_regs, &x_regs[0], 1);
 
                 #endif
                 break;
@@ -6041,7 +6069,6 @@ wait_timeout_trap_handler:
                     AVM_ABORT();
                 }
                 #endif
-                uint32_t live;
                 DECODE_LITERAL(live, pc);
                 #ifdef IMPL_EXECUTE_LOOP
                     // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
@@ -6168,7 +6195,6 @@ wait_timeout_trap_handler:
                 DECODE_LABEL(fail, pc);
                 uint32_t alloc;
                 DECODE_LITERAL(alloc, pc);
-                uint32_t live;
                 DECODE_LITERAL(live, pc);
                 uint32_t unit;
                 DECODE_LITERAL(unit, pc);
@@ -6598,7 +6624,6 @@ wait_timeout_trap_handler:
                         }
 
                         case INTEGER_ATOM: {
-                            uint32_t live;
                             DECODE_LITERAL(live, pc);
                             j++;
                             term flags;
@@ -6625,7 +6650,7 @@ wait_timeout_trap_handler:
                                     TRACE("bs_match/3: error extracting integer.\n");
                                     goto bs_match_jump_to_fail;
                                 }
-                                term t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
+                                term t = maybe_alloc_boxed_integer_fragment(ctx, x_regs, value.s);
                                 if (UNLIKELY(term_is_invalid_term(t))) {
                                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                                 }
@@ -6641,7 +6666,6 @@ wait_timeout_trap_handler:
                         }
 
                         case BINARY_ATOM: {
-                            uint32_t live;
                             DECODE_LITERAL(live, pc);
                             j++;
                             term flags;
@@ -6687,7 +6711,6 @@ wait_timeout_trap_handler:
                         }
 
                         case GET_TAIL_ATOM: {
-                            uint32_t live;
                             DECODE_LITERAL(live, pc);
                             j++;
                             int unit;
@@ -6781,6 +6804,7 @@ bs_match_jump_to_fail:
                 printf("Undecoded opcode: %i\n", *pc);
                 #ifdef IMPL_EXECUTE_LOOP
                     fprintf(stderr, "failed at %" PRIuPTR "\n", pc - code);
+                    free(x_regs);
                 #endif
                 AVM_ABORT();
                 return 1;
@@ -6805,13 +6829,13 @@ handle_error:
 
         // Do not print crash dump if reason is normal.
         if (x_regs[0] != LOWERCASE_EXIT_ATOM || x_regs[1] != NORMAL_ATOM) {
-            dump(ctx);
+            dump(ctx, x_regs);
         }
 
         if (x_regs[0] == LOWERCASE_EXIT_ATOM) {
             ctx->exit_reason = x_regs[1];
         } else {
-            bool throw = ctx->x[0] == THROW_ATOM;
+            bool throw = x_regs[0] == THROW_ATOM;
 
             int exit_reason_tuple_size = (throw ? TUPLE_SIZE(2) : 0) + TUPLE_SIZE(2);
             if (memory_ensure_free_with_roots(ctx, exit_reason_tuple_size, 1, x_regs + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
@@ -6839,6 +6863,8 @@ terminate_context:
         GlobalContext *global = ctx->global;
         if (ctx->leader) {
             scheduler_stop_all(global);
+            // Save result for main and tests
+            context_save_xregs(ctx, x_regs, 1);
         }
         scheduler_terminate(ctx);
         ctx = scheduler_run(global);

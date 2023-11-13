@@ -147,7 +147,7 @@ int main(int argc, char **argv)
 
     context_execute_loop(ctx, mod, "start", 0);
 
-    term ret_value = ctx->x[0];
+    term ret_value = ctx->saved_x[0];
     fprintf(stderr, "Return value: ");
     term_display(stderr, ret_value, ctx);
     fprintf(stderr, "\n");

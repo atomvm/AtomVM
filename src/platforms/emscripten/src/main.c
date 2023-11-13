@@ -98,7 +98,7 @@ static int start(void)
     Context *ctx = context_new(global);
     ctx->leader = 1;
     context_execute_loop(ctx, main_module, "start", 0);
-    term ret_value = ctx->x[0];
+    term ret_value = ctx->saved_x[0];
     fprintf(stdout, "Return value: ");
     term_display(stdout, ret_value, ctx);
     fprintf(stdout, "\n");

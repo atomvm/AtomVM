@@ -35,14 +35,6 @@ extern "C" {
 #include "context.h"
 
 /**
- * @brief Print a repreentation of the context to stderr.
- *
- * @details Print heap, stack, and registers of the given context to stderr.
- * @param ctx the process context.
- */
-void debug_dump_context(Context *ctx);
-
-/**
  * @brief Print heap contents to stderr.
  *
  * @details Print the dump of the heap of the given context to stderr.
@@ -57,14 +49,6 @@ void debug_dump_heap(Context *ctx);
  * @param ctx the process context.
  */
 void debug_dump_stack(Context *ctx);
-
-/**
- * @brief Print register contents to stderr.
- *
- * @details Print the dump of the registers of the given context to stderr.
- * @param ctx the process context.
- */
-void debug_dump_registers(Context *ctx);
 
 /**
  * @brief Print a region of (term) memory to stderr.

@@ -44,8 +44,8 @@
     }
 
 #define RAISE_ERROR(error_type_atom) \
-    ctx->x[0] = ERROR_ATOM;          \
-    ctx->x[1] = (error_type_atom);   \
+    argv[0] = ERROR_ATOM;          \
+    argv[1] = (error_type_atom);   \
     return term_invalid_term();
 
 #if ATOMVM_HAS_MBEDTLS
