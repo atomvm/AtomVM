@@ -442,7 +442,7 @@ static inline int get_protocol(GlobalContext *global, term protocol_term, bool *
  * memory exception.
  * @end
  */
-static inline term make_error_tuple(term reason, Context *ctx)
+static inline term make_error_tuple(Context *ctx, term argv[], term reason)
 {
     if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
         AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
@@ -458,14 +458,14 @@ static inline term make_error_tuple(term reason, Context *ctx)
 /**
  * @brief Like make_error_tuple but using errno converted to an atom or an int
  */
-static term make_errno_tuple(Context *ctx)
+static term make_errno_tuple(Context *ctx, term argv[])
 {
-    return make_error_tuple(posix_errno_to_term(errno, ctx->global), ctx);
+    return make_error_tuple(ctx, argv, posix_errno_to_term(errno, ctx->global));
 }
 #elif OTP_SOCKET_LWIP
-static term make_lwip_err_tuple(err_t err, Context *ctx)
+static term make_lwip_err_tuple(Context *ctx, term argv[], err_t err)
 {
-    return make_error_tuple(term_from_int(err), ctx);
+    return make_error_tuple(ctx, argv, term_from_int(err));
 }
 #endif
 
@@ -506,7 +506,7 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
     if (UNLIKELY(rsrc_obj->fd == -1 || rsrc_obj->fd == CLOSED_FD)) {
         AVM_LOGE(TAG, "Failed to initialize socket.");
         enif_release_resource(rsrc_obj);
-        return make_errno_tuple(ctx);
+        return make_errno_tuple(ctx, argv);
     } else {
         TRACE("nif_socket_open: Created socket fd=%i\n", rsrc_obj->fd);
         rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
@@ -1032,7 +1032,7 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
 #elif OTP_SOCKET_LWIP
     if (rsrc_obj->socket_state == SocketStateClosed) {
 #endif
-        return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EBADF, global));
     }
     term level_tuple = argv[1];
     term value = argv[2];
@@ -1049,7 +1049,7 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
 #if OTP_SOCKET_BSD
                 int res = setsockopt(rsrc_obj->fd, SOL_SOCKET, SO_REUSEADDR, &option_value, sizeof(int));
                 if (UNLIKELY(res != 0)) {
-                    return make_errno_tuple(ctx);
+                    return make_errno_tuple(ctx, argv);
                 } else {
                     return OK_ATOM;
                 }
@@ -1082,7 +1082,7 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
                 sl.l_linger = term_to_int(linger);
                 int res = setsockopt(rsrc_obj->fd, SOL_SOCKET, SO_LINGER, &sl, sizeof(sl));
                 if (UNLIKELY(res != 0)) {
-                    return make_errno_tuple(ctx);
+                    return make_errno_tuple(ctx, argv);
                 } else {
                     return OK_ATOM;
                 }
@@ -1109,13 +1109,13 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
                     // TODO support the atom `default` as a value to roll back to the default buffer size
                     if (UNLIKELY(!term_is_integer(value))) {
                         AVM_LOGE(TAG, "socket:setopt: otp rcvbuf value must be an integer");
-                        return make_error_tuple(globalcontext_make_atom(global, invalid_value_atom), ctx);
+                        return make_error_tuple(ctx, argv, globalcontext_make_atom(global, invalid_value_atom));
                     }
 
                     avm_int_t buf_size = term_to_int(value);
                     if (UNLIKELY(buf_size < 0)) {
                         AVM_LOGE(TAG, "socket:setopt: otp rcvbuf value may not be negative");
-                        return make_error_tuple(globalcontext_make_atom(global, invalid_value_atom), ctx);
+                        return make_error_tuple(ctx, argv, globalcontext_make_atom(global, invalid_value_atom));
                     }
 
                     rsrc_obj->buf_size = (size_t) buf_size;
@@ -1123,7 +1123,7 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
                     return OK_ATOM;
                 } else {
                     AVM_LOGE(TAG, "socket:setopt: Unsupported otp option");
-                    return make_error_tuple(globalcontext_make_atom(global, invalid_option_atom), ctx);
+                    return make_error_tuple(ctx, argv, globalcontext_make_atom(global, invalid_option_atom));
                 }
             }
 
@@ -1157,7 +1157,7 @@ static term nif_socket_sockname(Context *ctx, int argc, term argv[])
 #elif OTP_SOCKET_LWIP
     if (rsrc_obj->socket_state == SocketStateClosed) {
 #endif
-        return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EBADF, global));
     }
 
 #if OTP_SOCKET_BSD
@@ -1167,7 +1167,7 @@ static term nif_socket_sockname(Context *ctx, int argc, term argv[])
 
     if (UNLIKELY(res != 0)) {
         AVM_LOGE(TAG, "Unable to getsockname: fd=%i res=%i.", rsrc_obj->fd, res);
-        return make_errno_tuple(ctx);
+        return make_errno_tuple(ctx, argv);
     }
     uint32_t ip4_u32 = ntohl(addr.sin_addr.s_addr);
     uint16_t port_u16 = ntohs(addr.sin_port);
@@ -1222,18 +1222,18 @@ static term nif_socket_peername(Context *ctx, int argc, term argv[])
 
 #if OTP_SOCKET_BSD
     if (rsrc_obj->fd == 0) {
-        return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EBADF, global));
     }
 #elif OTP_SOCKET_LWIP
     if (rsrc_obj->socket_state == SocketStateClosed) {
-        return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EBADF, global));
     }
     if (rsrc_obj->socket_state & SocketStateUDP) {
         // TODO: handle "connected" UDP sockets
-        return make_error_tuple(posix_errno_to_term(EOPNOTSUPP, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EOPNOTSUPP, global));
     }
     if ((rsrc_obj->socket_state & SocketStateTCPListening) == SocketStateTCPListening) {
-        return make_error_tuple(posix_errno_to_term(ENOTCONN, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(ENOTCONN, global));
     }
 #endif
 
@@ -1244,7 +1244,7 @@ static term nif_socket_peername(Context *ctx, int argc, term argv[])
 
     if (UNLIKELY(res != 0)) {
         AVM_LOGE(TAG, "Unable to getpeername: fd=%i res=%i.", rsrc_obj->fd, res);
-        return make_errno_tuple(ctx);
+        return make_errno_tuple(ctx, argv);
     }
     uint32_t ip4_u32 = ntohl(addr.sin_addr.s_addr);
     uint16_t port_u16 = ntohs(addr.sin_port);
@@ -1291,11 +1291,11 @@ static term nif_socket_bind(Context *ctx, int argc, term argv[])
 #if OTP_SOCKET_BSD
     TRACE("rsrc_obj->fd=%i\n", (int) rsrc_obj->fd);
     if (rsrc_obj->fd == 0) {
-        return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EBADF, global));
     }
 #elif OTP_SOCKET_LWIP
     if (rsrc_obj->socket_state == SocketStateClosed) {
-        return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EBADF, global));
     }
 #endif
 
@@ -1354,7 +1354,7 @@ static term nif_socket_bind(Context *ctx, int argc, term argv[])
     int res = bind(rsrc_obj->fd, (struct sockaddr *) &serveraddr, address_len);
     if (UNLIKELY(res != 0)) {
         AVM_LOGE(TAG, "Unable to bind socket: res=%i.", res);
-        return make_errno_tuple(ctx);
+        return make_errno_tuple(ctx, argv);
     } else {
         return OK_ATOM;
     }
@@ -1367,7 +1367,7 @@ static term nif_socket_bind(Context *ctx, int argc, term argv[])
     }
     if (UNLIKELY(res != ERR_OK)) {
         AVM_LOGE(TAG, "Unable to bind socket: res=%i.", res);
-        return make_lwip_err_tuple(res, ctx);
+        return make_lwip_err_tuple(ctx, argv, res);
     } else {
         return OK_ATOM;
     }
@@ -1394,14 +1394,14 @@ static term nif_socket_listen(Context *ctx, int argc, term argv[])
     }
 #if OTP_SOCKET_BSD
     if (rsrc_obj->fd == 0) {
-        return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EBADF, global));
     }
 #elif OTP_SOCKET_LWIP
     if (rsrc_obj->socket_state == SocketStateClosed) {
-        return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EBADF, global));
     }
     if (rsrc_obj->socket_state & SocketStateUDP) {
-        return make_error_tuple(posix_errno_to_term(EPROTOTYPE, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EPROTOTYPE, global));
     }
 #endif
 
@@ -1411,7 +1411,7 @@ static term nif_socket_listen(Context *ctx, int argc, term argv[])
     int res = listen(rsrc_obj->fd, backlog);
     if (UNLIKELY(res != 0)) {
         AVM_LOGE(TAG, "Unable to listen on socket: res=%i.", res);
-        return make_errno_tuple(ctx);
+        return make_errno_tuple(ctx, argv);
     } else {
         return OK_ATOM;
     }
@@ -1430,7 +1430,7 @@ static term nif_socket_listen(Context *ctx, int argc, term argv[])
     err_t err;
     struct tcp_pcb *new_pcb = tcp_listen_with_backlog_and_err(rsrc_obj->tcp_pcb, backlog_u8, &err);
     if (new_pcb == NULL) {
-        return make_lwip_err_tuple(err, ctx);
+        return make_lwip_err_tuple(ctx, argv, err);
     }
     // Define accept callback
     tcp_accept(new_pcb, tcp_accept_cb);
@@ -1473,18 +1473,18 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
     }
 #if OTP_SOCKET_BSD
     if (rsrc_obj->fd == 0) {
-        return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EBADF, global));
     }
 #elif OTP_SOCKET_LWIP
     if (rsrc_obj->socket_state & SocketStateClosed) {
-        return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EBADF, global));
     }
     if (rsrc_obj->socket_state & SocketStateUDP) {
-        return make_error_tuple(posix_errno_to_term(EOPNOTSUPP, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EOPNOTSUPP, global));
     }
     // Only listening is allowed
     if ((rsrc_obj->socket_state & SocketStateTCPListening) != SocketStateTCPListening) {
-        return make_error_tuple(posix_errno_to_term(EINVAL, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EINVAL, global));
     }
 #endif
 
@@ -1496,7 +1496,7 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
         AVM_LOGE(TAG, "Unable to accept on socket %i.", rsrc_obj->fd);
         int err = errno;
         term reason = (err == ECONNABORTED) ? CLOSED_ATOM : posix_errno_to_term(err, global);
-        return make_error_tuple(reason, ctx);
+        return make_error_tuple(ctx, argv, reason);
     } else {
 
         struct SocketResource *conn_rsrc_obj = enif_alloc_resource(socket_resource_type, sizeof(struct SocketResource));
@@ -1554,7 +1554,7 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
         term_put_tuple_element(result, 1, socket_term);
     } else {
         // return EAGAIN
-        return make_error_tuple(posix_errno_to_term(EAGAIN, ctx->global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EAGAIN, ctx->global));
     }
     LWIP_END();
     return result;
@@ -1706,7 +1706,7 @@ ssize_t socket_recv(struct SocketResource *rsrc_obj, uint8_t *buf, size_t len, i
 }
 
 #if OTP_SOCKET_BSD
-static term nif_socket_recv_with_peek(Context *ctx, struct SocketResource *rsrc_obj, size_t len, bool is_recvfrom)
+static term nif_socket_recv_with_peek(Context *ctx, term argv[], struct SocketResource *rsrc_obj, size_t len, bool is_recvfrom)
 {
     TRACE("nif_socket_recv_with_peek\n");
 
@@ -1717,10 +1717,10 @@ static term nif_socket_recv_with_peek(Context *ctx, struct SocketResource *rsrc_
     TRACE("%li bytes available.\n", (long int) res);
     if (res < 0) {
         AVM_LOGI(TAG, "Unable to receive data on fd %i.  errno=%i", rsrc_obj->fd, errno);
-        return make_errno_tuple(ctx);
+        return make_errno_tuple(ctx, argv);
     } else if (res == 0) {
         TRACE("Peer closed socket %i.\n", rsrc_obj->fd);
-        return make_error_tuple(CLOSED_ATOM, ctx);
+        return make_error_tuple(ctx, argv, CLOSED_ATOM);
     } else {
         // user-supplied len has higher precedence than the default buffer size, but we also
         // want the configured default buffer size to be a lower bound on anything we peek
@@ -1759,7 +1759,7 @@ static term nif_socket_recv_with_peek(Context *ctx, struct SocketResource *rsrc_
     }
 }
 
-static term nif_socket_recv_without_peek(Context *ctx, struct SocketResource *rsrc_obj, size_t len, bool is_recvfrom)
+static term nif_socket_recv_without_peek(Context *ctx, term argv[], struct SocketResource *rsrc_obj, size_t len, bool is_recvfrom)
 {
     TRACE("nif_socket_recv_without_peek\n");
 
@@ -1796,11 +1796,11 @@ static term nif_socket_recv_without_peek(Context *ctx, struct SocketResource *rs
                 AVM_LOGE(TAG, "Unable to read data on socket %i.  errno=%i", rsrc_obj->fd, errno);
             }
 
-            return make_error_tuple(reason, ctx);
+            return make_error_tuple(ctx, argv, reason);
 
         } else if (res == 0) {
             TRACE("Peer closed socket %i.\n", rsrc_obj->fd);
-            return make_error_tuple(CLOSED_ATOM, ctx);
+            return make_error_tuple(ctx, argv, CLOSED_ATOM);
         } else {
 
             size_t len = (size_t) res;
@@ -1833,7 +1833,7 @@ static term nif_socket_recv_without_peek(Context *ctx, struct SocketResource *rs
 
 #elif OTP_SOCKET_LWIP
 
-static term nif_socket_recv_lwip(Context *ctx, struct SocketResource *rsrc_obj, size_t len, bool is_recvfrom)
+static term nif_socket_recv_lwip(Context *ctx, term argv[], struct SocketResource *rsrc_obj, size_t len, bool is_recvfrom)
 {
     TRACE("nif_socket_recv_lwip\n");
 
@@ -1876,12 +1876,12 @@ static term nif_socket_recv_lwip(Context *ctx, struct SocketResource *rsrc_obj, 
     // If we have no data, return EAGAIN or closed or the error.
     if (buffer_size == 0) {
         if (closed) {
-            return make_error_tuple(CLOSED_ATOM, ctx);
+            return make_error_tuple(ctx, argv, CLOSED_ATOM);
         }
         if (err != ERR_OK) {
-            return make_error_tuple(term_from_int(err), ctx);
+            return make_error_tuple(ctx, argv, term_from_int(err));
         }
-        return make_error_tuple(posix_errno_to_term(EAGAIN, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EAGAIN, global));
     }
 
     size_t ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
@@ -1929,25 +1929,25 @@ static term nif_socket_recv_internal(Context *ctx, term argv[], bool is_recvfrom
     }
 #if OTP_SOCKET_BSD
     if (rsrc_obj->fd == 0) {
-        return make_error_tuple(posix_errno_to_term(EBADF, ctx->global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EBADF, ctx->global));
     }
 #elif OTP_SOCKET_LWIP
     if (rsrc_obj->socket_state & SocketStateClosed) {
-        return make_error_tuple(posix_errno_to_term(EBADF, ctx->global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EBADF, ctx->global));
     }
     if (rsrc_obj->socket_state & SocketStateListening) {
-        return make_error_tuple(posix_errno_to_term(EOPNOTSUPP, ctx->global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EOPNOTSUPP, ctx->global));
     }
 #endif
 
 #if OTP_SOCKET_BSD
     if (otp_socket_platform_supports_peek()) {
-        return nif_socket_recv_with_peek(ctx, rsrc_obj, len, is_recvfrom);
+        return nif_socket_recv_with_peek(ctx, argv, rsrc_obj, len, is_recvfrom);
     } else {
-        return nif_socket_recv_without_peek(ctx, rsrc_obj, len, is_recvfrom);
+        return nif_socket_recv_without_peek(ctx, argv, rsrc_obj, len, is_recvfrom);
     }
 #elif OTP_SOCKET_LWIP
-    return nif_socket_recv_lwip(ctx, rsrc_obj, len, is_recvfrom);
+    return nif_socket_recv_lwip(ctx, argv, rsrc_obj, len, is_recvfrom);
 #endif
 }
 
@@ -2093,14 +2093,14 @@ static term nif_socket_send_internal(Context *ctx, int argc, term argv[], bool i
 
 #if OTP_SOCKET_BSD
     if (rsrc_obj->fd == 0) {
-        return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EBADF, global));
     }
 #elif OTP_SOCKET_LWIP
     if (rsrc_obj->socket_state == SocketStateClosed) {
-        return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EBADF, global));
     }
     if (rsrc_obj->socket_state & SocketStateListening) {
-        return make_error_tuple(posix_errno_to_term(EOPNOTSUPP, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EOPNOTSUPP, global));
     }
 #endif
 
@@ -2140,7 +2140,7 @@ static term nif_socket_send_internal(Context *ctx, int argc, term argv[], bool i
         return port_create_tuple2(ctx, OK_ATOM, data);
     } else {
         AVM_LOGE(TAG, "Unable to send data: res=%zi.", sent_data);
-        return make_error_tuple(CLOSED_ATOM, ctx);
+        return make_error_tuple(ctx, argv, CLOSED_ATOM);
     }
 }
 
@@ -2244,15 +2244,15 @@ static term nif_socket_connect(Context *ctx, int argc, term argv[])
 
 #if OTP_SOCKET_BSD
     if (rsrc_obj->fd == 0) {
-        return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EBADF, global));
     }
 #elif OTP_SOCKET_LWIP
     if (rsrc_obj->socket_state == SocketStateClosed) {
-        return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EBADF, global));
     }
     if (((rsrc_obj->socket_state & SocketStateTCPListening) == SocketStateTCPListening)
         || ((rsrc_obj->socket_state & SocketStateTCPConnected) == SocketStateTCPConnected)) {
-        return make_error_tuple(posix_errno_to_term(EOPNOTSUPP, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EOPNOTSUPP, global));
     }
 #endif
 
@@ -2280,7 +2280,7 @@ static term nif_socket_connect(Context *ctx, int argc, term argv[])
 
         } else {
             AVM_LOGE(TAG, "Unable to connect: res=%i errno=%i", res, errno);
-            return make_error_tuple(CLOSED_ATOM, ctx);
+            return make_error_tuple(ctx, argv, CLOSED_ATOM);
         }
     } else if (res == 0) {
         return OK_ATOM;
@@ -2358,7 +2358,7 @@ static term nif_socket_shutdown(Context *ctx, int argc, term argv[])
 #elif OTP_SOCKET_LWIP
     if (rsrc_obj->socket_state == SocketStateClosed) {
 #endif
-        return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
+        return make_error_tuple(ctx, argv, posix_errno_to_term(EBADF, global));
     }
 
     term result = OK_ATOM;
@@ -2367,7 +2367,7 @@ static term nif_socket_shutdown(Context *ctx, int argc, term argv[])
     int res = shutdown(rsrc_obj->fd, how);
     if (res < 0) {
         AVM_LOGE(TAG, "Unable to shut down socket: res=%i errno=%i", res, errno);
-        return make_errno_tuple(ctx);
+        return make_errno_tuple(ctx, argv);
     }
 #elif OTP_SOCKET_LWIP
     LWIP_BEGIN();
@@ -2378,7 +2378,7 @@ static term nif_socket_shutdown(Context *ctx, int argc, term argv[])
         }
         if (res != ERR_OK) {
             AVM_LOGE(TAG, "Unable to shut down socket: res=%i", res);
-            result = make_lwip_err_tuple(res, ctx);
+            result = make_lwip_err_tuple(ctx, argv, res);
         }
     }
     LWIP_END();

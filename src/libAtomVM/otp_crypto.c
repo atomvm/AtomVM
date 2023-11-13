@@ -367,7 +367,7 @@ static bool bool_to_mbedtls_operation(term encrypt_flag, mbedtls_operation_t *op
     }
 }
 
-static term make_crypto_error(const char *file, int line, const char *message, Context *ctx)
+static term make_crypto_error(Context *ctx, term argv[], const char *file, int line, const char *message)
 {
     int err_needed_mem = (strlen(file) * CONS_SIZE) + TUPLE_SIZE(2) + (strlen(message) * CONS_SIZE)
         + TUPLE_SIZE(3);
@@ -413,7 +413,7 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     mbedtls_cipher_type_t cipher
         = interop_atom_term_select_int(cipher_table, cipher_term, ctx->global);
     if (UNLIKELY(cipher == MBEDTLS_CIPHER_NONE)) {
-        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unknown cipher", ctx));
+        RAISE_ERROR(make_crypto_error(ctx, argv, __FILE__, __LINE__, "Unknown cipher"));
     }
 
     // from this point onward use `goto raise_error` in order to raise and free all buffers
@@ -561,7 +561,7 @@ mbed_error:
 
     char err_msg[24];
     snprintf(err_msg, sizeof(err_msg), "Error %x", -result);
-    RAISE_ERROR(make_crypto_error(__FILE__, source_line, err_msg, ctx));
+    RAISE_ERROR(make_crypto_error(ctx, argv, __FILE__, source_line, err_msg));
 }
 
 // not static since we are using it elsewhere to provide backward compatibility
@@ -583,7 +583,7 @@ term nif_crypto_strong_rand_bytes(Context *ctx, int argc, term argv[])
 
     mbedtls_ctr_drbg_context *rnd_ctx = sys_mbedtls_get_ctr_drbg_context_lock(ctx->global);
     if (IS_NULL_PTR(rnd_ctx)) {
-        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Failed CTR_DRBG init", ctx));
+        RAISE_ERROR(make_crypto_error(ctx, argv, __FILE__, __LINE__, "Failed CTR_DRBG init"));
     }
 
     term out_bin = term_create_uninitialized_binary(out_len, &ctx->heap, ctx->global);
@@ -592,7 +592,7 @@ term nif_crypto_strong_rand_bytes(Context *ctx, int argc, term argv[])
     int err = mbedtls_ctr_drbg_random(rnd_ctx, out, out_len);
     sys_mbedtls_ctr_drbg_context_unlock(ctx->global);
     if (UNLIKELY(err != 0)) {
-        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Failed random", ctx));
+        RAISE_ERROR(make_crypto_error(ctx, argv, __FILE__, __LINE__, "Failed random"));
     }
 
     return out_bin;

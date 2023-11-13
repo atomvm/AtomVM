@@ -485,7 +485,7 @@ static term nif_ssl_setup(Context *ctx, int argc, term argv[])
     return OK_ATOM;
 }
 
-static term make_err_result(int err, Context *ctx)
+static term make_err_result(int err, Context *ctx, term argv[])
 {
     switch (err) {
         case 0:
@@ -537,7 +537,7 @@ static term nif_ssl_handshake_step(Context *ctx, int argc, term argv[])
         return globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "done"));
     }
 #endif
-    return make_err_result(err, ctx);
+    return make_err_result(err, ctx, argv);
 }
 
 static term nif_ssl_close_notify(Context *ctx, int argc, term argv[])
@@ -552,7 +552,7 @@ static term nif_ssl_close_notify(Context *ctx, int argc, term argv[])
     struct SSLContextResource *context_rsrc = (struct SSLContextResource *) rsrc_obj_ptr;
 
     int err = mbedtls_ssl_close_notify(&context_rsrc->context);
-    return make_err_result(err, ctx);
+    return make_err_result(err, ctx, argv);
 }
 
 static term nif_ssl_write(Context *ctx, int argc, term argv[])
@@ -589,7 +589,7 @@ static term nif_ssl_write(Context *ctx, int argc, term argv[])
         return port_create_tuple2(ctx, OK_ATOM, rest);
     }
 
-    return make_err_result(res, ctx);
+    return make_err_result(res, ctx, argv);
 }
 
 static term nif_ssl_read(Context *ctx, int argc, term argv[])
@@ -644,7 +644,7 @@ static term nif_ssl_read(Context *ctx, int argc, term argv[])
         return port_create_tuple2(ctx, OK_ATOM, rest);
     }
 
-    return make_err_result(res, ctx);
+    return make_err_result(res, ctx, argv);
 }
 
 static const struct Nif ssl_entropy_init_nif = {

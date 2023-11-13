@@ -58,8 +58,8 @@
 #define FLOAT_BUF_SIZE 64
 
 #define RAISE(a, b)  \
-    ctx->x[0] = (a); \
-    ctx->x[1] = (b); \
+    argv[0] = (a); \
+    argv[1] = (b); \
     return term_invalid_term();
 
 #ifndef MAX
@@ -806,7 +806,7 @@ const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
     return nameAndPtr->nif;
 }
 
-static inline term make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
+static inline term make_maybe_boxed_int64(Context *ctx, term argv[], avm_int64_t value)
 {
     #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
         if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
@@ -829,6 +829,7 @@ static inline term make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
 
 static term nif_erlang_iolist_size_1(Context *ctx, int argc, term argv[])
 {
+    UNUSED(ctx);
     UNUSED(argc);
 
     size_t size;
@@ -1088,7 +1089,7 @@ static NativeHandlerResult process_console_mailbox(Context *ctx)
 
 // Common handling of spawn/1, spawn/3, spawn_opt/2, spawn_opt/4
 // opts_term is [] for spawn/1,3
-static term do_spawn(Context *ctx, Context *new_ctx, term opts_term)
+static term do_spawn(Context *ctx, term argv[], Context *new_ctx, term opts_term)
 {
     term min_heap_size_term = interop_proplist_get_value(opts_term, MIN_HEAP_SIZE_ATOM);
     term max_heap_size_term = interop_proplist_get_value(opts_term, MAX_HEAP_SIZE_ATOM);
@@ -1222,15 +1223,17 @@ static term nif_erlang_spawn_fun_opt(Context *ctx, int argc, term argv[])
         fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
         AVM_ABORT();
     }
+    term x_regs[arity];
     for (uint32_t i = 0; i < n_freeze; i++) {
-        new_ctx->x[i + arity - n_freeze] = memory_copy_term_tree(&new_ctx->heap, boxed_value[i + 3]);
+        x_regs[i + arity - n_freeze] = memory_copy_term_tree(&new_ctx->heap, boxed_value[i + 3]);
     }
 
     new_ctx->saved_module = fun_module;
     new_ctx->saved_ip = fun_module->labels[label];
     new_ctx->cp = module_address(fun_module->module_index, fun_module->end_instruction_ii);
+    context_save_xregs(new_ctx, x_regs, arity);
 
-    return do_spawn(ctx, new_ctx, opts_term);
+    return do_spawn(ctx, argv, new_ctx, opts_term);
 }
 
 static term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
@@ -1271,9 +1274,6 @@ static term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
     new_ctx->saved_ip = found_module->labels[label];
     new_ctx->cp = module_address(found_module->module_index, found_module->end_instruction_ii);
 
-    //TODO: check available registers count
-    int reg_index = 0;
-
     size_t min_heap_size = 0;
     term min_heap_size_term = interop_proplist_get_value(opts_term, MIN_HEAP_SIZE_ATOM);
     if (min_heap_size_term != term_nil()) {
@@ -1293,18 +1293,18 @@ static term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
         context_destroy(new_ctx);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
+    term x_regs[args_len];
+    int reg_index = 0;
     while (term_is_nonempty_list(args_term)) {
-        new_ctx->x[reg_index] = memory_copy_term_tree(&new_ctx->heap, term_get_list_head(args_term));
+        x_regs[reg_index] = memory_copy_term_tree(&new_ctx->heap, term_get_list_head(args_term));
         reg_index++;
 
         args_term = term_get_list_tail(args_term);
-        if (!term_is_list(args_term)) {
-            context_destroy(new_ctx);
-            RAISE_ERROR(BADARG_ATOM);
-        }
     }
 
-    return do_spawn(ctx, new_ctx, opts_term);
+    context_save_xregs(new_ctx, x_regs, args_len);
+
+    return do_spawn(ctx, argv, new_ctx, opts_term);
 }
 
 static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
@@ -1431,20 +1431,19 @@ term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[])
 
 term nif_erlang_monotonic_time_1(Context *ctx, int argc, term argv[])
 {
-    UNUSED(ctx);
     UNUSED(argc);
 
     struct timespec ts;
     sys_monotonic_time(&ts);
 
     if (argv[0] == SECOND_ATOM) {
-        return make_maybe_boxed_int64(ctx, ts.tv_sec);
+        return make_maybe_boxed_int64(ctx, argv, ts.tv_sec);
 
     } else if (argv[0] == MILLISECOND_ATOM) {
-        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000UL + ts.tv_nsec / 1000000UL);
+        return make_maybe_boxed_int64(ctx, argv, ((int64_t) ts.tv_sec) * 1000UL + ts.tv_nsec / 1000000UL);
 
     } else if (argv[0] == MICROSECOND_ATOM) {
-        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000000UL + ts.tv_nsec / 1000UL);
+        return make_maybe_boxed_int64(ctx, argv, ((int64_t) ts.tv_sec) * 1000000UL + ts.tv_nsec / 1000UL);
 
     } else {
         RAISE_ERROR(BADARG_ATOM);
@@ -1453,27 +1452,26 @@ term nif_erlang_monotonic_time_1(Context *ctx, int argc, term argv[])
 
 term nif_erlang_system_time_1(Context *ctx, int argc, term argv[])
 {
-    UNUSED(ctx);
     UNUSED(argc);
 
     struct timespec ts;
     sys_time(&ts);
 
     if (argv[0] == SECOND_ATOM) {
-        return make_maybe_boxed_int64(ctx, ts.tv_sec);
+        return make_maybe_boxed_int64(ctx, argv, ts.tv_sec);
 
     } else if (argv[0] == MILLISECOND_ATOM) {
-        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000UL + ts.tv_nsec / 1000000UL);
+        return make_maybe_boxed_int64(ctx, argv, ((int64_t) ts.tv_sec) * 1000UL + ts.tv_nsec / 1000000UL);
 
     } else if (argv[0] == MICROSECOND_ATOM) {
-        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000000UL + ts.tv_nsec / 1000UL);
+        return make_maybe_boxed_int64(ctx, argv, ((int64_t) ts.tv_sec) * 1000000UL + ts.tv_nsec / 1000UL);
 
     } else {
         RAISE_ERROR(BADARG_ATOM);
     }
 }
 
-static term build_datetime_from_tm(Context *ctx, struct tm *broken_down_time)
+static term build_datetime_from_tm(Context *ctx, term argv[], struct tm *broken_down_time)
 {
     // 4 = size of date/time tuple, 3 size of date time tuple
     if (UNLIKELY(memory_ensure_free_opt(ctx, 3 + 4 + 4, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -1506,7 +1504,7 @@ term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[])
     sys_time(&ts);
 
     struct tm broken_down_time;
-    return build_datetime_from_tm(ctx, gmtime_r(&ts.tv_sec, &broken_down_time));
+    return build_datetime_from_tm(ctx, argv, gmtime_r(&ts.tv_sec, &broken_down_time));
 }
 
 term nif_erlang_localtime(Context *ctx, int argc, term argv[])
@@ -1551,7 +1549,7 @@ term nif_erlang_localtime(Context *ctx, int argc, term argv[])
 #endif
 
     free(tz);
-    return build_datetime_from_tm(ctx, localtime);
+    return build_datetime_from_tm(ctx, argv, localtime);
 }
 
 term nif_erlang_timestamp_0(Context *ctx, int argc, term argv[])
@@ -1601,7 +1599,7 @@ term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term a
     }
 
     struct tm broken_down_time;
-    return build_datetime_from_tm(ctx, gmtime_r(&ts.tv_sec, &broken_down_time));
+    return build_datetime_from_tm(ctx, argv, gmtime_r(&ts.tv_sec, &broken_down_time));
 }
 
 static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[])
@@ -1815,7 +1813,7 @@ static term nif_erlang_binary_to_integer_1(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    return make_maybe_boxed_int64(ctx, value);
+    return make_maybe_boxed_int64(ctx, argv, value);
 }
 
 static int is_valid_float_string(const char *str, int len)
@@ -1847,7 +1845,7 @@ static int is_valid_float_string(const char *str, int len)
     return has_point;
 }
 
-static term parse_float(Context *ctx, const char *buf, int len)
+static term parse_float(Context *ctx, term argv[], const char *buf, int len)
 {
     if (UNLIKELY((len == 0) || (len >= FLOAT_BUF_SIZE - 1))) {
         RAISE_ERROR(BADARG_ATOM);
@@ -1883,7 +1881,7 @@ static term nif_erlang_binary_to_float_1(Context *ctx, int argc, term argv[])
     const char *bin_data = term_binary_data(bin_term);
     int bin_data_size = term_binary_size(bin_term);
 
-    return parse_float(ctx, bin_data, bin_data_size);
+    return parse_float(ctx, argv, bin_data, bin_data_size);
 }
 
 static term nif_erlang_list_to_float_1(Context *ctx, int argc, term argv[])
@@ -1904,7 +1902,7 @@ static term nif_erlang_list_to_float_1(Context *ctx, int argc, term argv[])
     if (UNLIKELY(!ok)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-    term res_term = parse_float(ctx, string, len);
+    term res_term = parse_float(ctx, argv, string, len);
 
     free(string);
 
@@ -2438,7 +2436,7 @@ static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    return make_maybe_boxed_int64(ctx, acc);
+    return make_maybe_boxed_int64(ctx, argv, acc);
 }
 
 static term nif_erlang_display_1(Context *ctx, int argc, term argv[])
@@ -2453,7 +2451,7 @@ static term nif_erlang_display_1(Context *ctx, int argc, term argv[])
 }
 
 // process_flag/3 work on a subset of flags, target is locked.
-static term nif_erlang_process_flag_3(Context *ctx, Context *target, term flag, term value)
+static term nif_erlang_process_flag_3(Context *ctx, term argv[], Context *target, term flag, term value)
 {
 #ifdef ENABLE_ADVANCED_TRACE
     if (flag == globalcontext_make_atom(ctx->global, trace_calls_atom)) {
@@ -2498,6 +2496,7 @@ static term nif_erlang_process_flag_3(Context *ctx, Context *target, term flag, 
         }
     }
 #else
+    UNUSED(ctx);
     UNUSED(target);
     UNUSED(flag);
     UNUSED(value);
@@ -2534,7 +2533,7 @@ static term nif_erlang_process_flag(Context *ctx, int argc, term argv[])
         }
 
         // TODO: check erlang:process_flag/3 implementation
-        return nif_erlang_process_flag_3(ctx, ctx, flag, value);
+        return nif_erlang_process_flag_3(ctx, argv, ctx, flag, value);
     } else if (argc == 3) {
         term pid = argv[0];
         flag = argv[1];
@@ -2546,7 +2545,7 @@ static term nif_erlang_process_flag(Context *ctx, int argc, term argv[])
         if (IS_NULL_PTR(target)) {
             RAISE_ERROR(BADARG_ATOM);
         }
-        term result = nif_erlang_process_flag_3(ctx, target, flag, value);
+        term result = nif_erlang_process_flag_3(ctx, argv, target, flag, value);
         globalcontext_get_process_unlock(ctx->global, target);
         return result;
     } else {
@@ -2823,6 +2822,7 @@ static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[])
 
 static term nif_binary_at_2(Context *ctx, int argc, term argv[])
 {
+    UNUSED(ctx);
     UNUSED(argc);
 
     term bin_term = argv[0];
@@ -2843,6 +2843,7 @@ static term nif_binary_at_2(Context *ctx, int argc, term argv[])
 
 static term nif_binary_first_1(Context *ctx, int argc, term argv[])
 {
+    UNUSED(ctx);
     UNUSED(argc);
 
     term bin_term = argv[0];
@@ -2858,6 +2859,7 @@ static term nif_binary_first_1(Context *ctx, int argc, term argv[])
 
 static term nif_binary_last_1(Context *ctx, int argc, term argv[])
 {
+    UNUSED(ctx);
     UNUSED(argc);
 
     term bin_term = argv[0];
@@ -2961,26 +2963,28 @@ static term nif_binary_split_2(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_throw(Context *ctx, int argc, term argv[])
 {
+    UNUSED(ctx);
     UNUSED(argc);
 
     term t = argv[0];
 
-    ctx->x[0] = THROW_ATOM;
-    ctx->x[1] = t;
+    argv[0] = THROW_ATOM;
+    argv[1] = t;
     return term_invalid_term();
 }
 
 static term nif_erlang_raise(Context *ctx, int argc, term argv[])
 {
+    UNUSED(ctx);
     UNUSED(argc);
 
     term ex_class = argv[0];
     if (UNLIKELY(ex_class != ERROR_ATOM && ex_class != LOWERCASE_EXIT_ATOM && ex_class != THROW_ATOM)) {
         return BADARG_ATOM;
     }
-    ctx->x[0] = ex_class;
-    ctx->x[1] = argv[1];
-    ctx->x[2] = term_nil();
+    argv[0] = ex_class;
+    argv[1] = argv[1];
+    argv[2] = term_nil();
     return term_invalid_term();
 }
 
@@ -3162,6 +3166,7 @@ static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_error(Context *ctx, int argc, term argv[])
 {
+    UNUSED(ctx);
     UNUSED(argc);
 
     term r = argv[0];
@@ -3592,7 +3597,7 @@ static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
     return OK_ATOM;
 }
 
-static term open_avm_error_tuple(Context *ctx, enum OpenAVMResult result)
+static term open_avm_error_tuple(Context *ctx, term argv[], enum OpenAVMResult result)
 {
     term reason = UNDEFINED_ATOM;
     switch (result) {
@@ -3646,7 +3651,7 @@ static term nif_atomvm_add_avm_pack_file(Context *ctx, int argc, term argv[])
     enum OpenAVMResult result = sys_open_avm_from_file(ctx->global, abs, &avmpack_data);
     if (UNLIKELY(result != AVM_OPEN_OK)) {
         free(abs);
-        return open_avm_error_tuple(ctx, result);
+        return open_avm_error_tuple(ctx, argv, result);
     }
 
     term name = interop_kv_get_value_default(opts, ATOM_STR("\x4", "name"), UNDEFINED_ATOM, ctx->global);
@@ -3828,6 +3833,7 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
 
 static term nif_console_print(Context *ctx, int argc, term argv[])
 {
+    UNUSED(ctx);
     UNUSED(argc);
 
     term t = argv[0];

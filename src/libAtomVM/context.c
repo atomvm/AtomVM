@@ -60,8 +60,9 @@ Context *context_new(GlobalContext *glb)
     }
     ctx->e = ctx->heap.heap_end;
 
-    context_clean_registers(ctx, 0);
-
+    ctx->xregs_count = 0;
+    ctx->fpregs_count = 0;
+    ctx->saved_x = NULL;
     ctx->fr = NULL;
 
     ctx->min_heap_size = 0;
@@ -151,6 +152,7 @@ void context_destroy(Context *ctx)
     // Any other process released our mailbox, so we can clear it.
     mailbox_destroy(&ctx->mailbox, &ctx->heap);
 
+    free(ctx->saved_x);
     free(ctx->fr);
 
     memory_destroy_heap(&ctx->heap, ctx->global);
@@ -195,14 +197,14 @@ void context_process_process_info_request_signal(Context *ctx, struct BuiltInAto
     } // else: sender died
 }
 
-bool context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal)
+bool context_process_signal_trap_answer(Context *ctx, term *x_regs, struct TermSignal *signal)
 {
     context_update_flags(ctx, ~Trap, NoFlags);
-    ctx->x[0] = signal->signal_term;
+    x_regs[0] = signal->signal_term;
     return true;
 }
 
-void context_process_flush_monitor_signal(Context *ctx, uint64_t ref_ticks, bool info)
+void context_process_flush_monitor_signal(Context *ctx, term *x_regs, uint64_t ref_ticks, bool info)
 {
     context_update_flags(ctx, ~Trap, NoFlags);
     bool result = true;
@@ -222,7 +224,7 @@ void context_process_flush_monitor_signal(Context *ctx, uint64_t ref_ticks, bool
         }
     }
     mailbox_reset(&ctx->mailbox);
-    ctx->x[0] = result ? TRUE_ATOM : FALSE_ATOM;
+    x_regs[0] = result ? TRUE_ATOM : FALSE_ATOM;
 }
 
 void context_update_flags(Context *ctx, int mask, int value) CLANG_THREAD_SANITIZE_SAFE

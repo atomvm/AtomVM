@@ -495,6 +495,8 @@ struct Test tests[] = {
 
     TEST_CASE(test_module_info),
 
+    TEST_CASE(test_many_xregs),
+
     // noisy tests, keep them at the end
     TEST_CASE_EXPECTED(spawn_opt_monitor_normal, 1),
     TEST_CASE_EXPECTED(spawn_opt_link_normal, 1),
@@ -545,11 +547,11 @@ static int test_atom(struct Test *test)
 
     context_execute_loop(ctx, mod, "start", 0);
 
-    if (!term_is_any_integer(ctx->x[0])) {
+    if (!term_is_any_integer(ctx->saved_x[0])) {
         fprintf(stderr, "\x1b[1;31mExpected %i but result is not an integer\x1b[0m\n", test->expected_value);
         result = -1;
     } else {
-        int32_t value = (int32_t) term_maybe_unbox_int(ctx->x[0]);
+        int32_t value = (int32_t) term_maybe_unbox_int(ctx->saved_x[0]);
         if (value != test->expected_value) {
             fprintf(stderr, "\x1b[1;31mExpected %i, got: %i\x1b[0m\n", test->expected_value, value);
             result = -1;

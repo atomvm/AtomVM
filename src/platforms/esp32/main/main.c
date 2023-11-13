@@ -112,7 +112,7 @@ void app_main()
     fprintf(stdout, "---\n");
 
     context_execute_loop(ctx, mod, "start", 0);
-    term ret_value = ctx->x[0];
+    term ret_value = ctx->saved_x[0];
 
     fprintf(stdout, "AtomVM finished with return value: ");
     term_display(stdout, ret_value, ctx);

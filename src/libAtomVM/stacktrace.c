@@ -25,17 +25,19 @@
 
 #ifndef AVM_CREATE_STACKTRACES
 
-term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term exception_class)
+term stacktrace_create_raw(Context *ctx, term *x_regs, Module *mod, int current_offset, term exception_class)
 {
     UNUSED(ctx);
+    UNUSED(x_regs);
     UNUSED(mod);
     UNUSED(current_offset);
     return exception_class;
 }
 
-term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
+term stacktrace_build(Context *ctx, term *x_regs, term *stack_info, uint32_t live)
 {
     UNUSED(ctx);
+    UNUSED(x_regs);
     UNUSED(stack_info);
     UNUSED(live);
     return UNDEFINED_ATOM;
@@ -86,7 +88,7 @@ static bool is_module_member(Module *mod, Module **mods, unsigned long len)
     return false;
 }
 
-term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term exception_class)
+term stacktrace_create_raw(Context *ctx, term *x_regs, Module *mod, int current_offset, term exception_class)
 {
     unsigned int num_frames = 0;
     unsigned int num_aux_terms = 0;
@@ -166,7 +168,7 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
     // {num_frames, num_aux_terms, filename_lens, num_mods, [{module, offset}, ...]}
     size_t requested_size = TUPLE_SIZE(6) + num_frames * (2 + TUPLE_SIZE(2));
     // We need to preserve x0 and x1 that contain information on the current exception
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 2, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 2, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         fprintf(stderr, "WARNING: Unable to allocate heap space for raw stacktrace\n");
         return OUT_OF_MEMORY_ATOM;
     }
@@ -257,7 +259,7 @@ static term find_path_created(term module_name, struct ModulePathPair *module_pa
     return term_invalid_term();
 }
 
-term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
+term stacktrace_build(Context *ctx, term *x_regs, term *stack_info, uint32_t live)
 {
     GlobalContext *glb = ctx->global;
 
@@ -283,7 +285,7 @@ term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
     // [{module, function, arity, [{file, string()}, {line, int}]}, ...]
     //
     size_t requested_size = (TUPLE_SIZE(4) + 2) * num_frames + num_aux_terms * (4 + 2 * TUPLE_SIZE(2)) + 2 * filename_lens;
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, live, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         free(module_paths);
         return OUT_OF_MEMORY_ATOM;
     }

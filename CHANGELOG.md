@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - ESP32: fix i2c_driver_acquire and i2c_driver_release functions, that were working only once.
+- Fixed a bug where the VM would crash when code used more than 16 x registers.
 
 ## [0.6.0-beta.0] - 2024-02-08
 

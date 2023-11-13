@@ -33,7 +33,6 @@ struct ErlNifEnv
     GlobalContext *global;
     Heap heap;
     term *stack_pointer; // Context stack pointer, NULL for non-context envs
-    term x[2];
 };
 
 _Static_assert(offsetof(struct ErlNifEnv, global) == offsetof(struct Context, global) ? 1 : 0,
@@ -42,8 +41,6 @@ _Static_assert(offsetof(struct ErlNifEnv, heap) == offsetof(struct Context, heap
     "ErlNifEnv.heap doesn't match Context.heap");
 _Static_assert(offsetof(struct ErlNifEnv, stack_pointer) == offsetof(struct Context, e) ? 1 : 0,
     "ErlNifEnv.stack_pointer doesn't match Context.e");
-_Static_assert(offsetof(struct ErlNifEnv, x) == offsetof(struct Context, x) ? 1 : 0,
-    "ErlNifEnv.x doesn't match Context.x");
 
 static inline ErlNifEnv *erl_nif_env_from_context(Context *ctx)
 {
@@ -63,8 +60,6 @@ static inline void erl_nif_env_partial_init_from_globalcontext(ErlNifEnv *env, G
     env->heap.heap_ptr = NULL;
     env->heap.heap_end = NULL;
     env->stack_pointer = NULL;
-    env->x[0] = term_nil();
-    env->x[1] = term_nil();
 }
 
 #ifdef __cplusplus

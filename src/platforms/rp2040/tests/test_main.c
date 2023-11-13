@@ -121,7 +121,7 @@ static term avm_test_case(const char *test_module)
     ctx->leader = 1;
 
     context_execute_loop(ctx, mod, "start", 0);
-    term ret_value = ctx->x[0];
+    term ret_value = ctx->saved_x[0];
 
     nif_collection_destroy_all(glb);
 
