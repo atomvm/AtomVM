@@ -162,5 +162,8 @@ void nif_collection_destroy_all(GlobalContext *global);
 
 void sys_init_icache(void);
 void sys_enable_flash_cache(void);
+void *_sbrk_r(struct _reent *, ptrdiff_t);
+// This function may be defined to relocate the heap.
+void local_heap_setup(uint8_t **start, uint8_t **end);
 
 #endif /* _STM_SYS_H_ */
