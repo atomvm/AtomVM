@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed a bug that would make the VM to loop and failing to process selected fds on Linux
 - Fixed classes of exceptions in estdlib.
 - Fixed STM32 code that was hard coded to the default target device, now configured based on the `cmake -DDEVICE=` parameter
+- Fixed changed default to `AVM_USE_32BIT_FLOAT=on` for STM32 platform to enable use of single precision hardware FPU on F4/F7 devices.
 
 ### Changed
 
