@@ -17,6 +17,9 @@
  *
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
+#include <errno.h>
+#include <malloc.h>
+#include <stdint.h>
 #include <time.h>
 
 #include <avmpack.h>
@@ -36,9 +39,52 @@
 #include "stm_sys.h"
 
 #define TAG "sys"
+#define RESERVE_STACK_SIZE 4096U
 
 struct PortDriverDefListItem *port_driver_list;
 struct NifCollectionDefListItem *nif_collection_list;
+
+/* These functions are needed to fix a hard fault when using malloc in devices with sram spanning
+ * multiple chips
+ */
+#pragma weak local_heap_setup = __local_ram
+
+/* these are defined by the linker script */
+extern uint8_t _ebss, _stack;
+
+static uint8_t *_cur_brk = NULL;
+static uint8_t *_heap_end = NULL;
+
+/*
+ * If not overridden, this puts the heap into the left
+ * over ram between the BSS section and the stack while
+ * preserving RESERVE_STACK_SIZE bytes for the stack itself.
+ * This may be overridden by defining the function
+ * `local_heap_setup` (exported in `stm_sys.h`).
+ */
+static void
+__local_ram(uint8_t **start, uint8_t **end)
+{
+    *start = &_ebss;
+    *end = (uint8_t *) (&_stack - RESERVE_STACK_SIZE);
+}
+
+void *_sbrk_r(struct _reent *reent, ptrdiff_t diff)
+{
+    uint8_t *_old_brk;
+
+    if (_heap_end == NULL) {
+        local_heap_setup(&_cur_brk, &_heap_end);
+    }
+
+    _old_brk = _cur_brk;
+    if (_cur_brk + diff > _heap_end) {
+        reent->_errno = ENOMEM;
+        return (void *) -1;
+    }
+    _cur_brk += diff;
+    return _old_brk;
+}
 
 // Monotonically increasing number of milliseconds from reset
 static volatile uint64_t system_millis;
