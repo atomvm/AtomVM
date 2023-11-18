@@ -30,6 +30,8 @@
 #include <term_typedef.h>
 
 #include <mbedtls/cipher.h>
+#include <mbedtls/ctr_drbg.h>
+#include <mbedtls/entropy.h>
 #include <mbedtls/md5.h>
 #include <mbedtls/sha1.h>
 #include <mbedtls/sha256.h>
@@ -561,6 +563,52 @@ mbed_error:
     RAISE_ERROR(make_crypto_error(__FILE__, source_line, err_msg, ctx));
 }
 
+// not static since we are using it elsewhere to provide backward compatibility
+term nif_crypto_strong_rand_bytes(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term count_term = argv[0];
+    VALIDATE_VALUE(count_term, term_is_integer);
+    avm_int_t out_len = term_to_int(count_term);
+    if (out_len < 0) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    static bool initialized = false;
+    static mbedtls_entropy_context entropy_ctx;
+    static mbedtls_ctr_drbg_context rnd_ctx;
+
+    if (!initialized) {
+        mbedtls_entropy_init(&entropy_ctx);
+
+        mbedtls_ctr_drbg_init(&rnd_ctx);
+
+        const char *seed = "AtomVM Mbed-TLS initial seed.";
+        int seed_len = strlen(seed);
+        int seed_err = mbedtls_ctr_drbg_seed(
+            &rnd_ctx, mbedtls_entropy_func, &entropy_ctx, (const unsigned char *) seed, seed_len);
+        if (UNLIKELY(seed_err != 0)) {
+            abort();
+        }
+    }
+
+    int ensure_size = term_binary_heap_size(out_len);
+    if (UNLIKELY(memory_ensure_free(ctx, ensure_size) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term out_bin = term_create_uninitialized_binary(out_len, &ctx->heap, ctx->global);
+    unsigned char *out = (unsigned char *) term_binary_data(out_bin);
+
+    int err = mbedtls_ctr_drbg_random(&rnd_ctx, out, out_len);
+    if (err != 0) {
+        abort();
+    }
+
+    return out_bin;
+}
+
 static const struct Nif crypto_hash_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_crypto_hash
@@ -568,6 +616,10 @@ static const struct Nif crypto_hash_nif = {
 static const struct Nif crypto_crypto_one_time_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_crypto_crypto_one_time
+};
+static const struct Nif crypto_strong_rand_bytes_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_strong_rand_bytes
 };
 
 //
@@ -589,6 +641,10 @@ const struct Nif *otp_crypto_nif_get_nif(const char *nifname)
         if (strcmp("crypto_one_time/5", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &crypto_crypto_one_time_nif;
+        }
+        if (strcmp("strong_rand_bytes/1", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_strong_rand_bytes_nif;
         }
     }
     return NULL;

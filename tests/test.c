@@ -513,6 +513,11 @@ struct Test tests[] = {
     TEST_CASE(test_crypto),
     TEST_CASE(test_min_max_guard),
     TEST_CASE(int64_build_binary),
+
+#if defined ATOMVM_HAS_MBEDTLS
+    TEST_CASE(test_crypto_strong_rand_bytes),
+#endif
+
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 
     { NULL, 0, false, false }
