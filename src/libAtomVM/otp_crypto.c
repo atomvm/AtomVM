@@ -532,7 +532,8 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     free(allocated_iv_data);
     free(allocated_data_data);
 
-    if (UNLIKELY(memory_ensure_free(ctx, temp_buf_size) != MEMORY_GC_OK)) {
+    int ensure_size = term_binary_heap_size(temp_buf_size);
+    if (UNLIKELY(memory_ensure_free(ctx, ensure_size) != MEMORY_GC_OK)) {
         free(temp_buf);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
