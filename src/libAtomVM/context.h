@@ -204,7 +204,7 @@ static inline void context_ensure_fpregs(Context *c, uint16_t n_regs)
                 AVM_ABORT();
             }
         } else {
-            c->fr = realloc(c->fr, new_size);
+            c->fr = (avm_float_t *) realloc(c->fr, new_size);
             if (IS_NULL_PTR(c->fr)) {
                 fprintf(stderr, "Could not allocate FP registers\n");
                 AVM_ABORT();
@@ -231,7 +231,7 @@ static inline void context_save_xregs(Context *c, term *x_regs, uint16_t n_regs)
                 AVM_ABORT();
             }
         } else {
-            c->saved_x = realloc(c->saved_x, new_size);
+            c->saved_x = (term *) realloc(c->saved_x, new_size);
             if (IS_NULL_PTR(c->saved_x)) {
                 fprintf(stderr, "Could not allocate X registers\n");
                 AVM_ABORT();

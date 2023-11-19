@@ -80,6 +80,16 @@
 #define COMPACT_NBITS_VALUE 0x18
 
 #ifdef IMPL_EXECUTE_LOOP
+// Allocate initially this number of registers (suitable for exceptions)
+#define DEFAULT_XREGS 3
+
+#define ENSURE_XREGS(x_regs, x_regs_count, mod)                 \
+    if (mod->max_xregs > x_regs_count) {                        \
+        x_regs_count = mod->max_xregs;                          \
+        x_regs = realloc(x_regs, x_regs_count * sizeof(term));  \
+    }
+
+
 #define SET_ERROR(error_type_atom)                                      \
     x_regs[0] = ERROR_ATOM;                                             \
     x_regs[1] = error_type_atom;                                        \
@@ -167,8 +177,12 @@ typedef dreg_t dreg_gc_safe_t;
             break;                                                                      \
                                                                                         \
         case COMPACT_ATOM:                                                              \
-        case COMPACT_XREG:                                                              \
         case COMPACT_YREG:                                                              \
+            break;                                                                      \
+        case COMPACT_XREG: {                                                            \
+                uint16_t reg_index = first_byte >> 4;                                   \
+                mod->max_xregs = MAX(mod->max_xregs, reg_index + 1);                    \
+            }                                                                           \
             break;                                                                      \
                                                                                         \
         case COMPACT_EXTENDED:                                                          \
@@ -223,7 +237,12 @@ typedef dreg_t dreg_gc_safe_t;
             }                                                                           \
             break;                                                                      \
                                                                                         \
-        case COMPACT_LARGE_XREG:                                                        \
+        case COMPACT_LARGE_XREG: {                                                      \
+                uint16_t reg_index = (((first_byte & 0xE0) << 3) | *(decode_pc)++);     \
+                mod->max_xregs = MAX(mod->max_xregs, reg_index + 1);                    \
+            }                                                                           \
+            break;                                                                      \
+                                                                                        \
         case COMPACT_LARGE_YREG:                                                        \
             (decode_pc)++;                                                              \
             break;                                                                      \
@@ -259,11 +278,21 @@ typedef dreg_t dreg_gc_safe_t;
     uint8_t reg_type = first_byte & 0xF;                                                            \
     (dreg).reg_type = reg_type;                                                                     \
     switch (reg_type) {                                                                             \
-        case COMPACT_XREG:                                                                          \
+        case COMPACT_XREG: {                                                                        \
+                uint16_t reg_index = first_byte >> 4;                                               \
+                mod->max_xregs = MAX(mod->max_xregs, reg_index + 1);                                \
+                (dreg).index = reg_index;                                                           \
+            }                                                                                       \
+            break;                                                                                  \
         case COMPACT_YREG:                                                                          \
             (dreg).index = first_byte >> 4;                                                         \
-             break;                                                                                 \
-        case COMPACT_LARGE_XREG:                                                                    \
+            break;                                                                                  \
+        case COMPACT_LARGE_XREG: {                                                                  \
+                uint16_t reg_index = (((first_byte & 0xE0) << 3) | *(decode_pc)++);                 \
+                mod->max_xregs = MAX(mod->max_xregs, reg_index + 1);                                \
+                (dreg).index = reg_index;                                                           \
+            }                                                                                       \
+            break;                                                                                  \
         case COMPACT_LARGE_YREG:                                                                    \
             (dreg).index = (((first_byte & 0xE0) << 3) | *(decode_pc)++);                           \
             break;                                                                                  \
@@ -282,10 +311,18 @@ typedef dreg_t dreg_gc_safe_t;
     uint8_t first_byte = *(decode_pc)++;                                                            \
     uint8_t reg_type = first_byte & 0xF;                                                            \
     switch (reg_type) {                                                                             \
-        case COMPACT_XREG:                                                                          \
+        case COMPACT_XREG: {                                                                        \
+                uint16_t reg_index = first_byte >> 4;                                               \
+                mod->max_xregs = MAX(mod->max_xregs, reg_index + 1);                                \
+            }                                                                                       \
+            break;                                                                                  \
         case COMPACT_YREG:                                                                          \
             break;                                                                                  \
-        case COMPACT_LARGE_XREG:                                                                    \
+        case COMPACT_LARGE_XREG: {                                                                  \
+                uint16_t reg_index = (((first_byte & 0xE0) << 3) | *(decode_pc)++);                 \
+                mod->max_xregs = MAX(mod->max_xregs, reg_index + 1);                                \
+            }                                                                                       \
+            break;                                                                                  \
         case COMPACT_LARGE_YREG:                                                                    \
             (decode_pc)++;                                                                          \
             break;                                                                                  \
@@ -793,12 +830,13 @@ typedef struct
 #define IS_EXTENDED_FP_REGISTER(decode_pc) \
     (*decode_pc) == COMPACT_EXTENDED_FP_REGISTER
 
-#define JUMP_TO_LABEL(module, label)    \
-    if (module != mod) {                \
-        prev_mod = mod;                 \
-        mod = module;                   \
-        code = mod->code->code;         \
-    }                                   \
+#define JUMP_TO_LABEL(module, label)                \
+    if (module != mod) {                            \
+        prev_mod = mod;                             \
+        mod = module;                               \
+        ENSURE_XREGS(x_regs, x_regs_count, mod);    \
+        code = mod->code->code;                     \
+    }                                               \
     JUMP_TO_ADDRESS(mod->labels[label])
 
 #ifndef TRACE_JUMP
@@ -924,11 +962,13 @@ typedef struct
         if (module_index == prev_mod->module_index) {                   \
             Module *t = mod;                                            \
             mod = prev_mod;                                             \
+            ENSURE_XREGS(x_regs, x_regs_count, mod);                    \
             prev_mod = t;                                               \
             code = mod->code->code;                                     \
         } else if (module_index != mod->module_index) {                 \
             prev_mod = mod;                                             \
             mod = globalcontext_get_module_by_index(glb, module_index); \
+            ENSURE_XREGS(x_regs, x_regs_count, mod);                    \
             code = mod->code->code;                                     \
         }                                                               \
         pc = code + ((ctx->cp & 0xFFFFFF) >> 2);                        \
@@ -1583,7 +1623,8 @@ HOT_FUNC int scheduler_entry_point(GlobalContext *glb)
     const uint8_t *code;
     Module *mod;
     Module *prev_mod;
-    term *x_regs = malloc(MAX_REG * sizeof(term));
+    uint16_t x_regs_count = DEFAULT_XREGS;
+    term *x_regs = malloc(x_regs_count * sizeof(term));
     const uint8_t *pc;
     int remaining_reductions;
     uint32_t live;
@@ -1598,6 +1639,7 @@ schedule_in:
         return 0;
     }
     mod = ctx->saved_module;
+    ENSURE_XREGS(x_regs, x_regs_count, mod);
     prev_mod = mod;
     code = mod->code->code;
     live = ctx->xregs_count;
@@ -1618,6 +1660,7 @@ schedule_in:
 #ifdef IMPL_CODE_LOADER
     TRACE("-- Loading code\n");
     SMP_MODULE_LOCK(mod);
+    mod->max_xregs = 0;
     const uint8_t *code = mod->code->code;
     const uint8_t *pc = code;
     uint32_t live;
@@ -4148,7 +4191,7 @@ wait_timeout_trap_handler:
 
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
-                
+
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_append/8, fail=%u size=%li unit=%u src=0x%lx dreg=%c%i\n", (unsigned) fail, size_val, (unsigned) unit, src, T_DEST_REG(dreg));
                     DECODE_COMPACT_TERM(src, src_pc)
@@ -4353,6 +4396,10 @@ wait_timeout_trap_handler:
                 DECODE_LITERAL(live, pc);
                 term slots_term;
                 DECODE_COMPACT_TERM(slots_term, pc);
+                #ifdef IMPL_CODE_LOADER
+                    // We use an additional x_regs to preserve src
+                    mod->max_xregs = MAX(mod->max_xregs, live + 1);
+                #endif
                 #ifdef IMPL_EXECUTE_LOOP
                     int slots = term_to_int(slots_term);
 
@@ -4400,6 +4447,10 @@ wait_timeout_trap_handler:
                     TRACE("bs_start_match3/4\n");
                 #endif
 
+                #ifdef IMPL_CODE_LOADER
+                    // We use an additional x_regs to preserve src
+                    mod->max_xregs = MAX(mod->max_xregs, live + 1);
+                #endif
                 #ifdef IMPL_EXECUTE_LOOP
                     // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
                     #ifdef IMPL_EXECUTE_LOOP
@@ -4458,6 +4509,10 @@ wait_timeout_trap_handler:
                     TRACE("bs_get_tail/3\n");
                 #endif
 
+                #ifdef IMPL_CODE_LOADER
+                    // We use an additional x_regs to preserve src
+                    mod->max_xregs = MAX(mod->max_xregs, live + 1);
+                #endif
                 #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_get_tail");
 
@@ -5390,6 +5445,10 @@ wait_timeout_trap_handler:
                     #endif
                 }
 
+                #ifdef IMPL_CODE_LOADER
+                    // We use an additional x_regs to preserve src
+                    mod->max_xregs = MAX(mod->max_xregs, live + 1);
+                #endif
                 #ifdef IMPL_EXECUTE_LOOP
                     //
                     // Maybe GC, and reset the src term in case it changed
@@ -5514,6 +5573,10 @@ wait_timeout_trap_handler:
                     #endif
                 }
 
+                #ifdef IMPL_CODE_LOADER
+                    // We use an additional x_regs to preserve src
+                    mod->max_xregs = MAX(mod->max_xregs, live + 1);
+                #endif
                 #ifdef IMPL_EXECUTE_LOOP
                     //
                     // Maybe GC, and reset the src term in case it changed
@@ -6681,6 +6744,10 @@ wait_timeout_trap_handler:
                             int unit;
                             DECODE_LITERAL(unit, pc);
                             j++;
+                            #ifdef IMPL_CODE_LOADER
+                                // We use an additional x_regs to preserve match_state
+                                mod->max_xregs = MAX(mod->max_xregs, live + 1);
+                            #endif
                             #ifdef IMPL_EXECUTE_LOOP
                                 int matched_bits = size * unit;
                                 if (bs_offset % 8 != 0 || matched_bits % 8 != 0) {
@@ -6716,6 +6783,10 @@ wait_timeout_trap_handler:
                             int unit;
                             DECODE_LITERAL(unit, pc);
                             j++;
+                            #ifdef IMPL_CODE_LOADER
+                                // We use an additional x_regs to preserve match_state
+                                mod->max_xregs = MAX(mod->max_xregs, live + 1);
+                            #endif
                             #ifdef IMPL_EXECUTE_LOOP
                                 size_t total_bits = term_binary_size(bs_bin) * 8;
                                 size_t tail_bits = total_bits - bs_offset;
@@ -6821,6 +6892,7 @@ handle_error:
         {
             int target_label = get_catch_label_and_change_module(ctx, &mod);
             if (target_label) {
+                ENSURE_XREGS(x_regs, x_regs_count, mod);
                 code = mod->code->code;
                 JUMP_TO_ADDRESS(mod->labels[target_label]);
                 continue;

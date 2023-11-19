@@ -130,6 +130,7 @@ struct Module
     int end_instruction_ii;
 
     unsigned int free_literals_data : 1;
+    uint16_t max_xregs;
 
 #ifndef AVM_NO_SMP
     Mutex *mutex;
