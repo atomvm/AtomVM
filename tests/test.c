@@ -516,6 +516,7 @@ struct Test tests[] = {
 
 #if defined ATOMVM_HAS_MBEDTLS
     TEST_CASE(test_crypto_strong_rand_bytes),
+    TEST_CASE(test_atomvm_random),
 #endif
 
     // TEST CRASHES HERE: TEST_CASE(memlimit),
