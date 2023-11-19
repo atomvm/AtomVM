@@ -64,17 +64,14 @@ jobs:
         - os: "macos-latest"
           otp: "23"
           path_prefix: "/usr/local/opt/erlang@23/bin:"
-          cmake_opts: "-DOPENSSL_ROOT_DIR=/usr/local/opt/openssl"
 
         - os: "macos-latest"
           otp: "24"
           path_prefix: "/usr/local/opt/erlang@24/bin:"
-          cmake_opts: "-DOPENSSL_ROOT_DIR=/usr/local/opt/openssl"
 
         - os: "macos-latest"
           otp: "25"
           path_prefix: "/usr/local/opt/erlang@25/bin:"
-          cmake_opts: "-DOPENSSL_ROOT_DIR=/usr/local/opt/openssl"
     steps:
     # Setup
     - name: "Checkout repo"
@@ -101,7 +98,7 @@ jobs:
 
     - name: "Install deps (macOS)"
       if: runner.os == 'macOS'
-      run: brew install gperf erlang@${{ matrix.otp }} ninja
+      run: brew install gperf erlang@${{ matrix.otp }} ninja mbedtls
 
     # Build
     - name: "Build: create build dir"

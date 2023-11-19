@@ -98,7 +98,7 @@ jobs:
             apt update &&
             apt install -y -t stretch-backports-sloppy libarchive13 &&
             apt install -y -t stretch-backports cmake &&
-            apt install -y file gcc g++ binutils make doxygen gperf zlib1g-dev libssl-dev libmbedtls-dev
+            apt install -y file gcc g++ binutils make doxygen gperf zlib1g-dev libmbedtls-dev
 
         - arch: "arm32v7"
           platform: "arm/v7"
@@ -148,7 +148,7 @@ jobs:
             ${{ matrix.install_deps }}
         else
             apt update &&
-            apt install -y file gcc g++ binutils cmake make doxygen gperf zlib1g-dev libssl-dev libmbedtls-dev
+            apt install -y file gcc g++ binutils cmake make doxygen gperf zlib1g-dev libmbedtls-dev
         fi &&
         file /bin/bash &&
         uname -a &&
