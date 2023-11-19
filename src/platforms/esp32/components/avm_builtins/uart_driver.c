@@ -257,6 +257,9 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
     }
 
     uart_config_t uart_config = {
+#if ESP_IDF_VERSION_MAJOR >= 5
+        .source_clk = UART_SCLK_DEFAULT,
+#endif
         .baud_rate = uart_speed,
         .data_bits = data_bits,
         .parity = parity,
