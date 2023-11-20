@@ -207,9 +207,9 @@ static bool get_register_callback_parameters(Context *ctx, int argc, term argv[]
     }
     bool use_capture_opt = false;
     bool prevent_default_opt = false;
-    if (argc >= 1 && term_is_atom(argv[1])) {
+    if (argc > 1 && term_is_atom(argv[1])) {
         use_capture_opt = argv[1] == TRUE_ATOM;
-    } else if (argc >= 1 && term_is_list(argv[1])) {
+    } else if (argc > 1 && term_is_list(argv[1])) {
         use_capture_opt = interop_proplist_get_value_default(argv[1], globalcontext_make_atom(ctx->global, ATOM_STR("\xB", "use_capture")), FALSE_ATOM) == TRUE_ATOM;
         prevent_default_opt = interop_proplist_get_value_default(argv[1], globalcontext_make_atom(ctx->global, ATOM_STR("\xF", "prevent_default")), FALSE_ATOM) == TRUE_ATOM;
     }
