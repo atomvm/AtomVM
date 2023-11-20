@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed STM32 code that was hard coded to the default target device, now configured based on the `cmake -DDEVICE=` parameter
 - Fixed hard fault on STM32 durung malloc on boards with more than one bank of sram
 - Fixed invalid src_clk error on ESP-IDF >= 5.0
+- Fixed changed default to `AVM_USE_32BIT_FLOAT=on` for STM32 platform to enable use of single precision hardware FPU on F4/F7 devices.
 
 ### Changed
 
