@@ -61,7 +61,7 @@ jobs:
           echo "%%"
           echo "**freebsd-version:**"
           freebsd-version
-          sudo pkg install -y cmake gperf erlang elixir mbedtls
+          sudo pkg install -y cmake gperf erlang rebar3 elixir mbedtls
           echo "**uname:**"
           uname -a
           echo "**C Compiler version:**"
@@ -113,11 +113,6 @@ jobs:
           echo "%% Running eavmlib tests ..."
           echo "%%"
           ./src/AtomVM tests/libs/eavmlib/test_eavmlib.avm
-
-          echo "%%"
-          echo "%% Running alisp tests ..."
-          echo "%%"
-          ./src/AtomVM tests/libs/alisp/test_alisp.avm
 
           echo "%%"
           echo "%% Running install ..."

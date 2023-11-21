@@ -36,16 +36,24 @@ jobs:
     - name: Install required packages
       run: sudo apt install -y gperf
 
+    - name: "Build rebar3"
+      run: |
+        cd /tmp
+        git clone https://github.com/erlang/rebar3.git
+        cd rebar3
+        ./bootstrap
+
     - name: Compile test modules
       run: |
         set -e
         mkdir build_tests
         cd build_tests
+        export PATH=/tmp/rebar3:$PATH
         cmake ..
-        make erlang_test_modules
+        make erlang_tests
+        make code_load copy_code_load_beam copy_code_load_avm
         make test_estdlib
         make test_eavmlib
-        make test_alisp
 
     - name: Upload test modules
       uses: actions/upload-artifact@v3
@@ -216,13 +224,10 @@ jobs:
         mkdir -p build &&
         cd build &&
         cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo ${{ matrix.cmake_opts }} &&
-        cp ../build_tests/tests/erlang_tests/*.beam tests/erlang_tests/ &&
-        cp ../build_tests/tests/erlang_tests/code_load/*.{avm,beam,hrl} tests/erlang_tests/code_load/ &&
-        mkdir -p tests/erlang_tests/code_load/beams/ &&
-        cp ../build_tests/tests/erlang_tests/code_load/beams/*.beam tests/erlang_tests/code_load/beams/ &&
-        cp ../build_tests/tests/libs/estdlib/*.avm tests/libs/estdlib/  &&
-        cp ../build_tests/tests/libs/eavmlib/*.avm tests/libs/eavmlib/ &&
-        cp ../build_tests/tests/libs/alisp/*.avm tests/libs/alisp/ &&
+        mkdir -p tests/erlang_tests/_build/default/lib/erlang_tests/ebin &&
+        cp -r ../build_tests/tests/erlang_tests/_build/default/lib/erlang_tests/ebin/* tests/erlang_tests/_build/default/lib/erlang_tests/ebin/. &&
+        cp ../build_tests/tests/libs/estdlib/_build/default/lib/*.avm tests/libs/estdlib/.  &&
+        cp ../build_tests/tests/libs/eavmlib/_build/default/lib/*.avm tests/libs/eavmlib/. &&
         VERBOSE=1 make AtomVM &&
         make test-erlang &&
         make test-enif &&
@@ -239,7 +244,6 @@ jobs:
         file ./src/AtomVM &&
         ./src/AtomVM tests/libs/estdlib/test_estdlib.avm &&
         ./src/AtomVM tests/libs/eavmlib/test_eavmlib.avm &&
-        ./src/AtomVM tests/libs/alisp/test_alisp.avm &&
         cp ./src/AtomVM ./AtomVM-${{ matrix.build_name }}-${{ github.ref_name }} &&
         sha256sum ./src/AtomVM > ./AtomVM-${{ matrix.build_name }}-${{ github.ref_name }}.sha256
         '

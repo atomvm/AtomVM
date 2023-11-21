@@ -1,7 +1,7 @@
 #
 # This file is part of AtomVM.
 #
-# Copyright 2018-2021 Fred Dushin <fred@dushin.net>
+# Copyright 2018-2023 Fred Dushin <fred@dushin.net>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,29 +22,6 @@ project(test_estdlib)
 
 include(BuildErlang)
 
-set(ERLANG_MODULES
-    test_calendar
-    test_gen_event
-    test_gen_server
-    test_gen_statem
-    test_gen_udp
-    test_gen_tcp
-    test_io_lib
-    test_lists
-    test_logger
-    test_maps
-    test_net
-    test_spawn
-    test_ssl
-    test_string
-    test_proplists
-    test_timer
-    test_supervisor
-    test_tcp_socket
-    test_udp_socket
-    notify_init_server
-    ping_pong_server
-)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/rebar.config.in ${CMAKE_CURRENT_SOURCE_DIR}/rebar.config @ONLY)
 
-pack_archive(test_estdlib_lib ${ERLANG_MODULES})
-pack_test(test_estdlib estdlib eavmlib etest)
+rebar3_packbeam(test_estdlib atomvmlib etest)

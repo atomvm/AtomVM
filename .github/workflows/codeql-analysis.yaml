@@ -66,8 +66,17 @@ jobs:
         languages: ${{ matrix.language }}
         queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql
 
+    - name: "Build rebar3"
+      run: |
+        export PATH="${{ matrix.path_prefix }}$PATH"
+        cd /tmp
+        git clone https://github.com/erlang/rebar3.git
+        cd rebar3
+        ./bootstrap
+
     - name: "Build"
       run: |
+        export PATH=/tmp/rebar3:$PATH
         mkdir build
         cd build
         cmake .. -G Ninja

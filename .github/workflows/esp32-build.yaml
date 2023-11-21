@@ -63,7 +63,7 @@ jobs:
         set -eu
         apt update
         DEBIAN_FRONTEND=noninteractive apt install -y -q \
-            doxygen erlang-base erlang-dialyzer \
+            doxygen erlang erlang-dialyzer \
             libglib2.0-0 libpixman-1-0 \
             gcc g++ zlib1g-dev
 
@@ -88,10 +88,18 @@ jobs:
             pytest-embedded-idf==1.2.5 \
             pytest-embedded-qemu==1.2.5
 
+    - name: "Build rebar3"
+      run: |
+        cd /tmp
+        git clone https://github.com/erlang/rebar3.git
+        cd rebar3
+        ./bootstrap
+
     - name: Build ESP32 tests using idf.py
       working-directory: ./src/platforms/esp32/test/
       run: |
         set -e
+        export PATH=/tmp/rebar3:$PATH
         . $IDF_PATH/export.sh
         idf.py build
 
@@ -100,6 +108,7 @@ jobs:
       timeout-minutes: 10
       run: |
         set -e
+        export PATH=/tmp/rebar3:$PATH
         . $IDF_PATH/export.sh
         export PATH=/opt/qemu/bin:${PATH}
         pytest --embedded-services=idf,qemu -s

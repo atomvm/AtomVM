@@ -55,7 +55,7 @@ compile_erlang(test_tz)
 add_custom_command(
     OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/esp32_test_modules.avm"
     COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/packbeam/PackBEAM -i esp32_test_modules.avm
-        HostAtomVM-prefix/src/HostAtomVM-build/libs/atomvmlib.avm
+        HostAtomVM-prefix/src/HostAtomVM-build/libs/atomvmlib/atomvmlib.avm
         test_esp_partition.beam
         test_file.beam
         test_list_to_binary.beam

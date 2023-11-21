@@ -599,7 +599,7 @@ int test_module_execution(bool beam, struct Test *test)
 
 int test_modules_execution(bool beam, bool skip, int count, char **item)
 {
-    if (chdir("erlang_tests") != 0) {
+    if (chdir("erlang_tests/_build/default/lib/erlang_tests/ebin") != 0) {
         perror("Error: ");
         return EXIT_FAILURE;
     }

@@ -59,7 +59,8 @@ The following software is required in order to build AtomVM in generic UNIX syst
 * `gperf`
 * `zlib`
 * `Mbed TLS`
-* Erlang/OTP compiler (`erlc`)
+* The [Erlang](https://www.erlang.org/) runtime
+* The [rebar3](https://rebar3.org) build tool
 * Elixir compiler
 
 Consult [Release Notes](./release-notes.md) for currently supported versions of required software.
@@ -84,7 +85,7 @@ This command will create all of the required make files for creating the AtomVM 
 
 Upon completion, the `AtomVM` executable can be found in the `build/src` directory.
 
-The AtomVM core Erlang library can be found in the generated `libs/atomvmlib.avm` AVM file.
+The AtomVM core Erlang library can be found in the generated `libs/atomvmlib/atomvmlib.avm` AVM file.
 
 Use the `install` target to install the `atomvm` command and associated binary files.  On most UNIX systems, these artifacts will be installed in the `/usr/local` directory tree.
 
@@ -99,7 +100,7 @@ Once installed, you can use the `atomvm` command to execute an AtomVM applicatio
 For users doing incremental development on the AtomVM virtual machine, you may want to run the `AtomVM` binary directly instead of installing the VM on your machine.  If you do, you will typically need to also specify the path to the AtomVM core Erlang library.  For example,
 
     shell$ cd build
-    shell$ ./src/AtomVM /path/to/myapp.avm ./libs/atomvmlib.avm
+    shell$ ./src/AtomVM /path/to/myapp.avm ./libs/atomvmlib/atomvmlib.avm
 
 #### Special Note for MacOS users
 
@@ -135,7 +136,6 @@ Tests for the following libraries are supported:
 
 * `estdlib`
 * `eavmlib`
-* `alisp`
 
 ## Building for ESP32
 
@@ -400,9 +400,9 @@ Applications can be flashed using the `flash.sh` script in the esp32 build direc
 
 If you are doing development work on the core Erlang/Elixir libraries and wish to test changes that do not involve the `C` code in the core VM you may flash `atomvmlib.avm` to the avm.lib partition (offset 0x1D0000) by using the `flash.sh` script in the esp32 build directory as follows:
 
-    shell$ build/flash.sh -l ../../../build/libs/atomvmlib.avm
+    shell$ build/flash.sh -l ../../../build/libs/atomvmlib/atomvmlib.avm
     %%
-    %% Flashing ../../../build/libs/atomvmlib.avm (size=116k)
+    %% Flashing ../../../build/libs/atomvmlib/atomvmlib.avm (size=116k)
     %%
     esptool.py v4.5.1
     Serial port /dev/ttyUSB0

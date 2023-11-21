@@ -82,7 +82,7 @@ jobs:
       working-directory: build
       run: |
         ATOMVMLIB_FILE=atomvmlib-${{ github.ref_name }}.avm
-        mv libs/atomvmlib.avm "libs/${ATOMVMLIB_FILE}" &&
+        mv libs/atomvmlib/_build/default/lib/atomvmlib.avm "libs/${ATOMVMLIB_FILE}" &&
         sha256sum "libs/${ATOMVMLIB_FILE}" > "libs/${ATOMVMLIB_FILE}.sha256"
 
     - name: Release

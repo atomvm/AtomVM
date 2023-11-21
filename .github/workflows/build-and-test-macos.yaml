@@ -61,6 +61,14 @@ jobs:
         echo "**CMake version:**"
         cmake --version
 
+    - name: "Build rebar3"
+      run: |
+        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
+        cd /tmp
+        git clone https://github.com/erlang/rebar3.git
+        cd rebar3
+        ./bootstrap
+
     # Build
     - name: "Build: create build dir"
       run: mkdir build
@@ -68,19 +76,19 @@ jobs:
     - name: "Build: run cmake"
       working-directory: build
       run: |
-        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
+        export PATH="/tmp/rebar3:/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
         cmake -DAVM_WARNINGS_ARE_ERRORS=ON -G Ninja ..
 
     - name: "Build: run ninja"
       working-directory: build
       run: |
-        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
+        export PATH="/tmp/rebar3:/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
         ninja
 
     - name: "Build: run dialyzer"
       working-directory: build
       run: |
-        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
+        export PATH="/tmp/rebar3:/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
         ninja dialyzer
 
     # Test
@@ -118,16 +126,10 @@ jobs:
       run: |
         ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 
-    - name: "Test: test_alisp.avm"
-      timeout-minutes: 10
-      working-directory: build
-      run: |
-        ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
-
     - name: "Install and smoke test"
       working-directory: build
       run: |
-        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
+        export PATH="/tmp/rebar3:/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
         sudo ninja install
         atomvm examples/erlang/hello_world.avm
         atomvm -v

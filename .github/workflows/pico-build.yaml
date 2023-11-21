@@ -41,13 +41,26 @@ jobs:
       uses: actions/checkout@v3
 
     - name: "Install deps"
-      run: sudo apt install -y cmake gperf ninja-build gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib erlang-base erlang-dialyzer
+      run: sudo apt install -y cmake gperf ninja-build gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
+
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: "24"
+        elixir-version: "1.14"
+
+    - name: "Build rebar3"
+      run: |
+        cd /tmp
+        git clone https://github.com/erlang/rebar3.git
+        cd rebar3
+        ./bootstrap
 
     - name: Build
       shell: bash
       working-directory: ./src/platforms/rp2040/
       run: |
         set -euo pipefail
+        export PATH=/tmp/rebar3:$PATH
         mkdir build
         cd build
         cmake .. -G Ninja -DPICO_BOARD=${{ matrix.board }}
@@ -65,6 +78,7 @@ jobs:
       working-directory: ./src/platforms/rp2040/
       run: |
         set -euo pipefail
+        export PATH=/tmp/rebar3:$PATH
         mkdir build.nosmp
         cd build.nosmp
         # TODO: fix all warnings and enable -DAVM_WARNINGS_ARE_ERRORS=ON
@@ -85,6 +99,7 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/')
       shell: bash
       run: |
+        export PATH=/tmp/rebar3:$PATH
         set -euo pipefail
         mkdir build
         cd build

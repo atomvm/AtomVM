@@ -23,6 +23,8 @@ project (UF2Tool)
 
 include(${CMAKE_SOURCE_DIR}/CMakeModules/GetVersion.cmake)
 
+# TODO CMAKE_FILES_DIRECTORY is an undocumented CMake variable,
+# so we should consider an alternative location for these files
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/uf2tool.erl ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/uf2tool @ONLY)
 file(COPY ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/uf2tool
     DESTINATION ${CMAKE_CURRENT_BINARY_DIR}

@@ -42,7 +42,7 @@ To flash your packed AVM, use
 
 You must include the atomvmlib.avm with your application when using packbeam, and it should be pruned:
 
-	$ packbeam create -p -i application.avm application.beam /path/to/AtomVM/build/libs/atomvmlib.avm
+	$ packbeam create -p -i application.avm application.beam /path/to/AtomVM/build/libs/atomvmlib/atomvmlib.avm
 
 > Note: The option`-i` will instruct packbeam to include file names and line numbers in stack traces. This makes debugging applications far easier, but also increases size, so it may be omitted if desired. The `-p` option should be used, it instructs packbeam to prune the unused functions from the packed `.avm` file, and is strongly recommended.
 

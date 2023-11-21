@@ -217,6 +217,14 @@ jobs:
     - name: "Install deps"
       run: sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen valgrind libmbedtls-dev
 
+    - name: "Build rebar3"
+      run: |
+        export PATH="${{ matrix.path_prefix }}$PATH"
+        cd /tmp
+        git clone https://github.com/erlang/rebar3.git
+        cd rebar3
+        ./bootstrap
+
     # Builder info
     - name: "System info"
       run: |
@@ -254,11 +262,15 @@ jobs:
 
     - name: "Build: run make"
       working-directory: build
-      run: make
+      run: |
+        export PATH=/tmp/rebar3:$PATH
+        make
 
     - name: "Build: run dialyzer"
       working-directory: build
-      run: make dialyzer
+      run: |
+        export PATH=/tmp/rebar3:$PATH
+        make dialyzer
 
     # Test
     - name: "Test: test-erlang"
@@ -301,17 +313,10 @@ jobs:
         ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
         valgrind ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 
-    - name: "Test: test_alisp.avm"
-      timeout-minutes: 10
-      working-directory: build
-      run: |
-        ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
-        valgrind ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
-
     - name: "Install and smoke test"
       working-directory: build
       run: |
-        sudo PATH=${PATH} make install
+        sudo PATH=/tmp/rebar3:${PATH} make install
         atomvm examples/erlang/hello_world.avm
         atomvm -v
         atomvm -h

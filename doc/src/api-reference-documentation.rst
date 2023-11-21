@@ -34,16 +34,6 @@ eavmlib
    apidocs/erlang/eavmlib/*
 
 ---------------------
-alisp
----------------------
-
-.. toctree::
-   :maxdepth: 1
-   :glob:
-
-   apidocs/erlang/alisp/*
-
----------------------
 etest
 ---------------------
 

@@ -21,12 +21,12 @@
 cmake_minimum_required (VERSION 3.12)
 project(libs)
 
-add_subdirectory(estdlib/src)
-add_subdirectory(eavmlib/src)
-add_subdirectory(alisp/src)
-add_subdirectory(etest/src)
+add_subdirectory(estdlib)
+add_subdirectory(eavmlib)
+add_subdirectory(atomvmlib)
+add_subdirectory(esp32devmode)
 add_subdirectory(esp32boot)
-add_subdirectory(esp32devmode/src)
+add_subdirectory(etest)
 
 if (Elixir_FOUND)
     add_subdirectory(exavmlib/lib)
@@ -34,20 +34,14 @@ else()
     message("Unable to find elixirc -- skipping Elixir libs")
 endif()
 
-if (Elixir_FOUND)
-    pack_lib(atomvmlib eavmlib estdlib alisp exavmlib)
-else()
-    pack_lib(atomvmlib eavmlib estdlib alisp)
-endif()
-
 if (Dialyzer_FOUND)
     add_custom_command(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.plt
         DEPENDS atomvmlib
         COMMAND dialyzer --build_plt --output_plt ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.plt
-            -r ${CMAKE_CURRENT_BINARY_DIR}/estdlib/src/beams
-            -r ${CMAKE_CURRENT_BINARY_DIR}/eavmlib/src/beams
-            -r ${CMAKE_CURRENT_BINARY_DIR}/alisp/src/beams
+            -r ${CMAKE_CURRENT_BINARY_DIR}/estdlib/_build/default/lib/estdlib/ebin
+            -r ${CMAKE_CURRENT_BINARY_DIR}/estdlib/_build/default/lib/estdlib/bootstrap_ebin
+            -r ${CMAKE_CURRENT_BINARY_DIR}/eavmlib/_build/default/lib/eavmlib/ebin
     )
     add_custom_target(atomvmlib_plt
         DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.plt
@@ -55,8 +49,3 @@ if (Dialyzer_FOUND)
 else()
     message("Dialyzer was not found -- skipping PLT build")
 endif()
-
-install(
-    FILES ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.avm
-    DESTINATION lib/atomvm
-)
