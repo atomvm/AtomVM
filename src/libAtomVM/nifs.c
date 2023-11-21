@@ -32,6 +32,7 @@
 #include <time.h>
 
 #include "atomshashtable.h"
+#include "avm_version.h"
 #include "avmpack.h"
 #include "bif.h"
 #include "context.h"
@@ -51,7 +52,6 @@
 #include "sys.h"
 #include "term.h"
 #include "utils.h"
-#include "version.h"
 
 #define MAX_NIF_NAME_LEN 260
 #define FLOAT_BUF_SIZE 64

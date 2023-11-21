@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include <avm_version.h>
 #include <avmpack.h>
 #include <context.h>
 #include <defaultatoms.h>
@@ -29,7 +30,6 @@
 #include <iff.h>
 #include <module.h>
 #include <sys.h>
-#include <version.h>
 
 #include <emscripten.h>
 #include <emscripten/promise.h>

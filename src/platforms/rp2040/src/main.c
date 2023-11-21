@@ -31,13 +31,13 @@
 
 #pragma GCC diagnostic pop
 
+#include <avm_version.h>
 #include <avmpack.h>
 #include <context.h>
 #include <defaultatoms.h>
 #include <globalcontext.h>
 #include <iff.h>
 #include <module.h>
-#include <version.h>
 
 #include "rp2040_sys.h"
 

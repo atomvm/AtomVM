@@ -31,13 +31,13 @@
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/usart.h>
 
+#include <avm_version.h>
 #include <avmpack.h>
 #include <context.h>
 #include <defaultatoms.h>
 #include <globalcontext.h>
 #include <module.h>
 #include <utils.h>
-#include <version.h>
 
 #include "lib/avm_devcfg.h"
 #include "lib/avm_log.h"
