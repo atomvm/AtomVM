@@ -1,0 +1,25 @@
+# Copyright (c) 2021 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+manifest:
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+  defaults:
+    remote: zephyrproject-rtos
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      revision: v3.5.0
+      import:
+        # By using name-allowlist we can clone only the modules that are
+        # strictly needed by the application.
+        name-allowlist:
+          - cmsis          # required by the ARM port
+          - stm32          # required by STM32 boards
+          - native_sim     # 32-bit native
+          - native_sim_64  # 64-bit native
+          - qemu_x86       # QEMU 32-bit virtual machine
+          - qemu_x86_64    # QEMU 64-bit virtual machine
+  self:
+    path: .
