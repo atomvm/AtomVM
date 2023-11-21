@@ -120,6 +120,18 @@ test() ->
     ),
 
     ?ASSERT_MATCH(?FLT(io_lib:format("~p", [foo])), "foo"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("~p", ['-foo'])), "'-foo'"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("~p", ['try'])), "'try'"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("~p", ['maybe'])), "maybe"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("~w", [foo])), "foo"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("~w", ['-foo'])), "'-foo'"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("~w", ['try'])), "'try'"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("~w", ['maybe'])), "maybe"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("~s", [foo])), "foo"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("~s", ['-foo'])), "-foo"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("~s", ['try'])), "try"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("~s", ['maybe'])), "maybe"),
+
     ?ASSERT_MATCH(?FLT(io_lib:format("\t~p", [bar])), "\tbar"),
 
     ?ASSERT_MATCH(
