@@ -90,12 +90,20 @@ jobs:
         echo "**OTP version:**"
         cat $(dirname $(which erlc))/../releases/RELEASES || true
 
+    - name: "Build rebar3"
+      run: |
+        cd /tmp
+        git clone https://github.com/erlang/rebar3.git
+        cd rebar3
+        ./bootstrap
+
     - name: "Build: create build dir"
       run: mkdir build
 
     - name: "Build: run cmake"
       working-directory: build
       run: |
+        export PATH=/tmp/rebar3:$PATH
         cmake ..
         # git clone will use more recent timestamps than cached beam files
         # touch them so we can benefit from the cache and avoid costly beam file rebuild.
@@ -104,6 +112,7 @@ jobs:
     - name: "Build erlang and Elixir libs"
       working-directory: build/libs
       run: |
+        export PATH=/tmp/rebar3:$PATH
         make
 
     - name: "Use release defaults"

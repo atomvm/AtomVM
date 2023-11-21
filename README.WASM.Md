@@ -39,7 +39,7 @@ You can also load beam files with:
 
 ```
 cd src/platforms/emscripten/build
-node src/AtomVM.js ../../../../build/examples/erlang/hello_world.beam ../../../../build/libs/atomvmlib.avm
+node src/AtomVM.js ../../../../build/examples/erlang/hello_world.beam ../../../../build/libs/atomvmlib/atomvmlib.avm
 ```
 
 Running AtomVM in the browser

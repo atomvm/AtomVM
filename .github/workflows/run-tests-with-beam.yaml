@@ -43,39 +43,45 @@ jobs:
         - os: "ubuntu-20.04"
           test_erlang_opts: "-s prime_smp"
           otp: "21"
+          path_prefix: "/tmp/rebar3:"
 
         - os: "ubuntu-20.04"
           test_erlang_opts: "-s prime_smp"
           otp: "22"
+          path_prefix: "/tmp/rebar3:"
 
         - os: "ubuntu-20.04"
           test_erlang_opts: "-s prime_smp"
           otp: "23"
+          path_prefix: "/tmp/rebar3:"
 
         - os: "ubuntu-22.04"
           test_erlang_opts: "-s prime_smp"
           otp: "24"
+          path_prefix: "/tmp/rebar3:"
 
         - os: "ubuntu-22.04"
           test_erlang_opts: "-s prime_smp"
           otp: "25"
+          path_prefix: "/tmp/rebar3:"
 
         - os: "ubuntu-22.04"
           test_erlang_opts: "-s prime_smp"
           otp: "26"
+          path_prefix: "/tmp/rebar3:"
           container: erlang:26
 
         - os: "macos-latest"
           otp: "23"
-          path_prefix: "/usr/local/opt/erlang@23/bin:"
+          path_prefix: "/tmp/rebar3:/usr/local/opt/erlang@23/bin:"
 
         - os: "macos-latest"
           otp: "24"
-          path_prefix: "/usr/local/opt/erlang@24/bin:"
+          path_prefix: "/tmp/rebar3:/usr/local/opt/erlang@24/bin:"
 
         - os: "macos-latest"
           otp: "25"
-          path_prefix: "/usr/local/opt/erlang@25/bin:"
+          path_prefix: "/tmp/rebar3:/usr/local/opt/erlang@25/bin:"
     steps:
     # Setup
     - name: "Checkout repo"
@@ -103,6 +109,14 @@ jobs:
     - name: "Install deps (macOS)"
       if: runner.os == 'macOS'
       run: brew install gperf erlang@${{ matrix.otp }} ninja mbedtls
+
+    - name: "Build rebar3"
+      run: |
+        export PATH="${{ matrix.path_prefix }}$PATH"
+        cd /tmp
+        git clone https://github.com/erlang/rebar3.git
+        cd rebar3
+        ./bootstrap
 
     # Build
     - name: "Build: create build dir"
@@ -147,4 +161,4 @@ jobs:
       working-directory: build
       run: |
         export PATH="${{ matrix.path_prefix }}$PATH"
-        erl -pa tests/libs/estdlib/ -pa tests/libs/estdlib/beams/ -pa libs/etest/src/beams -s tests -s init stop -noshell
+        erl -pa tests/libs/estdlib/_build/default/lib/test_estdlib/ebin -pa libs/etest/_build/default/lib/etest/ebin -s tests -s init stop -noshell

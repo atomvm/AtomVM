@@ -56,12 +56,18 @@ execute_process(COMMAND "bash" "-c" "tag=$(git for-each-ref --points-at=HEAD --f
 ## Erlang API documentation
 ##
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/apidocs/erlang)
-file(COPY ${CMAKE_SOURCE_DIR}/libs/include DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/edoc/)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/edoc/include)
+file(COPY ${CMAKE_SOURCE_DIR}/libs/eavmlib/include/ledc.hrl DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/edoc/include/.)
+file(COPY ${CMAKE_SOURCE_DIR}/libs/etest/include/etest.hrl DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/edoc/include/.)
 
-foreach(ERLANG_LIB estdlib eavmlib alisp etest)
+foreach(ERLANG_LIB estdlib eavmlib etest)
     set(ERL_LIB ${ERLANG_LIB}) # to allow passing ERL_LIB to gendoc.erl.in
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/edoc/gendoc.erl.in ${CMAKE_CURRENT_BINARY_DIR}/edoc/${ERLANG_LIB}/gendoc.erl @ONLY)
     file(COPY ${CMAKE_SOURCE_DIR}/libs/${ERLANG_LIB} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/edoc/)
+    if (EXISTS ${CMAKE_CURRENT_BINARY_DIR}/edoc/${ERLANG_LIB}/bootstrap)
+        file(GLOB BOOTSTRAP_FILES ${CMAKE_CURRENT_BINARY_DIR}/edoc/${ERLANG_LIB}/bootstrap/*.erl)
+        file(COPY ${BOOTSTRAP_FILES} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/edoc/${ERLANG_LIB}/src/.)
+    endif()
     add_custom_target(edoc-${ERLANG_LIB}
         COMMAND escript gendoc.erl ${ERLANG_LIB} src ${CMAKE_CURRENT_BINARY_DIR}/src/apidocs/erlang/${ERLANG_LIB}
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/edoc/${ERLANG_LIB}
@@ -143,7 +149,7 @@ else()
 endif()
 
 ## Fix URLs and change title to include "library" instead of "application"
-foreach(LIBAVM_ERL_LIB estdlib eavmlib alisp etest)
+foreach(LIBAVM_ERL_LIB estdlib eavmlib etest)
     add_custom_command(TARGET edoc-${LIBAVM_ERL_LIB}
         POST_BUILD
         COMMAND sed -i -e "s/\.md/\.html/g; s/application/library/g" ${CMAKE_CURRENT_BINARY_DIR}/src/apidocs/erlang/${LIBAVM_ERL_LIB}/README.md

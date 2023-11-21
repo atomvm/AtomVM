@@ -89,11 +89,10 @@ target_link_libraries(test-structs PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUF
 
 # Except for XCode, also compile beams
 if (NOT "${CMAKE_GENERATOR}" MATCHES "Xcode")
-    add_dependencies(test-erlang erlang_test_modules)
+    add_subdirectory(code_load)
     add_subdirectory(erlang_tests)
     add_subdirectory(libs/estdlib)
     add_subdirectory(libs/eavmlib)
-    add_subdirectory(libs/alisp)
 endif()
 
 if (COVERAGE)

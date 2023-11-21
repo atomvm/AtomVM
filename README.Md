@@ -36,7 +36,8 @@ Dependencies
 Required for building:
 * CMake ([CMake build system](https://cmake.org/))
 * gperf ([GNU Perfect Hash Function Generator](https://www.gnu.org/software/gperf/manual/gperf.html))
-* erlc ([erlang compiler](https://www.erlang.org/))
+* The [Erlang](https://www.erlang.org/) runtime
+* The [rebar3](https://rebar3.org) build tool
 * elixirc ([elixir compiler](https://elixir-lang.org))
 * Mbed TLS ([portable TLS library, optionally required to support SSL](https://www.trustedfirmware.org/projects/mbed-tls/))
 * zlib ([zlib compression and decompression library](https://zlib.net/))

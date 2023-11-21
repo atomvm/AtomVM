@@ -44,14 +44,21 @@ macro(pack_archive avm_name)
     endif()
 
     add_custom_target(
-        ${avm_name} ALL
+        ${avm_name}_packbeam ALL
         DEPENDS ${avm_name}_beams PackBEAM
         COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${BEAMS}
         COMMENT "Packing archive ${avm_name}.avm"
         VERBATIM
     )
-    add_dependencies(${avm_name} ${avm_name}_beams PackBEAM)
+    add_dependencies(${avm_name}_packbeam ${avm_name}_beams PackBEAM)
 
+    add_custom_target(
+        ${avm_name} ALL
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/..
+        COMMAND ln -f -s lib/${avm_name}.avm
+        DEPENDS ${avm_name}_packbeam
+        VERBATIM
+    )
 endmacro()
 
 macro(pack_runnable avm_name main)
@@ -80,7 +87,7 @@ macro(pack_runnable avm_name main)
         if(${archive_name} STREQUAL "exavmlib")
             set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/lib/${archive_name}.avm)
         else()
-            set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
+            set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/${archive_name}.avm)
         endif()
         set(ARCHIVE_TARGETS ${ARCHIVE_TARGETS} ${archive_name})
     endforeach()

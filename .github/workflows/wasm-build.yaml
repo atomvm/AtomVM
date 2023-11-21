@@ -51,13 +51,21 @@ jobs:
     - name: Install required packages
       run: sudo apt install -y gperf zlib1g-dev ninja-build
 
+    - name: "Build rebar3"
+      run: |
+        cd /tmp
+        git clone https://github.com/erlang/rebar3.git
+        cd rebar3
+        ./bootstrap
+
     - name: Compile AtomVM and test modules
       run: |
+        export PATH=/tmp/rebar3:$PATH
         set -e
         mkdir build
         cd build
         cmake .. -G Ninja -DAVM_WARNINGS_ARE_ERRORS=ON
-        ninja AtomVM atomvmlib test_eavmlib test_alisp hello_world run_script call_cast html5_events wasm_webserver
+        ninja AtomVM atomvmlib test_eavmlib hello_world run_script call_cast html5_events wasm_webserver
 
     - name: Upload AtomVM and test modules
       uses: actions/upload-artifact@v3
@@ -119,9 +127,8 @@ jobs:
       run: |
         set -euxo pipefail
         # Test compressed beams
-        node src/AtomVM.js ../../../../build/examples/erlang/hello_world.beam  ../../../../build/libs/eavmlib/src/eavmlib.avm
+        node src/AtomVM.js ../../../../build/examples/erlang/hello_world.beam  ../../../../build/libs/eavmlib/eavmlib.avm
         # Run tests that pass
-        node src/AtomVM.js ../../../../build/tests/libs/alisp/test_alisp.avm
         node src/AtomVM.js ../../../../build/tests/libs/eavmlib/test_eavmlib.avm
 
     - name: "Rename and write sha256sum (node)"

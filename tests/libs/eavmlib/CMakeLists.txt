@@ -1,7 +1,7 @@
 #
 # This file is part of AtomVM.
 #
-# Copyright 2018 Fred Dushin <fred@dushin.net>
+# Copyright 2018-2023 Fred Dushin <fred@dushin.net>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,11 +22,6 @@ project(test_eavmlib)
 
 include(BuildErlang)
 
-set(ERLANG_MODULES
-    test_file
-    test_port
-    test_timer_manager
-)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/rebar.config.in ${CMAKE_CURRENT_SOURCE_DIR}/rebar.config @ONLY)
 
-pack_archive(test_eavmlib_lib ${ERLANG_MODULES})
-pack_test(test_eavmlib eavmlib estdlib etest)
+rebar3_packbeam(test_eavmlib atomvmlib etest)

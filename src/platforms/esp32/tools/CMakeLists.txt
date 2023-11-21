@@ -34,6 +34,8 @@ endif()
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mkimage.config.in ${CMAKE_BINARY_DIR}/mkimage.config)
 
+## TODO CMAKE_FILES_DIRECTORY is an undocumented CMake variable,
+## so we should consider an alternative location for these files
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/dev/flash.sh ${CMAKE_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/flash.sh COPYONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mkimage.erl ${CMAKE_BINARY_DIR}/mkimage.erl COPYONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/flashimage.sh.in ${CMAKE_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/flashimage.sh @ONLY)
@@ -50,4 +52,3 @@ file(COPY ${CMAKE_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/flash.sh
     DESTINATION ${CMAKE_BINARY_DIR}
     FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
 )
-
