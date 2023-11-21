@@ -121,6 +121,22 @@ jobs:
           cflags: ""
 
         - arch: "x86_64"
+          build_name: "linux-x86_64-static-mbedtls"
+          docker_image: "ubuntu"
+          platform: "amd64"
+          tag: "18.04"
+          cflags: ""
+          cmake_opts: "-DAVM_STATIC_MBEDTLS=ON"
+          install_deps: |
+            apt update &&
+            apt install -y file gcc g++ binutils make doxygen gperf zlib1g-dev libmbedtls-dev wget tzdata &&
+            apt purge -y cmake &&
+            wget https://cmake.org/files/v3.13/cmake-3.13.5-Linux-x86_64.tar.gz &&
+            tar xf cmake-3.13.5-Linux-x86_64.tar.gz &&
+            mv cmake-3.13.5-Linux-x86_64 /opt/cmake-3.13.5 &&
+            ln -sf /opt/cmake-3.13.5/bin/* /usr/bin/
+
+        - arch: "x86_64"
           build_name: "linux-x86_64"
           docker_image: "ubuntu"
           platform: "amd64"
