@@ -217,8 +217,14 @@ format_string(Format, T) ->
     format_spw(Format, T).
 
 %% @private
-format_spw(_Format, T) when is_atom(T) ->
+format_spw(#format{control = s}, T) when is_atom(T) ->
     erlang:atom_to_list(T);
+format_spw(_Format, T) when is_atom(T) ->
+    AtomStr = erlang:atom_to_list(T),
+    case atom_requires_quotes(T, AtomStr) of
+        false -> AtomStr;
+        true -> [$', AtomStr, $']
+    end;
 format_spw(#format{control = s, mod = t} = Format, T) when is_binary(T) ->
     case unicode:characters_to_list(T, utf8) of
         L when is_list(L) -> L;
@@ -286,6 +292,55 @@ format_spw(Format, T) when is_map(T) ->
         ]),
         $}
     ].
+
+%% We will probably need to add 'maybe' with OTP 27
+-define(RESERVED_KEYWORDS, [
+    'after',
+    'and',
+    'andalso',
+    'band',
+    'begin',
+    'bnot',
+    'bor',
+    'bsl',
+    'bsr',
+    'bxor',
+    'case',
+    'catch',
+    'cond',
+    'div',
+    'end',
+    'fun',
+    'if',
+    'let',
+    'not',
+    'of',
+    'or',
+    'orelse',
+    'receive',
+    'rem',
+    'try',
+    'when',
+    'xor'
+]).
+
+%% @private
+atom_requires_quotes(Atom, AtomStr) ->
+    case lists:member(Atom, ?RESERVED_KEYWORDS) of
+        true -> true;
+        false -> atom_requires_quotes0(AtomStr)
+    end.
+
+atom_requires_quotes0([C | _T]) when C < $a orelse C > $z -> true;
+atom_requires_quotes0([_C | T]) -> atom_requires_quotes1(T).
+
+atom_requires_quotes1([]) -> false;
+atom_requires_quotes1([$@ | T]) -> atom_requires_quotes1(T);
+atom_requires_quotes1([$_ | T]) -> atom_requires_quotes1(T);
+atom_requires_quotes1([C | T]) when C >= $A andalso C =< $Z -> atom_requires_quotes1(T);
+atom_requires_quotes1([C | T]) when C >= $0 andalso C =< $9 -> atom_requires_quotes1(T);
+atom_requires_quotes1([C | T]) when C >= $a andalso C =< $z -> atom_requires_quotes1(T);
+atom_requires_quotes1(_) -> true.
 
 %% @private
 format_integer(#format{control = C, precision = Precision0}, T0) when
