@@ -167,21 +167,30 @@ void sys_time(struct timespec *t)
     }
 
     t->tv_sec = tv.tv_sec;
-    t->tv_nsec = tv.tv_usec * 1000;
+    t->tv_nsec = (uint_least64_t) tv.tv_usec * 1000;
 }
 
 void sys_monotonic_time(struct timespec *t)
 {
-    int64_t us_since_boot = esp_timer_get_time();
+    uint64_t us_since_boot = (uint64_t) esp_timer_get_time();
 
-    t->tv_sec = us_since_boot / 1000000UL;
-    t->tv_nsec = (us_since_boot % 1000000UL) * 1000UL;
+    t->tv_sec = us_since_boot / 1000000;
+    t->tv_nsec = (us_since_boot % 1000000) * 1000;
 }
 
-uint64_t sys_monotonic_millis()
+uint64_t sys_monotonic_time_u64()
 {
-    int64_t usec = esp_timer_get_time();
-    return usec / 1000UL;
+    return esp_timer_get_time();
+}
+
+uint64_t sys_monotonic_time_ms_to_u64(uint64_t ms)
+{
+    return ms * 1000;
+}
+
+uint64_t sys_monotonic_time_u64_to_ms(uint64_t t)
+{
+    return t / 1000;
 }
 
 void sys_init_platform(GlobalContext *glb)

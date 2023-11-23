@@ -3,7 +3,7 @@
   "description": "Tests using rp2040js emulator",
   "dependencies": {
     "@tsconfig/node20": "^20.1.2",
-    "rp2040js": "^0.19.1",
+    "rp2040js": "^0.19.3",
     "sync-fetch": "^0.5.2",
     "tsx": "^3.12.8",
     "typescript": "^5.2.2",

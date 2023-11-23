@@ -578,11 +578,21 @@ void sys_monotonic_time(struct timespec *t)
     }
 }
 
-uint64_t sys_monotonic_millis()
+uint64_t sys_monotonic_time_u64()
 {
-    struct timespec ts;
-    sys_monotonic_time(&ts);
-    return (ts.tv_nsec / 1000000UL) + (ts.tv_sec * 1000UL);
+    // 2^64/10^9/86400/365 around 585 years
+    double now = emscripten_get_now() * 1000000.0;
+    return (uint64_t) now;
+}
+
+uint64_t sys_monotonic_time_ms_to_u64(uint64_t ms)
+{
+    return ms * 1000000;
+}
+
+uint64_t sys_monotonic_time_u64_to_ms(uint64_t t)
+{
+    return t / 1000000;
 }
 
 static emscripten_fetch_t *fetch_file(const char *url)

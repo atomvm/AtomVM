@@ -97,7 +97,7 @@ void sys_tick_handler()
 
 static inline void sys_clock_gettime(struct timespec *t)
 {
-    uint64_t now = sys_monotonic_millis();
+    uint64_t now = sys_monotonic_time_u64();
     t->tv_sec = (time_t) now / 1000;
     t->tv_nsec = ((int32_t) now % 1000) * 1000000;
 }
@@ -221,9 +221,19 @@ void sys_monotonic_time(struct timespec *t)
     sys_clock_gettime(t);
 }
 
-uint64_t sys_monotonic_millis()
+uint64_t sys_monotonic_time_u64()
 {
     return system_millis;
+}
+
+uint64_t sys_monotonic_time_ms_to_u64(uint64_t ms)
+{
+    return ms;
+}
+
+uint64_t sys_monotonic_time_u64_to_ms(uint64_t t)
+{
+    return t;
 }
 
 enum OpenAVMResult sys_open_avm_from_file(

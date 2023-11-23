@@ -19,10 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed invalid src_clk error on ESP-IDF >= 5.0
 - Fixed changed default to `AVM_USE_32BIT_FLOAT=on` for STM32 platform to enable use of single precision hardware FPU on F4/F7 devices.
 - Fixed a bug where emscripten `register_*_callback/1` functions would use x[1] as second argument
+- Fixed precision of integers used with timers which could yield to halts and wait times smaller than expected
 
 ### Changed
 
 - Crypto functions on generic_unix platform now rely on MbedTLS instead of OpenSSL
+- Platform function providing time used by timers was changed from `sys_monotonic_millis` to `sys_monotonic_time_u64`, `sys_monotonic_time_u64_to_ms` and `sys_monotonic_time_ms_to_u64`.
 
 ### Added
 

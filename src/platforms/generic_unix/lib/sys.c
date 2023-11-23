@@ -137,7 +137,7 @@ static inline void sys_poll_events_with_kqueue(GlobalContext *glb, int timeout_m
         ts_ptr = NULL;
     } else {
         ts.tv_sec = timeout_ms / 1000;
-        ts.tv_nsec = (timeout_ms % 1000) * 1000000UL;
+        ts.tv_nsec = (uint_least64_t) (timeout_ms % 1000) * 1000000;
     }
 
     int nbEvents = kevent(platform->kqueue_fd, NULL, 0, notified, poll_count, ts_ptr);
@@ -377,12 +377,23 @@ void sys_monotonic_time(struct timespec *t)
     }
 }
 
-uint64_t sys_monotonic_millis()
+uint64_t sys_monotonic_time_u64()
 {
     // On generic unix, native format is timespec.
     struct timespec ts;
     sys_monotonic_time(&ts);
-    return (ts.tv_nsec / 1000000UL) + (ts.tv_sec * 1000UL);
+    // 2^64/10^9/86400/365 around 585 years
+    return ((uint_least64_t) ts.tv_sec * 1000000000) + ts.tv_nsec;
+}
+
+uint64_t sys_monotonic_time_ms_to_u64(uint64_t ms)
+{
+    return ms * 1000000;
+}
+
+uint64_t sys_monotonic_time_u64_to_ms(uint64_t t)
+{
+    return t / 1000000;
 }
 
 enum OpenAVMResult sys_open_avm_from_file(
