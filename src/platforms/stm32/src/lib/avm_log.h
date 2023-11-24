@@ -80,25 +80,25 @@ enum AVMLogLevel
 
 #define AVM_LOGE(tag, format, ...)                                                                                                               \
     do {                                                                                                                                         \
-        uint64_t logtime = sys_monotonic_millis();                                                                                               \
+        uint64_t logtime = sys_monotonic_time_u64();                                                                                             \
         if (LOG_LEVEL_MAX >= LOG_ERROR)                                                                                                          \
             printf(LOG_COLOR_ERROR "ERROR [%llu] %s: " format " (%s:%i)" LOG_RESET_COLOR "\n", logtime, tag, ##__VA_ARGS__, __FILE__, __LINE__); \
     } while (0)
 #define AVM_LOGW(tag, format, ...)                                                                                                    \
     do {                                                                                                                              \
-        uint64_t logtime = sys_monotonic_millis();                                                                                    \
+        uint64_t logtime = sys_monotonic_time_u64();                                                                                  \
         if (LOG_LEVEL_MAX >= LOG_WARN)                                                                                                \
             printf(LOG_COLOR_WARN "WARN [%llu] %s: " format LINE_FORMAT LOG_RESET_COLOR "\n", logtime, tag, ##__VA_ARGS__ LINE_DATA); \
     } while (0)
 #define AVM_LOGI(tag, format, ...)                                                                                                    \
     do {                                                                                                                              \
-        uint64_t logtime = sys_monotonic_millis();                                                                                    \
+        uint64_t logtime = sys_monotonic_time_u64();                                                                                  \
         if (LOG_LEVEL_MAX >= LOG_INFO)                                                                                                \
             printf(LOG_COLOR_INFO "INFO [%llu] %s: " format LINE_FORMAT LOG_RESET_COLOR "\n", logtime, tag, ##__VA_ARGS__ LINE_DATA); \
     } while (0)
 #define AVM_LOGD(tag, format, ...)                                                                                                      \
     do {                                                                                                                                \
-        uint64_t logtime = sys_monotonic_millis();                                                                                      \
+        uint64_t logtime = sys_monotonic_time_u64();                                                                                    \
         if (LOG_LEVEL_MAX >= LOG_DEBUG)                                                                                                 \
             printf(LOG_COLOR_DEBUG "DEBUG [%llu] %s: " format LINE_FORMAT LOG_RESET_COLOR "\n", logtime, tag, ##__VA_ARGS__ LINE_DATA); \
     } while (0)

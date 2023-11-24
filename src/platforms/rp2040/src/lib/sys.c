@@ -154,6 +154,8 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
         }
         mutex_exit(&platform->event_poll_mutex);
     }
+#else
+    UNUSED(timeout_ms);
 #endif
     queue_t *event = NULL;
     while (queue_try_remove(&platform->event_queue, &event)) {
@@ -203,11 +205,20 @@ void sys_monotonic_time(struct timespec *t)
     t->tv_sec = (usec / 1000000);
 }
 
-uint64_t sys_monotonic_millis()
+uint64_t sys_monotonic_time_u64()
 {
     absolute_time_t now = get_absolute_time();
-    uint64_t usec = to_us_since_boot(now);
-    return usec / 1000;
+    return to_us_since_boot(now);
+}
+
+uint64_t sys_monotonic_time_ms_to_u64(uint64_t ms)
+{
+    return ms * 1000;
+}
+
+uint64_t sys_monotonic_time_u64_to_ms(uint64_t t)
+{
+    return t / 1000;
 }
 
 enum OpenAVMResult sys_open_avm_from_file(

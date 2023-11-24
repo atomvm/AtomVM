@@ -200,7 +200,7 @@ enum OpenAVMResult sys_open_avm_from_file(
 /**
  * @brief gets wall clock time
  *
- * @details gets system wall clock time.
+ * @details gets system wall clock time, used by `erlang:system_time/1`
  * @param t the timespec that will be updated.
  */
 void sys_time(struct timespec *t);
@@ -208,21 +208,35 @@ void sys_time(struct timespec *t);
 /**
  * @brief gets monotonic time
  *
- * @details gets monotonic time. Must have the same origin as
- * `sys_monotonic_millis`.
+ * @details gets the time that is used by `erlang:monotonic_time/1`
  * @param t the timespec that will be updated.
  */
 void sys_monotonic_time(struct timespec *t);
 
 /**
- * @brief gets monotonic time in milliseconds.
- * @details This function must have the same origin as `sys_monotonic_time`.
- * The native format depends on platform and this function should be fast as it
- * is used in timers.
+ * @brief gets monotonic time for timers
+ * @details This function must return a non-overflowing counter in the highest
+ * precision the platform permits to make sure that we don't have truncation
+ * errors when compared with sys_time or sys_monotonic_time.
+ * Returning the number of microseconds or nanoseconds since boot would work.
  *
- * @return a monotonic time in milliseconds
+ * @return a monotonic time in a system-chosen unit
  */
-uint64_t sys_monotonic_millis();
+uint64_t sys_monotonic_time_u64();
+
+/**
+ * @brief convert a number of milliseconds to system-chosen unit
+ * @param ms the number of milliseconds to convert
+ * @return the result of the conversion
+ */
+uint64_t sys_monotonic_time_ms_to_u64(uint64_t ms);
+
+/**
+ * @brief convert a number in system-chosen unit to milliseconds
+ * @param t the number to convert
+ * @return the result of the conversion
+ */
+uint64_t sys_monotonic_time_u64_to_ms(uint64_t t);
 
 /**
  * @brief Loads a BEAM module using platform dependent methods.

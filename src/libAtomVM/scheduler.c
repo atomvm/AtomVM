@@ -52,16 +52,20 @@ static int update_timer_list(GlobalContext *global)
         // Do not fetch the current date if there is no timer
         return -1;
     }
-    uint64_t millis_now = sys_monotonic_millis();
-    timer_list_next(tw, millis_now, scheduler_timeout_callback);
+    uint64_t native_now = sys_monotonic_time_u64();
+    timer_list_next(tw, native_now, scheduler_timeout_callback);
     if (tw->next_timer == 0) {
         return -1;
     }
-    uint64_t wait_timeout = tw->next_timer - millis_now;
-    if (wait_timeout > INT_MAX) {
-        wait_timeout = INT_MAX;
+    if (native_now >= tw->next_timer) {
+        return 0;
     }
-    return (int) wait_timeout;
+    uint64_t wait_timeout = tw->next_timer - native_now;
+    uint64_t wait_timeout_ms = sys_monotonic_time_u64_to_ms(wait_timeout);
+    if (wait_timeout_ms > INT_MAX) {
+        wait_timeout_ms = INT_MAX;
+    }
+    return (int) wait_timeout_ms;
 }
 
 Context *scheduler_wait(Context *ctx)
@@ -367,8 +371,8 @@ static void scheduler_timeout_callback(struct TimerListItem *it)
 void scheduler_set_timeout(Context *ctx, avm_int64_t timeout)
 {
     GlobalContext *glb = ctx->global;
-    uint64_t millis_now = sys_monotonic_millis();
-    uint64_t expiry = millis_now + timeout;
+    uint64_t native_now = sys_monotonic_time_u64();
+    uint64_t expiry = native_now + sys_monotonic_time_ms_to_u64(timeout);
 
     context_update_flags(ctx, ~NoFlags, WaitingTimeout);
     struct TimerList *tw = &glb->timer_list;

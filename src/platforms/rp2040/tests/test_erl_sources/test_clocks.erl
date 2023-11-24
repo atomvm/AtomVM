@@ -34,8 +34,6 @@ start() ->
         true ->
             ok
     end,
-    % give time to the emulator to synchronize rtc time and system time
-    timer:sleep(500),
     test_clock(system_time_after_set_rtc, fun() -> erlang:system_time(millisecond) end),
     NewDate = erlang:universaltime(),
     if
