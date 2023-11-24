@@ -33,7 +33,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: ["macos-11"]
+        os: ["macos-13"]
         otp: ["24", "25", "26"]
 
     steps:
@@ -44,7 +44,7 @@ jobs:
         submodules: 'recursive'
 
     - name: "Install deps"
-      run: brew install gperf doxygen erlang@${{ matrix.otp }} ninja mbedtls
+      run: HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf doxygen erlang@${{ matrix.otp }} ninja mbedtls
 
     # Builder info
     - name: "System info"
