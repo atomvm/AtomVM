@@ -26,6 +26,7 @@
 #include <stdbool.h>
 
 #include <atom.h>
+#include <avm_version.h>
 #include <avmpack.h>
 #include <bif.h>
 #include <context.h>
@@ -35,7 +36,6 @@
 #include <module.h>
 #include <term.h>
 #include <utils.h>
-#include <version.h>
 
 #include "esp32_sys.h"
 

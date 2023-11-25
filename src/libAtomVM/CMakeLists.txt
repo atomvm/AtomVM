@@ -63,7 +63,7 @@ set(HEADER_FILES
     trace.h
     utils.h
     valueshashtable.h
-    ${CMAKE_CURRENT_BINARY_DIR}/version.h
+    ${CMAKE_CURRENT_BINARY_DIR}/avm_version.h
 )
 
 set(SOURCE_FILES
@@ -226,10 +226,10 @@ else()
     set(ATOMVM_VERSION ${ATOMVM_BASE_VERSION})
 endif()
 
-# Add include to directory where version.h is generated so targets linking
+# Add include to directory where avm_version.h is generated so targets linking
 # libAtomVM can access it
 target_include_directories(libAtomVM PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_BINARY_DIR}/version.h)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_BINARY_DIR}/avm_version.h)
 
 if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Generic")
     target_link_libraries(libAtomVM PUBLIC libAtomVM${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR})

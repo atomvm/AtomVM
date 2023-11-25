@@ -27,6 +27,7 @@
 #include <unistd.h>
 
 #include "atom.h"
+#include "avm_version.h"
 #include "avmpack.h"
 #include "bif.h"
 #include "context.h"
@@ -38,7 +39,6 @@
 #include "sys.h"
 #include "term.h"
 #include "utils.h"
-#include "version.h"
 
 void print_help(const char *program_name)
 {
