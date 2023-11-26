@@ -44,6 +44,12 @@
 #include <otp_socket.h>
 #endif
 
+#if defined(MBEDTLS_VERSION_NUMBER) && (MBEDTLS_VERSION_NUMBER >= 0x03000000)
+#include <mbedtls/build_info.h>
+#else
+#include <mbedtls/config.h>
+#endif
+
 // libAtomVM
 #include <avmpack.h>
 #include <defaultatoms.h>
@@ -56,6 +62,14 @@
 
 // Platform uses listeners
 #include "listeners.h"
+
+#ifndef AVM_NO_SMP
+#define SMP_MUTEX_LOCK(mtx) smp_mutex_lock(mtx)
+#define SMP_MUTEX_UNLOCK(mtx) smp_mutex_unlock(mtx)
+#else
+#define SMP_MUTEX_LOCK(mtx)
+#define SMP_MUTEX_UNLOCK(mtx)
+#endif
 
 struct PortDriverDefListItem *port_driver_list;
 struct NifCollectionDefListItem *nif_collection_list;
@@ -75,6 +89,9 @@ void sys_init_platform(GlobalContext *glb)
     cyw43_arch_init();
     otp_socket_init(glb);
 #endif
+
+    platform->entropy_is_initialized = false;
+    platform->random_is_initialized = false;
 }
 
 void sys_free_platform(GlobalContext *glb)
@@ -85,6 +102,15 @@ void sys_free_platform(GlobalContext *glb)
 
     struct RP2040PlatformData *platform = glb->platform_data;
     queue_free(&platform->event_queue);
+
+    if (platform->random_is_initialized) {
+        mbedtls_ctr_drbg_free(&platform->random_ctx);
+    }
+
+    if (platform->entropy_is_initialized) {
+        mbedtls_entropy_free(&platform->entropy_ctx);
+    }
+
     free(platform);
 
 #ifndef AVM_NO_SMP
@@ -386,4 +412,73 @@ void sys_unregister_listener_from_event(GlobalContext *global, listener_event_t 
         }
     }
     synclist_unlock(&global->listeners);
+}
+
+// TODO: enable mbedtls threading support by defining MBEDTLS_THREADING_ALT
+// and remove this function.
+int sys_mbedtls_entropy_func(void *entropy, unsigned char *buf, size_t size)
+{
+#ifndef MBEDTLS_THREADING_C
+    struct RP2040PlatformData *platform
+        = CONTAINER_OF(entropy, struct RP2040PlatformData, entropy_ctx);
+    SMP_MUTEX_LOCK(platform->entropy_mutex);
+    int result = mbedtls_entropy_func(entropy, buf, size);
+    SMP_MUTEX_UNLOCK(platform->entropy_mutex);
+
+    return result;
+#else
+    return mbedtls_entropy_func(entropy, buf, size);
+#endif
+}
+
+mbedtls_entropy_context *sys_mbedtls_get_entropy_context_lock(GlobalContext *global)
+{
+    struct RP2040PlatformData *platform = global->platform_data;
+
+    SMP_MUTEX_LOCK(platform->entropy_mutex);
+
+    if (!platform->entropy_is_initialized) {
+        mbedtls_entropy_init(&platform->entropy_ctx);
+        platform->entropy_is_initialized = true;
+    }
+
+    return &platform->entropy_ctx;
+}
+
+void sys_mbedtls_entropy_context_unlock(GlobalContext *global)
+{
+    struct RP2040PlatformData *platform = global->platform_data;
+    SMP_MUTEX_UNLOCK(platform->entropy_mutex);
+}
+
+mbedtls_ctr_drbg_context *sys_mbedtls_get_ctr_drbg_context_lock(GlobalContext *global)
+{
+    struct RP2040PlatformData *platform = global->platform_data;
+
+    SMP_MUTEX_LOCK(platform->random_mutex);
+
+    if (!platform->random_is_initialized) {
+        mbedtls_ctr_drbg_init(&platform->random_ctx);
+
+        mbedtls_entropy_context *entropy_ctx = sys_mbedtls_get_entropy_context_lock(global);
+        // Safe to unlock it now, sys_mbedtls_entropy_func will lock it again later
+        sys_mbedtls_entropy_context_unlock(global);
+
+        const char *seed = "AtomVM RP2040 Mbed-TLS initial seed.";
+        int seed_len = strlen(seed);
+        int seed_err = mbedtls_ctr_drbg_seed(&platform->random_ctx, sys_mbedtls_entropy_func,
+            entropy_ctx, (const unsigned char *) seed, seed_len);
+        if (UNLIKELY(seed_err != 0)) {
+            abort();
+        }
+        platform->random_is_initialized = true;
+    }
+
+    return &platform->random_ctx;
+}
+
+void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
+{
+    struct RP2040PlatformData *platform = global->platform_data;
+    SMP_MUTEX_UNLOCK(platform->random_mutex);
 }

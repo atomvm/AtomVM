@@ -55,12 +55,26 @@
 #include "soc/soc_caps.h"
 #endif
 
+#if defined(MBEDTLS_VERSION_NUMBER) && (MBEDTLS_VERSION_NUMBER >= 0x03000000)
+#include <mbedtls/build_info.h>
+#else
+#include <mbedtls/config.h>
+#endif
+
 // Platform uses listeners
 #include "listeners.h"
 
 #define EVENT_QUEUE_LEN 16
 
 #define TAG "sys"
+
+#ifndef AVM_NO_SMP
+#define SMP_MUTEX_LOCK(mtx) smp_mutex_lock(mtx)
+#define SMP_MUTEX_UNLOCK(mtx) smp_mutex_unlock(mtx)
+#else
+#define SMP_MUTEX_LOCK(mtx)
+#define SMP_MUTEX_UNLOCK(mtx)
+#endif
 
 static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts);
 
@@ -241,6 +255,9 @@ void sys_init_platform(GlobalContext *glb)
         AVM_ABORT();
     }
 #endif
+
+    platform->entropy_is_initialized = false;
+    platform->random_is_initialized = false;
 }
 
 void sys_free_platform(GlobalContext *glb)
@@ -256,6 +273,15 @@ void sys_free_platform(GlobalContext *glb)
             AVM_ABORT();
         }
     }
+
+    if (platform->random_is_initialized) {
+        mbedtls_ctr_drbg_free(&platform->random_ctx);
+    }
+
+    if (platform->entropy_is_initialized) {
+        mbedtls_entropy_free(&platform->entropy_ctx);
+    }
+
     free(platform);
 }
 
@@ -758,4 +784,77 @@ term esp_err_to_term(GlobalContext *glb, esp_err_t status)
         default:
             return term_from_int(status);
     }
+}
+
+int sys_mbedtls_entropy_func(void *entropy, unsigned char *buf, size_t size)
+{
+#ifndef MBEDTLS_THREADING_C
+    struct ESP32PlatformData *platform
+        = CONTAINER_OF(entropy, struct ESP32PlatformData, entropy_ctx);
+    SMP_MUTEX_LOCK(platform->entropy_mutex);
+    int result = mbedtls_entropy_func(entropy, buf, size);
+    SMP_MUTEX_UNLOCK(platform->entropy_mutex);
+
+    return result;
+#else
+    return mbedtls_entropy_func(entropy, buf, size);
+#endif
+}
+
+mbedtls_entropy_context *sys_mbedtls_get_entropy_context_lock(GlobalContext *global)
+{
+    struct ESP32PlatformData *platform = global->platform_data;
+
+    SMP_MUTEX_LOCK(platform->entropy_mutex);
+
+    if (!platform->entropy_is_initialized) {
+        // mbedtls_entropy_init will gather entropy for us using esp_fill_random()
+        // however it will be pseudorandom when wifi/bluetooth/RF is not enabled.
+        //
+        // TODO: when radio is not active bootloader_random_enable() must be enabled for gathering
+        // entropy. However, "enable function is not safe to use if any other subsystem is
+        // accessing the RF subsystem or the ADC at the same time".
+        mbedtls_entropy_init(&platform->entropy_ctx);
+        platform->entropy_is_initialized = true;
+    }
+
+    return &platform->entropy_ctx;
+}
+
+void sys_mbedtls_entropy_context_unlock(GlobalContext *global)
+{
+    struct ESP32PlatformData *platform = global->platform_data;
+    SMP_MUTEX_UNLOCK(platform->entropy_mutex);
+}
+
+mbedtls_ctr_drbg_context *sys_mbedtls_get_ctr_drbg_context_lock(GlobalContext *global)
+{
+    struct ESP32PlatformData *platform = global->platform_data;
+
+    SMP_MUTEX_LOCK(platform->random_mutex);
+
+    if (!platform->random_is_initialized) {
+        mbedtls_ctr_drbg_init(&platform->random_ctx);
+
+        mbedtls_entropy_context *entropy_ctx = sys_mbedtls_get_entropy_context_lock(global);
+        // Safe to unlock it now, sys_mbedtls_entropy_func will lock it again later
+        sys_mbedtls_entropy_context_unlock(global);
+
+        const char *seed = "AtomVM ESP32 Mbed-TLS initial seed.";
+        int seed_len = strlen(seed);
+        int seed_err = mbedtls_ctr_drbg_seed(&platform->random_ctx, sys_mbedtls_entropy_func,
+            entropy_ctx, (const unsigned char *) seed, seed_len);
+        if (UNLIKELY(seed_err != 0)) {
+            abort();
+        }
+        platform->random_is_initialized = true;
+    }
+
+    return &platform->random_ctx;
+}
+
+void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
+{
+    struct ESP32PlatformData *platform = global->platform_data;
+    SMP_MUTEX_UNLOCK(platform->random_mutex);
 }

@@ -30,8 +30,16 @@
 #include <spi_flash_mmap.h>
 #endif
 
+#include <mbedtls/ctr_drbg.h>
+#include <mbedtls/entropy.h>
+
 #include <sys/poll.h>
+#include <stdbool.h>
 #include <time.h>
+
+#ifndef AVM_NO_SMP
+#include "smp.h"
+#endif
 
 #include "sys.h"
 
@@ -94,6 +102,18 @@ struct ESP32PlatformData
     EventListener *socket_listener;
     struct SyncList sockets;
     struct ListHead ready_connections;
+
+#ifndef AVM_NO_SMP
+    Mutex *entropy_mutex;
+#endif
+    mbedtls_entropy_context entropy_ctx;
+    bool entropy_is_initialized;
+
+#ifndef AVM_NO_SMP
+    Mutex *random_mutex;
+#endif
+    mbedtls_ctr_drbg_context random_ctx;
+    bool random_is_initialized;
 };
 
 typedef void (*port_driver_init_t)(GlobalContext *global);

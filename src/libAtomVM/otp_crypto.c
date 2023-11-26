@@ -26,6 +26,7 @@
 #include <globalcontext.h>
 #include <interop.h>
 #include <nifs.h>
+#include <sys_mbedtls.h>
 #include <term.h>
 #include <term_typedef.h>
 
@@ -575,35 +576,23 @@ term nif_crypto_strong_rand_bytes(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    static bool initialized = false;
-    static mbedtls_entropy_context entropy_ctx;
-    static mbedtls_ctr_drbg_context rnd_ctx;
-
-    if (!initialized) {
-        mbedtls_entropy_init(&entropy_ctx);
-
-        mbedtls_ctr_drbg_init(&rnd_ctx);
-
-        const char *seed = "AtomVM Mbed-TLS initial seed.";
-        int seed_len = strlen(seed);
-        int seed_err = mbedtls_ctr_drbg_seed(
-            &rnd_ctx, mbedtls_entropy_func, &entropy_ctx, (const unsigned char *) seed, seed_len);
-        if (UNLIKELY(seed_err != 0)) {
-            abort();
-        }
-    }
-
     int ensure_size = term_binary_heap_size(out_len);
     if (UNLIKELY(memory_ensure_free(ctx, ensure_size) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
+    mbedtls_ctr_drbg_context *rnd_ctx = sys_mbedtls_get_ctr_drbg_context_lock(ctx->global);
+    if (IS_NULL_PTR(rnd_ctx)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Failed CTR_DRBG init", ctx));
+    }
+
     term out_bin = term_create_uninitialized_binary(out_len, &ctx->heap, ctx->global);
     unsigned char *out = (unsigned char *) term_binary_data(out_bin);
 
-    int err = mbedtls_ctr_drbg_random(&rnd_ctx, out, out_len);
-    if (err != 0) {
-        abort();
+    int err = mbedtls_ctr_drbg_random(rnd_ctx, out, out_len);
+    sys_mbedtls_ctr_drbg_context_unlock(ctx->global);
+    if (UNLIKELY(err != 0)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Failed random", ctx));
     }
 
     return out_bin;
