@@ -148,7 +148,7 @@ static inline term interop_kv_get_value(term kv, AtomString key, GlobalContext *
 
 static inline term interop_bytes_to_list(const void *bytes, int len, Heap *heap)
 {
-    const uint8_t *bytes_u8 = bytes;
+    const uint8_t *bytes_u8 = (const uint8_t *) bytes;
 
     term l = term_nil();
     for (int i = len - 1; i >= 0; i--) {
