@@ -37,7 +37,7 @@ jobs:
         idf-version:
         - '4.4.6'
         - '5.0.4'
-        - '5.1.1'
+        - '5.1.2'
 
     steps:
     - name: Checkout repo
