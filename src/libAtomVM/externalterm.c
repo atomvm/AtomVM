@@ -626,7 +626,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
         }
 
         case SMALL_BIG_EXT: {
-            uint8_t num_bytes = external_term_buf[1];
+            size_t num_bytes = external_term_buf[1];
             if (UNLIKELY(num_bytes > 8 || remaining < (SMALL_BIG_EXT_BASE_SIZE + num_bytes))) {
                 return INVALID_TERM_SIZE;
             }
