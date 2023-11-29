@@ -58,7 +58,7 @@
 #define SMALL_ATOM_EXT_BASE_SIZE 2
 
 // Assuming two's-complement implementation of signed integers
-#define SIGNED_INT_TO_UNSIGNED(val, unsigned_type)                                                 \
+#define REMOVE_SIGN(val, unsigned_type)                                                            \
     ((val) < 0 ? ~((unsigned_type) (val)) + 1 : (unsigned_type) (val))
 
 // MAINTENANCE NOTE.  Range checking on the external term buffer is only performed in
@@ -240,7 +240,7 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
             }
             return INTEGER_EXT_SIZE;
         } else {
-            avm_uint64_t unsigned_val = SIGNED_INT_TO_UNSIGNED(val, avm_uint64_t);
+            avm_uint64_t unsigned_val = REMOVE_SIGN(val, avm_uint64_t);
             uint8_t num_bytes = get_num_bytes(unsigned_val);
             if (buf != NULL) {
                 buf[0] = SMALL_BIG_EXT;
