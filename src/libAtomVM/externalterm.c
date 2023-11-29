@@ -58,7 +58,8 @@
 #define SMALL_ATOM_EXT_BASE_SIZE 2
 
 // Assuming two's-complement implementation of signed integers
-#define SIGNED_INT_TO_UNSIGNED(val, unsigned_type) ((val) < 0 ? ~((unsigned_type) (val)) + 1 : (val))
+#define SIGNED_INT_TO_UNSIGNED(val, unsigned_type)                                                 \
+    ((val) < 0 ? ~((unsigned_type) (val)) + 1 : (unsigned_type) (val))
 
 // MAINTENANCE NOTE.  Range checking on the external term buffer is only performed in
 // the calculate_heap_usage function, which will fail with an invalid term if there is
