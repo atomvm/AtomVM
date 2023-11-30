@@ -886,7 +886,7 @@ static inline bool term_binary_size_is_heap_binary(uint32_t size)
  * @param size the size in bytes
  * @return the count of terms
  */
-static inline int term_binary_data_size_in_terms(uint32_t size)
+static inline size_t term_binary_data_size_in_terms(uint32_t size)
 {
     if (term_binary_size_is_heap_binary(size)) {
 #if TERM_BYTES == 4
@@ -908,7 +908,7 @@ static inline int term_binary_data_size_in_terms(uint32_t size)
  * @param size the size of the binary (in bytes)
  * @return the size (in terms) of a binary of size-many bytes in the heap
  */
-static inline int term_binary_heap_size(uint32_t size)
+static inline size_t term_binary_heap_size(uint32_t size)
 {
     return term_binary_data_size_in_terms(size) + BINARY_HEADER_SIZE;
 }
@@ -982,7 +982,7 @@ static inline const char *term_binary_data(term t)
 static inline term term_create_uninitialized_binary(uint32_t size, Heap *heap, GlobalContext *glb)
 {
     if (term_binary_size_is_heap_binary(size)) {
-        int size_in_terms = term_binary_data_size_in_terms(size);
+        size_t size_in_terms = term_binary_data_size_in_terms(size);
 
         term *boxed_value = memory_heap_alloc(heap, size_in_terms + 1);
         boxed_value[0] = (size_in_terms << 6) | TERM_BOXED_HEAP_BINARY;
