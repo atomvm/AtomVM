@@ -296,4 +296,18 @@ static inline __attribute__((always_inline)) void *cast_func_to_void_ptr(func_pt
     #define UNREACHABLE(...)
 #endif
 
+/**
+ * The following is a woraround for disabling "warning: struct has no members [-Wpedantic]"
+ */
+#ifdef __GNUC__
+    #define TYPEDEF_EMPTY_STRUCT(name) \
+        _Pragma("GCC diagnostic push") \
+        _Pragma("GCC diagnostic ignored \"-Wpedantic\"") \
+        typedef struct {} name; \
+        _Pragma("GCC diagnostic pop")
+#else
+    #define TYPEDEF_EMPTY_STRUCT(name) \
+        typedef struct {int dummy} name;
+#endif
+
 #endif

@@ -114,7 +114,7 @@ typedef dreg_t dreg_gc_safe_t;
 #define T_DEST_REG_GC_SAFE(dreg) T_DEST_REG(dreg)
 #else
 
-typedef struct {} dreg_t;
+TYPEDEF_EMPTY_STRUCT(dreg_t)
 typedef dreg_t dreg_gc_safe_t;
 
 #endif
