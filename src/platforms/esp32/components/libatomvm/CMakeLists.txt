@@ -19,6 +19,11 @@
 #
 
 idf_component_register(INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../../../../libAtomVM")
+
+# GCC complains about "warning: #include_next is a GCC extension" when using pedantic flag
+# "pedantic" flag should be disabled rather poluting diagnostics with warnings caused from 3rd party
+option(AVM_PEDANTIC_WARNINGS "Pedantic compiler warnings" OFF)
+
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../../libAtomVM" "libAtomVM")
 
 target_link_libraries(${COMPONENT_LIB}
