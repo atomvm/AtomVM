@@ -251,15 +251,6 @@ static term get_error_type(term error_tuple)
 // Common setup function used by nif and port driver
 static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
 {
-    bool setup_output = false;
-    uint16_t gpio_pin_mask = 0x0000U;
-    uint8_t gpio_mode;
-    uint8_t pull_up_down;
-    uint8_t out_type;
-    uint8_t output_speed;
-    term mhz_atom = term_invalid_term();
-    term pull_atom = term_invalid_term();
-
     if (UNLIKELY(!term_is_tuple(gpio_pin_tuple))) {
         AVM_LOGE(TAG, "Invalid GPIO Pin tuple, expect {Bank, Pin}.");
         return create_pair(ctx, ERROR_ATOM, BADARG_ATOM);
@@ -279,6 +270,7 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
     }
 
     term pin_term = term_get_tuple_element(gpio_pin_tuple, 1);
+    uint16_t gpio_pin_mask = 0x0000U;
     if (term_is_list(pin_term)) {
         if (UNLIKELY(!term_is_nonempty_list(pin_term))) {
             AVM_LOGE(TAG, "Pin list parameter contains no pin numbers!");
@@ -316,6 +308,13 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
     }
 
     term mode_atom;
+    uint8_t gpio_mode;
+    bool setup_output = false;
+    uint8_t pull_up_down;
+    uint8_t out_type;
+    uint8_t output_speed;
+    term mhz_atom = term_invalid_term();
+    term pull_atom = term_invalid_term();
     if (term_is_tuple(mode_term)) {
         mode_atom = term_get_tuple_element(mode_term, 0);
         if (UNLIKELY(!term_is_atom(mode_atom))) {
@@ -403,10 +402,6 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
 // Common write function used by nif and port driver
 static term gpio_digital_write(Context *ctx, term gpio_pin_tuple, term level_term)
 {
-    uint16_t gpio_pin_mask = 0x0000U;
-    int level;
-    uint32_t gpio_bank;
-
     if (UNLIKELY(!term_is_tuple(gpio_pin_tuple))) {
         AVM_LOGE(TAG, "Invalid GPIO Pin tuple, expect {Bank, Pin}.");
         return create_pair(ctx, ERROR_ATOM, BADARG_ATOM);
@@ -416,8 +411,8 @@ static term gpio_digital_write(Context *ctx, term gpio_pin_tuple, term level_ter
         AVM_LOGE(TAG, "Bank parameter of pin tuple must be an atom!");
         return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_bank_atom));
     }
-    gpio_bank = ((uint32_t) interop_atom_term_select_int(gpio_bank_table, gpio_bank_atom, ctx->global));
 
+    uint32_t gpio_bank = ((uint32_t) interop_atom_term_select_int(gpio_bank_table, gpio_bank_atom, ctx->global));
     if (UNLIKELY(gpio_bank == GPIOInvalidBank)) {
         char *bank_string = interop_atom_to_string(ctx, gpio_bank_atom);
         AVM_LOGE(TAG, "Invalid GPIO Bank '%s' in pin tuple", bank_string);
@@ -426,6 +421,7 @@ static term gpio_digital_write(Context *ctx, term gpio_pin_tuple, term level_ter
     }
 
     term pin_term = term_get_tuple_element(gpio_pin_tuple, 1);
+    uint16_t gpio_pin_mask = 0x0000U;
     if (term_is_list(pin_term)) {
         if (UNLIKELY(!term_is_nonempty_list(pin_term))) {
             AVM_LOGE(TAG, "Pin list parameter contains no pin numbers!");
@@ -463,6 +459,7 @@ static term gpio_digital_write(Context *ctx, term gpio_pin_tuple, term level_ter
         return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_pin_atom));
     }
 
+    int level;
     if (term_is_integer(level_term)) {
         level = term_to_int(level_term);
         if (UNLIKELY((level != 0) && (level != 1))) {
@@ -563,7 +560,6 @@ static term gpiodriver_close(Context *ctx)
     }
 
     struct GPIOData *gpio_data = ctx->platform_data;
-
     struct ListHead *item;
     struct ListHead *tmp;
     if (!list_is_empty(&gpio_data->gpio_listeners)) {
@@ -843,10 +839,6 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
 
 static term gpiodriver_remove_int(Context *ctx, term cmd)
 {
-    struct GPIOData *gpio_data = ctx->platform_data;
-    bool int_removed = false;
-    bool stop_irq = true;
-
     term gpio_tuple = term_get_tuple_element(cmd, 1);
     if (UNLIKELY(!term_is_tuple(gpio_tuple))) {
         AVM_LOGE(TAG, "Invalid GPIO Pin tuple, expect {Bank, Pin}.");
@@ -867,6 +859,9 @@ static term gpiodriver_remove_int(Context *ctx, term cmd)
     uint16_t target_num = (uint16_t) term_to_int32(term_get_tuple_element(gpio_tuple, 1));
     uint8_t target_irq = pin_num_to_exti_irq(target_num);
 
+    bool stop_irq = true;
+    bool int_removed = false;
+    struct GPIOData *gpio_data = ctx->platform_data;
     struct ListHead *item;
     struct ListHead *tmp;
     if (!list_is_empty(&gpio_data->gpio_listeners)) {
