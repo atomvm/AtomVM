@@ -520,7 +520,8 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
         }
         char port_driver_func_name[64 + strlen("_create_port") + 1];
         snprintf(port_driver_func_name, sizeof(port_driver_func_name), "%s_create_port", driver_name);
-        create_port_t create_port = (create_port_t) dlsym(handle, port_driver_func_name);
+        create_port_t create_port
+            = (create_port_t) CAST_VOID_TO_FUNC_PTR(dlsym(handle, port_driver_func_name));
         if (IS_NULL_PTR(create_port)) {
             return NULL;
         }
