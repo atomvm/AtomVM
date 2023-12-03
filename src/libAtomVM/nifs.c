@@ -3772,6 +3772,9 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
     size_t app_len;
     atom_ref_t atom_ref = atom_table_get_atom_ptr_and_len(glb->atom_table, atom_index, &app_len);
     char *app = malloc(app_len + 1);
+    if (IS_NULL_PTR(app)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
     atom_table_write_cstring(glb->atom_table, atom_ref, app_len + 1, app);
 
     int ok;
@@ -4171,6 +4174,10 @@ static term nif_code_load_abs(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
     char *path = malloc(strlen(abs) + strlen(".beam") + 1);
+    if (IS_NULL_PTR(path)) {
+        free(abs);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
     strcpy(path, abs);
     strcat(path, ".beam");
 
