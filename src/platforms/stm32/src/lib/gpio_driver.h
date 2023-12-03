@@ -28,11 +28,13 @@
 
 #ifndef AVM_DISABLE_GPIO_NIFS
 static const struct Nif *gpio_nif_get_nif(const char *nifname);
+void gpioregister_nif_collection(void);
 #endif
 
 #ifndef AVM_DISABLE_GPIO_PORT_DRIVER
 static Context *gpio_driver_create_port(GlobalContext *global, term opts);
 void gpiodriver_init(GlobalContext *glb);
+void gpioregister_port_driver(void);
 #endif
 
 #endif /* _GPIO_DRIVER_H_ */

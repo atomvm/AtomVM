@@ -53,17 +53,15 @@
 #define GPIO_INVALID_MODE 0xE
 #define INVALID_GPIO_OSPEED 0xE
 
-#define HIGH_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "high"))
-#define LOW_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "low"))
-
-#define INVALID_BANK_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\xC", "invalid_bank"))
-#define INVALID_PIN_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\xB", "invalid_pin"))
-#define INVALID_MODE_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\xC", "invalid_mode"))
-#define INVALID_PULL_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\xC", "invalid_pull"))
-#define INVALID_RATE_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\xC", "invalid_rate"))
-#define INVALID_LEVEL_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\xD", "invalid_level"))
-#define INVALID_IRQ_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\xB", "invalid_irq"))
-#define INVALID_TRIGGER_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\xF", "invalid_trigger"))
+static const char *const high_atom = ATOM_STR("\x4", "high");
+static const char *const low_atom = ATOM_STR("\x3", "low");
+static const char *const invalid_bank_atom = ATOM_STR("\xC", "invalid_bank");
+static const char *const invalid_pin_atom = ATOM_STR("\xB", "invalid_pin");
+static const char *const invalid_mode_atom = ATOM_STR("\xC", "invalid_mode");
+static const char *const invalid_pull_atom = ATOM_STR("\xC", "invalid_pull");
+static const char *const invalid_rate_atom = ATOM_STR("\xC", "invalid_rate");
+static const char *const invalid_level_atom = ATOM_STR("\xD", "invalid_level");
+static const char *const invalid_irq_atom = ATOM_STR("\xB", "invalid_irq");
 
 // Port driver specific  data structures and definitions
 #ifndef AVM_DISABLE_GPIO_PORT_DRIVER
@@ -71,9 +69,10 @@
 static NativeHandlerResult consume_gpio_mailbox(Context *ctx);
 
 static const char *const gpio_atom = ATOM_STR("\x4", "gpio");
+static const char *const gpio_interrupt_atom = ATOM_STR("\xE", "gpio_interrupt");
+static const char *const invalid_trigger_atom = ATOM_STR("\xF", "invalid_trigger");
 
 #define INVALID_EXTI_TRIGGER 0xEE
-#define GPIO_INTERRUPT_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\xE", "gpio_interrupt"))
 
 struct GPIOListenerData
 {
@@ -215,6 +214,10 @@ static uint8_t pin_num_to_exti_irq(uint16_t pin_num)
             return 0;
     }
 }
+
+void gpio_interrupt_callback(Context *ctx, uint32_t exti);
+void isr_handler(Context *ctx, uint32_t exti);
+void isr_error_handler(const char *isr_name);
 #endif /* NOT defined AVM_DISABLE_GPIO_PORT_DRIVER */
 
 static term create_pair(Context *ctx, term term1, term term2)
@@ -226,18 +229,28 @@ static term create_pair(Context *ctx, term term1, term term2)
     return ret;
 }
 
+static inline term level_to_atom(Context *ctx, uint16_t level)
+{
+    term level_atom;
+    if (level != 0) {
+        level_atom = globalcontext_make_atom(ctx->global, high_atom);
+    } else {
+        level_atom = globalcontext_make_atom(ctx->global, low_atom);
+    }
+    return level_atom;
+}
+
+static term get_error_type(term error_tuple)
+{
+    if ((term_is_tuple(error_tuple)) && (term_get_tuple_element(error_tuple, 0) == ERROR_ATOM)) {
+        return term_get_tuple_element(error_tuple, 1);
+    }
+    return OK_ATOM;
+}
+
 // Common setup function used by nif and port driver
 static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
 {
-    bool setup_output = false;
-    uint16_t gpio_pin_mask = 0x0000U;
-    uint8_t gpio_mode;
-    uint8_t pull_up_down;
-    uint8_t out_type;
-    uint8_t output_speed;
-    term mhz_atom = term_invalid_term();
-    term pull_atom = term_invalid_term();
-
     if (UNLIKELY(!term_is_tuple(gpio_pin_tuple))) {
         AVM_LOGE(TAG, "Invalid GPIO Pin tuple, expect {Bank, Pin}.");
         return create_pair(ctx, ERROR_ATOM, BADARG_ATOM);
@@ -245,7 +258,7 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
     term gpio_bank_atom = term_get_tuple_element(gpio_pin_tuple, 0);
     if (UNLIKELY(!term_is_atom(gpio_bank_atom))) {
         AVM_LOGE(TAG, "Bank parameter of pin tuple must be an atom! (a...h|k depending on board)");
-        return create_pair(ctx, ERROR_ATOM, INVALID_BANK_ATOM);
+        return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_bank_atom));
     }
 
     uint32_t gpio_bank = ((uint32_t) interop_atom_term_select_int(gpio_bank_table, gpio_bank_atom, ctx->global));
@@ -253,18 +266,27 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
         char *bank_string = interop_atom_to_string(ctx, gpio_bank_atom);
         AVM_LOGE(TAG, "Invalid GPIO Bank '%s' in pin tuple", bank_string);
         free(bank_string);
-        return create_pair(ctx, ERROR_ATOM, INVALID_BANK_ATOM);
+        return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_bank_atom));
     }
 
     term pin_term = term_get_tuple_element(gpio_pin_tuple, 1);
+    uint16_t gpio_pin_mask = 0x0000U;
     if (term_is_list(pin_term)) {
         if (UNLIKELY(!term_is_nonempty_list(pin_term))) {
             AVM_LOGE(TAG, "Pin list parameter contains no pin numbers!");
-            return create_pair(ctx, ERROR_ATOM, INVALID_PIN_ATOM);
+            return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_pin_atom));
         }
         while (term_is_nonempty_list(pin_term)) {
             term gpio_pin_term = term_get_list_head(pin_term);
+            if (UNLIKELY(!term_is_any_integer(gpio_pin_term))) {
+                AVM_LOGE(TAG, "Pin numbers must be between 0 and 15!");
+                return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_pin_atom));
+            }
             uint16_t gpio_pin_num = ((uint16_t) term_to_int32(gpio_pin_term));
+            if (UNLIKELY(gpio_pin_num > 15)) {
+                AVM_LOGE(TAG, "Pin numbers must be between 0 and 15!");
+                return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_pin_atom));
+            }
             gpio_pin_mask = 1U << gpio_pin_num | gpio_pin_mask;
             pin_term = term_get_list_tail(pin_term);
         }
@@ -272,47 +294,54 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
         uint16_t gpio_pin_num = ((uint16_t) term_to_int32(pin_term));
         if (UNLIKELY(gpio_pin_num > 15)) {
             AVM_LOGE(TAG, "Pin number must be between 0 and 15!");
-            return create_pair(ctx, ERROR_ATOM, INVALID_PIN_ATOM);
+            return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_pin_atom));
         } else {
             gpio_pin_mask = 1U << gpio_pin_num | gpio_pin_mask;
         }
     } else if (term_is_atom(pin_term)) {
-        if (pin_term == ALL_ATOM) {
-            gpio_pin_mask = GPIO_ALL;
+        if (pin_term != ALL_ATOM) {
+            return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_pin_atom));
         }
+        gpio_pin_mask = GPIO_ALL;
     } else {
-        return create_pair(ctx, ERROR_ATOM, INVALID_PIN_ATOM);
+        return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_pin_atom));
     }
 
     term mode_atom;
+    uint8_t gpio_mode;
+    bool setup_output = false;
+    uint8_t pull_up_down;
+    uint8_t out_type;
+    uint8_t output_speed;
+    term mhz_atom = term_invalid_term();
+    term pull_atom = term_invalid_term();
     if (term_is_tuple(mode_term)) {
         mode_atom = term_get_tuple_element(mode_term, 0);
         if (UNLIKELY(!term_is_atom(mode_atom))) {
             AVM_LOGE(TAG, "GPIO Mode must be an atom ('input', 'output', 'output_od').");
-            return create_pair(ctx, ERROR_ATOM, INVALID_MODE_ATOM);
+            return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_mode_atom));
         }
         gpio_mode = ((uint8_t) interop_atom_term_select_int(pin_mode_table, mode_atom, ctx->global));
         if (UNLIKELY(gpio_mode == GPIO_INVALID_MODE)) {
             char *mode_string = interop_atom_to_string(ctx, mode_atom);
             AVM_LOGE(TAG, "Invalid gpio mode: %s", mode_string);
             free(mode_string);
-            return create_pair(ctx, ERROR_ATOM, INVALID_MODE_ATOM);
+            return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_mode_atom));
         }
         if ((gpio_mode == GPIO_MODE_OUTPUT) || (gpio_mode == GPIO_MODE_OUTPUT_OD)) {
             if (gpio_mode == GPIO_MODE_OUTPUT_OD) {
                 gpio_mode = GPIO_MODE_OUTPUT;
                 out_type = GPIO_OTYPE_OD;
-                setup_output = true;
             } else {
                 out_type = GPIO_OTYPE_PP;
-                setup_output = true;
             }
+            setup_output = true;
         }
 
         pull_atom = term_get_tuple_element(mode_term, 1);
         if (UNLIKELY(!term_is_atom(pull_atom))) {
             AVM_LOGE(TAG, "GPIO pull direction must be one of the following atoms: up | down | floating");
-            return create_pair(ctx, ERROR_ATOM, INVALID_PULL_ATOM);
+            return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_pull_atom));
         }
 
         pull_up_down = ((uint8_t) interop_atom_term_select_int(pull_mode_table, pull_atom, ctx->global));
@@ -320,7 +349,7 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
             mhz_atom = term_get_tuple_element(mode_term, 2);
             if (UNLIKELY(!term_is_atom(mhz_atom))) {
                 AVM_LOGE(TAG, "GPIO output speed must be one of the following atoms: mhz_2 | mhz_25 | mhz_50 | mhz_100");
-                return create_pair(ctx, ERROR_ATOM, INVALID_RATE_ATOM);
+                return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_rate_atom));
             }
 
             output_speed = (uint8_t) interop_atom_term_select_int(output_mhz_table, mhz_atom, ctx->global);
@@ -338,18 +367,25 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
         mode_atom = mode_term;
         if (UNLIKELY(!term_is_atom(mode_atom))) {
             AVM_LOGE(TAG, "GPIO Mode must be an atom ('input', 'output', 'output_od').");
-            return create_pair(ctx, ERROR_ATOM, INVALID_MODE_ATOM);
+            return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_mode_atom));
         }
         gpio_mode = ((uint8_t) interop_atom_term_select_int(pin_mode_table, mode_atom, ctx->global));
         if (UNLIKELY(gpio_mode == GPIO_INVALID_MODE)) {
             char *mode_string = interop_atom_to_string(ctx, mode_atom);
             AVM_LOGE(TAG, "Invalid gpio mode: %s", mode_string);
             free(mode_string);
-            return create_pair(ctx, ERROR_ATOM, INVALID_MODE_ATOM);
+            return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_mode_atom));
         }
         pull_up_down = GPIO_PUPD_NONE;
-        if (setup_output) {
+        if ((gpio_mode == GPIO_MODE_OUTPUT) || (gpio_mode == GPIO_MODE_OUTPUT_OD)) {
+            if (gpio_mode == GPIO_MODE_OUTPUT_OD) {
+                gpio_mode = GPIO_MODE_OUTPUT;
+                out_type = GPIO_OTYPE_OD;
+            } else {
+                out_type = GPIO_OTYPE_PP;
+            }
             output_speed = GPIO_OSPEED_2MHZ;
+            setup_output = true;
         }
     }
 
@@ -366,10 +402,6 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
 // Common write function used by nif and port driver
 static term gpio_digital_write(Context *ctx, term gpio_pin_tuple, term level_term)
 {
-    uint16_t gpio_pin_mask = 0x0000U;
-    int level;
-    uint32_t gpio_bank;
-
     if (UNLIKELY(!term_is_tuple(gpio_pin_tuple))) {
         AVM_LOGE(TAG, "Invalid GPIO Pin tuple, expect {Bank, Pin}.");
         return create_pair(ctx, ERROR_ATOM, BADARG_ATOM);
@@ -377,26 +409,34 @@ static term gpio_digital_write(Context *ctx, term gpio_pin_tuple, term level_ter
     term gpio_bank_atom = term_get_tuple_element(gpio_pin_tuple, 0);
     if (UNLIKELY(!term_is_atom(gpio_bank_atom))) {
         AVM_LOGE(TAG, "Bank parameter of pin tuple must be an atom!");
-        return create_pair(ctx, ERROR_ATOM, INVALID_BANK_ATOM);
+        return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_bank_atom));
     }
-    gpio_bank = ((uint32_t) interop_atom_term_select_int(gpio_bank_table, gpio_bank_atom, ctx->global));
 
+    uint32_t gpio_bank = ((uint32_t) interop_atom_term_select_int(gpio_bank_table, gpio_bank_atom, ctx->global));
     if (UNLIKELY(gpio_bank == GPIOInvalidBank)) {
         char *bank_string = interop_atom_to_string(ctx, gpio_bank_atom);
         AVM_LOGE(TAG, "Invalid GPIO Bank '%s' in pin tuple", bank_string);
         free(bank_string);
-        return create_pair(ctx, ERROR_ATOM, INVALID_BANK_ATOM);
+        return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_bank_atom));
     }
 
     term pin_term = term_get_tuple_element(gpio_pin_tuple, 1);
+    uint16_t gpio_pin_mask = 0x0000U;
     if (term_is_list(pin_term)) {
         if (UNLIKELY(!term_is_nonempty_list(pin_term))) {
             AVM_LOGE(TAG, "Pin list parameter contains no pin numbers!");
-            return create_pair(ctx, ERROR_ATOM, INVALID_PIN_ATOM);
+            return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_pin_atom));
         }
         while (term_is_nonempty_list(pin_term)) {
             term gpio_pin_term = term_get_list_head(pin_term);
+            if (UNLIKELY(!term_is_integer(gpio_pin_term))) {
+                return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_pin_atom));
+            }
             uint16_t gpio_pin_num = ((uint16_t) term_to_int32(gpio_pin_term));
+            if (UNLIKELY(gpio_pin_num > 15)) {
+                AVM_LOGE(TAG, "Pin numbers must be between 0 and 15!");
+                return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_pin_atom));
+            }
             gpio_pin_mask = 1U << gpio_pin_num | gpio_pin_mask;
             pin_term = term_get_list_tail(pin_term);
         }
@@ -404,32 +444,36 @@ static term gpio_digital_write(Context *ctx, term gpio_pin_tuple, term level_ter
         uint16_t gpio_pin_num = ((uint16_t) term_to_int32(pin_term));
         if (UNLIKELY(gpio_pin_num > 15)) {
             AVM_LOGE(TAG, "Pin number must be between 0 and 15!");
-            return create_pair(ctx, ERROR_ATOM, INVALID_PIN_ATOM);
+            return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_pin_atom));
         } else {
             gpio_pin_mask = 1U << gpio_pin_num | gpio_pin_mask;
         }
     } else if (term_is_atom(pin_term)) {
-        if (pin_term == ALL_ATOM) {
-            gpio_pin_mask = GPIO_ALL;
+        if (UNLIKELY(pin_term != ALL_ATOM)) {
+
+            AVM_LOGE(TAG, "Pin number must be between 0 and 15!");
+            return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_pin_atom));
         }
+        gpio_pin_mask = GPIO_ALL;
     } else {
-        return create_pair(ctx, ERROR_ATOM, INVALID_PIN_ATOM);
+        return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_pin_atom));
     }
 
+    int level;
     if (term_is_integer(level_term)) {
         level = term_to_int(level_term);
         if (UNLIKELY((level != 0) && (level != 1))) {
-            return create_pair(ctx, ERROR_ATOM, INVALID_LEVEL_ATOM);
+            return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_level_atom));
         }
     } else {
         if (UNLIKELY(!term_is_atom(level_term))) {
             AVM_LOGE(TAG, "GPIO level must be 0 or 1, or an atom ('high' or 'low').");
-            return create_pair(ctx, ERROR_ATOM, INVALID_LEVEL_ATOM);
+            return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_level_atom));
         }
         level = interop_atom_term_select_int(pin_level_table, level_term, ctx->global);
         if (UNLIKELY(level < 0)) {
             AVM_LOGE(TAG, "GPIO level atom must be 'high' or 'low'.");
-            return create_pair(ctx, ERROR_ATOM, INVALID_LEVEL_ATOM);
+            return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_level_atom));
         }
     }
 
@@ -452,7 +496,7 @@ static term gpio_digital_read(Context *ctx, term gpio_pin_tuple)
     term gpio_bank_atom = term_get_tuple_element(gpio_pin_tuple, 0);
     if (UNLIKELY(!term_is_atom(gpio_bank_atom))) {
         AVM_LOGE(TAG, "Bank parameter of pin tuple must be an atom!");
-        return create_pair(ctx, ERROR_ATOM, INVALID_BANK_ATOM);
+        return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_bank_atom));
     }
     uint32_t gpio_bank = ((uint32_t) interop_atom_term_select_int(gpio_bank_table, gpio_bank_atom, ctx->global));
 
@@ -460,20 +504,20 @@ static term gpio_digital_read(Context *ctx, term gpio_pin_tuple)
         char *bank_string = interop_atom_to_string(ctx, gpio_bank_atom);
         AVM_LOGE(TAG, "Invalid GPIO Bank '%s' in pin tuple", bank_string);
         free(bank_string);
-        return create_pair(ctx, ERROR_ATOM, INVALID_BANK_ATOM);
+        return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_bank_atom));
     }
     // TODO: Add support for reading list, or all input pins on port?
     uint16_t gpio_pin_num = ((uint16_t) term_to_int32(term_get_tuple_element(gpio_pin_tuple, 1)));
     if (UNLIKELY(gpio_pin_num > 15)) {
         AVM_LOGE(TAG, "Pin number must be between 0 and 15!");
-        return create_pair(ctx, ERROR_ATOM, INVALID_PIN_ATOM);
+        return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_pin_atom));
     }
 
     uint16_t pin_levels = gpio_get(gpio_bank, (1U << gpio_pin_num));
     uint16_t level = (pin_levels >> gpio_pin_num);
     TRACE("Read: Bank 0x%08lX Pin %u. RESULT: %u\n", gpio_bank, gpio_pin_num, level);
 
-    return level ? HIGH_ATOM : LOW_ATOM;
+    return level_to_atom(ctx, level);
 }
 
 #ifndef AVM_DISABLE_GPIO_PORT_DRIVER
@@ -516,7 +560,6 @@ static term gpiodriver_close(Context *ctx)
     }
 
     struct GPIOData *gpio_data = ctx->platform_data;
-
     struct ListHead *item;
     struct ListHead *tmp;
     if (!list_is_empty(&gpio_data->gpio_listeners)) {
@@ -556,7 +599,7 @@ void gpio_interrupt_callback(Context *ctx, uint32_t exti)
 
             term int_msg = term_alloc_tuple(2, &heap);
             term gpio_tuple = term_alloc_tuple(2, &heap);
-            term_put_tuple_element(int_msg, 0, GPIO_INTERRUPT_ATOM);
+            term_put_tuple_element(int_msg, 0, globalcontext_make_atom(ctx->global, gpio_interrupt_atom));
             term_put_tuple_element(gpio_tuple, 0, gpio_bank);
             term_put_tuple_element(gpio_tuple, 1, term_from_int32((int32_t) gpio_pin));
             term_put_tuple_element(int_msg, 1, gpio_tuple);
@@ -579,43 +622,43 @@ void isr_handler(Context *ctx, uint32_t exti)
         TRACE("gpio_driver: GlobalContext stored in isr_handler\n");
     } else {
         UNUSED(ctx);
-        TRACE("gpio_driver: isr_handler relaying exti to gpio_interrupt_callback\n");
+        TRACE("gpio_driver: isr_handler relaying exti 0x%08lX to gpio_interrupt_callback\n", exti);
         gpio_interrupt_callback(local_ctx, exti);
     }
+}
+
+void isr_error_handler(const char *isr_name)
+{
+    AVM_LOGE(TAG, "%s triggered, but no match found!", isr_name);
 }
 
 void exti0_isr()
 {
     exti_reset_request(EXTI0);
-    TRACE("gpio_driver: exti0 interrupt triggered.\n");
     isr_handler(NULL, EXTI0);
 }
 
 void exti1_isr()
 {
     exti_reset_request(EXTI1);
-    TRACE("gpio_driver: exti1 interrupt triggered\n");
     isr_handler(NULL, EXTI1);
 }
 
 void exti2_isr()
 {
     exti_reset_request(EXTI2);
-    TRACE("gpio_driver: exti2 interrupt triggered\n");
     isr_handler(NULL, EXTI2);
 }
 
 void exti3_isr()
 {
     exti_reset_request(EXTI3);
-    TRACE("gpio_driver: exti3 interrupt triggered\n");
     isr_handler(NULL, EXTI3);
 }
 
 void exti4_isr()
 {
     exti_reset_request(EXTI4);
-    TRACE("gpio_driver: exti4 interrupt triggered\n");
     isr_handler(NULL, EXTI4);
 }
 
@@ -624,25 +667,21 @@ void exti9_5_isr()
     if (exti_get_flag_status(EXTI5) == EXTI5) {
         exti_reset_request(EXTI5);
         isr_handler(NULL, EXTI5);
-        TRACE("gpio_driver: exti5 interrupt triggered\n");
     } else if (exti_get_flag_status(EXTI6) == EXTI6) {
         exti_reset_request(EXTI6);
         isr_handler(NULL, EXTI6);
-        TRACE("gpio_driver: exti6 interrupt triggered\n");
     } else if (exti_get_flag_status(EXTI7) == EXTI7) {
         exti_reset_request(EXTI7);
         isr_handler(NULL, EXTI7);
-        TRACE("gpio_driver: exti7 interrupt triggered\n");
     } else if (exti_get_flag_status(EXTI8) == EXTI8) {
         exti_reset_request(EXTI8);
         isr_handler(NULL, EXTI8);
-        TRACE("gpio_driver: exti8 interrupt triggered\n");
     } else if (exti_get_flag_status(EXTI9) == EXTI9) {
         exti_reset_request(EXTI9);
         isr_handler(NULL, EXTI9);
-        TRACE("gpio_driver: exti9 interrupt triggered\n");
     } else {
-        AVM_LOGE(TAG, "exti9_5_isr triggered, but no match found!");
+        static const char *const isr_name = "exti9_5_isr";
+        isr_error_handler(isr_name);
     }
 }
 
@@ -651,29 +690,24 @@ void exti15_10_isr()
     if (exti_get_flag_status(EXTI10)) {
         exti_reset_request(EXTI10);
         isr_handler(NULL, EXTI10);
-        TRACE("gpio_driver: exti10 interrupt triggered\n");
     } else if (exti_get_flag_status(EXTI11)) {
         exti_reset_request(EXTI11);
         isr_handler(NULL, EXTI11);
-        TRACE("gpio_driver: exti11 interrupt triggered\n");
     } else if (exti_get_flag_status(EXTI12)) {
         exti_reset_request(EXTI12);
         isr_handler(NULL, EXTI12);
-        TRACE("gpio_driver: exti12 interrupt triggered\n");
     } else if (exti_get_flag_status(EXTI13)) {
         exti_reset_request(EXTI13);
         isr_handler(NULL, EXTI13);
-        TRACE("gpio_driver: exti13 interrupt triggered\n");
     } else if (exti_get_flag_status(EXTI14)) {
         exti_reset_request(EXTI14);
         isr_handler(NULL, EXTI14);
-        TRACE("gpio_driver: exti14 interrupt triggered\n");
     } else if (exti_get_flag_status(EXTI15)) {
         exti_reset_request(EXTI15);
         isr_handler(NULL, EXTI15);
-        TRACE("gpio_driver: exti15 interrupt triggered\n");
     } else {
-        AVM_LOGE(TAG, "exti15_10_isr triggered, but no match found!");
+        static const char *const isr_name = "exti15_10_isr";
+        isr_error_handler(isr_name);
     }
 }
 
@@ -721,14 +755,14 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
     term gpio_bank_atom = term_get_tuple_element(gpio_tuple, 0);
     if (UNLIKELY(!term_is_atom(gpio_bank_atom))) {
         AVM_LOGE(TAG, "Bank parameter of pin tuple must be an atom!");
-        return create_pair(ctx, ERROR_ATOM, INVALID_BANK_ATOM);
+        return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_bank_atom));
     }
     uint32_t gpio_bank = (uint32_t) interop_atom_term_select_int(gpio_bank_table, gpio_bank_atom, ctx->global);
     if (UNLIKELY(gpio_bank == GPIOInvalidBank)) {
         char *bank_string = interop_atom_to_string(ctx, gpio_bank_atom);
         AVM_LOGE(TAG, "Invalid GPIO bank '%s' in pin tuple", bank_string);
         free(bank_string);
-        return create_pair(ctx, ERROR_ATOM, INVALID_BANK_ATOM);
+        return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_bank_atom));
     }
 
     uint16_t gpio_pin = (uint16_t) term_to_int32(term_get_tuple_element(gpio_tuple, 1));
@@ -736,7 +770,7 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
     struct GPIOData *gpio_data = ctx->platform_data;
     if (gpiodriver_is_gpio_attached(gpio_data, gpio_bank_atom, gpio_pin)) {
         char *bank_string = interop_atom_to_string(ctx, gpio_bank_atom);
-        AVM_LOGW(TAG, "GPIO pin %c%u interrupt already attached.", bank_string, gpio_pin);
+        AVM_LOGW(TAG, "GPIO pin %s%u interrupt already attached.", bank_string, gpio_pin);
         free(bank_string);
         return OK_ATOM;
     }
@@ -744,28 +778,27 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
     term trigger = term_get_tuple_element(cmd, 2);
     if (UNLIKELY(!term_is_atom(trigger))) {
         AVM_LOGE(TAG, "GPIO interrupt trigger must be an atom ('rising', 'falling', or 'both').");
-        return create_pair(ctx, ERROR_ATOM, INVALID_TRIGGER_ATOM);
+        return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_trigger_atom));
     }
     enum exti_trigger_type interrupt_type = interop_atom_term_select_int(exti_trigger_table, trigger, ctx->global);
     if (UNLIKELY(interrupt_type == INVALID_EXTI_TRIGGER)) {
         char *trigger_string = interop_atom_to_string(ctx, trigger);
         AVM_LOGE(TAG, "Interrupt type %s not supported on stm32 platform.", trigger_string);
         free(trigger_string);
-        return create_pair(ctx, ERROR_ATOM, INVALID_TRIGGER_ATOM);
+        return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_trigger_atom));
     }
 
     uint32_t exti = 1U << gpio_pin;
 
     if (!list_is_empty(&gpio_data->gpio_listeners)) {
         struct ListHead *item;
-        struct ListHead *tmp;
-        MUTABLE_LIST_FOR_EACH (item, tmp, &gpio_data->gpio_listeners) {
+        LIST_FOR_EACH (item, &gpio_data->gpio_listeners) {
             struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
             if (gpio_listener->exti == exti) {
                 char *bank_string = interop_atom_to_string(ctx, gpio_bank_atom);
-                AVM_LOGE(TAG, "Cannot set interrupt for pin %c%u, exti%u device already in use!", bank_string, gpio_pin, gpio_pin);
+                AVM_LOGE(TAG, "Cannot set interrupt for pin %s%u, exti%u device already in use!", bank_string, gpio_pin, gpio_pin);
                 free(bank_string);
-                return create_pair(ctx, ERROR_ATOM, INVALID_IRQ_ATOM);
+                return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_irq_atom));
             }
         }
     }
@@ -773,7 +806,7 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
     uint8_t exti_irq = pin_num_to_exti_irq(gpio_pin);
     if (UNLIKELY(exti_irq == 0)) {
         AVM_LOGE(TAG, "BUG: No valid exti irq found!");
-        return create_pair(ctx, ERROR_ATOM, INVALID_IRQ_ATOM);
+        return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_irq_atom));
     }
 
     struct GPIOListenerData *data = malloc(sizeof(struct GPIOListenerData));
@@ -806,10 +839,6 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
 
 static term gpiodriver_remove_int(Context *ctx, term cmd)
 {
-    struct GPIOData *gpio_data = ctx->platform_data;
-    bool int_removed = false;
-    bool stop_irq = true;
-
     term gpio_tuple = term_get_tuple_element(cmd, 1);
     if (UNLIKELY(!term_is_tuple(gpio_tuple))) {
         AVM_LOGE(TAG, "Invalid GPIO Pin tuple, expect {Bank, Pin}.");
@@ -818,18 +847,21 @@ static term gpiodriver_remove_int(Context *ctx, term cmd)
     term target_bank_atom = term_get_tuple_element(gpio_tuple, 0);
     if (UNLIKELY(!term_is_atom(target_bank_atom))) {
         AVM_LOGE(TAG, "Bank parameter of pin tuple must be an atom!");
-        return create_pair(ctx, ERROR_ATOM, INVALID_BANK_ATOM);
+        return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_bank_atom));
     }
     uint32_t target_bank = (uint32_t) interop_atom_term_select_int(gpio_bank_table, target_bank_atom, ctx->global);
     if (UNLIKELY(target_bank == GPIOInvalidBank)) {
         char *bank_string = interop_atom_to_string(ctx, target_bank_atom);
         AVM_LOGE(TAG, "Invalid GPIO bank %s in pin tuple", bank_string);
         free(bank_string);
-        return create_pair(ctx, ERROR_ATOM, INVALID_BANK_ATOM);
+        return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_bank_atom));
     }
     uint16_t target_num = (uint16_t) term_to_int32(term_get_tuple_element(gpio_tuple, 1));
     uint8_t target_irq = pin_num_to_exti_irq(target_num);
 
+    bool stop_irq = true;
+    bool int_removed = false;
+    struct GPIOData *gpio_data = ctx->platform_data;
     struct ListHead *item;
     struct ListHead *tmp;
     if (!list_is_empty(&gpio_data->gpio_listeners)) {
@@ -914,7 +946,7 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
 
     term ret_msg;
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, 3, 1, &ret, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        ret_msg = create_pair(ctx, ERROR_ATOM, OUT_OF_MEMORY_ATOM);
+        ret_msg = OUT_OF_MEMORY_ATOM;
     } else {
         term ref = term_get_tuple_element(msg, 1);
         ret_msg = create_pair(ctx, ref, ret);
@@ -939,7 +971,11 @@ REGISTER_PORT_DRIVER(gpio, gpiodriver_init, NULL, gpio_driver_create_port)
 static term nif_gpio_set_pin_mode(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
-    return setup_gpio_pin(ctx, argv[0], argv[1]);
+    term ret = setup_gpio_pin(ctx, argv[0], argv[1]);
+    if (UNLIKELY(get_error_type(ret) != OK_ATOM)) {
+        RAISE_ERROR(ret);
+    }
+    return ret;
 }
 
 static term nif_gpio_set_pin_pull(Context *ctx, int argc, term argv[])
@@ -947,19 +983,27 @@ static term nif_gpio_set_pin_pull(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
     AVM_LOGW(TAG, "Pull mode must be set using `gpio:set_pin_mode/2` arg #2 i.e. {Mode,PullMode}");
-    return ERROR_ATOM;
+    return UNDEF_ATOM;
 }
 
 static term nif_gpio_digital_write(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
-    return gpio_digital_write(ctx, argv[0], argv[1]);
+    term ret = gpio_digital_write(ctx, argv[0], argv[1]);
+    if (UNLIKELY(get_error_type(ret) != OK_ATOM)) {
+        RAISE_ERROR(ret);
+    }
+    return ret;
 }
 
 static term nif_gpio_digital_read(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
-    return gpio_digital_read(ctx, argv[0]);
+    term ret = gpio_digital_read(ctx, argv[0]);
+    if (UNLIKELY(get_error_type(ret) != OK_ATOM)) {
+        RAISE_ERROR(ret);
+    }
+    return ret;
 }
 
 static const struct Nif gpio_set_pin_mode_nif = {
