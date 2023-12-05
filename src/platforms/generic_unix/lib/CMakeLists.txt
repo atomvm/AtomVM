@@ -76,16 +76,6 @@ else()
     message("WARNING:  Could NOT find MbedTLS, ssl and crypto modules will not be supported. Install MbedTLS 3.x or try to set MBEDTLS_ROOT_DIR to installation prefix of MbedTLS 2.x")
 endif()
 
-# For now we still use OpenSSL for random
-find_package(OpenSSL)
-if (${OPENSSL_FOUND} STREQUAL TRUE)
-    target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${OPENSSL_INCLUDE_DIR})
-    target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ATOMVM_HAS_OPENSSL)
-    target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${OPENSSL_CRYPTO_LIBRARY})
-else()
-    message("WARNING:  atomvm:random/0 and atomvm:rand_bytes/1 will not be supported.")
-endif()
-
 # enable by default dynamic loading on unix
 target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC DYNLOAD_PORT_DRIVERS)
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${CMAKE_DL_LIBS})

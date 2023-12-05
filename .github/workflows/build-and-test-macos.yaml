@@ -65,7 +65,7 @@ jobs:
       working-directory: build
       run: |
         export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
-        cmake -G Ninja -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl ..
+        cmake -G Ninja ..
 
     - name: "Build: run ninja"
       working-directory: build

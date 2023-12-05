@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Crypto functions on generic_unix platform now rely on MbedTLS instead of OpenSSL
 - Platform function providing time used by timers was changed from `sys_monotonic_millis` to `sys_monotonic_time_u64`, `sys_monotonic_time_u64_to_ms` and `sys_monotonic_time_ms_to_u64`.
+- Implement `atomvm:random/0` and `atomvm:rand_bytes/1` on top of `crypto:strong_rand_bytes/1` on
+  generic_unix, ESP32 and RP2040 platforms.
 
 ### Added
 
@@ -39,6 +41,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for `crypto:one_time/4,5` on Unix and Pico as well as for `crypto:hash/2` on Pico
 - Added ability to configure STM32 Nucleo boards onboard UART->USB-COM using the `-DBOARD=nucleo` cmake option
 - Added STM32 cmake option `-DAVM_CFG_CONSOLE=` to select a different uart peripheral for the system console
+- Added `crypto:strong_rand_bytes/1` using Mbed-TLS (only on generic_unix, ESP32 and RP2040
+  platforms)
+
+### Removed
+
+- OpenSSL support, Mbed-TLS is required instead.
 
 ## [0.6.0-alpha.1] - 2023-10-09
 

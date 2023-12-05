@@ -171,10 +171,10 @@ jobs:
           cflags: "-m32 -O3"
           otp: "23"
           elixir_version: "1.11"
-          cmake_opts_other: "-DOPENSSL_CRYPTO_LIBRARY=/usr/lib/i386-linux-gnu/libcrypto.so -DAVM_CREATE_STACKTRACES=off"
+          cmake_opts_other: "-DAVM_CREATE_STACKTRACES=off"
           arch: "i386"
           compiler_pkgs: "gcc-10 g++-10 gcc-10-multilib g++-10-multilib libc6-dev-i386
-          libc6-dbg:i386 zlib1g-dev:i386 libssl-dev:i386 libmbedtls-dev:i386"
+          libc6-dbg:i386 zlib1g-dev:i386 libmbedtls-dev:i386"
 
     env:
       CC: ${{ matrix.cc }}

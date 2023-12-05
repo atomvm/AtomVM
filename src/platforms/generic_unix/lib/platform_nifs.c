@@ -33,10 +33,6 @@
 #include "term.h"
 #include <stdlib.h>
 
-#if defined ATOMVM_HAS_OPENSSL
-#include <openssl/rand.h>
-#endif
-
 //#define ENABLE_TRACE
 #include "trace.h"
 
@@ -52,40 +48,23 @@
     ctx->x[1] = (error_type_atom);   \
     return term_invalid_term();
 
-#if defined ATOMVM_HAS_OPENSSL
-static term nif_openssl_rand_bytes(Context *ctx, int argc, term argv[])
+#if ATOMVM_HAS_MBEDTLS
+
+// declared in otp_crypt
+term nif_crypto_strong_rand_bytes(Context *ctx, int argc, term argv[]);
+
+static term nif_atomvm_rand_bytes(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
-    term t = argv[0];
-    VALIDATE_VALUE(t, term_is_any_integer);
-    avm_int_t n = term_maybe_unbox_int(t);
-
-    char *buf = malloc(n);
-    if (IS_NULL_PTR(buf)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    int status = RAND_bytes((unsigned char *) buf, n);
-    if (UNLIKELY(status != 1)) {
-        free(buf);
-        RAISE_ERROR(LOW_ENTROPY_ATOM);
-    }
-
-    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(n)) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-    term ret = term_from_literal_binary(buf, n, &ctx->heap, ctx->global);
-    free(buf);
-    return ret;
+    return nif_crypto_strong_rand_bytes(ctx, argc, argv);
 }
 
-static term nif_openssl_random(Context *ctx, int argc, term argv[])
+static term nif_atomvm_random(Context *ctx, int argc, term argv[])
 {
     UNUSED(ctx);
     UNUSED(argc);
     UNUSED(argv);
     term ra[1] = { term_from_int(4) };
-    term t = nif_openssl_rand_bytes(ctx, 1, ra);
+    term t = nif_atomvm_rand_bytes(ctx, 1, ra);
     if (term_is_invalid_term(t)) {
         return t;
     }
@@ -97,15 +76,15 @@ static term nif_openssl_random(Context *ctx, int argc, term argv[])
     return term_make_boxed_int(value, &ctx->heap);
 }
 
-static const struct Nif openssl_rand_bytes_nif =
+static const struct Nif atomvm_rand_bytes_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_openssl_rand_bytes
+    .nif_ptr = nif_atomvm_rand_bytes
 };
-static const struct Nif openssl_random_nif =
+static const struct Nif atomvm_random_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_openssl_random
+    .nif_ptr = nif_atomvm_random
 };
 #endif
 
@@ -126,14 +105,14 @@ static const struct Nif atomvm_platform_nif =
 
 const struct Nif *platform_nifs_get_nif(const char *nifname)
 {
-#if defined ATOMVM_HAS_OPENSSL
+#if ATOMVM_HAS_MBEDTLS
     if (strcmp("atomvm:rand_bytes/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
-        return &openssl_rand_bytes_nif;
+        return &atomvm_rand_bytes_nif;
     }
     if (strcmp("atomvm:random/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
-        return &openssl_random_nif;
+        return &atomvm_random_nif;
     }
 #endif
     if (strcmp("atomvm:platform/0", nifname) == 0) {

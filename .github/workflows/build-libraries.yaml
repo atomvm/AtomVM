@@ -35,7 +35,7 @@ jobs:
       run: sudo apt update -y
 
     - name: "Install deps"
-      run: sudo apt install -y build-essential cmake gperf zlib1g-dev libssl-dev valgrind
+      run: sudo apt install -y build-essential cmake gperf zlib1g-dev libmbedtls-dev valgrind
 
     # Builder info
     - name: "System info"

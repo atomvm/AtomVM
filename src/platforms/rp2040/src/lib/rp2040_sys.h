@@ -30,6 +30,9 @@
 #include <pico/cond.h>
 #include <pico/util/queue.h>
 
+#include <mbedtls/ctr_drbg.h>
+#include <mbedtls/entropy.h>
+
 #pragma GCC diagnostic pop
 
 #include "sys.h"
@@ -112,6 +115,18 @@ struct RP2040PlatformData
     cond_t event_poll_cond;
 #endif
     queue_t event_queue;
+
+#ifndef AVM_NO_SMP
+    Mutex *entropy_mutex;
+#endif
+    mbedtls_entropy_context entropy_ctx;
+    bool entropy_is_initialized;
+
+#ifndef AVM_NO_SMP
+    Mutex *random_mutex;
+#endif
+    mbedtls_ctr_drbg_context random_ctx;
+    bool random_is_initialized;
 };
 
 typedef void (*port_driver_init_t)(GlobalContext *global);

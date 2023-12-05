@@ -48,6 +48,10 @@
     posix_open_flag/0
 ]).
 
+-deprecated([
+    {random, 0, next_version}
+]).
+
 -type platform_name() ::
     generic_unix
     | emscripten
@@ -109,6 +113,7 @@ random() ->
 %%          Supplying a negative value will result in a badarg error.
 %%          This function will use a cryptographically strong RNG if available.
 %%          Otherwise, the random value is generated using a PRNG.
+%% @deprecated Use crypto:strong_rand_bytes/1 instead.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec rand_bytes(Len :: non_neg_integer()) -> binary().
