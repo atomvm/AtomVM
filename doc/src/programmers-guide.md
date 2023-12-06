@@ -1804,12 +1804,14 @@ Currently, the following options are supported:
 |------------|--------------|-------------|
 | `{socket, reuseaddr}` | `boolean()` | Sets `SO_REUSEADDR` on the socket. |
 | `{socket, linger}` | `#{onoff => boolean(), linger => non_neg_integer()}` | Sets `SO_LINGER` on the socekt. |
+| `{otp, rcvbuf}` | `non_neg_integer()` | Sets the default buffer size (in bytes) on receive calls.  This value is only used if the `Length` parameter of the `socket:recv` family of functions has the value `0`; otherwise, the specified non-zero length in the `socket:recv` takes precendence.  Note that the OTP option value `default` is not currently supported.|
 
 For example:
 
     %% erlang
     ok = socket:setopt(Socket, {socket, reuseaddr}, true),
     ok = socket:setopt(Socket, {socket, linger}, #{onoff => true, linger => 0}),
+    ok = socket:setopt(Socket, {otp, rcvbuf}, 1024),
 
 ### UDP Socket Programming
 
