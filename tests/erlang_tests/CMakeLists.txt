@@ -489,6 +489,8 @@ compile_erlang(int64_build_binary)
 compile_erlang(test_crypto_strong_rand_bytes)
 compile_erlang(test_atomvm_random)
 
+compile_erlang(float_decode)
+
 add_custom_target(erlang_test_modules DEPENDS
     code_load_files
 
@@ -941,4 +943,6 @@ add_custom_target(erlang_test_modules DEPENDS
 
     test_crypto_strong_rand_bytes.beam
     test_atomvm_random.beam
+
+    float_decode.beam
 )
