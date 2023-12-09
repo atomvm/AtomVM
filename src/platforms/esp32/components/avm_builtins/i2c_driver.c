@@ -178,6 +178,7 @@ static void i2c_driver_close(Context *ctx)
         ESP_LOGW(TAG, "Failed to delete I2C driver.  err=%i", err);
     }
     free(ctx->platform_data);
+    ctx->platform_data = NULL;
 }
 
 static term i2cdriver_begin_transmission(Context *ctx, term pid, term req)
