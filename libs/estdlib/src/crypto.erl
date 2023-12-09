@@ -22,7 +22,8 @@
 -export([
     hash/2,
     crypto_one_time/4,
-    crypto_one_time/5
+    crypto_one_time/5,
+    strong_rand_bytes/1
 ]).
 
 -type hash_algorithm() :: md5 | sha | sha224 | sha256 | sha384 | sha512.
@@ -99,4 +100,15 @@ crypto_one_time(_Cipher, _Key, _Data, _FlagOrOptions) ->
     FlagOrOptions :: crypto_opts()
 ) -> binary().
 crypto_one_time(_Cipher, _Key, _IV, _Data, _FlagOrOptions) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   N desired length of cryptographically secure random data
+%% @returns Returns Cryptographically secure random data of length `N'
+%% @doc     Generate N cryptographically secure random octets
+%%          and return the result in a binary.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec strong_rand_bytes(N :: non_neg_integer()) -> binary().
+strong_rand_bytes(_N) ->
     erlang:nif_error(undefined).

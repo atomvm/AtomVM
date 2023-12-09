@@ -641,10 +641,10 @@ Use `atomvm:random/0` to generate a random unsigned 32-bit integer in the range 
     %% erlang
     RandomInteger = atomvm:random().
 
-Use `atomvm:random_bytes/1` to return a randomly populated binary of a specified size:
+Use `crypto:strong_rand_bytes/1` to return a randomly populated binary of a specified size:
 
     %% erlang
-    RandomBinary = erlang:random_bytes(32).
+    RandomBinary = crypto:strong_rand_bytes(32).
 
 Use `base64:encode/1` and `base64:decode/1` to encode to and decode from Base64 format.  The input value to these functions may be a binary or string.  The output value from these functions is an Erlang binary.
 
