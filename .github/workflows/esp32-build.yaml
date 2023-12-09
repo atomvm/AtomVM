@@ -68,7 +68,7 @@ jobs:
             gcc g++ zlib1g-dev
 
     - name: Install qemu binary from espressif/qemu
-      if: matrix.idf-version != '5.1.1'
+      if: matrix.idf-version != '5.1.2'
       run: |
         set -eu
         QEMU_VER=esp-develop-20220919

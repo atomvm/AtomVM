@@ -113,9 +113,23 @@ static const AtomStringIntPair spi_cmd_table[] = {
 };
 
 static const AtomStringIntPair spi_host_table[] = {
+// aliases for different chips, deprecated for the chips after esp32s2
+#ifdef SPI_HOST
+    { ATOM_STR("\x3", "spi"), SPI_HOST },
+#endif
+#ifdef HSPI_HOST
     { ATOM_STR("\x4", "hspi"), HSPI_HOST },
-#ifndef CONFIG_IDF_TARGET_ESP32C3
+#endif
+#ifdef VSPI_HOST
     { ATOM_STR("\x4", "vspi"), VSPI_HOST },
+#endif
+#ifdef FSPI_HOST
+    { ATOM_STR("\x4", "fspi"), FSPI_HOST },
+#endif
+    { ATOM_STR("\x4", "spi1"), SPI1_HOST },
+    { ATOM_STR("\x4", "spi2"), SPI2_HOST },
+#if SOC_SPI_PERIPH_NUM > 2
+    { ATOM_STR("\x4", "spi3"), SPI3_HOST },
 #endif
     SELECT_INT_DEFAULT(-1)
 };
@@ -125,8 +139,8 @@ static spi_host_device_t get_spi_host_device(term spi_peripheral, GlobalContext 
     int peripheral = interop_atom_term_select_int(spi_host_table, spi_peripheral, global);
 
     if (peripheral < 0) {
-        ESP_LOGW(TAG, "Unrecognized SPI peripheral.  Must be either hspi or vspi.  Defaulting to hspi.");
-        return HSPI_HOST;
+        ESP_LOGW(TAG, "Unrecognized SPI peripheral.  Defaulting to spi2.");
+        return SPI2_HOST;
     }
 
     return peripheral;
