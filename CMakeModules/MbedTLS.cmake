@@ -33,12 +33,18 @@
 # If it doesn't work, search for MBEDTLS_VERSION_NUMBER symbol as well as
 # the three libraries we need with check_symbol_exists and find_library
 
+option(AVM_STATIC_MBEDTLS "Static link Mbed-TLS." OFF)
+
 if (MBEDTLS_ROOT_DIR)
     set(MbedTLS_FOUND TRUE)
     if (NOT MBEDTLS_LIBRARIES_DIR)
         set(MBEDTLS_LIBRARIES_DIR ${MBEDTLS_ROOT_DIR}/lib)
     endif()
     message(STATUS "Will use MbedTLS from ${MBEDTLS_ROOT_DIR} and ${MBEDTLS_LIBRARIES_DIR}")
+
+    if (AVM_STATIC_MBEDTLS)
+        message(FATAL_ERROR "AVM_STATIC_MBEDTLS not supported with MbedTLS root dir option")
+    endif()
 
     add_library(MbedTLS::mbedcrypto SHARED IMPORTED)
     set_target_properties(MbedTLS::mbedcrypto PROPERTIES
@@ -64,12 +70,26 @@ else()
     find_package(MbedTLS QUIET)
     if (MbedTLS_FOUND)
         message(STATUS "Found MbedTLS package ${MbedTLS_FOUND}")
+
+        if (AVM_STATIC_MBEDTLS)
+            message(FATAL_ERROR "AVM_STATIC_MBEDTLS not supported with MbedTLS cmake package")
+        endif()
     else()
+        if (AVM_STATIC_MBEDTLS)
+            set(MBEDCRYPTO_LIB_NAME "libmbedcrypto.a")
+            set(MBEDX509_LIB "libmbedx509.a")
+            set(MBEDTLS_LIB "libmbedtls.a")
+        else()
+            set(MBEDCRYPTO_LIB_NAME "mbedcrypto")
+            set(MBEDX509_LIB "mbedx509")
+            set(MBEDTLS_LIB "mbedtls")
+        endif()
+
         include(CheckSymbolExists)
         check_symbol_exists(MBEDTLS_VERSION_NUMBER "mbedtls/version.h" HAVE_MBEDTLS_VERSION_NUMBER)
-        find_library(MBEDCRYPTO mbedcrypto)
-        find_library(MBEDX509 mbedx509)
-        find_library(MBEDTLS mbedtls)
+        find_library(MBEDCRYPTO NAMES ${MBEDCRYPTO_LIB_NAME})
+        find_library(MBEDX509 NAMES ${MBEDX509_LIB})
+        find_library(MBEDTLS NAMES ${MBEDTLS_LIB})
         if (HAVE_MBEDTLS_VERSION_NUMBER
             AND NOT ${MBEDCRYPTO} STREQUAL "MBEDCRYPTO-NOTFOUND"
             AND NOT ${MBEDX509} STREQUAL "MBEDX509-NOTFOUND"
