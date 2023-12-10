@@ -490,6 +490,14 @@ TEST_CASE("test_rtc_slow", "[test_run]")
     TEST_ASSERT(term_to_int(ret_value) == 0);
 }
 
+#if ESP_IDF_VERSION_MAJOR >= 5
+TEST_CASE("test_twdt", "[test_run]")
+{
+    term ret_value = avm_test_case("test_twdt.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+#endif
+
 void app_main(void)
 {
     UNITY_BEGIN();

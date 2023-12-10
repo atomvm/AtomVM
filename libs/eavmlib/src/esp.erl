@@ -46,7 +46,13 @@
     rtc_slow_get_binary/0,
     rtc_slow_set_binary/1,
     freq_hz/0,
-    get_mac/1
+    get_mac/1,
+    task_wdt_init/1,
+    task_wdt_reconfigure/1,
+    task_wdt_deinit/0,
+    task_wdt_add_user/1,
+    task_wdt_reset_user/1,
+    task_wdt_delete_user/1
 ]).
 
 -deprecated([
@@ -100,6 +106,26 @@
 
 -type interface() :: wifi_sta | wifi_softap.
 -type mac() :: binary().
+
+-type task_wdt_config() :: {
+    TimeoutMS :: pos_integer(),
+    IdleCoreMask :: non_neg_integer(),
+    TriggerPanic :: boolean()
+}.
+-opaque task_wdt_user_handle() :: binary().
+
+-export_type(
+    [
+        esp_partition/0,
+        esp_partition_type/0,
+        esp_partition_subtype/0,
+        esp_partition_address/0,
+        esp_partition_size/0,
+        esp_partition_props/0,
+        task_wdt_config/0,
+        task_wdt_user_handle/0
+    ]
+).
 
 -define(ATOMVM_NVS_NS, atomvm).
 
@@ -386,4 +412,70 @@ freq_hz() ->
 %%-----------------------------------------------------------------------------
 -spec get_mac(Interface :: interface()) -> mac().
 get_mac(_Interface) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param Config configuration for the watchdog timer
+%% @returns ok or an error tuple
+%% @doc     Initialize the task watchdog timer with a configuration
+%%          Available with ESP-IDF 5.0 or higher.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec task_wdt_init(Config :: task_wdt_config()) -> ok | {error, already_started} | {error, any()}.
+task_wdt_init(_Config) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param Config configuration for the watchdog timer
+%% @returns ok or an error tuple
+%% @doc     Update the configuration of the task watchdog timer
+%%          Available with ESP-IDF 5.0 or higher.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec task_wdt_reconfigure(Config :: task_wdt_config()) -> ok | {error, noproc} | {error, any()}.
+task_wdt_reconfigure(_Config) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns ok or an error tuple if tasks are subscribed (beyond idle tasks) or
+%%          if the timer is not initialized
+%% @doc     Deinitialize the task watchdog timer
+%%          Available with ESP-IDF 5.0 or higher.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec task_wdt_deinit() -> ok | {error, any()}.
+task_wdt_deinit() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param Username name of the user
+%% @returns the handle to use with `task_wdt_reset_user/1' or an error tuple.
+%% @doc     Register a user of the task watchdog timer.
+%%          Available with ESP-IDF 5.0 or higher.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec task_wdt_add_user(Username :: iodata()) -> {ok, task_wdt_user_handle()} | {error, any()}.
+task_wdt_add_user(_Username) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param UserHandle handle for the user, obtained from `task_wdt_add_user/1'
+%% @returns ok or an error tuple
+%% @doc     Reset the timer a previously registered user.
+%%          Available with ESP-IDF 5.0 or higher.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec task_wdt_reset_user(UserHandle :: task_wdt_user_handle()) -> ok | {error, any()}.
+task_wdt_reset_user(_UserHandle) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param UserHandle handle for the user, obtained from `task_wdt_add_user/1'
+%% @returns ok or an error tuple
+%% @doc     Unsubscribe a given user from the task watchdog timer.
+%%          Available with ESP-IDF 5.0 or higher.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec task_wdt_delete_user(UserHandle :: task_wdt_user_handle()) -> ok | {error, any()}.
+task_wdt_delete_user(_UserHandle) ->
     erlang:nif_error(undefined).

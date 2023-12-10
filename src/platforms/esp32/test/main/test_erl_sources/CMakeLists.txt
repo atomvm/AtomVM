@@ -49,6 +49,7 @@ compile_erlang(test_select)
 compile_erlang(test_socket)
 compile_erlang(test_ssl)
 compile_erlang(test_time_and_processes)
+compile_erlang(test_twdt)
 compile_erlang(test_tz)
 
 add_custom_command(
@@ -67,6 +68,7 @@ add_custom_command(
         test_socket.beam
         test_ssl.beam
         test_time_and_processes.beam
+        test_twdt.beam
         test_tz.beam
     DEPENDS
         HostAtomVM
@@ -82,6 +84,7 @@ add_custom_command(
         "${CMAKE_CURRENT_BINARY_DIR}/test_socket.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_ssl.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_time_and_processes.beam"
+        "${CMAKE_CURRENT_BINARY_DIR}/test_twdt.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_tz.beam"
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     VERBATIM

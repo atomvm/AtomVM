@@ -36,6 +36,7 @@
 #include <esp_partition.h>
 #include <esp_sleep.h>
 #include <esp_system.h>
+#include <esp_task_wdt.h>
 #include <mbedtls/cipher.h>
 #include <mbedtls/md5.h>
 #include <mbedtls/sha1.h>
@@ -54,6 +55,12 @@
 
 #define TAG "atomvm"
 
+#if ESP_IDF_VERSION_MAJOR >= 5 && (CONFIG_ESP_TASK_WDT_EN || CONFIG_ESP_TASK_WDT)
+#define ESP_TASK_WDT_API 1
+#else
+#define ESP_TASK_WDT_API 0
+#endif
+
 static const char *const esp_rst_unknown_atom   = "\xF"  "esp_rst_unknown";
 static const char *const esp_rst_poweron        = "\xF"  "esp_rst_poweron";
 static const char *const esp_rst_ext            = "\xB"  "esp_rst_ext";
@@ -65,6 +72,9 @@ static const char *const esp_rst_wdt            = "\xB"  "esp_rst_wdt";
 static const char *const esp_rst_deepsleep      = "\x11" "esp_rst_deepsleep";
 static const char *const esp_rst_brownout       = "\x10" "esp_rst_brownout";
 static const char *const esp_rst_sdio           = "\xC"  "esp_rst_sdio";
+#if ESP_TASK_WDT_API
+static const char *const already_started        = "\xF"  "already_started";
+#endif
 //                                                        123456789ABCDEF01
 
 enum NetworkInterface {
@@ -78,6 +88,13 @@ static const AtomStringIntPair interface_table[] = {
     { ATOM_STR("\xB", "wifi_softap"), WifiSoftAPInterface },
     SELECT_INT_DEFAULT(InvalidInterface)
 };
+
+#if ESP_IDF_VERSION_MAJOR >= 5
+struct esp_task_wdt_user_handle_and_name {
+    esp_task_wdt_user_handle_t user_handle;
+    char *user_name;
+};
+#endif
 
 #if defined __has_include
 #if __has_include(<esp_idf_version.h>)
@@ -492,6 +509,202 @@ static term nif_esp_get_mac(Context *ctx, int argc, term argv[])
     return term_from_literal_binary(mac, 6, &ctx->heap, ctx->global);
 }
 
+#if ESP_TASK_WDT_API
+static term parse_task_wdt_config(Context *ctx, esp_task_wdt_config_t *config, term argv[])
+{
+    VALIDATE_VALUE(argv[0], term_is_tuple);
+    size_t tuple_size = term_get_tuple_arity(argv[0]);
+    if (tuple_size != 3) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    term timeout_ms_term = term_get_tuple_element(argv[0], 0);
+    VALIDATE_VALUE(timeout_ms_term, term_is_integer);
+    avm_int_t timeout_ms = term_to_int(timeout_ms_term);
+    if (timeout_ms <= 0) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    term core_mask_term = term_get_tuple_element(argv[0], 1);
+    VALIDATE_VALUE(core_mask_term, term_is_integer);
+    avm_int_t core_mask = term_to_int(core_mask_term);
+    if (core_mask < 0) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+#ifdef HAVE_SOC_CPU_CORES_NUM
+    if (core_mask > 1 << SOC_CPU_CORES_NUM) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+#else
+    if (core_mask > 1 << 2) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+#endif
+
+    term trigger_panic_term = term_get_tuple_element(argv[0], 2);
+    if (trigger_panic_term != TRUE_ATOM && trigger_panic_term != FALSE_ATOM) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    config->timeout_ms = timeout_ms;
+    config->idle_core_mask = core_mask;
+    config->trigger_panic = trigger_panic_term != FALSE_ATOM;
+
+    return OK_ATOM;
+}
+
+static term nif_esp_task_wdt_init(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    esp_task_wdt_config_t config;
+
+    if (term_is_invalid_term(parse_task_wdt_config(ctx, &config, argv))) {
+        return term_invalid_term();
+    }
+
+    esp_err_t result = esp_task_wdt_init(&config);
+    if (result == ESP_OK) {
+        return OK_ATOM;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term error_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+    if (result == ESP_ERR_INVALID_STATE) {
+        term_put_tuple_element(error_tuple, 1, globalcontext_make_atom(ctx->global, already_started));
+    } else {
+        term_put_tuple_element(error_tuple, 1, term_from_int(result));
+    }
+    return error_tuple;
+}
+
+static term nif_esp_task_wdt_reconfigure(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    esp_task_wdt_config_t config;
+
+    if (term_is_invalid_term(parse_task_wdt_config(ctx, &config, argv))) {
+        return term_invalid_term();
+    }
+
+    esp_err_t result = esp_task_wdt_reconfigure(&config);
+    if (result == ESP_OK) {
+        return OK_ATOM;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term error_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+    if (result == ESP_ERR_INVALID_STATE) {
+        term_put_tuple_element(error_tuple, 1, NOPROC_ATOM);
+    } else {
+        term_put_tuple_element(error_tuple, 1, term_from_int(result));
+    }
+    return error_tuple;
+}
+
+static term nif_esp_task_wdt_deinit(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    esp_err_t result = esp_task_wdt_deinit();
+    if (result == ESP_OK) {
+        return OK_ATOM;
+    }
+
+    term error_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+    term_put_tuple_element(error_tuple, 1, term_from_int(result));
+
+    return error_tuple;
+}
+
+static term nif_esp_task_wdt_add_user(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    int ok;
+    char *user_name = interop_term_to_string(argv[0], &ok);
+    if (UNLIKELY(!ok)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    // Documentation isn't explicit about it, but user name must exist while the user is registered
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + term_binary_heap_size(sizeof(struct esp_task_wdt_user_handle_and_name))) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term binary = term_create_empty_binary(sizeof(struct esp_task_wdt_user_handle_and_name), &ctx->heap, ctx->global);
+    struct esp_task_wdt_user_handle_and_name *handle = (struct esp_task_wdt_user_handle_and_name *) term_binary_data(binary);
+    handle->user_name = user_name;
+
+    esp_err_t result = esp_task_wdt_add_user(handle->user_name, &handle->user_handle);
+
+    term result_tuple;
+    if (result == ESP_OK) {
+        result_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(result_tuple, 0, OK_ATOM);
+        term_put_tuple_element(result_tuple, 1, binary);
+    } else {
+        result_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(result_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(result_tuple, 1, term_from_int(result));
+    }
+    return result_tuple;
+}
+
+static term nif_esp_task_wdt_reset_user(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    VALIDATE_VALUE(argv[0], term_is_binary);
+    size_t binary_size = term_binary_size(argv[0]);
+    if (binary_size != sizeof(struct esp_task_wdt_user_handle_and_name)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    struct esp_task_wdt_user_handle_and_name *handle = (struct esp_task_wdt_user_handle_and_name *) term_binary_data(argv[0]);
+    esp_err_t result = esp_task_wdt_reset_user(handle->user_handle);
+    if (result == ESP_OK) {
+        return OK_ATOM;
+    } else {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term error_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(error_tuple, 1, term_from_int(result));
+        return error_tuple;
+    }
+}
+
+static term nif_esp_task_wdt_delete_user(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    VALIDATE_VALUE(argv[0], term_is_binary);
+    size_t binary_size = term_binary_size(argv[0]);
+    if (binary_size != sizeof(struct esp_task_wdt_user_handle_and_name)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    struct esp_task_wdt_user_handle_and_name *handle = (struct esp_task_wdt_user_handle_and_name *) term_binary_data(argv[0]);
+    esp_err_t result = esp_task_wdt_delete_user(handle->user_handle);
+    if (result == ESP_OK) {
+        free(handle->user_name);
+        handle->user_name = NULL; // double free shouldn't happen as esp_task_wdt_delete_user should refuse to delete the user again...
+        return OK_ATOM;
+    } else {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term error_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(error_tuple, 1, term_from_int(result));
+        return error_tuple;
+    }
+}
+#endif
+
 //
 // NIF structures and dispatch
 //
@@ -575,6 +788,38 @@ static const struct Nif esp_get_mac_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_get_mac
 };
+#if ESP_TASK_WDT_API
+static const struct Nif esp_task_wdt_init_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_task_wdt_init
+};
+static const struct Nif esp_task_wdt_reconfigure_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_task_wdt_reconfigure
+};
+static const struct Nif esp_task_wdt_deinit_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_task_wdt_deinit
+};
+static const struct Nif esp_task_wdt_add_user_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_task_wdt_add_user
+};
+static const struct Nif esp_task_wdt_reset_user_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_task_wdt_reset_user
+};
+static const struct Nif esp_task_wdt_delete_user_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_task_wdt_delete_user
+};
+#endif
 
 const struct Nif *platform_nifs_get_nif(const char *nifname)
 {
@@ -650,6 +895,32 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_get_mac_nif;
     }
+#if ESP_TASK_WDT_API
+    if (strcmp("esp:task_wdt_init/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_task_wdt_init_nif;
+    }
+    if (strcmp("esp:task_wdt_reconfigure/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_task_wdt_reconfigure_nif;
+    }
+    if (strcmp("esp:task_wdt_deinit/0", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_task_wdt_deinit_nif;
+    }
+    if (strcmp("esp:task_wdt_add_user/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_task_wdt_add_user_nif;
+    }
+    if (strcmp("esp:task_wdt_reset_user/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_task_wdt_reset_user_nif;
+    }
+    if (strcmp("esp:task_wdt_delete_user/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_task_wdt_delete_user_nif;
+    }
+#endif
     const struct Nif *nif = nif_collection_resolve_nif(nifname);
     if (nif) {
         return nif;
