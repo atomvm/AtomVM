@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `crypto:strong_rand_bytes/1` using Mbed-TLS (only on generic_unix, ESP32 and RP2040
   platforms)
 - Added support for setting the default receive buffer size for sockets via `socket:setopt/3`
+- Added `esp:get_default_mac/0` for retrieving the default MAC address on ESP32.
 
 ### Removed
 
