@@ -73,7 +73,7 @@ jobs:
           echo "%%"
           mkdir build
           cd build
-          cmake .. -DMBEDTLS_ROOT_DIR=/usr/local
+          cmake .. -DMBEDTLS_ROOT_DIR=/usr/local -DAVM_WARNINGS_ARE_ERRORS=ON
 
           echo "%%"
           echo "%% Building AtomVM ..."

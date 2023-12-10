@@ -104,17 +104,20 @@ jobs:
           platform: "arm/v7"
           tag: "bullseye"
           cflags: "-mcpu=cortex-a7 -mfloat-abi=hard -O2 -mthumb -mthumb-interwork"
+          cmake_opts: "-DAVM_WARNINGS_ARE_ERRORS=ON"
 
         - arch: "arm64v8"
           platform: "arm64/v8"
           tag: "bullseye"
           cflags: "-O2"
+          cmake_opts: "-DAVM_WARNINGS_ARE_ERRORS=ON"
 
         # Required for testing big endian archs
         - arch: "s390x"
           platform: "s390x"
           tag: "bullseye"
           cflags: "-O2"
+          cmake_opts: "-DAVM_WARNINGS_ARE_ERRORS=ON"
 
     steps:
     - name: Checkout repo

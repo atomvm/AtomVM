@@ -65,7 +65,7 @@ jobs:
       working-directory: build
       run: |
         export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
-        cmake -G Ninja ..
+        cmake -DAVM_WARNINGS_ARE_ERRORS=ON -G Ninja ..
 
     - name: "Build: run ninja"
       working-directory: build

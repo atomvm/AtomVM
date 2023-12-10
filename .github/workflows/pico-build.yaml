@@ -67,6 +67,7 @@ jobs:
         set -euo pipefail
         mkdir build.nosmp
         cd build.nosmp
+        # TODO: fix all warnings and enable -DAVM_WARNINGS_ARE_ERRORS=ON
         cmake .. -G Ninja -DPICO_BOARD=${{ matrix.board }} -DAVM_DISABLE_SMP=1
         cmake --build . --target=rp2040_tests
 
