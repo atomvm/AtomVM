@@ -29,6 +29,9 @@ extern "C" {
 
 #define TAG "otp_socket"
 
+#define AVM_LOGD(tag, format, ...) \
+    ;
+
 #define AVM_LOGI ESP_LOGI
 #define AVM_LOGW ESP_LOGW
 #define AVM_LOGE ESP_LOGE

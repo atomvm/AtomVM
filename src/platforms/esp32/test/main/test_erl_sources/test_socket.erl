@@ -62,19 +62,26 @@ test_tcp_client(Active, BinaryOpt) ->
             true ->
                 ok =
                     receive
-                        {tcp, Socket, <<"HTTP/1.1 301", _/binary>>} when BinaryOpt =:= binary -> ok;
-                        {tcp, Socket, "HTTP/1.1 301" ++ _} when BinaryOpt =:= list -> ok;
-                        {tcp, Socket, Packet} -> {unexpected_packet, Packet};
-                        UnexpectedAfterSend -> {unexpected_message_after_send, UnexpectedAfterSend}
+                        {tcp, _WrappedSocket, <<"HTTP/1.1 301", _/binary>>} when
+                            BinaryOpt =:= binary
+                        ->
+                            ok;
+                        {tcp, _WrappedSocket, "HTTP/1.1 301" ++ _} when BinaryOpt =:= list -> ok;
+                        {tcp, _WrappedSocket, Packet} ->
+                            {unexpected_packet, Packet, {Active, BinaryOpt}};
+                        UnexpectedAfterSend ->
+                            {test_tcp_client, unexpected_message_after_send, Socket,
+                                UnexpectedAfterSend, {Active, BinaryOpt}}
                     after 10000 ->
                         {receive_packet, timeout}
                     end,
                 ok =
                     receive
-                        {tcp_closed, Socket} ->
+                        {tcp_closed, _OtherWrappedSocket} ->
                             ok;
                         UnexpectedAfterPacket ->
-                            {unexpected_message_after_packet, Socket, UnexpectedAfterPacket}
+                            {unexpected_message_after_packet, Socket, UnexpectedAfterPacket,
+                                {Active, BinaryOpt}}
                     after 10000 ->
                         {closed_socket, timeout}
                     end,
@@ -155,14 +162,14 @@ test_udp(Active, QueryID) ->
                 ok =
                     receive
                         %               {udp, Socket, {{1,1,1,1}, 53, <<QueryID:16, 1:1, _:7, _/binary>>}} -> ok;    % not supported yet
-                        {udp, Socket, {1, 1, 1, 1}, 53, <<QueryID:16, B, _/binary>>} when
+                        {udp, _WrappedSocket, {1, 1, 1, 1}, 53, <<QueryID:16, B, _/binary>>} when
                             B band 16#80 =:= 16#80
                         ->
                             ok;
-                        {udp, Socket, Addr, Port, Packet} ->
+                        {udp, _WrappedSocket, Addr, Port, Packet} ->
                             {unexpected_packet, Addr, Port, Packet};
                         UnexpectedAfterSend ->
-                            {unexpected_message_after_send, UnexpectedAfterSend}
+                            {test_udp, unexpected_message_after_send, UnexpectedAfterSend}
                     after 10000 ->
                         {receive_packet, timeout}
                     end,
@@ -228,8 +235,10 @@ test_tcp_server(Active, Port) ->
         case Active of
             true ->
                 receive
-                    {tcp, ConnectedSocket, <<"pong">>} -> ok;
-                    UnexpectedClientMessage -> {unexpected_client, UnexpectedClientMessage}
+                    {tcp, _WrappedConnectedSocket, <<"pong">>} ->
+                        ok;
+                    UnexpectedClientMessage ->
+                        {test_tcp_server, unexpected_client, UnexpectedClientMessage}
                 after 5000 -> client_timeout
                 end;
             false ->
@@ -273,8 +282,10 @@ tcp_client(Active, Port) ->
         case Active of
             true ->
                 receive
-                    {tcp, ClientSocket, <<"ping">>} -> ok;
-                    UnexpectedClientMessage -> {unexpected_client, UnexpectedClientMessage}
+                    {tcp, _WrappedClientSocketPing, <<"ping">>} ->
+                        ok;
+                    UnexpectedClientMessage ->
+                        {tcp_client, unexpected_client, UnexpectedClientMessage}
                 after 5000 -> client_timeout
                 end;
             false ->
@@ -297,7 +308,7 @@ tcp_client(Active, Port) ->
         case Active of
             true ->
                 receive
-                    {tcp_closed, ClientSocket} ->
+                    {tcp_closed, _WrappedClientSocketClosed} ->
                         ok;
                     UnexpectedAfterPacket ->
                         {unexpected_message_after_pong, ClientSocket, UnexpectedAfterPacket}

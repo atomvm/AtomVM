@@ -101,11 +101,36 @@ const char *const not_owner_a = "\x9" "not_owner";
 
 const char *const close_internal = "\x14" "$atomvm_socket_close";
 
+static const char *gen_tcp_moniker_atom = ATOM_STR("\xC", "$avm_gen_tcp");
+static const char *native_tcp_module_atom = ATOM_STR("\xC", "gen_tcp_inet");
+static const char *gen_udp_moniker_atom = ATOM_STR("\xC", "$avm_gen_udp");
+static const char *native_udp_module_atom = ATOM_STR("\xC", "gen_udp_inet");
+
 static EventListener *active_recv_callback(GlobalContext *glb, EventListener *listener);
 static EventListener *passive_recv_callback(GlobalContext *glb, EventListener *listener);
 static EventListener *active_recvfrom_callback(GlobalContext *glb, EventListener *listener);
 static EventListener *passive_recvfrom_callback(GlobalContext *glb, EventListener *listener);
 static NativeHandlerResult socket_consume_mailbox(Context *ctx);
+
+static inline term create_socket_wrapper(term pid, const char *moniker_atom, const char *module_atom, Heap *heap, GlobalContext *global)
+{
+    term tuple = term_alloc_tuple(3, heap);
+    term_put_tuple_element(tuple, 0, globalcontext_make_atom(global, moniker_atom));
+    term_put_tuple_element(tuple, 1, pid);
+    term_put_tuple_element(tuple, 2, globalcontext_make_atom(global, module_atom));
+
+    return tuple;
+}
+
+static inline term create_tcp_socket_wrapper(term pid, Heap *heap, GlobalContext *global)
+{
+    return create_socket_wrapper(pid, gen_tcp_moniker_atom, native_tcp_module_atom, heap, global);
+}
+
+static inline term create_udp_socket_wrapper(term pid, Heap *heap, GlobalContext *global)
+{
+    return create_socket_wrapper(pid, gen_udp_moniker_atom, native_udp_module_atom, heap, global);
+}
 
 uint32_t socket_tuple_to_addr(term addr_tuple)
 {
@@ -694,10 +719,12 @@ static EventListener *active_recv_callback(GlobalContext *glb, EventListener *ba
     }
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     if (len <= 0) {
-        // {tcp, Socket, {error, {SysCall, Errno}}}
-        BEGIN_WITH_STACK_HEAP(12, heap);
+        // {tcp_closed, {Moniker :: atom(), Socket :: pid(), Module :: module()}}
+        BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(2) + TUPLE_SIZE(3), heap);
         term pid = socket_data->controlling_process;
-        term msgs[2] = { TCP_CLOSED_ATOM, term_from_local_process_id(ctx->process_id) };
+        term socket_pid = term_from_local_process_id(ctx->process_id);
+        term socket_wrapper = create_tcp_socket_wrapper(socket_pid, &heap, glb);
+        term msgs[2] = { TCP_CLOSED_ATOM, socket_wrapper };
         term msg = port_heap_create_tuple_n(&heap, 2, msgs);
         port_send_message_nolock(glb, pid, msg);
         socket_data->active_listener = NULL;
@@ -713,15 +740,18 @@ static EventListener *active_recv_callback(GlobalContext *glb, EventListener *ba
         } else {
             ensure_packet_avail = len * 2;
         }
-        // {tcp, pid, binary}
+        // {tcp, {Moniker :: atom(), pid(), Module :: module()}, binary}
         Heap heap;
-        if (UNLIKELY(memory_init_heap(&heap, 20 + ensure_packet_avail) != MEMORY_GC_OK)) {
+        size_t requested_size = TUPLE_SIZE(3) + TUPLE_SIZE(3) + ensure_packet_avail;
+        if (UNLIKELY(memory_init_heap(&heap, requested_size) != MEMORY_GC_OK)) {
             fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
             AVM_ABORT();
         }
         term pid = socket_data->controlling_process;
         term packet = socket_create_packet_term(buf, len, socket_data->binary, &heap, glb);
-        term msgs[3] = { TCP_ATOM, term_from_local_process_id(ctx->process_id), packet };
+        term socket_pid = term_from_local_process_id(ctx->process_id);
+        term socket_wrapper = create_tcp_socket_wrapper(socket_pid, &heap, glb);
+        term msgs[3] = { TCP_ATOM, socket_wrapper, packet };
         term msg = port_heap_create_tuple_n(&heap, 3, msgs);
         port_send_message_nolock(glb, pid, msg);
         memory_destroy_heap(&heap, glb);
@@ -835,10 +865,13 @@ static EventListener *active_recvfrom_callback(GlobalContext *glb, EventListener
     }
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     if (len == -1) {
-        // {udp, Socket, {error, {SysCall, Errno}}}
-        BEGIN_WITH_STACK_HEAP(12, heap);
+        // {udp, {Moniker :: atom(), Socket :: pid(), Module :: module()}, {error, {SysCall, Errno}}}
+        BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(3) + TUPLE_SIZE(3) + TUPLE_SIZE(2) + TUPLE_SIZE(2), heap);
         term pid = socket_data->controlling_process;
-        term msgs[3] = { UDP_ATOM, term_from_local_process_id(ctx->process_id), port_heap_create_sys_error_tuple(&heap, RECVFROM_ATOM, errno) };
+        term socket_pid = term_from_local_process_id(ctx->process_id);
+        // printf("Sending tcp_closed wrapper to %i\n", ctx->process_id);
+        term socket_wrapper = create_udp_socket_wrapper(socket_pid, &heap, glb);
+        term msgs[3] = { UDP_ATOM, socket_wrapper, port_heap_create_sys_error_tuple(&heap, RECVFROM_ATOM, errno) };
         term msg = port_heap_create_tuple_n(&heap, 3, msgs);
         port_send_message_nolock(glb, pid, msg);
         END_WITH_STACK_HEAP(heap, glb);
@@ -850,9 +883,10 @@ static EventListener *active_recvfrom_callback(GlobalContext *glb, EventListener
         } else {
             ensure_packet_avail = len * 2;
         }
-        // {udp, pid, {int,int,int,int}, int, binary}
+        // {udp, {Moniker :: atom(), pid(), Module :: module()}, Address :: {int,int,int,int}, Port :: integer(), binary()}
         Heap heap;
-        if (UNLIKELY(memory_init_heap(&heap, 20 + ensure_packet_avail) != MEMORY_GC_OK)) {
+        size_t requested_size = TUPLE_SIZE(5) + TUPLE_SIZE(3) + TUPLE_SIZE(4) + ensure_packet_avail;
+        if (UNLIKELY(memory_init_heap(&heap, requested_size) != MEMORY_GC_OK)) {
             fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
             AVM_ABORT();
         }
@@ -860,7 +894,9 @@ static EventListener *active_recvfrom_callback(GlobalContext *glb, EventListener
         term addr = socket_heap_tuple_from_addr(&heap, htonl(clientaddr.sin_addr.s_addr));
         term port = term_from_int32(htons(clientaddr.sin_port));
         term packet = socket_create_packet_term(buf, len, socket_data->binary, &heap, glb);
-        term msgs[5] = { UDP_ATOM, term_from_local_process_id(ctx->process_id), addr, port, packet };
+        term socket_pid = term_from_local_process_id(ctx->process_id);
+        term socket_wrapper = create_udp_socket_wrapper(socket_pid, &heap, glb);
+        term msgs[5] = { UDP_ATOM, socket_wrapper, addr, port, packet };
         term msg = port_heap_create_tuple_n(&heap, 5, msgs);
         port_send_message_nolock(glb, pid, msg);
         memory_destroy_heap(&heap, glb);

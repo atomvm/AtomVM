@@ -52,9 +52,10 @@
     | {timeout, timeout()}
     | list
     | binary
-    | {binary, boolean()}.
+    | {binary, boolean()}
+    | {inet_backend, inet | socket}.
 
--define(DEFAULT_PARAMS, [{active, true}, {buffer, 128}, {timeout, infinity}]).
+-include("inet-priv.hrl").
 
 %%-----------------------------------------------------------------------------
 %% @equiv   open(PortNum, [])
@@ -86,9 +87,13 @@ open(PortNum) ->
 -spec open(PortNum :: inet:port_number(), Options :: [option()]) ->
     {ok, inet:socket()} | {error, Reason :: reason()}.
 open(PortNum, Options) ->
-    DriverPid = open_port({spawn, "socket"}, []),
-    Params = merge(Options, ?DEFAULT_PARAMS),
-    init(DriverPid, PortNum, Params).
+    Module = get_inet_backend_module(Options),
+    case Module:open(PortNum, Options) of
+        {ok, Socket} ->
+            {ok, {?GEN_UDP_MONIKER, Socket, Module}};
+        Other ->
+            Other
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket over which to send a packet
@@ -107,13 +112,8 @@ open(PortNum, Options) ->
     PortNum :: inet:port_number(),
     Packet :: packet()
 ) -> ok | {error, reason()}.
-send(Socket, Address, PortNum, Packet) ->
-    case call(Socket, {sendto, Address, PortNum, Packet}) of
-        {ok, _Sent} ->
-            ok;
-        Else ->
-            Else
-    end.
+send({?GEN_UDP_MONIKER, Socket, Module}, Address, PortNum, Packet) ->
+    Module:send(Socket, Address, PortNum, Packet).
 
 %%-----------------------------------------------------------------------------
 %% @equiv   recv(Socket, Length, infinity)
@@ -144,8 +144,8 @@ recv(Socket, Length) ->
 %%-----------------------------------------------------------------------------
 -spec recv(Socket :: inet:socket(), Length :: non_neg_integer(), Timeout :: timeout()) ->
     {ok, {inet:ip_address(), inet:port_number(), packet()}} | {error, reason()}.
-recv(Socket, Length, Timeout) ->
-    call(Socket, {recvfrom, Length, Timeout}).
+recv({?GEN_UDP_MONIKER, Socket, Module}, Length, Timeout) ->
+    Module:recv(Socket, Length, Timeout).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket to close
@@ -154,8 +154,8 @@ recv(Socket, Length, Timeout) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec close(inet:socket()) -> ok.
-close(Socket) ->
-    inet:close(Socket).
+close({?GEN_UDP_MONIKER, Socket, Module}) ->
+    Module:close(Socket).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket to which to assign the pid
@@ -173,56 +173,20 @@ close(Socket) ->
 %%-----------------------------------------------------------------------------
 -spec controlling_process(Socket :: inet:socket(), Pid :: pid()) ->
     ok | {error, Reason :: reason()}.
-controlling_process(Socket, Pid) ->
-    call(Socket, {controlling_process, Pid}).
+controlling_process({?GEN_UDP_MONIKER, Socket, Module}, Pid) ->
+    Module:controlling_process(Socket, Pid).
 
-%% internal operations
-
-%% @private
-init(DriverPid, PortNum, Params) ->
-    InitParams = [
-        {proto, udp},
-        {port, PortNum},
-        {controlling_process, self()}
-        | Params
-    ],
-    case call(DriverPid, {init, InitParams}) of
-        ok ->
-            {ok, DriverPid};
-        ErrorReason ->
-            %% TODO close port
-            ErrorReason
-    end.
-
-%% TODO implement this in lists
+%%
+%% Internal implementation
+%%
 
 %% @private
-merge(Config, Defaults) ->
-    merge(Config, Defaults, []) ++ Config.
-
-%% @private
-merge(_Config, [], Accum) ->
-    Accum;
-merge(Config, [H | T], Accum) ->
-    Key =
-        case H of
-            {K, _V} -> K;
-            K -> K
-        end,
-    case proplists:get_value(Key, Config) of
+get_inet_backend_module(Options) ->
+    case proplists:get_value(inet_backend, Options) of
         undefined ->
-            merge(Config, T, [H | Accum]);
-        Value ->
-            merge(Config, T, [{Key, Value} | Accum])
-    end.
-
-%%
-%% Internal operations
-%%
-
-call(Port, Msg) ->
-    case port:call(Port, Msg) of
-        {error, noproc} -> {error, closed};
-        out_of_memory -> {error, enomem};
-        Result -> Result
+            gen_udp_inet;
+        inet ->
+            gen_udp_inet;
+        socket ->
+            gen_udp_socket
     end.

@@ -33,7 +33,11 @@ set(ERLANG_MODULES
     gen_server
     gen_statem
     gen_udp
+    gen_udp_inet
+    gen_udp_socket
     gen_tcp
+    gen_tcp_inet
+    gen_tcp_socket
     supervisor
     inet
     io_lib
