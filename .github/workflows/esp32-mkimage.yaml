@@ -35,7 +35,7 @@ jobs:
 
     strategy:
       matrix:
-        idf-version: ["4.4.6", "5.1.2"]
+        idf-version: ["5.1.2"]
         cc: ["clang-10"]
         cxx: ["clang++-10"]
         cflags: ["-O3"]
@@ -43,9 +43,6 @@ jobs:
         elixir_version: ["1.11"]
         compiler_pkgs: ["clang-10"]
         soc: ["esp32", "esp32c3", "esp32s2", "esp32s3", "esp32c6"]
-        exclude:
-        - soc: "esp32c6"
-          idf-version: "4.4.6"
 
     env:
       CC: ${{ matrix.cc }}
