@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.6.0-alpha.2] - Unreleased
+## [0.6.0-alpha.2] - 2023-12-10
 
 ### Fixed
 
@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed changed default to `AVM_USE_32BIT_FLOAT=on` for STM32 platform to enable use of single precision hardware FPU on F4/F7 devices.
 - Fixed a bug where emscripten `register_*_callback/1` functions would use x[1] as second argument
 - Fixed precision of integers used with timers which could yield to halts and wait times smaller than expected
+- Add support for ESP32-C6
 
 ### Changed
 
@@ -27,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Platform function providing time used by timers was changed from `sys_monotonic_millis` to `sys_monotonic_time_u64`, `sys_monotonic_time_u64_to_ms` and `sys_monotonic_time_ms_to_u64`.
 - Implement `atomvm:random/0` and `atomvm:rand_bytes/1` on top of `crypto:strong_rand_bytes/1` on
   generic_unix, ESP32 and RP2040 platforms.
+- Performance improvements
 
 ### Added
 
@@ -46,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for setting the default receive buffer size for sockets via `socket:setopt/3`
 - Added support for pattern matching binaries containing 32 and 64 bit floating point values, but
   only when aligned to byte boundaries (e.g. `<<0:4, F:32/float>> = Bin` is not supported).
+- Added experimental backend to `get_tcp` and `get_udp` based on the new `socket` interface
+- Added API for managing ESP32 watchdog (only on `esp-idf` >= v5.x)
 
 ### Removed
 
