@@ -29,6 +29,7 @@
 #include "memory.h"
 #include "nifs.h"
 #include "platform_defaultatoms.h"
+#include "port.h"
 #include "term.h"
 
 #include "esp_log.h"
@@ -509,6 +510,31 @@ static term nif_esp_get_mac(Context *ctx, int argc, term argv[])
     return term_from_literal_binary(mac, 6, &ctx->heap, ctx->global);
 }
 
+static term nif_esp_get_default_mac(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    uint8_t mac[6];
+    esp_err_t err = esp_efuse_mac_get_default(mac);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Unable to read default mac.  err=%i", err);
+        return port_create_error_tuple(ctx, esp_err_to_term(ctx->global, err));
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + term_binary_heap_size(6)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term mac_term = term_from_literal_binary(mac, 6, &ctx->heap, ctx->global);
+
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, OK_ATOM);
+    term_put_tuple_element(result, 1, mac_term);
+
+    return result;
+}
+
 #if ESP_TASK_WDT_API
 static term parse_task_wdt_config(Context *ctx, esp_task_wdt_config_t *config, term argv[])
 {
@@ -788,6 +814,11 @@ static const struct Nif esp_get_mac_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_get_mac
 };
+static const struct Nif esp_get_default_mac_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_get_default_mac
+};
 #if ESP_TASK_WDT_API
 static const struct Nif esp_task_wdt_init_nif =
 {
@@ -894,6 +925,10 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     if (strcmp("esp:get_mac/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_get_mac_nif;
+    }
+    if (strcmp("esp:get_default_mac/0", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_get_default_mac_nif;
     }
 #if ESP_TASK_WDT_API
     if (strcmp("esp:task_wdt_init/1", nifname) == 0) {

@@ -47,6 +47,7 @@
     rtc_slow_set_binary/1,
     freq_hz/0,
     get_mac/1,
+    get_default_mac/0,
     task_wdt_init/1,
     task_wdt_reconfigure/1,
     task_wdt_deinit/0,
@@ -412,6 +413,20 @@ freq_hz() ->
 %%-----------------------------------------------------------------------------
 -spec get_mac(Interface :: interface()) -> mac().
 get_mac(_Interface) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns The default MAC address of the ESP32 device.
+%% @doc     Retrieve the default MAC address of the ESP32 device.
+%%          This function accesses the EFUSE memory of the ESP32 and reads
+%%          the factory-programmed MAC address.
+%%
+%%          The mac address is returned as a 6-byte binary, per the
+%%          IEEE 802 family of specifications.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_default_mac() -> {ok, mac()} | {error, atom()}.
+get_default_mac() ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
