@@ -599,7 +599,8 @@ int test_module_execution(bool beam, struct Test *test)
 
 int test_modules_execution(bool beam, bool skip, int count, char **item)
 {
-    if (chdir("erlang_tests")) {
+    if (chdir("erlang_tests") != 0) {
+        perror("Error: ");
         return EXIT_FAILURE;
     }
 
@@ -666,7 +667,10 @@ int main(int argc, char **argv)
     fprintf(stderr, "Seed is %li\n", seed);
     srand(seed);
 
-    chdir(dirname(name));
+    if (chdir(dirname(name)) != 0) {
+        perror("Error: ");
+        return EXIT_FAILURE;
+    }
 
     int opt;
     bool beam = false;
