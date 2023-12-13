@@ -41,6 +41,8 @@
 #define TAG "sys"
 #define RESERVE_STACK_SIZE 4096U
 
+static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts);
+
 struct PortDriverDefListItem *port_driver_list;
 struct NifCollectionDefListItem *nif_collection_list;
 
