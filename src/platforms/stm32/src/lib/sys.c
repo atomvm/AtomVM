@@ -236,9 +236,11 @@ uint64_t sys_monotonic_time_u64_to_ms(uint64_t t)
     return t;
 }
 
-enum OpenAVMResult sys_open_avm_from_file(
-    GlobalContext *global, const char *path, struct AVMPackData **data)
+enum OpenAVMResult sys_open_avm_from_file(GlobalContext *global, const char *path, struct AVMPackData **data)
 {
+    UNUSED(global);
+    UNUSED(path);
+    UNUSED(data);
     TRACE("sys_open_avm_from_file: Going to open: %s\n", path);
 
     // TODO
@@ -248,6 +250,8 @@ enum OpenAVMResult sys_open_avm_from_file(
 
 Module *sys_load_module_from_file(GlobalContext *global, const char *path)
 {
+    UNUSED(global);
+    UNUSED(path);
     // TODO
     return NULL;
 }
@@ -291,6 +295,8 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 
 term sys_get_info(Context *ctx, term key)
 {
+    UNUSED(ctx);
+    UNUSED(key);
     return UNDEFINED_ATOM;
 }
 
