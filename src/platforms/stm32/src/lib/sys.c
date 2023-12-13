@@ -119,7 +119,7 @@ void platform_defaultatoms_init(GlobalContext *glb)
 void sys_enable_core_periph_clocks()
 {
     uint32_t list[] = GPIO_CLOCK_LIST;
-    for (int i = 0; i < sizeof(list) / sizeof(list[0]); i++) {
+    for (size_t i = 0; i < sizeof(list) / sizeof(list[0]); i++) {
         rcc_periph_clock_enable((enum rcc_periph_clken) list[i]);
     }
 #ifndef AVM_DISABLE_GPIO_PORT_DRIVER
