@@ -62,11 +62,10 @@ static uint8_t *_heap_end = NULL;
  * This may be overridden by defining the function
  * `local_heap_setup` (exported in `stm_sys.h`).
  */
-static void
-__local_ram(uint8_t **start, uint8_t **end)
+static void __local_ram(uint8_t **start, uint8_t **end)
 {
     *start = &_ebss;
-    *end = (uint8_t *) (&_stack - RESERVE_STACK_SIZE);
+    *end = (uint8_t *) (((uintptr_t) &_stack - RESERVE_STACK_SIZE));
 }
 
 void *_sbrk_r(struct _reent *reent, ptrdiff_t diff)
