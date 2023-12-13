@@ -529,6 +529,7 @@ void gpiodriver_init(GlobalContext *glb)
 
 static Context *gpio_driver_create_port(GlobalContext *global, term opts)
 {
+    UNUSED(opts);
     Context *ctx = context_new(global);
 
     struct GPIOData *gpio_data = malloc(sizeof(struct GPIOData));
@@ -983,6 +984,7 @@ static term nif_gpio_set_pin_mode(Context *ctx, int argc, term argv[])
 
 static term nif_gpio_set_pin_pull(Context *ctx, int argc, term argv[])
 {
+    UNUSED(ctx);
     UNUSED(argc);
     UNUSED(argv);
     AVM_LOGW(TAG, "Pull mode must be set using `gpio:set_pin_mode/2` arg #2 i.e. {Mode,PullMode}");
