@@ -31,6 +31,7 @@
 #ifdef __cplusplus
 #include <climits>
 #else
+#include <assert.h>
 #include <limits.h>
 #endif
 #include <inttypes.h>
@@ -119,9 +120,23 @@ typedef uint64_t avm_uint64_t;
 #ifdef AVM_USE_SINGLE_PRECISION
     typedef float avm_float_t;
     #define AVM_FLOAT_FMT "%f"
+
+#ifndef __cplusplus
+    _Static_assert(sizeof(avm_float_t) == 4, "avm_float_t must be a 32-bit float");
+#endif
+
+    #define INT64_MIN_AS_AVM_FLOAT -9223372036854775808.0
+    #define INT64_MAX_AS_AVM_FLOAT 9223372036854775808.0
 #else
     typedef double avm_float_t;
     #define AVM_FLOAT_FMT "%lf"
+
+#ifndef __cplusplus
+    _Static_assert(sizeof(avm_float_t) == 8, "avm_float_t must be a 64-bit float");
+#endif
+
+    #define INT64_MIN_AS_AVM_FLOAT -9223372036854775808.0
+    #define INT64_MAX_AS_AVM_FLOAT 9223372036854775808.0
 #endif
 
 typedef union {
