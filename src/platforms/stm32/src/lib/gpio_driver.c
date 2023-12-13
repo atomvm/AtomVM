@@ -870,6 +870,7 @@ static term gpiodriver_remove_int(Context *ctx, term cmd)
             if ((gpio_listener->gpio_pin == target_num) && (gpio_listener->bank_atom == target_bank_atom)) {
                 uint16_t exti = gpio_listener->exti;
                 uint8_t irqn = pin_num_to_exti_irq(gpio_listener->gpio_pin);
+                nvic_disable_irq(irqn);
                 list_remove(&gpio_listener->gpio_listener_list_head);
                 exti_disable_request(exti);
                 free(gpio_listener);
