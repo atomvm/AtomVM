@@ -931,18 +931,20 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
             ret = gpiodriver_close(ctx);
             break;
 
-        case GPIOInvalidCmd:
+        case GPIOInvalidCmd: {
             char *invalid_name = interop_atom_to_string(ctx, cmd_term);
             AVM_LOGE(TAG, "Invalid command: %s", invalid_name);
             free(invalid_name);
             ret = create_pair(ctx, ERROR_ATOM, UNDEFINED_ATOM);
             break;
+        }
 
-        default:
+        default: {
             char *cmd_name = interop_atom_to_string(ctx, cmd_term);
             AVM_LOGE(TAG, "Unhandled error processing command: %s", cmd_name);
             free(cmd_name);
             ret = create_pair(ctx, ERROR_ATOM, BADMATCH_ATOM);
+        }
     }
 
     term ret_msg;
