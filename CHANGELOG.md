@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Added `esp:get_default_mac/0` for retrieving the default MAC address on ESP32.
+- Added support for `pico` and `poci` as an alternative to `mosi` and `miso` for SPI
 
 ### Changed
 

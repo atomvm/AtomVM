@@ -44,7 +44,9 @@
 
 -type peripheral() :: hspi | vspi.
 -type bus_config() :: [
-    {miso, non_neg_integer()}
+    {poci, non_neg_integer()}
+    | {pico, non_neg_integer()}
+    | {miso, non_neg_integer()}
     | {mosi, non_neg_integer()}
     | {sclk, non_neg_integer()}
     | {peripheral, peripheral()}
@@ -330,14 +332,14 @@ migrate_deprecated(MaybeDeprecated) ->
 migrate_deprecated_iter(none, Accum) ->
     Accum;
 migrate_deprecated_iter({K, V, Iter}, Accum) ->
-    NewK = replace_key(K),
-    warn_deprecated(K, NewK),
+    {Status, NewK} = replace_key(K),
+    warn_deprecated(Status, K, NewK),
     migrate_deprecated_iter(maps:next(Iter), Accum#{NewK => V}).
 
 %% @private
 migrate_deprecated_fold({K, V}, Accum) ->
-    NewK = replace_key(K),
-    warn_deprecated(K, NewK),
+    {Status, NewK} = replace_key(K),
+    warn_deprecated(Status, K, NewK),
     [{NewK, V} | Accum];
 migrate_deprecated_fold(E, Accum) ->
     [E | Accum].
@@ -345,19 +347,21 @@ migrate_deprecated_fold(E, Accum) ->
 %% @private
 replace_key(Key) ->
     case Key of
-        miso_io_num -> miso;
-        mosi_io_num -> mosi;
-        sclk_io_num -> sclk;
-        spi_cs_io_num -> cs;
-        spi_clock_hz -> clock_speed_hz;
-        spi_peripheral -> peripheral;
-        Any -> Any
+        pico -> {rename, mosi};
+        poci -> {rename, miso};
+        miso_io_num -> {warning, miso};
+        mosi_io_num -> {warning, mosi};
+        sclk_io_num -> {warning, sclk};
+        spi_cs_io_num -> {warning, cs};
+        spi_clock_hz -> {warning, clock_speed_hz};
+        spi_peripheral -> {warning, peripheral};
+        Any -> {ok, Any}
     end.
 
-warn_deprecated(Key, Key) ->
-    ok;
-warn_deprecated(OldKey, NewKey) ->
-    io:format("SPI: found deprecated ~p, use ~p instead!!!~n", [OldKey, NewKey]).
+warn_deprecated(warning, OldKey, NewKey) ->
+    io:format("SPI: found deprecated ~p, use ~p instead!!!~n", [OldKey, NewKey]);
+warn_deprecated(_Status, Key, Key) ->
+    ok.
 
 %% @private
 validate_integer_entry(Key, Map) ->

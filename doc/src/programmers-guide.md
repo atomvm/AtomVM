@@ -1220,11 +1220,11 @@ The AtomVM SPI implementation uses the AtomVM Port mechanism and must be initial
 
 The `bus_config` properties list contains the following entries:
 
-| Key | Value Type | Required | Description |
-|-----|------------|----------|---|
-| `miso` | `integer()` | yes | SPI leader-in, follower-out pin (MOSI) |
-| `mosi` | `integer()` | yes | SPI leader-out, follower-in pin (MISO) |
-| `sclk` | `integer()` | yes | SPI clock pin (SCLK) |
+| Key              | Value Type  | Required    | Description                                  |
+|------------------|-------------|-------------|----------------------------------------------|
+| `poci` (`miso`)  | `integer()` | yes         | SPI peripheral-out, controller-in pin (MOSI) |
+| `pico` (`mosi`)  | `integer()` | yes         | SPI peripheral-in, controller-out pin (MISO) |
+| `sclk`           | `integer()` | yes         | SPI clock pin (SCLK)                         |
 
 The `device_config` entry is a properties list containing entries for each device attached to the SPI Bus.  Each entry in this list contains the user-selected name (as an atom) of the device, followed by configuration for the named device.
 
