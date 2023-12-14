@@ -77,5 +77,6 @@ jobs:
         export PATH=/home/runner/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi/bin:${PATH}
         mkdir build
         cd build
+        # -DAVM_WARNINGS_ARE_ERRORS=ON
         cmake .. -DCMAKE_TOOLCHAIN_FILE=cmake/arm-toolchain.cmake -DLIBOPENCM3_DIR=/home/runner/libopencm3
         make -j

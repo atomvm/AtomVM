@@ -56,7 +56,7 @@ jobs:
         set -e
         mkdir build
         cd build
-        cmake .. -G Ninja
+        cmake .. -G Ninja -DAVM_WARNINGS_ARE_ERRORS=ON
         ninja AtomVM atomvmlib test_eavmlib test_alisp hello_world run_script call_cast html5_events wasm_webserver
 
     - name: Upload AtomVM and test modules

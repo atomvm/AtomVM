@@ -91,18 +91,26 @@ jobs:
         - cc: "gcc-10"
           cxx: "g++-10"
           compiler_pkgs: "gcc-10 g++-10"
+          # Use Werror for recent GCC versions that have better diagnostics
+          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
         - cc: "gcc-11"
           cxx: "g++-11"
           compiler_pkgs: "gcc-11 g++-11"
+          # Use Werror for recent GCC versions that have better diagnostics
+          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
         - cc: "gcc-12"
           cxx: "g++-12"
           compiler_pkgs: "gcc-12 g++-12"
+          # Use Werror for recent GCC versions that have better diagnostics
+          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
         - cc: "clang-10"
           cxx: "clang++-10"
           compiler_pkgs: "clang-10"
+          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
         - cc: "clang-11"
           cxx: "clang++-11"
           compiler_pkgs: "clang-11"
+          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
 #       - cc: "clang-12"
 #         cxx: "clang++-12"
 #         compiler_pkgs: "clang-12"
@@ -171,7 +179,8 @@ jobs:
           cflags: "-m32 -O3"
           otp: "23"
           elixir_version: "1.11"
-          cmake_opts_other: "-DAVM_CREATE_STACKTRACES=off"
+          # Use Werror so we get an error with 32 bit specific warnings
+          cmake_opts_other: "-DAVM_CREATE_STACKTRACES=off -DAVM_WARNINGS_ARE_ERRORS=ON"
           arch: "i386"
           compiler_pkgs: "gcc-10 g++-10 gcc-10-multilib g++-10-multilib libc6-dev-i386
           libc6-dbg:i386 zlib1g-dev:i386 libmbedtls-dev:i386"

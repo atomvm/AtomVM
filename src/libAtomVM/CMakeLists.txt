@@ -100,13 +100,18 @@ if (AVM_PEDANTIC_WARNINGS)
     set(MAYBE_PEDANTIC_FLAG "-pedantic")
 endif()
 
+option(AVM_WARNINGS_ARE_ERRORS "Error on warning" OFF)
+if (AVM_WARNINGS_ARE_ERRORS)
+    set(MAYBE_WERROR_FLAG "-Werror")
+endif()
+
 add_library(libAtomVM ${SOURCE_FILES} ${HEADER_FILES})
 target_include_directories(libAtomVM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(libAtomVM PUBLIC c_std_11)
 if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(libAtomVM PUBLIC -Wall ${MAYBE_PEDANTIC_FLAG} -Wextra -ggdb -Werror=incompatible-pointer-types)
+    target_compile_options(libAtomVM PUBLIC -Wall ${MAYBE_PEDANTIC_FLAG} ${MAYBE_WERROR_FLAG} -Wextra -ggdb -Werror=incompatible-pointer-types)
 elseif (CMAKE_C_COMPILER_ID MATCHES "Clang")
-    target_compile_options(libAtomVM PUBLIC -Wall --extra-warnings -Werror=incompatible-pointer-types)
+    target_compile_options(libAtomVM PUBLIC -Wall --extra-warnings -Werror=incompatible-pointer-types ${MAYBE_WERROR_FLAG})
 endif()
 
 # AtomVM options used in libAtomVM
