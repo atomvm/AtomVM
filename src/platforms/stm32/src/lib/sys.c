@@ -103,11 +103,6 @@ static inline void sys_clock_gettime(struct timespec *t)
     t->tv_nsec = ((int32_t) now % 1000) * 1000000;
 }
 
-static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *timespec2)
-{
-    return (int32_t) ((timespec1->tv_sec - timespec2->tv_sec) * 1000 + (timespec1->tv_nsec - timespec2->tv_nsec) / 1000000);
-}
-
 /* TODO: Needed because `defaultatoms_init` in libAtomVM/defaultatoms.c calls this function.
  * We should be able to remove this after `platform_defaulatoms.{c,h}` are removed on all platforms
  * and `defaultatoms_init` is no longer called.
