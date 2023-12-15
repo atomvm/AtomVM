@@ -173,6 +173,10 @@ bool sys_unlock_pin(GlobalContext *glb, uint32_t gpio_bank, uint16_t pin_num)
 void sys_init_platform(GlobalContext *glb)
 {
     struct STM32PlatformData *platform = malloc(sizeof(struct STM32PlatformData));
+    if (IS_NULL_PTR(platform)) {
+        AVM_LOGE(TAG, "Out of memory!");
+        AVM_ABORT();
+    }
     glb->platform_data = platform;
     list_init(&platform->locked_pins);
 }
