@@ -321,6 +321,7 @@ COLD_FUNC void module_destroy(Module *module)
     free(module->labels);
     free(module->imported_funcs);
     free(module->literals_table);
+    free(module->local_atoms_to_global_table);
     if (module->free_literals_data) {
         free(module->literals_data);
     }
