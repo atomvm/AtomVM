@@ -991,8 +991,13 @@ static term nif_gpio_set_pin_mode(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
     term ret = setup_gpio_pin(ctx, argv[0], argv[1]);
-    if (UNLIKELY(get_error_type(ret) != OK_ATOM)) {
-        RAISE_ERROR(ret);
+    term error = get_error_type(ret);
+    if (UNLIKELY(error != OK_ATOM)) {
+        RAISE_ERROR(error);
+    } else {
+        if (UNLIKELY(ret == OUT_OF_MEMORY_ATOM)) {
+            RAISE_ERROR(ret);
+        }
     }
     return ret;
 }
@@ -1010,8 +1015,13 @@ static term nif_gpio_digital_write(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
     term ret = gpio_digital_write(ctx, argv[0], argv[1]);
-    if (UNLIKELY(get_error_type(ret) != OK_ATOM)) {
-        RAISE_ERROR(ret);
+    term error = get_error_type(ret);
+    if (UNLIKELY(error != OK_ATOM)) {
+        RAISE_ERROR(error);
+    } else {
+        if (UNLIKELY(ret == OUT_OF_MEMORY_ATOM)) {
+            RAISE_ERROR(ret);
+        }
     }
     return ret;
 }
@@ -1020,8 +1030,13 @@ static term nif_gpio_digital_read(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
     term ret = gpio_digital_read(ctx, argv[0]);
-    if (UNLIKELY(get_error_type(ret) != OK_ATOM)) {
-        RAISE_ERROR(ret);
+    term error = get_error_type(ret);
+    if (UNLIKELY(error != OK_ATOM)) {
+        RAISE_ERROR(error);
+    } else {
+        if (UNLIKELY(ret == OUT_OF_MEMORY_ATOM)) {
+            RAISE_ERROR(ret);
+        }
     }
     return ret;
 }
