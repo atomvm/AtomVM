@@ -22,10 +22,10 @@
 -export([open/1, open/2, close/1, read/1, write/2]).
 
 open(Name, Opts) ->
-    open_port({spawn, "uart"}, [{peripheral, Name} | Opts]).
+    open([{peripheral, Name} | Opts]).
 
 open(Opts) ->
-    open_port({spawn, "uart"}, Opts).
+    open_port({spawn, "uart"}, migrate_config(Opts)).
 
 close(Pid) ->
     port:call(Pid, close).
@@ -57,3 +57,24 @@ is_iolist([H | T]) ->
     end;
 is_iolist(_) ->
     false.
+
+migrate_config([]) ->
+    [];
+migrate_config([{K, V} | T]) ->
+    NewK = rename_key(K),
+    warn_deprecated(K, NewK),
+    [{NewK, V} | migrate_config(T)].
+
+rename_key(Key) ->
+    case Key of
+        rx_pin -> rx;
+        tx_pin -> tx;
+        rts_pin -> rts;
+        cts_pin -> cts;
+        Any -> Any
+    end.
+
+warn_deprecated(Key, Key) ->
+    ok;
+warn_deprecated(OldKey, NewKey) ->
+    io:format("UART: found deprecated ~p, use ~p instead!!!~n", [OldKey, NewKey]).
