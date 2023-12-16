@@ -44,7 +44,7 @@
 
 -type pin() :: non_neg_integer().
 -type freq_hz() :: non_neg_integer().
--type param() :: {scl_io_num, pin()} | {sda_io_num, pin()} | {i2c_clock_hz, freq_hz()}.
+-type param() :: {scl, pin()} | {sda, pin()} | {clock_speed_hz, freq_hz()}.
 -type params() :: [param()].
 -type i2c() :: pid().
 -type address() :: non_neg_integer().

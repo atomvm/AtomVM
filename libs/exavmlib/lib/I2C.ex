@@ -43,9 +43,9 @@ defmodule I2C do
   Used to set the SCL pin, SDA pin, and clock speed.
   """
   @type param() ::
-          {:scl_io_num, gpio_pin()}
-          | {:sda_io_num, gpio_pin()}
-          | {:i2c_clock_hz, freq_hz()}
+          {:scl, gpio_pin()}
+          | {:sda, gpio_pin()}
+          | {:clock_speed_hz, freq_hz()}
 
   @type params() :: [param()]
 
@@ -69,7 +69,7 @@ defmodule I2C do
 
   ## Example:
 
-  `I2C.open([{:scl_io_num, 15}, {:sda_io_num, 4}, {:i2c_clock_hz, 1000000}])`
+  `I2C.open([{:scl, 15}, {:sda, 4}, {:clock_speed_hz, 1000000}])`
   """
   @spec open(params()) :: pid()
   def open(configuration) do
