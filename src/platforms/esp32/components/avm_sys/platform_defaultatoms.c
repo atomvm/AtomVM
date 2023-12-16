@@ -66,10 +66,10 @@ static const char *const data_bits_atom = "\x9" "data_bits";
 static const char *const stop_bits_atom = "\x9" "stop_bits";
 static const char *const flow_control_atom = "\xC" "flow_control";
 static const char *const parity_atom = "\x6" "parity";
-static const char *const rx_pin_atom = "\x6" "rx_pin";
-static const char *const tx_pin_atom = "\x6" "tx_pin";
-static const char *const rts_pin_atom = "\x7" "rts_pin";
-static const char *const cts_pin_atom = "\x7" "cts_pin";
+static const char *const rx_atom = "\x2" "rx";
+static const char *const tx_atom = "\x2" "tx";
+static const char *const rts_atom = "\x3" "rts";
+static const char *const cts_atom = "\x3" "cts";
 static const char *const default_atom = "\x7" "default";
 static const char *const event_queue_len_atom = "\xF" "event_queue_len";
 
@@ -123,10 +123,10 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, stop_bits_atom) == STOP_BITS_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, flow_control_atom) == FLOW_CONTROL_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, parity_atom) == PARITY_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, tx_pin_atom) == TX_PIN_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, rx_pin_atom) == RX_PIN_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, rts_pin_atom) == RTS_PIN_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, cts_pin_atom) == CTS_PIN_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, tx_atom) == TX_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, rx_atom) == RX_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, rts_atom) == RTS_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, cts_atom) == CTS_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, default_atom) == DEFAULT_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, event_queue_len_atom) == EVENT_QUEUE_LEN_ATOM_INDEX;
 

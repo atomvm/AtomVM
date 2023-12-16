@@ -19,10 +19,13 @@
 %
 
 -module(uart).
--export([open/2, close/1, read/1, write/2]).
+-export([open/1, open/2, close/1, read/1, write/2]).
 
 open(Name, Opts) ->
-    open_port({spawn, "uart"}, [{name, Name} | Opts]).
+    open_port({spawn, "uart"}, [{peripheral, Name} | Opts]).
+
+open(Opts) ->
+    open_port({spawn, "uart"}, Opts).
 
 close(Pid) ->
     port:call(Pid, close).
