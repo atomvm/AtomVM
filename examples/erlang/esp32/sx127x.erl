@@ -67,15 +67,15 @@
 
 -define(SPISettings, [
     {bus_config, [
-        {miso_io_num, 19},
-        {mosi_io_num, 27},
-        {sclk_io_num, 5}
+        {miso, 19},
+        {mosi, 27},
+        {sclk, 5}
     ]},
     {device_config, [
         {my_device, [
-            {spi_clock_hz, 1000000},
+            {clock_speed_hz, 1000000},
             {mode, 0},
-            {spi_cs_io_num, 18},
+            {cs, 18},
             {address_len_bits, 8}
         ]}
     ]}

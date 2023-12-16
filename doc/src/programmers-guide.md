@@ -1220,11 +1220,11 @@ The AtomVM SPI implementation uses the AtomVM Port mechanism and must be initial
 
 The `bus_config` properties list contains the following entries:
 
-| Key | Value Type | Required | Description |
-|-----|------------|----------|---|
-| `miso_io_num` | `integer()` | yes | SPI leader-in, follower-out pin (MOSI) |
-| `mosi_io_num` | `integer()` | yes | SPI leader-out, follower-in pin (MISO) |
-| `sclk_io_num` | `integer()` | yes | SPI clock pin (SCLK) |
+| Key              | Value Type  | Required    | Description                                  |
+|------------------|-------------|-------------|----------------------------------------------|
+| `poci` (`miso`)  | `integer()` | yes         | SPI peripheral-out, controller-in pin (MOSI) |
+| `pico` (`mosi`)  | `integer()` | yes         | SPI peripheral-in, controller-out pin (MISO) |
+| `sclk`           | `integer()` | yes         | SPI clock pin (SCLK)                         |
 
 The `device_config` entry is a properties list containing entries for each device attached to the SPI Bus.  Each entry in this list contains the user-selected name (as an atom) of the device, followed by configuration for the named device.
 
@@ -1232,9 +1232,9 @@ Each device configuration is a properties list containing the following entries:
 
 | Key | Value Type | Required | Description |
 |-----|------------|----------|---|
-| `spi_clock_hz` | `integer()` | yes | SPI clock frequency (in hertz) |
+| `clock_speed_hz` | `integer()` | yes | SPI clock frequency (in hertz) |
 | `mode` | `0..3` | yes | SPI mode, indicating clock polarity (`CPOL`) and clock phase (`CPHA`).  Consult the SPI specification and data sheet for your device, for more information about how to control the behavior of the SPI clock. |
-| `spi_cs_io_num` | `integer()` | yes | SPI chip select pin (CS) |
+| `cs` | `integer()` | yes | SPI chip select pin (CS) |
 | `address_len_bits` | `0..64` | yes | number of bits in the address field of a read/write operation (for example, 8, if the transaction address field is a single byte) |
 | `command_len_bits` | `0..16` | default: 0 | number of bits in the command field of a read/write operation (for example, 8, if the transaction command field is a single byte) |
 
@@ -1243,21 +1243,21 @@ For example,
     %% erlang
     SPIConfig = [
         {bus_config, [
-            {miso_io_num, 19},
-            {mosi_io_num, 27},
-            {sclk_io_num, 5}
+            {miso, 19},
+            {mosi, 27},
+            {sclk, 5}
         ]},
         {device_config, [
             {my_device_1, [
-                {spi_clock_hz, 1000000},
+                {clock_speed_hz, 1000000},
                 {mode, 0},
-                {spi_cs_io_num, 18},
+                {cs, 18},
                 {address_len_bits, 8}
             ]}
             {my_device_2, [
-                {spi_clock_hz, 1000000},
+                {clock_speed_hz, 1000000},
                 {mode, 0},
-                {spi_cs_io_num, 15},
+                {cs, 15},
                 {address_len_bits, 8}
             ]}
         ]}
