@@ -25,7 +25,7 @@
 -define(SHT31_MEAS_HIGH_REP, 16#2400).
 
 start() ->
-    I2C = i2c:open([{scl_io_num, 15}, {sda_io_num, 4}, {i2c_clock_hz, 1000000}]),
+    I2C = i2c:open([{scl, 15}, {sda, 4}, {clock_speed_hz, 1000000}]),
     loop(I2C).
 
 loop(I2C) ->

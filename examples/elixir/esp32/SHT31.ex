@@ -30,7 +30,7 @@ defmodule SHT31 do
   @sht31_meas_high_rep 0x2400
 
   def start do
-    i2c = I2C.open([{:scl_io_num, 15}, {:sda_io_num, 4}, {:i2c_clock_hz, 1000000}])
+    i2c = I2C.open([{:scl, 15}, {:sda, 4}, {:clock_speed_hz, 1000000}])
     loop(i2c)
   end
 

@@ -44,7 +44,7 @@
 
 -type pin() :: non_neg_integer().
 -type freq_hz() :: non_neg_integer().
--type param() :: {scl_io_num, pin()} | {sda_io_num, pin()} | {i2c_clock_hz, freq_hz()}.
+-type param() :: {scl, pin()} | {sda, pin()} | {clock_speed_hz, freq_hz()}.
 -type params() :: [param()].
 -type i2c() :: pid().
 -type address() :: non_neg_integer().
@@ -60,7 +60,7 @@
 %%-----------------------------------------------------------------------------
 -spec open(Param :: params()) -> i2c().
 open(Param) ->
-    open_port({spawn, "i2c"}, Param).
+    open_port({spawn, "i2c"}, migrate_config(Param)).
 
 %%-----------------------------------------------------------------------------
 %% @param   I2C I2C instance created via `open/1'
@@ -200,3 +200,24 @@ write_bytes(I2C, Address, BinOrInt) ->
 ) -> ok | {error, Reason :: term()}.
 write_bytes(I2C, Address, Register, BinOrInt) ->
     port:call(I2C, {write_bytes, Address, BinOrInt, Register}).
+
+migrate_config([]) ->
+    [];
+migrate_config([{K, V} | T]) ->
+    NewK = rename_key(K),
+    warn_deprecated(K, NewK),
+    [{NewK, V} | migrate_config(T)].
+
+rename_key(Key) ->
+    case Key of
+        scl_io_num -> scl;
+        sda_io_num -> sda;
+        i2c_clock_hz -> clock_speed_hz;
+        i2c_num -> peripheral;
+        Any -> Any
+    end.
+
+warn_deprecated(Key, Key) ->
+    ok;
+warn_deprecated(OldKey, NewKey) ->
+    io:format("I2C: found deprecated ~p, use ~p instead!!!~n", [OldKey, NewKey]).
