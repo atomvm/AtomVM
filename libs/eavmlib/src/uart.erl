@@ -63,7 +63,13 @@ migrate_config([]) ->
 migrate_config([{K, V} | T]) ->
     NewK = rename_key(K),
     warn_deprecated(K, NewK),
-    [{NewK, V} | migrate_config(T)].
+    NewV = migrate_value(NewK, V),
+    [{NewK, NewV} | migrate_config(T)].
+
+migrate_value(peripheral, Peripheral) ->
+    validate_peripheral(Peripheral);
+migrate_value(_K, V) ->
+    V.
 
 rename_key(Key) ->
     case Key of
@@ -78,3 +84,23 @@ warn_deprecated(Key, Key) ->
     ok;
 warn_deprecated(OldKey, NewKey) ->
     io:format("UART: found deprecated ~p, use ~p instead!!!~n", [OldKey, NewKey]).
+
+validate_peripheral(I) when is_integer(I) ->
+    io:format("UART: deprecated integer peripheral is used.~n"),
+    I;
+validate_peripheral([$u, $a, $r, $t | N] = Value) ->
+    try list_to_integer(N) of
+        % Internally integers are still used
+        % TODO: change this as soon as ESP32 code is reworked
+        I -> I
+    catch
+        error:_ -> {bardarg, {peripheral, Value}}
+    end;
+validate_peripheral(<<"uart", N/binary>> = Value) ->
+    try binary_to_integer(N) of
+        I -> I
+    catch
+        error:_ -> {bardarg, {peripheral, Value}}
+    end;
+validate_peripheral(Value) ->
+    throw({bardarg, {peripheral, Value}}).

@@ -9,12 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added `esp:get_default_mac/0` for retrieving the default MAC address on ESP32.
 - Added support for `pico` and `poci` as an alternative to `mosi` and `miso` for SPI
+- ESP32: Added support to SPI peripherals other than hspi and vspi
 
 ### Changed
 
 - Shorten SPI config options, such as `sclk_io_num` -> `sclk`
 - Shorten I2C config options, such as `scl_io_num` -> `scl`
 - Shorten UART config options, such as `tx_pin` -> `tx`
+- Introduced support to non-integer peripheral names, `"i2c0"`, `"uart1"` (instead of just `0` and
+- `1`, which now they are deprecated)
 
 ## [0.6.0-alpha.2] - 2023-12-10
 
