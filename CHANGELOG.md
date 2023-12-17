@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Shorten SPI config options, such as `sclk_io_num` -> `sclk`
 - Shorten I2C config options, such as `scl_io_num` -> `scl`
+- Shorten UART config options, such as `tx_pin` -> `tx`
 
 ## [0.6.0-alpha.2] - 2023-12-10
 
