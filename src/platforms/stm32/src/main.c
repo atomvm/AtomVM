@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <libopencm3/cm3/cortex.h>
@@ -71,6 +72,10 @@
 int _write(int file, char *ptr, int len);
 pid_t _getpid(void);
 int _kill(pid_t pid, int sig);
+
+// setup errno to work with newlib
+#undef errno
+extern int errno;
 
 static void clock_setup()
 {
@@ -155,6 +160,62 @@ void hard_fault_handler()
 {
     fprintf(stderr, "\nHard Fault detected!\n");
     AVM_ABORT();
+}
+
+/* define newlib weakly defined functions to prevent compiler warnings
+ * Reference: https://sourceware.org/newlib/libc.html#Stubs
+ * These are minimal non-functional implementations that can be modified as needed to
+ * implement functionality.
+ */
+
+int _close(int file)
+{
+    UNUSED(file);
+    return -1;
+}
+
+int _fstat_r(int file, struct stat *st)
+{
+    UNUSED(file);
+    st->st_mode = S_IFCHR;
+    return 0;
+}
+
+int _isatty(int file)
+{
+    UNUSED(file);
+    return 1;
+}
+
+off_t _lseek_r(int file, off_t ptr, int dir)
+{
+    UNUSED(file);
+    UNUSED(ptr);
+    UNUSED(dir);
+    return 0;
+}
+
+int open(const char *name, int flags, int mode)
+{
+    UNUSED(name);
+    UNUSED(flags);
+    UNUSED(mode);
+    return -1;
+}
+
+int _read_r(int file, void *ptr, size_t len)
+{
+    UNUSED(file);
+    UNUSED(ptr);
+    UNUSED(len);
+    return 0;
+}
+
+int unlink(const char *name)
+{
+    UNUSED(name);
+    errno = ENOENT;
+    return -1;
 }
 
 int main()

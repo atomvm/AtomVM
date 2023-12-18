@@ -529,6 +529,7 @@ void gpiodriver_init(GlobalContext *glb)
 
 static Context *gpio_driver_create_port(GlobalContext *global, term opts)
 {
+    UNUSED(opts);
     Context *ctx = context_new(global);
 
     struct GPIOData *gpio_data = malloc(sizeof(struct GPIOData));
@@ -543,7 +544,7 @@ static Context *gpio_driver_create_port(GlobalContext *global, term opts)
     if (UNLIKELY(!globalcontext_register_process(ctx->global, atom_index, ctx->process_id))) {
         scheduler_terminate(ctx);
         AVM_LOGE(TAG, "Only a single GPIO driver can be opened.");
-        return create_pair(ctx, ERROR_ATOM, USED_ATOM);
+        return NULL;
     }
 
     return ctx;
@@ -870,6 +871,7 @@ static term gpiodriver_remove_int(Context *ctx, term cmd)
             if ((gpio_listener->gpio_pin == target_num) && (gpio_listener->bank_atom == target_bank_atom)) {
                 uint16_t exti = gpio_listener->exti;
                 uint8_t irqn = pin_num_to_exti_irq(gpio_listener->gpio_pin);
+                nvic_disable_irq(irqn);
                 list_remove(&gpio_listener->gpio_listener_list_head);
                 exti_disable_request(exti);
                 free(gpio_listener);
@@ -930,18 +932,20 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
             ret = gpiodriver_close(ctx);
             break;
 
-        case GPIOInvalidCmd:
+        case GPIOInvalidCmd: {
             char *invalid_name = interop_atom_to_string(ctx, cmd_term);
             AVM_LOGE(TAG, "Invalid command: %s", invalid_name);
             free(invalid_name);
             ret = create_pair(ctx, ERROR_ATOM, UNDEFINED_ATOM);
             break;
+        }
 
-        default:
+        default: {
             char *cmd_name = interop_atom_to_string(ctx, cmd_term);
             AVM_LOGE(TAG, "Unhandled error processing command: %s", cmd_name);
             free(cmd_name);
             ret = create_pair(ctx, ERROR_ATOM, BADMATCH_ATOM);
+        }
     }
 
     term ret_msg;
@@ -980,6 +984,7 @@ static term nif_gpio_set_pin_mode(Context *ctx, int argc, term argv[])
 
 static term nif_gpio_set_pin_pull(Context *ctx, int argc, term argv[])
 {
+    UNUSED(ctx);
     UNUSED(argc);
     UNUSED(argv);
     AVM_LOGW(TAG, "Pull mode must be set using `gpio:set_pin_mode/2` arg #2 i.e. {Mode,PullMode}");

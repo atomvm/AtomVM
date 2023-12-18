@@ -41,6 +41,8 @@
 #define TAG "sys"
 #define RESERVE_STACK_SIZE 4096U
 
+static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts);
+
 struct PortDriverDefListItem *port_driver_list;
 struct NifCollectionDefListItem *nif_collection_list;
 
@@ -62,11 +64,10 @@ static uint8_t *_heap_end = NULL;
  * This may be overridden by defining the function
  * `local_heap_setup` (exported in `stm_sys.h`).
  */
-static void
-__local_ram(uint8_t **start, uint8_t **end)
+static void __local_ram(uint8_t **start, uint8_t **end)
 {
     *start = &_ebss;
-    *end = (uint8_t *) (&_stack - RESERVE_STACK_SIZE);
+    *end = (uint8_t *) (((uintptr_t) &_stack - RESERVE_STACK_SIZE));
 }
 
 void *_sbrk_r(struct _reent *reent, ptrdiff_t diff)
@@ -102,11 +103,6 @@ static inline void sys_clock_gettime(struct timespec *t)
     t->tv_nsec = ((int32_t) now % 1000) * 1000000;
 }
 
-static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *timespec2)
-{
-    return (int32_t) ((timespec1->tv_sec - timespec2->tv_sec) * 1000 + (timespec1->tv_nsec - timespec2->tv_nsec) / 1000000);
-}
-
 /* TODO: Needed because `defaultatoms_init` in libAtomVM/defaultatoms.c calls this function.
  * We should be able to remove this after `platform_defaulatoms.{c,h}` are removed on all platforms
  * and `defaultatoms_init` is no longer called.
@@ -119,7 +115,7 @@ void platform_defaultatoms_init(GlobalContext *glb)
 void sys_enable_core_periph_clocks()
 {
     uint32_t list[] = GPIO_CLOCK_LIST;
-    for (int i = 0; i < sizeof(list) / sizeof(list[0]); i++) {
+    for (size_t i = 0; i < sizeof(list) / sizeof(list[0]); i++) {
         rcc_periph_clock_enable((enum rcc_periph_clken) list[i]);
     }
 #ifndef AVM_DISABLE_GPIO_PORT_DRIVER
@@ -236,9 +232,11 @@ uint64_t sys_monotonic_time_u64_to_ms(uint64_t t)
     return t;
 }
 
-enum OpenAVMResult sys_open_avm_from_file(
-    GlobalContext *global, const char *path, struct AVMPackData **data)
+enum OpenAVMResult sys_open_avm_from_file(GlobalContext *global, const char *path, struct AVMPackData **data)
 {
+    UNUSED(global);
+    UNUSED(path);
+    UNUSED(data);
     TRACE("sys_open_avm_from_file: Going to open: %s\n", path);
 
     // TODO
@@ -248,6 +246,8 @@ enum OpenAVMResult sys_open_avm_from_file(
 
 Module *sys_load_module_from_file(GlobalContext *global, const char *path)
 {
+    UNUSED(global);
+    UNUSED(path);
     // TODO
     return NULL;
 }
@@ -291,6 +291,8 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 
 term sys_get_info(Context *ctx, term key)
 {
+    UNUSED(ctx);
+    UNUSED(key);
     return UNDEFINED_ATOM;
 }
 

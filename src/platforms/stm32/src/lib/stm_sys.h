@@ -152,7 +152,6 @@ extern struct NifCollectionDefListItem *nif_collection_list;
 void sys_enable_core_periph_clocks(void);
 bool sys_lock_pin(GlobalContext *glb, uint32_t gpio_bank, uint16_t pin_num);
 
-static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts);
 void port_driver_init_all(GlobalContext *global);
 void port_driver_destroy_all(GlobalContext *global);
 
