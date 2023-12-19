@@ -1162,7 +1162,7 @@ The AtomVM I2C implementation uses the AtomVM Port mechanism and must be initial
 | `scl` | `integer()` | yes | I2C clock pin (SCL) |
 | `sda` | `integer()` | yes | I2C data pin (SDA) |
 | `clock_speed_hz` | `integer()` | yes | I2C clock frequency (in hertz) |
-| `peripheral` | `0 .. I2C_NUM_MAX - 1` | no (default: `0`) | I2C port number.  `I2C_NUM_MAX` is defined by the device SDK.  On ESP32, this value is 1. |
+| `peripheral` | `string() | binary()` | no (platform dependent default) | I2C peripheral, such as `"i2c0"` |
 
 For example,
 

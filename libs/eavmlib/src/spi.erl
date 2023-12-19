@@ -42,7 +42,7 @@
 
 -export([open/1, close/1, read_at/4, write_at/5, write/3, write_read/3]).
 
--type peripheral() :: hspi | vspi.
+-type peripheral() :: hspi | vspi | string() | binary().
 -type bus_config() :: [
     {poci, non_neg_integer()}
     | {pico, non_neg_integer()}
@@ -378,9 +378,20 @@ validate_is_integer(Key, Value) ->
     throw({badarg, {not_an_integer_value, {Key, Value}}}).
 
 %% @private
-validate_peripheral(hspi) -> hspi;
-validate_peripheral(vspi) -> vspi;
-validate_peripheral(Value) -> throw({bardarg, {peripheral, Value}}).
+validate_peripheral(hspi) ->
+    io:format("SPI: deprecated peripheral name!!!~n"),
+    hspi;
+validate_peripheral(vspi) ->
+    io:format("SPI: deprecated peripheral name!!!~n"),
+    vspi;
+validate_peripheral(PeripheralString) when is_list(PeripheralString) ->
+    % Internally atoms are still used, so it is easier to convert them here
+    % TODO: use just strings in the future
+    erlang:list_to_atom(PeripheralString);
+validate_peripheral(PeripheralBinString) when is_binary(PeripheralBinString) ->
+    erlang:binary_to_atom(PeripheralBinString, latin1);
+validate_peripheral(Value) ->
+    throw({bardarg, {peripheral, Value}}).
 
 %% @private
 validate_device_config(DeviceConfig) when is_map(DeviceConfig) ->
