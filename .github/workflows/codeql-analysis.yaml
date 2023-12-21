@@ -9,7 +9,9 @@ name: "CodeQL"
 on:
   push:
     paths-ignore:
+      - 'src/platforms/emscripten/**'
       - 'src/platforms/esp32/**'
+      - 'src/platforms/rp2040/**'
       - 'src/platforms/stm32/**'
       - 'libs/**'
       - 'doc/**'
@@ -18,7 +20,9 @@ on:
       - '*.md'
   pull_request:
     paths-ignore:
+      - 'src/platforms/emscripten/**'
       - 'src/platforms/esp32/**'
+      - 'src/platforms/rp2040/**'
       - 'src/platforms/stm32/**'
       - 'libs/**'
       - 'doc/**'
