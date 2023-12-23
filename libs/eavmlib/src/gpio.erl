@@ -36,7 +36,7 @@
     read/2,
     set_direction/3,
     set_level/3,
-    set_int/3,
+    set_int/3, set_int/4,
     remove_int/2,
     stop/0,
     close/1
@@ -250,6 +250,31 @@ set_level(GPIO, Pin, Level) ->
     ok | {error, Reason :: atom()} | error.
 set_int(GPIO, Pin, Trigger) ->
     port:call(GPIO, {set_int, Pin, Trigger}).
+
+%%-----------------------------------------------------------------------------
+%% @param   GPIO pid that was returned from `gpio:start/0'
+%% @param   Pin number of the pin to set the interrupt on
+%% @param   Trigger is the state that will trigger an interrupt
+%% @param   Pid is the process that will receive the interrupt message
+%% @returns ok | error | {error, Reason}
+%% @doc     Set a GPIO interrupt
+%%
+%%          Available triggers are `none' (which is the same as disabling an
+%%          interrupt), `rising', `falling', `both' (rising or falling), `low', and
+%%          `high'. When the interrupt is triggered it will send a tuple:
+%%            `{gpio_interrupt, Pin}'
+%%          to the process that set the interrupt. Pin will be the number
+%%          of the pin that triggered the interrupt.
+%%
+%%          The STM32 port only supports `rising', `falling', or `both'.
+%%
+%%          The rp2040 (Pico) port does not support gpio interrupts at this time.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_int(GPIO :: gpio(), Pin :: pin(), Trigger :: trigger(), Pid :: pid()) ->
+    ok | {error, Reason :: atom()} | error.
+set_int(GPIO, Pin, Trigger, Pid) ->
+    port:call(GPIO, {set_int, Pin, Trigger, Pid}).
 
 %%-----------------------------------------------------------------------------
 %% @param   GPIO pid that was returned from `gpio:start/0'
