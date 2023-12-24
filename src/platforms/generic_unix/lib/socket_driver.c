@@ -1133,9 +1133,18 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx)
         // We don't need to remove message.
         return NativeTerminate;
     }
-    term pid = term_get_tuple_element(msg, 0);
-    term ref = term_get_tuple_element(msg, 1);
-    term cmd = term_get_tuple_element(msg, 2);
+
+    GenMessage gen_message;
+    if (UNLIKELY((port_parse_gen_message(msg, &gen_message) != GenMessageParseOk)
+            || !term_is_tuple(gen_message.req) || term_get_tuple_arity(gen_message.req) < 1)) {
+        fprintf(stderr, "Received invalid socket message.\n");
+        mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+        return NativeContinue;
+    }
+
+    term pid = gen_message.pid;
+    term ref = gen_message.ref;
+    term cmd = gen_message.req;
 
     term cmd_name = term_get_tuple_element(cmd, 0);
     if (cmd_name == globalcontext_make_atom(glb, init_a)) {

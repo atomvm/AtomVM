@@ -761,6 +761,7 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
         return NativeContinue;
     }
 
+    //TODO: port this code to standard port (and gen_message)
     term pid = term_get_tuple_element(msg, 0);
     term ref = term_get_tuple_element(msg, 1);
     term cmd = term_get_tuple_element(msg, 2);

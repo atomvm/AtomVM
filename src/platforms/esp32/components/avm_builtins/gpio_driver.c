@@ -40,6 +40,7 @@
 #include "module.h"
 #include "nifs.h"
 #include "platform_defaultatoms.h"
+#include "port.h"
 #include "scheduler.h"
 #include "term.h"
 #include "utils.h"
@@ -477,35 +478,39 @@ static term create_pair(Context *ctx, term term1, term term2)
 static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
 {
     Message *message = mailbox_first(&ctx->mailbox);
-    term msg = message->message;
-    term pid = term_get_tuple_element(msg, 0);
-    term req = term_get_tuple_element(msg, 2);
-    term cmd_term = term_get_tuple_element(req, 0);
+    GenMessage gen_message;
+    if (UNLIKELY(port_parse_gen_message(message->message, &gen_message) != GenMessageParseOk)) {
+        ESP_LOGW(TAG, "Received invalid message.");
+        mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+        return NativeContinue;
+    }
 
-    int local_process_id = term_to_local_process_id(pid);
+    term cmd_term = term_get_tuple_element(gen_message.req, 0);
+
+    int local_process_id = term_to_local_process_id(gen_message.pid);
 
     term ret;
 
     enum gpio_cmd cmd = interop_atom_term_select_int(gpio_cmd_table, cmd_term, ctx->global);
     switch (cmd) {
         case GPIOSetLevelCmd:
-            ret = gpiodriver_set_level(ctx, req);
+            ret = gpiodriver_set_level(ctx, gen_message.req);
             break;
 
         case GPIOSetDirectionCmd:
-            ret = gpiodriver_set_direction(ctx, req);
+            ret = gpiodriver_set_direction(ctx, gen_message.req);
             break;
 
         case GPIOReadCmd:
-            ret = gpiodriver_read(req);
+            ret = gpiodriver_read(gen_message.req);
             break;
 
         case GPIOSetIntCmd:
-            ret = gpiodriver_set_int(ctx, local_process_id, req);
+            ret = gpiodriver_set_int(ctx, local_process_id, gen_message.req);
             break;
 
         case GPIORemoveIntCmd:
-            ret = gpiodriver_remove_int(ctx, req);
+            ret = gpiodriver_remove_int(ctx, gen_message.req);
             break;
 
         case GPIOCloseCmd:
@@ -521,8 +526,7 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, 3, 1, &ret, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         ret_msg = OUT_OF_MEMORY_ATOM;
     } else {
-        term ref = term_get_tuple_element(msg, 1);
-        ret_msg = create_pair(ctx, ref, ret);
+        ret_msg = create_pair(ctx, gen_message.ref, ret);
     }
 
     globalcontext_send_message(ctx->global, local_process_id, ret_msg);

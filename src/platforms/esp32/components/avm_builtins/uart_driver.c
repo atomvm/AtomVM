@@ -38,6 +38,7 @@
 #include "interop.h"
 #include "mailbox.h"
 #include "module.h"
+#include "port.h"
 #include "platform_defaultatoms.h"
 #include "scheduler.h"
 #include "term.h"
@@ -452,12 +453,16 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx)
     while (mailbox_has_next(&ctx->mailbox)) {
         Message *message = mailbox_first(&ctx->mailbox);
         term msg = message->message;
-        term pid = term_get_tuple_element(msg, 0);
-        term ref = term_get_tuple_element(msg, 1);
-        term req = term_get_tuple_element(msg, 2);
-        uint64_t ref_ticks = term_to_ref_ticks(ref);
+        GenMessage gen_message;
+        if (UNLIKELY(port_parse_gen_message(msg, &gen_message) != GenMessageParseOk)) {
+            ESP_LOGW(TAG, "Received invalid message.");
+            mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+            return NativeContinue;
+        }
 
-        int local_pid = term_to_local_process_id(pid);
+        uint64_t ref_ticks = term_to_ref_ticks(gen_message.ref);
+
+        int local_pid = term_to_local_process_id(gen_message.pid);
 
         if (is_closed) {
             if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + REF_SIZE) != MEMORY_GC_OK)) {
@@ -480,6 +485,7 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx)
             continue;
         }
 
+        term req = gen_message.req;
         term cmd_term = term_is_atom(req) ? req : term_get_tuple_element(req, 0);
 
         enum uart_cmd cmd = interop_atom_term_select_int(cmd_table, cmd_term, ctx->global);

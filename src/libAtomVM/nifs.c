@@ -1000,6 +1000,8 @@ static NativeHandlerResult process_console_message(Context *ctx, term msg)
         AVM_ABORT();
     }
 
+    GenMessage gen_message;
+
     if (term_is_tuple(msg) && term_get_tuple_arity(msg) == 2 && term_get_tuple_element(msg, 1) == CLOSE_ATOM) {
         result = NativeTerminate;
         term pid = term_get_tuple_element(msg, 0);
@@ -1032,11 +1034,10 @@ static NativeHandlerResult process_console_message(Context *ctx, term msg)
             }
         }
 
-    } else if (port_is_standard_port_command(msg)) {
-
-        term pid = term_get_tuple_element(msg, 0);
-        term ref = term_get_tuple_element(msg, 1);
-        term cmd = term_get_tuple_element(msg, 2);
+    } else if (port_parse_gen_message(msg, &gen_message) == GenMessageParseOk) {
+        term pid = gen_message.pid;
+        term ref = gen_message.ref;
+        term cmd = gen_message.req;
 
         if (term_is_atom(cmd) && cmd == FLUSH_ATOM) {
             fflush(stdout);
