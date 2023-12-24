@@ -6,12 +6,14 @@
 
 # AtomVM Update Instructions
 
-## v0.6.0-alpha.1 -> v0.6.0-beta.0
+## v0.6.0-alpha.2 -> v0.6.0-beta.0
 
 - Registers are no longer preserved by GC by default when invoking nifs, as part of the fix
 of interpretation of the emulator of the live parameter of many opcodes. NIFs may need
 to call `memory_ensure_free_with_roots` and pass their arguments are roots, instead of
 `memory_ensure_free` or `memory_ensure_free_opt`.
+- Port call message tuple format has been changed, hence previous version of the standard library
+  cannot be used. **Libraries (or boot .avm file) from latest version must be used**.
 
 ## v0.6.0-alpha.0 -> v0.6.0-alpha.1
 

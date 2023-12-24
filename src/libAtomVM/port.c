@@ -111,17 +111,27 @@ enum GenMessageParseResult port_parse_gen_message(term msg, GenMessage *gen_mess
         return GenMessageParseError;
     }
 
-    gen_message->pid = term_get_tuple_element(msg, 0);
-    if (UNLIKELY(!term_is_pid(gen_message->pid))) {
+    // right now we support just $call
+    term message_type = term_get_tuple_element(msg, 0);
+    if (UNLIKELY(message_type != CALL_ATOM)) {
         return GenMessageParseError;
     }
 
-    gen_message->ref = term_get_tuple_element(msg, 1);
-    if (UNLIKELY(!term_is_reference(gen_message->ref))) {
+    term from = term_get_tuple_element(msg, 1);
+    if (UNLIKELY(!term_is_tuple(from) || term_get_tuple_arity(from) != 2)) {
         return GenMessageParseError;
     }
 
     gen_message->req = term_get_tuple_element(msg, 2);
+
+    gen_message->pid = term_get_tuple_element(from, 0);
+    if (UNLIKELY(!term_is_pid(gen_message->pid))) {
+        return GenMessageParseError;
+    }
+    gen_message->ref = term_get_tuple_element(from, 1);
+    if (UNLIKELY(!term_is_reference(gen_message->ref))) {
+        return GenMessageParseError;
+    }
 
     return GenCallMessage;
 }

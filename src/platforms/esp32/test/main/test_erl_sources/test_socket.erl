@@ -329,12 +329,21 @@ tcp_client(Active, Port) ->
 call(DriverPid, Msg) ->
     call(DriverPid, Msg, 5000).
 
-call(DriverPid, Msg, Timeout) ->
-    Ref = erlang:make_ref(),
-    DriverPid ! {self(), Ref, Msg},
-    receive
-        {Ref, Ret} ->
-            Ret
-    after Timeout ->
-        {driver_call, Msg, timeout}
-    end.
+call(Port, Message, Timeout) ->
+    MonitorRef = monitor(port, Port),
+    Port ! {'$call', {self(), MonitorRef}, Message},
+    Result =
+        receive
+            {'DOWN', MonitorRef, port, Port, normal} ->
+                {error, noproc};
+            {'DOWN', MonitorRef, port, Port, Reason} ->
+                {error, Reason};
+            out_of_memory ->
+                out_of_memory;
+            {MonitorRef, Ret} ->
+                Ret
+        after Timeout ->
+            {error, timeout}
+        end,
+    demonitor(MonitorRef, [flush]),
+    Result.
