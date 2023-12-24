@@ -24,6 +24,7 @@ project (libAtomVM)
 set(HEADER_FILES
     atom.h
     atomshashtable.h
+    atom_table.h
     avmpack.h
     bif.h
     bitstring.h
@@ -69,6 +70,7 @@ set(HEADER_FILES
 set(SOURCE_FILES
     atom.c
     atomshashtable.c
+    atom_table.c
     avmpack.c
     bif.c
     bitstring.c

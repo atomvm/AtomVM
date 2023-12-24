@@ -30,7 +30,7 @@ void atom_string_to_c(AtomString atom_string, char *buf, size_t bufsize)
 {
     size_t atom_len = *((const uint8_t *) atom_string);
 
-    if (bufsize < atom_len) {
+    if (bufsize <= atom_len) {
         atom_len = bufsize - 1;
     }
     memcpy(buf, ((const uint8_t *) atom_string) + 1, atom_len);

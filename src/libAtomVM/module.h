@@ -36,6 +36,7 @@ extern "C" {
 #include <stdint.h>
 
 #include "atom.h"
+#include "atom_table.h"
 #include "atomshashtable.h"
 #include "context.h"
 #include "exportedfunction.h"
@@ -244,7 +245,7 @@ term module_load_literal(Module *mod, int index, Context *ctx);
 static inline AtomString module_get_atom_string_by_id(const Module *mod, int local_atom_id, GlobalContext *glb)
 {
     int global_id = mod->local_atoms_to_global_table[local_atom_id];
-    return (AtomString) valueshashtable_get_value(glb->atoms_ids_table, global_id, (unsigned long) NULL);
+    return atom_table_get_atom_string(glb->atom_table, global_id);
 }
 
 /**

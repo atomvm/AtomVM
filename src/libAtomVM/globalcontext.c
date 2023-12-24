@@ -23,6 +23,7 @@
 
 #include "globalcontext.h"
 
+#include "atom_table.h"
 #include "atomshashtable.h"
 #include "avmpack.h"
 #include "context.h"
@@ -85,17 +86,8 @@ GlobalContext *globalcontext_new()
 
     glb->last_process_id = 0;
 
-#ifndef AVM_NO_SMP
-    smp_spinlock_init(&glb->atom_insert_lock);
-#endif
-    glb->atoms_table = atomshashtable_new();
-    if (IS_NULL_PTR(glb->atoms_table)) {
-        free(glb);
-        return NULL;
-    }
-    glb->atoms_ids_table = valueshashtable_new();
-    if (IS_NULL_PTR(glb->atoms_ids_table)) {
-        free(glb->atoms_table);
+    glb->atom_table = atom_table_new();
+    if (IS_NULL_PTR(glb->atom_table)) {
         free(glb);
         return NULL;
     }
@@ -106,8 +98,7 @@ GlobalContext *globalcontext_new()
     glb->loaded_modules_count = 0;
     glb->modules_table = atomshashtable_new();
     if (IS_NULL_PTR(glb->modules_table)) {
-        free(glb->atoms_ids_table);
-        free(glb->atoms_table);
+        atom_table_destroy(glb->atom_table);
         free(glb);
         return NULL;
     }
@@ -115,8 +106,7 @@ GlobalContext *globalcontext_new()
     glb->modules_lock = smp_rwlock_create();
     if (IS_NULL_PTR(glb->modules_lock)) {
         free(glb->modules_table);
-        free(glb->atoms_ids_table);
-        free(glb->atoms_table);
+        atom_table_destroy(glb->atom_table);
         free(glb);
         return NULL;
     }
@@ -141,8 +131,7 @@ GlobalContext *globalcontext_new()
         smp_rwlock_destroy(glb->modules_lock);
 #endif
         free(glb->modules_table);
-        free(glb->atoms_ids_table);
-        free(glb->atoms_table);
+        atom_table_destroy(glb->atom_table);
         free(glb);
         return NULL;
     }
@@ -158,8 +147,7 @@ GlobalContext *globalcontext_new()
 #endif
         smp_rwlock_destroy(glb->modules_lock);
         free(glb->modules_table);
-        free(glb->atoms_ids_table);
-        free(glb->atoms_table);
+        atom_table_destroy(glb->atom_table);
         free(glb);
         return NULL;
     }
@@ -171,8 +159,7 @@ GlobalContext *globalcontext_new()
 #endif
         smp_rwlock_destroy(glb->modules_lock);
         free(glb->modules_table);
-        free(glb->atoms_ids_table);
-        free(glb->atoms_table);
+        atom_table_destroy(glb->atom_table);
         free(glb);
         return NULL;
     }
@@ -405,59 +392,10 @@ int globalcontext_get_registered_process(GlobalContext *glb, int atom_index)
     return 0;
 }
 
-int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string)
-{
-    return globalcontext_insert_atom_maybe_copy(glb, atom_string, 0);
-}
-
-int globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_string, int copy)
-{
-    struct AtomsHashTable *htable = glb->atoms_table;
-
-    unsigned long atom_index = atomshashtable_get_value(htable, atom_string, ULONG_MAX);
-    if (atom_index == ULONG_MAX) {
-        if (copy) {
-            uint8_t len = *((uint8_t *) atom_string);
-            uint8_t *buf = malloc(1 + len);
-            if (IS_NULL_PTR(buf)) {
-                fprintf(stderr, "Unable to allocate memory for atom string\n");
-                AVM_ABORT();
-            }
-            memcpy(buf, atom_string, 1 + len);
-            atom_string = buf;
-        }
-        // TODO: This lock can be avoided by returning from a new atomshashtable_get_or_insert
-        // function the new atom index, and using it when calling valueshashtable_insert.
-        // See also https://github.com/atomvm/AtomVM/pull/812 discussion
-        SMP_SPINLOCK_LOCK(&glb->atom_insert_lock);
-
-        // things might have changed in the meantime, so let's check this again now that there is
-        // a lock.
-        atom_index = atomshashtable_get_value(htable, atom_string, ULONG_MAX);
-        if (atom_index != ULONG_MAX) {
-            SMP_SPINLOCK_UNLOCK(&glb->atom_insert_lock);
-            return atom_index;
-        }
-
-        atom_index = htable->count;
-        if (!atomshashtable_insert(htable, atom_string, atom_index)) {
-            SMP_SPINLOCK_UNLOCK(&glb->atom_insert_lock);
-            return -1;
-        }
-        if (!valueshashtable_insert(glb->atoms_ids_table, atom_index, (unsigned long) atom_string)) {
-            SMP_SPINLOCK_UNLOCK(&glb->atom_insert_lock);
-            return -1;
-        }
-        SMP_SPINLOCK_UNLOCK(&glb->atom_insert_lock);
-    }
-
-    return (int) atom_index;
-}
-
 bool globalcontext_is_atom_index_equal_to_atom_string(GlobalContext *glb, int atom_index_a, AtomString atom_string_b)
 {
     AtomString atom_string_a;
-    atom_string_a = (AtomString) valueshashtable_get_value(glb->atoms_ids_table, atom_index_a, 0);
+    atom_string_a = atom_table_get_atom_string(glb->atom_table, atom_index_a);
     return atom_are_equals(atom_string_a, atom_string_b);
 }
 
@@ -467,18 +405,17 @@ AtomString globalcontext_atomstring_from_term(GlobalContext *glb, term t)
         AVM_ABORT();
     }
     unsigned long atom_index = term_to_atom_index(t);
-    unsigned long ret;
-    ret = valueshashtable_get_value(glb->atoms_ids_table, atom_index, ULONG_MAX);
-    if (ret == ULONG_MAX) {
+    AtomString str = atom_table_get_atom_string(glb->atom_table, atom_index);
+    if (IS_NULL_PTR(str)) {
         return NULL;
     }
-    return (AtomString) ret;
+    return str;
 }
 
 term globalcontext_existing_term_from_atom_string(GlobalContext *glb, AtomString atom_string)
 {
-    unsigned long atom_index = atomshashtable_get_value(glb->atoms_table, atom_string, ULONG_MAX);
-    if (atom_index == ULONG_MAX) {
+    long atom_index = atom_table_get_index(glb->atom_table, atom_string);
+    if (UNLIKELY(atom_index == ATOM_TABLE_NOT_FOUND)) {
         return term_invalid_term();
     }
     return term_from_atom_index(atom_index);

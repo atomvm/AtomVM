@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Shorten UART config options, such as `tx_pin` -> `tx`
 - Introduced support to non-integer peripheral names, `"i2c0"`, `"uart1"` (instead of just `0` and
 - `1`, which now they are deprecated)
+- New atom table, which uses less memory, has improved performances and better code.
 
 ## [0.6.0-alpha.2] - 2023-12-10
 

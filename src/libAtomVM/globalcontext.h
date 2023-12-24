@@ -35,6 +35,7 @@ extern "C" {
 #include <stdint.h>
 
 #include "atom.h"
+#include "atom_table.h"
 #include "erl_nif.h"
 #include "list.h"
 #include "smp.h"
@@ -82,12 +83,7 @@ struct GlobalContext
 
     int32_t last_process_id;
 
-    // TODO: this SpinLock should be removed
-#ifndef AVM_NO_SMP
-    SpinLock atom_insert_lock;
-#endif
-    struct AtomsHashTable *atoms_table;
-    struct ValuesHashTable *atoms_ids_table;
+    struct AtomTable *atom_table;
     struct AtomsHashTable *modules_table;
 
 #ifndef AVM_NO_SMP
@@ -271,11 +267,6 @@ bool globalcontext_unregister_process(GlobalContext *glb, int atom_index);
 void globalcontext_maybe_unregister_process_id(GlobalContext *glb, int process_id);
 
 /**
- * @brief equivalent to globalcontext_insert_atom_maybe_copy(glb, atom_string, 0);
- */
-int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string);
-
-/**
  * @brief Inserts an atom into the global atoms table, making a copy of the supplied atom
  * string, if copy is non-zero.
  *
@@ -286,7 +277,23 @@ int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string);
  * assumes "ownership" of the allocated memory.
  * @returns newly added atom id or -1 in case of failure.
  */
-int globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_string, int copy);
+static inline int globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_string, int copy)
+{
+    long index = atom_table_ensure_atom(
+        glb->atom_table, atom_string, copy ? AtomTableCopyAtom : AtomTableNoOpts);
+    if (UNLIKELY(index) < 0) {
+        return -1;
+    }
+    return index;
+}
+
+/**
+ * @brief equivalent to globalcontext_insert_atom_maybe_copy(glb, atom_string, 0);
+ */
+static inline int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string)
+{
+    return globalcontext_insert_atom_maybe_copy(glb, atom_string, 0);
+}
 
 /**
  * @brief Compares an atom table index with an AtomString.
