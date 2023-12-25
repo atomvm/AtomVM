@@ -454,7 +454,7 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx)
         Message *message = mailbox_first(&ctx->mailbox);
         term msg = message->message;
         GenMessage gen_message;
-        if (UNLIKELY(port_parse_gen_message(msg, &gen_message) != GenMessageParseOk)) {
+        if (UNLIKELY(port_parse_gen_message(msg, &gen_message) != GenCallMessage)) {
             ESP_LOGW(TAG, "Received invalid message.");
             mailbox_remove_message(&ctx->mailbox, &ctx->heap);
             return NativeContinue;

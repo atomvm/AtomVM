@@ -1396,7 +1396,7 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx)
         }
 
         GenMessage gen_message;
-        if (UNLIKELY((port_parse_gen_message(msg, &gen_message) != GenMessageParseOk)
+        if (UNLIKELY((port_parse_gen_message(msg, &gen_message) != GenCallMessage)
                 || !term_is_tuple(gen_message.req) || term_get_tuple_arity(gen_message.req) < 1)) {
             ESP_LOGW(TAG, "Received invalid message.");
             mailbox_remove_message(&ctx->mailbox, &ctx->heap);

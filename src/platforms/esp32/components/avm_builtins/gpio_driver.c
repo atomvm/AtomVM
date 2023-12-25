@@ -479,7 +479,7 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
 {
     Message *message = mailbox_first(&ctx->mailbox);
     GenMessage gen_message;
-    if (UNLIKELY(port_parse_gen_message(message->message, &gen_message) != GenMessageParseOk)) {
+    if (UNLIKELY(port_parse_gen_message(message->message, &gen_message) != GenCallMessage)) {
         ESP_LOGW(TAG, "Received invalid message.");
         mailbox_remove_message(&ctx->mailbox, &ctx->heap);
         return NativeContinue;

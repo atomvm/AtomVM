@@ -92,7 +92,7 @@ typedef struct
 
 enum GenMessageParseResult
 {
-    GenMessageParseOk,
+    GenCallMessage,
     GenMessageParseError
 };
 

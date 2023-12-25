@@ -938,7 +938,7 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
 {
     Message *message = mailbox_first(&ctx->mailbox);
     GenMessage gen_message;
-    if (UNLIKELY(port_parse_gen_message(message->message, &gen_message) != GenMessageParseOk)
+    if (UNLIKELY(port_parse_gen_message(message->message, &gen_message) != GenCallMessage)
         || !term_is_tuple(gen_message.req) || term_get_tuple_arity(gen_message.req) < 1) {
         AVM_LOGW(TAG, "Received invalid message.");
         mailbox_remove_message(&ctx->mailbox, &ctx->heap);

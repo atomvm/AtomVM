@@ -123,5 +123,5 @@ enum GenMessageParseResult port_parse_gen_message(term msg, GenMessage *gen_mess
 
     gen_message->req = term_get_tuple_element(msg, 2);
 
-    return GenMessageParseOk;
+    return GenCallMessage;
 }

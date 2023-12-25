@@ -1034,7 +1034,7 @@ static NativeHandlerResult process_console_message(Context *ctx, term msg)
             }
         }
 
-    } else if (port_parse_gen_message(msg, &gen_message) == GenMessageParseOk) {
+    } else if (port_parse_gen_message(msg, &gen_message) == GenCallMessage) {
         term pid = gen_message.pid;
         term ref = gen_message.ref;
         term cmd = gen_message.req;
