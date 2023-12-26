@@ -41,6 +41,7 @@
 #include "mailbox.h"
 #include "module.h"
 #include "platform_defaultatoms.h"
+#include "port.h"
 #include "scheduler.h"
 #include "term.h"
 #include "utils.h"
@@ -601,14 +602,16 @@ static term create_pair(Context *ctx, term term1, term term2)
 static NativeHandlerResult spidriver_consume_mailbox(Context *ctx)
 {
     Message *message = mailbox_first(&ctx->mailbox);
-    term msg = message->message;
-    term pid = term_get_tuple_element(msg, 0);
-    term ref = term_get_tuple_element(msg, 1);
-    term req = term_get_tuple_element(msg, 2);
+    GenMessage gen_message;
+    if (UNLIKELY(port_parse_gen_message(message->message, &gen_message) != GenCallMessage)) {
+        ESP_LOGW(TAG, "Received invalid message.");
+        mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+        return NativeContinue;
+    }
 
-    term cmd_term = term_get_tuple_element(req, 0);
+    term cmd_term = term_get_tuple_element(gen_message.req, 0);
 
-    int local_process_id = term_to_local_process_id(pid);
+    int local_process_id = term_to_local_process_id(gen_message.pid);
     Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
 
     term ret;
@@ -617,22 +620,22 @@ static NativeHandlerResult spidriver_consume_mailbox(Context *ctx)
     switch (cmd) {
         case SPIReadAtCmd:
             TRACE("spi: read at.\n");
-            ret = spidriver_read_at(ctx, req);
+            ret = spidriver_read_at(ctx, gen_message.req);
             break;
 
         case SPIWriteAtCmd:
             TRACE("spi: write at.\n");
-            ret = spidriver_write_at(ctx, req);
+            ret = spidriver_write_at(ctx, gen_message.req);
             break;
 
         case SPIWriteCmd:
             TRACE("spi: write.\n");
-            ret = spidriver_write(ctx, req);
+            ret = spidriver_write(ctx, gen_message.req);
             break;
 
         case SPIWriteReadCmd:
             TRACE("spi: write_read.\n");
-            ret = spidriver_write_read(ctx, req);
+            ret = spidriver_write_read(ctx, gen_message.req);
             break;
 
         case SPICloseCmd:
@@ -652,8 +655,7 @@ static NativeHandlerResult spidriver_consume_mailbox(Context *ctx)
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, 3, 1, &ret, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         ret_msg = OUT_OF_MEMORY_ATOM;
     } else {
-        ref = term_get_tuple_element(msg, 1);
-        ret_msg = create_pair(ctx, ref, ret);
+        ret_msg = create_pair(ctx, gen_message.ref, ret);
     }
 
     mailbox_send(target, ret_msg);

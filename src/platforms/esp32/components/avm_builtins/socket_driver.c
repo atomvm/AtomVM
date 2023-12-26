@@ -32,6 +32,7 @@
 #include "globalcontext.h"
 #include "interop.h"
 #include "mailbox.h"
+#include "port.h"
 #include "scheduler.h"
 #include "sys.h"
 #include "term.h"
@@ -50,6 +51,8 @@
 
 //#define ENABLE_TRACE 1
 #include "trace.h"
+
+#define TAG "socket_driver"
 
 typedef struct SocketListener
 {
@@ -534,12 +537,12 @@ static void accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, uint
 
 }
 
-static void do_accept(Context *ctx, term msg)
+static void do_accept(Context *ctx, const GenMessage *gen_message)
 {
     struct TCPServerSocketData *tcp_data = ctx->platform_data;
 
-    int32_t pid = term_to_local_process_id(term_get_tuple_element(msg, 0));
-    uint64_t ref_ticks = term_to_ref_ticks(term_get_tuple_element(msg, 1));
+    int32_t pid = term_to_local_process_id(gen_message->pid);
+    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
 
     if (tcp_data->ready_connections) {
         TRACE("accepting existing connections.\n");
@@ -815,15 +818,18 @@ static bool bool_term_to_bool(term b, bool *ok)
     }
 }
 
-static void do_connect(Context *ctx, term msg)
+static void do_connect(Context *ctx, const GenMessage *gen_message)
 {
     GlobalContext *glb = ctx->global;
     struct ESP32PlatformData *platform = glb->platform_data;
 
-    int32_t pid = term_to_local_process_id(term_get_tuple_element(msg, 0));
-    uint64_t ref_ticks = term_to_ref_ticks(term_get_tuple_element(msg, 1));
-    term cmd = term_get_tuple_element(msg, 2);
-    term params = term_get_tuple_element(cmd, 1);
+    int32_t pid = term_to_local_process_id(gen_message->pid);
+    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
+    if (UNLIKELY(term_get_tuple_arity(gen_message->req) != 2)) {
+        ESP_LOGW(TAG, "Received invalid message.");
+        return;
+    }
+    term params = term_get_tuple_element(gen_message->req, 1);
 
     term address_term = interop_proplist_get_value(params, ADDRESS_ATOM);
     term port_term = interop_proplist_get_value(params, PORT_ATOM);
@@ -902,15 +908,18 @@ static void do_connect(Context *ctx, term msg)
     do_send_reply(ctx, OK_ATOM, ref_ticks, pid);
 }
 
-static void do_listen(Context *ctx, term msg)
+static void do_listen(Context *ctx, const GenMessage *gen_message)
 {
     GlobalContext *glb = ctx->global;
     struct ESP32PlatformData *platform = glb->platform_data;
 
-    int32_t pid = term_to_local_process_id(term_get_tuple_element(msg, 0));
-    uint64_t ref_ticks = term_to_ref_ticks(term_get_tuple_element(msg, 1));
-    term cmd = term_get_tuple_element(msg, 2);
-    term params = term_get_tuple_element(cmd, 1);
+    int32_t pid = term_to_local_process_id(gen_message->pid);
+    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
+    if (UNLIKELY(term_get_tuple_arity(gen_message->req) != 2)) {
+        ESP_LOGW(TAG, "Received invalid message.");
+        return;
+    }
+    term params = term_get_tuple_element(gen_message->req, 1);
 
     term port_term = interop_proplist_get_value(params, PORT_ATOM);
     term backlog_term = interop_proplist_get_value(params, BACKLOG_ATOM);
@@ -974,15 +983,18 @@ static void do_listen(Context *ctx, term msg)
     do_send_reply(ctx, OK_ATOM, ref_ticks, pid);
 }
 
-void do_udp_open(Context *ctx, term msg)
+void do_udp_open(Context *ctx, const GenMessage *gen_message)
 {
     GlobalContext *glb = ctx->global;
     struct ESP32PlatformData *platform = glb->platform_data;
 
-    int32_t pid = term_to_local_process_id(term_get_tuple_element(msg, 0));
-    uint64_t ref_ticks = term_to_ref_ticks(term_get_tuple_element(msg, 1));
-    term cmd = term_get_tuple_element(msg, 2);
-    term params = term_get_tuple_element(cmd, 1);
+    int32_t pid = term_to_local_process_id(gen_message->pid);
+    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
+    if (UNLIKELY(term_get_tuple_arity(gen_message->req) != 2)) {
+        ESP_LOGW(TAG, "Received invalid message.");
+        return;
+    }
+    term params = term_get_tuple_element(gen_message->req, 1);
 
     term port_term = interop_proplist_get_value(params, PORT_ATOM);
     term binary_term = interop_proplist_get_value_default(params, BINARY_ATOM, FALSE_ATOM);
@@ -1048,34 +1060,40 @@ void do_udp_open(Context *ctx, term msg)
 
 // Required for compatibility with existing erlang libraries
 // TODO: remove this when not required anymore
-static void do_init(Context *ctx, term msg)
+static void do_init(Context *ctx, const GenMessage *gen_message)
 {
-    term cmd = term_get_tuple_element(msg, 2);
-    term params = term_get_tuple_element(cmd, 1);
+    if (UNLIKELY(term_get_tuple_arity(gen_message->req) < 2)) {
+        ESP_LOGW(TAG, "Received invalid message.");
+        return;
+    }
+    term params = term_get_tuple_element(gen_message->req, 1);
 
     if (interop_proplist_get_value_default(params, LISTEN_ATOM, FALSE_ATOM) == TRUE_ATOM) {
         TRACE("listen\n");
-        do_listen(ctx, msg);
+        do_listen(ctx, gen_message);
 
     } else if (interop_proplist_get_value_default(params, CONNECT_ATOM, FALSE_ATOM) == TRUE_ATOM) {
         TRACE("connect\n");
-        do_connect(ctx, msg);
+        do_connect(ctx, gen_message);
 
     } else if (interop_proplist_get_value_default(params, PROTO_ATOM, FALSE_ATOM) == UDP_ATOM) {
         TRACE("udp_open\n");
-        do_udp_open(ctx, msg);
+        do_udp_open(ctx, gen_message);
     }
 }
 
-static void do_send(Context *ctx, term msg)
+static void do_send(Context *ctx, const GenMessage *gen_message)
 {
     struct TCPServerSocketData *tcp_data = ctx->platform_data;
 
-    int32_t pid = term_to_local_process_id(term_get_tuple_element(msg, 0));
-    uint64_t ref_ticks = term_to_ref_ticks(term_get_tuple_element(msg, 1));
-    term cmd = term_get_tuple_element(msg, 2);
+    int32_t pid = term_to_local_process_id(gen_message->pid);
+    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
 
-    term data = term_get_tuple_element(cmd, 1);
+    if (UNLIKELY(term_get_tuple_arity(gen_message->req) != 2)) {
+        ESP_LOGW(TAG, "Received invalid message.");
+        return;
+    }
+    term data = term_get_tuple_element(gen_message->req, 1);
 
     size_t buffer_size;
     switch (interop_iolist_size(data, &buffer_size)) {
@@ -1114,14 +1132,18 @@ static void do_send(Context *ctx, term msg)
     do_send_reply(ctx, OK_ATOM, ref_ticks, pid);
 }
 
-static void do_sendto(Context *ctx, term msg)
+static void do_sendto(Context *ctx, const GenMessage *gen_message)
 {
     struct UDPSocketData *udp_data = ctx->platform_data;
 
-    int32_t pid = term_to_local_process_id(term_get_tuple_element(msg, 0));
-    uint64_t ref_ticks = term_to_ref_ticks(term_get_tuple_element(msg, 1));
-    term cmd = term_get_tuple_element(msg, 2);
+    int32_t pid = term_to_local_process_id(gen_message->pid);
+    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
 
+    if (UNLIKELY(term_get_tuple_arity(gen_message->req) != 4)) {
+        ESP_LOGW(TAG, "Received invalid message.");
+        return;
+    }
+    term cmd = gen_message->req;
     term dest_addr_term = term_get_tuple_element(cmd, 1);
     term dest_port_term = term_get_tuple_element(cmd, 2);
     term data = term_get_tuple_element(cmd, 3);
@@ -1180,12 +1202,12 @@ static void do_sendto(Context *ctx, term msg)
     do_send_reply(ctx, OK_ATOM, ref_ticks, pid);
 }
 
-static void do_close(Context *ctx, term msg)
+static void do_close(Context *ctx, const GenMessage *gen_message)
 {
     struct SocketData *socket_data = ctx->platform_data;
 
-    int32_t pid = term_to_local_process_id(term_get_tuple_element(msg, 0));
-    uint64_t ref_ticks = term_to_ref_ticks(term_get_tuple_element(msg, 1));
+    int32_t pid = term_to_local_process_id(gen_message->pid);
+    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
 
     if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + REPLY_SIZE) != MEMORY_GC_OK)) {
         AVM_ABORT();
@@ -1211,12 +1233,12 @@ static void do_close(Context *ctx, term msg)
     }
 }
 
-static NativeHandlerResult do_recvfrom(Context *ctx, term msg)
+static NativeHandlerResult do_recvfrom(Context *ctx, const GenMessage *gen_message)
 {
     struct SocketData *socket_data = ctx->platform_data;
 
-    int32_t pid = term_to_local_process_id(term_get_tuple_element(msg, 0));
-    uint64_t ref_ticks = term_to_ref_ticks(term_get_tuple_element(msg, 1));
+    int32_t pid = term_to_local_process_id(gen_message->pid);
+    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
 
     // We cannot stack blocked queries
     if (socket_data->passive_receiver_process_pid != 0) {
@@ -1234,12 +1256,12 @@ static NativeHandlerResult do_recvfrom(Context *ctx, term msg)
     return NativeContinue;
 }
 
-static void do_get_port(Context *ctx, term msg)
+static void do_get_port(Context *ctx, const GenMessage *gen_message)
 {
     struct SocketData *socket_data = ctx->platform_data;
 
-    int32_t pid = term_to_local_process_id(term_get_tuple_element(msg, 0));
-    uint64_t ref_ticks = term_to_ref_ticks(term_get_tuple_element(msg, 1));
+    int32_t pid = term_to_local_process_id(gen_message->pid);
+    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
 
     if (socket_data->port == 0) {
         do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
@@ -1254,12 +1276,12 @@ static void do_get_port(Context *ctx, term msg)
     }
 }
 
-static void do_sockname(Context *ctx, term msg)
+static void do_sockname(Context *ctx, const GenMessage *gen_message)
 {
     struct SocketData *socket_data = ctx->platform_data;
 
-    int32_t pid = term_to_local_process_id(term_get_tuple_element(msg, 0));
-    uint64_t ref_ticks = term_to_ref_ticks(term_get_tuple_element(msg, 1));
+    int32_t pid = term_to_local_process_id(gen_message->pid);
+    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
 
     ip_addr_t addr;
     u16_t port;
@@ -1283,12 +1305,12 @@ static void do_sockname(Context *ctx, term msg)
     }
 }
 
-static void do_peername(Context *ctx, term msg)
+static void do_peername(Context *ctx, const GenMessage *gen_message)
 {
     struct SocketData *socket_data = ctx->platform_data;
 
-    int32_t pid = term_to_local_process_id(term_get_tuple_element(msg, 0));
-    uint64_t ref_ticks = term_to_ref_ticks(term_get_tuple_element(msg, 1));
+    int32_t pid = term_to_local_process_id(gen_message->pid);
+    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
 
     ip_addr_t addr;
     u16_t port;
@@ -1313,16 +1335,18 @@ static void do_peername(Context *ctx, term msg)
     }
 }
 
-static void do_controlling_process(Context *ctx, term msg)
+static void do_controlling_process(Context *ctx, const GenMessage *gen_message)
 {
     struct SocketData *socket_data = ctx->platform_data;
 
-    int32_t pid = term_to_local_process_id(term_get_tuple_element(msg, 0));
-    uint64_t ref_ticks = term_to_ref_ticks(term_get_tuple_element(msg, 1));
+    int32_t pid = term_to_local_process_id(gen_message->pid);
+    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
 
-    term cmd = term_get_tuple_element(msg, 2);
-
-    term new_pid_term = term_get_tuple_element(cmd, 1);
+    if (UNLIKELY(term_get_tuple_arity(gen_message->req) != 2)) {
+        ESP_LOGW(TAG, "Received invalid message.");
+        return;
+    }
+    term new_pid_term = term_get_tuple_element(gen_message->req, 1);
     if (UNLIKELY(!term_is_pid(new_pid_term))) {
         do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
     } else {
@@ -1371,69 +1395,76 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx)
             continue;
         }
 
-        term cmd = term_get_tuple_element(msg, 2);
-        term cmd_name = term_get_tuple_element(cmd, 0);
+        GenMessage gen_message;
+        if (UNLIKELY((port_parse_gen_message(msg, &gen_message) != GenCallMessage)
+                || !term_is_tuple(gen_message.req) || term_get_tuple_arity(gen_message.req) < 1)) {
+            ESP_LOGW(TAG, "Received invalid message.");
+            mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+            return NativeContinue;
+        }
+
+        term cmd_name = term_get_tuple_element(gen_message.req, 0);
 
         switch (cmd_name) {
             //TODO: remove this
             case INIT_ATOM:
                 TRACE("init\n");
-                do_init(ctx, msg);
+                do_init(ctx, &gen_message);
                 break;
 
             case SENDTO_ATOM:
                 TRACE("sendto\n");
-                do_sendto(ctx, msg);
+                do_sendto(ctx, &gen_message);
                 break;
 
             case SEND_ATOM:
                 TRACE("send\n");
-                do_send(ctx, msg);
+                do_send(ctx, &gen_message);
                 break;
 
             case RECVFROM_ATOM:
                 TRACE("recvfrom\n");
-                if (do_recvfrom(ctx, msg) == NativeTerminate) {
+                if (do_recvfrom(ctx, &gen_message) == NativeTerminate) {
                     return NativeTerminate;
                 }
                 break;
 
             case RECV_ATOM:
                 TRACE("recv\n");
-                if (do_recvfrom(ctx, msg) == NativeTerminate) {
+                if (do_recvfrom(ctx, &gen_message) == NativeTerminate) {
                     return NativeTerminate;
                 }
                 break;
 
             case ACCEPT_ATOM:
                 TRACE("accept\n");
-                do_accept(ctx, msg);
+                do_accept(ctx, &gen_message);
                 break;
 
             case CLOSE_ATOM:
                 TRACE("close\n");
-                do_close(ctx, msg);
+                do_close(ctx, &gen_message);
                 // We don't need to remove message.
                 return NativeTerminate;
 
             case GET_PORT_ATOM:
                 TRACE("get_port\n");
-                do_get_port(ctx, msg);
+                do_get_port(ctx, &gen_message);
                 break;
 
             case SOCKNAME_ATOM:
                 TRACE("sockname\n");
-                do_sockname(ctx, msg);
+                do_sockname(ctx, &gen_message);
                 break;
 
             case PEERNAME_ATOM:
                 TRACE("peername\n");
-                do_peername(ctx, msg);
+                do_peername(ctx, &gen_message);
                 break;
 
             case CONTROLLING_PROCESS_ATOM:
                 TRACE("controlling_process\n");
-                do_controlling_process(ctx, msg);
+                do_controlling_process(ctx, &gen_message);
                 break;
 
             default:

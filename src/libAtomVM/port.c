@@ -54,25 +54,6 @@ void port_ensure_available(Context *ctx, size_t size)
     }
 }
 
-int port_is_standard_port_command(term t)
-{
-    if (!term_is_tuple(t)) {
-        return 0;
-    } else if (term_get_tuple_arity(t) != 3) {
-        return 0;
-    } else {
-        term pid = term_get_tuple_element(t, 0);
-        term ref = term_get_tuple_element(t, 1);
-        if (!term_is_pid(pid)) {
-            return 0;
-        } else if (!term_is_reference(ref)) {
-            return 0;
-        } else {
-            return 1;
-        }
-    }
-}
-
 term port_heap_create_tuple2(Heap *heap, term a, term b)
 {
     term terms[2];
@@ -122,4 +103,25 @@ term port_heap_create_ok_tuple(Heap *heap, term t)
 term port_heap_create_reply(Heap *heap, term ref, term payload)
 {
     return port_heap_create_tuple2(heap, ref, payload);
+}
+
+enum GenMessageParseResult port_parse_gen_message(term msg, GenMessage *gen_message)
+{
+    if (UNLIKELY(!term_is_tuple(msg) || term_get_tuple_arity(msg) != 3)) {
+        return GenMessageParseError;
+    }
+
+    gen_message->pid = term_get_tuple_element(msg, 0);
+    if (UNLIKELY(!term_is_pid(gen_message->pid))) {
+        return GenMessageParseError;
+    }
+
+    gen_message->ref = term_get_tuple_element(msg, 1);
+    if (UNLIKELY(!term_is_reference(gen_message->ref))) {
+        return GenMessageParseError;
+    }
+
+    gen_message->req = term_get_tuple_element(msg, 2);
+
+    return GenCallMessage;
 }

@@ -35,6 +35,7 @@
 #include <interop.h>
 #include <mailbox.h>
 #include <nifs.h>
+#include <port.h>
 #include <scheduler.h>
 #include <sys.h>
 #include <term.h>
@@ -936,12 +937,17 @@ static term gpiodriver_remove_int(Context *ctx, term cmd)
 static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
 {
     Message *message = mailbox_first(&ctx->mailbox);
-    term msg = message->message;
-    term pid = term_get_tuple_element(msg, 0);
-    term req = term_get_tuple_element(msg, 2);
+    GenMessage gen_message;
+    if (UNLIKELY(port_parse_gen_message(message->message, &gen_message) != GenCallMessage)
+        || !term_is_tuple(gen_message.req) || term_get_tuple_arity(gen_message.req) < 1) {
+        AVM_LOGW(TAG, "Received invalid message.");
+        mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+        return NativeContinue;
+    }
+    term req = gen_message.req;
     term cmd_term = term_get_tuple_element(req, 0);
 
-    int local_process_id = term_to_local_process_id(pid);
+    int local_process_id = term_to_local_process_id(gen_message.pid);
 
     term ret;
 
@@ -991,8 +997,7 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &ret, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         ret_msg = OUT_OF_MEMORY_ATOM;
     } else {
-        term ref = term_get_tuple_element(msg, 1);
-        ret_msg = create_pair(ctx, ref, ret);
+        ret_msg = create_pair(ctx, gen_message.ref, ret);
     }
 
     globalcontext_send_message(ctx->global, local_process_id, ret_msg);

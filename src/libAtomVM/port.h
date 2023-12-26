@@ -74,7 +74,6 @@ static inline term port_create_reply(Context *ctx, term ref, term payload)
 void port_send_message(GlobalContext *glb, term pid, term msg);
 void port_send_message_nolock(GlobalContext *glb, term pid, term msg);
 void port_ensure_available(Context *ctx, size_t size);
-int port_is_standard_port_command(term msg);
 
 // Helper to send a message from NIFs or from the native handler.
 static inline void port_send_reply(Context *ctx, term pid, term ref, term payload)
@@ -82,6 +81,22 @@ static inline void port_send_reply(Context *ctx, term pid, term ref, term payloa
     term reply = port_create_reply(ctx, ref, payload);
     port_send_message(ctx->global, pid, reply);
 }
+
+typedef struct
+{
+    term req;
+
+    term pid;
+    term ref;
+} GenMessage;
+
+enum GenMessageParseResult
+{
+    GenCallMessage,
+    GenMessageParseError
+};
+
+enum GenMessageParseResult port_parse_gen_message(term msg, GenMessage *gen_message);
 
 #ifdef __cplusplus
 }

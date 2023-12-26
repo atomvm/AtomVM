@@ -140,7 +140,6 @@ Functions
 .. doxygenfunction:: port_heap_create_tuple2
 .. doxygenfunction:: port_heap_create_tuple3
 .. doxygenfunction:: port_heap_create_tuple_n
-.. doxygenfunction:: port_is_standard_port_command
 .. doxygenfunction:: port_send_message
 .. doxygenfunction:: port_send_message_nolock
 .. doxygenfunction:: posix_errno_to_term
