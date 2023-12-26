@@ -196,16 +196,16 @@ Context *spi_driver_create_port(GlobalContext *global, term opts)
     term hspi_atom = globalcontext_make_atom(global, ATOM_STR("\x4", "hspi"));
 
     term bus_config = interop_kv_get_value(opts, ATOM_STR("\xA", "bus_config"), global);
-    term miso_term = interop_kv_get_value(bus_config, ATOM_STR("\x4", "miso"), global);
-    term mosi_term = interop_kv_get_value(bus_config, ATOM_STR("\x4", "mosi"), global);
-    term sclk_term = interop_kv_get_value(bus_config, ATOM_STR("\x4", "sclk"), global);
-    term peripheral_term = interop_kv_get_value_default(bus_config, ATOM_STR("\xA", "peripheral"), hspi_atom, global);
-    spi_host_device_t host_device = get_spi_host_device(peripheral_term, global);
+    term miso = interop_kv_get_value(bus_config, ATOM_STR("\x4", "miso"), global);
+    term mosi = interop_kv_get_value(bus_config, ATOM_STR("\x4", "mosi"), global);
+    term sclk = interop_kv_get_value(bus_config, ATOM_STR("\x4", "sclk"), global);
+    term peripheral = interop_kv_get_value_default(bus_config, ATOM_STR("\xA", "peripheral"), hspi_atom, global);
+    spi_host_device_t host_device = get_spi_host_device(peripheral, global);
 
     spi_bus_config_t buscfg = { 0 };
-    buscfg.miso_io_num = term_to_int32(miso_term);
-    buscfg.mosi_io_num = term_to_int32(mosi_term);
-    buscfg.sclk_io_num = term_to_int32(sclk_term);
+    buscfg.miso_io_num = term_to_int32(miso);
+    buscfg.mosi_io_num = term_to_int32(mosi);
+    buscfg.sclk_io_num = term_to_int32(sclk);
     buscfg.quadwp_io_num = -1;
     buscfg.quadhd_io_num = -1;
 
