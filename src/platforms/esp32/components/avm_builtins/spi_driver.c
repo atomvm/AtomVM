@@ -193,11 +193,12 @@ Context *spi_driver_create_port(GlobalContext *global, term opts)
     TRACE("spi_driver_create_port\n");
     Context *ctx = context_new(global);
 
+    term no_pin = term_from_int(-1);
     term hspi_atom = globalcontext_make_atom(global, ATOM_STR("\x4", "hspi"));
 
     term bus_config = interop_kv_get_value(opts, ATOM_STR("\xA", "bus_config"), global);
-    term miso = interop_kv_get_value(bus_config, ATOM_STR("\x4", "miso"), global);
-    term mosi = interop_kv_get_value(bus_config, ATOM_STR("\x4", "mosi"), global);
+    term miso = interop_kv_get_value_default(bus_config, ATOM_STR("\x4", "miso"), no_pin, global);
+    term mosi = interop_kv_get_value_default(bus_config, ATOM_STR("\x4", "mosi"), no_pin, global);
     term sclk = interop_kv_get_value(bus_config, ATOM_STR("\x4", "sclk"), global);
     term peripheral = interop_kv_get_value_default(bus_config, ATOM_STR("\xA", "peripheral"), hspi_atom, global);
     spi_host_device_t host_device = get_spi_host_device(peripheral, global);

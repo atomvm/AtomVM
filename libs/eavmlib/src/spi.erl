@@ -304,16 +304,24 @@ validate_bus_config(MaybeOldBusConfig) when
     is_map(MaybeOldBusConfig) orelse is_list(MaybeOldBusConfig)
 ->
     BusConfig = migrate_deprecated(MaybeOldBusConfig),
-    #{
-        miso => validate_integer_entry(miso, BusConfig),
-        mosi => validate_integer_entry(mosi, BusConfig),
-        sclk => validate_integer_entry(sclk, BusConfig),
-        peripheral => validate_peripheral(get_value(peripheral, BusConfig, hspi))
-    };
+    ValidatedConfig0 = #{
+        peripheral => validate_peripheral(get_value(peripheral, BusConfig, hspi)),
+        sclk => validate_integer_entry(sclk, BusConfig)
+    },
+    ValidatedConfig1 = maybe_validate_optional_integer(miso, ValidatedConfig0, BusConfig),
+    ValidatedConfig2 = maybe_validate_optional_integer(mosi, ValidatedConfig1, BusConfig),
+    ValidatedConfig2;
 validate_bus_config(undefined) ->
     throw({badarg, missing_bus_config});
 validate_bus_config(BusConfig) ->
     throw({badarg, {not_a_map_or_list, BusConfig}}).
+
+%% @private
+maybe_validate_optional_integer(Key, ValidatedConfig, Config) ->
+    case get_value(Key, Config, undefined) of
+        undefined -> ValidatedConfig;
+        _ -> ValidatedConfig#{Key => validate_integer_entry(Key, Config)}
+    end.
 
 %% @private
 migrate_deprecated(MaybeDeprecated) when is_map(MaybeDeprecated) ->
