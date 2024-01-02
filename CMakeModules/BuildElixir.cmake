@@ -18,47 +18,40 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-macro(pack_archive avm_name)
+macro(mix_packbeam lib_name)
     find_package(Elixir REQUIRED)
-
-    foreach(module_name ${ARGN})
-        add_custom_command(
-            OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/Elixir.${module_name}.beam
-            COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams && elixirc --no-docs --no-debug-info --ignore-module-conflict -o ${CMAKE_CURRENT_BINARY_DIR}/beams ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.ex
-            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.ex
-            COMMENT "Compiling ${module_name}.ex"
-            VERBATIM
-        )
-        set(BEAMS ${BEAMS} ${CMAKE_CURRENT_BINARY_DIR}/beams/Elixir.${module_name}.beam)
-    endforeach()
-
-    add_custom_target(
-        ${avm_name}_beams ALL
-        DEPENDS ${BEAMS}
-    )
 
     if(AVM_RELEASE)
         set(INCLUDE_LINES "")
     else()
         set(INCLUDE_LINES "-i")
     endif()
-
+    
     add_custom_target(
-        ${avm_name}_packbeam ALL
-        DEPENDS ${avm_name}_beams PackBEAM
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${BEAMS}
-        COMMENT "Packing archive ${avm_name}.avm"
+        ${lib_name}_deps ALL
+        DEPENDS mix-prepare-${lib_name}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMAND mix deps.get
         VERBATIM
     )
-    add_dependencies(${avm_name}_packbeam ${avm_name}_beams PackBEAM)
 
     add_custom_target(
-        ${avm_name} ALL
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/..
-        COMMAND ln -f -s lib/${avm_name}.avm
-        DEPENDS ${avm_name}_packbeam
+        ${lib_name}_packbeam ALL
+        DEPENDS ${lib_name}_deps
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMAND mix atomvm.packbeam ${INCLUDE_LINES}
+        COMMENT "Creating ${lib_name} packbeam ..."
         VERBATIM
     )
+
+    add_custom_target(
+        ${lib_name} ALL
+        DEPENDS ${lib_name}_packbeam
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMAND touch -c ${lib_name}.avm
+        VERBATIM
+    )
+
 endmacro()
 
 macro(pack_runnable avm_name main)
@@ -85,7 +78,7 @@ macro(pack_runnable avm_name main)
 
     foreach(archive_name ${ARGN})
         if(${archive_name} STREQUAL "exavmlib")
-            set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/lib/${archive_name}.avm)
+            set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/${archive_name}.avm)
         else()
             set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/${archive_name}.avm)
         endif()

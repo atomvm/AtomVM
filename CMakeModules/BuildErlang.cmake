@@ -66,45 +66,6 @@ macro(rebar3_packbeam project_name)
 endmacro()
 
 ##
-## TODO only used by exavm -- deprecate once we have a solution for mix
-##
-macro(pack_archive avm_name)
-
-    foreach(module_name ${ARGN})
-        add_custom_command(
-            OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam
-            COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams && erlc +debug_info -o ${CMAKE_CURRENT_BINARY_DIR}/beams -I ${CMAKE_SOURCE_DIR}/libs/estdlib/include -I ${CMAKE_SOURCE_DIR}/libs/eavmlib/include ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
-            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
-            COMMENT "Compiling ${module_name}.erl"
-            VERBATIM
-        )
-        set(pack_archive_${avm_name}_beams ${pack_archive_${avm_name}_beams} ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam)
-    endforeach()
-
-    add_custom_target(
-        ${avm_name}_beams ALL
-        DEPENDS ${pack_archive_${avm_name}_beams}
-    )
-
-    if(AVM_RELEASE)
-        set(INCLUDE_LINES "")
-    else()
-        set(INCLUDE_LINES "-i")
-    endif()
-
-    add_custom_target(
-        ${avm_name} ALL
-        DEPENDS ${avm_name}_beams PackBEAM
-        #DEPENDS ${pack_archive_${avm_name}_beams}
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${pack_archive_${avm_name}_beams}
-        COMMENT "Packing archive ${avm_name}.avm"
-        VERBATIM
-    )
-    add_dependencies(${avm_name} ${avm_name}_beams PackBEAM)
-
-endmacro()
-
-##
 ## TODO only used in examples -- to deprecate
 ##
 macro(pack_runnable avm_name main)

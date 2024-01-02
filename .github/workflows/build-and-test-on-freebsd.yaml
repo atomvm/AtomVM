@@ -61,7 +61,7 @@ jobs:
           echo "%%"
           echo "**freebsd-version:**"
           freebsd-version
-          sudo pkg install -y cmake gperf erlang rebar3 elixir mbedtls
+          sudo pkg install -y cmake gperf erlang rebar3 elixir mbedtls git
           echo "**uname:**"
           uname -a
           echo "**C Compiler version:**"

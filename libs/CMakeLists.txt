@@ -29,7 +29,7 @@ add_subdirectory(esp32boot)
 add_subdirectory(etest)
 
 if (Elixir_FOUND)
-    add_subdirectory(exavmlib/lib)
+    add_subdirectory(exavmlib)
 else()
     message("Unable to find elixirc -- skipping Elixir libs")
 endif()

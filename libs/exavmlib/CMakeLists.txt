@@ -20,26 +20,17 @@
 
 project(exavmlib)
 
-include(BuildElixir)
+include(../../version.cmake)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mix.exs.in ${CMAKE_CURRENT_BINARY_DIR}/mix.exs @ONLY)
 
-set(ELIXIR_MODULES
-    AVMPort
-    Bitwise
-    Code
-    Console
-    GPIO
-    I2C
-    Integer
-    LEDC
-    Access
-    Enum
-    List
-    Map
-    Module
-    Keyword
-    Kernel
-    Process
-    Tuple
+add_custom_target(
+    mix-prepare-exavmlib ALL
+    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/mix.exs
+    COMMENT "Preparing exavmlib for building with mix"
+    COMMAND ln -s -f ${CMAKE_CURRENT_SOURCE_DIR}/lib ${CMAKE_CURRENT_BINARY_DIR}/
+    VERBATIM
 )
 
-pack_archive(exavmlib ${ELIXIR_MODULES})
+include(BuildElixir)
+
+mix_packbeam(exavmlib)
