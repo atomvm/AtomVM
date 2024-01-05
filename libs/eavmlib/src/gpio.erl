@@ -197,7 +197,7 @@ set_direction(GPIO, Pin, Direction) ->
 %%-----------------------------------------------------------------------------
 %% @param   GPIO pid that was returned from `gpio:start/0'
 %% @param   Pin number of the pin to write
-%% @param   Desired output level to set
+%% @param   Level the desired output level to set
 %% @returns ok | error | {error, Reason}
 %% @doc     Set GPIO digital output level
 %%
@@ -443,7 +443,7 @@ deep_sleep_hold_dis() ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number of the pin to write
-%% @param   Desired output level to set
+%% @param   Level the desired output level to set
 %% @returns ok | error | {error, Reason}
 %% @doc     Set GPIO digital output level
 %%

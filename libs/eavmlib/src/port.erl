@@ -41,7 +41,7 @@
 -export([call/2, call/3]).
 
 %%-----------------------------------------------------------------------------
-%% @param   Pid Pid to which to send messages
+%% @param   Port Pid to which to send messages
 %% @param   Message the message to send
 %% @returns term() | {error, Reason}.
 %% @doc     Send a message to a given port driver pid.
@@ -50,12 +50,12 @@
 %% return a term or `{error, Reason}'.
 %% @end
 %%-----------------------------------------------------------------------------
--spec call(Pid :: pid(), Message :: term()) -> term().
+-spec call(Port :: pid(), Message :: term()) -> term().
 call(Port, Message) ->
     call(Port, Message, infinity).
 
 %%-----------------------------------------------------------------------------
-%% @param   Pid Pid to which to send messages
+%% @param   Port Pid to which to send messages
 %% @param   Message the message to send
 %% @param   Timeout the timeout value in milliseconds
 %% @returns term() | {error, Reason}.
@@ -65,7 +65,7 @@ call(Port, Message) ->
 %% a term or `{error, Reason}', or`{error, timeout}' if the TimeoutMs is reached first.
 %% @end
 %%-----------------------------------------------------------------------------
--spec call(Pid :: pid(), Message :: term(), Timeout :: timeout()) -> term() | {error, timeout}.
+-spec call(Port :: pid(), Message :: term(), Timeout :: timeout()) -> term() | {error, timeout}.
 call(Port, Message, Timeout) ->
     MonitorRef = monitor(port, Port),
     Port ! {'$call', {self(), MonitorRef}, Message},

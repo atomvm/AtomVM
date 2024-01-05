@@ -306,7 +306,7 @@ keyreplace(K, I, [H | T], L, NewTuple, NewList) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun the function to apply
-%% @param   Accum0 the initial accumulator
+%% @param   Acc0 the initial accumulator
 %% @param   List the list over which to fold
 %% @returns the result of folding Fun over L
 %% @doc     Fold over a list of terms, from left to right, applying Fun(E, Accum)

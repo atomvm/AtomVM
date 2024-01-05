@@ -172,7 +172,7 @@ listen(Port, Options) ->
     end.
 
 %%-----------------------------------------------------------------------------
-%% @param   ListenSocket the listening socket.
+%% @param   Socket the listening socket.
 %% @returns a connection-based (tcp) socket that can be used for reading and writing
 %% @doc     Accept a connection on a listening socket.
 %% @end
@@ -188,7 +188,7 @@ accept({?GEN_TCP_MONIKER, Socket, Module}) ->
     end.
 
 %%-----------------------------------------------------------------------------
-%% @param   ListenSocket the listening socket.
+%% @param   Socket the listening socket.
 %% @param   Timeout amount of time in milliseconds to wait for a connection
 %% @returns a connection-based (tcp) socket that can be used for reading and writing
 %% @doc     Accept a connection on a listening socket.

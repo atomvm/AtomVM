@@ -178,7 +178,7 @@ add_avm_pack_file(_AVMPath, _Options) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @param   name the AVM name.
+%% @param   Name the AVM name.
 %% @param   Options Options, as a property list.
 %% @returns `ok | error'
 %% @doc     Close previously opened AVM binary from your application.
