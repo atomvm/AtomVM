@@ -69,7 +69,7 @@ enum inet_protocol
 
 /**
  * @brief Parse an inet protocol
- * @param type the inet protocol atom
+ * @param protocol the inet protocol atom
  * @param global the global context
  * @returns the parsed protocol
  */

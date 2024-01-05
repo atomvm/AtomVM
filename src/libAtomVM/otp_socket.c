@@ -440,7 +440,6 @@ static inline int get_protocol(GlobalContext *global, term protocol_term, bool *
  * @details This function is meant to be called from a nif that should return
  * its result directly, to allow for further processing of a possible out of
  * memory exception.
- * @end
  */
 static inline term make_error_tuple(term reason, Context *ctx)
 {

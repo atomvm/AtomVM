@@ -25,7 +25,8 @@
 %% (General Purpose Input and Output) pins.
 %%
 %% Note: `-type pin()' used in this driver refers to a pin number on Espressif
-%% chips, or a tuple {GPIO_BANK, PIN} for stm32 chips.
+%% chips and normal Raspberry Pi Pico pins, or a tuple {GPIO_BANK, PIN} for STM32
+%% chips and the "extra" GPIOs available on the Pico-W.
 %% @end
 %%-----------------------------------------------------------------------------
 -module(gpio).
@@ -197,7 +198,7 @@ set_direction(GPIO, Pin, Direction) ->
 %%-----------------------------------------------------------------------------
 %% @param   GPIO pid that was returned from `gpio:start/0'
 %% @param   Pin number of the pin to write
-%% @param   Desired output level to set
+%% @param   Level desired output level to set
 %% @returns ok | error | {error, Reason}
 %% @doc     Set GPIO digital output level
 %%
@@ -443,7 +444,7 @@ deep_sleep_hold_dis() ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number of the pin to write
-%% @param   Desired output level to set
+%% @param   Level desired output level to set
 %% @returns ok | error | {error, Reason}
 %% @doc     Set GPIO digital output level
 %%

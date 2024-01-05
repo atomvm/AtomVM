@@ -204,7 +204,7 @@ send_after(Time, Dest, Msg) ->
 %%-----------------------------------------------------------------------------
 %% @param   Pid the process pid.
 %% @param   Key key used to find process information.
-%% @returns process information for the specified pid defined by the specified key.
+%% @returns `{Key, Value}' where `Value' is information for the specified pid defined by the specified `Key'.
 %% @doc     Return process information.
 %%
 %% This function returns information about the specified process.
@@ -223,13 +223,8 @@ send_after(Time, Dest, Msg) ->
 %%
 %% @end
 %%-----------------------------------------------------------------------------
--spec process_info
-    (Pid :: pid(), heap_size) -> {heap_size, non_neg_integer()};
-    (Pid :: pid(), total_heap_size) -> {total_heap_size, non_neg_integer()};
-    (Pid :: pid(), stack_size) -> {stack_size, non_neg_integer()};
-    (Pid :: pid(), message_queue_len) -> {message_queue_len, non_neg_integer()};
-    (Pid :: pid(), memory) -> {memory, non_neg_integer()};
-    (Pid :: pid(), links) -> {links, [pid()]}.
+-spec process_info(Pid :: pid(), Key :: atom()) ->
+    {LookupKey :: atom(), Value :: non_neg_integer()} | {links, [LinkPid :: pid()]}.
 process_info(_Pid, _Key) ->
     erlang:nif_error(undefined).
 
@@ -925,11 +920,12 @@ demonitor(_Monitor) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Monitor reference of monitor to remove
+%% @param   Options options list
 %% @returns `true'
 %% @doc     Remove a monitor, with options.
 %% If `flush', monitor messages are flushed and guaranteed to not be received.
 %% If `info', return `true' if monitor was removed, `false' if it was not found.
-%% If both options are provivded, return `false' if flush was needed.
+%% If both options are provided, return `false' if flush was needed.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec demonitor(Monitor :: reference(), Options :: [demonitor_option()]) -> boolean().
@@ -1031,9 +1027,9 @@ group_leader(_Leader, _Pid) ->
 %% @returns Previous value of the flag
 %% @doc     Set a flag for the current process.
 %% When `trap_exit' is true, exit signals are converted to messages
-%% ```
-%% {'EXIT', From, Reason}
-%% '''
+%%
+%% ``{'EXIT', From, Reason}''
+%%
 %% and the process does not exit if `Reason' is not `normal'.
 %%
 %% @end

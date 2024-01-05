@@ -34,10 +34,11 @@
 
 %%-----------------------------------------------------------------------------
 %% @doc     Set the datetime on the RTC.
+%% @param   Datetime `calendar:datetime()' to set rtc clock.
 %%          The datetime can be obtained through bif erlang:localtime()
 %% @end
 %%-----------------------------------------------------------------------------
--spec rtc_set_datetime(calendar:datetime()) -> ok.
+-spec rtc_set_datetime(Datetime :: calendar:datetime()) -> ok.
 rtc_set_datetime(_Datetime) ->
     erlang:nif_error(undefined).
 

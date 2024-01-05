@@ -86,7 +86,7 @@ date_to_gregorian_days({Y, M, D}) ->
 %% @doc     Computes the number of gregorian days starting with year 0 and ending at the specified date.
 %% @end
 %%-----------------------------------------------------------------------------
--spec date_to_gregorian_days(Year :: year(), M :: month(), D :: day()) -> gregorian_days().
+-spec date_to_gregorian_days(Year :: year(), M :: month(), D :: day()) -> Days :: gregorian_days().
 date_to_gregorian_days(Year, M, D) when
     is_integer(Year) andalso Year >= 0 andalso
         is_integer(M) andalso M > 0 andalso M =< 12 andalso
@@ -113,12 +113,13 @@ date_to_gregorian_days(Year, M, D) when
     Era * 146097 + DoE + 60.
 
 %%-----------------------------------------------------------------------------
-%% @param   DateTime
-%% @returns Days    number of days
-%% @doc     Computes the number of gregorian days starting with year 0 and ending at the specified date.
+%% @param   DateTime the date and time to retrieve seconds
+%% @returns Seconds number of seconds
+%% @doc     Computes the number of gregorian seconds starting with year 0 and ending
+%% at the specified date and time.
 %% @end
 %%-----------------------------------------------------------------------------
--spec datetime_to_gregorian_seconds(DateTime :: datetime()) -> integer().
+-spec datetime_to_gregorian_seconds(DateTime :: datetime()) -> Seconds :: integer().
 datetime_to_gregorian_seconds({Date, {Hour, Minute, Second}}) when
     is_integer(Hour) andalso Hour >= 0 andalso Hour =< 23 andalso
         is_integer(Minute) andalso Minute >= 0 andalso Minute =< 59 andalso
@@ -129,7 +130,7 @@ datetime_to_gregorian_seconds({Date, {Hour, Minute, Second}}) when
 
 %%-----------------------------------------------------------------------------
 %% @equiv day_of_the_week(Y, M, D)
-%% @param   Date the date for which to retreive the weekday
+%% @param   Date the date for which to retrieve the weekday
 %% @returns Weekday day of the week
 %% @doc     Computes the day of the week from the specified date tuple {Year, Month, Day}.
 %%          Returns the day of the week as 1: Monday, 2: Tuesday, and so on.
@@ -138,7 +139,7 @@ datetime_to_gregorian_seconds({Date, {Hour, Minute, Second}}) when
 %%          Returns the day of the week as 1: Monday, 2: Tuesday, and so on.
 %% @end
 %%-----------------------------------------------------------------------------
--spec day_of_the_week(Date :: date()) -> day_of_week().
+-spec day_of_the_week(Date :: date()) -> Weekday :: day_of_week().
 day_of_the_week({Y, M, D}) ->
     day_of_the_week(Y, M, D).
 
@@ -151,18 +152,18 @@ day_of_the_week({Y, M, D}) ->
 %%          Returns the day of the week as 1: Monday, 2: Tuesday, and so on.
 %% @end
 %%-----------------------------------------------------------------------------
--spec day_of_the_week(Y :: year(), M :: month(), D :: day()) -> day_of_week().
+-spec day_of_the_week(Y :: year(), M :: month(), D :: day()) -> Weekday :: day_of_week().
 day_of_the_week(Y, M, D) ->
     (date_to_gregorian_days(Y, M, D) + 5) rem 7 + 1.
 
 %%-----------------------------------------------------------------------------
 %% @param   Time the time, as an integer, in the specified unit
 %% @param   TimeUnit the time unit
-%% @param   The date and time (in UTC) converted from the specified time and time unit
+%% @returns DateTime The date and time (in UTC) converted from the specified time and time unit
 %% @doc     Convert an integer time value to a date and time in UTC.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec system_time_to_universal_time(Time :: integer(), TimeUnit :: erlang:time_unit()) ->
-    datetime().
+    DateTime :: datetime().
 system_time_to_universal_time(_Time, _TimeUnit) ->
     erlang:nif_error(undefined).

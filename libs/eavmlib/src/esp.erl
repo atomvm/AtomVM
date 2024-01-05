@@ -157,7 +157,10 @@ sleep_get_wakeup_cause() ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @returns Configure ext0 wakeup
+%% @doc Configure gpio wakeup from deep sleep
+%% @param   Pin number of the pin to use as wakeup event
+%% @param   Level is the state to trigger a wakeup
+%% @returns `ok | error'
 %% @end
 %%-----------------------------------------------------------------------------
 -spec sleep_enable_ext0_wakeup(Pin :: pos_integer(), Level :: 0..1) -> ok | error.
@@ -165,7 +168,22 @@ sleep_enable_ext0_wakeup(_Pin, _Level) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @returns Configure ext1 wakeup
+%% @doc Configure multiple gpio pins for wakeup from deep sleep
+%% @param   Mask bit mask of GPIO numbers which will cause wakeup
+%% @param   Mode used to determine wakeup events
+%%
+%%     The available modes are:
+%% <table>
+%%   <tr> <th>Mode</th> <th>Description</th> </tr>
+%%   <tr> <td>`0'</td> <td>WAKEUP_ALL_LOW</td></tr>
+%%   <tr> <td>`1'</td> <td>WAKEUP_ANY_HIGH (When chip is ESP32-S2, ESP32-S3, ESP32-C6 or ESP32-H2)</td></tr>
+%%   <tr> <td>`2'</td> <td>WAKEUP_ANY_LOW</td></tr>
+%%   <tr> <td>`3'</td> <td>WAKEUP_ANY_HIGH</td></tr>
+%% </table>
+%%
+%% Note: The operation of these modes can vary with builds from previous versions
+%% of the ESP-IDF. The modes described here are valid for AtomVM built with ESP-IDF-v5.1.x.
+%% @returns `ok | error'
 %% @end
 %%-----------------------------------------------------------------------------
 -spec sleep_enable_ext1_wakeup(Mask :: non_neg_integer(), Mode :: 0..1) -> ok | error.

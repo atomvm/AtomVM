@@ -1538,7 +1538,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 
         ctx->cp = module_address(mod->module_index, mod->end_instruction_ii);
         ctx->saved_ip = mod->labels[label];
+        #ifndef DOXYGEN_SKIP_SECTION /* documented in scheduler.h */
         scheduler_init_ready(ctx);
+        #endif /* DOXYGEN_SKIP_SECTION */
     #endif
 
 #ifdef IMPL_CODE_LOADER

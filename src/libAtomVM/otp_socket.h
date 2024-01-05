@@ -56,6 +56,7 @@ void otp_socket_init(GlobalContext *global);
  *
  * @param socket_term   the term with the socket
  * @param otp_socket    on output, the socket resource
+ * @param ctx           the current context
  * @return true in case of success
  */
 bool term_to_otp_socket(term socket_term, struct SocketResource **otp_socket, Context *ctx);
@@ -71,10 +72,10 @@ bool term_is_otp_socket(term socket_term);
 /**
  * @brief Send data to a socket (without blocking)
  *
- * @param otp_socket    the socket resource
- * @param buf           buffer to send
- * @param len           number of bytes
- * @param dest          destination address or invalid term for sendto/send
+ * @param socket    the socket resource
+ * @param buf       buffer to send
+ * @param len       number of bytes
+ * @param dest      destination address or invalid term for sendto/send
  * @return the number of written bytes or a value from SocketErrors
  */
 ssize_t socket_send(struct SocketResource *socket, const uint8_t *buf, size_t len, term dest);
@@ -82,12 +83,12 @@ ssize_t socket_send(struct SocketResource *socket, const uint8_t *buf, size_t le
 /**
  * @brief Read data from a socket.
  *
- * @param otp_socket    the socket resource
- * @param buf           buffer to store data
- * @param len           number of bytes
- * @param flags         flags passed to recvfrom
- * @param from          filled with origin address using recvfrom (can be NULL)
- * @param heap          heap to build the origin address term (can be NULL if from is NULL)
+ * @param socket    the socket resource
+ * @param buf       buffer to store data
+ * @param len       number of bytes
+ * @param flags     flags passed to recvfrom
+ * @param from      filled with origin address using recvfrom (can be NULL)
+ * @param heap      heap to build the origin address term (can be NULL if from is NULL)
  * @return the number of read bytes or a value from SocketErrors
  */
 ssize_t socket_recv(struct SocketResource *socket, uint8_t *buf, size_t len, int flags, term *from, Heap *heap);
