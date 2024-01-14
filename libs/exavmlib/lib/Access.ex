@@ -23,6 +23,13 @@ defmodule Access do
   # This avoids crashing the compiler at build time
   @compile {:autoload, false}
 
+  def fetch(map, key) when is_map(map) do
+    case map do
+      %{^key => value} -> {:ok, value}
+      _ -> :error
+    end
+  end
+
   def fetch(list, key) when is_list(list) and is_atom(key) do
     case :lists.keyfind(key, 1, list) do
       {_, value} -> {:ok, value}
@@ -47,6 +54,13 @@ defmodule Access do
   end
 
   def get(container, key, default \\ nil)
+
+  def get(map, key, default) when is_map(map) do
+    case map do
+      %{^key => value} -> value
+      _ -> default
+    end
+  end
 
   def get(list, key, default) when is_list(list) and is_atom(key) do
     case :lists.keyfind(key, 1, list) do
