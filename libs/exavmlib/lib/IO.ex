@@ -1,7 +1,7 @@
 #
 # This file is part of AtomVM.
 #
-# Copyright 2019-2021 Riccardo Binetti <rbino@gmx.com>
+# Copyright 2024 Davide Bettio <davide@uninstall.it>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,29 +18,21 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-project(exavmlib)
+defmodule IO do
+  # This avoids crashing the compiler at build time
+  @compile {:autoload, false}
 
-include(BuildElixir)
+  def puts(string) do
+    :io.put_chars([to_chardata(string), ?\n])
+  end
 
-set(ELIXIR_MODULES
-    AVMPort
-    Bitwise
-    Code
-    Console
-    GPIO
-    I2C
-    Integer
-    LEDC
-    Access
-    Enum
-    IO
-    List
-    Map
-    Module
-    Keyword
-    Kernel
-    Process
-    Tuple
-)
+  defp to_chardata(list) when is_list(list), do: list
+  defp to_chardata(other), do: to_string(other)
 
-pack_archive(exavmlib ${ELIXIR_MODULES})
+  def inspect(t) do
+    Kernel.inspect(t)
+    |> puts()
+
+    t
+  end
+end
