@@ -22,6 +22,6 @@ project(test_estdlib)
 
 include(BuildErlang)
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/rebar.config.in ${CMAKE_CURRENT_SOURCE_DIR}/rebar.config @ONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/rebar.config.in ${CMAKE_CURRENT_BINARY_DIR}/rebar.config @ONLY)
 
 rebar3_packbeam(test_estdlib atomvmlib etest)

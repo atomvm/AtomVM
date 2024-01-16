@@ -22,7 +22,7 @@ project(esp32boot)
 
 include(BuildErlang)
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/rebar.config.in ${CMAKE_CURRENT_SOURCE_DIR}/rebar.config @ONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/rebar.config.in ${CMAKE_CURRENT_BINARY_DIR}/rebar.config @ONLY)
 
 if (Elixir_FOUND)
     rebar3_packbeam(esp32boot esp32devmode exavmlib)

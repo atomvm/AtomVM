@@ -34,17 +34,43 @@ macro(rebar3_packbeam project_name)
     foreach(dep ${rebar3_packbeam_${project_name}_deps})
         add_custom_target(
             ${project_name}_${dep}_checkouts ALL
-            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
             COMMAND mkdir -p _checkouts && cd _checkouts && ln -f -s ${CMAKE_SOURCE_DIR}/libs/${dep}
             VERBATIM
         )
     endforeach()
 
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src
+        COMMAND ln -s -f ${CMAKE_CURRENT_SOURCE_DIR}/src
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/priv
+        COMMAND ln -s -f ${CMAKE_CURRENT_SOURCE_DIR}/priv
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/include
+        COMMAND ln -s -f ${CMAKE_CURRENT_SOURCE_DIR}/include
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/bootstrap
+        COMMAND ln -s -f ${CMAKE_CURRENT_SOURCE_DIR}/bootstrap
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+
     add_custom_target(
         ${project_name}_packbeam ALL
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMAND rebar3 atomvm packbeam ${rebar3_packbeam_${project_name}_ext}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMAND rebar3 atomvm packbeam -l ${rebar3_packbeam_${project_name}_ext}
         COMMAND_EXPAND_LISTS
+        DEPENDS 
+            ${CMAKE_CURRENT_BINARY_DIR}/src
+            ${CMAKE_CURRENT_BINARY_DIR}/priv
+            ${CMAKE_CURRENT_BINARY_DIR}/include
+            ${CMAKE_CURRENT_BINARY_DIR}/bootstrap
         COMMENT "Creating ${project_name} packbeam ..."
         VERBATIM
     )

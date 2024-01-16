@@ -23,7 +23,7 @@ project(erlang_tests)
 
 include(BuildErlang)
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/rebar.config.in ${CMAKE_CURRENT_SOURCE_DIR}/rebar.config @ONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/rebar.config.in ${CMAKE_CURRENT_BINARY_DIR}/rebar.config @ONLY)
 
 rebar3_packbeam(erlang_tests)
 
@@ -47,23 +47,30 @@ endmacro()
 generate_hrl(
     ${CMAKE_CURRENT_BINARY_DIR}/../code_load/_build/default/lib/code_load/ebin/export_test_module.beam
     EXPORT_TEST_MODULE_DATA
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/export_test_module_data.hrl
+    ${CMAKE_CURRENT_BINARY_DIR}/include/export_test_module_data.hrl
     code_load_packbeam
 )
 
 generate_hrl(
     ${CMAKE_CURRENT_BINARY_DIR}/../code_load/_build/default/lib/code_load.avm
     CODE_LOAD_PACK_DATA
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/code_load_pack_data.hrl
+    ${CMAKE_CURRENT_BINARY_DIR}/include/code_load_pack_data.hrl
     code_load_packbeam
+)
+
+add_custom_target(
+    create_header_dir
+    COMMAND mkdir ${CMAKE_CURRENT_BINARY_DIR}/include
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 add_custom_target(
     code_load_headers ALL
     COMMAND echo "Generating code_load_headers"
     DEPENDS
-    generate_hrl_EXPORT_TEST_MODULE_DATA
-    generate_hrl_CODE_LOAD_PACK_DATA
+        create_header_dir
+        generate_hrl_EXPORT_TEST_MODULE_DATA
+        generate_hrl_CODE_LOAD_PACK_DATA
 )
 
 add_dependencies(erlang_tests_packbeam code_load_headers)

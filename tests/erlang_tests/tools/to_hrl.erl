@@ -1,6 +1,3 @@
-#!/usr/bin/env escript
-%% -*- erlang -*-
-%%! -sname to_hrl debug verbose
 %
 % This file is part of AtomVM.
 %
