@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `1`, which now they are deprecated)
 - New atom table, which uses less memory, has improved performances and better code.
 
+### Fixed
+
+- Fix several missing memory allocation checks in libAtomVM.
+- Fixed a possible memory leak in libAtomVM/module.c `module_destroy`.
+
 ## [0.6.0-alpha.2] - 2023-12-10
 
 ### Fixed

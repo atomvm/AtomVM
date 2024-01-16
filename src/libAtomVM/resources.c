@@ -174,6 +174,9 @@ int enif_select(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSelectFlags mode, 
     // Create new event if it doesn't exist.
     if (select_event == NULL) {
         select_event = malloc(sizeof(struct SelectEvent));
+        if (IS_NULL_PTR(select_event)) {
+            AVM_ABORT();
+        }
         select_event->event = event;
         select_event->resource = resource;
         // Resource is used in select_event, so we increase refcount.
