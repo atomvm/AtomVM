@@ -40,7 +40,7 @@ defmodule Kernel do
   def inspect(term, opts \\ []) when is_list(opts) do
     case term do
       t when is_atom(t) ->
-        :erlang.atom_to_binary(t, :latin1)
+        [?:, atom_to_string(t)]
 
       t when is_integer(t) ->
         :erlang.integer_to_binary(t)
@@ -71,6 +71,10 @@ defmodule Kernel do
 
       t when is_float(t) ->
         :erlang.float_to_binary(t)
+
+      t when is_map(t) ->
+        [?%, ?{ | t |> inspect_kv() |> join(?})]
+        |> :erlang.list_to_binary()
     end
   end
 
@@ -84,5 +88,37 @@ defmodule Kernel do
 
   defp inspect_join([h | t], last) do
     [inspect(h), ?,, ?\s | inspect_join(t, last)]
+  end
+
+  defp join([], last) do
+    [last]
+  end
+
+  defp join([e], last) do
+    [e, last]
+  end
+
+  defp join([h | t], last) do
+    [h, ?,, ?\s | join(t, last)]
+  end
+
+  defp inspect_kv(t) do
+    :maps.fold(
+      fn
+        k, v, acc_in when is_atom(k) ->
+          [[atom_to_string(k), ?:, ?\s, inspect(v)] | acc_in]
+
+        k, v, acc_in ->
+          [[inspect(k), " => ", inspect(v)] | acc_in]
+      end,
+      [],
+      t
+    )
+  end
+
+  defp atom_to_string(atom) do
+    # TODO: use unicode rather than plain latin1
+    # handle spaces and special characters
+    :erlang.atom_to_binary(atom, :latin1)
   end
 end
