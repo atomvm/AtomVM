@@ -165,7 +165,7 @@ term interop_proplist_get_value_default(term list, term key, term default_value)
 {
     term t = list;
 
-    while (!term_is_nil(t)) {
+    while (term_is_nonempty_list(t)) {
         term *t_ptr = term_get_list_ptr(t);
 
         term head = t_ptr[1];
