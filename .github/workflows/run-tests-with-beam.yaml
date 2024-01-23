@@ -61,7 +61,7 @@ jobs:
           otp: "25"
 
         - os: "ubuntu-22.04"
-          test_erlang_opts: "-s prime_smp"
+          test_erlang_opts: "-s prime_smp,test_gc"
           otp: "26"
           container: erlang:26
 
