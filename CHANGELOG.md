@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0-beta.0] - Unreleased
 
+### Fixed
+
+- Fixed interpretation of live for opcodes, thus altering GC semantics for nifs. See also [UPDATING](UPDATING.md).
+
 ### Added
 - Added `esp:get_default_mac/0` for retrieving the default MAC address on ESP32.
 - Added support for `pico` and `poci` as an alternative to `mosi` and `miso` for SPI

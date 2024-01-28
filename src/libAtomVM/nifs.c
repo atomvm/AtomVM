@@ -42,6 +42,7 @@
 #include "globalcontext.h"
 #include "interop.h"
 #include "mailbox.h"
+#include "memory.h"
 #include "module.h"
 #include "platform_nifs.h"
 #include "port.h"
@@ -1377,7 +1378,7 @@ static term nif_erlang_concat_2(Context *ctx, int argc, term argv[])
     if (UNLIKELY(!proper)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-    if (UNLIKELY(memory_ensure_free_opt(ctx, len * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, len * 2, argc, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -1646,7 +1647,7 @@ static term nif_erlang_insert_element_3(Context *ctx, int argc, term argv[])
     }
 
     int new_tuple_size = old_tuple_size + 1;
-    if (UNLIKELY(memory_ensure_free_opt(ctx, new_tuple_size + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, new_tuple_size + 1, 2, argv + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term new_tuple = term_alloc_tuple(new_tuple_size, &ctx->heap);
@@ -1684,7 +1685,7 @@ static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[])
     }
 
     int new_tuple_size = old_tuple_size - 1;
-    if (UNLIKELY(memory_ensure_free_opt(ctx, new_tuple_size + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, new_tuple_size + 1, 1, argv + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term new_tuple = term_alloc_tuple(new_tuple_size, &ctx->heap);
@@ -1718,7 +1719,7 @@ static term nif_erlang_setelement_3(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, tuple_size + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, tuple_size + 1, 2, argv + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term new_tuple = term_alloc_tuple(tuple_size, &ctx->heap);
@@ -1742,7 +1743,7 @@ static term nif_erlang_tuple_to_list_1(Context *ctx, int argc, term argv[])
 
     int tuple_size = term_get_tuple_arity(argv[0]);
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, tuple_size * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, tuple_size * 2, 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -1768,7 +1769,7 @@ static term nif_erlang_list_to_tuple_1(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(len), 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term tuple = term_alloc_tuple(len, &ctx->heap);
@@ -1918,11 +1919,11 @@ static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(value, term_is_binary);
 
     int bin_size = term_binary_size(value);
-    if (UNLIKELY(memory_ensure_free_opt(ctx, bin_size * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, bin_size * 2, 1, &value, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    const uint8_t *bin_data = (const uint8_t *) term_binary_data(argv[0]);
+    const uint8_t *bin_data = (const uint8_t *) term_binary_data(value);
 
     term prev = term_nil();
     for (int i = bin_size - 1; i >= 0; i--) {
@@ -2370,7 +2371,7 @@ static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
         buf_allocated = false;
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(bin_size), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, term_binary_heap_size(bin_size), 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         if (buf_allocated) {
             free(bin_buf);
         }
@@ -2898,10 +2899,10 @@ static term nif_binary_part_3(Context *ctx, int argc, term argv[])
     }
 
     size_t size = term_sub_binary_heap_size(bin_term, len);
-    if (UNLIKELY(memory_ensure_free_opt(ctx, size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, size, 1, &bin_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    return term_maybe_create_sub_binary(argv[0], pos, len, &ctx->heap, ctx->global);
+    return term_maybe_create_sub_binary(bin_term, pos, len, &ctx->heap, ctx->global);
 }
 
 static term nif_binary_split_2(Context *ctx, int argc, term argv[])
@@ -2936,7 +2937,7 @@ static term nif_binary_split_2(Context *ctx, int argc, term argv[])
         size_t rest_size_in_terms = term_sub_binary_heap_size(bin_term, rest_size);
 
         // + 4 which is the result cons
-        if (UNLIKELY(memory_ensure_free_opt(ctx, tok_size_in_terms + rest_size_in_terms + 4, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, tok_size_in_terms + rest_size_in_terms + 4, 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 
@@ -2950,7 +2951,7 @@ static term nif_binary_split_2(Context *ctx, int argc, term argv[])
         return result_list;
 
     } else {
-        if (UNLIKELY(memory_ensure_free_opt(ctx, 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, 2, 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 
@@ -3281,9 +3282,10 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
+    term object_type = argv[0];
     term target_pid = argv[1];
 
-    if (argv[0] != PROCESS_ATOM && argv[0] != PORT_ATOM) {
+    if (object_type != PROCESS_ATOM && object_type != PORT_ATOM) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -3301,14 +3303,14 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
         term down_message_tuple = term_alloc_tuple(5, &ctx->heap);
         term_put_tuple_element(down_message_tuple, 0, DOWN_ATOM);
         term_put_tuple_element(down_message_tuple, 1, ref);
-        term_put_tuple_element(down_message_tuple, 2, argv[0]);
-        term_put_tuple_element(down_message_tuple, 3, argv[1]);
+        term_put_tuple_element(down_message_tuple, 2, object_type);
+        term_put_tuple_element(down_message_tuple, 3, target_pid);
         term_put_tuple_element(down_message_tuple, 4, NOPROC_ATOM);
         mailbox_send(ctx, down_message_tuple);
         return ref;
     }
 
-    if ((argv[0] == PROCESS_ATOM && target->native_handler != NULL) || (argv[0] == PORT_ATOM && target->native_handler == NULL)) {
+    if ((object_type == PROCESS_ATOM && target->native_handler != NULL) || (object_type == PORT_ATOM && target->native_handler == NULL)) {
         RAISE_ERROR(BADARG_ATOM);
     }
     term callee_pid = term_from_local_process_id(ctx->process_id);
@@ -3935,12 +3937,12 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
     size_t heap_free = return_binary ?
         term_binary_heap_size(dst_size_with_pad)
         : 2*dst_size_with_pad;
-    if (UNLIKELY(memory_ensure_free_opt(ctx, heap_free, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_free, 1, &src, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     // src may have been invalidated by GC
-    if (term_is_binary(argv[0])) {
-        src_pos = (uint8_t *) term_binary_data(argv[0]);
+    if (term_is_binary(src)) {
+        src_pos = (uint8_t *) term_binary_data(src);
     }
     term dst;
     uint8_t *dst_pos;
@@ -4083,7 +4085,7 @@ static term base64_decode(Context *ctx, int argc, term argv[], bool return_binar
     size_t heap_free = return_binary ?
         term_binary_heap_size(dst_size)
         : 2*dst_size;
-    if (UNLIKELY(memory_ensure_free_opt(ctx, heap_free, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_free, 1, &src, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term dst = term_invalid_term();
@@ -4099,8 +4101,8 @@ static term base64_decode(Context *ctx, int argc, term argv[], bool return_binar
         }
         dst_pos = dst_buf;
     }
-    if (term_is_binary(argv[0])) {
-        src_pos = (uint8_t *) term_binary_data(argv[0]);
+    if (term_is_binary(src)) {
+        src_pos = (uint8_t *) term_binary_data(src);
     }
     size_t n = src_size - pad;
     for (size_t i = 0; i < n; ++i) {
@@ -4310,12 +4312,11 @@ static term nif_maps_next(Context *ctx, int argc, term argv[])
         return NONE_ATOM;
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, 6, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, 6, 1, &iterator, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     // recompute all the terms we need (after possible GC)
-    iterator = argv[0];
     map = term_get_list_tail(iterator);
     term key = term_get_map_key(map, pos);
     term value = term_get_map_value(map, pos);
@@ -4361,7 +4362,7 @@ static term nif_unicode_characters_to_list(Context *ctx, int argc, term argv[])
         free(chars);
         RAISE_ERROR(BADARG_ATOM);
     }
-    if (UNLIKELY(memory_ensure_free(ctx, needed_terms) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, needed_terms, 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         free(chars);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
@@ -4421,7 +4422,7 @@ static term nif_unicode_characters_to_binary(Context *ctx, int argc, term argv[]
     if (UNLIKELY(conv_result == UnicodeBadArg)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-    if (UNLIKELY(memory_ensure_free(ctx, needed_terms) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, needed_terms, 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term result = term_create_uninitialized_binary(len, &ctx->heap, ctx->global);

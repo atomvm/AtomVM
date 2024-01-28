@@ -279,6 +279,7 @@ static term nif_esp_partition_write(Context *ctx, int argc, term argv[])
 static term nif_esp_partition_list(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
+    UNUSED(argv);
 
     size_t needed = 0;
 

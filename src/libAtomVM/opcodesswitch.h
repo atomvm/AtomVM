@@ -237,6 +237,14 @@ typedef dreg_t dreg_gc_safe_t;
     }                                                                                   \
 }
 
+#define DECODE_NIL(decode_pc)                                                           \
+{                                                                                       \
+    if ((*(decode_pc)++) != COMPACT_ATOM) {                                             \
+        fprintf(stderr, "Unexpected operand, expected nil, got %x\n", (decode_pc)[-1]); \
+        AVM_ABORT();                                                                    \
+    }                                                                                   \
+}
+
 #ifdef ENABLE_TRACE
 
 #define DECODE_DEST_REGISTER(dreg, decode_pc)                                                       \
@@ -610,6 +618,11 @@ typedef struct
     decode_pc++;                                                                        \
 }
 
+#define DECODE_NIL(decode_pc)                                                           \
+{                                                                                       \
+    decode_pc++;                                                                        \
+}
+
 #define DECODE_DEST_REGISTER(dreg, decode_pc)                                                                   \
 {                                                                                                               \
     uint8_t first_byte = *(decode_pc)++;                                                                        \
@@ -956,7 +969,7 @@ typedef struct
             PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value);              \
             x_regs[0] = return_value;                                   \
             if (ctx->heap.root->next) {                                 \
-                if (UNLIKELY(memory_ensure_free_opt(ctx, 0, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) { \
+                if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, x_regs, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) { \
                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);                    \
                 }                                                       \
             }                                                           \
@@ -1141,7 +1154,7 @@ COLD_FUNC static void dump(Context *ctx)
     fprintf(stderr, "\n");
 
     fprintf(stderr, "\nStacktrace:\n");
-    term_display(stderr, stacktrace_build(ctx, &ctx->x[2]), ctx);
+    term_display(stderr, stacktrace_build(ctx, &ctx->x[2], 3), ctx);
     fprintf(stderr, "\n\n");
 
     {
@@ -1183,13 +1196,6 @@ COLD_FUNC static void dump(Context *ctx)
 
         ct++;
     }
-
-    fprintf(stderr, "\n\nRegisters\n----------");
-    for (int i = 0; i < 16; i++) {
-        fprintf(stderr, "\nx[%i]: ", i);
-        term_display(stderr, ctx->x[i], ctx);
-    }
-    fprintf(stderr, "\n");
 
     fprintf(stderr, "\n\nMailbox\n--------\n");
     mailbox_crashdump(ctx);
@@ -1317,12 +1323,12 @@ static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *co
     }
 }
 
-term make_fun(Context *ctx, const Module *mod, int fun_index)
+term make_fun(Context *ctx, const Module *mod, int fun_index, term argv[])
 {
     uint32_t n_freeze = module_get_fun_freeze(mod, fun_index);
 
     int size = BOXED_FUN_SIZE + n_freeze;
-    if (memory_ensure_free_opt(ctx, size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+    if (memory_ensure_free_with_roots(ctx, size, n_freeze, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
         return term_invalid_term();
     }
     term *boxed_func = memory_heap_alloc(&ctx->heap, size);
@@ -1332,7 +1338,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index)
     boxed_func[2] = term_from_int(fun_index);
 
     for (uint32_t i = 3; i < n_freeze + 3; i++) {
-        boxed_func[i] = ctx->x[i - 3];
+        boxed_func[i] = argv[i - 3];
     }
 
     return ((term) boxed_func) | TERM_BOXED_VALUE_TAG;
@@ -1757,7 +1763,7 @@ schedule_in:
                             PROCESS_MAYBE_TRAP_RETURN_VALUE_RESTORE_PC(return_value, orig_pc);
                             x_regs[0] = return_value;
                             if (ctx->heap.root->next) {
-                                if (UNLIKELY(memory_ensure_free_opt(ctx, 0, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+                                if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, x_regs, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
                                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                                 }
                             }
@@ -1846,7 +1852,7 @@ schedule_in:
                             ctx->e += (n_words + 1);
 
                             if (ctx->heap.root->next) {
-                                if (UNLIKELY(memory_ensure_free_opt(ctx, 0, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+                                if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, x_regs, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
                                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                                 }
                             }
@@ -2014,10 +2020,8 @@ schedule_in:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    context_clean_registers(ctx, live);
-
                     if (ctx->heap.root->next || ((ctx->heap.heap_ptr > ctx->e - (stack_need + 1)))) {
-                        if (UNLIKELY(memory_ensure_free_opt(ctx, stack_need + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     }
@@ -2047,10 +2051,8 @@ schedule_in:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    context_clean_registers(ctx, live);
-
                     if (ctx->heap.root->next || ((ctx->heap.heap_ptr + heap_need) > ctx->e - (stack_need + 1))) {
-                        if (UNLIKELY(memory_ensure_free_opt(ctx, heap_need + stack_need + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need + stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     }
@@ -2077,10 +2079,8 @@ schedule_in:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    context_clean_registers(ctx, live);
-
                     if (ctx->heap.root->next || ((ctx->heap.heap_ptr > ctx->e - (stack_need + 1)))) {
-                        if (UNLIKELY(memory_ensure_free_opt(ctx, stack_need + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     }
@@ -2115,10 +2115,8 @@ schedule_in:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    context_clean_registers(ctx, live);
-
                     if (ctx->heap.root->next || ((ctx->heap.heap_ptr + heap_need) > ctx->e - (stack_need + 1))) {
-                        if (UNLIKELY(memory_ensure_free_opt(ctx, heap_need + stack_need + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need + stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     }
@@ -2146,15 +2144,13 @@ schedule_in:
                     size_t heap_free = context_avail_free_memory(ctx);
                     // if we need more heap space than is currently free, then try to GC the needed space
                     if (heap_free < heap_need) {
-                        context_clean_registers(ctx, live_registers);
-                        if (UNLIKELY(memory_ensure_free_opt(ctx, heap_need, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need, live_registers, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     // otherwise, there is enough space for the needed heap, but there might
                     // more more than necessary.  In that case, try to shrink the heap.
                     } else if (heap_free > heap_need * HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF) {
-                        context_clean_registers(ctx, live_registers);
-                        if (UNLIKELY(memory_ensure_free_opt(ctx, heap_need * (HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF / 2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need * (HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF / 2), live_registers, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             TRACE("Unable to ensure free memory.  heap_need=%i\n", heap_need);
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
@@ -2188,8 +2184,9 @@ schedule_in:
                     ctx->cp = ctx->e[n_words];
                     ctx->e += n_words + 1;
                     DEBUG_DUMP_STACK(ctx);
+                    // Hopefully, we only need x[0]
                     if (ctx->heap.root->next) {
-                        if (UNLIKELY(memory_ensure_free_opt(ctx, 0, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, x_regs, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     }
@@ -2212,7 +2209,6 @@ schedule_in:
                 break;
             }
 
-            //TODO: implement send/0
             case OP_SEND: {
                 #ifdef IMPL_CODE_LOADER
                     TRACE("send/0\n");
@@ -3048,7 +3044,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    TRACE("get_list/2\n");
+                    TRACE("get_list/3\n");
                     UNUSED(src_value)
                 #endif
                 break;
@@ -3176,13 +3172,6 @@ wait_timeout_trap_handler:
 #endif
 
             case OP_BADMATCH: {
-                #ifdef IMPL_EXECUTE_LOOP
-                    // We can gc as we are raising
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                #endif
-
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
@@ -3193,6 +3182,11 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("badmatch/1, v=0x%lx\n", arg1);
+
+                    // We can gc as we are raising
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &arg1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
 
                     term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
                     term_put_tuple_element(new_error_tuple, 0, BADMATCH_ATOM);
@@ -3216,13 +3210,6 @@ wait_timeout_trap_handler:
             }
 
             case OP_CASE_END: {
-                #ifdef IMPL_EXECUTE_LOOP
-                    // We can gc as we are raising
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                #endif
-
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
@@ -3233,6 +3220,11 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("case_end/1, v=0x%lx\n", arg1);
+
+                    // We can gc as we are raising
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &arg1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
 
                     term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
                     term_put_tuple_element(new_error_tuple, 0, CASE_CLAUSE_ATOM);
@@ -3260,12 +3252,12 @@ wait_timeout_trap_handler:
                     term fun = x_regs[args_count];
                     if (UNLIKELY(!term_is_function(fun))) {
                         // We can gc as we are raising
-                        if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &fun, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                         term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
                         term_put_tuple_element(new_error_tuple, 0, BADFUN_ATOM);
-                        term_put_tuple_element(new_error_tuple, 1, x_regs[args_count]);
+                        term_put_tuple_element(new_error_tuple, 1, fun);
                         RAISE_ERROR(new_error_tuple);
                     }
 
@@ -3329,7 +3321,7 @@ wait_timeout_trap_handler:
                             x_regs[0] = return_value;
 
                             if (ctx->heap.root->next) {
-                                if (UNLIKELY(memory_ensure_free_opt(ctx, 0, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+                                if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, x_regs, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
                                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                                 }
                             }
@@ -3384,7 +3376,7 @@ wait_timeout_trap_handler:
 
                 TRACE("make_fun/2, fun_index=%i\n", fun_index);
                 #ifdef IMPL_EXECUTE_LOOP
-                    term f = make_fun(ctx, mod, fun_index);
+                    term f = make_fun(ctx, mod, fun_index, x_regs);
                     if (term_is_invalid_term(f)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     } else {
@@ -3437,13 +3429,6 @@ wait_timeout_trap_handler:
             }
 
             case OP_TRY_CASE_END: {
-                #ifdef IMPL_EXECUTE_LOOP
-                    // We can gc as we are raising
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                #endif
-
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
@@ -3454,6 +3439,11 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("try_case_end/1, val=%lx\n", arg1);
+
+                    // We can gc as we are raising
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &arg1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
 
                     term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
                     term_put_tuple_element(new_error_tuple, 0, TRY_CLAUSE_ATOM);
@@ -3522,9 +3512,9 @@ wait_timeout_trap_handler:
                             break;
 
                         case ERROR_ATOM_INDEX: {
-                            x_regs[2] = stacktrace_build(ctx, &x_regs[2]);
+                            x_regs[2] = stacktrace_build(ctx, &x_regs[2], 3);
                             // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
-                            if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2) * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                            if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2) * 2, 2, x_regs + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
                             term reason_tuple = term_alloc_tuple(2, &ctx->heap);
@@ -3539,7 +3529,7 @@ wait_timeout_trap_handler:
                         }
                         case LOWERCASE_EXIT_ATOM_INDEX: {
                             // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
-                            if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                            if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, x_regs + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
                             term exit_tuple = term_alloc_tuple(2, &ctx->heap);
@@ -3550,7 +3540,7 @@ wait_timeout_trap_handler:
                             break;
                         }
                     }
-#endif
+                #endif
                 break;
             }
 
@@ -3591,9 +3581,8 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(size, pc)
                 uint32_t words;
                 DECODE_LITERAL(words, pc)
-                uint32_t regs;
-                UNUSED(regs);
-                DECODE_LITERAL(regs, pc)
+                uint32_t live;
+                DECODE_LITERAL(live, pc)
                 term flags;
                 UNUSED(flags);
                 DECODE_COMPACT_TERM(flags, pc)
@@ -3606,7 +3595,7 @@ wait_timeout_trap_handler:
                     VERIFY_IS_INTEGER(size, "bs_init2");
                     avm_int_t size_val = term_to_int(size);
 
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, words + term_binary_heap_size(size_val), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, words + term_binary_heap_size(size_val), live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     term t = term_create_empty_binary(size_val, &ctx->heap, ctx->global);
@@ -3619,7 +3608,7 @@ wait_timeout_trap_handler:
                 DECODE_DEST_REGISTER(dreg, pc);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_init2/6, fail=%u size=%li words=%u regs=%u dreg=%c%i\n", (unsigned) fail, size_val, (unsigned) words, (unsigned) regs, T_DEST_REG(dreg));
+                    TRACE("bs_init2/6, fail=%u size=%li words=%u live=%u dreg=%c%i\n", (unsigned) fail, size_val, (unsigned) words, (unsigned) live, T_DEST_REG(dreg));
                     WRITE_REGISTER(dreg, t);
                 #endif
                 break;
@@ -3632,8 +3621,8 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(size, pc)
                 uint32_t words;
                 DECODE_LITERAL(words, pc)
-                uint32_t regs;
-                DECODE_LITERAL(regs, pc)
+                uint32_t live;
+                DECODE_LITERAL(live, pc)
                 uint32_t flags_value;
                 DECODE_LITERAL(flags_value, pc)
 
@@ -3653,7 +3642,7 @@ wait_timeout_trap_handler:
                         RAISE_ERROR(UNSUPPORTED_ATOM);
                     }
 
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, words + term_binary_heap_size(size_val / 8), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, words + term_binary_heap_size(size_val / 8), live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     term t = term_create_empty_binary(size_val / 8, &ctx->heap, ctx->global);
@@ -3666,7 +3655,7 @@ wait_timeout_trap_handler:
                 DECODE_DEST_REGISTER(dreg, pc);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_init_bits/6, fail=%i size=%li words=%i regs=%i dreg=%c%i\n", fail, size_val, words, regs, T_DEST_REG(dreg));
+                    TRACE("bs_init_bits/6, fail=%i size=%li words=%i live=%u dreg=%c%i\n", fail, size_val, words, (unsigned) live, T_DEST_REG(dreg));
                     WRITE_REGISTER(dreg, t);
                 #endif
                 break;
@@ -4082,9 +4071,9 @@ wait_timeout_trap_handler:
                 term extra;
                 UNUSED(extra);
                 DECODE_COMPACT_TERM(extra, pc)
-                term live;
+                uint32_t live;
                 UNUSED(live);
-                DECODE_COMPACT_TERM(live, pc)
+                DECODE_LITERAL(live, pc);
                 uint32_t unit;
                 DECODE_LITERAL(unit, pc);
                 term src;
@@ -4118,7 +4107,7 @@ wait_timeout_trap_handler:
 
                     size_t src_size = term_binary_size(src);
                     // TODO: further investigate extra_val
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, src_size + term_binary_heap_size(size_val / 8) + extra_val, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, src_size + term_binary_heap_size(size_val / 8) + extra_val, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
@@ -4325,24 +4314,21 @@ wait_timeout_trap_handler:
             case OP_BS_START_MATCH2: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
-                #ifdef IMPL_EXECUTE_LOOP
-                    const uint8_t *src_pc = pc;
-                #endif
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
-                term arg2;
-                DECODE_COMPACT_TERM(arg2, pc);
+                uint32_t live;
+                DECODE_LITERAL(live, pc);
                 term slots_term;
                 DECODE_COMPACT_TERM(slots_term, pc);
                 #ifdef IMPL_EXECUTE_LOOP
                     int slots = term_to_int(slots_term);
 
                     // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
-                    if (memory_ensure_free_opt(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE + slots, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+                    x_regs[live] = src;
+                    if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE + slots, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-
-                    DECODE_COMPACT_TERM(src, src_pc);
+                    src = x_regs[live];
                 #endif
 
                 DEST_REGISTER(dreg);
@@ -4353,7 +4339,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_start_match2/5, fail=%i src=0x%lx arg2=0x%lx arg3=0x%lx dreg=%c%i\n", fail, src, arg2, slots_term, T_DEST_REG(dreg));
+                    TRACE("bs_start_match2/5, fail=%i src=0x%lx live=%u arg3=0x%lx dreg=%c%i\n", fail, src, (unsigned) live, slots_term, T_DEST_REG(dreg));
                     if (!(term_is_binary(src) || term_is_match_state(src))) {
                         WRITE_REGISTER(dreg, src);
                         pc = mod->labels[fail];
@@ -4369,35 +4355,36 @@ wait_timeout_trap_handler:
 
 #if MAXIMUM_OTP_COMPILER_VERSION >= 22
             case OP_BS_START_MATCH3: {
-                // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
-                #ifdef IMPL_EXECUTE_LOOP
-                    if (memory_ensure_free_opt(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                #endif
-
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
-                term live;
-                DECODE_COMPACT_TERM(live, pc);
-                DEST_REGISTER(dreg);
-                DECODE_DEST_REGISTER(dreg, pc);
+                uint32_t live;
+                DECODE_LITERAL(live, pc);
+                GC_SAFE_DEST_REGISTER(dreg);
+                DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("bs_start_match3/4\n");
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_start_match3/4, fail=%i src=0x%lx live=0x%lx dreg=%c%i\n", fail, src, live, T_DEST_REG(dreg));
+                    // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
+                    #ifdef IMPL_EXECUTE_LOOP
+                        x_regs[live] = src;
+                        if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        }
+                        src = x_regs[live];
+                    #endif
+                    TRACE("bs_start_match3/4, fail=%i src=0x%lx live=%u dreg=%c%i\n", fail, src, live, T_DEST_REG_UNSAFE(dreg));
                     if (!(term_is_binary(src) || term_is_match_state(src))) {
-                        WRITE_REGISTER(dreg, src);
+                        WRITE_REGISTER_GC_SAFE(dreg, src);
                         pc = mod->labels[fail];
                     } else {
                         term match_state = term_alloc_bin_match_state(src, 0, &ctx->heap);
 
-                        WRITE_REGISTER(dreg, match_state);
+                        WRITE_REGISTER_GC_SAFE(dreg, match_state);
                     }
                 #endif
                 break;
@@ -4408,8 +4395,10 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(src, pc);
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
-                term live;
-                DECODE_COMPACT_TERM(live, pc);
+                // TODO: determine why we're not GC-ing here as we have live
+                uint32_t live;
+                UNUSED(live);
+                DECODE_LITERAL(live, pc);
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("bs_get_position/3\n");
@@ -4418,7 +4407,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_get_position");
 
-                    TRACE("bs_get_position/3 src=0x%lx dreg=%c%i live=0x%lx \n", src, T_DEST_REG(dreg), live);
+                    TRACE("bs_get_position/3 src=0x%lx dreg=%c%i live=%u\n", src, T_DEST_REG(dreg), live);
 
                     avm_int_t offset = term_get_match_state_offset(src);
                     term offset_term = term_from_int(offset);
@@ -4430,14 +4419,11 @@ wait_timeout_trap_handler:
 
             case OP_BS_GET_TAIL: {
                 term src;
-                #ifdef IMPL_EXECUTE_LOOP
-                    const uint8_t *src_pc = pc;
-                #endif
                 DECODE_COMPACT_TERM(src, pc);
                 GC_SAFE_DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
-                term live;
-                DECODE_COMPACT_TERM(live, pc);
+                uint32_t live;
+                DECODE_LITERAL(live, pc);
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("bs_get_tail/3\n");
@@ -4449,7 +4435,7 @@ wait_timeout_trap_handler:
                     avm_int_t bs_offset = term_get_match_state_offset(src);
                     term bs_bin = term_get_match_state_binary(src);
 
-                    TRACE("bs_get_tail/3 src=0x%lx dreg=%c%i live=0x%lx \n", src, T_DEST_REG_GC_SAFE(dreg), live);
+                    TRACE("bs_get_tail/3 src=0x%lx dreg=%c%i live=%u\n", src, T_DEST_REG_GC_SAFE(dreg), live);
                     if (bs_offset == 0) {
 
                         WRITE_REGISTER_GC_SAFE(dreg, bs_bin);
@@ -4464,11 +4450,11 @@ wait_timeout_trap_handler:
                             size_t new_bin_size = src_size - start_pos;
                             size_t heap_size = term_sub_binary_heap_size(bs_bin, src_size - start_pos);
 
-
-                            if (UNLIKELY(memory_ensure_free_opt(ctx, heap_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                            x_regs[live] = src;
+                            if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
-                            DECODE_COMPACT_TERM(src, src_pc);
+                            src = x_regs[live];
                             bs_bin = term_get_match_state_binary(src);
                             term t = term_maybe_create_sub_binary(bs_bin, start_pos, new_bin_size, &ctx->heap, ctx->global);
                             WRITE_REGISTER_GC_SAFE(dreg, t);
@@ -4713,8 +4699,8 @@ wait_timeout_trap_handler:
                 DECODE_LABEL(fail, pc)
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
-                term arg2;
-                DECODE_COMPACT_TERM(arg2, pc);
+                uint32_t live;
+                DECODE_LITERAL(live, pc);
                 term size;
                 DECODE_COMPACT_TERM(size, pc);
                 uint32_t unit;
@@ -4732,7 +4718,7 @@ wait_timeout_trap_handler:
 
                     avm_int_t size_val = term_to_int(size);
 
-                    TRACE("bs_get_integer2/7, fail=%u src=%p size=%u unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned) size_val, (unsigned) unit, (int) flags_value);
+                    TRACE("bs_get_integer2/7, fail=%u src=%p live=%u size=%u unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned) size_val, (unsigned) live, (unsigned) unit, (int) flags_value);
 
                     avm_int_t increment = size_val * unit;
                     union maybe_unsigned_int64 value;
@@ -4835,8 +4821,8 @@ wait_timeout_trap_handler:
                     const uint8_t *src_pc = pc;
                 #endif
                 DECODE_COMPACT_TERM(src, pc);
-                term arg2;
-                DECODE_COMPACT_TERM(arg2, pc);
+                uint32_t live;
+                DECODE_LITERAL(live, pc);
                 term size;
                 DECODE_COMPACT_TERM(size, pc);
                 uint32_t unit;
@@ -4876,7 +4862,7 @@ wait_timeout_trap_handler:
                         RAISE_ERROR(UNSUPPORTED_ATOM);
                     }
 
-                    TRACE("bs_get_binary2/7, fail=%u src=%p unit=%u\n", (unsigned) fail, (void *) bs_bin, (unsigned) unit);
+                    TRACE("bs_get_binary2/7, fail=%u src=%p live=%u unit=%u\n", (unsigned) fail, (void *) bs_bin, (unsigned) live, (unsigned) unit);
 
                     if ((unsigned int) (bs_offset / unit + size_val) > term_binary_size(bs_bin)) {
                         TRACE("bs_get_binary2: insufficient capacity -- bs_offset = %d, size_val = %d\n", (int) bs_offset, (int) size_val);
@@ -4885,7 +4871,7 @@ wait_timeout_trap_handler:
                         term_set_match_state_offset(src, bs_offset + size_val * unit);
 
                         size_t heap_size = term_sub_binary_heap_size(bs_bin, size_val);
-                        if (UNLIKELY(memory_ensure_free_opt(ctx, heap_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                 #endif
@@ -4927,12 +4913,9 @@ wait_timeout_trap_handler:
                             term src_bin = term_get_match_state_binary(src);
                             int len = term_binary_size(src_bin) - offset / 8;
                             size_t heap_size = term_sub_binary_heap_size(src_bin, len);
-                            if (UNLIKELY(memory_ensure_free_opt(ctx, heap_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                            if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, 1, &src_bin, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
-                            // src might be invalid after a GC
-                            src = READ_DEST_REGISTER_GC_SAFE(dreg);
-                            src_bin = term_get_match_state_binary(src);
                             bin = term_maybe_create_sub_binary(src_bin, offset / 8, len, &ctx->heap, ctx->global);
                         }
                     } else {
@@ -5344,9 +5327,6 @@ wait_timeout_trap_handler:
                 uint32_t label;
                 DECODE_LABEL(label, pc)
                 term src;
-                #ifdef IMPL_EXECUTE_LOOP
-                    const uint8_t *src_pc = pc;
-                #endif
                 DECODE_COMPACT_TERM(src, pc);
                 GC_SAFE_DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
@@ -5392,10 +5372,11 @@ wait_timeout_trap_handler:
                     bool is_shared = new_entries == 0;
                     size_t heap_needed = term_map_size_in_terms_maybe_shared(new_map_size, is_shared);
                     // MEMORY_CAN_SHRINK because put_map is classified as gc in beam_ssa_codegen.erl
-                    if (memory_ensure_free_opt(ctx, heap_needed, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+                    x_regs[live] = src;
+                    if (memory_ensure_free_with_roots(ctx, heap_needed, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    DECODE_COMPACT_TERM(src, src_pc);
+                    src = x_regs[live];
                     //
                     //
                     //
@@ -5475,9 +5456,6 @@ wait_timeout_trap_handler:
                 uint32_t label;
                 DECODE_LABEL(label, pc)
                 term src;
-                #ifdef IMPL_EXECUTE_LOOP
-                    const uint8_t *src_pc = pc;
-                #endif
                 DECODE_COMPACT_TERM(src, pc);
                 GC_SAFE_DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
@@ -5516,10 +5494,11 @@ wait_timeout_trap_handler:
                     //
                     size_t src_size = term_get_map_size(src);
                     // MEMORY_CAN_SHRINK because put_map is classified as gc in beam_ssa_codegen.erl
-                    if (memory_ensure_free_opt(ctx, term_map_size_in_terms_maybe_shared(src_size, true), MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+                    x_regs[live] = src;
+                    if (memory_ensure_free_with_roots(ctx, term_map_size_in_terms_maybe_shared(src_size, true), live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    DECODE_COMPACT_TERM(src, src_pc);
+                    src = x_regs[live];
                     //
                     // Create a new map of the same size as src and populate with entries from src
                     //
@@ -5949,7 +5928,7 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
 
-                    x_regs[0] = stacktrace_build(ctx, &x_regs[0]);
+                    x_regs[0] = stacktrace_build(ctx, &x_regs[0], 1);
 
                 #endif
                 break;
@@ -6052,19 +6031,26 @@ wait_timeout_trap_handler:
             }
 
             case OP_BS_START_MATCH4: {
+                // fail since OTP 23 might be either 'no_fail', 'resume' or a fail label
+                // TODO: figure out what could fail
+                term fail;
+                DECODE_COMPACT_TERM(fail, pc);
+                #ifdef IMPL_EXECUTE_LOOP
+                if (!term_is_integer(fail) && !term_is_atom(fail)) {
+                    fprintf(stderr, "Unexpected fail term ");
+                    term_display(stderr, fail, ctx);
+                    fprintf(stderr, "\n");
+                    AVM_ABORT();
+                }
+                #endif
+                uint32_t live;
+                DECODE_LITERAL(live, pc);
                 #ifdef IMPL_EXECUTE_LOOP
                     // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
-                    if (memory_ensure_free_opt(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+                    if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
-
-                // fail since OTP 23 might be either 'no_fail', 'resume' or a fail label
-                // we are ignoring this right now, but we might use it for future optimizations.
-                term fail;
-                DECODE_COMPACT_TERM(fail, pc);
-                uint32_t live;
-                DECODE_LITERAL(live, pc);
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
                 DEST_REGISTER(dreg);
@@ -6292,8 +6278,7 @@ wait_timeout_trap_handler:
                         TRACE("bs_create_bin/6: total binary size (%li) is not evenly divisible by 8\n", binary_size);
                         RAISE_ERROR(UNSUPPORTED_ATOM);
                     }
-                    context_clean_registers(ctx, live);
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, alloc + term_binary_heap_size(binary_size / 8), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, alloc + term_binary_heap_size(binary_size / 8), live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     term t = term_create_empty_binary(binary_size / 8, &ctx->heap, ctx->global);
@@ -6444,9 +6429,6 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(tag, pc)
                 unsigned int args_count;
                 DECODE_LITERAL(args_count, pc)
-                #ifdef IMPL_EXECUTE_LOOP
-                    const uint8_t *fun_pc = pc;
-                #endif
                 term fun;
                 DECODE_COMPACT_TERM(fun, pc)
 
@@ -6456,11 +6438,9 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     if (UNLIKELY(!term_is_function(fun))) {
                         // We can gc as we are raising
-                        if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &fun, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
-                        // Decode the function again after GC was possibly run
-                        DECODE_COMPACT_TERM(fun, fun_pc)
                         term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
                         term_put_tuple_element(new_error_tuple, 0, BADFUN_ATOM);
                         term_put_tuple_element(new_error_tuple, 1, fun);
@@ -6475,12 +6455,13 @@ wait_timeout_trap_handler:
                 TRACE("badrecord/1\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    // We can gc as we are raising
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
                     term value;
                     DECODE_COMPACT_TERM(value, pc)
+
+                    // We can gc as we are raising
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &value, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
                     term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
                     term_put_tuple_element(new_error_tuple, 0, BADRECORD_ATOM);
                     term_put_tuple_element(new_error_tuple, 1, value);
@@ -6506,10 +6487,6 @@ wait_timeout_trap_handler:
                 DECODE_ATOM(hint, pc);
                 int size;
                 DECODE_LITERAL(size, pc);
-                #ifdef IMPL_EXECUTE_LOOP
-                    term dst;
-                    dst = term_alloc_tuple(size, &ctx->heap);
-                #endif
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
                 DEST_REGISTER(dreg);
@@ -6524,6 +6501,9 @@ wait_timeout_trap_handler:
                 int list_len;
                 DECODE_LITERAL(list_len, pc);
                 #ifdef IMPL_EXECUTE_LOOP
+                    term dst;
+                    dst = term_alloc_tuple(size, &ctx->heap);
+
                     TRACE("update_record/5 hint=%lu, size=%i, src=%p, dst=%p, updates_len=%d\n", hint, size, (void *)src, (void *)dst, list_len);
                     bool reuse = hint == REUSE_ATOM;
                     for (int j = 0;  j < size; j++) {
@@ -6564,9 +6544,6 @@ wait_timeout_trap_handler:
 
                 int fail;
                 DECODE_LABEL(fail, pc);
-                #ifdef IMPL_EXECUTE_LOOP
-                    const uint8_t *match_pc = pc;
-                #endif
                 term match_state;
                 DECODE_COMPACT_TERM(match_state, pc);
                 #ifdef IMPL_EXECUTE_LOOP
@@ -6623,7 +6600,7 @@ wait_timeout_trap_handler:
                         }
 
                         case INTEGER_ATOM: {
-                            int live;
+                            uint32_t live;
                             DECODE_LITERAL(live, pc);
                             j++;
                             term flags;
@@ -6666,7 +6643,7 @@ wait_timeout_trap_handler:
                         }
 
                         case BINARY_ATOM: {
-                            int live;
+                            uint32_t live;
                             DECODE_LITERAL(live, pc);
                             j++;
                             term flags;
@@ -6683,7 +6660,6 @@ wait_timeout_trap_handler:
                             DECODE_LITERAL(unit, pc);
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
-                                // context_clean_registers(ctx, live); // TODO: check if needed
                                 int matched_bits = size * unit;
                                 if (bs_offset % 8 != 0 || matched_bits % 8 != 0) {
                                     TRACE("bs_match/3: Unsupported.  Offset on binary read must be aligned on byte boundaries.\n");
@@ -6694,12 +6670,11 @@ wait_timeout_trap_handler:
                                     goto bs_match_jump_to_fail;
                                 }
                                 size_t heap_size = term_sub_binary_heap_size(bs_bin, matched_bits / 8);
-                                if (UNLIKELY(memory_ensure_free_opt(ctx, heap_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                                x_regs[live] = match_state;
+                                if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                                 }
-                                // re-compute match_state as GC could have moved it
-                                const uint8_t *temp = match_pc;
-                                DECODE_COMPACT_TERM(match_state, temp);
+                                match_state = x_regs[live];
                                 bs_bin = term_get_match_state_binary(match_state);
                                 term t = term_maybe_create_sub_binary(bs_bin, bs_offset / 8, matched_bits / 8, &ctx->heap, ctx->global);
                             #endif
@@ -6714,14 +6689,13 @@ wait_timeout_trap_handler:
                         }
 
                         case GET_TAIL_ATOM: {
-                            int live;
+                            uint32_t live;
                             DECODE_LITERAL(live, pc);
                             j++;
                             int unit;
                             DECODE_LITERAL(unit, pc);
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
-                                // context_clean_registers(ctx, live); // TODO: check if needed
                                 size_t total_bits = term_binary_size(bs_bin) * 8;
                                 size_t tail_bits = total_bits - bs_offset;
                                 if (bs_offset % 8 != 0 || tail_bits % 8 != 0) {
@@ -6729,12 +6703,11 @@ wait_timeout_trap_handler:
                                     RAISE_ERROR(BADARG_ATOM);
                                 }
                                 size_t heap_size = term_sub_binary_heap_size(bs_bin, tail_bits / 8);
-                                if (UNLIKELY(memory_ensure_free_opt(ctx, heap_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                                x_regs[live] = match_state;
+                                if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                                 }
-                                // re-compute match_state as GC could have moved it
-                                const uint8_t *temp = match_pc;
-                                DECODE_COMPACT_TERM(match_state, temp);
+                                match_state = x_regs[live];
                                 bs_bin = term_get_match_state_binary(match_state);
                                 term t = term_maybe_create_sub_binary(bs_bin, bs_offset / 8, tail_bits / 8, &ctx->heap, ctx->global);
                             #endif
@@ -6749,8 +6722,8 @@ wait_timeout_trap_handler:
                         }
 
                         case EQUAL_COLON_EQUAL_ATOM: {
-                            term live;
-                            DECODE_COMPACT_TERM(live, pc);
+                            // genot.tab says Live, but compiler always put nil
+                            DECODE_NIL(pc);
                             j++;
                             int size;
                             DECODE_LITERAL(size, pc);
@@ -6843,7 +6816,7 @@ handle_error:
             bool throw = ctx->x[0] == THROW_ATOM;
 
             int exit_reason_tuple_size = (throw ? TUPLE_SIZE(2) : 0) + TUPLE_SIZE(2);
-            if (memory_ensure_free_opt(ctx, exit_reason_tuple_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+            if (memory_ensure_free_with_roots(ctx, exit_reason_tuple_size, 1, x_regs + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
                 ctx->exit_reason = OUT_OF_MEMORY_ATOM;
             } else {
                 term error_term;

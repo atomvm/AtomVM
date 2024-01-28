@@ -21,6 +21,7 @@
 #include "stacktrace.h"
 #include "defaultatoms.h"
 #include "globalcontext.h"
+#include "memory.h"
 
 #ifndef AVM_CREATE_STACKTRACES
 
@@ -32,10 +33,11 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
     return exception_class;
 }
 
-term stacktrace_build(Context *ctx, term *stack_info)
+term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
 {
     UNUSED(ctx);
     UNUSED(stack_info);
+    UNUSED(live);
     return UNDEFINED_ATOM;
 }
 
@@ -163,7 +165,8 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
 
     // {num_frames, num_aux_terms, filename_lens, num_mods, [{module, offset}, ...]}
     size_t requested_size = TUPLE_SIZE(6) + num_frames * (2 + TUPLE_SIZE(2));
-    if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
+    // We need to preserve x0 and x1 that contain information on the current exception
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 2, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         fprintf(stderr, "WARNING: Unable to allocate heap space for raw stacktrace\n");
         return OUT_OF_MEMORY_ATOM;
     }
@@ -254,7 +257,7 @@ static term find_path_created(term module_name, struct ModulePathPair *module_pa
     return term_invalid_term();
 }
 
-term stacktrace_build(Context *ctx, term *stack_info)
+term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
 {
     GlobalContext *glb = ctx->global;
 
@@ -280,12 +283,11 @@ term stacktrace_build(Context *ctx, term *stack_info)
     // [{module, function, arity, [{file, string()}, {line, int}]}, ...]
     //
     size_t requested_size = (TUPLE_SIZE(4) + 2) * num_frames + num_aux_terms * (4 + 2 * TUPLE_SIZE(2)) + 2 * filename_lens;
-    if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, live, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         free(module_paths);
         return OUT_OF_MEMORY_ATOM;
     }
 
-    // Note.  Safe to get stacktrace after GC when stack_info comes from x[0]
     term raw_stacktrace = term_get_tuple_element(*stack_info, 4);
 
     term stacktrace = term_nil();
