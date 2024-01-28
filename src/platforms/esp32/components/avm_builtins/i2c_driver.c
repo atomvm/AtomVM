@@ -49,6 +49,8 @@
 #include "esp32_sys.h"
 #include "sys.h"
 
+#include "include/i2c_driver.h"
+
 #define TAG "i2c_driver"
 
 static void i2c_driver_init(GlobalContext *global);
@@ -89,6 +91,9 @@ struct I2CData
     i2c_cmd_handle_t cmd;
     term transmitting_pid;
     i2c_port_t i2c_num;
+
+    // no need to make it atomic, we use it only when the process table is locked
+    int ref_count;
 };
 
 #define I2C_VALIDATE_NOT_INVALID(moniker)              \
@@ -106,6 +111,7 @@ void i2c_driver_init(GlobalContext *global)
 Context *i2c_driver_create_port(GlobalContext *global, term opts)
 {
     struct I2CData *i2c_data = calloc(1, sizeof(struct I2CData));
+    i2c_data->ref_count = 1;
     i2c_data->transmitting_pid = term_invalid_term();
 
     term scl_io_num_term = interop_kv_get_value(opts, ATOM_STR("\x3", "scl"), global);
@@ -165,16 +171,23 @@ free_and_exit:
     return NULL;
 }
 
-static void i2c_driver_close(Context *ctx)
+static NativeHandlerResult i2c_driver_maybe_close(Context *ctx)
 {
     struct I2CData *i2c_data = ctx->platform_data;
+    if (--i2c_data->ref_count != 0) {
+        return NativeContinue;
+    }
+
+    ctx->platform_data = NULL;
 
     esp_err_t err = i2c_driver_delete(i2c_data->i2c_num);
     if (UNLIKELY(err != ESP_OK)) {
         ESP_LOGW(TAG, "Failed to delete I2C driver.  err=%i", err);
     }
-    free(ctx->platform_data);
-    ctx->platform_data = NULL;
+
+    free(i2c_data);
+
+    return NativeTerminate;
 }
 
 static term i2cdriver_begin_transmission(Context *ctx, term pid, term req)
@@ -564,6 +577,7 @@ static NativeHandlerResult i2cdriver_consume_mailbox(Context *ctx)
     int local_process_id = term_to_local_process_id(gen_message.pid);
 
     term ret;
+    NativeHandlerResult handler_result = NativeContinue;
 
     enum i2c_cmd cmd = interop_atom_term_select_int(cmd_table, cmd_term, ctx->global);
     switch (cmd) {
@@ -591,7 +605,11 @@ static NativeHandlerResult i2cdriver_consume_mailbox(Context *ctx)
             }
             break;
         case I2CCloseCmd:
-            i2c_driver_close(ctx);
+            // ugly hack: we lock before closing so _release and _acquire can assume
+            // ctx->platform is not changed.
+            globalcontext_get_process_lock(ctx->global, ctx->process_id);
+            handler_result = i2c_driver_maybe_close(ctx);
+            globalcontext_get_process_unlock(ctx->global, ctx);
             ret = OK_ATOM;
             break;
 
@@ -610,7 +628,60 @@ static NativeHandlerResult i2cdriver_consume_mailbox(Context *ctx)
     globalcontext_send_message(ctx->global, local_process_id, ret_msg);
     mailbox_remove_message(&ctx->mailbox, &ctx->heap);
 
-    return cmd == I2CCloseCmd ? NativeTerminate : NativeContinue;
+    return handler_result;
+}
+
+I2CAcquireResult i2c_driver_acquire(term i2c_port, i2c_port_t *i2c_num, GlobalContext *global)
+{
+    if (UNLIKELY(!term_is_pid(i2c_port))) {
+        ESP_LOGW(TAG, "Given term is not a I2C port driver.");
+        return I2CAcquireInvalidPeripheral;
+    }
+
+    int local_process_id = term_to_local_process_id(i2c_port);
+    Context *ctx = globalcontext_get_process_lock(global, local_process_id);
+
+    if ((ctx == NULL) || (ctx->native_handler != i2cdriver_consume_mailbox)
+        || (ctx->platform_data == NULL)) {
+        ESP_LOGW(TAG, "Given term is not a I2C port driver.");
+        globalcontext_get_process_unlock(global, ctx);
+        return I2CAcquireInvalidPeripheral;
+    }
+
+    struct I2CData *i2c_data = ctx->platform_data;
+    i2c_data->ref_count++;
+
+    *i2c_num = i2c_data->i2c_num;
+
+    globalcontext_get_process_unlock(global, ctx);
+
+    return I2CAcquireOk;
+}
+
+void i2c_driver_release(term i2c_port, GlobalContext *global)
+{
+    if (UNLIKELY(!term_is_pid(i2c_port))) {
+        ESP_LOGW(TAG, "Given term is not a I2C port driver.");
+        return;
+    }
+
+    int local_process_id = term_to_local_process_id(i2c_port);
+    Context *ctx = globalcontext_get_process_lock(global, local_process_id);
+
+    if ((ctx == NULL) || (ctx->native_handler != i2cdriver_consume_mailbox)
+        || (ctx->platform_data == NULL)) {
+        ESP_LOGW(TAG, "Given term is not a I2C port driver.");
+        globalcontext_get_process_unlock(global, ctx);
+        return;
+    }
+
+    struct I2CData *i2c_data = ctx->platform_data;
+    i2c_data->ref_count--;
+    NativeHandlerResult close_result = i2c_driver_maybe_close(ctx);
+    if (close_result == NativeTerminate) {
+        mailbox_send_term_signal(ctx, KillSignal, NORMAL_ATOM);
+    }
+    globalcontext_get_process_unlock(global, ctx);
 }
 
 //
