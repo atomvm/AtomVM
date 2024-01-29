@@ -254,6 +254,15 @@ void sys_init_platform(GlobalContext *glb)
     if (UNLIKELY(esp_pthread_set_cfg(&esp_pthread_cfg))) {
         AVM_ABORT();
     }
+
+    platform->entropy_mutex = smp_mutex_create();
+    if (IS_NULL_PTR(platform->entropy_mutex)) {
+        AVM_ABORT();
+    }
+    platform->random_mutex = smp_mutex_create();
+    if (IS_NULL_PTR(platform->random_mutex)) {
+        AVM_ABORT();
+    }
 #endif
 
     platform->entropy_is_initialized = false;
@@ -281,6 +290,11 @@ void sys_free_platform(GlobalContext *glb)
     if (platform->entropy_is_initialized) {
         mbedtls_entropy_free(&platform->entropy_ctx);
     }
+
+#ifndef AVM_NO_SMP
+    smp_mutex_destroy(platform->entropy_mutex);
+    smp_mutex_destroy(platform->random_mutex);
+#endif
 
     free(platform);
 }
