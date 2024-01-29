@@ -41,6 +41,7 @@ test() ->
     ok = test_join(),
     ok = test_seq(),
     ok = test_sort(),
+    ok = test_split(),
     ok = test_usort(),
     ok.
 
@@ -208,6 +209,23 @@ test_sort() ->
     ?ASSERT_ERROR(lists:sort(fun(A, B) -> A > B end, 1), function_clause),
     ?ASSERT_ERROR(lists:sort(1, [1]), function_clause),
 
+    ok.
+
+test_split() ->
+    ?ASSERT_MATCH(
+        lists:split(1, ["Foo", "Bar", "Alice", "Bob", "lowercase"]),
+        {["Foo"], ["Bar", "Alice", "Bob", "lowercase"]}
+    ),
+    ?ASSERT_MATCH(
+        lists:split(4, ["Foo", "Bar", "Alice", "Bob", "lowercase"]),
+        {["Foo", "Bar", "Alice", "Bob"], ["lowercase"]}
+    ),
+    ?ASSERT_MATCH(lists:split(0, []), {[], []}),
+    ?ASSERT_MATCH(lists:split(0, ["Foo"]), {[], ["Foo"]}),
+    ?ASSERT_MATCH(lists:split(1, ["Foo"]), {["Foo"], []}),
+    ?ASSERT_ERROR(lists:split(1, []), badarg),
+    ?ASSERT_ERROR(lists:split(2, ["Foo"]), badarg),
+    ?ASSERT_ERROR(lists:split(-1, ["Foo"]), badarg),
     ok.
 
 test_usort() ->
