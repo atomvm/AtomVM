@@ -35,9 +35,9 @@
     system_flag/2,
     md5/1,
     is_map/1,
+    is_map_key/2,
     map_size/1,
     map_get/2,
-    map_is_key/2,
     monotonic_time/1,
     min/2,
     max/2,
@@ -394,8 +394,8 @@ map_get(_Key, _Map) ->
 %% This function may be used in a guard expression.
 %% @end
 %%-----------------------------------------------------------------------------
--spec map_is_key(Key :: term(), Map :: map()) -> boolean().
-map_is_key(_Key, _Map) ->
+-spec is_map_key(Key :: term(), Map :: map()) -> boolean().
+is_map_key(_Key, _Map) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
