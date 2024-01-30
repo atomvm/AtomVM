@@ -68,7 +68,7 @@ call(Port, Message) ->
 -spec call(pid(), Message :: term(), Timeout :: timeout()) -> term() | {error, timeout}.
 call(Port, Message, Timeout) ->
     MonitorRef = monitor(port, Port),
-    Port ! {self(), MonitorRef, Message},
+    Port ! {'$call', {self(), MonitorRef}, Message},
     Result =
         receive
             {'DOWN', MonitorRef, port, Port, normal} ->

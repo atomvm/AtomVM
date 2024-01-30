@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `1`, which now they are deprecated)
 - New atom table, which uses less memory, has improved performances and better code.
 - SPI: when gpio number is not provided for `miso` or `mosi` default to disabled
+- Change port call tuple format to the same format as gen_server, so casts can be supported too
 
 ### Fixed
 

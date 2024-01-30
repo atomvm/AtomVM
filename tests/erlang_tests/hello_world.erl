@@ -31,7 +31,7 @@ do_open_port(PortName, Param) ->
 
 write(Console, String) ->
     Ref = make_ref(),
-    Console ! {self(), Ref, {puts, String}},
+    Console ! {'$call', {self(), Ref}, {puts, String}},
     receive
         {Ref, ReturnStatus} ->
             ReturnStatus

@@ -155,6 +155,9 @@ static const char *const bounded_free_atom = "\xC" "bounded_free";
 static const char *const minimum_atom = "\x7" "minimum";
 static const char *const fibonacci_atom = "\x9" "fibonacci";
 
+static const char *const call_atom = "\x5" "$call";
+static const char *const cast_atom = "\x5" "$cast";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -293,6 +296,9 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, bounded_free_atom) == BOUNDED_FREE_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, minimum_atom) == MINIMUM_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, fibonacci_atom) == FIBONACCI_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, call_atom) == CALL_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, cast_atom) == CAST_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();
