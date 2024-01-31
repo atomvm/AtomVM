@@ -20,7 +20,24 @@
 
 defmodule Code do
   @compile {:autoload, false}
+  @moduledoc """
+  This module is to satisfy certain code loading checks in Elixir,
+  specifically with regards to protocols support.
+  The functions are noop, and doesn't perform the actual checks,
+  as they are not relevant on AtomVM.
+  """
 
+  @doc """
+  required for protocols to work with Elixir >= 1.16, due to code loading checks.
+  """
+  def ensure_compiled(module) do
+    {:module, module}
+  end
+
+  @doc """
+  previously required for protocols support, due to code loading checks.
+  """
+  @deprecated "Use Code.ensure_compiled/1 instead"
   def ensure_compiled?(_) do
     true
   end
