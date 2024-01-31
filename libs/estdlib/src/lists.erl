@@ -2,6 +2,7 @@
 % This file is part of AtomVM.
 %
 % Copyright 2017-2023 Fred Dushin <fred@dushin.net>
+% split/2 function Copyright Ericsson AB 1996-2023.
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -49,6 +50,7 @@
     join/2,
     seq/2, seq/3,
     sort/1, sort/2,
+    split/2,
     usort/1, usort/2,
     duplicate/2,
     sublist/2
@@ -501,6 +503,39 @@ sort(List) when is_list(List) ->
 -spec sort(Fun :: fun((T, T) -> boolean()), List :: [T]) -> [T].
 sort(Fun, List) when is_function(Fun), is_list(List) ->
     quick_sort(Fun, List).
+
+%%-----------------------------------------------------------------------------
+%% @param   N elements non negative Integer
+%% @param   List1 list to split
+%% @returns Tuple with the two lists
+%% @doc     Splits List1 into List2 and List3. List2 contains the first N elements
+%%          and List3 the remaining elements (the Nth tail).
+%% @end
+%%-----------------------------------------------------------------------------
+%% Attribution: https://github.com/erlang/otp/blob/5c8a9cbd125f3db5f5d13ff5ba2a12c076912425/lib/stdlib/src/lists.erl#L1801
+-spec split(N, List1) -> {List2, List3} when
+    N :: non_neg_integer(),
+    List1 :: [T],
+    List2 :: [T],
+    List3 :: [T],
+    T :: term().
+
+split(N, List) when is_integer(N), N >= 0, is_list(List) ->
+    case split(N, List, []) of
+        {_, _} = Result ->
+            Result;
+        Fault when is_atom(Fault) ->
+            erlang:error(Fault, [N, List])
+    end;
+split(N, List) ->
+    erlang:error(badarg, [N, List]).
+
+split(0, L, R) ->
+    {lists:reverse(R, []), L};
+split(N, [H | T], R) ->
+    split(N - 1, T, [H | R]);
+split(_, [], _) ->
+    badarg.
 
 %% Attribution: https://erlang.org/doc/programming_examples/list_comprehensions.html#quick-sort
 %% @private
