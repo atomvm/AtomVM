@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fix several missing memory allocation checks in libAtomVM.
 - Fixed a possible memory leak in libAtomVM/module.c `module_destroy`.
+- Fix possibile bug in random number generator on ESP32 and RPi2040
 
 ## [0.6.0-alpha.2] - 2023-12-10
 
