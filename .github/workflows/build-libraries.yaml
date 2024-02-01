@@ -84,6 +84,9 @@ jobs:
         ATOMVMLIB_FILE=atomvmlib-${{ github.ref_name }}.avm
         mv libs/atomvmlib.avm "libs/${ATOMVMLIB_FILE}" &&
         sha256sum "libs/${ATOMVMLIB_FILE}" > "libs/${ATOMVMLIB_FILE}.sha256"
+        HELLO_WORLD_FILE=hello_world-${{ github.ref_name }}.avm
+        mv examples/erlang/hello_world.avm "examples/erlang/${HELLO_WORLD_FILE}"
+        sha256sum "examples/erlang/${HELLO_WORLD_FILE}" > "examples/erlang/${HELLO_WORLD_FILE}.sha256"
 
     - name: Release
       uses: softprops/action-gh-release@v1
@@ -94,3 +97,5 @@ jobs:
         files: |
           build/libs/atomvmlib-${{ github.ref_name }}.avm
           build/libs/atomvmlib-${{ github.ref_name }}.avm.sha256
+          examples/erlang/hello_world-${{ github.ref_name }}.avm
+          examples/erlang/hello_world-${{ github.ref_name }}.avm.sha256
