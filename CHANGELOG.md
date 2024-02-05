@@ -6,10 +6,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0-beta.0] - Unreleased
 
-### Fixed
-
-- Fixed interpretation of live for opcodes, thus altering GC semantics for nifs. See also [UPDATING](UPDATING.md).
-
 ### Added
 - Added `esp:get_default_mac/0` for retrieving the default MAC address on ESP32.
 - Added support for `pico` and `poci` as an alternative to `mosi` and `miso` for SPI
@@ -33,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix several missing memory allocation checks in libAtomVM.
 - Fixed a possible memory leak in libAtomVM/module.c `module_destroy`.
 - Fix possibile bug in random number generator on ESP32 and RPi2040
+- Fixed interpretation of live for opcodes, thus altering GC semantics for nifs. See also [UPDATING](UPDATING.md).
 
 ## [0.6.0-alpha.2] - 2023-12-10
 
