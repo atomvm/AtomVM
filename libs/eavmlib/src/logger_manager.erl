@@ -89,7 +89,7 @@ allow(Level, Module) ->
         undefined ->
             false;
         _ ->
-            gen_server:call(?MODULE, {allow, Level, Module})
+            maybe_get_cached_module_level(Level, Module)
     end.
 
 %%
@@ -133,6 +133,35 @@ terminate(_Reason, _State) ->
 %%
 %% internal implementation
 %%
+
+%% @private
+maybe_get_cached_module_level(Level, Module) ->
+    %%
+    %% TODO Until we have support for ETS, we check the process
+    %% dictionary for a cached value of the log level for a given module.
+    %% Caching (or ETS) is needed for performance reasons, in order to
+    %% prevent gen_server calls for each log call.  Note that as long as logger
+    %% configuration is immutable (which it is, currently, caching is "safe").
+    %% Once we support ETS tables (preferably with read concurrency), we can
+    %% support reading these values without having to resort to this hack
+    %% while also supporting programmatic mutation of logger configuration.
+    %%
+    case erlang:get({'$atomvm_logger_module_level', Level, Module}) of
+        undefined ->
+            Pid = erlang:whereis(?MODULE),
+            Result = gen_server:call(?MODULE, {allow, Level, Module}),
+            erlang:put({'$atomvm_logger_module_level', Level, Module}, {Pid, Result}),
+            Result;
+        {Pid, Result} ->
+            case erlang:whereis(?MODULE) of
+                Pid ->
+                    Result;
+                NewPid ->
+                    NewResult = gen_server:call(?MODULE, {allow, Level, Module}),
+                    erlang:put({'$atomvm_logger_module_level', Level, Module}, {NewPid, NewResult}),
+                    NewResult
+            end
+    end.
 
 %% @private
 get_log_level(#{log_level := LogLevel}) ->
