@@ -27,6 +27,7 @@
 #include <hardware/regs/addressmap.h>
 #include <hardware/watchdog.h>
 #include <pico/binary_info.h>
+#include <pico/bootrom.h>
 #include <pico/stdlib.h>
 
 #pragma GCC diagnostic pop
@@ -183,12 +184,26 @@ int _kill(pid_t pid, int sig)
         fprintf(stderr, "Unknown signal %d\n", sig);
     }
     exit_handler(true);
+#ifdef WAIT_BOOTSEL_ON_EXIT
+    while (stdio_usb_connected()) {
+        ;
+    }
+    reset_usb_boot(0, 0);
+#else
     return 0;
+#endif
 }
 
 int main()
 {
     int reboot = app_main();
     exit_handler(reboot);
+#ifdef WAIT_BOOTSEL_ON_EXIT
+    while (stdio_usb_connected()) {
+        ;
+    }
+    reset_usb_boot(0, 0);
+#else
     return 0;
+#endif
 }

@@ -45,6 +45,10 @@ if (AVM_WAIT_FOR_USB_CONNECT)
     target_compile_definitions(AtomVM PRIVATE PICO_STDIO_USB_CONNECT_WAIT_TIMEOUT_MS=-1)
 endif()
 
+if (AVM_WAIT_BOOTSEL_ON_EXIT)
+    target_compile_definitions(AtomVM PRIVATE WAIT_BOOTSEL_ON_EXIT)
+endif()
+
 set(
     PLATFORM_LIB_SUFFIX
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
