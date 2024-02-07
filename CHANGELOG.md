@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ESP32: Added support to SPI peripherals other than hspi and vspi
 - Added `gpio:set_int/4`, with the 4th parameter being the pid() or registered name of the process to receive interrupt messages
 - Added support for `lists:split/2`
+- Added ESP32 API for allowing coexistence of native and Erlang I2C drivers
 
 ### Changed
 
