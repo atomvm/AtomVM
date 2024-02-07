@@ -1,0 +1,8 @@
+# Copyright 2024 Winford (Uncle Grumpy) <winford@object.stream>
+#
+# SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+
+[TEMPLATE_CONFIGURATION]
+name = PDF
+template = book
+stylesheet = pdf_stylesheet.rts
