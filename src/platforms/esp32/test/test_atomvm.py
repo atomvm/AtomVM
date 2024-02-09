@@ -37,8 +37,18 @@ def create_sd_image():
     ],
     indirect=True,
 )
-def test_atomvm(dut, redirect):
+def test_atomvm_qemu(dut, redirect):
      dut.expect_unity_test_output(timeout=120)
+     assert len(dut.testsuite.testcases) > 0
+     assert dut.testsuite.attrs['failures'] == 0
+     assert dut.testsuite.attrs['errors'] == 0
+
+# These tests are run on sim tests
+def test_atomvm_sim(dut, redirect):
+     dut.expect('Got IP')
+     #dut.expect('Synchronized time with SNTP server')
+
+     dut.expect_unity_test_output(timeout=180)
      assert len(dut.testsuite.testcases) > 0
      assert dut.testsuite.attrs['failures'] == 0
      assert dut.testsuite.attrs['errors'] == 0

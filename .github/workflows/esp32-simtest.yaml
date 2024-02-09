@@ -1,0 +1,127 @@
+#
+#  Copyright 2022 Davide Bettio <davide@uninstall.it>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: ESP32 Sim test
+
+on:
+  push:
+    paths:
+      - ".github/workflows/esp32-build.yaml"
+      - "CMakeLists.txt"
+      - "libs/**"
+      - "src/platforms/esp32/**"
+      - "src/libAtomVM/**"
+      - "tools/packbeam/**"
+  pull_request:
+    paths:
+      - ".github/workflows/esp32-build.yaml"
+      - "src/platforms/esp32/**"
+      - "src/libAtomVM/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  cli_token:
+    name: WOKWI_CLI_TOKEN presence
+    runs-on: ubuntu-latest
+    outputs:
+      token_check: ${{ steps.token_check.outputs.should-run }}
+
+    steps:
+      - name: Mark esp-sim-test job as 'to be run'
+        id: token_check
+        env:
+          wokwi_secret: ${{ secrets.WOKWI_CLI_TOKEN }}
+        run: |
+          if [${{ env.wokwi_secret }} == ''];
+          then
+            echo "WOKWI_CLI_TOKEN not found"
+
+          else
+            echo "WOKWI_CLI_TOKEN found continuing"
+            echo "should-run=true" >> $GITHUB_OUTPUT
+
+          fi
+  esp-sim-test:
+    needs: cli_token
+    runs-on: ubuntu-latest
+    if: needs.cli_token.outputs.token_check == 'true'
+    container: espressif/idf:${{ matrix.idf-version }}
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        esp-idf-target: ["esp32", "esp32s2", "esp32s3", "esp32c3", "esp32c6"]
+        idf-version:
+          - "v4.4.7"
+          - "v5.0.6"
+          - "v5.1.3"
+          - "v5.2"
+        exclude:
+          - esp-idf-target: "esp32c6"
+            idf-version: "v4.4.7"
+          - esp-idf-target: "esp32c6"
+            idf-version: "v5.0.6"
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install the Wokwi CLI
+        run: curl -L https://raw.githubusercontent.com/petermm/wokwi-cli/patch-1/scripts/install.sh | sh
+
+      - name: Install dependencies to build host AtomVM
+        run: |
+          set -eu
+          apt update
+          DEBIAN_FRONTEND=noninteractive apt install -y -q \
+              doxygen erlang-base erlang-dialyzer \
+              libglib2.0-0 libpixman-1-0 \
+              gcc g++ zlib1g-dev libsdl2-2.0-0 libslirp0 libmbedtls-dev
+
+      - name: Install pytest and pytest-embedded plugins
+        run: |
+          set -e
+          . $IDF_PATH/export.sh
+          pip install pytest==8.0.2 \
+              pytest-embedded==1.8.1 \
+              pytest-embedded-idf==1.8.1 \
+              pytest-embedded-qemu==1.8.1 \
+              pytest-embedded-wokwi==1.8.1
+
+      - name: "Use simtest defaults"
+        shell: bash
+        working-directory: ./src/platforms/esp32/test/
+        run: |
+          cp sdkconfig.simtest-defaults sdkconfig.defaults
+
+      - name: "On Esp32 use board with sd card"
+        if: matrix.esp-idf-target == 'esp32'
+        shell: bash
+        working-directory: ./src/platforms/esp32/test/
+        run: |
+          cp diagram_esp32.json diagram.json
+
+      - name: Build ESP32-sim tests using idf.py
+        working-directory: ./src/platforms/esp32/test/
+        run: |
+          set -e
+          . $IDF_PATH/export.sh
+          idf.py set-target ${{matrix.esp-idf-target}}
+          idf.py build
+
+      - name: Run ESP32-sim tests using Wokwi CI
+        working-directory: ./src/platforms/esp32/test/
+        env:
+          WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
+        timeout-minutes: 10
+        run: |
+          set -e
+          . $IDF_PATH/export.sh
+          pytest -k 'test_atomvm_sim' --embedded-services=idf,wokwi --wokwi-timeout=120000 --target=${{ matrix.esp-idf-target }} -s

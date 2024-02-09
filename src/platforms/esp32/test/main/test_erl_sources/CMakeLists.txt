@@ -39,6 +39,7 @@ endfunction()
 
 compile_erlang(test_esp_partition)
 compile_erlang(test_file)
+compile_erlang(test_wifi_example)
 compile_erlang(test_list_to_binary)
 compile_erlang(test_md5)
 compile_erlang(test_crypto)
@@ -58,6 +59,7 @@ add_custom_command(
         HostAtomVM-prefix/src/HostAtomVM-build/libs/atomvmlib.avm
         test_esp_partition.beam
         test_file.beam
+        test_wifi_example.beam
         test_list_to_binary.beam
         test_md5.beam
         test_crypto.beam
@@ -73,6 +75,7 @@ add_custom_command(
     DEPENDS
         HostAtomVM
         "${CMAKE_CURRENT_BINARY_DIR}/test_esp_partition.beam"
+        "${CMAKE_CURRENT_BINARY_DIR}/test_wifi_example.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_file.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_list_to_binary.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_md5.beam"

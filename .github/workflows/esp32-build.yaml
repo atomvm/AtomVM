@@ -102,4 +102,4 @@ jobs:
         set -e
         . $IDF_PATH/export.sh
         export PATH=/opt/qemu/bin:${PATH}
-        pytest --embedded-services=idf,qemu -s
+        pytest -k 'test_atomvm_qemu' --embedded-services=idf,qemu -s
