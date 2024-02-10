@@ -30,6 +30,9 @@ There is much more information, including a more complete (["Getting Started Gui
 
 > Don't forget to check out the ([examples repository](https://github.com/atomvm/atomvm_examples)) to help get you started on your next IoT project.
 
+**Please, use [v0.6.x](https://github.com/atomvm/AtomVM/tree/release-0.6) releases, main branch
+is for development purposes and it might be unstable.**
+
 Dependencies
 ------------
 
