@@ -97,5 +97,5 @@ jobs:
         files: |
           build/libs/atomvmlib-${{ github.ref_name }}.avm
           build/libs/atomvmlib-${{ github.ref_name }}.avm.sha256
-          examples/erlang/hello_world-${{ github.ref_name }}.avm
-          examples/erlang/hello_world-${{ github.ref_name }}.avm.sha256
+          build/examples/erlang/hello_world-${{ github.ref_name }}.avm
+          build/examples/erlang/hello_world-${{ github.ref_name }}.avm.sha256
