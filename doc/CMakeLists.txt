@@ -28,6 +28,9 @@ file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/src DESTINATION ${CMAKE_CURRENT_BINARY_DIR
 file(COPY ${CMAKE_SOURCE_DIR}/CONTRIBUTING.md DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/src)
 file(COPY ${CMAKE_SOURCE_DIR}/CHANGELOG.md DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/src)
 file(COPY ${CMAKE_SOURCE_DIR}/UPDATING.md DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/src)
+file(COPY ${CMAKE_SOURCE_DIR}/CODE_OF_CONDUCT.md DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/src)
+file(COPY ${CMAKE_SOURCE_DIR}/LICENSES/Apache-2.0.txt DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/src/LICENSES)
+file(COPY ${CMAKE_SOURCE_DIR}/SECURITY.md DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/src)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/release-notes.md.in ${CMAKE_CURRENT_BINARY_DIR}/src/release-notes.md @ONLY)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/edoc/edown_dep DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/edoc/)
 
@@ -146,6 +149,9 @@ endif()
 foreach(LIBAVM_ERL_LIB estdlib eavmlib alisp etest)
     add_custom_command(TARGET edoc-${LIBAVM_ERL_LIB}
         POST_BUILD
+        COMMAND find ./ -name *.md -exec sed -i -e "s/\#types/\#data-types/g" {} \;
+        COMMAND find ./ -name *.md -exec sed -i -e "s/\#index/\#function-index/g" {} \;
+        COMMAND find ./ -name *.md -exec sed -i -e "s/\#functions/\#function-details/g" {} \;
         COMMAND sed -i -e "s/\.md/\.html/g; s/application/library/g" ${CMAKE_CURRENT_BINARY_DIR}/src/apidocs/erlang/${LIBAVM_ERL_LIB}/README.md
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Fixing html link locations for ${LIBAVM_ERL_LIB}." VERBATIM
