@@ -634,7 +634,7 @@ static NativeHandlerResult i2cdriver_consume_mailbox(Context *ctx)
 I2CAcquireResult i2c_driver_acquire(term i2c_port, i2c_port_t *i2c_num, GlobalContext *global)
 {
     if (UNLIKELY(!term_is_pid(i2c_port))) {
-        ESP_LOGW(TAG, "Given term is not a I2C port driver.");
+        ESP_LOGW(TAG, "acquire: given term is not a PID.");
         return I2CAcquireInvalidPeripheral;
     }
 
@@ -643,7 +643,7 @@ I2CAcquireResult i2c_driver_acquire(term i2c_port, i2c_port_t *i2c_num, GlobalCo
 
     if ((ctx == NULL) || (ctx->native_handler != i2cdriver_consume_mailbox)
         || (ctx->platform_data == NULL)) {
-        ESP_LOGW(TAG, "Given term is not a I2C port driver.");
+        ESP_LOGW(TAG, "acquire: given term is not a I2C port driver.");
         globalcontext_get_process_unlock(global, ctx);
         return I2CAcquireInvalidPeripheral;
     }
@@ -661,7 +661,7 @@ I2CAcquireResult i2c_driver_acquire(term i2c_port, i2c_port_t *i2c_num, GlobalCo
 void i2c_driver_release(term i2c_port, GlobalContext *global)
 {
     if (UNLIKELY(!term_is_pid(i2c_port))) {
-        ESP_LOGW(TAG, "Given term is not a I2C port driver.");
+        ESP_LOGW(TAG, "release: given term is not a PID.");
         return;
     }
 
@@ -670,7 +670,7 @@ void i2c_driver_release(term i2c_port, GlobalContext *global)
 
     if ((ctx == NULL) || (ctx->native_handler != i2cdriver_consume_mailbox)
         || (ctx->platform_data == NULL)) {
-        ESP_LOGW(TAG, "Given term is not a I2C port driver.");
+        ESP_LOGW(TAG, "release: given term is not a I2C port driver.");
         globalcontext_get_process_unlock(global, ctx);
         return;
     }
