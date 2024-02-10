@@ -171,7 +171,7 @@ free_and_exit:
     return NULL;
 }
 
-static NativeHandlerResult i2c_driver_maybe_close(Context *ctx)
+static NativeHandlerResult i2c_driver_unref(Context *ctx)
 {
     struct I2CData *i2c_data = ctx->platform_data;
     if (--i2c_data->ref_count != 0) {
@@ -608,7 +608,7 @@ static NativeHandlerResult i2cdriver_consume_mailbox(Context *ctx)
             // ugly hack: we lock before closing so _release and _acquire can assume
             // ctx->platform is not changed.
             globalcontext_get_process_lock(ctx->global, ctx->process_id);
-            handler_result = i2c_driver_maybe_close(ctx);
+            handler_result = i2c_driver_unref(ctx);
             globalcontext_get_process_unlock(ctx->global, ctx);
             ret = OK_ATOM;
             break;
@@ -676,8 +676,7 @@ void i2c_driver_release(term i2c_port, GlobalContext *global)
     }
 
     struct I2CData *i2c_data = ctx->platform_data;
-    i2c_data->ref_count--;
-    NativeHandlerResult close_result = i2c_driver_maybe_close(ctx);
+    NativeHandlerResult close_result = i2c_driver_unref(ctx);
     if (close_result == NativeTerminate) {
         mailbox_send_term_signal(ctx, KillSignal, NORMAL_ATOM);
     }

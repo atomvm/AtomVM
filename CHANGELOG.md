@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0-beta.1] - Unreleased
 
+### Fixed
+
+- ESP32: fix i2c_driver_acquire and i2c_driver_release functions, that were working only once.
+
 ## [0.6.0-beta.0] - 2024-02-08
 
 ### Added
