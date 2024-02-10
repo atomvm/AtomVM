@@ -66,9 +66,9 @@ All source code modules should include copyright headers that are formatted for 
 
 ### C Code
 
-C source code style is enforced with [clang-format-13](https://releases.llvm.org/13.0.1/tools/clang/docs/ClangFormat.html). To automatically fix a file, run:
+C source code style is enforced with [`clang-format-16`](https://releases.llvm.org/16.0.0/tools/clang/docs/ClangFormat.html). To automatically fix a file, run:
 
-    clang-format-13 --style=file -i file.c
+    clang-format-16 --style=file -i file.c
 
 #### Indentation
 
