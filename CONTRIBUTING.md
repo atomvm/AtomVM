@@ -72,7 +72,7 @@ C source code style is enforced with [clang-format-13](https://releases.llvm.org
 
 #### Indentation
 
-* [K&R identation and braces style](https://en.wikipedia.org/wiki/Indentation_style#K&R_style)
+* [K&R indentation and braces style](https://en.wikipedia.org/wiki/Indentation_style#K&R_style)
 * [Mandatory braces](https://en.wikipedia.org/wiki/Indentation_style#Variant:_mandatory_braces)
 * 4 space indentation (no tabs)
 
@@ -169,7 +169,7 @@ C source modules (`.c`) should be organized as follows:
 
 #### Documentation
 
-[Doxygen Javadoc style](https://www.doxygen.nl/manual/docblocks.html) code comments will be picked up and added to the documentation. Changes will automatically be added to the [libAtomVM Source Files](https://www.atomvm.net/doc/master/c_api_docs.html#libatomvm-source-files) and the [libAtomVM Index](https://www.atomvm.net/doc/master/apidocs/libatomvm/index.html#libatomvm-index). But to have `Data Strucures`, `Types`, `MACROS`, and `Functions` appear in the correct C Library APIs section the corresponding entries must be added to the similarly named `*.rst` files in the `AtomVM/doc/src/apidocs/libatomvm/` directory. The exact names of the flies that need to be altered are: `data_structures.rst`, `functions.rst`, `macros.rst`, and `types.rst`. The other files in the directory handle auto`generated content and do not need to be altered.
+[Doxygen Javadoc style](https://www.doxygen.nl/manual/docblocks.html) code comments will be picked up and added to the documentation. Changes will automatically be added to the [libAtomVM Source Files](https://www.atomvm.net/doc/master/c_api_docs.html#libatomvm-source-files) and the [libAtomVM Index](https://www.atomvm.net/doc/master/apidocs/libatomvm/index.html#libatomvm-index). But to have `Data Structures`, `Types`, `MACROS`, and `Functions` appear in the correct C Library APIs section the corresponding entries must be added to the similarly named `*.rst` files in the `AtomVM/doc/src/apidocs/libatomvm/` directory. The exact names of the files that need to be altered are: `data_structures.rst`, `functions.rst`, `macros.rst`, and `types.rst`. The other files in the directory handle auto`generated content and do not need to be altered.
 
 In the rare case that a function declaration and definition are both in different header files (rather than the definition in a `*.c` file) this can cause rendering errors for `Doxygen`. The work around for these cases can be demonstrated with this example for the function `sys_listener_destroy` it is documented and declared in `sys.h` and defined as follows in `listeners.h`:
 
