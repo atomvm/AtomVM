@@ -125,6 +125,13 @@ StandaloneHTMLBuilder.supported_image_types = [
 
 html_copy_source = False
 
+language = "en"
+html_meta = {
+    "description lang=en": "AtomVM Guides and API Documentation",
+    "keywords": "AtomVM, Erlang, Elixir, BEAM, IoT, embedded, ESP32, STM32, RP2040, Raspberry Pi Pico, WASM, libAtomVM, eavmlib, packbeam",
+    "property=og:locale": "en_US"
+}
+
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
