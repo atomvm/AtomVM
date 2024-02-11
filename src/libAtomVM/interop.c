@@ -138,6 +138,62 @@ char *interop_list_to_string(term list, int *ok)
     return str;
 }
 
+char *interop_list_to_utf8_string(term list, int *ok)
+{
+    size_t byte_len = 0;
+
+    term t = list;
+    while (term_is_nonempty_list(t)) {
+        term head = term_get_list_head(t);
+        if (UNLIKELY(!term_is_integer(head))) {
+            *ok = 0;
+            return NULL;
+        }
+        avm_int_t codepoint = term_to_int(head);
+        if (UNLIKELY(codepoint < 0)) {
+            *ok = 0;
+            return NULL;
+        } else if (codepoint <= 127) {
+            byte_len++;
+        } else {
+            size_t codepoint_size;
+            bool is_encodable = bitstring_utf8_encode(codepoint, NULL, &codepoint_size);
+            if (UNLIKELY(!is_encodable)) {
+                *ok = 0;
+                return NULL;
+            }
+            byte_len += codepoint_size;
+        }
+        t = term_get_list_tail(t);
+    }
+
+    if (!term_is_nil(t)) {
+        *ok = 0;
+        return NULL;
+    }
+
+    uint8_t *str = malloc(byte_len + 1);
+    if (IS_NULL_PTR(str)) {
+        *ok = 0;
+        return NULL;
+    }
+
+    t = list;
+    size_t i = 0;
+    while (i < byte_len) {
+        term codepoint_term = term_get_list_head(t);
+        size_t codepoint_size;
+        // list has been previously checked, no need to check again
+        bitstring_utf8_encode(term_to_int(codepoint_term), &str[i], &codepoint_size);
+        t = term_get_list_tail(t);
+        i += codepoint_size;
+    }
+    str[byte_len] = 0;
+
+    *ok = 1;
+    return (char *) str;
+}
+
 char *interop_atom_to_string(Context *ctx, term atom)
 {
     GlobalContext *glb = ctx->global;

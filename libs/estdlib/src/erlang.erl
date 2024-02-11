@@ -117,6 +117,8 @@
 %% * review API documentation for timer functions in this module
 %%
 
+-type atom_encoding() :: latin1 | utf8 | unicode.
+
 -type mem_type() :: binary.
 -type time_unit() :: second | millisecond | microsecond.
 -type timestamp() :: {
@@ -582,13 +584,12 @@ iolist_to_binary(_IOList) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Binary  Binary to convert to atom
-%% @param   Encoding encoding for conversion
+%% @param   Encoding encoding for conversion (any of latin1, utf8 or unicode)
 %% @returns an atom from passed binary
 %% @doc     Convert a binary to atom.
-%% Only latin1 encoded is supported.
 %% @end
 %%-----------------------------------------------------------------------------
--spec binary_to_atom(Binary :: binary(), Encoding :: latin1) -> atom().
+-spec binary_to_atom(Binary :: binary(), Encoding :: atom_encoding()) -> atom().
 binary_to_atom(_Binary, _Encoding) ->
     erlang:nif_error(undefined).
 
@@ -614,13 +615,13 @@ binary_to_list(_Binary) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Atom        Atom to convert
-%% @param   Encoding    Encoding for conversion
+%% @param   Encoding    Encoding for conversion (any of latin1, utf8 or unicode)
 %% @returns a binary with the atom's name
 %% @doc     Convert an atom to a binary.
 %% Only latin1 encoding is supported.
 %% @end
 %%-----------------------------------------------------------------------------
--spec atom_to_binary(Atom :: atom(), Encoding :: latin1) -> binary().
+-spec atom_to_binary(Atom :: atom(), Encoding :: atom_encoding()) -> binary().
 atom_to_binary(_Atom, _Encoding) ->
     erlang:nif_error(undefined).
 
