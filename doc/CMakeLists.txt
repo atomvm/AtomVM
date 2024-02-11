@@ -105,6 +105,8 @@ if(SPHINX_FOUND)
     message("Sphinx found: ${SPHINX_BUILD_EXECUTABLE}")
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/conf.py.in ${CMAKE_CURRENT_BINARY_DIR}/conf.py @ONLY)
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY)
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/pdf_stylesheet.rts DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/pdf_template.rtt DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
     file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/apidocs/libatomvm)
     add_custom_target(sphinx-html
         ${SPHINX_BUILD_EXECUTABLE} -b html -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/html/
