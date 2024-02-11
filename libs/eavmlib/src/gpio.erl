@@ -25,7 +25,8 @@
 %% (General Purpose Input and Output) pins.
 %%
 %% Note: `-type pin()' used in this driver refers to a pin number on Espressif
-%% chips, or a tuple {GPIO_BANK, PIN} for stm32 chips.
+%% chips and normal Raspberry Pi Pico pins, or a tuple {GPIO_BANK, PIN} for STM32
+%% chips and the "extra" GPIOs available on the Pico-W.
 %% @end
 %%-----------------------------------------------------------------------------
 -module(gpio).
