@@ -129,7 +129,7 @@ datetime_to_gregorian_seconds({Date, {Hour, Minute, Second}}) when
 
 %%-----------------------------------------------------------------------------
 %% @equiv day_of_the_week(Y, M, D)
-%% @param   Date the date for which to retreive the weekday
+%% @param   Date the date for which to retrieve the weekday
 %% @returns Weekday day of the week
 %% @doc     Computes the day of the week from the specified date tuple {Year, Month, Day}.
 %%          Returns the day of the week as 1: Monday, 2: Tuesday, and so on.

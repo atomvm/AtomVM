@@ -22,7 +22,7 @@
 %%-----------------------------------------------------------------------------
 %% @doc An implementation of the Erlang/OTP lists interface.
 %%
-%% This module implements a strict susbset of the Erlang/OTP lists
+%% This module implements a strict subset of the Erlang/OTP lists
 %% interface.
 %% @end
 %%-----------------------------------------------------------------------------
@@ -125,7 +125,7 @@ delete(E, [H | T], Accum) ->
 %% @returns the elements of L in reverse order
 %% @equiv lists:reverse(L, [])
 %% @doc Erlang/OTP implementation of this function actually handles few simple
-%% cases and calls lists:reverse/2 for the more genertic case. Consequently,
+%% cases and calls `lists:reverse/2' for the more generic case. Consequently,
 %% calling `lists:reverse/1' without a list or with an improper list of two
 %% elements will fail with a function clause exception on Erlang/OTP and with a
 %% badarg exception with this implementation.
@@ -139,7 +139,7 @@ reverse(_L) ->
 %% @param   L the list to reverse
 %% @param   T the tail to append to the reversed list
 %% @returns the elements of L in reverse order followed by T
-%% @doc     Reverse the elements of L, folled by T.
+%% @doc     Reverse the elements of L, followed by T.
 %% If T is not a list or not a proper list, it is appended anyway and the result
 %% will be an improper list.
 %%

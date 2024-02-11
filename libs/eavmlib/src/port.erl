@@ -23,7 +23,7 @@
 %% @doc AtomVM port driver APIs
 %%
 %% This module contains functions that are intended to be used by drivers that
-%% rely on a `port' interface rather than `niffs'.
+%% rely on a `port' interface rather than `nifs'.
 %%
 %% The port driver should be initialized with:
 %% `open_port({spawn, "Name"}, Param)'
