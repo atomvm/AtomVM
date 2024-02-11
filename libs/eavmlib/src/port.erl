@@ -50,7 +50,7 @@
 %% return a term or `{error, Reason}'.
 %% @end
 %%-----------------------------------------------------------------------------
--spec call(pid(), Message :: term()) -> term().
+-spec call(Pid :: pid(), Message :: term()) -> term().
 call(Port, Message) ->
     call(Port, Message, infinity).
 
@@ -65,7 +65,7 @@ call(Port, Message) ->
 %% a term or `{error, Reason}', or`{error, timeout}' if the TimeoutMs is reached first.
 %% @end
 %%-----------------------------------------------------------------------------
--spec call(pid(), Message :: term(), Timeout :: timeout()) -> term() | {error, timeout}.
+-spec call(Pid :: pid(), Message :: term(), Timeout :: timeout()) -> term() | {error, timeout}.
 call(Port, Message, Timeout) ->
     MonitorRef = monitor(port, Port),
     Port ! {'$call', {self(), MonitorRef}, Message},

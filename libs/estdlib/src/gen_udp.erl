@@ -153,7 +153,7 @@ recv({?GEN_UDP_MONIKER, Socket, Module}, Length, Timeout) ->
 %% @doc     Close the socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec close(inet:socket()) -> ok.
+-spec close(Socket :: inet:socket()) -> ok.
 close({?GEN_UDP_MONIKER, Socket, Module}) ->
     Module:close(Socket).
 

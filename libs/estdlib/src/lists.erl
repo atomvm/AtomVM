@@ -464,6 +464,7 @@ seq(From, To) when is_integer(From) andalso is_integer(To) andalso From =< To ->
 %%
 %% @end
 %%-----------------------------------------------------------------------------
+-spec seq(From :: integer(), To :: integer(), Incr :: integer()) -> list().
 seq(From, To, Incr) when
     (not is_integer(From) orelse not is_integer(To) orelse not is_integer(Incr)) orelse
         (To < (From - Incr) andalso Incr > 0) orelse

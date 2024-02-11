@@ -49,7 +49,7 @@
 %%          returns the atom fail.
 %% @end
 %%-----------------------------------------------------------------------------
--spec test(list(module())) -> ok | fail.
+-spec test(Tests :: list(module())) -> ok | fail.
 test(Tests) ->
     Results = [{Test, run_test(Test)} || Test <- Tests],
     case erlang:system_info(machine) of
@@ -65,7 +65,7 @@ test(Tests) ->
 %% @returns ok if X and Y unify; fail otherwise.
 %% @end
 %%-----------------------------------------------------------------------------
--spec assert_match(term(), term()) -> ok | fail.
+-spec assert_match(X :: term(), Y :: term()) -> ok | fail.
 assert_match(X, X) -> ok;
 assert_match(_, _) -> fail.
 
@@ -75,7 +75,7 @@ assert_match(_, _) -> fail.
 %% @returns ok if X and Y are equal; fail otherwise.
 %% @end
 %%-----------------------------------------------------------------------------
--spec assert_equals(term(), term()) -> ok | fail.
+-spec assert_equals(X :: term(), Y :: term()) -> ok | fail.
 assert_equals(X, Y) ->
     case X == Y of
         true -> ok;
@@ -87,7 +87,7 @@ assert_equals(X, Y) ->
 %% @returns ok if X is true; fail otherwise.
 %% @end
 %%-----------------------------------------------------------------------------
--spec assert_true(boolean()) -> ok | fail.
+-spec assert_true(X :: boolean()) -> ok | fail.
 assert_true(true) -> ok;
 assert_true(_) -> fail.
 
@@ -96,7 +96,7 @@ assert_true(_) -> fail.
 %% @returns ok if evaluating F results in Error being raised; fail, otherwise
 %% @end
 %%-----------------------------------------------------------------------------
--spec assert_exception(fun()) -> ok | fail.
+-spec assert_exception(F :: fun()) -> ok | fail.
 assert_exception(F) ->
     try
         F(),
@@ -112,7 +112,7 @@ assert_exception(F) ->
 %% raised; fail, otherwise
 %% @end
 %%-----------------------------------------------------------------------------
--spec assert_exception(fun(), Class :: throw | error | exit) -> ok | fail.
+-spec assert_exception(F :: fun(), Class :: throw | error | exit) -> ok | fail.
 assert_exception(F, Class) ->
     try
         F(),
@@ -130,7 +130,7 @@ assert_exception(F, Class) ->
 %% value E being raised; fail, otherwise
 %% @end
 %%-----------------------------------------------------------------------------
--spec assert_exception(fun(), Class :: throw | error | exit, E :: any()) -> ok | fail.
+-spec assert_exception(F :: fun(), Class :: throw | error | exit, E :: any()) -> ok | fail.
 assert_exception(F, Class, E) ->
     try
         F(),
