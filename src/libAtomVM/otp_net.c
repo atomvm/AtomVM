@@ -106,7 +106,7 @@ static term eai_errno_to_term(int err, GlobalContext *glb)
  * @param inner_addr IP address  that will be stored in both address and addr
  *             entries of the map
  * @param global the global context
- * @returrn the getaddrinfo result item term
+ * @return the getaddrinfo result item term
  * @param heap the heap to create terms in, should have sufficient free space
  * @details This function is called in a loop to create optimized maps that
  * share keys.
