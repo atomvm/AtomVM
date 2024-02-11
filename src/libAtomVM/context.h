@@ -399,7 +399,7 @@ bool context_get_process_info(Context *ctx, term *out, term atom_key);
  * the link.
  *
  * @param ctx context to link
- * @param link_pid process to link ctx to
+ * @param monitor_pid process to link ctx to
  * @return 0 on success
  */
 int context_link(Context *ctx, term monitor_pid);
@@ -430,7 +430,7 @@ struct ResourceMonitor *context_resource_monitor(Context *ctx, void *resource);
  * the link.
  *
  * @param ctx context to monitor
- * @param link_id process to unlink
+ * @param monitor_pid process to unlink
  */
 void context_unlink(Context *ctx, term monitor_pid);
 

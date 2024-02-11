@@ -231,7 +231,7 @@ int enif_monitor_process(ErlNifEnv *env, void *obj, const ErlNifPid *target_pid,
 /**
  * @brief Unmonitor a process
  *
- * @param env current environment
+ * @param caller_env current environment
  * @param obj resource used by monitor
  * @param mon monitor
  * @return 0 on success
