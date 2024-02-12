@@ -316,9 +316,9 @@ promise_resolve(_Promise) ->
 %% '''
 %% and if an Erlang process is registered as `some_proc`, then the process
 %% will receive a message:
-%% ```
+%% <pre><code>
 %% {emscripten, {call, Promise, <<"message">>}}
-%% '''
+%% </code></pre>
 %% and the Javascript caller will wait until `promise_resolve' or `promise_reject'
 %% is called. If the process doesn't exist, the promise will be rejected with
 %% 'no_proc'. Likewise if the Promise is garbage collected by the Erlang VM.
