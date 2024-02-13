@@ -89,8 +89,8 @@ static inline void resource_type_destroy(struct ResourceType *resource_type)
  *
  * This function calls `sys_unregister_select_event`.
  *
- * @param select_event the event to notify
- * @param is_write if the event was selected for reading
+ * @param event the event to notify
+ * @param is_read if the event was selected for reading
  * @param is_write if the event was selected for writing
  * @param global the global context
  * @return true if the event was found

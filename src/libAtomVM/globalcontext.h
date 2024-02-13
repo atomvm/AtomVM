@@ -310,7 +310,7 @@ bool globalcontext_is_atom_index_equal_to_atom_string(GlobalContext *glb, int at
  * @brief Compares a term with an AtomString.
  *
  * @details Checks if the given term and the given AtomString refers to the same atom.
- * @param glb the global context.
+ * @param global the global context.
  * @param atom_a any term of any type, when it is not an atom false is always returned.
  * @param atom_string_b an atom string, which is the atom length followed by atom characters.
  * @returns true if they both refer to the same atom, otherwise false.
