@@ -60,7 +60,7 @@ If you have installed AtomVM on a generic UNIX platform, you and run the example
     Hello World
     Return value: ok
 
-For instructions about how to install AtomVM on the `generic_unix` platform, see the [Getting Started Guide](getting-started-guide.md)
+For instructions about how to install AtomVM on the `generic_unix` platform, see the [Getting Started Guide](./getting-started-guide.md)
 
 ### Flashing your application
 
@@ -118,7 +118,7 @@ To flash AtomVM AVM file to an STM32 device, use the `stm32_flash` target in the
 
 Since the AtomVM core libraries are not flashed to an STM32 device, you will need to include is library in your application.  As part of the build process for the STM32, you will have built the AtomVM core libraries into a file named `atomvmlib.avm`
 
-> Note.  It is critical that the version of the AtomVM core libraries match the version of the AtomVM virtual machine you built as part of the STM32 build.  Be sure to use the version of this library (written to `build/lib/atomvmlib.avm` during the build process).  For more information about how to build AtomVM for the STM32 platform, see the AtomVM [Build Instructions](build-instructions.md).
+> Note.  It is critical that the version of the AtomVM core libraries match the version of the AtomVM virtual machine you built as part of the STM32 build.  Be sure to use the version of this library (written to `build/lib/atomvmlib.avm` during the build process).  For more information about how to build AtomVM for the STM32 platform, see the AtomVM [Build Instructions](./build-instructions.md).
 
 In general, it is also a good idea to use the prune option when creating your application's AVM file.  This way, only the modules that are needed for your application will be included, which will decrease the size of your application's AVM file, leading to faster development times.
 
@@ -330,7 +330,7 @@ For example:
 
 ## `atomvm_packbeam`
 
-The [atomvm_packbeam](https://atomvm.github.io/atomvm_packbeam) tool is a simple command-line utility that allows you to create, inspect, and manipulate AtomVM [PackBEAM](packbeam-format.md) files.  By convention, PackBEAM files end in the `.avm` suffix and are referred to as "AVM" files, in the remainder of this section.
+The [atomvm_packbeam](https://atomvm.github.io/atomvm_packbeam) tool is a simple command-line utility that allows you to create, inspect, and manipulate AtomVM [PackBEAM](./packbeam-format.md) files.  By convention, PackBEAM files end in the `.avm` suffix and are referred to as "AVM" files, in the remainder of this section.
 
 > Note.  Users generally do not have a need to use the `packbeam` tool directly.  Instead, the functionality of this tool is embedded in the [`atomvm_rebar3_plugin`](https://atomvm.github.io/atomvm_rebar3_plugin).
 
@@ -363,7 +363,7 @@ Note that you can supply a previously created AVM file as an input to another cr
 
     shell$ packbeam create new_output.avm tapas.beam output.avm
 
-You can also embed non-BEAM files in an AVM file.  These files are accessible programmatically withing atomvm via the `atomvm:read_priv/2` function, described in the AtomVM [Programmer's Guide](programmers-guide.md).
+You can also embed non-BEAM files in an AVM file.  These files are accessible programmatically withing atomvm via the `atomvm:read_priv/2` function, described in the AtomVM [Programmer's Guide](./programmers-guide.md).
 
 For example, if you wanted to add a file `my_app/priv/my_file.txt` to a new file, you could use the following command:
 

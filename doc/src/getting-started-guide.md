@@ -157,7 +157,7 @@ When the AtomVM virtual machine starts, it will search for the first module that
 
 AtomVM applications can be written in Erlang or Elixir, or a combination of both.  The AtomVM community has provided tooling for both platforms, making deployment of AtomVM applications as seamless as possible.
 
-For information about how to flash your application to your ESP32, see the [AtomVM Tooling](atomvm-tooling.md) chapter.
+For information about how to flash your application to your ESP32, see the [AtomVM Tooling](./atomvm-tooling.md) chapter.
 
 ## Getting Started on the STM32 platform
 
@@ -184,7 +184,7 @@ The following methods can be used to deploy the AtomVM virtual machine to an STM
 
 Note.  Due to the very large number of supported chip-sets and the wide variety of board configurations, and the code changes required to support them, pre-built binaries for the stm32 platform are not currently available.
 
-Consult the [Build Instructions](build-instructions.md) to create a binary compatible with your board.
+Consult the [Build Instructions](./build-instructions.md) to create a binary compatible with your board.
 
 #### Flashing a binary image
 
@@ -212,7 +212,7 @@ When the AtomVM virtual machine starts, it will search for the first module that
 
 AtomVM applications can be written in Erlang or Elixir, or a combination of both.  The AtomVM community has provided tooling for both platforms, making deployment of AtomVM applications as seamless as possible.
 
-For information about how to flash your application to your STM32, see the [AtomVM Tooling](atomvm-tooling.md) chapter.
+For information about how to flash your application to your STM32, see the [AtomVM Tooling](./atomvm-tooling.md) chapter.
 
 ## Getting Started on the Raspberry Pi Pico platform
 
@@ -326,7 +326,7 @@ When the AtomVM virtual machine starts, it will search for the first module that
 
 AtomVM applications can be written in Erlang or Elixir, or a combination of both.  The AtomVM community has provided tooling for both platforms, making deployment of AtomVM applications as seamless as possible.
 
-For information about how to flash your application to your Raspberry Pico, see the [AtomVM Tooling](atomvm-tooling.md) chapter.
+For information about how to flash your application to your Raspberry Pico, see the [AtomVM Tooling](./atomvm-tooling.md) chapter.
 
 ## Getting Started on the Generic UNIX platform
 
@@ -334,7 +334,7 @@ The AtomVM virtual machine is supported a wide variety of Generic UNIX platforms
 
 These instructions cover how to provision the AtomVM virtual machine onto your development machine.  Running applications locally can sometimes be a useful exercise in debugging.
 
-> Note.  Not all programming interfaces are supported on all platforms.  See the AtomVM [Programmers Guide](programmers-guide.md) for more information.
+> Note.  Not all programming interfaces are supported on all platforms.  See the AtomVM [Programmers Guide](./programmers-guide.md) for more information.
 
 For most applications, you should only need to install the VM once (or at least once per desired AtomVM release).  Once the VM is installed, you can then begin development of Erlang or Elixir applications, which can then be flashed as part of your routine development cycle.
 
@@ -530,6 +530,6 @@ We did successfully use [coi-serviceworker](https://github.com/gzuidhof/coi-serv
 
 The following resources may be useful for understanding how to develop Erlang or Elixir applications for the AtomVM platform:
 
-* [AtomVM Tooling](atomvm-tooling.md)
+* [AtomVM Tooling](./atomvm-tooling.md)
 * [Example Programs](https://github.com/atomvm/atomvm_examples)
-* [Programmers Guide](programmers-guide.md)
+* [Programmers Guide](./programmers-guide.md)
