@@ -268,9 +268,9 @@ You will also find the sha256 hash for this file, which you should verify using 
 
 To flash your Raspberry Pico, you will need to undertake a few steps that interact with your operating file system.
 
-> Note.  It is important that you downloads the `.uf2` versions of these files for the Raspbery Pico platform.
+> Note.  It is important that you downloads the `.uf2` versions of these files for the Raspberry Pico platform.
 
-For each of the above files, you will start your Rapberry Pico in bootloader mode by pressing the `BOOTSEL` button on the Raspberry Pico dev board, while powering on the device.  Doing so will automatically boot the device and mount the Raspberry Pico on to your file system as a USB device.
+For each of the above files, you will start your Raspberry Pico in bootloader mode by pressing the `BOOTSEL` button on the Raspberry Pico dev board, while powering on the device.  Doing so will automatically boot the device and mount the Raspberry Pico on to your file system as a USB device.
 
 You can then use normal operating system commands (such as `cp`, or even drag-and-drop) to copy the above files to the mounted USB volume.
 

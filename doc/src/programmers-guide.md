@@ -294,7 +294,7 @@ Alternatively, you can pass a module, function name, and list of arguments to th
     Args = ...
     Pid = spawn(?MODULE, run_some_code_with_args, [Args]),
 
-The `spawn_opt/2,4` functions can be be used to spawn a function with additional options that control the behavior of the spawned processs, e.g.,
+The `spawn_opt/2,4` functions can be be used to spawn a function with additional options that control the behavior of the spawned processes, e.g.,
 
     %% erlang
     Pid = spawn_opt(fun run_some_code/0, [{min_heap_size, 1342}]),
@@ -751,7 +751,7 @@ To close a previous opened AVM by name, use the `atomvm:close_avm_pack/2` functi
     %% erlang
     ok = atomvm:close_avm_pack(my_avm, [])
 
-> Note.  Currently, the options parameter is ignored, so use the empty list (`[]`) for foward compatibility.
+> Note.  Currently, the options parameter is ignored, so use the empty list (`[]`) for forward compatibility.
 
 You can load an individual BEAM file using the `code:load_binary/3` function.  Specify the Module name (as an atom), as well as the BEAM data you have loaded into memory.
 
@@ -834,8 +834,7 @@ You can also use the legacy `erlang:md5/1` function to compute the MD5 hash of a
     %% erlang
     Hash = erlang:md5(<<foo>>).
 
-On ESP32, you can perform symetric encryption and decryption of any iodata data using
-`crypto_one_time/4,5` function.
+On ESP32, you can perform symmetric encryption and decryption of any iodata data using `crypto_one_time/4,5` function.
 
 Following ciphers are supported:
 
@@ -1017,7 +1016,7 @@ The `freq_hz` function can be used to retrieve the clock frequency of the chip.
 
 * `esp:freq_hz/0`
 
-The `esp:partition_list/0` function can be used to retrieve information about the paritions on an ESP32 flash.
+The `esp:partition_list/0` function can be used to retrieve information about the partitions on an ESP32 flash.
 
 The return type is a list of tuples, each of which contains the partition id (as a binary), partition type and sub-type (both of which are represented as integers), the start of the partition as an address along with its size, as well as a list of properties about the partition, as a properties list.
 
@@ -1143,7 +1142,7 @@ Use the `gpio:close/1` function to close the GPIO driver and free any resources 
     %% erlang
     ok = gpio:close(GPIO).
 
-Since only one instance of the GPIO driver is allowed, you may also simply use `gpio:stop/0` to remove all interrupts, free the resouces, and close the GPIO driver port.
+Since only one instance of the GPIO driver is allowed, you may also simply use `gpio:stop/0` to remove all interrupts, free the resources, and close the GPIO driver port.
 
     %% erlang
     ok = gpio:stop().
@@ -1619,7 +1618,7 @@ The socket returned from `gen_tcp:accept/1` can then be used to send and receive
                 echo()
         end.
 
-In this case, the server program will continuosuly echo the received input back to the client, until the client closes the connection.
+In this case, the server program will continuously echo the received input back to the client, until the client closes the connection.
 
 For more information about the `gen_tcp` server interface, consult the AtomVM [API Reference Documentation](./api-reference-documentation.md).
 
@@ -1803,8 +1802,8 @@ Currently, the following options are supported:
 | Option Key | Option Value | Description |
 |------------|--------------|-------------|
 | `{socket, reuseaddr}` | `boolean()` | Sets `SO_REUSEADDR` on the socket. |
-| `{socket, linger}` | `#{onoff => boolean(), linger => non_neg_integer()}` | Sets `SO_LINGER` on the socekt. |
-| `{otp, rcvbuf}` | `non_neg_integer()` | Sets the default buffer size (in bytes) on receive calls.  This value is only used if the `Length` parameter of the `socket:recv` family of functions has the value `0`; otherwise, the specified non-zero length in the `socket:recv` takes precendence.  Note that the OTP option value `default` is not currently supported.|
+| `{socket, linger}` | `#{onoff => boolean(), linger => non_neg_integer()}` | Sets `SO_LINGER` on the socket. |
+| `{otp, rcvbuf}` | `non_neg_integer()` | Sets the default buffer size (in bytes) on receive calls.  This value is only used if the `Length` parameter of the `socket:recv` family of functions has the value `0`; otherwise, the specified non-zero length in the `socket:recv` takes precedence.  Note that the OTP option value `default` is not currently supported.|
 
 For example:
 
@@ -1883,7 +1882,7 @@ For example:
                 address := Address
             } = AddrInfo,
 
-            io:format("family: ~p prototcol: ~p type: ~p address: ~p", [Family, Protocol, Type, Address])
+            io:format("family: ~p protocol: ~p type: ~p address: ~p", [Family, Protocol, Type, Address])
 
         end,
         AddrInfos

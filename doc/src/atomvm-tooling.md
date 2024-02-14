@@ -19,7 +19,7 @@ Two tools are supported, one for Erlang developers, and one for Elixir developer
 
 ## `atomvm_rebar3_plugin`
 
-The [`atomvm_rebar3_plugin`](https://atomvm.github.io/atomvm_rebar3_plugin) is a [rebar3](https://rebar3.org) plugin that can be used to create and flash Erlang applications that run over AtomVM.  Using this plugin greatly simplies the process of building Erlang applications that run over AtomVM, and is strongly encouraged for all users.
+The [`atomvm_rebar3_plugin`](https://atomvm.github.io/atomvm_rebar3_plugin) is a [rebar3](https://rebar3.org) plugin that can be used to create and flash Erlang applications that run over AtomVM.  Using this plugin greatly simplifies the process of building Erlang applications that run over AtomVM, and is strongly encouraged for all users.
 
 ### Prerequisites
 
@@ -214,7 +214,7 @@ For example:
 
 ## `ExAtomVM`
 
-The [`ExAtomVM`](https://github.com/atomvm/ExAtomVM) tool is a [mix](https://elixir-lang.org/getting-started/mix-otp/introduction-to-mix.html) plugin that can be used to create and flash [Elixir](https://elixir-lang.org) applications that run over AtomVM.  Using this plugin greatly simplies the process of building Elixir applications that run over AtomVM, and is strongly encouraged for new users.
+The [`ExAtomVM`](https://github.com/atomvm/ExAtomVM) tool is a [mix](https://elixir-lang.org/getting-started/mix-otp/introduction-to-mix.html) plugin that can be used to create and flash [Elixir](https://elixir-lang.org) applications that run over AtomVM.  Using this plugin greatly simplifies the process of building Elixir applications that run over AtomVM, and is strongly encouraged for new users.
 
 ### Prerequisites
 

@@ -65,7 +65,7 @@ Processes are in either `waiting_processes`, `running_processes` or `ready_proce
 
 Each of these fields are doubly-linked list (ring) structures, i.e, structs containing a `prev` and `next` pointer field.  The `Context` data structure begins with two such structures, the first of which links the `Context` struct in the `processes_table` field, and the second of which is used for either the `waiting_processes`, the `ready_processes` or the `running_processes` field.
 
-> Note.  The C programming language treats structures in memory as contiguous sequences of fields of given types.  Structures have no hidden pramble data, such as you might find in C++ or who knows what in even higher level languages.  The size of a struct, therefore, is determined simply by the size of the component fields.
+> Note.  The C programming language treats structures in memory as contiguous sequences of fields of given types.  Structures have no hidden preamble data, such as you might find in C++ or who knows what in even higher level languages.  The size of a struct, therefore, is determined simply by the size of the component fields.
 
 
 The relationship between the `GlobalContext` fields that manage BEAM processes and the `Context` data structures that represent the processes, themselves, is illustrated in the following diagram:
