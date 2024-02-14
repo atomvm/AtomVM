@@ -39,6 +39,13 @@ This section describes AtomVM internal data structures that are used to manage t
 
 We start with the top level data structure, the `GlobalContext` struct.  This object is a singleton object (currently, and for the foreseeable future), and represents the root of all data structures in the virtual machine.  It is in essence in 1..1 correspondence with instances of the virtual machine.
 
+````{only} html
+:::{doxygenstruct} GlobalContext
+   :allow-dot-graphs:
+
+:::
+````
+
 ```{note}
 Given the design of the system, it is theoretically possible to run multiple instances of the AtomVM in one process
 space.  However, no current deployments make use of this capability.
@@ -93,9 +100,23 @@ The [Context](#contexts) data structure is described in more detail below.
 #### An Aside: What's in a HashTable?
 
 ### Modules
+-->
 
 ### Contexts
 
+`````{only} html
+````{danger}
+
+This section is under construction
+
+:::{doxygenstruct} Context
+   :allow-dot-graphs:
+
+:::
+````
+`````
+
+<!-- TODO: Document and uncomment sections below.
 ## Runtime Execution Loop
 
 ## Module Loading
@@ -113,17 +134,43 @@ Each scheduler thread picks a ready process and execute it until it yields.  Erl
 
 Once a scheduler thread is done executing a process, if no other thread is waiting into `sys_poll_events`, it calls `sys_poll_events` with a timeout that correspond to the time to wait for next execution.  If there are ready processes, the timeout is 0.  If there is no ready process, this scheduler thread will wait into `sys_poll_event` and depending on the platform implementation, the CPU usage can drop.
 
+````{only} html
+>:::{doxygenfunction} sys_poll_events
+````
+
 If there already is one thread in `sys_poll_events`, other scheduler threads pick the next ready process and if there is none, wait.  Other scheduler threads can also interrupt the wait in `sys_poll_events` if a process is made ready to run.  They do so using platform function `sys_signal`.
+
+````{only} html
+>:::{doxygenfunction} sys_signal
+````
 
 ## Mailboxes and signals
 
 Erlang processes receive messages in a mailbox.  The mailbox is the interface with other processes.
 
+````{only} html
+>:::{doxygenstruct} Message
+>:allow-dot-graphs:
+>
+>:::
+````
+
 When a sender process sends a message to a recipient process, the message is first enqueued into an outer mailbox.  The recipient process eventually moves all messages from the outer mailbox to the inner mailbox.  The reason for the inner and outer mailbox is to use lock-free data structures using atomic CAS operations.
+
+````{only} html
+>:::{doxygenstruct} Mailbox
+>:allow-dot-graphs:
+>
+>:::
+````
 
 Sometimes, Erlang processes need to query information from other processes but without sending a regular message, for example when using [`process_info/1,2`](./apidocs/erlang/estdlib/erlang.md#process_info2) nif.  This is handled by signals.  Signals are special messages that are enqueued in the outer mailbox of a process.  Signals are processed by the recipient process when regular messages from the outer mailbox are moved to the inner mailbox.  Signal processing code is part of the main loop and transparent to recipient processes.  Both native handlers and erlang processes can receive signals.  Signals are also used to run specific operation on other processes that cannot be done from another thread.  For example, signals are used to perform garbage collection on another process.
 
 When an Erlang process calls a nif that requires such an information from another process such as `process_info/1,2`, the nif returns a special value and set the `Trap` flag on the calling process.  The calling process is effectively blocked until the other process is scheduled and the information is sent back using another signal message.  This mechanism can also be used by nifs that want to block until a condition is true.
+
+````{only} html
+>:::{doxygenenum} ContextFlags
+````
 
 ## Stacktraces
 
@@ -146,6 +193,13 @@ Including file and line number information in stacktraces adds considerable over
 
 The line-refs table is an array of 16-bit integers, mapping line references (as they occur in BEAM instructions) to the actual line numbers in a file.  (Internally, BEAM instructions do not reference line numbers directly, but instead are indirected through a line index).  This table is stored on the `Module` structure.
 
+````{only} html
+>:::{doxygenstruct} Module
+>:allow-dot-graphs:
+>
+>:::
+````
+
 This table is populated when the BEAM file is loaded.  The table is created from information in the `Line` chunk in the BEAM file, if it exists.  Note that if there is no `Line` chunk in a BEAM file, this table is not created.
 
 The memory cost of this table is `num_line_refs * 2` bytes, for each loaded module, or 0, if there is no `Line` chunk in the associated BEAM file.
@@ -154,6 +208,12 @@ The memory cost of this table is `num_line_refs * 2` bytes, for each loaded modu
 
 The filenames table is a table of (usually only 1?) file name.  This table maps filename indices to `ModuleFilename` structures, which is essentially a pointer and a length (of type `size_t`).  This table generally only contains 1 entry, the file name of the Erlang source code module from which the BEAM file was generated.  This table is stored on the `Module` structure.
 
+````{only} html
+>:::{doxygenstruct} ModuleFilename
+>
+>:::
+````
+
 Note that a `ModuleFilename` structure points to data directly in the `Line` chunk of the BEAM file.  Therefore, for ports of AtomVM that memory-map BEAM file data (e.g., ESP32), the actual file name data does not consume any memory.
 
 The memory cost of this table is `num_filenames * sizeof(struct ModuleFilename)`, where `struct ModuleFilename` is a pointer and length, for each loaded module, or 0, if there is no `Line` chunk in the associated BEAM file.
@@ -161,6 +221,13 @@ The memory cost of this table is `num_filenames * sizeof(struct ModuleFilename)`
 #### The line-ref-offsets list
 
 The line-ref-offsets list is a sequence of `LineRefOffset` structures, where each structure contains a ListHead (for list book-keeping), a 16-bit line-ref, and an unsigned integer value designating the code offset at which the line reference occurs in the code chunk of the BEAM file.  This list is stored on the `Module` structure.
+
+````{only} html
+>:::{doxygenstruct} LineRefOffset
+>:allow-dot-graphs:
+>
+>:::
+````
 
 This list is populated at code load time.  When a line reference is encountered during code loading, a `LineRefOffset` structure is allocated and added to the line-ref-offsets list.  This list is used at a later time to find the line number at which a stack frame is called, in a manner described below.
 
