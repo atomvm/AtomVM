@@ -74,10 +74,10 @@ The relationship between the `GlobalContext` fields that manage BEAM processes a
 
 > Note.  The `Context` data structure is described in more detail below.
 
+<!-- TODO: Document and uncomment sections below.
 #### Module Management
 
 #### An Aside: What's in a HashTable?
-
 
 ### Modules
 
@@ -92,6 +92,7 @@ The relationship between the `GlobalContext` fields that manage BEAM processes a
 ## Exception Handling
 
 ## The Scheduler
+-->
 
 In SMP builds, AtomVM runs one scheduler thread per core.  Scheduler threads are actually started on demand.  The number of scheduler threads can be queried with `erlang:system_info/1` and be modified with `erlang:system_flag/2`.  All scheduler threads are considered equal and there is no notion of main thread except when shutting down (main thread is shut down last).
 
