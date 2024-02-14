@@ -21,7 +21,7 @@
 %%-----------------------------------------------------------------------------
 %% @doc An implementation of the Erlang/OTP gen_statem interface.
 %%
-%% This module implements a strict susbset of the Erlang/OTP gen_statem
+%% This module implements a strict subset of the Erlang/OTP gen_statem
 %% interface, supporting operations for local creation and management of
 %% gen_statem instances.
 %%
@@ -169,6 +169,8 @@ stop(ServerRef) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   ServerRef a reference to the gen_statem acquired via start
+%% @param   Reason the reason to supply for stopping
+%% @param   Timeout maximum time to wait for shutdown
 %% @returns ok, if the gen_statem stopped; {error, Reason}, otherwise.
 %% @doc     Stop a previously started gen_statem instance.
 %%

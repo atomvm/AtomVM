@@ -445,7 +445,7 @@ sendto(Socket, Data, Dest) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
-%% @param   Option the option
+%% @param   SocketOption the option
 %% @param   Value the option value
 %% @returns `{ok, Address}' if successful; `{error, Reason}', otherwise.
 %% @doc     Set a socket option.

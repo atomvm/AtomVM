@@ -69,7 +69,7 @@ open(PortNum) ->
     open(PortNum, []).
 
 %%-----------------------------------------------------------------------------
-%% @param   Port the port number to bind to.  Specify 0 to use an OS-assigned
+%% @param   PortNum the port number to bind to.  Specify 0 to use an OS-assigned
 %%          port number, which can then be retrieved via the inet:port/1
 %%          function.
 %% @param   Options A list of configuration parameters.
@@ -98,7 +98,7 @@ open(PortNum, Options) ->
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket over which to send a packet
 %% @param   Address the target address to which to send the packet
-%% @param   Port    the port on target address to which to send the packet
+%% @param   PortNum the port on target address to which to send the packet
 %% @param   Packet  the packet of data to send
 %% @returns ok | {error, Reason}
 %% @doc     Send a packet over a UDP socket to a target address/port.
@@ -153,7 +153,7 @@ recv({?GEN_UDP_MONIKER, Socket, Module}, Length, Timeout) ->
 %% @doc     Close the socket.
 %% @end
 %%-----------------------------------------------------------------------------
--spec close(inet:socket()) -> ok.
+-spec close(Socket :: inet:socket()) -> ok.
 close({?GEN_UDP_MONIKER, Socket, Module}) ->
     Module:close(Socket).
 

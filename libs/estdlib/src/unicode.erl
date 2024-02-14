@@ -122,7 +122,7 @@ characters_to_binary(_Data, _InEncoding) ->
 %% for which this function merely returns an error tuple.</p>
 %% @param Data data to convert to UTF8
 %% @param InEncoding encoding of input data
-%% @param InEncoding output encoding
+%% @param OutEncoding output encoding
 %% @return an encoded binary or a tuple if conversion failed.
 -spec characters_to_binary(
     Data :: chardata() | latin1_chardata(), InEncoding :: encoding(), OutEncoding :: encoding()
