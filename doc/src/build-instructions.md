@@ -28,6 +28,16 @@ The AtomVM source code is available by cloning the AtomVM github repository:
 
 > Note.  Downloading the AtomVM github repository requires the installation of the `git` program.  Consult your local OS documentation for installation of the `git` package.
 
+If you want to build a release version of AtomVM, simply checkout the desired release (from inside your local clone of the repo):
+
+    shell$ git checkout v0.6.0-alpha.2
+
+> Note.  You may need to refresh the tags if you have already cloned the repository and you want to build a more recent release version.
+>    shell$ git pull --tags --rebase
+>The use of `--rebase` is necessary if you are in a working branch and have made commits, otherwise it is optional, but recommended.
+
+To return to the current `master` branch use `git switch master`.
+
 ## Source code organization
 
 Source code is organized as follows:
@@ -269,7 +279,7 @@ The flash layout is roughly as follows (not to scale):
     |                 |             |
     |                 |             |
     +-----------------+             |
-    |     lib.avm     | 256KB       v
+    |    boot.avm     | 256KB       v
     +-----------------+  ------------- 0x210000
     |                 |             ^
     |                 |             |
@@ -292,17 +302,17 @@ The following table summarizes the partitions created on the ESP32 when deployin
 | lib.avm | 0x1D0000 | 256k | The AtomVM BEAM library, compiled from Erlang and Elixir files in the AtomVM source tree. |
 | main.avm | 0x210000 | 1mB | The user application.  This is where users flash their compiled Erlang/Elixir code |
 
-### The `lib.avm` and `main.avm` partitions
+### The `boot.avm` and `main.avm` partitions
 
-The `lib.avm` and `main.avm` partitions are intended to store Erlang/Elixir libraries (compiled down to BEAM files, and assembled as AVM files).
+The `boot.avm` and `main.avm` partitions are intended to store Erlang/Elixir libraries (compiled down to BEAM files, and assembled as AVM files).
 
-The `lib.avm` partition is intended for core Erlang/Elixir libraries that are built as part of the AtomVM build.  The release image of AtomVM (see below) includes both the AtomVM virtual machine and the `lib.avm` partition, which includes the BEAM files from the `estdlib` and `eavmlib` libraries.
+The `boot.avm` partition is intended for core Erlang/Elixir libraries that are built as part of the AtomVM build.  The release image of AtomVM (see below) includes both the AtomVM virtual machine and the `boot.avm` partition, which includes the BEAM files from the `estdlib` and `eavmlib` libraries.
 
 In contrast, the `main.avm` partition is intended for user applications.  Currently, the `main.avm` partition starts at address `0x210000`, and it is to that location to which application developers should flash their application AVM files.
 
-The AtomVM search path for BEAM modules starts in the `main.avm` partition and falls back to `lib.avm`.  Users should not have a need to override any functionality in the `lib.avm` partition, but if necessary, a BEAM module of the same name in the `main.avm` partition will be loaded instead of the version in the `lib.avm` partition.
+The AtomVM search path for BEAM modules starts in the `main.avm` partition and falls back to `boot.avm`.  Users should not have a need to override any functionality in the `boot.avm` partition, but if necessary, a BEAM module of the same name in the `main.avm` partition will be loaded instead of the version in the `boot.avm` partition.
 
-> Note.  The location of the `main.avm` partition may change over time, depending on the relative sizes of the AtomVM binary and `lib.avm` partitions.
+> Note.  The location of the `main.avm` partition may change over time, depending on the relative sizes of the AtomVM binary and `boot.avm` partitions.
 
 ### Building a Release Image
 
@@ -310,7 +320,7 @@ The `<atomvm-source-tree-root>/tools/release/esp32` directory contains the `mkim
 
 > Note.  Before running the `mkimage.sh` script, you must have a complete build of both the esp32 project, as well as a full build of the core Erlang libraries in the `libs` directory.  The script configuration defaults to assuming that the core Erlang libraries will be written to the `build/libs` directory in the AtomVM source tree.  You should pass the `--build_dir <path>` option to the `mkimage.sh` script, with `<path>` pointing to your AtomVM build directory, if you  target a different build directory when running CMake.
 
-Running this script will generate a single `atomvm-<sha>.img` file in the `build` directory of the esp32 source tree, where `<sha>` is the git hash of the current checkout.  This image contains the ESP32 bootloader, AtomVM executable, and the `eavmlib` and `estdlib` Erlang libraries in one file, which can then be flashed to address `0x1000`.
+Running this script will generate a single `atomvm-<sha>.img` file in the `build` directory of the esp32 source tree, where `<sha>` is the git hash of the current checkout.  This image contains the ESP32 bootloader, AtomVM executable, and the `eavmlib` and `estdlib` Erlang libraries in one file, which can then be flashed to address `0x1000` on an ESP32. The address is different for some ESP32 models, this is set when running `idf.py set-target`, and `mkimage.sh` will use the correct offset for the chip model the build was configured for. See the the [ESP32 section](./getting-started-guide.md/#getting-started-on-the-esp32-platform) of the [Getting Started Guide](./getting-started-guide.md) for specific details about the bootloader offset address of each chip model.
 
 The `mkimage.sh` script is run from the `src/platform/esp32` directory as follows:
 

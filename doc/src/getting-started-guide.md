@@ -111,10 +111,12 @@ Flashing the ESP32 using a pre-built binary image is by far the easiest path to 
 
 We recommend first erasing any existing applications on the ESP32 device.  E.g.,
 
-    shell$ esptool.py --chip auto --port /dev/ttyUSB0 --baud 115200 erase_flash
+    shell$ esptool.py --chip auto --port /dev/ttyUSB0 --baud 921600 erase_flash
     ...
 
 > Note.  Specify the device port and baud settings and AtomVM image name to suit your particular environment.
+
+> Note. A baud rate of 921600 works well for most ESP32 devices, some can work reliably at higher rates of 1500000, or even 2000000, but some devices (especially those with a 26Mhz crystal frequency, rather than the more common 40 Mhz crystal) may need to use a slower baud rate such as 115200.
 
 Download the latest [release image](https://github.com/atomvm/AtomVM/releases) for ESP32.
 
@@ -134,12 +136,29 @@ Finally, use the `esptool.py` command to flash the image to the start address `0
 
     shell$ esptool.py \
         --chip auto \
-        --port /dev/ttyUSB0 --baud 115200 \
+        --port /dev/ttyUSB0 --baud 921600 \
         --before default_reset --after hard_reset \
         write_flash -u \
         --flash_mode dio --flash_freq 40m --flash_size detect \
         0x1000 \
         /path/to/Atomvm-esp32-v0.6.0.img
+
+> Note. A baud rate of 921600 works well for most ESP32 devices, some can work reliably at higher rates of 1500000, or even 2000000, but some devices (especially those with a 26Mhz crystal frequency, rather than the more common 40 Mhz crystal) may need to use a slower baud rate such as 115200.
+
+The chart below lists the start address of the bootloader for the various ESP32 family of chips:
+
+| Chipset | Bootloader address |
+|----------|----------|
+| ESP32 | `0x1000` |
+| ESP32-S2 | `0x1000` |
+| ESP32-S3 | `0x0` |
+| ESP32-C2 | `0x0` |
+| ESP32-C3 | `0x0` |
+| ESP32-C6 | `0x0` |
+| ESP32-H2 | `0x0` |
+<!-- TODO: Pending chip release and support
+| ESP32-P4 | `0x2000` |
+-->
 
 Once completed, your ESP32 device is ready to run Erlang or Elixir programs targeted for AtomVM.
 

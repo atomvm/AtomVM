@@ -328,6 +328,26 @@ For example:
     AtomVM finished with return value: ok
     I (972) AtomVM: AtomVM application terminated.  Going to sleep forever ...
 
+#### STM32 flash task
+
+To flash AtomVM packbeam file to an STM32 device, use the `atomvm.stm32.flash` mix target.
+
+> Note.  In order to use the `mix.stm32.flash` target, you will need to install the  `st-flash` tool from the open source (bsd-3 licensed) [stlink](https://github.com/stlink-org/stlink) suite of stm32 utilities.
+
+For example:
+
+    shell$ mix atomvm.stm32.flash
+
+Most devices do not need to enter the default application offset `0x8080000`, but devices with only 512KiB of flash storage need to use `--flash_offset=0x8060000` parameter setting to upload the application to the correct flash location.
+
+BlackPill V2 example:
+
+    shell$ mix atomvm.stm32.flash --flash_offset=0x8060000
+
+If the `st-flash` tool is not in environment PATH, the full path to the `st-flash` tool should be exported to the environment variable `ATOMVM_MIX_PLUGIN_STFLASH`, for example:
+
+    shell$ export ATOMVM_MIX_PLUGIN_STFLASH=/opt/stlink/bin/st-flash
+
 ## `atomvm_packbeam`
 
 The [atomvm_packbeam](https://atomvm.github.io/atomvm_packbeam) tool is a simple command-line utility that allows you to create, inspect, and manipulate AtomVM [PackBEAM](./packbeam-format.md) files.  By convention, PackBEAM files end in the `.avm` suffix and are referred to as "AVM" files, in the remainder of this section.

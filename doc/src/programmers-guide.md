@@ -102,7 +102,17 @@ In order to deploy AtomVM applications to and test on the ESP32 platform, develo
 
 #### STM32 Deployment Requirements
 
-TODO
+* A computer running MacOS or Linux (Windows is not currently supported);
+* An stm32 board with a USB/UART connector (these are built into some boards such as the Nucleo product line) and a minimum of 512k (1M recommended) of flash and a minimum of 100k RAM; STM32 board or external UART connector to your development machine (laptop or PC);
+* `st-flash` via [stlink](https://github.com/stlink-org/stlink), to flash both AtomVM and your packed AVM applications. Make sure to follow its [installation procedure](https://github.com/stlink-org/stlink#installation) before proceeding further.m` files into the AtomVM `*.avm` format.
+* (Optional, but recommended) A serial console program, such as `minicom` or `screen`, so that you can view console output from your AtomVM application.
+
+#### Raspberry Pi Pico Deployment Requirements
+
+* A computer running MacOS or Linux (Windows support is not currently supported);
+* A Raspberry Pico board with a USB/UART connector (typically part of a development board);
+* A USB cable capable of connecting the Raspberry Pico module or board to your development machine (laptop or PC);
+* (Optional, but recommended) A serial console program, such as `minicom` or `screen`, so that you can view console output from your AtomVM application.
 
 ### Development Workflow
 
@@ -199,33 +209,55 @@ Not all files in a Packbeam need to be BEAM modules -- you can embed any type of
 
 The AtomVM community has provided several tools for simplifying your experience, as a developer.  These tools allow you to use standard Erlang and Elixir tooling (such as `rebar3` and `mix`) to build Packbeam files and deploy then to your device of choice.
 
-### `PackBEAM` tool
+### `packbeam` tool
 
-The `PackBEAM` tool is a command-line application that can be used to create Packbeam files from a collection of input files:
+The `packbeam` tool is a command-line application that can be used to create Packbeam files from a collection of input files:
 
-    shell$ PackBEAM -h
-    Usage: PackBEAM [-h] [-l] <avm-file> [<options>]
-        -h                                                Print this help menu.
-        -i                                                Include file and line information.
-        -l <input-avm-file>                               List the contents of an AVM file.
-        [-a] <output-avm-file> <input-beam-or-avm-file>+  Create an AVM file (archive if -a specified).
+    shell$ packbeam help
+    packbeam version 0.7.0
+    Syntax:
+        packbeam <sub-command> <options> <args>
 
-To create a packbeam file, specify the name of the AVM file to created (by convention, ending in `.avm`), followed by a list of BEAM files:
+    The following sub-commands are supported:
 
-    shell$ PackBEAM foo.avm path/to/foo.beam path/to/bar.beam
+        create <options> <output-avm-file> [<input-file>]+
+            where:
+                <output-avm-file> is the output AVM file,
+                [<input-file>]+ is a list of one or more input files,
+                and <options> are among the following:
+                    [--prune|-p]           Prune dependencies
+                    [--start|-s <module>]  Start module
+                    [--remove_lines|-r]    Remove line number information from AVM files
 
-You can also specify another AVM file to include.  Thus, for example, to add to BEAM file to an existing AVM file, you might enter:
+        list <options> <avm-file>
+            where:
+                <avm-file> is an AVM file,
+                and <options> are among the following:
+                    [--format|-f csv|bare|default]  Format output
 
-    shell$ PackBEAM foo.avm foo.avm path/to/gnu.beam
+        extract <options> <avm-file> [<element>]*
+            where:
+                <avm-file> is an AVM file,
+                [<element>]+ is a list of one or more elements to extract
+                    (if empty, then extract all elements)
+                and <options> are among the following:
+                    [--out|-o <output-directory>]   Output directory into which to write elements
+                    (if unspecified, use the current working directory)
 
-To list the contents of an AVM file, use the `-l` flag:
+        delete <options> <avm-file> [<element>]+
+            where:
+                <avm-file> is an AVM file,
+                [<element>]+ is a list of one or more elements to delete,
+                and <options> are among the following:
+                    [--out|-o <output-avm-file>]    Output AVM file
 
-    shell% PackBEAM -l foo.avm
-    foo.beam *
-    bar.beam
-    gnu.beam
+        version
+            Print version and exit
 
-Any BEAM files that export a `start/0` function will contain an asterisk (`*`) in the AVM file contents.
+        help
+            Print this help
+
+For more information consult the [packbeam section of AtomVM Tooling](./atomvm-tooling.md#atomvm_packbeam).
 
 ### Running AtomVM
 
