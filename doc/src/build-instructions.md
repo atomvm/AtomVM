@@ -8,7 +8,7 @@
 
 This guide is intended for anyone interested in building the AtomVM virtual machine from source code.  You may be interested in building the AtomVM source code if you want to provide bug fixes or enhancements to the VM, or if you want to simply learn more about the platform.  In addition, some "downstream" drivers for specific devices may need to be built specifically for the target platform (e.g., ESP32), in which case building the VM from source code is required.
 
-> Note.  Many applications do not require building the AtomVM runtime from source code.  Instead, you can download pre-built VM images for platforms such as ESP32, and use Erlang and Elixir tooling to build and deploy your applications.
+> Note.  Many applications do not require building the AtomVM runtime from source code.  Instead, you can [download pre-built VM images](https://github.com/atomvm/AtomVM/releases) for platforms such as ESP32, and use Erlang and Elixir tooling to build and deploy your applications.
 
 The AtomVM virtual machine itself, including the runtime code execution engine, as well as built-in functions and Nifs is implemented in C.  The core standard and AtomVM libraries are implemented in Erlang and Elixir.
 
@@ -28,13 +28,13 @@ The AtomVM source code is available by cloning the AtomVM github repository:
 
 > Note.  Downloading the AtomVM github repository requires the installation of the `git` program.  Consult your local OS documentation for installation of the `git` package.
 
-If you want to build a release version of AtomVM, simply checkout the desired release (from inside your local clone of the repo):
+If you want to build a release version of AtomVM, simply checkout the desired release:
 
     shell$ git checkout v0.6.0-alpha.2
 
-> Note.  You may need to refresh the tags if you have already cloned the repository and you want to build a more recent release version.
->    shell$ git pull --tags --rebase
->The use of `--rebase` is necessary if you are in a working branch and have made commits, otherwise it is optional, but recommended.
+> Note. You may need to refresh the tags if you have already cloned the repository and you want to build a more recent release version.
+>   shell$ git pull --tags --rebase
+> The use of `--rebase` is necessary if you are in a working branch and have made commits, otherwise it is optional.
 
 To return to the current `master` branch use `git switch master`.
 
@@ -51,7 +51,13 @@ Source code is organized as follows:
 
 The `src` directory is broken up into the core platform-independent AtomVM library (`libAtomVM`), and platform-dependent code for each of the supported platforms  (Generic UNIX, ESP32, and STM32).
 
-For information about porting to new platforms, see [Porting to new platforms](#porting-to-new-platforms), below.
+## Platform Specific Build Instructions
+
+* [Generic UNIX](#building-for-generic-unix)
+* [ESP32](#building-for-esp32)
+* [STM32](#building-for-stm32)
+* [Raspberry Pi Pico](#building-for-raspberry-pi-pico) (rp2040)
+* [WASM](#building-for-emscripten) (NodeJS or web)
 
 ## Building for Generic UNIX
 
@@ -59,7 +65,7 @@ The following instructions apply to unix-like environments, including Linux, Fre
 
 > Note.  The Generic UNIX is useful for running and testing simple AtomVM programs.  Not all of the AtomVM APIs, specifically, APIs that are dependent on various device integration, are supported on this platform.
 
-### Build Requirements
+### Generic UNIX Build Requirements
 
 The following software is required in order to build AtomVM in generic UNIX systems:
 
@@ -76,7 +82,7 @@ Consult [Release Notes](./release-notes.md) for currently supported versions of 
 
 Consult your local OS documentation for instructions about how to install these components.
 
-### Build Instructions
+### Generic UNIX Build Instructions
 
 The AtomVM build for generic UNIX systems makes use of the `cmake` tool for generating `make` files from the top level AtomVM directory.  With CMake, you generally create a separate directory for all output files (make files, generated object files, linked binaries, etc).  A common pattern is to create a local `build` directory, and then point `cmake` to the parent directory for the root of the source tree:
 
@@ -153,7 +159,7 @@ Building AtomVM for ESP32 must be done on either a Linux or MacOS build machine.
 
 In order to build a complete AtomVM image for ESP32, you will also need to build AtomVM for the Generic UNIX platform (typically, the same build machine you are suing to build AtomVM for ESP32).
 
-### Build Requirements
+### ESP32 Build Requirements
 
 The following software is required in order to build AtomVM for the ESP32 platform:
 
@@ -163,7 +169,7 @@ The following software is required in order to build AtomVM for the ESP32 platfo
 
 Instructions for downloading and installing the Espressif IDF SDK and tool chains are outside of the scope of this document.  Please consult the [IDF SDKGetting Started](https://docs.espressif.com/projects/esp-idf/en/release-v4.4/get-started/index.html) guide for more information.
 
-### Build Instructions
+### ESP32 Build Instructions
 
 To activate the ESP-IDF build environment change directories to the tree root of your local ESP-IDF:
 
@@ -184,7 +190,7 @@ Start by updating the default build configuration of local `sdkconfig` file via 
 
 > Note.  For those familiar with esp-idf the build can be customized using `menuconfig` instead of `reconfigure`
 >
->	shell$ idf.py menuconfig
+> shell$ idf.py menuconfig
 >
 >   This command will bring up a curses dialog box where you can make adjustments such as not including AtomVM components that
 >   are not desired in a particular build. You can also change the behavior of a crash in the VM to print the error and reboot,
@@ -198,19 +204,19 @@ You can now build AtomVM using the build command:
 
 This command, once completed, will create the Espressif bootloader, partition table, and AtomVM binary.  The last line of the output should read something like the following:
 
-	To flash all build output, run 'idf.py flash' or:
-	python /path/to/esp-idf-sdk/components/esptool_py/esptool/esptool.py --chip esp32
-	--port /dev/ttyUSB0 --baud 115200 --before default_reset --after hard_reset write_flash
-	-z --flash_mode dio --flash_freq 40m --flash_size detect
-	0x1000 /path-to-atomvm-source-tree/Atomvm/src/platforms/esp32/build/bootloader/bootloader.bin
-	0x10000 /path-to-atomvm-source-tree/Atomvm/src/platforms/esp32/build/atomvm-esp32.bin
-	0x8000 /path-to-atomvm-source-tree/Atomvm/src/platforms/esp32/build/partition_table/partition-table.bin
+    Project build complete. To flash, run this command:
+    ~/.espressif/python_env/idf5.1_py3.11_env/bin/python ~/esp/esp-idf-v5.1/components
+    /esptool_py/esptool/esptool.py -p (PORT) -b 921600 --before default_reset
+    --after hard_reset --chip esp32 write_flash --flash_mode dio --flash_size detect
+    --flash_freq 40m 0x1000 build/bootloader/bootloader.bin 0x8000
+    build/partition_table/partition-table.bin 0x10000 build/atomvm-esp32.bin
+    or run 'idf.py -p (PORT) flash'
 
 At this point, you can run `idf.py flash` to upload the 3 binaries up to your ESP32 device, and in some development scenarios, this is a preferable shortcut.
 
 However, first, we will build a single binary image file containing all of the above 3 binaries, as well as the AtomVM core libraries.  See [Building a Release Image](#building-a-release-image), below.  But first, it is helpful to understand a bit about how the AtomVM partitioning scheme works, on the ESP32.
 
-### Running tests
+### Running tests for ESP32
 
 Tests for ESP32 are run on the desktop (or CI) using qemu.
 
@@ -222,10 +228,10 @@ Also install Espressif pytest's extensions for embedded testing with:
 	shell$ cd <ESP-IDF-ROOT-DIR>
 	shell$ . ./export.sh
 	shell$ pip install pytest==7.0.1 \
-	        pytest-embedded==1.2.5 \
-	        pytest-embedded-serial-esp==1.2.5 \
-	        pytest-embedded-idf==1.2.5 \
-	        pytest-embedded-qemu==1.2.5
+		  pytest-embedded==1.2.5 \
+		  pytest-embedded-serial-esp==1.2.5 \
+		  pytest-embedded-idf==1.2.5 \
+		  pytest-embedded-qemu==1.2.5
 	...
 
 Change directory to the `src/platforms/esp32/test` directory under the AtomVM source tree root:
@@ -236,7 +242,6 @@ Change directory to the `src/platforms/esp32/test` directory under the AtomVM so
 Build tests using the build command:
 
 	shell$ idf.py build
-	...
 
 > Note.  This eventually compiles host AtomVM to be able to build and pack erlang test modules.
 
@@ -279,7 +284,7 @@ The flash layout is roughly as follows (not to scale):
     |                 |             |
     |                 |             |
     +-----------------+             |
-    |    boot.avm     | 256KB       v
+    |     boot.avm    | 256KB       v
     +-----------------+  ------------- 0x210000
     |                 |             ^
     |                 |             |
@@ -299,7 +304,7 @@ The following table summarizes the partitions created on the ESP32 when deployin
 | NVS | 0x9000 | 24kB | Space for non-volatile storage. |
 | PHY_INIT | 0xF000 | 4kB | Initialization data for physical layer radio signal data. |
 | AtomVM virtual machine | 0x10000 | 1.75mB | The AtomVM virtual machine (compiled from C code). |
-| lib.avm | 0x1D0000 | 256k | The AtomVM BEAM library, compiled from Erlang and Elixir files in the AtomVM source tree. |
+| boot.avm | 0x1D0000 | 256k | The AtomVM BEAM library, compiled from Erlang and Elixir files in the AtomVM source tree. |
 | main.avm | 0x210000 | 1mB | The user application.  This is where users flash their compiled Erlang/Elixir code |
 
 ### The `boot.avm` and `main.avm` partitions
@@ -318,14 +323,14 @@ The AtomVM search path for BEAM modules starts in the `main.avm` partition and f
 
 The `<atomvm-source-tree-root>/tools/release/esp32` directory contains the `mkimage.sh` script that can be used to create a single AtomVM image file, which can be distributed as a release, allowing application developers to develop AtomVM applications without having to build AtomVM from scratch.
 
-> Note.  Before running the `mkimage.sh` script, you must have a complete build of both the esp32 project, as well as a full build of the core Erlang libraries in the `libs` directory.  The script configuration defaults to assuming that the core Erlang libraries will be written to the `build/libs` directory in the AtomVM source tree.  You should pass the `--build_dir <path>` option to the `mkimage.sh` script, with `<path>` pointing to your AtomVM build directory, if you  target a different build directory when running CMake.
+> Note.  Before running the `mkimage.sh` script, you must have a complete build of both the esp32 project, as well as a full build of the core Erlang libraries in the `libs` directory.  The script configuration defaults to assuming that the core Erlang libraries will be written to the `build/libs` directory in the AtomVM source tree.  You should pass the `--build_dir <path>` option to the `mkimage.sh` script, with `<path>` pointing to your AtomVM build directory, if you target a different build directory when running CMake.
 
-Running this script will generate a single `atomvm-<sha>.img` file in the `build` directory of the esp32 source tree, where `<sha>` is the git hash of the current checkout.  This image contains the ESP32 bootloader, AtomVM executable, and the `eavmlib` and `estdlib` Erlang libraries in one file, which can then be flashed to address `0x1000` on an ESP32. The address is different for some ESP32 models, this is set when running `idf.py set-target`, and `mkimage.sh` will use the correct offset for the chip model the build was configured for. See the the [ESP32 section](./getting-started-guide.md/#getting-started-on-the-esp32-platform) of the [Getting Started Guide](./getting-started-guide.md) for specific details about the bootloader offset address of each chip model.
+Running this script will generate a single `atomvm-<sha>.img` file in the `build` directory of the esp32 source tree, where `<sha>` is the git hash of the current checkout.  This image contains the ESP32 bootloader, AtomVM executable, and the `eavmlib` and `estdlib` Erlang libraries in one file, which can then be flashed to address `0x1000` for the esp32. The bootloader address varies for other chip variants. See the [flashing a binary image to ESP32](./getting-started-guide.md#flashing-a-binary-image-to-esp32) section of the [Getting Started Guide](./getting-started-guide.md) for a chart with the bootloader offset address of each model.
 
 The `mkimage.sh` script is run from the `src/platform/esp32` directory as follows:
 
     shell$ ./build/mkimage.sh
-    Writing output to /home/frege/AtomVM/src/platforms/esp32/build/atomvm-esp32-0.6.0-dev+git.602e6bc.img
+    Writing output to /home/joe/AtomVM/src/platforms/esp32/build/atomvm-esp32-0.6.0-dev+git.602e6bc.img
     =============================================
     Wrote bootloader at offset 0x1000 (4096)
     Wrote partition-table at offset 0x8000 (32768)
@@ -355,7 +360,7 @@ After preparing a release image you can use the `flashimage.sh`, which is genera
 
 To perform this action manually you can use the `./build/flash.sh` tool (or `esptool.py` directly, if you prefer):
 
-    shell$ FLASH_OFFSET=0x1000 ./build/flash.sh ./build/atomvm-esp32-0.6.0-dev+git.602e6bc.img
+    shell$ FLASH_OFFSET=0x1000 ./build/flash.sh ./build/atomvm-esp32-0.6.0-beta-0.img
     esptool.py v2.8-dev
     Serial port /dev/tty.SLAB_USBtoUART
     Connecting........_
@@ -375,7 +380,7 @@ To perform this action manually you can use the `./build/flash.sh` tool (or `esp
     Leaving...
     Hard resetting via RTS pin...
 
-> Note. Flashing the full AtomVM image will delete all entries in non-volatile storage.  Only flash the full image if you have a way to recover and re-write any such data, if you need to retain it.
+> Note.  Flashing the full AtomVM image will delete all entries in non-volatile storage.  Only flash the full image if you have a way to recover and re-write any such data, if you need to retain it.
 
 ### Flashing Applications
 
@@ -404,7 +409,7 @@ Applications can be flashed using the `flash.sh` script in the esp32 build direc
     Leaving...
     Hard resetting via RTS pin...
 
-> Note.  Since the Erlang core libraries are flashed to the ESP32 device, it is not necessary to include core libraries in your application AVM files.  Users may be interested in using downstream development tools, such as the Elixir <a href="https://github.com/atomvm/ExAtomVM">ExAtomVM Mix task</a>, or the Erlang <a href="https://github.com/atomvm/atomvm_rebar3_plugin">AtomVM Rebar3 Plugin</a> for doing day-to-day development of applications for the AtomVM platform.
+> Note.  Since the Erlang core libraries are flashed to the ESP32 device, it is not necessary to include core libraries in your application AVM files.  Users may be interested in using downstream development tools, such as the Elixir [ExAtomVM Mix task](https://github.com/atomvm/ExAtomVM), or the Erlang [AtomVM Rebar3 Plugin](https://github.com/atomvm/atomvm_rebar3_plugin) for doing day-to-day development of applications for the AtomVM platform.
 
 #### Flashing the core libraries
 
@@ -444,7 +449,7 @@ While AtomVM is a functional implementation of the Erlang virtual machine, it is
 
 AtomVM supports extensions to the VM via the implementation of custom native functions (Nifs) and processes (AtomVM Ports), allowing users to extend the VM for additional functionality, and you can add your own custom Nifs, ports, and additional third-party components to your ESP32 build by adding them to the `components` directory, and the ESP32 build will compile them automatically.
 
-> For more information about building components for the IDF SDK, consult the [IDF SDK Build System](https://docs.espressif.com/projects/esp-idf/en/v4.4.4/api-guides/build-system.html#) documentation.
+For more information about building components for the IDF SDK, consult the [IDF SDK Build System](https://docs.espressif.com/projects/esp-idf/en/v5.1.2/esp32/api-guides/build-system.html) documentation.
 
 The instructions for adding custom Nifs and ports differ in slight detail, but are otherwise quite similar.  In general, they involve:
 
@@ -468,7 +473,6 @@ To add support for a new peripheral or protocol using custom AtomVM Nif, you nee
         * This function will be called once, when the application is started.
     * `const struct Nif *<moniker>_nif_get_nif(const char *nifname);`
         * This function will be called to locate the Nif during a function call.
-
 Example:
 
     void my_nif_init(GlobalContext *global);
@@ -490,7 +494,6 @@ To add support for a new peripheral or protocol using an AtomVM port, you need t
         * This function will be called once, when the application is started.
     * `Context *<moniker>_create_port(GlobalContext *global, term opts);`
         * This function will be called to locate the Nif during a function call.
-
 Example:
 
     void my_port_init(GlobalContext *global);
@@ -504,14 +507,12 @@ Example:
 
 ## Building for STM32
 
-### Prerequisites
+### STM32 Prerequisites
 
 The following software is required to build AtomVM for the STM32 platform:
 
-| Package |
-|---------|
-| [11.3 ARM toolchain](https://developer.arm.com/-/media/Files/downloads/gnu/11.3.rel1/binrel/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi.tar.xz) (or compatible with your system) |
-| [libopencm3](https://github.com/libopencm3/libopencm3.git) version 0.8.0 |
+* [11.3 ARM toolchain](https://developer.arm.com/-/media/Files/downloads/gnu/11.3.rel1/binrel/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi.tar.xz) (or compatible with your system)
+* [libopencm3](https://github.com/libopencm3/libopencm3.git) version 0.8.0
 * `cmake`
 * `make`
 * `git`
@@ -524,20 +525,21 @@ The following software is required to build AtomVM for the STM32 platform:
 
 Before building for the first time you need to have a compiled clone of the libopencm3 libraries, from inside the AtomVM/src/platforms/stm32 directory:
 
-    $ git clone https://github.com/libopencm3/libopencm3.git
+    $ git clone -b v0.8.0 https://github.com/libopencm3/libopencm3.git
     $ cd libopencm3 && make -j4 && cd ..
 
->Note: You can put libopencm3 wherever you want on your PC as long as you update LIBOPENCM3_DIR to point to it. This example assumes it has been cloned into /opt/libopencm3 and built. From inside the AtomVM/src/platforms/stm32 directory:```
-        cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/arm-toolchain.cmake -DLIBOPENCM3_DIR=/opt/libopencm3 ..
+> Note: You can put libopencm3 wherever you want on your PC as long as you update LIBOPENCM3_DIR to point to it. This example assumes it has been cloned into /opt/libopencm3 and built. From inside the AtomVM/src/platforms/stm32 directory:```
+    cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/arm-toolchain.cmake -DLIBOPENCM3_DIR=/opt/libopencm3 ..
+```
 
-### Build AtomVM
+### Build AtomVM with cmake toolchain file
 
     $ mkdir build
     $ cd build
-    $ cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/arm-toolchain.cmake
+    $ cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/arm-toolchain.cmake ..
     $ make
 
-### Changing device
+### Changing the target device
 
 The default build is based on the STM32F4Discovery board chip (`stm32f407vgt6`). If you want to target a different
 chip, pass the `-DDEVICE` flag when invoking cmake. For example, to use the BlackPill V2.0, pass `-DDEVICE=STM32F411CEU6`. At this time any `STM32F4` or `STM32F7` device with 512KB or more of on package flash should work with AtomVM. If an unsupported device is passed with the `DEVICE` parameter the configuration will fail. For devices with either 512KB or 768KB of flash the available application flash space will be limited to 128KB. Devices with only 512KB of flash may also suffer from slightly reduced performance because the compiler must optimize for size rather than performance.
@@ -565,7 +567,8 @@ The AtomVM system console `USART` may also be configured to a specific uart peri
 | `CONSOLE_7` | `UART7` | `PF7` |   |   |   |
 | `CONSOLE_8` | `UART8` | `PJ8` |   |   |   |
 
-### Configure logging with `cmake`
+### Configure STM32 logging with `cmake`
+
 The default maximum log level is `LOG_INFO`. To change the maximum level displayed pass `-DAVM_LOG_LEVEL_MAX="{level}"` to `cmake`, with one of `LOG_ERROR`, `LOG_WARN`, `LOG_INFO`, or `LOG_DEBUG` (listed from least to most verbose). Log messages can be completely disabled by using `-DAVM_LOG_DISABLE=on`.
 
 For log entries colorized by log level pass `-DAVM_ENABLE_LOG_COLOR=on` to cmake. With color enable there is a very small performance penalty (~1ms per message printed), the log entries are colored as follows:
@@ -579,7 +582,8 @@ For log entries colorized by log level pass `-DAVM_ENABLE_LOG_COLOR=on` to cmake
 
 By default only `ERROR` messages contain file and line number information. This can be included with all log entries by passing `-DAVM_ENABLE_LOG_LINES=on` to cmake, but it does incur a significant performance penalty and is only suggested for debugging during development.
 
-### Printing
+### Console Printing on STM32
+
 AtomVM is built with standard `newlib` to support `long long` integers (`signed` and `unsigned`). If you are building for a device with extremely limited flash space the `nano` version of `newlib` can be used instead. This may be done by passing `-DAVM_NEWLIB_NANO=on`. If the `nano newlib` is used logs will be automatically disabled, this is because many of the VM low level log messages will include `%ull` formatting and will cause buffer overflows and crash the VM if logging is not disabled for `nano newlib` builds. The total flash savings of using `nano newlib` and disabling logs is just under 40kB.
 
 By default, stdout and stderr are printed on USART2. On the STM32F4Discovery board, you can see them
@@ -588,12 +592,13 @@ is 8N1 with no flow control.
 
 > If building for a different target USART may be configure as explained above in [Configuring the Console](#configuring-the-console).
 
-### Configuring for "deployment"
+### Configuring deployment builds for STM32
+
 After your application has been tested (_and debugged_) and is ready to put into active use you may want to tune the build of AtomVM.  For instance disabling logging with `-DAVM_LOG_DISABLE=on` as a `cmake` configuration option may result in slightly better performance. This will have no affect on the console output of your application, just disable low level log messages from the AtomVM system. You may also want to enabling automatic reboot in the case that your application ever exits with a return other than `ok`. This can be enabled with the `cmake` option `-DAVM_CONFIG_REBOOT_ON_NOT_OK=on`.
 
 ## Building for Raspberry Pi Pico
 
-### Prerequisites
+### Pico Prerequisites
 
 * `cmake`
 * `ninja`
@@ -620,7 +625,7 @@ After your application has been tested (_and debugged_) and is ready to put into
 
 > You may want to build with option `AVM_REBOOT_ON_NOT_OK` so Pico restarts on error.
 
-### libAtomVM build steps
+### libAtomVM build steps for Pico
 
 Build of standard libraries is part of the generic unix build.
 
@@ -631,7 +636,7 @@ From the root of the project:
     cmake .. -G Ninja
     ninja
 
-### Running tests
+### Running tests for Pico
 
 Tests for Pico/RP2040 are run on the desktop (or CI) using [rp2040js](https://github.com/wokwi/rp2040js).
 Running tests currently require nodejs 20.
@@ -649,12 +654,12 @@ We are assuming tests were built as part of regular build of AtomVM. Run them wi
 
 	shell$ npx tsx run-tests.ts ../build/tests/rp2040_tests.uf2 ../build/tests/test_erl_sources/rp2040_test_modules.uf2
 
-## Building for NodeJS/Web
+## Building for `emscripten`
 
 Two different builds are possible, depending on link options: for NodeJS and
 for the web browser.
 
-### Prerequisites
+### WASM Prerequisites
 
 * [emscripten SDK](https://emscripten.org)
 * `cmake`
@@ -726,7 +731,7 @@ Then run tests with Cypress with:
     npm install cypress
     npx cypress run --browser chrome
 
-You can alternatvely specify: `chromium` or `edge` depending on what is installed.
+You can alternatively specify: `chromium` or `edge` depending on what is installed.
 
 Alternatively, on Linux, you can run tests with docker:
 

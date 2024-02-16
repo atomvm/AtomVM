@@ -70,7 +70,7 @@ The following BEAM header indicates a BEAM file with a length of 308 bytes (`0x0
 
 ### BEAM files
 
-BEAM files obey <a href="https://en.wikipedia.org/wiki/Interchange_File_Format">IFF</a> encoding as detailed <a href="http://www.erlang.se/~bjorn/beam_file_format.html">here</a>, but certain information in BEAM files is stripped out in order to minimize the amount of data stored on flash.
+BEAM files obey [IFF](https://en.wikipedia.org/wiki/Interchange_File_Format) encoding as detailed [here](http://www.erlang.se/~bjorn/beam_file_format.html), but certain information in BEAM files is stripped out in order to minimize the amount of data stored on flash.
 
 The following BEAM chunks are included in BEAM files:
 
@@ -98,7 +98,7 @@ Normal files (e.g., text files, data files, etc.) can be stored in packbeam AVM 
 
 Normal files contain a 32-bit big-endian size prefix, indicating the size of the file data (without padding).  Note that the `size` field in the file header includes the size of the data with padding, if applicable.
 
-The AtomVM runtime provides access to data files via the `atomvm:read_priv/2` NIF.  This function will create a path name formed by the `App` (atom) and `Path` (string) terms provided by this function, separated by `"/priv/"`.  For example, the expression
+The AtomVM runtime provides access to data files via the [`atomvm:read_priv/2`](./apidocs/erlang/eavmlib/atomvm.md#read-priv2) NIF.  This function will create a path name formed by the `App` (atom) and `Path` (string) terms provided by this function, separated by `"/priv/"`.  For example, the expression
 
     atomvm:read_priv(mylib, "sample.txt")
 
@@ -112,7 +112,7 @@ As a consequence, normal files should be included in packbeam files using module
 
 Packbeam files end with a special `end` header.  The `size` field of the `end` header is 0 bytes.
 
-#### Example
+#### Example `end` header
 
 The following sequence of bytes encodes the `end` header:
 

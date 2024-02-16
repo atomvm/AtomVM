@@ -8,7 +8,7 @@
 
 Welcome to the AtomVM Getting Started Guide.  This document is intended to get you started so that you can run Erlang or Elixir programs on the AtomVM platform as quickly as possible.
 
-In order to do so, you will need to provision your device (depending on the device type) with the AtomVM virtual machine.  Typically, you only need to do this once (or at least once per release of the VM you would like to use).  Once the VM is provisioned on the device, you can then deploy your application onto the device, and we expect this process to your typical "deploy, test, debug" development lifecycle.  The subsequent chapter on [AtomVM Tooling](atomvm-tooling.md) will help you understand that process.
+In order to do so, you will need to provision your device (depending on the device type) with the AtomVM virtual machine.  Typically, you only need to do this once (or at least once per release of the VM you would like to use).  Once the VM is provisioned on the device, you can then deploy your application onto the device, and we expect this process to your typical "deploy, test, debug" development lifecycle.  The subsequent chapter on [AtomVM Tooling](./atomvm-tooling.md) will help you understand that process.
 
 The getting started is broken up into the following sections:
 
@@ -22,13 +22,13 @@ Please use the appropriate section for the device type you intend to use.
 
 ## Getting Started on the ESP32 platform
 
-The AtomVM virtual machine is supported on the [Espressif](https://www.espressif.com) [ESP32](https://www.espressif.com/en/products/socs/esp32) platform, allowing users to write Erlang and Elixir programs and deploy them to the ESP32 micro-controller.  For specific information about which ESP32 boards and chip-sets are supported, please refer to the AtomVM [Release Notes](release-notes.md).
+The AtomVM virtual machine is supported on the [Espressif](https://www.espressif.com) [ESP32](https://www.espressif.com/en/products/socs/esp32) platform, allowing users to write Erlang and Elixir programs and deploy them to the ESP32 micro-controller.  For specific information about which ESP32 boards and chip-sets are supported, please refer to the AtomVM [Release Notes](./release-notes.md).
 
 These instructions cover how to provision the AtomVM virtual machine flashed to your ESP32 device.
 
 For most applications, you should only need to install the VM once (or at least once per desired AtomVM release).  Once the VM is uploaded, you can then begin development of Erlang or Elixir applications, which can then be flashed as part of your routine development cycle.
 
-### Requirements
+### ESP32 Requirements
 
 Deployment of AtomVM on the ESP32 platform requires the following components:
 
@@ -98,21 +98,20 @@ Connect the ESP32 to your development machine (e.g., laptop or PC) via a USB cab
 
 Consult your local development board documentation for instructions about how to connect your device to your development machine.
 
-### Deploying the AtomVM virtual machine
+### Deploying the ESP32 AtomVM virtual machine
 
 The following methods can be used to deploy the AtomVM virtual machine to an ESP32 device:
 
 1. Flashing a binary image;
 1. Building from source.
 
-#### Flashing a binary image
+#### Flashing a binary image to ESP32
 
 Flashing the ESP32 using a pre-built binary image is by far the easiest path to getting started with development on the ESP32.  Binary images contain the virtual machine image and all of the necessary components to run your application.
 
 We recommend first erasing any existing applications on the ESP32 device.  E.g.,
 
     shell$ esptool.py --chip auto --port /dev/ttyUSB0 --baud 921600 erase_flash
-    ...
 
 > Note.  Specify the device port and baud settings and AtomVM image name to suit your particular environment.
 
@@ -130,9 +129,9 @@ For example:
 
 You will also find the sha256 hash for this file, which you should verify using the `sha256sum` command on your local operating system.
 
-> Note.  Alpha and Beta images may be unstable and may result in unpredictable behavior.
+> Note.  Alpha and Beta images may be unstable and may result in unpredictable behavior.  You can help solve these bugs by opening a detailed [issue on GitHub](https://github.com/atomvm/AtomVM/issues), if you encounter such problems.
 
-Finally, use the `esptool.py` command to flash the image to the start address `0x1000` on the ESP32.  E.g.,
+Finally, use the `esptool.py` command to flash the image to the bootloader start address `0x1000` on the ESP32.  E.g.,
 
     shell$ esptool.py \
         --chip auto \
@@ -145,9 +144,9 @@ Finally, use the `esptool.py` command to flash the image to the start address `0
 
 > Note. A baud rate of 921600 works well for most ESP32 devices, some can work reliably at higher rates of 1500000, or even 2000000, but some devices (especially those with a 26Mhz crystal frequency, rather than the more common 40 Mhz crystal) may need to use a slower baud rate such as 115200.
 
-The chart below lists the start address of the bootloader for the various ESP32 family of chips:
+The chart below lists the bootloader offset for the various ESP32 family of chips:
 
-| Chipset | Bootloader address |
+| Chipset | Bootloader offset |
 |----------|----------|
 | ESP32 | `0x1000` |
 | ESP32-S2 | `0x1000` |
@@ -162,13 +161,13 @@ The chart below lists the start address of the bootloader for the various ESP32 
 
 Once completed, your ESP32 device is ready to run Erlang or Elixir programs targeted for AtomVM.
 
-#### Building from source
+#### Building for ESP32 from source
 
 You may optionally build AtomVM from source and deploy the AtomVM virtual machine to your ESP32 device manually.  Building AtomVM from source is slightly more involved, as it requires the installation of the Espressif IDF SDK and tool chain and is typically recommended only for users who are doing development on the AtomVM virtual machine, or for developers implementing custom Nifs or ports.
 
-Instructions for building AtomVM from source are covered in the AtomVM [Build Instructions](./build-instructions.md)
+Instructions for building AtomVM from source are covered in the AtomVM [Build Instructions](./build-instructions.md#building-for-esp32)
 
-### Deploying an AtomVM application
+### Deploying an AtomVM application for ESP32
 
 An AtomVM application is a collection of BEAM files, which have been compiled using the Erlang or Elixir compiler.  These BEAM files are assembled into an AtomVM "packbeam" (`.avm`) file, which in turn is flashed to the `main` data partition on the ESP32 flash module, starting at address `0x210000`.
 
@@ -176,26 +175,26 @@ When the AtomVM virtual machine starts, it will search for the first module that
 
 AtomVM applications can be written in Erlang or Elixir, or a combination of both.  The AtomVM community has provided tooling for both platforms, making deployment of AtomVM applications as seamless as possible.
 
-For information about how to flash your application to your ESP32, see the [AtomVM Tooling](./atomvm-tooling.md) chapter.
+For information about how to flash your application to your ESP32, see the [AtomVM Tooling](./atomvm-tooling.md#esp32) chapter.
 
 ## Getting Started on the STM32 platform
 
 AtomVM can run on a wide variety of STM32 chip-sets available from [STMicroelectronics](https://www.st.com). The support is not nearly as mature as for the ESP32 platform, but work is ongoing, and pull requests are always welcome. At this time AtomVM will work on any board with a minimum of around 128KB ram and 512KB (1M recommended) flash. Simple applications and tests have been successfully run on a stm32f411ceu6 (A.K.A. Black Pill V2). These minimum requirements may need to be raised as platform support matures.
 
-### Requirements
+### STM32 Requirements
 
 Deployment of AtomVM on the STM32 platform requires the following components:
 
-* A computer running MacOS or Linux (Windows support is not currently supported);
-* An STM32 module with a USB/UART connector (typically part of an STM32 development board);
+* A computer running MacOS or Linux (Windows is not currently supported);
+* An stm32 board and a USB/UART connector (these are built into some boards such as the Nucleo product line) and a minimum of 512k (1M recommended) of flash and a recommended minimum of 100k RAM;
 * A USB cable capable of connecting the STM32 module or board to your development machine (laptop or PC);
-* [st-flash](https://github.com/texane/stlink), to flash both AtomVM and your packed AVM applications. Make sure to follow its [installation procedure](https://github.com/texane/stlink#installation) before proceeding further.
-* To use jtag for flashing and console output debugging, you will need a [st-link v2](https://www.st.com/en/development-tools/st-link-v2.html) or [st-link v3](https://www.st.com/en/development-tools/stlink-v3set.html) device (typically already included on Nucleo and Discovery boards).
+* `st-flash` via [stlink](https://github.com/stlink-org/stlink), to flash both AtomVM and your packed AVM applications. Make sure to follow its [installation procedure](https://github.com/stlink-org/stlink#installation) before proceeding further.
+* A [st-link v2](https://www.st.com/en/development-tools/st-link-v2.html) or [st-link v3](https://www.st.com/en/development-tools/stlink-v3set.html) device (typically already included on Nucleo and Discovery boards), is needed for flashing and optional jtag debugging.
 * A serial console program, such as `minicom` or `screen`, so that you can view console output from your AtomVM application.
 * (recommended) For Erlang programs, [`rebar3`](https://rebar3.org);
 * (recommended) For Elixir programs, [`mix`](https://elixir-lang.org/getting-started/mix-otp/introduction-to-mix.html), which ships with the Elixir runtime;
 
-### Deploying the AtomVM virtual machine
+### Deploying the STM32 AtomVM virtual machine
 
 The following methods can be used to deploy the AtomVM virtual machine to an STM32 device:
 
@@ -203,9 +202,9 @@ The following methods can be used to deploy the AtomVM virtual machine to an STM
 
 Note.  Due to the very large number of supported chip-sets and the wide variety of board configurations, and the code changes required to support them, pre-built binaries for the stm32 platform are not currently available.
 
-Consult the [Build Instructions](./build-instructions.md) to create a binary compatible with your board.
+Consult the [STM32 Build Instructions](./build-instructions.md#building-for-stm32) to create a binary compatible with your board.
 
-#### Flashing a binary image
+#### Flashing a binary image to STM32
 
 Once you have created an STM32 binary image, you can flash the image to your STM32 device using the `st-flash` application.
 
@@ -217,13 +216,13 @@ Congratulations!  You have now flashed the AtomVM VM image onto your STM32 devic
 
 > Note. AtomVM expects to find the AVM at the address 0x8080000. On a STM32 Discovery board this means that the 1MB of flash will be split in 512KB available for the program and 512KB available for the packed AVM. For devices with only 512KB of flash the application address is 0x8060000, leaving 128KB of application flash available.
 
-#### Printing
+#### Console Printing
 
 By default, stdout and stderr are printed on USART2. On the STM32F4Discovery board, you can see them using a TTL-USB with the TX pin connected to board's pin PA2 (USART2 RX). Baudrate is 115200 and serial transmission is 8N1 with no flow control.
 
 For Nucleo boards the on board USB-COM to USART may be used by configuring your build with a BOARD parameter, see the [STM32 Build Instructions](./build-instructions.md#building-for-stm32) for [Configuring the Console](./build-instructions.md#configuring-the-console).
 
-### Deploying an AtomVM application
+### Deploying an AtomVM application for STM32
 
 An AtomVM application is a collection of BEAM files, which have been compiled using the Erlang or Elixir compiler.  These BEAM files are assembled into an AtomVM "packbeam" (`.avm`) file, which in turn is flashed to the `main` data partition on the STM32 flash module, starting at address `0x8080000`, for boards with 512KB of flash the address is `0x8060000`.
 
@@ -235,11 +234,11 @@ For information about how to flash your application to your STM32, see the [Atom
 
 ## Getting Started on the Raspberry Pi Pico platform
 
-AtomVM supports deployment of the VM and applications onto the [Raspberry Pi Pico](https://www.raspberrypi.com/products/raspberry-pi-pico/) platform.  For information about supported boards, please refer to the AtomVM [Release Notes](release-notes.md).
+AtomVM supports deployment of the VM and applications onto the [Raspberry Pi Pico](https://www.raspberrypi.com/products/raspberry-pi-pico/) platform.  For information about supported boards, please refer to the AtomVM [Release Notes](./release-notes.md).
 
 The following instructions show you how to install the AtomVM onto one of the [Raspberry Pi Pico](https://www.raspberrypi.com/products/raspberry-pi-pico/) boards.
 
-### Requirements
+### Pico Requirements
 
 Deployment of AtomVM on the Raspberry Pico platform requires the following components:
 
@@ -250,14 +249,14 @@ Deployment of AtomVM on the Raspberry Pico platform requires the following compo
 * (recommended) For Erlang programs, [`rebar3`](https://rebar3.org);
 * (recommended) For Elixir programs, [`mix`](https://elixir-lang.org/getting-started/mix-otp/introduction-to-mix.html), which ships with the Elixir runtime;
 
-### Deploying the AtomVM virtual machine
+### Deploying the Pico AtomVM virtual machine
 
 The following methods can be used to deploy the AtomVM virtual machine to a Raspberry Pico device:
 
 1. Flashing a binary image;
 1. Building from source.
 
-#### Flashing a binary image
+#### Flashing a binary image to Pico
 
 Flashing the Raspberry Pico using a pre-built binary image is by far the easiest path to getting started with development on the Raspberry Pico.  Binary images contain the virtual machine image and all of the necessary components to run your application.
 
@@ -337,7 +336,7 @@ First issue can be solved with `cp -x` if you don't tolerate the error message a
     shell$ xattr -d com.apple.quarantine ~/Downloads/AtomVM-pico_w-v0.6.0.uf2
     shell$ cp -x ~/Downloads/AtomVM-pico_w-v0.6.0.uf2 /Volumes/RPI-RP2/.
 
-### Deploying an AtomVM application
+### Deploying an AtomVM application for Generic Unix
 
 An AtomVM application is a collection of BEAM files, which have been compiled using the Erlang or Elixir compiler.  These BEAM files are assembled into an AtomVM "packbeam" (`.avm`) file, which in turn can be provided to the `atomvm` executable on the command line.
 
@@ -345,11 +344,11 @@ When the AtomVM virtual machine starts, it will search for the first module that
 
 AtomVM applications can be written in Erlang or Elixir, or a combination of both.  The AtomVM community has provided tooling for both platforms, making deployment of AtomVM applications as seamless as possible.
 
-For information about how to flash your application to your Raspberry Pico, see the [AtomVM Tooling](./atomvm-tooling.md) chapter.
+For information about how to flash your application to your Raspberry Pico, see the [AtomVM Tooling](./atomvm-tooling.md#raspberry-pico) chapter.
 
 ## Getting Started on the Generic UNIX platform
 
-The AtomVM virtual machine is supported a wide variety of Generic UNIX platforms, including many Linux kernels and target architectures, FreeBSD, and MacOS, allowing users to write Erlang and Elixir programs and run them on a local development machine.  For specific information about which Generic UNIX versions and architectures are supported, please refer to the AtomVM [Release Notes](release-notes.md).
+The AtomVM virtual machine is supported a wide variety of Generic UNIX platforms, including many Linux kernels and target architectures, FreeBSD, and MacOS, allowing users to write Erlang and Elixir programs and run them on a local development machine.  For specific information about which Generic UNIX versions and architectures are supported, please refer to the AtomVM [Release Notes](./release-notes.md).
 
 These instructions cover how to provision the AtomVM virtual machine onto your development machine.  Running applications locally can sometimes be a useful exercise in debugging.
 
@@ -357,7 +356,7 @@ These instructions cover how to provision the AtomVM virtual machine onto your d
 
 For most applications, you should only need to install the VM once (or at least once per desired AtomVM release).  Once the VM is installed, you can then begin development of Erlang or Elixir applications, which can then be flashed as part of your routine development cycle.
 
-### Requirements
+### Generic UNIX Requirements
 
 Deployment of AtomVM on the Generic UNIX platform requires the following components:
 
@@ -406,7 +405,7 @@ For example:
 
 You will also find the sha256 hash for this file, which you should verify using the `sha256sum` command on your local operating system.
 
-> Note.  See the AtomVM [Build Instructions](./build-instructions.md) for instructions about how to run the `AtomVM` binary, together with the AtomVM core libraries on the command line.
+> Note.  [See below](#running-applications-on-the-generic-unix-platform) for instructions about how to run the `AtomVM` binary, together with the AtomVM core libraries on the command line.
 
 #### Installation on MacOS
 
@@ -434,11 +433,11 @@ Once installed, the `atomvm` executable should be available in your `$PATH` envi
     shell$ which atomvm
     /usr/local/bin/atomvm
 
-#### Building from source
+#### Building on MacOS from source
 
 You may optionally build AtomVM from source and install the AtomVM virtual machine to your development machine.  Building AtomVM from source is slightly more involved, as it requires the installation of third party libraries and is typically recommended only for users who are doing development on the AtomVM virtual machine, or for developers implementing custom Nifs or ports.
 
-Instructions for building AtomVM from source are covered in the AtomVM [Build Instructions](./build-instructions.md).
+Instructions for building AtomVM from source are covered in the AtomVM [Build Instructions](./build-instructions.md#generic-unix-build-instructions).
 
 ### Running applications on the Generic UNIX platform
 
@@ -509,7 +508,7 @@ These security requirements are documented in [Mozilla's documentation](https://
 
 #### Trying locally from AtomVM source tree
 
-If you compile AtomVM for Unix as well as for Node as explained in the [build instructions](./build-instructions.md), you can use an AtomVM-based toy webserver to serve the WebAssembly examples with:
+If you compile AtomVM for Unix as well as for Node as explained in the [build instructions](./build-instructions.md#building-for-emscripten), you can use an AtomVM-based toy webserver to serve the WebAssembly examples with:
 
     ./src/AtomVM examples/emscripten/wasm_webserver.avm
 

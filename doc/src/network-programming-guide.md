@@ -8,9 +8,9 @@
 
 One of the exciting features of the ESP32 and the Pico-W is their support for WiFi networking, allowing ESP32 and Pico-W micro-controllers to communicate with the outside world over common IP networking protocols, such as TCP or IDP.  The ESP32 and the Pico-W can be configured in station mode (STA), whereby the devices connect to an existing access point, as well as "softAP" mode (AP), whereby they function as an access point, to which other stations can connect. The ESP32 also supports a combined STA+softAP mode, which allows the device to function in both STA and softAP mode simultaneously.
 
-AtomVM provides an Erlang API interface for interacting with the WiFi networking layer on ESP32 and Pico-W devices, providing support for configuring your ESP32 or Pico-W device in STA mode, AP mode, or a combined STA+AP mode, allowing Erlang/Elixir applications to send and receive data from other devices on a network.  This interface is encapsulated in the `network` module, which implements a simple interface for connecting to existing WiFi networks or for functioning as a WiFi access point. The same `network` module is used for both the ESP32 and the Pico-W.
+AtomVM provides an Erlang API interface for interacting with the WiFi networking layer on ESP32 and Pico-W devices, providing support for configuring your ESP32 or Pico-W device in STA mode, AP mode, or a combined STA+AP mode, allowing Erlang/Elixir applications to send and receive data from other devices on a network.  This interface is encapsulated in the [`network` module](./apidocs/erlang/eavmlib/network.md), which implements a simple interface for connecting to existing WiFi networks or for functioning as a WiFi access point. The same `network` module is used for both the ESP32 and the Pico-W.
 
-Once the network has been set up (in STA or AP mode), AtomVM can use various socket interfaces to interact with the socket layer to create a client or server application.  For example, on ESP32, AtomVM supports the `gen_udp` and `gen_tcp` APIs, while AtomVM extensions may support HTTP, MQTT, and other protocols built over low-level networking interfaces.
+Once the network has been set up (in STA or AP mode), AtomVM can use various socket interfaces to interact with the socket layer to create a client or server application.  For example, on ESP32, AtomVM supports the [`gen_udp`](./apidocs/erlang/estdlib/gen_udp.md) and [`gen_tcp`](./apidocs/erlang/estdlib/gen_tcp.md) APIs, while AtomVM extensions may support HTTP, MQTT, and other protocols built over low-level networking interfaces.
 
 The AtomVM networking API leverages callback functions, allowing applications to be responsive to changes in the underlying network, which can frequently occur in embedded applications, where devices can easily lose and then regain network connectivity.  In such cases, it is important for applications to be resilient to changes in network availability, by closing or re-opening socket connections in response to disconnections and re-connections in the underlying network.
 
@@ -27,7 +27,7 @@ The `<sta-properties>` property list should contain the following entries:
 * `{ssid, string() | binary()}`  The SSID to which the device should connect.
 * `{psk, string() | binary()}` The password required to authenticate to the network, if required.
 
-The `network:start/1` will immediately return `{ok, Pid}`, where `Pid` is the process ID of the network server instance, if the network was properly initialized, or `{error, Reason}`, if there was an error in configuration.  However, the application may want to wait for the device to connect to the target network and obtain an IP address, for example, before starting clients or services that require network access.
+The [`network:start/1`](./apidocs/erlang/eavmlib/network.md#start1) will immediately return `{ok, Pid}`, where `Pid` is the process ID of the network server instance, if the network was properly initialized, or `{error, Reason}`, if there was an error in configuration.  However, the application may want to wait for the device to connect to the target network and obtain an IP address, for example, before starting clients or services that require network access.
 
 Applications can specify callback functions, which get triggered as events emerge from the network layer, including connection to and disconnection from the target network, as well as IP address acquisition.
 
@@ -52,7 +52,7 @@ The following example illustrates initialization of the WiFi network in STA mode
         {sta, [
             {ssid, <<"myssid">>},
             {psk,  <<"mypsk">>},
-            {connected, fun connected/0,
+            {connected, fun connected/0},
             {got_ip, fun got_ip/1},
             {disconnected, fun disconnected/0}
             {dhcp_hostname, <<"myesp32">>}
@@ -64,7 +64,7 @@ The following example illustrates initialization of the WiFi network in STA mode
 The following callback functions will be called when the corresponding events occur during the lifetime of the network connection.
 
     %% erlang
-    connected()) ->
+    connected() ->
         io:format("Connected to AP.~n").
 
     gotIp(IpInfo) ->
@@ -75,9 +75,9 @@ The following callback functions will be called when the corresponding events oc
 
 In a typical application, the network should be configured and an IP address should be acquired first, before starting clients or services that have a dependency on the network.
 
-### Convenience Functions
+### STA Mode Convenience Functions
 
-The `network` module supports the `network:wait_for_sta/1,2` convenience functions for applications that do not need robust connection management.  These functions are synchronous and will wait until the device is connected to the specified AP.  Supply the properties list specified in the `{sta, [...]}` component of the above configuration, in addition to an optional timeout (in milliseconds).
+The `network` module supports the [`network:wait_for_sta/1,2`](./apidocs/erlang/eavmlib/network.md#wait_for_sta1) convenience functions for applications that do not need robust connection management.  These functions are synchronous and will wait until the device is connected to the specified AP.  Supply the properties list specified in the `{sta, [...]}` component of the above configuration, in addition to an optional timeout (in milliseconds).
 
 For example:
 
@@ -109,7 +109,7 @@ If the SSID is omitted in configuration, the SSID name `atomvm-<hexmac>` will be
 
 If the password is omitted, then an _open network_ will be created, and a warning will be printed to the console.  Otherwise, the AP network will be started using WPA+WPA2 authentication.
 
-The `network:start/1` will immediately return `{ok, Pid}`, where `Pid` is the process id of the network server, if the network was properly initialized, or `{error, Reason}`, if there was an error in configuration.  However, the application may want to wait for the device to to be ready to accept connections from other devices, or to be notified when other devices connect to this AP.
+The [`network:start/1`](./apidocs/erlang/eavmlib/network.md#start1) will immediately return `{ok, Pid}`, where `Pid` is the process id of the network server, if the network was properly initialized, or `{error, Reason}`, if there was an error in configuration.  However, the application may want to wait for the device to to be ready to accept connections from other devices, or to be notified when other devices connect to this AP.
 
 Applications can specify callback functions, which get triggered as events emerge from the network layer, including when a station connects or disconnects from the AP, as well as when a station is assigned an IP address.
 
@@ -162,9 +162,9 @@ The following callback functions will be called when the corresponding events oc
 
 In a typical application, the network should be configured and the application should wait for the AP to report that it has started, before starting clients or services that have a dependency on the network.
 
-### Convenience Functions
+### AP Mode Convenience Functions
 
-The `network` module supports the `network:wait_for_ap/1,2` convenience functions for applications that do not need robust connection management.  These functions are synchronous and will wait until the device is successfully starts an AP.  Supply the properties list specified in the `{ap, [...]}` component of the above configuration, in addition to an optional timeout (in milliseconds).
+The `network` module supports the [`network:wait_for_ap/1,2`](./apidocs/erlang/eavmlib/network.md#wait_for_ap1) convenience functions for applications that do not need robust connection management.  These functions are synchronous and will wait until the device is successfully starts an AP.  Supply the properties list specified in the `{ap, [...]}` component of the above configuration, in addition to an optional timeout (in milliseconds).
 
 For example:
 
@@ -184,7 +184,7 @@ For example:
 
 The `network` module can be started in both STA and AP mode.  In this case, the ESP32 device will both connect to an access point in its STA mode, and will simultaneously serve as an access point in its role in AP mode.
 
-In order to enable both STA and AP mode, simply provide valid configuration for both modes in the configuration structure supplied to the `network:start/1` function.
+In order to enable both STA and AP mode, simply provide valid configuration for both modes in the configuration structure supplied to the [`network:start/1`](./apidocs/erlang/eavmlib/network.md#start1) function.
 
 ## SNTP Support
 
@@ -214,13 +214,13 @@ where the `sntp_synchronized/1` function is defined as:
 
 It can become tiresome to enter an SSID and password for every application, and in general it is bad security practice to hard-wire WiFi credentials in your application source code.
 
-You may instead store an STA or AP SSID and PSK in non-volatile storage (NVS) on and ESP32 device under the `atomvm` namespace.
+You may instead store an STA or AP SSID and PSK in [non-volatile storage (NVS)](./programmers-guide.md#non-volatile-storage) on and ESP32 device.
 
 > Note.  Credentials are stored un-encrypted and in plaintext and should not be considered secure.  Future versions may use encrypted NVS storage.
 
 ## Stopping the Network
 
-To stop the network and free any resources in use, issue the `stop/0` function:
+To stop the network and free any resources in use, issue the [`stop/0`](./apidocs/erlang/eavmlib/network.md#stop0) function:
 
     network:stop().
 

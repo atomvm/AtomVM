@@ -14,7 +14,7 @@ AtomVM and virtual machines generally (including, for example, the Java Virtual 
 
 AtomVM is an abstract machine designed to implement the BEAM instruction set, the 170+ (and growing) set of virtual machine instructions implemented in the Erlang/OTP BEAM.
 
-> Note that there is no abstract specification of the BEAM abstract machine and instruction set.  Instead, the BEAM implementation by the Erlang/OTP team is the definitive specification of its behavior.
+> Note. There is no abstract specification of the BEAM abstract machine and instruction set.  Instead, the BEAM implementation by the Erlang/OTP team is the definitive specification of its behavior.
 
 At a high level, the AtomVM abstract machine is responsible for:
 
@@ -30,7 +30,7 @@ This document provides a description of the AtomVM abstract machine, including i
 
 ## AtomVM Data Structures
 
-This section describes AtomVM internal data structures that are used to manage the load and runtime state of the virtual machine.  Since AtomVM is written in C, this discussion will largely be in the context of native C data structures (i.e., `structs`).  The descriptions will start at a fairly high level but drill down to some detail about the data structures, themselves.  This narrative is important, because memory is limited on the target architectures for AtomVM (i.e., micro-controllers), and it is important to always be aware of how memory is organized and used in a way that is as space-efficient as possible.
+This section describes AtomVM internal data structures that are used to manage the load and runtime state of the virtual machine.  Since AtomVM is written in C, this discussion will largely be in the context of [native C data structures](./apidocs/libatomvm/data_structures.rst) (i.e., `structs`).  The descriptions will start at a fairly high level but drill down to some detail about the data structures, themselves.  This narrative is important, because memory is limited on the target architectures for AtomVM (i.e., micro-controllers), and it is important to always be aware of how memory is organized and used in a way that is as space-efficient as possible.
 
 ### The GlobalContext
 
@@ -52,7 +52,7 @@ These subsets are described in more detail below.
 
 #### Process Management
 
-As a BEAM implementation, AtomVM must be capable of spawning and managing the lifecycle of Erlang lightweight processes.  Each of these processes is encapsulated in the `Context` structure, described in more detail in subsequent sections.
+As a BEAM implementation, AtomVM must be capable of spawning and managing the lifecycle of Erlang lightweight processes.  Each of these processes is encapsulated in the [`Context` structure](#contexts), described in more detail in subsequent sections.
 
 The `GlobalContext` structure maintains a list of running processes and contains the following fields for managing the running Erlang processes in the VM:
 
@@ -72,7 +72,7 @@ The relationship between the `GlobalContext` fields that manage BEAM processes a
 
 ![GlobalContext Processes](_static/globalcontext-processes.svg)
 
-> Note.  The `Context` data structure is described in more detail below.
+> Note.  The [`Context`](#contexts) data structure is described in more detail below.
 
 <!-- TODO: Document and uncomment sections below.
 #### Module Management
@@ -94,7 +94,7 @@ The relationship between the `GlobalContext` fields that manage BEAM processes a
 ## The Scheduler
 -->
 
-In SMP builds, AtomVM runs one scheduler thread per core.  Scheduler threads are actually started on demand.  The number of scheduler threads can be queried with `erlang:system_info/1` and be modified with `erlang:system_flag/2`.  All scheduler threads are considered equal and there is no notion of main thread except when shutting down (main thread is shut down last).
+In SMP builds, AtomVM runs one scheduler thread per core.  Scheduler threads are actually started on demand.  The number of scheduler threads can be queried with [`erlang:system_info/1`](./apidocs/erlang/estdlib/erlang.md#system_info1) and be modified with [`erlang:system_flag/2`](./apidocs/erlang/estdlib/erlang.md#system_flag2).  All scheduler threads are considered equal and there is no notion of main thread except when shutting down (main thread is shut down last).
 
 Each scheduler thread picks a ready process and execute it until it yields.  Erlang processes yield when they are waiting (for a message) and after a number of reductions elapsed.  Native processes yield when they are done consuming messages (when the handler returns).
 
@@ -108,7 +108,7 @@ Erlang processes receive messages in a mailbox.  The mailbox is the interface wi
 
 When a sender process sends a message to a recipient process, the message is first enqueued into an outer mailbox.  The recipient process eventually moves all messages from the outer mailbox to the inner mailbox.  The reason for the inner and outer mailbox is to use lock-free data structures using atomic CAS operations.
 
-Sometimes, Erlang processes need to query information from other processes but without sending a regular message, for example when using `process_info/1,2` nif.  This is handled by signals.  Signals are special messages that are enqueued in the outer mailbox of a process.  Signals are processed by the recipient process when regular messages from the outer mailbox are moved to the inner mailbox.  Signal processing code is part of the main loop and transparent to recipient processes.  Both native handlers and erlang processes can receive signals.  Signals are also used to run specific operation on other processes that cannot be done from another thread.  For example, signals are used to perform garbage collection on another process.
+Sometimes, Erlang processes need to query information from other processes but without sending a regular message, for example when using [`process_info/1,2`](./apidocs/erlang/estdlib/erlang.md#process_info2) nif.  This is handled by signals.  Signals are special messages that are enqueued in the outer mailbox of a process.  Signals are processed by the recipient process when regular messages from the outer mailbox are moved to the inner mailbox.  Signal processing code is part of the main loop and transparent to recipient processes.  Both native handlers and erlang processes can receive signals.  Signals are also used to run specific operation on other processes that cannot be done from another thread.  For example, signals are used to perform garbage collection on another process.
 
 When an Erlang process calls a nif that requires such an information from another process such as `process_info/1,2`, the nif returns a special value and set the Trap flag on the calling process.  The calling process is effectively blocked until the other process is scheduled and the information is sent back using another signal message.  This mechanism can also be used by nifs that want to block until a condition is true.
 
@@ -164,7 +164,7 @@ The Web environment build of this port is slightly more complex.
 
 Regarding files, `main` function can load modules (beam or AVM packages) using FetchAPI, which means they can be served by the same HTTP server. This is a fallback and users can preload files using Emscripten `file_packager` tool.
 
-The port also uses Emscripten's proxy-to-pthread feature which means AtomVM's `main` function is run in a web worker. The rationale is the browser thread (or main thread) with WebAssembly cannot run a loop such as AtomVM's schedulers. Web workers typically cannot manipulate the DOM and do other things that only the browser's main thread can do. For this purpose, Erlang processes can call `emscripten:run_script/2` function which dispatches the Javascript to execute to the main thread, waiting for completion (with `[main_thread]`) or not waiting for completion  (with `[main_thread, async]`). Waiting for completion of a script on the main thread does not block the Erlang scheduler, other Erlang processes can be scheduled. Execution of Javascript on the worker thread, however, does block the scheduler.
+The port also uses Emscripten's proxy-to-pthread feature which means AtomVM's `main` function is run in a web worker. The rationale is the browser thread (or main thread) with WebAssembly cannot run a loop such as AtomVM's schedulers. Web workers typically cannot manipulate the DOM and do other things that only the browser's main thread can do. For this purpose, Erlang processes can call [`emscripten:run_script/2`](./apidocs/erlang/eavmlib/emscripten.md#run_script2) function which dispatches the Javascript to execute to the main thread, waiting for completion (with `[main_thread]`) or not waiting for completion  (with `[main_thread, async]`). Waiting for completion of a script on the main thread does not block the Erlang scheduler, other Erlang processes can be scheduled. Execution of Javascript on the worker thread, however, does block the scheduler.
 
 Javascript code can also send messages to Erlang processes using `call` and `cast` functions from `main.c`. These functions are actually wrapped in `atomvm.pre.js`. Usage is demonstrated by `call_cast.html` example.
 
@@ -178,7 +178,7 @@ Call allows Javascript code to wait for the result and is based on Javascript pr
 - C code returns the handle of the promise (actually the index in the map) to Javascript Module.call wrapper.
 - The `Module.call` wrapper converts the handle into a Promise object and returns it, so Javascript code can await on the promise.
 - A scheduler dequeues the message with the resource, looks up the target process and sends it the resource as a term
-- The target process eventually calls `emscripten:promise_resolve/1,2` or `emscripten:promise_reject/1,2` to resolve or reject the promise.
+- The target process eventually calls [`emscripten:promise_resolve/1,2`](./apidocs/erlang/eavmlib/emscripten.md#promise_resolve2) or [`emscripten:promise_reject/1,2`](./apidocs/erlang/eavmlib/emscripten.md#promise_reject2) to resolve or reject the promise.
 - The `emscripten:promise_resolve/1,2` and `emscripten:promise_reject/1,2` nifs dispatch a message in the browser's main thread.
 - The dispatched function retrieves the promise from its index, resolves or rejects it, with the value passed to `emscripten:promise_resolve/2` or `emscripten:promise_reject/2` and destroys it.
 
