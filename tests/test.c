@@ -520,6 +520,7 @@ struct Test tests[] = {
 #endif
 
     TEST_CASE(float_decode),
+    TEST_CASE(test_utf8_atoms),
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 
     { NULL, 0, false, false }
