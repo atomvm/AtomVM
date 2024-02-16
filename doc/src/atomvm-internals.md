@@ -172,15 +172,15 @@ Cast is straightforward: the message is enqueued and picked up by the scheduler.
 
 Call allows Javascript code to wait for the result and is based on Javascript promises (related to `async`/`await` syntax).
 
-- A promise is created (in the browser's main thread) in a map to prevent Javascript garbage collection (this is done by Emscripten's promise glue code).
-- An Erlang resource is created to encapsulate the promise so it is properly destroyed when garbage collected
-- A message is enqueued with the resource as well as the registered name of the target process and the content of the message
-- C code returns the handle of the promise (actually the index in the map) to Javascript Module.call wrapper.
-- The `Module.call` wrapper converts the handle into a Promise object and returns it, so Javascript code can await on the promise.
-- A scheduler dequeues the message with the resource, looks up the target process and sends it the resource as a term
-- The target process eventually calls [`emscripten:promise_resolve/1,2`](./apidocs/erlang/eavmlib/emscripten.md#promise_resolve2) or [`emscripten:promise_reject/1,2`](./apidocs/erlang/eavmlib/emscripten.md#promise_reject2) to resolve or reject the promise.
-- The `emscripten:promise_resolve/1,2` and `emscripten:promise_reject/1,2` nifs dispatch a message in the browser's main thread.
-- The dispatched function retrieves the promise from its index, resolves or rejects it, with the value passed to `emscripten:promise_resolve/2` or `emscripten:promise_reject/2` and destroys it.
+1. A promise is created (in the browser's main thread) in a map to prevent Javascript garbage collection (this is done by Emscripten's promise glue code).
+1. An Erlang resource is created to encapsulate the promise so it is properly destroyed when garbage collected
+1. A message is enqueued with the resource as well as the registered name of the target process and the content of the message
+1. C code returns the handle of the promise (actually the index in the map) to Javascript Module.call wrapper.
+1. The `Module.call` wrapper converts the handle into a Promise object and returns it, so Javascript code can await on the promise.
+1. A scheduler dequeues the message with the resource, looks up the target process and sends it the resource as a term
+1. The target process eventually calls [`emscripten:promise_resolve/1,2`](./apidocs/erlang/eavmlib/emscripten.md#promise_resolve2) or [`emscripten:promise_reject/1,2`](./apidocs/erlang/eavmlib/emscripten.md#promise_reject2) to resolve or reject the promise.
+1. The `emscripten:promise_resolve/1,2` and `emscripten:promise_reject/1,2` nifs dispatch a message in the browser's main thread.
+1. The dispatched function retrieves the promise from its index, resolves or rejects it, with the value passed to `emscripten:promise_resolve/2` or `emscripten:promise_reject/2` and destroys it.
 
 Values currently can only be integers or strings.
 
