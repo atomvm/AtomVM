@@ -1942,12 +1942,10 @@ static term nif_erlang_binary_to_existing_atom_2(Context *ctx, int argc, term ar
 
 static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
 {
-    UNUSED(argc);
-
     term a_binary = argv[0];
     VALIDATE_VALUE(a_binary, term_is_binary);
 
-    term encoding = argv[1];
+    term encoding = (argc == 2) ? argv[1] : UTF8_ATOM;
 
     const char *atom_string = term_binary_data(a_binary);
     size_t atom_string_len = term_binary_size(a_binary);

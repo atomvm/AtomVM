@@ -53,9 +53,11 @@
     list_to_integer/1,
     list_to_tuple/1,
     iolist_to_binary/1,
+    binary_to_atom/1,
     binary_to_atom/2,
     binary_to_integer/1,
     binary_to_list/1,
+    atom_to_binary/1,
     atom_to_binary/2,
     atom_to_list/1,
     float_to_binary/1,
@@ -584,6 +586,16 @@ iolist_to_binary(_IOList) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Binary  Binary to convert to atom
+%% @returns an atom from passed binary
+%% @doc     Convert a binary to atom, defaults to utf8.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec binary_to_atom(Binary :: binary()) -> atom().
+binary_to_atom(_Binary) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Binary  Binary to convert to atom
 %% @param   Encoding encoding for conversion (any of latin1, utf8 or unicode)
 %% @returns an atom from passed binary
 %% @doc     Convert a binary to atom.
@@ -611,6 +623,17 @@ binary_to_integer(_Binary) ->
 %%-----------------------------------------------------------------------------
 -spec binary_to_list(Binary :: binary()) -> [byte()].
 binary_to_list(_Binary) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Atom        Atom to convert
+%% @returns a binary with the atom's name
+%% @doc     Convert an atom to a binary, defaults to utf8.
+%% Only latin1 encoding is supported.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec atom_to_binary(Atom :: atom()) -> binary().
+atom_to_binary(_Atom) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
