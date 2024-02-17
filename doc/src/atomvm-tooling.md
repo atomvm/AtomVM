@@ -246,7 +246,7 @@ To create an AtomVM packbeam file (ending in `.avm`), first use the `mix.deps` t
     remote: Counting objects: 100% (17/17), done.
     remote: Compressing objects: 100% (10/10), done.
     remote: Total 17 (delta 6), reused 16 (delta 6), pack-reused 0
-    origin/HEAD set to master
+    origin/HEAD set to main
 
 You can now use the `atomvm.packbeam` target to create a packbeam (ending in `.avm`) file:
 
