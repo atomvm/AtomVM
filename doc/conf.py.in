@@ -166,11 +166,11 @@ versions = list()
 for tag in tag_list:
     versions.append(tag.name)
 
-versions.append('master')
+versions.append('main')
 if ((repo.head.object.hexsha) == (latest_tag.commit.hexsha)):
     current_version = latest_tag.name
 else:
-    current_version = 'master'
+    current_version = 'main'
 
 print("Sphinx config found documentation candidates: %r." % (versions))
 print("Sphinx config current version: %r." % (current_version))
