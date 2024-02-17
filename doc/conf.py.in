@@ -43,7 +43,7 @@ subprocess.call('doxygen Doxyfile', shell=True)
 import sphinx_rtd_theme
 
 project = 'AtomVM'
-copyright = '2017-2023, AtomVM'
+copyright = '2017-2024, AtomVM'
 author = 'github.com/atomvm'
 version = '@ATOMVM_BASE_VERSION@'
 release = '@ATOMVM_VERSION@'
@@ -57,16 +57,13 @@ extensions = [
     'breathe',
     'myst_parser',
     'sphinx_rtd_theme',
-    'sphinx.ext.graphviz',
-    'sphinx.ext.autodoc',
-    'sphinx.ext.intersphinx',
-    'sphinx.ext.autosectionlabel',
-    'sphinx.ext.todo',
-    'sphinx.ext.coverage',
-    'sphinx.ext.mathjax',
-    'sphinx.ext.ifconfig',
-    'sphinx.ext.viewcode',
-    'sphinx.ext.inheritance_diagram'
+    'sphinx.ext.graphviz'
+]
+
+suppress_warnings = [
+    'epub.unknown_project_files',
+    'misc.highlighting_failure',
+    'toc.excluded'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -80,20 +77,30 @@ exclude_patterns = ['*/favicon/about.txt']
 # The master toctree document.
 master_doc = 'index'
 
-highlight_language = 'c'
+highlight_language = 'guess'
 primary_domain = 'c'
+
+source_suffix = {
+    '.rst': 'restructuredtext',
+    '.txt': 'restructuredtext',
+    '.md': 'markdown'
+}
+
+# -- Sphinx Extension configuration ---------------------------------------------------
 
 # Breathe configuration
 breathe_projects = { "libatomvm": "@CMAKE_CURRENT_BINARY_DIR@/xml/" }
 breathe_default_project = "libatomvm"
 breathe_default_members = ('members', 'undoc-members')
+breathe_show_enumvalue_initializer = True
+breathe_show_define_initializer = True
+breathe_domain_by_extension = {
+    "h" : "c",
+    "c" : "c"
+}
+breathe_use_project_refids = True
 
-StandaloneHTMLBuilder.supported_image_types = [
-    'image/svg+xml',
-    'image/gif',
-    'image/png',
-    'image/jpeg'
-]
+myst_heading_anchors = 5
 
 # -- Options for HTML output -------------------------------------------------
 
@@ -105,21 +112,34 @@ html_logo = '@CMAKE_CURRENT_SOURCE_DIR@/src/_static/avm_logo_banner.png'
 html_theme_options = {
     'logo_only': True,
     'style_external_links': True,
-    'display_version': True
+    'display_version': True,
+    'includehidden': False
 }
 
+StandaloneHTMLBuilder.supported_image_types = [
+    'image/svg+xml',
+    'image/gif',
+    'image/png',
+    'image/jpeg'
+]
+
 html_copy_source = False
+
+language = "en"
+html_meta = {
+    "description lang=en": "AtomVM Guides and API Documentation",
+    "keywords": "AtomVM, Erlang, Elixir, BEAM, IoT, embedded, ESP32, STM32, RP2040, Raspberry Pi Pico, WASM, libAtomVM, eavmlib, packbeam",
+    "property=og:locale": "en_US"
+}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['@CMAKE_CURRENT_BINARY_DIR@/src/_static']
 
-source_suffix = {
-    '.rst': 'restructuredtext',
-    '.txt': 'restructuredtext',
-    '.md': 'markdown',
-}
+html_css_files = [
+    'css/custom.css',
+]
 
 html_favicon = '@CMAKE_CURRENT_SOURCE_DIR@/src/_static/favicon/favicon.ico'
 
@@ -171,21 +191,24 @@ html_sidebars = {
     ],
 }
 
-# settings for creating PDF with rinoh
-rinoh_documents = [(
-  master_doc,
-  project+ '-' +current_version,
-  project+ ' Documentation',
-  '© ' +copyright,
-)]
-today_fmt = "%B %d, %Y"
-
-# settings for EPUB
-epub_tocdepth = 6
-epub_show_urls = 'no'
-epub_basename = project+ '-' +current_version
-
 # POPULATE LINKS TO OTHER FORMATS/DOWNLOADS
 html_context['downloads'] = list()
 html_context['downloads'].append( ('pdf', '/doc/' +current_version+ '/pdf/' +project+ '-' +current_version+ '.pdf') )
 html_context['downloads'].append( ('epub', '/doc/' +current_version+ '/epub/' +project+ '-' +current_version+ '.epub') )
+
+# -- Options for PDF output -------------------------------------------------
+
+rinoh_documents = [dict(
+  doc=master_doc,
+  target=project+ '-' +current_version,
+  logo='@CMAKE_CURRENT_SOURCE_DIR@/src/_static/AtomVM-logo.png',
+  template='pdf_template.rtt'
+)]
+
+today_fmt = "%B %d, %Y"
+
+# -- Options for EPUB output -------------------------------------------------
+
+epub_tocdepth = 3
+epub_show_urls = 'no'
+epub_basename = project+ '-' +current_version
