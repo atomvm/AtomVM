@@ -16,6 +16,7 @@ on:
       - '**'
     branches:
       - 'master'
+      - 'release-**'
     paths:
       - '.github/workflows/**'
       - 'CMakeLists.txt'
