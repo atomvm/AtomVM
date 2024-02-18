@@ -12,10 +12,11 @@ name: Build Docs
 on:
   # Triggers the workflow on push request and tag events on main branch
   pull_request:
-    tag:
+    tags:
       - '**'
     branches:
       - 'main'
+      - 'release-**'
     paths:
       - '.github/workflows/**'
       - 'CMakeLists.txt'
