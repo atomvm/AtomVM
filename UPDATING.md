@@ -6,6 +6,17 @@
 
 # AtomVM Update Instructions
 
+## v0.6.0-beta.0 -> v0.6.0-beta.1
+
+- The `master` branch has been renamed to `main`, to update your local clone of the repo
+use the following commands:
+```
+git branch -m master main
+git fetch origin
+git branch -u origin/main main
+git remote set-head origin -a
+```
+
 ## v0.6.0-alpha.2 -> v0.6.0-beta.0
 
 - Registers are no longer preserved by GC by default when invoking nifs, as part of the fix
