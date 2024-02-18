@@ -240,6 +240,7 @@ term module_load_literal(Module *mod, int index, Context *ctx);
  * @details Gets an AtomString for the given local atom id from the global table.
  * @param mod the module that owns the atom.
  * @param local_atom_id module atom table index.
+ * @param glb the global context.
  * @return the AtomString for the given module atom index.
  */
 static inline AtomString module_get_atom_string_by_id(const Module *mod, int local_atom_id, GlobalContext *glb)

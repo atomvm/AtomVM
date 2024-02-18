@@ -298,7 +298,7 @@ run_script(_Script) ->
 %% is run on the main thread. If `async', the script is run asynchronously, i.e.
 %% the caller does not wait for completion. Only applies if `main_thread' is specified.
 %% @returns ok
--spec run_script(iodata(), [run_script_opt()]) -> ok.
+-spec run_script(_Script :: iodata(), _Options :: [run_script_opt()]) -> ok.
 run_script(_Script, _Options) ->
     erlang:nif_error(undefined).
 
@@ -316,15 +316,15 @@ promise_resolve(_Promise) ->
 %% '''
 %% and if an Erlang process is registered as `some_proc`, then the process
 %% will receive a message:
-%% ```
+%% <pre><code>
 %% {emscripten, {call, Promise, <<"message">>}}
-%% '''
+%% </code></pre>
 %% and the Javascript caller will wait until `promise_resolve' or `promise_reject'
 %% is called. If the process doesn't exist, the promise will be rejected with
 %% 'no_proc'. Likewise if the Promise is garbage collected by the Erlang VM.
 %% @param _Promise Opaque promise resource
 %% @param _Value Value to send to Javascript, must be an integer or a string.
--spec promise_resolve(promise(), integer() | iodata()) -> ok.
+-spec promise_resolve(_Promise :: promise(), _Value :: integer() | iodata()) -> ok.
 promise_resolve(_Promise, _Value) ->
     erlang:nif_error(undefined).
 
@@ -337,7 +337,7 @@ promise_reject(_Promise) ->
 %% This is similar to `promise_resolve' except the promise is rejected.
 %% @param _Promise Opaque promise resource
 %% @param _Value Value to send to Javascript, must be an integer or a string.
--spec promise_reject(promise(), integer() | iodata()) -> ok.
+-spec promise_reject(_Promise :: promise(), _Value :: integer() | iodata()) -> ok.
 promise_reject(_Promise, _Value) ->
     erlang:nif_error(undefined).
 
@@ -383,7 +383,10 @@ register_keypress_callback(_Target, _Options) ->
 %% @param _Target target to register keypress on
 %% @param _Options options for event handling
 %% @param _UserData user data passed back
--spec register_keypress_callback(html5_target(), register_options(), any()) -> register_result().
+-spec register_keypress_callback(
+    _Target :: html5_target(), _Options :: register_options(), _UserData :: any()
+) ->
+    register_result().
 register_keypress_callback(_Target, _Options, _UserData) ->
     erlang:nif_error(undefined).
 
@@ -405,7 +408,7 @@ register_keypress_callback(_Target, _Options, _UserData) ->
 %%
 %% @param _TargetOrHandle Target or handle
 %% @returns ok or an error
--spec unregister_keypress_callback(html5_target() | listener_handle()) ->
+-spec unregister_keypress_callback(_TargetOrHandle :: html5_target() | listener_handle()) ->
     ok | {error, register_error_reason()}.
 unregister_keypress_callback(_TargetOrHandle) ->
     erlang:nif_error(undefined).

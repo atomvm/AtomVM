@@ -76,11 +76,13 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb);
 /**
  * @brief
  * @param   external_term   buffer containing external term
+ * @param   size            size of the external_term
  * @param   ctx             current context in which terms may be stored
  * @param   opts            additional opts, such as ExternalTermToHeapFragment for storing parsed
  * terms in a heap fragment.
  *                          are stored in the context heap.
  * @param   bytes_read      the number of bytes read off external_term in order to yield a term
+ * @param   copy            whether to copy binary data and atom strings (pass `true', unless `external_term' is a const binary and will not be deallocated)
  * @return  the parsed term
  */
 static term externalterm_to_term_internal(const void *external_term, size_t size, Context *ctx,

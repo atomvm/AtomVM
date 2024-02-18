@@ -27,10 +27,10 @@ might be supported in a near future.
 Getting Started
 ===============
 There is much more information, including a more complete
-["Getting Started Guide"](https://www.atomvm.net/doc/master/getting-started-guide.html),
-[extensive documentation](https://www.atomvm.net/doc/master/build-instructions.html),
+["Getting Started Guide"](https://www.atomvm.net/doc/main/getting-started-guide.html),
+[extensive documentation](https://www.atomvm.net/doc/main/build-instructions.html),
 [examples](https://www.atomvm.net/sample-code),
-detailed [build instructions](https://www.atomvm.net/doc/master/build-instructions.html),
+detailed [build instructions](https://www.atomvm.net/doc/main/build-instructions.html),
 and [contact information](https://www.atomvm.net/contact) available on the
 [AtomVM](https://atomvm.net) project website.
 
@@ -77,19 +77,19 @@ $ ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 $ ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
 ```
 
-Complete [Build Instructions](https://www.atomvm.net/doc/master/build-instructions.html) are
+Complete [Build Instructions](https://www.atomvm.net/doc/main/build-instructions.html) are
 available in the documentation for
-[Generic UNIX](https://www.atomvm.net/doc/master/build-instructions.html) (Linux, MacOS, FreeBSD),
-[ESP32](https://www.atomvm.net/doc/master/build-instructions.html#building-for-esp32),
-[STM32](https://www.atomvm.net/doc/master/build-instructions.html#building-for-stm32),
-[Raspberry Pi Pico](https://www.atomvm.net/doc/master/build-instructions.html#building-for-raspberry-pi-pico)
+[Generic UNIX](https://www.atomvm.net/doc/main/build-instructions.html) (Linux, MacOS, FreeBSD),
+[ESP32](https://www.atomvm.net/doc/main/build-instructions.html#building-for-esp32),
+[STM32](https://www.atomvm.net/doc/main/build-instructions.html#building-for-stm32),
+[Raspberry Pi Pico](https://www.atomvm.net/doc/main/build-instructions.html#building-for-raspberry-pi-pico)
 (rp2040), and
-[WASM](https://www.atomvm.net/doc/master/build-instructions.html#building-for-nodejs-web) (NodeJS/Web).
+[WASM](https://www.atomvm.net/doc/main/build-instructions.html#building-for-nodejs-web) (NodeJS/Web).
 
 Project Status
 ==============
 
-[![Build and Test](https://github.com/atomvm/AtomVM/actions/workflows/build-and-test.yaml/badge.svg?branch=master)](https://github.com/atomvm/AtomVM/actions/workflows/build-and-test.yaml)
+[![Build and Test](https://github.com/atomvm/AtomVM/actions/workflows/build-and-test.yaml/badge.svg?branch=main)](https://github.com/atomvm/AtomVM/actions/workflows/build-and-test.yaml)
 
 AtomVM is still in its early stages, but it can run simple applications similar to those available
 in [examples](examples/) and [tests](tests/).

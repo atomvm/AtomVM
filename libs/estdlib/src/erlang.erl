@@ -925,6 +925,7 @@ demonitor(_Monitor) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Monitor reference of monitor to remove
+%% @param   Options options list
 %% @returns `true'
 %% @doc     Remove a monitor, with options.
 %% If `flush', monitor messages are flushed and guaranteed to not be received.

@@ -30,7 +30,7 @@ main([LibraryName, SrcDir, TgtDir]) ->
     {ok, AllFiles} = file:list_dir(SrcDir),
     ErlFiles = [SrcDir ++ "/" ++ F || F <- AllFiles, ends_with(F, ".erl")],
     ok = edoc:application(
-        @ERL_LIB@,
+        @ERLANG_LIB@,
         ".",
         [
             {doclet, edown_doclet},
@@ -42,7 +42,7 @@ main([LibraryName, SrcDir, TgtDir]) ->
             {dir, TgtDir}
         ]
     ),
-    io:format("Generated documentation for application ~p using source files ~p into ~s~n", [
+    io:format("Generated documentation for library ~p using source files ~p into ~s~n", [
         LibraryName, ErlFiles, TgtDir
     ]).
 

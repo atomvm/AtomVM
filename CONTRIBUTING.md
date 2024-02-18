@@ -14,7 +14,7 @@ AtomVM is open to any contribution.
 However before contributing, please read carefully our [Code of Conduct](CODE_OF_CONDUCT.md) and
 the following contribution guidelines.
 
-Please, also make sure to understand the [Apache 2.0 license](LICENSE.md) and the
+Please, also make sure to understand the [Apache 2.0 license](LICENSES/Apache-2.0.txt) and the
 [Developer Certificate of Origin](https://developercertificate.org/).
 
 Last but not least, **do not use GitHub issues for vulnerability reports**, read instead the
@@ -66,13 +66,13 @@ All source code modules should include copyright headers that are formatted for 
 
 ### C Code
 
-C source code style is enforced with [clang-format-13](https://releases.llvm.org/13.0.1/tools/clang/docs/ClangFormat.html). To automatically fix a file, run:
+C source code style is enforced with [`clang-format-16`](https://releases.llvm.org/16.0.0/tools/clang/docs/ClangFormat.html). To automatically fix a file, run:
 
-    clang-format-13 --style=file -i file.c
+    clang-format-16 --style=file -i file.c
 
 #### Indentation
 
-* [K&R identation and braces style](https://en.wikipedia.org/wiki/Indentation_style#K&R_style)
+* [K&R indentation and braces style](https://en.wikipedia.org/wiki/Indentation_style#K&R_style)
 * [Mandatory braces](https://en.wikipedia.org/wiki/Indentation_style#Variant:_mandatory_braces)
 * 4 space indentation (no tabs)
 
@@ -169,7 +169,7 @@ C source modules (`.c`) should be organized as follows:
 
 #### Documentation
 
-[Doxygen Javadoc style](https://www.doxygen.nl/manual/docblocks.html) code comments will be picked up and added to the documentation. Changes will automatically be added to the [libAtomVM Source Files](https://www.atomvm.net/doc/master/c_api_docs.html#libatomvm-source-files) and the [libAtomVM Index](https://www.atomvm.net/doc/master/apidocs/libatomvm/index.html#libatomvm-index). But to have `Data Strucures`, `Types`, `MACROS`, and `Functions` appear in the correct C Library APIs section the corresponding entries must be added to the similarly named `*.rst` files in the `AtomVM/doc/src/apidocs/libatomvm/` directory. The exact names of the flies that need to be altered are: `data_structures.rst`, `functions.rst`, `macros.rst`, and `types.rst`. The other files in the directory handle auto`generated content and do not need to be altered.
+[Doxygen Javadoc style](https://www.doxygen.nl/manual/docblocks.html) code comments will be picked up and added to the documentation. Changes will automatically be added to the [libAtomVM Source Files](https://www.atomvm.net/doc/main/c_api_docs.html#libatomvm-source-files) and the [libAtomVM Index](https://www.atomvm.net/doc/main/apidocs/libatomvm/index.html#libatomvm-index). But to have `Data Structures`, `Types`, `MACROS`, and `Functions` appear in the correct C Library APIs section the corresponding entries must be added to the similarly named `*.rst` files in the `AtomVM/doc/src/apidocs/libatomvm/` directory. The exact names of the files that need to be altered are: `data_structures.rst`, `functions.rst`, `macros.rst`, and `types.rst`. The other files in the directory handle auto`generated content and do not need to be altered.
 
 In the rare case that a function declaration and definition are both in different header files (rather than the definition in a `*.c` file) this can cause rendering errors for `Doxygen`. The work around for these cases can be demonstrated with this example for the function `sys_listener_destroy` it is documented and declared in `sys.h` and defined as follows in `listeners.h`:
 
