@@ -10,12 +10,12 @@ name: Publish Docs
 
 # Controls when the workflow will run
 on:
-  # Triggers the workflow on pull request, tag events and pushes on master
+  # Triggers the workflow on pull request, tag events and pushes on main
   push:
     tags:
       - '**'
     branches:
-      - 'master'
+      - 'main'
     paths:
       - '.github/workflows/publish-docs.yaml'
       - 'CMakeLists.txt'

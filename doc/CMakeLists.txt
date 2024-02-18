@@ -46,8 +46,8 @@ add_custom_target(edown-escript
     COMMENT "Preparing edown escript" VERBATIM
 )
 
-# Get the version tree name, tag if this is a tagged commit, otherwise master.
-execute_process(COMMAND "bash" "-c" "tag=$(git for-each-ref --points-at=HEAD --format='%(refname:lstrip=2)' refs/tags); ( [ $tag ] && echo $tag ) || echo 'master'"
+# Get the version tree name, tag if this is a tagged commit, otherwise main.
+execute_process(COMMAND "bash" "-c" "tag=$(git for-each-ref --points-at=HEAD --format='%(refname:lstrip=2)' refs/tags); ( [ $tag ] && echo $tag ) || echo 'main'"
                 OUTPUT_VARIABLE
                 DOC_TREE_VERSION
                 OUTPUT_STRIP_TRAILING_WHITESPACE )
