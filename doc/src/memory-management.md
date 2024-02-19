@@ -28,7 +28,7 @@ The heap contains all of the allocated terms in an execution context.  In some c
 
 The heap grows incrementally, as memory is allocated, and terms are allocated sequentially, in increasing memory addresses.  There is, therefore, no memory fragmentation, properly speaking, at least insofar as a portion of memory might be in use and then freed.  However, it is possible that previously allocated blocks of memory in the context heap are no longer referenced by the program.  In this case, the allocated blocks are "garbage", and are reclaimed at the next garbage collection. The actual growth of the heap is controlled by a heap growth strategy (`atomvm_heap_growth` spawn option) as described [below](#heap-growth-strategies).
 
-> Note. It is possible for the AtomVM heap, as provided by the underlying operating system, to become fragmented, as the execution context stack and heap are allocated via `malloc` or equiv.  But that is a different kind of fragmentation that does not refer to the allocated block used by an individual AtomVM process.
+>It is possible for the AtomVM heap, as provided by the underlying operating system, to become fragmented, as the execution context stack and heap are allocated via `malloc` or equiv.  But that is a different kind of fragmentation that does not refer to the allocated block used by an individual AtomVM process.
 
 The stack grows from the top of the allocated block toward the heap in decreasing addresses.  Terms in the stack, as opposed to the heap, are either single-word terms, i.e., simple terms like small integers, process ids, etc, or _pointers_ to terms in the heap.  In either case, they only occupy one word of memory.
 
@@ -68,7 +68,7 @@ The initial size of the allocated block for the stack and heap in AtomVM is 8 wo
 
 ### Heap growth strategies
 
-AtomVM aims at minimizing memory footprint and several heap growth strategies are available. The heap is grown or shrunk when an allocation is required and the current execution context allows for a garbage collection (that will move data structures), allows for shrinking or forces shrinking (typically in the case of a call to `erlang:garbage_collect/0,1`).
+AtomVM aims at minimizing memory footprint and several heap growth strategies are available. The heap is grown or shrunk when an allocation is required and the current execution context allows for a garbage collection (that will move data structures), allows for shrinking or forces shrinking (typically in the case of a call to [`erlang:garbage_collect/0,1`](./apidocs/erlang/estdlib/erlang.md#garbage_collect1)).
 
 Each strategy is set at the process level.
 
@@ -92,7 +92,7 @@ Registers are used as part of the BEAM instruction set to store and retrieve val
 
 ### Process Dictionary
 
-AtomVM processes support a process dictionary, or map of process-specific data, as supported via the `erlang:put/2` and `erlang:get/1` functions.
+AtomVM processes support a process dictionary, or map of process-specific data, as supported via the [`erlang:put/2`](./apidocs/erlang/estdlib/erlang.md#put2) and [`erlang:get/1`](./apidocs/erlang/estdlib/erlang.md#get1) functions.
 
 The Process Dictionary contains a list of key-value pairs, where each key and value is a single-word term, either a simple term like an atom or pid, or a reference to an allocated object in the process heap. (see below)
 
@@ -102,7 +102,7 @@ AtomVM makes use of heap fragments in some edge cases, such as loading external 
 
 ### Mailbox
 
-Each Erlang process contains a process mailbox, which is a linked-list structure of messages.  Each message in this list contains a term structure, which is a copy of a term sent to it, e.g., via the `erlang:send/2` operation, or `!` operator.
+Each Erlang process contains a process mailbox, which is a linked-list structure of messages.  Each message in this list contains a term structure, which is a copy of a term sent to it, e.g., via the [`erlang:send/2`](./apidocs/erlang/estdlib/erlang.md#send2) operation, or `!` operator.
 
 The representation of terms in a message is identical to that in the heap and heap fragments.  Messages are allocated like fragments and they actually become heap fragments of the receiving process when the message is read off the mailbox (e.g., via `receive ... end`).  Messages (and their term contents) are moved to the main heap as part of regular garbage collection of the process, and the fragment is freed.
 
@@ -153,7 +153,10 @@ The fundamental unit of memory in AtomVM is the `term` object, which is designed
 
 This section enumerates the AtomVM term types, and how they are represented in memory.
 
-> Note.  The term type is overloaded in some cases to store raw pointers to memory addresses, but this is rare and well controlled.
+```{note}
+The term type is overloaded in some cases to store raw pointers to memory addresses, but this is rare and well
+controlled.
+```
 
 The following term types take up a single word, referred to as "immediates" in the BEAM documentation[1].  The low-order bits of the word are used to represent the type of the term, and the high order bits represent the term contents, in a manner described in the following sections.
 
@@ -170,7 +173,10 @@ An atom is represented as a single word, with the low-order 6 bits having the va
 
 There may therefore only be `2^{word-size-6}` atoms in an AtomVM program (e.g., on a 32-bit platform, `67,108,864`).  Plenty to work with!
 
-> Note. The global atom table is a table of all allocated atoms, and is generally (at least in the limit, as modules are loaded) a fixed size table.  Management of the global atom table is outside of the scope of this document.
+```{note}
+The global atom table is a table of all allocated atoms, and is generally (at least in the limit, as modules are
+loaded) a fixed size table.  Management of the global atom table is outside of the scope of this document.
+```
 
 ### Integers
 
@@ -185,7 +191,9 @@ An integer is represented as a single word, with the low-order 4 bits having the
 
 The magnitude of an integer is therefore limited to `2^{word-size - 4}` in an AtomVM program (e.g., on a 32-bit platform, `+- 134,217,728`).
 
-> Note.  Arbitrarily large integers (bignums) are not currently supported in AtomVM.
+```{attention}
+Arbitrarily large integers (bignums) are not currently supported in AtomVM.
+```
 
 ### nil
 
@@ -196,7 +204,6 @@ The special value `nil` (typically the tail of the tail ... of the tail of a lis
     +================================+
     |                                |
     |<---------- word-size --------->|
-
 
 ### Pids
 
@@ -211,7 +218,10 @@ A Pid is represented as a single word, with the low order 4 bits indicating the 
 
 There may therefore only be `2^{word-size - 4}` Pids in an AtomVM program (e.g., on a 32-bit platform, `268,435,456`).
 
-> Note.  Global process IDs are not currently supported, but they may be in the future, which may result in segmentation of the high order `word-size - 4` bits.
+```{note}
+Global process IDs are not currently supported, but they may be in the future, which may result in segmentation of
+the high order `word-size - 4` bits.
+```
 
 ## Boxed terms
 
@@ -234,7 +244,7 @@ Because terms (and hence the heap) are always aligned on boundaries that are div
 
 ### References
 
-A reference (e.g., created via `erlang:make_ref/0`) stores a 64-bit incrementing counter value (a "ref tick").  On 64 bit machines, a Reference takes up two words -- the boxed header and the 64-bit value, which of course can fit in a single word.  On 32-bit platforms, the high-order 28 bits are stored in `boxed[1]`, and the low-order 32 bits are stored in `boxed[2]`:
+A reference (e.g., created via [`erlang:make_ref/0`](./apidocs/erlang/estdlib/erlang.md#make_ref0)) stores a 64-bit incrementing counter value (a "ref tick").  On 64 bit machines, a Reference takes up two words -- the boxed header and the 64-bit value, which of course can fit in a single word.  On 32-bit platforms, the high-order 28 bits are stored in `boxed[1]`, and the low-order 32 bits are stored in `boxed[2]`:
 
                               |< 6  >|
     +=========================+======+
@@ -246,7 +256,6 @@ A reference (e.g., created via `erlang:make_ref/0`) stores a 64-bit incrementing
     += = = = = = = = = = = = = = = ==+
     |                                |
     |<---------- word-size --------->|
-
 
 ### Tuples
 
@@ -266,7 +275,6 @@ Tuples are represented as boxed terms containing a boxed header (`boxed[0]`), a 
     +================================+
     |                                |
     |<---------- word-size --------->|
-
 
 ### Maps
 
@@ -313,7 +321,7 @@ Binaries are stored in several different ways, depending on their size and the k
 
 Binary data less than 64 bytes in length are stored in the process heap, as so-called Heap Binaries.
 
-Binary data greater or equal to 64 bytes is stored in two manners, depending on whether the data stored is constant data (e.g., literal binary data compiled directly into a BEAM file), or dynamically allocated data, e.g., as the result of a call to the `erlang:list_to_binary/1` Nif.
+Binary data greater or equal to 64 bytes is stored in two manners, depending on whether the data stored is constant data (e.g., literal binary data compiled directly into a BEAM file), or dynamically allocated data, e.g., as the result of a call to the [`erlang:list_to_binary/1`](./apidocs/erlang/estdlib/erlang.md#list_to_binary1) Nif.
 
 Non-const binaries are stored outside of the heap in dynamically allocated memory and are reference-counted, whereby references to dynamically allocated blocks are tracked from pointers in heap storage.  This way, large blocks of binary data can be efficiently shared between processes; only a relatively small term that contains a reference to the dynamically allocated storage needs to be copied.  When the reference count of non-literal binary reaches 0, the dynamically allocated memory is free'd.
 
@@ -342,7 +350,10 @@ Heap binaries are represented as boxed terms containing a boxed header (`boxed[0
     |                                |
     |<---------- word-size --------->|
 
-> Note.  If the number of bytes in a binary is not evenly divisible by the machine word size, then the remaining sequence of bytes in the last word are unused.
+```{note}
+If the number of bytes in a binary is not evenly divisible by the machine word size, then the remaining sequence
+of bytes in the last word are unused.
+```
 
 #### Reference Counted Binaries
 
@@ -383,7 +394,11 @@ The reference count is initialized to 1, under the principle that that reference
                                                           |                      |
                                                           +----------------------+
 
-> Note. The size of a reference counted binary is stored both in the process heap (in the boxed term), as well as in the off-heap storage.  The size count in the off-heap storage is needed in order to report the amount of data in use by binaries (e.g., via `erlang:memory/0,1`).
+```{note}
+The size of a reference counted binary is stored both in the process heap (in the boxed term), as well as in the
+off-heap storage.  The size count in the off-heap storage is needed in order to report the amount of data in use by
+binaries (e.g., via [`erlang:memory/0,1`](./apidocs/erlang/estdlib/erlang.md#memory1)).
+```
 
 In addition, a reference-counted boxed term contains a cons-cell appended to the end of the boxed term, which is used by the garbage collector for tracking references.  The `car` of this cell points to the boxed term, itself, and the `cdr` points to the "previous" cons cell associated with a reference counted binary in the heap, if there is one, or the empty list (`nil`), otherwise.  The cons cell forms an element in the "Mark and Sweep Object" (MSO) list, used to reclaim unreferenced storage during a garbage collection event..  See the Garbage Collection section, below, for more information about the critical role of this structure in the process of reclaiming unused memory in the AtomVM virtual machine.
 
@@ -423,7 +438,10 @@ Match binaries are represented as boxed terms containing a boxed header (`boxed[
 
 Like a reference counted binary, a match binary includes a trailing cons cell, whose `car` element points to the actual referenced binary (if the referenced binary is a reference-counted binary), and whose `cdr` points to the "previous" cons cell associated with a reference counted binary in the heap.
 
-> Note.  If the referenced binary is not reference-counted, the trailing cons cell elements are unused and are initialized to `nil`.
+```{note}
+If the referenced binary is not reference-counted, the trailing cons cell elements are unused and are initialized
+to `nil`.
+```
 
     some
     binary                            |< 6  >|
@@ -464,11 +482,11 @@ A sub-binary is a boxed term that points to a reference-counted binary, recordin
                 +================================+
                 |<---------- word-size --------->|
 
-Note than when a sub-binary is copied between processes (e.g., via `erlang:send`, or `!`), the sub-binary boxed term, as well as the boxed-term that manages the reference-counted binary is copied, as well.  Thus, sending a sub-binary to another process will result in an increment of the reference count on the referenced binary, and similarly, garbage collection of the sub-binary will result in a decrement of the referenced binary's reference count.
+Note than when a sub-binary is copied between processes (e.g., via [`erlang:send`](./apidocs/erlang/estdlib/erlang.md#send2), or `!`), the sub-binary boxed term, as well as the boxed-term that manages the reference-counted binary is copied, as well.  Thus, sending a sub-binary to another process will result in an increment of the reference count on the referenced binary, and similarly, garbage collection of the sub-binary will result in a decrement of the referenced binary's reference count.
 
 A sub-binary may be created from both const (literal) and non-const reference-counted binaries.  For performance reasons, sub-binaries do not reference heap binaries.
 
-Sub-binaries are created via the `binary:part/3` and `binary:split/2` Nifs, as well as via the `/binary` bit syntax specifier.
+Sub-binaries are created via the [`binary:part/3`](./apidocs/erlang/estdlib/binary.md#part3) and [`binary:split/2`](./apidocs/erlang/estdlib/binary.md#split2) Nifs, as well as via the `/binary` bit syntax specifier.
 
 ## Lists
 
@@ -482,7 +500,10 @@ A list is, very simply, a cons cell, i.e., a sequence of two words, whose first 
     |                                |
     |<---------- word-size --------->|
 
-> Note.  Lists are typically terminated with the empty list (`[]`), represented by the nil term, described above.  However, nothing in Erlang requires that a sequence of cons cells is `nil`-terminated.
+```{note}
+Lists are typically terminated with the empty list (`[]`), represented by the nil term, described above.  However,
+nothing in Erlang requires that a sequence of cons cells is `nil`-terminated.
+```
 
 Unlike boxed terms, the low-order two bits of list pointers are `0x1` (`01b`):
 
@@ -516,8 +537,9 @@ Strings are just lists of integers, but they are efficiently allocated at creati
     |                                |
     |<---------- word-size --------->|
 
-
-> Note.  String elements may not remain contiguous after a garbage collection event.
+```{note}
+String elements may not remain contiguous after a garbage collection event.
+```
 
 ### Functions
 
@@ -613,8 +635,6 @@ Terms stored in the stack, registers, and process dictionary are either single-w
 Garbage collection typically occurs as the result of a request for an allocation of a multi-word term in the heap (e.g., a tuple, list, or binary, among other types), and when there is currently insufficient space in the free space between the current heap and the current stack to accommodate the allocation.
 
 Garbage collection is a _synchronous_ operation in each Context (Erlang process), but conceptually no other execution contexts are impacted (i.e., no global locks, other than those required for memory allocation in the OS process heap).
-
-> Note.  Currently, AtomVM does not support symmetric multi-processing, or execution of multiple processes in parallel on separate machine cores.
 
 ### Garbage Collection Steps
 
@@ -751,7 +771,6 @@ The following sequence of iterative additions to the new heap illustrates this p
               |  scan&copy    |      |               |
               +---------------+      +---------------+
 
-
 At the end of the iterative scan and copy, all reachable terms in the old heap will be copied to the new heap, and no boxed terms in the old heap will contain pointers to terms in the old heap.  Any terms that have not been copied to the new heap are "garbage", as there are no longer any paths to them from the root set, and can therefore be destroyed,
 
 #### MSO Sweep
@@ -798,7 +817,13 @@ The following diagram illustrates a set of two reference counted binaries in a p
 
 After the new heap has been scanned and copied, as described above, the MSO list is traversed to determine if any reference-counted binaries are no longer referenced from the process heap.  If any reference counted binaries in the heap have not been marked as moved from the old heap, they are, effectively, no longer referenced from the root set, and the reference count on the corresponding off-heap binary can be decremented.  Furthermore, when the reference count reaches 0, the binaries can then be deleted.
 
-> Note.  Const binaries, while they have slots for entry into the MSO list, nonetheless are never "stitched" into the MSO list, as the binary data they point to is const, endures for the lifecycle of the program, and is never deleted.  Match binaries, on the other hand, do count as references, and can therefore be stitched into the MSO list.  However, when they are, the reference counted binaries they point to are the actual binaries in the process heap, not the match binaries, as with the case of refc binaries on the process heap.
+```{note}
+Const binaries, while they have slots for entry into the MSO list, nonetheless are never "stitched" into the MSO
+list, as the binary data they point to is const, endures for the lifecycle of the program, and is never deleted.
+Match binaries, on the other hand, do count as references, and can therefore be stitched into the MSO list.  However,
+when they are, the reference counted binaries they point to are the actual binaries in the process heap, not the
+match binaries, as with the case of refc binaries on the process heap.
+```
 
 #### Deletion
 
