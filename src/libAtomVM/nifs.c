@@ -791,7 +791,8 @@ const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
 
     int function_name_len = atom_string_len(function);
     if (UNLIKELY((arity > 9) || (module_name_len + function_name_len + 4 > MAX_NIF_NAME_LEN))) {
-        AVM_ABORT();
+        // In AtomVM NIFs are limited to 9 parameters
+        return NULL;
     }
     memcpy(nifname + module_name_len + 1, atom_string_data(function), function_name_len);
 

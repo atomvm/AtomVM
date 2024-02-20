@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `binary_to_term` checks atom encoding validity, and fix latin1 support (when non-ASCII chars are
 used)
 - ESP32: fixed bug in `gpio:set_pin_mode/2` and `gpio:set_direction/3` that would accept any atom for the mode parameter without an error.
+- Support to function with 10 or more parameters
 
 ### Changed
 

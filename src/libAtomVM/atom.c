@@ -54,6 +54,39 @@ int atom_are_equals(AtomString a, AtomString b)
     }
 }
 
+static void utoa10(unsigned int int_value, char *integer_string)
+{
+    /*
+        Generic version:
+
+        size_t integer_string_len = 0;
+        unsigned int v = int_value;
+        do {
+            v = v / 10;
+            integer_string_len++;
+        } while (v != 0);
+    */
+
+    // let's avoid divisions
+    size_t integer_string_len = 1;
+    if (UNLIKELY(integer_string_len >= 1000)) {
+        integer_string_len = 4;
+    } else if (UNLIKELY(integer_string_len >= 100)) {
+        integer_string_len = 3;
+    } else if (integer_string_len >= 10) {
+        integer_string_len = 2;
+    }
+
+    int ix = 1;
+    do {
+        unsigned int digit = int_value % 10;
+        integer_string[integer_string_len - ix] = '0' + digit;
+        int_value = int_value / 10;
+        ix++;
+    } while (int_value != 0);
+    integer_string[integer_string_len] = '\0';
+}
+
 void atom_write_mfa(char *buf, size_t buf_size, AtomString module, AtomString function, unsigned int arity)
 {
     size_t module_name_len = atom_string_len(module);
@@ -62,14 +95,12 @@ void atom_write_mfa(char *buf, size_t buf_size, AtomString module, AtomString fu
     buf[module_name_len] = ':';
 
     size_t function_name_len = atom_string_len(function);
-    if (UNLIKELY((arity > 9) || (module_name_len + function_name_len + 4 > buf_size))) {
+    if (UNLIKELY((module_name_len + 1 + function_name_len + 1 + 4 + 1 > buf_size))) {
         fprintf(stderr, "Insufficient room to write mfa.\n");
         AVM_ABORT();
     }
     memcpy(buf + module_name_len + 1, atom_string_data(function), function_name_len);
 
-    // TODO: handle functions with more than 9 parameters
     buf[module_name_len + function_name_len + 1] = '/';
-    buf[module_name_len + function_name_len + 2] = (char) ('0' + arity);
-    buf[module_name_len + function_name_len + 3] = 0;
+    utoa10(arity, buf + module_name_len + 1 + function_name_len + 1);
 }
