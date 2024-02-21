@@ -235,6 +235,11 @@ Context *gpio_driver_create_port(GlobalContext *global, term opts)
     Context *ctx = context_new(global);
 
     struct GPIOData *gpio_data = malloc(sizeof(struct GPIOData));
+    if (IS_NULL_PTR(gpio_data)) {
+        ESP_LOGE(TAG, "Not enough free memory to initialize GPIO port driver!");
+        scheduler_terminate(ctx);
+        return NULL;
+    }
     list_init(&gpio_data->gpio_listeners);
 
     ctx->native_handler = consume_gpio_mailbox;
