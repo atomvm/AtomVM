@@ -1745,6 +1745,11 @@ static term nif_socket_recv_with_peek(Context *ctx, struct SocketResource *rsrc_
         term map = term_invalid_term();
         res = socket_recv(rsrc_obj, buffer, buffer_size, flags, is_recvfrom ? &map : NULL, &ctx->heap);
 
+        if (UNLIKELY(res < 0)) {
+            AVM_LOGI(TAG, "Unable to receive data on fd %i.  errno=%i", rsrc_obj->fd, errno);
+            return make_errno_tuple(ctx);
+        }
+
         TRACE("otp_socket.recv_handler: received data on fd: %i available=%lu, read=%lu\n", rsrc_obj->fd, (unsigned long) res, (unsigned long) buffer_size);
 
         term payload;
@@ -1767,7 +1772,6 @@ static term nif_socket_recv_without_peek(Context *ctx, struct SocketResource *rs
 
     size_t buffer_size = len == 0 ? rsrc_obj->buf_size : len;
     uint8_t *buffer = (uint8_t *) malloc(buffer_size);
-    term payload = term_invalid_term();
 
     if (IS_NULL_PTR(buffer)) {
         AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
@@ -1778,6 +1782,7 @@ static term nif_socket_recv_without_peek(Context *ctx, struct SocketResource *rs
         term map = term_invalid_term();
         if (is_recvfrom) {
             if (UNLIKELY(memory_ensure_free(ctx, INET_ADDR4_TUPLE_SIZE + TERM_MAP_SIZE(2)) != MEMORY_GC_OK)) {
+                free(buffer);
                 AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
@@ -1786,7 +1791,6 @@ static term nif_socket_recv_without_peek(Context *ctx, struct SocketResource *rs
         ssize_t res = socket_recv(rsrc_obj, buffer, buffer_size, 0, is_recvfrom ? &map : NULL, &ctx->heap);
 
         if (res < 0) {
-
             int err = errno;
             term reason = (err == ECONNRESET) ? globalcontext_make_atom(global, ATOM_STR("\xA", "econnreset")) : posix_errno_to_term(err, global);
 
@@ -1797,33 +1801,36 @@ static term nif_socket_recv_without_peek(Context *ctx, struct SocketResource *rs
             }
 
             return make_error_tuple(reason, ctx);
+        }
 
-        } else if (res == 0) {
+        if (res == 0) {
             TRACE("Peer closed socket %i.\n", rsrc_obj->fd);
+            free(buffer);
             return make_error_tuple(CLOSED_ATOM, ctx);
+        }
+
+        size_t len = (size_t) res;
+        TRACE("otp_socket.recv_handler: received data on fd: %i len=%lu\n", rsrc_obj->fd, (unsigned long) len);
+
+        // {ok, Data :: binary()}
+        // {ok, {Source :: #{addr => Address :: {0..255, 0..255, 0..255, 0..255}, port => Port :: non_neg_integer()}, Data :: binary()}}
+        size_t ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
+        size_t requested_size = TUPLE_SIZE(2) + ensure_packet_avail + (is_recvfrom ? TUPLE_SIZE(2) : 0);
+
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, is_recvfrom ? 1 : 0, &map, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            free(buffer);
+            AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+
+        term data = term_from_literal_binary(buffer, len, &ctx->heap, global);
+
+        term payload;
+        if (is_recvfrom) {
+            term tuple = port_heap_create_tuple2(&ctx->heap, map, data);
+            payload = port_heap_create_ok_tuple(&ctx->heap, tuple);
         } else {
-
-            size_t len = (size_t) res;
-            TRACE("otp_socket.recv_handler: received data on fd: %i len=%lu\n", rsrc_obj->fd, (unsigned long) len);
-
-            // {ok, Data :: binary()}
-            // {ok, {Source :: #{addr => Address :: {0..255, 0..255, 0..255, 0..255}, port => Port :: non_neg_integer()}, Data :: binary()}}
-            size_t ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
-            size_t requested_size = TUPLE_SIZE(2) + ensure_packet_avail + (is_recvfrom ? TUPLE_SIZE(2) : 0);
-
-            if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, is_recvfrom ? 1 : 0, &map, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
-                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-            }
-
-            term data = term_from_literal_binary(buffer, len, &ctx->heap, global);
-
-            if (is_recvfrom) {
-                term tuple = port_heap_create_tuple2(&ctx->heap, map, data);
-                payload = port_heap_create_ok_tuple(&ctx->heap, tuple);
-            } else {
-                payload = port_heap_create_ok_tuple(&ctx->heap, data);
-            }
+            payload = port_heap_create_ok_tuple(&ctx->heap, data);
         }
 
         free(buffer);
