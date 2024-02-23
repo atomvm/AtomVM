@@ -62,6 +62,7 @@ set(HEADER_FILES
     term.h
     timer_list.h
     trace.h
+    unicode.h
     utils.h
     valueshashtable.h
     ${CMAKE_CURRENT_BINARY_DIR}/avm_version.h
@@ -94,6 +95,7 @@ set(SOURCE_FILES
     stacktrace.c
     term.c
     timer_list.c
+    unicode.c
     valueshashtable.c
 )
 

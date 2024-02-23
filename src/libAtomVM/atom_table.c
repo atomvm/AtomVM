@@ -27,6 +27,7 @@
 
 #include "atom.h"
 #include "smp.h"
+#include "unicode.h"
 #include "utils.h"
 
 #ifndef AVM_NO_SMP
@@ -277,6 +278,20 @@ atom_ref_t atom_table_get_atom_ptr_and_len(struct AtomTable *table, long index, 
 
     SMP_UNLOCK(table);
     return node;
+}
+
+bool atom_table_is_atom_ref_ascii(struct AtomTable *table, atom_ref_t atom)
+{
+    SMP_RDLOCK(table);
+
+    struct HNode *node = (struct HNode *) atom;
+    const uint8_t *data = atom_string_data(node->key);
+    size_t len = atom_string_len(node->key);
+
+    bool result = unicode_buf_is_ascii(data, len);
+
+    SMP_UNLOCK(table);
+    return result;
 }
 
 void atom_table_write_bytes(struct AtomTable *table, atom_ref_t atom, size_t buf_len, void *outbuf)

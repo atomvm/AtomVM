@@ -21,6 +21,8 @@
 #ifndef _ATOM_TABLE_
 #define _ATOM_TABLE_
 
+#include <stdbool.h>
+
 #include "atom.h"
 
 #define ATOM_TABLE_NOT_FOUND -1
@@ -56,6 +58,7 @@ int atom_table_ensure_atoms(
 int atom_table_cmp_using_atom_index(
     struct AtomTable *table, int t_atom_index, int other_atom_index);
 atom_ref_t atom_table_get_atom_ptr_and_len(struct AtomTable *table, long index, size_t *out_len);
+bool atom_table_is_atom_ref_ascii(struct AtomTable *table, atom_ref_t atom);
 void atom_table_write_bytes(struct AtomTable *table, atom_ref_t atom, size_t buf_len, void *outbuf);
 void atom_table_write_cstring(
     struct AtomTable *table, atom_ref_t atom, size_t buf_len, char *outbuf);
