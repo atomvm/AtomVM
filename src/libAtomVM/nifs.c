@@ -35,6 +35,7 @@
 #include "avm_version.h"
 #include "avmpack.h"
 #include "bif.h"
+#include "bitstring.h"
 #include "context.h"
 #include "defaultatoms.h"
 #include "dictionary.h"
@@ -52,6 +53,7 @@
 #include "synclist.h"
 #include "sys.h"
 #include "term.h"
+#include "unicode.h"
 #include "utils.h"
 
 #define MAX_NIF_NAME_LEN 260
@@ -1940,14 +1942,10 @@ static term nif_erlang_binary_to_existing_atom_2(Context *ctx, int argc, term ar
 
 static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
 {
-    UNUSED(argc);
-
     term a_binary = argv[0];
     VALIDATE_VALUE(a_binary, term_is_binary);
 
-    if (UNLIKELY(argv[1] != LATIN1_ATOM)) {
-        RAISE_ERROR(BADARG_ATOM);
-    }
+    term encoding = (argc == 2) ? argv[1] : UTF8_ATOM;
 
     const char *atom_string = term_binary_data(a_binary);
     size_t atom_string_len = term_binary_size(a_binary);
@@ -1955,9 +1953,49 @@ static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
         RAISE_ERROR(SYSTEM_LIMIT_ATOM);
     }
 
-    AtomString atom = malloc(atom_string_len + 1);
-    ((uint8_t *) atom)[0] = atom_string_len;
-    memcpy(((char *) atom) + 1, atom_string, atom_string_len);
+    bool encode_latin1_to_utf8 = false;
+    if (UNLIKELY((encoding == LATIN1_ATOM)
+            && !unicode_buf_is_ascii((const uint8_t *) atom_string, atom_string_len))) {
+        encode_latin1_to_utf8 = true;
+    } else if (UNLIKELY((encoding != LATIN1_ATOM) && (encoding != UNICODE_ATOM)
+                   && (encoding != UTF8_ATOM))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    AtomString atom;
+    if (LIKELY(!encode_latin1_to_utf8)) {
+        size_t i = 0;
+        while (i < atom_string_len) {
+            uint32_t codepoint;
+            size_t codepoint_size;
+            if (UNLIKELY(bitstring_utf8_decode(
+                    (uint8_t *) atom_string + i, atom_string_len, &codepoint, &codepoint_size))
+                != UnicodeTransformDecodeSuccess) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            i += codepoint_size;
+        }
+
+        atom = malloc(atom_string_len + 1);
+        ((uint8_t *) atom)[0] = atom_string_len;
+        memcpy(((char *) atom) + 1, atom_string, atom_string_len);
+    } else {
+        // * 2 is the worst case size
+        size_t buf_len = atom_string_len * 2;
+        atom = malloc(buf_len + 1);
+        uint8_t *atom_data = ((uint8_t *) atom) + 1;
+        size_t out_pos = 0;
+        for (size_t i = 0; i < atom_string_len; i++) {
+            size_t out_size;
+            bitstring_utf8_encode(((uint8_t) atom_string[i]), &atom_data[out_pos], &out_size);
+            out_pos += out_size;
+        }
+        if (out_pos > 255) {
+            free((void *) atom);
+            RAISE_ERROR(SYSTEM_LIMIT_ATOM);
+        }
+        ((uint8_t *) atom)[0] = out_pos;
+    }
 
     enum AtomTableCopyOpt atom_opts = AtomTableCopyAtom;
     if (!create_new) {
@@ -1991,7 +2029,7 @@ term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
     VALIDATE_VALUE(a_list, term_is_list);
 
     int ok;
-    char *atom_string = interop_list_to_string(a_list, &ok);
+    char *atom_string = interop_list_to_utf8_string(a_list, &ok);
     if (UNLIKELY(!ok)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
@@ -2031,9 +2069,7 @@ static term nif_erlang_atom_to_binary_2(Context *ctx, int argc, term argv[])
     term atom_term = argv[0];
     VALIDATE_VALUE(atom_term, term_is_atom);
 
-    if (UNLIKELY(argv[1] != LATIN1_ATOM)) {
-        RAISE_ERROR(BADARG_ATOM);
-    }
+    term encoding = argv[1];
 
     GlobalContext *glb = ctx->global;
 
@@ -2041,13 +2077,50 @@ static term nif_erlang_atom_to_binary_2(Context *ctx, int argc, term argv[])
     size_t atom_len;
     atom_ref_t atom_ref = atom_table_get_atom_ptr_and_len(glb->atom_table, atom_index, &atom_len);
 
+    bool encode_to_latin1 = false;
+    if (encoding == LATIN1_ATOM) {
+        if (UNLIKELY(!atom_table_is_atom_ref_ascii(glb->atom_table, atom_ref))) {
+            encode_to_latin1 = true;
+        }
+    } else if (UNLIKELY(encoding != UTF8_ATOM) && (encoding != UNICODE_ATOM)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
     if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(atom_len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    term binary = term_create_uninitialized_binary(atom_len, &ctx->heap, glb);
-    atom_table_write_bytes(glb->atom_table, atom_ref, atom_len, (char *) term_binary_data(binary));
-    return binary;
+    if (LIKELY(!encode_to_latin1)) {
+        term binary = term_create_uninitialized_binary(atom_len, &ctx->heap, glb);
+        atom_table_write_bytes(
+            glb->atom_table, atom_ref, atom_len, (char *) term_binary_data(binary));
+        return binary;
+    } else {
+        uint8_t *utf8_tmp_buf = malloc(atom_len);
+        if (IS_NULL_PTR(utf8_tmp_buf)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        atom_table_write_bytes(glb->atom_table, atom_ref, atom_len, (char *) utf8_tmp_buf);
+        size_t encoded_len = unicode_buf_utf8_len(utf8_tmp_buf, atom_len);
+        term binary = term_create_uninitialized_binary(encoded_len, &ctx->heap, glb);
+        char *binary_data = (char *) term_binary_data(binary);
+        size_t in_pos = 0;
+        for (size_t i = 0; i < encoded_len; i++) {
+            size_t codepoint_size;
+            uint32_t codepoint;
+            if (UNLIKELY(bitstring_utf8_decode(
+                             &utf8_tmp_buf[in_pos], 2, &codepoint, &codepoint_size)
+                        != UnicodeTransformDecodeSuccess
+                    || (codepoint > 255))) {
+                free(utf8_tmp_buf);
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            binary_data[i] = codepoint;
+            in_pos += codepoint_size;
+        }
+        free(utf8_tmp_buf);
+        return binary;
+    }
 }
 
 static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
@@ -2069,18 +2142,49 @@ static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, atom_len * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    atom_table_write_bytes(ctx->global->atom_table, atom_ref, atom_len, atom_buf);
+
+    size_t u8len = unicode_buf_utf8_len((uint8_t *) atom_buf, atom_len);
+    bool is_latin1 = atom_len == u8len;
+
+    size_t list_len = is_latin1 ? atom_len : u8len;
+
+    if (UNLIKELY(
+            memory_ensure_free_opt(ctx, list_len * CONS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        free(atom_buf);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    atom_table_write_bytes(ctx->global->atom_table, atom_ref, atom_len, atom_buf);
-
     term prev = term_nil();
-    for (int i = atom_len - 1; i >= 0; i--) {
-        char c = atom_buf[i];
-        prev = term_list_prepend(term_from_int11(c), prev, &ctx->heap);
-    }
 
+    if (is_latin1) {
+        for (int i = atom_len - 1; i >= 0; i--) {
+            char c = atom_buf[i];
+            prev = term_list_prepend(term_from_int11(c), prev, &ctx->heap);
+        }
+    } else {
+        uint32_t *codepoints = malloc(u8len * sizeof(uint32_t));
+        if (IS_NULL_PTR(codepoints)) {
+            free(atom_buf);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        uint8_t *u_in = (uint8_t *) atom_buf;
+        for (size_t i = 0; i < u8len; i++) {
+            size_t codepoint_size;
+            enum UnicodeTransformDecodeResult result
+                = bitstring_utf8_decode(u_in, atom_len, &codepoints[i], &codepoint_size);
+            if (UNLIKELY((result != UnicodeTransformDecodeSuccess)
+                    || !unicode_is_valid_codepoint(codepoints[i]))) {
+                AVM_ABORT();
+            }
+            u_in += codepoint_size;
+        }
+
+        for (int i = u8len - 1; i >= 0; i--) {
+            prev = term_list_prepend(term_from_int(codepoints[i]), prev, &ctx->heap);
+        }
+        free(codepoints);
+    }
     free(atom_buf);
 
     return prev;

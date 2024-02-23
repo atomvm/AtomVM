@@ -6,11 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0-beta.1] - Unreleased
 
+### Added
+
+- Support for utf8 encoding to `*_to_atom` and `atom_to_*` functions
+- `binary_to_atom/1` and `atom_to_binary/1` that default to utf8 (they were introduced with OTP23)
+
 ### Fixed
 
 - ESP32: fix i2c_driver_acquire and i2c_driver_release functions, that were working only once.
 - Sending messages to registered processes using the `!` operator now works.
 - Fixed bug in `OP_SEND` that would accept sending a message to any integer or term without raising an error.
+
+### Changed
+
+- `binary_to_atom/2` validates utf8 strings
+- `*_to_atom` and `atom_to_*` properly convert latin1 (not just ASCII) to utf8 and viceversa
 
 ## [0.6.0-beta.0] - 2024-02-08
 
