@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ESP32: fix i2c_driver_acquire and i2c_driver_release functions, that were working only once.
 - Sending messages to registered processes using the `!` operator now works.
 - Fixed bug in `OP_SEND` that would accept sending a message to any integer or term without raising an error.
+- `binary_to_term` checks atom encoding validity, and fix latin1 support (when non-ASCII chars are
+used)
 
 ### Changed
 

@@ -47,3 +47,13 @@ bool unicode_buf_is_ascii(const uint8_t *buf, size_t len)
 
     return true;
 }
+
+size_t unicode_latin1_buf_size_as_utf8(const uint8_t *buf, size_t len)
+{
+    size_t required_size = 0;
+    for (size_t i = 0; i < len; i++) {
+        required_size += (buf[i] > 0x7F) ? 2 : 1;
+    }
+
+    return required_size;
+}
