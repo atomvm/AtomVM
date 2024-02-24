@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for utf8 encoding to `*_to_atom` and `atom_to_*` functions
 - `binary_to_atom/1` and `atom_to_binary/1` that default to utf8 (they were introduced with OTP23)
 - Added Pico cmake option `AVM_WAIT_BOOTSEL_ON_EXIT` (default `ON`) to allow tools to use automated `BOOTSEL` mode after main application exits
+- Support for code that makes use of more than 16 live registers, such as functions with > 16
+parameters and complex pattern matchings.
 
 ### Fixed
 

@@ -87,6 +87,7 @@ struct Context
     Heap heap;
     term *e;
     term x[MAX_REG + 1];
+    struct ListHead extended_x_regs;
 
     struct ListHead processes_list_head;
 
@@ -167,6 +168,13 @@ struct ResourceMonitor
 {
     struct Monitor base;
     struct ListHead resource_list_head;
+};
+
+struct ExtendedRegister
+{
+    struct ListHead head;
+    unsigned int index;
+    term value;
 };
 
 /**

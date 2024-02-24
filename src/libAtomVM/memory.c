@@ -264,6 +264,13 @@ static enum MemoryGCResult memory_gc(Context *ctx, size_t new_size, size_t num_r
         entry->value = memory_shallow_copy_term(old_root_fragment, entry->value, &ctx->heap.heap_ptr, true);
     }
 
+    TRACE("- Running copy GC on process extended registers\n");
+    LIST_FOR_EACH (item, &ctx->extended_x_regs) {
+        struct ExtendedRegister *ext_reg = GET_LIST_ENTRY(item, struct ExtendedRegister, head);
+        ext_reg->value = memory_shallow_copy_term(
+            old_root_fragment, ext_reg->value, &ctx->heap.heap_ptr, true);
+    }
+
     TRACE("- Running copy GC on exit reason\n");
     ctx->exit_reason = memory_shallow_copy_term(old_root_fragment, ctx->exit_reason, &ctx->heap.heap_ptr, true);
 
