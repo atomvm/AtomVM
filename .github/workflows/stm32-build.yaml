@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   stm32:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
     - uses: actions/cache@v3
       id: builddeps-cache
@@ -62,6 +62,9 @@ jobs:
         git clone https://github.com/libopencm3/libopencm3.git -b v0.8.0
         cd libopencm3
         make
+
+    - name: "apt update"
+      run: sudo apt update
 
     - name: "Install deps"
       run: sudo apt install -y cmake gperf
