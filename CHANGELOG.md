@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 used)
 - ESP32: fixed bug in `gpio:set_pin_mode/2` and `gpio:set_direction/3` that would accept any atom for the mode parameter without an error.
 - Support to function with 10 or more parameters
+- Very unlikely but possible corruption caused by generated code that uses 16 live registers
 
 ### Changed
 

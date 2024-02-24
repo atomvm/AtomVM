@@ -76,6 +76,8 @@ enum HeapGrowthStrategy
 
 // Max number of x(N) & fr(N) registers
 // BEAM sets this to 1024.
+// x regs have an additional register that is used for storing an additional working element
+// so the number of registers is MAX_REG + 1, but only MAX_REG are addressable as x registers
 #define MAX_REG 16
 
 struct Context
@@ -84,7 +86,7 @@ struct Context
     GlobalContext *global;
     Heap heap;
     term *e;
-    term x[MAX_REG];
+    term x[MAX_REG + 1];
 
     struct ListHead processes_list_head;
 
