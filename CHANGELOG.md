@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ESP32: fix i2c_driver_acquire and i2c_driver_release functions, that were working only once.
 - Sending messages to registered processes using the `!` operator now works.
 - Fixed bug in `OP_SEND` that would accept sending a message to any integer or term without raising an error.
+- ESP32: fixed bug in `gpio:set_pin_mode/2` and `gpio:set_direction/3` that would accept any atom for the mode parameter without an error.
 
 ### Changed
 

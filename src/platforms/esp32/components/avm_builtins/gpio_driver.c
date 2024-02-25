@@ -140,11 +140,11 @@ static inline term gpio_set_pin_mode(Context *ctx, term gpio_num_term, term mode
 {
     int gpio_num = term_to_int(gpio_num_term);
 
-    gpio_mode_t mode = interop_atom_term_select_int(pin_mode_table, mode_term, ctx->global);
+    avm_int_t mode = interop_atom_term_select_int(pin_mode_table, mode_term, ctx->global);
     if (UNLIKELY(mode < 0)) {
         return ERROR_ATOM;
     }
-    esp_err_t result = gpio_set_direction(gpio_num, mode);
+    esp_err_t result = gpio_set_direction(gpio_num, (gpio_mode_t) mode);
 
     if (UNLIKELY(result != ESP_OK)) {
         return ERROR_ATOM;
