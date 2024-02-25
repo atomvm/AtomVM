@@ -547,7 +547,7 @@ AtomVM supports extensions to the VM via the implementation of custom native fun
 
 ```{seealso}
 For more information about building components for the IDF SDK, consult the
-[IDF SDK Build System](https://docs.espressif.com/projects/esp-idf/en/v5.1.2/esp32/api-guides/build-system.html)
+[IDF SDK Build System](https://docs.espressif.com/projects/esp-idf/en/v5.1.3/esp32/api-guides/build-system.html)
 documentation.
 ```
 

@@ -36,8 +36,8 @@ jobs:
       matrix:
         idf-version:
         - '4.4.6'
-        - '5.0.4'
-        - '5.1.2'
+        - '5.0.6'
+        - '5.1.3'
 
     steps:
     - name: Checkout repo
@@ -68,7 +68,7 @@ jobs:
             gcc g++ zlib1g-dev
 
     - name: Install qemu binary from espressif/qemu
-      if: matrix.idf-version != '5.1.2'
+      if: matrix.idf-version != '5.1.3'
       run: |
         set -eu
         QEMU_VER=esp-develop-20220919

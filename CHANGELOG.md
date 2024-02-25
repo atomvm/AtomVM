@@ -24,6 +24,7 @@ used)
 
 - `binary_to_atom/2` validates utf8 strings
 - `*_to_atom` and `atom_to_*` properly convert latin1 (not just ASCII) to utf8 and viceversa
+- ESP32: use esp-idf v5.1.3 for building release binaries
 
 ## [0.6.0-beta.0] - 2024-02-08
 
