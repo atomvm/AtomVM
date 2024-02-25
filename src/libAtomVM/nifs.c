@@ -2914,24 +2914,11 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[])
 {
-    ExternalTermOpts opts = ExternalTermNoOpts;
-    if (argc == 2) {
-        term options = argv[1];
-        VALIDATE_VALUE(options, term_is_list);
-
-        term minor_version = interop_kv_get_value(options, ATOM_STR("\xD", "minor_version"), ctx->global);
-        if (!term_is_invalid_term(minor_version)) {
-            VALIDATE_VALUE(minor_version, term_is_integer);
-            if (term_to_int(minor_version) != 1) {
-                RAISE_ERROR(BADARG_ATOM);
-            } else {
-                opts |= ExternalTermAllowLatin1Encoding;
-            }
-        }
+    if (argc != 1) {
+        RAISE_ERROR(BADARG_ATOM);
     }
-
     term t = argv[0];
-    term ret = externalterm_to_binary(ctx, t, opts);
+    term ret = externalterm_to_binary(ctx, t);
     if (term_is_invalid_term(ret)) {
         RAISE_ERROR(BADARG_ATOM);
     }

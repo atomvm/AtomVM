@@ -20,7 +20,6 @@
 
 #include "externalterm.h"
 
-#include "bitstring.h"
 #include "context.h"
 #include "list.h"
 
@@ -72,9 +71,9 @@
 
 static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm_size, bool copy, Heap *heap, GlobalContext *glb);
 static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaining, size_t *eterm_size, bool copy);
-static size_t compute_external_size(term t, ExternalTermOpts opts, GlobalContext *glb);
-static int externalterm_from_term(uint8_t **buf, size_t *len, term t, ExternalTermOpts opts, GlobalContext *glb);
-static int serialize_term(uint8_t *buf, term t, ExternalTermOpts opts, GlobalContext *glb);
+static size_t compute_external_size(term t, GlobalContext *glb);
+static int externalterm_from_term(uint8_t **buf, size_t *len, term t, GlobalContext *glb);
+static int serialize_term(uint8_t *buf, term t, GlobalContext *glb);
 
 /**
  * @brief
@@ -163,27 +162,27 @@ enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term b
     }
 }
 
-static int externalterm_from_term(uint8_t **buf, size_t *len, term t, ExternalTermOpts opts, GlobalContext *glb)
+static int externalterm_from_term(uint8_t **buf, size_t *len, term t, GlobalContext *glb)
 {
-    *len = compute_external_size(t, opts, glb) + 1;
+    *len = compute_external_size(t, glb) + 1;
     *buf = malloc(*len);
     if (IS_NULL_PTR(*buf)) {
         fprintf(stderr, "Unable to allocate %zu bytes for externalized term.\n", *len);
         AVM_ABORT();
     }
-    size_t k = serialize_term(*buf + 1, t, opts, glb);
+    size_t k = serialize_term(*buf + 1, t, glb);
     *buf[0] = EXTERNAL_TERM_TAG;
     return k + 1;
 }
 
-term externalterm_to_binary(Context *ctx, term t, ExternalTermOpts opts)
+term externalterm_to_binary(Context *ctx, term t)
 {
     //
     // convert
     //
     uint8_t *buf;
     size_t len;
-    externalterm_from_term(&buf, &len, t, opts, ctx->global);
+    externalterm_from_term(&buf, &len, t, ctx->global);
     //
     // Ensure enough free space in heap for binary
     //
@@ -200,9 +199,9 @@ term externalterm_to_binary(Context *ctx, term t, ExternalTermOpts opts)
     return binary;
 }
 
-static size_t compute_external_size(term t, ExternalTermOpts opts, GlobalContext *glb)
+static size_t compute_external_size(term t, GlobalContext *glb)
 {
-    return serialize_term(NULL, t, opts, glb);
+    return serialize_term(NULL, t, glb);
 }
 
 static uint8_t get_num_bytes(avm_uint64_t val)
@@ -226,47 +225,7 @@ static void write_bytes(uint8_t *buf, avm_uint64_t val)
     }
 }
 
-static bool has_extended_utf8_encoding(const uint8_t *atom_data, size_t atom_len)
-{
-    for (size_t i = 0; i < atom_len; ) {
-        size_t out_len = 0;
-        uint32_t c;
-        enum UnicodeTransformDecodeResult res = bitstring_utf8_decode(
-            atom_data + i,
-            atom_len - i,
-            &c,
-            &out_len
-        );
-        if (res == UnicodeTransformDecodeSuccess && out_len != 1) {
-            return true;
-        } else {
-            ++i;
-        }
-    }
-    return false;
-}
-
-static inline void encode_atom_latin1(uint8_t *buf, atom_ref_t atom_ref, size_t atom_len, int *offset, GlobalContext *glb)
-{
-    *offset = 3;
-    if (!IS_NULL_PTR(buf)) {
-        buf[0] = ATOM_EXT;
-        WRITE_16_UNALIGNED(buf + 1, atom_len);
-        atom_table_write_bytes(glb->atom_table, atom_ref, atom_len, buf + 3);
-    }
-}
-
-static inline void encode_atom_utf8(uint8_t *buf, atom_ref_t atom_ref, size_t atom_len, int *offset, GlobalContext *glb)
-{
-    *offset = 2;
-    if (!IS_NULL_PTR(buf)) {
-        buf[0] = SMALL_ATOM_UTF8_EXT;
-        buf[1] = atom_len;
-        atom_table_write_bytes(glb->atom_table, atom_ref, atom_len, buf + 2);
-    }
-}
-
-static int serialize_term(uint8_t *buf, term t, ExternalTermOpts opts, GlobalContext *glb)
+static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
 {
     if (term_is_uint8(t)) {
         if (!IS_NULL_PTR(buf)) {
@@ -313,26 +272,12 @@ static int serialize_term(uint8_t *buf, term t, ExternalTermOpts opts, GlobalCon
         int atom_index = term_to_atom_index(t);
         size_t atom_len;
         atom_ref_t atom_ref = atom_table_get_atom_ptr_and_len(glb->atom_table, atom_index, &atom_len);
-
-        uint8_t *atom_data = malloc(atom_len);
-        if (IS_NULL_PTR(atom_data)) {
-            // Not much else we can do here...
-            AVM_ABORT();
+        if (!IS_NULL_PTR(buf)) {
+            buf[0] = SMALL_ATOM_UTF8_EXT;
+            buf[1] = atom_len;
+            atom_table_write_bytes(glb->atom_table, atom_ref, atom_len, buf + 2);
         }
-        atom_table_write_bytes(glb->atom_table, atom_ref, atom_len, atom_data);
-
-        int offset = 0;
-        if (opts & ExternalTermAllowLatin1Encoding) {
-            if (has_extended_utf8_encoding(atom_data, atom_len)) {
-                encode_atom_utf8(buf, atom_ref, atom_len, &offset, glb);
-            } else {
-                encode_atom_latin1(buf, atom_ref, atom_len, &offset, glb);
-            }
-        } else {
-            encode_atom_utf8(buf, atom_ref, atom_len, &offset, glb);
-        }
-        free(atom_data);
-        return offset + atom_len;
+        return 2 + atom_len;
 
     } else if (term_is_tuple(t)) {
         size_t arity = term_get_tuple_arity(t);
@@ -347,7 +292,7 @@ static int serialize_term(uint8_t *buf, term t, ExternalTermOpts opts, GlobalCon
         size_t k = 2;
         for (size_t i = 0; i < arity; ++i) {
             term e = term_get_tuple_element(t, i);
-            k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, e, opts, glb);
+            k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, e, glb);
         }
         return k;
 
@@ -387,11 +332,11 @@ static int serialize_term(uint8_t *buf, term t, ExternalTermOpts opts, GlobalCon
         term i = t;
         while (term_is_nonempty_list(i)) {
             term e = term_get_list_head(i);
-            k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, e, opts, glb);
+            k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, e, glb);
             i = term_get_list_tail(i);
             ++len;
         }
-        k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, i, opts, glb);
+        k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, i, glb);
         if (!IS_NULL_PTR(buf)) {
             WRITE_32_UNALIGNED(buf + 1, len);
         }
@@ -418,9 +363,9 @@ static int serialize_term(uint8_t *buf, term t, ExternalTermOpts opts, GlobalCon
         size_t k = 5;
         for (size_t i = 0; i < size; ++i) {
             term key = term_get_map_key(t, i);
-            k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, key, opts, glb);
+            k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, key, glb);
             term value = term_get_map_value(t, i);
-            k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, value, opts, glb);
+            k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, value, glb);
         }
         return k;
     } else if (term_is_function(t)) {
@@ -431,7 +376,7 @@ static int serialize_term(uint8_t *buf, term t, ExternalTermOpts opts, GlobalCon
         const term *boxed_value = term_to_const_term_ptr(t);
         for (size_t i = 1; i <= 3; ++i) {
             term mfa = boxed_value[i];
-            k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, mfa, opts, glb);
+            k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, mfa, glb);
         }
         return k;
     } else {

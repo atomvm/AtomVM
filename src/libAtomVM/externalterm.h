@@ -45,8 +45,7 @@ enum ExternalTermResult
 typedef enum
 {
     ExternalTermNoOpts = 0,
-    ExternalTermToHeapFragment = 1,
-    ExternalTermAllowLatin1Encoding = 2
+    ExternalTermToHeapFragment = 1
 } ExternalTermOpts;
 
 /**
@@ -90,14 +89,10 @@ enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term b
  * WARNING: This function may call the GC, which may render the input binary invalid.
  * @param ctx the context that owns the memory that will be allocated.
  * @param t the term to return as binary.
- * @param opts encoding options.  If the ExternalTermAllowLatin1Encoding bit is
- * set in opts, then atoms that do not contain extended UTF-8 character will be
- * encoded using latin1 (ATOM_EXT) encoding; otherwise, atoms are encoded in UTF-8
- * (SMALL_ATOM_UTF8_EXT or ATOM_UTF8_EXT) encoding.
  * @returns the term deserialized from the input term, or an invalid term, if
  * deserialization fails.
  */
-term externalterm_to_binary(Context *ctx, term t, ExternalTermOpts opts);
+term externalterm_to_binary(Context *ctx, term t);
 
 #ifdef __cplusplus
 }
