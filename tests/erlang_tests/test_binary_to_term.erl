@@ -2,6 +2,7 @@
 % This file is part of AtomVM.
 %
 % Copyright 2019-2021 Fred Dushin <fred@dushin.net>
+% Copyright 2024 Davide Bettio <davide@uninstall.it>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -20,7 +21,14 @@
 
 -module(test_binary_to_term).
 
--export([start/0, apply/2, apply/3]).
+-export([
+    start/0,
+    apply/2, apply/3,
+    test_atom_decoding/0,
+    get_atom/1,
+    get_binary/1,
+    test_atom_decoding_checks/0
+]).
 
 start() ->
     % Starting from OTP-26, atoms are encoded as UTF-8 by default.
@@ -84,6 +92,8 @@ start() ->
     test_catenate_and_split([foo, bar, 128, {foo, bar}, [a, b, c, {d}]]),
     ok = test_invalid_term_encoding(),
     ok = test_mutate_encodings(),
+    ok = test_atom_decoding(),
+    ok = test_atom_decoding_checks(),
     0.
 
 test_reverse(T, Interop) ->
@@ -183,6 +193,127 @@ test_external_function(Options) ->
     42 = Fun3(?MODULE, apply, [Fun2, [fun() -> 42 end, []]]),
     ok.
 
+get_binary(Id) ->
+    case Id of
+        % 'buondì'
+        latin1_1 ->
+            <<131, 100, 0, 6, 98, 117, 111, 110, 100, 236>>;
+        % 'ðñ÷aþbÿ'
+        latin1_2 ->
+            <<131, 100, 0, 7, 240, 241, 247, 97, 254, 98, 255>>;
+        % 'hello'
+        latin1_3 ->
+            <<131, 100, 0, 5, 104, 101, 108, 108, 111>>;
+        % invalid length
+        invalid_latin1_1 ->
+            <<131, 100, 1, 6, 98, 117, 111, 110, 100, 236>>;
+        % invalid length
+        invalid_latin1_2 ->
+            <<131, 100, 0, 6, 240, 241, 247, 97, 254, 98, 255>>;
+        % invalid length
+        invalid_latin1_3 ->
+            <<131, 100, 0, 10, 240, 241, 247, 97, 254, 98, 255>>;
+        % invalid length
+        invalid_latin1_4 ->
+            <<131, 100, 0, 6, 104, 101, 108, 108, 111>>;
+        % invalid length
+        invalid_latin1_5 ->
+            <<131, 100, 0, 4, 104, 101, 108, 108, 111>>;
+        % invalid length
+        invalid_latin1_6 ->
+            <<131, 100, 1, 5, 104, 101, 108, 108, 111>>;
+        % '漢字'
+        jp_1 ->
+            <<131, 119, 6, 230, 188, 162, 229, 173, 151>>;
+        % 'Unicodeで使える8ビット'
+        jp_2 ->
+            <<131, 119, 29, 85, 110, 105, 99, 111, 100, 101, 227, 129, 167, 228, 189, 191, 227, 129,
+                136, 227, 130, 139, 56, 227, 131, 147, 227, 131, 131, 227, 131, 136>>;
+        % 'buondì'
+        latin1_as_utf8_1 ->
+            <<131, 119, 7, 98, 117, 111, 110, 100, 195, 172>>;
+        % 'ðñ÷aþbÿ'
+        latin1_as_utf8_2 ->
+            <<131, 119, 12, 195, 176, 195, 177, 195, 183, 97, 195, 190, 98, 195, 191>>;
+        % 'hello'
+        latin1_as_utf8_3 ->
+            <<131, 119, 5, 104, 101, 108, 108, 111>>;
+        % valid length, but truncated utf8
+        invalid_utf8_1 ->
+            <<131, 119, 5, 230, 188, 162, 229, 173>>;
+        % invalid length and truncated utf8
+        invalid_utf8_2 ->
+            <<131, 119, 6, 230, 188, 162, 229, 173>>;
+        % invalid length
+        invalid_utf8_len_1 ->
+            <<131, 119, 4, 104, 101, 108, 108, 111>>;
+        % invalid length
+        invalid_utf8_len_2 ->
+            <<131, 119, 6, 104, 101, 108, 108, 111>>;
+        % invalid utf8 sequence
+        invalid_utf8_seq_1 ->
+            <<131, 119, 1, 230>>;
+        % invalid utf8 sequence
+        invalid_utf8_seq_2 ->
+            <<131, 119, 4, 16#f0, 16#90, 16#28, 16#bc>>;
+        % invalid utf8 sequence
+        invalid_utf8_seq_3 ->
+            <<131, 119, 6, 16#fc, 16#a1, 16#a1, 16#a1, 16#a1, 16#a1>>
+    end.
+
+get_atom(Id) ->
+    case Id of
+        latin1_1 -> 'buondì';
+        latin1_2 -> 'ðñ÷aþbÿ';
+        latin1_3 -> 'hello';
+        jp_1 -> '漢字';
+        jp_2 -> 'Unicodeで使える8ビット';
+        latin1_as_utf8_1 -> 'buondì';
+        latin1_as_utf8_2 -> 'ðñ÷aþbÿ';
+        latin1_as_utf8_3 -> 'hello'
+    end.
+
+test_atom_decoding() ->
+    true = compare_pair(latin1_1),
+    true = compare_pair(latin1_2),
+    true = compare_pair(latin1_3),
+    true = compare_pair(jp_1),
+    true = compare_pair(jp_2),
+    true = compare_pair(latin1_as_utf8_1),
+    true = compare_pair(latin1_as_utf8_2),
+    true = compare_pair(latin1_as_utf8_3),
+    ok.
+
+test_atom_decoding_checks() ->
+    % if there are some bytes at the end of the binary no error is raised
+    % I was expecting some kind of error, but it is not raised
+    % I will keep them anyway here but commented
+    ok = expect_badarg(make_binterm_fun(invalid_latin1_1)),
+    %ok = expect_badarg(make_binterm_fun(invalid_latin1_2)),
+    ok = expect_badarg(make_binterm_fun(invalid_latin1_3)),
+    ok = expect_badarg(make_binterm_fun(invalid_latin1_4)),
+    %ok = expect_badarg(make_binterm_fun(invalid_latin1_5)),
+    ok = expect_badarg(make_binterm_fun(invalid_latin1_6)),
+    ok = expect_badarg(make_binterm_fun(invalid_utf8_1)),
+    ok = expect_badarg(make_binterm_fun(invalid_utf8_2)),
+    %ok = expect_badarg(make_binterm_fun(invalid_utf8_len_1)),
+    ok = expect_badarg(make_binterm_fun(invalid_utf8_len_2)),
+    ok = expect_badarg(make_binterm_fun(invalid_utf8_seq_1)),
+    ok = expect_badarg(make_binterm_fun(invalid_utf8_seq_2)),
+    ok = expect_badarg(make_binterm_fun(invalid_utf8_seq_3)),
+    ok.
+
+make_binterm_fun(Id) ->
+    fun() ->
+        Bin = ?MODULE:get_binary(Id),
+        erlang:binary_to_term(Bin)
+    end.
+
+compare_pair(Id) ->
+    A = ?MODULE:get_atom(Id),
+    B = ?MODULE:get_binary(Id),
+    A == erlang:binary_to_term(B).
+
 % We don't have access to erlang module in tests.
 apply(F, []) ->
     F();
@@ -200,7 +331,7 @@ apply(M, F, [X, Y]) ->
 
 expect_badarg(Fun) ->
     try
-        Fun(),
+        erlang:display(Fun()),
         fail
     catch
         _:badarg ->
