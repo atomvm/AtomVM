@@ -28,6 +28,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "bitstring.h"
+#include "unicode.h"
 #include "utils.h"
 
 #define EXTERNAL_TERM_TAG 131
@@ -439,7 +441,39 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
         case ATOM_EXT: {
             uint16_t atom_len = READ_16_UNALIGNED(external_term_buf + 1);
 
-            int global_atom_id = globalcontext_insert_atom_maybe_copy(glb, (AtomString) (external_term_buf + 2), copy);
+            if (UNLIKELY(atom_len > 255)) {
+                return term_invalid_term();
+            }
+
+            const uint8_t *atom_chars = (const uint8_t *) (external_term_buf + 3);
+            int global_atom_id;
+            if (LIKELY(unicode_buf_is_ascii(atom_chars, atom_len))) {
+                // there is a trick here: we are reusing LSB of len field as atom length
+                global_atom_id = globalcontext_insert_atom_maybe_copy(
+                    glb, (AtomString) (external_term_buf + 2), copy);
+            } else {
+                // need to re-encode latin1 to UTF-8
+                size_t required_buf_size = unicode_latin1_buf_size_as_utf8(atom_chars, atom_len);
+                if (UNLIKELY(required_buf_size > 255)) {
+                    return term_invalid_term();
+                }
+                uint8_t *atom_buf = malloc(1 + required_buf_size);
+                atom_buf[0] = required_buf_size;
+                uint8_t *curr_codepoint = &atom_buf[1];
+                for (int i = 0; i < atom_len; i++) {
+                    size_t codepoint_size;
+                    // latin1 encoding is always successful
+                    bitstring_utf8_encode(atom_chars[i], curr_codepoint, &codepoint_size);
+                    curr_codepoint += codepoint_size;
+                }
+                global_atom_id
+                    = globalcontext_insert_atom_maybe_copy(glb, (AtomString) atom_buf, true);
+                free(atom_buf);
+            }
+
+            if (UNLIKELY(global_atom_id) < 0) {
+                return term_invalid_term();
+            }
 
             *eterm_size = 3 + atom_len;
             return term_from_atom_index(global_atom_id);
@@ -582,9 +616,26 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
 
         case SMALL_ATOM_UTF8_EXT: {
             uint8_t atom_len = *(external_term_buf + 1);
+            const uint8_t *atom_chars = external_term_buf + 2;
+
+            size_t remaining_length = atom_len;
+            const uint8_t *curr_buf = atom_chars;
+            while (remaining_length) {
+                uint32_t out_c;
+                size_t codepoint_size;
+                enum UnicodeTransformDecodeResult result = bitstring_utf8_decode(curr_buf, remaining_length, &out_c, &codepoint_size);
+                if (UNLIKELY(result != UnicodeTransformDecodeSuccess)) {
+                    return term_invalid_term();
+                }
+                remaining_length -= codepoint_size;
+                curr_buf += codepoint_size;
+            }
 
             // AtomString first byte is the atom length
             int global_atom_id = globalcontext_insert_atom_maybe_copy(glb, (AtomString) (external_term_buf + 1), copy);
+            if (UNLIKELY(global_atom_id < 0)) {
+                return term_invalid_term();
+            }
 
             *eterm_size = 2 + atom_len;
             return term_from_atom_index(global_atom_id);

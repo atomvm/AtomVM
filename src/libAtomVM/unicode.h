@@ -31,6 +31,7 @@ extern "C" {
 
 size_t unicode_buf_utf8_len(const uint8_t *buf, size_t buf_len);
 bool unicode_buf_is_ascii(const uint8_t *buf, size_t buf_len);
+size_t unicode_latin1_buf_size_as_utf8(const uint8_t *buf, size_t len);
 
 static inline bool unicode_is_valid_codepoint(uint32_t codepoint)
 {
