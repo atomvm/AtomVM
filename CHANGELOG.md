@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 used)
 - ESP32: fixed bug in `gpio:set_pin_mode/2` and `gpio:set_direction/3` that would accept any atom for the mode parameter without an error.
 - ESP32: GPIO driver fix bug that would accept invalid `pull` direction, and silently set `pull` direction to `floating` without issuing an error.
-
+- ESP32: fixed bug in gpio driver that would accept invalid pin numbers (either negative, or too large)
 
 ### Changed
 
