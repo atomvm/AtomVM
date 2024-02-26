@@ -33,17 +33,29 @@
 start() ->
     % Starting from OTP-26, atoms are encoded as UTF-8 by default.
     TermToBinaryOptions =
-        case erlang:system_info(machine) of
-            "BEAM" ->
-                case erlang:system_info(version) >= "13.2" of
-                    true -> [{minor_version, 1}];
-                    false -> []
-                end;
-            "ATOM" ->
+        case get_otp_version() of
+            X when is_integer(X) andalso X >= 26 ->
+                [{minor_version, 1}];
+            atomvm ->
+                [{minor_version, 1}];
+            _ ->
                 []
         end,
     test_reverse(foo, <<131, 100, 0, 3, 102, 111, 111>>, TermToBinaryOptions),
     test_reverse(bar, <<131, 100, 0, 3, 98, 97, 114>>, TermToBinaryOptions),
+    test_reverse(foo, {<<131, 119, 3, 102, 111, 111>>, <<131, 100, 0, 3, 102, 111, 111>>}),
+    test_reverse(bar, {<<131, 119, 3, 98, 97, 114>>, <<131, 100, 0, 3, 98, 97, 114>>}),
+    test_reverse(
+        '∀x∃y.f(x,y)',
+        <<131, 119, 15, 226, 136, 128, 120, 226, 136, 131, 121, 46, 102, 40, 120, 44, 121, 41>>,
+        [{minor_version, 1}]
+    ),
+    test_reverse(
+        ':アトムＶＭ',
+        <<131, 119, 16, 58, 227, 130, 162, 227, 131, 136, 227, 131, 160, 239, 188, 182, 239, 188,
+            173>>,
+        [{minor_version, 1}]
+    ),
     test_reverse(128, <<131, 97, 128>>),
     test_reverse(257, <<131, 98, 0, 0, 1, 1>>),
     test_reverse(0, <<131, 97, 0>>),
@@ -68,6 +80,31 @@ start() ->
         <<131, 108, 0, 0, 0, 1, 100, 0, 8, 105, 109, 112, 114, 111, 112, 101, 114, 100, 0, 4, 108,
             105, 115, 116>>,
         TermToBinaryOptions
+    ),
+    test_reverse({foo, bar}, {
+        <<131, 104, 2, 119, 3, 102, 111, 111, 119, 3, 98, 97, 114>>,
+        <<131, 104, 2, 100, 0, 3, 102, 111, 111, 100, 0, 3, 98, 97, 114>>
+    }),
+    test_reverse({foo, 0}, {
+        <<131, 104, 2, 119, 3, 102, 111, 111, 97, 0>>,
+        <<131, 104, 2, 100, 0, 3, 102, 111, 111, 97, 0>>
+    }),
+    test_reverse([], <<131, 106>>),
+    test_reverse(
+        [{foo, 0}, {bar, 1}], {
+            <<131, 108, 0, 0, 0, 2, 104, 2, 119, 3, 102, 111, 111, 97, 0, 104, 2, 119, 3, 98, 97,
+                114, 97, 1, 106>>,
+            <<131, 108, 0, 0, 0, 2, 104, 2, 100, 0, 3, 102, 111, 111, 97, 0, 104, 2, 100, 0, 3, 98,
+                97, 114, 97, 1, 106>>
+        }
+    ),
+    test_reverse(
+        [improper | list], {
+            <<131, 108, 0, 0, 0, 1, 119, 8, 105, 109, 112, 114, 111, 112, 101, 114, 119, 4, 108,
+                105, 115, 116>>,
+            <<131, 108, 0, 0, 0, 1, 100, 0, 8, 105, 109, 112, 114, 111, 112, 101, 114, 100, 0, 4,
+                108, 105, 115, 116>>
+        }
     ),
     test_reverse(<<"foobar">>, <<131, 109, 0, 0, 0, 6, 102, 111, 111, 98, 97, 114>>),
     test_reverse(<<":アトムＶＭ">>, <<131, 109, 0, 0, 0, 6, 58, 162, 200, 224, 54, 45>>),
@@ -99,7 +136,16 @@ start() ->
 test_reverse(T, Interop) ->
     test_reverse(T, Interop, []).
 
-test_reverse(T, Interop, Options) ->
+test_reverse(T, {Utf8Interop, Latin1Interop}, Options) ->
+    case get_otp_version() of
+        X when is_integer(X) andalso X >= 26 ->
+            test_reverse(T, Utf8Interop, Options);
+        atomvm ->
+            test_reverse(T, Utf8Interop, Options);
+        _ ->
+            test_reverse(T, Latin1Interop, Options)
+    end;
+test_reverse(T, Interop, Options) when is_binary(Interop) andalso is_list(Options) ->
     Bin =
         case Options of
             [] -> erlang:term_to_binary(T);
@@ -336,4 +382,12 @@ expect_badarg(Fun) ->
     catch
         _:badarg ->
             ok
+    end.
+
+get_otp_version() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            list_to_integer(erlang:system_info(otp_release));
+        _ ->
+            atomvm
     end.

@@ -102,6 +102,7 @@
     garbage_collect/1,
     binary_to_term/1,
     term_to_binary/1,
+    term_to_binary/2,
     timestamp/0,
     universaltime/0,
     localtime/0
@@ -1149,7 +1150,7 @@ binary_to_term(_Binary) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @returns A binary encoding passed term.
+%% @returns the binary encoding of a term
 %% @param   Term    term to encode
 %% @doc Encode a term to a binary that can later be decoded with `binary_to_term/1'.
 %% This function should be mostly compatible with its Erlang/OTP counterpart.
@@ -1159,6 +1160,23 @@ binary_to_term(_Binary) ->
 %%-----------------------------------------------------------------------------
 -spec term_to_binary(Term :: any()) -> binary().
 term_to_binary(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns the binary encoding of a term
+%% @param   Term    term to encode
+%% @param   Options encoding options.  Currently, the only supported encoding
+%%          options are `{minor_version, 1}', which will encode atoms using
+%%          latin1 encoding, if the atom does not contain any extended UTF-8
+%%          characters.
+%% @doc Encode a term to a binary that can later be decoded with `binary_to_term/1'.
+%% This function should be mostly compatible with its Erlang/OTP counterpart.
+%% Unlike modern Erlang/OTP, resources are currently serialized as empty
+%% binaries.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec term_to_binary(Term :: any(), Options :: [{minor_version, 1}]) -> binary().
+term_to_binary(_Term, _Options) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

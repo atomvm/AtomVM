@@ -46,6 +46,7 @@ used)
 - New atom table, which uses less memory, has improved performances and better code.
 - SPI: when gpio number is not provided for `miso` or `mosi` default to disabled
 - Change port call tuple format to the same format as gen_server, so casts can be supported too
+- Use UTF-8 encoding for atoms when using `erlang:term_to_binary/1,2`, in conformance with OTP-26
 
 ### Fixed
 

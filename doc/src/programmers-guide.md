@@ -587,6 +587,30 @@ The currently supported keys are enumerated in the following table:
 
 See the `word_size` key in the [System APIs](#system-apis) section for information about how to find the number of bytes used in a machine word on the current platform.
 
+### External Term Format
+
+The `erlang:term_to_binary/1` and `erlang:binary_to_term/2` can be used to serialize arbitrary term data into and out of binary data.  These operations can be useful for applications that wish to share term data over some network protocol, such as HTTP or MQTT, or wish to store serialized term data in some permanant sttorage (e.g., Non-volatile storage on ESP32 devices).
+
+For example, to convert a term to a binary, use `erlang:term_to_binary/1,2`, e.g.,
+
+    %% erlang
+    Term = ...
+    Binary = erlang:term_to_binary(Term),
+
+And to convert the binary back to a term, use `erlang:binary_to_term/1,2`, e.g.,
+
+    %% erlang
+    Binary = ...
+    {Term, _Used} = erlang:binary_to_term(Binary, [used]),
+
+By default, AtomVM will encode all atoms using UTF-8 encoding.  This encoding is the default encoding for OTP-26 and later releases.  If you would like to use the legacy Latin1 encoding for atoms that do not contain UTF-8 extended characters, provide the `{minor_version, 1}` to the `erlang:term_to_binary/2` function.  For example:
+
+    %% erlang
+    Term = ...
+    Binary = erlang:term_to_binary(Term, [{minor_version, 1}]),
+
+For more information about Erlang external term format, consult the [Erlang Documentation](https://www.erlang.org/doc/apps/erts/erl_ext_dist.html)
+
 ### System APIs
 
 You can obtain system information about the AtomVM virtual machine via the [`erlang:system_info/1`](./apidocs/erlang/estdlib/erlang.md#system_info1) function, which takes an atom parameter designating the desired datum.  Allowable parameters include

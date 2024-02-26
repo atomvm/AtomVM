@@ -153,7 +153,7 @@ enum UnicodeTransformDecodeResult bitstring_utf8_decode(const uint8_t *buf, size
         v |= (buf[3] & 0x3F);
         // overlong encoding or invalid codepoint
         if (v <= 0x10000 || v > 0x10FFFF) {
-            return false;
+            return UnicodeTransformDecodeFail;
         }
         *c = v;
         *out_size = 4;
@@ -165,7 +165,7 @@ enum UnicodeTransformDecodeResult bitstring_utf8_decode(const uint8_t *buf, size
         v |= (buf[2] & 0x3F);
         // overlong encoding or surrogate
         if (v < 0x800 || (v >= 0xD800 && v <= 0xDFFF)) {
-            return false;
+            return UnicodeTransformDecodeFail;
         }
         *c = v;
         *out_size = 3;
@@ -176,7 +176,7 @@ enum UnicodeTransformDecodeResult bitstring_utf8_decode(const uint8_t *buf, size
         v |= (buf[1] & 0x3F);
         // overlong encoding
         if (v < 0x80) {
-            return false;
+            return UnicodeTransformDecodeFail;
         }
         *c = v;
         *out_size = 2;
