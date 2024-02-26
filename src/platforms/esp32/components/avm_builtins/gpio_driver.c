@@ -82,7 +82,7 @@ static const AtomStringIntPair pull_mode_table[] = {
     { ATOM_STR("\x4", "down"), GPIO_PULLDOWN_ONLY },
     { ATOM_STR("\x7", "up_down"), GPIO_PULLUP_PULLDOWN },
     { ATOM_STR("\x8", "floating"), GPIO_FLOATING },
-    SELECT_INT_DEFAULT(GPIO_FLOATING)
+    SELECT_INT_DEFAULT(-1)
 };
 
 enum gpio_pin_level
@@ -153,7 +153,7 @@ static inline term gpio_set_pin_mode(Context *ctx, term gpio_num_term, term mode
     return OK_ATOM;
 }
 
-static gpio_pull_mode_t get_pull_mode(Context *ctx, term pull)
+static avm_int_t get_pull_mode(Context *ctx, term pull)
 {
     return interop_atom_term_select_int(pull_mode_table, pull, ctx->global);
 }
@@ -161,8 +161,12 @@ static gpio_pull_mode_t get_pull_mode(Context *ctx, term pull)
 static inline term set_pin_pull_mode(Context *ctx, term gpio_num_term, term pull)
 {
     avm_int_t gpio_num = term_to_int(gpio_num_term);
-    gpio_pull_mode_t pull_mode = get_pull_mode(ctx, pull);
-    esp_err_t result = gpio_set_pull_mode(gpio_num, pull_mode);
+    avm_int_t pull_mode = get_pull_mode(ctx, pull);
+    if (UNLIKELY(pull_mode < 0)) {
+        return ERROR_ATOM;
+    }
+
+    esp_err_t result = gpio_set_pull_mode(gpio_num, (gpio_pull_mode_t) pull_mode);
     if (UNLIKELY(result != ESP_OK)) {
         return ERROR_ATOM;
     }
