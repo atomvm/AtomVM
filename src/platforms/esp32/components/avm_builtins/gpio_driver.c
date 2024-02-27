@@ -82,7 +82,7 @@ static const AtomStringIntPair pull_mode_table[] = {
     { ATOM_STR("\x4", "down"), GPIO_PULLDOWN_ONLY },
     { ATOM_STR("\x7", "up_down"), GPIO_PULLUP_PULLDOWN },
     { ATOM_STR("\x8", "floating"), GPIO_FLOATING },
-    SELECT_INT_DEFAULT(GPIO_FLOATING)
+    SELECT_INT_DEFAULT(-1)
 };
 
 enum gpio_pin_level
@@ -138,7 +138,16 @@ struct GPIOData
 
 static inline term gpio_set_pin_mode(Context *ctx, term gpio_num_term, term mode_term)
 {
-    int gpio_num = term_to_int(gpio_num_term);
+    gpio_num_t gpio_num;
+    if (LIKELY(term_is_integer(gpio_num_term))) {
+        avm_int_t pin_int = term_to_int32(gpio_num_term);
+        if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
+            return ERROR_ATOM;
+        }
+        gpio_num = (gpio_num_t) pin_int;
+    } else {
+        return ERROR_ATOM;
+    }
 
     avm_int_t mode = interop_atom_term_select_int(pin_mode_table, mode_term, ctx->global);
     if (UNLIKELY(mode < 0)) {
@@ -153,16 +162,30 @@ static inline term gpio_set_pin_mode(Context *ctx, term gpio_num_term, term mode
     return OK_ATOM;
 }
 
-static gpio_pull_mode_t get_pull_mode(Context *ctx, term pull)
+static avm_int_t get_pull_mode(Context *ctx, term pull)
 {
     return interop_atom_term_select_int(pull_mode_table, pull, ctx->global);
 }
 
 static inline term set_pin_pull_mode(Context *ctx, term gpio_num_term, term pull)
 {
-    avm_int_t gpio_num = term_to_int(gpio_num_term);
-    gpio_pull_mode_t pull_mode = get_pull_mode(ctx, pull);
-    esp_err_t result = gpio_set_pull_mode(gpio_num, pull_mode);
+    gpio_num_t gpio_num;
+    if (LIKELY(term_is_integer(gpio_num_term))) {
+        avm_int_t pin_int = term_to_int32(gpio_num_term);
+        if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
+            return ERROR_ATOM;
+        }
+        gpio_num = (gpio_num_t) pin_int;
+    } else {
+        return ERROR_ATOM;
+    }
+
+    avm_int_t pull_mode = get_pull_mode(ctx, pull);
+    if (UNLIKELY(pull_mode < 0)) {
+        return ERROR_ATOM;
+    }
+
+    esp_err_t result = gpio_set_pull_mode(gpio_num, (gpio_pull_mode_t) pull_mode);
     if (UNLIKELY(result != ESP_OK)) {
         return ERROR_ATOM;
     }
@@ -171,7 +194,17 @@ static inline term set_pin_pull_mode(Context *ctx, term gpio_num_term, term pull
 
 static inline term hold_en(term gpio_num_term)
 {
-    int gpio_num = term_to_int(gpio_num_term);
+    gpio_num_t gpio_num;
+    if (LIKELY(term_is_integer(gpio_num_term))) {
+        avm_int_t pin_int = term_to_int32(gpio_num_term);
+        if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
+            return ERROR_ATOM;
+        }
+        gpio_num = (gpio_num_t) pin_int;
+    } else {
+        return ERROR_ATOM;
+    }
+
     esp_err_t result = gpio_hold_en(gpio_num);
     if (UNLIKELY(result != ESP_OK)) {
         return ERROR_ATOM;
@@ -181,7 +214,17 @@ static inline term hold_en(term gpio_num_term)
 
 static inline term hold_dis(term gpio_num_term)
 {
-    int gpio_num = term_to_int(gpio_num_term);
+    gpio_num_t gpio_num;
+    if (LIKELY(term_is_integer(gpio_num_term))) {
+        avm_int_t pin_int = term_to_int32(gpio_num_term);
+        if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
+            return ERROR_ATOM;
+        }
+        gpio_num = (gpio_num_t) pin_int;
+    } else {
+        return ERROR_ATOM;
+    }
+
     esp_err_t result = gpio_hold_dis(gpio_num);
     if (UNLIKELY(result != ESP_OK)) {
         return ERROR_ATOM;
@@ -191,7 +234,16 @@ static inline term hold_dis(term gpio_num_term)
 
 static inline term gpio_digital_write(Context *ctx, term gpio_num_term, term level_term)
 {
-    int gpio_num = term_to_int(gpio_num_term);
+    gpio_num_t gpio_num;
+    if (LIKELY(term_is_integer(gpio_num_term))) {
+        avm_int_t pin_int = term_to_int32(gpio_num_term);
+        if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
+            return ERROR_ATOM;
+        }
+        gpio_num = (gpio_num_t) pin_int;
+    } else {
+        return ERROR_ATOM;
+    }
 
     int level;
     if (term_is_integer(level_term)) {
@@ -216,7 +268,17 @@ static inline term gpio_digital_write(Context *ctx, term gpio_num_term, term lev
 
 static inline term gpio_digital_read(term gpio_num_term)
 {
-    avm_int_t gpio_num = term_to_int(gpio_num_term);
+    gpio_num_t gpio_num;
+    if (LIKELY(term_is_integer(gpio_num_term))) {
+        avm_int_t pin_int = term_to_int32(gpio_num_term);
+        if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
+            return ERROR_ATOM;
+        }
+        gpio_num = (gpio_num_t) pin_int;
+    } else {
+        return ERROR_ATOM;
+    }
+
     avm_int_t level = gpio_get_level(gpio_num);
 
     return level ? HIGH_ATOM : LOW_ATOM;
@@ -349,7 +411,18 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
 
     struct GPIOData *gpio_data = ctx->platform_data;
 
-    int32_t gpio_num = term_to_int32(term_get_tuple_element(cmd, 1));
+    term gpio_num_term = term_to_int32(term_get_tuple_element(cmd, 1));
+    gpio_num_t gpio_num;
+    if (LIKELY(term_is_integer(gpio_num_term))) {
+        avm_int_t pin_int = term_to_int32(gpio_num_term);
+        if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
+            return ERROR_ATOM;
+        }
+        gpio_num = (gpio_num_t) pin_int;
+    } else {
+        return ERROR_ATOM;
+    }
+
     term trigger = term_get_tuple_element(cmd, 2);
     if (term_get_tuple_arity(cmd) == 4) {
         term pid = term_get_tuple_element(cmd, 3);
@@ -441,7 +514,17 @@ static term gpiodriver_remove_int(Context *ctx, term cmd)
 {
     struct GPIOData *gpio_data = ctx->platform_data;
 
-    int32_t gpio_num = term_to_int32(term_get_tuple_element(cmd, 1));
+    term gpio_num_term = term_to_int32(term_get_tuple_element(cmd, 1));
+    gpio_num_t gpio_num;
+    if (LIKELY(term_is_integer(gpio_num_term))) {
+        avm_int_t pin_int = term_to_int32(gpio_num_term);
+        if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
+            return ERROR_ATOM;
+        }
+        gpio_num = (gpio_num_t) pin_int;
+    } else {
+        return ERROR_ATOM;
+    }
 
     struct ListHead *item;
     struct ListHead *tmp;
