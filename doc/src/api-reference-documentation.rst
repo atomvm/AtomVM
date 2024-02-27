@@ -2,7 +2,6 @@
 ..
 .. SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 
-
 API Reference Documentation
 =========================================
 
@@ -54,12 +53,10 @@ etest
    apidocs/erlang/etest/*
 
 =========================================
-AtomVM 'C' Internal Libraries
+AtomVM 'C' APIs
 =========================================
 
 .. toctree::
    :maxdepth: 1
 
-   c_api_docs
-
-[`libAtomVM  (Doxygen theme) <_static/libatomvm/index.html>`_]
+   apidocs/libatomvm/index
