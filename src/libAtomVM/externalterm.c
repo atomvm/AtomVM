@@ -273,11 +273,11 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
         size_t atom_len;
         atom_ref_t atom_ref = atom_table_get_atom_ptr_and_len(glb->atom_table, atom_index, &atom_len);
         if (!IS_NULL_PTR(buf)) {
-            buf[0] = ATOM_EXT;
-            WRITE_16_UNALIGNED(buf + 1, atom_len);
-            atom_table_write_bytes(glb->atom_table, atom_ref, atom_len, buf + 3);
+            buf[0] = SMALL_ATOM_UTF8_EXT;
+            buf[1] = atom_len;
+            atom_table_write_bytes(glb->atom_table, atom_ref, atom_len, buf + 2);
         }
-        return 3 + atom_len;
+        return 2 + atom_len;
 
     } else if (term_is_tuple(t)) {
         size_t arity = term_get_tuple_arity(t);
