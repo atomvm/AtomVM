@@ -60,6 +60,7 @@
 #define COMPACT_LARGE_LITERAL 8
 #define COMPACT_LARGE_INTEGER 9
 #define COMPACT_LARGE_ATOM 10
+#define COMPACT_LARGE_XREG 11
 #define COMPACT_LARGE_YREG 12
 
 // OTP-20+ format
@@ -179,13 +180,21 @@ typedef dreg_t dreg_gc_safe_t;
                 }                                                                       \
                 case COMPACT_EXTENDED_TYPED_REGISTER: {                                 \
                     uint8_t reg_byte = *(decode_pc)++;                                  \
-                    if (((reg_byte & 0x0F) != COMPACT_XREG)                             \
-                        && ((reg_byte & 0x0F) != COMPACT_YREG)) {                       \
-                        fprintf(stderr, "Unexpected reg byte %x @ %" PRIuPTR "\n", (int) reg_byte, (uintptr_t) ((decode_pc) - 1)); \
-                        AVM_ABORT();                                                    \
+                    switch (reg_byte & 0x0F) {                                          \
+                        case COMPACT_XREG:                                              \
+                        case COMPACT_YREG:                                              \
+                            break;                                                      \
+                        case COMPACT_LARGE_XREG:                                        \
+                        case COMPACT_LARGE_YREG:                                        \
+                            (decode_pc)++;                                              \
+                            break;                                                      \
+                        default:                                                        \
+                            fprintf(stderr, "Unexpected reg byte %x @ %" PRIuPTR "\n",  \
+                                    (int) reg_byte, (uintptr_t) ((decode_pc) - 1));     \
+                            AVM_ABORT();                                                \
                     }                                                                   \
                     int type_index;                                                     \
-                    DECODE_LITERAL(type_index, decode_pc)             \
+                    DECODE_LITERAL(type_index, decode_pc)                               \
                     break;                                                              \
                 }                                                                       \
                 default:                                                                \
@@ -218,6 +227,7 @@ typedef dreg_t dreg_gc_safe_t;
             }                                                                           \
             break;                                                                      \
                                                                                         \
+        case COMPACT_LARGE_XREG:                                                        \
         case COMPACT_LARGE_YREG:                                                        \
             (decode_pc)++;                                                              \
             break;                                                                      \
@@ -257,6 +267,7 @@ typedef dreg_t dreg_gc_safe_t;
         case COMPACT_YREG:                                                                          \
             (dreg).index = first_byte >> 4;                                                         \
              break;                                                                                 \
+        case COMPACT_LARGE_XREG:                                                                    \
         case COMPACT_LARGE_YREG:                                                                    \
             (dreg).index = (((first_byte & 0xE0) << 3) | *(decode_pc)++);                           \
             break;                                                                                  \
@@ -278,6 +289,7 @@ typedef dreg_t dreg_gc_safe_t;
         case COMPACT_XREG:                                                                          \
         case COMPACT_YREG:                                                                          \
             break;                                                                                  \
+        case COMPACT_LARGE_XREG:                                                                    \
         case COMPACT_LARGE_YREG:                                                                    \
             (decode_pc)++;                                                                          \
             break;                                                                                  \
@@ -458,13 +470,63 @@ typedef struct
     int index;
 } dreg_gc_safe_t;
 
+static dreg_t extended_register_ptr(Context *ctx, unsigned int index)
+{
+    struct ListHead *item;
+    LIST_FOR_EACH (item, &ctx->extended_x_regs) {
+        struct ExtendedRegister *ext_reg = GET_LIST_ENTRY(item, struct ExtendedRegister, head);
+        if (ext_reg->index == index) {
+            return &ext_reg->value;
+        }
+    }
+    struct ExtendedRegister *new_ext_reg = malloc(sizeof(struct ExtendedRegister));
+    new_ext_reg->index = index;
+    new_ext_reg->value = term_nil();
+    list_append(&ctx->extended_x_regs, &new_ext_reg->head);
+
+    return &new_ext_reg->value;
+}
+
+static void destroy_extended_registers(Context *ctx, unsigned int live)
+{
+    struct ListHead *item;
+    struct ListHead *tmp;
+    MUTABLE_LIST_FOR_EACH (item, tmp, &ctx->extended_x_regs) {
+        struct ExtendedRegister *ext_reg = GET_LIST_ENTRY(item, struct ExtendedRegister, head);
+        if (ext_reg->index >= live) {
+            list_remove(item);
+            free(ext_reg);
+        }
+    }
+}
+
+#define READ_ANY_XREG(out_term, reg_index)                                                         \
+    {                                                                                              \
+        if (LIKELY(reg_index < MAX_REG)) {                                                         \
+            out_term = x_regs[reg_index];                                                          \
+        } else {                                                                                   \
+            dreg_t reg = extended_register_ptr(ctx, reg_index);                                    \
+            out_term = *reg;                                                                       \
+        }                                                                                          \
+    }
+
+#define TRIM_LIVE_REGS(live_regs_no)                                                               \
+    if (UNLIKELY(!list_is_empty(&ctx->extended_x_regs))) {                                         \
+        destroy_extended_registers(ctx, live_regs_no);                                             \
+    }                                                                                              \
+    if (UNLIKELY(live_regs_no > MAX_REG)) {                                                        \
+        live_regs_no = MAX_REG;                                                                    \
+    }
+
 #define DEST_REGISTER(reg) dreg_t reg
 #define GC_SAFE_DEST_REGISTER(reg) dreg_gc_safe_t reg
 
+// TODO: fix register type heuristics, there is a chance that 'y' might be an "extended" x reg
 #define T_DEST_REG(dreg) \
     ((dreg) >= x_regs && (dreg) < x_regs + MAX_REG) ? 'x' : 'y', \
     (int) (((dreg) >= x_regs && (dreg) < x_regs + MAX_REG) ? ((dreg) - x_regs) : ((dreg) - ctx->e))
 
+// TODO: fix register type heuristics, there is a chance that 'y' might be an "extended" x reg
 #define T_DEST_REG_GC_SAFE(dreg_gc_safe) \
     ((dreg).base == x_regs) ? 'x' : 'y', ((dreg).index)
 
@@ -532,10 +594,34 @@ typedef struct
                 }                                                                                                       \
                 case COMPACT_EXTENDED_TYPED_REGISTER: {                                                                 \
                     uint8_t reg_byte = *(decode_pc)++;                                                                  \
-                    if ((reg_byte & 0x0F) == COMPACT_XREG) {                                                            \
-                        dest_term = x_regs[reg_byte >> 4];                                                              \
-                    } else {                                                                                            \
-                        dest_term = ctx->e[reg_byte >> 4];                                                              \
+                    switch (reg_byte & 0x0F) {                                                                          \
+                        case COMPACT_XREG:                                                                              \
+                            dest_term = x_regs[reg_byte >> 4];                                                          \
+                            break;                                                                                      \
+                        case COMPACT_YREG:                                                                              \
+                            dest_term = ctx->e[reg_byte >> 4];                                                          \
+                            break;                                                                                      \
+                        case COMPACT_LARGE_XREG:                                                                        \
+                            if (LIKELY((reg_byte & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE)) {                  \
+                                unsigned int reg_index = (((reg_byte & 0xE0) << 3) | *(decode_pc)++);                   \
+                                dreg_t ext_reg = extended_register_ptr(ctx, reg_index);                                 \
+                                if (IS_NULL_PTR(ext_reg)) {                                                             \
+                                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);                                                    \
+                                }                                                                                       \
+                                dest_term = *ext_reg;                                                                   \
+                            } else {                                                                                    \
+                                VM_ABORT();                                                                             \
+                            }                                                                                           \
+                            break;                                                                                      \
+                        case COMPACT_LARGE_YREG:                                                                        \
+                            if (LIKELY((reg_byte & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE)) {                  \
+                                dest_term = ctx->e[((reg_byte & 0xE0) << 3) | *(decode_pc)++];                          \
+                            } else {                                                                                    \
+                                VM_ABORT();                                                                             \
+                            }                                                                                           \
+                            break;                                                                                      \
+                        default:                                                                                        \
+                            VM_ABORT();                                                                                 \
                     }                                                                                                   \
                     int type_index;                                                                                     \
                     DECODE_LITERAL(type_index, decode_pc)                                                               \
@@ -577,6 +663,19 @@ typedef struct
                 default:                                                                                                \
                     VM_ABORT();                                                                                         \
                     break;                                                                                              \
+            }                                                                                                           \
+            break;                                                                                                      \
+                                                                                                                        \
+        case COMPACT_LARGE_XREG:                                                                                        \
+            if (LIKELY((first_byte & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE)) {                                \
+                unsigned int reg_index = (((first_byte & 0xE0) << 3) | *(decode_pc)++);                                 \
+                dreg_t ext_reg = extended_register_ptr(ctx, reg_index);                                                 \
+                if (IS_NULL_PTR(ext_reg)) {                                                                             \
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);                                                                    \
+                }                                                                                                       \
+                dest_term = *ext_reg;                                                                                   \
+            } else {                                                                                                    \
+                VM_ABORT();                                                                                             \
             }                                                                                                           \
             break;                                                                                                      \
                                                                                                                         \
@@ -635,6 +734,18 @@ typedef struct
         case COMPACT_YREG:                                                                                      \
             (dreg) = ctx->e + reg_index;                                                                        \
             break;                                                                                              \
+        case COMPACT_LARGE_XREG:                                                                                \
+            if (LIKELY((first_byte & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE)) {                        \
+                unsigned int reg_index = (((first_byte & 0xE0) << 3) | *(decode_pc)++);                         \
+                dreg_t ext_reg = extended_register_ptr(ctx, reg_index);                                         \
+                if (IS_NULL_PTR(ext_reg)) {                                                                     \
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);                                                            \
+                }                                                                                               \
+                dreg = ext_reg;                                                                                 \
+            } else {                                                                                            \
+                VM_ABORT();                                                                                     \
+            }                                                                                                   \
+            break;                                                                                              \
         case COMPACT_LARGE_YREG:                                                                                \
             if (LIKELY((first_byte & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE)) {                        \
                 (dreg) = ctx->e + (((first_byte & 0xE0) << 3) | *(decode_pc)++);                                \
@@ -660,6 +771,19 @@ typedef struct
         case COMPACT_YREG:                                                                                      \
             (dreg_gc_safe).base = ctx->e;                                                                       \
             (dreg_gc_safe).index = reg_index;                                                                   \
+            break;                                                                                              \
+        case COMPACT_LARGE_XREG:                                                                                \
+            if (LIKELY((first_byte & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE)) {                        \
+                unsigned int reg_index = (((first_byte & 0xE0) << 3) | *(decode_pc)++);                         \
+                dreg_t reg_base = extended_register_ptr(ctx, reg_index);                                        \
+                if (IS_NULL_PTR(reg_base)) {                                                                    \
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);                                                            \
+                }                                                                                               \
+                (dreg_gc_safe).base = reg_base;                                                                 \
+                (dreg_gc_safe).index = 0;                                                                       \
+            } else {                                                                                            \
+                VM_ABORT();                                                                                     \
+            }                                                                                                   \
             break;                                                                                              \
         case COMPACT_LARGE_YREG:                                                                                \
             if (LIKELY((first_byte & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE)) {                        \
@@ -951,6 +1075,9 @@ typedef struct
         RAISE_ERROR(BADARG_ATOM);                                          \
     }
 
+#define MAXI(A, B) ((A > B) ? (A) : (B))
+#define MINI(A, B) ((A > B) ? (B) : (A))
+
 #define CALL_FUN(fun, args_count)                             \
     Module *fun_module;                                                 \
     unsigned int fun_arity;                                             \
@@ -995,8 +1122,14 @@ typedef struct
     if (UNLIKELY(args_count != fun_arity)) {                            \
         RAISE_ERROR(BADARITY_ATOM);                                     \
     }                                                                   \
-    for (uint32_t i = 0; i < n_freeze; i++) {                           \
-        x_regs[i + fun_arity] = boxed_value[i + 3];                     \
+    uint32_t lim_freeze = MINI(fun_arity + n_freeze, MAX_REG);          \
+    for (uint32_t i = fun_arity; i < lim_freeze; i++) {                 \
+        x_regs[i] = boxed_value[i - fun_arity + 3];                     \
+    }                                                                   \
+    uint32_t ext_fun_arity = MAXI(fun_arity, MAX_REG);                  \
+    for (uint32_t i = ext_fun_arity; i < fun_arity + n_freeze; i++) {   \
+        dreg_t ext_reg = extended_register_ptr(ctx, i);                 \
+        *ext_reg = boxed_value[i - fun_arity + 3];                      \
     }                                                                   \
     ctx->cp = module_address(mod->module_index, pc - code);             \
     JUMP_TO_LABEL(fun_module, label);
@@ -1328,7 +1461,8 @@ term make_fun(Context *ctx, const Module *mod, int fun_index, term argv[])
     uint32_t n_freeze = module_get_fun_freeze(mod, fun_index);
 
     int size = BOXED_FUN_SIZE + n_freeze;
-    if (memory_ensure_free_with_roots(ctx, size, n_freeze, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+    if (memory_ensure_free_with_roots(ctx, size, MINI(MAX_REG, n_freeze), argv, MEMORY_CAN_SHRINK)
+        != MEMORY_GC_OK) {
         return term_invalid_term();
     }
     term *boxed_func = memory_heap_alloc(&ctx->heap, size);
@@ -1337,8 +1471,12 @@ term make_fun(Context *ctx, const Module *mod, int fun_index, term argv[])
     boxed_func[1] = (term) mod;
     boxed_func[2] = term_from_int(fun_index);
 
-    for (uint32_t i = 3; i < n_freeze + 3; i++) {
+    for (uint32_t i = 3; i < MINI(n_freeze, MAX_REG) + 3; i++) {
         boxed_func[i] = argv[i - 3];
+    }
+    for (uint32_t i = MINI(n_freeze, MAX_REG) + 3; i < n_freeze + 3; i++) {
+        dreg_t ext_reg = extended_register_ptr(ctx, i - 3);
+        boxed_func[i] = *ext_reg;
     }
 
     return ((term) boxed_func) | TERM_BOXED_VALUE_TAG;
@@ -2010,15 +2148,9 @@ schedule_in:
                 USED_BY_TRACE(stack_need);
                 USED_BY_TRACE(live);
 
-                #ifdef IMPL_CODE_LOADER
-                    if (live > MAX_REG) {
-                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
-                        AVM_ABORT();
-                    }
-                #endif
-
                 #ifdef IMPL_EXECUTE_LOOP
                     if (ctx->heap.root->next || ((ctx->heap.heap_ptr > ctx->e - (stack_need + 1)))) {
+                        TRIM_LIVE_REGS(live);
                         if (UNLIKELY(memory_ensure_free_with_roots(ctx, stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
@@ -2041,15 +2173,9 @@ schedule_in:
                 USED_BY_TRACE(heap_need);
                 USED_BY_TRACE(live);
 
-                #ifdef IMPL_CODE_LOADER
-                    if (live > MAX_REG) {
-                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
-                        AVM_ABORT();
-                    }
-                #endif
-
                 #ifdef IMPL_EXECUTE_LOOP
                     if (ctx->heap.root->next || ((ctx->heap.heap_ptr + heap_need) > ctx->e - (stack_need + 1))) {
+                        TRIM_LIVE_REGS(live);
                         if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need + stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
@@ -2069,15 +2195,9 @@ schedule_in:
                 USED_BY_TRACE(stack_need);
                 USED_BY_TRACE(live);
 
-                #ifdef IMPL_CODE_LOADER
-                    if (live > MAX_REG) {
-                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
-                        AVM_ABORT();
-                    }
-                #endif
-
                 #ifdef IMPL_EXECUTE_LOOP
                     if (ctx->heap.root->next || ((ctx->heap.heap_ptr > ctx->e - (stack_need + 1)))) {
+                        TRIM_LIVE_REGS(live);
                         if (UNLIKELY(memory_ensure_free_with_roots(ctx, stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
@@ -2105,15 +2225,9 @@ schedule_in:
                 USED_BY_TRACE(heap_need);
                 USED_BY_TRACE(live);
 
-                #ifdef IMPL_CODE_LOADER
-                    if (live > MAX_REG) {
-                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
-                        AVM_ABORT();
-                    }
-                #endif
-
                 #ifdef IMPL_EXECUTE_LOOP
                     if (ctx->heap.root->next || ((ctx->heap.heap_ptr + heap_need) > ctx->e - (stack_need + 1))) {
+                        TRIM_LIVE_REGS(live);
                         if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need + stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
@@ -2142,12 +2256,14 @@ schedule_in:
                     size_t heap_free = context_avail_free_memory(ctx);
                     // if we need more heap space than is currently free, then try to GC the needed space
                     if (heap_free < heap_need) {
+                        TRIM_LIVE_REGS(live_registers);
                         if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need, live_registers, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     // otherwise, there is enough space for the needed heap, but there might
                     // more more than necessary.  In that case, try to shrink the heap.
                     } else if (heap_free > heap_need * HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF) {
+                        TRIM_LIVE_REGS(live_registers);
                         if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need * (HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF / 2), live_registers, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             TRACE("Unable to ensure free memory.  heap_need=%i\n", heap_need);
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -3258,7 +3374,8 @@ wait_timeout_trap_handler:
                 USED_BY_TRACE(args_count);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    term fun = x_regs[args_count];
+                    term fun;
+                    READ_ANY_XREG(fun, args_count);
                     if (UNLIKELY(!term_is_function(fun))) {
                         // We can gc as we are raising
                         if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &fun, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -3604,6 +3721,7 @@ wait_timeout_trap_handler:
                     VERIFY_IS_INTEGER(size, "bs_init2");
                     avm_int_t size_val = term_to_int(size);
 
+                    TRIM_LIVE_REGS(live);
                     if (UNLIKELY(memory_ensure_free_with_roots(ctx, words + term_binary_heap_size(size_val), live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
@@ -3651,6 +3769,7 @@ wait_timeout_trap_handler:
                         RAISE_ERROR(UNSUPPORTED_ATOM);
                     }
 
+                    TRIM_LIVE_REGS(live);
                     if (UNLIKELY(memory_ensure_free_with_roots(ctx, words + term_binary_heap_size(size_val / 8), live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
@@ -4115,6 +4234,7 @@ wait_timeout_trap_handler:
                     }
 
                     size_t src_size = term_binary_size(src);
+                    TRIM_LIVE_REGS(live);
                     // TODO: further investigate extra_val
                     if (UNLIKELY(memory_ensure_free_with_roots(ctx, src_size + term_binary_heap_size(size_val / 8) + extra_val, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -4332,6 +4452,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     int slots = term_to_int(slots_term);
 
+                    TRIM_LIVE_REGS(live);
                     // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
                     x_regs[live] = src;
                     if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE + slots, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
@@ -4380,6 +4501,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
                     #ifdef IMPL_EXECUTE_LOOP
+                        TRIM_LIVE_REGS(live);
                         x_regs[live] = src;
                         if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -4459,6 +4581,7 @@ wait_timeout_trap_handler:
                             size_t new_bin_size = src_size - start_pos;
                             size_t heap_size = term_sub_binary_heap_size(bs_bin, src_size - start_pos);
 
+                            TRIM_LIVE_REGS(live);
                             x_regs[live] = src;
                             if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -4879,6 +5002,7 @@ wait_timeout_trap_handler:
                     } else {
                         term_set_match_state_offset(src, bs_offset + size_val * unit);
 
+                        TRIM_LIVE_REGS(live);
                         size_t heap_size = term_sub_binary_heap_size(bs_bin, size_val);
                         if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -4948,8 +5072,10 @@ wait_timeout_trap_handler:
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc)
 #ifdef IMPL_EXECUTE_LOOP
-                term module = x_regs[arity];
-                term function = x_regs[arity + 1];
+                term module;
+                READ_ANY_XREG(module, arity);
+                term function;
+                READ_ANY_XREG(function, arity + 1);
                 TRACE("apply/1, module=%lu, function=%lu arity=%i\n", module, function, arity);
 
                 if (UNLIKELY(!term_is_atom(module) || !term_is_atom(function))) {
@@ -4999,8 +5125,10 @@ wait_timeout_trap_handler:
                 uint32_t n_words;
                 DECODE_LITERAL(n_words, pc);
 #ifdef IMPL_EXECUTE_LOOP
-                term module = x_regs[arity];
-                term function = x_regs[arity + 1];
+                term module;
+                READ_ANY_XREG(module, arity);
+                term function;
+                READ_ANY_XREG(function, arity + 1);
                 TRACE("apply_last/1, module=%lu, function=%lu arity=%i deallocate=%i\n", module, function, arity, n_words);
 
                 ctx->cp = ctx->e[n_words];
@@ -5123,6 +5251,8 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(arg1, pc)
 
                 #ifdef IMPL_EXECUTE_LOOP
+                    TRIM_LIVE_REGS(live);
+
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     GCBifImpl1 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif1_ptr;
                     term ret = func(ctx, live, arg1);
@@ -5168,6 +5298,8 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(arg2, pc);
 
                 #ifdef IMPL_EXECUTE_LOOP
+                    TRIM_LIVE_REGS(live);
+
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     GCBifImpl2 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif2_ptr;
                     term ret = func(ctx, live, arg1, arg2);
@@ -5239,6 +5371,8 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(arg3, pc);
 
                 #ifdef IMPL_EXECUTE_LOOP
+                    TRIM_LIVE_REGS(live);
+
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     GCBifImpl3 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif3_ptr;
                     term ret = func(ctx, live, arg1, arg2, arg3);
@@ -5380,6 +5514,7 @@ wait_timeout_trap_handler:
                     size_t new_map_size = src_size + new_entries;
                     bool is_shared = new_entries == 0;
                     size_t heap_needed = term_map_size_in_terms_maybe_shared(new_map_size, is_shared);
+                    TRIM_LIVE_REGS(live);
                     // MEMORY_CAN_SHRINK because put_map is classified as gc in beam_ssa_codegen.erl
                     x_regs[live] = src;
                     if (memory_ensure_free_with_roots(ctx, heap_needed, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
@@ -5502,6 +5637,7 @@ wait_timeout_trap_handler:
                     // Maybe GC, and reset the src term in case it changed
                     //
                     size_t src_size = term_get_map_size(src);
+                    TRIM_LIVE_REGS(live);
                     // MEMORY_CAN_SHRINK because put_map is classified as gc in beam_ssa_codegen.erl
                     x_regs[live] = src;
                     if (memory_ensure_free_with_roots(ctx, term_map_size_in_terms_maybe_shared(src_size, true), live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
@@ -6055,6 +6191,7 @@ wait_timeout_trap_handler:
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
                 #ifdef IMPL_EXECUTE_LOOP
+                    TRIM_LIVE_REGS(live);
                     // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
                     if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -6194,10 +6331,6 @@ wait_timeout_trap_handler:
                 #endif
                 size_t nb_segments = list_len / 6;
                 #ifdef IMPL_CODE_LOADER
-                    if (live > MAX_REG) {
-                        fprintf(stderr, "Cannot use more than %d registers.\n", MAX_REG);
-                        AVM_ABORT();
-                    }
                     if (list_len != nb_segments * 6) {
                         fprintf(stderr, "Unexpected number of operations for bs_create_bin/6, each segment should be 6 elements\n");
                         AVM_ABORT();
@@ -6287,6 +6420,7 @@ wait_timeout_trap_handler:
                         TRACE("bs_create_bin/6: total binary size (%li) is not evenly divisible by 8\n", binary_size);
                         RAISE_ERROR(UNSUPPORTED_ATOM);
                     }
+                    TRIM_LIVE_REGS(live);
                     if (UNLIKELY(memory_ensure_free_with_roots(ctx, alloc + term_binary_heap_size(binary_size / 8), live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
@@ -6679,6 +6813,7 @@ wait_timeout_trap_handler:
                                     goto bs_match_jump_to_fail;
                                 }
                                 size_t heap_size = term_sub_binary_heap_size(bs_bin, matched_bits / 8);
+                                TRIM_LIVE_REGS(live);
                                 x_regs[live] = match_state;
                                 if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -6712,6 +6847,7 @@ wait_timeout_trap_handler:
                                     RAISE_ERROR(BADARG_ATOM);
                                 }
                                 size_t heap_size = term_sub_binary_heap_size(bs_bin, tail_bits / 8);
+                                TRIM_LIVE_REGS(live);
                                 x_regs[live] = match_state;
                                 if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
