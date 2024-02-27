@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `binary_to_atom/1` and `atom_to_binary/1` that default to utf8 (they were introduced with OTP23)
 - Added Pico cmake option `AVM_WAIT_BOOTSEL_ON_EXIT` (default `ON`) to allow tools to use automated `BOOTSEL` mode after main application exits
 - Use UTF-8 encoding for atoms when using `erlang:term_to_binary/1`, in conformance with OTP-26
+- Pico: Wait for USB serial connection `cmake` configuration option `AVM_USB_WAIT_SECONDS` added with 20 second default.
 
 ### Fixed
 
