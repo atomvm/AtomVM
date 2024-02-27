@@ -52,7 +52,7 @@ static const AtomStringIntPair pull_mode_table[] = {
     { ATOM_STR("\x4", "down"), AtomVMRP2040GPIOPullDown },
     { ATOM_STR("\x7", "up_down"), AtomVMRP2040GPIOPullUp | AtomVMRP2040GPIOPullDown },
     { ATOM_STR("\x8", "floating"), AtomVMRP2040GPIOFloating },
-    SELECT_INT_DEFAULT(AtomVMRP2040GPIOFloating)
+    SELECT_INT_DEFAULT(-1)
 };
 
 enum gpio_pin_level
@@ -123,6 +123,9 @@ static term nif_gpio_set_pin_pull(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
     int pull_mode = interop_atom_term_select_int(pull_mode_table, argv[1], ctx->global);
+    if (UNLIKELY(pull_mode < 0)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
     gpio_set_pulls(gpio_num, pull_mode & AtomVMRP2040GPIOPullUp, pull_mode & AtomVMRP2040GPIOPullDown);
     return OK_ATOM;
 }
