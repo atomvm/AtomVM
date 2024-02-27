@@ -30,6 +30,7 @@ To use the [`atomvm_rebar3_plugin`](https://atomvm.github.io/atomvm_rebar3_plugi
 * For flashing to ESP32, the [`esptool`](https://github.com/espressif/esptool) program.
 * For flashing to STM32, `st-flash` via [stlink](https://github.com/stlink-org/stlink)
 * (optional) A serial console program such as [minicom](https://en.wikipedia.org/wiki/Minicom) or [screen](https://en.wikipedia.org/wiki/GNU_Screen), to view console output from a device.
+* (recommended) For rp2040, [`picotool`](https://github.com/raspberrypi/picotool) for software resets on Raspberry Pi Pico. (optionally used if found in PATH to disconnect active `screen` sessions, which normally prevent flashing)
 
 ### Erlang Example Program
 
@@ -227,7 +228,7 @@ $ rebar3 atomvm pico_flash
 
 See the [`atomvm_rebar3_plugin`](https://atomvm.github.io/atomvm_rebar3_plugin) page for more detailed instructions about how to use the `pico_flash` target.
 
-You can now use a serial console program such as [minicom](https://en.wikipedia.org/wiki/Minicom) or [screen](https://en.wikipedia.org/wiki/GNU_Screen) to view console output from a device.
+You can now use a serial console program such as [minicom](https://en.wikipedia.org/wiki/Minicom) or [screen](https://en.wikipedia.org/wiki/GNU_Screen) to view console output from a device.  The default build will wait 20 seconds for a serial connection to be established before starting the application.
 
         ###########################################################
 
@@ -248,6 +249,20 @@ You can now use a serial console program such as [minicom](https://en.wikipedia.
     Hello World
     AtomVM finished with return value: ok
     AtomVM application terminated.  Going to sleep forever ...
+
+
+If no connection is made before the timeout is reached the application will start, but the uart console will not be available.  At this point you can use [`picotool`](https://github.com/raspberrypi/picotool) to reboot the device into `application` mode.
+
+Example:
+
+```shell
+$ picotool reboot -f
+The device was asked to reboot into application mode.
+
+$
+```
+
+This will again give you 20 seconds to establish a serial monitor connection.  For information about changing this timeout, or locking down the device so that software resets no longer work (requiring that the device be power cycled and the `BOOTSEL` button help when powering on to flash) consult the [rp2040 section](./build-instructions.md#building-for-raspberry-pi-pico) of the [Build Instructions](./build-instructions.md).
 
 ## `ExAtomVM`
 

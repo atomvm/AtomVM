@@ -769,6 +769,10 @@ $ ninja
 You may want to build with option `AVM_REBOOT_ON_NOT_OK` so Pico restarts on error.
 ```
 
+The default build configuration allows the device to be re-flashed with the `atomvm_rebar3_plugin` `atomvm pico_flash` task or restarting the application after exiting using [`picotool`](https://github.com/raspberrypi/picotool).  This behaviour can be changed to hang the CPU when the application exits, so that power must be cycled to restart, and `BOOTSEL` must be held when power on to flash a new application.  To disable software resets use `-DAVM_WAIT_BOOTSEL_ON_EXIT=off` when configuring `cmake`.
+
+The 20 second default timeout for a USB serial connection can be changed using option `AVM_USB_WAIT_SECONDS`.  The device can also be configured to wait indefinitely for a serial connection using the option `AVM_WAIT_FOR_USB_CONNECT=on`.
+
 ### libAtomVM build steps for Pico
 
 Build of standard libraries is part of the generic unix build.
