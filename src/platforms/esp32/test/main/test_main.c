@@ -177,6 +177,10 @@ TEST_CASE("test_esp_partition", "[test_run]")
     TEST_ASSERT(term_to_int(ret_value) == 0);
 }
 
+// avoid: assert failed: sdmmc_ll_get_card_clock_div /IDF/components/hal/esp32/include/hal/sdmmc_ll.h:203 (hw->clksrc.card1 == 1)
+// pending https://github.com/espressif/qemu/commit/fe80b1870651ef1227bffd7d4151aa2ce4bcf65f released
+// due to assert fix in 5.2+ https://github.com/espressif/esp-idf/commit/263e39c32b447f7832744f2458f13abbfe2033a9
+#if ESP_IDF_VERSION_MAJOR < 5 || (ESP_IDF_VERSION_MAJOR <= 5 && ESP_IDF_VERSION_MINOR < 2)
 TEST_CASE("test_file", "[test_run]")
 {
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
@@ -213,6 +217,7 @@ TEST_CASE("test_file", "[test_run]")
     esp_vfs_fat_sdcard_unmount(mount_point, card);
     ESP_LOGI(TAG, "Card unmounted");
 }
+#endif
 
 TEST_CASE("test_list_to_binary", "[test_run]")
 {
