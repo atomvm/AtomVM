@@ -31,7 +31,7 @@ concurrency:
 
 jobs:
   pico:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         board: ["pico", "pico_w"]
@@ -39,6 +39,9 @@ jobs:
     steps:
     - name: Checkout repo
       uses: actions/checkout@v3
+
+    - name: "apt update"
+      run: sudo apt update
 
     - name: "Install deps"
       run: sudo apt install -y cmake gperf ninja-build gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib erlang-base erlang-dialyzer

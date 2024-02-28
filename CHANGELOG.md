@@ -6,11 +6,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-## [0.6.0-beta.1] - Unreleased
+## [0.6.0-beta.1] - 2024-02-28
+
+### Added
+
+- Support for utf8 encoding to `*_to_atom` and `atom_to_*` functions
+- `binary_to_atom/1` and `atom_to_binary/1` that default to utf8 (they were introduced with OTP23)
+- Added Pico cmake option `AVM_WAIT_BOOTSEL_ON_EXIT` (default `ON`) to allow tools to use automated `BOOTSEL` mode after main application exits
+- Use UTF-8 encoding for atoms when using `erlang:term_to_binary/1`, in conformance with OTP-26
+- Pico: Wait for USB serial connection `cmake` configuration option `AVM_USB_WAIT_SECONDS` added with 20 second default.
+- Support for code that makes use of more than 16 live registers, such as functions with > 16
+parameters and complex pattern matchings.
 
 ### Fixed
 
 - ESP32: fix i2c_driver_acquire and i2c_driver_release functions, that were working only once.
+- Sending messages to registered processes using the `!` operator now works.
+- Fixed bug in `OP_SEND` that would accept sending a message to any integer or term without raising an error.
+- `binary_to_term` checks atom encoding validity, and fix latin1 support (when non-ASCII chars are
+used)
+- ESP32: fixed bug in `gpio:set_pin_mode/2` and `gpio:set_direction/3` that would accept any atom for the mode parameter without an error.
+- ESP32: GPIO driver fix bug that would accept invalid `pull` direction, and silently set `pull` direction to `floating` without issuing an error.
+- ESP32: fixed bug in gpio driver that would accept invalid pin numbers (either negative, or too large)
+- RP2040: fixed bug in `gpio:set_pin_pull/2` that would accept any parameter as a valid `pull` mode.
+- Support to function with 10 or more parameters
+- Very unlikely but possible corruption caused by generated code that uses 16 live registers
+
+### Changed
+
+- `binary_to_atom/2` validates utf8 strings
+- `*_to_atom` and `atom_to_*` properly convert latin1 (not just ASCII) to utf8 and viceversa
+- ESP32: use esp-idf v5.1.3 for building release binaries
 
 ## [0.6.0-beta.0] - 2024-02-08
 

@@ -490,6 +490,11 @@ compile_erlang(test_crypto_strong_rand_bytes)
 compile_erlang(test_atomvm_random)
 
 compile_erlang(float_decode)
+compile_erlang(test_utf8_atoms)
+
+compile_erlang(twentyone_param_function)
+compile_erlang(complex_list_match_xregs)
+compile_erlang(twentyone_param_fun)
 
 add_custom_target(erlang_test_modules DEPENDS
     code_load_files
@@ -945,4 +950,10 @@ add_custom_target(erlang_test_modules DEPENDS
     test_atomvm_random.beam
 
     float_decode.beam
+
+    test_utf8_atoms.beam
+
+    twentyone_param_function.beam
+    complex_list_match_xregs.beam
+    twentyone_param_fun.beam
 )

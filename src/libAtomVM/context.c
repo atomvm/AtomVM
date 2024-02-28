@@ -43,6 +43,7 @@
 #define BYTES_PER_TERM (TERM_BITS / 8)
 
 static struct ResourceMonitor *context_monitors_handle_terminate(Context *ctx);
+static void destroy_extended_registers(Context *ctx, unsigned int live);
 
 Context *context_new(GlobalContext *glb)
 {
@@ -61,6 +62,7 @@ Context *context_new(GlobalContext *glb)
     ctx->e = ctx->heap.heap_end;
 
     context_clean_registers(ctx, 0);
+    list_init(&ctx->extended_x_regs);
 
     ctx->fr = NULL;
 
@@ -151,6 +153,7 @@ void context_destroy(Context *ctx)
     // Any other process released our mailbox, so we can clear it.
     mailbox_destroy(&ctx->mailbox, &ctx->heap);
 
+    destroy_extended_registers(ctx, 0);
     free(ctx->fr);
 
     memory_destroy_heap(&ctx->heap, ctx->global);

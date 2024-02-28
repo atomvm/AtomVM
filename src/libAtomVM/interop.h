@@ -67,6 +67,7 @@ typedef void (*interop_chardata_rest_fun)(term t, void *accum);
 
 char *interop_term_to_string(term t, int *ok);
 char *interop_binary_to_string(term binary);
+char *interop_list_to_utf8_string(term list, int *ok);
 char *interop_list_to_string(term list, int *ok);
 char *interop_iolist_to_string(term list, int *ok);
 char *interop_atom_to_string(Context *ctx, term atom);

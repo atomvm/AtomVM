@@ -43,6 +43,16 @@ endif()
 
 if (AVM_WAIT_FOR_USB_CONNECT)
     target_compile_definitions(AtomVM PRIVATE PICO_STDIO_USB_CONNECT_WAIT_TIMEOUT_MS=-1)
+elseif (AVM_USB_WAIT_SECONDS)
+    math(EXPR WAIT_FOR_USB_TIMEOUT "1000 * ${AVM_USB_WAIT_SECONDS}")
+    message(STATUS "Wait for USB serial connection timeout ${WAIT_FOR_USB_TIMEOUT} ms")
+    target_compile_definitions(AtomVM PRIVATE PICO_STDIO_USB_CONNECT_WAIT_TIMEOUT_MS=${WAIT_FOR_USB_TIMEOUT})
+else()
+    target_compile_definitions(AtomVM PRIVATE PICO_STDIO_USB_CONNECT_WAIT_TIMEOUT_MS=20000)
+endif()
+
+if (AVM_WAIT_BOOTSEL_ON_EXIT)
+    target_compile_definitions(AtomVM PRIVATE WAIT_BOOTSEL_ON_EXIT)
 endif()
 
 set(

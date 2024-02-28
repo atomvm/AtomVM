@@ -23,10 +23,44 @@
 -export([start/0, send_test/2]).
 
 start() ->
-    send_test(9, self()),
-    receive
-        Value -> Value * 2
-    end.
+    Test0 = test_send2(),
+    Test1 = test_send(),
+    Test2 = test_send_to_int(),
+    Test3 = test_non_resitered_name(),
+    Test0 + Test1 + Test2 + Test3.
 
 send_test(V, P) ->
     P ! V.
+
+%priv
+
+%% test send to pid
+test_send2() ->
+    send_test(9, self()),
+    receive
+        Value -> Value
+    end.
+
+%% test send to registered process
+test_send() ->
+    erlang:register(tester, self()),
+    send_test(6, tester),
+    receive
+        RegisteredVal -> RegisteredVal
+    end.
+
+%% test send to integer
+test_send_to_int() ->
+    try 1 ! 1 of
+        _Any -> 0
+    catch
+        error:badarg -> 2
+    end.
+
+%% test send to non-registered atom
+test_non_resitered_name() ->
+    try nobody ! test of
+        _Any -> 0
+    catch
+        error:badarg -> 1
+    end.

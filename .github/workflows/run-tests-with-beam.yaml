@@ -66,16 +66,16 @@ jobs:
           container: erlang:26
 
         - os: "macos-latest"
-          otp: "23"
-          path_prefix: "/usr/local/opt/erlang@23/bin:"
-
-        - os: "macos-latest"
           otp: "24"
           path_prefix: "/usr/local/opt/erlang@24/bin:"
 
         - os: "macos-latest"
           otp: "25"
           path_prefix: "/usr/local/opt/erlang@25/bin:"
+
+        - os: "macos-latest"
+          otp: "26"
+          path_prefix: "/usr/local/bin:"
     steps:
     # Setup
     - name: "Checkout repo"
