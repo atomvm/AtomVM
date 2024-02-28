@@ -123,10 +123,8 @@ $ esptool.py --chip auto --port /dev/ttyUSB0 --baud 921600 erase_flash
 ```
 
 ```{note}
-Specify the device port and baud settings and AtomVM image name to suit your particular environment.
+Specify the device port and baud settings and AtomVM image name to suit your particular environment.  A baud rate of 921600 works well for most ESP32 devices, some can work reliably at higher rates of 1500000, or even 2000000, but some devices (especially those with a 26Mhz crystal frequency, rather than the more common 40 Mhz crystal) may need to use a slower baud rate such as 115200.
 ```
-
-> Note. A baud rate of 921600 works well for most ESP32 devices, some can work reliably at higher rates of 1500000, or even 2000000, but some devices (especially those with a 26Mhz crystal frequency, rather than the more common 40 Mhz crystal) may need to use a slower baud rate such as 115200.
 
 Download the latest [release image](https://github.com/atomvm/AtomVM/releases) for ESP32.
 
