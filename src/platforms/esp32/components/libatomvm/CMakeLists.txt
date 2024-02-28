@@ -29,4 +29,7 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../../libAtomVM" "libAtomVM"
 target_link_libraries(${COMPONENT_LIB}
     INTERFACE libAtomVM "-u platform_nifs_get_nif" "-u platform_defaultatoms_init")
 
+if ((IDF_VERSION_MAJOR GREATER_EQUAL 5) AND (${IDF_TARGET} MATCHES "^esp32$|esp32s2|esp32s3"))
+    target_compile_options("libAtomVM" PRIVATE -fjump-tables -ftree-switch-conversion)
+endif ()
 target_compile_features(${COMPONENT_LIB} INTERFACE c_std_11)
