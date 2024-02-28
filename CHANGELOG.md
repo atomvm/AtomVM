@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0-rc.0] - Unreleased
 
+### Added
+
+- `BOOTLOADER_OFFSET` for all current Esp32 models.
+
+### Fixed
+
+- `BOOTLOADER_OFFSET` was incorrect for Esp32-C6 and Esp32-S2.
+
+### Changed
+
 ## [0.6.0-beta.1] - 2024-02-28
 
 ### Added
