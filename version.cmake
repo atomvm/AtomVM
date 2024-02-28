@@ -19,4 +19,4 @@
 #
 
 set(ATOMVM_BASE_VERSION "0.6.0-beta.1")
-set(ATOMVM_DEV TRUE)
+set(ATOMVM_DEV FALSE)
