@@ -277,6 +277,7 @@ Deployment of AtomVM on the Raspberry Pico platform requires the following compo
 * A serial console program, such as `minicom` or `screen`, so that you can view console output from your AtomVM application.
 * (recommended) For Erlang programs, [`rebar3`](https://rebar3.org);
 * (recommended) For Elixir programs, [`mix`](https://elixir-lang.org/getting-started/mix-otp/introduction-to-mix.html), which ships with the Elixir runtime;
+* (recommended) [`picotool`](https://github.com/raspberrypi/picotool), useful for resetting the device into `BOOTSEL` or `application` mode, optionally used by the `atomvm_rebar3_plugin` (if available in env $PATH) for disconnecting active `screen` sessions when attempting to flash when still connected.
 
 ### Deploying the Pico AtomVM virtual machine
 
