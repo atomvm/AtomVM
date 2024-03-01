@@ -530,10 +530,10 @@ static void maybe_set_sntp(term sntp_config, GlobalContext *global)
         char *host = interop_term_to_string(interop_kv_get_value(sntp_config, host_atom, global), &ok);
         if (LIKELY(ok)) {
             // do not free(sntp)
-            sntp_setoperatingmode(SNTP_OPMODE_POLL);
-            sntp_setservername(0, host);
+            esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
+            esp_sntp_setservername(0, host);
             sntp_set_time_sync_notification_cb(time_sync_notification_cb);
-            sntp_init();
+            esp_sntp_init();
             ESP_LOGI(TAG, "SNTP initialized with host set to %s", host);
         } else {
             ESP_LOGE(TAG, "Unable to locate sntp host in configuration");
