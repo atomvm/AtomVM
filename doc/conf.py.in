@@ -101,6 +101,7 @@ breathe_domain_by_extension = {
 breathe_use_project_refids = True
 
 myst_heading_anchors = 5
+myst_enable_extensions = ['colon_fence']
 
 # -- Options for HTML output -------------------------------------------------
 
