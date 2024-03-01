@@ -33,12 +33,6 @@ set(HAVE_SOCKET 1 CACHE INTERNAL "Have symbol socket" FORCE)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../CMakeModules")
 
-# Disable SMP with esp32 socs that have only one core
-if (${IDF_TARGET} MATCHES "esp32s2|esp32c3|esp32c6|esp32h2")
-    message("Disabling SMP as selected target only has one core")
-    set(AVM_DISABLE_SMP YES FORCE)
-endif()
-
 project(atomvm-esp32)
 
 # esp-idf does not use compile_feature but instead sets version in
@@ -52,7 +46,11 @@ if (-std=gnu99 IN_LIST c_compile_options )
 endif()
 
 # Options that make sense for this platform
+
+# Some AtomVM components might not work when SMP is disabled, such as the network driver that sends
+# messages from other threads.
 option(AVM_DISABLE_SMP "Disable SMP." OFF)
+
 option(AVM_USE_32BIT_FLOAT "Use 32 bit floats." OFF)
 option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
