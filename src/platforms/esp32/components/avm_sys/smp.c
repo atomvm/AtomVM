@@ -20,6 +20,8 @@
 
 #include "smp.h"
 
+#include <sdkconfig.h>
+
 #ifndef AVM_NO_SMP
 #include <unistd.h>
 #include <pthread.h>
@@ -97,11 +99,24 @@ void smp_scheduler_start(GlobalContext *ctx)
             AVM_ABORT();
         }
     }
+
+    pthread_attr_t thread_attr;
+    if (UNLIKELY(pthread_attr_init(&thread_attr) != 0)) {
+        AVM_ABORT();
+    }
+    if (UNLIKELY(pthread_attr_setstacksize(&thread_attr, CONFIG_ESP_MAIN_TASK_STACK_SIZE) != 0)) {
+        AVM_ABORT();
+    }
+
     pthread_t thread;
-    if (UNLIKELY(pthread_create(&thread, NULL, scheduler_thread_entry_point, ctx))) {
+    if (UNLIKELY(pthread_create(&thread, &thread_attr, scheduler_thread_entry_point, ctx))) {
         AVM_ABORT();
     }
     if (UNLIKELY(pthread_detach(thread))) {
+        AVM_ABORT();
+    }
+
+    if (UNLIKELY(pthread_attr_destroy(&thread_attr) != 0)) {
         AVM_ABORT();
     }
 }
