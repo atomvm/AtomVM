@@ -541,7 +541,7 @@ static void maybe_set_sntp(term sntp_config, GlobalContext *global)
     }
 }
 
-static void set_dhcp_hostname(esp_netif_t *interface, term dhcp_hostname_term)
+static void set_dhcp_hostname(esp_netif_t *interface, const char *interface_name, term dhcp_hostname_term)
 {
     char dhcp_hostname[TCPIP_HOSTNAME_MAX_SIZE + 1];
     if (!term_is_invalid_term(dhcp_hostname_term)) {
@@ -562,17 +562,15 @@ static void set_dhcp_hostname(esp_netif_t *interface, term dhcp_hostname_term)
     }
     esp_err_t status = esp_netif_set_hostname(interface, dhcp_hostname);
     if (status == ESP_OK) {
-        ESP_LOGI(TAG, "DHCP hostname set to %s", dhcp_hostname);
+        ESP_LOGI(TAG, "%s DHCP hostname set to %s", interface_name, dhcp_hostname);
     } else {
-        ESP_LOGW(TAG, "Unable to set DHCP hostname to %s.  status=%d", dhcp_hostname, status);
+        ESP_LOGW(TAG, "Unable to set %s DHCP hostname to %s.  status=%d", interface_name, dhcp_hostname, status);
     }
 }
 
 static void start_network(Context *ctx, term pid, term ref, term config)
 {
     TRACE("start_network");
-
-    esp_netif_t *interface = NULL;
 
     // {Ref, ok | {error, atom() | integer()}}
     size_t heap_size = PORT_REPLY_SIZE + TUPLE_SIZE(2);
@@ -616,17 +614,25 @@ static void start_network(Context *ctx, term pid, term ref, term config)
 
     esp_err_t err;
 
+    esp_netif_t *sta_wifi_interface = NULL;
     if (sta_wifi_config != NULL) {
-        interface = esp_netif_create_default_wifi_sta();
+        sta_wifi_interface = esp_netif_create_default_wifi_sta();
+        if (IS_NULL_PTR(sta_wifi_interface)) {
+            ESP_LOGE(TAG, "Failed to create network STA interface");
+            term error = port_create_error_tuple(ctx, ERROR_ATOM);
+            port_send_reply(ctx, pid, ref, error);
+            return;
+        }
     }
+    esp_netif_t *ap_wifi_interface = NULL;
     if (ap_wifi_config != NULL) {
-        interface = esp_netif_create_default_wifi_ap();
-    }
-    if (IS_NULL_PTR(interface)) {
-        ESP_LOGE(TAG, "Failed to create net work interface");
-        term error = port_create_error_tuple(ctx, ERROR_ATOM);
-        port_send_reply(ctx, pid, ref, error);
-        return;
+        ap_wifi_interface = esp_netif_create_default_wifi_ap();
+        if (IS_NULL_PTR(ap_wifi_interface)) {
+            ESP_LOGE(TAG, "Failed to create network AP interface");
+            term error = port_create_error_tuple(ctx, ERROR_ATOM);
+            port_send_reply(ctx, pid, ref, error);
+            return;
+        }
     }
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -743,7 +749,10 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     // Set the DHCP hostname, if STA mode is enabled
     //
     if (!IS_NULL_PTR(sta_wifi_config)) {
-        set_dhcp_hostname(interface, interop_kv_get_value(sta_config, dhcp_hostname_atom, ctx->global));
+        set_dhcp_hostname(sta_wifi_interface, "STA", interop_kv_get_value(sta_config, dhcp_hostname_atom, ctx->global));
+    }
+    if (!IS_NULL_PTR(ap_wifi_config)) {
+        set_dhcp_hostname(ap_wifi_interface, "AP", interop_kv_get_value(ap_config, dhcp_hostname_atom, ctx->global));
     }
     //
     // Done -- send an ok so the FSM can proceed
