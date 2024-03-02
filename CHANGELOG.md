@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `BOOTLOADER_OFFSET` was incorrect for Esp32-C6 and Esp32-S2.
 - Fixed a bug that would fail to set DHCP hostname in STA+AP mode on all ESP32 platforms.
+- ESP32-S3: crash in network driver caused by a smaller stack size for scheduler threads, when
+calling `esp_wifi_init()`. See also issue [#1059](https://github.com/atomvm/AtomVM/issues/1059).
 
 ### Changed
 
