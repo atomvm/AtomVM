@@ -297,6 +297,11 @@ Context *gpio_driver_create_port(GlobalContext *global, term opts)
     Context *ctx = context_new(global);
 
     struct GPIOData *gpio_data = malloc(sizeof(struct GPIOData));
+    if (IS_NULL_PTR(gpio_data)) {
+        ESP_LOGE(TAG, "Not enough free memory to initialize GPIO port driver!");
+        scheduler_terminate(ctx);
+        return NULL;
+    }
     list_init(&gpio_data->gpio_listeners);
 
     ctx->native_handler = consume_gpio_mailbox;
@@ -332,7 +337,7 @@ static term gpiodriver_close(Context *ctx)
             struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
             gpio_num = gpio_listener->gpio;
             list_remove(&gpio_listener->gpio_listener_list_head);
-            list_remove(&gpio_listener->listener.listeners_list_head);
+            sys_unregister_listener(ctx->global, &gpio_listener->listener);
             free(gpio_listener);
 
             gpio_set_intr_type(gpio_num, GPIO_INTR_DISABLE);
@@ -344,6 +349,7 @@ static term gpiodriver_close(Context *ctx)
         }
     }
 
+    ctx->platform_data = NULL;
     globalcontext_unregister_process(glb, gpio_atom_index);
     free(gpio_data);
 

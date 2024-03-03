@@ -19,6 +19,7 @@ easily support integration with Esp32 callbacks
 - ESP32-S3: crash in network driver caused by a smaller stack size for scheduler threads, when
 calling `esp_wifi_init()`. See also issue [#1059](https://github.com/atomvm/AtomVM/issues/1059).
 - Fixed Esp32 network driver on non-SMP builds
+- ESP32: fixed bug in `gpio:stop/0` and `gpio:close/1` that would cause the VM to crash.
 
 ### Changed
 
