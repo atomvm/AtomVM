@@ -65,6 +65,7 @@ set(HEADER_FILES
     unicode.h
     utils.h
     valueshashtable.h
+    atomvm_version.h
     ${CMAKE_CURRENT_BINARY_DIR}/avm_version.h
 )
 

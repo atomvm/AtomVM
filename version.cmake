@@ -18,5 +18,6 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
+# Please, keep also in sync src/libAtomVM/atomvm_version.h
 set(ATOMVM_BASE_VERSION "0.6.0-rc.0")
 set(ATOMVM_DEV TRUE)
