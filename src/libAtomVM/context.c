@@ -142,7 +142,6 @@ void context_destroy(Context *ctx)
         struct ListHead *tmp;
         MUTABLE_LIST_FOR_EACH (item, tmp, &monitors) {
             struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
-            resource_monitor = CONTAINER_OF(monitor, struct ResourceMonitor, base);
             void *resource = term_to_term_ptr(monitor->monitor_obj);
             struct RefcBinary *refc = refc_binary_from_data(resource);
             refc->resource_type->down(&env, resource, &ctx->process_id, &monitor->ref_ticks);
