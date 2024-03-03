@@ -23,6 +23,7 @@
 #include <sdkconfig.h>
 
 #ifndef AVM_NO_SMP
+#include <errno.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <stdlib.h>
@@ -257,6 +258,22 @@ void smp_rwlock_wrlock(RWLock *lock)
         AVM_ABORT();
     }
 #endif
+}
+
+bool smp_rwlock_tryrdlock(RWLock *lock)
+{
+#ifdef HAVE_PTHREAD_RWLOCK
+    int r = pthread_rwlock_tryrdlock(&lock->lock);
+#else
+    int r = pthread_mutex_trylock(&lock->lock);
+#endif
+    if (r == EBUSY) {
+        return false;
+    }
+    if (UNLIKELY(r)) {
+        AVM_ABORT();
+    }
+    return true;
 }
 
 void smp_rwlock_unlock(RWLock *lock)

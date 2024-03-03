@@ -70,14 +70,6 @@
 // Platform uses listeners
 #include "listeners.h"
 
-#ifndef AVM_NO_SMP
-#define SMP_MUTEX_LOCK(mtx) smp_mutex_lock(mtx)
-#define SMP_MUTEX_UNLOCK(mtx) smp_mutex_unlock(mtx)
-#else
-#define SMP_MUTEX_LOCK(mtx)
-#define SMP_MUTEX_UNLOCK(mtx)
-#endif
-
 #ifdef DYNLOAD_PORT_DRIVERS
 #include <dlfcn.h>
 
@@ -355,7 +347,7 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms) CLANG_THREAD_SANITIZE_S
 #endif
 }
 
-#ifndef AVM_NO_SMP
+#if !defined(AVM_NO_SMP) || defined(AVM_TASK_DRIVER_ENABLED)
 void sys_signal(GlobalContext *glb)
 {
     struct GenericUnixPlatformData *platform = glb->platform_data;

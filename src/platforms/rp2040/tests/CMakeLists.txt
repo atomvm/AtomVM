@@ -31,10 +31,11 @@ if(CMAKE_COMPILER_IS_GNUCC)
     target_compile_options(rp2040_tests PRIVATE -Wall -pedantic -Wextra)
 endif()
 
-# libAtomVM needs to find Pico's platform_smp.h header
+# libAtomVM needs to find Pico's platform_smp.h and platform_atomic.h headers
 set(HAVE_PLATFORM_SMP_H ON)
+set(HAVE_PLATFORM_ATOMIC_H ON)
 target_link_libraries(rp2040_tests PUBLIC libAtomVM)
-# Also add lib where platform_smp.h header is
+# Also add lib where platform_smp.h and platform_atomic.h headers are
 target_include_directories(rp2040_tests PUBLIC ../src/lib)
 
 target_link_libraries(rp2040_tests PUBLIC hardware_regs pico_stdlib pico_binary_info unity)

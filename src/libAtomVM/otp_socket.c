@@ -59,6 +59,8 @@
 // #define ENABLE_TRACE
 #include <trace.h>
 
+#define TAG "otp_socket"
+
 // Check some LWIP options
 #if OTP_SOCKET_LWIP
 #if !TCP_LISTEN_BACKLOG

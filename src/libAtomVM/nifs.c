@@ -2858,7 +2858,7 @@ static term nif_erlang_system_flag(Context *ctx, int argc, term argv[])
             argv[1] = BADARG_ATOM;
             return term_invalid_term();
         }
-        while (!ATOMIC_COMPARE_EXCHANGE_WEAK(&ctx->global->online_schedulers, &old_value, new_value)) {};
+        while (!ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&ctx->global->online_schedulers, &old_value, new_value)) {};
         return term_from_int32(old_value);
     }
 #else

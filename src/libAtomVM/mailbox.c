@@ -27,6 +27,15 @@
 #include "synclist.h"
 #include "trace.h"
 
+#ifdef HAVE_PLATFORM_ATOMIC_H
+#include "platform_atomic.h"
+#else
+#if defined(HAVE_ATOMIC)
+#include <stdatomic.h>
+#define ATOMIC_COMPARE_EXCHANGE_WEAK_PTR atomic_compare_exchange_weak
+#endif
+#endif
+
 #define ADDITIONAL_PROCESSING_MEMORY_SIZE 4
 
 void mailbox_init(Mailbox *mbx)
@@ -170,54 +179,68 @@ size_t mailbox_size(Mailbox *mbox)
     return result;
 }
 
-static void mailbox_post_message(Context *c, MailboxMessage *m)
+// Messages are enqueued using atomics (or emulation) unless this is a no-smp
+// build with no support for driver tasks
+#if !defined(AVM_NO_SMP) || defined(AVM_TASK_DRIVER_ENABLED)
+inline void mailbox_enqueue_message(Context *c, MailboxMessage *m)
 {
-    m->next = NULL;
-
     // Append message at the beginning of outer_first.
-#ifndef AVM_NO_SMP
     MailboxMessage *current_first = NULL;
     do {
         m->next = current_first;
-    } while (!ATOMIC_COMPARE_EXCHANGE_WEAK(&c->mailbox.outer_first, &current_first, m));
+    } while (!ATOMIC_COMPARE_EXCHANGE_WEAK_PTR(&c->mailbox.outer_first, &current_first, m));
+}
+
+static void mailbox_post_message(Context *c, MailboxMessage *m)
+{
+    mailbox_enqueue_message(c, m);
+    scheduler_signal_message(c);
+}
 #else
+static void mailbox_post_message(Context *c, MailboxMessage *m)
+{
     m->next = c->mailbox.outer_first;
     c->mailbox.outer_first = m;
+    scheduler_signal_message(c);
+}
 #endif
 
-    scheduler_signal_message(c);
+MailboxMessage *mailbox_message_create_from_term(enum MessageType type, term t)
+{
+    unsigned long estimated_mem_usage = memory_estimate_usage(t) + 1; // mso_list
+
+    size_t base_size = type == NormalMessage ? sizeof(Message) : sizeof(struct TermSignal);
+    void *msg_buf = malloc(base_size + estimated_mem_usage * sizeof(term));
+    if (IS_NULL_PTR(msg_buf)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        return NULL;
+    }
+
+    if (type == NormalMessage) {
+        Message *msg = msg_buf;
+        msg->base.type = NormalMessage;
+        msg->message = memory_copy_term_tree_to_storage(msg->storage, &msg->heap_end, t);
+
+        return &msg->base;
+    } else {
+        struct TermSignal *ts = msg_buf;
+        ts->base.type = type;
+        ts->signal_term = memory_copy_term_tree_to_storage(ts->storage, &ts->heap_end, t);
+
+        return &ts->base;
+    }
 }
 
 void mailbox_send(Context *c, term t)
 {
-    unsigned long estimated_mem_usage = memory_estimate_usage(t) + 1; // mso_list
-
-    Message *msg = malloc(sizeof(Message) + estimated_mem_usage * sizeof(term));
-    if (IS_NULL_PTR(msg)) {
-        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        return;
-    }
-    msg->base.type = NormalMessage;
-    msg->message = memory_copy_term_tree_to_storage(msg->storage, &msg->heap_end, t);
-
-    TRACE("Sending %p to pid %i\n", (void *) msg->message, c->process_id);
-
-    mailbox_post_message(c, &msg->base);
+    MailboxMessage *msg = mailbox_message_create_from_term(NormalMessage, t);
+    mailbox_post_message(c, msg);
 }
 
 void mailbox_send_term_signal(Context *c, enum MessageType type, term t)
 {
-    unsigned long estimated_mem_usage = memory_estimate_usage(t) + 1; // mso_list
-
-    struct TermSignal *ts = malloc(sizeof(struct TermSignal) + estimated_mem_usage * sizeof(term));
-    if (IS_NULL_PTR(ts)) {
-        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        return;
-    }
-    ts->base.type = type;
-    ts->signal_term = memory_copy_term_tree_to_storage(ts->storage, &ts->heap_end, t);
-
-    mailbox_post_message(c, &ts->base);
+    MailboxMessage *signal = mailbox_message_create_from_term(type, t);
+    mailbox_post_message(c, signal);
 }
 
 void mailbox_send_built_in_atom_signal(Context *c, enum MessageType type, term atom)
@@ -283,8 +306,8 @@ MailboxMessage *mailbox_process_outer_list(Mailbox *mbox)
 {
     // Empty outer list using CAS
     MailboxMessage *current = mbox->outer_first;
-#ifndef AVM_NO_SMP
-    while (!ATOMIC_COMPARE_EXCHANGE_WEAK(&mbox->outer_first, &current, NULL)) {
+#if !defined(AVM_NO_SMP) || defined(AVM_TASK_DRIVER_ENABLED)
+    while (!ATOMIC_COMPARE_EXCHANGE_WEAK_PTR(&mbox->outer_first, &current, NULL)) {
     };
 #else
     mbox->outer_first = NULL;

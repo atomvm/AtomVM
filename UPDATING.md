@@ -6,6 +6,13 @@
 
 # AtomVM Update Instructions
 
+## v0.6.0-beta.1 -> v0.6.0-rc.0
+
+- Drivers that send messages from Esp32 callbacks should use new functions
+`port_send_message_from_task`, `globalcontext_send_message_from_task` or
+`memory_destroy_heap_from_task` instead of `port_send_message`,
+`globalcontext_send_message` and `memory_destroy_heap`.
+
 ## v0.6.0-alpha.2 -> v0.6.0-beta.0
 
 - Registers are no longer preserved by GC by default when invoking nifs, as part of the fix

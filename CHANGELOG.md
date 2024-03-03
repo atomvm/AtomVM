@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `BOOTLOADER_OFFSET` for all current Esp32 models.
+- Added API to send messages from FreeRTOS tasks or pthreads, typically to
+easily support integration with Esp32 callbacks
 
 ### Fixed
 
@@ -16,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed a bug that would fail to set DHCP hostname in STA+AP mode on all ESP32 platforms.
 - ESP32-S3: crash in network driver caused by a smaller stack size for scheduler threads, when
 calling `esp_wifi_init()`. See also issue [#1059](https://github.com/atomvm/AtomVM/issues/1059).
+- Fixed Esp32 network driver on non-SMP builds
 
 ### Changed
 

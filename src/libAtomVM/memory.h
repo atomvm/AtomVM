@@ -92,6 +92,8 @@ struct Heap
 typedef struct Heap Heap;
 #endif
 
+// Stack heap macros can be used from driver tasks.
+
 #define BEGIN_WITH_STACK_HEAP(size, name) \
     struct                                \
     {                                     \
@@ -106,10 +108,10 @@ typedef struct Heap Heap;
     Heap name;                            \
     memory_init_heap_root_fragment(&name, (HeapFragment *) &(name##__root__), size);
 
-#define END_WITH_STACK_HEAP(name, global)               \
-    memory_sweep_mso_list(name.root->mso_list, global); \
-    if (name.root->next) {                              \
-        memory_destroy_heap_fragment(name.root->next);  \
+#define END_WITH_STACK_HEAP(name, global)                     \
+    memory_sweep_mso_list(name.root->mso_list, global, true); \
+    if (name.root->next) {                                    \
+        memory_destroy_heap_fragment(name.root->next);        \
     }
 
 // mso_list is the first term for message storage
@@ -128,6 +130,9 @@ void memory_init_heap_root_fragment(Heap *heap, HeapFragment *root, size_t size)
 
 /**
  * @brief Initialize a root heap.
+ *
+ * @details This function should be balanced with `memory_destroy_heap` or
+ * `memory_destroy_heap_from_task` if the heap is created by a driver task.
  *
  * @param heap heap to initialize.
  * @param size capacity of the heap to create, not including the mso_list.
@@ -323,7 +328,7 @@ static inline void memory_heap_append_heap(Heap *target, Heap *source)
  * @param mso_list the list of mark-sweep object in a heap "space"
  * @param global the global context
  */
-void memory_sweep_mso_list(term mso_list, GlobalContext *global);
+void memory_sweep_mso_list(term mso_list, GlobalContext *global, bool from_task);
 
 /**
  * @brief Destroy a chain of heap fragments.
@@ -342,12 +347,35 @@ static inline void memory_destroy_heap_fragment(HeapFragment *fragment)
 
 /**
  * @brief Destroy a root heap. First sweep its mso list.
+ *
+ * @details This function shall only be called from a scheduler thread
+ * (native handler or listener) because it decrements the reference count of
+ * refc binaries and may call resource destructors.
+ *
+ * @param heap the heap to destroy
+ * @param global the global context
  */
 static inline void memory_destroy_heap(Heap *heap, GlobalContext *global)
 {
-    memory_sweep_mso_list(heap->root->mso_list, global);
+    memory_sweep_mso_list(heap->root->mso_list, global, false);
     memory_destroy_heap_fragment(heap->root);
 }
+
+#ifdef AVM_TASK_DRIVER_ENABLED
+/**
+ * @brief Destroy a root heap. First sweep its mso list.
+ *
+ * @details This variant is safer and is meant for driver tasks.
+ *
+ * @param heap the heap to destroy
+ * @param global the global context
+ */
+static inline void memory_destroy_heap_from_task(Heap *heap, GlobalContext *global)
+{
+    memory_sweep_mso_list(heap->root->mso_list, global, true);
+    memory_destroy_heap_fragment(heap->root);
+}
+#endif
 
 #ifdef __cplusplus
 }

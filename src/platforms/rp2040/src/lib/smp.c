@@ -95,8 +95,7 @@ void smp_mutex_lock(Mutex *mtx)
 
 bool smp_mutex_trylock(Mutex *mtx)
 {
-    uint32_t owner;
-    return mutex_try_enter(&mtx->mutex, &owner);
+    return mutex_try_enter(&mtx->mutex, NULL);
 }
 
 void smp_mutex_unlock(Mutex *mtx)
@@ -147,6 +146,11 @@ void smp_rwlock_destroy(RWLock *lock)
 void smp_rwlock_rdlock(RWLock *lock)
 {
     mutex_enter_blocking(&lock->lock);
+}
+
+bool smp_rwlock_tryrdlock(RWLock *lock)
+{
+    return mutex_try_enter(&lock->lock, NULL);
 }
 
 void smp_rwlock_wrlock(RWLock *lock)

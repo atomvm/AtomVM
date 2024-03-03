@@ -71,8 +71,39 @@ static inline term port_create_reply(Context *ctx, term ref, term payload)
 {
     return port_heap_create_reply(&ctx->heap, ref, payload);
 }
+
+/**
+ * @brief Send a message to a given pid. This function must be called from
+ * a driver's native handler.
+ *
+ * @param glb the global context
+ * @param pid the pid of the process to send a message to.
+ * @param msg the message to send.
+ */
 void port_send_message(GlobalContext *glb, term pid, term msg);
+
+/**
+ * @brief Send a message to a given pid. This function must be called from
+ * a driver's native handler after a target context has been locked.
+ *
+ * @param glb the global context
+ * @param pid the pid of the process to send a message to.
+ * @param msg the message to send.
+ */
 void port_send_message_nolock(GlobalContext *glb, term pid, term msg);
+
+#ifdef AVM_TASK_DRIVER_ENABLED
+/**
+ * @brief Send a message to a given pid. This function can be called from
+ * a driver's task, such as an event callback.
+ *
+ * @param glb the global context
+ * @param pid the pid of the process to send a message to.
+ * @param msg the message to send.
+ */
+void port_send_message_from_task(GlobalContext *glb, term pid, term msg);
+#endif
+
 void port_ensure_available(Context *ctx, size_t size);
 
 // Helper to send a message from NIFs or from the native handler.

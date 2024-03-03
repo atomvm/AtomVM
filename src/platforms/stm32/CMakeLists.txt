@@ -37,6 +37,7 @@ option(AVM_DISABLE_GPIO_NIFS "Disable GPIO nifs (input and output)" OFF)
 option(AVM_DISABLE_GPIO_PORT_DRIVER "Disable GPIO 'port' driver (input, output, and interrupts)" OFF)
 
 set(AVM_DISABLE_SMP ON FORCE)
+set(AVM_DISABLE_TASK_DRIVER ON FORCE)
 
 if (AVM_NEWLIB_NANO)
     set(LINKER_FLAGS "${LINKER_FLAGS} -specs=nano.specs")

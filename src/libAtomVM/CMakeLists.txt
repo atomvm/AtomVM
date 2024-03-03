@@ -144,25 +144,35 @@ endif()
 
 if (AVM_DISABLE_SMP)
     target_compile_definitions(libAtomVM PUBLIC AVM_NO_SMP)
-else()
-    include(CheckIncludeFile)
-    CHECK_INCLUDE_FILE(stdatomic.h STDATOMIC_INCLUDE)
-    if(HAVE_PLATFORM_SMP_H)
-        target_compile_definitions(libAtomVM PUBLIC HAVE_PLATFORM_SMP_H)
-    endif()
-    include(CheckCSourceCompiles)
-    check_c_source_compiles("
-        #include <stdatomic.h>
-        int main() {
-            _Static_assert(ATOMIC_POINTER_LOCK_FREE == 2, \"Expected ATOMIC_POINTER_LOCK_FREE to be equal to 2\");
-        }
-    " ATOMIC_POINTER_LOCK_FREE_IS_TWO)
-    if (NOT ATOMIC_POINTER_LOCK_FREE_IS_TWO AND NOT HAVE_PLATFORM_SMP_H)
-        if (NOT STDATOMIC_INCLUDE)
-            message(FATAL_ERROR "stdatomic.h cannot be found, you need to disable SMP on this platform or provide platform_smp.h and define HAVE_PLATFORM_SMP_H")
-        else()
-            message(FATAL_ERROR "Platform doesn't support atomic pointers, you need to disable SMP or provide platform_smp.h and define HAVE_PLATFORM_SMP_H")
-        endif()
+endif()
+if (NOT AVM_DISABLE_TASK_DRIVER)
+    target_compile_definitions(libAtomVM PUBLIC AVM_TASK_DRIVER_ENABLED)
+endif()
+
+if(HAVE_PLATFORM_SMP_H)
+    target_compile_definitions(libAtomVM PUBLIC HAVE_PLATFORM_SMP_H)
+endif()
+if(HAVE_PLATFORM_ATOMIC_H)
+    target_compile_definitions(libAtomVM PUBLIC HAVE_PLATFORM_ATOMIC_H)
+endif()
+
+include(CheckIncludeFile)
+CHECK_INCLUDE_FILE(stdatomic.h STDATOMIC_INCLUDE)
+include(CheckCSourceCompiles)
+check_c_source_compiles("
+    #include <stdatomic.h>
+    int main() {
+        _Static_assert(ATOMIC_POINTER_LOCK_FREE == 2, \"Expected ATOMIC_POINTER_LOCK_FREE to be equal to 2\");
+    }
+" ATOMIC_POINTER_LOCK_FREE_IS_TWO)
+if (ATOMIC_POINTER_LOCK_FREE_IS_TWO)
+    target_compile_definitions(libAtomVM PUBLIC HAVE_ATOMIC)
+endif()
+if (NOT ATOMIC_POINTER_LOCK_FREE_IS_TWO AND NOT (HAVE_PLATFORM_ATOMIC_H OR (AVM_DISABLE_SMP AND AVM_DISABLE_TASK_DRIVER)))
+    if (NOT STDATOMIC_INCLUDE)
+        message(FATAL_ERROR "stdatomic.h cannot be found, you need to provide platform_atomic.h and define HAVE_PLATFORM_ATOMIC_H or alternatively pass AVM_DISABLE_SMP and AVM_DISABLE_TASK_DRIVER")
+    else()
+        message(FATAL_ERROR "Platform doesn't support atomic pointers, you need to provide platform_atomic.h and define HAVE_PLATFORM_ATOMIC_H or alternatively pass AVM_DISABLE_SMP and AVM_DISABLE_TASK_DRIVER")
     endif()
 endif()
 

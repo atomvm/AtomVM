@@ -31,8 +31,6 @@
 
 #pragma GCC diagnostic pop
 
-#define TAG "otp_socket"
-
 #define AVM_LOGD(tag, format, ...) \
     ;
 

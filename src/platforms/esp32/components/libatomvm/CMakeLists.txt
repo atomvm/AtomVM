@@ -26,6 +26,11 @@ option(AVM_PEDANTIC_WARNINGS "Pedantic compiler warnings" OFF)
 
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../../libAtomVM" "libAtomVM")
 
+# Add directory with platform_atomic.h if we mean to use it
+if (HAVE_PLATFORM_ATOMIC_H)
+    target_include_directories(libAtomVM PUBLIC ../avm_sys/)
+endif()
+
 target_link_libraries(${COMPONENT_LIB}
     INTERFACE libAtomVM "-u platform_nifs_get_nif" "-u platform_defaultatoms_init")
 

@@ -38,6 +38,7 @@ extern "C" {
 #include "atom_table.h"
 #include "erl_nif.h"
 #include "list.h"
+#include "mailbox.h"
 #include "smp.h"
 #include "synclist.h"
 #include "term.h"
@@ -64,6 +65,24 @@ typedef struct Module Module;
 typedef struct GlobalContext GlobalContext;
 #endif
 
+#ifndef TYPEDEF_MAILBOXMESSAGE
+#define TYPEDEF_MAILBOXMESSAGE
+typedef struct MailboxMessage MailboxMessage;
+#endif
+
+struct MessageQueueItem
+{
+    struct MessageQueueItem *next;
+    MailboxMessage *message;
+    int32_t process_id;
+};
+
+struct RefcBinaryQueueItem
+{
+    struct RefcBinaryQueueItem *next;
+    struct RefcBinary *refc;
+};
+
 struct GlobalContext
 {
     struct ListHead ready_processes;
@@ -73,6 +92,12 @@ struct GlobalContext
     // when running native handlers.
 #ifndef AVM_NO_SMP
     SpinLock processes_spinlock;
+#endif
+#ifdef AVM_TASK_DRIVER_ENABLED
+    // Queue of messages that could not be directly sent from a driver task
+    struct MessageQueueItem *ATOMIC message_queue;
+    // Queue of refc binaries that could not be directly ref decremented from a driver task
+    struct RefcBinaryQueueItem *ATOMIC refc_queue;
 #endif
     struct SyncList refc_binaries;
     struct SyncList processes_table;
@@ -214,6 +239,42 @@ void globalcontext_send_message(GlobalContext *glb, int32_t process_id, term t);
  * @param t the message to send.
  */
 void globalcontext_send_message_nolock(GlobalContext *glb, int32_t process_id, term t);
+
+#ifdef AVM_TASK_DRIVER_ENABLED
+/**
+ * @brief Send a message to a process identified by its id. This variant is to
+ * be used from task drivers. It tries to acquire the necessary locks and if it
+ * fails, it enqueues the message which will be delivered on the next scheduler
+ * context switch.
+ *
+ * @details Safely send a message to the process, doing nothing if the process
+ * cannot be found.
+ *
+ * @param glb the global context (that owns the process table).
+ * @param process_id the target process id.
+ * @param type the type of message to send, can be NormalMessage or a signal
+ * @param t the message to send.
+ */
+void globalcontext_send_message_from_task(GlobalContext *glb, int32_t process_id, enum MessageType type, term t);
+
+/**
+ * @brief Enqueue a refc binary from a task driver, to be refc decremented
+ * later from the scheduler.
+ *
+ * @param glb the global context
+ * @param refc the refc binary to enqueue
+ */
+void globalcontext_refc_decrement_refcount_from_task(GlobalContext *glb, struct RefcBinary *refc);
+
+/**
+ * @brief Process refc binaries and messages enqueued from task drivers.
+ *
+ * @details This function is called from the scheduler.
+ *
+ * @param glb the global context
+ */
+void globalcontext_process_task_driver_queues(GlobalContext *glb);
+#endif
 
 /**
  * @brief Initialize a new process, providing it with a process id.

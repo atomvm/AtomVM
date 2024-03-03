@@ -30,7 +30,17 @@ extern "C" {
 
 #include "list.h"
 #include "resources.h"
-#include "smp.h"
+
+#ifdef HAVE_PLATFORM_ATOMIC_H
+#include "platform_atomic.h"
+#endif
+
+#if defined(HAVE_ATOMIC) && !defined(__cplusplus)
+#include <stdatomic.h>
+#define ATOMIC _Atomic
+#else
+#define ATOMIC
+#endif
 
 #ifndef TYPEDEF_CONTEXT
 #define TYPEDEF_CONTEXT

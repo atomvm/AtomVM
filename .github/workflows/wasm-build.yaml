@@ -218,6 +218,15 @@ jobs:
         docker run --network host -v $PWD:/mnt -w /mnt cypress/included:12.17.1 --browser chrome
         killall AtomVM
 
+    - name: "Publish screenshots of failures"
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: cypress-screenshots
+        path: |
+            src/platforms/emscripten/tests/cypress/screenshots/**/*.png
+        retention-days: 7
+
     - name: "Rename and write sha256sum (web)"
       if: startsWith(github.ref, 'refs/tags/')
       shell: bash

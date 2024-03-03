@@ -185,8 +185,12 @@ describe("emscripten HTML5 Events", () => {
     cy.get("#click-checkbox").click();
     cy.get("#input-field").click({ x: 2, y: 2 });
     cy.get("#event-1 td.event-type").should("contain", "click");
-    cy.get("#event-1 td.event-map").should("contain", "target_x => 2");
-    cy.get("#event-1 td.event-map").should("contain", "target_y => 2");
+    // Could be offset by 1
+    // Maybe related: https://github.com/cypress-io/cypress/issues/20802
+    cy.get("#event-1 td.event-map").should(($eventMap) => {
+        const eventMapText = $eventMap.text();
+        expect(eventMapText).to.match(/target_x => [23]/).and.match(/target_y => [23]/);
+    });
     cy.get("#event-1 td.event-user-data").should(
       "contain",
       "click -- input field",

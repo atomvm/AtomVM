@@ -55,6 +55,7 @@
 #include <defaultatoms.h>
 #include <utils.h>
 
+#include "platform_atomic.h"
 #include "rp2040_sys.h"
 
 // #define ENABLE_TRACE
@@ -62,14 +63,6 @@
 
 // Platform uses listeners
 #include "listeners.h"
-
-#ifndef AVM_NO_SMP
-#define SMP_MUTEX_LOCK(mtx) smp_mutex_lock(mtx)
-#define SMP_MUTEX_UNLOCK(mtx) smp_mutex_unlock(mtx)
-#else
-#define SMP_MUTEX_LOCK(mtx)
-#define SMP_MUTEX_UNLOCK(mtx)
-#endif
 
 struct PortDriverDefListItem *port_driver_list;
 struct NifCollectionDefListItem *nif_collection_list;
@@ -81,9 +74,10 @@ void sys_init_platform(GlobalContext *glb)
 #ifndef AVM_NO_SMP
     mutex_init(&platform->event_poll_mutex);
     cond_init(&platform->event_poll_cond);
-    smp_init();
 #endif
     queue_init(&platform->event_queue, sizeof(queue_t *), EVENT_QUEUE_LEN);
+
+    atomic_init();
 
 #ifdef LIB_PICO_CYW43_ARCH
     cyw43_arch_init();
@@ -129,9 +123,7 @@ void sys_free_platform(GlobalContext *glb)
 
     free(platform);
 
-#ifndef AVM_NO_SMP
-    smp_free();
-#endif
+    atomic_free();
 }
 
 bool sys_try_post_listener_event_from_isr(GlobalContext *glb, listener_event_t listener_queue, const void *event)
