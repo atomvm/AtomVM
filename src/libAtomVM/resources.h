@@ -84,6 +84,9 @@ static inline void resource_type_destroy(struct ResourceType *resource_type)
  * if a select event was selected and the read or write flag was set.
  * It modifies the select_event object so the notification is only sent once.
  *
+ * The function can also be called from a select task loop if
+ * `AVM_SELECT_IN_TASK` is defined.
+ *
  * It is not an error to call this function with an event that is not in the
  * list.
  *
@@ -102,6 +105,10 @@ bool select_event_notify(ErlNifEvent event, bool is_read, bool is_write, GlobalC
  * events marked for close.
  * @details Convenience function that can be called by `sys_poll_events` and
  * iterates on events to be closed and count them.
+ *
+ * The function can also be called from a select task loop if
+ * `AVM_SELECT_IN_TASK` is defined.
+ *
  * @param select_events list of events, with a write lock
  * @param read on output number of events with read = 1, can be NULL
  * @param write on output number of events with write = 1, can be NULL

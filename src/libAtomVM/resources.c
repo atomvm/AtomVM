@@ -226,7 +226,11 @@ static void select_event_send_notification(struct SelectEvent *select_event, boo
 {
     BEGIN_WITH_STACK_HEAP(SELECT_EVENT_NOTIFICATION_SIZE, heap)
     term notification = select_event_make_notification(select_event->resource->data, select_event->ref_ticks, is_write, &heap);
+#ifdef AVM_SELECT_IN_TASK
+    globalcontext_send_message_from_task(global, select_event->local_pid, NormalMessage, notification);
+#else
     globalcontext_send_message(global, select_event->local_pid, notification);
+#endif
     if (is_write) {
         select_event->write = 0;
     } else {
@@ -270,7 +274,11 @@ static inline void select_event_destroy(struct SelectEvent *select_event, Global
         erl_nif_env_partial_init_from_globalcontext(&env, global);
         select_event->resource->resource_type->stop(&env, select_event->resource->data, select_event->event, false);
     }
+#ifdef AVM_SELECT_IN_TASK
+    globalcontext_refc_decrement_refcount_from_task(global, select_event->resource);
+#else
     refc_binary_decrement_refcount(select_event->resource, global);
+#endif
     free((void *) select_event);
 }
 
