@@ -1,7 +1,7 @@
 #
 # This file is part of AtomVM.
 #
-# Copyright 2022 Davide Bettio <davide@uninstall.it>
+# Copyright 2022-2024 Davide Bettio <davide@uninstall.it>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,5 +19,5 @@
 #
 
 # Please, keep also in sync src/libAtomVM/atomvm_version.h
-set(ATOMVM_BASE_VERSION "0.6.0-rc.0")
+set(ATOMVM_BASE_VERSION "0.6.0")
 set(ATOMVM_DEV FALSE)

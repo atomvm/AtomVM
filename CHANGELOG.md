@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2024-03-05
+
+### Fixed
+
+- Fix a bug that broke sockets on ESP32-C3 and other single core ESP32 devices, that may also
+cause other issues. The bug has been introduced with messages from tasks change between beta.1
+and rc.0
+
 ## [0.6.0-rc.0] - 2024-03-03
 
 ### Added
