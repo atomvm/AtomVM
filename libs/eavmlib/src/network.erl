@@ -355,9 +355,12 @@ maybe_callback0(_Key, undefined) ->
     ok;
 maybe_callback0(Key, Config) ->
     case proplists:get_value(Key, Config) of
-        undefined -> ok;
-        Pid when is_pid(Pid) -> Pid ! Key;
-        Fun -> Fun()
+        undefined ->
+            ok;
+        Pid when is_pid(Pid) ->
+            Pid ! Key;
+        Fun when is_function(Fun) ->
+            spawn(fun() -> Fun() end)
     end.
 
 %% @private
@@ -365,9 +368,12 @@ maybe_callback1(_KeyArg, undefined) ->
     ok;
 maybe_callback1({Key, Arg} = Msg, Config) ->
     case proplists:get_value(Key, Config) of
-        undefined -> ok;
-        Pid when is_pid(Pid) -> Pid ! Msg;
-        Fun -> Fun(Arg)
+        undefined ->
+            ok;
+        Pid when is_pid(Pid) ->
+            Pid ! Msg;
+        Fun when is_function(Fun) ->
+            spawn(fun() -> Fun(Arg) end)
     end.
 
 %% @private
