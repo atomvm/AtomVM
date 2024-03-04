@@ -321,6 +321,8 @@ static void scheduler_make_ready(Context *ctx)
     if (waiting_scheduler) {
         sys_signal(global);
     }
+#elif defined(AVM_TASK_DRIVER_ENABLED)
+    sys_signal(global);
 #endif
 }
 
@@ -372,7 +374,7 @@ void scheduler_terminate(Context *ctx)
 void scheduler_stop_all(GlobalContext *global)
 {
     global->scheduler_stop_all = true;
-#ifndef AVM_NO_SMP
+#if !defined(AVM_NO_SMP) || defined(AVM_TASK_DRIVER_ENABLED)
     sys_signal(global);
 #endif
 }
@@ -403,6 +405,8 @@ void scheduler_set_timeout(Context *ctx, avm_int64_t timeout)
     if (glb->waiting_scheduler) {
         sys_signal(glb);
     }
+#elif defined(AVM_TASK_DRIVER_ENABLED)
+    sys_signal(glb);
 #endif
 }
 

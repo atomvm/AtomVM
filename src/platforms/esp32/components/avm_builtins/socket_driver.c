@@ -756,7 +756,7 @@ static NativeHandlerResult do_receive_data(Context *ctx)
             term_put_tuple_element(active_tuple, 4, recv_data);
         }
         globalcontext_send_message(ctx->global, socket_data->controlling_process_pid, active_tuple);
-        TRACE("sent received to active process (pid=%d): ", socket_data->controlling_process_pid);
+        TRACE("sent received to active process (pid=%d): ", (int) socket_data->controlling_process_pid);
         #ifdef ENABLE_TRACE
             term_display(stdout, active_tuple, ctx);
         #endif
@@ -766,7 +766,7 @@ static NativeHandlerResult do_receive_data(Context *ctx)
         term_put_tuple_element(ok_tuple, 0, OK_ATOM);
         term_put_tuple_element(ok_tuple, 1, recv_term);
         do_send_passive_reply(ctx, socket_data, ok_tuple);
-        TRACE("sent received to passive caller (pid=%d): ", socket_data->passive_receiver_process_pid);
+        TRACE("sent received to passive caller (pid=%d): ", (int) socket_data->passive_receiver_process_pid);
         #ifdef ENABLE_TRACE
             term_display(stdout, ok_tuple, ctx);
         #endif
