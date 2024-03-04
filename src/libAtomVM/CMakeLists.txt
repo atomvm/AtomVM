@@ -157,6 +157,11 @@ if(HAVE_PLATFORM_ATOMIC_H)
     target_compile_definitions(libAtomVM PUBLIC HAVE_PLATFORM_ATOMIC_H)
 endif()
 
+# Platforms that run select in a task must set this option
+if(AVM_SELECT_IN_TASK)
+    target_compile_definitions(libAtomVM PUBLIC AVM_SELECT_IN_TASK)
+endif()
+
 include(CheckIncludeFile)
 CHECK_INCLUDE_FILE(stdatomic.h STDATOMIC_INCLUDE)
 include(CheckCSourceCompiles)
