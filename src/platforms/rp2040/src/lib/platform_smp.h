@@ -26,16 +26,11 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
 
-#include <pico/critical_section.h>
 #include <pico/mutex.h>
 
 #pragma GCC diagnostic pop
 
 #define SMP_PLATFORM_SPINLOCK
-#define ATOMIC
-
-#define ATOMIC_COMPARE_EXCHANGE_WEAK(object, expected, desired) \
-    smp_atomic_compare_exchange_weak(object, expected, (uint64_t) desired, sizeof(desired))
 
 #ifndef TYPEDEF_SPINLOCK
 #define TYPEDEF_SPINLOCK
@@ -69,86 +64,22 @@ static inline void smp_spinlock_lock(SpinLock *lock)
 }
 
 /**
+ * @brief Try to lock a spinlock.
+ * @param lock the spin lock to lock
+ * @return true if the lock was acquired.
+ */
+static inline bool smp_spinlock_trylock(SpinLock *lock)
+{
+    return mutex_try_enter(&lock->mutex, NULL);
+}
+
+/**
  * @brief Unlock a spinlock.
  * @param lock the spin lock to unlock
  */
 static inline void smp_spinlock_unlock(SpinLock *lock)
 {
     mutex_exit(&lock->mutex);
-}
-
-static critical_section_t atomic_cas_section;
-
-/**
- * @brief Initialize structures of SMP functions
- */
-static inline void smp_init()
-{
-    critical_section_init(&atomic_cas_section);
-}
-
-/**
- * @brief Free structures for SMP functions
- */
-static inline void smp_free()
-{
-    critical_section_deinit(&atomic_cas_section);
-}
-
-static inline bool smp_atomic_compare_exchange_weak(void *object, void *expected, uint64_t desired, size_t desired_len)
-{
-    critical_section_enter_blocking(&atomic_cas_section);
-
-    bool result;
-    switch (desired_len) {
-        case sizeof(uint64_t): {
-            uint64_t *object_ptr = (uint64_t *) object;
-            uint64_t *expected_ptr = (uint64_t *) expected;
-            result = *object_ptr == *expected_ptr;
-            if (result) {
-                *object_ptr = desired;
-            } else {
-                *expected_ptr = *object_ptr;
-            }
-            break;
-        }
-        case sizeof(uint32_t): {
-            uint32_t *object_ptr = (uint32_t *) object;
-            uint32_t *expected_ptr = (uint32_t *) expected;
-            result = *object_ptr == *expected_ptr;
-            if (result) {
-                *object_ptr = desired;
-            } else {
-                *expected_ptr = *object_ptr;
-            }
-            break;
-        }
-        case sizeof(uint16_t): {
-            uint16_t *object_ptr = (uint16_t *) object;
-            uint16_t *expected_ptr = (uint16_t *) expected;
-            result = *object_ptr == *expected_ptr;
-            if (result) {
-                *object_ptr = desired;
-            } else {
-                *expected_ptr = *object_ptr;
-            }
-            break;
-        }
-        case sizeof(uint8_t): {
-            uint8_t *object_ptr = (uint8_t *) object;
-            uint8_t *expected_ptr = (uint8_t *) expected;
-            result = *object_ptr == *expected_ptr;
-            if (result) {
-                *object_ptr = desired;
-            } else {
-                *expected_ptr = *object_ptr;
-            }
-            break;
-        }
-    }
-
-    critical_section_exit(&atomic_cas_section);
-    return result;
 }
 
 #endif

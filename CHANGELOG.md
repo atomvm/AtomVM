@@ -6,6 +6,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.6.0] - 2024-03-05
+
+### Fixed
+
+- Fix a bug that broke sockets on ESP32-C3 and other single core ESP32 devices, that may also
+cause other issues. The bug has been introduced with messages from tasks change between beta.1
+and rc.0
+- Fixed several issues related to Esp32 socket_driver that made it unreliable, especially with
+single core MCUs
+
+## [0.6.0-rc.0] - 2024-03-03
+
+### Added
+
+- `BOOTLOADER_OFFSET` for all current Esp32 models.
+- Added API to send messages from FreeRTOS tasks or pthreads, typically to
+easily support integration with Esp32 callbacks
+
+### Fixed
+
+- `BOOTLOADER_OFFSET` was incorrect for Esp32-C6 and Esp32-S2.
+- Fixed a bug that would fail to set DHCP hostname in STA+AP mode on all ESP32 platforms.
+- ESP32-S3: crash in network driver caused by a smaller stack size for scheduler threads, when
+calling `esp_wifi_init()`. See also issue [#1059](https://github.com/atomvm/AtomVM/issues/1059).
+- Fixed Esp32 network driver on non-SMP builds
+- ESP32: fixed bug in `gpio:stop/0` and `gpio:close/1` that would cause the VM to crash.
+
 ## [0.6.0-beta.1] - 2024-02-28
 
 ### Added

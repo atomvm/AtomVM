@@ -126,7 +126,7 @@ static void send_term(Heap *heap, struct ClientData *data, term t)
     term_put_tuple_element(msg, 1, t);
 
     // Pid ! {Ref, T}
-    port_send_message(data->global, term_from_local_process_id(data->owner_process_id), msg);
+    port_send_message_from_task(data->global, term_from_local_process_id(data->owner_process_id), msg);
 }
 
 static void send_got_ip(struct ClientData *data, esp_netif_ip_info_t *info)
@@ -319,6 +319,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
         switch (event_id) {
 
             case SNTP_EVENT_BASE_SYNC: {
+                ESP_LOGI(TAG, "SNTP_EVENT_BASE_SYNC received.");
                 send_sntp_sync(data, (struct timeval *) event_data);
                 break;
             }
@@ -530,10 +531,10 @@ static void maybe_set_sntp(term sntp_config, GlobalContext *global)
         char *host = interop_term_to_string(interop_kv_get_value(sntp_config, host_atom, global), &ok);
         if (LIKELY(ok)) {
             // do not free(sntp)
-            sntp_setoperatingmode(SNTP_OPMODE_POLL);
-            sntp_setservername(0, host);
+            esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
+            esp_sntp_setservername(0, host);
             sntp_set_time_sync_notification_cb(time_sync_notification_cb);
-            sntp_init();
+            esp_sntp_init();
             ESP_LOGI(TAG, "SNTP initialized with host set to %s", host);
         } else {
             ESP_LOGE(TAG, "Unable to locate sntp host in configuration");
@@ -541,7 +542,7 @@ static void maybe_set_sntp(term sntp_config, GlobalContext *global)
     }
 }
 
-static void set_dhcp_hostname(esp_netif_t *interface, term dhcp_hostname_term)
+static void set_dhcp_hostname(esp_netif_t *interface, const char *interface_name, term dhcp_hostname_term)
 {
     char dhcp_hostname[TCPIP_HOSTNAME_MAX_SIZE + 1];
     if (!term_is_invalid_term(dhcp_hostname_term)) {
@@ -562,17 +563,15 @@ static void set_dhcp_hostname(esp_netif_t *interface, term dhcp_hostname_term)
     }
     esp_err_t status = esp_netif_set_hostname(interface, dhcp_hostname);
     if (status == ESP_OK) {
-        ESP_LOGI(TAG, "DHCP hostname set to %s", dhcp_hostname);
+        ESP_LOGI(TAG, "%s DHCP hostname set to %s", interface_name, dhcp_hostname);
     } else {
-        ESP_LOGW(TAG, "Unable to set DHCP hostname to %s.  status=%d", dhcp_hostname, status);
+        ESP_LOGW(TAG, "Unable to set %s DHCP hostname to %s.  status=%d", interface_name, dhcp_hostname, status);
     }
 }
 
 static void start_network(Context *ctx, term pid, term ref, term config)
 {
     TRACE("start_network");
-
-    esp_netif_t *interface = NULL;
 
     // {Ref, ok | {error, atom() | integer()}}
     size_t heap_size = PORT_REPLY_SIZE + TUPLE_SIZE(2);
@@ -616,17 +615,25 @@ static void start_network(Context *ctx, term pid, term ref, term config)
 
     esp_err_t err;
 
+    esp_netif_t *sta_wifi_interface = NULL;
     if (sta_wifi_config != NULL) {
-        interface = esp_netif_create_default_wifi_sta();
+        sta_wifi_interface = esp_netif_create_default_wifi_sta();
+        if (IS_NULL_PTR(sta_wifi_interface)) {
+            ESP_LOGE(TAG, "Failed to create network STA interface");
+            term error = port_create_error_tuple(ctx, ERROR_ATOM);
+            port_send_reply(ctx, pid, ref, error);
+            return;
+        }
     }
+    esp_netif_t *ap_wifi_interface = NULL;
     if (ap_wifi_config != NULL) {
-        interface = esp_netif_create_default_wifi_ap();
-    }
-    if (IS_NULL_PTR(interface)) {
-        ESP_LOGE(TAG, "Failed to create net work interface");
-        term error = port_create_error_tuple(ctx, ERROR_ATOM);
-        port_send_reply(ctx, pid, ref, error);
-        return;
+        ap_wifi_interface = esp_netif_create_default_wifi_ap();
+        if (IS_NULL_PTR(ap_wifi_interface)) {
+            ESP_LOGE(TAG, "Failed to create network AP interface");
+            term error = port_create_error_tuple(ctx, ERROR_ATOM);
+            port_send_reply(ctx, pid, ref, error);
+            return;
+        }
     }
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -743,7 +750,10 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     // Set the DHCP hostname, if STA mode is enabled
     //
     if (!IS_NULL_PTR(sta_wifi_config)) {
-        set_dhcp_hostname(interface, interop_kv_get_value(sta_config, dhcp_hostname_atom, ctx->global));
+        set_dhcp_hostname(sta_wifi_interface, "STA", interop_kv_get_value(sta_config, dhcp_hostname_atom, ctx->global));
+    }
+    if (!IS_NULL_PTR(ap_wifi_config)) {
+        set_dhcp_hostname(ap_wifi_interface, "AP", interop_kv_get_value(ap_config, dhcp_hostname_atom, ctx->global));
     }
     //
     // Done -- send an ok so the FSM can proceed

@@ -98,6 +98,7 @@ Functions
 .. doxygenfunction:: globalcontext_process_exists
 .. doxygenfunction:: globalcontext_register_process
 .. doxygenfunction:: globalcontext_send_message
+.. doxygenfunction:: globalcontext_send_message_from_task
 .. doxygenfunction:: globalcontext_send_message_nolock
 .. doxygenfunction:: globalcontext_unregister_process
 .. doxygenfunction:: iff_is_valid_beam

@@ -170,6 +170,7 @@ struct SocketData
     size_t buffer;
     bool active : 1;
     bool binary : 1;
+    bool read_condition : 1;
 };
 
 struct TCPClientSocketData
@@ -237,6 +238,10 @@ void IRAM_ATTR socket_callback(struct netconn *netconn, enum netconn_evt evt, u1
     TRACE("socket_callback netconn=%p, evt=%d, len=%d\n", (void *) netconn, evt, len);
 
     // We only listen to NETCONN_EVT_RCVPLUS events
+    // NETCONN_EVT_RCVPLUS means it's safe to perform a potentially call once
+    // more. However, two data events (with len > 0) may be processed by a single
+    // netconn_recv. So we're sending len as well to address the case where len
+    // is equal to 0 and netconn_recv will return an error.
     if (evt == NETCONN_EVT_RCVPLUS) {
         struct NetconnEvent event;
         event.netconn = netconn;
@@ -362,8 +367,10 @@ static void socket_data_init(struct SocketData *data, Context *ctx, struct netco
     data->process_id = ctx->process_id;
     data->controlling_process_pid = 0;
     data->port = 0;
+    data->avail_bytes = 0;
     data->active = true;
     data->binary = true;
+    data->read_condition = false;
     data->buffer = 512;
 
     list_append(sockets, &data->sockets_head);
@@ -679,6 +686,7 @@ static NativeHandlerResult do_receive_data(Context *ctx)
         return NativeContinue;
     }
     socket_data->avail_bytes -= data_len;
+    socket_data->read_condition = false;
 
     TRACE("%*s\n", (int) data_len, (char *) data);
 
@@ -756,7 +764,7 @@ static NativeHandlerResult do_receive_data(Context *ctx)
             term_put_tuple_element(active_tuple, 4, recv_data);
         }
         globalcontext_send_message(ctx->global, socket_data->controlling_process_pid, active_tuple);
-        TRACE("sent received to active process (pid=%d): ", socket_data->controlling_process_pid);
+        TRACE("sent received to active process (pid=%d): ", (int) socket_data->controlling_process_pid);
         #ifdef ENABLE_TRACE
             term_display(stdout, active_tuple, ctx);
         #endif
@@ -766,7 +774,7 @@ static NativeHandlerResult do_receive_data(Context *ctx)
         term_put_tuple_element(ok_tuple, 0, OK_ATOM);
         term_put_tuple_element(ok_tuple, 1, recv_term);
         do_send_passive_reply(ctx, socket_data, ok_tuple);
-        TRACE("sent received to passive caller (pid=%d): ", socket_data->passive_receiver_process_pid);
+        TRACE("sent received to passive caller (pid=%d): ", (int) socket_data->passive_receiver_process_pid);
         #ifdef ENABLE_TRACE
             term_display(stdout, ok_tuple, ctx);
         #endif
@@ -781,9 +789,22 @@ static NativeHandlerResult do_data_netconn_event(Context *ctx, int len)
     TRACE("do_data_netconn_event\n");
     struct SocketData *socket_data = ctx->platform_data;
 
+    socket_data->avail_bytes += len;
+
+    // We got a message saying that it's safe to call netconn_recv as it will
+    // not block yet there is no data.
+    if (len == 0) {
+        socket_data->read_condition = true;
+    }
+
+    // If socket is in passive mode but we don't have any waiting receiver, we
+    // should just increment the number of available bytes.
     if (!socket_data->active && socket_data->passive_receiver_process_pid == 0) {
-        // netconn_recv will not block
-        socket_data->avail_bytes += len;
+        return NativeContinue;
+    }
+
+    // We may have already read the bytes from this event
+    if (socket_data->avail_bytes <= 0 && !socket_data->read_condition) {
         return NativeContinue;
     }
     return do_receive_data(ctx);
@@ -1249,11 +1270,12 @@ static NativeHandlerResult do_recvfrom(Context *ctx, const GenMessage *gen_messa
     socket_data->passive_receiver_process_pid = pid;
     socket_data->passive_ref_ticks = ref_ticks;
 
-    if (socket_data->avail_bytes > 0) {
-        return do_receive_data(ctx);
+    // There may be nothing to read.
+    if (socket_data->avail_bytes <= 0 && !socket_data->read_condition) {
+        return NativeContinue;
     }
 
-    return NativeContinue;
+    return do_receive_data(ctx);
 }
 
 static void do_get_port(Context *ctx, const GenMessage *gen_message)

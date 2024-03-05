@@ -23,15 +23,24 @@ project (ReleaseEsp32)
 
 ## Build image tools for target chip
 
+# BOOTLOADER_OFFSET
+# https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/api-guides/bootloader.html
+
 set(BOOTLOADER_OFFSET "0x1000")
-if(${CONFIG_IDF_TARGET} STREQUAL "esp32s3")
+if( ${CONFIG_IDF_TARGET} STREQUAL "esp32s2")
+    set(BOOTLOADER_OFFSET "0x1000")
+elseif(${CONFIG_IDF_TARGET} STREQUAL "esp32s3")
+    set(BOOTLOADER_OFFSET "0x0")
+elseif(${CONFIG_IDF_TARGET} STREQUAL "esp32c2")
     set(BOOTLOADER_OFFSET "0x0")
 elseif(${CONFIG_IDF_TARGET} STREQUAL "esp32c3")
     set(BOOTLOADER_OFFSET "0x0")
 elseif(${CONFIG_IDF_TARGET} STREQUAL "esp32c6")
     set(BOOTLOADER_OFFSET "0x0")
-elseif( ${CONFIG_IDF_TARGET} STREQUAL "esp32s2")
+elseif(${CONFIG_IDF_TARGET} STREQUAL "esp32h2")
     set(BOOTLOADER_OFFSET "0x0")
+elseif(${CONFIG_IDF_TARGET} STREQUAL "esp32p4")
+    set(BOOTLOADER_OFFSET "0x2000")
 endif()
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mkimage.config.in ${CMAKE_BINARY_DIR}/mkimage.config)

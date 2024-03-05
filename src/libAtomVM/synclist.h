@@ -56,6 +56,14 @@ static inline struct ListHead *synclist_rdlock(struct SyncList *synclist)
     return &synclist->head;
 }
 
+static inline struct ListHead *synclist_tryrdlock(struct SyncList *synclist)
+{
+    if (smp_rwlock_tryrdlock(synclist->lock)) {
+        return &synclist->head;
+    }
+    return NULL;
+}
+
 static inline struct ListHead *synclist_wrlock(struct SyncList *synclist)
 {
     smp_rwlock_wrlock(synclist->lock);
@@ -107,6 +115,7 @@ static inline int synclist_is_empty(struct SyncList *synclist)
 #define SyncList ListHead
 #define synclist_init(list) list_init(list)
 #define synclist_rdlock(list) list
+#define synclist_tryrdlock(list) list
 #define synclist_wrlock(list) list
 #define synclist_nolock(list) list
 #define synclist_unlock(list) UNUSED(list)

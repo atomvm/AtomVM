@@ -42,20 +42,31 @@ extern "C" {
 #define CLANG_THREAD_SANITIZE_SAFE
 #endif
 
-#if defined(AVM_NO_SMP)
-#define ATOMIC
-#else
+#ifndef AVM_NO_SMP
+
 #include <stdbool.h>
-#ifndef __cplusplus
+
 #ifdef HAVE_PLATFORM_SMP_H
 #include "platform_smp.h"
-#else
-#include <stdatomic.h>
-#define ATOMIC_COMPARE_EXCHANGE_WEAK atomic_compare_exchange_weak
-#define ATOMIC _Atomic
 #endif
+
+#ifdef HAVE_PLATFORM_ATOMIC_H
+#include "platform_atomic.h"
+#else
+#if defined(HAVE_ATOMIC)
+#include <stdatomic.h>
+#define ATOMIC_COMPARE_EXCHANGE_WEAK_INT atomic_compare_exchange_weak
+#endif
+#endif
+
+// spinlocks are implemented using atomics
+#if !defined(SMP_PLATFORM_SPINLOCK)
+#if defined(HAVE_ATOMIC) && !defined(__cplusplus)
+#include <stdatomic.h>
+#define ATOMIC _Atomic
 #else
 #define ATOMIC
+#endif
 #endif
 
 #ifndef TYPEDEF_MUTEX
@@ -167,6 +178,13 @@ void smp_rwlock_destroy(RWLock *lock);
 void smp_rwlock_rdlock(RWLock *lock);
 
 /**
+ * @brief Try to acquire read lock of a rwlock.
+ * @param lock the lock to read lock
+ * @return `true` if lock was acquired
+ */
+bool smp_rwlock_tryrdlock(RWLock *lock);
+
+/**
  * @brief Write lock a rwlock.
  * @param lock the lock to write lock
  */
@@ -198,7 +216,18 @@ static inline void smp_spinlock_lock(SpinLock *lock)
     int current;
     do {
         current = 0;
-    } while (!ATOMIC_COMPARE_EXCHANGE_WEAK(&lock->lock, &current, 1));
+    } while (!ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&lock->lock, &current, 1));
+}
+
+/**
+ * @brief Try to lock a spinlock.
+ * @param lock the spin lock to lock
+ * @return true if the spin lock was locked
+ */
+static inline bool smp_spinlock_trylock(SpinLock *lock)
+{
+    int current = 0;
+    return ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&lock->lock, &current, 1);
 }
 
 /**
@@ -233,6 +262,29 @@ void smp_scheduler_start(GlobalContext *glb);
  */
 bool smp_is_main_thread(GlobalContext *glb);
 
+#define SMP_SPINLOCK_LOCK(spinlock) smp_spinlock_lock(spinlock)
+#define SMP_SPINLOCK_TRYLOCK(spinlock) smp_spinlock_trylock(spinlock)
+#define SMP_SPINLOCK_UNLOCK(spinlock) smp_spinlock_unlock(spinlock)
+#define SMP_MUTEX_LOCK(mutex) smp_mutex_lock(mutex)
+#define SMP_MUTEX_TRYLOCK(mutex) smp_mutex_trylock(mutex)
+#define SMP_MUTEX_UNLOCK(mutex) smp_mutex_unlock(mutex)
+#define SMP_RWLOCK_RDLOCK(lock) smp_rwlock_rdlock(lock)
+#define SMP_RWLOCK_TRYRDLOCK(lock) smp_rwlock_tryrdlock(lock)
+#define SMP_RWLOCK_WRLOCK(lock) smp_rwlock_wrlock(lock)
+#define SMP_RWLOCK_UNLOCK(lock) smp_rwlock_unlock(lock)
+
+#else
+
+#define SMP_SPINLOCK_LOCK(spinlock)
+#define SMP_SPINLOCK_TRYLOCK(spinlock)
+#define SMP_SPINLOCK_UNLOCK(spinlock)
+#define SMP_MUTEX_LOCK(mutex)
+#define SMP_MUTEX_TRYLOCK(mutex)
+#define SMP_MUTEX_UNLOCK(mutex)
+#define SMP_RWLOCK_RDLOCK(lock)
+#define SMP_RWLOCK_TRYRDLOCK(lock)
+#define SMP_RWLOCK_WRLOCK(lock)
+#define SMP_RWLOCK_UNLOCK(lock)
 #endif
 
 #ifdef __cplusplus

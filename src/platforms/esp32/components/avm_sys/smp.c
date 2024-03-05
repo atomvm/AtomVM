@@ -20,7 +20,10 @@
 
 #include "smp.h"
 
+#include <sdkconfig.h>
+
 #ifndef AVM_NO_SMP
+#include <errno.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <stdlib.h>
@@ -97,11 +100,24 @@ void smp_scheduler_start(GlobalContext *ctx)
             AVM_ABORT();
         }
     }
+
+    pthread_attr_t thread_attr;
+    if (UNLIKELY(pthread_attr_init(&thread_attr) != 0)) {
+        AVM_ABORT();
+    }
+    if (UNLIKELY(pthread_attr_setstacksize(&thread_attr, CONFIG_ESP_MAIN_TASK_STACK_SIZE) != 0)) {
+        AVM_ABORT();
+    }
+
     pthread_t thread;
-    if (UNLIKELY(pthread_create(&thread, NULL, scheduler_thread_entry_point, ctx))) {
+    if (UNLIKELY(pthread_create(&thread, &thread_attr, scheduler_thread_entry_point, ctx))) {
         AVM_ABORT();
     }
     if (UNLIKELY(pthread_detach(thread))) {
+        AVM_ABORT();
+    }
+
+    if (UNLIKELY(pthread_attr_destroy(&thread_attr) != 0)) {
         AVM_ABORT();
     }
 }
@@ -242,6 +258,22 @@ void smp_rwlock_wrlock(RWLock *lock)
         AVM_ABORT();
     }
 #endif
+}
+
+bool smp_rwlock_tryrdlock(RWLock *lock)
+{
+#ifdef HAVE_PTHREAD_RWLOCK
+    int r = pthread_rwlock_tryrdlock(&lock->lock);
+#else
+    int r = pthread_mutex_trylock(&lock->lock);
+#endif
+    if (r == EBUSY) {
+        return false;
+    }
+    if (UNLIKELY(r)) {
+        AVM_ABORT();
+    }
+    return true;
 }
 
 void smp_rwlock_unlock(RWLock *lock)

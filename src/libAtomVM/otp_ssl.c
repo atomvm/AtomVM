@@ -42,6 +42,8 @@
 // #define ENABLE_TRACE
 #include <trace.h>
 
+#define TAG "otp_ssl"
+
 #ifndef MBEDTLS_PRIVATE
 #define MBEDTLS_PRIVATE(member) member
 #endif

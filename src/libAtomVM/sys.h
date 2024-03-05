@@ -175,23 +175,22 @@ void sys_unregister_listener(GlobalContext *global, EventListener *listener);
  */
 void sys_listener_destroy(struct ListHead *item);
 
-#ifndef AVM_NO_SMP
-
+#if !defined(AVM_NO_SMP) || defined(AVM_TASK_DRIVER_ENABLED)
 /**
  * @brief Interrupt the wait in `sys_poll_events`.
  *
  * @details This function should signal the thread that is waiting in
- * `sys_poll_events` so it returns before the timeout. It is only used
- * for SMP builds.
+ * `sys_poll_events` so it returns before the timeout. It is mostly used for
+ * SMP builds, but also to abort sleep from driver callbacks on FreeRTOS.
  *
  * Please note that this function may be called while no thread is waiting in
  * sys_poll_events and this should have no effect. This function is called in
- * scheduler loop (internal function `scheduler_run0`).
+ * scheduler loop (internal function `scheduler_run0`) and when scheduling
+ * processes.
  *
  * @param glb the global context.
  */
 void sys_signal(GlobalContext *glb);
-
 #endif
 
 enum OpenAVMResult sys_open_avm_from_file(
