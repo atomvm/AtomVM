@@ -162,7 +162,7 @@ Drivers can send messages from event callbacks typically called from FreeRTOS ta
 
 ````{only} html
 >:::{doxygenfunction} globalcontext_send_message
->
+
 >:::{doxygenfunction} globalcontext_send_message_from_task
 ````
 
