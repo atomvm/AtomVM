@@ -29,6 +29,7 @@ set(ERLANG_MODULES
     code
     crypto
     erts_debug
+    ets
     gen_event
     gen_server
     gen_statem

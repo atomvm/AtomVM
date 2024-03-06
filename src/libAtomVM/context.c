@@ -182,6 +182,8 @@ void context_destroy(Context *ctx)
         free(ctx->platform_data);
     }
 
+    ets_delete_owned_tables(&ctx->global->ets, ctx->process_id, ctx->global);
+
     free(ctx);
 }
 

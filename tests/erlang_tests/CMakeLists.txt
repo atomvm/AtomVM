@@ -495,6 +495,7 @@ compile_erlang(test_utf8_atoms)
 compile_erlang(twentyone_param_function)
 compile_erlang(complex_list_match_xregs)
 compile_erlang(twentyone_param_fun)
+compile_erlang(test_ets)
 
 add_custom_target(erlang_test_modules DEPENDS
     code_load_files
@@ -956,4 +957,5 @@ add_custom_target(erlang_test_modules DEPENDS
     twentyone_param_function.beam
     complex_list_match_xregs.beam
     twentyone_param_fun.beam
+    test_ets.beam
 )

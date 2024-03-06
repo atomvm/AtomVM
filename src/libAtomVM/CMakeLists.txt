@@ -34,6 +34,8 @@ set(HEADER_FILES
     dictionary.h
     erl_nif.h
     erl_nif_priv.h
+    ets.h
+    ets_hashtable.h
     exportedfunction.h
     externalterm.h
     globalcontext.h
@@ -80,6 +82,8 @@ set(SOURCE_FILES
     debug.c
     defaultatoms.c
     dictionary.c
+    ets.c
+    ets_hashtable.c
     externalterm.c
     globalcontext.c
     iff.c
