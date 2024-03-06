@@ -42,27 +42,54 @@
     write_bytes/2, write_bytes/3, write_bytes/4
 ]).
 
+%% Nif implementation
+-export([
+    open_nif/1,
+    close_nif/1,
+    read_bytes_nif/2,
+    write_bytes_nif/2,
+    begin_transmission_nif/2,
+    end_transmission_nif/1,
+    enqueue_write_bytes_nif/2
+]).
+
+-define(I2C_RSRC, {'$i2c', _Resource, _Ref}).
+
 -type pin() :: non_neg_integer().
 -type freq_hz() :: non_neg_integer().
 -type peripheral() :: string() | binary().
 -type param() ::
-    {scl, pin()} | {sda, pin()} | {clock_speed_hz, freq_hz()} | {peripheral, peripheral()}.
+    {scl, pin()}
+    | {sda, pin()}
+    | {clock_speed_hz, freq_hz()}
+    | {peripheral, peripheral()}
+    | {use_nif, boolean()}
+    | {send_timeout_ms, non_neg_integer()}.
 -type params() :: [param()].
--type i2c() :: pid().
+-type i2c() :: pid() | {'$i2c', term(), reference()}.
 -type address() :: non_neg_integer().
 -type register() :: non_neg_integer().
 
+-export_type([
+    i2c/0, address/0, register/0
+]).
+
 %%-----------------------------------------------------------------------------
-%% @param   Param Initialization parameters
+%% @param   Params Initialization parameters
 %% @returns process id of the driver.
 %% @doc     Open a connection to the I2C driver
 %%
 %%          This function will open a connection to the I2C driver.
 %% @end
 %%-----------------------------------------------------------------------------
--spec open(Param :: params()) -> i2c().
-open(Param) ->
-    open_port({spawn, "i2c"}, migrate_config(Param)).
+-spec open(Params :: params()) -> i2c().
+open(Params) ->
+    case proplists:get_value(use_nif, Params) of
+        true ->
+            ?MODULE:open_nif(migrate_config(Params));
+        _ ->
+            open_port({spawn, "i2c"}, migrate_config(Params))
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   I2C I2C instance created via `open/1'
@@ -74,6 +101,8 @@ open(Param) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec close(I2C :: i2c()) -> ok | {error, Reason :: term()}.
+close(?I2C_RSRC = I2C) ->
+    ?MODULE:close_nif(I2C);
 close(I2C) ->
     port:call(I2C, {close}).
 
@@ -88,6 +117,8 @@ close(I2C) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec begin_transmission(I2C :: i2c(), Address :: address()) -> ok | {error, Reason :: term()}.
+begin_transmission(?I2C_RSRC = I2C, Address) ->
+    ?MODULE:begin_transmission_nif(I2C, Address);
 begin_transmission(I2C, Address) ->
     port:call(I2C, {begin_transmission, Address}).
 
@@ -102,7 +133,9 @@ begin_transmission(I2C, Address) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec write_byte(I2C :: i2c(), Byte :: byte()) -> ok | {error, Reason :: term()}.
-write_byte(I2C, Byte) ->
+write_byte(?I2C_RSRC = I2C, Byte) when is_integer(Byte) andalso 0 =< Byte andalso Byte =< 255 ->
+    write_bytes(I2C, <<Byte:8>>);
+write_byte(I2C, Byte) when is_integer(Byte) andalso 0 =< Byte andalso Byte =< 255 ->
     port:call(I2C, {write_byte, Byte}).
 
 %%-----------------------------------------------------------------------------
@@ -116,6 +149,8 @@ write_byte(I2C, Byte) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec write_bytes(I2C :: i2c(), Bytes :: binary()) -> ok | {error, Reason :: term()}.
+write_bytes(?I2C_RSRC = I2C, Bytes) ->
+    ?MODULE:enqueue_write_bytes_nif(I2C, Bytes);
 write_bytes(I2C, Bytes) ->
     port:call(I2C, {write_bytes, Bytes}).
 
@@ -130,6 +165,8 @@ write_bytes(I2C, Bytes) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec end_transmission(I2C :: i2c()) -> ok | {error, Reason :: term()}.
+end_transmission(?I2C_RSRC = I2C) ->
+    ?MODULE:end_transmission_nif(I2C);
 end_transmission(I2C) ->
     port:call(I2C, {end_transmission}).
 
@@ -146,6 +183,8 @@ end_transmission(I2C) ->
 %%-----------------------------------------------------------------------------
 -spec read_bytes(I2C :: i2c(), Address :: address(), Count :: non_neg_integer()) ->
     {ok, Data :: binary()} | {error, Reason :: term()}.
+read_bytes(?I2C_RSRC = I2C, Address, Count) ->
+    ?MODULE:read_bytes_nif(I2C, {Address, Count});
 read_bytes(I2C, Address, Count) ->
     port:call(I2C, {read_bytes, Address, Count}).
 
@@ -165,6 +204,8 @@ read_bytes(I2C, Address, Count) ->
 -spec read_bytes(
     I2C :: i2c(), Address :: address(), Register :: register(), Count :: non_neg_integer()
 ) -> {ok, binary()} | {error, Reason :: term()}.
+read_bytes(?I2C_RSRC = I2C, Address, Register, Count) ->
+    ?MODULE:read_bytes_nif(I2C, {Address, Count, Register});
 read_bytes(I2C, Address, Register, Count) ->
     port:call(I2C, {read_bytes, Address, Count, Register}).
 
@@ -181,6 +222,8 @@ read_bytes(I2C, Address, Register, Count) ->
 %%-----------------------------------------------------------------------------
 -spec write_bytes(I2C :: i2c(), Address :: address(), BinOrInt :: binary() | byte()) ->
     ok | {error, Reason :: term()}.
+write_bytes(?I2C_RSRC = I2C, Address, BinOrInt) ->
+    ?MODULE:write_bytes_nif(I2C, {Address, BinOrInt});
 write_bytes(I2C, Address, BinOrInt) ->
     port:call(I2C, {write_bytes, Address, BinOrInt}).
 
@@ -200,9 +243,16 @@ write_bytes(I2C, Address, BinOrInt) ->
 -spec write_bytes(
     I2C :: i2c(), Address :: address(), Register :: register(), BinOrInt :: binary() | integer()
 ) -> ok | {error, Reason :: term()}.
+write_bytes(?I2C_RSRC = I2C, Address, Register, BinOrInt) ->
+    ?MODULE:write_bytes_nif(I2C, {Address, BinOrInt, Register});
 write_bytes(I2C, Address, Register, BinOrInt) ->
     port:call(I2C, {write_bytes, Address, BinOrInt, Register}).
 
+%%
+%% Internal operations
+%%
+
+%% @private
 migrate_config([]) ->
     [];
 migrate_config([{K, V} | T]) ->
@@ -211,11 +261,13 @@ migrate_config([{K, V} | T]) ->
     NewV = migrate_value(NewK, V),
     [{NewK, NewV} | migrate_config(T)].
 
+%% @private
 migrate_value(peripheral, Peripheral) ->
     validate_peripheral(Peripheral);
 migrate_value(_K, V) ->
     V.
 
+%% @private
 rename_key(Key) ->
     case Key of
         scl_io_num -> scl;
@@ -225,11 +277,13 @@ rename_key(Key) ->
         Any -> Any
     end.
 
+%% @private
 warn_deprecated(Key, Key) ->
     ok;
 warn_deprecated(OldKey, NewKey) ->
     io:format("I2C: found deprecated ~p, use ~p instead!!!~n", [OldKey, NewKey]).
 
+%% @private
 validate_peripheral(I) when is_integer(I) ->
     io:format("I2C: deprecated integer peripheral is used.~n"),
     I;
@@ -249,3 +303,35 @@ validate_peripheral(<<"i2c", N/binary>> = Value) ->
     end;
 validate_peripheral(Value) ->
     throw({bardarg, {peripheral, Value}}).
+
+%%
+%% Nif implementation
+%%
+
+%% @hidden
+open_nif(_Params) ->
+    erlang:nif_error(undefined).
+
+%% @hidden
+close_nif(_I2C) ->
+    erlang:nif_error(undefined).
+
+%% @hidden
+read_bytes_nif(_I2C, _Request) ->
+    erlang:nif_error(undefined).
+
+%% @hidden
+write_bytes_nif(_I2C, _Request) ->
+    erlang:nif_error(undefined).
+
+%% @hidden
+begin_transmission_nif(_I2C, _Address) ->
+    erlang:nif_error(undefined).
+
+%% @hidden
+enqueue_write_bytes_nif(_I2C, _Bytes) ->
+    erlang:nif_error(undefined).
+
+%% @hidden
+end_transmission_nif(_I2C) ->
+    erlang:nif_error(undefined).

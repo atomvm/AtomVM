@@ -21,6 +21,7 @@
 set(AVM_BUILTIN_COMPONENT_SRCS
     "gpio_driver.c"
     "i2c_driver.c"
+    "i2c_resource.c"
     "ledc_nif.c"
     "network_driver.c"
     "nvs_nif.c"
