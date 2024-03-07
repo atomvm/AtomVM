@@ -111,6 +111,14 @@ extern "C" {
 
 #define TERM_FROM_ATOM_INDEX(atom_index) ((atom_index << 6) | 0xB)
 
+// 2^64 = 18446744073709551616 (20 chars)
+// "#Ref<0.0.0." ">\0" (13 chars)
+#define REF_AS_CSTRING_LEN 33
+
+// 2^32 = 4294967296 (10 chars)
+// "<0." ".0>\0" (7 chars)
+#define PID_AS_CSTRING_LEN 17
+
 #ifndef TYPEDEF_GLOBALCONTEXT
 #define TYPEDEF_GLOBALCONTEXT
 typedef struct GlobalContext GlobalContext;

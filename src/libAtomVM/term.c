@@ -189,7 +189,8 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
             return ret;
         }
     } else if (term_is_pid(t)) {
-        return fun->print(fun, "<0.%" PRIu32 ".0>", term_to_local_process_id(t));
+        int32_t process_id = term_to_local_process_id(t);
+        return fun->print(fun, "<0.%" PRIu32 ".0>", process_id);
 
     } else if (term_is_function(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
@@ -326,13 +327,10 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
         return ret;
 
     } else if (term_is_reference(t)) {
-        const char *format =
-#ifdef __clang__
-        "#Ref<0.0.0.%llu>";
-#else
-        "#Ref<0.0.0.%lu>";
-#endif
-        return fun->print(fun, format, term_to_ref_ticks(t));
+        uint64_t ref_ticks = term_to_ref_ticks(t);
+
+        // Update also REF_AS_CSTRING_LEN when changing this format string
+        return fun->print(fun, "#Ref<0.0.0.%" PRIu64 ">", ref_ticks);
 
     } else if (term_is_boxed_integer(t)) {
         int size = term_boxed_size(t);
