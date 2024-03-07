@@ -22,12 +22,21 @@
 #define _GNU_SOURCE
 #endif
 
-#include "nifs.h"
+// used to be required before C11 for PRI* format macros
+#ifndef __STDC_FORMAT_MACROS
+#define __STDC_FORMAT_MACROS
+#endif
+
+// stdio.h must be included before of inttypes.h to avoid a bug in newlib (observed on RPi 2040)
+// that makes PRIu64 unavailable
+#include <stdint.h>
+#include <stdio.h>
+
+#include <inttypes.h>
 
 #include <errno.h>
 #include <fenv.h>
 #include <math.h>
-#include <stdio.h>
 #include <string.h>
 #include <time.h>
 
@@ -55,6 +64,8 @@
 #include "term.h"
 #include "unicode.h"
 #include "utils.h"
+
+#include "nifs.h"
 
 #define MAX_NIF_NAME_LEN 260
 #define FLOAT_BUF_SIZE 64
@@ -3133,16 +3144,11 @@ static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[])
     term t = argv[0];
     VALIDATE_VALUE(t, term_is_reference);
 
-    const char *format =
-    #ifdef __clang__
-            "#Ref<0.0.0.%llu>";
-    #else
-            "#Ref<0.0.0.%lu>";
-    #endif
     // 2^64 = 18446744073709551616 (20 chars)
     // 12 chars of static text + '\0'
     char buf[33];
-    snprintf(buf, 33, format, term_to_ref_ticks(t));
+    uint64_t ref_ticks = term_to_ref_ticks(t);
+    snprintf(buf, 33, "#Ref<0.0.0.%" PRIu64 ">", ref_ticks);
 
     int str_len = strnlen(buf, 33);
 

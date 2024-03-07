@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.1] - Unreleased
 
+### Fixed
+
+- Fix bug in `erlang:ref_to_list/1`, the unique integer was truncated on some 32-bit architectures
+
 ## [0.6.0] - 2024-03-05
 
 ### Fixed
