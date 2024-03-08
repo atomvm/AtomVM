@@ -546,6 +546,26 @@ static inline int term_is_function(term t)
 }
 
 /**
+ * @brief Checks if a term is an external fun
+ *
+ * @details Returns true if a term is an external fun such as "fun m:f/a", otherwise false.
+ * @param t the term that will be checked.
+ * @return true if check succeeds, false otherwise.
+ */
+static inline bool term_is_external_fun(term t)
+{
+    if (term_is_function(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        term index_or_function = boxed_value[2];
+        if (term_is_atom(index_or_function)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * @brief Checks if a term is a saved CP
  *
  * @details Returns 1 if a term is a saved continuation pointer, otherwise 0.
