@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fix bug in `erlang:ref_to_list/1` and `erlang:display/1`: the unique integer was truncated on some
 32-bit architectures
+- Stop hardcoding `erl_eval` as module name in both display and fun_to_list
+- Correctly display and convert to list funs such as `fun m:f/a`
 
 ## [0.6.0] - 2024-03-05
 

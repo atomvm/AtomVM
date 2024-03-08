@@ -24,6 +24,7 @@
 #include "atom_table.h"
 #include "context.h"
 #include "interop.h"
+#include "module.h"
 #include "tempstack.h"
 
 #include <ctype.h>
@@ -194,15 +195,65 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
 
     } else if (term_is_function(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        Module *fun_module = (Module *) boxed_value[1];
-        uint32_t fun_index = boxed_value[2];
-        const char *format =
-        #ifdef __clang__
-                "#Fun<erl_eval.%lu.%llu>";
-        #else
-                "#Fun<erl_eval.%lu.%llu>";
-        #endif
-        return fun->print(fun, format, fun_index, (unsigned long) fun_module);
+
+        if (term_is_external_fun(t)) {
+            term module_atom = boxed_value[1];
+            term function_atom = boxed_value[2];
+            int arity = term_to_int(boxed_value[3]);
+
+            int module_atom_index = term_to_atom_index(module_atom);
+            size_t module_buf_len;
+            atom_ref_t module_atom_ref = atom_table_get_atom_ptr_and_len(
+                global->atom_table, module_atom_index, &module_buf_len);
+            char *module_name = malloc(module_buf_len);
+            if (IS_NULL_PTR(module_name)) {
+                return -1;
+            }
+            atom_table_write_bytes(
+                global->atom_table, module_atom_ref, module_buf_len, module_name);
+
+            int function_atom_index = term_to_atom_index(function_atom);
+            size_t function_buf_len;
+            atom_ref_t function_atom_ref = atom_table_get_atom_ptr_and_len(
+                global->atom_table, function_atom_index, &function_buf_len);
+            char *function_name = malloc(function_buf_len);
+            if (IS_NULL_PTR(function_name)) {
+                free(module_name);
+                return -1;
+            }
+            atom_table_write_bytes(
+                global->atom_table, function_atom_ref, function_buf_len, function_name);
+
+            // fun m:f/a
+            int ret = fun->print(fun, "fun %.*s:%.*s/%i", (int) module_buf_len, module_name,
+                (int) function_buf_len, function_name, arity);
+            free(module_name);
+            free(function_name);
+            return ret;
+
+        } else {
+            Module *fun_module = (Module *) boxed_value[1];
+
+            term module_name_atom = module_get_name(fun_module);
+            int atom_index = term_to_atom_index(module_name_atom);
+            size_t buf_len;
+            atom_ref_t atom_ref
+                = atom_table_get_atom_ptr_and_len(global->atom_table, atom_index, &buf_len);
+            char *module_name = malloc(buf_len);
+            if (IS_NULL_PTR(module_name)) {
+                return -1;
+            }
+            atom_table_write_bytes(global->atom_table, atom_ref, buf_len, module_name);
+
+            // this is not the same fun_index used on the BEAM, but it should be fine
+            uint32_t fun_index = boxed_value[2];
+
+            // TODO: last component is a uniq, we are temporarly using the memory address
+            int ret = fun->print(fun, "#Fun<%.*s.%" PRIu32 ".%" PRIuPTR ">", (int) buf_len,
+                module_name, fun_index, (uintptr_t) fun_module);
+            free(module_name);
+            return ret;
+        }
 
     } else if (term_is_tuple(t)) {
         int ret = fun->print(fun, "{");
