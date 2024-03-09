@@ -2272,16 +2272,7 @@ static term nif_erlang_integer_to_list_2(Context *ctx, int argc, term argv[])
     char integer_string[integer_string_len];
     lltoa(int_value, base, integer_string);
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, integer_string_len * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    term prev = term_nil();
-    for (int i = integer_string_len - 1; i >= 0; i--) {
-        prev = term_list_prepend(term_from_int11(integer_string[i]), prev, &ctx->heap);
-    }
-
-    return prev;
+    return make_list_from_ascii_buf((uint8_t *) integer_string, integer_string_len, ctx);
 }
 
 static int format_float(term value, int scientific, int decimals, int compact, char *out_buf, int outbuf_len)
@@ -2429,16 +2420,7 @@ static term nif_erlang_float_to_list(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, len * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    term prev = term_nil();
-    for (int i = len - 1; i >= 0; i--) {
-        prev = term_list_prepend(term_from_int11(float_buf[i]), prev, &ctx->heap);
-    }
-
-    return prev;
+    return make_list_from_ascii_buf((uint8_t *) float_buf, len, ctx);
 }
 
 static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
