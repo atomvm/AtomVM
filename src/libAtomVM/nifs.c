@@ -82,6 +82,7 @@ static NativeHandlerResult process_echo_mailbox(Context *ctx);
 static NativeHandlerResult process_console_mailbox(Context *ctx);
 
 static term make_list_from_utf8_buf(const uint8_t *buf, size_t buf_len, Context *ctx);
+static term make_list_from_ascii_buf(const uint8_t *buf, size_t len, Context *ctx);
 
 static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new);
 static term list_to_atom(Context *ctx, int argc, term argv[], int create_new);
@@ -3105,6 +3106,15 @@ static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])
     return term_from_int32(terms_count);
 }
 
+static term make_list_from_ascii_buf(const uint8_t *buf, size_t len, Context *ctx)
+{
+    if (UNLIKELY(memory_ensure_free_opt(ctx, len * CONS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return interop_bytes_to_list(buf, len, &ctx->heap);
+}
+
 static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -3119,15 +3129,7 @@ static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, str_len * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    term prev = term_nil();
-    for (int i = str_len - 1; i >= 0; i--) {
-        prev = term_list_prepend(term_from_int11(buf[i]), prev, &ctx->heap);
-    }
-    return prev;
+    return make_list_from_ascii_buf((uint8_t *) buf, str_len, ctx);
 }
 
 static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[])
@@ -3144,15 +3146,7 @@ static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, str_len * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    term prev = term_nil();
-    for (int i = str_len - 1; i >= 0; i--) {
-        prev = term_list_prepend(term_from_int11(buf[i]), prev, &ctx->heap);
-    }
-    return prev;
+    return make_list_from_ascii_buf((uint8_t *) buf, str_len, ctx);
 }
 
 static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[])
