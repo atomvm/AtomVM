@@ -81,6 +81,8 @@ static const char *const trace_receive_atom = "\xD" "trace_receive";
 static NativeHandlerResult process_echo_mailbox(Context *ctx);
 static NativeHandlerResult process_console_mailbox(Context *ctx);
 
+static term make_list_from_utf8_buf(const uint8_t *buf, size_t buf_len, Context *ctx);
+
 static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new);
 static term list_to_atom(Context *ctx, int argc, term argv[], int create_new);
 
@@ -2124,6 +2126,49 @@ static term nif_erlang_atom_to_binary_2(Context *ctx, int argc, term argv[])
     }
 }
 
+static term make_list_from_utf8_buf(const uint8_t *buf, size_t buf_len, Context *ctx)
+{
+    size_t u8len = unicode_buf_utf8_len(buf, buf_len);
+    bool is_latin1 = buf_len == u8len;
+
+    size_t list_len = is_latin1 ? buf_len : u8len;
+
+    if (UNLIKELY(
+            memory_ensure_free_opt(ctx, list_len * CONS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term prev = term_nil();
+
+    if (is_latin1) {
+        prev = interop_bytes_to_list(buf, buf_len, &ctx->heap);
+
+    } else {
+        uint32_t *codepoints = malloc(u8len * sizeof(uint32_t));
+        if (IS_NULL_PTR(codepoints)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        const uint8_t *u_in = buf;
+        for (size_t i = 0; i < u8len; i++) {
+            size_t codepoint_size;
+            enum UnicodeTransformDecodeResult result
+                = bitstring_utf8_decode(u_in, buf_len, &codepoints[i], &codepoint_size);
+            if (UNLIKELY((result != UnicodeTransformDecodeSuccess)
+                    || !unicode_is_valid_codepoint(codepoints[i]))) {
+                AVM_ABORT();
+            }
+            u_in += codepoint_size;
+        }
+
+        for (int i = u8len - 1; i >= 0; i--) {
+            prev = term_list_prepend(term_from_int(codepoints[i]), prev, &ctx->heap);
+        }
+        free(codepoints);
+    }
+
+    return prev;
+}
+
 static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -2145,50 +2190,9 @@ static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
 
     atom_table_write_bytes(ctx->global->atom_table, atom_ref, atom_len, atom_buf);
 
-    size_t u8len = unicode_buf_utf8_len((uint8_t *) atom_buf, atom_len);
-    bool is_latin1 = atom_len == u8len;
-
-    size_t list_len = is_latin1 ? atom_len : u8len;
-
-    if (UNLIKELY(
-            memory_ensure_free_opt(ctx, list_len * CONS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        free(atom_buf);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    term prev = term_nil();
-
-    if (is_latin1) {
-        for (int i = atom_len - 1; i >= 0; i--) {
-            char c = atom_buf[i];
-            prev = term_list_prepend(term_from_int11(c), prev, &ctx->heap);
-        }
-    } else {
-        uint32_t *codepoints = malloc(u8len * sizeof(uint32_t));
-        if (IS_NULL_PTR(codepoints)) {
-            free(atom_buf);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-        uint8_t *u_in = (uint8_t *) atom_buf;
-        for (size_t i = 0; i < u8len; i++) {
-            size_t codepoint_size;
-            enum UnicodeTransformDecodeResult result
-                = bitstring_utf8_decode(u_in, atom_len, &codepoints[i], &codepoint_size);
-            if (UNLIKELY((result != UnicodeTransformDecodeSuccess)
-                    || !unicode_is_valid_codepoint(codepoints[i]))) {
-                AVM_ABORT();
-            }
-            u_in += codepoint_size;
-        }
-
-        for (int i = u8len - 1; i >= 0; i--) {
-            prev = term_list_prepend(term_from_int(codepoints[i]), prev, &ctx->heap);
-        }
-        free(codepoints);
-    }
+    term ret = make_list_from_utf8_buf((uint8_t *) atom_buf, atom_len, ctx);
     free(atom_buf);
-
-    return prev;
+    return ret;
 }
 
 static size_t lltoa(avm_int64_t int_value, unsigned base, char *integer_string)
@@ -3182,13 +3186,13 @@ static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    term prev = term_nil();
-    for (int i = str_len - 1; i >= 0; i--) {
-        prev = term_list_prepend(term_from_int11(buf[i]), prev, &ctx->heap);
-    }
-    free(buf);
+    // it looks like unicode is not supported right now for module names but it looks like a
+    // compiler limitation rather than a BEAM limitation, so let's assume that one day they might
+    // be unicode.
+    term list = make_list_from_utf8_buf((uint8_t *) buf, str_len, ctx);
 
-    return prev;
+    free(buf);
+    return list;
 }
 
 static term nif_erlang_function_exported(Context *ctx, int argc, term argv[])
