@@ -79,6 +79,10 @@ static const char *const esp_largest_free_block_atom = "\x18" "esp32_largest_fre
 static const char *const esp_get_minimum_free_size_atom = "\x17" "esp32_minimum_free_size";
 static const char *const esp_chip_info_atom = "\xF" "esp32_chip_info";
 static const char *const esp_idf_version_atom = "\xF" "esp_idf_version";
+static const char *const esp_idf_semantic_atom = "\xF" "esp_idf_semantic";
+static const char *const esp_idf_major_atom = "\xD" "esp_idf_major";
+static const char *const esp_idf_minor_atom = "\xD" "esp_idf_minor";
+static const char *const esp_idf_patch_atom = "\xD" "esp_idf_patch";
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 3, 2)
 static const char *const esp32_atom = "\x5" "esp32";
 static const char *const esp32_s2_atom = "\x8" "esp32_s2";
@@ -543,6 +547,25 @@ term sys_get_info(Context *ctx, term key)
             return OUT_OF_MEMORY_ATOM;
         }
         return term_from_string((const uint8_t *) str, n, &ctx->heap);
+    }
+    if (key == globalcontext_make_atom(glb, esp_idf_semantic_atom)){
+        if (memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK) {
+            return OUT_OF_MEMORY_ATOM;
+        }
+        term semantic = term_alloc_tuple(3, &ctx->heap);
+        term_put_tuple_element(semantic, 0, term_from_int32(ESP_IDF_VERSION_MAJOR));
+        term_put_tuple_element(semantic, 1, term_from_int32(ESP_IDF_VERSION_MINOR));
+        term_put_tuple_element(semantic, 2, term_from_int32(ESP_IDF_VERSION_PATCH));
+        return semantic;
+    }
+    if (key == globalcontext_make_atom(glb, esp_idf_major_atom)){
+        return term_from_int32(ESP_IDF_VERSION_MAJOR);
+    }
+    if (key == globalcontext_make_atom(glb, esp_idf_minor_atom)){
+        return term_from_int32(ESP_IDF_VERSION_MINOR);
+    }
+    if (key == globalcontext_make_atom(glb, esp_idf_patch_atom)){
+        return term_from_int32(ESP_IDF_VERSION_PATCH);
     }
     return UNDEFINED_ATOM;
 }

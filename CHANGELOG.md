@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.1] - Unreleased
 
+### Added
+
+- ESP32: new keys for `erlang:system_info/1` to retrieve esp-idf semantic version info:
+  * `esp_idf_semantic` returns a tuple `{Major :: integer(), Minor :: integer(), Patch :: integer()}`
+  * `esp_idf_major`, `esp_idf_minor`, `esp_idf_patch` return individual integers
+
 ### Fixed
 
 - Fix bug in `erlang:ref_to_list/1`, the unique integer was truncated on some 32-bit architectures
