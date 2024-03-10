@@ -67,6 +67,9 @@ OTP. Since active mode is not supported right now, `active` must be explicitly s
 
 - Added experimental optimized GC mode that makes use of C realloc instead of copying data around,
 it can be enabled with `-DENABLE_REALLOC_GC=On`.
+- ESP32: new keys for `erlang:system_info/1` to retrieve esp-idf semantic version info:
+  * `esp_idf_semantic` returns a tuple `{Major :: integer(), Minor :: integer(), Patch :: integer()}`
+  * `esp_idf_major`, `esp_idf_minor`, `esp_idf_patch` return individual integers
 
 ### Fixed
 
