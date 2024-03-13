@@ -1066,6 +1066,10 @@ You can request ESP32-specific information using using the following input atoms
 * `esp_get_minimum_free_size` Returns the smallest ever free space available in the ESP32 heap since boot, this will tell you how close you have come to running out of free memory.
 * `esp_chip_info` Returns map of the form `#{features := Features, cores := Cores, revision := Revision, model := Model}`, where `Features` is a list of features enabled in the chip, from among the following atoms: `[emb_flash, bgn, ble, bt]`; `Cores` is the number of CPU cores on the chip; `Revision` is the chip version; and `Model` is one of the following atoms: `esp32`, `esp32_s2`, `esp32_s3`, `esp32_c3`.
 * `esp_idf_version` Return the IDF SDK version, as a string.
+* `esp_idf_semantic` Returns a tuple containing `{Major :: integer(), Minor :: integer(), Patch :: integer()}`.
+* `esp_idf_major` Returns the major version number as an integer.
+* `esp_idf_minor` Returns the minor version number as an integer.
+* `esp_idf_patch` Returns the patch version number as an integer.
 
 For example,
 
