@@ -527,11 +527,12 @@ static inline int term_is_reference(term t)
 }
 
 /**
- * @brief Checks if a term is a function
+ * @brief Checks if a term is a fun
  *
  * @details Returns 1 if a term is a fun, otherwise 0.
  * @param t the term that will be checked.
  * @return 1 if check succeeds, 0 otherwise.
+ * @deprecated renamed to term_is_fun.
  */
 static inline int term_is_function(term t)
 {
@@ -546,6 +547,19 @@ static inline int term_is_function(term t)
 }
 
 /**
+ * @brief Checks if a term is a fun
+ *
+ * @details Returns true if a term is a fun, otherwise false.
+ * @param t the term that will be checked.
+ * @return true if check succeeds, false otherwise.
+ */
+
+static inline bool term_is_fun(term t)
+{
+    return term_is_function(t) != 0;
+}
+
+/**
  * @brief Checks if a term is an external fun
  *
  * @details Returns true if a term is an external fun such as "fun m:f/a", otherwise false.
@@ -554,7 +568,7 @@ static inline int term_is_function(term t)
  */
 static inline bool term_is_external_fun(term t)
 {
-    if (term_is_function(t)) {
+    if (term_is_fun(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
         term index_or_function = boxed_value[2];
         if (term_is_atom(index_or_function)) {
