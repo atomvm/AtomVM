@@ -55,7 +55,8 @@ In addition, several features are supported specifically for integration with mi
 While the list of supported features is long and growing, the currently unsupported Erlang/OTP and BEAM features include (but are not limited to):
 
 * Bignums.  Integer values are restricted to 64-bit values.
-* Bit Syntax.  While packing and unpacking of arbitrary (but less than 64-) bit values is support, packing and unpacking of integer values at the start or end of a binary, or bordering binary packing or extraction must align on 8-bit boundaries.  Arbitrary bit length binaries are not currently supported.
+* Atoms. Atoms cannot be larger than 255 bytes (255 ascii characters) are not supported.
+* Bit Syntax.  While packing and unpacking of arbitrary (but less than 64-) bit values is supported, packing and unpacking of integer values at the start or end of a binary, or bordering binary packing or extraction must align on 8-bit boundaries.  Arbitrary bit length binaries are not currently supported.
 * The `epmd` and the `disterl` protocols are not supported.
 * There is no support for code hot swapping.
 * There is no support for a Read-Eval-Print-Loop. (REPL)
