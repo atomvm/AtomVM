@@ -36,8 +36,11 @@ extern "C" {
 #include <stdlib.h>
 
 /**
- * No-op macro: just syntax sugar for avoiding mistakes or clang-format dividing atoms in multiple
- * lines. Usage: ATOM_STR("\x5", "hello").
+ * @details no-op macro: just syntax sugar for avoiding mistakes or clang-format dividing atoms in multiple
+ * lines. Usage: ATOM_STR("\\x5", "hello").
+ *
+ * @param LENSTR must be less than 255 (\\xFF), to fit within a uint8.
+ * @param STR the string to be used as an atom.
  */
 #define ATOM_STR(LENSTR, STR) (LENSTR STR)
 
