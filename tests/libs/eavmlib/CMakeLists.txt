@@ -24,6 +24,7 @@ include(BuildErlang)
 
 set(ERLANG_MODULES
     test_file
+    test_ahttp_client
     test_port
     test_timer_manager
 )

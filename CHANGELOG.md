@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.3] - Unreleased
 
+### Added
+
+- Simple http client, that can be used for different use case such as downloading OTA updates
+
 ### Fixed
 
 - Fix bug (with code compiled with OTP-21) with binary pattern matching: the fix introduced with

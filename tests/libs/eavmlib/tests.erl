@@ -26,5 +26,6 @@ start() ->
     etest:test([
         test_file,
         test_port,
-        test_timer_manager
+        test_timer_manager,
+        test_ahttp_client
     ]).
