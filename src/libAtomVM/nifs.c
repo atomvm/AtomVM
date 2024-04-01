@@ -22,21 +22,12 @@
 #define _GNU_SOURCE
 #endif
 
-// used to be required before C11 for PRI* format macros
-#ifndef __STDC_FORMAT_MACROS
-#define __STDC_FORMAT_MACROS
-#endif
-
-// stdio.h must be included before of inttypes.h to avoid a bug in newlib (observed on RPi 2040)
-// that makes PRIu64 unavailable
-#include <stdint.h>
-#include <stdio.h>
-
-#include <inttypes.h>
+#include "nifs.h"
 
 #include <errno.h>
 #include <fenv.h>
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 
@@ -65,8 +56,6 @@
 #include "unicode.h"
 #include "utils.h"
 
-#include "nifs.h"
-
 #define MAX_NIF_NAME_LEN 260
 #define FLOAT_BUF_SIZE 64
 
@@ -91,6 +80,9 @@ static const char *const trace_receive_atom = "\xD" "trace_receive";
 
 static NativeHandlerResult process_echo_mailbox(Context *ctx);
 static NativeHandlerResult process_console_mailbox(Context *ctx);
+
+static term make_list_from_utf8_buf(const uint8_t *buf, size_t buf_len, Context *ctx);
+static term make_list_from_ascii_buf(const uint8_t *buf, size_t len, Context *ctx);
 
 static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new);
 static term list_to_atom(Context *ctx, int argc, term argv[], int create_new);
@@ -2135,6 +2127,49 @@ static term nif_erlang_atom_to_binary_2(Context *ctx, int argc, term argv[])
     }
 }
 
+static term make_list_from_utf8_buf(const uint8_t *buf, size_t buf_len, Context *ctx)
+{
+    size_t u8len = unicode_buf_utf8_len(buf, buf_len);
+    bool is_latin1 = buf_len == u8len;
+
+    size_t list_len = is_latin1 ? buf_len : u8len;
+
+    if (UNLIKELY(
+            memory_ensure_free_opt(ctx, list_len * CONS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term prev = term_nil();
+
+    if (is_latin1) {
+        prev = interop_bytes_to_list(buf, buf_len, &ctx->heap);
+
+    } else {
+        uint32_t *codepoints = malloc(u8len * sizeof(uint32_t));
+        if (IS_NULL_PTR(codepoints)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        const uint8_t *u_in = buf;
+        for (size_t i = 0; i < u8len; i++) {
+            size_t codepoint_size;
+            enum UnicodeTransformDecodeResult result
+                = bitstring_utf8_decode(u_in, buf_len, &codepoints[i], &codepoint_size);
+            if (UNLIKELY((result != UnicodeTransformDecodeSuccess)
+                    || !unicode_is_valid_codepoint(codepoints[i]))) {
+                AVM_ABORT();
+            }
+            u_in += codepoint_size;
+        }
+
+        for (int i = u8len - 1; i >= 0; i--) {
+            prev = term_list_prepend(term_from_int(codepoints[i]), prev, &ctx->heap);
+        }
+        free(codepoints);
+    }
+
+    return prev;
+}
+
 static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -2156,50 +2191,9 @@ static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
 
     atom_table_write_bytes(ctx->global->atom_table, atom_ref, atom_len, atom_buf);
 
-    size_t u8len = unicode_buf_utf8_len((uint8_t *) atom_buf, atom_len);
-    bool is_latin1 = atom_len == u8len;
-
-    size_t list_len = is_latin1 ? atom_len : u8len;
-
-    if (UNLIKELY(
-            memory_ensure_free_opt(ctx, list_len * CONS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        free(atom_buf);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    term prev = term_nil();
-
-    if (is_latin1) {
-        for (int i = atom_len - 1; i >= 0; i--) {
-            char c = atom_buf[i];
-            prev = term_list_prepend(term_from_int11(c), prev, &ctx->heap);
-        }
-    } else {
-        uint32_t *codepoints = malloc(u8len * sizeof(uint32_t));
-        if (IS_NULL_PTR(codepoints)) {
-            free(atom_buf);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-        uint8_t *u_in = (uint8_t *) atom_buf;
-        for (size_t i = 0; i < u8len; i++) {
-            size_t codepoint_size;
-            enum UnicodeTransformDecodeResult result
-                = bitstring_utf8_decode(u_in, atom_len, &codepoints[i], &codepoint_size);
-            if (UNLIKELY((result != UnicodeTransformDecodeSuccess)
-                    || !unicode_is_valid_codepoint(codepoints[i]))) {
-                AVM_ABORT();
-            }
-            u_in += codepoint_size;
-        }
-
-        for (int i = u8len - 1; i >= 0; i--) {
-            prev = term_list_prepend(term_from_int(codepoints[i]), prev, &ctx->heap);
-        }
-        free(codepoints);
-    }
+    term ret = make_list_from_utf8_buf((uint8_t *) atom_buf, atom_len, ctx);
     free(atom_buf);
-
-    return prev;
+    return ret;
 }
 
 static size_t lltoa(avm_int64_t int_value, unsigned base, char *integer_string)
@@ -2278,16 +2272,7 @@ static term nif_erlang_integer_to_list_2(Context *ctx, int argc, term argv[])
     char integer_string[integer_string_len];
     lltoa(int_value, base, integer_string);
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, integer_string_len * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    term prev = term_nil();
-    for (int i = integer_string_len - 1; i >= 0; i--) {
-        prev = term_list_prepend(term_from_int11(integer_string[i]), prev, &ctx->heap);
-    }
-
-    return prev;
+    return make_list_from_ascii_buf((uint8_t *) integer_string, integer_string_len, ctx);
 }
 
 static int format_float(term value, int scientific, int decimals, int compact, char *out_buf, int outbuf_len)
@@ -2435,16 +2420,7 @@ static term nif_erlang_float_to_list(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, len * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    term prev = term_nil();
-    for (int i = len - 1; i >= 0; i--) {
-        prev = term_list_prepend(term_from_int11(float_buf[i]), prev, &ctx->heap);
-    }
-
-    return prev;
+    return make_list_from_ascii_buf((uint8_t *) float_buf, len, ctx);
 }
 
 static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
@@ -3112,6 +3088,15 @@ static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])
     return term_from_int32(terms_count);
 }
 
+static term make_list_from_ascii_buf(const uint8_t *buf, size_t len, Context *ctx)
+{
+    if (UNLIKELY(memory_ensure_free_opt(ctx, len * CONS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return interop_bytes_to_list(buf, len, &ctx->heap);
+}
+
 static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -3119,22 +3104,14 @@ static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[])
     term t = argv[0];
     VALIDATE_VALUE(t, term_is_pid);
 
-    // 2^32 = 4294967296 (10 chars)
-    // 6 chars of static text + '\0'
-    char buf[17];
-    snprintf(buf, 17, "<0.%" PRIu32 ".0>", term_to_local_process_id(t));
-
-    int str_len = strnlen(buf, 17);
-
-    if (UNLIKELY(memory_ensure_free_opt(ctx, str_len * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    char buf[PID_AS_CSTRING_LEN];
+    int str_len = term_snprint(buf, PID_AS_CSTRING_LEN, t, ctx->global);
+    if (UNLIKELY(str_len < 0)) {
+        // TODO: change to internal error or something like that
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    term prev = term_nil();
-    for (int i = str_len - 1; i >= 0; i--) {
-        prev = term_list_prepend(term_from_int11(buf[i]), prev, &ctx->heap);
-    }
-    return prev;
+    return make_list_from_ascii_buf((uint8_t *) buf, str_len, ctx);
 }
 
 static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[])
@@ -3144,23 +3121,14 @@ static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[])
     term t = argv[0];
     VALIDATE_VALUE(t, term_is_reference);
 
-    // 2^64 = 18446744073709551616 (20 chars)
-    // 12 chars of static text + '\0'
-    char buf[33];
-    uint64_t ref_ticks = term_to_ref_ticks(t);
-    snprintf(buf, 33, "#Ref<0.0.0.%" PRIu64 ">", ref_ticks);
-
-    int str_len = strnlen(buf, 33);
-
-    if (UNLIKELY(memory_ensure_free_opt(ctx, str_len * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    char buf[REF_AS_CSTRING_LEN];
+    int str_len = term_snprint(buf, REF_AS_CSTRING_LEN, t, ctx->global);
+    if (UNLIKELY(str_len < 0)) {
+        // TODO: change to internal error or something like that
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    term prev = term_nil();
-    for (int i = str_len - 1; i >= 0; i--) {
-        prev = term_list_prepend(term_from_int11(buf[i]), prev, &ctx->heap);
-    }
-    return prev;
+    return make_list_from_ascii_buf((uint8_t *) buf, str_len, ctx);
 }
 
 static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[])
@@ -3170,32 +3138,37 @@ static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[])
     term t = argv[0];
     VALIDATE_VALUE(t, term_is_function);
 
-    const term *boxed_value = term_to_const_term_ptr(t);
-    Module *fun_module = (Module *) boxed_value[1];
-    uint32_t fun_index = boxed_value[2];
+    // when using NULL, required buffer size will be returned
+    int str_len = term_snprint(NULL, 0, t, ctx->global);
+    if (UNLIKELY(str_len < 0)) {
+        // TODO: change to internal error or something like that
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    int buf_len = str_len + 1;
 
-    // char-len(address) + char-len(32-bit-num) + 16 + '\0' = 47
-    // 20                  10
-    const char *format =
-    #ifdef __clang__
-            "#Fun<erl_eval.%lu.%llu>";
-    #else
-            "#Fun<erl_eval.%lu.%llu>";
-    #endif
-    char buf[47];
-    snprintf(buf, 47, format, fun_index, (unsigned long) fun_module);
-
-    int str_len = strnlen(buf, 47);
-
-    if (UNLIKELY(memory_ensure_free_opt(ctx, str_len * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    char *buf = malloc(buf_len);
+    if (IS_NULL_PTR(buf)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    int ret = term_snprint(buf, buf_len, t, ctx->global);
+    if (UNLIKELY(ret < 0)) {
+        // TODO: change to internal error or something like that
+        free(buf);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    term prev = term_nil();
-    for (int i = str_len - 1; i >= 0; i--) {
-        prev = term_list_prepend(term_from_int11(buf[i]), prev, &ctx->heap);
+    if (UNLIKELY(memory_ensure_free_opt(ctx, str_len * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        free(buf);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    return prev;
+
+    // it looks like unicode is not supported right now for module names but it looks like a
+    // compiler limitation rather than a BEAM limitation, so let's assume that one day they might
+    // be unicode.
+    term list = make_list_from_utf8_buf((uint8_t *) buf, str_len, ctx);
+
+    free(buf);
+    return list;
 }
 
 static term nif_erlang_function_exported(Context *ctx, int argc, term argv[])
