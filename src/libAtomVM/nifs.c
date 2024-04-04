@@ -39,6 +39,7 @@
 #include "context.h"
 #include "defaultatoms.h"
 #include "dictionary.h"
+#include "ets.h"
 #include "externalterm.h"
 #include "globalcontext.h"
 #include "interop.h"
@@ -146,6 +147,10 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[]);
 static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_throw(Context *ctx, int argc, term argv[]);
 static term nif_erlang_raise(Context *ctx, int argc, term argv[]);
+static term nif_ets_new(Context *ctx, int argc, term argv[]);
+static term nif_ets_insert(Context *ctx, int argc, term argv[]);
+static term nif_ets_lookup(Context *ctx, int argc, term argv[]);
+static term nif_ets_delete(Context *ctx, int argc, term argv[]);
 static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[]);
@@ -636,6 +641,30 @@ static const struct Nif raise_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_raise
+};
+
+static const struct Nif ets_new_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_ets_new
+};
+
+static const struct Nif ets_insert_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_ets_insert
+};
+
+static const struct Nif ets_lookup_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_ets_lookup
+};
+
+static const struct Nif ets_delete_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_ets_delete
 };
 
 static const struct Nif atomvm_add_avm_pack_binary_nif =
@@ -3087,6 +3116,128 @@ static term nif_erlang_raise(Context *ctx, int argc, term argv[])
     ctx->x[1] = argv[1];
     ctx->x[2] = term_nil();
     return term_invalid_term();
+}
+
+static term nif_ets_new(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term name = argv[0];
+    VALIDATE_VALUE(name, term_is_atom);
+
+    term options = argv[1];
+    VALIDATE_VALUE(options, term_is_list);
+
+    term is_named = interop_kv_get_value_default(options, ATOM_STR("\xB", "named_table"), FALSE_ATOM, ctx->global);
+    term keypos = interop_kv_get_value_default(options, ATOM_STR("\x6", "keypos"), term_from_int(1), ctx->global);
+
+    if (term_to_int(keypos) < 1) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    term private = interop_kv_get_value(options, ATOM_STR("\x7", "private"), ctx->global);
+    term public = interop_kv_get_value(options, ATOM_STR("\x6", "public"), ctx->global);
+
+    EtsAccessType access = EtsAccessProtected;
+    if (!term_is_invalid_term(private)) {
+        access = EtsAccessPrivate;
+    } else if (!term_is_invalid_term(public)) {
+        access = EtsAccessPublic;
+    }
+
+    term table = term_invalid_term();
+    EtsErrorCode result = ets_create_table(name, is_named == TRUE_ATOM, EtsTableSet, access, term_to_int(keypos) - 1, &table, ctx);
+    switch (result) {
+        case EtsOk:
+            return table;
+        case EtsTableNameInUse:
+            RAISE_ERROR(BADARG_ATOM);
+        case EtsAllocationFailure:
+            RAISE_ERROR(MEMORY_ATOM);
+        default:
+            AVM_ABORT();
+    }
+}
+
+static inline bool is_ets_table_id(term t)
+{
+    return term_is_reference(t) || term_is_atom(t);
+}
+
+static term nif_ets_insert(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term ref = argv[0];
+    VALIDATE_VALUE(ref, is_ets_table_id);
+
+    term entry = argv[1];
+    VALIDATE_VALUE(entry, term_is_tuple);
+    if (term_get_tuple_arity(entry) < 1) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    EtsErrorCode result = ets_insert(ref, entry, ctx);
+    switch (result) {
+        case EtsOk:
+            return TRUE_ATOM;
+        case EtsTableNotFound:
+        case EtsBadEntry:
+        case EtsPermissionDenied:
+            RAISE_ERROR(BADARG_ATOM);
+        case EtsAllocationFailure:
+            RAISE_ERROR(MEMORY_ATOM);
+        default:
+            AVM_ABORT();
+    }
+}
+
+static term nif_ets_lookup(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term ref = argv[0];
+    VALIDATE_VALUE(ref, is_ets_table_id);
+
+    term key = argv[1];
+
+    term ret = term_invalid_term();
+    EtsErrorCode result = ets_lookup(ref, key, &ret, ctx);
+    switch (result) {
+        case EtsOk:
+            return ret;
+        case EtsTableNotFound:
+        case EtsPermissionDenied:
+            RAISE_ERROR(BADARG_ATOM);
+        case EtsAllocationFailure:
+            RAISE_ERROR(MEMORY_ATOM);
+        default:
+            AVM_ABORT();
+    }
+}
+
+static term nif_ets_delete(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term ref = argv[0];
+    VALIDATE_VALUE(ref, is_ets_table_id);
+
+    term key = argv[1];
+
+    term ret = term_invalid_term();
+    EtsErrorCode result = ets_delete(ref, key, &ret, ctx);
+    switch (result) {
+        case EtsOk:
+            return ret;
+        case EtsTableNotFound:
+        case EtsPermissionDenied:
+            RAISE_ERROR(BADARG_ATOM);
+        case EtsAllocationFailure:
+            RAISE_ERROR(MEMORY_ATOM);
+        default:
+            AVM_ABORT();
+    }
 }
 
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])

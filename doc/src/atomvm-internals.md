@@ -257,6 +257,108 @@ The memory cost of this list is `num_line_refs * sizeof(struct LineRefOffset)`, 
 
 ### Raw Stacktraces
 
+TODO
+
+## ETS Tables
+
+AtomVM includes a very basic implementation of the OTP ETS interface, allowing applications to efficiently store term data in tables, and to access term data across processes.
+
+> For information about ETS tables from the user's perspective, see the AtomVM [Programmers Guide](programmers-guide.md).
+
+ETS tables are represented internally by the `EtsTable` structure, which records information about the table configured by the user (via `ets:new/2`), such as the table name, whether is it a named table, the access type (`private`, `protected`, or `public`), the key position, etc.
+
+ETS tables are uniquely identifiable via Erlang references, and generally this reference is returned as the "table identifier" when an ETS table is created (via `ets:new/2`).  ETS tables can also be referenced via their name, if they are designated as a "named table" in configuration.  Table identifiers are unique, and the ETS implementation also ensures that if tables are named, they are named uniquely.
+
+In addition, the `EtsTable` structure records the table type, which in the current implementation is limited to the `set` type.  Future versions may support alternative table types (`ordered_set`, `bag`, `duplicate_bag`).
+
+For the `set` table type, the `EtsTable` instantiates an `EtsHashTable`, a  hash table implementation with an array of buckets (to which keys hash), and for each bucket, a (possibly empty) linked list of `HNode` elements, where `HNode` in the list contains a reference to an AtomVM `Heap` (fragment).  Each `Heap` instance stores a copy of the tuple element that has been added to the table (via `ets:insert/2`).  The `HNode` also stores a `term` representing the key used to store the element, as well as a term representing the element, itself.  Note that the `key` and `entry` term fields refer to elements stored in the heap fragment referenced from the `HNode`, not terms in a process heap.
+
+When an element is inserted into the table or retrieved from the table (e.g., via `ets:lookup/2`), the `term` data is copied into or from, respectively, the `Heap` instance stored in the table.  The `Heap` instance in each entry is allocated to hold exactly the amount of data needed to store the `term`.  This `Heap` is owned by the `EtsHashTable`, in the sense that an instance is created when an entry is inserted into the table, and destroyed when an entry is deleted from the table.
+
+For more information about the `Heap` data structure, see the [Memory Management](memory-management.md) chapter of the AtomVM documentation.
+
+The relationship between an `EtsTable` and `EtsHashTable` and its elements is illustrated in the following "class" diagram (some elements are removed for the sake of brevity):
+
+    +--------------------+
+    | EtsTable           |
+    +--------------------+
+    | name               |
+    | is_named           |
+    | ref_ticks          |
+    | access_type        |
+    | keypos             |
+    | table_type         |
+    | ets_hashtable -----------> +-----------------+
+    | rw_lock            |       | EtsHashTable    |
+    +--------------------+       +-----------------+
+                                 | capacity        |
+                                 | count           |
+                                 | buckets ---------------> +-----------------------+
+                                 |                 |        |   | o |   ...     |   |
+                                 +-----------------+        +-----|-----------------+
+                                                                  |
+                                                                  v
+                                                                  +----------+   +----> +----------+
+                                                                  | HNode    |   |      | HNode    |
+                                                                  +----------+   |      +----------+
+                                                                  | next --------+      | next -------> ...
+                                                                  | key      |          | key      |
+                                                                  | entry    |          | entry    |
+                                                                  | heap --------+      | heap --------+
+                                                                  +----------+   |      +----------+   |
+                                                                                 |                     |
+                                                                                 +---> +----------+    +---> +----------+
+                                                                                       | Heap     |          | Heap     |
+                                                                                       +----------+          +----------+
+                                                                                       | ...      |          | ...      |
+                                                                                       +----------+          +----------+
+
+The `Ets` structure contains a `SyncList` of `EtsTable` structures, protected from concurrent access via a read-write lock.  A single instance of an `Ets` structure is stored in the `GlobalContext` structure.
+
+    +---------------+
+    | GlobalContext |
+    +---------------+
+    | ...           |
+    | ets ---------------> +------------+
+    | ...           |      | Ets        |
+    +---------------+      +------------+
+                           | ets_tables --------> +----------+   +---> +----------+
+                           +------------+         | EtsTable |   |     | EtsTable |
+                                                  +----------+   |     +----------+
+                                                  | next --------+     | next ------> ...
+                                                  +----------+         +----------+
+
+> Note.  A deficiency in this implementation is that lookup of an ETs table in this list is `O(<number of ETS tables>)`, whereas a "promise" of ETS is that insertion, lookup, and deletion of entries in at least the `set` table type is or should be constant (modulo poor hashing functions).  A future implementation of this data structure could use a map or table structure to make lookup of ETS tables more efficient (i.e., constant), but at the expense of i) increased memory consumption and heap fragmentation, and ii) code complexity.  Given the likely relative paucity of ETS tables instances likely to be instantiated by applications, we feel that using a list of ETS tables is an acceptable tradeoff for embedded systems deployments, but we are open to being wrong about our assumptions.
+
+### Ownership and Lookup
+
+An ETS table is conceptually "owned" by the Erlang process that creates it (via `ets:new/2`).  This generally means that:
+
+* The owning process has exclusive access for reading and writing entries in the table (unless the table is declared `public`, in which case other processes may change entries in the table, e.g., via `ets:insert/2` or `ets:delete/2`);
+* The lifecycle of the ETS table is associated with the lifecycle of the owning process, meaning that the ETS table is destroyed when the owning process terminates.  Note that any references to the ETS table are invalid once the table has been destroyed.
+
+> Note that AtomVM does not currently support transfer of ownership of an ETS table from one process to another.
+
+When a table is used in an `ets` operation (e.g., `ets:insert/2`, `ets:lookup/2`, `ets:delete/2`, etc), the `ets_tables` sync list is searched for the first entry in the table that matches the requested table id (as a name or reference).
+
+If the Erlang process that requests a table is the same process that owns the table, then the operation is permitted.  Otherwise, the access type on the table must be `public` in order for an operation that modifies the table (e.g., `ets:insert/2` or `ets:delete/2`) to be permitted, or `protected` in order for an operation that simply reads from the table (e.g., `ets:lookup/2`).
+
+### Key Hashing
+
+A "key" in an ETS table is an arbitrary term.  In order to insert, lookup, or delete a key in an `EtsHashTable`, we need a way to efficiently hash a key into a bucket, preferably without any memory allocation.
+
+The implementation of the `EtsHashTable` uses a variant of the [Character Folding](https://en.wikipedia.org/wiki/Hash_function#Character_folding) hash algorithm, using a collection of sufficiently large prime numbers for each Erlang term type (atom, integer, tuple, list, map, etc), and adapted to Erlang recursively structured terms.
+
+This algorithm resembles the term hashing algorithm in [OTP](https://github.com/erlang/otp/blob/cbd1378ee1fde835e55614bac9290b281bafe49a/erts/emulator/beam/utils.c#L644); however, for the purposes of the `EtsHashTable` implementation, the algorithm is not designed to be interoperable with the OTP implementation.  Future versions of AtomVM that, for example, implement the Erlang portable hash function ([`erlang:phash2/1,2`](https://www.erlang.org/doc/man/erlang#phash2-1)) can be adapted to use the OTP algorithm for this implementation.
+
+### Concurrency
+
+ETS tables are designed to be accessed concurrently from multiple Erlang processes.  Depending on how table are configured, they may be accessed concurrently for reads but serially for writes (typical), or in probably non-standard cases, concurrently for both reads and writes.
+
+The `ets_tables` sync list is protected by a read-write lock, so that multiple processes calling operations that read the list (e.g., for common `ets` operations like `ets:insert/1`, `ets:lookup/2`, or `ets:delete/2`) can do so concurrently, whereas operation that mutate this list (e.g., `ets:new/2` or termination of a process) are serialized with a write lock.
+
+When an `EtsTable` is retrieved from this list, before the read lock is released on the sync list, either a read or write lock is acquired on the `EtsTable`, depending on the operation being called.  For example, operations that change the state of the table, such as `ets:insert/2` or `ets:delete/2`, acquire a write lock, whereas operation that merely read table contents, such as `ets:lookup/2` acquire a read lock.  This way, a lock is held on the `EtsTable` before another thread might race to delete the table, which would otherwise render the reference to the `EtsTable` invalid, and likely crash the VM.
+
 ## AtomVM WebAssembly port
 
 WebAssembly or Wasm port of AtomVM relies on Emscripten SDK and library. Even when SMP is disabled (with `-DAVM_DISABLE_SMP=On`), it uses pthread library to sleep when Erlang processes are not running (to not waste CPU cycles).
