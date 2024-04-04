@@ -50,6 +50,10 @@ config AVM_ENABLE_I2C_PORT_DRIVER
     bool "Enable I2C port driver"
     default y
 
+config AVM_ENABLE_I2C_RESOURCE_NIFS
+    bool "Enable I2C resource Nifs"
+    default y
+
 config AVM_ENABLE_NETWORK_PORT_DRIVER
     bool "Enable network port driver"
     default y
