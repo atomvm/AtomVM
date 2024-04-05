@@ -28,27 +28,37 @@ concurrency:
 jobs:
   esp-idf:
     runs-on: ubuntu-latest
-    container: espressif/idf:v${{ matrix.idf-version }}
+    container: espressif/idf:${{ matrix.idf-version }}
 
     strategy:
       fail-fast: false
 
       matrix:
+        esp-idf-target: ["esp32", "esp32c3"]
         idf-version:
-        - '4.4.6'
-        - '5.0.6'
-        - '5.1.3'
+         - 'v4.4.7'
+         - 'v5.0.6'
+         - 'v5.1.3'
+         - 'v5.2.1'
 
+        exclude:
+        - esp-idf-target: "esp32c3"
+          idf-version: 'v4.4.7'
+        - esp-idf-target: "esp32c3"
+          idf-version: 'v5.0.6'
+        - esp-idf-target: "esp32c3"
+          idf-version: 'v5.1.3'
     steps:
     - name: Checkout repo
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Build with idf.py
       shell: bash
       working-directory: ./src/platforms/esp32/
       run: |
         . $IDF_PATH/export.sh
-        idf.py reconfigure
+        export IDF_TARGET=${{matrix.esp-idf-target}}
+        idf.py set-target ${{matrix.esp-idf-target}}
         idf.py build
         idf.py size
     - name: Print component size info with idf.py
@@ -65,34 +75,69 @@ jobs:
         DEBIAN_FRONTEND=noninteractive apt install -y -q \
             doxygen erlang-base erlang-dialyzer \
             libglib2.0-0 libpixman-1-0 \
-            gcc g++ zlib1g-dev
+            gcc g++ zlib1g-dev libsdl2-2.0-0 libslirp0 libmbedtls-dev
 
-    - name: Install qemu binary from espressif/qemu
-      if: matrix.idf-version != '5.1.3'
+    - name: Install qemu binary from espressif/qemu esp32
+      if: runner.arch != 'ARM64' && runner.os == 'Linux' && matrix.esp-idf-target == 'esp32'
       run: |
         set -eu
-        QEMU_VER=esp-develop-20220919
-        QEMU_DIST=qemu-${QEMU_VER}.tar.bz2
-        QEMU_SHA256=f6565d3f0d1e463a63a7f81aec94cce62df662bd42fc7606de4b4418ed55f870
-        wget --no-verbose https://github.com/espressif/qemu/releases/download/${QEMU_VER}/${QEMU_DIST}
-        echo "${QEMU_SHA256} *${QEMU_DIST}" | sha256sum --check --strict -
-        tar -xf ${QEMU_DIST} -C /opt
+        QEMU_VER=esp-develop-8.2.0-20240122
+        QEMU_XTENSA_DIST=qemu-xtensa-softmmu-esp_develop_8.2.0_20240122-x86_64-linux-gnu.tar.xz
+        QEMU_XTENSA_SHA256=e7c72ef5705ad1444d391711088c8717fc89f42e9bf6d1487f9c2a326b8cfa83
+        wget --no-verbose https://github.com/espressif/qemu/releases/download/${QEMU_VER}/${QEMU_XTENSA_DIST}
+        echo "${QEMU_XTENSA_SHA256} *${QEMU_XTENSA_DIST}" | sha256sum --check --strict -
+        tar -xf ${QEMU_XTENSA_DIST} -C /opt && rm ${QEMU_XTENSA_DIST}
+
+    - name: Install qemu binary from espressif/qemu esp32c3
+      if: runner.arch != 'ARM64' && runner.os == 'Linux' && matrix.esp-idf-target == 'esp32c3'
+      run: |
+        set -eu
+        QEMU_VER=esp-develop-8.2.0-20240122
+        QEMU_RISCV32_DIST=qemu-riscv32-softmmu-esp_develop_8.2.0_20240122-x86_64-linux-gnu.tar.xz
+        QEMU_RISCV32_SHA256=95ac86d7b53bf98b5ff19c33aa926189b849f5a0daf8f41e160bc86c5e31abd4
+        wget --no-verbose https://github.com/espressif/qemu/releases/download/${QEMU_VER}/${QEMU_RISCV32_DIST}
+        echo "${QEMU_RISCV32_SHA256} *${QEMU_RISCV32_DIST}" | sha256sum --check --strict -
+        tar -xf ${QEMU_RISCV32_DIST} -C /opt && rm ${QEMU_RISCV32_DIST}
+
+    - name: Install qemu binary from espressif/qemu ARM64 esp32
+      if: runner.arch == 'ARM64' && runner.os == 'Linux' && matrix.esp-idf-target == 'esp32'
+      run: |
+        set -eu
+        QEMU_VER=esp-develop-8.2.0-20240122
+        QEMU_XTENSA_DIST=qemu-xtensa-softmmu-esp_develop_8.2.0_20240122-aarch64-linux-gnu.tar.xz
+        QEMU_XTENSA_SHA256=77c83f2772f7d9b0c770722c2cebf3625d21d8eddbccfea6816f3d8f4982ea86
+        wget --no-verbose https://github.com/espressif/qemu/releases/download/${QEMU_VER}/${QEMU_XTENSA_DIST}
+        echo "${QEMU_XTENSA_SHA256} *${QEMU_XTENSA_DIST}" | sha256sum --check --strict -
+        tar -xf ${QEMU_XTENSA_DIST} -C /opt && rm ${QEMU_XTENSA_DIST}
+
+    - name: Install qemu binary from espressif/qemu ARM64 esp32c3
+      if: runner.arch == 'ARM64' && runner.os == 'Linux' && matrix.esp-idf-target == 'esp32c3'
+      run: |
+        set -eu
+        QEMU_VER=esp-develop-8.2.0-20240122
+        QEMU_RISCV32_DIST=qemu-riscv32-softmmu-esp_develop_8.2.0_20240122-aarch64-linux-gnu.tar.xz
+        QEMU_RISCV32_SHA256=4089f7958f753779e5b4c93fe2469d62850a1f209b0bda8b75d55fe4a61ca39b
+        wget --no-verbose https://github.com/espressif/qemu/releases/download/${QEMU_VER}/${QEMU_RISCV32_DIST}
+        echo "${QEMU_RISCV32_SHA256} *${QEMU_RISCV32_DIST}" | sha256sum --check --strict -
+        tar -xf ${QEMU_RISCV32_DIST} -C /opt && rm ${QEMU_RISCV32_DIST}
 
     - name: Install pytest and pytest-embedded plugins
       run: |
         set -e
         . $IDF_PATH/export.sh
-        pip install pytest==7.0.1 \
-            pytest-embedded==1.2.5 \
-            pytest-embedded-serial-esp==1.2.5 \
-            pytest-embedded-idf==1.2.5 \
-            pytest-embedded-qemu==1.2.5
+        pip install pytest==8.0.2 \
+            pytest-embedded==1.8.1 \
+            pytest-embedded-serial-esp==1.8.1 \
+            pytest-embedded-idf==1.8.1 \
+            pytest-embedded-qemu==1.8.1
 
     - name: Build ESP32 tests using idf.py
       working-directory: ./src/platforms/esp32/test/
       run: |
         set -e
         . $IDF_PATH/export.sh
+        export IDF_TARGET=${{matrix.esp-idf-target}}
+        idf.py set-target ${{matrix.esp-idf-target}}
         idf.py build
 
     - name: Run ESP32 tests using qemu
@@ -102,4 +147,4 @@ jobs:
         set -e
         . $IDF_PATH/export.sh
         export PATH=/opt/qemu/bin:${PATH}
-        pytest --embedded-services=idf,qemu -s
+        pytest --target=${{matrix.esp-idf-target}} --embedded-services=idf,qemu -s

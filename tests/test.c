@@ -526,8 +526,10 @@ struct Test tests[] = {
     TEST_CASE(twentyone_param_function),
     TEST_CASE(complex_list_match_xregs),
     TEST_CASE(twentyone_param_fun),
+    TEST_CASE(test_fun_to_list),
 
     TEST_CASE(test_ets),
+
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 
     { NULL, 0, false, false }

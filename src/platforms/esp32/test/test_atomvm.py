@@ -30,15 +30,25 @@ def create_sd_image():
     yield path
     os.unlink(path)
 
-@pytest.mark.parametrize(
-    'qemu_extra_args',
-    [
-        '-nic user,model=open_eth -drive file=sd_image.bin,if=sd,format=raw',
-    ],
-    indirect=True,
-)
+def pytest_generate_tests(metafunc):
+    option_value = metafunc.config.option.target
+    if option_value is None or option_value == 'esp32':
+        metafunc.parametrize(
+            'qemu_extra_args',
+            [
+                '-nic user,model=open_eth -drive file=sd_image.bin,if=sd,format=raw'
+            ],indirect=True
+        )
+    if option_value == 'esp32c3':
+        metafunc.parametrize(
+            'qemu_extra_args',
+            [
+                '-nic user,model=open_eth -drive file=qemu_esp32c3_efuse.bin,if=none,format=raw,id=efuse -global driver=nvram.esp32c3.efuse,property=drive,value=efuse'
+            ],indirect=True
+        )
+
 def test_atomvm(dut, redirect):
-     dut.expect_unity_test_output(timeout=120)
+     dut.expect_unity_test_output(timeout=180)
      assert len(dut.testsuite.testcases) > 0
      assert dut.testsuite.attrs['failures'] == 0
      assert dut.testsuite.attrs['errors'] == 0
