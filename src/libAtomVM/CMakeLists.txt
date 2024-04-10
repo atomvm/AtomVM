@@ -119,6 +119,10 @@ elseif (CMAKE_C_COMPILER_ID MATCHES "Clang")
     target_compile_options(libAtomVM PUBLIC -Wall --extra-warnings -Werror=incompatible-pointer-types ${MAYBE_WERROR_FLAG})
 endif()
 
+if (ENABLE_REALLOC_GC)
+    target_compile_definitions(libAtomVM PUBLIC ENABLE_REALLOC_GC)
+endif()
+
 # AtomVM options used in libAtomVM
 if (ADVANCED_TRACING)
     target_compile_definitions(libAtomVM PUBLIC ENABLE_ADVANCED_TRACE)

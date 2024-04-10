@@ -18,6 +18,7 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -41,9 +42,20 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
+#ifdef ENABLE_REALLOC_GC
+#define MEMORY_SHRINK memory_shrink
+#else
+#define MEMORY_SHRINK memory_gc
+#endif
+
 static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, const term *mem_end, term **new_heap_pos, term *mso_list, bool move);
 static term memory_shallow_copy_term(HeapFragment *old_fragment, term t, term **new_heap, bool move);
 static enum MemoryGCResult memory_gc(Context *ctx, size_t new_size, size_t num_roots, term *roots);
+#ifdef ENABLE_REALLOC_GC
+static enum MemoryGCResult memory_shrink(Context *ctx, size_t new_size, size_t num_roots, term *roots);
+static void memory_scan_and_rewrite(size_t count, term *terms, const term *old_start, const term *old_end, intptr_t delta, bool is_heap);
+static inline term *memory_rewrite_pointer(term *ptr, const term *old_start, const term *old_end, intptr_t delta);
+#endif
 
 enum MemoryGCResult memory_init_heap(Heap *heap, size_t size)
 {
@@ -63,6 +75,20 @@ void memory_init_heap_root_fragment(Heap *heap, HeapFragment *root, size_t size)
     heap->heap_start = root->storage;
     heap->heap_ptr = heap->heap_start;
     heap->heap_end = heap->heap_start + size;
+}
+
+static inline enum MemoryGCResult memory_realloc_heap_root(Heap *heap, size_t size)
+{
+    uintptr_t used_size = heap->heap_ptr - heap->heap_start;
+    HeapFragment *new_root = (HeapFragment *) realloc(heap->root, sizeof(HeapFragment) + size * sizeof(term));
+    if (IS_NULL_PTR(new_root)) {
+        return MEMORY_GC_ERROR_FAILED_ALLOCATION;
+    }
+    heap->root = new_root;
+    heap->heap_start = new_root->storage;
+    heap->heap_ptr = heap->heap_start + used_size;
+    heap->heap_end = heap->heap_start + size;
+    return MEMORY_GC_OK;
 }
 
 static inline enum MemoryGCResult memory_heap_alloc_new_fragment(Heap *heap, size_t size)
@@ -172,6 +198,9 @@ enum MemoryGCResult memory_ensure_free_with_roots(Context *c, size_t size, size_
                     UNREACHABLE();
             }
             target_size = MAX(c->has_min_heap_size ? c->min_heap_size : 0, target_size);
+            if (UNLIKELY(c->has_max_heap_size && (target_size > c->max_heap_size))) {
+                return MEMORY_GC_DENIED_ALLOCATION;
+            }
             if (target_size != memory_size) {
                 if (UNLIKELY(memory_gc(c, target_size, num_roots, roots) != MEMORY_GC_OK)) {
                     // TODO: handle this more gracefully
@@ -206,7 +235,7 @@ enum MemoryGCResult memory_ensure_free_with_roots(Context *c, size_t size, size_
                 if (should_gc) {
                     new_target_size = MAX(c->has_min_heap_size ? c->min_heap_size : 0, new_target_size);
                     if (new_target_size != new_memory_size) {
-                        if (UNLIKELY(memory_gc(c, new_target_size, num_roots, roots) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(MEMORY_SHRINK(c, new_target_size, num_roots, roots) != MEMORY_GC_OK)) {
                             TRACE("Unable to allocate memory for GC shrink.  new_memory_size=%zu new_free_space=%zu size=%u\n", new_memory_size, new_free_space, size);
                             return MEMORY_GC_ERROR_FAILED_ALLOCATION;
                         }
@@ -228,13 +257,6 @@ static inline void push_to_stack(term **stack, term value)
 static enum MemoryGCResult memory_gc(Context *ctx, size_t new_size, size_t num_roots, term *roots)
 {
     TRACE("Going to perform gc on process %i\n", ctx->process_id);
-    size_t min_heap_size = ctx->has_min_heap_size ? ctx->min_heap_size : 0;
-    new_size = MAX(new_size, min_heap_size);
-
-    if (UNLIKELY(ctx->has_max_heap_size && (new_size > ctx->max_heap_size))) {
-        return MEMORY_GC_DENIED_ALLOCATION;
-    }
-
     term old_mso_list = ctx->heap.root->mso_list;
     term *old_stack_ptr = context_stack_base(ctx);
     term *old_heap_end = ctx->heap.heap_end;
@@ -300,6 +322,80 @@ static enum MemoryGCResult memory_gc(Context *ctx, size_t new_size, size_t num_r
 
     return MEMORY_GC_OK;
 }
+
+#ifdef ENABLE_REALLOC_GC
+static enum MemoryGCResult memory_shrink(Context *ctx, size_t new_size, size_t num_roots, term *roots)
+{
+    TRACE("Going to perform shrink on process %i\n", ctx->process_id);
+
+    // First, move stack up.
+    term *old_stack_ptr = context_stack_base(ctx);
+    size_t stack_size = old_stack_ptr - ctx->e;
+    term *new_ctx_e = ctx->heap.heap_start + new_size - stack_size;
+    memmove(new_ctx_e, ctx->e, stack_size * sizeof(term));
+    ctx->e = new_ctx_e;
+
+    term *old_heap_root = ctx->heap.root->storage;
+    term *old_end = ctx->heap.heap_ptr;
+
+    if (UNLIKELY(memory_realloc_heap_root(&ctx->heap, new_size) != MEMORY_GC_OK)) {
+        return MEMORY_GC_ERROR_FAILED_ALLOCATION;
+    }
+
+    term *new_heap_root = ctx->heap.root->storage;
+    intptr_t delta = new_heap_root - old_heap_root;
+    ctx->e += delta;
+
+    if (delta == 0) {
+        return MEMORY_GC_OK;
+    }
+
+    // Rewrite all boxed pointers...
+    // ...in stack
+    memory_scan_and_rewrite(ctx->heap.heap_end - ctx->e, ctx->e, old_heap_root, old_end, delta, false);
+    // ...in heap
+    memory_scan_and_rewrite(old_end - old_heap_root, new_heap_root, old_heap_root, old_end, delta, true);
+    // ...in roots
+    memory_scan_and_rewrite(num_roots, roots, old_heap_root, old_end, delta, true);
+    // ...in process dictionary
+    struct ListHead *item;
+    LIST_FOR_EACH (item, &ctx->dictionary) {
+        struct DictEntry *entry = GET_LIST_ENTRY(item, struct DictEntry, head);
+        memory_scan_and_rewrite(2, &entry->key, old_heap_root, old_end, delta, true);
+    }
+    // ...in extended x registers
+    LIST_FOR_EACH (item, &ctx->extended_x_regs) {
+        struct ExtendedRegister *ext_reg = GET_LIST_ENTRY(item, struct ExtendedRegister, head);
+        memory_scan_and_rewrite(1, &ext_reg->value, old_heap_root, old_end, delta, true);
+    }
+    // ...exit_reason
+    memory_scan_and_rewrite(1, &ctx->exit_reason, old_heap_root, old_end, delta, true);
+    // ...and MSO list.
+    term *mso_ptr = &ctx->heap.root->mso_list;
+    while (!term_is_nil(*mso_ptr)) {
+        term *list_ptr = term_get_list_ptr(*mso_ptr);
+        term *new_list_ptr = memory_rewrite_pointer(list_ptr, old_heap_root, old_end, delta);
+        if (list_ptr != new_list_ptr) {
+            *mso_ptr = ((term) new_list_ptr) | 0x1;
+        }
+        // Process head.
+        term head = new_list_ptr[1];
+        if (UNLIKELY(!term_is_boxed(head))) {
+            fprintf(stderr, "Expected a boxed term, got %" TERM_X_FMT "\n", head);
+            AVM_ABORT();
+        }
+        term *boxed_ptr = term_to_term_ptr(head);
+        term *new_boxed_ptr = memory_rewrite_pointer(boxed_ptr, old_heap_root, old_end, delta);
+        if (boxed_ptr != new_boxed_ptr) {
+            new_list_ptr[1] = ((term) new_boxed_ptr) | TERM_BOXED_VALUE_TAG;
+        }
+        // Loop with tail.
+        mso_ptr = new_list_ptr;
+    }
+
+    return MEMORY_GC_OK;
+}
+#endif
 
 static inline int memory_is_moved_marker(term *t)
 {
@@ -580,6 +676,99 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
 
     *new_heap_pos = new_heap;
 }
+
+#ifdef ENABLE_REALLOC_GC
+static inline term *memory_rewrite_pointer(term *ptr, const term *old_start, const term *old_end, intptr_t delta)
+{
+    if (ptr >= old_start && ptr < old_end) {
+        return ptr + delta;
+    }
+    return ptr;
+}
+
+static void memory_scan_and_rewrite(size_t count, term *terms, const term *old_start, const term *old_end, intptr_t delta, bool is_heap)
+{
+    term *ptr = terms;
+    term *end = terms + count;
+    while (ptr < end) {
+        term t = *ptr++;
+        if (is_heap && (t & 0x3) == 0x0) {
+            switch (t & TERM_BOXED_TAG_MASK) {
+                case TERM_BOXED_TUPLE:
+                    // Skip header and process elements
+                    break;
+
+                case TERM_BOXED_BIN_MATCH_STATE: {
+                    // there is a boxed binary that needs to be rewritten and then it's integers.
+                    term binary_or_state = *ptr;
+                    if (UNLIKELY(!term_is_boxed(binary_or_state))) {
+                        fprintf(stderr, "Expected a boxed term, got %" TERM_X_FMT "\n", binary_or_state);
+                        AVM_ABORT();
+                    }
+                    term *boxed_ptr = term_to_term_ptr(binary_or_state);
+                    term *new_boxed_ptr = memory_rewrite_pointer(boxed_ptr, old_start, old_end, delta);
+                    if (boxed_ptr != new_boxed_ptr) {
+                        *ptr = ((term) new_boxed_ptr) | TERM_BOXED_VALUE_TAG;
+                    }
+                    ptr += term_get_size_from_boxed_header(t);
+                    break;
+                }
+
+                case TERM_BOXED_POSITIVE_INTEGER:
+                    ptr += term_get_size_from_boxed_header(t);
+                    break;
+
+                case TERM_BOXED_REF:
+                    ptr += term_get_size_from_boxed_header(t);
+                    break;
+
+                case TERM_BOXED_FUN:
+                    // Skip header and module and process next terms
+                    ptr++;
+                    break;
+
+                case TERM_BOXED_FLOAT:
+                    ptr += term_get_size_from_boxed_header(t);
+                    break;
+
+                case TERM_BOXED_REFC_BINARY:
+                    ptr += term_get_size_from_boxed_header(t);
+                    break;
+
+                case TERM_BOXED_SUB_BINARY:
+                    // Skip to binary
+                    ptr += 2;
+                    break;
+
+                case TERM_BOXED_HEAP_BINARY:
+                    ptr += term_get_size_from_boxed_header(t);
+                    break;
+
+                case TERM_BOXED_MAP:
+                    // Skip header and process next term
+                    break;
+
+                default:
+                    fprintf(stderr, "- Found unknown boxed type: %" TERM_X_FMT "\n", t & TERM_BOXED_TAG_MASK);
+                    AVM_ABORT();
+            }
+        } else if (term_is_nonempty_list(t)) {
+            term *list_ptr = term_get_list_ptr(t);
+            term *new_list_ptr = memory_rewrite_pointer(list_ptr, old_start, old_end, delta);
+            if (list_ptr != new_list_ptr) {
+                ptr[-1] = ((term) new_list_ptr) | 0x1;
+            }
+
+        } else if (term_is_boxed(t)) {
+            term *boxed_ptr = term_to_term_ptr(t);
+            term *new_boxed_ptr = memory_rewrite_pointer(boxed_ptr, old_start, old_end, delta);
+            if (boxed_ptr != new_boxed_ptr) {
+                ptr[-1] = ((term) new_boxed_ptr) | TERM_BOXED_VALUE_TAG;
+            }
+        }
+    }
+}
+#endif
 
 HOT_FUNC static inline bool memory_heap_fragment_contains_pointer(HeapFragment *old_fragment, term *ptr)
 {

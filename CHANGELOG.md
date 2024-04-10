@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.1] - Unreleased
 
+### Added
+
+- Added experimental optimized GC mode that makes use of C realloc instead of copying data around,
+it can be enabled with `-DENABLE_REALLOC_GC=On`.
+
 ### Fixed
 
 - Fix bug in `erlang:ref_to_list/1` and `erlang:display/1`: the unique integer was truncated on some
