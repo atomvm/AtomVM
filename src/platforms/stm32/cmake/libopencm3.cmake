@@ -184,7 +184,7 @@ macro(add_executable _name)
             ${bin} ALL
             COMMAND ${ARM_OBJCOPY} -Obinary ${elf_in} ${bin_out}
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-            DEPENDS ${elf}
+            DEPENDS ${elf_in}
         )
 
         message("------------Output Locations------------")

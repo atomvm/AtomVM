@@ -17,6 +17,7 @@ it can be enabled with `-DENABLE_REALLOC_GC=On`.
 32-bit architectures
 - Stop hardcoding `erl_eval` as module name in both display and fun_to_list
 - Correctly display and convert to list funs such as `fun m:f/a`
+- Fixed bug in STM32 cmake that could cause builds with multiple jobs to fail due to incorrect artifact dependency
 
 ## [0.6.0] - 2024-03-05
 
