@@ -295,8 +295,26 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 
 term sys_get_info(Context *ctx, term key)
 {
-    UNUSED(ctx);
-    UNUSED(key);
+    if (globalcontext_is_term_equal_to_atom_string(ctx->global, key, ATOM_STR("\x7", "os_type"))) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            return OUT_OF_MEMORY_ATOM;
+        }
+        term os = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(os, 0, globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "stm32")));
+        term_put_tuple_element(os, 1, globalcontext_make_atom(ctx->global, ATOM_STR("\x7", "opencm3")));
+
+        return os;
+    }
+    if (globalcontext_is_term_equal_to_atom_string(ctx->global, key, ATOM_STR("\xA", "os_version"))) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
+            return OUT_OF_MEMORY_ATOM;
+        }
+        term os_ver = term_alloc_tuple(3, &ctx->heap);
+        term_put_tuple_element(os_ver, 0, term_from_int32(OS_VERSION_MAJOR));
+        term_put_tuple_element(os_ver, 1, term_from_int32(OS_VERSION_MINOR));
+        term_put_tuple_element(os_ver, 2, term_from_int32(OS_VERSION_PATCH));
+        return os_ver;
+    }
     return UNDEFINED_ATOM;
 }
 
