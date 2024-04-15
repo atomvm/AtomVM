@@ -77,6 +77,7 @@ void memory_init_heap_root_fragment(Heap *heap, HeapFragment *root, size_t size)
     heap->heap_end = heap->heap_start + size;
 }
 
+#ifdef ENABLE_REALLOC_GC
 static inline enum MemoryGCResult memory_realloc_heap_root(Heap *heap, size_t size)
 {
     uintptr_t used_size = heap->heap_ptr - heap->heap_start;
@@ -90,6 +91,7 @@ static inline enum MemoryGCResult memory_realloc_heap_root(Heap *heap, size_t si
     heap->heap_end = heap->heap_start + size;
     return MEMORY_GC_OK;
 }
+#endif
 
 static inline enum MemoryGCResult memory_heap_alloc_new_fragment(Heap *heap, size_t size)
 {
