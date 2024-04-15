@@ -45,12 +45,15 @@
 #include "sys_mbedtls.h"
 #endif
 
+#include <ctype.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/time.h>
+#include <sys/utsname.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -550,8 +553,67 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 
 term sys_get_info(Context *ctx, term key)
 {
-    UNUSED(ctx);
-    UNUSED(key);
+    if (globalcontext_is_term_equal_to_atom_string(ctx->global, key, ATOM_STR("\x7", "os_type"))) {
+        struct utsname buf;
+        errno = 0;
+        if (UNLIKELY(uname(&buf) != 0)) {
+            return ERROR_ATOM;
+        }
+
+        const char *sys_name;
+
+        if (strcmp(buf.sysname, "Linux") == 0) {
+            sys_name = ATOM_STR("\x5", "linux");
+        } else if (strcmp(buf.sysname, "Darwin") == 0) {
+            sys_name = ATOM_STR("\x6", "darwin");
+        } else if (strcmp(buf.sysname, "FreeBSD") == 0) {
+            sys_name = ATOM_STR("\x7", "freebsd");
+        } else if (strcmp(buf.sysname, "NetBSB") == 0) {
+            sys_name = ATOM_STR("\x7", "netbsd");
+        } else if (strcmp(buf.sysname, "OpenBSB") == 0) {
+            sys_name = ATOM_STR("\x7", "openbsd");
+        } else if (strcmp(buf.sysname, "Firefly") == 0) {
+            sys_name = ATOM_STR("\x7", "firefly");
+        } else {
+            sys_name = ATOM_STR("\x7", "unknown");
+        }
+
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            return OUT_OF_MEMORY_ATOM;
+        }
+        term os = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(os, 0, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "unix")));
+        term_put_tuple_element(os, 1, globalcontext_make_atom(ctx->global, sys_name));
+        return os;
+    }
+    if (globalcontext_is_term_equal_to_atom_string(ctx->global, key, ATOM_STR("\xA", "os_version"))) {
+        struct utsname buf;
+        char *p;
+        int ver[3] = { 0 };
+        int i = 0;
+
+        errno = 0;
+        if (UNLIKELY(uname(&buf) != 0)) {
+            return ERROR_ATOM;
+        }
+        p = buf.release;
+        while ((*p) && i < 3) {
+            if (isdigit(*p)) {
+                ver[i] = strtol(p, &p, 10);
+                i++;
+            } else {
+                p++;
+            }
+        }
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
+            return OUT_OF_MEMORY_ATOM;
+        }
+        term os_ver = term_alloc_tuple(3, &ctx->heap);
+        term_put_tuple_element(os_ver, 0, term_from_int(ver[0]));
+        term_put_tuple_element(os_ver, 1, term_from_int(ver[1]));
+        term_put_tuple_element(os_ver, 2, term_from_int(ver[2]));
+        return os_ver;
+    }
     return UNDEFINED_ATOM;
 }
 
