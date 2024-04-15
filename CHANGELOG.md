@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for setting channel used by network driver wifi access point.
 - Support for `maps:iterator/2` and `~kp` with `io_lib:format/2` that were introduced with OTP26.
 - Support for `erlang:apply/2`
+- Added support for `erlang:system_info/1` keys `os_type` and `os_version`.
 
 ### Changed
 
@@ -67,9 +68,6 @@ OTP. Since active mode is not supported right now, `active` must be explicitly s
 
 - Added experimental optimized GC mode that makes use of C realloc instead of copying data around,
 it can be enabled with `-DENABLE_REALLOC_GC=On`.
-- ESP32: new keys for `erlang:system_info/1` to retrieve esp-idf semantic version info:
-  * `esp_idf_semantic` returns a tuple `{Major :: integer(), Minor :: integer(), Patch :: integer()}`
-  * `esp_idf_major`, `esp_idf_minor`, `esp_idf_patch` return individual integers
 
 ### Fixed
 

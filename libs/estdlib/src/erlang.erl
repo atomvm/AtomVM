@@ -248,6 +248,8 @@ process_info(_Pid, _Key) ->
 %%
 %% The following keys are supported on all platforms:
 %% <ul>
+%%      <li><b>os_type</b> tuple containing `{Osfamily :: atom(), Osname (or IDE) :: atom()}'</li>
+%%      <li><b>os_version</b> operating system sematic version `{Major :: integer(), Minor :: integer(), Patch :: integer()}'</li>
 %%      <li><b>process_count</b> the number of processes running in the node (integer)</li>
 %%      <li><b>port_count</b> the number of ports running in the node (integer)</li>
 %%      <li><b>atom_count</b> the number of atoms currently allocated (integer)</li>

@@ -612,6 +612,8 @@ For more information about Erlang external term format, consult the [Erlang Docu
 
 You can obtain system information about the AtomVM virtual machine via the [`erlang:system_info/1`](./apidocs/erlang/estdlib/erlang.md#system_info1) function, which takes an atom parameter designating the desired datum.  Allowable parameters include
 
+* `os_type` The operating system or runtime environment.
+* `os_version` The sematic version of the currently running operating system or runtime environment.
 * `process_count` The number of processes running in the system.
 * `port_count` The number of ports running in the system.
 * `atom_count` The number of atoms allocated in the system.
@@ -1067,10 +1069,6 @@ You can request ESP32-specific information using using the following input atoms
 * `esp32_minimum_free_size` Returns the smallest ever free space available in the ESP32 heap since boot, this will tell you how close you have come to running out of free memory.
 * `esp32_chip_info` Returns map of the form `#{features := Features, cores := Cores, revision := Revision, model := Model}`, where `Features` is a list of features enabled in the chip, from among the following atoms: `[emb_flash, bgn, ble, bt]`; `Cores` is the number of CPU cores on the chip; `Revision` is the chip version; and `Model` is one of the following atoms: `esp32`, `esp32_s2`, `esp32_s3`, `esp32_c3`, etc.
 * `esp_idf_version` Return the IDF SDK version, as a string.
-* `esp_idf_semantic` Returns a tuple containing `{Major :: integer(), Minor :: integer(), Patch :: integer()}`.
-* `esp_idf_major` Returns the major version number as an integer.
-* `esp_idf_minor` Returns the minor version number as an integer.
-* `esp_idf_patch` Returns the patch version number as an integer.
 
 For example,
 
