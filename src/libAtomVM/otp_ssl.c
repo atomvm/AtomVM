@@ -39,6 +39,10 @@
 #include <mbedtls/entropy.h>
 #include <mbedtls/ssl.h>
 
+#if defined(MBEDTLS_PSA_CRYPTO_C)
+#include <psa/crypto.h>
+#endif
+
 // #define ENABLE_TRACE
 #include <trace.h>
 
@@ -300,6 +304,14 @@ static term nif_ssl_init(Context *ctx, int argc, term argv[])
     enif_release_resource(rsrc_obj);
 
     mbedtls_ssl_init(&rsrc_obj->context);
+
+#if defined(MBEDTLS_PSA_CRYPTO_C)
+    psa_status_t status = psa_crypto_init();
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        AVM_LOGW(TAG, "Failed to initialize PSA %s:%i.\n", __FILE__, __LINE__);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+#endif
 
     return obj;
 }
