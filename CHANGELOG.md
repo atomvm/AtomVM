@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.6.1] - Unreleased
+## [0.6.1] - 2024-04-17
 
 ### Added
 
@@ -18,6 +18,8 @@ it can be enabled with `-DENABLE_REALLOC_GC=On`.
 - Stop hardcoding `erl_eval` as module name in both display and fun_to_list
 - Correctly display and convert to list funs such as `fun m:f/a`
 - Fixed bug in STM32 cmake that could cause builds with multiple jobs to fail due to incorrect artifact dependency
+- Fix crash on macOS due to missing call to `psa_crypto_init` for TLS 1.3
+- Fix crypto test on rp2040
 
 ## [0.6.0] - 2024-03-05
 
