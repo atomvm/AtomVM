@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added guards `is_even` and `is_odd` to the `Integer` module
 - Add a number of functions to proplists module, such as `delete/2`, `from/to_map/1`, etc...
 - Add `esp:deep_sleep_enable_gpio_wakeup/2` to allow wakeup from deep sleep for ESP32C3 and ESP32C6.
+- Obtain RSSI of the current connection with `network:sta_rssi/0` on ESP32.
 
 ### Fixed
 

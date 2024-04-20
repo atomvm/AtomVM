@@ -99,6 +99,8 @@ case network:wait_for_sta(Config, 15000) of
 end
 ```
 
+To obtain the signal strength (in decibels) of the connection to the associated access point use [`network:sta_rssi/0`](./apidocs/erlang/eavmlib/network.md#sta_rssi0).
+
 ## AP mode
 
 In AP mode, the ESP32 starts a WiFi network to which other devices (laptops, mobile devices, other ESP32 devices, etc) can connect.  The ESP32 will create an IPv4 network, and will assign itself the address `192.168.4.1`.  Devices that attach to the ESP32 in AP mode will be assigned sequential addresses in the `192.168.4.0/24` range, e.g., `192.168.4.2`, `192.168.4.3`, etc.
