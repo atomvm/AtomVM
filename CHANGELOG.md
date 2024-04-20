@@ -37,6 +37,8 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 - Support for directory listing using POSIX APIs: (`atomvm:posix_opendir/1`,
 `atomvm:posix_readdir/1`, `atomvm:posix_closedir/1`).
 - ESP32: add support for `esp_adc` ADC driver, with Erlang and Elixir examples
+- Add handler for ESP32 network driver STA mode `beacon_timeout` (event: 21), see issue
+[#1100](https://github.com/atomvm/AtomVM/issues/1100)
 
 ### Changed
 

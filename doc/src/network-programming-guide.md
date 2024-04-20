@@ -46,6 +46,7 @@ Callback functions are optional, but are highly recommended for building robust 
 In addition, the following optional parameters can be specified to configure the AP network (ESP32 only):
 
 * `{dhcp_hostname, string()|binary()}` The DHCP hostname as which the device should register (`<<"atomvm-<hexmac>">>`, where `<hexmac>` is the hexadecimal representation of the factory-assigned MAC address of the device).
+* `{beacon_timeout, fun(() -> term())}` A callback function which will be called when the device does not receive a beacon frame from the connected access point during the "inactive time" (6 second default, currently not configurable).
 
 The following example illustrates initialization of the WiFi network in STA mode.  The example program will configure the network to connect to a specified network.  Events that occur during the lifecycle of the network will trigger invocations of the specified callback functions.
 

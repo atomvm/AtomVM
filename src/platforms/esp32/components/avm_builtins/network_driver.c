@@ -76,6 +76,7 @@ static const char *const ssid_atom = ATOM_STR("\x4", "ssid");
 static const char *const ssid_hidden_atom = ATOM_STR("\xB", "ssid_hidden");
 static const char *const sta_atom = ATOM_STR("\x3", "sta");
 static const char *const sta_connected_atom = ATOM_STR("\xD", "sta_connected");
+static const char *const sta_beacon_timeout_atom = ATOM_STR("\x12", "sta_beacon_timeout");
 static const char *const sta_disconnected_atom = ATOM_STR("\x10", "sta_disconnected");
 static const char *const sta_got_ip_atom = ATOM_STR("\xA", "sta_got_ip");
 
@@ -164,6 +165,18 @@ static void send_sta_connected(struct ClientData *data)
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
     {
         send_term(&heap, data, make_atom(data->global, sta_connected_atom));
+    }
+    END_WITH_STACK_HEAP(heap, data->global);
+}
+
+static void send_sta_beacon_timeout(struct ClientData *data)
+{
+    TRACE("Sending sta_beacon_timeout back to AtomVM\n");
+
+    // {Ref, sta_beacon_timeout}
+    BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
+    {
+        send_term(&heap, data, make_atom(data->global, sta_beacon_timeout_atom));
     }
     END_WITH_STACK_HEAP(heap, data->global);
 }
@@ -303,6 +316,12 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
                 break;
             }
 #endif
+
+            case WIFI_EVENT_STA_BEACON_TIMEOUT: {
+                ESP_LOGI(TAG, "WIFI_EVENT_STA_BEACON_TIMEOUT received. Maybe poor signal, or network congestion?");
+                send_sta_beacon_timeout(data);
+                break;
+            }
 
             default:
                 ESP_LOGI(TAG, "Unhandled wifi event: %" PRIi32 ".", event_id);
