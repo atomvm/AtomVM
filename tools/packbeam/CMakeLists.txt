@@ -39,7 +39,8 @@ endif (ZLIB_FOUND)
 
 if((${CMAKE_SYSTEM_NAME} STREQUAL "Darwin") OR
    (${CMAKE_SYSTEM_NAME} STREQUAL "Linux") OR
-   (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD"))
+   (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD") OR
+   (${CMAKE_SYSTEM_NAME} STREQUAL "DragonFly"))
     target_include_directories(PackBEAM PRIVATE ../../src/platforms/generic_unix/lib)
 else()
     message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_NAME}")

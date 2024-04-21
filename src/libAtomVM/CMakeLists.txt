@@ -218,7 +218,10 @@ if(AVM_CREATE_STACKTRACES)
 endif()
 
 # Automatically use zlib if present to load .beam files
-if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin" OR ${CMAKE_SYSTEM_NAME} STREQUAL "Linux" OR ${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
+if ((${CMAKE_SYSTEM_NAME} STREQUAL "Darwin") OR
+    (${CMAKE_SYSTEM_NAME} STREQUAL "Linux") OR
+    (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD") OR
+    (${CMAKE_SYSTEM_NAME} STREQUAL "DragonFly"))
     find_package(ZLIB)
     if (ZLIB_FOUND)
         target_compile_definitions(libAtomVM PRIVATE WITH_ZLIB)
