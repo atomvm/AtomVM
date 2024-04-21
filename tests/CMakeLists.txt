@@ -69,7 +69,8 @@ set(
 
 if((${CMAKE_SYSTEM_NAME} STREQUAL "Darwin") OR
    (${CMAKE_SYSTEM_NAME} STREQUAL "Linux") OR
-   (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD"))
+   (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD") OR
+   (${CMAKE_SYSTEM_NAME} STREQUAL "DragonFly"))
     target_include_directories(test-erlang PRIVATE ../src/platforms/generic_unix/lib)
     target_include_directories(test-enif PRIVATE ../src/platforms/generic_unix/lib)
     target_include_directories(test-mailbox PRIVATE ../src/platforms/generic_unix/lib)
