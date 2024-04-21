@@ -92,12 +92,14 @@ enum network_cmd
     NetworkInvalidCmd = 0,
     // TODO add support for scan, ifconfig
     NetworkStartCmd,
-    NetworkRssiCmd
+    NetworkRssiCmd,
+    NetworkStopCmd
 };
 
 static const AtomStringIntPair cmd_table[] = {
     { ATOM_STR("\x5", "start"), NetworkStartCmd },
     { ATOM_STR("\x4", "rssi"), NetworkRssiCmd },
+    { ATOM_STR("\x4", "stop"), NetworkStopCmd },
     SELECT_INT_DEFAULT(NetworkInvalidCmd)
 };
 
@@ -779,10 +781,49 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     if (!IS_NULL_PTR(ap_wifi_config)) {
         set_dhcp_hostname(ap_wifi_interface, "AP", interop_kv_get_value(ap_config, dhcp_hostname_atom, ctx->global));
     }
+
     //
     // Done -- send an ok so the FSM can proceed
     //
     port_send_reply(ctx, pid, ref, OK_ATOM);
+}
+
+static void stop_network(Context *ctx)
+{
+    // Stop unregister event callbacks so they dont trigger during shutdown.
+    esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler);
+
+    esp_netif_t *sta_wifi_interface = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    esp_netif_t *ap_wifi_interface = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+
+    // Disconnect STA if connected to access point
+    if ((sta_wifi_interface != NULL) && (esp_netif_is_netif_up(sta_wifi_interface))) {
+        esp_err_t err = esp_wifi_disconnect();
+        if (UNLIKELY(err == ESP_FAIL)) {
+            ESP_LOGE(TAG, "ESP FAIL error while disconnecting from AP, continuing network shutdown...");
+        }
+    }
+
+    // Stop and deinit the WiFi driver, these only return OK, or not init error (fine to ignore).
+    esp_wifi_stop();
+    esp_wifi_deinit();
+
+    // Stop sntp (ignore OK, or not configured error)
+    esp_sntp_stop();
+
+    // Delete network event loop
+    esp_err_t err = esp_event_loop_delete_default();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Invalid state error while deleting event loop, continuing network shutdown...");
+    }
+
+    // Destroy existing netif interfaces
+    if (ap_wifi_interface != NULL) {
+        esp_netif_destroy_default_wifi(ap_wifi_interface);
+    }
+    if (sta_wifi_interface != NULL) {
+        esp_netif_destroy_default_wifi(sta_wifi_interface);
+    }
 }
 
 static void get_sta_rssi(Context *ctx, term pid, term ref)
@@ -805,11 +846,11 @@ static void get_sta_rssi(Context *ctx, term pid, term ref)
     port_ensure_available(ctx, tuple_reply_size);
     term reply = port_create_tuple2(ctx, make_atom(ctx->global, ATOM_STR("\x4", "rssi")), rssi);
     port_send_reply(ctx, pid, ref, reply);
-
 }
 
 static NativeHandlerResult consume_mailbox(Context *ctx)
 {
+    bool cmd_terminate = false;
     Message *message = mailbox_first(&ctx->mailbox);
     term msg = message->message;
 
@@ -842,6 +883,10 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
             case NetworkRssiCmd:
                 get_sta_rssi(ctx, pid, ref);
                 break;
+            case NetworkStopCmd:
+                cmd_terminate = true;
+                stop_network(ctx);
+                break;
 
             default: {
                 ESP_LOGE(TAG, "Unrecognized command: %x", cmd);
@@ -868,7 +913,7 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
 
     mailbox_remove_message(&ctx->mailbox, &ctx->heap);
 
-    return NativeContinue;
+    return cmd_terminate ? NativeTerminate : NativeContinue;
 }
 
 //

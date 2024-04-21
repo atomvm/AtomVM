@@ -386,6 +386,8 @@ handle_info(Msg, State) ->
 
 %% @hidden
 terminate(_Reason, _State) ->
+    Ref = make_ref(),
+    network_port ! {?SERVER, Ref, stop},
     ok.
 
 %%
