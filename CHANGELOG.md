@@ -57,6 +57,8 @@ instead
 - General inspect() compliance with Elixir behavior (but there are still some minor differences)
 - Fix several uses of free on prevously released memory on ESP32, under certain error condition using
 `network:start/1`, that would lead to a hard crash of the VM.
+- Fix a bug in ESP32 network driver where the low level driver was not being stopped and resoureces were not freed
+when `network:stop/0` was used, see issue [#643](https://github.com/atomvm/AtomVM/issues/643)
 
 ## [0.6.4] - 2024-08-18
 
