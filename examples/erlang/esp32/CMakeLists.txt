@@ -23,6 +23,7 @@ project(examples_erlang_esp32)
 include(BuildErlang)
 
 pack_runnable(blink blink eavmlib estdlib)
+pack_runnable(blink_led_strip blink_led_strip eavmlib estdlib)
 pack_runnable(deep_sleep deep_sleep eavmlib estdlib)
 pack_runnable(morse_server morse_server estdlib eavmlib)
 pack_runnable(ap_sta_network ap_sta_network eavmlib estdlib)
