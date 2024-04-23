@@ -23,7 +23,11 @@
 
 start() ->
     Sysinfo = erlang:system_info(esp32_chip_info),
-    Model = maps:get(model, Sysinfo),
+    Model =
+        if
+            is_map(Sysinfo) -> maps:get(model, Sysinfo);
+            true -> undefined
+        end,
     ok = test_hash(),
     ok = test_crypto_one_time(),
     ok = test_available_ciphers(Model),

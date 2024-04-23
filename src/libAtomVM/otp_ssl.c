@@ -39,6 +39,10 @@
 #include <mbedtls/entropy.h>
 #include <mbedtls/ssl.h>
 
+#if defined(MBEDTLS_PSA_CRYPTO_C)
+#include <psa/crypto.h>
+#endif
+
 // #define ENABLE_TRACE
 #include <trace.h>
 
@@ -103,14 +107,15 @@ static void ctrdrbg_dtor(ErlNifEnv *caller_env, void *obj)
     UNUSED(caller_env);
 
     struct CtrDrbgResource *rsrc_obj = (struct CtrDrbgResource *) obj;
-    // Release the entropy
+    // Release the drbg first
+    mbedtls_ctr_drbg_free(&rsrc_obj->context);
+    // Eventually release the entropy
     mbedtls_entropy_context *entropy_context = rsrc_obj->context.MBEDTLS_PRIVATE(p_entropy);
     if (entropy_context) {
         struct EntropyContextResource *entropy_obj = CONTAINER_OF(entropy_context, struct EntropyContextResource, context);
         struct RefcBinary *entropy_refc = refc_binary_from_data(entropy_obj);
         refc_binary_decrement_refcount(entropy_refc, caller_env->global);
     }
-    mbedtls_ctr_drbg_free(&rsrc_obj->context);
 }
 
 static void sslcontext_dtor(ErlNifEnv *caller_env, void *obj)
@@ -119,14 +124,15 @@ static void sslcontext_dtor(ErlNifEnv *caller_env, void *obj)
     UNUSED(caller_env);
 
     struct SSLContextResource *rsrc_obj = (struct SSLContextResource *) obj;
-    // Release the config
+    // Free the context first
+    mbedtls_ssl_free(&rsrc_obj->context);
+    // Eventually release the config
     const mbedtls_ssl_config *config = rsrc_obj->context.MBEDTLS_PRIVATE(conf);
     if (config) {
         struct SSLConfigResource *config_obj = CONTAINER_OF(config, struct SSLConfigResource, config);
         struct RefcBinary *config_refc = refc_binary_from_data(config_obj);
         refc_binary_decrement_refcount(config_refc, caller_env->global);
     }
-    mbedtls_ssl_free(&rsrc_obj->context);
 }
 
 static void sslconfig_dtor(ErlNifEnv *caller_env, void *obj)
@@ -300,6 +306,14 @@ static term nif_ssl_init(Context *ctx, int argc, term argv[])
     enif_release_resource(rsrc_obj);
 
     mbedtls_ssl_init(&rsrc_obj->context);
+
+#if defined(MBEDTLS_PSA_CRYPTO_C)
+    psa_status_t status = psa_crypto_init();
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        AVM_LOGW(TAG, "Failed to initialize PSA %s:%i.\n", __FILE__, __LINE__);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+#endif
 
     return obj;
 }

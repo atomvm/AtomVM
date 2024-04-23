@@ -123,6 +123,10 @@ elseif (CMAKE_C_COMPILER_ID MATCHES "Clang")
     target_compile_options(libAtomVM PUBLIC -Wall --extra-warnings -Werror=incompatible-pointer-types ${MAYBE_WERROR_FLAG})
 endif()
 
+if (ENABLE_REALLOC_GC)
+    target_compile_definitions(libAtomVM PUBLIC ENABLE_REALLOC_GC)
+endif()
+
 # AtomVM options used in libAtomVM
 if (ADVANCED_TRACING)
     target_compile_definitions(libAtomVM PUBLIC ENABLE_ADVANCED_TRACE)
@@ -218,7 +222,10 @@ if(AVM_CREATE_STACKTRACES)
 endif()
 
 # Automatically use zlib if present to load .beam files
-if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin" OR ${CMAKE_SYSTEM_NAME} STREQUAL "Linux" OR ${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
+if ((${CMAKE_SYSTEM_NAME} STREQUAL "Darwin") OR
+    (${CMAKE_SYSTEM_NAME} STREQUAL "Linux") OR
+    (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD") OR
+    (${CMAKE_SYSTEM_NAME} STREQUAL "DragonFly"))
     find_package(ZLIB)
     if (ZLIB_FOUND)
         target_compile_definitions(libAtomVM PRIVATE WITH_ZLIB)

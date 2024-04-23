@@ -13,6 +13,7 @@ on:
       - 'CMakeLists.txt'
       - 'libs/**'
       - 'src/platforms/rp2040/**'
+      - 'src/platforms/esp32/test/main/test_erl_sources/test_crypto.erl'
       - 'src/libAtomVM/**'
   pull_request:
     paths:
@@ -20,6 +21,7 @@ on:
       - 'CMakeLists.txt'
       - 'libs/**'
       - 'src/platforms/rp2040/**'
+      - 'src/platforms/esp32/test/main/test_erl_sources/test_crypto.erl'
       - 'src/libAtomVM/**'
 
 permissions:

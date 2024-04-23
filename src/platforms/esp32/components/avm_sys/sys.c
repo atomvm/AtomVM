@@ -799,16 +799,12 @@ term esp_err_to_term(GlobalContext *glb, esp_err_t status)
 
 int sys_mbedtls_entropy_func(void *entropy, unsigned char *buf, size_t size)
 {
-#ifndef MBEDTLS_THREADING_C
-#ifndef AVM_NO_SMP
+#if !defined(MBEDTLS_THREADING_C) && !defined(AVM_NO_SMP)
     struct ESP32PlatformData *platform
         = CONTAINER_OF(entropy, struct ESP32PlatformData, entropy_ctx);
     SMP_MUTEX_LOCK(platform->entropy_mutex);
-#endif
     int result = mbedtls_entropy_func(entropy, buf, size);
-#ifndef AVM_NO_SMP
     SMP_MUTEX_UNLOCK(platform->entropy_mutex);
-#endif
 
     return result;
 #else

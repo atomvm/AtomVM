@@ -81,7 +81,7 @@ The `src` directory is broken up into the core platform-independent AtomVM libra
 
 ## Building for Generic UNIX
 
-The following instructions apply to unix-like environments, including Linux, FreeBSD, and MacOS.
+The following instructions apply to unix-like environments, including Linux, FreeBSD, DragonFly and MacOS.
 
 ```{hint}
 The Generic UNIX is useful for running and testing simple AtomVM programs.  Not all of the AtomVM

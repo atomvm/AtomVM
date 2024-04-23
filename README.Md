@@ -15,7 +15,7 @@ AtomVM implements from scratch a minimal Erlang VM that supports a subset of Erl
 Supported Platforms
 ===================
 
-* Linux, macOS, FreeBSD ([generic unix](src/platforms/generic_unix))
+* Linux, macOS, FreeBSD, DragonFly ([generic unix](src/platforms/generic_unix))
 * ESP32 SoC (with IDF/FreeRTOS, see [README.ESP32.Md](README.ESP32.Md))
 * STM32 MCUs (with LibOpenCM3, see [README.STM32.Md](README.STM32.Md))
 * Raspberry Pi Pico (see [README.PICO.Md](README.PICO.Md))
@@ -79,7 +79,7 @@ $ ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
 
 Complete [Build Instructions](https://www.atomvm.net/doc/main/build-instructions.html) are
 available in the documentation for
-[Generic UNIX](https://www.atomvm.net/doc/main/build-instructions.html) (Linux, MacOS, FreeBSD),
+[Generic UNIX](https://www.atomvm.net/doc/main/build-instructions.html) (Linux, MacOS, FreeBSD, DragonFly),
 [ESP32](https://www.atomvm.net/doc/main/build-instructions.html#building-for-esp32),
 [STM32](https://www.atomvm.net/doc/main/build-instructions.html#building-for-stm32),
 [Raspberry Pi Pico](https://www.atomvm.net/doc/main/build-instructions.html#building-for-raspberry-pi-pico)

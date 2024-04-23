@@ -62,3 +62,7 @@ file(COPY ${CMAKE_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/flash.sh
     FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
 )
 
+if (NOT EXISTS ../../../../build/libs/esp32boot/esp32boot.avm)
+    message(WARNING "A generic_unix build must be done first in the top level AtomVM/build directory! \n\
+    Consult https://www.atomvm.net/doc/main/build-instructions.html for build instructions.")
+endif()

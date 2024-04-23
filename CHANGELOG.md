@@ -9,7 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added a limited implementation of the OTP `ets` interface
 
-## [0.6.1] - Unreleased
+## [0.6.2] - Unreleased
+
+### Added
+
+- Support for DragonFly BSD (generic_unix platform).
+
+### Fixed
+
+- Fix invalid read after free in ssl code, see also issue
+[#1115](https://github.com/atomvm/AtomVM/issues/1115).
+
+## [0.6.1] - 2024-04-17
+
+### Added
+
+- Added experimental optimized GC mode that makes use of C realloc instead of copying data around,
+it can be enabled with `-DENABLE_REALLOC_GC=On`.
 
 ### Fixed
 
@@ -17,6 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 32-bit architectures
 - Stop hardcoding `erl_eval` as module name in both display and fun_to_list
 - Correctly display and convert to list funs such as `fun m:f/a`
+- Fixed bug in STM32 cmake that could cause builds with multiple jobs to fail due to incorrect artifact dependency
+- Fix crash on macOS due to missing call to `psa_crypto_init` for TLS 1.3
+- Fix crypto test on rp2040
 
 ## [0.6.0] - 2024-03-05
 
