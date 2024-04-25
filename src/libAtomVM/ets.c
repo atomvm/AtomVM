@@ -25,6 +25,7 @@
 #include "ets_hashtable.h"
 #include "list.h"
 #include "memory.h"
+#include "term.h"
 
 #ifndef AVM_NO_SMP
 #define SMP_RDLOCK(table) smp_rwlock_rdlock(table->lock)
@@ -313,7 +314,7 @@ EtsErrorCode ets_lookup(term ref, term key, term *ret, Context *ctx)
     } else {
 
         size_t size = (size_t) memory_estimate_usage(res);
-        // alocate [object]
+        // allocate [object]
         if (UNLIKELY(memory_ensure_free_opt(ctx, size + CONS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             SMP_UNLOCK(ets_table);
             return EtsAllocationFailure;
@@ -321,6 +322,47 @@ EtsErrorCode ets_lookup(term ref, term key, term *ret, Context *ctx)
         term new_res = memory_copy_term_tree(&ctx->heap, res);
         *ret = term_list_prepend(new_res, term_nil(), &ctx->heap);
     }
+    SMP_UNLOCK(ets_table);
+
+    return EtsOk;
+}
+
+EtsErrorCode ets_lookup_element(term ref, term key, size_t pos, term *ret, Context *ctx)
+{
+    if (UNLIKELY(pos == 0)) {
+        return EtsBadPosition;
+    }
+
+    struct EtsTable *ets_table = term_is_atom(ref) ? ets_get_table_by_name(&ctx->global->ets, ref, TableAccessRead) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(ref), TableAccessRead);
+    if (ets_table == NULL) {
+        return EtsTableNotFound;
+    }
+
+    if (ets_table->access_type == EtsAccessPrivate && ets_table->owner_process_id != ctx->process_id) {
+        SMP_UNLOCK(ets_table);
+        return EtsPermissionDenied;
+    }
+
+    term entry = ets_hashtable_lookup(ets_table->hashtable, key, ets_table->keypos, ctx->global);
+
+    if (term_is_nil(entry)) {
+        SMP_UNLOCK(ets_table);
+        return EtsEntryNotFound;
+    }
+
+    if ((size_t) term_get_tuple_arity(entry) < pos) {
+        SMP_UNLOCK(ets_table);
+        return EtsBadPosition;
+    }
+
+    term res = term_get_tuple_element(entry, pos - 1);
+    size_t size = (size_t) memory_estimate_usage(res);
+    // allocate [object]
+    if (UNLIKELY(memory_ensure_free_opt(ctx, size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        SMP_UNLOCK(ets_table);
+        return EtsAllocationFailure;
+    }
+    *ret = memory_copy_term_tree(&ctx->heap, res);
     SMP_UNLOCK(ets_table);
 
     return EtsOk;
