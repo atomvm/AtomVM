@@ -55,7 +55,9 @@ typedef enum EtsErrorCode
     EtsTableNameInUse,
     EtsPermissionDenied,
     EtsBadEntry,
-    EtsAllocationFailure
+    EtsAllocationFailure,
+    EtsEntryNotFound,
+    EtsBadPosition
 } EtsErrorCode;
 struct Ets
 {
@@ -73,6 +75,7 @@ void ets_delete_owned_tables(struct Ets *ets, int32_t process_id, GlobalContext 
 
 EtsErrorCode ets_insert(term ref, term entry, Context *ctx);
 EtsErrorCode ets_lookup(term ref, term key, term *ret, Context *ctx);
+EtsErrorCode ets_lookup_element(term ref, term key, size_t pos, term *ret, Context *ctx);
 EtsErrorCode ets_delete(term ref, term key, term *ret, Context *ctx);
 
 #ifdef __cplusplus

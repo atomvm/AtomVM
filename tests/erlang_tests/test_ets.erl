@@ -30,6 +30,7 @@ start() ->
     ok = test_private_access(),
     ok = test_protected_access(),
     ok = test_public_access(),
+    ok = test_lookup_element(),
 
     0.
 
@@ -341,3 +342,13 @@ echo(Term) ->
         T ->
             T
     end.
+
+test_lookup_element() ->
+    Tid = ets:new(test_lookup_element, []),
+    true = ets:insert(Tid, {foo, tapas}),
+    foo = ets:lookup_element(Tid, foo, 1),
+    tapas = ets:lookup_element(Tid, foo, 2),
+    expect_failure(fun() -> ets:lookup_element(Tid, bar, 1) end),
+    expect_failure(fun() -> ets:lookup_element(Tid, foo, 3) end),
+    expect_failure(fun() -> ets:lookup_element(Tid, foo, 0) end),
+    ok.

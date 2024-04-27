@@ -153,6 +153,7 @@ static term nif_erlang_raise(Context *ctx, int argc, term argv[]);
 static term nif_ets_new(Context *ctx, int argc, term argv[]);
 static term nif_ets_insert(Context *ctx, int argc, term argv[]);
 static term nif_ets_lookup(Context *ctx, int argc, term argv[]);
+static term nif_ets_lookup_element(Context *ctx, int argc, term argv[]);
 static term nif_ets_delete(Context *ctx, int argc, term argv[]);
 static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
@@ -662,6 +663,12 @@ static const struct Nif ets_lookup_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ets_lookup
+};
+
+static const struct Nif ets_lookup_element_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_ets_lookup_element
 };
 
 static const struct Nif ets_delete_nif =
@@ -3193,6 +3200,34 @@ static term nif_ets_lookup(Context *ctx, int argc, term argv[])
     switch (result) {
         case EtsOk:
             return ret;
+        case EtsTableNotFound:
+        case EtsPermissionDenied:
+            RAISE_ERROR(BADARG_ATOM);
+        case EtsAllocationFailure:
+            RAISE_ERROR(MEMORY_ATOM);
+        default:
+            AVM_ABORT();
+    }
+}
+
+static term nif_ets_lookup_element(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term ref = argv[0];
+    VALIDATE_VALUE(ref, is_ets_table_id);
+
+    term key = argv[1];
+    term pos = argv[2];
+    VALIDATE_VALUE(pos, term_is_integer);
+
+    term ret = term_invalid_term();
+    EtsErrorCode result = ets_lookup_element(ref, key, term_to_int(pos), &ret, ctx);
+    switch (result) {
+        case EtsOk:
+            return ret;
+        case EtsEntryNotFound:
+        case EtsBadPosition:
         case EtsTableNotFound:
         case EtsPermissionDenied:
             RAISE_ERROR(BADARG_ATOM);
