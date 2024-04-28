@@ -37,7 +37,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: ["macos-13"]
+        os: ["macos-13", "macos-14"]
         otp: ["24", "25", "26"]
 
     steps:
@@ -68,19 +68,19 @@ jobs:
     - name: "Build: run cmake"
       working-directory: build
       run: |
-        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
+        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:/opt/homebrew/opt/erlang@${{ matrix.otp }}/bin:$PATH"
         cmake -DAVM_WARNINGS_ARE_ERRORS=ON -G Ninja ..
 
     - name: "Build: run ninja"
       working-directory: build
       run: |
-        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
+        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:/opt/homebrew/opt/erlang@${{ matrix.otp }}/bin:$PATH"
         ninja
 
     - name: "Build: run dialyzer"
       working-directory: build
       run: |
-        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
+        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:/opt/homebrew/opt/erlang@${{ matrix.otp }}/bin:$PATH"
         ninja dialyzer
 
     # Test
@@ -127,7 +127,7 @@ jobs:
     - name: "Install and smoke test"
       working-directory: build
       run: |
-        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:$PATH"
+        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:/opt/homebrew/opt/erlang@${{ matrix.otp }}/bin:$PATH"
         sudo ninja install
         atomvm examples/erlang/hello_world.avm
         atomvm -v
