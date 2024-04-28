@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Support for DragonFly BSD (generic_unix platform).
 - Added guards `is_even` and `is_odd` to the `Integer` module
+- Add a number of functions to proplists module, such as `delete/2`, `from/to_map/1`, etc...
 
 ### Fixed
 
