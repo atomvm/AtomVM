@@ -54,6 +54,7 @@ option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
 option(AVM_WAIT_FOR_USB_CONNECT "Wait for USB connection before starting" OFF)
 option(AVM_WAIT_BOOTSEL_ON_EXIT "Wait in BOOTSEL rather than shutdown on exit" ON)
 option(AVM_REBOOT_ON_NOT_OK "Reboot Pico if result is not ok" OFF)
+option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 
 set(AVM_DISABLE_TASK_DRIVER ON FORCE)
 
