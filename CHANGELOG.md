@@ -14,11 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Support for DragonFly BSD (generic_unix platform).
+- Added guards `is_even` and `is_odd` to the `Integer` module
 
 ### Fixed
 
 - Fix invalid read after free in ssl code, see also issue
 [#1115](https://github.com/atomvm/AtomVM/issues/1115).
+
+### Changed
+- Stacktraces are included by default on Pico devices.
 
 ## [0.6.1] - 2024-04-17
 

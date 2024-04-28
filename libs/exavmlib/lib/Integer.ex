@@ -25,6 +25,12 @@ defmodule Integer do
   This is not a full implementation of the Elixir Integer module.
   """
 
+  import Bitwise
+
+  defguard is_odd(integer) when is_integer(integer) and (integer &&& 1) == 1
+
+  defguard is_even(integer) when is_integer(integer) and (integer &&& 1) == 0
+
   def floor_div(dividend, divisor) do
     if dividend * divisor < 0 and rem(dividend, divisor) != 0 do
       div(dividend, divisor) - 1
