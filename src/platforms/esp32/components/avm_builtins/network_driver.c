@@ -744,7 +744,6 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         if ((err = esp_wifi_set_config(ESP_IF_WIFI_AP, ap_wifi_config)) != ESP_OK) {
             ESP_LOGE(TAG, "Error setting AP mode config %d", err);
             free(ap_wifi_config);
-            free(sta_wifi_config);
             term error = port_create_error_tuple(ctx, term_from_int(err));
             port_send_reply(ctx, pid, ref, error);
             return;
@@ -753,12 +752,14 @@ static void start_network(Context *ctx, term pid, term ref, term config)
             free(ap_wifi_config);
         }
     }
+
+    //
+    // Start the configured interface(s)
+    //
     if ((err = esp_wifi_start()) != ESP_OK) {
         ESP_LOGE(TAG, "Error in esp_wifi_start %d", err);
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
-        free(ap_wifi_config);
-        free(sta_wifi_config);
         return;
     } else {
         ESP_LOGI(TAG, "WIFI started");

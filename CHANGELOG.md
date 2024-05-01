@@ -31,6 +31,8 @@ in ESP-IDF Kconfig options.
 - Fix creation of multiple links for the same process and not removing link at trapped exits.
 See issue [#1193](https://github.com/atomvm/AtomVM/issues/1193).
 - Fix error that is raised when a function is undefined
+- Fix several uses of free on prevously released memory on ESP32, under certain error condition using
+`network:start/1`, that would lead to a hard crash of the VM.
 
 ## [0.6.2] - 25-05-2024
 
