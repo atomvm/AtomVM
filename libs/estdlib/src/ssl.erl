@@ -216,6 +216,8 @@ process_options(SSLContext, SSLConfig, [{verify, verify_none} | Tail]) ->
     process_options(SSLContext, SSLConfig, Tail);
 process_options(SSLContext, SSLConfig, [{binary, true} | Tail]) ->
     process_options(SSLContext, SSLConfig, Tail);
+process_options(SSLContext, SSLConfig, [binary | Tail]) ->
+    process_options(SSLContext, SSLConfig, Tail);
 process_options(SSLContext, SSLConfig, [{active, false} | Tail]) ->
     process_options(SSLContext, SSLConfig, Tail).
 
