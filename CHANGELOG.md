@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Stacktraces are included by default on Pico devices.
+- Changed ssl default from `{active, false}` to `{active, true}` in order to have same behavior as
+OTP. Since active mode is not supported right now, `active` must be explicitly set to false:
+`ssl:connect(..., ..., [{active, false}, ...])`, otherwise it will crash.
 
 ## [0.6.1] - 2024-04-17
 
