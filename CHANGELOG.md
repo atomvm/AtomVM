@@ -55,6 +55,8 @@ instead
 - `unicode:characters_to_list`: fixed bogus out_of_memory error on some platforms such as ESP32
 - Fix crash in Elixir library when doing `inspect(:atom)`
 - General inspect() compliance with Elixir behavior (but there are still some minor differences)
+- Fix several uses of free on prevously released memory on ESP32, under certain error condition using
+`network:start/1`, that would lead to a hard crash of the VM.
 
 ## [0.6.4] - 2024-08-18
 
