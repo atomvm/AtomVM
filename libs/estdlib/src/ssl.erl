@@ -283,22 +283,26 @@ send({SSLContext, Socket} = SSLSocket, Binary) ->
 
 -spec recv(Socket :: sslsocket(), Length :: non_neg_integer()) -> ok | {error, reason()}.
 recv(SSLSocket, Length) ->
-    recv0(SSLSocket, Length, []).
+    recv0(SSLSocket, Length, Length, []).
 
-recv0(_SSLSocket, 0, Acc) ->
+recv0(_SSLSocket, Length, 0, Acc) when Length > 0 ->
+    % We were called with Length > 0 and all bytes have been returned
     {ok, list_to_binary(lists:reverse(Acc))};
-recv0({SSLContext, Socket} = SSLSocket, Remaining, Acc) ->
+recv0(_SSLSocket, 0, Remaining, Acc) when Remaining < 0 ->
+    % We were called with Length =:= 0 and some bytes have been returned
+    {ok, list_to_binary(lists:reverse(Acc))};
+recv0({SSLContext, Socket} = SSLSocket, Length, Remaining, Acc) ->
     case ?MODULE:nif_read(SSLContext, Remaining) of
         {ok, Data} ->
             Len = byte_size(Data),
-            recv0(SSLSocket, Remaining - Len, [Data | Acc]);
+            recv0(SSLSocket, Length, Remaining - Len, [Data | Acc]);
         want_read ->
             Ref = erlang:make_ref(),
             case socket:nif_select_read(Socket, Ref) of
                 ok ->
                     receive
                         {select, _SocketResource, Ref, ready_input} ->
-                            recv0(SSLSocket, Remaining, Acc);
+                            recv0(SSLSocket, Length, Remaining, Acc);
                         {closed, Ref} ->
                             {error, closed}
                     end;
@@ -307,7 +311,7 @@ recv0({SSLContext, Socket} = SSLSocket, Remaining, Acc) ->
             end;
         want_write ->
             % We're currrently missing non-blocking writes
-            recv0(SSLSocket, Remaining, Acc);
+            recv0(SSLSocket, Length, Remaining, Acc);
         {error, _Reason} = Error ->
             Error
     end.

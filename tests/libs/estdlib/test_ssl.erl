@@ -53,6 +53,7 @@ test_ssl() ->
     ok = test_connect_close(),
     ok = test_connect_error(),
     ok = test_send_recv(),
+    ok = test_send_recv_zero(),
     ok = ssl:stop(),
     ok.
 
@@ -76,5 +77,17 @@ test_send_recv() ->
         <<"GET / HTTP/1.1\r\nHost: atomvm.net\r\nUser-Agent: ">>, UserAgent, <<"\r\n\r\n">>
     ]),
     {ok, <<"HTTP/1.1">>} = ssl:recv(SSLSocket, 8),
+    ok = ssl:close(SSLSocket),
+    ok.
+
+test_send_recv_zero() ->
+    {ok, SSLSocket} = ssl:connect("atomvm.net", 443, [
+        {verify, verify_none}, {active, false}, {binary, true}
+    ]),
+    UserAgent = erlang:system_info(machine),
+    ok = ssl:send(SSLSocket, [
+        <<"GET / HTTP/1.1\r\nHost: atomvm.net\r\nUser-Agent: ">>, UserAgent, <<"\r\n\r\n">>
+    ]),
+    {ok, <<"HTTP/1.1", _/binary>>} = ssl:recv(SSLSocket, 0),
     ok = ssl:close(SSLSocket),
     ok.
