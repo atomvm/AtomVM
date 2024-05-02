@@ -166,6 +166,7 @@ connect(Socket, TLSOptions) ->
     ok = ?MODULE:nif_set_bio(SSLContext, Socket),
     SSLConfig = ?MODULE:nif_config_init(),
     ok = ?MODULE:nif_config_defaults(SSLConfig, client, stream),
+    {active, false} = proplists:lookup(active, TLSOptions),
     process_options(SSLContext, SSLConfig, TLSOptions),
     CtrDrbg = gen_server:call(?MODULE, get_ctr_drbg),
     ok = ?MODULE:nif_conf_rng(SSLConfig, CtrDrbg),
@@ -215,6 +216,8 @@ process_options(SSLContext, SSLConfig, [{verify, verify_none} | Tail]) ->
     ok = ?MODULE:nif_conf_authmode(SSLConfig, none),
     process_options(SSLContext, SSLConfig, Tail);
 process_options(SSLContext, SSLConfig, [{binary, true} | Tail]) ->
+    process_options(SSLContext, SSLConfig, Tail);
+process_options(SSLContext, SSLConfig, [binary | Tail]) ->
     process_options(SSLContext, SSLConfig, Tail);
 process_options(SSLContext, SSLConfig, [{active, false} | Tail]) ->
     process_options(SSLContext, SSLConfig, Tail).

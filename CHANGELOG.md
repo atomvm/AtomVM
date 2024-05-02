@@ -17,9 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix invalid read after free in ssl code, see also issue
 [#1115](https://github.com/atomvm/AtomVM/issues/1115).
 - Fix semantic of `ssl:recv(Socket, 0)` to return all available bytes, matching what OTP does.
+- Fix `binary` option handling in `ssl:connect/3` so `binary` can be used instead of
+`{binary, true}`.
 
 ### Changed
 - Stacktraces are included by default on Pico devices.
+- Changed ssl default from `{active, false}` to `{active, true}` in order to have same behavior as
+OTP. Since active mode is not supported right now, `active` must be explicitly set to false:
+`ssl:connect(..., ..., [{active, false}, ...])`, otherwise it will crash.
 
 ## [0.6.1] - 2024-04-17
 
