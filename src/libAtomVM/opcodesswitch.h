@@ -4508,7 +4508,7 @@ wait_timeout_trap_handler:
                         }
                         src = x_regs[live];
                     #endif
-                    TRACE("bs_start_match3/4, fail=%i src=0x%lx live=%u dreg=%c%i\n", fail, src, live, T_DEST_REG_UNSAFE(dreg));
+                    TRACE("bs_start_match3/4, fail=%i src=0x%lx live=%u dreg=%c%i\n", fail, src, live, T_DEST_REG_GC_SAFE(dreg));
                     if (!(term_is_binary(src) || term_is_match_state(src))) {
                         WRITE_REGISTER_GC_SAFE(dreg, src);
                         pc = mod->labels[fail];
@@ -6925,7 +6925,7 @@ bs_match_jump_to_fail:
 #endif
 
             default:
-                printf("Undecoded opcode: %i\n", *pc);
+                printf("Undecoded opcode: %i\n", pc[-1]);
                 #ifdef IMPL_EXECUTE_LOOP
                     fprintf(stderr, "failed at %" PRIuPTR "\n", pc - code);
                 #endif
