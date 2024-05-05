@@ -166,6 +166,7 @@ connect(Socket, TLSOptions) ->
     ok = ?MODULE:nif_set_bio(SSLContext, Socket),
     SSLConfig = ?MODULE:nif_config_init(),
     ok = ?MODULE:nif_config_defaults(SSLConfig, client, stream),
+    {active, false} = proplists:lookup(active, TLSOptions),
     process_options(SSLContext, SSLConfig, TLSOptions),
     CtrDrbg = gen_server:call(?MODULE, get_ctr_drbg),
     ok = ?MODULE:nif_conf_rng(SSLConfig, CtrDrbg),
@@ -215,6 +216,8 @@ process_options(SSLContext, SSLConfig, [{verify, verify_none} | Tail]) ->
     ok = ?MODULE:nif_conf_authmode(SSLConfig, none),
     process_options(SSLContext, SSLConfig, Tail);
 process_options(SSLContext, SSLConfig, [{binary, true} | Tail]) ->
+    process_options(SSLContext, SSLConfig, Tail);
+process_options(SSLContext, SSLConfig, [binary | Tail]) ->
     process_options(SSLContext, SSLConfig, Tail);
 process_options(SSLContext, SSLConfig, [{active, false} | Tail]) ->
     process_options(SSLContext, SSLConfig, Tail).
@@ -283,22 +286,26 @@ send({SSLContext, Socket} = SSLSocket, Binary) ->
 
 -spec recv(Socket :: sslsocket(), Length :: non_neg_integer()) -> ok | {error, reason()}.
 recv(SSLSocket, Length) ->
-    recv0(SSLSocket, Length, []).
+    recv0(SSLSocket, Length, Length, []).
 
-recv0(_SSLSocket, 0, Acc) ->
+recv0(_SSLSocket, Length, 0, Acc) when Length > 0 ->
+    % We were called with Length > 0 and all bytes have been returned
     {ok, list_to_binary(lists:reverse(Acc))};
-recv0({SSLContext, Socket} = SSLSocket, Remaining, Acc) ->
+recv0(_SSLSocket, 0, Remaining, Acc) when Remaining < 0 ->
+    % We were called with Length =:= 0 and some bytes have been returned
+    {ok, list_to_binary(lists:reverse(Acc))};
+recv0({SSLContext, Socket} = SSLSocket, Length, Remaining, Acc) ->
     case ?MODULE:nif_read(SSLContext, Remaining) of
         {ok, Data} ->
             Len = byte_size(Data),
-            recv0(SSLSocket, Remaining - Len, [Data | Acc]);
+            recv0(SSLSocket, Length, Remaining - Len, [Data | Acc]);
         want_read ->
             Ref = erlang:make_ref(),
             case socket:nif_select_read(Socket, Ref) of
                 ok ->
                     receive
                         {select, _SocketResource, Ref, ready_input} ->
-                            recv0(SSLSocket, Remaining, Acc);
+                            recv0(SSLSocket, Length, Remaining, Acc);
                         {closed, Ref} ->
                             {error, closed}
                     end;
@@ -307,7 +314,7 @@ recv0({SSLContext, Socket} = SSLSocket, Remaining, Acc) ->
             end;
         want_write ->
             % We're currrently missing non-blocking writes
-            recv0(SSLSocket, Remaining, Acc);
+            recv0(SSLSocket, Length, Remaining, Acc);
         {error, _Reason} = Error ->
             Error
     end.
