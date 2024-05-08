@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix `binary` option handling in `ssl:connect/3` so `binary` can be used instead of
 `{binary, true}`.
 - Fix scheduling of trapped process that were wrongly immediately rescheduled before being signaled.
+- Fix `gen_tcp` and `ssl` types.
 
 ### Changed
 - Stacktraces are included by default on Pico devices.
