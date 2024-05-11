@@ -926,6 +926,15 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         goto schedule_in;                                                                         \
     }
 
+#define SCHEDULE_WAIT(restore_mod, restore_to) \
+    {                                                                                             \
+        ctx->saved_ip = restore_to;                                                               \
+        ctx->saved_module = restore_mod;                                                          \
+        ctx = scheduler_wait(ctx);                                                                \
+        goto schedule_in;                                                                         \
+    }
+
+
 // We use goto label as values, a GCC extension supported by clang.
 
 #define PROCESS_SIGNAL_MESSAGES() \
@@ -992,7 +1001,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
             goto *next_label;                                                                   \
         }                                                                                       \
         if (context_get_flags(ctx, Trap)) {                                                     \
-            SCHEDULE_NEXT(mod, pc);                                                             \
+            SCHEDULE_WAIT(mod, pc);                                                             \
         }                                                                                       \
     }
 
@@ -1001,7 +1010,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         if (UNLIKELY(!context_get_flags(ctx, Trap))) {          \
             HANDLE_ERROR();                                     \
         } else {                                                \
-            SCHEDULE_NEXT(mod, pc);                             \
+            SCHEDULE_WAIT(mod, pc);                             \
         }                                                       \
     }
 
@@ -1011,7 +1020,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
             pc = rest_pc;                                                 \
             HANDLE_ERROR();                                               \
         } else {                                                          \
-            SCHEDULE_NEXT(mod, pc);                                       \
+            SCHEDULE_WAIT(mod, pc);                                       \
         }                                                                 \
     }
 
@@ -1021,7 +1030,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
             HANDLE_ERROR();                                     \
         } else {                                                \
             DO_RETURN();                                        \
-            SCHEDULE_NEXT(mod, pc);                             \
+            SCHEDULE_WAIT(mod, pc);                             \
         }                                                       \
     }
 
@@ -2433,10 +2442,7 @@ schedule_in:
                     // after message is enqueued. So we always schedule out
                     // when executing wait/1 and process will be scheduled in
                     // and the outer list will be processed.
-                    ctx->saved_ip = mod->labels[label];
-                    ctx->saved_module = mod;
-                    ctx = scheduler_wait(ctx);
-                    goto schedule_in;
+                    SCHEDULE_WAIT(mod, mod->labels[label]);
                 #endif
                 break;
             }
