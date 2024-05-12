@@ -63,7 +63,7 @@ static void gpio_driver_init(GlobalContext *global);
 
 #ifdef CONFIG_AVM_ENABLE_GPIO_PORT_DRIVER
 static NativeHandlerResult consume_gpio_mailbox(Context *ctx);
-static void IRAM_ATTR gpio_isr_handler(void *arg);
+static void gpio_isr_handler(void *arg);
 
 static Context *gpio_driver_create_port(GlobalContext *global, term opts);
 #endif

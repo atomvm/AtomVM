@@ -675,7 +675,6 @@ void i2c_driver_release(term i2c_port, GlobalContext *global)
         return;
     }
 
-    struct I2CData *i2c_data = ctx->platform_data;
     NativeHandlerResult close_result = i2c_driver_unref(ctx);
     if (close_result == NativeTerminate) {
         mailbox_send_term_signal(ctx, KillSignal, NORMAL_ATOM);

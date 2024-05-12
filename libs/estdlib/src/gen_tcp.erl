@@ -59,6 +59,8 @@
 -type connect_option() :: option().
 -type packet() :: string() | binary().
 
+-export_type([reason/0, option/0, listen_option/0, connect_option/0, packet/0]).
+
 -include("inet-priv.hrl").
 
 %%-----------------------------------------------------------------------------

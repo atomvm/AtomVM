@@ -158,8 +158,6 @@ extern QueueSetHandle_t event_set;
 extern QueueHandle_t event_queue;
 void esp32_sys_queue_init();
 
-void sys_event_listener_init(EventListener *listener, void *sender, event_handler_t handler, void *data);
-
 void socket_init(Context *ctx, term opts);
 
 void port_driver_init_all(GlobalContext *global);
