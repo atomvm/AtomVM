@@ -8,9 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Support for DragonFly BSD (generic_unix platform).
+- Support for DragonFly BSD (generic\_unix platform).
 - Added guards `is_even` and `is_odd` to the `Integer` module
 - Add a number of functions to proplists module, such as `delete/2`, `from/to_map/1`, etc...
+- Add `esp:deep_sleep_enable_gpio_wakeup/2` to allow wakeup from deep sleep for ESP32C3 and ESP32C6.
 
 ### Fixed
 
@@ -20,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix `binary` option handling in `ssl:connect/3` so `binary` can be used instead of
 `{binary, true}`.
 - Fix scheduling of trapped process that were wrongly immediately rescheduled before being signaled.
+- Fix documentation and specification of `esp:sleep_enable_ext0_wakeup/2` and `esp:sleep_enable_ext1_wakeup/2`.
 
 ### Changed
 - Stacktraces are included by default on Pico devices.

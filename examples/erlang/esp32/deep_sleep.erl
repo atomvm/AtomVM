@@ -22,7 +22,54 @@
 -export([start/0]).
 
 start() ->
+    % If you want to reconnect over USB, this may help.
+    io:format("Sleeping for 10 seconds to ease reconnection~n"),
+    timer:sleep(10000),
     io:format("Wakeup cause: ~p~n", [esp:sleep_get_wakeup_cause()]),
+
+    SystemInfo = erlang:system_info(esp32_chip_info),
+    GPIOWakeUpMethod =
+        case maps:get(model, SystemInfo) of
+            esp32 ->
+                ext0;
+            esp32_s2 ->
+                ext0;
+            esp32_s3 ->
+                ext0;
+            esp32_h2 ->
+                ext1;
+            esp32_c2 ->
+                gpio;
+            esp32_c3 ->
+                gpio;
+            esp32_c6 ->
+                gpio;
+            esp32_p4 ->
+                gpio;
+            Other ->
+                io:format("Not sure which GPIO wakeup API this SOC (~p) supports\n", [Other]),
+                {unknown, Other}
+        end,
+
+    % In this example, we don't use internal pull downs, which means that you
+    % should use an external one (this will eventually reduce power further).
+    gpio:set_pin_mode(0, input),
+    gpio:set_pin_pull(0, floating),
+
+    case GPIOWakeUpMethod of
+        ext0 ->
+            ok = esp:sleep_enable_ext0_wakeup(0, 1),
+            io:format("Using esp:sleep_enable_ext0_wakeup/2 to enable wake up on pin 0\n");
+        ext1 ->
+            ok = esp:sleep_enable_ext1_wakeup(1, 1),
+            io:format("Using esp:sleep_enable_ext1_wakeup/2 to enable wake up on pin 0\n");
+        gpio ->
+            ok = esp:deep_sleep_enable_gpio_wakeup(1, 1),
+            io:format("Using esp:deep_sleep_enable_gpio_wakeup/2 to enable wake up on pin 0\n");
+        {unknown, SOC} ->
+            io:format("Not sure what API this soc (~p) supports\n", [SOC])
+    end,
+
     SleepMs = 5000,
-    io:format("Sleeping for ~pms~n", [SleepMs]),
+    io:format("Deep sleeping for ~pms~n", [SleepMs]),
     esp:deep_sleep(SleepMs).

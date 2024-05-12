@@ -340,8 +340,10 @@ static term nif_esp_deep_sleep(Context *ctx, int argc, term argv[])
     return OK_ATOM;
 }
 
-#if SOC_PM_SUPPORT_EXT_WAKEUP
+#if SOC_PM_SUPPORT_EXT_WAKEUP || SOC_PM_SUPPORT_EXT0_WAKEUP
 static const char *const sleep_wakeup_ext0_atom = "\x11" "sleep_wakeup_ext0";
+#endif
+#if SOC_PM_SUPPORT_EXT_WAKEUP || SOC_PM_SUPPORT_EXT1_WAKEUP
 static const char *const sleep_wakeup_ext1_atom = "\x11" "sleep_wakeup_ext1";
 #endif
 static const char *const sleep_wakeup_timer_atom = "\x12" "sleep_wakeup_timer";
@@ -374,9 +376,11 @@ static term nif_esp_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[])
     switch (cause) {
         case ESP_SLEEP_WAKEUP_UNDEFINED:
             return UNDEFINED_ATOM;
-#if SOC_PM_SUPPORT_EXT_WAKEUP
+#if SOC_PM_SUPPORT_EXT_WAKEUP || SOC_PM_SUPPORT_EXT0_WAKEUP
         case ESP_SLEEP_WAKEUP_EXT0:
             return globalcontext_make_atom(ctx->global, sleep_wakeup_ext0_atom);
+#endif
+#if SOC_PM_SUPPORT_EXT_WAKEUP || SOC_PM_SUPPORT_EXT1_WAKEUP
         case ESP_SLEEP_WAKEUP_EXT1:
             return globalcontext_make_atom(ctx->global, sleep_wakeup_ext1_atom);
 #endif
@@ -413,8 +417,7 @@ static term nif_esp_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[])
     }
 }
 
-#if SOC_PM_SUPPORT_EXT_WAKEUP
-
+#if SOC_PM_SUPPORT_EXT_WAKEUP || SOC_PM_SUPPORT_EXT0_WAKEUP
 static term nif_esp_sleep_enable_ext0_wakeup(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -432,7 +435,9 @@ static term nif_esp_sleep_enable_ext0_wakeup(Context *ctx, int argc, term argv[]
     }
     return OK_ATOM;
 }
+#endif
 
+#if SOC_PM_SUPPORT_EXT_WAKEUP || SOC_PM_SUPPORT_EXT1_WAKEUP
 static term nif_esp_sleep_enable_ext1_wakeup(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -450,8 +455,64 @@ static term nif_esp_sleep_enable_ext1_wakeup(Context *ctx, int argc, term argv[]
     }
     return OK_ATOM;
 }
-
 #endif
+
+#if SOC_PM_SUPPORT_EXT1_WAKEUP && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 2)
+static term nif_esp_sleep_enable_ext1_wakeup_io(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    VALIDATE_VALUE(argv[0], term_is_any_integer);
+    VALIDATE_VALUE(argv[1], term_is_integer);
+    avm_int64_t mask = term_maybe_unbox_int64(argv[0]);
+    esp_sleep_ext1_wakeup_mode_t mode = term_to_int(argv[1]);
+    esp_err_t err = esp_sleep_enable_ext1_wakeup_io(mask, mode);
+    if (UNLIKELY(err == ESP_ERR_INVALID_ARG)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (UNLIKELY(err != ESP_OK)) {
+        return ERROR_ATOM;
+    }
+    return OK_ATOM;
+}
+
+static term nif_esp_sleep_disable_ext1_wakeup_io(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    VALIDATE_VALUE(argv[0], term_is_any_integer);
+    avm_int64_t mask = term_maybe_unbox_int64(argv[0]);
+    esp_err_t err = esp_sleep_disable_ext1_wakeup_io(mask);
+    if (UNLIKELY(err == ESP_ERR_INVALID_ARG)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (UNLIKELY(err != ESP_OK)) {
+        return ERROR_ATOM;
+    }
+    return OK_ATOM;
+}
+#endif
+
+#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+static term nif_esp_deep_sleep_enable_gpio_wakeup(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    VALIDATE_VALUE(argv[0], term_is_any_integer);
+    VALIDATE_VALUE(argv[1], term_is_integer);
+    avm_int64_t mask = term_maybe_unbox_int64(argv[0]);
+    esp_deepsleep_gpio_wake_up_mode_t mode = term_to_int(argv[1]);
+    esp_err_t err = esp_deep_sleep_enable_gpio_wakeup(mask, mode);
+    if (UNLIKELY(err == ESP_ERR_INVALID_ARG)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (UNLIKELY(err != ESP_OK)) {
+        return ERROR_ATOM;
+    }
+    return OK_ATOM;
+}
+#endif
+
 
 #if SOC_ULP_SUPPORTED
 
@@ -786,16 +847,37 @@ static const struct Nif esp_sleep_get_wakeup_cause_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_sleep_get_wakeup_cause
 };
-#if SOC_PM_SUPPORT_EXT_WAKEUP
+#if SOC_PM_SUPPORT_EXT_WAKEUP || SOC_PM_SUPPORT_EXT0_WAKEUP
 static const struct Nif esp_sleep_enable_ext0_wakeup_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_sleep_enable_ext0_wakeup
 };
+#endif
+#if SOC_PM_SUPPORT_EXT_WAKEUP || SOC_PM_SUPPORT_EXT1_WAKEUP
 static const struct Nif esp_sleep_enable_ext1_wakeup_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_sleep_enable_ext1_wakeup
+};
+#endif
+#if SOC_PM_SUPPORT_EXT1_WAKEUP && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 2)
+static const struct Nif esp_sleep_enable_ext1_wakeup_io_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_sleep_enable_ext1_wakeup_io
+};
+static const struct Nif esp_sleep_disable_ext1_wakeup_io_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_sleep_disable_ext1_wakeup_io
+};
+#endif
+#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+static const struct Nif esp_deep_sleep_enable_gpio_wakeup_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_deep_sleep_enable_gpio_wakeup
 };
 #endif
 #if SOC_ULP_SUPPORTED
@@ -903,14 +985,32 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_sleep_get_wakeup_cause_nif;
     }
-#if SOC_PM_SUPPORT_EXT_WAKEUP
+#if SOC_PM_SUPPORT_EXT_WAKEUP || SOC_PM_SUPPORT_EXT0_WAKEUP
     if (strcmp("esp:sleep_enable_ext0_wakeup/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_sleep_enable_ext0_wakeup_nif;
     }
+#endif
+#if SOC_PM_SUPPORT_EXT_WAKEUP || SOC_PM_SUPPORT_EXT1_WAKEUP
     if (strcmp("esp:sleep_enable_ext1_wakeup/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_sleep_enable_ext1_wakeup_nif;
+    }
+#endif
+#if SOC_PM_SUPPORT_EXT1_WAKEUP && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 2)
+    if (strcmp("esp:sleep_enable_ext1_wakeup_io/2", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_sleep_enable_ext1_wakeup_io_nif;
+    }
+    if (strcmp("esp:sleep_disable_ext1_wakeup_io/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_sleep_disable_ext1_wakeup_io_nif;
+    }
+#endif
+#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+    if (strcmp("esp:deep_sleep_enable_gpio_wakeup/2", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_deep_sleep_enable_gpio_wakeup_nif;
     }
 #endif
 #if SOC_ULP_SUPPORTED
