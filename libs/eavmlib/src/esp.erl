@@ -32,6 +32,9 @@
     sleep_get_wakeup_cause/0,
     sleep_enable_ext0_wakeup/2,
     sleep_enable_ext1_wakeup/2,
+    sleep_enable_ext1_wakeup_io/2,
+    sleep_disable_ext1_wakeup_io/1,
+    deep_sleep_enable_gpio_wakeup/2,
     sleep_enable_ulp_wakeup/0,
     deep_sleep/0,
     deep_sleep/1,
@@ -157,37 +160,91 @@ sleep_get_wakeup_cause() ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @doc Configure gpio wakeup from deep sleep
+%% @doc Configure gpio wakeup from deep sleep.
+%% Implemented for SOCs that support it (ESP32, ESP32S2, ESP32S3)
 %% @param   Pin number of the pin to use as wakeup event
 %% @param   Level is the state to trigger a wakeup
 %% @returns `ok | error'
 %% @end
 %%-----------------------------------------------------------------------------
--spec sleep_enable_ext0_wakeup(Pin :: pos_integer(), Level :: 0..1) -> ok | error.
+-spec sleep_enable_ext0_wakeup(Pin :: non_neg_integer(), Level :: 0..1) -> ok | error.
 sleep_enable_ext0_wakeup(_Pin, _Level) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @doc Configure multiple gpio pins for wakeup from deep sleep
+%% @doc Configure multiple gpio pins for wakeup from deep sleep.
+%% Implemented for SOCs that support it (ESP32, ESP32S2, ESP32S3, ESP32C6, ESP32H2).
+%% @deprecated This function will be removed in ESP-IDF 6.0. Use {@link sleep_enable_ext1_wakeup_io} instead.
 %% @param   Mask bit mask of GPIO numbers which will cause wakeup
 %% @param   Mode used to determine wakeup events
 %%
 %%     The available modes are:
 %% <table>
 %%   <tr> <th>Mode</th> <th>Description</th> </tr>
-%%   <tr> <td>`0'</td> <td>WAKEUP_ALL_LOW</td></tr>
-%%   <tr> <td>`1'</td> <td>WAKEUP_ANY_HIGH (When chip is ESP32-S2, ESP32-S3, ESP32-C6 or ESP32-H2)</td></tr>
-%%   <tr> <td>`2'</td> <td>WAKEUP_ANY_LOW</td></tr>
-%%   <tr> <td>`3'</td> <td>WAKEUP_ANY_HIGH</td></tr>
+%%   <tr> <td>`0'</td> <td>WAKEUP_ALL_LOW (ESP32)</td></tr>
+%%   <tr> <td>`0'</td> <td>WAKEUP_ANY_LOW (ESP32S2, ESP32S3, ESP32C6, ESP32H2)</td></tr>
+%%   <tr> <td>`1'</td> <td>WAKEUP_ANY_HIGH</td></tr>
 %% </table>
-%%
-%% Note: The operation of these modes can vary with builds from previous versions
-%% of the ESP-IDF. The modes described here are valid for AtomVM built with ESP-IDF-v5.1.x.
 %% @returns `ok | error'
 %% @end
 %%-----------------------------------------------------------------------------
--spec sleep_enable_ext1_wakeup(Mask :: non_neg_integer(), Mode :: 0..3) -> ok | error.
+-spec sleep_enable_ext1_wakeup(Mask :: pos_integer(), Mode :: 0..3) -> ok | error.
 sleep_enable_ext1_wakeup(_Mask, _Mode) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @doc Configure multiple gpio pins for wakeup from deep sleep.
+%% Implemented for SOCs that support it (ESP32, ESP32S2, ESP32S3, ESP32C6, ESP32H2).
+%% This function does not reset the previously set pins. On some SOCs (ESP32C6, ESP32H2),
+%% pins can be configured with different levels.
+%% @since ESP-IDF 5.3 and maybe 5.2.2
+%% @param   Mask bit mask of GPIO numbers which will cause wakeup
+%% @param   Mode used to determine wakeup events
+%%
+%%     The available modes are:
+%% <table>
+%%   <tr> <th>Mode</th> <th>Description</th> </tr>
+%%   <tr> <td>`0'</td> <td>WAKEUP_ALL_LOW (ESP32)</td></tr>
+%%   <tr> <td>`0'</td> <td>WAKEUP_ANY_LOW (ESP32S2, ESP32S3, ESP32C6, ESP32H2)</td></tr>
+%%   <tr> <td>`1'</td> <td>WAKEUP_ANY_HIGH</td></tr>
+%% </table>
+%% @returns `ok | error'
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sleep_enable_ext1_wakeup_io(Mask :: pos_integer(), Mode :: 0..3) -> ok | error.
+sleep_enable_ext1_wakeup_io(_Mask, _Mode) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @doc Unconfigure one or more gpio pins for wakeup from deep sleep.
+%% Implemented for SOCs that support it (ESP32, ESP32S2, ESP32S3, ESP32C6, ESP32H2).
+%% This function resets pins previously configured with {@link sleep_enable_ext1_wakeup_io}.
+%% @since ESP-IDF 5.3 and maybe 5.2.2
+%% @param   Mask bit mask of GPIO numbers to reset.
+%% @returns `ok | error'
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sleep_disable_ext1_wakeup_io(Mask :: pos_integer()) -> ok | error.
+sleep_disable_ext1_wakeup_io(_Mask) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @doc Configure multiple gpio pins for wakeup from deep sleep.
+%% Implemented for SOCs that support it (ESP32C2, ESP32C3, ESP32C6, ESP32P4)
+%% @param   Mask bit mask of GPIO numbers which will cause wakeup
+%% @param   Mode level that will trigger the wakeup.
+%%
+%%     The available modes are:
+%% <table>
+%%   <tr> <th>Mode</th> <th>Description</th> </tr>
+%%   <tr> <td>`0'</td> <td>ESP_GPIO_WAKEUP_GPIO_LOW</td></tr>
+%%   <tr> <td>`1'</td> <td>ESP_GPIO_WAKEUP_GPIO_HIGH</td></tr>
+%% </table>
+%% @returns `ok | error'
+%% @end
+%%-----------------------------------------------------------------------------
+-spec deep_sleep_enable_gpio_wakeup(Mask :: pos_integer(), Mode :: 0..1) -> ok | error.
+deep_sleep_enable_gpio_wakeup(_Mask, _Mode) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
