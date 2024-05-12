@@ -67,15 +67,20 @@
 -export_type([
     sslsocket/0,
     host/0,
-    hostname/0
+    hostname/0,
+    socket_option/0,
+    tls_client_option/0
 ]).
 
 -type host() :: hostname() | ip_address().
 -type hostname() :: string().
 -type ip_address() :: inet:ip_address().
--type tls_client_option() :: client_option().
+
+-type socket_option() :: gen_tcp:connect_option() | gen_tcp:listen_option().
+-type tls_client_option() :: client_option() | socket_option().
 -type client_option() ::
-    {server_name_indication, sni()}.
+    {server_name_indication, sni()} | {verify, verify_none}.
+
 -type sni() :: hostname() | disabled.
 -type reason() :: any().
 
