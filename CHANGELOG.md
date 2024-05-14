@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix bug (with code compiled with OTP-21) with binary pattern matching: the fix introduced with
 `02411048` was not completely right, and it was converting match context to bogus binaries.
 
+### Changed
+
+- ESP32 builds now assemble the complet image automatically if `esp32boot.avm` is found from a previous generic_unix build.
+
 ## [0.6.2] - 25-05-2024
 
 ### Added

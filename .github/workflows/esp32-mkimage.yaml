@@ -123,12 +123,6 @@ jobs:
         idf.py reconfigure
         idf.py build
 
-    - name: "Create a ${{ matrix.soc }} image"
-      working-directory: ./src/platforms/esp32/build
-      run: |
-        ./mkimage.sh
-        ls -l *.img
-
     - name: "Upload ${{ matrix.soc }} artifacts"
       uses: actions/upload-artifact@v3
       with:
