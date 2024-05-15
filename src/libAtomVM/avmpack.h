@@ -26,15 +26,15 @@
 #ifndef _AVMPACK_H_
 #define _AVMPACK_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "globalcontext.h"
 #include "list.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define END_OF_FILE 0
 #define BEAM_START_FLAG 1

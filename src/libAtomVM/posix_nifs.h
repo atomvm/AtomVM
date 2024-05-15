@@ -26,13 +26,13 @@
 #ifndef _POSIX_NIFS_H_
 #define _POSIX_NIFS_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "exportedfunction.h"
 #include "globalcontext.h"
 #include "term.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #if HAVE_OPEN && HAVE_CLOSE
 extern const ErlNifResourceTypeInit posix_fd_resource_type_init;

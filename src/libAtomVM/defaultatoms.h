@@ -21,11 +21,11 @@
 #ifndef _DEFAULTATOMS_H_
 #define _DEFAULTATOMS_H_
 
+#include "globalcontext.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "globalcontext.h"
 
 #define FALSE_ATOM_INDEX 0
 #define TRUE_ATOM_INDEX 1

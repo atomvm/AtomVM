@@ -28,10 +28,6 @@
 #ifndef _TERM_H_
 #define _TERM_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -43,6 +39,10 @@ extern "C" {
 #include "utils.h"
 
 #include "term_typedef.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define TERM_BOXED_VALUE_TAG 0x2
 #define TERM_INTEGER_TAG 0xF

@@ -21,6 +21,10 @@
 #ifndef _LIST_H_
 #define _LIST_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * @brief gets a pointer to the struct that contains a certain list head
  *
@@ -91,5 +95,9 @@ static inline struct ListHead *list_last(struct ListHead *head)
 {
     return head->prev;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

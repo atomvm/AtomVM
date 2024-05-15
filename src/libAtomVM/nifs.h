@@ -26,13 +26,13 @@
 #ifndef _NIFS_H_
 #define _NIFS_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "atom.h"
 #include "context.h"
 #include "exportedfunction.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define VALIDATE_VALUE(value, verify_function) \
     if (UNLIKELY(!verify_function((value)))) { \

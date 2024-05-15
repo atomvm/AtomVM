@@ -21,14 +21,14 @@
 #ifndef _TIMER_LIST_H_
 #define _TIMER_LIST_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdbool.h>
 #include <stdint.h>
 
 #include "list.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct TimerListItem;
 typedef void(timer_list_callback_t)(struct TimerListItem *);

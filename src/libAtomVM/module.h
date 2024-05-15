@@ -28,10 +28,6 @@
 #ifndef _MODULE_H_
 #define _MODULE_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -43,6 +39,10 @@ extern "C" {
 #include "globalcontext.h"
 #include "term.h"
 #include "valueshashtable.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifndef AVM_NO_SMP
 

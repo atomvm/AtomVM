@@ -30,15 +30,15 @@
 #ifndef _SYS_H_
 #define _SYS_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "globalcontext.h"
 #include "module.h"
 
 #include <stdint.h>
 #include <time.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct AVMPackData;
 

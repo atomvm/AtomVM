@@ -21,12 +21,17 @@
 #ifndef _SYNCLIST_H_
 #define _SYNCLIST_H_
 
-#include "list.h"
 #include <stdio.h>
+
+#include "list.h"
 
 #ifndef AVM_NO_SMP
 
 #include "smp.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifndef TYPEDEF_RWLOCK
 #define TYPEDEF_RWLOCK
@@ -109,6 +114,10 @@ static inline int synclist_is_empty(struct SyncList *synclist)
     synclist_unlock(synclist);
     return result;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #else
 

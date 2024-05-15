@@ -26,16 +26,16 @@
 #ifndef _BIF_H_
 #define _BIF_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdbool.h>
 
 #include "atom.h"
 #include "context.h"
 #include "exportedfunction.h"
 #include "module.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define MAX_BIF_NAME_LEN 260
 

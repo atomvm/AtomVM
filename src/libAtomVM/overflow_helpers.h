@@ -21,6 +21,14 @@
 #ifndef _OVERFLOW_HELPERS_H_
 #define _OVERFLOW_HELPERS_H_
 
+#include "term.h"
+
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifdef __GNUC__
 #if __GNUC__ >= 5
     #define BUILTIN_ADD_OVERFLOW __builtin_add_overflow
@@ -59,9 +67,6 @@
 #define BUILTIN_ADD_OVERFLOW atomvm_add_overflow
 #define BUILTIN_ADD_OVERFLOW_INT atomvm_add_overflow_int
 #define BUILTIN_ADD_OVERFLOW_INT64 atomvm_add_overflow_int64
-
-#include "term.h"
-#include <stdint.h>
 
 static inline int atomvm_add_overflow(avm_int_t a, avm_int_t b, avm_int_t *res)
 {
@@ -120,9 +125,6 @@ static inline int atomvm_sub_overflow_int64(avm_int64_t a, avm_int64_t b, avm_in
 #define BUILTIN_MUL_OVERFLOW_INT atomvm_mul_overflow_int
 #define BUILTIN_MUL_OVERFLOW_INT64 atomvm_mul_overflow_int64
 
-#include "term.h"
-#include <stdint.h>
-
 static inline int atomvm_mul_overflow_int(avm_int_t a, avm_int_t b, avm_int_t *res)
 {
     avm_int64_t mul = (avm_int64_t) a * (avm_int64_t) b;
@@ -157,6 +159,10 @@ static inline int atomvm_mul_overflow(avm_int_t a, avm_int_t b, avm_int_t *res)
     #else
         #error "Unsupported AVM_INT_MAX size"
     #endif
+}
+#endif
+
+#ifdef __cplusplus
 }
 #endif
 

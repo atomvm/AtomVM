@@ -21,12 +21,12 @@
 #ifndef _INTEROP_H_
 #define _INTEROP_H_
 
+#include "context.h"
+#include "term.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "context.h"
-#include "term.h"
 
 typedef enum
 {

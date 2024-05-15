@@ -29,10 +29,6 @@
 #ifndef _SMP_H_
 #define _SMP_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #if defined(__has_feature)
 #if __has_feature(thread_sanitizer)
 #define CLANG_THREAD_SANITIZE_SAFE __attribute__((no_sanitize("thread")))
@@ -67,6 +63,10 @@ extern "C" {
 #else
 #define ATOMIC
 #endif
+#endif
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 #ifndef TYPEDEF_MUTEX

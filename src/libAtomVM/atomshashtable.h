@@ -21,11 +21,11 @@
 #ifndef _ATOMSHASHTABLE_H_
 #define _ATOMSHASHTABLE_H_
 
+#include "atom.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "atom.h"
 
 #ifndef AVM_NO_SMP
 #ifndef TYPEDEF_RWLOCK
