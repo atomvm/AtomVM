@@ -447,6 +447,16 @@ static term nif_ssl_conf_authmode(Context *ctx, int argc, term argv[])
 
     mbedtls_ssl_conf_authmode(&rsrc_obj->config, authmode);
 
+    // MBEDTLS_SSL_VERIFY_NONE and MBEDTLS_SSL_VERIFY_OPTIONAL do not work with TLS 1.3
+    // https://github.com/Mbed-TLS/mbedtls/issues/7075
+    if (authmode != MBEDTLS_SSL_VERIFY_REQUIRED) {
+#if MBEDTLS_VERSION_NUMBER >= 0x03020000
+        mbedtls_ssl_conf_max_tls_version(&rsrc_obj->config, MBEDTLS_SSL_VERSION_TLS1_2);
+#else
+        mbedtls_ssl_conf_max_version(&rsrc_obj->config, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
+#endif
+    }
+
     return OK_ATOM;
 }
 
