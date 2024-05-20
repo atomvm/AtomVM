@@ -21,11 +21,11 @@
 #ifndef _OTP_CRYPTO_H_
 #define _OTP_CRYPTO_H_
 
+#include <nifs.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <nifs.h>
 
 const struct Nif *otp_crypto_nif_get_nif(const char *nifname);
 

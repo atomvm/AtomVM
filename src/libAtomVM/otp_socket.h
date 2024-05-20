@@ -21,13 +21,13 @@
 #ifndef _OTP_SOCKET_H_
 #define _OTP_SOCKET_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <globalcontext.h>
 #include <nifs.h>
 #include <otp_socket_platform.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #if !defined(OTP_SOCKET_BSD) && !defined(OTP_SOCKET_LWIP)
 #if HAVE_SOCKET && HAVE_SELECT

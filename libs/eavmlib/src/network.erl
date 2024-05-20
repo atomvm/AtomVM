@@ -24,7 +24,8 @@
 
 -export([
     wait_for_sta/0, wait_for_sta/1, wait_for_sta/2,
-    wait_for_ap/0, wait_for_ap/1, wait_for_ap/2
+    wait_for_ap/0, wait_for_ap/1, wait_for_ap/2,
+    sta_rssi/0
 ]).
 -export([start/1, start_link/1, stop/0]).
 -export([
@@ -87,6 +88,8 @@
 -type sntp_config() :: {sntp, [sntp_config_property()]}.
 
 -type network_config() :: [sta_config() | ap_config() | sntp_config()].
+
+-type db() :: integer().
 
 -record(state, {
     config :: network_config(),
@@ -246,6 +249,23 @@ start_link(Config) ->
 -spec stop() -> ok | {error, Reason :: term()}.
 stop() ->
     gen_server:stop(?SERVER).
+
+%%-----------------------------------------------------------------------------
+%% @returns {ok, Rssi} in decibels, or {error, Reason}.
+%%
+%% @doc     Get the rssi information of AP to which the device is associated with.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sta_rssi() -> {ok, Rssi :: db()} | {error, Reason :: term()}.
+sta_rssi() ->
+    Port = get_port(),
+    Ref = make_ref(),
+    Port ! {self(), Ref, rssi},
+    receive
+        {Ref, {error, Reason}} -> {error, Reason};
+        {Ref, {rssi, Rssi}} -> {ok, Rssi};
+        Other -> {error, Other}
+    end.
 
 %%
 %% gen_server callbacks

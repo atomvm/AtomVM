@@ -21,12 +21,12 @@
 #ifndef _DICTIONARY_H_
 #define _DICTIONARY_H_
 
+#include "list.h"
+#include "term.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "list.h"
-#include "term.h"
 
 typedef enum
 {

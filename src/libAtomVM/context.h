@@ -28,16 +28,16 @@
 #ifndef _CONTEXT_H_
 #define _CONTEXT_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "globalcontext.h"
 #include "list.h"
 #include "mailbox.h"
 #include "smp.h"
 #include "term.h"
 #include "timer_list.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Module;
 

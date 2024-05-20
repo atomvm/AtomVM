@@ -21,12 +21,12 @@
 #ifndef _PLATFORM_NIFS_H_
 #define _PLATFORM_NIFS_H_
 
+#include "exportedfunction.h"
+#include "module.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "exportedfunction.h"
-#include "module.h"
 
 /**
  * @brief    Returns the Nif assocatiated with a nif name.

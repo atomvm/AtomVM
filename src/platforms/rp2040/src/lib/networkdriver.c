@@ -58,11 +58,13 @@ enum network_cmd
 {
     NetworkInvalidCmd = 0,
     // TODO add support for scan, ifconfig
-    NetworkStartCmd
+    NetworkStartCmd,
+    NetworkRssiCmd
 };
 
 static const AtomStringIntPair cmd_table[] = {
     { ATOM_STR("\x5", "start"), NetworkStartCmd },
+    { ATOM_STR("\x4", "rssi"), NetworkRssiCmd },
     SELECT_INT_DEFAULT(NetworkInvalidCmd)
 };
 
@@ -602,6 +604,27 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     port_send_reply(ctx, pid, ref, OK_ATOM);
 }
 
+static void get_sta_rssi(Context *ctx, term pid, term ref)
+{
+    size_t tuple_reply_size = PORT_REPLY_SIZE + TUPLE_SIZE(2);
+
+    int32_t sta_rssi = 0;
+    int err = cyw43_wifi_get_rssi(&cyw43_state, &sta_rssi);
+    if (UNLIKELY(err != 0)) {
+        // Reply: {Ref, {error, Reason}}
+        port_ensure_available(ctx, tuple_reply_size);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    }
+
+    term rssi = term_from_int32(sta_rssi);
+    // Reply: {Ref, {rssi, Value}}
+    port_ensure_available(ctx, tuple_reply_size);
+    term reply = port_create_tuple2(ctx, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "rssi")), rssi);
+    port_send_reply(ctx, pid, ref, reply);
+}
+
 static NativeHandlerResult consume_mailbox(Context *ctx)
 {
     Message *message = mailbox_first(&ctx->mailbox);
@@ -614,17 +637,27 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
     term pid = term_get_tuple_element(msg, 0);
     term ref = term_get_tuple_element(msg, 1);
     term cmd = term_get_tuple_element(msg, 2);
+    term cmd_term = term_invalid_term();
+    term config = term_invalid_term();
 
-    if (term_is_tuple(cmd) && term_get_tuple_arity(cmd) == 2) {
+    if ((term_is_tuple(cmd) && term_get_tuple_arity(cmd) == 2) || term_is_atom(cmd)) {
+        if (term_is_atom(cmd)) {
+            cmd_term = cmd;
+        } else {
+            cmd_term = term_get_tuple_element(cmd, 0);
+            config = term_get_tuple_element(cmd, 1);
+        }
 
-        term cmd_term = term_get_tuple_element(cmd, 0);
-        term config = term_get_tuple_element(cmd, 1);
-
-        enum network_cmd cmd = interop_atom_term_select_int(cmd_table, cmd_term, ctx->global);
-        switch (cmd) {
-            case NetworkStartCmd:
+        enum network_cmd command = interop_atom_term_select_int(cmd_table, cmd_term, ctx->global);
+        switch (command) {
+            case NetworkStartCmd: {
                 start_network(ctx, pid, ref, config);
                 break;
+            }
+            case NetworkRssiCmd: {
+                get_sta_rssi(ctx, pid, ref);
+                break;
+            }
 
             default: {
                 // {Ref, {error, badarg}}

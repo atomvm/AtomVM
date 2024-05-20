@@ -41,14 +41,17 @@
     #include "stacktrace.h"
 #endif
 
+//#define ENABLE_TRACE
+#include "trace.h"
+
 // These constants can be used to reduce the size of the VM for a specific
 // range of compiler versions
 #define MINIMUM_OTP_COMPILER_VERSION 21
 #define MAXIMUM_OTP_COMPILER_VERSION 26
 
-//#define ENABLE_TRACE
-
-#include "trace.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define COMPACT_LITERAL 0
 #define COMPACT_INTEGER 1
@@ -7007,3 +7010,7 @@ terminate_context:
 #endif
 
 #undef DECODE_COMPACT_TERM
+
+#ifdef __cplusplus
+}
+#endif

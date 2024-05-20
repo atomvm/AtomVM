@@ -28,12 +28,12 @@
 #ifndef _SCHEDULER_H_
 #define _SCHEDULER_H_
 
+#include "context.h"
+#include "globalcontext.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "context.h"
-#include "globalcontext.h"
 
 #define DEFAULT_REDUCTIONS_AMOUNT 1024
 

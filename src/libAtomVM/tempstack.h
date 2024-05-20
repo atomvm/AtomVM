@@ -24,6 +24,10 @@
 #include "term_typedef.h"
 #include "utils.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum
 {
     TempStackOk = 0,
@@ -114,5 +118,9 @@ static inline term temp_stack_pop(struct TempStack *temp_stack)
 
     return value;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

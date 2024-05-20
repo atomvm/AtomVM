@@ -22,14 +22,14 @@
 #ifndef _BITSTRING_H_
 #define _BITSTRING_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "term.h"
 
 #include <stdbool.h>
 #include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifdef __ORDER_LITTLE_ENDIAN__
     #define READ_16LE_UNALIGNED(ptr) \

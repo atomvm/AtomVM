@@ -24,6 +24,10 @@
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // On SMP builds, mbedtls_entropy_context or mbedtls_ctr_drbg_context can be
 // accessed from several scheduler threads at once through calls to functions
 // such as `mbedtls_ctr_drbg_random` that may call a function on
@@ -74,5 +78,9 @@ mbedtls_ctr_drbg_context *sys_mbedtls_get_ctr_drbg_context_lock(GlobalContext *g
  * @param global the global context
  */
 void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -28,10 +28,6 @@
 #ifndef _GLOBALCONTEXT_H_
 #define _GLOBALCONTEXT_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdint.h>
 
 #include "atom.h"
@@ -44,6 +40,10 @@ extern "C" {
 #include "synclist.h"
 #include "term.h"
 #include "timer_list.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define INVALID_PROCESS_ID 0
 

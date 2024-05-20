@@ -21,12 +21,12 @@
 #ifndef _OTP_SSL_H_
 #define _OTP_SSL_H_
 
+#include <globalcontext.h>
+#include <nifs.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <globalcontext.h>
-#include <nifs.h>
 
 const struct Nif *otp_ssl_nif_get_nif(const char *nifname);
 void otp_ssl_init(GlobalContext *global);
