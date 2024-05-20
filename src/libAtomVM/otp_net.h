@@ -21,12 +21,12 @@
 #ifndef _OTP_NET_H_
 #define _OTP_NET_H_
 
+#include <globalcontext.h>
+#include <nifs.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <globalcontext.h>
-#include <nifs.h>
 
 const struct Nif *otp_net_nif_get_nif(const char *nifname);
 void otp_net_init(GlobalContext *global);

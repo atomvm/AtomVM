@@ -21,20 +21,20 @@
 #ifndef _MEMORY_H_
 #define _MEMORY_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#include "erl_nif.h"
-#include "term_typedef.h"
-#include "utils.h"
-
 // #define DEBUG_HEAP_ALLOC
 
 #include <stdint.h>
 #include <stdlib.h>
 #ifdef DEBUG_HEAP_ALLOC
 #include <stdio.h>
+#endif
+
+#include "erl_nif.h"
+#include "term_typedef.h"
+#include "utils.h"
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 #define HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF 64

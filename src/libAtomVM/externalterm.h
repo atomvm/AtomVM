@@ -28,11 +28,11 @@
 #ifndef _EXTERNALTERM_H_
 #define _EXTERNALTERM_H_
 
+#include "term.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "term.h"
 
 enum ExternalTermResult
 {

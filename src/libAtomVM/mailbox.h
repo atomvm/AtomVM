@@ -29,10 +29,6 @@
 #ifndef _MAILBOX_H_
 #define _MAILBOX_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdbool.h>
 
 #include "list.h"
@@ -48,6 +44,10 @@ extern "C" {
 #define ATOMIC _Atomic
 #else
 #define ATOMIC
+#endif
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 struct Context;

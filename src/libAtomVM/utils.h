@@ -28,6 +28,14 @@
 #ifndef _UTILS_H_
 #define _UTILS_H_
 
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     #ifdef __GNUC__
         #define READ_32_ALIGNED(ptr) \
@@ -190,7 +198,6 @@
 #define RAND_MODULO 31
 #endif
 
-#include <stdlib.h>
 static inline void *rand_fail_malloc(unsigned long malloc_size)
 {
     return ((rand() % RAND_MODULO) == 0) ? 0L : malloc(malloc_size);
@@ -207,7 +214,6 @@ static inline void *rand_fail_calloc(int n, unsigned long alloc_size)
 #endif
 
 #ifdef AVM_VERBOSE_ABORT
-#include <stdio.h>
 #define AVM_ABORT()                                                           \
     {                                                                         \
         fprintf(stderr, "Abort in file %s at line %i\n", __FILE__, __LINE__); \
@@ -297,8 +303,6 @@ static inline __attribute__((always_inline)) func_ptr_t cast_void_to_func_ptr(vo
  * It makes use of offsetof() from stddef.h.
  */
 
-#include <stddef.h>
-
 #define CONTAINER_OF(ptr, type, member) \
     ((type *) (((char *) (ptr)) - offsetof(type, member)))
 
@@ -321,6 +325,10 @@ static inline __attribute__((always_inline)) func_ptr_t cast_void_to_func_ptr(vo
         __builtin_unreachable()
 #else
     #define UNREACHABLE(...)
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif

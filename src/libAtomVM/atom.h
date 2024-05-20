@@ -28,12 +28,12 @@
 #ifndef _ATOM_H_
 #define _ATOM_H_
 
+#include <stdint.h>
+#include <stdlib.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stdint.h>
-#include <stdlib.h>
 
 /**
  * @details no-op macro: just syntax sugar for avoiding mistakes or clang-format dividing atoms in multiple

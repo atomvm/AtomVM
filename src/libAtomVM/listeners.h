@@ -49,6 +49,10 @@
 
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * @brief Add an event listener to the set of polled events.
  *
@@ -151,3 +155,7 @@ void sys_listener_destroy(struct ListHead *item)
     free(listener);
 }
 #endif /* DOXYGEN_SKIP_SECTION */
+
+#ifdef __cplusplus
+}
+#endif

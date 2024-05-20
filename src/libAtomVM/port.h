@@ -21,15 +21,15 @@
 #ifndef _PORT_H_
 #define _PORT_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "context.h"
 #include "defaultatoms.h"
 #include "globalcontext.h"
 #include "memory.h"
 #include "term.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // Sometimes ports need to send messages while not executed in a given ctx
 // (typically event handlers), so the helpers are available with a Heap

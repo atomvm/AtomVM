@@ -28,11 +28,11 @@
 #ifndef _IFF_H_
 #define _IFF_H_
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stdint.h>
 
 /** UTF-8 Atoms table section */
 #define AT8U 0

@@ -28,11 +28,11 @@
 #ifndef _DEBUG_H_
 #define _DEBUG_H_
 
+#include "context.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "context.h"
 
 /**
  * @brief Print a repreentation of the context to stderr.

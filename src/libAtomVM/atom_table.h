@@ -25,6 +25,10 @@
 
 #include "atom.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define ATOM_TABLE_NOT_FOUND -1
 #define ATOM_TABLE_ALLOC_FAIL -2
 
@@ -62,5 +66,9 @@ bool atom_table_is_atom_ref_ascii(struct AtomTable *table, atom_ref_t atom);
 void atom_table_write_bytes(struct AtomTable *table, atom_ref_t atom, size_t buf_len, void *outbuf);
 void atom_table_write_cstring(
     struct AtomTable *table, atom_ref_t atom, size_t buf_len, char *outbuf);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

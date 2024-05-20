@@ -21,12 +21,12 @@
 #ifndef _ERL_NIF_PRIV_H_
 #define _ERL_NIF_PRIV_H_
 
+#include "context.h"
+#include "memory.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "context.h"
-#include "memory.h"
 
 struct ErlNifEnv
 {

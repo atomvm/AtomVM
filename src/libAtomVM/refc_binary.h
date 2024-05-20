@@ -21,10 +21,6 @@
 #ifndef _REFC_BINARY_H_
 #define _REFC_BINARY_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdbool.h>
 #include <stdlib.h>
 
@@ -40,6 +36,10 @@ extern "C" {
 #define ATOMIC _Atomic
 #else
 #define ATOMIC
+#endif
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 #ifndef TYPEDEF_CONTEXT

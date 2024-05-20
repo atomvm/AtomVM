@@ -21,13 +21,13 @@
 #ifndef _STACKTRACE_H_
 #define _STACKTRACE_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "context.h"
 #include "module.h"
 #include "term.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term exception_class);
 /**
