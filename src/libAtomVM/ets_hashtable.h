@@ -21,13 +21,13 @@
 #ifndef _ETS_HASHTABLE_H_
 #define _ETS_HASHTABLE_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "globalcontext.h"
 #include "term.h"
 #include <stdlib.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define NUM_BUCKETS 16
 
