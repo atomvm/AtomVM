@@ -24,6 +24,9 @@
 #include <string.h>
 
 #include <hardware/gpio.h>
+#ifdef LIB_PICO_CYW43_ARCH
+#include <pico/cyw43_arch.h>
+#endif
 
 #include "defaultatoms.h"
 #include "interop.h"
