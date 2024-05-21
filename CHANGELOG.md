@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added Erlang distribution over serial (uart)
 
+### Changed
+- Updated network type db() to dbm() to reflect the actual representation of the type
+
 ### Fixed
 - Stop using deprecated `term_from_int32` on STM32 platform
 - Stop using deprecated `term_from_int32` on RP2 platform
