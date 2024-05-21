@@ -143,7 +143,10 @@
 
 -type network_config() :: [sta_config() | ap_config() | sntp_config()].
 
--type db() :: integer().
+-type dbm() :: integer().
+%% `dbm()' decibel-milliwatts (or dBm) will typically be a negative number, but in the presence of
+%% a powerful signal this can be a positive number. A level of 0 dBm corresponds to the power of 1
+%% milliwatt. A 10 dBm decrease in level is equivalent to a ten-fold decrease in signal power.
 
 -record(state, {
     config :: network_config(),
@@ -305,12 +308,12 @@ stop() ->
     gen_server:stop(?SERVER).
 
 %%-----------------------------------------------------------------------------
-%% @returns {ok, Rssi} in decibels, or {error, Reason}.
+%% @returns {ok, Rssi} in dBm, or {error, Reason}.
 %%
 %% @doc     Get the rssi information of AP to which the device is associated with.
 %% @end
 %%-----------------------------------------------------------------------------
--spec sta_rssi() -> {ok, Rssi :: db()} | {error, Reason :: term()}.
+-spec sta_rssi() -> {ok, Rssi :: dbm()} | {error, Reason :: term()}.
 sta_rssi() ->
     Port = get_port(),
     Ref = make_ref(),
