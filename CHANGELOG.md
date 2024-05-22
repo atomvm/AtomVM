@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - ESP32 builds now assemble the complet image automatically if `esp32boot.avm` is found from a previous generic_unix build.
+- ESP32 cmake build options are now also exposed in `idf.py menuconfig`.
 
 ## [0.6.2] - 25-05-2024
 
