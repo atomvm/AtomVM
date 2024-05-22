@@ -88,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `binary_to_integer` and `list_to_integer` do not raise anymore `overflow` error, they raise
 instead `badarg`.
 - Resources are now references instead of empty binaries.
+- ESP32 cmake build options are now also exposed in `idf.py menuconfig`.
 
 ### Fixed
 
