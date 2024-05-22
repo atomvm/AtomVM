@@ -100,6 +100,7 @@ instead `badarg`.
 - Function arguments are added to stacktrace also for some NIFs, when one of the arguments is badarg
 - Using a custom callback for STA disconnected events in esp32 network driver will stop automatic re-connect,
 allowing applications to use scan results or other means to decide when and where to connect.
+- ESP32 cmake build options are now also exposed in `idf.py menuconfig`.
 
 ### Fixed
 
