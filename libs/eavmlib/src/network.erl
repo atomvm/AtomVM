@@ -62,6 +62,59 @@
 -type sta_config() :: {sta, [sta_config_property()]}.
 
 -type mac() :: binary().
+-type ghz24_channel() :: 1..14.
+% This is the global 2.4 Ghz WiFI channel range, check your local jurisdiction for allowed channels in your geographic region.
+
+-type ghz5_20mhz_channel() ::
+    32
+    | 36
+    | 40
+    | 44
+    | 48
+    | 52
+    | 56
+    | 60
+    | 64
+    | 68
+    | 96
+    | 104
+    | 108
+    | 112
+    | 116
+    | 120
+    | 122
+    | 128
+    | 132
+    | 136
+    | 140
+    | 144
+    | 149
+    | 153
+    | 157
+    | 161
+    | 165
+    | 169
+    | 173
+    | 177.
+% This is the global 5 Ghz WiFI channel range when using 20Mhz bandwidth channels, check your local jurisdiction for allowed channels in your geographic region.
+
+-type ghz5_40mhz_channel() ::
+    38 | 46 | 54 | 62 | 102 | 110 | 118 | 126 | 134 | 142 | 151 | 159 | 167 | 175.
+% This is the global 5 Ghz WiFI channel range when using 40Mhz bandwidth channels, check your local jurisdiction for allowed channels in your geographic region.
+
+-type ghz5_80mhz_channel() :: 42 | 58 | 74 | 90 | 106 | 122 | 138 | 155 | 171.
+% This is the global 5 Ghz WiFI channel range when using 80Mhz bandwidth channels, check your local jurisdiction for allowed channels in your geographic region.
+
+-type ghz5_160mhz_channel() :: 50 | 82 | 114 | 163.
+% This is the global 5 Ghz WiFI channel range when using 160Mhz bandwidth channels, check your local jurisdiction for allowed channels in your geographic region.
+
+-type wifi_channel() ::
+    ghz24_channel()
+    | ghz5_20mhz_channel()
+    | ghz5_40mhz_channel()
+    | ghz5_80mhz_channel()
+    | ghz5_160mhz_channel().
+-type ap_channel_cfg() :: {ap_channel, wifi_channel()}.
 -type ap_ssid_hidden_config() :: {ap_ssid_hidden, boolean()}.
 -type ap_max_connections_config() :: {ap_max_connections, non_neg_integer()}.
 -type ap_started_config() :: {ap_started, fun(() -> term())}.
@@ -71,6 +124,7 @@
 -type ap_config_property() ::
     ssid_config()
     | psk_config()
+    | ap_channel_cfg()
     | ap_ssid_hidden_config()
     | ap_max_connections_config()
     | ap_started_config()
