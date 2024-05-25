@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.6.2] - Unreleased
+## [0.6.2] - 25-05-2024
 
 ### Added
 
@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `esp:deep_sleep_enable_gpio_wakeup/2` to allow wakeup from deep sleep for ESP32C3 and ESP32C6.
 - Obtain RSSI of the current connection with `network:sta_rssi/0` on ESP32.
 - Pico-W support for `network:sta_rssi/0`.
+- Add support to ESP32C2
 
 ### Fixed
 
