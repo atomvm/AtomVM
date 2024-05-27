@@ -41,11 +41,6 @@
 #define TAG "sys"
 #define RESERVE_STACK_SIZE 4096U
 
-static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts);
-
-struct PortDriverDefListItem *port_driver_list;
-struct NifCollectionDefListItem *nif_collection_list;
-
 /* These functions are needed to fix a hard fault when using malloc in devices with sram spanning
  * multiple chips
  */
@@ -327,63 +322,4 @@ void sys_init_icache()
     // Force a final resync and clear of the instruction pipeline
     __dsb;
     __isb;
-}
-
-void port_driver_init_all(GlobalContext *global)
-{
-    for (struct PortDriverDefListItem *item = port_driver_list; item != NULL; item = item->next) {
-        if (item->def->port_driver_init_cb) {
-            item->def->port_driver_init_cb(global);
-        }
-    }
-}
-
-void port_driver_destroy_all(GlobalContext *global)
-{
-    for (struct PortDriverDefListItem *item = port_driver_list; item != NULL; item = item->next) {
-        if (item->def->port_driver_destroy_cb) {
-            item->def->port_driver_destroy_cb(global);
-        }
-    }
-}
-
-static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts)
-{
-    for (struct PortDriverDefListItem *item = port_driver_list; item != NULL; item = item->next) {
-        if (strcmp(port_name, item->def->port_driver_name) == 0) {
-            return item->def->port_driver_create_port_cb(global, opts);
-        }
-    }
-
-    return NULL;
-}
-
-void nif_collection_init_all(GlobalContext *global)
-{
-    for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
-        if (item->def->nif_collection_init_cb) {
-            item->def->nif_collection_init_cb(global);
-        }
-    }
-}
-
-void nif_collection_destroy_all(GlobalContext *global)
-{
-    for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
-        if (item->def->nif_collection_destroy_cb) {
-            item->def->nif_collection_destroy_cb(global);
-        }
-    }
-}
-
-const struct Nif *nif_collection_resolve_nif(const char *name)
-{
-    for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
-        const struct Nif *res = item->def->nif_collection_resolve_nif_cb(name);
-        if (res) {
-            return res;
-        }
-    }
-
-    return NULL;
 }

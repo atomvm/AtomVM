@@ -68,8 +68,6 @@
 
 #define TAG "sys"
 
-static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts);
-
 static void *select_thread_loop(void *);
 static void select_thread_signal(struct ESP32PlatformData *platform);
 
@@ -97,9 +95,6 @@ static const char *const features_atom = "\x8" "features";
 static const char *const model_atom = "\x5" "model";
 static const char *const revision_atom = "\x8" "revision";
 // clang-format on
-
-struct PortDriverDefListItem *port_driver_list;
-struct NifCollectionDefListItem *nif_collection_list;
 
 QueueHandle_t event_queue = NULL;
 QueueSetHandle_t event_set = NULL;
@@ -545,65 +540,6 @@ term sys_get_info(Context *ctx, term key)
         return term_from_string((const uint8_t *) str, n, &ctx->heap);
     }
     return UNDEFINED_ATOM;
-}
-
-void port_driver_init_all(GlobalContext *global)
-{
-    for (struct PortDriverDefListItem *item = port_driver_list; item != NULL; item = item->next) {
-        if (item->def->port_driver_init_cb) {
-            item->def->port_driver_init_cb(global);
-        }
-    }
-}
-
-void port_driver_destroy_all(GlobalContext *global)
-{
-    for (struct PortDriverDefListItem *item = port_driver_list; item != NULL; item = item->next) {
-        if (item->def->port_driver_destroy_cb) {
-            item->def->port_driver_destroy_cb(global);
-        }
-    }
-}
-
-static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts)
-{
-    for (struct PortDriverDefListItem *item = port_driver_list; item != NULL; item = item->next) {
-        if (strcmp(port_name, item->def->port_driver_name) == 0) {
-            return item->def->port_driver_create_port_cb(global, opts);
-        }
-    }
-
-    return NULL;
-}
-
-void nif_collection_init_all(GlobalContext *global)
-{
-    for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
-        if (item->def->nif_collection_init_cb) {
-            item->def->nif_collection_init_cb(global);
-        }
-    }
-}
-
-void nif_collection_destroy_all(GlobalContext *global)
-{
-    for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
-        if (item->def->nif_collection_destroy_cb) {
-            item->def->nif_collection_destroy_cb(global);
-        }
-    }
-}
-
-const struct Nif *nif_collection_resolve_nif(const char *name)
-{
-    for (struct NifCollectionDefListItem *item = nif_collection_list; item != NULL; item = item->next) {
-        const struct Nif *res = item->def->nif_collection_resolve_nif_cb(name);
-        if (res) {
-            return res;
-        }
-    }
-
-    return NULL;
 }
 
 void event_listener_add_to_polling_set(struct EventListener *listener, GlobalContext *global)
