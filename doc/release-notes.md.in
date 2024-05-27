@@ -64,12 +64,12 @@ AtomVM currently supports the following versions of ESP-IDF:
 
 | IDF SDK supported versions | AtomVM support |
 |------------------------------|----------------|
-| ESP-IDF [v4.4.7](https://docs.espressif.com/projects/esp-idf/en/v4.4.7/esp32/get-started/index.html) | ✅ |
-| ESP-IDF [v5.0.6](https://docs.espressif.com/projects/esp-idf/en/v5.0.6/esp32/get-started/index.html) | ✅ |
-| ESP-IDF [v5.1.3](https://docs.espressif.com/projects/esp-idf/en/v5.1.3/esp32/get-started/index.html) | ✅ |
-| ESP-IDF [v5.2.1](https://docs.espressif.com/projects/esp-idf/en/v5.2.1/esp32/get-started/index.html) | ✅ |
+| ESP-IDF [v4.4](https://docs.espressif.com/projects/esp-idf/en/v4.4.7/esp32/get-started/index.html) | ✅ |
+| ESP-IDF [v5.0](https://docs.espressif.com/projects/esp-idf/en/v5.0.6/esp32/get-started/index.html) | ✅ |
+| ESP-IDF [v5.1](https://docs.espressif.com/projects/esp-idf/en/v5.1.3/esp32/get-started/index.html) | ✅ |
+| ESP-IDF [v5.2](https://docs.espressif.com/projects/esp-idf/en/v5.2.1/esp32/get-started/index.html) | ✅ |
 
-Building the AtomVM virtual machine for ESP32 is optional.  In most cases, you can simply download a release image from the AtomVM [release](https://github.com/atomvm/AtomVM/releases) repository.  If you wish to work on development of the VM or use one on the additional drivers that are available in the [AtomVM repositories](https://github.com/atomvm) you will to build AtomVM from source.  See the [Build Instructions](build-instructions.md) for information about how to build AtomVM from source code.  Also, please check [`idf-version` of the CI build target](https://github.com/atomvm/AtomVM/blob/main/.github/workflows/esp32-build.yaml#L38).
+Building the AtomVM virtual machine for ESP32 is optional.  In most cases, you can simply download a release image from the AtomVM [release](https://github.com/atomvm/AtomVM/releases) repository.  If you wish to work on development of the VM or use one on the additional drivers that are available in the [AtomVM repositories](https://github.com/atomvm) you will to build AtomVM from source.  See the [Build Instructions](build-instructions.md) for information about how to build AtomVM from source code.  Also, please check [`idf-version` on esp32-build.yaml](https://github.com/atomvm/AtomVM/blob/main/.github/workflows/esp32-build.yaml#L38) for the current versions including subminor number used in the CI build.
 
 ### STM32 Support
 
