@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for setting channel used by network driver wifi access point.
 - Support for `maps:iterator/2` and `~kp` with `io_lib:format/2` that were introduced with OTP26.
 - Support for `erlang:apply/2`
+- Added support to Pico-W network driver for setting `dhcp_hostname`
+(see issue 1094)[https://github.com/atomvm/AtomVM/issues/1094].
 
 ### Changed
 
