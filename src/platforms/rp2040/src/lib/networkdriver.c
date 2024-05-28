@@ -39,6 +39,7 @@
 #pragma GCC diagnostic pop
 
 #define PORT_REPLY_SIZE (TUPLE_SIZE(2) + REF_SIZE)
+#define DEFAULT_HOSTNAME_SIZE (strlen("atomvm-") + 12 + 1)
 
 static const char *const ap_atom = ATOM_STR("\x2", "ap");
 static const char *const ap_channel_atom = ATOM_STR("\xA", "ap_channel");
@@ -253,25 +254,22 @@ static term start_sta(term sta_config, GlobalContext *global)
     return OK_ATOM;
 }
 
-static char *get_default_device_name()
+// param should be pointer to malloc'd destination to copy device hostname
+// return ok atom or error as atom
+static term get_default_device_name(char *name)
 {
     uint8_t mac[6];
-    // Device name is used for AP mode. It seems the interface parameter is
-    // ignored and both interfaces have the same MAC address.
+    // Device name is used for AP mode ssid (if undefined), and for the
+    // default dhcp_hostname on both interfaces. It seems the interface
+    // parameter is ignored and both interfaces have the same MAC address.
     int err = cyw43_wifi_get_mac(&cyw43_state, CYW43_ITF_AP, mac);
     if (err) {
-        return NULL;
+        return globalcontext_make_atom(global, ATOM_STR("\x10", "device_mac_error"));
     }
 
-    size_t buf_size = strlen("atomvm-") + 12 + 1;
-    char *buf = malloc(buf_size);
-    if (IS_NULL_PTR(buf)) {
-        return NULL;
-    }
-    snprintf(buf, buf_size,
+    snprintf(name, buf_size,
         "atomvm-%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    return buf;
-}
+    return OK_ATOM;
 
 static void network_driver_do_cyw43_assoc(GlobalContext *glb)
 {
@@ -390,7 +388,15 @@ static term start_ap(term ap_config, GlobalContext *global)
     //
     char *ssid = NULL;
     if (term_is_invalid_term(ssid_term)) {
-        ssid = get_default_device_name();
+        ssid = malloc(DEFAULT_HOSTNAME_SIZE);
+        if (IS_NULL_PTR(ssid)) {
+            return OUT_OF_MEMORY_ATOM;
+        }
+        term error = get_default_device_name(ssid);
+        if (error != OK_ATOM) {
+            free(ssid);
+            return error;
+        }
     } else {
         int ok = 0;
         ssid = interop_term_to_string(ssid_term, &ok);
@@ -404,6 +410,7 @@ static term start_ap(term ap_config, GlobalContext *global)
         psk = interop_term_to_string(pass_term, &ok);
         if (strlen(psk) < 8) {
             free(ssid);
+            free(psk);
             return BADARG_ATOM;
         }
         if (!ok) {
