@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.5] - Unreleased
 
+### Added
+
+- Added support to Pico-W network driver for setting `dhcp_hostname`
+(see issue 1094)[https://github.com/atomvm/AtomVM/issues/1094].
+
 ## [0.6.4] - 2024-08-18
 
 ### Added
