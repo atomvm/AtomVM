@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - ESP32: improved sntp sync speed from a cold boot.
 - Utilize reserved `phy_init` partition on ESP32 to store wifi calibration for faster connections.
+- Correctly set Pico-W unique hostname, use `dhcp_hostname` if present in config.
+(see issue 1094)[https://github.com/atomvm/AtomVM/issues/1094].
 
 ## [0.6.6] - Unreleased
 
