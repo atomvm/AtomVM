@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix bug (with code compiled with OTP-21) with binary pattern matching: the fix introduced with
 `02411048` was not completely right, and it was converting match context to bogus binaries.
 
+### Changed
+
+- Default size of ESP32 RTC slow memory from 4086 to 4096, except on ESP32-H2 where it's 3072
+
+### Added
+
+- Support for ESP32-H2
+
 ## [0.6.2] - 25-05-2024
 
 ### Added

@@ -19,6 +19,10 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#include <sdkconfig.h>
+
+#ifdef CONFIG_AVM_ENABLE_NETWORK_PORT_DRIVER
+
 #include <atom.h>
 #include <context.h>
 #include <debug.h>
@@ -881,8 +885,6 @@ Context *network_driver_create_port(GlobalContext *global, term opts)
     ctx->platform_data = NULL;
     return ctx;
 }
-
-#ifdef CONFIG_AVM_ENABLE_NETWORK_PORT_DRIVER
 
 REGISTER_PORT_DRIVER(network, network_driver_init, NULL, network_driver_create_port)
 

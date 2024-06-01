@@ -63,6 +63,9 @@
 #elif CONFIG_IDF_TARGET_ESP32C3
 // only one user SPI bus, no VSPI
 #define HSPI_HOST   SPI2_HOST
+#elif CONFIG_IDF_TARGET_ESP32H2
+// only one user SPI bus, no VSPI
+#define HSPI_HOST   SPI2_HOST
 #elif (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)) && CONFIG_IDF_TARGET_ESP32C2
 // only one user SPI bus, no VSPI
 #define HSPI_HOST   SPI2_HOST

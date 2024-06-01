@@ -37,10 +37,13 @@ config AVM_ENABLE_RTC_SLOW_NIFS
     default y
 
 config AVM_RTC_SLOW_MAX_SIZE
-    int "RTC SLOW maximum binary size"
-    # By default, use the maximum size for esp-idf < 4.4
-    # In newer version, available size is 8170
-    default 4086
+    int "RTC SLOW maximum binary size (maximum varies by soc and idf versions)"
+    # ESP32-H2 has no RTC SLOW, only RTC FAST and both are mapped at the same
+    # space, and based on other usage of RTC FAST we can use up to 3.5kb
+    # sdkconfig.defaults.esp32h2 sets value to 3KB
+    # 8130 works on esp-idf 5.1 with other socs
+    # 4KB is a reasonable default
+    default 4096
 
 config AVM_ENABLE_GPIO_PORT_DRIVER
     bool "Enable GPIO port driver"
@@ -52,10 +55,12 @@ config AVM_ENABLE_I2C_PORT_DRIVER
 
 config AVM_ENABLE_NETWORK_PORT_DRIVER
     bool "Enable network port driver"
+	depends on ESP_WIFI_ENABLED || ESP_HOST_WIFI_ENABLED || ESP32_WIFI_ENABLED
     default y
 
 config AVM_ENABLE_SOCKET_PORT_DRIVER
     bool "Enable socket port driver"
+	depends on ESP_WIFI_ENABLED || ESP_HOST_WIFI_ENABLED || ESP32_WIFI_ENABLED || ETH_ENABLED
     default y
 
 config AVM_ENABLE_SPI_PORT_DRIVER
@@ -72,14 +77,17 @@ config AVM_ENABLE_OTP_CRYPTO_NIFS
 
 config AVM_ENABLE_OTP_SOCKET_NIFS
     bool "Enable OTP Socket NIFs"
+	depends on ESP_WIFI_ENABLED || ESP_HOST_WIFI_ENABLED || ESP32_WIFI_ENABLED || ETH_ENABLED
     default y
 
 config AVM_ENABLE_OTP_NET_NIFS
     bool "Enable OTP Net NIFs"
+	depends on ESP_WIFI_ENABLED || ESP_HOST_WIFI_ENABLED || ESP32_WIFI_ENABLED || ETH_ENABLED
     default y
 
 config AVM_ENABLE_OTP_SSL_NIFS
     bool "Enable OTP SSL NIFs"
+	depends on ESP_WIFI_ENABLED || ESP_HOST_WIFI_ENABLED || ESP32_WIFI_ENABLED || ETH_ENABLED
     default y
 
 endmenu
