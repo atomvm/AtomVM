@@ -21,16 +21,16 @@
 #ifndef _ETS_H_
 #define _ETS_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 struct Context;
 struct GlobalContext;
 
 #include "list.h"
 #include "synclist.h"
 #include "term.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // N.B. Only EtsTableSet currently supported
 typedef enum EtsTableType
