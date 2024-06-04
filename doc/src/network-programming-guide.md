@@ -20,21 +20,61 @@ This document describes the basic design of the AtomVM network interfaces, and h
 
 In STA mode, the ESP32 or the Pico W/Pico 2 W connect to an existing WiFi network.
 
-In this case, the input configuration should be a properties list containing a tuple of the form `{sta, <sta-properties>}`, where `<sta-properties>` is a property list containing configuration properties for the device in station mode.
+In this case, the input configuration should be a properties list containing a tuple of the form
+`{sta, <sta-properties>}`, where `<sta-properties>` is a property list containing configuration
+properties for the device in station mode.
 
 The `<sta-properties>` property list should contain the following entries:
 
 * `{ssid, string() | binary()}`  The SSID to which the device should connect.
 * `{psk, string() | binary()}` The password required to authenticate to the network, if required.
 
-The [`network:start/1`](./apidocs/erlang/eavmlib/network.md#start1) will immediately return `{ok, Pid}`, where `Pid` is the process ID of the network server instance, if the network was properly initialized, or `{error, Reason}`, if there was an error in configuration.  However, the application may want to wait for the device to connect to the target network and obtain an IP address, for example, before starting clients or services that require network access.
+In addition, the following optional parameters can be specified to configure the network:
 
-Applications can specify callback functions, which get triggered as events emerge from the network layer, including connection to and disconnection from the target network, as well as IP address acquisition.
+* `{dhcp_hostname, string()|binary()}` The DHCP hostname as which the device should register
+(default: `<<"atomvm-<hexmac>">>`, where `<hexmac>` is the hexadecimal representation of the
+factory-assigned MAC address of the device).
+
+The following options are only supported on ESP32 platform:
+
+* `{beacon_timeout, fun(() -> term())}` A callback function which will be called when the device
+does not receive a beacon frame from the connected access point during the "inactive time" (6
+second default, currently not configurable).
+* `managed` or `{managed, boolean()}` Used to activate application-managed mode,
+[see below](#managed-mode).
+
+The [`network:start/1`](./apidocs/erlang/eavmlib/network.md#start1) will immediately return
+`{ok, Pid}`, where `Pid` is the process ID of the network server instance, if the network was
+properly initialized, or `{error, Reason}`, if there was an error in configuration.  However, the
+application may want to wait for the device to connect to the target network and obtain an IP
+address, for example, before starting clients or services that require network access.
+
+### Managed mode
+
+For fine-grained control over network connections in station mode, the `managed` boolean may be
+used, to start the driver and enable station mode, without starting a connection to an access
+point. In this mode, providing the `ssid` and `psk` tuples is optional. If a configuration is
+provided, this will be used by the
+[`sta_connect/0`](./apidocs/erlang/eavmlib/network.md#sta_connect0) function to initiate a
+connection to the access point. If `ssid` and `psk` are omitted from the configuration they must be
+supplied to [`sta_connect/1`](./apidocs/erlang/eavmlib/network.md#sta_connect1) to initiate a
+connection to an access point. Any new configuration values passed to `sta_connect/1` will replace
+any previous values, but leave the rest unchanged. Callback configuration as well as `mdns` and
+`sntp` configurations may also be updated in the configuration passed to `sta_connect/1`.
+
+When using managed mode applications should include a `disconnected` callback to also inhibit the
+automatic reconnection behavior.
+
+### Station mode callbacks
+
+Applications can specify callback functions, which get triggered as events emerge from the network
+layer, including connection to and disconnection from the target network, as well as IP address
+acquisition.
 
 Callback functions can be specified by the following configuration parameters:
 
 * `{connected, fun(() -> term())}` A callback function which will be called when the device connects to the target network.
-* `{disconnected, fun(() -> term())}` A callback function which will be called when the device disconnects from the target network.
+* `{disconnected, fun(() -> term())}` A callback function which will be called when the device disconnects from the target network. If no callback function is provided the default behavior is to attempt to reconnect immediately. By providing a callback function the application can decide whether to reconnect, or connect to a new access point.
 * `{got_ip, fun((ip_info()) -> term())}` A callback function which will be called when the device obtains an IP address.  In this case, the IPv4 IP address, net mask, and gateway are provided as a parameter to the callback function.
 
 ```{warning}
@@ -43,10 +83,7 @@ IPv6 addresses are not yet supported in AtomVM.
 
 Callback functions are optional, but are highly recommended for building robust WiFi applications.  The return value from callback functions is ignored, and AtomVM provides no guarantees about the execution context (i.e., BEAM process) in which these functions are invoked.
 
-In addition, the following optional parameters can be specified to configure the AP network (ESP32 only):
-
-* `{dhcp_hostname, string()|binary()}` The DHCP hostname as which the device should register (`<<"atomvm-<hexmac>">>`, where `<hexmac>` is the hexadecimal representation of the factory-assigned MAC address of the device).
-* `{beacon_timeout, fun(() -> term())}` A callback function which will be called when the device does not receive a beacon frame from the connected access point during the "inactive time" (6 second default, currently not configurable).
+### Station mode example configuration
 
 The following example illustrates initialization of the WiFi network in STA mode.  The example program will configure the network to connect to a specified network.  Events that occur during the lifecycle of the network will trigger invocations of the specified callback functions.
 
@@ -75,7 +112,8 @@ gotIp(IpInfo) ->
     io:format("Got IP: ~p~n", [IpInfo]).
 
 disconnected() ->
-    io:format("Disconnected from AP.~n").
+    io:format("Disconnected from AP, attempting to reconnect~n"),
+    network:sta_connect().
 ```
 
 In a typical application, the network should be configured and an IP address should be acquired first, before starting clients or services that have a dependency on the network.
@@ -101,6 +139,43 @@ end
 ```
 
 To obtain the signal strength (in decibels) of the connection to the associated access point use [`network:sta_rssi/0`](./apidocs/erlang/eavmlib/network.md#sta_rssi0).
+
+### STA (or AP+STA) mode functions
+
+#### `sta_status`
+
+The function [`network:sta_status/0`](./apidocs/erlang/eavmlib/network.md#sta_status0) may be used
+any time after the driver has been started to get the current connection state of the sta
+interface. When a connection is initiated, either at start up or when `network:sta_connect/1` is used
+in application `managed` mode (which will start with a `disconnected` state) the interface will be
+marked as `connecting` followed by `associated` after a connection is established with an access
+point. After receiving an IP address the connection will be fully `connected`. If a beacon timeout
+event is received (this indicates poor signal strength or a heavily congested network) the status
+will change to `degraded` for the remainder of the connection session. This does not always mean
+that the connection is still poor, but it can be a helpful diagnostic when experiencing network
+problems, and often does result in a dropped connection. When stopping the interface with
+`network:sta_disconnect/0` the state will change to `disconnecting` until the interface is completely
+stopped and set to `disconnected`.
+
+#### `sta_disconnect`
+
+The function [`network:sta_disconnect/0`](./apidocs/erlang/eavmlib/network.md#sta_disconnect0) will
+disconnect a station from the associated access point. Note that using this function without
+providing a custom `disconnected` event callback function will result in the driver immediately
+attempting to reconnect to the last associated access point.
+
+This function is currently only supported on the ESP32 platform.
+
+#### `sta_connect`
+
+Using the function [`network:sta_connect/0`](./apidocs/erlang/eavmlib/network.md#sta_connect0) will
+start a connection to the last configured access point. To connect to a new access point use
+[`network:sta_connect/1`](./apidocs/erlang/eavmlib/network.md#sta_connect1) with either a proplist
+consisting of `[{ssid, NetworkName}, {psk, Password}, {dhcp_hostname, Hostname}]` (setting the
+hostname is optional, and `psk` is not required for unsecure networks), or a complete
+`network_config()` consisting of `[sta_config(), sntp_config(), mdns_config()]`.
+
+This function is currently only supported on the ESP32 platform.
 
 ## AP mode
 
