@@ -68,6 +68,7 @@ static const char *const ap_sta_ip_assigned_atom = ATOM_STR("\x12", "ap_sta_ip_a
 static const char *const ap_started_atom = ATOM_STR("\xA", "ap_started");
 static const char *const dhcp_hostname_atom = ATOM_STR("\xD", "dhcp_hostname");
 static const char *const host_atom = ATOM_STR("\x4", "host");
+static const char *const managed_atom = ATOM_STR("\x7", "managed");
 static const char *const max_connections_atom = ATOM_STR("\xF", "max_connections");
 static const char *const psk_atom = ATOM_STR("\x3", "psk");
 static const char *const sntp_atom = ATOM_STR("\x4", "sntp");
@@ -92,12 +93,16 @@ enum network_cmd
     NetworkInvalidCmd = 0,
     // TODO add support for scan, ifconfig
     NetworkStartCmd,
-    NetworkRssiCmd
+    NetworkRssiCmd,
+    StaHaltCmd,
+    StaConnectCmd
 };
 
 static const AtomStringIntPair cmd_table[] = {
     { ATOM_STR("\x5", "start"), NetworkStartCmd },
     { ATOM_STR("\x4", "rssi"), NetworkRssiCmd },
+    { ATOM_STR("\x8", "halt_sta"),  StaHaltCmd },
+    { ATOM_STR("\x7", "connect"),  StaConnectCmd },
     SELECT_INT_DEFAULT(NetworkInvalidCmd)
 };
 
@@ -269,7 +274,6 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 
             case WIFI_EVENT_STA_DISCONNECTED: {
                 ESP_LOGI(TAG, "WIFI_EVENT_STA_DISCONNECTED received.");
-                esp_wifi_connect();
                 send_sta_disconnected(data);
                 break;
             }
@@ -361,12 +365,20 @@ static wifi_config_t *get_sta_wifi_config(term sta_config, GlobalContext *global
     }
     term ssid_term = interop_kv_get_value(sta_config, ssid_atom, global);
     term pass_term = interop_kv_get_value(sta_config, psk_atom, global);
+    term managed_term = interop_kv_get_value(sta_config, managed_atom, global);
+
+    bool roaming = false;
+    if ((!term_is_invalid_term(managed_term)) && (managed_term != FALSE_ATOM)) {
+        roaming = true;
+    }
 
     //
     // Check parameters
     //
     if (term_is_invalid_term(ssid_term)) {
-        ESP_LOGE(TAG, "get_sta_wifi_config: Missing SSID");
+        if (roaming != true) {
+            ESP_LOGE(TAG, "get_sta_wifi_config: Missing SSID");
+        }
         return NULL;
     }
     int ok = 0;
@@ -615,9 +627,18 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         return;
     }
 
+    bool roaming = false;
     wifi_config_t *sta_wifi_config = get_sta_wifi_config(sta_config, ctx->global);
+    if (IS_NULL_PTR(sta_wifi_config)) {
+        term managed = interop_kv_get_value(sta_config, managed_atom, ctx->global);
+        if (!term_invalid_term(managed)) {
+            if (managed != FALSE_ATOM) {
+                roaming = true;
+            }
+        }
+    }
     wifi_config_t *ap_wifi_config = get_ap_wifi_config(ap_config, ctx->global);
-    if (IS_NULL_PTR(sta_wifi_config) && IS_NULL_PTR(ap_wifi_config)) {
+    if ((roaming == false) && IS_NULL_PTR(sta_wifi_config) && IS_NULL_PTR(ap_wifi_config)) {
         ESP_LOGE(TAG, "Unable to get STA or AP configuration");
         term error = port_create_error_tuple(ctx, BADARG_ATOM);
         port_send_reply(ctx, pid, ref, error);
@@ -639,7 +660,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     esp_err_t err;
 
     esp_netif_t *sta_wifi_interface = NULL;
-    if (sta_wifi_config != NULL) {
+    if ((sta_wifi_config != NULL) || (roaming == true)) {
         sta_wifi_interface = esp_netif_create_default_wifi_sta();
         if (IS_NULL_PTR(sta_wifi_interface)) {
             ESP_LOGE(TAG, "Failed to create network STA interface");
@@ -702,13 +723,14 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     // Set the wifi mode
     //
     wifi_mode_t wifi_mode = WIFI_MODE_NULL;
-    if (!IS_NULL_PTR(sta_wifi_config) && !IS_NULL_PTR(ap_wifi_config)) {
+    if ((!IS_NULL_PTR(sta_wifi_config) || (roaming == true)) && !IS_NULL_PTR(ap_wifi_config)) {
         wifi_mode = WIFI_MODE_APSTA;
-    } else if (!IS_NULL_PTR(sta_wifi_config)) {
-        wifi_mode = WIFI_MODE_STA;
-    } else {
+    } else if (!IS_NULL_PTR(ap_wifi_config)) {
         wifi_mode = WIFI_MODE_AP;
+    } else {
+        wifi_mode = WIFI_MODE_STA;
     }
+
     if ((err = esp_wifi_set_mode(wifi_mode)) != ESP_OK) {
         ESP_LOGE(TAG, "Error setting wifi mode %d", err);
         term error = port_create_error_tuple(ctx, term_from_int(err));
@@ -807,6 +829,106 @@ static void get_sta_rssi(Context *ctx, term pid, term ref)
 
 }
 
+static void sta_disconnect(Context *ctx, term pid, term ref)
+{
+    esp_err_t err = esp_wifi_disconnect();
+    if (UNLIKELY(err != ESP_OK)) {
+        ESP_LOGE(TAG, "Error while disconnecting from AP (%i)", err);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+    }
+    port_send_reply(ctx, pid, ref, OK_ATOM);
+}
+
+static void sta_connect(Context *ctx, term pid, term ref, term config)
+{
+    //
+    // Check wifi mode
+    //
+    wifi_mode_t mode;
+    esp_err_t err = esp_wifi_get_mode(&mode);
+    if ((err != ESP_OK) || ((mode != WIFI_MODE_STA) && (mode != WIFI_MODE_APSTA))) {
+        ESP_LOGE(TAG, "sta_connect: WiFi mode must be started in either STA mode or APSTA mode to use this function");
+        term error = port_create_error_tuple(ctx, ERROR_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    }
+
+    //
+    // Get the STA config
+    //
+    term sta_config = interop_kv_get_value_default(config, sta_atom, term_invalid_term(), ctx->global);
+    if (UNLIKELY(term_is_invalid_term(sta_config))) {
+        // Also accept a proplist containing `ssid` and `psk` key/value tuples.
+        if ((interop_kv_get_value_default(config, ssid_atom, term_invalid_term(), ctx->global)) != (term_invalid_term())) {
+            sta_config = config;
+        } else {
+            ESP_LOGE(TAG, "Expected STA configuration but got none");
+            term error = port_create_error_tuple(ctx, BADARG_ATOM);
+            port_send_reply(ctx, pid, ref, error);
+            return;
+        }
+    }
+
+    wifi_config_t *sta_wifi_config = get_sta_wifi_config(sta_config, ctx->global);
+    if (IS_NULL_PTR(sta_wifi_config)) {
+        ESP_LOGE(TAG, "Unable to get STA configuration");
+        term error = port_create_error_tuple(ctx, BADARG_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    }
+
+    //
+    // Set up STA mode
+    //
+    if ((err = esp_wifi_set_config(ESP_IF_WIFI_STA, sta_wifi_config)) != ESP_OK) {
+        ESP_LOGE(TAG, "Error setting STA mode config %d", err);
+        free(sta_wifi_config);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    } else {
+        ESP_LOGD(TAG, "STA mode configured");
+        free(sta_wifi_config);
+    }
+
+    //
+    // Set the DHCP hostname
+    //
+    esp_netif_t *sta_interface = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    set_dhcp_hostname(sta_interface, "STA", interop_kv_get_value(sta_config, dhcp_hostname_atom, ctx->global));
+
+    if ((err = esp_wifi_connect()) != ESP_OK) {
+        ESP_LOGE(TAG, "Error while connecting: %d", err);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    } else {
+        ESP_LOGI(TAG, "WiFi connection started.");
+    }
+
+    //
+    // Set up simple NTP, if configured
+    //
+    maybe_set_sntp(interop_kv_get_value(config, sntp_atom, ctx->global), ctx->global);
+
+    port_send_reply(ctx, pid, ref, OK_ATOM);
+}
+
+static void sta_reconnect(Context *ctx, term pid, term ref)
+{
+    esp_err_t err = esp_wifi_connect();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error while connecting: %d", err);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    } else {
+        ESP_LOGI(TAG, "WiFi connection started.");
+    }
+    port_send_reply(ctx, pid, ref, OK_ATOM);
+}
+
 static NativeHandlerResult consume_mailbox(Context *ctx)
 {
     Message *message = mailbox_first(&ctx->mailbox);
@@ -840,6 +962,16 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
                 break;
             case NetworkRssiCmd:
                 get_sta_rssi(ctx, pid, ref);
+                break;
+            case StaHaltCmd:
+                sta_disconnect(ctx, pid, ref);
+                break;
+            case StaConnectCmd:
+                if (term_is_invalid_term(config)) {
+                    sta_reconnect(ctx, pid, ref);
+                } else {
+                    sta_connect(ctx, pid, ref, config);
+                }
                 break;
 
             default: {

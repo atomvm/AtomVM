@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.5] - Unreleased
 
+### Added
+
+- Add `network:connect/0,1` and `network:disconnect` to ESP32 network driver.
+
+### Changed
+
+- Using a custom callback for STA disconnected events in esp32 network driver will stop automatic re-connect,
+allowing applications to use scan results or other means to decide when and where to connect.
+
 ## [0.6.4] - 2024-08-18
 
 ### Added
