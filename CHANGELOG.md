@@ -70,6 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added initial support for ESP32C5 and ESP32C61
 - Added `Range:size/1`
 - Added missing `ledc` functions for esp32 platform
+- Added `network:connect/0,1` and `network:disconnect/0` to ESP32 network driver.
 
 ### Changed
 
@@ -90,6 +91,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 instead `badarg`.
 - Resources are now references instead of empty binaries.
 - Badarg error return from calling crypto:crypto_one_time with invalid arguments now matches OTP24+.
+- Using a custom callback for STA disconnected events in esp32 network driver will stop automatic re-connect,
+allowing applications to use scan results or other means to decide when and where to connect.
 
 ### Fixed
 
