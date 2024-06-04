@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Simple http client, that can be used for different use case such as downloading OTA updates
 - Elixir support for `Keyword.merge` `Keyword.take` `Keyword.pop(!)` `Keyword.keyword?` `Keyword.has_key?` functions.
 - Support for ESP32-H2
+- Add `network:connect/0,1` and `network:disconnect` to ESP32 network driver.
 
 ### Changed
 
@@ -23,6 +24,11 @@ in ESP-IDF Kconfig options.
 
 - Fix bug (with code compiled with OTP-21) with binary pattern matching: the fix introduced with
 `02411048` was not completely right, and it was converting match context to bogus binaries.
+
+### Changed
+
+- Using a custom callback for STA disconnected events in esp32 network driver will stop automatic re-connect,
+allowing applications to use scan results or other means to decide when and where to connect.
 
 ## [0.6.2] - 25-05-2024
 
