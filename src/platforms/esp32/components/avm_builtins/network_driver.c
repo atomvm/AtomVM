@@ -68,6 +68,7 @@ static const char *const ap_sta_ip_assigned_atom = ATOM_STR("\x12", "ap_sta_ip_a
 static const char *const ap_started_atom = ATOM_STR("\xA", "ap_started");
 static const char *const dhcp_hostname_atom = ATOM_STR("\xD", "dhcp_hostname");
 static const char *const host_atom = ATOM_STR("\x4", "host");
+static const char *const managed_atom = ATOM_STR("\x7", "managed");
 static const char *const max_connections_atom = ATOM_STR("\xF", "max_connections");
 static const char *const psk_atom = ATOM_STR("\x3", "psk");
 static const char *const sntp_atom = ATOM_STR("\x4", "sntp");
@@ -95,13 +96,17 @@ enum network_cmd
     // TODO add support for scan, ifconfig
     NetworkStartCmd,
     NetworkRssiCmd,
-    NetworkStopCmd
+    NetworkStopCmd,
+    StaHaltCmd,
+    StaConnectCmd
 };
 
 static const AtomStringIntPair cmd_table[] = {
     { ATOM_STR("\x5", "start"), NetworkStartCmd },
     { ATOM_STR("\x4", "rssi"), NetworkRssiCmd },
     { ATOM_STR("\x4", "stop"), NetworkStopCmd },
+    { ATOM_STR("\x8", "halt_sta"), StaHaltCmd },
+    { ATOM_STR("\x7", "connect"), StaConnectCmd },
     SELECT_INT_DEFAULT(NetworkInvalidCmd)
 };
 
@@ -111,6 +116,7 @@ struct ClientData
     uint32_t port_process_id;
     uint32_t owner_process_id;
     uint64_t ref_ticks;
+    bool managed;
 };
 
 static inline term make_atom(GlobalContext *global, AtomString atom_str)
@@ -273,7 +279,9 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 
             case WIFI_EVENT_STA_START: {
                 ESP_LOGI(TAG, "WIFI_EVENT_STA_START received.");
-                esp_wifi_connect();
+                if (!data->managed) {
+                    esp_wifi_connect();
+                }
                 break;
             }
 
@@ -285,7 +293,6 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 
             case WIFI_EVENT_STA_DISCONNECTED: {
                 ESP_LOGI(TAG, "WIFI_EVENT_STA_DISCONNECTED received.");
-                esp_wifi_connect();
                 send_sta_disconnected(data);
                 break;
             }
@@ -386,12 +393,20 @@ static wifi_config_t *get_sta_wifi_config(term sta_config, GlobalContext *global
     }
     term ssid_term = interop_kv_get_value(sta_config, ssid_atom, global);
     term pass_term = interop_kv_get_value(sta_config, psk_atom, global);
+    term managed_term = interop_kv_get_value_default(sta_config, managed_atom, FALSE_ATOM, global);
+
+    bool roaming = false;
+    if ((!term_is_invalid_term(managed_term)) && (managed_term != FALSE_ATOM)) {
+        roaming = true;
+    }
 
     //
     // Check parameters
     //
     if (term_is_invalid_term(ssid_term)) {
-        ESP_LOGE(TAG, "get_sta_wifi_config: Missing SSID");
+        if (roaming != true) {
+            ESP_LOGE(TAG, "get_sta_wifi_config: Missing SSID");
+        }
         return NULL;
     }
     int ok = 0;
@@ -579,6 +594,9 @@ static void maybe_set_sntp(term sntp_config, GlobalContext *global)
         char *host = interop_term_to_string(interop_kv_get_value(sntp_config, host_atom, global), &ok);
         if (LIKELY(ok)) {
             // do not free(sntp)
+            if (esp_sntp_enabled()) {
+                esp_sntp_stop();
+            }
             esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
             esp_sntp_setservername(0, host);
             sntp_set_time_sync_notification_cb(time_sync_notification_cb);
@@ -640,13 +658,19 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         return;
     }
 
+    bool roaming = false;
+    term managed = interop_kv_get_value_default(sta_config, managed_atom, FALSE_ATOM, ctx->global);
+    if ((!term_is_invalid_term(managed)) && (managed != FALSE_ATOM)) {
+        roaming = true;
+    }
+
     wifi_config_t *sta_wifi_config = get_sta_wifi_config(sta_config, ctx->global);
     wifi_config_t *ap_wifi_config = get_ap_wifi_config(ap_config, ctx->global);
-    if (IS_NULL_PTR(sta_wifi_config) && IS_NULL_PTR(ap_wifi_config)) {
+    if ((!roaming) && IS_NULL_PTR(sta_wifi_config) && IS_NULL_PTR(ap_wifi_config)) {
         ESP_LOGE(TAG, "Unable to get STA or AP configuration");
         term error = port_create_error_tuple(ctx, BADARG_ATOM);
         port_send_reply(ctx, pid, ref, error);
-        goto cleanup0;
+        goto cleanup;
     }
 
     struct ClientData *data = malloc(sizeof(struct ClientData));
@@ -654,23 +678,24 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         ESP_LOGE(TAG, "Failed to allocate ClientData");
         term error = port_create_error_tuple(ctx, OUT_OF_MEMORY_ATOM);
         port_send_reply(ctx, pid, ref, error);
-        goto cleanup1;
+        goto cleanup;
     }
     data->global = ctx->global;
     data->port_process_id = ctx->process_id;
     data->owner_process_id = term_to_local_process_id(pid);
     data->ref_ticks = term_to_ref_ticks(ref);
+    data->managed = roaming;
 
     esp_err_t err;
 
     esp_netif_t *sta_wifi_interface = NULL;
-    if (sta_wifi_config != NULL) {
+    if ((sta_wifi_config != NULL) || (roaming)) {
         sta_wifi_interface = esp_netif_create_default_wifi_sta();
         if (IS_NULL_PTR(sta_wifi_interface)) {
             ESP_LOGE(TAG, "Failed to create network STA interface");
             term error = port_create_error_tuple(ctx, ERROR_ATOM);
             port_send_reply(ctx, pid, ref, error);
-            goto cleanup1;
+            goto cleanup;
         }
     }
     esp_netif_t *ap_wifi_interface = NULL;
@@ -680,7 +705,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
             ESP_LOGE(TAG, "Failed to create network AP interface");
             term error = port_create_error_tuple(ctx, ERROR_ATOM);
             port_send_reply(ctx, pid, ref, error);
-            goto cleanup1;
+            goto cleanup;
         }
     }
 
@@ -689,56 +714,57 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         ESP_LOGE(TAG, "Failed to initialize ESP WiFi");
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
-        goto cleanup1;
+        goto cleanup;
     }
     if (UNLIKELY((err = esp_wifi_set_storage(WIFI_STORAGE_FLASH)) != ESP_OK)) {
         ESP_LOGE(TAG, "Failed to set ESP WiFi storage");
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
-        goto cleanup1;
+        goto cleanup;
     }
 
     if ((err = esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, data)) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to register wifi event handler");
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
-        goto cleanup1;
+        goto cleanup;
     }
     if ((err = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, data)) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to register got_ip event handler");
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
-        goto cleanup1;
+        goto cleanup;
     }
     if ((err = esp_event_handler_register(IP_EVENT, IP_EVENT_AP_STAIPASSIGNED, &event_handler, data)) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to register staipassigned event handler");
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
-        goto cleanup1;
+        goto cleanup;
     }
     if ((err = esp_event_handler_register(sntp_event_base, SNTP_EVENT_BASE_SYNC, &event_handler, data)) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to register sntp event handler");
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
-        goto cleanup1;
+        goto cleanup;
     }
 
     //
     // Set the wifi mode
     //
     wifi_mode_t wifi_mode = WIFI_MODE_NULL;
-    if (!IS_NULL_PTR(sta_wifi_config) && !IS_NULL_PTR(ap_wifi_config)) {
+    if ((!IS_NULL_PTR(sta_wifi_config) || (roaming)) && !IS_NULL_PTR(ap_wifi_config)) {
         wifi_mode = WIFI_MODE_APSTA;
-    } else if (!IS_NULL_PTR(sta_wifi_config)) {
-        wifi_mode = WIFI_MODE_STA;
-    } else {
+    } else if (!IS_NULL_PTR(ap_wifi_config)) {
         wifi_mode = WIFI_MODE_AP;
+    } else {
+        wifi_mode = WIFI_MODE_STA;
     }
+
     if ((err = esp_wifi_set_mode(wifi_mode)) != ESP_OK) {
         ESP_LOGE(TAG, "Error setting wifi mode %d", err);
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
-        goto cleanup1;
+        goto cleanup;
     } else {
         ESP_LOGI(TAG, "WIFI mode set to %d", wifi_mode);
     }
@@ -751,7 +777,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
             ESP_LOGE(TAG, "Error setting STA mode config %d", err);
             term error = port_create_error_tuple(ctx, term_from_int(err));
             port_send_reply(ctx, pid, ref, error);
-            goto cleanup1;
+            goto cleanup;
         } else {
             ESP_LOGI(TAG, "STA mode configured");
         }
@@ -763,10 +789,9 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     if (!IS_NULL_PTR(ap_wifi_config)) {
         if ((err = esp_wifi_set_config(WIFI_IF_AP, ap_wifi_config)) != ESP_OK) {
             ESP_LOGE(TAG, "Error setting AP mode config %d", err);
-            free(ap_wifi_config);
             term error = port_create_error_tuple(ctx, term_from_int(err));
             port_send_reply(ctx, pid, ref, error);
-            goto cleanup1;
+            goto cleanup;
         } else {
             ESP_LOGI(TAG, "AP mode configured");
         }
@@ -779,7 +804,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         ESP_LOGE(TAG, "Error in esp_wifi_start %d", err);
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
-        goto cleanup1;
+        goto cleanup;
     } else {
         ESP_LOGI(TAG, "WIFI started");
     }
@@ -805,25 +830,18 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     port_send_reply(ctx, pid, ref, OK_ATOM);
     goto cleanup;
 
-cleanup0:
+cleanup:
     free(sta_wifi_config);
-    sta_wifi_config = NULL;
     free(ap_wifi_config);
-    ap_wifi_config = NULL;
-    return;
-
-cleanup1:
-    free(sta_wifi_config);
-    sta_wifi_config = NULL;
-    free(ap_wifi_config);
-    ap_wifi_config = NULL;
-    free(data);
-    data = NULL;
     return;
 }
 
 static void stop_network(Context *ctx)
 {
+
+    // Stop sntp (ignore OK, or not configured error)
+    esp_sntp_stop();
+
     // Stop unregister event callbacks so they dont trigger during shutdown.
     esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler);
     esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler);
@@ -844,9 +862,6 @@ static void stop_network(Context *ctx)
     // Stop and deinit the WiFi driver, these only return OK, or not init error (fine to ignore).
     esp_wifi_stop();
     esp_wifi_deinit();
-
-    // Stop sntp (ignore OK, or not configured error)
-    esp_sntp_stop();
 
     // Destroy existing netif interfaces
     if (ap_wifi_interface != NULL) {
@@ -890,6 +905,134 @@ static void get_sta_rssi(Context *ctx, term pid, term ref)
     port_send_reply(ctx, pid, ref, reply);
 }
 
+static void sta_disconnect(Context *ctx, term pid, term ref)
+{
+    esp_err_t err = esp_wifi_disconnect();
+    if (UNLIKELY(err != ESP_OK)) {
+        ESP_LOGE(TAG, "Error while disconnecting from AP (%i)", err);
+        port_ensure_available(ctx, PORT_REPLY_SIZE + TUPLE_SIZE(2));
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    }
+
+    size_t heap_size = PORT_REPLY_SIZE + TUPLE_SIZE(2);
+    if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "Unable to allocate heap space for sta_disconnect; no message sent");
+        return;
+    }
+
+    port_send_reply(ctx, pid, ref, OK_ATOM);
+}
+
+static void sta_connect(Context *ctx, term pid, term ref, term config)
+{
+    size_t tuple_reply_size = PORT_REPLY_SIZE + TUPLE_SIZE(2);
+
+    //
+    // Check wifi mode
+    //
+    wifi_mode_t mode;
+    esp_err_t err = esp_wifi_get_mode(&mode);
+    if ((err != ESP_OK) || ((mode != WIFI_MODE_STA) && (mode != WIFI_MODE_APSTA))) {
+        ESP_LOGE(TAG, "sta_connect: WiFi mode must be started in either STA mode or APSTA mode to use this function");
+        port_ensure_available(ctx, tuple_reply_size);
+        term error = port_create_error_tuple(ctx, ERROR_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    }
+
+    //
+    // Get the STA config
+    //
+    term sta_config = interop_kv_get_value_default(config, sta_atom, term_invalid_term(), ctx->global);
+    if (UNLIKELY(term_is_invalid_term(sta_config))) {
+        // Also accept a proplist containing `ssid` and `psk` key/value tuples.
+        if ((interop_kv_get_value_default(config, ssid_atom, term_invalid_term(), ctx->global)) != (term_invalid_term())) {
+            sta_config = config;
+        } else {
+            ESP_LOGE(TAG, "Expected STA configuration but got none");
+            port_ensure_available(ctx, tuple_reply_size);
+            term error = port_create_error_tuple(ctx, BADARG_ATOM);
+            port_send_reply(ctx, pid, ref, error);
+            return;
+        }
+    }
+
+    wifi_config_t *sta_wifi_config = get_sta_wifi_config(sta_config, ctx->global);
+    if (IS_NULL_PTR(sta_wifi_config)) {
+        ESP_LOGE(TAG, "Unable to get STA configuration");
+        port_ensure_available(ctx, tuple_reply_size);
+        term error = port_create_error_tuple(ctx, BADARG_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    }
+
+    //
+    // Set up STA mode
+    //
+    if ((err = esp_wifi_set_config(ESP_IF_WIFI_STA, sta_wifi_config)) != ESP_OK) {
+        ESP_LOGE(TAG, "Error setting STA mode config %d", err);
+        free(sta_wifi_config);
+        port_ensure_available(ctx, tuple_reply_size);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    } else {
+        ESP_LOGD(TAG, "STA mode configured");
+        free(sta_wifi_config);
+    }
+
+    //
+    // Set the DHCP hostname
+    //
+    esp_netif_t *sta_interface = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    set_dhcp_hostname(sta_interface, "STA", interop_kv_get_value(sta_config, dhcp_hostname_atom, ctx->global));
+
+    if ((err = esp_wifi_connect()) != ESP_OK) {
+        ESP_LOGE(TAG, "Error while connecting: %d", err);
+        port_ensure_available(ctx, tuple_reply_size);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    } else {
+        ESP_LOGI(TAG, "WiFi connection started.");
+    }
+
+    //
+    // Set up simple NTP, if configured
+    //
+    maybe_set_sntp(interop_kv_get_value(config, sntp_atom, ctx->global), ctx->global);
+
+    if (UNLIKELY(memory_ensure_free(ctx, tuple_reply_size) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "Unable to allocate heap space for sta_connect/1; no message sent");
+        return;
+    }
+    port_send_reply(ctx, pid, ref, OK_ATOM);
+}
+
+static void sta_reconnect(Context *ctx, term pid, term ref)
+{
+    size_t tuple_reply_size = PORT_REPLY_SIZE + TUPLE_SIZE(2);
+
+    esp_err_t err = esp_wifi_connect();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error while connecting: %d", err);
+        port_ensure_available(ctx, tuple_reply_size);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    } else {
+        ESP_LOGI(TAG, "WiFi connection started.");
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, tuple_reply_size) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "Unable to allocate heap space for sta_connect/0; no message sent");
+        return;
+    }
+    port_send_reply(ctx, pid, ref, OK_ATOM);
+}
+
 static NativeHandlerResult consume_mailbox(Context *ctx)
 {
     bool cmd_terminate = false;
@@ -901,7 +1044,7 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
         return NativeContinue;
     }
 
-    //TODO: port this code to standard port (and gen_message)
+    // TODO: port this code to standard port (and gen_message)
     term pid = term_get_tuple_element(msg, 0);
     term ref = term_get_tuple_element(msg, 1);
     term cmd = term_get_tuple_element(msg, 2);
@@ -928,6 +1071,16 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
             case NetworkStopCmd:
                 cmd_terminate = true;
                 stop_network(ctx);
+                break;
+            case StaHaltCmd:
+                sta_disconnect(ctx, pid, ref);
+                break;
+            case StaConnectCmd:
+                if (term_is_invalid_term(config)) {
+                    sta_reconnect(ctx, pid, ref);
+                } else {
+                    sta_connect(ctx, pid, ref, config);
+                }
                 break;
 
             default: {

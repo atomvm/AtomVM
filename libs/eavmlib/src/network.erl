@@ -25,7 +25,9 @@
 -export([
     wait_for_sta/0, wait_for_sta/1, wait_for_sta/2,
     wait_for_ap/0, wait_for_ap/1, wait_for_ap/2,
-    sta_rssi/0
+    sta_rssi/0,
+    sta_disconnect/0,
+    sta_connect/0, sta_connect/1
 ]).
 -export([start/1, start_link/1, stop/0]).
 -export([
@@ -46,14 +48,31 @@
 
 -type ssid_config() :: {ssid, string() | binary()}.
 -type psk_config() :: {psk, string() | binary()}.
+-type app_managed_config() :: managed | {managed, boolean()}.
+%% Setting `{managed, true}' or including the atom `managed' in the `sta_config()' will signal to
+%% the driver that sta mode connections are managed in the user application, allowing to start the
+%% driver in STA (or AP+STA) mode, configuring `ssid' and `psk' if provided, but not immediately
+%% connecting to the access point. If `ssid` and `psk` are provided in `managed` mode, this
+%% configuration will be used when starting a connection using `sta_connect/0`. When using this
+%% mode of operation applications will likely need to provide an `sta_disconnected_config()' to
+%% replace the default callback (which attempts to reconnect to the last network) and instead scan
+%% for available networks, or use some other means of determining when, and which network to
+%% connect to.
 
 -type dhcp_hostname_config() :: {dhcp_hostname, string() | binary()}.
 -type sta_connected_config() :: {connected, fun(() -> term())}.
 -type sta_beacon_timeout_config() :: {beacon_timeout, fun(() -> term())}.
 -type sta_disconnected_config() :: {disconnected, fun(() -> term())}.
+%% If no callback is configured the default behavior when the connection to an access point is
+%% lost is to attempt to reconnect. If a callback is provided these automatic re-connections will
+%% no longer occur, and the application must use `network:sta_connect/0' to reconnect to the last
+%% access point, or use `network:sta_connect/1' to connect to a new access point in a manner
+%% determined by the application.
+
 -type sta_got_ip_config() :: {got_ip, fun((ip_info()) -> term())}.
 -type sta_config_property() ::
-    ssid_config()
+    app_managed_config()
+    | ssid_config()
     | psk_config()
     | dhcp_hostname_config()
     | sta_connected_config()
@@ -157,8 +176,9 @@
     config :: network_config(),
     port :: port(),
     ref :: reference(),
-    sta_ip_info :: ip_info(),
-    mdns :: pid() | undefined
+    sta_ip_info :: ip_info() | undefined,
+    mdns :: pid() | undefined,
+    sta_state :: sta_status()
 }).
 
 %%-----------------------------------------------------------------------------
@@ -269,10 +289,16 @@ wait_for_ap(ApConfig, Timeout) ->
 %% @doc     Start a network interface.
 %%
 %%          This function will start a network interface, which will attempt to
-%%          connect to an AP endpoint in the background.  Specify callback
-%%          functions to receive definitive
-%%          information that the connection succeeded.  See the AtomVM Network
-%%          FSM Programming Manual for more information.
+%%          connect to an AP endpoint in the background. If the `managed'
+%%          option us used the driver will be started, but the connection will
+%%          be delayed until `network:sta_connect/0,1' is used to start the
+%%          connection. Specify callback functions to receive definitive
+%%          information that the connection succeeded; specify a
+%%          `sta_disconnected_config()' in the `sta_config()' to manage
+%%          re-connections in the application, rather than the default
+%%          automatic attempt to reconnect until a connection is reestablished.
+%%
+%%          See the AtomVM Network Programming Manual for more information.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec start(Config :: network_config()) -> {ok, pid()} | {error, Reason :: term()}.
@@ -282,6 +308,50 @@ start(Config) ->
 -spec start_link(Config :: network_config()) -> {ok, pid()} | {error, Reason :: term()}.
 start_link(Config) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, Config, []).
+
+%%-----------------------------------------------------------------------------
+%% @returns `ok', if the network disconnects from the access point, or
+%%          `{error, Reason}' if a failure occurred.
+%% @doc     Disconnect from access point.
+%%
+%%          This will terminate a connection to an access point.
+%%
+%%          Note: Using this function without providing an `sta_disconnected_config()'
+%%          in the `sta_config()' will result in the driver immediately attempting to
+%%          reconnect to the same access point again.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sta_disconnect() -> ok | {error, Reason :: term()}.
+sta_disconnect() ->
+    gen_server:call(?SERVER, halt_sta).
+
+%%-----------------------------------------------------------------------------
+%% @param   Config The new station mode network configuration
+%% @returns ok, if the network interface was started, or {error, Reason} if
+%%          a failure occurred (e.g., due to malformed network configuration).
+%% @doc     Connect to a new access point after the network driver has been started.
+%%
+%%          This function will attempt to connect to a new AP endpoint in the
+%%          background.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sta_connect(Config :: network_config() | [sta_config_property()]) ->
+    ok | {error, Reason :: term()}.
+sta_connect(Config) ->
+    gen_server:call(?SERVER, {connect, Config}).
+
+%%-----------------------------------------------------------------------------
+%% @returns ok, if the network interface was started, or {error, Reason} if
+%%          a failure occurred (e.g., due to malformed network configuration).
+%% @doc     Connect to an access point after a network disconnection.
+%%
+%%          This function will attempt to connect, in the background, to the
+%%          last AP endpoint that was configured.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sta_connect() -> ok | {error, Reason :: term()}.
+sta_connect() ->
+    gen_server:call(?SERVER, connect).
 
 %%-----------------------------------------------------------------------------
 %% @returns ok, if the network interface was stopped, or {error, Reason} if
@@ -324,6 +394,7 @@ init(Config) ->
     Ref = make_ref(),
     {ok, #state{config = Config, port = Port, ref = Ref}, {continue, start_port}}.
 
+%% @hidden
 handle_continue(start_port, #state{config = Config, port = Port, ref = Ref} = State) ->
     Port ! {self(), Ref, {start, Config}},
     receive
@@ -334,6 +405,22 @@ handle_continue(start_port, #state{config = Config, port = Port, ref = Ref} = St
     end.
 
 %% @hidden
+handle_call(halt_sta, _From, #state{ref = Ref} = State) ->
+    network_port ! {self(), Ref, halt_sta},
+    wait_halt_sta_reply(Ref, State);
+handle_call(connect, _From, #state{config = Config, ref = Ref} = State) ->
+    network_port ! {self(), Ref, {connect, Config}},
+    wait_connect_reply(Ref, Config, State);
+handle_call({connect, Config}, _From, #state{config = OldConfig, ref = Ref} = State) ->
+    case update_config(OldConfig, Config) of
+        {error, Reason} ->
+            {reply, {error, Reason}, State};
+        NewConfig ->
+            network_port ! {self(), Ref, {connect, NewConfig}},
+            wait_connect_reply(Ref, NewConfig, State#state{config = NewConfig})
+    end;
+handle_call(sta_status, _From, State) ->
+    {reply, State#state.sta_state, State};
 handle_call(_Msg, _From, State) ->
     {reply, {error, unknown_message}, State}.
 
@@ -362,7 +449,9 @@ handle_info({Ref, ap_started} = _Msg, #state{ref = Ref, config = Config} = State
 handle_info({Ref, {ap_sta_connected, Mac}} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_ap_sta_connected_callback(Config, Mac),
     {noreply, State};
-handle_info({Ref, {ap_sta_disconnected, Mac}} = _Msg, #state{ref = Ref, config = Config} = State) ->
+handle_info(
+    {Ref, {ap_sta_disconnected, Mac}} = _Msg, #state{ref = Ref, config = Config} = State
+) ->
     maybe_ap_sta_disconnected_callback(Config, Mac),
     {noreply, State};
 handle_info(
@@ -385,6 +474,26 @@ terminate(_Reason, State) ->
     PortMonitor = erlang:monitor(port, Port),
     network_port ! {?SERVER, Ref, stop},
     wait_for_port_close(PortMonitor, Port).
+
+%% @private
+wait_connect_reply(Ref, NewConfig, State) ->
+    receive
+        {Ref, ok} ->
+            {reply, ok, State#state{ref = Ref, config = NewConfig}};
+        {Ref, {error, _Reason} = ER} ->
+            {reply, ER, State}
+    end.
+
+%% @private
+wait_halt_sta_reply(Ref, State) ->
+    receive
+        {Ref, ok} ->
+            {reply, ok, State};
+        {Ref, {error, _Reason} = Error} ->
+            {reply, Error, State}
+    after 60000 ->
+        {reply, {error, timeout}, State#state{sta_state = degraded}}
+    end.
 
 wait_for_port_close(PortMonitor, Port) ->
     receive
@@ -412,7 +521,9 @@ maybe_sta_beacon_timeout_callback(Config) ->
 
 %% @private
 maybe_sta_disconnected_callback(Config) ->
-    maybe_callback0(disconnected, proplists:get_value(sta, Config)).
+    maybe_callback0(
+        disconnected, proplists:get_value(sta, Config, fun sta_disconnected_default_callback/0)
+    ).
 
 %% @private
 maybe_sta_got_ip_callback(Config, IpInfo) ->
@@ -508,6 +619,65 @@ open_port() ->
     Port.
 
 %% @private
+-spec update_config(
+    OldConfig :: network_config() | [sta_config_property()], NewConfig :: network_config()
+) -> UpdatedConfig :: network_config() | {error, Reason :: term()}.
+update_config(OldConfig, NewConfig) ->
+    try
+        OldSTA = proplists:get_value(sta, OldConfig, []),
+        NewSTA =
+            case proplists:get_value(sta, NewConfig) of
+                undefined ->
+                    SSID =
+                        case proplists:get_value(ssid, NewConfig) of
+                            undefined ->
+                                case proplists:get_value(ssid, OldSTA) of
+                                    undefined ->
+                                        error(no_ssid);
+                                    OldSsid ->
+                                        OldSsid
+                                end;
+                            Ssid ->
+                                Ssid
+                        end,
+                    case proplists:get_value(psk, NewConfig) of
+                        undefined ->
+                            update_opts(OldSTA, [{ssid, SSID}]);
+                        PSK ->
+                            update_opts(OldSTA, [{ssid, SSID}, {psk, PSK}])
+                    end;
+                NewSta ->
+                    NewSta
+            end,
+        STA = {sta, update_opts(OldSTA, NewSTA)},
+        AP =
+            case proplists:get_value(ap, OldConfig) of
+                undefined -> [];
+                Ap -> {ap, Ap}
+            end,
+        MDNS =
+            case proplists:get_value(mdns, OldConfig) of
+                undefined -> [];
+                Mdns -> {mdns, Mdns}
+            end,
+        SNTP =
+            case proplists:get_value(sntp, OldConfig) of
+                undefined -> [];
+                Sntp -> {sntp, Sntp}
+            end,
+        lists:flatten([STA, AP, MDNS, SNTP])
+    catch
+        error:Reason -> {error, Reason}
+    end.
+
+%% @private
+update_opts(OldOpts, NewOpts) ->
+    Old = proplists:to_map(OldOpts),
+    New = proplists:to_map(NewOpts),
+    NewMap = maps:merge(Old, New),
+    proplists:from_map(NewMap).
+
+%% @private
 wait_for_ip(Timeout) ->
     receive
         connected ->
@@ -528,3 +698,7 @@ wait_for_ap_started(Timeout) ->
     after Timeout ->
         {error, timeout}
     end.
+
+%% @private
+sta_disconnected_default_callback() ->
+    sta_connect().
