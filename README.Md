@@ -15,11 +15,11 @@ AtomVM implements from scratch a minimal Erlang VM that supports a subset of Erl
 Supported Platforms
 ===================
 
-* Linux, macOS, FreeBSD, DragonFly ([generic unix](src/platforms/generic_unix))
-* ESP32 SoC (with IDF/FreeRTOS, see [README.ESP32.Md](README.ESP32.Md))
-* STM32 MCUs (with LibOpenCM3, see [README.STM32.Md](README.STM32.Md))
-* Raspberry Pi Pico (see [README.PICO.Md](README.PICO.Md))
-* Browsers and NodeJS with web assembly (see [README.WASM.Md](README.WASM.Md))
+* Linux, macOS, FreeBSD, DragonFly ([generic_unix](src/platforms/generic_unix))
+* ESP32 SoC (with IDF/FreeRTOS, see [esp32](src/platforms/esp32))
+* STM32 MCUs (with LibOpenCM3, see [stm32](src/platforms/stm32))
+* Raspberry Pi Pico (see [rp2040](src/platforms/rp2040))
+* Browsers and NodeJS with web assembly (see [emscripten](src/platforms/emscripten))
 
 AtomVM aims to be easily portable to new platforms with a minimum effort, so additional platforms
 might be supported in a near future.
