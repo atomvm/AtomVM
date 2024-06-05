@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.3] - Unreleased
 
+### Fixed
+
+- Fix bug (with code compiled with OTP-21) with binary pattern matching: the fix introduced with
+`02411048` was not completely right, and it was converting match context to bogus binaries.
+
 ## [0.6.2] - 25-05-2024
 
 ### Added

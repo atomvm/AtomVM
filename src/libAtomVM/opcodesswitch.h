@@ -5045,9 +5045,12 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_context_to_binary/1, dreg=%c%i\n", T_DEST_REG_GC_SAFE(dreg));
+                    // TODO: bs_context_to_binary should rather overwrite the match state with
+                    // the result of the conversion
                     term src = READ_DEST_REGISTER_GC_SAFE(dreg);
                     term bin;
                     if (term_is_match_state(src)) {
+                        term_match_state_restore_start_offset(src);
                         avm_int_t offset = term_get_match_state_offset(src);
                         if (offset == 0) {
                             bin = term_get_match_state_binary(src);
