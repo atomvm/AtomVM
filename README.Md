@@ -28,7 +28,6 @@ Getting Started
 ===============
 There is much more information, including a more complete
 ["Getting Started Guide"](https://www.atomvm.net/doc/main/getting-started-guide.html),
-[extensive documentation](https://www.atomvm.net/doc/main/build-instructions.html),
 [examples](https://www.atomvm.net/sample-code),
 detailed [build instructions](https://www.atomvm.net/doc/main/build-instructions.html),
 and [contact information](https://www.atomvm.net/contact) available on the
