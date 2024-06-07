@@ -27,6 +27,7 @@ set(HEADER_FILES
     gpio_driver.h
     stm_sys.h
     ../../../../libAtomVM/platform_nifs.h
+    ../../../../libAtomVM/portnifloader.h
     ../../../../libAtomVM/sys.h
 )
 
@@ -34,6 +35,7 @@ set(SOURCE_FILES
     gpio_driver.c
     platform_nifs.c
     sys.c
+    ../../../../libAtomVM/portnifloader.c
 )
 
 set(

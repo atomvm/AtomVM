@@ -26,6 +26,7 @@ set(HEADER_FILES
     platform_smp.h
     rp2040_sys.h
     ../../../../libAtomVM/otp_crypto.h
+    ../../../../libAtomVM/portnifloader.h
 )
 
 set(SOURCE_FILES
@@ -37,6 +38,7 @@ set(SOURCE_FILES
     smp.c
     sys.c
     ../../../../libAtomVM/otp_crypto.c
+    ../../../../libAtomVM/portnifloader.c
 )
 
 set(
