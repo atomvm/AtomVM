@@ -40,6 +40,7 @@ jobs:
          - 'v5.0.6'
          - 'v5.1.4'
          - 'v5.2.2'
+         - 'v5.3-beta2'
 
         exclude:
         - esp-idf-target: "esp32c3"
