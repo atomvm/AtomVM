@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Simple http client, that can be used for different use case such as downloading OTA updates
 
+### Changed
+
+- ESP32 network driver messages for event 40 (home channel change events) are now suppressed, but the
+details for the channel changes can be observed in the console log if "debug" level logging is enabled
+in ESP-IDF Kconfig options.
+
 ### Fixed
 
 - Fix bug (with code compiled with OTP-21) with binary pattern matching: the fix introduced with
