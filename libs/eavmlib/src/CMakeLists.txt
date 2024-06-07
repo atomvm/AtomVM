@@ -23,6 +23,7 @@ project(eavmlib)
 include(BuildErlang)
 
 set(ERLANG_MODULES
+    ahttp_client
     atomvm
     avm_pubsub
     console
