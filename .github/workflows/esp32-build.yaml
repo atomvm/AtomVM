@@ -38,8 +38,8 @@ jobs:
         idf-version:
          - 'v4.4.7'
          - 'v5.0.6'
-         - 'v5.1.3'
-         - 'v5.2.1'
+         - 'v5.1.4'
+         - 'v5.2.2'
 
         exclude:
         - esp-idf-target: "esp32c3"
@@ -47,7 +47,7 @@ jobs:
         - esp-idf-target: "esp32c3"
           idf-version: 'v5.0.6'
         - esp-idf-target: "esp32c3"
-          idf-version: 'v5.1.3'
+          idf-version: 'v5.1.4'
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
