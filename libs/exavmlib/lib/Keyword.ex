@@ -1,8 +1,11 @@
 #
 # This file is part of elixir-lang.
 #
-# Copyright 2012-2019 Elixir Contributors
+# Copyright 2012-2024 Elixir Contributors
 # https://github.com/elixir-lang/elixir/commits/v1.10.1/lib/elixir/lib/keyword.ex
+#
+# merge/2 take/2 pop/2/3 pop!/2 keyword?/1 has_key?/2 from:
+# https://github.com/elixir-lang/elixir/blob/v1.16/lib/elixir/lib/keyword.ex
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -52,6 +55,41 @@ defmodule Keyword do
     end
   end
 
+  def merge(keywords1, []) when is_list(keywords1), do: keywords1
+  def merge([], keywords2) when is_list(keywords2), do: keywords2
+
+  def merge(keywords1, keywords2) when is_list(keywords1) and is_list(keywords2) do
+    if keyword?(keywords2) do
+      fun = fn
+        {key, _value} when is_atom(key) ->
+          not has_key?(keywords2, key)
+
+        _ ->
+          raise ArgumentError,
+                "expected a keyword list as the first argument, got: #{inspect(keywords1)}"
+      end
+
+      :lists.filter(fun, keywords1) ++ keywords2
+    else
+      raise ArgumentError,
+            "expected a keyword list as the second argument, got: #{inspect(keywords2)}"
+    end
+  end
+
+  def pop(keywords, key, default \\ nil) when is_list(keywords) and is_atom(key) do
+    case fetch(keywords, key) do
+      {:ok, value} -> {value, delete(keywords, key)}
+      :error -> {default, keywords}
+    end
+  end
+
+  def pop!(keywords, key) when is_list(keywords) and is_atom(key) do
+    case fetch(keywords, key) do
+      {:ok, value} -> {value, delete(keywords, key)}
+      :error -> raise KeyError, key: key, term: keywords
+    end
+  end
+
   def put(keywords, key, value) when is_list(keywords) and is_atom(key) do
     [{key, value} | delete(keywords, key)]
   end
@@ -61,6 +99,18 @@ defmodule Keyword do
       true -> delete_key(keywords, key)
       _ -> keywords
     end
+  end
+
+  def take(keywords, keys) when is_list(keywords) and is_list(keys) do
+    :lists.filter(fn {k, _} -> :lists.member(k, keys) end, keywords)
+  end
+
+  def keyword?([{key, _value} | rest]) when is_atom(key), do: keyword?(rest)
+  def keyword?([]), do: true
+  def keyword?(_other), do: false
+
+  def has_key?(keywords, key) when is_list(keywords) and is_atom(key) do
+    :lists.keymember(key, 1, keywords)
   end
 
   defp delete_key([{key, _} | tail], key), do: delete_key(tail, key)
