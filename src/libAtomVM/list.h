@@ -21,6 +21,8 @@
 #ifndef _LIST_H_
 #define _LIST_H_
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -81,7 +83,7 @@ static inline void list_init(struct ListHead *list_item)
     list_item->next = list_item;
 }
 
-static inline int list_is_empty(struct ListHead *list_item)
+static inline bool list_is_empty(struct ListHead *list_item)
 {
     return (list_item->next == list_item) && (list_item->prev == list_item);
 }

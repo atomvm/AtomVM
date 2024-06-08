@@ -106,9 +106,9 @@ static inline void synclist_remove(struct SyncList *synclist, struct ListHead *i
     synclist_unlock(synclist);
 }
 
-static inline int synclist_is_empty(struct SyncList *synclist)
+static inline bool synclist_is_empty(struct SyncList *synclist)
 {
-    int result;
+    bool result;
     struct ListHead *head = synclist_rdlock(synclist);
     result = (head->next == head) && (head->prev == head);
     synclist_unlock(synclist);
