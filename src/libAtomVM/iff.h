@@ -28,6 +28,7 @@
 #ifndef _IFF_H_
 #define _IFF_H_
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -76,13 +77,13 @@ extern "C" {
 void scan_iff(const void *iff_binary, int file_size, unsigned long *offsets, unsigned long *sizes);
 
 /**
- * @brief Returns 1 if pointed binary is valid BEAM IFF.
+ * @brief Returns \c true if pointed binary is valid BEAM IFF.
  *
  * @details Checks if the pointed binary has a valid BEAM IFF header.
  * @param beam_data a pointer to the beam_data binary
- * @returns 1 if beam_data points to a valid binary, otherwise 0 is returned.
+ * @returns \c true if beam_data points to a valid binary, otherwise \c false is returned.
  */
-int iff_is_valid_beam(const void *beam_data);
+bool iff_is_valid_beam(const void *beam_data);
 
 #ifdef __cplusplus
 }

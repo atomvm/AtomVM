@@ -125,14 +125,14 @@ int avmpack_find_section_by_flag(const void *avmpack_binary, uint32_t flags_mask
 int avmpack_find_section_by_name(const void *avmpack_binary, const char *name, const void **ptr, uint32_t *size);
 
 /**
- * @brief Returns 1 if the pointed binary is a valid AVM Pack.
+ * @brief Returns \c true if the pointed binary is a valid AVM Pack.
  *
  * @details Returns if the pointed binary is a valid AVM Pack binary or not.
  * @param avmpack_binary a pointer to an AVM Pack binary.
  * @param size the size of AVM Pack binary.
- * @returns 1 if it is a valid AVM Pack binary, 0 otherwise.
+ * @returns \c true if it is a valid AVM Pack binary, \c false otherwise.
  */
-int avmpack_is_valid(const void *avmpack_binary, uint32_t size);
+bool avmpack_is_valid(const void *avmpack_binary, uint32_t size);
 
 /**
  * @brief Fold over all the sections in an AVM Pack.
