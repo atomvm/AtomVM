@@ -82,9 +82,9 @@ jobs:
       if: runner.arch != 'ARM64' && runner.os == 'Linux' && matrix.esp-idf-target == 'esp32'
       run: |
         set -eu
-        QEMU_VER=esp-develop-8.2.0-20240122
-        QEMU_XTENSA_DIST=qemu-xtensa-softmmu-esp_develop_8.2.0_20240122-x86_64-linux-gnu.tar.xz
-        QEMU_XTENSA_SHA256=e7c72ef5705ad1444d391711088c8717fc89f42e9bf6d1487f9c2a326b8cfa83
+        QEMU_VER=esp-develop-9.0.0-20240606
+        QEMU_XTENSA_DIST=qemu-xtensa-softmmu-esp_develop_9.0.0_20240606-x86_64-linux-gnu.tar.xz
+        QEMU_XTENSA_SHA256=071d117c44a6e9a1bc8664ab63b592d3e17ceb779119dcb46c59571a4a7a88c9
         wget --no-verbose https://github.com/espressif/qemu/releases/download/${QEMU_VER}/${QEMU_XTENSA_DIST}
         echo "${QEMU_XTENSA_SHA256} *${QEMU_XTENSA_DIST}" | sha256sum --check --strict -
         tar -xf ${QEMU_XTENSA_DIST} -C /opt && rm ${QEMU_XTENSA_DIST}
@@ -93,9 +93,9 @@ jobs:
       if: runner.arch != 'ARM64' && runner.os == 'Linux' && matrix.esp-idf-target == 'esp32c3'
       run: |
         set -eu
-        QEMU_VER=esp-develop-8.2.0-20240122
-        QEMU_RISCV32_DIST=qemu-riscv32-softmmu-esp_develop_8.2.0_20240122-x86_64-linux-gnu.tar.xz
-        QEMU_RISCV32_SHA256=95ac86d7b53bf98b5ff19c33aa926189b849f5a0daf8f41e160bc86c5e31abd4
+        QEMU_VER=esp-develop-9.0.0-20240606
+        QEMU_RISCV32_DIST=qemu-riscv32-softmmu-esp_develop_9.0.0_20240606-x86_64-linux-gnu.tar.xz
+        QEMU_RISCV32_SHA256=47120e826cfec7180db8cb611a7a4aed2e9b2191c2a739194f8ce085e63cdd8d
         wget --no-verbose https://github.com/espressif/qemu/releases/download/${QEMU_VER}/${QEMU_RISCV32_DIST}
         echo "${QEMU_RISCV32_SHA256} *${QEMU_RISCV32_DIST}" | sha256sum --check --strict -
         tar -xf ${QEMU_RISCV32_DIST} -C /opt && rm ${QEMU_RISCV32_DIST}
@@ -104,9 +104,9 @@ jobs:
       if: runner.arch == 'ARM64' && runner.os == 'Linux' && matrix.esp-idf-target == 'esp32'
       run: |
         set -eu
-        QEMU_VER=esp-develop-8.2.0-20240122
-        QEMU_XTENSA_DIST=qemu-xtensa-softmmu-esp_develop_8.2.0_20240122-aarch64-linux-gnu.tar.xz
-        QEMU_XTENSA_SHA256=77c83f2772f7d9b0c770722c2cebf3625d21d8eddbccfea6816f3d8f4982ea86
+        QEMU_VER=esp-develop-9.0.0-20240606
+        QEMU_XTENSA_DIST=qemu-xtensa-softmmu-esp_develop_9.0.0_20240606-aarch64-linux-gnu.tar.xz
+        QEMU_XTENSA_SHA256=43552f32b303a6820d0d9551903e54fc221aca98ccbd04e5cbccbca881548008
         wget --no-verbose https://github.com/espressif/qemu/releases/download/${QEMU_VER}/${QEMU_XTENSA_DIST}
         echo "${QEMU_XTENSA_SHA256} *${QEMU_XTENSA_DIST}" | sha256sum --check --strict -
         tar -xf ${QEMU_XTENSA_DIST} -C /opt && rm ${QEMU_XTENSA_DIST}
@@ -115,9 +115,9 @@ jobs:
       if: runner.arch == 'ARM64' && runner.os == 'Linux' && matrix.esp-idf-target == 'esp32c3'
       run: |
         set -eu
-        QEMU_VER=esp-develop-8.2.0-20240122
-        QEMU_RISCV32_DIST=qemu-riscv32-softmmu-esp_develop_8.2.0_20240122-aarch64-linux-gnu.tar.xz
-        QEMU_RISCV32_SHA256=4089f7958f753779e5b4c93fe2469d62850a1f209b0bda8b75d55fe4a61ca39b
+        QEMU_VER=esp-develop-9.0.0-20240606
+        QEMU_RISCV32_DIST=qemu-riscv32-softmmu-esp_develop_9.0.0_20240606-aarch64-linux-gnu.tar.xz
+        QEMU_RISCV32_SHA256=3b6221a8b1881d2c9b9fa0b0bf8d7065c84153d2a54e429307bde9feae235c27
         wget --no-verbose https://github.com/espressif/qemu/releases/download/${QEMU_VER}/${QEMU_RISCV32_DIST}
         echo "${QEMU_RISCV32_SHA256} *${QEMU_RISCV32_DIST}" | sha256sum --check --strict -
         tar -xf ${QEMU_RISCV32_DIST} -C /opt && rm ${QEMU_RISCV32_DIST}
@@ -126,11 +126,11 @@ jobs:
       run: |
         set -e
         . $IDF_PATH/export.sh
-        pip install pytest==8.0.2 \
-            pytest-embedded==1.8.1 \
-            pytest-embedded-serial-esp==1.8.1 \
-            pytest-embedded-idf==1.8.1 \
-            pytest-embedded-qemu==1.8.1
+        pip install pytest==8.2.2 \
+            pytest-embedded==1.10.3 \
+            pytest-embedded-serial-esp==1.10.3 \
+            pytest-embedded-idf==1.10.3 \
+            pytest-embedded-qemu==1.10.3
 
     - name: Build ESP32 tests using idf.py
       working-directory: ./src/platforms/esp32/test/
