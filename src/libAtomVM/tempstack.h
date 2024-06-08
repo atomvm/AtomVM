@@ -21,6 +21,8 @@
 #ifndef _TEMPSTACK_H_
 #define _TEMPSTACK_H_
 
+#include <stdbool.h>
+
 #include "term_typedef.h"
 #include "utils.h"
 
@@ -83,7 +85,7 @@ NO_DISCARD static TempStackResult temp_stack_grow(struct TempStack *temp_stack)
     return TempStackOk;
 }
 
-static inline int temp_stack_is_empty(const struct TempStack *temp_stack)
+static inline bool temp_stack_is_empty(const struct TempStack *temp_stack)
 {
     return temp_stack->stack_pos == temp_stack->min_stack + MIN_STACK_SIZE;
 }

@@ -18,6 +18,7 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -399,7 +400,7 @@ static enum MemoryGCResult memory_shrink(Context *ctx, size_t new_size, size_t n
 }
 #endif
 
-static inline int memory_is_moved_marker(term *t)
+static inline bool memory_is_moved_marker(term *t)
 {
     // 0x2B is an unused tag
     return *t == 0x2B;
