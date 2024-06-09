@@ -12,6 +12,7 @@ src/platforms/esp32/build/**
 src/platforms/esp32/build/**/*.d
 src/platforms/esp32/test/build/**
 src/platforms/esp32/components/**
+src/platforms/esp32/managed_components/**
 src/platforms/esp32/sdkconfig
 !src/platforms/esp32/components/avm_builtins/
 !src/platforms/esp32/components/avm_builtins/**

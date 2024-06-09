@@ -19,6 +19,10 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#include <sdkconfig.h>
+
+#ifdef CONFIG_AVM_ENABLE_NETWORK_PORT_DRIVER
+
 #include <atom.h>
 #include <context.h>
 #include <debug.h>
@@ -288,6 +292,14 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
                 send_ap_started(data);
                 break;
             }
+
+#if ESP_IDF_VERSION_MAJOR >= 5 && ESP_IDF_VERSION_MINOR >= 2
+            case WIFI_EVENT_HOME_CHANNEL_CHANGE: {
+                wifi_event_home_channel_change_t *chan_data = (wifi_event_home_channel_change_t *) event_data;
+                ESP_LOGD(TAG, "WIFI_EVENT home channel changed from %u to %u.", chan_data->old_chan, chan_data->new_chan);
+                break;
+            }
+#endif
 
             default:
                 ESP_LOGI(TAG, "Unhandled wifi event: %" PRIi32 ".", event_id);
@@ -881,8 +893,6 @@ Context *network_driver_create_port(GlobalContext *global, term opts)
     ctx->platform_data = NULL;
     return ctx;
 }
-
-#ifdef CONFIG_AVM_ENABLE_NETWORK_PORT_DRIVER
 
 REGISTER_PORT_DRIVER(network, network_driver_init, NULL, network_driver_create_port)
 

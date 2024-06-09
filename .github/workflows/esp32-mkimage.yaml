@@ -35,14 +35,14 @@ jobs:
 
     strategy:
       matrix:
-        idf-version: ["5.1.3"]
+        idf-version: ["5.1.4"]
         cc: ["clang-10"]
         cxx: ["clang++-10"]
         cflags: ["-O3"]
         otp: ["24"]
         elixir_version: ["1.11"]
         compiler_pkgs: ["clang-10"]
-        soc: ["esp32", "esp32c3", "esp32s2", "esp32s3", "esp32c6"]
+        soc: ["esp32", "esp32c2", "esp32c3", "esp32s2", "esp32s3", "esp32c6", "esp32h2"]
 
     env:
       CC: ${{ matrix.cc }}
