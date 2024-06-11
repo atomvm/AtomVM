@@ -10,25 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Simple http client, that can be used for different use case such as downloading OTA updates
 - Elixir support for `Keyword.merge` `Keyword.take` `Keyword.pop(!)` `Keyword.keyword?` `Keyword.has_key?` functions.
+- Support for ESP32-H2
 
 ### Changed
 
 - ESP32 network driver messages for event 40 (home channel change events) are now suppressed, but the
 details for the channel changes can be observed in the console log if "debug" level logging is enabled
 in ESP-IDF Kconfig options.
+- Default size of ESP32 RTC slow memory from 4086 to 4096, except on ESP32-H2 where it's 3072
 
 ### Fixed
 
 - Fix bug (with code compiled with OTP-21) with binary pattern matching: the fix introduced with
 `02411048` was not completely right, and it was converting match context to bogus binaries.
-
-### Changed
-
-- Default size of ESP32 RTC slow memory from 4086 to 4096, except on ESP32-H2 where it's 3072
-
-### Added
-
-- Support for ESP32-H2
 
 ## [0.6.2] - 25-05-2024
 
