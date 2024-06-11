@@ -31,6 +31,7 @@ test() ->
     ok = test_keyfind(),
     ok = test_keydelete(),
     ok = test_keyreplace(),
+    ok = test_keytake(),
     ok = test_foldl(),
     ok = test_foldr(),
     ok = test_all(),
@@ -103,6 +104,19 @@ test_keyreplace() ->
         {a, x},
         []
     ]),
+    ok.
+
+test_keytake() ->
+    List1 = [{name, "Joe"}, {name, "Robert"}, {name, "Mike"}],
+    ?ASSERT_MATCH(
+        lists:keytake("Joe", 2, List1), {value, {name, "Joe"}, [{name, "Robert"}, {name, "Mike"}]}
+    ),
+    ?ASSERT_MATCH(
+        lists:keytake("Robert", 2, List1),
+        {value, {name, "Robert"}, [{name, "Joe"}, {name, "Mike"}]}
+    ),
+    ?ASSERT_MATCH(lists:keytake("Joe", 1, List1), false),
+    ?ASSERT_MATCH(lists:keytake("Joe", 3, List1), false),
     ok.
 
 test_foldl() ->
