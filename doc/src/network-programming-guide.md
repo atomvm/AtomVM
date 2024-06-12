@@ -111,10 +111,13 @@ The `<ap-properties>` property list may contain the following entries:
 
 * `{ssid, string() | binary()}`  The SSID to which the device should connect.
 * `{psk, string() | binary()}` The password required to authenticate to the network, if required.  Note that this password must be a minimum of 8 characters.
+* `{ap_channel, wifi_channel()}` The channel the access point should use.
 
 If the SSID is omitted in configuration, the SSID name `atomvm-<hexmac>` will be created, where `<hexmac>` is the hexadecimal representation of the factory-assigned MAC address of the device.  This name should be sufficiently unique to disambiguate it from other reachable ESP32 devices, but it may also be difficult to read or remember.
 
 If the password is omitted, then an _open network_ will be created, and a warning will be printed to the console.  Otherwise, the AP network will be started using WPA+WPA2 authentication.
+
+If the channel is omitted the default chanel for esp32 is `1`. This setting is only used while a device is operation is AP mode only. If `ap_channel` is configured, it will be temporarily changed to match the associated access point if AP + STA mode is used and the station is associated with an access point. This is a hardware limitation due to the modem radio only being able to operate on a single channel (frequency) at a time.
 
 The [`network:start/1`](./apidocs/erlang/eavmlib/network.md#start1) will immediately return `{ok, Pid}`, where `Pid` is the process id of the network server, if the network was properly initialized, or `{error, Reason}`, if there was an error in configuration.  However, the application may want to wait for the device to to be ready to accept connections from other devices, or to be notified when other devices connect to this AP.
 
