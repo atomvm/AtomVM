@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Simple http client, that can be used for different use case such as downloading OTA updates
 - Elixir support for `Keyword.merge` `Keyword.take` `Keyword.pop(!)` `Keyword.keyword?` `Keyword.has_key?` functions.
 - Support for ESP32-H2
+- Add `network:wifi_scan/0,1` to ESP32 network driver to scan available APs when in station (or sta+ap) mode.
 
 ### Changed
 
@@ -23,6 +24,10 @@ in ESP-IDF Kconfig options.
 
 - Fix bug (with code compiled with OTP-21) with binary pattern matching: the fix introduced with
 `02411048` was not completely right, and it was converting match context to bogus binaries.
+
+### Added
+
+- Add `network:wifi_scan/0,1` to ESP32 network driver to scan available APs when in station (or sta+ap) mode.
 
 ## [0.6.2] - 25-05-2024
 
