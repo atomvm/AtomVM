@@ -3,6 +3,7 @@
 %
 % Copyright 2017-2023 Fred Dushin <fred@dushin.net>
 % split/2 function Copyright Ericsson AB 1996-2023.
+% keytake/3 function Copyright Ericsson AB 1996-2024.
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -40,6 +41,7 @@
     keyfind/3,
     keymember/3,
     keyreplace/4,
+    keytake/3,
     foldl/3,
     foldr/3,
     all/2,
@@ -303,6 +305,33 @@ keyreplace(K, I, [H | T], L, NewTuple, NewList) when is_tuple(H) andalso is_tupl
     end;
 keyreplace(K, I, [H | T], L, NewTuple, NewList) ->
     keyreplace(K, I, T, L, NewTuple, [H | NewList]).
+
+%%-----------------------------------------------------------------------------
+%% @param   Key         the key to match
+%% @param   N           the position in the tuple to compare (1..tuple_size)
+%% @param   TupleList1  the list of tuples from which to find the element
+%% @returns `{value, Tuple, TupleList2}' if such a tuple is found, otherwise `false'.
+%%          `TupleList2' is a copy of `TupleList1' where the first
+%%          occurrence of `Tuple' has been removed.
+%% @doc     Searches the list of tuples `TupleList1' for a tuple whose `N'th element
+%%          compares equal to `Key'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec keytake(Key, N, TupleList1) -> {value, Tuple, TupleList2} | false when
+    Key :: term(),
+    N :: pos_integer(),
+    TupleList1 :: [tuple()],
+    TupleList2 :: [tuple()],
+    Tuple :: tuple().
+keytake(Key, N, L) when is_integer(N), N > 0 ->
+    keytake(Key, N, L, []).
+
+keytake(Key, N, [H | T], L) when element(N, H) == Key ->
+    {value, H, lists:reverse(L, T)};
+keytake(Key, N, [H | T], L) ->
+    keytake(Key, N, T, [H | L]);
+keytake(_K, _N, [], _L) ->
+    false.
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun the function to apply
