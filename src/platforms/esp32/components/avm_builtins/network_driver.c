@@ -61,6 +61,7 @@
 #define PORT_REPLY_SIZE (TUPLE_SIZE(2) + REF_SIZE)
 
 static const char *const ap_atom = ATOM_STR("\x2", "ap");
+static const char *const ap_channel_atom = ATOM_STR("\xA", "ap_channel");
 static const char *const ap_sta_connected_atom = ATOM_STR("\x10", "ap_sta_connected");
 static const char *const ap_sta_disconnected_atom = ATOM_STR("\x13", "ap_sta_disconnected");
 static const char *const ap_sta_ip_assigned_atom = ATOM_STR("\x12", "ap_sta_ip_assigned");
@@ -449,6 +450,7 @@ static wifi_config_t *get_ap_wifi_config(term ap_config, GlobalContext *global)
     }
     term ssid_term = interop_kv_get_value(ap_config, ssid_atom, global);
     term pass_term = interop_kv_get_value(ap_config, psk_atom, global);
+    term channel_term = interop_kv_get_value(ap_config, ap_channel_atom, global);
 
     //
     // Check parameters
@@ -481,6 +483,10 @@ static wifi_config_t *get_ap_wifi_config(term ap_config, GlobalContext *global)
             return NULL;
         }
     }
+    uint8_t channel = 0;
+    if (!term_is_invalid_term(channel_term)) {
+        channel = term_to_uint8(channel_term);
+    }
 
     //
     // Allocate wifi_config and check variable sizes
@@ -512,6 +518,9 @@ static wifi_config_t *get_ap_wifi_config(term ap_config, GlobalContext *global)
     if (!IS_NULL_PTR(psk)) {
         strcpy((char *) wifi_config->ap.password, psk);
         free(psk);
+    }
+    if (channel != 0) {
+        wifi_config->ap.channel = channel;
     }
 
     wifi_config->ap.authmode = IS_NULL_PTR(psk) ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA_WPA2_PSK;
