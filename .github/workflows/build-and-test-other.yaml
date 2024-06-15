@@ -112,7 +112,7 @@ jobs:
 
         - arch: "arm64v8"
           platform: "arm64/v8"
-          tag: "bullseye"
+          tag: "bookworm"
           cflags: "-O2"
           cmake_opts: "-DAVM_WARNINGS_ARE_ERRORS=ON"
 
@@ -149,7 +149,8 @@ jobs:
         -e CFLAGS="${{ matrix.cflags }}" -e CXXFLAGS="${{ matrix.cflags }}" \
         ${{ matrix.arch }}/debian:${{ matrix.tag }} /bin/bash -c '
         ([ -n "${{ matrix.sources }}" ] && echo "${{ matrix.sources }}" > /etc/apt/sources.list || true) &&
-        cat /etc/apt/sources.list &&
+        cat /etc/apt/sources.list || true &&
+        cat /etc/apt/sources.list.d/* || true &&
         if test -n "${{ matrix.install_deps }}"; then
             echo
             ${{ matrix.install_deps }}
