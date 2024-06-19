@@ -446,6 +446,7 @@ compile_erlang(sexp_lexer)
 compile_erlang(test_function_exported)
 compile_erlang(test_list_to_tuple)
 
+compile_erlang(bs_context_byte_size)
 compile_erlang(bs_context_to_binary_with_offset)
 compile_erlang(bs_restore2_start_offset)
 compile_erlang(test_refc_binaries)
@@ -910,6 +911,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_function_exported.beam
     test_list_to_tuple.beam
 
+    bs_context_byte_size.beam
     bs_context_to_binary_with_offset.beam
     bs_restore2_start_offset.beam
     bs_append_extra_words.beam

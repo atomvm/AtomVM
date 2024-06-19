@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 details for the channel changes can be observed in the console log if "debug" level logging is enabled
 in ESP-IDF Kconfig options.
 - Default size of ESP32 RTC slow memory from 4086 to 4096, except on ESP32-H2 where it's 3072
+- Update `byte_size/1` and `bit_size/1` to implement OTP27 match context reuse optimization OTP-18987.
 
 ### Fixed
 
