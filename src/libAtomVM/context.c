@@ -404,10 +404,12 @@ static struct ResourceMonitor *context_monitors_handle_terminate(Context *ctx)
                         AVM_ABORT();
                     }
 
+                    term exited_pid = term_from_local_process_id(ctx->process_id);
+                    context_unlink(target, exited_pid);
                     // Prepare the message on ctx's heap which will be freed afterwards.
                     term info_tuple = term_alloc_tuple(3, &ctx->heap);
                     term_put_tuple_element(info_tuple, 0, EXIT_ATOM);
-                    term_put_tuple_element(info_tuple, 1, term_from_local_process_id(ctx->process_id));
+                    term_put_tuple_element(info_tuple, 1, exited_pid);
                     term_put_tuple_element(info_tuple, 2, ctx->exit_reason);
                     mailbox_send(target, info_tuple);
                 } else {
@@ -446,7 +448,15 @@ static struct ResourceMonitor *context_monitors_handle_terminate(Context *ctx)
 
 int context_link(Context *ctx, term link_pid)
 {
-    struct Monitor *monitor = malloc(sizeof(struct Monitor));
+    struct ListHead *item;
+    struct Monitor *monitor;
+    LIST_FOR_EACH (item, &ctx->monitors_head) {
+        monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
+        if ((monitor->monitor_obj == link_pid) && (monitor->ref_ticks == 0)) {
+            return 0;
+        }
+    }
+    monitor = malloc(sizeof(struct Monitor));
     if (IS_NULL_PTR(monitor)) {
         return -1;
     }
