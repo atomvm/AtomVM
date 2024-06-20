@@ -53,13 +53,13 @@
 
 #define TAG "gpio_driver"
 
-static const char *const gpio_atom = "\x4" "gpio";
-
 #ifdef CONFIG_AVM_ENABLE_GPIO_NIFS
 static const struct Nif *gpio_nif_get_nif(const char *nifname);
 #endif
 
+#ifdef CONFIG_AVM_ENABLE_GPIO_PORT_DRIVER
 static void gpio_driver_init(GlobalContext *global);
+#endif
 
 #ifdef CONFIG_AVM_ENABLE_GPIO_PORT_DRIVER
 static NativeHandlerResult consume_gpio_mailbox(Context *ctx);
@@ -68,7 +68,10 @@ static void gpio_isr_handler(void *arg);
 static Context *gpio_driver_create_port(GlobalContext *global, term opts);
 #endif
 
+#ifdef CONFIG_AVM_ENABLE_GPIO_PORT_DRIVER
+static const char *const gpio_atom = "\x4" "gpio";
 static const char *const gpio_driver_atom = "\xB" "gpio_driver";
+#endif
 
 static const AtomStringIntPair pin_mode_table[] = {
     { ATOM_STR("\x5", "input"), GPIO_MODE_INPUT },
@@ -109,6 +112,7 @@ enum gpio_cmd
     GPIOCloseCmd
 };
 
+#ifdef CONFIG_AVM_ENABLE_GPIO_PORT_DRIVER
 static const AtomStringIntPair gpio_cmd_table[] = {
     { ATOM_STR("\x9", "set_level"), GPIOSetLevelCmd },
     { ATOM_STR("\x4", "read"), GPIOReadCmd },
@@ -120,6 +124,7 @@ static const AtomStringIntPair gpio_cmd_table[] = {
 };
 
 static term gpio_driver;
+#endif
 
 struct GPIOListenerData
 {
