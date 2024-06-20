@@ -31,12 +31,16 @@ start() ->
     0.
 
 test_nocatch() ->
+    MyPid = self(),
     Pid = spawn_opt(fun proc/0, []),
     erlang:link(Pid),
+    erlang:link(Pid),
+    {links,[Pid]} = erlang:process_info(MyPid,links),
     Pid ! do_throw,
     ok =
         receive
             {'EXIT', Pid, {{nocatch, test}, EL}} when is_list(EL) ->
+                {links,[]} = erlang:process_info(MyPid,links),
                 ok;
             Other ->
                 {unexpected, Other}
