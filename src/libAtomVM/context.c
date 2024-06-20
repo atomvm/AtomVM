@@ -405,6 +405,8 @@ static struct ResourceMonitor *context_monitors_handle_terminate(Context *ctx)
                     }
 
                     term exited_pid = term_from_local_process_id(ctx->process_id);
+                    // Process table should be locked before context_unlink is
+                    // called. This is done in calling function context_destroy.
                     context_unlink(target, exited_pid);
                     // Prepare the message on ctx's heap which will be freed afterwards.
                     term info_tuple = term_alloc_tuple(3, &ctx->heap);
