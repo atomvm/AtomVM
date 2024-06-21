@@ -35,12 +35,14 @@ test_nocatch() ->
     Pid = spawn_opt(fun proc/0, []),
     erlang:link(Pid),
     erlang:link(Pid),
-    {links,[Pid]} = erlang:process_info(MyPid,links),
+    {links, LinkedPids1} = erlang:process_info(MyPid, links),
+    1 = no_of_linked_pids(Pid, LinkedPids1),
     Pid ! do_throw,
     ok =
         receive
             {'EXIT', Pid, {{nocatch, test}, EL}} when is_list(EL) ->
-                {links,[]} = erlang:process_info(MyPid,links),
+                {links, LinkedPids2} = erlang:process_info(MyPid, links),
+                0 = no_of_linked_pids(Pid, LinkedPids2),
                 ok;
             Other ->
                 {unexpected, Other}
@@ -81,3 +83,6 @@ proc() ->
         exit_normally ->
             ok
     end.
+
+no_of_linked_pids(Pid, L) ->
+    erlang:length([X || X <- L, X =:= Pid]).
