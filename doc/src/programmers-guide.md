@@ -1062,16 +1062,16 @@ As noted above, the [`erlang:system_info/1`](./apidocs/erlang/estdlib/erlang.md#
 
 You can request ESP32-specific information using using the following input atoms:
 
-* `esp_free_heap_size` Returns the available free space in the ESP32 heap.
-* `esp_largest_free_block` Returns the size of the largest free continuous block in the ESP32 heap.
-* `esp_get_minimum_free_size` Returns the smallest ever free space available in the ESP32 heap since boot, this will tell you how close you have come to running out of free memory.
-* `esp_chip_info` Returns map of the form `#{features := Features, cores := Cores, revision := Revision, model := Model}`, where `Features` is a list of features enabled in the chip, from among the following atoms: `[emb_flash, bgn, ble, bt]`; `Cores` is the number of CPU cores on the chip; `Revision` is the chip version; and `Model` is one of the following atoms: `esp32`, `esp32_s2`, `esp32_s3`, `esp32_c3`.
+* `esp32_free_heap_size` Returns the available free space in the ESP32 heap.
+* `esp32_largest_free_block` Returns the size of the largest free continuous block in the ESP32 heap.
+* `esp32_minimum_free_size` Returns the smallest ever free space available in the ESP32 heap since boot, this will tell you how close you have come to running out of free memory.
+* `esp32_chip_info` Returns map of the form `#{features := Features, cores := Cores, revision := Revision, model := Model}`, where `Features` is a list of features enabled in the chip, from among the following atoms: `[emb_flash, bgn, ble, bt]`; `Cores` is the number of CPU cores on the chip; `Revision` is the chip version; and `Model` is one of the following atoms: `esp32`, `esp32_s2`, `esp32_s3`, `esp32_c3`, etc.
 * `esp_idf_version` Return the IDF SDK version, as a string.
 
 For example,
 
 ```erlang
-FreeHeapSize = erlang:system_info(esp_free_heap_size).
+FreeHeapSize = erlang:system_info(esp32_free_heap_size).
 ```
 
 ### Non-volatile Storage
