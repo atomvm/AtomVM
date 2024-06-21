@@ -595,6 +595,32 @@ int globalcontext_insert_module(GlobalContext *global, Module *module)
     return module_index;
 }
 
+Module *globalcontext_load_module_from_avm(GlobalContext *global, const char *module_name)
+{
+    const void *beam_module = NULL;
+    uint32_t beam_module_size = 0;
+
+    struct ListHead *item;
+    struct ListHead *avmpack_data = synclist_rdlock(&global->avmpack_data);
+    LIST_FOR_EACH (item, avmpack_data) {
+        struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
+        avmpack_data->in_use = true;
+        if (avmpack_find_section_by_name(avmpack_data->data, module_name, &beam_module, &beam_module_size)) {
+            break;
+        }
+    }
+    synclist_unlock(&global->avmpack_data);
+
+    if (IS_NULL_PTR(beam_module)) {
+        return NULL;
+    }
+
+    Module *new_module = module_new_from_iff_binary(global, beam_module, beam_module_size);
+    new_module->module_platform_data = NULL;
+
+    return new_module;
+}
+
 Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_atom)
 {
     Module *found_module = (Module *) atomshashtable_get_value(global->modules_table, module_name_atom, (unsigned long) NULL);
@@ -607,12 +633,18 @@ Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_a
 
         atom_string_to_c(module_name_atom, module_name, 256);
         strcat(module_name, ".beam");
-        Module *loaded_module = sys_load_module(global, module_name);
-        free(module_name);
-
+        Module *loaded_module = globalcontext_load_module_from_avm(global, module_name);
+        if (IS_NULL_PTR(loaded_module)) {
+            // Platform may implement sys_load_module_from_file
+            loaded_module = sys_load_module_from_file(global, module_name);
+        }
         if (UNLIKELY(!loaded_module || (globalcontext_insert_module(global, loaded_module) < 0))) {
+            fprintf(stderr, "Failed load module: %s\n", module_name);
+            free(module_name);
             return NULL;
         }
+
+        free(module_name);
 
         return loaded_module;
     }

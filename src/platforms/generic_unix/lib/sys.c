@@ -473,50 +473,6 @@ Module *sys_load_module_from_file(GlobalContext *global, const char *path)
     return new_module;
 }
 
-Module *sys_find_and_load_module_from_avm(GlobalContext *global, const char *module_name)
-{
-    TRACE("sys_find_and_load_module_from_avm: Going to load: %s\n", module_name);
-
-    const void *beam_module = NULL;
-    uint32_t beam_module_size = 0;
-
-    Module *new_module = NULL;
-
-    struct ListHead *item;
-    struct ListHead *avmpack_data = synclist_rdlock(&global->avmpack_data);
-    LIST_FOR_EACH (item, avmpack_data) {
-        struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
-        bool prev_in_use = avmpack_data->in_use;
-        avmpack_data->in_use = true;
-        if (avmpack_find_section_by_name(avmpack_data->data, module_name, &beam_module, &beam_module_size)) {
-            new_module = module_new_from_iff_binary(global, beam_module, beam_module_size);
-            if (IS_NULL_PTR(new_module)) {
-                avmpack_data->in_use = prev_in_use;
-                synclist_unlock(&global->avmpack_data);
-                return NULL;
-            }
-            new_module->module_platform_data = NULL;
-
-            break;
-        }
-    }
-    synclist_unlock(&global->avmpack_data);
-
-    return new_module;
-}
-
-Module *sys_load_module(GlobalContext *global, const char *module_name)
-{
-    TRACE("sys_load_module: Going to load: %s\n", module_name);
-
-    Module *new_module = sys_find_and_load_module_from_avm(global, module_name);
-    if (new_module) {
-        return new_module;
-    }
-
-    return sys_load_module_from_file(global, module_name);
-}
-
 Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 {
     if (!strcmp(driver_name, "socket")) {
