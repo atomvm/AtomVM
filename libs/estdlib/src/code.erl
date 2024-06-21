@@ -24,7 +24,37 @@
 %%-----------------------------------------------------------------------------
 -module(code).
 
--export([load_abs/1, load_binary/3]).
+-export([
+    all_available/0,
+    all_loaded/0,
+    load_abs/1,
+    load_binary/3
+]).
+
+%%-----------------------------------------------------------------------------
+%% @returns A list of available modules, including loaded modules
+%% @doc     Return all modules available from loaded avm packs, in addition
+%%          to loaded modules. List of available modules may be incomplete if
+%%          this function is called while a module is loaded.
+%%          Result type differs from Erlang/OTP: names of modules is a binary
+%%          (and not a string), and second term of tuples is currently
+%%          unspecified
+%% @end
+%%-----------------------------------------------------------------------------
+-spec all_available() -> [{unicode:unicode_binary(), term(), boolean()}].
+all_available() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns A list of all loaded modules
+%% @doc     Return a list of all loaded modules.
+%%          Result type differs from Erlang/OTP: second term of tuples is
+%%          currently unspecified
+%% @end
+%%-----------------------------------------------------------------------------
+-spec all_loaded() -> [{atom(), term()}].
+all_loaded() ->
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Filename    path to the beam to open, without .beams suffix

@@ -487,6 +487,7 @@ struct Test tests[] = {
     TEST_CASE_ATOMVM_ONLY(test_regecho_driver, 11),
     TEST_CASE_ATOMVM_ONLY(test_send_nif_and_echo, 22),
 
+    TEST_CASE(test_code_all_available_loaded),
     TEST_CASE_EXPECTED(test_code_load_binary, 24),
     TEST_CASE_EXPECTED(test_code_load_abs, 24),
     TEST_CASE_ATOMVM_ONLY(test_add_avm_pack_binary, 24),

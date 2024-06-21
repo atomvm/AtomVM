@@ -177,6 +177,8 @@ static term nif_base64_encode(Context *ctx, int argc, term argv[]);
 static term nif_base64_decode(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode_to_string(Context *ctx, int argc, term argv[]);
 static term nif_base64_decode_to_string(Context *ctx, int argc, term argv[]);
+static term nif_code_all_available(Context *ctx, int argc, term argv[]);
+static term nif_code_all_loaded(Context *ctx, int argc, term argv[]);
 static term nif_code_load_abs(Context *ctx, int argc, term argv[]);
 static term nif_code_load_binary(Context *ctx, int argc, term argv[]);
 static term nif_lists_reverse(Context *ctx, int argc, term argv[]);
@@ -727,6 +729,16 @@ static const struct Nif base64_decode_to_string_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_base64_decode_to_string
+};
+static const struct Nif code_all_available_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_all_available
+};
+static const struct Nif code_all_loaded_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_all_loaded
 };
 static const struct Nif code_load_abs_nif =
 {
@@ -4433,6 +4445,121 @@ static term nif_base64_encode_to_string(Context *ctx, int argc, term argv[])
 static term nif_base64_decode_to_string(Context *ctx, int argc, term argv[])
 {
     return base64_decode(ctx, argc, argv, false);
+}
+
+static term nif_code_all_loaded(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    term result = term_nil();
+    int loaded_modules_count = ctx->global->loaded_modules_count;
+    if (UNLIKELY(memory_ensure_free(ctx, LIST_SIZE(loaded_modules_count, TUPLE_SIZE(2))) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    for (int ix = 0; ix < loaded_modules_count; ix++) {
+        Module *module = globalcontext_get_module_by_index(ctx->global, ix);
+        term module_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(module_tuple, 0, module_get_name(module));
+        term_put_tuple_element(module_tuple, 1, UNDEFINED_ATOM);
+        result = term_list_prepend(module_tuple, result, &ctx->heap);
+    }
+
+    return result;
+}
+
+struct CodeAllAvailableAcc {
+    Context *ctx;
+    struct AVMPackData *avmpack_data;
+    term result;
+    size_t acc_count;
+};
+
+static void *nif_code_all_available_fold(void *accum, const void *section_ptr, uint32_t section_size, const void *beam_ptr, uint32_t flags, const char *section_name)
+{
+    UNUSED(section_ptr);
+    UNUSED(section_size);
+    UNUSED(beam_ptr);
+    UNUSED(flags);
+
+    struct CodeAllAvailableAcc *acc = (struct CodeAllAvailableAcc *) accum;
+    size_t section_name_len = strlen(section_name);
+    if (section_name_len < 260) {
+        if (memcmp(".beam", section_name + section_name_len - 5, 5) == 0) {
+            bool loaded;
+            if (acc->avmpack_data->in_use) {
+                // Check if module is loaded
+                char atom_str[section_name_len - 5];
+                atom_str[0] = section_name_len - 5;
+                memcpy(atom_str + 1, section_name, atom_str[0]);
+                Module *loaded_module = globalcontext_get_module(acc->ctx->global, (AtomString) &atom_str);
+                loaded = loaded_module != NULL;
+            } else {
+                loaded = false;
+            }
+            if (!loaded) {
+                acc->acc_count++;
+                if (!term_is_invalid_term(acc->result)) {
+                    term module_tuple = term_alloc_tuple(3, &acc->ctx->heap);
+                    term_put_tuple_element(module_tuple, 0, term_from_const_binary(section_name, section_name_len - 5, &acc->ctx->heap, acc->ctx->global));
+                    term_put_tuple_element(module_tuple, 1, UNDEFINED_ATOM);
+                    term_put_tuple_element(module_tuple, 2, FALSE_ATOM);
+                    acc->result = term_list_prepend(module_tuple, acc->result, &acc->ctx->heap);
+                }
+            }
+        }
+    }
+    return accum;
+}
+
+static term nif_code_all_available(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    // We return the list of loaded modules and all modules that are
+    // found in loaded avm packs.
+    struct ListHead *item;
+    struct ListHead *avmpack_data = synclist_rdlock(&ctx->global->avmpack_data);
+    struct CodeAllAvailableAcc acc;
+    acc.ctx = ctx;
+    acc.result = term_invalid_term();
+    acc.acc_count = 0;
+    LIST_FOR_EACH (item, avmpack_data) {
+        struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
+        acc.avmpack_data = avmpack_data;
+        avmpack_fold(&acc, avmpack_data->data, nif_code_all_available_fold);
+    }
+
+    size_t available_count = acc.acc_count + ctx->global->loaded_modules_count;
+
+    if (UNLIKELY(memory_ensure_free(ctx, LIST_SIZE(available_count, TUPLE_SIZE(3) + TERM_BOXED_REFC_BINARY_SIZE)) != MEMORY_GC_OK)) {
+        synclist_unlock(&ctx->global->avmpack_data);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    // List may be incomplete if modules are loaded while we are iterating on them
+    acc.acc_count = 0;
+    acc.result = term_nil();
+    LIST_FOR_EACH (item, avmpack_data) {
+        struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
+        acc.avmpack_data = avmpack_data;
+        avmpack_fold(&acc, avmpack_data->data, nif_code_all_available_fold);
+    }
+    synclist_unlock(&ctx->global->avmpack_data);
+
+    for (size_t ix = 0; ix < available_count - acc.acc_count; ix++) {
+        Module *module = globalcontext_get_module_by_index(ctx->global, ix);
+        term module_tuple = term_alloc_tuple(3, &ctx->heap);
+        AtomString module_atom_str = globalcontext_atomstring_from_term(ctx->global, module_get_name(module));
+        term_put_tuple_element(module_tuple, 0, term_from_const_binary(((const char *) module_atom_str) + 1, ((const char *) module_atom_str)[0], &ctx->heap, ctx->global));
+        term_put_tuple_element(module_tuple, 1, UNDEFINED_ATOM);
+        term_put_tuple_element(module_tuple, 2, TRUE_ATOM);
+        acc.result = term_list_prepend(module_tuple, acc.result, &ctx->heap);
+    }
+
+    return acc.result;
 }
 
 static term nif_code_load_abs(Context *ctx, int argc, term argv[])
