@@ -358,6 +358,7 @@ struct Test tests[] = {
     TEST_CASE(test_binary_to_term),
     TEST_CASE(test_selective_receive),
     TEST_CASE(test_timeout_not_integer),
+    TEST_CASE(test_undef),
     TEST_CASE(test_bs),
     TEST_CASE(test_bs_int),
     TEST_CASE(test_bs_int_unaligned),
