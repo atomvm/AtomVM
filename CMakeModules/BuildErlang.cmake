@@ -20,10 +20,13 @@
 
 macro(pack_archive avm_name)
 
-    foreach(module_name ${ARGN})
+    set(multiValueArgs ERLC_FLAGS MODULES)
+    cmake_parse_arguments(PACK_ARCHIVE "" "" "${multiValueArgs}" ${ARGN})
+    list(JOIN PACK_ARCHIVE_ERLC_FLAGS " " PACK_ARCHIVE_ERLC_FLAGS)
+    foreach(module_name IN LISTS ${PACK_ARCHIVE_MODULES} PACK_ARCHIVE_MODULES PACK_ARCHIVE_UNPARSED_ARGUMENTS)
         add_custom_command(
             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam
-            COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams && erlc +debug_info -o ${CMAKE_CURRENT_BINARY_DIR}/beams -I ${CMAKE_SOURCE_DIR}/libs/include ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
+            COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams && erlc +debug_info ${PACK_ARCHIVE_ERLC_FLAGS} -o ${CMAKE_CURRENT_BINARY_DIR}/beams -I ${CMAKE_SOURCE_DIR}/libs/include ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
             DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
             COMMENT "Compiling ${module_name}.erl"
             VERBATIM
@@ -171,6 +174,32 @@ macro(pack_test test_avm_name)
         VERBATIM
     )
     add_dependencies(${test_avm_name} ${pack_test_${test_avm_name}_archive_targets} PackBEAM)
+
+endmacro()
+
+macro(pack_eunit test_avm_name)
+
+    set(pack_eunit_${test_avm_name}_archives ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}_lib.avm)
+    set(pack_eunit_${test_avm_name}_archive_targets ${test_avm_name}_lib)
+    foreach(archive_name ${ARGN})
+        set(pack_eunit_${test_avm_name}_archives ${pack_eunit_${test_avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
+        set(pack_eunit_${test_avm_name}_archive_targets ${pack_eunit_${test_avm_name}_archive_targets} ${archive_name})
+    endforeach()
+
+    if(AVM_RELEASE)
+        set(INCLUDE_LINES "")
+    else()
+        set(INCLUDE_LINES "-i")
+    endif()
+
+    add_custom_target(
+        ${test_avm_name} ALL
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}.avm ${CMAKE_BINARY_DIR}/libs/etest/src/beams/eunit.beam ${pack_eunit_${test_avm_name}_archives}
+        DEPENDS ${CMAKE_BINARY_DIR}/libs/etest/src/beams/eunit.beam
+        COMMENT "Packing runnable ${test_avm_name}.avm"
+        VERBATIM
+    )
+    add_dependencies(${test_avm_name} ${pack_eunit_${test_avm_name}_archive_targets} PackBEAM)
 
 endmacro()
 
