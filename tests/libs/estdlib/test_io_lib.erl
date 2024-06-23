@@ -112,8 +112,18 @@ test() ->
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [{bar, "tapas"}])), "foo: {bar,\"tapas\"}\n"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [#{}])), "foo: #{}\n"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [#{a => 1}])), "foo: #{a => 1}\n"),
-    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p", [#{a => 1, b => 2}])), "foo: #{a => 1,b => 2}"),
-    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p", [#{b => 2, a => 1}])), "foo: #{a => 1,b => 2}"),
+    % OTP-27 can return either map representations
+    % https://github.com/erlang/otp/issues/8606
+    ?ASSERT_TRUE(
+        lists:member(?FLT(io_lib:format("foo: ~p", [#{a => 1, b => 2}])), [
+            "foo: #{a => 1,b => 2}", "foo: #{b => 2,a => 1}"
+        ])
+    ),
+    ?ASSERT_TRUE(
+        lists:member(?FLT(io_lib:format("foo: ~p", [#{b => 2, a => 1}])), [
+            "foo: #{a => 1,b => 2}", "foo: #{b => 2,a => 1}"
+        ])
+    ),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p", [#{{x, y} => z}])), "foo: #{{x,y} => z}"),
     ?ASSERT_MATCH(
         ?FLT(io_lib:format("foo: ~p", [#{"foo" => "bar"}])), "foo: #{\"foo\" => \"bar\"}"
@@ -122,11 +132,21 @@ test() ->
     ?ASSERT_MATCH(?FLT(io_lib:format("~p", [foo])), "foo"),
     ?ASSERT_MATCH(?FLT(io_lib:format("~p", ['-foo'])), "'-foo'"),
     ?ASSERT_MATCH(?FLT(io_lib:format("~p", ['try'])), "'try'"),
-    ?ASSERT_MATCH(?FLT(io_lib:format("~p", ['maybe'])), "maybe"),
+    MaybeAtomStr =
+        case erlang:system_info(machine) of
+            "BEAM" ->
+                case erlang:system_info(version) >= "15." of
+                    true -> "'maybe'";
+                    false -> "maybe"
+                end;
+            "ATOM" ->
+                "maybe"
+        end,
+    ?ASSERT_MATCH(?FLT(io_lib:format("~p", ['maybe'])), MaybeAtomStr),
     ?ASSERT_MATCH(?FLT(io_lib:format("~w", [foo])), "foo"),
     ?ASSERT_MATCH(?FLT(io_lib:format("~w", ['-foo'])), "'-foo'"),
     ?ASSERT_MATCH(?FLT(io_lib:format("~w", ['try'])), "'try'"),
-    ?ASSERT_MATCH(?FLT(io_lib:format("~w", ['maybe'])), "maybe"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("~w", ['maybe'])), MaybeAtomStr),
     ?ASSERT_MATCH(?FLT(io_lib:format("~s", [foo])), "foo"),
     ?ASSERT_MATCH(?FLT(io_lib:format("~s", ['-foo'])), "-foo"),
     ?ASSERT_MATCH(?FLT(io_lib:format("~s", ['try'])), "try"),
