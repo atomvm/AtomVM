@@ -40,6 +40,7 @@
     is_key/2,
     put/3,
     iterator/1,
+    iterator/2,
     next/1,
     new/0,
     keys/1,
@@ -57,12 +58,22 @@
     update/3
 ]).
 
--type key() :: term().
--type value() :: term().
--type iterator() ::
-    {key(), value(), iterator()} | none | nonempty_improper_list(non_neg_integer(), map()).
+-export_type([
+    iterator/2,
+    iterator/0,
+    iterator_order/1,
+    iterator_order/0
+]).
 
--type map_or_iterator() :: map() | iterator().
+-opaque iterator(Key, Value) ::
+    {Key, Value, iterator()}
+    | none
+    | nonempty_improper_list(non_neg_integer(), #{Key => Value})
+    | nonempty_improper_list(list(Key), #{Key => Value}).
+-type iterator() :: iterator(Key :: any(), Value :: any()).
+-type iterator_order(Key) :: undefined | ordered | reversed | fun((Key, Key) -> boolean()).
+-type iterator_order() :: iterator_order(Key :: term()).
+-type map_or_iterator(Key, Value) :: #{Key => Value} | iterator(Key, Value).
 
 %%-----------------------------------------------------------------------------
 %% @param   Key     the key to get
@@ -74,7 +85,7 @@
 %% `Map' or a `{badmap, Map}' error if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec get(Key :: key(), Map :: map()) -> Value :: value().
+-spec get(Key, Map :: #{Key => Value}) -> Value.
 get(Key, Map) ->
     erlang:map_get(Key, Map).
 
@@ -90,7 +101,7 @@ get(Key, Map) ->
 %% This function raises a `{badmap, Map}' error if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec get(Key :: key(), Map :: map(), Default :: term()) -> Value :: value().
+-spec get(Key, Map :: #{Key => Value}, Default :: Value) -> Value.
 get(Key, Map, Default) ->
     try
         ?MODULE:get(Key, Map)
@@ -108,7 +119,7 @@ get(Key, Map, Default) ->
 %% This function raises a `{badmap, Map}' error if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec is_key(Key :: key(), Map :: map()) -> boolean().
+-spec is_key(Key, Map :: #{Key => _Value}) -> boolean().
 is_key(Key, Map) ->
     erlang:is_map_key(Key, Map).
 
@@ -125,30 +136,37 @@ is_key(Key, Map) ->
 %% This function raises a `{badmap, Map}' error if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec put(Key :: key(), Value :: value(), Map :: map()) -> map().
+-spec put(Key, Value, Map :: #{Key => Value}) -> #{Key => Value}.
 put(Key, Value, Map) when is_map(Map) ->
     Map#{Key => Value};
 put(_Key, _Value, Map) when not is_map(Map) ->
     error({badmap, Map}).
 
+%% @equiv iterator(Map, undefined)
+-spec iterator(Map :: #{Key => Value}) -> iterator(Key, Value).
+iterator(Map) ->
+    iterator(Map, undefined).
+
 %%-----------------------------------------------------------------------------
 %% @param   Map     the map
+%% @param   Order   the iterator order, or undefined for default (unspecified)
+%% order.
 %% @returns an iterator structure that can be used to iterate over associations
 %% in a map.
 %% @see next/1
 %% @doc Return an iterator structure that can be used to iterate over associations
 %% in a map.
 %%
-%% In general, users should make no assumptions about the order in which entries
-%% appear in an iterator.  The order of entries in a map is implementation-defined.
-%%
 %% This function raises a `{badmap, Map}' error if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec iterator(Map :: map()) -> iterator().
-iterator(Map) when is_map(Map) ->
+-spec iterator(Map :: #{Key => Value}, Order :: iterator_order()) -> iterator(Key, Value).
+iterator(Map, undefined) when is_map(Map) ->
     [0 | Map];
-iterator(Map) ->
+iterator(Map, Order) when is_map(Map) ->
+    Keys = iterate_keys(maps:next(maps:iterator(Map)), Order, []),
+    [Keys | Map];
+iterator(Map, _Order) ->
     error({badmap, Map}).
 
 %%-----------------------------------------------------------------------------
@@ -163,8 +181,8 @@ iterator(Map) ->
 %% in this module.
 %% @end
 %%-----------------------------------------------------------------------------
--spec next(Iterator :: iterator()) ->
-    {Key :: key(), Value :: value(), NextIterator :: iterator()} | none.
+-spec next(Iterator :: iterator(Key, Value)) ->
+    {Key, Value, iterator(Key, Value)} | none.
 next([_Pos | _Map] = _Iterator) ->
     erlang:nif_error(undefined).
 
@@ -173,7 +191,7 @@ next([_Pos | _Map] = _Iterator) ->
 %% @doc Return a new (empty) map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec new() -> iterator().
+-spec new() -> map().
 new() ->
     #{}.
 
@@ -187,9 +205,9 @@ new() ->
 %% This function raises a `{badmap, Map}' error if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec keys(Map :: map()) -> [key()].
+-spec keys(Map :: #{Key => _Value}) -> [Key].
 keys(Map) when is_map(Map) ->
-    iterate_keys(maps:next(maps:iterator(Map)), []);
+    iterate_keys(maps:next(maps:iterator(Map)), undefined, []);
 keys(Map) ->
     error({badmap, Map}).
 
@@ -203,25 +221,29 @@ keys(Map) ->
 %% This function raises a `{badmap, Map}' error if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec values(Map :: map()) -> [key()].
+-spec values(Map :: #{_Key => Value}) -> [Value].
 values(Map) when is_map(Map) ->
     iterate_values(maps:next(maps:iterator(Map)), []);
 values(Map) ->
     error({badmap, Map}).
 
 %%-----------------------------------------------------------------------------
-%% @param   Map     the map
+%% @param   MapOrIterator     the map or iterator
 %% @returns a list of `[{Key, Value}]' tuples
 %% @doc Return the list of entries, expressed as `{Key, Value}' pairs, in the supplied map.
 %%
-%% No guarantees are provided about the order of entries returned from this function.
+%% If provided with a map, no guarantees are provided about the order of
+%% entries returned from this function. Order can be controlled with `iterator/2'
 %%
-%% This function raises a `{badmap, Map}' error if `Map' is not a map.
+%% This function raises a `{badmap, Map}' error if `Map' is not a map and not
+%% an iterator.
 %% @end
 %%-----------------------------------------------------------------------------
--spec to_list(Map :: map()) -> [key()].
+-spec to_list(Map :: #{Key => Value}) -> [{Key, Value}].
 to_list(Map) when is_map(Map) ->
-    iterate_entries(maps:next(maps:iterator(Map)), []);
+    to_list(maps:iterator(Map));
+to_list(Iterator) when is_list(Iterator) andalso is_map(tl(Iterator)) ->
+    iterate_entries(maps:next(Iterator), []);
 to_list(Map) ->
     error({badmap, Map}).
 
@@ -237,7 +259,7 @@ to_list(Map) ->
 %% list or contains an element that is not a key-value pair.
 %% @end
 %%-----------------------------------------------------------------------------
--spec from_list(List :: [{Key :: key(), Value :: value()}]) -> map().
+-spec from_list(List :: [{Key, Value}]) -> #{Key => Value}.
 from_list(List) when is_list(List) ->
     iterate_from_list(List, ?MODULE:new());
 from_list(_List) ->
@@ -266,7 +288,7 @@ size(Map) ->
 %% This function raises a `{badmap, Map}' error if `Map' is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec find(Key :: key(), Map :: map()) -> {ok, Value :: value()} | error.
+-spec find(Key, Map :: #{Key => Value}) -> {ok, Value} | error.
 find(Key, Map) ->
     try
         {ok, ?MODULE:get(Key, Map)}
@@ -291,9 +313,9 @@ find(Key, Map) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec filter(
-    Pred :: fun((Key :: key(), Value :: value()) -> boolean()),
-    MapOrIterator :: map_or_iterator()
-) -> map().
+    Pred :: fun((Key, Value) -> boolean()),
+    MapOrIterator :: map_or_iterator(Key, Value)
+) -> #{Key => Value}.
 filter(Pred, Map) when is_function(Pred, 2) andalso is_map(Map) ->
     iterate_filter(Pred, maps:next(maps:iterator(Map)), ?MODULE:new());
 filter(Pred, [Pos | Map] = Iterator) when
@@ -321,10 +343,10 @@ filter(_Pred, _Map) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec fold(
-    Fun :: fun((Key :: key(), Value :: value(), Accum :: term()) -> term()),
-    Init :: term(),
-    MapOrIterator :: map_or_iterator()
-) -> term().
+    Fun :: fun((Key, Value, Accum) -> Accum),
+    Accum,
+    MapOrIterator :: map_or_iterator(Key, Value)
+) -> Accum.
 fold(Fun, Init, Map) when is_function(Fun, 3) andalso is_map(Map) ->
     iterate_fold(Fun, maps:next(maps:iterator(Map)), Init);
 fold(Fun, Init, [Pos | Map] = Iterator) when
@@ -349,8 +371,8 @@ fold(_Fun, _Init, _Map) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec foreach(
-    Fun :: fun((Key :: key(), Value :: value()) -> any()),
-    MapOrIterator :: map_or_iterator()
+    Fun :: fun((Key, Value) -> any()),
+    MapOrIterator :: map_or_iterator(Key, Value)
 ) -> ok.
 foreach(Fun, Map) when is_function(Fun, 2) andalso is_map(Map) ->
     iterate_foreach(Fun, maps:next(maps:iterator(Map)));
@@ -373,8 +395,8 @@ foreach(_Fun, _Map) ->
 %% and a `badarg' error if the input function is not a function.
 %% @end
 %%-----------------------------------------------------------------------------
--spec map(Fun :: fun((Key :: key(), Value :: value()) -> value()), Map :: map_or_iterator()) ->
-    map().
+-spec map(Fun :: fun((Key, Value) -> MappedValue), Map :: map_or_iterator(Key, Value)) ->
+    #{Key => MappedValue}.
 map(Fun, Map) when is_function(Fun, 2) andalso is_map(Map) ->
     iterate_map(Fun, maps:next(maps:iterator(Map)), ?MODULE:new());
 map(Fun, [Pos | Map] = Iterator) when
@@ -388,7 +410,7 @@ map(_Fun, _Map) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Map1  a map
-%% @param   Map2  a mpa
+%% @param   Map2  a map
 %% @returns the result of merging entries from `Map1' and `Map2'.
 %% @doc Merge two maps to yield a new map.
 %%
@@ -397,7 +419,7 @@ map(_Fun, _Map) ->
 %% This function raises a `badmap' error if neither `Map1' nor `Map2' is a map.
 %% @end
 %%-----------------------------------------------------------------------------
--spec merge(Map1 :: map(), Map2 :: map()) -> map().
+-spec merge(Map1 :: #{Key => Value}, Map2 :: #{Key => Value}) -> #{Key => Value}.
 merge(Map1, Map2) when is_map(Map1) andalso is_map(Map2) ->
     iterate_merge(maps:next(maps:iterator(Map2)), Map1);
 merge(Map1, _Map2) when not is_map(Map1) ->
@@ -420,7 +442,7 @@ merge(_Map1, Map2) when not is_map(Map2) ->
 %% This function raises a `badmap' error if `Map' is not a map or map iterator.
 %% @end
 %%-----------------------------------------------------------------------------
--spec remove(Key :: key(), MapOrIterator :: map_or_iterator()) -> map().
+-spec remove(Key, MapOrIterator :: map_or_iterator(Key, Value)) -> #{Key => Value}.
 remove(Key, Map) when is_map(Map) ->
     case ?MODULE:is_key(Key, Map) of
         true ->
@@ -444,7 +466,7 @@ remove(_Key, Map) when not is_map(Map) ->
 %% `{badkey, Key}` if key doesn't exist
 %% @end
 %%-----------------------------------------------------------------------------
--spec update(Key :: key(), Value :: value(), Map :: map()) -> map().
+-spec update(Key, Value, Map :: #{Key => Value}) -> #{Key => Value}.
 update(Key, Value, Map) ->
     _ = ?MODULE:get(Key, Map),
     Map#{Key => Value}.
@@ -454,10 +476,16 @@ update(Key, Value, Map) ->
 %%
 
 %% @private
-iterate_keys(none, Accum) ->
+iterate_keys(none, undefined, Accum) ->
     lists:reverse(Accum);
-iterate_keys({Key, _Value, Iterator}, Accum) ->
-    iterate_keys(maps:next(Iterator), [Key | Accum]).
+iterate_keys(none, ordered, Accum) ->
+    lists:sort(Accum);
+iterate_keys(none, reversed, Accum) ->
+    lists:reverse(lists:sort(Accum));
+iterate_keys(none, F, Accum) ->
+    lists:sort(F, Accum);
+iterate_keys({Key, _Value, Iterator}, Order, Accum) ->
+    iterate_keys(maps:next(Iterator), Order, [Key | Accum]).
 
 %% @private
 iterate_values(none, Accum) ->
