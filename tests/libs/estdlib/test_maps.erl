@@ -29,6 +29,22 @@ test() ->
     ok = test_is_key(),
     ok = test_put(),
     ok = test_iterator(),
+    HasIterator2 =
+        case erlang:system_info(machine) of
+            "BEAM" ->
+                erlang:system_info(version) >= "14.";
+            "ATOM" ->
+                true
+        end,
+    case HasIterator2 of
+        true ->
+            ok = test_iterator_2_undefined(),
+            ok = test_iterator_2_ordered(),
+            ok = test_iterator_2_reversed(),
+            ok = test_iterator_2_f();
+        false ->
+            ok
+    end,
     ok = test_keys(),
     ok = test_values(),
     ok = test_to_list(),
@@ -76,6 +92,71 @@ test_iterator() ->
     {YK, YV, Iterator2} = maps:next(Iterator1),
     {ZK, ZV, Iterator3} = maps:next(Iterator2),
     [{a, 1}, {b, 2}, {c, 3}] = lists:sort([{XK, XV}, {YK, YV}, {ZK, ZV}]),
+    none = maps:next(Iterator3),
+    none = maps:next(none),
+
+    EmptyMap = maps:new(),
+    EmptyIterator = maps:iterator(EmptyMap),
+    none = maps:next(EmptyIterator),
+
+    ok.
+
+test_iterator_2_undefined() ->
+    Map = #{c => 3, a => 1, b => 2},
+    Iterator0 = maps:iterator(Map, undefined),
+    {XK, XV, Iterator1} = maps:next(Iterator0),
+    {YK, YV, Iterator2} = maps:next(Iterator1),
+    {ZK, ZV, Iterator3} = maps:next(Iterator2),
+    [{a, 1}, {b, 2}, {c, 3}] = lists:sort([{XK, XV}, {YK, YV}, {ZK, ZV}]),
+    none = maps:next(Iterator3),
+    none = maps:next(none),
+
+    EmptyMap = maps:new(),
+    EmptyIterator = maps:iterator(EmptyMap),
+    none = maps:next(EmptyIterator),
+
+    ok.
+
+test_iterator_2_ordered() ->
+    Map = #{c => 3, a => 1, b => 2},
+    Iterator0 = maps:iterator(Map, ordered),
+    {a, 1, Iterator1} = maps:next(Iterator0),
+    {b, 2, Iterator2} = maps:next(Iterator1),
+    {c, 3, Iterator3} = maps:next(Iterator2),
+    none = maps:next(Iterator3),
+    none = maps:next(none),
+
+    EmptyMap = maps:new(),
+    EmptyIterator = maps:iterator(EmptyMap),
+    none = maps:next(EmptyIterator),
+
+    ok.
+
+test_iterator_2_reversed() ->
+    Map = #{c => 3, a => 1, b => 2},
+    Iterator0 = maps:iterator(Map, reversed),
+    {c, 3, Iterator1} = maps:next(Iterator0),
+    {b, 2, Iterator2} = maps:next(Iterator1),
+    {a, 1, Iterator3} = maps:next(Iterator2),
+    none = maps:next(Iterator3),
+    none = maps:next(none),
+
+    EmptyMap = maps:new(),
+    EmptyIterator = maps:iterator(EmptyMap),
+    none = maps:next(EmptyIterator),
+
+    ok.
+
+test_iterator_2_f_order(c, _) -> true;
+test_iterator_2_f_order(a, b) -> true;
+test_iterator_2_f_order(_, _) -> false.
+
+test_iterator_2_f() ->
+    Map = #{c => 3, a => 1, b => 2},
+    Iterator0 = maps:iterator(Map, fun test_iterator_2_f_order/2),
+    {c, 3, Iterator1} = maps:next(Iterator0),
+    {a, 1, Iterator2} = maps:next(Iterator1),
+    {b, 2, Iterator3} = maps:next(Iterator2),
     none = maps:next(Iterator3),
     none = maps:next(none),
 

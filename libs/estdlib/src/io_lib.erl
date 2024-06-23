@@ -130,6 +130,8 @@ parse_format_mod([$t | Rest], Format) ->
     parse_format_control(Rest, Format#format{mod = t});
 parse_format_mod([$l | Rest], Format) ->
     parse_format_control(Rest, Format#format{mod = l});
+parse_format_mod([$k | Rest], Format) ->
+    parse_format_control(Rest, Format#format{mod = k});
 parse_format_mod(String, Format) ->
     parse_format_control(String, Format).
 
@@ -282,13 +284,18 @@ format_spw(_Format, T) when is_function(T) ->
     erlang:fun_to_list(T);
 format_spw(Format, T) when is_tuple(T) ->
     [${, lists:join($,, [format_spw(Format, E) || E <- tuple_to_list(T)]), $}];
-format_spw(Format, T) when is_map(T) ->
+format_spw(#format{mod = Mod} = Format, T) when is_map(T) ->
+    Order =
+        case Mod of
+            undefined -> undefined;
+            k -> ordered
+        end,
     [
         $#,
         ${,
         lists:join($,, [
             [format_spw(Format, K), " => ", format_spw(Format, V)]
-         || {K, V} <- maps:to_list(T)
+         || {K, V} <- maps:to_list(maps:iterator(T, Order))
         ]),
         $}
     ].

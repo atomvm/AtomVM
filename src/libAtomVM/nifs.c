@@ -4385,15 +4385,27 @@ static term nif_maps_next(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(iterator, term_is_nonempty_list);
 
     term post = term_get_list_head(iterator);
-    VALIDATE_VALUE(post, term_is_integer);
+    if (UNLIKELY(!term_is_integer(post) && !term_is_list(post))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
 
     term map = term_get_list_tail(iterator);
     VALIDATE_VALUE(map, term_is_map);
 
-    int size = term_get_map_size(map);
-    int pos = term_to_int(post);
-    if (pos >= size) {
+    int pos;
+    if (term_is_integer(post)) {
+        int size = term_get_map_size(map);
+        pos = term_to_int(post);
+        if (pos >= size) {
+            return NONE_ATOM;
+        }
+    } else if (term_is_nil(post)) {
         return NONE_ATOM;
+    } else {
+        pos = term_find_map_pos(map, term_get_list_head(post), ctx->global);
+        if (pos == TERM_MAP_NOT_FOUND) {
+            return NONE_ATOM;
+        }
     }
 
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, 6, 1, &iterator, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -4402,10 +4414,17 @@ static term nif_maps_next(Context *ctx, int argc, term argv[])
 
     // recompute all the terms we need (after possible GC)
     map = term_get_list_tail(iterator);
+    post = term_get_list_head(iterator);
     term key = term_get_map_key(map, pos);
     term value = term_get_map_value(map, pos);
+    term next_pos;
+    if (term_is_integer(post)) {
+        next_pos = term_from_int(pos + 1);
+    } else {
+        next_pos = term_get_list_tail(post);
+    }
 
-    term next_iterator = term_list_prepend(term_from_int(pos + 1), map, &ctx->heap);
+    term next_iterator = term_list_prepend(next_pos, map, &ctx->heap);
     term ret = term_alloc_tuple(3, &ctx->heap);
     term_put_tuple_element(ret, 0, key);
     term_put_tuple_element(ret, 1, value);

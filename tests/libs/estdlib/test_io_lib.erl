@@ -112,8 +112,8 @@ test() ->
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [{bar, "tapas"}])), "foo: {bar,\"tapas\"}\n"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [#{}])), "foo: #{}\n"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [#{a => 1}])), "foo: #{a => 1}\n"),
-    % OTP-27 can return either map representations
-    % https://github.com/erlang/otp/issues/8606
+    % OTP-26+ can return either map representations
+    % https://www.erlang.org/patches/otp-26.0#OTP-18414
     ?ASSERT_TRUE(
         lists:member(?FLT(io_lib:format("foo: ~p", [#{a => 1, b => 2}])), [
             "foo: #{a => 1,b => 2}", "foo: #{b => 2,a => 1}"
@@ -124,6 +124,21 @@ test() ->
             "foo: #{a => 1,b => 2}", "foo: #{b => 2,a => 1}"
         ])
     ),
+    HasKModifier =
+        case erlang:system_info(machine) of
+            "BEAM" ->
+                erlang:system_info(version) >= "14.";
+            "ATOM" ->
+                true
+        end,
+    case HasKModifier of
+        true ->
+            ?ASSERT_MATCH(
+                ?FLT(io_lib:format("foo: ~kp~n", [#{a => 1, b => 2}])), "foo: #{a => 1,b => 2}\n"
+            );
+        false ->
+            ok
+    end,
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p", [#{{x, y} => z}])), "foo: #{{x,y} => z}"),
     ?ASSERT_MATCH(
         ?FLT(io_lib:format("foo: ~p", [#{"foo" => "bar"}])), "foo: #{\"foo\" => \"bar\"}"

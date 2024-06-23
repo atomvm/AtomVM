@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for ESP32-H2
 - lists:keytake/3 implemented.
 - Support for setting channel used by network driver wifi access point.
+- Support for `maps:iterator/2` and `~kp` with `io_lib:format/2` that were introduced with OTP26.
 
 ### Changed
 
