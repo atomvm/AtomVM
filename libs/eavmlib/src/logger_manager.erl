@@ -88,8 +88,8 @@ allow(Level, Module) ->
     case erlang:whereis(?MODULE) of
         undefined ->
             false;
-        _ ->
-            maybe_get_cached_module_level(Level, Module)
+        Pid ->
+            maybe_get_cached_module_level(Pid, Level, Module)
     end.
 
 %%
@@ -135,7 +135,18 @@ terminate(_Reason, _State) ->
 %%
 
 %% @private
-maybe_get_cached_module_level(Level, Module) ->
+get_and_cache_allow_level(Pid, Level, Module) ->
+    try
+        Result = gen_server:call(Pid, {allow, Level, Module}),
+        erlang:put({'$atomvm_logger_module_level', Level, Module}, {Pid, Result}),
+        Result
+    catch
+        exit:{noproc, _} ->
+            false
+    end.
+
+%% @private
+maybe_get_cached_module_level(Pid, Level, Module) ->
     %%
     %% TODO Until we have support for ETS, we check the process
     %% dictionary for a cached value of the log level for a given module.
@@ -148,19 +159,11 @@ maybe_get_cached_module_level(Level, Module) ->
     %%
     case erlang:get({'$atomvm_logger_module_level', Level, Module}) of
         undefined ->
-            Pid = erlang:whereis(?MODULE),
-            Result = gen_server:call(?MODULE, {allow, Level, Module}),
-            erlang:put({'$atomvm_logger_module_level', Level, Module}, {Pid, Result}),
-            Result;
+            get_and_cache_allow_level(Pid, Level, Module);
         {Pid, Result} ->
-            case erlang:whereis(?MODULE) of
-                Pid ->
-                    Result;
-                NewPid ->
-                    NewResult = gen_server:call(?MODULE, {allow, Level, Module}),
-                    erlang:put({'$atomvm_logger_module_level', Level, Module}, {NewPid, NewResult}),
-                    NewResult
-            end
+            Result;
+        {_OldPid, _OldResult} ->
+            get_and_cache_allow_level(Pid, Level, Module)
     end.
 
 %% @private
