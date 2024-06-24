@@ -56,7 +56,7 @@ jobs:
           sudo apt update -y
           DEBIAN_FRONTEND=noninteractive sudo apt install -y git cmake doxygen graphviz python3-pip python3-virtualenv python3-setuptools python3-stemmer wget
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         id: sphinx-cache
         with:
           path: /home/runner/python-env/sphinx
@@ -88,7 +88,7 @@ jobs:
           ./rebar3 local install
           echo "/home/runner/.cache/rebar3/bin" >> ${GITHUB_PATH}
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: ${{ vars.GITHUB_REPOSITORY }}
           fetch-depth: 0

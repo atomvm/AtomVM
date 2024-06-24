@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
     - name: Checkout repo
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - uses: erlef/setup-beam@v1
       with:
@@ -61,7 +61,7 @@ jobs:
         ninja AtomVM atomvmlib test_alisp hello_world run_script call_cast html5_events wasm_webserver
 
     - name: Upload AtomVM and test modules
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: atomvm-and-test-modules
         path: |
@@ -80,7 +80,7 @@ jobs:
         ninja emscripten_erlang_test_modules
 
     - name: Upload emscripten test modules
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: emscripten-test-modules
         path: |
@@ -93,7 +93,7 @@ jobs:
     container: emscripten/emsdk
     steps:
     - name: Checkout repo
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: "Install deps"
       run: sudo apt update -y && sudo apt install -y cmake gperf
@@ -109,7 +109,7 @@ jobs:
         emmake make -j
 
     - name: Download AtomVM and test modules
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: atomvm-and-test-modules
         path: build
@@ -160,7 +160,7 @@ jobs:
     container: emscripten/emsdk
     steps:
     - name: Checkout repo
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: "Install deps"
       run: sudo apt update -y && sudo apt install -y cmake gperf
@@ -176,7 +176,7 @@ jobs:
         emmake make -j
 
     - name: Upload wasm build for web
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: atomvm-js-web
         path: |
@@ -189,22 +189,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repo
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Download AtomVM and test modules
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: atomvm-and-test-modules
         path: build
 
     - name: Download wasm build for web
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: atomvm-js-web
         path: src/platforms/emscripten/build
 
     - name: Download emscripten test modules
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: emscripten-test-modules
         path: src/platforms/emscripten/build
@@ -222,7 +222,7 @@ jobs:
 
     - name: "Publish screenshots of failures"
       if: failure()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: cypress-screenshots
         path: |
