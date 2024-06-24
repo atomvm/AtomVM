@@ -85,7 +85,7 @@ jobs:
     steps:
     # Setup
     - name: "Checkout repo"
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         submodules: 'recursive'
 
@@ -114,7 +114,7 @@ jobs:
     - name: "Build: create build dir"
       run: mkdir build
 
-    - uses: actions/cache@v3
+    - uses: actions/cache@v4
       id: cache
       with:
         path: 'build/tests/**/*.beam'
