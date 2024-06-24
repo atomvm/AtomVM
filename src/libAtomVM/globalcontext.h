@@ -463,6 +463,19 @@ Module *globalcontext_get_module_by_index(GlobalContext *global, int index);
 Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_atom);
 
 /**
+ * @brief Load a given module from registered AVM packs
+ *
+ * @details This function is typically called from sys_load_module. It does
+ * not check if the module is already loaded and allocates a new module
+ * structure.
+ * @param global the global context.
+ * @param module_name_atom the module name.
+ * @returns a pointer to a Module struct or NULL if the module could not be
+ * found.
+ */
+Module *globalcontext_load_module_from_avm(GlobalContext *global, const char *module_name);
+
+/**
  * @brief remove a monitor
  *
  * @details iterate on the list of all processes and then on each monitor

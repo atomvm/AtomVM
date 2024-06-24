@@ -143,7 +143,7 @@ term avm_test_case(const char *test_module)
     avmpack_data->base.data = main_avm;
     synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
 
-    Module *mod = sys_load_module(glb, test_module);
+    Module *mod = globalcontext_load_module_from_avm(glb, test_module);
     TEST_ASSERT(mod != NULL);
 
     globalcontext_insert_module(glb, mod);

@@ -711,33 +711,6 @@ Module *sys_load_module_from_file(GlobalContext *global, const char *path)
     return new_module;
 }
 
-Module *sys_load_module(GlobalContext *global, const char *module_name)
-{
-    const void *beam_module = NULL;
-    uint32_t beam_module_size = 0;
-
-    struct ListHead *avmpack_data_list = synclist_rdlock(&global->avmpack_data);
-    struct ListHead *item;
-    LIST_FOR_EACH (item, avmpack_data_list) {
-        struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
-        avmpack_data->in_use = true;
-        if (avmpack_find_section_by_name(avmpack_data->data, module_name, &beam_module, &beam_module_size)) {
-            break;
-        }
-    }
-    synclist_unlock(&global->avmpack_data);
-
-    if (IS_NULL_PTR(beam_module)) {
-        fprintf(stderr, "Failed to open module: %s\n", module_name);
-        return NULL;
-    }
-
-    Module *new_module = module_new_from_iff_binary(global, beam_module, beam_module_size);
-    new_module->module_platform_data = NULL;
-
-    return new_module;
-}
-
 Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 {
     UNUSED(glb);

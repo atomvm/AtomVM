@@ -238,14 +238,14 @@ uint64_t sys_monotonic_time_ms_to_u64(uint64_t ms);
 uint64_t sys_monotonic_time_u64_to_ms(uint64_t t);
 
 /**
- * @brief Loads a BEAM module using platform dependent methods.
+ * @brief Loads a BEAM module, searching files.
  *
- * @details Loads a BEAM module into memory using platform dependent methods and returns a pointer to a Module struct.
+ * @details Loads a BEAM module into memory using platform dependent methods
+ * and returns a pointer to a Module struct. This function is called if loading
+ * from avm packs failed and may return NULL if there is no support for files.
  * @param global the global context.
  * @param module_name the name of the BEAM file (e.g. "mymodule.beam").
  */
-Module *sys_load_module(GlobalContext *global, const char *module_name);
-
 Module *sys_load_module_from_file(GlobalContext *global, const char *path);
 
 /**
