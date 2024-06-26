@@ -30,6 +30,7 @@ in ESP-IDF Kconfig options.
 `02411048` was not completely right, and it was converting match context to bogus binaries.
 - Fix creation of multiple links for the same process and not removing link at trapped exits.
 See issue [#1193](https://github.com/atomvm/AtomVM/issues/1193).
+- Fix error that is raised when a function is undefined
 
 ## [0.6.2] - 25-05-2024
 

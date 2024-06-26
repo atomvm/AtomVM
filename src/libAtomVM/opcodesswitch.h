@@ -1116,10 +1116,12 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         } else {                                                        \
             fun_module = globalcontext_get_module(ctx->global, module_name); \
             if (IS_NULL_PTR(fun_module)) {                              \
+                SET_ERROR(UNDEF_ATOM);                                  \
                 HANDLE_ERROR();                                         \
             }                                                           \
             label = module_search_exported_function(fun_module, function_name, fun_arity, glb); \
             if (UNLIKELY(label == 0)) {                                 \
+                SET_ERROR(UNDEF_ATOM);                                  \
                 HANDLE_ERROR();                                         \
             }                                                           \
         }                                                               \
@@ -5108,11 +5110,13 @@ wait_timeout_trap_handler:
                     Module *target_module = globalcontext_get_module(ctx->global, module_name);
                     if (IS_NULL_PTR(target_module)) {
                         pc = orig_pc;
+                        SET_ERROR(UNDEF_ATOM);
                         HANDLE_ERROR();
                     }
                     int target_label = module_search_exported_function(target_module, function_name, arity, glb);
                     if (target_label == 0) {
                         pc = orig_pc;
+                        SET_ERROR(UNDEF_ATOM);
                         HANDLE_ERROR();
                     }
                     ctx->cp = module_address(mod->module_index, pc - code);
@@ -5164,10 +5168,12 @@ wait_timeout_trap_handler:
                 } else {
                     Module *target_module = globalcontext_get_module(ctx->global, module_name);
                     if (IS_NULL_PTR(target_module)) {
+                        SET_ERROR(UNDEF_ATOM);
                         HANDLE_ERROR();
                     }
                     int target_label = module_search_exported_function(target_module, function_name, arity, glb);
                     if (target_label == 0) {
+                        SET_ERROR(UNDEF_ATOM);
                         HANDLE_ERROR();
                     }
                     JUMP_TO_LABEL(target_module, target_label);
