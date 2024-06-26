@@ -26,6 +26,7 @@
 -module(erlang).
 
 -export([
+    apply/2,
     apply/3,
     start_timer/3, start_timer/4,
     cancel_timer/1,
@@ -341,6 +342,41 @@ apply(Module, Function, Args) ->
             Module:Function(Arg1, Arg2, Arg3, Arg4, Arg5);
         [Arg1, Arg2, Arg3, Arg4, Arg5, Arg6] ->
             Module:Function(Arg1, Arg2, Arg3, Arg4, Arg5, Arg6);
+        _ ->
+            error(badarg)
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @param   Function Function to call
+%% @param   Args Parameters to pass to function (max 6)
+%% @returns Returns the result of Function(Args).
+%% @doc     Returns the result of applying Function to Args. The arity of the
+%%          function is the length of Args. Example:
+%%          ```> apply(fun(R) -> lists:reverse(R) end, [[a, b, c]]).
+%%          [c,b,a]
+%%          > apply(fun erlang:atom_to_list/1, ['AtomVM']).
+%%          "AtomVM"'''
+%%          If the number of arguments are known at compile time, the call is better
+%%          written as Function(Arg1, Arg2, ..., ArgN).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec apply(Function :: fun(), Args :: [term()]) -> term().
+apply(Function, Args) ->
+    case Args of
+        [] ->
+            Function();
+        [Arg1] ->
+            Function(Arg1);
+        [Arg1, Arg2] ->
+            Function(Arg1, Arg2);
+        [Arg1, Arg2, Arg3] ->
+            Function(Arg1, Arg2, Arg3);
+        [Arg1, Arg2, Arg3, Arg4] ->
+            Function(Arg1, Arg2, Arg3, Arg4);
+        [Arg1, Arg2, Arg3, Arg4, Arg5] ->
+            Function(Arg1, Arg2, Arg3, Arg4, Arg5);
+        [Arg1, Arg2, Arg3, Arg4, Arg5, Arg6] ->
+            Function(Arg1, Arg2, Arg3, Arg4, Arg5, Arg6);
         _ ->
             error(badarg)
     end.
