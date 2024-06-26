@@ -143,6 +143,8 @@ atomvm:posix_unlink/1, IF_HAVE_UNLINK(&atomvm_posix_unlink_nif)
 atomvm:posix_clock_settime/2, IF_HAVE_CLOCK_SETTIME_OR_SETTIMEOFDAY(&atomvm_posix_clock_settime_nif)
 code:load_abs/1, &code_load_abs_nif
 code:load_binary/3, &code_load_binary_nif
+code:all_available/0, &code_all_available_nif
+code:all_loaded/0, &code_all_loaded_nif
 console:print/1, &console_print_nif
 base64:encode/1, &base64_encode_nif
 base64:decode/1, &base64_decode_nif

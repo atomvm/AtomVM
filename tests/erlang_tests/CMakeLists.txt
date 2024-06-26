@@ -476,6 +476,7 @@ compile_erlang(test_stacktrace)
 compile_erlang(small_big_ext)
 compile_erlang(test_crypto)
 
+compile_erlang(test_code_all_available_loaded)
 compile_erlang(test_code_load_binary)
 compile_erlang(test_code_load_abs)
 compile_erlang(test_add_avm_pack_binary)
@@ -939,6 +940,7 @@ add_custom_target(erlang_test_modules DEPENDS
     small_big_ext.beam
     test_crypto.beam
 
+    test_code_all_available_loaded.beam
     test_code_load_binary.beam
     test_code_load_abs.beam
     test_add_avm_pack_binary.beam

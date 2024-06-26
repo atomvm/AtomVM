@@ -118,7 +118,7 @@ struct GlobalContext
     RWLock *modules_lock;
 #endif
     Module **modules_by_index;
-    int loaded_modules_count;
+    int ATOMIC loaded_modules_count;
 
     struct SyncList avmpack_data;
 
