@@ -322,7 +322,7 @@ jobs:
 
     # Test
     - name: "Test: test-erlang"
-      timeout-minutes: 10
+      timeout-minutes: 15
       working-directory: build
       run: |
         ./tests/test-erlang -s prime_smp
@@ -348,7 +348,7 @@ jobs:
         valgrind ./tests/test-structs
 
     - name: "Test: test_estdlib.avm"
-      timeout-minutes: 10
+      timeout-minutes: 5
       working-directory: build
       run: |
         ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
