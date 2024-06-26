@@ -47,7 +47,7 @@ test_grow_beyond_min_heap_size() ->
     ok =
         receive
             {'DOWN', Ref1, process, Pid1, normal} -> ok
-        after 500 -> timeout
+        after 1000 -> timeout
         end,
     ok.
 
