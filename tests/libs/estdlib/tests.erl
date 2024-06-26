@@ -39,6 +39,7 @@ get_tests(OTPVersion) when
     [test_tcp_socket, test_udp_socket, test_net, test_ssl | get_tests(undefined)];
 get_tests(_OTPVersion) ->
     [
+        test_apply,
         test_lists,
         test_calendar,
         test_gen_event,
