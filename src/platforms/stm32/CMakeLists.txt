@@ -104,4 +104,7 @@ include(cmake/libopencm3.cmake)
 # Include additional compilation flags
 include(cmake/compile-flags.cmake)
 
+# Include version_from_git
+include(cmake/version_from_git.cmake)
+
 add_subdirectory(src)

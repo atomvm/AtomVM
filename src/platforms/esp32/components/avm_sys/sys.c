@@ -20,6 +20,7 @@
 
 #include "sys.h"
 #include "esp32_sys.h"
+#include "platform_defaultatoms.h"
 
 #include "avmpack.h"
 #include "defaultatoms.h"
@@ -78,7 +79,6 @@ static const char *const esp_free_heap_size_atom = "\x14" "esp32_free_heap_size"
 static const char *const esp_largest_free_block_atom = "\x18" "esp32_largest_free_block";
 static const char *const esp_get_minimum_free_size_atom = "\x17" "esp32_minimum_free_size";
 static const char *const esp_chip_info_atom = "\xF" "esp32_chip_info";
-static const char *const esp_idf_version_atom = "\xF" "esp_idf_version";
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 3, 2)
 static const char *const esp32_atom = "\x5" "esp32";
 static const char *const esp32_s2_atom = "\x8" "esp32_s2";
@@ -546,13 +546,25 @@ term sys_get_info(Context *ctx, term key)
         term_set_map_assoc(ret, 3, globalcontext_make_atom(glb, revision_atom), term_from_int32(info.revision));
         return ret;
     }
-    if (key == globalcontext_make_atom(glb, esp_idf_version_atom)) {
-        const char *str = esp_get_idf_version();
-        size_t n = strlen(str);
-        if (memory_ensure_free(ctx, 2 * n) != MEMORY_GC_OK) {
+    if (globalcontext_is_term_equal_to_atom_string(glb, key, ATOM_STR("\x7", "os_type"))) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
             return OUT_OF_MEMORY_ATOM;
         }
-        return term_from_string((const uint8_t *) str, n, &ctx->heap);
+        term os = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(os, 0, ESP32_ATOM);
+        term_put_tuple_element(os, 1, globalcontext_make_atom(glb, ATOM_STR("\x7", "esp-idf")));
+
+        return os;
+    }
+    if (globalcontext_is_term_equal_to_atom_string(glb, key, ATOM_STR("\xA", "os_version"))) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
+            return OUT_OF_MEMORY_ATOM;
+        }
+        term os_ver = term_alloc_tuple(3, &ctx->heap);
+        term_put_tuple_element(os_ver, 0, term_from_int32(ESP_IDF_VERSION_MAJOR));
+        term_put_tuple_element(os_ver, 1, term_from_int32(ESP_IDF_VERSION_MINOR));
+        term_put_tuple_element(os_ver, 2, term_from_int32(ESP_IDF_VERSION_PATCH));
+        return os_ver;
     }
     return UNDEFINED_ATOM;
 }

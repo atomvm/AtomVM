@@ -20,6 +20,8 @@
 
 cmake_minimum_required (VERSION 3.13)
 
+include(${PICO_SDK_PATH}/pico_sdk_version.cmake)
+
 set(HEADER_FILES
     gpiodriver.h
     platform_defaultatoms.h
@@ -43,6 +45,10 @@ set(
     PLATFORM_LIB_SUFFIX
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
 )
+
+add_compile_definitions(OS_VERSION_MAJOR=${PICO_SDK_VERSION_MAJOR})
+add_compile_definitions(OS_VERSION_MINOR=${PICO_SDK_VERSION_MINOR})
+add_compile_definitions(OS_VERSION_PATCH=${PICO_SDK_VERSION_REVISION})
 
 add_library(libAtomVM${PLATFORM_LIB_SUFFIX} STATIC ${SOURCE_FILES} ${HEADER_FILES})
 target_compile_features(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC c_std_11)

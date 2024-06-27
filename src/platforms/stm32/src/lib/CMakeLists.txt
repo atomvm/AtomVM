@@ -21,6 +21,7 @@
 cmake_minimum_required (VERSION 3.13)
 project (libAtomVMPlatformSTM32)
 
+
 set(HEADER_FILES
     avm_devcfg.h
     avm_log.h
@@ -40,6 +41,11 @@ set(
     PLATFORM_LIB_SUFFIX
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
 )
+
+version_from_git()
+add_compile_definitions(OS_VERSION_MAJOR=${IDE_VERSION_MAJOR})
+add_compile_definitions(OS_VERSION_MINOR=${IDE_VERSION_MINOR})
+add_compile_definitions(OS_VERSION_PATCH=${IDE_VERSION_PATCH})
 
 add_library(libAtomVM${PLATFORM_LIB_SUFFIX} ${SOURCE_FILES} ${HEADER_FILES})
 target_compile_features(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC c_std_11)
