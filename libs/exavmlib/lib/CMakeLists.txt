@@ -92,3 +92,24 @@ set(ELIXIR_MODULES
 )
 
 pack_archive(exavmlib ${ELIXIR_MODULES})
+
+include(../../../version.cmake)
+
+set(EXAVMLIB_VERSION ${ATOMVM_BASE_VERSION})
+
+install(
+    DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/beams/
+    DESTINATION lib/atomvm/lib/exavmlib-${EXAVMLIB_VERSION}/ebin
+    FILES_MATCHING PATTERN "*.beam"
+)
+
+install(
+    FILES ${CMAKE_CURRENT_BINARY_DIR}/exavmlib.avm
+    DESTINATION lib/atomvm/lib/exavmlib-${EXAVMLIB_VERSION}/ebin/
+)
+
+install(
+    DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
+    DESTINATION lib/atomvm/lib/exavmlib-${EXAVMLIB_VERSION}/lib
+    FILES_MATCHING PATTERN "*.ex"
+)
