@@ -4485,14 +4485,15 @@ static void *nif_code_all_available_fold(void *accum, const void *section_ptr, u
 
     struct CodeAllAvailableAcc *acc = (struct CodeAllAvailableAcc *) accum;
     size_t section_name_len = strlen(section_name);
-    if (section_name_len < 260) {
-        if (memcmp(".beam", section_name + section_name_len - 5, 5) == 0) {
+    if (flags & BEAM_CODE_FLAG && section_name_len > 5 && section_name_len < 260) {
+        size_t module_name_len = section_name_len - 5;
+        if (memcmp(".beam", section_name + module_name_len, 5) == 0) {
             bool loaded;
             if (acc->avmpack_data->in_use) {
                 // Check if module is loaded
-                char atom_str[section_name_len - 5];
-                atom_str[0] = section_name_len - 5;
-                memcpy(atom_str + 1, section_name, atom_str[0]);
+                char atom_str[module_name_len + 1];
+                atom_str[0] = module_name_len;
+                memcpy(atom_str + 1, section_name, module_name_len);
                 Module *loaded_module = globalcontext_get_module(acc->ctx->global, (AtomString) &atom_str);
                 loaded = loaded_module != NULL;
             } else {
@@ -4502,7 +4503,7 @@ static void *nif_code_all_available_fold(void *accum, const void *section_ptr, u
                 acc->acc_count++;
                 if (!term_is_invalid_term(acc->result)) {
                     term module_tuple = term_alloc_tuple(3, &acc->ctx->heap);
-                    term_put_tuple_element(module_tuple, 0, term_from_const_binary(section_name, section_name_len - 5, &acc->ctx->heap, acc->ctx->global));
+                    term_put_tuple_element(module_tuple, 0, term_from_const_binary(section_name, module_name_len, &acc->ctx->heap, acc->ctx->global));
                     term_put_tuple_element(module_tuple, 1, UNDEFINED_ATOM);
                     term_put_tuple_element(module_tuple, 2, FALSE_ATOM);
                     acc->result = term_list_prepend(module_tuple, acc->result, &acc->ctx->heap);
