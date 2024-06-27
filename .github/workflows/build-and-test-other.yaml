@@ -33,15 +33,15 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  otp_version: 24
-  elixir_version: 1.14
+  otp_version: 27
+  elixir_version: 1.17
 
 jobs:
   compile_tests:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
     - name: Checkout repo
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - uses: erlef/setup-beam@v1
       with:
@@ -66,7 +66,7 @@ jobs:
         make test_alisp
 
     - name: Upload test modules
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-modules
         path: |
@@ -77,7 +77,7 @@ jobs:
 
   build-and-test-other:
     needs: compile_tests
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     strategy:
       fail-fast: false
@@ -125,7 +125,7 @@ jobs:
 
     steps:
     - name: Checkout repo
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: apt update
       run: sudo apt update
@@ -134,7 +134,7 @@ jobs:
       run: sudo apt install -y debootstrap
 
     - name: Download test modules
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: test-modules
         path: build_tests

@@ -1141,16 +1141,16 @@ As noted above, the [`erlang:system_info/1`](./apidocs/erlang/estdlib/erlang.md#
 
 You can request ESP32-specific information using using the following input atoms:
 
-* `esp_free_heap_size` Returns the available free space in the ESP32 heap.
-* `esp_largest_free_block` Returns the size of the largest free continuous block in the ESP32 heap.
-* `esp_get_minimum_free_size` Returns the smallest ever free space available in the ESP32 heap since boot, this will tell you how close you have come to running out of free memory.
-* `esp_chip_info` Returns map of the form `#{features := Features, cores := Cores, revision := Revision, model := Model}`, where `Features` is a list of features enabled in the chip, from among the following atoms: `[emb_flash, bgn, ble, bt]`; `Cores` is the number of CPU cores on the chip; `Revision` is the chip version; and `Model` is one of the following atoms: `esp32`, `esp32_s2`, `esp32_s3`, `esp32_c3`.
+* `esp32_free_heap_size` Returns the available free space in the ESP32 heap.
+* `esp32_largest_free_block` Returns the size of the largest free continuous block in the ESP32 heap.
+* `esp32_minimum_free_size` Returns the smallest ever free space available in the ESP32 heap since boot, this will tell you how close you have come to running out of free memory.
+* `esp32_chip_info` Returns map of the form `#{features := Features, cores := Cores, revision := Revision, model := Model}`, where `Features` is a list of features enabled in the chip, from among the following atoms: `[emb_flash, bgn, ble, bt]`; `Cores` is the number of CPU cores on the chip; `Revision` is the chip version; and `Model` is one of the following atoms: `esp32`, `esp32_s2`, `esp32_s3`, `esp32_c3`, etc.
 * `esp_idf_version` Return the IDF SDK version, as a string.
 
 For example,
 
 ```erlang
-FreeHeapSize = erlang:system_info(esp_free_heap_size).
+FreeHeapSize = erlang:system_info(esp32_free_heap_size).
 ```
 
 ### Non-volatile Storage
@@ -1341,7 +1341,7 @@ The AtomVM virtual machine and libraries support APIs for interfacing with perip
 
 The GPIO peripheral has nif support on all platforms. One notable difference on the STM32 platform is that `Pin()` is defined as a tuple consisting of the bank (a.k.a. port) and pin number.  For example a pin labeled PB7 on your board would be `{b,7}`.
 
-You can read and write digital values on GPIO pins using the [`gpio` module](./apidocs/erlang/eavmlib/gpio.md), using the [`digital_read/1`](./apidocs/erlang/eavmlib/gpio.md#digital_read1) and [`digital_write/2`](./apidocs/erlang/eavmlib/gpio.md#digital_write2) functions.  You must first set the direction of the pin using the [`gpio:set_direction/2`](./apidocs/erlang/eavmlib/gpio.md#set_direction3) function, using `input` or `output` as the direction parameter.
+You can read and write digital values on GPIO pins using the [`gpio` module](./apidocs/erlang/eavmlib/gpio.md), using the [`digital_read/1`](./apidocs/erlang/eavmlib/gpio.md#digital_read1) and [`digital_write/2`](./apidocs/erlang/eavmlib/gpio.md#digital_write2) functions.  You must first set the pin mode using the [`gpio:set_pin_mode/2`](./apidocs/erlang/eavmlib/gpio.md#set_pin_mode2) function, using `input` or `output` as the direction parameter.
 
 #### Digital Read
 
@@ -1351,7 +1351,7 @@ For ESP32 family:
 
 ```erlang
 Pin = 2,
-gpio:set_direction(Pin, input),
+gpio:set_pin_mode(Pin, input),
 case gpio:digital_read(Pin) of
     high ->
         io:format("Pin ~p is high ~n", [Pin]);
@@ -1364,7 +1364,7 @@ For STM32 only the line with the Pin definition needs to be a tuple:
 
 ```erlang
 Pin = {c, 13},
-gpio:set_direction(Pin, input),
+gpio:set_pin_mode(Pin, input),
 case gpio:digital_read(Pin) of
     high ->
         io:format("Pin ~p is high ~n", [Pin]);
@@ -1378,7 +1378,7 @@ The Pico has an additional initialization step [`gpio:init/1`](./apidocs/erlang/
 ```erlang
 Pin = 2,
 gpio:init(Pin),
-gpio:set_direction(Pin, input),
+gpio:set_pin_mode(Pin, input),
 case gpio:digital_read(Pin) of
     high ->
         io:format("Pin ~p is high ~n", [Pin]);
@@ -1395,7 +1395,7 @@ For ESP32 family:
 
 ```erlang
 Pin = 2,
-gpio:set_direction(Pin, output),
+gpio:set_pin_mode(Pin, output),
 gpio:digital_write(Pin, low).
 ```
 
@@ -1403,7 +1403,7 @@ For the STM32 use a pin tuple:
 
 ```erlang
 Pin = {b, 7},
-gpio:set_direction(Pin, output),
+gpio:set_pin_mode(Pin, output),
 gpio:digital_write(Pin, low).
 ```
 
@@ -1412,13 +1412,13 @@ Pico needs the extra `gpio:init/1` before `gpio:read/1` too:
 ```erlang
 Pin = 2,
 gpio:init(Pin),
-gpio:set_direction(Pin, output),
+gpio:set_pin_mode(Pin, output),
 gpio:digital_write(Pin, low).
 ```
 
 #### Interrupt Handling
 
-Interrupts are supported on both the ESP32 and STM32 platforms.
+Interrupts are supported on both the ESP32 and STM32 platforms. They require using the GPIO port driver, using [`gpio:open/0`](./apidocs/erlang/eavmlib/gpio.md#open0) and [`gpio:set_direction/3`](./apidocs/erlang/eavmlib/gpio.md#set_direction3).
 
 You can get notified of changes in the state of a GPIO pin by using the [`gpio:set_int/3`](./apidocs/erlang/eavmlib/gpio.md#set_int3) function.  This function takes a reference to a GPIO instance, a Pin, and a trigger.  Allowable triggers are `rising`, `falling`, `both`, `low`, `high`, and `none` (to disable an interrupt).
 
@@ -1426,8 +1426,8 @@ When a trigger event occurs, such as a pin rising in voltage, a tuple will be de
 
 ```erlang
 Pin = 2,
-gpio:set_direction(Pin, input),
 GPIO = gpio:open(),
+gpio:set_direction(GPIO, Pin, input),
 ok = gpio:set_int(GPIO, Pin, rising),
 receive
     {gpio_interrupt, Pin} ->
@@ -1439,9 +1439,9 @@ You can also use the [`gpio:set_int/4`](./apidocs/erlang/eavmlib/gpio.md#set_int
 
 ```erlang
 Pin = 2,
-gpio:set_direction(Pin, input),
-Listener = spawn(fun() -> my_gen_statem() end),
 GPIO = gpio:open(),
+gpio:set_direction(GPIO, Pin, input),
+Listener = spawn(fun() -> my_gen_statem() end),
 ok = gpio:set_int(GPIO, Pin, rising, Listener),
 timer:sleep(infinity).
 ```

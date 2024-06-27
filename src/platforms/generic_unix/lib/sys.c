@@ -536,7 +536,13 @@ void sys_init_platform(GlobalContext *global)
 #else
     platform->listeners_poll_count = -1;
     platform->select_events_poll_count = -1;
+#if __GNUC__ >= 14
+#pragma GCC diagnostic ignored "-Walloc-size"
+#endif
     platform->fds = malloc(0);
+#if __GNUC__ >= 14
+#pragma GCC diagnostic pop
+#endif
 #ifndef AVM_NO_SMP
 #ifdef HAVE_EVENTFD
     int signal_fd = eventfd(0, EFD_NONBLOCK);

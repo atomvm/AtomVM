@@ -52,18 +52,23 @@ jobs:
           test_erlang_opts: "-s prime_smp"
           otp: "23"
 
-        - os: "ubuntu-22.04"
+        - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
           otp: "24"
 
-        - os: "ubuntu-22.04"
+        - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
           otp: "25"
 
-        - os: "ubuntu-22.04"
+        - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp,test_gc"
           otp: "26"
           container: erlang:26
+
+        - os: "ubuntu-24.04"
+          test_erlang_opts: "-s prime_smp,test_gc"
+          otp: "27"
+          container: erlang:27
 
         # This is ARM64
         - os: "macos-14"
@@ -80,7 +85,7 @@ jobs:
     steps:
     # Setup
     - name: "Checkout repo"
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         submodules: 'recursive'
 
@@ -109,7 +114,7 @@ jobs:
     - name: "Build: create build dir"
       run: mkdir build
 
-    - uses: actions/cache@v3
+    - uses: actions/cache@v4
       id: cache
       with:
         path: 'build/tests/**/*.beam'

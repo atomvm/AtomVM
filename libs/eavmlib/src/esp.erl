@@ -120,6 +120,8 @@
 
 -export_type(
     [
+        esp_reset_reason/0,
+        esp_wakeup_cause/0,
         esp_partition/0,
         esp_partition_type/0,
         esp_partition_subtype/0,

@@ -41,6 +41,7 @@
 #define PORT_REPLY_SIZE (TUPLE_SIZE(2) + REF_SIZE)
 
 static const char *const ap_atom = ATOM_STR("\x2", "ap");
+static const char *const ap_channel_atom = ATOM_STR("\xA", "ap_channel");
 static const char *const ap_sta_connected_atom = ATOM_STR("\x10", "ap_sta_connected");
 static const char *const ap_sta_disconnected_atom = ATOM_STR("\x13", "ap_sta_disconnected");
 static const char *const ap_started_atom = ATOM_STR("\xA", "ap_started");
@@ -382,6 +383,7 @@ static term start_ap(term ap_config, GlobalContext *global)
 {
     term ssid_term = interop_kv_get_value(ap_config, ssid_atom, global);
     term pass_term = interop_kv_get_value(ap_config, psk_atom, global);
+    term channel_term = interop_kv_get_value(ap_config, ap_channel_atom, global);
 
     //
     // Check parameters
@@ -407,6 +409,13 @@ static term start_ap(term ap_config, GlobalContext *global)
         if (!ok) {
             free(ssid);
             return BADARG_ATOM;
+        }
+    }
+    uint32_t channel = 0;
+    if (!term_is_invalid_term(channel_term)) {
+        channel = term_to_int32(channel_term);
+        if (channel != 0) {
+            cyw43_wifi_ap_set_channel(&cyw43_state, channel);
         }
     }
 

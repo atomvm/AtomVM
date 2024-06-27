@@ -358,6 +358,7 @@ struct Test tests[] = {
     TEST_CASE(test_binary_to_term),
     TEST_CASE(test_selective_receive),
     TEST_CASE(test_timeout_not_integer),
+    TEST_CASE(test_undef),
     TEST_CASE(test_bs),
     TEST_CASE(test_bs_int),
     TEST_CASE(test_bs_int_unaligned),
@@ -467,6 +468,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_function_exported, 7),
     TEST_CASE_EXPECTED(test_list_to_tuple, 69),
 
+    TEST_CASE(bs_context_byte_size),
     TEST_CASE_EXPECTED(bs_context_to_binary_with_offset, 42),
     TEST_CASE_EXPECTED(bs_restore2_start_offset, 823),
 

@@ -16,25 +16,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Simple http client, that can be used for different use case such as downloading OTA updates
 - Elixir support for `Keyword.merge` `Keyword.take` `Keyword.pop(!)` `Keyword.keyword?` `Keyword.has_key?` functions.
+- Support for ESP32-H2
+- lists:keytake/3 implemented.
+- Support for setting channel used by network driver wifi access point.
+- Support for `maps:iterator/2` and `~kp` with `io_lib:format/2` that were introduced with OTP26.
+- Support for `erlang:apply/2`
 
 ### Changed
 
 - ESP32 network driver messages for event 40 (home channel change events) are now suppressed, but the
 details for the channel changes can be observed in the console log if "debug" level logging is enabled
 in ESP-IDF Kconfig options.
+- Default size of ESP32 RTC slow memory from 4086 to 4096, except on ESP32-H2 where it's 3072
+- Update `byte_size/1` and `bit_size/1` to implement OTP27 match context reuse optimization OTP-18987.
 
 ### Fixed
 
 - Fix bug (with code compiled with OTP-21) with binary pattern matching: the fix introduced with
 `02411048` was not completely right, and it was converting match context to bogus binaries.
-
-### Changed
-
-- Default size of ESP32 RTC slow memory from 4086 to 4096, except on ESP32-H2 where it's 3072
-
-### Added
-
-- Support for ESP32-H2
+- Fix creation of multiple links for the same process and not removing link at trapped exits.
+See issue [#1193](https://github.com/atomvm/AtomVM/issues/1193).
+- Fix error that is raised when a function is undefined
 
 ## [0.6.2] - 25-05-2024
 

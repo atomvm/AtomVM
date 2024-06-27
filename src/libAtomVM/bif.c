@@ -27,6 +27,7 @@
 #include "defaultatoms.h"
 #include "dictionary.h"
 #include "overflow_helpers.h"
+#include "term.h"
 #include "trace.h"
 #include "utils.h"
 
@@ -68,18 +69,36 @@ term bif_erlang_byte_size_1(Context *ctx, int live, term arg1)
 {
     UNUSED(live);
 
-    VALIDATE_VALUE(arg1, term_is_binary);
+    size_t len;
 
-    return term_from_int32(term_binary_size(arg1));
+    if (term_is_match_state(arg1)) {
+        avm_int_t offset = term_get_match_state_offset(arg1);
+        term src_bin = term_get_match_state_binary(arg1);
+        len = term_binary_size(src_bin) - offset / 8;
+    } else {
+        VALIDATE_VALUE(arg1, term_is_binary);
+        len = term_binary_size(arg1);
+    }
+
+    return term_from_int32(len);
 }
 
 term bif_erlang_bit_size_1(Context *ctx, int live, term arg1)
 {
     UNUSED(live);
 
-    VALIDATE_VALUE(arg1, term_is_binary);
+    size_t len;
 
-    return term_from_int32(term_binary_size(arg1) * 8);
+    if (term_is_match_state(arg1)) {
+        avm_int_t offset = term_get_match_state_offset(arg1);
+        term src_bin = term_get_match_state_binary(arg1);
+        len = term_binary_size(src_bin) * 8 - offset;
+    } else {
+        VALIDATE_VALUE(arg1, term_is_binary);
+        len = term_binary_size(arg1) * 8;
+    }
+
+    return term_from_int32(len);
 }
 
 term bif_erlang_is_atom_1(Context *ctx, term arg1)

@@ -178,6 +178,7 @@ compile_erlang(test_system_info)
 compile_erlang(test_binary_to_term)
 compile_erlang(test_selective_receive)
 compile_erlang(test_timeout_not_integer)
+compile_erlang(test_undef)
 
 compile_erlang(test_funs0)
 compile_erlang(test_funs1)
@@ -446,6 +447,7 @@ compile_erlang(sexp_lexer)
 compile_erlang(test_function_exported)
 compile_erlang(test_list_to_tuple)
 
+compile_erlang(bs_context_byte_size)
 compile_erlang(bs_context_to_binary_with_offset)
 compile_erlang(bs_restore2_start_offset)
 compile_erlang(test_refc_binaries)
@@ -638,6 +640,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_binary_to_term.beam
     test_selective_receive.beam
     test_timeout_not_integer.beam
+    test_undef.beam
 
     test_funs0.beam
     test_funs1.beam
@@ -912,6 +915,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_function_exported.beam
     test_list_to_tuple.beam
 
+    bs_context_byte_size.beam
     bs_context_to_binary_with_offset.beam
     bs_restore2_start_offset.beam
     bs_append_extra_words.beam
