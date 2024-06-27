@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   stm32:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/cache@v4
       id: builddeps-cache
@@ -38,7 +38,11 @@ jobs:
 
     - uses: erlef/setup-beam@v1
       with:
-        otp-version: "26"
+        otp-version: "27"
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://repo.hex.pm
+          https://cdn.jsdelivr.net/hex
 
     - name: Install arm-embedded toolchain
       if: ${{ steps.builddeps-cache.outputs.cache-hit != 'true' }}

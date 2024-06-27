@@ -29,27 +29,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
   cancel-in-progress: true
 
-env:
-  otp_version: 24
-  elixir_version: 1.14
-
 jobs:
   compile_tests:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
+    container: erlang:27
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
 
-    - uses: erlef/setup-beam@v1
-      with:
-        otp-version: ${{ env.otp_version }}
-        elixir-version: ${{ env.elixir_version }}
-
-    - name: apt update
-      run: sudo apt update
-
     - name: Install required packages
-      run: sudo apt install -y gperf zlib1g-dev ninja-build
+      run: apt update && apt install -y gperf zlib1g-dev cmake ninja-build
 
     - name: Compile AtomVM and test modules
       run: |
