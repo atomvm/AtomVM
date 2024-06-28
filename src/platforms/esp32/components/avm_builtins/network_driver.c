@@ -76,6 +76,7 @@ static const char *const ssid_atom = ATOM_STR("\x4", "ssid");
 static const char *const ssid_hidden_atom = ATOM_STR("\xB", "ssid_hidden");
 static const char *const sta_atom = ATOM_STR("\x3", "sta");
 static const char *const sta_connected_atom = ATOM_STR("\xD", "sta_connected");
+static const char *const sta_beacon_timeout_atom = ATOM_STR("\x12", "sta_beacon_timeout");
 static const char *const sta_disconnected_atom = ATOM_STR("\x10", "sta_disconnected");
 static const char *const sta_got_ip_atom = ATOM_STR("\xA", "sta_got_ip");
 
@@ -92,12 +93,14 @@ enum network_cmd
     NetworkInvalidCmd = 0,
     // TODO add support for scan, ifconfig
     NetworkStartCmd,
-    NetworkRssiCmd
+    NetworkRssiCmd,
+    NetworkStopCmd
 };
 
 static const AtomStringIntPair cmd_table[] = {
     { ATOM_STR("\x5", "start"), NetworkStartCmd },
     { ATOM_STR("\x4", "rssi"), NetworkRssiCmd },
+    { ATOM_STR("\x4", "stop"), NetworkStopCmd },
     SELECT_INT_DEFAULT(NetworkInvalidCmd)
 };
 
@@ -162,6 +165,18 @@ static void send_sta_connected(struct ClientData *data)
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
     {
         send_term(&heap, data, make_atom(data->global, sta_connected_atom));
+    }
+    END_WITH_STACK_HEAP(heap, data->global);
+}
+
+static void send_sta_beacon_timeout(struct ClientData *data)
+{
+    TRACE("Sending sta_beacon_timeout back to AtomVM\n");
+
+    // {Ref, sta_beacon_timeout}
+    BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
+    {
+        send_term(&heap, data, make_atom(data->global, sta_beacon_timeout_atom));
     }
     END_WITH_STACK_HEAP(heap, data->global);
 }
@@ -301,6 +316,12 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
                 break;
             }
 #endif
+
+            case WIFI_EVENT_STA_BEACON_TIMEOUT: {
+                ESP_LOGI(TAG, "WIFI_EVENT_STA_BEACON_TIMEOUT received. Maybe poor signal, or network congestion?");
+                send_sta_beacon_timeout(data);
+                break;
+            }
 
             default:
                 ESP_LOGI(TAG, "Unhandled wifi event: %" PRIi32 ".", event_id);
@@ -744,7 +765,6 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         if ((err = esp_wifi_set_config(ESP_IF_WIFI_AP, ap_wifi_config)) != ESP_OK) {
             ESP_LOGE(TAG, "Error setting AP mode config %d", err);
             free(ap_wifi_config);
-            free(sta_wifi_config);
             term error = port_create_error_tuple(ctx, term_from_int(err));
             port_send_reply(ctx, pid, ref, error);
             return;
@@ -753,12 +773,14 @@ static void start_network(Context *ctx, term pid, term ref, term config)
             free(ap_wifi_config);
         }
     }
+
+    //
+    // Start the configured interface(s)
+    //
     if ((err = esp_wifi_start()) != ESP_OK) {
         ESP_LOGE(TAG, "Error in esp_wifi_start %d", err);
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
-        free(ap_wifi_config);
-        free(sta_wifi_config);
         return;
     } else {
         ESP_LOGI(TAG, "WIFI started");
@@ -778,10 +800,49 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     if (!IS_NULL_PTR(ap_wifi_config)) {
         set_dhcp_hostname(ap_wifi_interface, "AP", interop_kv_get_value(ap_config, dhcp_hostname_atom, ctx->global));
     }
+
     //
     // Done -- send an ok so the FSM can proceed
     //
     port_send_reply(ctx, pid, ref, OK_ATOM);
+}
+
+static void stop_network(Context *ctx)
+{
+    // Stop unregister event callbacks so they dont trigger during shutdown.
+    esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler);
+
+    esp_netif_t *sta_wifi_interface = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    esp_netif_t *ap_wifi_interface = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+
+    // Disconnect STA if connected to access point
+    if ((sta_wifi_interface != NULL) && (esp_netif_is_netif_up(sta_wifi_interface))) {
+        esp_err_t err = esp_wifi_disconnect();
+        if (UNLIKELY(err == ESP_FAIL)) {
+            ESP_LOGE(TAG, "ESP FAIL error while disconnecting from AP, continuing network shutdown...");
+        }
+    }
+
+    // Stop and deinit the WiFi driver, these only return OK, or not init error (fine to ignore).
+    esp_wifi_stop();
+    esp_wifi_deinit();
+
+    // Stop sntp (ignore OK, or not configured error)
+    esp_sntp_stop();
+
+    // Delete network event loop
+    esp_err_t err = esp_event_loop_delete_default();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Invalid state error while deleting event loop, continuing network shutdown...");
+    }
+
+    // Destroy existing netif interfaces
+    if (ap_wifi_interface != NULL) {
+        esp_netif_destroy_default_wifi(ap_wifi_interface);
+    }
+    if (sta_wifi_interface != NULL) {
+        esp_netif_destroy_default_wifi(sta_wifi_interface);
+    }
 }
 
 static void get_sta_rssi(Context *ctx, term pid, term ref)
@@ -804,11 +865,11 @@ static void get_sta_rssi(Context *ctx, term pid, term ref)
     port_ensure_available(ctx, tuple_reply_size);
     term reply = port_create_tuple2(ctx, make_atom(ctx->global, ATOM_STR("\x4", "rssi")), rssi);
     port_send_reply(ctx, pid, ref, reply);
-
 }
 
 static NativeHandlerResult consume_mailbox(Context *ctx)
 {
+    bool cmd_terminate = false;
     Message *message = mailbox_first(&ctx->mailbox);
     term msg = message->message;
 
@@ -841,6 +902,10 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
             case NetworkRssiCmd:
                 get_sta_rssi(ctx, pid, ref);
                 break;
+            case NetworkStopCmd:
+                cmd_terminate = true;
+                stop_network(ctx);
+                break;
 
             default: {
                 ESP_LOGE(TAG, "Unrecognized command: %x", cmd);
@@ -867,7 +932,7 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
 
     mailbox_remove_message(&ctx->mailbox, &ctx->heap);
 
-    return NativeContinue;
+    return cmd_terminate ? NativeTerminate : NativeContinue;
 }
 
 //

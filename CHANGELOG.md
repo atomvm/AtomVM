@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for setting channel used by network driver wifi access point.
 - Support for `maps:iterator/2` and `~kp` with `io_lib:format/2` that were introduced with OTP26.
 - Support for `erlang:apply/2`
+- Add handler for ESP32 network driver STA mode `beacon_timeout` (event: 21), see issue
+[#1100](https://github.com/atomvm/AtomVM/issues/1100)
 
 ### Changed
 
@@ -31,6 +33,10 @@ in ESP-IDF Kconfig options.
 - Fix creation of multiple links for the same process and not removing link at trapped exits.
 See issue [#1193](https://github.com/atomvm/AtomVM/issues/1193).
 - Fix error that is raised when a function is undefined
+- Fix several uses of free on prevously released memory on ESP32, under certain error condition using
+`network:start/1`, that would lead to a hard crash of the VM.
+- Fix a bug in ESP32 network driver where the low level driver was not being stopped and resoureces were not freed
+when `network:stop/0` was used, see issue [#643](https://github.com/atomvm/AtomVM/issues/643)
 
 ## [0.6.2] - 25-05-2024
 
