@@ -30,18 +30,38 @@ start() ->
 make_config(A, B, C) ->
     erlang:garbage_collect(self()),
 
+    Z1 = maketuple(1, 2, 3),
+    Z2 = maketuple(Z1, 1, 2),
+    Z3 = maketuple(Z1, Z2, 1),
     % With OTP24+, this is implemented with make_fun3 which optimizes allocation.
     X = [
         {fun() -> 0 end, 1, 2, 3, 4},
         % env = 1
         {fun() -> A end, 1, 2, 3, 4},
         % env = 2
-        {fun() -> A + B end, 1, 2, 3, 4, 5}
+        {fun() -> A + B end, 1, 2, 3, 4, 5},
+        % env = 3, with a term that takes some space
+        fun() -> sumtuple(Z1) + sumtuple(Z2) + sumtuple(Z3) end
     ],
-    maketuple(A, B, C, X).
+
+    % Make a copy sending this as a message, to ensure we know how to copy
+    % terms created by make_fun3
+    Y = send_self(X),
+    maketuple(A, B, C, Y).
 
 maketuple(A, B, C) -> {A, B, C}.
 
 maketuple(A, B, C, _D) -> {A, B, C}.
 
 sumtuple({A, B, C}) -> A + B + C.
+
+send_self(X) ->
+    Ref = make_ref(),
+    self() ! {Ref, X},
+    receive_self(Ref).
+
+receive_self(Ref) ->
+    erlang:garbage_collect(self()),
+    receive
+        {Ref, Y} -> Y
+    end.

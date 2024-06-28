@@ -31,6 +31,7 @@ in ESP-IDF Kconfig options.
 - Fix creation of multiple links for the same process and not removing link at trapped exits.
 See issue [#1193](https://github.com/atomvm/AtomVM/issues/1193).
 - Fix error that is raised when a function is undefined
+- Fix a bug that could yield crashes when functions are sent in messages
 
 ## [0.6.2] - 25-05-2024
 
