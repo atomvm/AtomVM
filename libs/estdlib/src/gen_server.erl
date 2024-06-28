@@ -51,6 +51,11 @@
 
 -export([init_it/4, init_it/5]).
 
+-export_type([
+    server_ref/0,
+    from/0
+]).
+
 -record(state, {
     name = undefined :: atom(),
     mod :: module(),
