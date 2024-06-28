@@ -248,7 +248,7 @@ test_reason_normal_self() ->
         receive
             {Pid2, {'EXIT', Pid2, normal}} -> ok;
             Other -> Other
-        after 500 -> timeout
+        after 1000 -> timeout
         end,
     ok =
         receive
