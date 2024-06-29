@@ -40,25 +40,25 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - os: "ubuntu-20.04"
+        - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
-          otp: "21"
-
-        - os: "ubuntu-20.04"
-          test_erlang_opts: "-s prime_smp"
-          otp: "22"
-
-        - os: "ubuntu-20.04"
-          test_erlang_opts: "-s prime_smp"
-          otp: "23"
+          container: erlang:21
 
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
-          otp: "24"
+          container: erlang:22
 
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
-          otp: "25"
+          container: erlang:23
+
+        - os: "ubuntu-24.04"
+          test_erlang_opts: "-s prime_smp"
+          container: erlang:24
+
+        - os: "ubuntu-24.04"
+          test_erlang_opts: "-s prime_smp"
+          container: erlang:25
 
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
@@ -89,19 +89,8 @@ jobs:
       with:
         submodules: 'recursive'
 
-    - uses: erlef/setup-beam@v1
-      if: runner.os == 'Linux' && matrix.container == ''
-      with:
-        otp-version: ${{ matrix.otp }}
-
-    - name: "Install deps (Linux)"
-      if: runner.os == 'Linux' && matrix.container == ''
-      run: |
-        sudo apt update -y
-        sudo apt install -y cmake gperf zlib1g-dev ninja-build
-
     - name: "Install deps (container)"
-      if: runner.os == 'Linux' && matrix.container != ''
+      if: runner.os == 'Linux'
       run: |
         apt update -y
         apt install -y cmake gperf zlib1g-dev ninja-build

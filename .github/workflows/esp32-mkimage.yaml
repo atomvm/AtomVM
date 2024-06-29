@@ -39,8 +39,8 @@ jobs:
         cc: ["clang-10"]
         cxx: ["clang++-10"]
         cflags: ["-O3"]
-        otp: ["24"]
-        elixir_version: ["1.11"]
+        otp: ["27"]
+        elixir_version: ["1.17"]
         compiler_pkgs: ["clang-10"]
         soc: ["esp32", "esp32c2", "esp32c3", "esp32s2", "esp32s3", "esp32c6", "esp32h2"]
 
@@ -59,6 +59,10 @@ jobs:
       with:
         otp-version: ${{ matrix.otp }}
         elixir-version: ${{ matrix.elixir_version }}
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://repo.hex.pm
+          https://cdn.jsdelivr.net/hex
 
     - name: "APT update"
       run: apt update -y

@@ -32,38 +32,24 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
   cancel-in-progress: true
 
-env:
-  otp_version: 27
-  elixir_version: 1.17
-
 jobs:
   compile_tests:
     runs-on: ubuntu-24.04
+    container: erlang:27
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
 
-    - uses: erlef/setup-beam@v1
-      with:
-        otp-version: ${{ env.otp_version }}
-        elixir-version: ${{ env.elixir_version }}
-
-    - name: apt update
-      run: sudo apt update
-
     - name: Install required packages
-      run: sudo apt install -y gperf
+      run: apt update && apt install -y gperf zlib1g-dev cmake ninja-build
 
     - name: Compile test modules
       run: |
         set -e
         mkdir build_tests
         cd build_tests
-        cmake ..
-        make erlang_test_modules
-        make test_estdlib
-        make test_eavmlib
-        make test_alisp
+        cmake .. -G Ninja -DAVM_WARNINGS_ARE_ERRORS=ON
+        ninja erlang_test_modules test_estdlib test_eavmlib test_alisp
 
     - name: Upload test modules
       uses: actions/upload-artifact@v4
