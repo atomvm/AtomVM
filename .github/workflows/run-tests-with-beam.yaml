@@ -143,3 +143,11 @@ jobs:
       run: |
         export PATH="${{ matrix.path_prefix }}$PATH"
         erl -pa tests/libs/estdlib/ -pa tests/libs/estdlib/beams/ -pa libs/etest/src/beams -s tests -s init stop -noshell
+
+    # Test
+    - name: "Run tests/libs/etest/test_eunit with OTP eunit"
+      timeout-minutes: 10
+      working-directory: build
+      run: |
+        export PATH="${{ matrix.path_prefix }}$PATH"
+        erl -pa tests/libs/etest/beams -s test_eunit test -s init stop -noshell

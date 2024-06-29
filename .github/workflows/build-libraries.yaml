@@ -67,6 +67,20 @@ jobs:
       working-directory: build
       run: make dialyzer
 
+    - name: "Test: test_alisp.avm"
+      timeout-minutes: 5
+      working-directory: build
+      run: |
+        ./src/AtomVM ./tests/libs/etest/test_alisp.avm
+        valgrind ./src/AtomVM ./tests/libs/etest/test_alisp.avm
+
+    - name: "Test: test_etest.avm"
+      timeout-minutes: 5
+      working-directory: build
+      run: |
+        ./src/AtomVM ./tests/libs/etest/test_etest.avm
+        valgrind ./src/AtomVM ./tests/libs/etest/test_etest.avm
+
     - name: "Test: test_estdlib.avm"
       timeout-minutes: 10
       working-directory: build

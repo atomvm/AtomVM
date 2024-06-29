@@ -1,7 +1,7 @@
 #
 # This file is part of AtomVM.
 #
-# Copyright 2018-2020 Fred Dushin <fred@dushin.net>
+# Copyright 2024 Paul Guyot <pguyot@kallisys.net>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,13 +18,13 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-project(estest)
+project(test_etest)
 
 include(BuildErlang)
 
 set(ERLANG_MODULES
-    etest
-    eunit
+    test_eunit
 )
 
-pack_archive(etest ${ERLANG_MODULES})
+pack_archive(test_etest_lib ERLC_FLAGS -DTEST MODULES ${ERLANG_MODULES})
+pack_eunit(test_etest estdlib eavmlib etest)

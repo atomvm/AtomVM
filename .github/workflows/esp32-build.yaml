@@ -74,7 +74,7 @@ jobs:
         set -eu
         apt update
         DEBIAN_FRONTEND=noninteractive apt install -y -q \
-            doxygen erlang-base erlang-dialyzer \
+            doxygen erlang-base erlang-dev erlang-dialyzer erlang-eunit \
             libglib2.0-0 libpixman-1-0 \
             gcc g++ zlib1g-dev libsdl2-2.0-0 libslirp0 libmbedtls-dev
 

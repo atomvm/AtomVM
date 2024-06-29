@@ -351,6 +351,13 @@ jobs:
         ./tests/test-structs
         valgrind ./tests/test-structs
 
+    - name: "Test: test_etest.avm"
+      timeout-minutes: 5
+      working-directory: build
+      run: |
+        ./src/AtomVM ./tests/libs/etest/test_etest.avm
+        valgrind ./src/AtomVM ./tests/libs/etest/test_etest.avm
+
     - name: "Test: test_estdlib.avm"
       timeout-minutes: 5
       working-directory: build
