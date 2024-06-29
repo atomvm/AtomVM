@@ -61,12 +61,12 @@ jobs:
           otp: "25"
 
         - os: "ubuntu-24.04"
-          test_erlang_opts: "-s prime_smp,test_gc"
+          test_erlang_opts: "-s prime_smp"
           otp: "26"
           container: erlang:26
 
         - os: "ubuntu-24.04"
-          test_erlang_opts: "-s prime_smp,test_gc"
+          test_erlang_opts: "-s prime_smp"
           otp: "27"
           container: erlang:27
 
