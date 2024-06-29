@@ -31,6 +31,7 @@ test() ->
     ok = test_keyfind(),
     ok = test_keydelete(),
     ok = test_keyreplace(),
+    ok = test_keystore(),
     ok = test_keytake(),
     ok = test_foldl(),
     ok = test_foldr(),
@@ -103,6 +104,27 @@ test_keyreplace() ->
         {a, x},
         {a, x},
         []
+    ]),
+    ok.
+
+test_keystore() ->
+    ?ASSERT_MATCH(lists:keystore(a, 1, [], {foo, bar}), [{foo, bar}]),
+    ?ASSERT_MATCH(lists:keystore(a, 1, [{a, x}, b, []], {1, 2}), [{1, 2}, b, []]),
+    ?ASSERT_MATCH(lists:keystore(x, 2, [b, {a, x}, []], {1, 2}), [b, {1, 2}, []]),
+    ?ASSERT_MATCH(lists:keystore(a, 1, [b, {a, x}, {a, x}, {a, x}, []], {1, 2}), [
+        b,
+        {1, 2},
+        {a, x},
+        {a, x},
+        []
+    ]),
+    ?ASSERT_MATCH(lists:keystore(a, 3, [b, {a, x}, {a, x}, {a, x}, []], {1, 2}), [
+        b,
+        {a, x},
+        {a, x},
+        {a, x},
+        [],
+        {1, 2}
     ]),
     ok.
 

@@ -41,6 +41,7 @@
     keyfind/3,
     keymember/3,
     keyreplace/4,
+    keystore/4,
     keytake/3,
     foldl/3,
     foldr/3,
@@ -280,31 +281,48 @@ keymember(K, I, [_H | T]) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec keyreplace(
-    K :: term(),
-    I :: pos_integer(),
-    L :: list(tuple()),
-    NewTuple :: {NewKey :: term(), Val :: term()}
-) -> boolean().
-keyreplace(K, I, L, NewTuple) ->
-    keyreplace(K, I, L, L, NewTuple, []).
+    Key :: term(),
+    N :: pos_integer(),
+    TupleList :: [tuple()],
+    NewTuple :: tuple()
+) -> [tuple()].
+keyreplace(Key, N, TupleList, NewTuple) when is_tuple(NewTuple) ->
+    case keyreplace(Key, N, TupleList, TupleList, NewTuple, []) of
+        {false, _Reversed} -> TupleList;
+        {value, Updated} -> Updated
+    end.
 
 %% @private
-keyreplace(_K, _I, [], OrigL, _NewTuple, _NewList) ->
-    OrigL;
-keyreplace(K, I, [H | T], L, NewTuple, NewList) when is_tuple(H) andalso is_tuple(NewTuple) ->
-    case I =< tuple_size(H) of
-        true ->
-            case element(I, H) of
-                K ->
-                    ?MODULE:reverse(NewList, [NewTuple | T]);
-                _ ->
-                    keyreplace(K, I, T, L, NewTuple, [H | NewList])
-            end;
-        false ->
-            keyreplace(K, I, T, L, NewTuple, [H | NewList])
-    end;
-keyreplace(K, I, [H | T], L, NewTuple, NewList) ->
-    keyreplace(K, I, T, L, NewTuple, [H | NewList]).
+keyreplace(_Key, _N, [], _OrigL, _NewTuple, Acc) ->
+    {false, Acc};
+keyreplace(Key, N, [H | Tail], _OrigL, NewTuple, Acc) when element(N, H) =:= Key ->
+    {value, ?MODULE:reverse(Acc, [NewTuple | Tail])};
+keyreplace(Key, N, [H | Tail], OrigL, NewTuple, Acc) ->
+    keyreplace(Key, N, Tail, OrigL, NewTuple, [H | Acc]).
+
+%%-----------------------------------------------------------------------------
+%% @param   Key         the key to match
+%% @param   N           the position in the tuple to compare (1..tuple_size)
+%% @param   TupleList   the list of tuples from which to find the element
+%% @param   NewTuple    the tuple to add to the list
+%% @returns An updated TupleList where the first occurrence of `Key' has been
+%%          replaced with `NewTuple'.
+%% @doc     Searches the list of tuples `TupleList' for a tuple whose `N'th
+%%          element compares equal to `Key', replaces it with `NewTuple' if
+%%          found. If not found, append `NewTuple' to `TupleList'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec keystore(
+    Key :: term(),
+    N :: pos_integer(),
+    TupleList :: [tuple()],
+    NewTuple :: tuple()
+) -> [tuple()].
+keystore(Key, N, TupleList, NewTuple) when is_tuple(NewTuple) ->
+    case keyreplace(Key, N, TupleList, TupleList, NewTuple, []) of
+        {false, Reversed} -> ?MODULE:reverse(Reversed, [NewTuple]);
+        {value, Updated} -> Updated
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   Key         the key to match
