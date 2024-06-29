@@ -197,12 +197,12 @@ jobs:
           cflags: ""
           elixir_version: "1.14"
 
-        # master version of OTP/Elixir
+        # master/main version of OTP/Elixir
         - os: "ubuntu-24.04"
           cc: "cc"
           cxx: "c++"
           otp: "master"
-          elixir_version: "master"
+          elixir_version: "main"
 
         # Additional default compiler builds
         - os: "ubuntu-20.04"
@@ -266,6 +266,10 @@ jobs:
       with:
         otp-version: ${{ matrix.otp }}
         elixir-version: ${{ matrix.elixir_version }}
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://repo.hex.pm
+          https://cdn.jsdelivr.net/hex
 
     - name: "Add i386 architecture"
       if: matrix.arch == 'i386'

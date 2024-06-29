@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for setting channel used by network driver wifi access point.
 - Support for `maps:iterator/2` and `~kp` with `io_lib:format/2` that were introduced with OTP26.
 - Support for `erlang:apply/2`
+- Support for `lists:keystore/4`
 
 ### Changed
 
@@ -37,6 +38,8 @@ in ESP-IDF Kconfig options.
 - Fix creation of multiple links for the same process and not removing link at trapped exits.
 See issue [#1193](https://github.com/atomvm/AtomVM/issues/1193).
 - Fix error that is raised when a function is undefined
+- Fix a bug that could yield crashes when functions are sent in messages
+- Fix bug where failing guards would corrupt x0 and x1
 
 ## [0.6.2] - 25-05-2024
 

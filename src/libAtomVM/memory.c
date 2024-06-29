@@ -528,21 +528,36 @@ unsigned long memory_estimate_usage(term t)
                 t = term_nil();
             }
 
-        } else if (term_is_boxed(t)) {
-            acc += term_boxed_size(t) + 1;
-            if (term_is_sub_binary(t)) {
-                t = term_get_sub_binary_ref(t);
-            } else {
-                t = temp_stack_pop(&temp_stack);
+        } else if (term_is_function(t)) {
+            int boxed_size = term_boxed_size(t);
+            acc += boxed_size + 1;
+            const term *boxed_value = term_to_const_term_ptr(t);
+
+            // We skip the first two elements:
+            // First is either a module atom or a pointer to a Module
+            // Second is either a function atom or a function index
+            // Third would be arity as a term int (external function) or
+            // the first argument (if built with make_fun3) which we should
+            // estimate.
+            for (int i = 2; i < boxed_size; i++) {
+                if (UNLIKELY(temp_stack_push(&temp_stack, boxed_value[i + 1]) != TempStackOk)) {
+                    // TODO: handle failed malloc
+                    AVM_ABORT();
+                }
             }
+            t = boxed_value[2];
+
+        } else if (term_is_sub_binary(t)) {
+            acc += term_boxed_size(t) + 1;
+            t = term_get_sub_binary_ref(t);
+
+        } else if (term_is_boxed(t)) {
+            // Default type of boxed terms
+            acc += term_boxed_size(t) + 1;
+            t = temp_stack_pop(&temp_stack);
 
         } else {
             fprintf(stderr, "bug: found unknown term type: 0x%" TERM_X_FMT "\n", t);
-            if (term_is_boxed(t)) {
-                const term *boxed_value = term_to_const_term_ptr(t);
-                int boxed_size = term_boxed_size(t) + 1;
-                fprintf(stderr, "boxed header: 0x%" TERM_X_FMT ", size: %i\n", boxed_value[0], boxed_size);
-            }
             AVM_ABORT();
         }
     }

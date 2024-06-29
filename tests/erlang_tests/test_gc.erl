@@ -23,6 +23,22 @@
 -export([start/0]).
 
 start() ->
+    {Pid, Ref} = spawn_opt(
+        fun() ->
+            test_gc()
+        end,
+        [monitor]
+    ),
+    normal =
+        receive
+            {'DOWN', Ref, process, Pid, Reason} -> Reason;
+            Other -> {unexpected, Other}
+        after 5000 ->
+            timeout
+        end,
+    0.
+
+test_gc() ->
     {HeapSize, _} = make_a_big_heap(),
     MemorySize = erlang:process_info(self(), memory),
     true = erlang:garbage_collect(),
@@ -30,13 +46,13 @@ start() ->
     ok =
         case NewHeapSize < HeapSize of
             true -> ok;
-            _ -> fail
+            _ -> {fail, ?LINE, NewHeapSize, HeapSize}
         end,
     NewMemorySize = erlang:process_info(self(), memory),
     ok =
         case NewMemorySize < MemorySize of
             true -> ok;
-            _ -> fail
+            _ -> {fail, ?LINE, NewMemorySize, MemorySize}
         end,
     0.
 

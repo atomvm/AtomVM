@@ -27,19 +27,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  clang-format-check:
-    runs-on: ubuntu-20.04
+  clang-format-prettier-check:
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
 
-    - uses: erlef/setup-beam@v1
-      with:
-        otp-version: 24.3
-        elixir-version: 1.12
-
     - name: "Install run-clang-format"
       run: |
-        wget -q -O - https://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
+        wget -q -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
         echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-16 main" | sudo tee -a /etc/apt/sources.list
         echo "deb-src http://apt.llvm.org/focal/ llvm-toolchain-focal-16 main" | sudo tee -a /etc/apt/sources.list
         sudo apt-get update
@@ -51,8 +46,19 @@ jobs:
       run: |
         ./run-clang-format --style=file --clang-format-executable=clang-format-16 -r src/ tests/
 
-    - name: "Check formatting with Erlang fmt"
+    - name: "Check formatting with prettier"
       if: success() || failure()
+      run: |
+        npm install prettier
+        find ../src/platforms/emscripten/ ../examples/emscripten/ -name "*.js" -o -name "*.html" | xargs npx prettier -c
+
+  erlfmt-check:
+    runs-on: ubuntu-24.04
+    container: erlang:27
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: "Check formatting with Erlang fmt"
       run: |
         cd ..
         git clone --depth 1 -b v1.1.0 https://github.com/WhatsApp/erlfmt.git
@@ -61,14 +67,13 @@ jobs:
         cd ../AtomVM
         find . -name *.erl | xargs ../erlfmt/_build/release/bin/erlfmt -c
 
+  mix-format-check:
+    runs-on: ubuntu-24.04
+    container: elixir:1.17.1
+    steps:
+    - uses: actions/checkout@v4
+
     - name: "Check formatting with Elixir mix format"
-      if: success() || failure()
       run: |
         cd libs/exavmlib/
         mix format --check-formatted
-
-    - name: "Check formatting with prettier"
-      if: success() || failure()
-      run: |
-        npm install prettier
-        find ../src/platforms/emscripten/ ../examples/emscripten/ -name "*.js" -o -name "*.html" | xargs npx prettier -c

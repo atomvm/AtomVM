@@ -1505,15 +1505,15 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             const struct GCBif *gcbif = EXPORTED_FUNCTION_TO_GCBIF(exported_bif);
             switch (arity) {
                 case 1: {
-                    *return_value = gcbif->gcbif1_ptr(ctx, 0, ctx->x[0]);
+                    *return_value = gcbif->gcbif1_ptr(ctx, 0, 0, ctx->x[0]);
                     return true;
                 }
                 case 2: {
-                    *return_value = gcbif->gcbif2_ptr(ctx, 0, ctx->x[0], ctx->x[1]);
+                    *return_value = gcbif->gcbif2_ptr(ctx, 0, 0, ctx->x[0], ctx->x[1]);
                     return true;
                 }
                 case 3: {
-                    *return_value = gcbif->gcbif3_ptr(ctx, 0, ctx->x[0], ctx->x[1], ctx->x[2]);
+                    *return_value = gcbif->gcbif3_ptr(ctx, 0, 0, ctx->x[0], ctx->x[1], ctx->x[2]);
                     return true;
                 }
             }
@@ -1525,11 +1525,11 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
                     return true;
                 }
                 case 1: {
-                    *return_value = bif->bif1_ptr(ctx, ctx->x[0]);
+                    *return_value = bif->bif1_ptr(ctx, 0, ctx->x[0]);
                     return true;
                 }
                 case 2: {
-                    *return_value = bif->bif2_ptr(ctx, ctx->x[0], ctx->x[1]);
+                    *return_value = bif->bif2_ptr(ctx, 0, ctx->x[0], ctx->x[1]);
                     return true;
                 }
             }
@@ -1936,10 +1936,10 @@ schedule_in:
                                     x_regs[0] = bif->bif0_ptr(ctx);
                                     break;
                                 case 1:
-                                    x_regs[0] = bif->bif1_ptr(ctx, x_regs[0]);
+                                    x_regs[0] = bif->bif1_ptr(ctx, 0, x_regs[0]);
                                     break;
                                 case 2:
-                                    x_regs[0] = bif->bif2_ptr(ctx, x_regs[0], x_regs[1]);
+                                    x_regs[0] = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
                                     break;
                                 default:
                                     fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
@@ -2036,10 +2036,10 @@ schedule_in:
                                     x_regs[0] = bif->bif0_ptr(ctx);
                                     break;
                                 case 1:
-                                    x_regs[0] = bif->bif1_ptr(ctx, x_regs[0]);
+                                    x_regs[0] = bif->bif1_ptr(ctx, 0, x_regs[0]);
                                     break;
                                 case 2:
-                                    x_regs[0] = bif->bif2_ptr(ctx, x_regs[0], x_regs[1]);
+                                    x_regs[0] = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
                                     break;
                                 default:
                                     fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
@@ -2099,7 +2099,7 @@ schedule_in:
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     BifImpl1 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif1_ptr;
                     DEBUG_FAIL_NULL(func);
-                    term ret = func(ctx, arg1);
+                    term ret = func(ctx, fail_label, arg1);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
                         if (fail_label) {
                             pc = mod->labels[fail_label];
@@ -2138,7 +2138,7 @@ schedule_in:
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     BifImpl2 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif2_ptr;
                     DEBUG_FAIL_NULL(func);
-                    term ret = func(ctx, arg1, arg2);
+                    term ret = func(ctx, fail_label, arg1, arg2);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
                         if (fail_label) {
                             pc = mod->labels[fail_label];
@@ -3485,10 +3485,10 @@ wait_timeout_trap_handler:
                                     x_regs[0] = bif->bif0_ptr(ctx);
                                     break;
                                 case 1:
-                                    x_regs[0] = bif->bif1_ptr(ctx, x_regs[0]);
+                                    x_regs[0] = bif->bif1_ptr(ctx, 0, x_regs[0]);
                                     break;
                                 case 2:
-                                    x_regs[0] = bif->bif2_ptr(ctx, x_regs[0], x_regs[1]);
+                                    x_regs[0] = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
                                     break;
                                 default:
                                     fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
@@ -5273,7 +5273,7 @@ wait_timeout_trap_handler:
 
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     GCBifImpl1 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif1_ptr;
-                    term ret = func(ctx, live, arg1);
+                    term ret = func(ctx, fail_label, live, arg1);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
                         if (fail_label) {
                             pc = mod->labels[fail_label];
@@ -5320,7 +5320,7 @@ wait_timeout_trap_handler:
 
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     GCBifImpl2 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif2_ptr;
-                    term ret = func(ctx, live, arg1, arg2);
+                    term ret = func(ctx, fail_label, live, arg1, arg2);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
                         if (fail_label) {
                             pc = mod->labels[fail_label];
@@ -5393,7 +5393,7 @@ wait_timeout_trap_handler:
 
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     GCBifImpl3 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif3_ptr;
-                    term ret = func(ctx, live, arg1, arg2, arg3);
+                    term ret = func(ctx, fail_label, live, arg1, arg2, arg3);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
                         if (fail_label) {
                             pc = mod->labels[fail_label];
