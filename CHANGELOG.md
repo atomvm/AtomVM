@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for `maps:iterator/2` and `~kp` with `io_lib:format/2` that were introduced with OTP26.
 - Support for `erlang:apply/2`
 - Support for `lists:keystore/4`
+- Support for `erlang:size/1` bif
 
 ### Changed
 

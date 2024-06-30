@@ -120,6 +120,7 @@ compile_erlang(test_bitwise2)
 compile_erlang(test_boolean)
 compile_erlang(test_gt_and_le)
 compile_erlang(test_tuple_size)
+compile_erlang(test_size)
 compile_erlang(test_element)
 compile_erlang(test_setelement)
 compile_erlang(test_insert_element)
@@ -580,6 +581,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_boolean.beam
     test_gt_and_le.beam
     test_tuple_size.beam
+    test_size.beam
     test_element.beam
     test_setelement.beam
     test_insert_element.beam
