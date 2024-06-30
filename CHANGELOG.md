@@ -36,6 +36,11 @@ See issue [#1193](https://github.com/atomvm/AtomVM/issues/1193).
 - Fix a bug that could yield crashes when functions are sent in messages
 - Fix bug where failing guards would corrupt x0 and x1
 
+### Changed
+
+- ESP32 builds now assemble the complet image automatically if `esp32boot.avm` is found from a previous generic_unix build.
+- ESP32 cmake build options are now also exposed in `idf.py menuconfig`.
+
 ## [0.6.2] - 25-05-2024
 
 ### Added
