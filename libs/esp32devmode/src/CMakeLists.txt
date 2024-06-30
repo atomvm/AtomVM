@@ -23,3 +23,24 @@ project(esp32devmode)
 include(BuildErlang)
 
 pack_archive(esp32devmode esp32devmode)
+
+include(../../../version.cmake)
+
+set(ESP32DEVMODE_VERSION ${ATOMVM_BASE_VERSION})
+
+install(
+    DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/beams/
+    DESTINATION lib/atomvm/lib/esp32devmode-${ESP32DEVMODE_VERSION}/ebin
+    FILES_MATCHING PATTERN "*.beam"
+)
+
+install(
+    FILES ${CMAKE_CURRENT_BINARY_DIR}/esp32devmode.avm
+    DESTINATION lib/atomvm/lib/esp32devmode-${ESP32DEVMODE_VERSION}/ebin/
+)
+
+install(
+    DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
+    DESTINATION lib/atomvm/lib/esp32devmode-${ESP32DEVMODE_VERSION}/src
+    FILES_MATCHING PATTERN "*.erl"
+)

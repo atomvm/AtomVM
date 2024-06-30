@@ -46,3 +46,24 @@ set(ERLANG_MODULES
 )
 
 pack_archive(eavmlib ${ERLANG_MODULES})
+
+include(../../../version.cmake)
+
+set(EAVMLIB_VERSION ${ATOMVM_BASE_VERSION})
+
+install(
+    DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/beams/
+    DESTINATION lib/atomvm/lib/eavmlib-${EAVMLIB_VERSION}/ebin
+    FILES_MATCHING PATTERN "*.beam"
+)
+
+install(
+    FILES ${CMAKE_CURRENT_BINARY_DIR}/eavmlib.avm
+    DESTINATION lib/atomvm/lib/eavmlib-${EAVMLIB_VERSION}/ebin/
+)
+
+install(
+    DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
+    DESTINATION lib/atomvm/lib/eavmlib-${EAVMLIB_VERSION}/src
+    FILES_MATCHING PATTERN "*.erl"
+)
