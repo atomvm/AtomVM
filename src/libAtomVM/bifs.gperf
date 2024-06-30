@@ -90,3 +90,4 @@ erlang:map_size/1, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif1_ptr = bi
 erlang:map_get/2, {.bif.base.type = BIFFunctionType, .bif.bif2_ptr = bif_erlang_map_get_2}
 erlang:min/2, {.bif.base.type = BIFFunctionType, .bif.bif2_ptr = bif_erlang_min_2}
 erlang:max/2, {.bif.base.type = BIFFunctionType, .bif.bif2_ptr = bif_erlang_max_2}
+erlang:size/1, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif1_ptr = bif_erlang_size_1}
