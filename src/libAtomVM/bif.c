@@ -1500,3 +1500,15 @@ term bif_erlang_max_2(Context *ctx, uint32_t fail_label, term arg1, term arg2)
     }
     return r == TermGreaterThan ? arg1 : arg2;
 }
+
+term bif_erlang_size_1(Context *ctx, uint32_t fail_label, int live, term arg1)
+{
+    if (term_is_binary(arg1)) {
+        // For bitstrings, number of bytes is rounded down
+        return bif_erlang_byte_size_1(ctx, fail_label, live, arg1);
+    } else if (term_is_tuple(arg1)) {
+        return bif_erlang_tuple_size_1(ctx, fail_label, arg1);
+    }
+
+    RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+}

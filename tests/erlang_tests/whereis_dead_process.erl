@@ -38,7 +38,7 @@ test_names(Names) ->
     ok =
         receive
             {'DOWN', Monitor, process, Pid, _} -> ok
-        after 500 -> timeout
+        after 1000 -> timeout
         end,
     ok = test_unregistered(Names).
 

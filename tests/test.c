@@ -143,6 +143,7 @@ struct Test tests[] = {
     TEST_CASE(test_boolean),
     TEST_CASE_EXPECTED(test_gt_and_le, 255),
     TEST_CASE_EXPECTED(test_tuple_size, 6),
+    TEST_CASE(test_size),
     TEST_CASE_EXPECTED(test_element, 7),
     TEST_CASE_EXPECTED(test_setelement, 121),
     TEST_CASE_EXPECTED(test_insert_element, 121),
