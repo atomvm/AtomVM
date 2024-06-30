@@ -5273,6 +5273,7 @@ wait_timeout_trap_handler:
 
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     GCBifImpl1 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif1_ptr;
+                    DEBUG_FAIL_NULL(func);
                     term ret = func(ctx, fail_label, live, arg1);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
                         if (fail_label) {
@@ -5320,6 +5321,7 @@ wait_timeout_trap_handler:
 
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     GCBifImpl2 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif2_ptr;
+                    DEBUG_FAIL_NULL(func);
                     term ret = func(ctx, fail_label, live, arg1, arg2);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
                         if (fail_label) {
@@ -5393,6 +5395,7 @@ wait_timeout_trap_handler:
 
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     GCBifImpl3 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif3_ptr;
+                    DEBUG_FAIL_NULL(func);
                     term ret = func(ctx, fail_label, live, arg1, arg2, arg3);
                     if (UNLIKELY(term_is_invalid_term(ret))) {
                         if (fail_label) {
