@@ -45,6 +45,7 @@ test() ->
     ok = test_sort(),
     ok = test_split(),
     ok = test_usort(),
+    ok = test_filtermap(),
     ok.
 
 test_nth() ->
@@ -278,6 +279,21 @@ test_usort() ->
     ?ASSERT_ERROR(lists:usort(fun(A, B) -> A > B end, 1), function_clause),
     ?ASSERT_ERROR(lists:usort(1, [1]), function_clause),
 
+    ok.
+
+test_filtermap() ->
+    ?ASSERT_MATCH(
+        lists:filtermap(
+            fun(X) ->
+                case X rem 2 of
+                    0 -> {true, X div 2};
+                    _ -> false
+                end
+            end,
+            [1, 2, 3, 4, 5]
+        ),
+        [1, 2]
+    ),
     ok.
 
 id(X) -> X.

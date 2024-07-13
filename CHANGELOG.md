@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for `lists:keystore/4`
 - Support for `erlang:size/1` bif
 - Support for USB serial output on ESP32 (needs to be manually enabled)
+- Support for `lists:filtermap/2`
 
 ### Changed
 
