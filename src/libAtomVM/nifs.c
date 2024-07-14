@@ -173,6 +173,7 @@ static term nif_base64_decode_to_string(Context *ctx, int argc, term argv[]);
 static term nif_code_load_abs(Context *ctx, int argc, term argv[]);
 static term nif_code_load_binary(Context *ctx, int argc, term argv[]);
 static term nif_lists_reverse(Context *ctx, int argc, term argv[]);
+static term nif_maps_from_keys(Context *ctx, int argc, term argv[]);
 static term nif_maps_next(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_list(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_binary(Context *ctx, int argc, term argv[]);
@@ -705,6 +706,11 @@ static const struct Nif lists_reverse_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_lists_reverse
+};
+static const struct Nif maps_from_keys_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_maps_from_keys
 };
 static const struct Nif maps_next_nif =
 {
@@ -4371,6 +4377,98 @@ static term nif_lists_reverse(Context *ctx, int argc, term argv[])
         list_crsr = list_ptr[LIST_TAIL_INDEX];
     }
     return result;
+}
+
+// assumption: size is at least 1
+static int sort_keys_uniq(term *keys, int size, GlobalContext *global)
+{
+    int k = size;
+    while (1 < k) {
+        int max_pos = 0;
+        for (int i = 1; i < k; i++) {
+            term t_max = keys[max_pos];
+            term t = keys[i];
+            // TODO: not sure if exact is the right choice here
+            TermCompareResult result = term_compare(t, t_max, TermCompareExact, global);
+            if (result == TermGreaterThan) {
+                max_pos = i;
+            } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+                return -1;
+            }
+        }
+        if (max_pos != k - 1) {
+            term tmp = keys[k - 1];
+            keys[k - 1] = keys[max_pos];
+            keys[max_pos] = tmp;
+        }
+        k--;
+        // keys[k..size] sorted
+    }
+
+    int j = 1;
+    term last_seen = keys[0];
+    for (int i = 1; i < size; i++) {
+        if (keys[i] != last_seen) {
+            last_seen = keys[i];
+            keys[j] = last_seen;
+            j++;
+        }
+    }
+
+    return j;
+}
+
+static term nif_maps_from_keys(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    VALIDATE_VALUE(argv[0], term_is_list);
+
+    if (term_is_nil(argv[0])) {
+        int required_size = TUPLE_SIZE(0) + TERM_MAP_SIZE(0);
+        if (UNLIKELY(memory_ensure_free_opt(ctx, required_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return term_alloc_map_maybe_shared(0, term_invalid_term(), &ctx->heap);
+    }
+
+    int proper;
+    avm_int_t len = term_list_length(argv[0], &proper);
+    if (UNLIKELY(!proper)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int required_size = TUPLE_SIZE(len) + TERM_MAP_SHARED_SIZE(len);
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, required_size, 2, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term keys_tuple = term_alloc_tuple(len, &ctx->heap);
+
+    term l = argv[0];
+    for (int i = 0; i < len; i++) {
+        term element = term_get_list_head(l);
+        term_put_tuple_element(keys_tuple, i, element);
+        l = term_get_list_tail(l);
+    }
+
+    term *keys = term_to_term_ptr(keys_tuple);
+    int uniq = sort_keys_uniq(keys + 1, len, ctx->global);
+    if (UNLIKELY(uniq < 0)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    if (len != uniq) {
+        term_truncate_boxed(keys_tuple, uniq, &ctx->heap);
+        len = uniq;
+    }
+
+    term value = argv[1];
+
+    term map = term_alloc_map_maybe_shared(len, keys_tuple, &ctx->heap);
+    for (int i = 0; i < len; i++) {
+        term_set_map_value(map, i, value);
+    }
+
+    return map;
 }
 
 static term nif_maps_next(Context *ctx, int argc, term argv[])

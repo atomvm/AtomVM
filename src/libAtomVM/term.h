@@ -1616,6 +1616,25 @@ static inline term term_alloc_bin_match_state(term binary_or_state, int slots, H
     return ((term) boxed_match_state) | TERM_BOXED_VALUE_TAG;
 }
 
+/**
+ * @brief truncates last allocated boxed term to given size
+ *
+ * @details This function can be used to shrink last allocated boxed term
+ * @param boxed the boxed term that will be shrinked (it must be the last allocated)
+ * @param new_size in terms
+ * @param heap the heap where the term has been allocated
+ */
+static inline void term_truncate_boxed(term boxed, size_t new_size, Heap *heap)
+{
+    /* boxed: 10 */
+    TERM_DEBUG_ASSERT((t & 0x3) == 0x2);
+
+    term *boxed_value = term_to_term_ptr(boxed);
+    int size_diff = (boxed_value[0] >> 6) - new_size;
+    boxed_value[0] = (boxed_value[0] & TERM_BOXED_TAG_MASK) | (new_size << 6);
+    memory_heap_trim(heap, size_diff);
+}
+
 static inline int term_is_map(term t)
 {
     if (term_is_boxed(t)) {
@@ -1693,6 +1712,12 @@ static inline term term_get_map_value(term map, avm_uint_t pos)
 {
     term *boxed_value = term_to_term_ptr(map);
     return boxed_value[term_get_map_value_offset() + pos];
+}
+
+static inline void term_set_map_value(term map, avm_uint_t pos, term value)
+{
+    term *boxed_value = term_to_term_ptr(map);
+    boxed_value[term_get_map_value_offset() + pos] = value;
 }
 
 static inline int term_find_map_pos(term map, term key, GlobalContext *global)

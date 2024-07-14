@@ -52,6 +52,7 @@
     filter/2,
     fold/3,
     foreach/2,
+    from_keys/2,
     map/2,
     merge/2,
     remove/2,
@@ -384,6 +385,17 @@ foreach(_Fun, Map) when not is_map(Map) ->
     error({badmap, Map});
 foreach(_Fun, _Map) ->
     error(badarg).
+
+%%-----------------------------------------------------------------------------
+%% @param   List    the list of keys of the map that will be created
+%% @param   Value   the value that will be used as value for all map items
+%% @returns a map having all provided keys having provided value as value
+%% @doc Creates a map with specified keys intialized to given value
+%% @end
+%%-----------------------------------------------------------------------------
+-spec from_keys(list(), term()) -> map().
+from_keys(List, _Value) when is_list(List) ->
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun     the function to apply to every entry in the map

@@ -531,6 +531,7 @@ struct Test tests[] = {
     TEST_CASE(twentyone_param_fun),
 
     TEST_CASE(test_fun_to_list),
+    TEST_CASE(maps_nifs),
 
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 

@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for USB serial output on ESP32 (needs to be manually enabled)
 - Support for `lists:filtermap/2`
 - Support for standard library `queue` module
+- Support for `maps:from_keys/2` NIF
 
 ### Changed
 
