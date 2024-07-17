@@ -50,6 +50,7 @@
     flatten/1,
     search/2,
     filter/2,
+    filtermap/2,
     join/2,
     seq/2, seq/3,
     sort/1, sort/2,
@@ -468,6 +469,47 @@ search(Pred, [H | T]) ->
 -spec filter(Pred :: fun((Elem :: term()) -> boolean()), List :: list()) -> list().
 filter(Pred, L) when is_function(Pred, 1) ->
     [X || X <- L, Pred(X)].
+
+% Taken from `otp/blob/master/lib/stdlib/src/lists.erl`
+
+%%-----------------------------------------------------------------------------
+%% @param   Fun the filter/map fun
+%% @param   List1 the list where given fun will be applied
+%% @returns Returns the result of application of given fun over given list items
+%% @doc     Calls `Fun(Elem)' on successive elements `Elem' of `List1' in order to update or
+%%          remove elements from `List1'.
+%%
+%%          `Fun/1' must return either a Boolean or a tuple `{true, Value}'. The function
+%%          returns the list of elements for which `Fun' returns a new value, where a value
+%%          of `true' is synonymous with `{true, Elem}'.
+%%
+%%          Example:
+%%          `1> lists:filtermap(fun(X) -> case X rem 2 of 0 -> {true, X div 2}; _ -> false end end, [1,2,3,4,5]).'
+%%          `[1,2]'
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-spec filtermap(Fun, List1) -> List2 when
+    Fun :: fun((Elem) -> boolean() | {'true', Value}),
+    List1 :: [Elem],
+    List2 :: [Elem | Value],
+    Elem :: term(),
+    Value :: term().
+
+filtermap(F, List) when is_function(F, 1) ->
+    filtermap_1(F, List).
+
+filtermap_1(F, [Hd | Tail]) ->
+    case F(Hd) of
+        true ->
+            [Hd | filtermap_1(F, Tail)];
+        {true, Val} ->
+            [Val | filtermap_1(F, Tail)];
+        false ->
+            filtermap_1(F, Tail)
+    end;
+filtermap_1(_F, []) ->
+    [].
 
 %%-----------------------------------------------------------------------------
 %% @param   Sep the separator

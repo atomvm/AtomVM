@@ -39,6 +39,7 @@ set(ERLANG_MODULES
     test_ssl
     test_string
     test_proplists
+    test_queue
     test_timer
     test_supervisor
     test_tcp_socket
