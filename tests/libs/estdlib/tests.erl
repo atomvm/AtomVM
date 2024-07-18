@@ -34,8 +34,13 @@ get_otp_version() ->
     end.
 
 get_tests(OTPVersion) when
-    (is_integer(OTPVersion) andalso OTPVersion >= 24) orelse OTPVersion == atomvm
+    (is_integer(OTPVersion) andalso OTPVersion >= 27) orelse OTPVersion == atomvm
 ->
+    [test_tcp_socket, test_udp_socket, test_net, test_ssl, test_sets | get_tests(undefined)];
+get_tests(OTPVersion) when
+    (is_integer(OTPVersion) andalso OTPVersion >= 24)
+->
+    % test_sets heavily relies on is_equal that is from OTP-27
     [test_tcp_socket, test_udp_socket, test_net, test_ssl | get_tests(undefined)];
 get_tests(_OTPVersion) ->
     [

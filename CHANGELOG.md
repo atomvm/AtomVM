@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for `lists:filtermap/2`
 - Support for standard library `queue` module
 - Support for `maps:from_keys/2` NIF
+- Support for standard library `sets` module
 
 ### Changed
 
