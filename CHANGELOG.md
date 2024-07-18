@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for USB serial output on ESP32 (needs to be manually enabled)
 - Support for `lists:filtermap/2`
 - Support for standard library `queue` module
+- Support for `maps:from_keys/2` NIF
+- Support for standard library `sets` module
 
 ### Changed
 
@@ -38,6 +40,7 @@ See issue [#1193](https://github.com/atomvm/AtomVM/issues/1193).
 - Fix error that is raised when a function is undefined
 - Fix a bug that could yield crashes when functions are sent in messages
 - Fix bug where failing guards would corrupt x0 and x1
+- Fix a memory leak when raising out of memory error while executing PUT_MAP_ASSOC instruction
 
 ## [0.6.2] - 25-05-2024
 

@@ -50,6 +50,7 @@ set(ERLANG_MODULES
     logger_std_h
     proplists
     queue
+    sets
     socket
     ssl
     string
