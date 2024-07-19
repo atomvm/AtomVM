@@ -11,6 +11,7 @@ xcode/**
 src/platforms/esp32/build/**
 src/platforms/esp32/build/**/*.d
 src/platforms/esp32/test/build/**
+src/platforms/esp32/test/__pycache__/**
 src/platforms/esp32/components/**
 src/platforms/esp32/managed_components/**
 src/platforms/esp32/sdkconfig
