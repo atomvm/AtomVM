@@ -14,27 +14,38 @@ on:
 permissions:
   contents: write
 
+env:
+  otp_version: 24
+  elixir_version: 1.14
+
 jobs:
   compile_tests:
-    runs-on: ubuntu-24.04
-    container: erlang:27
+    runs-on: ubuntu-22.04
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
+
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: ${{ env.otp_version }}
+        elixir-version: ${{ env.elixir_version }}
 
     - name: apt update
       run: sudo apt update
 
     - name: Install required packages
-      run: sudo apt install -y cmake gperf zlib1g-dev ninja-build
+      run: sudo apt install -y gperf
 
     - name: Compile test modules
       run: |
         set -e
         mkdir build_tests
         cd build_tests
-        cmake .. -G Ninja -DAVM_WARNINGS_ARE_ERRORS=ON
-        ninja erlang_test_modules test_estdlib test_eavmlib test_alisp
+        cmake ..
+        make erlang_test_modules
+        make test_estdlib
+        make test_eavmlib
+        make test_alisp
 
     - name: Upload test modules
       uses: actions/upload-artifact@v4
