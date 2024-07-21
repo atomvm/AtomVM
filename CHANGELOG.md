@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.4] - Unreleased
 
+### Added
+
+- Implement `gpio:init/1` on esp32 to initialize pins for GPIO usage, which some pins
+require depending on default function and bootloader code
+
 ## [0.6.3] - 20-07-2024
 
 ### Added
