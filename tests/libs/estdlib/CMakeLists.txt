@@ -35,10 +35,12 @@ set(ERLANG_MODULES
     test_logger
     test_maps
     test_net
+    test_sets
     test_spawn
     test_ssl
     test_string
     test_proplists
+    test_queue
     test_timer
     test_supervisor
     test_tcp_socket

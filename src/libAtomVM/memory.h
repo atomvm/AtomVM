@@ -206,6 +206,18 @@ static inline MALLOC_LIKE term *memory_heap_alloc(Heap *heap, size_t size)
 }
 
 /**
+ * @brief shrinks the heap by size units
+ *
+ * @details this function is used when resizing the last item allocated on the heap.
+ * @param heap the heap that will be shrinked
+ * @param size the number of terms that will be removed
+ */
+static inline void memory_heap_trim(Heap *heap, size_t size)
+{
+    heap->heap_ptr -= size;
+}
+
+/**
  * @brief copies a term to a destination heap
  *
  * @details deep copies a term to a destination heap, once finished old memory can be freed.

@@ -33,8 +33,14 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../CMakeModules
 pico_sdk_init()
 
 # Pico SDK forces compiler, but we really want to know its features.
-include(${CMAKE_ROOT}/Modules/CMakeDetermineCompileFeatures.cmake)
-CMAKE_DETERMINE_COMPILE_FEATURES(C)
+# TODO: avoid using private api: https://discourse.cmake.org/t/cmakedeterminecompilerfeatures-cmake-is-no-more-in-3-30-bug-or-not/11176/3
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.30.0)
+    include(${CMAKE_ROOT}/Modules/CMakeDetermineCompilerSupport.cmake)
+    cmake_determine_compiler_support(C)
+else()
+    include(${CMAKE_ROOT}/Modules/CMakeDetermineCompileFeatures.cmake)
+    CMAKE_DETERMINE_COMPILE_FEATURES(C)
+endif()
 
 enable_language( C CXX ASM )
 

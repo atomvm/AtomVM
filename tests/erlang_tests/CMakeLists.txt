@@ -503,6 +503,8 @@ compile_erlang(test_fun_to_list)
 
 compile_erlang(test_ets)
 
+compile_erlang(maps_nifs)
+
 add_custom_target(erlang_test_modules DEPENDS
     code_load_files
 
@@ -970,4 +972,6 @@ add_custom_target(erlang_test_modules DEPENDS
     test_fun_to_list.beam
 
     test_ets.beam
+
+    maps_nifs.beam
 )

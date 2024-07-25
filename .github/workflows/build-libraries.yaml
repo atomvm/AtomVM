@@ -16,8 +16,7 @@ permissions:
 
 jobs:
   build-libraries:
-    runs-on: "ubuntu-24.04"
-    container: erlang:27
+    runs-on: "ubuntu-22.04"
     strategy:
       fail-fast: false
 
@@ -26,6 +25,11 @@ jobs:
       uses: actions/checkout@v4
       with:
         submodules: 'recursive'
+
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: "24"
+        elixir-version: "1.11"
 
     - name: "APT update"
       run: sudo apt update -y

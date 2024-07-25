@@ -531,6 +531,7 @@ struct Test tests[] = {
     TEST_CASE(complex_list_match_xregs),
     TEST_CASE(twentyone_param_fun),
     TEST_CASE(test_fun_to_list),
+    TEST_CASE(maps_nifs),
 
     TEST_CASE(test_ets),
 

@@ -5557,6 +5557,7 @@ wait_timeout_trap_handler:
                         kv[j].value = value;
                     }
                     if (UNLIKELY(!sort_kv_pairs(kv, num_elements, ctx->global))) {
+                        free(kv);
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     //
@@ -5605,6 +5606,7 @@ wait_timeout_trap_handler:
                                 }
 
                                 case TermCompareMemoryAllocFail: {
+                                    free(kv);
                                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                                 }
                             }
