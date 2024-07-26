@@ -296,7 +296,7 @@ remove_int(GPIO, Pin) ->
 %% @param   Pin number to initialize
 %% @returns ok
 %% @doc     Initialize a pin to be used as GPIO.
-%%          Currently only implemented (and required) for RP2040 (Pico).
+%%          This is required on RP2040 and for some pins on ESP32.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec init(Pin :: pin()) -> ok.
