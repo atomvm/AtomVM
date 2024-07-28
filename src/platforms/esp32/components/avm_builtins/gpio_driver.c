@@ -644,10 +644,43 @@ REGISTER_PORT_DRIVER(gpio, gpio_driver_init, NULL, gpio_driver_create_port)
 
 #ifdef CONFIG_AVM_ENABLE_GPIO_NIFS
 
+static term nif_gpio_init(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    gpio_num_t gpio_num;
+    if (LIKELY(term_is_integer(argv[0]))) {
+        avm_int_t pin_int = term_to_int32(argv[0]);
+        if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        gpio_num = (gpio_num_t) pin_int;
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    gpio_config_t config = {};
+    config.pin_bit_mask = 1 << gpio_num;
+    config.mode = GPIO_MODE_DISABLE;
+    config.pull_up_en = GPIO_PULLUP_DISABLE;
+    config.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    config.intr_type = GPIO_INTR_DISABLE;
+
+    esp_err_t result = gpio_config(&config);
+
+    if (UNLIKELY(result != ESP_OK)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    return OK_ATOM;
+}
+
 /* TODO: in the case of {error, Return} we should RAISE_ERROR(Reason) */
 
 static term nif_gpio_set_pin_mode(Context *ctx, int argc, term argv[])
 {
+    UNUSED(argc);
+
     return gpio_set_pin_mode(ctx, argv[0], argv[1]);
 }
 
@@ -706,6 +739,12 @@ static term nif_gpio_digital_read(Context *ctx, int argc, term argv[])
     return gpio_digital_read(argv[0]);
 }
 
+static const struct Nif gpio_init_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_gpio_init
+};
+
 static const struct Nif gpio_set_pin_mode_nif =
 {
     .base.type = NIFFunctionType,
@@ -757,6 +796,15 @@ static const struct Nif gpio_digital_read_nif = {
 
 const struct Nif *gpio_nif_get_nif(const char *nifname)
 {
+    if (strcmp("gpio:init/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &gpio_init_nif;
+    }
+    if (strcmp("Elixir.GPIO:init/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &gpio_init_nif;
+    }
+
     if (strcmp("gpio:set_pin_mode/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &gpio_set_pin_mode_nif;
