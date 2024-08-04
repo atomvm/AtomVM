@@ -5,6 +5,7 @@
 :orphan:
 
 .. c:namespace:: libAtomVM
+.. c:namespace-push:: @SOURCE_FILE@
 
 ------------------
 @SOURCE_FILE@
