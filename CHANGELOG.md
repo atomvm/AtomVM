@@ -13,6 +13,7 @@ require depending on default function and bootloader code
 - Implement missing opcode 161 (raw_raise), that looks more likely to be generated with Elixir code
 - Support for Elixir `Map.replace/3` and `Map.replace!/3`
 - Support for Elixir `Kernel.struct` and `Kernel.struct!`
+- Support for Elixir `IO.iodata_to_binary/1`
 
 ## [0.6.3] - 20-07-2024
 
