@@ -11,14 +11,14 @@
 {# Add rst-badge after rst-versions for small badge style. #}
   <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
     <span class="rst-current-version" data-toggle="rst-current-version">
-      <span class="fa fa-book">AtomVM Docs</span>
-      v: {{ current_version }}
+      <span class="fa fa-download"></span><span class="fa fa-book"> AtomVM Docs version:</span>
+      {{ current_version }}
       <span class="fa fa-caret-down"></span>
     </span>
     <div class="rst-other-versions">
       {% if versions|length >= 1 %}
       <dl>
-        <dt>{{ _('Versions') }}</dt>
+        <dt><span class="fa fa-book">{{ _(' Versions') }}</span></dt>
         {% for slug, url in versions %}
           {% if slug == current_version %} <strong> {% endif %}
           <dd><a href="{{ url }}">{{ slug }}</a></dd>
@@ -28,7 +28,7 @@
       {% endif %}
       {% if downloads|length >= 1 %}
       <dl>
-        <dt>{{ _('Downloads') }}</dt>
+        <dt><span class="fa fa-download">{{ _(' Downloads') }}</span></dt>
         {% for type, url in downloads %}
           <dd><a href="{{ url }}">{{ type }}</a></dd>
         {% endfor %}
