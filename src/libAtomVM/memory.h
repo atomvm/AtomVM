@@ -339,6 +339,7 @@ static inline void memory_heap_append_heap(Heap *target, Heap *source)
  * the copy of a term to or from a process mailbox.
  * @param mso_list the list of mark-sweep object in a heap "space"
  * @param global the global context
+ * @param from_task boolean, true if called from a task, false otherwise
  */
 void memory_sweep_mso_list(term mso_list, GlobalContext *global, bool from_task);
 
