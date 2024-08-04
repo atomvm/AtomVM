@@ -63,7 +63,9 @@ extensions = [
 suppress_warnings = [
     'epub.unknown_project_files',
     'misc.highlighting_failure',
-    'toc.excluded'
+    'toc.excluded',
+    'myst.*',
+    'breathe.*'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
