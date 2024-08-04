@@ -12,7 +12,7 @@ Data Structures
 ---------------------
 
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 4
    :caption: Structs
 
 .. doxygenstruct:: AtomsHashTable
@@ -55,24 +55,46 @@ Data Structures
    :allow-dot-graphs:
 .. doxygenstruct:: Heap
    :allow-dot-graphs:
-.. doxygenstruct:: HNode
-   :allow-dot-graphs:
+.. Doxygen mangles this structure when parsing atomshashtable.c.
+.. c:struct:: HNode
+
+   **Public Members**
+
+   .. c:var:: struct HNode *next
+   .. c:var:: AtomString key
+   .. c:var:: unsigned long value
+
 .. doxygenstruct:: HNodeGroup
    :allow-dot-graphs:
 .. doxygenstruct:: IFFRecord
    :allow-dot-graphs:
 .. doxygenstruct:: InMemoryAVMPack
    :allow-dot-graphs:
-.. doxygenstruct:: Int24
-   :allow-dot-graphs:
-.. doxygenstruct:: Int40
-   :allow-dot-graphs:
-.. doxygenstruct:: Int48
-   :allow-dot-graphs:
-.. doxygenstruct:: Int56
-   :allow-dot-graphs:
-.. doxygenstruct:: kv_pair
-   :allow-dot-graphs:
+.. defined in excluded opcodesswitch.h
+.. c:struct:: Int24
+
+   .. c:var:: int32_t val24 : 24
+
+.. c:struct:: Int40
+
+   .. c:var:: int64_t val40 : 40
+
+.. c:struct:: Int48
+
+   .. c:var:: int64_t val48 : 48
+
+.. c:struct:: Int56
+
+   .. c:var:: int64_t val56 : 56
+
+.. c:struct:: kv_pair
+
+   **Public Members**
+
+   .. c:var:: term key
+   .. c:var:: term value
+
+.. end of opcodesswitch.h structs
 .. doxygenstruct:: LineRefOffset
    :allow-dot-graphs:
 .. doxygenstruct:: ListHead
@@ -115,8 +137,6 @@ Data Structures
 .. doxygenstruct:: SSLContextResource
    :allow-dot-graphs:
 .. doxygenstruct:: SyncList
-   :allow-dot-graphs:
-.. doxygenstruct:: TempStack
    :allow-dot-graphs:
 .. doxygenstruct:: TermSignal
    :allow-dot-graphs:
@@ -164,7 +184,6 @@ Enumerations
 .. doxygenenum:: OpenAVMResult
 .. doxygenenum:: RefcBinaryFlags
 .. doxygenenum:: SocketErrors
-.. doxygenenum:: TempStackResult
 .. doxygenenum:: TermCompareOpts
 .. doxygenenum:: TermCompareResult
 .. doxygenenum:: UnicodeConversionResult

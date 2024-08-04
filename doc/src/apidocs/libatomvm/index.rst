@@ -20,7 +20,7 @@ libAtomVM
    macros
 
 -------------------------
-libAtomVM Header Files
+libAtomVM source files
 -------------------------
 
 .. toctree::

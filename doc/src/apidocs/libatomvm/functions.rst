@@ -4,6 +4,7 @@
 
 :orphan:
 
+.. c:namespace:: NULL
 .. c:namespace:: libAtomVM
 .. c:namespace-push:: functions
 
@@ -24,13 +25,22 @@ Functions
 .. doxygenfunction:: avmpack_find_section_by_name
 .. doxygenfunction:: avmpack_fold
 .. doxygenfunction:: avmpack_is_valid
+.. doxygenfunction:: bitstring_copy_bits
 .. doxygenfunction:: bitstring_copy_bits_incomplete_bytes
+.. doxygenfunction:: bitstring_insert_utf16
+.. doxygenfunction:: bitstring_insert_utf32
+.. doxygenfunction:: bitstring_insert_utf8
+.. doxygenfunction:: bitstring_match_utf16
+.. doxygenfunction:: bitstring_match_utf32
+.. doxygenfunction:: bitstring_match_utf8
 .. doxygenfunction:: bitstring_utf16_decode
 .. doxygenfunction:: bitstring_utf16_encode
+.. doxygenfunction:: bitstring_utf16_size
 .. doxygenfunction:: bitstring_utf32_decode
 .. doxygenfunction:: bitstring_utf32_encode
 .. doxygenfunction:: bitstring_utf8_decode
 .. doxygenfunction:: bitstring_utf8_encode
+.. doxygenfunction:: bitstring_utf8_size
 .. doxygenfunction:: context_avail_free_memory
 .. doxygenfunction:: context_clean_registers
 .. doxygenfunction:: context_destroy
@@ -76,6 +86,21 @@ Functions
 .. doxygenfunction:: externalterm_from_binary
 .. doxygenfunction:: externalterm_to_binary
 .. doxygenfunction:: externalterm_to_term
+.. TODO: figure out why  Doxgen cant find externalterm_to_term_internal in externalterm.c
+.. c:function:: static term externalterm_to_term_internal(const void *external_term, size_t size, Context *ctx, ExternalTermOpts opts, size_t *bytes_read, bool copy)
+
+   Copy an external term to internal storage.
+
+   :param external_term: buffer containing external term
+   :param size:          size of the external_term
+   :param ctx:           current context in which terms may be stored
+   :param opts:          additional opts, such as ExternalTermToHeapFragment for storing parsed
+                         terms in a heap fragment, otherwise terms are stored in the context heap.
+   :param bytes_read:    the number of bytes read off external_term in order to yield a term
+   :param copy:          whether to copy binary data and atom strings (pass `true`, unless
+                         `external_term` is a const binary and will not be deallocated)
+   :returns:             the parsed term
+
 .. doxygenfunction:: globalcontext_atomstring_from_term
 .. doxygenfunction:: globalcontext_demonitor
 .. doxygenfunction:: globalcontext_destroy
@@ -96,6 +121,8 @@ Functions
 .. doxygenfunction:: globalcontext_maybe_unregister_process_id
 .. doxygenfunction:: globalcontext_new
 .. doxygenfunction:: globalcontext_process_exists
+.. doxygenfunction:: globalcontext_process_task_driver_queues
+.. doxygenfunction:: globalcontext_refc_decrement_refcount_from_task
 .. doxygenfunction:: globalcontext_register_process
 .. doxygenfunction:: globalcontext_send_message
 .. doxygenfunction:: globalcontext_send_message_from_task
@@ -118,6 +145,7 @@ Functions
 .. doxygenfunction:: mailbox_has_next
 .. doxygenfunction:: mailbox_init
 .. doxygenfunction:: mailbox_len
+.. doxygenfunction:: mailbox_message_create_from_term
 .. doxygenfunction:: mailbox_message_dispose
 .. doxygenfunction:: mailbox_next
 .. doxygenfunction:: mailbox_peek
@@ -136,11 +164,16 @@ Functions
 .. doxygenfunction:: memory_copy_term_tree_to_storage
 .. doxygenfunction:: memory_destroy_heap
 .. doxygenfunction:: memory_destroy_heap_fragment
+.. doxygenfunction:: memory_destroy_heap_from_task
+.. doxygenfunction:: memory_ensure_free_opt
 .. doxygenfunction:: memory_ensure_free_with_roots
+.. doxygenfunction:: memory_erl_nif_env_ensure_free
 .. doxygenfunction:: memory_estimate_usage
+.. doxygenfunction:: memory_heap_alloc
 .. doxygenfunction:: memory_heap_append_fragment
 .. doxygenfunction:: memory_heap_append_heap
 .. doxygenfunction:: memory_heap_fragment_memory_size
+.. doxygenfunction:: memory_heap_trim
 .. doxygenfunction:: memory_heap_youngest_size
 .. doxygenfunction:: memory_heap_memory_size
 .. doxygenfunction:: memory_init_heap
@@ -157,6 +190,7 @@ Functions
 .. doxygenfunction:: module_new_from_iff_binary
 .. doxygenfunction:: module_resolve_function
 .. doxygenfunction:: module_search_exported_function
+.. doxygenfunction:: otp_socket_lwip_enqueue
 .. doxygenfunction:: platform_nifs_get_nif
 .. doxygenfunction:: posix_errno_to_term
 .. doxygenfunction:: process_listener_handler
