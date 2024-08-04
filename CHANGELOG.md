@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `gpio:init/1` on esp32 to initialize pins for GPIO usage, which some pins
 require depending on default function and bootloader code
 - Implement missing opcode 161 (raw_raise), that looks more likely to be generated with Elixir code
+- Support for Elixir `Map.replace/3` and `Map.replace!/3`
 
 ## [0.6.3] - 20-07-2024
 

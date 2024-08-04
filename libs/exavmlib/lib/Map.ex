@@ -23,6 +23,9 @@ defmodule Map do
   # This avoids crashing the compiler at build time
   @compile {:autoload, false}
 
+  @type key :: any
+  @type value :: any
+
   def new(list) when is_list(list), do: :maps.from_list(list)
   def new(%{} = map), do: map
 
@@ -66,4 +69,53 @@ defmodule Map do
   def equal?(%{} = map1, %{} = map2), do: map1 === map2
   def equal?(%{} = map1, map2), do: :erlang.error({:badmap, map2}, [map1, map2])
   def equal?(term, other), do: :erlang.error({:badmap, term}, [term, other])
+
+  @doc """
+  Puts a value under `key` only if the `key` already exists in `map`.
+
+  ## Examples
+
+      iex> Map.replace(%{a: 1, b: 2}, :a, 3)
+      %{a: 3, b: 2}
+
+      iex> Map.replace(%{a: 1}, :b, 2)
+      %{a: 1}
+
+  """
+  @doc since: "1.11.0"
+  @spec replace(map, key, value) :: map
+  def replace(map, key, value) do
+    case map do
+      %{^key => _value} ->
+        %{map | key => value}
+
+      %{} ->
+        map
+
+      other ->
+        :erlang.error({:badmap, other})
+    end
+  end
+
+  @doc """
+  Puts a value under `key` only if the `key` already exists in `map`.
+
+  If `key` is not present in `map`, a `KeyError` exception is raised.
+
+  Inlined by the compiler.
+
+  ## Examples
+
+      iex> Map.replace!(%{a: 1, b: 2}, :a, 3)
+      %{a: 3, b: 2}
+
+      iex> Map.replace!(%{a: 1}, :b, 2)
+      ** (KeyError) key :b not found in: %{a: 1}
+
+  """
+  @doc since: "1.5.0"
+  @spec replace!(map, key, value) :: map
+  def replace!(map, key, value) do
+    :maps.update(key, value, map)
+  end
 end
