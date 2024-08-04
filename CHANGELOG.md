@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 require depending on default function and bootloader code
 - Implement missing opcode 161 (raw_raise), that looks more likely to be generated with Elixir code
 - Support for Elixir `Map.replace/3` and `Map.replace!/3`
+- Support for Elixir `Kernel.struct` and `Kernel.struct!`
 
 ## [0.6.3] - 20-07-2024
 

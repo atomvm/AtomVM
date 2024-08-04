@@ -2,6 +2,8 @@
 # This file is part of AtomVM.
 #
 # Copyright 2020 Davide Bettio <davide@uninstall.it>
+# Copyright 2012-2022 Elixir Contributors
+# https://github.com/elixir-lang/elixir/commits/main/lib/elixir/lib/kernel.ex
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -120,5 +122,113 @@ defmodule Kernel do
     # TODO: use unicode rather than plain latin1
     # handle spaces and special characters
     :erlang.atom_to_binary(atom, :latin1)
+  end
+
+  # Taken from Elixir kernel.ex
+  @doc """
+  Creates and updates structs.
+
+  The `struct` argument may be an atom (which defines `defstruct`)
+  or a `struct` itself. The second argument is any `Enumerable` that
+  emits two-element tuples (key-value pairs) during enumeration.
+
+  Keys in the `Enumerable` that don't exist in the struct are automatically
+  discarded. Note that keys must be atoms, as only atoms are allowed when
+  defining a struct.
+
+  This function is useful for dynamically creating and updating structs, as
+  well as for converting maps to structs; in the latter case, just inserting
+  the appropriate `:__struct__` field into the map may not be enough and
+  `struct/2` should be used instead.
+
+  ## Examples
+
+      defmodule User do
+        defstruct name: "john"
+      end
+
+      struct(User)
+      #=> %User{name: "john"}
+
+      opts = [name: "meg"]
+      user = struct(User, opts)
+      #=> %User{name: "meg"}
+
+      struct(user, unknown: "value")
+      #=> %User{name: "meg"}
+
+      struct(User, %{name: "meg"})
+      #=> %User{name: "meg"}
+
+      # String keys are ignored
+      struct(User, %{"name" => "meg"})
+      #=> %User{name: "john"}
+
+  """
+  @spec struct(module | struct, Enum.t()) :: struct
+  def struct(struct, fields \\ []) do
+    struct(struct, fields, fn
+      {:__struct__, _val}, acc ->
+        acc
+
+      {key, val}, acc ->
+        case acc do
+          %{^key => _} -> %{acc | key => val}
+          _ -> acc
+        end
+    end)
+  end
+
+  # Taken from Elixir kernel.ex
+  @doc """
+  Similar to `struct/2` but checks for key validity.
+
+  The function `struct!/2` emulates the compile time behaviour
+  of structs. This means that:
+
+    * when building a struct, as in `struct!(SomeStruct, key: :value)`,
+      it is equivalent to `%SomeStruct{key: :value}` and therefore this
+      function will check if every given key-value belongs to the struct.
+      If the struct is enforcing any key via `@enforce_keys`, those will
+      be enforced as well;
+
+    * when updating a struct, as in `struct!(%SomeStruct{}, key: :value)`,
+      it is equivalent to `%SomeStruct{struct | key: :value}` and therefore this
+      function will check if every given key-value belongs to the struct.
+      However, updating structs does not enforce keys, as keys are enforced
+      only when building;
+
+  """
+  @spec struct!(module | struct, Enum.t()) :: struct | no_return
+  def struct!(struct, fields \\ [])
+
+  def struct!(struct, fields) when is_atom(struct) do
+    struct.__struct__(fields)
+  end
+
+  def struct!(struct, fields) when is_map(struct) do
+    struct(struct, fields, fn
+      {:__struct__, _}, acc ->
+        acc
+
+      {key, val}, acc ->
+        Map.replace!(acc, key, val)
+    end)
+  end
+
+  defp struct(struct, [], _fun) when is_atom(struct) do
+    struct.__struct__()
+  end
+
+  defp struct(struct, fields, fun) when is_atom(struct) do
+    struct(struct.__struct__(), fields, fun)
+  end
+
+  defp struct(%_{} = struct, [], _fun) do
+    struct
+  end
+
+  defp struct(%_{} = struct, fields, fun) do
+    Enum.reduce(fields, struct, fun)
   end
 end
