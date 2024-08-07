@@ -14,6 +14,7 @@ require depending on default function and bootloader code
 - Support for Elixir `Map.replace/3` and `Map.replace!/3`
 - Support for Elixir `Kernel.struct` and `Kernel.struct!`
 - Support for Elixir `IO.iodata_to_binary/1`
+- Support for Elixir `Enum.split_with/2`, `Enum.join/2`, `Enum.map_join/3`
 
 ## [0.6.3] - 20-07-2024
 

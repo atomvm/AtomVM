@@ -23,6 +23,8 @@ defmodule Enum do
   # This avoids crashing the compiler at build time
   @compile {:autoload, false}
 
+  @type element :: any
+
   def reduce(enumerable, acc, fun) when is_list(enumerable) do
     :lists.foldl(fun, acc, enumerable)
   end
@@ -66,6 +68,41 @@ defmodule Enum do
 
   def map(enumerable, fun) when is_list(enumerable) do
     :lists.map(fun, enumerable)
+  end
+
+  @doc """
+  Maps and joins the given enumerable in one pass.
+
+  `joiner` can be either a binary or a list and the result will be of
+  the same type as `joiner`.
+  If `joiner` is not passed at all, it defaults to an empty binary.
+
+  All items returned from invoking the `mapper` must be convertible to
+  a binary, otherwise an error is raised.
+
+  ## Examples
+
+      iex> Enum.map_join([1, 2, 3], &(&1 * 2))
+      "246"
+
+      iex> Enum.map_join([1, 2, 3], " = ", &(&1 * 2))
+      "2 = 4 = 6"
+
+  """
+  def map_join(enumerable, joiner \\ "", mapper)
+
+  def map_join(enumerable, joiner, mapper) when is_binary(joiner) do
+    reduced =
+      reduce(enumerable, :first, fn
+        entry, :first -> entry_to_string(mapper.(entry))
+        entry, acc -> [acc, joiner | entry_to_string(mapper.(entry))]
+      end)
+
+    if reduced == :first do
+      ""
+    else
+      IO.iodata_to_binary(reduced)
+    end
   end
 
   def member?(enumerable, element) when is_list(enumerable) do
@@ -156,6 +193,40 @@ defmodule Enum do
     default
   end
 
+  @doc """
+  Joins the given enumerable into a binary using `joiner` as a
+  separator.
+
+  If `joiner` is not passed at all, it defaults to the empty binary.
+
+  All items in the enumerable must be convertible to a binary,
+  otherwise an error is raised.
+
+  ## Examples
+
+      iex> Enum.join([1, 2, 3])
+      "123"
+
+      iex> Enum.join([1, 2, 3], " = ")
+      "1 = 2 = 3"
+
+  """
+  def join(enumerable, joiner \\ "")
+
+  def join(enumerable, joiner) when is_binary(joiner) do
+    reduced =
+      reduce(enumerable, :first, fn
+        entry, :first -> entry_to_string(entry)
+        entry, acc -> [acc, joiner | entry_to_string(entry)]
+      end)
+
+    if reduced == :first do
+      ""
+    else
+      IO.iodata_to_binary(reduced)
+    end
+  end
+
   ## reject
 
   defp reject_list([head | tail], fun) do
@@ -169,4 +240,52 @@ defmodule Enum do
   defp reject_list([], _fun) do
     []
   end
+
+  @doc """
+  Splits the `enumerable` in two lists according to the given function `fun`.
+
+  Splits the given `enumerable` in two lists by calling `fun` with each element
+  in the `enumerable` as its only argument. Returns a tuple with the first list
+  containing all the elements in `enumerable` for which applying `fun` returned
+  a truthy value, and a second list with all the elements for which applying
+  `fun` returned a falsy value (`false` or `nil`).
+
+  The elements in both the returned lists are in the same relative order as they
+  were in the original enumerable (if such enumerable was ordered, e.g., a
+  list); see the examples below.
+
+  ## Examples
+
+      iex> Enum.split_with([5, 4, 3, 2, 1, 0], fn x -> rem(x, 2) == 0 end)
+      {[4, 2, 0], [5, 3, 1]}
+
+      iex> Enum.split_with(%{a: 1, b: -2, c: 1, d: -3}, fn {_k, v} -> v < 0 end)
+      {[b: -2, d: -3], [a: 1, c: 1]}
+
+      iex> Enum.split_with(%{a: 1, b: -2, c: 1, d: -3}, fn {_k, v} -> v > 50 end)
+      {[], [a: 1, b: -2, c: 1, d: -3]}
+
+      iex> Enum.split_with(%{}, fn {_k, v} -> v > 50 end)
+      {[], []}
+
+  """
+  @doc since: "1.4.0"
+  def split_with(enumerable, fun) do
+    {acc1, acc2} =
+      reduce(enumerable, {[], []}, fn entry, {acc1, acc2} ->
+        if fun.(entry) do
+          {[entry | acc1], acc2}
+        else
+          {acc1, [entry | acc2]}
+        end
+      end)
+
+    {:lists.reverse(acc1), :lists.reverse(acc2)}
+  end
+
+  # helpers
+
+  @compile {:inline, entry_to_string: 1}
+
+  defp entry_to_string(entry) when is_binary(entry), do: entry
 end
