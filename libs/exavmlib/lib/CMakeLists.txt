@@ -65,6 +65,10 @@ set(ELIXIR_MODULES
     FunctionClauseError
     KeyError
     ErlangError
+
+    Collectable
+    Collectable.List
+    Collectable.Map
 )
 
 pack_archive(exavmlib ${ELIXIR_MODULES})

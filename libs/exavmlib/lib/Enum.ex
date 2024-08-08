@@ -292,6 +292,102 @@ defmodule Enum do
   end
 
   @doc """
+  Inserts the given `enumerable` into a `collectable`.
+
+  ## Examples
+
+      iex> Enum.into([1, 2], [0])
+      [0, 1, 2]
+
+      iex> Enum.into([a: 1, b: 2], %{})
+      %{a: 1, b: 2}
+
+      iex> Enum.into(%{a: 1}, %{b: 2})
+      %{a: 1, b: 2}
+
+      iex> Enum.into([a: 1, a: 2], %{})
+      %{a: 2}
+
+  """
+  @spec into(Enumerable.t(), Collectable.t()) :: Collectable.t()
+  def into(enumerable, collectable) when is_list(collectable) do
+    collectable ++ to_list(enumerable)
+  end
+
+  def into(%_{} = enumerable, collectable) do
+    into_protocol(enumerable, collectable)
+  end
+
+  def into(enumerable, %_{} = collectable) do
+    into_protocol(enumerable, collectable)
+  end
+
+  def into(%{} = enumerable, %{} = collectable) do
+    Map.merge(collectable, enumerable)
+  end
+
+  def into(enumerable, %{} = collectable) when is_list(enumerable) do
+    Map.merge(collectable, :maps.from_list(enumerable))
+  end
+
+  def into(enumerable, %{} = collectable) do
+    reduce(enumerable, collectable, fn {key, val}, acc ->
+      Map.put(acc, key, val)
+    end)
+  end
+
+  def into(enumerable, collectable) do
+    into_protocol(enumerable, collectable)
+  end
+
+  defp into_protocol(enumerable, collectable) do
+    {initial, fun} = Collectable.into(collectable)
+
+    into(enumerable, initial, fun, fn entry, acc ->
+      fun.(acc, {:cont, entry})
+    end)
+  end
+
+  @doc """
+  Inserts the given `enumerable` into a `collectable` according to the
+  transformation function.
+
+  ## Examples
+
+      iex> Enum.into([2, 3], [3], fn x -> x * 3 end)
+      [3, 6, 9]
+
+      iex> Enum.into(%{a: 1, b: 2}, %{c: 3}, fn {k, v} -> {k, v * 2} end)
+      %{a: 2, b: 4, c: 3}
+
+  """
+  @spec into(Enumerable.t(), Collectable.t(), (term -> term)) :: Collectable.t()
+
+  def into(enumerable, collectable, transform) when is_list(collectable) do
+    collectable ++ map(enumerable, transform)
+  end
+
+  def into(enumerable, collectable, transform) do
+    {initial, fun} = Collectable.into(collectable)
+
+    into(enumerable, initial, fun, fn entry, acc ->
+      fun.(acc, {:cont, transform.(entry)})
+    end)
+  end
+
+  defp into(enumerable, initial, fun, callback) do
+    try do
+      reduce(enumerable, initial, callback)
+    catch
+      kind, reason ->
+        fun.(initial, :halt)
+        :erlang.raise(kind, reason, __STACKTRACE__)
+    else
+      acc -> fun.(acc, :done)
+    end
+  end
+
+  @doc """
   Joins the given enumerable into a binary using `joiner` as a
   separator.
 
@@ -341,6 +437,24 @@ defmodule Enum do
   end
 
   @doc """
+  Returns a list of elements in `enumerable` in reverse order.
+
+  ## Examples
+
+      iex> Enum.reverse([1, 2, 3])
+      [3, 2, 1]
+
+  """
+  @spec reverse(t) :: list
+  def reverse(enumerable)
+
+  def reverse([]), do: []
+  def reverse([_] = list), do: list
+  def reverse([item1, item2]), do: [item2, item1]
+  def reverse([item1, item2 | rest]), do: :lists.reverse(rest, [item2, item1])
+  def reverse(enumerable), do: reduce(enumerable, [], &[&1 | &2])
+
+  @doc """
   Splits the `enumerable` in two lists according to the given function `fun`.
 
   Splits the given `enumerable` in two lists by calling `fun` with each element
@@ -381,6 +495,21 @@ defmodule Enum do
 
     {:lists.reverse(acc1), :lists.reverse(acc2)}
   end
+
+  @doc """
+  Converts `enumerable` to a list.
+
+  ## Examples
+
+      iex> Enum.to_list(1..3)
+      [1, 2, 3]
+
+  """
+  @spec to_list(t) :: [element]
+  def to_list(enumerable) when is_list(enumerable), do: enumerable
+  def to_list(%_{} = enumerable), do: reverse(enumerable) |> :lists.reverse()
+  def to_list(%{} = enumerable), do: Map.to_list(enumerable)
+  def to_list(enumerable), do: reverse(enumerable) |> :lists.reverse()
 
   # helpers
 
