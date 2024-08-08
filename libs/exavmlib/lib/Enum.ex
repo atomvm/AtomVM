@@ -23,14 +23,33 @@ defmodule Enum do
   # This avoids crashing the compiler at build time
   @compile {:autoload, false}
 
+  @type t :: Enumerable.t()
   @type element :: any
+
+  require Stream.Reducers, as: R
+
+  defmacrop next(_, entry, acc) do
+    quote(do: [unquote(entry) | unquote(acc)])
+  end
 
   def reduce(enumerable, acc, fun) when is_list(enumerable) do
     :lists.foldl(fun, acc, enumerable)
   end
 
+  def reduce(%_{} = enumerable, acc, fun) do
+    reduce_enumerable(enumerable, acc, fun)
+  end
+
   def reduce(%{} = enumerable, acc, fun) do
     :maps.fold(fn k, v, acc -> fun.({k, v}, acc) end, acc, enumerable)
+  end
+
+  def reduce(enumerable, acc, fun) do
+    reduce_enumerable(enumerable, acc, fun)
+  end
+
+  defp reduce_enumerable(enumerable, acc, fun) do
+    Enumerable.reduce(enumerable, {:cont, acc}, fn x, acc -> {:cont, fun.(x, acc)} end) |> elem(1)
   end
 
   def all?(enumerable, fun) when is_list(enumerable) do
@@ -41,8 +60,28 @@ defmodule Enum do
     any_list(enumerable, fun)
   end
 
+  @doc """
+  Returns the size of the enumerable.
+
+  ## Examples
+
+      iex> Enum.count([1, 2, 3])
+      3
+
+  """
+  @spec count(t) :: non_neg_integer
   def count(enumerable) when is_list(enumerable) do
     length(enumerable)
+  end
+
+  def count(enumerable) do
+    case Enumerable.count(enumerable) do
+      {:ok, value} when is_integer(value) ->
+        value
+
+      {:error, module} ->
+        enumerable |> module.reduce({:cont, 0}, fn _, acc -> {:cont, acc + 1} end) |> elem(1)
+    end
   end
 
   def each(enumerable, fun) when is_list(enumerable) do
@@ -66,8 +105,30 @@ defmodule Enum do
     find_value_list(enumerable, default, fun)
   end
 
+  @doc """
+  Returns a list where each element is the result of invoking
+  `fun` on each corresponding element of `enumerable`.
+
+  For maps, the function expects a key-value tuple.
+
+  ## Examples
+
+      iex> Enum.map([1, 2, 3], fn x -> x * 2 end)
+      [2, 4, 6]
+
+      iex> Enum.map([a: 1, b: 2], fn {k, v} -> {k, -v} end)
+      [a: -1, b: -2]
+
+  """
+  @spec map(t, (element -> any)) :: list
+  def map(enumerable, fun)
+
   def map(enumerable, fun) when is_list(enumerable) do
     :lists.map(fun, enumerable)
+  end
+
+  def map(enumerable, fun) do
+    reduce(enumerable, [], R.map(fun)) |> :lists.reverse()
   end
 
   @doc """
@@ -89,6 +150,7 @@ defmodule Enum do
       "2 = 4 = 6"
 
   """
+  @spec map_join(t, String.t(), (element -> String.Chars.t())) :: String.t()
   def map_join(enumerable, joiner \\ "", mapper)
 
   def map_join(enumerable, joiner, mapper) when is_binary(joiner) do
@@ -105,8 +167,44 @@ defmodule Enum do
     end
   end
 
+  @doc """
+  Checks if `element` exists within the enumerable.
+
+  Membership is tested with the match (`===/2`) operator.
+
+  ## Examples
+
+      iex> Enum.member?(1..10, 5)
+      true
+      iex> Enum.member?(1..10, 5.0)
+      false
+
+      iex> Enum.member?([1.0, 2.0, 3.0], 2)
+      false
+      iex> Enum.member?([1.0, 2.0, 3.0], 2.000)
+      true
+
+      iex> Enum.member?([:a, :b, :c], :d)
+      false
+
+  """
+  @spec member?(t, element) :: boolean
   def member?(enumerable, element) when is_list(enumerable) do
     :lists.member(element, enumerable)
+  end
+
+  def member?(enumerable, element) do
+    case Enumerable.member?(enumerable, element) do
+      {:ok, element} when is_boolean(element) ->
+        element
+
+      {:error, module} ->
+        module.reduce(enumerable, {:cont, false}, fn
+          v, _ when v === element -> {:halt, true}
+          _, _ -> {:cont, false}
+        end)
+        |> elem(1)
+    end
   end
 
   def reject(enumerable, fun) when is_list(enumerable) do
@@ -211,6 +309,7 @@ defmodule Enum do
       "1 = 2 = 3"
 
   """
+  @spec join(t, String.t()) :: String.t()
   def join(enumerable, joiner \\ "")
 
   def join(enumerable, joiner) when is_binary(joiner) do
@@ -285,7 +384,7 @@ defmodule Enum do
 
   # helpers
 
-  @compile {:inline, entry_to_string: 1}
+  @compile {:inline, entry_to_string: 1, reduce: 3}
 
   defp entry_to_string(entry) when is_binary(entry), do: entry
 end

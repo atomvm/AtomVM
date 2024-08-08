@@ -33,6 +33,9 @@ set(ELIXIR_MODULES
     LEDC
     Access
     Enum
+    Enumerable
+    Enumerable.List
+    Enumerable.Map
     Exception
     IO
     List
