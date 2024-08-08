@@ -33,6 +33,7 @@ set(ELIXIR_MODULES
     LEDC
     Access
     Enum
+    Exception
     IO
     List
     Map
@@ -41,6 +42,25 @@ set(ELIXIR_MODULES
     Kernel
     Process
     Tuple
+
+    ArithmeticError
+    ArgumentError
+    BadFunctionError
+    BadStructError
+    RuntimeError
+    SystemLimitError
+    BadMapError
+    BadBooleanError
+    MatchError
+    CaseClauseError
+    WithClauseError
+    CondClauseError
+    TryClauseError
+    BadArityError
+    UndefinedFunctionError
+    FunctionClauseError
+    KeyError
+    ErlangError
 )
 
 pack_archive(exavmlib ${ELIXIR_MODULES})

@@ -15,6 +15,8 @@ require depending on default function and bootloader code
 - Support for Elixir `Kernel.struct` and `Kernel.struct!`
 - Support for Elixir `IO.iodata_to_binary/1`
 - Support for Elixir `Enum.split_with/2`, `Enum.join/2`, `Enum.map_join/3`
+- Support for Elixir exceptions: `Exception` module and the other error related modules such as
+`ArgumentError`, `UndefinedFunctionError`, etc...
 
 ## [0.6.3] - 20-07-2024
 
