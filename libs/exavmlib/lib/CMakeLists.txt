@@ -41,6 +41,7 @@ set(ELIXIR_MODULES
     Keyword
     Kernel
     Process
+    Protocol.UndefinedError
     Tuple
 
     ArithmeticError
