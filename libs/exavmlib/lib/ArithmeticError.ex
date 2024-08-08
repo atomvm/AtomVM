@@ -24,40 +24,4 @@ defmodule ArithmeticError do
   @compile {:autoload, false}
 
   defexception message: "bad argument in arithmetic expression"
-
-  @unary_ops [:+, :-]
-  @binary_ops [:+, :-, :*, :/]
-  @binary_funs [:div, :rem]
-  @bitwise_binary_funs [:band, :bor, :bxor, :bsl, :bsr]
-
-  @impl true
-  def blame(%{message: message} = exception, [{:erlang, fun, args, _} | _] = stacktrace) do
-    message =
-      message <>
-        case {fun, args} do
-          {op, [a]} when op in @unary_ops ->
-            ": #{op}(#{inspect(a)})"
-
-          {op, [a, b]} when op in @binary_ops ->
-            ": #{inspect(a)} #{op} #{inspect(b)}"
-
-          {fun, [a, b]} when fun in @binary_funs ->
-            ": #{fun}(#{inspect(a)}, #{inspect(b)})"
-
-          {fun, [a, b]} when fun in @bitwise_binary_funs ->
-            ": Bitwise.#{fun}(#{inspect(a)}, #{inspect(b)})"
-
-          {:bnot, [a]} ->
-            ": Bitwise.bnot(#{inspect(a)})"
-
-          _ ->
-            ""
-        end
-
-    {%{exception | message: message}, stacktrace}
-  end
-
-  def blame(exception, stacktrace) do
-    {exception, stacktrace}
-  end
 end
