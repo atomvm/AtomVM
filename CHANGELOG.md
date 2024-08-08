@@ -19,6 +19,7 @@ require depending on default function and bootloader code
 - Support for Elixir `Enumerable` and `Collectable` protocol
 - Support for Elixir `Enum` functions: `split_with`, `join`, `map_join`, `into`, `reverse`,
 `to_list`
+- Support for Elixir `MapSet` module
 
 ## [0.6.3] - 20-07-2024
 

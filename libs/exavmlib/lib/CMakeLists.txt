@@ -36,10 +36,12 @@ set(ELIXIR_MODULES
     Enumerable
     Enumerable.List
     Enumerable.Map
+    Enumerable.MapSet
     Exception
     IO
     List
     Map
+    MapSet
     Module
     Keyword
     Kernel
@@ -69,6 +71,7 @@ set(ELIXIR_MODULES
     Collectable
     Collectable.List
     Collectable.Map
+    Collectable.MapSet
 )
 
 pack_archive(exavmlib ${ELIXIR_MODULES})
