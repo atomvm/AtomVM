@@ -37,6 +37,7 @@ set(ELIXIR_MODULES
     Enumerable.List
     Enumerable.Map
     Enumerable.MapSet
+    Enumerable.Range
     Exception
     IO
     List
@@ -47,6 +48,7 @@ set(ELIXIR_MODULES
     Kernel
     Process
     Protocol.UndefinedError
+    Range
     Tuple
 
     ArithmeticError
