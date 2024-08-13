@@ -21,6 +21,7 @@ require depending on default function and bootloader code
 `to_list`
 - Support for Elixir `MapSet` module
 - Support for Elixir `Range` module
+- Support for Elixir `Kernel.min` and `Kernel.max`
 
 ## [0.6.3] - 20-07-2024
 

@@ -124,6 +124,68 @@ defmodule Kernel do
     :erlang.atom_to_binary(atom, :latin1)
   end
 
+  @doc """
+  Returns the biggest of the two given terms according to
+  Erlang's term ordering.
+
+  If the terms compare equal, the first one is returned.
+
+  Inlined by the compiler.
+
+  ## Examples
+
+      iex> max(1, 2)
+      2
+      iex> max(:a, :b)
+      :b
+
+  Using Erlang's term ordering means that comparisons are
+  structural and not semantic. For example, when comparing dates:
+
+      iex> max(~D[2017-03-31], ~D[2017-04-01])
+      ~D[2017-03-31]
+
+  In the example above, `max/1` returned March 31st instead of April 1st
+  because the structural comparison compares the day before the year. In
+  such cases it is common for modules to provide functions such as
+  `Date.compare/2` that perform semantic comparison.
+  """
+  @spec max(first, second) :: first | second when first: term, second: term
+  def max(first, second) do
+    :erlang.max(first, second)
+  end
+
+  @doc """
+  Returns the smallest of the two given terms according to
+  Erlang's term ordering.
+
+  If the terms compare equal, the first one is returned.
+
+  Inlined by the compiler.
+
+  ## Examples
+
+      iex> min(1, 2)
+      1
+      iex> min("foo", "bar")
+      "bar"
+
+  Using Erlang's term ordering means that comparisons are
+  structural and not semantic. For example, when comparing dates:
+
+      iex> min(~D[2017-03-31], ~D[2017-04-01])
+      ~D[2017-04-01]
+
+  In the example above, `min/1` returned April 1st instead of March 31st
+  because the structural comparison compares the day before the year. In
+  such cases it is common for modules to provide functions such as
+  `Date.compare/2` that perform semantic comparison.
+  """
+  @spec min(first, second) :: first | second when first: term, second: term
+  def min(first, second) do
+    :erlang.min(first, second)
+  end
+
   # Taken from Elixir kernel.ex
   @doc """
   Creates and updates structs.
