@@ -372,6 +372,16 @@ jobs:
         ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
         valgrind ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
 
+    - name: "Test: Tests.avm (Elixir)"
+      timeout-minutes: 10
+      working-directory: build
+      run: |
+        if command -v elixirc &> /dev/null
+        then
+          ./src/AtomVM ./tests/libs/exavmlib/Tests.avm
+          valgrind ./src/AtomVM ./tests/libs/exavmlib/Tests.avm
+        fi
+
     - name: "Install and smoke test"
       working-directory: build
       run: |
