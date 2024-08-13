@@ -32,6 +32,11 @@ defimpl Enumerable, for: Map do
     {:ok, false}
   end
 
+  def slice(map) do
+    size = map_size(map)
+    {:ok, size, &Enumerable.List.slice(:maps.to_list(map), &1, &2, size)}
+  end
+
   def reduce(map, acc, fun) do
     reduce_list(:maps.to_list(map), acc, fun)
   end

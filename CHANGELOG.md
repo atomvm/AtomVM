@@ -18,7 +18,7 @@ require depending on default function and bootloader code
 `ArgumentError`, `UndefinedFunctionError`, etc...
 - Support for Elixir `Enumerable` and `Collectable` protocol
 - Support for Elixir `Enum` functions: `split_with`, `join`, `map_join`, `into`, `reverse`,
-`to_list`
+`slice` and `to_list`
 - Support for Elixir `MapSet` module
 - Support for Elixir `Range` module
 - Support for Elixir `Kernel.min` and `Kernel.max`

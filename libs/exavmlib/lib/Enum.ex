@@ -24,6 +24,7 @@ defmodule Enum do
   @compile {:autoload, false}
 
   @type t :: Enumerable.t()
+  @type index :: integer
   @type element :: any
 
   require Stream.Reducers, as: R
@@ -455,6 +456,99 @@ defmodule Enum do
   def reverse(enumerable), do: reduce(enumerable, [], &[&1 | &2])
 
   @doc """
+  Returns a subset list of the given enumerable, from `range.first` to `range.last` positions.
+
+  Given `enumerable`, it drops elements until element position `range.first`,
+  then takes elements until element position `range.last` (inclusive).
+
+  Positions are normalized, meaning that negative positions will be counted from the end
+  (e.g. `-1` means the last element of the enumerable).
+  If `range.last` is out of bounds, then it is assigned as the position of the last element.
+
+  If the normalized `range.first` position is out of bounds of the given enumerable,
+  or this one is greater than the normalized `range.last` position, then `[]` is returned.
+
+  ## Examples
+
+      iex> Enum.slice(1..100, 5..10)
+      [6, 7, 8, 9, 10, 11]
+
+      iex> Enum.slice(1..10, 5..20)
+      [6, 7, 8, 9, 10]
+
+      # last five elements (negative positions)
+      iex> Enum.slice(1..30, -5..-1)
+      [26, 27, 28, 29, 30]
+
+      # last five elements (mixed positive and negative positions)
+      iex> Enum.slice(1..30, 25..-1)
+      [26, 27, 28, 29, 30]
+
+      # out of bounds
+      iex> Enum.slice(1..10, 11..20)
+      []
+
+      # range.first is greater than range.last
+      iex> Enum.slice(1..10, 6..5)
+      []
+
+  """
+  @doc since: "1.6.0"
+  @spec slice(t, Range.t()) :: list
+  def slice(enumerable, first..last) do
+    {count, fun} = slice_count_and_fun(enumerable)
+    corr_first = if first >= 0, do: first, else: first + count
+    corr_last = if last >= 0, do: last, else: last + count
+    amount = corr_last - corr_first + 1
+
+    if corr_first >= 0 and corr_first < count and amount > 0 do
+      fun.(corr_first, Kernel.min(amount, count - corr_first))
+    else
+      []
+    end
+  end
+
+  @doc """
+  Returns a subset list of the given enumerable, from `start` position with `amount` of elements if available.
+
+  Given `enumerable`, it drops elements until element position `start`,
+  then takes `amount` of elements until the end of the enumerable.
+
+  If `start` is out of bounds, it returns `[]`.
+
+  If `amount` is greater than `enumerable` length, it returns as many elements as possible.
+  If `amount` is zero, then `[]` is returned.
+
+  ## Examples
+
+      iex> Enum.slice(1..100, 5, 10)
+      [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+      # amount to take is greater than the number of elements
+      iex> Enum.slice(1..10, 5, 100)
+      [6, 7, 8, 9, 10]
+
+      iex> Enum.slice(1..10, 5, 0)
+      []
+
+      # out of bound start position
+      iex> Enum.slice(1..10, 10, 5)
+      []
+
+      # out of bound start position (negative)
+      iex> Enum.slice(1..10, -11, 5)
+      []
+
+  """
+  @spec slice(t, index, non_neg_integer) :: list
+  def slice(_enumerable, start, 0) when is_integer(start), do: []
+
+  def slice(enumerable, start, amount)
+      when is_integer(start) and is_integer(amount) and amount >= 0 do
+    slice_any(enumerable, start, amount)
+  end
+
+  @doc """
   Splits the `enumerable` in two lists according to the given function `fun`.
 
   Splits the given `enumerable` in two lists by calling `fun` with each element
@@ -516,4 +610,80 @@ defmodule Enum do
   @compile {:inline, entry_to_string: 1, reduce: 3}
 
   defp entry_to_string(entry) when is_binary(entry), do: entry
+
+  ## drop
+
+  defp drop_list(list, 0), do: list
+  defp drop_list([_ | tail], counter), do: drop_list(tail, counter - 1)
+  defp drop_list([], _), do: []
+
+  ## slice
+
+  defp slice_any(enumerable, start, amount) when start < 0 do
+    {count, fun} = slice_count_and_fun(enumerable)
+    start = count + start
+
+    if start >= 0 do
+      fun.(start, Kernel.min(amount, count - start))
+    else
+      []
+    end
+  end
+
+  defp slice_any(list, start, amount) when is_list(list) do
+    list |> drop_list(start) |> take_list(amount)
+  end
+
+  defp slice_any(enumerable, start, amount) do
+    case Enumerable.slice(enumerable) do
+      {:ok, count, _} when start >= count ->
+        []
+
+      {:ok, count, fun} when is_function(fun) ->
+        fun.(start, Kernel.min(amount, count - start))
+
+      {:error, module} ->
+        slice_enum(enumerable, module, start, amount)
+    end
+  end
+
+  defp slice_enum(enumerable, module, start, amount) do
+    {_, {_, _, slice}} =
+      module.reduce(enumerable, {:cont, {start, amount, []}}, fn
+        _entry, {start, amount, _list} when start > 0 ->
+          {:cont, {start - 1, amount, []}}
+
+        entry, {start, amount, list} when amount > 1 ->
+          {:cont, {start, amount - 1, [entry | list]}}
+
+        entry, {start, amount, list} ->
+          {:halt, {start, amount, [entry | list]}}
+      end)
+
+    :lists.reverse(slice)
+  end
+
+  defp slice_count_and_fun(enumerable) when is_list(enumerable) do
+    length = length(enumerable)
+    {length, &Enumerable.List.slice(enumerable, &1, &2, length)}
+  end
+
+  defp slice_count_and_fun(enumerable) do
+    case Enumerable.slice(enumerable) do
+      {:ok, count, fun} when is_function(fun) ->
+        {count, fun}
+
+      {:error, module} ->
+        {_, {list, count}} =
+          module.reduce(enumerable, {:cont, {[], 0}}, fn elem, {acc, count} ->
+            {:cont, {[elem | acc], count + 1}}
+          end)
+
+        {count, &Enumerable.List.slice(:lists.reverse(list), &1, &2, count)}
+    end
+  end
+
+  defp take_list([head | _], 1), do: [head]
+  defp take_list([head | tail], counter), do: [head | take_list(tail, counter - 1)]
+  defp take_list([], _counter), do: []
 end

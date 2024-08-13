@@ -22,9 +22,21 @@
 defimpl Enumerable, for: List do
   def count(_list), do: {:error, __MODULE__}
   def member?(_list, _value), do: {:error, __MODULE__}
+  def slice(_list), do: {:error, __MODULE__}
 
   def reduce(_list, {:halt, acc}, _fun), do: {:halted, acc}
   def reduce(list, {:suspend, acc}, fun), do: {:suspended, acc, &reduce(list, &1, fun)}
   def reduce([], {:cont, acc}, _fun), do: {:done, acc}
   def reduce([head | tail], {:cont, acc}, fun), do: reduce(tail, fun.(head, acc), fun)
+
+  @doc false
+  def slice(_list, _start, 0, _size), do: []
+  def slice(list, start, count, size) when start + count == size, do: list |> drop(start)
+  def slice(list, start, count, _size), do: list |> drop(start) |> take(count)
+
+  defp drop(list, 0), do: list
+  defp drop([_ | tail], count), do: drop(tail, count - 1)
+
+  defp take(_list, 0), do: []
+  defp take([head | tail], count), do: [head | take(tail, count - 1)]
 end

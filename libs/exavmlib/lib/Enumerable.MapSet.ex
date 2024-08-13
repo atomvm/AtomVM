@@ -31,4 +31,9 @@ defimpl Enumerable, for: MapSet do
   def reduce(map_set, acc, fun) do
     Enumerable.List.reduce(MapSet.to_list(map_set), acc, fun)
   end
+
+  def slice(map_set) do
+    size = MapSet.size(map_set)
+    {:ok, size, &MapSet.to_list/1}
+  end
 end

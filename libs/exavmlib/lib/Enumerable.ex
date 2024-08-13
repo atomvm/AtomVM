@@ -58,7 +58,7 @@ defprotocol Enumerable do
   (as in zip).
 
   This protocol requires four functions to be implemented, `reduce/3`,
-  `count/1`, `member?/2`. The core of the protocol is the
+  `count/1`, `member?/2`, and `slice/1`. The core of the protocol is the
   `reduce/3` function. All other functions exist as optimizations paths
   for data structures that can implement certain properties in better
   than linear time.
@@ -126,6 +126,20 @@ defprotocol Enumerable do
   """
   @type continuation :: (acc -> result)
 
+  @typedoc """
+  A slicing function that receives the initial position and the
+  number of elements in the slice.
+
+  The `start` position is a number `>= 0` and guaranteed to
+  exist in the enumerable. The length is a number `>= 1` in a way
+  that `start + length <= count`, where `count` is the maximum
+  amount of elements in the enumerable.
+
+  The function should return a non empty list where
+  the amount of elements is equal to `length`.
+  """
+  @type slicing_fun :: (start :: non_neg_integer, length :: pos_integer -> [term()])
+
   @doc """
   Reduces the enumerable into an element.
 
@@ -174,4 +188,31 @@ defprotocol Enumerable do
   """
   @spec member?(t, term) :: {:ok, boolean} | {:error, module}
   def member?(enumerable, element)
+
+  @doc """
+  Returns a function that slices the data structure contiguously.
+
+  It should return `{:ok, size, slicing_fun}` if the enumerable has
+  a known bound and can access a position in the enumerable without
+  traversing all previous elements.
+
+  Otherwise it should return `{:error, __MODULE__}` and a default
+  algorithm built on top of `reduce/3` that runs in linear time will be
+  used.
+
+  ## Differences to `count/1`
+
+  The `size` value returned by this function is used for boundary checks,
+  therefore it is extremely important that this function only returns `:ok`
+  if retrieving the `size` of the enumerable is cheap, fast and takes constant
+  time. Otherwise the simplest of operations, such as `Enum.at(enumerable, 0)`,
+  will become too expensive.
+
+  On the other hand, the `count/1` function in this protocol should be
+  implemented whenever you can count the number of elements in the collection.
+  """
+  @spec slice(t) ::
+          {:ok, size :: non_neg_integer(), slicing_fun()}
+          | {:error, module()}
+  def slice(enumerable)
 end
