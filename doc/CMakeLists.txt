@@ -32,12 +32,22 @@ file(COPY ${CMAKE_SOURCE_DIR}/LICENSES/Apache-2.0.txt DESTINATION ${CMAKE_CURREN
 file(COPY ${CMAKE_SOURCE_DIR}/SECURITY.md DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/src)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/release-notes.md.in ${CMAKE_CURRENT_BINARY_DIR}/src/release-notes.md @ONLY)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/edoc/edown_dep DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/edoc/)
+target_compile_definitions(libAtomVM PUBLIC AVM_TASK_DRIVER_ENABLED)
 
 # Configure libAtomVM restucturedtext skeleton.
 file(GLOB SOURCE_FILES LIST_DIRECTORIES false RELATIVE ${CMAKE_SOURCE_DIR}/src/libAtomVM/ ${CMAKE_SOURCE_DIR}/src/libAtomVM/*.c ${CMAKE_SOURCE_DIR}/src/libAtomVM/*.h)
+set(OMIT_FILES
+    "defaultatoms.c"
+    "opcodesswitch.h"
+    "scheduler.c"
+    "tempstack.h"
+)
 foreach(SOURCE_FILE ${SOURCE_FILES})
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/apidocs/libatomvm/file.rst.in ${CMAKE_CURRENT_BINARY_DIR}/src/apidocs/libatomvm/src/${SOURCE_FILE}.rst @ONLY)
 endforeach(SOURCE_FILE)
+foreach(OMIT ${OMIT_FILES})
+    file(REMOVE ${CMAKE_CURRENT_BINARY_DIR}/src/apidocs/libatomvm/src/${OMIT}.rst)
+endforeach(OMIT)
 
 # Support for edoc -> markdown.
 add_custom_target(edown-escript

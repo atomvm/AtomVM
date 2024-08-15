@@ -8,3 +8,6 @@ base = sphinx
 
 [linked reference]
 type = custom
+
+[chapter]
+page_break = any
