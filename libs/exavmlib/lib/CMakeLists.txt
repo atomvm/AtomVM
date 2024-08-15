@@ -33,14 +33,47 @@ set(ELIXIR_MODULES
     LEDC
     Access
     Enum
+    Enumerable
+    Enumerable.List
+    Enumerable.Map
+    Enumerable.MapSet
+    Enumerable.Range
+    Exception
     IO
     List
     Map
+    MapSet
     Module
     Keyword
     Kernel
     Process
+    Protocol.UndefinedError
+    Range
     Tuple
+
+    ArithmeticError
+    ArgumentError
+    BadFunctionError
+    BadStructError
+    RuntimeError
+    SystemLimitError
+    BadMapError
+    BadBooleanError
+    MatchError
+    CaseClauseError
+    WithClauseError
+    CondClauseError
+    TryClauseError
+    BadArityError
+    UndefinedFunctionError
+    FunctionClauseError
+    KeyError
+    ErlangError
+
+    Collectable
+    Collectable.List
+    Collectable.Map
+    Collectable.MapSet
 )
 
 pack_archive(exavmlib ${ELIXIR_MODULES})

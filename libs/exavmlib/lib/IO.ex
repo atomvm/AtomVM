@@ -2,6 +2,8 @@
 # This file is part of AtomVM.
 #
 # Copyright 2024 Davide Bettio <davide@uninstall.it>
+# Copyright 2012-2017 Elixir Contributors
+# https://github.com/elixir-lang/elixir/commits/v1.7.4/lib/elixir/lib/io.ex
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,6 +23,39 @@
 defmodule IO do
   # This avoids crashing the compiler at build time
   @compile {:autoload, false}
+
+  # Taken from Elixir io.ex
+  @doc """
+  Converts iodata (a list of integers representing bytes, lists
+  and binaries) into a binary.
+  The operation is Unicode unsafe.
+
+  Notice that this function treats lists of integers as raw bytes
+  and does not perform any kind of encoding conversion. If you want
+  to convert from a charlist to a string (UTF-8 encoded), please
+  use `chardata_to_string/1` instead.
+
+  If this function receives a binary, the same binary is returned.
+
+  Inlined by the compiler.
+
+  ## Examples
+
+      iex> bin1 = <<1, 2, 3>>
+      iex> bin2 = <<4, 5>>
+      iex> bin3 = <<6>>
+      iex> IO.iodata_to_binary([bin1, 1, [2, 3, bin2], 4 | bin3])
+      <<1, 2, 3, 1, 2, 3, 4, 5, 4, 6>>
+
+      iex> bin = <<1, 2, 3>>
+      iex> IO.iodata_to_binary(bin)
+      <<1, 2, 3>>
+
+  """
+  @spec iodata_to_binary(iodata) :: binary
+  def iodata_to_binary(item) do
+    :erlang.iolist_to_binary(item)
+  end
 
   def puts(string) do
     :io.put_chars([to_chardata(string), ?\n])

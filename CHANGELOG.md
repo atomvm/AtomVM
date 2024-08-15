@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `gpio:init/1` on esp32 to initialize pins for GPIO usage, which some pins
 require depending on default function and bootloader code
 - Implement missing opcode 161 (raw_raise), that looks more likely to be generated with Elixir code
+- Support for Elixir `Map.replace/3` and `Map.replace!/3`
+- Support for Elixir `Kernel.struct` and `Kernel.struct!`
+- Support for Elixir `IO.iodata_to_binary/1`
+- Support for Elixir exceptions: `Exception` module and the other error related modules such as
+`ArgumentError`, `UndefinedFunctionError`, etc...
+- Support for Elixir `Enumerable` and `Collectable` protocol
+- Support for Elixir `Enum` functions: `split_with`, `join`, `map_join`, `into`, `reverse`,
+`slice` and `to_list`
+- Support for Elixir `MapSet` module
+- Support for Elixir `Range` module
+- Support for Elixir `Kernel.min` and `Kernel.max`
 
 ## [0.6.3] - 20-07-2024
 
