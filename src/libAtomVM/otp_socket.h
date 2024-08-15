@@ -151,7 +151,6 @@ struct LWIPEvent
  * so platforms using a queue need a global variable.
  * If lwIP callbacks are not called from ISR, calling handler with the event is
  * sufficient.
- * @end
  */
 void otp_socket_lwip_enqueue(struct LWIPEvent *event);
 
