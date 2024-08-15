@@ -32,6 +32,7 @@ defmodule Tests do
     :ok = test_exception()
     :ok = test_chars_protocol()
     :ok = test_inspect()
+    :ok = test_gen_server()
     :ok = IO.puts("Finished Elixir tests")
   end
 
@@ -284,6 +285,147 @@ defmodule Tests do
     #   ~s[%#{__MODULE__}{field2: 42, field1: nil}],
     #   inspect(%__MODULE__{})
     # )
+
+    :ok
+  end
+
+  defmodule Stack do
+    use GenServer
+
+    def init(args) do
+      {:ok, args}
+    end
+
+    def handle_call(:pop, _from, [h | t]) do
+      {:reply, h, t}
+    end
+
+    def handle_call(:noreply, _from, h) do
+      {:noreply, h}
+    end
+
+    def handle_call(:stop_self, _from, state) do
+      # catch_exit(GenServer.stop(self()))
+      reason = "stop_self"
+      {:reply, reason, state}
+    end
+
+    def handle_cast({:push, element}, state) do
+      {:noreply, [element | state]}
+    end
+
+    def terminate(_reason, _state) do
+      # There is a race condition if the agent is
+      # restarted too fast and it is registered.
+      try do
+        self() |> Process.info(:registered_name) |> elem(1) |> Process.unregister()
+      rescue
+        _ -> :ok
+      end
+
+      :ok
+    end
+  end
+
+  defmodule CustomStack do
+    use GenServer, id: :id, restart: :temporary, shutdown: :infinity, start: {:foo, :bar, []}
+
+    def init(args) do
+      {:ok, args}
+    end
+  end
+
+  def test_gen_server do
+    # See Stack/CustomStack above
+    # Tests are from:
+    # https://github.com/elixir-lang/elixir/blob/v1.17/lib/elixir/test/elixir/gen_server_test.exs
+
+    # test "generates child_spec/1"
+    true =
+      Stack.child_spec([:hello]) == %{
+        id: Stack,
+        start: {Stack, :start_link, [[:hello]]}
+      }
+
+    true =
+      CustomStack.child_spec([:hello]) == %{
+        id: :id,
+        restart: :temporary,
+        shutdown: :infinity,
+        start: {:foo, :bar, []}
+      }
+
+    # test "start_link/3 with local"
+    {:ok, pid} = GenServer.start_link(Stack, [:hello], name: :stack)
+    true = GenServer.call(:stack, :pop) == :hello
+    :ok = GenServer.stop(pid)
+
+    # test "start_link/2, call/2 and cast/2"
+    {:ok, pid} = GenServer.start_link(Stack, [:hello])
+
+    {:links, links} = Process.info(self(), :links)
+    true = pid in links
+
+    true = GenServer.call(pid, :pop) == :hello
+    true = GenServer.cast(pid, {:push, :world}) == :ok
+    true = GenServer.call(pid, :pop) == :world
+    true = GenServer.stop(pid) == :ok
+
+    # true = GenServer.cast({:global, :foo}, {:push, :world}) == :ok
+    # true = GenServer.cast({:via, :foo, :bar}, {:push, :world}) == :ok
+    # true = GenServer.cast(:foo, {:push, :world}) == :ok
+
+    # test "nil name"
+    {:ok, pid} = GenServer.start_link(Stack, [:hello], name: nil)
+    # registered_name not supported: https://github.com/atomvm/AtomVM/issues/1286
+    # Process.info(pid, :registered_name) == {:registered_name, []}
+    true = GenServer.stop(pid) == :ok
+
+    # test "start/2"
+    {:ok, pid} = GenServer.start(Stack, [:hello])
+    {:links, links} = Process.info(self(), :links)
+    false = pid in links
+    GenServer.stop(pid)
+
+    # test "whereis/1"
+    name = :whereis_server
+
+    {:ok, pid} = GenServer.start_link(Stack, [], name: name)
+    true = GenServer.whereis(name) == pid
+    # true = GenServer.whereis({name, node()}) == pid
+    # true = GenServer.whereis({name, :another_node}) == {name, :another_node}
+    true = GenServer.whereis(pid) == pid
+    true = GenServer.whereis(:whereis_bad_server) == nil
+
+    # {:ok, pid} = GenServer.start_link(Stack, [], name: {:global, name})
+    # true = GenServer.whereis({:global, name}) == pid
+    # true = GenServer.whereis({:global, :whereis_bad_server}) == nil
+    # true = GenServer.whereis({:via, :global, name}) == pid
+    # true = GenServer.whereis({:via, :global, :whereis_bad_server}) == nil
+
+    # test "stop/3", %{test: name}
+    name = :test
+    {:ok, pid} = GenServer.start(Stack, [])
+    true = GenServer.stop(pid, :normal) == :ok
+
+    # stopped_pid = pid
+
+    # true =
+    #   catch_exit(GenServer.stop(stopped_pid)) ==
+    #     {:noproc, {GenServer, :stop, [stopped_pid, :normal, :infinity]}}
+
+    # true =
+    #   catch_exit(GenServer.stop(nil)) ==
+    #     {:noproc, {GenServer, :stop, [nil, :normal, :infinity]}}
+
+    # {:ok, pid} = GenServer.start(Stack, [])
+
+    # true =
+    #   GenServer.call(pid, :stop_self) ==
+    #     {:calling_self, {GenServer, :stop, [pid, :normal, :infinity]}}
+
+    {:ok, _} = GenServer.start(Stack, [], name: name)
+    true = GenServer.stop(name, :normal) == :ok
 
     :ok
   end
