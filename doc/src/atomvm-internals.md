@@ -277,6 +277,7 @@ When an element is inserted into the table or retrieved from the table (e.g., vi
 
 For more information about the `Heap` data structure, see the [Memory Management](memory-management.md) chapter of the AtomVM documentation.
 
+```{only} html
 The relationship between an `EtsTable` and `EtsHashTable` and its elements is illustrated in the following "class" diagram (some elements are removed for the sake of brevity):
 
     +--------------------+
@@ -312,9 +313,11 @@ The relationship between an `EtsTable` and `EtsHashTable` and its elements is il
                                                                                        +----------+          +----------+
                                                                                        | ...      |          | ...      |
                                                                                        +----------+          +----------+
+```
 
 The `Ets` structure contains a `SyncList` of `EtsTable` structures, protected from concurrent access via a read-write lock.  A single instance of an `Ets` structure is stored in the `GlobalContext` structure.
 
+```{only} html
     +---------------+
     | GlobalContext |
     +---------------+
@@ -327,8 +330,11 @@ The `Ets` structure contains a `SyncList` of `EtsTable` structures, protected fr
                                                   +----------+   |     +----------+
                                                   | next --------+     | next ------> ...
                                                   +----------+         +----------+
+```
 
-> Note.  A deficiency in this implementation is that lookup of an ETs table in this list is `O(<number of ETS tables>)`, whereas a "promise" of ETS is that insertion, lookup, and deletion of entries in at least the `set` table type is or should be constant (modulo poor hashing functions).  A future implementation of this data structure could use a map or table structure to make lookup of ETS tables more efficient (i.e., constant), but at the expense of i) increased memory consumption and heap fragmentation, and ii) code complexity.  Given the likely relative paucity of ETS tables instances likely to be instantiated by applications, we feel that using a list of ETS tables is an acceptable tradeoff for embedded systems deployments, but we are open to being wrong about our assumptions.
+```{note}
+A deficiency in this implementation is that lookup of an ETs table in this list is `O(<number of ETS tables>)`, whereas a "promise" of ETS is that insertion, lookup, and deletion of entries in at least the `set` table type is or should be constant (modulo poor hashing functions).  A future implementation of this data structure could use a map or table structure to make lookup of ETS tables more efficient (i.e., constant), but at the expense of i) increased memory consumption and heap fragmentation, and ii) code complexity.  Given the likely relative paucity of ETS tables instances likely to be instantiated by applications, we feel that using a list of ETS tables is an acceptable tradeoff for embedded systems deployments, but we are open to being wrong about our assumptions.
+```
 
 ### Ownership and Lookup
 
@@ -337,7 +343,7 @@ An ETS table is conceptually "owned" by the Erlang process that creates it (via 
 * The owning process has exclusive access for reading and writing entries in the table (unless the table is declared `public`, in which case other processes may change entries in the table, e.g., via `ets:insert/2` or `ets:delete/2`);
 * The lifecycle of the ETS table is associated with the lifecycle of the owning process, meaning that the ETS table is destroyed when the owning process terminates.  Note that any references to the ETS table are invalid once the table has been destroyed.
 
-> Note that AtomVM does not currently support transfer of ownership of an ETS table from one process to another.
+```{important} AtomVM does not currently support transfer of ownership of an ETS table from one process to another.```
 
 When a table is used in an `ets` operation (e.g., `ets:insert/2`, `ets:lookup/2`, `ets:delete/2`, etc), the `ets_tables` sync list is searched for the first entry in the table that matches the requested table id (as a name or reference).
 
