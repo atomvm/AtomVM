@@ -164,14 +164,26 @@ repo = Repo( search_parent_directories=True )
 tag_list = sorted(repo.tags, key=lambda t: t.commit.committed_datetime)
 latest_tag = tag_list[-1]
 versions = list()
+release_list = list()
 for tag in tag_list:
     versions.append(tag.name)
+    release_list.append(tag.name)
 
-versions.append('main')
+omit_branch_list = ('release-0.5')
+branch_list = sorted(repo.branches, key=lambda t: t.commit.committed_datetime)
+for branch in branch_list:
+    if branch.name not in omit_branch_list:
+        versions.append(branch.name)
+
 if ((repo.head.object.hexsha) == (latest_tag.commit.hexsha)):
     current_version = latest_tag.name
+    download_version = current_version
 else:
-    current_version = 'main'
+    download_version = '@DOC_TREE_VERSION@'
+    if ((download_version) == ('main')):
+        current_version = download_version + ' branch (unstable)'
+    else:
+        current_version = download_version + ' branch (unreleased)'
 
 print("Sphinx config found documentation candidates: %r." % (versions))
 print("Sphinx config current version: %r." % (current_version))
@@ -184,7 +196,13 @@ html_context['version'] = current_version
 # POPULATE LINKS TO OTHER VERSIONS
 html_context['versions'] = list()
 for version in versions:
-    html_context['versions'].append( (version, '/doc/' +version+ '/') )
+    if ((version) == ('main')):
+        html_context['versions'].append( (version + ' branch (unstable)', '/doc/' +version+ '/') )
+    else:
+        if (version not in release_list):
+            html_context['versions'].append( (version + ' branch (unreleased)', '/doc/' +version+ '/') )
+        else:
+            html_context['versions'].append( (version, '/doc/' +version+ '/') )
 
 html_sidebars = {
     '**': [
@@ -194,14 +212,14 @@ html_sidebars = {
 
 # POPULATE LINKS TO OTHER FORMATS/DOWNLOADS
 html_context['downloads'] = list()
-html_context['downloads'].append( ('pdf', '/doc/' +current_version+ '/pdf/' +project+ '-' +current_version+ '.pdf') )
-html_context['downloads'].append( ('epub', '/doc/' +current_version+ '/epub/' +project+ '-' +current_version+ '.epub') )
+html_context['downloads'].append( ('pdf', '/doc/' +download_version+ '/pdf/' +project+ '-' +download_version+ '.pdf') )
+html_context['downloads'].append( ('epub', '/doc/' +download_version+ '/epub/' +project+ '-' +download_version+ '.epub') )
 
 # -- Options for PDF output -------------------------------------------------
 
 rinoh_documents = [dict(
   doc=master_doc,
-  target=project+ '-' +current_version,
+  target=project+ '-' +download_version,
   logo='@CMAKE_CURRENT_SOURCE_DIR@/src/_static/AtomVM-logo.png',
   template='pdf_template.rtt'
 )]
@@ -212,4 +230,4 @@ today_fmt = "%B %d, %Y"
 
 epub_tocdepth = 3
 epub_show_urls = 'no'
-epub_basename = project+ '-' +current_version
+epub_basename = project+ '-' +download_version

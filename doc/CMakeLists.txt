@@ -46,11 +46,29 @@ add_custom_target(edown-escript
     COMMENT "Preparing edown escript" VERBATIM
 )
 
-# Get the version tree name, tag if this is a tagged commit, otherwise main.
-execute_process(COMMAND "bash" "-c" "tag=$(git for-each-ref --points-at=HEAD --format='%(refname:lstrip=2)' refs/tags); ( [ $tag ] && echo $tag ) || echo 'main'"
-                OUTPUT_VARIABLE
-                DOC_TREE_VERSION
-                OUTPUT_STRIP_TRAILING_WHITESPACE )
+# Get the version tree name, tag if this is a tagged commit, otherwise get the current branch name.
+if ($ENV{CI})
+    if (NOT (DEFINED ENV{GITHUB_BASE_REF}) AND ($ENV{GITHUB_REPOSITORY} STREQUAL "atomvm/AtomVM"))
+        set(DOC_TREE_VERSION $ENV{GITHUB_REF_NAME})
+        message("CI Publishing documentation for ${DOC_TREE_VERSION}")
+    elseif ($ENV{GITHUB_REPOSITORY} STREQUAL "atomvm/AtomVM")
+        set(DOC_TREE_VERSION $ENV{GITHUB_HEAD_REF})
+        message("CI Test building documentation for ${DOC_TREE_VERSION}")
+    else()
+        set(DOC_TREE_VERSION $ENV{GITHUB_REF_NAME})
+        message("CI Test building documentation for $ENV{GITHUB_REPOSITORY} on branch ${DOC_TREE_VERSION}")
+    endif (NOT (DEFINED ENV{GITHUB_BASE_REF}) AND ($ENV{GITHUB_REPOSITORY} STREQUAL "atomvm/AtomVM"))
+else()
+    execute_process(COMMAND "bash" "-c" "tag=$(git for-each-ref --points-at=HEAD --format='%(refname:lstrip=2)' refs/tags); ( [ $tag ] && echo $tag )|| git branch --show-current"
+                    OUTPUT_VARIABLE
+                    DOC_TREE_VERSION
+                    OUTPUT_STRIP_TRAILING_WHITESPACE )
+    message("Local documentation test build on ${DOC_TREE_VERSION}")
+endif($ENV{CI})
+
+
+## conf.py.in must be configured after DOC_TREE_VERSION is defined
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/conf.py.in ${CMAKE_CURRENT_BINARY_DIR}/conf.py @ONLY)
 
 ##
 ## Erlang API documentation
@@ -108,7 +126,6 @@ endif()
 find_package(Sphinx)
 if(SPHINX_FOUND)
     message("Sphinx found: ${SPHINX_BUILD_EXECUTABLE}")
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/conf.py.in ${CMAKE_CURRENT_BINARY_DIR}/conf.py @ONLY)
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY)
     file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/pdf_stylesheet.rts DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
     file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/pdf_template.rtt DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
