@@ -58,16 +58,8 @@ add_custom_target(edown-escript
 
 # Get the version tree name, tag if this is a tagged commit, otherwise get the current branch name.
 if ($ENV{CI})
-    if (NOT (DEFINED ENV{GITHUB_BASE_REF}) AND ($ENV{GITHUB_REPOSITORY} STREQUAL "atomvm/AtomVM"))
-        set(DOC_TREE_VERSION $ENV{GITHUB_REF_NAME})
-        message("CI Publishing documentation for ${DOC_TREE_VERSION}")
-    elseif ($ENV{GITHUB_REPOSITORY} STREQUAL "atomvm/AtomVM")
-        set(DOC_TREE_VERSION $ENV{GITHUB_HEAD_REF})
-        message("CI Test building documentation for ${DOC_TREE_VERSION}")
-    else()
-        set(DOC_TREE_VERSION $ENV{GITHUB_REF_NAME})
-        message("CI Test building documentation for $ENV{GITHUB_REPOSITORY} on branch ${DOC_TREE_VERSION}")
-    endif (NOT (DEFINED ENV{GITHUB_BASE_REF}) AND ($ENV{GITHUB_REPOSITORY} STREQUAL "atomvm/AtomVM"))
+    set(DOC_TREE_VERSION $ENV{AVM_DOCS_NAME})
+    message("CI building documentation for target branch ${DOC_TREE_VERSION}")
 else()
     execute_process(COMMAND "bash" "-c" "tag=$(git for-each-ref --points-at=HEAD --format='%(refname:lstrip=2)' refs/tags); ( [ $tag ] && echo $tag )|| git branch --show-current"
                     OUTPUT_VARIABLE
