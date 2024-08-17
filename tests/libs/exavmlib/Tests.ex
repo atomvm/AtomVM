@@ -19,6 +19,9 @@
 #
 
 defmodule Tests do
+
+  @compile {:no_warn_undefined, :undef}
+
   def start() do
     :ok = IO.puts("Running Elixir tests")
     :ok = test_enum()
