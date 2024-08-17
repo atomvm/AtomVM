@@ -32,7 +32,6 @@ file(COPY ${CMAKE_SOURCE_DIR}/LICENSES/Apache-2.0.txt DESTINATION ${CMAKE_CURREN
 file(COPY ${CMAKE_SOURCE_DIR}/SECURITY.md DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/src)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/release-notes.md.in ${CMAKE_CURRENT_BINARY_DIR}/src/release-notes.md @ONLY)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/edoc/edown_dep DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/edoc/)
-target_compile_definitions(libAtomVM PUBLIC AVM_TASK_DRIVER_ENABLED)
 
 # Configure libAtomVM restucturedtext skeleton.
 file(GLOB SOURCE_FILES LIST_DIRECTORIES false RELATIVE ${CMAKE_SOURCE_DIR}/src/libAtomVM/ ${CMAKE_SOURCE_DIR}/src/libAtomVM/*.c ${CMAKE_SOURCE_DIR}/src/libAtomVM/*.h)
