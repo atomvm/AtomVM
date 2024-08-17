@@ -30,8 +30,11 @@ do_catch() ->
         _X -> 1
     catch
         error:{badarith, new_reason}:ST ->
+            % TODO: verify if undefined is an acceptable value or an AtomVM only extension
+            % See also issue #1247
             case ST of
                 L when is_list(L) -> 0;
+                undefined -> 0;
                 _ -> 2
             end;
         _:_ ->
