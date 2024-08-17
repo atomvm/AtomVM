@@ -22,6 +22,7 @@ require depending on default function and bootloader code
 - Support for Elixir `MapSet` module
 - Support for Elixir `Range` module
 - Support for Elixir `Kernel.min` and `Kernel.max`
+- Support (as stub) for `erlang:error/3` (that is required from Elixir code)
 
 ## [0.6.3] - 20-07-2024
 

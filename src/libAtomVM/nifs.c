@@ -3250,6 +3250,8 @@ static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[])
     return TRUE_ATOM;
 }
 
+// TODO: WORKAROUND: this function also implements erlang:error/3, but it ignores Args and Options
+// since we don't have required machinery to make use of them
 static term nif_erlang_error(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
