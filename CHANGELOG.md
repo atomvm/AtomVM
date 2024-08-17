@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.6.4] - Unreleased
+## [0.6.4] - 2024-08-18
 
 ### Added
 
@@ -24,7 +24,7 @@ require depending on default function and bootloader code
 - Support for Elixir `Kernel.min` and `Kernel.max`
 - Support (as stub) for `erlang:error/3` (that is required from Elixir code)
 
-## [0.6.3] - 20-07-2024
+## [0.6.3] - 2024-07-20
 
 ### Added
 
