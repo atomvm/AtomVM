@@ -91,6 +91,14 @@ jobs:
           repository: ${{ vars.GITHUB_REPOSITORY }}
           fetch-depth: 0
 
+      - name: Track all branches
+        shell: bash
+        run: |
+          git config --global --add safe.directory /__w/AtomVM/AtomVM
+          for branch in `git branch -a | grep "remotes/origin" | grep -v HEAD | grep -v  "${{ github.ref_name }}"`; do
+            git branch --track ${branch#remotes/origin/} $branch
+          done
+
       - name: Build Site
         shell: bash
         run: |
