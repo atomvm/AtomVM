@@ -171,7 +171,7 @@ for tag in tag_list:
     versions.append(tag.name)
     release_list.append(tag.name)
 
-omit_branch_list = ('release-0.5')
+omit_branch_list = [ 'release-0.5' ]
 branch_list = sorted(repo.branches, key=lambda t: t.commit.committed_datetime)
 for branch in branch_list:
     if branch.name not in omit_branch_list:
