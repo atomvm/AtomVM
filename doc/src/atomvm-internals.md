@@ -124,9 +124,9 @@ This section is under construction
 ## Function Calls and Return Values
 
 ## Exception Handling
+-->
 
 ## The Scheduler
--->
 
 In SMP builds, AtomVM runs one scheduler thread per core.  Scheduler threads are actually started on demand.  The number of scheduler threads can be queried with [`erlang:system_info/1`](./apidocs/erlang/estdlib/erlang.md#system_info1) and be modified with [`erlang:system_flag/2`](./apidocs/erlang/estdlib/erlang.md#system_flag2).  All scheduler threads are considered equal and there is no notion of main thread except when shutting down (main thread is shut down last).
 
@@ -255,7 +255,9 @@ This list is populated at code load time.  When a line reference is encountered 
 
 The memory cost of this list is `num_line_refs * sizeof(struct LineRefOffset)`, for each loaded module, or 0, if there is no `Line` chunk in the associated BEAM file.
 
+<!-- TODO: this sub-section can be expanded at a later date.
 ### Raw Stacktraces
+-->
 
 TODO
 

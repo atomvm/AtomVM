@@ -50,6 +50,7 @@ erlang:delete_element/2, &delete_element_nif
 erlang:erase/1, &erase_nif
 erlang:error/1, &error_nif
 erlang:error/2, &error_nif
+erlang:error/3, &error_nif
 erlang:exit/1, &exit_nif
 erlang:exit/2, &exit_nif
 erlang:display/1, &display_nif

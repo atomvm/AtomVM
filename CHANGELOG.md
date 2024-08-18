@@ -10,14 +10,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a limited implementation of the OTP `ets` interface
 - Added `code:all_loaded/0` and `code:all_available/0`
 
-## [0.6.4] - Unreleased
+## [0.6.4] - 2024-08-18
 
 ### Added
 
 - Implement `gpio:init/1` on esp32 to initialize pins for GPIO usage, which some pins
 require depending on default function and bootloader code
+- Implement missing opcode 161 (raw_raise), that looks more likely to be generated with Elixir code
+- Support for Elixir `Map.replace/3` and `Map.replace!/3`
+- Support for Elixir `Kernel.struct` and `Kernel.struct!`
+- Support for Elixir `IO.iodata_to_binary/1`
+- Support for Elixir exceptions: `Exception` module and the other error related modules such as
+`ArgumentError`, `UndefinedFunctionError`, etc...
+- Support for Elixir `Enumerable` and `Collectable` protocol
+- Support for Elixir `Enum` functions: `split_with`, `join`, `map_join`, `into`, `reverse`,
+`slice` and `to_list`
+- Support for Elixir `MapSet` module
+- Support for Elixir `Range` module
+- Support for Elixir `Kernel.min` and `Kernel.max`
+- Support (as stub) for `erlang:error/3` (that is required from Elixir code)
 
-## [0.6.3] - 20-07-2024
+## [0.6.3] - 2024-07-20
 
 ### Added
 

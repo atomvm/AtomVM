@@ -35,9 +35,18 @@ file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/edoc/edown_dep DESTINATION ${CMAKE_CURRENT
 
 # Configure libAtomVM restucturedtext skeleton.
 file(GLOB SOURCE_FILES LIST_DIRECTORIES false RELATIVE ${CMAKE_SOURCE_DIR}/src/libAtomVM/ ${CMAKE_SOURCE_DIR}/src/libAtomVM/*.c ${CMAKE_SOURCE_DIR}/src/libAtomVM/*.h)
+set(OMIT_FILES
+    "defaultatoms.c"
+    "opcodesswitch.h"
+    "scheduler.c"
+    "tempstack.h"
+)
 foreach(SOURCE_FILE ${SOURCE_FILES})
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/apidocs/libatomvm/file.rst.in ${CMAKE_CURRENT_BINARY_DIR}/src/apidocs/libatomvm/src/${SOURCE_FILE}.rst @ONLY)
 endforeach(SOURCE_FILE)
+foreach(OMIT ${OMIT_FILES})
+    file(REMOVE ${CMAKE_CURRENT_BINARY_DIR}/src/apidocs/libatomvm/src/${OMIT}.rst)
+endforeach(OMIT)
 
 # Support for edoc -> markdown.
 add_custom_target(edown-escript
@@ -46,11 +55,21 @@ add_custom_target(edown-escript
     COMMENT "Preparing edown escript" VERBATIM
 )
 
-# Get the version tree name, tag if this is a tagged commit, otherwise main.
-execute_process(COMMAND "bash" "-c" "tag=$(git for-each-ref --points-at=HEAD --format='%(refname:lstrip=2)' refs/tags); ( [ $tag ] && echo $tag ) || echo 'main'"
-                OUTPUT_VARIABLE
-                DOC_TREE_VERSION
-                OUTPUT_STRIP_TRAILING_WHITESPACE )
+# Get the version tree name, tag if this is a tagged commit, otherwise get the current branch name.
+if ($ENV{CI})
+    set(DOC_TREE_VERSION $ENV{AVM_DOCS_NAME})
+    message("CI building documentation for target branch ${DOC_TREE_VERSION}")
+else()
+    execute_process(COMMAND "bash" "-c" "tag=$(git for-each-ref --points-at=HEAD --format='%(refname:lstrip=2)' refs/tags); ( [ $tag ] && echo $tag )|| git branch --show-current"
+                    OUTPUT_VARIABLE
+                    DOC_TREE_VERSION
+                    OUTPUT_STRIP_TRAILING_WHITESPACE )
+    message("Local documentation test build on ${DOC_TREE_VERSION}")
+endif($ENV{CI})
+
+
+## conf.py.in must be configured after DOC_TREE_VERSION is defined
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/conf.py.in ${CMAKE_CURRENT_BINARY_DIR}/conf.py @ONLY)
 
 ##
 ## Erlang API documentation
@@ -108,7 +127,6 @@ endif()
 find_package(Sphinx)
 if(SPHINX_FOUND)
     message("Sphinx found: ${SPHINX_BUILD_EXECUTABLE}")
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/conf.py.in ${CMAKE_CURRENT_BINARY_DIR}/conf.py @ONLY)
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY)
     file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/pdf_stylesheet.rts DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
     file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/pdf_template.rtt DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)

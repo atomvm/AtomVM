@@ -6102,6 +6102,26 @@ wait_timeout_trap_handler:
                 break;
             }
 
+            case OP_RAW_RAISE: {
+
+                TRACE("raw_raise/0\n");
+
+                #ifdef IMPL_EXECUTE_LOOP
+                    // This is an optimization from the compiler where we don't need to call
+                    // stacktrace_create_raw here because the stack trace has already been created
+                    // and set in x[2].
+                    term ex_class = x_regs[0];
+                    if (UNLIKELY(ex_class != ERROR_ATOM &&
+                                ex_class != LOWERCASE_EXIT_ATOM &&
+                                ex_class != THROW_ATOM)) {
+                        x_regs[0] = BADARG_ATOM;
+                    } else {
+                        goto handle_error;
+                    }
+                #endif
+                break;
+            }
+
             case OP_GET_HD: {
                 term src_value;
                 DECODE_COMPACT_TERM(src_value, pc)

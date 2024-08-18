@@ -149,10 +149,11 @@ enum ModuleLoadResult
 
 #ifdef ENABLE_ADVANCED_TRACE
 /**
- * @briefs Gets imported function module and name
+ * @brief Gets imported function module and name
  *
  * @details Gets imported function module and name given its import table index.
  * @param this_module the module on which the function will be searched.
+ * @param index the modules import table offset to begin searching.
  * @param module_atom module name atom string.
  * @param function_atom function name atom string.
  */
@@ -207,7 +208,7 @@ static inline size_t module_get_exported_functions_list_size(Module *this_module
 term module_get_exported_functions(Module *this_module, Heap *heap, GlobalContext *global);
 
 /***
- * @brief Destoys an existing Module
+ * @brief Destroys an existing Module
  *
  * @details Destroys a module and free Module resources.
  * @param module the module that will be freed.
