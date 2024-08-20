@@ -62,3 +62,20 @@ option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 
 add_subdirectory(tools)
+
+add_custom_command(
+    OUTPUT atomvm-${IDF_TARGET}.img
+    DEPENDS gen_project_binary bootloader
+    COMMENT "Assembling complete image"
+    COMMAND ${CMAKE_BINARY_DIR}/mkimage.sh
+    COMMAND echo && cmake -E cmake_echo_color --yellow "ATTENTION: Ignore the following output and use: \"./build/flashimage.sh\" to flash the complete AtomVM image, including libraries."
+    VERBATIM
+    USES_TERMINAL)
+
+if (EXISTS ${CMAKE_SOURCE_DIR}/../../../build/libs/esp32boot/esp32boot.avm)
+    add_custom_target(atomvm_image ALL DEPENDS atomvm-${IDF_TARGET}.img)
+endif()
+
+
+set_property(DIRECTORY "${BUILD_DIR}" APPEND PROPERTY
+     ADDITIONAL_CLEAN_FILES atomvm-${IDF_TARGET}.img)

@@ -64,6 +64,11 @@ See issue [#1193](https://github.com/atomvm/AtomVM/issues/1193).
 - Fix bug where failing guards would corrupt x0 and x1
 - Fix a memory leak when raising out of memory error while executing PUT_MAP_ASSOC instruction
 
+### Changed
+
+- ESP32 builds now assemble the complet image automatically if `esp32boot.avm` is found from a previous generic_unix build.
+- ESP32 cmake build options are now also exposed in `idf.py menuconfig`.
+
 ## [0.6.2] - 25-05-2024
 
 ### Added
