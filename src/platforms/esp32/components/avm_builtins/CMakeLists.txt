@@ -35,7 +35,8 @@ set(AVM_BUILTIN_COMPONENT_SRCS
 )
 
 if (IDF_VERSION_MAJOR GREATER_EQUAL 5)
-    set(ADDITIONAL_PRIV_REQUIRES "esp_hw_support" "efuse")
+    set(ADDITIONAL_PRIV_REQUIRES "esp_hw_support" "efuse" "esp_adc")
+    set(AVM_BUILTIN_COMPONENT_SRCS "adc_driver.c" ${AVM_BUILTIN_COMPONENT_SRCS})
 else()
     set(ADDITIONAL_PRIV_REQUIRES "")
 endif()
