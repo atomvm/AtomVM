@@ -25,6 +25,7 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 - Support for Elixir `List.Chars` protocol
 - Support for `gen_server:start_monitor/3,4`
 - Support for `code:ensure_loaded/1`
+- ESP32: add support for `esp_adc` ADC driver, with Erlang and Elixir examples
 
 ### Changed
 
