@@ -6,6 +6,12 @@
 
 # AtomVM Update Instructions
 
+## v0.6.4 -> v0.6.5
+
+- ESP32: partitioning schema for Elixir flavor is different, so app offset has been changed for
+Elixir images. Make sure to use `0x250000` as offset in your mix.exs or when performing manual
+flashing.
+
 ## v0.6.0-beta.1 -> v0.6.0-rc.0
 
 - Drivers that send messages from Esp32 callbacks should use new functions

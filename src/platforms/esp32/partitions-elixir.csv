@@ -1,0 +1,12 @@
+# Copyright 2018-2021 Davide Bettio <davide@uninstall.it>
+# Copyright 2018-2021 Fred Dushin <fred@dushin.net>
+#
+# SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+
+# Name,   Type, SubType, Offset,  Size, Flags
+# Note: if you change the phy_init or app partition offset, make sure to change the offset in Kconfig.projbuild
+nvs,      data, nvs,       0x9000,     0x6000,
+phy_init, data, phy,       0xf000,     0x1000,
+factory,  app,  factory,  0x10000,   0x1C0000,
+boot.avm,  data, phy,     0x1D0000,    0x80000,
+main.avm, data, phy,     0x250000,   0x100000

@@ -43,6 +43,7 @@ jobs:
         elixir_version: ["1.17"]
         compiler_pkgs: ["clang-10"]
         soc: ["esp32", "esp32c2", "esp32c3", "esp32s2", "esp32s3", "esp32c6", "esp32h2"]
+        flavor: ["", "-elixir"]
 
     env:
       CC: ${{ matrix.cc }}
@@ -117,27 +118,35 @@ jobs:
       run: |
         cp sdkconfig.release-defaults sdkconfig.defaults
 
-    - name: "Build ${{ matrix.soc }} with idf.py"
+    - name: "Build ${{ matrix.soc }}${{ matrix.flavor }} with idf.py"
       shell: bash
       working-directory: ./src/platforms/esp32/
       run: |
         rm -rf build
         . $IDF_PATH/export.sh
+        if [ ! -z "${{ matrix.flavor }}" ]
+        then
+          mv partitions${{ matrix.flavor }}.csv partitions.csv
+        fi
         idf.py set-target ${{ matrix.soc }}
         idf.py reconfigure
         idf.py build
 
-    - name: "Create a ${{ matrix.soc }} image"
+    - name: "Create a ${{ matrix.soc }}${{ matrix.flavor }} image"
       working-directory: ./src/platforms/esp32/build
       run: |
         ./mkimage.sh
+        if [ ! -z "${{ matrix.flavor }}" ]
+        then
+          mv atomvm-${{ matrix.soc }}.img atomvm-${{ matrix.soc }}${{ matrix.flavor }}.img
+        fi
         ls -l *.img
 
     - name: "Upload ${{ matrix.soc }} artifacts"
       uses: actions/upload-artifact@v4
       with:
-        name: atomvm-${{ matrix.soc }}-image
-        path: ./src/platforms/esp32/build/atomvm-${{ matrix.soc }}.img
+        name: atomvm-${{ matrix.soc }}${{ matrix.flavor }}-image
+        path: ./src/platforms/esp32/build/atomvm-${{ matrix.soc }}${{ matrix.flavor }}.img
         if-no-files-found: error
 
     - name: "Rename and write sha256sum"
@@ -145,8 +154,8 @@ jobs:
       shell: bash
       working-directory: src/platforms/esp32/build
       run: |
-        ATOMVM_IMG="AtomVM-${{ matrix.soc }}-${{ github.ref_name }}.img"
-        mv atomvm-${{ matrix.soc }}.img "${ATOMVM_IMG}"
+        ATOMVM_IMG="AtomVM-${{ matrix.soc }}${{ matrix.flavor }}-${{ github.ref_name }}.img"
+        mv atomvm-${{ matrix.soc }}${{ matrix.flavor }}.img "${ATOMVM_IMG}"
         sha256sum "${ATOMVM_IMG}" > "${ATOMVM_IMG}.sha256"
 
     - name: Release
@@ -156,5 +165,5 @@ jobs:
         draft: true
         fail_on_unmatched_files: true
         files: |
-          src/platforms/esp32/build/AtomVM-${{ matrix.soc }}-${{ github.ref_name }}.img
-          src/platforms/esp32/build/AtomVM-${{ matrix.soc }}-${{ github.ref_name }}.img.sha256
+          src/platforms/esp32/build/AtomVM-${{ matrix.soc }}${{ matrix.flavor }}-${{ github.ref_name }}.img
+          src/platforms/esp32/build/AtomVM-${{ matrix.soc }}${{ matrix.flavor }}-${{ github.ref_name }}.img.sha256

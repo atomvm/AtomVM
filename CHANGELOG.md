@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.5] - Unreleased
 
+### Added
+
+- ESP32: add a new Elixir release "flavor" with a bigger boot.avm partition that has room for
+Elixir standard library modules
+
 ## [0.6.4] - 2024-08-18
 
 ### Added
