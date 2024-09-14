@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ESP32: add a new Elixir release "flavor" with a bigger boot.avm partition that has room for
 Elixir standard library modules
+- ESP32: `--boot` option to mkimage.sh tool
 
 ### Changed
 

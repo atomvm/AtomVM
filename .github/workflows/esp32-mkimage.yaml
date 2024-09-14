@@ -135,9 +135,13 @@ jobs:
     - name: "Create a ${{ matrix.soc }}${{ matrix.flavor }} image"
       working-directory: ./src/platforms/esp32/build
       run: |
-        ./mkimage.sh
-        if [ ! -z "${{ matrix.flavor }}" ]
+        if [ -z "${{ matrix.flavor }}" ]
         then
+          ./mkimage.sh
+        else
+          FLAVOR_SUFFIX=$(echo "${{ matrix.flavor }}" | sed 's/-//g')
+          BOOT_FILE="build/libs/esp32boot/${FLAVOR_SUFFIX}_esp32boot.avm"
+          ./mkimage.sh --boot="$BOOT_FILE"
           mv atomvm-${{ matrix.soc }}.img atomvm-${{ matrix.soc }}${{ matrix.flavor }}.img
         fi
         ls -l *.img
