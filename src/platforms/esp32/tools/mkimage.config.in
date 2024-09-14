@@ -38,7 +38,7 @@
         #{
             name => "AtomVM Boot and Core BEAM Library",
             offset =>  "0x1D0000",
-            path => ["${BUILD_DIR}/../../../../build/libs/esp32boot/esp32boot.avm"]
+            path => ["$[BOOT_FILE]"]
         }
     ]
 }.
