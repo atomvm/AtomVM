@@ -94,7 +94,7 @@ static term nif_binary_part_3(Context *ctx, int argc, term argv[]);
 static term nif_binary_split_2(Context *ctx, int argc, term argv[]);
 static term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
-static term nif_erlang_atom_to_binary_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_atom_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_float_1(Context *ctx, int argc, term argv[]);
@@ -243,7 +243,7 @@ static const struct Nif make_ref_nif =
 static const struct Nif atom_to_binary_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_erlang_atom_to_binary_2
+    .nif_ptr = nif_erlang_atom_to_binary
 };
 
 static const struct Nif atom_to_list_nif =
@@ -2072,14 +2072,12 @@ term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
     return term_from_atom_index(global_atom_index);
 }
 
-static term nif_erlang_atom_to_binary_2(Context *ctx, int argc, term argv[])
+static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
-
     term atom_term = argv[0];
     VALIDATE_VALUE(atom_term, term_is_atom);
 
-    term encoding = argv[1];
+    term encoding = (argc == 1) ? UTF8_ATOM : argv[1];
 
     GlobalContext *glb = ctx->global;
 
