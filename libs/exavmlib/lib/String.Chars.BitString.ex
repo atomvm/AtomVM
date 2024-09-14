@@ -1,0 +1,35 @@
+#
+# This file is part of elixir-lang.
+#
+# Copyright 2013-2023 Elixir Contributors
+# https://github.com/elixir-lang/elixir/commits/v1.17.2/lib/elixir/lib/string/chars.ex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+import Kernel, except: [to_string: 1]
+
+defimpl String.Chars, for: BitString do
+  def to_string(term) when is_binary(term) do
+    term
+  end
+
+  def to_string(term) do
+    raise Protocol.UndefinedError,
+      protocol: @protocol,
+      value: term,
+      description: "cannot convert a bitstring to a string"
+  end
+end

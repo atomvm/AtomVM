@@ -19,13 +19,13 @@
 #
 
 defmodule Tests do
-
   @compile {:no_warn_undefined, :undef}
 
   def start() do
     :ok = IO.puts("Running Elixir tests")
     :ok = test_enum()
     :ok = test_exception()
+    :ok = test_chars_protocol()
     :ok = IO.puts("Finished Elixir tests")
   end
 
@@ -147,6 +147,17 @@ defmodule Tests do
 
     %MatchError{} = ex5
 
+    :ok
+  end
+
+  def test_chars_protocol() do
+    "" = String.Chars.to_string(nil)
+    "hello" = String.Chars.to_string(:hello)
+    "hellø" = String.Chars.to_string(:hellø)
+    "123" = String.Chars.to_string(123)
+    "1.0" = String.Chars.to_string(1.0)
+    "abc" = String.Chars.to_string(~c"abc")
+    "test" = String.Chars.to_string("test")
     :ok
   end
 

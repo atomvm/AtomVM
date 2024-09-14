@@ -74,6 +74,13 @@ set(ELIXIR_MODULES
     Collectable.List
     Collectable.Map
     Collectable.MapSet
+
+    String.Chars
+    String.Chars.Atom
+    String.Chars.BitString
+    String.Chars.Float
+    String.Chars.Integer
+    String.Chars.List
 )
 
 pack_archive(exavmlib ${ELIXIR_MODULES})
