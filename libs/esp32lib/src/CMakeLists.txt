@@ -1,7 +1,7 @@
 #
 # This file is part of AtomVM.
 #
-# Copyright 2018-2021 Fred Dushin <fred@dushin.net>
+# Copyright 2024 Davide Bettio <davide@uninstall.it>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,29 +18,12 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-project(eavmlib)
+project(esp32lib)
 
 include(BuildErlang)
 
 set(ERLANG_MODULES
-    ahttp_client
-    atomvm
-    avm_pubsub
-    console
     esp
-    gpio
-    i2c
-    http_server
-    json_encoder
-    ledc
-    logger_manager
-    network
-    network_fsm
-    port
-    spi
-    timer_manager
-    timestamp_util
-    uart
 )
 
-pack_archive(eavmlib ${ERLANG_MODULES})
+pack_archive(esp32lib ${ERLANG_MODULES})

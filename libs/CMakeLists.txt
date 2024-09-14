@@ -28,6 +28,11 @@ add_subdirectory(etest/src)
 add_subdirectory(esp32boot)
 add_subdirectory(esp32devmode/src)
 
+# platform libraries
+add_subdirectory(emscriptenlib/src)
+add_subdirectory(esp32lib/src)
+add_subdirectory(picolib/src)
+
 if (Elixir_FOUND)
     add_subdirectory(exavmlib/lib)
 else()
