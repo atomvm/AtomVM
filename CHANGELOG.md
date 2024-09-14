@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ESP32: add a new Elixir release "flavor" with a bigger boot.avm partition that has room for
 Elixir standard library modules
 
+### Changed
+
+- ESP32: Elixir library is not shipped anymore with `esp32boot.avm`. Use `elixir_esp32boot.avm`
+instead
+
+### Fixed
+
+- ESP32: content of `boot.avm` partition is not truncated anymore
+
 ## [0.6.4] - 2024-08-18
 
 ### Added
