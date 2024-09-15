@@ -15,7 +15,8 @@ Elixir standard library modules
 - Support for Elixir `String.Chars` protocol, now functions such as `Enum.join` are able to take
 also non string parameters (e.g. `Enum.join([1, 2], ",")`
 - Support for Elixir `Enum.at/3`
-- Add support to Elixir `Enumerable` protocol also for `Enum.all?`, `Enum.any?` and `Enum.filter`
+- Add support to Elixir `Enumerable` protocol also for `Enum.all?`, `Enum.any?`, `Enum.each` and
+`Enum.filter`
 
 ### Changed
 

@@ -42,6 +42,7 @@ defmodule Tests do
     true = Enum.all?([1, 2, 3], fn n -> n >= 0 end)
     true = Enum.any?([1, -2, 3], fn n -> n < 0 end)
     [2] = Enum.filter([1, 2, 3], fn n -> rem(n, 2) == 0 end)
+    :ok = Enum.each([1, 2, 3], fn n -> true = is_integer(n) end)
 
     # map
     2 = Enum.count(%{a: 1, b: 2})
@@ -65,6 +66,7 @@ defmodule Tests do
     true = Enum.all?(%{a: 1, b: 2}, fn {_k, v} -> v >= 0 end)
     true = Enum.any?(%{a: 1, b: -2}, fn {_k, v} -> v < 0 end)
     [b: 2] = Enum.filter(%{a: 1, b: 2, c: 3}, fn {_k, v} -> rem(v, 2) == 0 end)
+    :ok = Enum.each(%{a: 1, b: 2}, fn {_k, v} -> true = is_integer(v) end)
 
     # map set
     3 = Enum.count(MapSet.new([0, 1, 2]))
@@ -81,6 +83,7 @@ defmodule Tests do
     true = Enum.all?(MapSet.new([1, 2, 3]), fn n -> n >= 0 end)
     true = Enum.any?(MapSet.new([1, -2, 3]), fn n -> n < 0 end)
     [2] = Enum.filter(MapSet.new([1, 2, 3]), fn n -> rem(n, 2) == 0 end)
+    :ok = Enum.each(MapSet.new([1, 2, 3]), fn n -> true = is_integer(n) end)
 
     # range
     4 = Enum.count(1..4)
@@ -94,6 +97,7 @@ defmodule Tests do
     true = Enum.all?(0..10, fn n -> n >= 0 end)
     true = Enum.any?(-1..10, fn n -> n < 0 end)
     [0, 1, 2] = Enum.filter(-10..2, fn n -> n >= 0 end)
+    :ok = Enum.each(-5..5, fn n -> true = is_integer(n) end)
 
     # into
     %{a: 1, b: 2} = Enum.into([a: 1, b: 2], %{})

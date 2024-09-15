@@ -209,8 +209,31 @@ defmodule Enum do
     end
   end
 
+  @doc """
+  Invokes the given `fun` for each element in the `enumerable`.
+
+  Returns `:ok`.
+
+  ## Examples
+
+      Enum.each(["some", "example"], fn x -> IO.puts(x) end)
+      "some"
+      "example"
+      #=> :ok
+
+  """
+  @spec each(t, (element -> any)) :: :ok
   def each(enumerable, fun) when is_list(enumerable) do
     :lists.foreach(fun, enumerable)
+    :ok
+  end
+
+  def each(enumerable, fun) do
+    reduce(enumerable, nil, fn entry, _ ->
+      fun.(entry)
+      nil
+    end)
+
     :ok
   end
 
