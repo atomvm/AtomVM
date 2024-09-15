@@ -19,13 +19,13 @@
 #
 
 defmodule Tests do
-
   @compile {:no_warn_undefined, :undef}
 
   def start() do
     :ok = IO.puts("Running Elixir tests")
     :ok = test_enum()
     :ok = test_exception()
+    :ok = test_chars_protocol()
     :ok = IO.puts("Finished Elixir tests")
   end
 
@@ -37,6 +37,12 @@ defmodule Tests do
     [0, 2, 4] = Enum.map([0, 1, 2], fn x -> x * 2 end)
     6 = Enum.reduce([1, 2, 3], 0, fn x, acc -> acc + x end)
     [2, 3] = Enum.slice([1, 2, 3], 1, 2)
+    :test = Enum.at([0, 1, :test, 3], 2)
+    :atom = Enum.find([1, 2, :atom, 3, 4], -1, fn item -> not is_integer(item) end)
+    true = Enum.all?([1, 2, 3], fn n -> n >= 0 end)
+    true = Enum.any?([1, -2, 3], fn n -> n < 0 end)
+    [2] = Enum.filter([1, 2, 3], fn n -> rem(n, 2) == 0 end)
+    :ok = Enum.each([1, 2, 3], fn n -> true = is_integer(n) end)
 
     # map
     2 = Enum.count(%{a: 1, b: 2})
@@ -49,7 +55,18 @@ defmodule Tests do
     :a = kw2[:A]
     :b = kw2[:B]
     kw3 = Enum.slice(%{a: 1, b: 2}, 0, 1)
-    true = (length(kw3) == 1) and ((kw3[:a] == 1) or (kw3[:b] == 2))
+    true = length(kw3) == 1 and (kw3[:a] == 1 or kw3[:b] == 2)
+    at_0 = Enum.at(%{a: 1, b: 2}, 0)
+    at_1 = Enum.at(%{a: 1, b: 2}, 1)
+    true = at_0 == {:a, 1} or at_0 == {:b, 2}
+    true = at_1 == {:a, 1} or at_1 == {:b, 2}
+    true = at_0 != at_1
+    {:c, :atom} = Enum.find(%{a: 1, b: 2, c: :atom, d: 3}, fn {_k, v} -> not is_integer(v) end)
+    {:d, 3} = Enum.find(%{a: 1, b: 2, c: :atom, d: 3}, fn {k, _v} -> k == :d end)
+    true = Enum.all?(%{a: 1, b: 2}, fn {_k, v} -> v >= 0 end)
+    true = Enum.any?(%{a: 1, b: -2}, fn {_k, v} -> v < 0 end)
+    [b: 2] = Enum.filter(%{a: 1, b: 2, c: 3}, fn {_k, v} -> rem(v, 2) == 0 end)
+    :ok = Enum.each(%{a: 1, b: 2}, fn {_k, v} -> true = is_integer(v) end)
 
     # map set
     3 = Enum.count(MapSet.new([0, 1, 2]))
@@ -58,6 +75,15 @@ defmodule Tests do
     [0, 2, 4] = Enum.map(MapSet.new([0, 1, 2]), fn x -> x * 2 end)
     6 = Enum.reduce(MapSet.new([1, 2, 3]), 0, fn x, acc -> acc + x end)
     [] = Enum.slice(MapSet.new([1, 2]), 1, 0)
+    ms_at_0 = Enum.at(MapSet.new([1, 2]), 0)
+    ms_at_1 = Enum.at(MapSet.new([1, 2]), 1)
+    true = ms_at_0 == 1 or ms_at_0 == 2
+    true = ms_at_1 == 1 or ms_at_1 == 2
+    :atom = Enum.find(MapSet.new([1, 2, :atom, 3, 4]), fn item -> not is_integer(item) end)
+    true = Enum.all?(MapSet.new([1, 2, 3]), fn n -> n >= 0 end)
+    true = Enum.any?(MapSet.new([1, -2, 3]), fn n -> n < 0 end)
+    [2] = Enum.filter(MapSet.new([1, 2, 3]), fn n -> rem(n, 2) == 0 end)
+    :ok = Enum.each(MapSet.new([1, 2, 3]), fn n -> true = is_integer(n) end)
 
     # range
     4 = Enum.count(1..4)
@@ -66,6 +92,12 @@ defmodule Tests do
     [1, 2, 3, 4] = Enum.map(1..4, fn x -> x end)
     55 = Enum.reduce(1..10, 0, fn x, acc -> x + acc end)
     [6, 7, 8, 9, 10] = Enum.slice(1..10, 5, 100)
+    7 = Enum.at(1..10, 6)
+    8 = Enum.find(-10..10, fn item -> item >= 8 end)
+    true = Enum.all?(0..10, fn n -> n >= 0 end)
+    true = Enum.any?(-1..10, fn n -> n < 0 end)
+    [0, 1, 2] = Enum.filter(-10..2, fn n -> n >= 0 end)
+    :ok = Enum.each(-5..5, fn n -> true = is_integer(n) end)
 
     # into
     %{a: 1, b: 2} = Enum.into([a: 1, b: 2], %{})
@@ -75,6 +107,8 @@ defmodule Tests do
 
     # Enum.join
     "1, 2, 3" = Enum.join(["1", "2", "3"], ", ")
+    "1, 2, 3" = Enum.join([1, 2, 3], ", ")
+    "123" = Enum.join([1, 2, 3], "")
 
     # Enum.reverse
     [4, 3, 2] = Enum.reverse([2, 3, 4])
@@ -147,6 +181,17 @@ defmodule Tests do
 
     %MatchError{} = ex5
 
+    :ok
+  end
+
+  def test_chars_protocol() do
+    "" = String.Chars.to_string(nil)
+    "hello" = String.Chars.to_string(:hello)
+    "hellø" = String.Chars.to_string(:hellø)
+    "123" = String.Chars.to_string(123)
+    "1.0" = String.Chars.to_string(1.0)
+    "abc" = String.Chars.to_string(~c"abc")
+    "test" = String.Chars.to_string("test")
     :ok
   end
 

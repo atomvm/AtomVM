@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ESP32: add a new Elixir release "flavor" with a bigger boot.avm partition that has room for
 Elixir standard library modules
 - ESP32: `--boot` option to mkimage.sh tool
+- Add `erlang:atom_to_binary/1` that is equivalent to `erlang:atom_to_binary(Atom, utf8)`
+- Support for Elixir `String.Chars` protocol, now functions such as `Enum.join` are able to take
+also non string parameters (e.g. `Enum.join([1, 2], ",")`
+- Support for Elixir `Enum.at/3`
+- Add support to Elixir `Enumerable` protocol also for `Enum.all?`, `Enum.any?`, `Enum.each` and
+`Enum.filter`
 
 ### Changed
 

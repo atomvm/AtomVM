@@ -1,8 +1,8 @@
 #
 # This file is part of elixir-lang.
 #
-# Copyright 2012-2024 Elixir Contributors
-# https://github.com/elixir-lang/elixir/tree/v1.17.2/lib/elixir/lib/map_set.ex
+# Copyright 2013-2023 Elixir Contributors
+# https://github.com/elixir-lang/elixir/commits/v1.17.2/lib/elixir/lib/string/chars.ex
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,21 +19,17 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-defimpl Enumerable, for: MapSet do
-  def count(map_set) do
-    {:ok, MapSet.size(map_set)}
+import Kernel, except: [to_string: 1]
+
+defimpl String.Chars, for: BitString do
+  def to_string(term) when is_binary(term) do
+    term
   end
 
-  def member?(map_set, val) do
-    {:ok, MapSet.member?(map_set, val)}
-  end
-
-  def reduce(map_set, acc, fun) do
-    Enumerable.List.reduce(MapSet.to_list(map_set), acc, fun)
-  end
-
-  def slice(map_set) do
-    size = MapSet.size(map_set)
-    {:ok, size, &Enumerable.List.slice(MapSet.to_list(map_set), &1, &2, size)}
+  def to_string(term) do
+    raise Protocol.UndefinedError,
+      protocol: @protocol,
+      value: term,
+      description: "cannot convert a bitstring to a string"
   end
 end
