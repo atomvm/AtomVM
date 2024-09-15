@@ -55,12 +55,98 @@ defmodule Enum do
     Enumerable.reduce(enumerable, {:cont, acc}, fn x, acc -> {:cont, fun.(x, acc)} end) |> elem(1)
   end
 
+  @doc """
+  Returns `true` if `fun.(element)` is truthy for all elements in `enumerable`.
+
+  Iterates over the `enumerable` and invokes `fun` on each element. When an invocation
+  of `fun` returns a falsy value (`false` or `nil`) iteration stops immediately and
+  `false` is returned. In all other cases `true` is returned.
+
+  ## Examples
+
+      iex> Enum.all?([2, 4, 6], fn x -> rem(x, 2) == 0 end)
+      true
+
+      iex> Enum.all?([2, 3, 4], fn x -> rem(x, 2) == 0 end)
+      false
+
+      iex> Enum.all?([], fn x -> x > 0 end)
+      true
+
+  If no function is given, the truthiness of each element is checked during iteration.
+  When an element has a falsy value (`false` or `nil`) iteration stops immediately and
+  `false` is returned. In all other cases `true` is returned.
+
+      iex> Enum.all?([1, 2, 3])
+      true
+
+      iex> Enum.all?([1, nil, 3])
+      false
+
+      iex> Enum.all?([])
+      true
+
+  """
+  @spec all?(t, (element -> as_boolean(term))) :: boolean
+
+  def all?(enumerable, fun \\ fn x -> x end)
+
   def all?(enumerable, fun) when is_list(enumerable) do
     all_list(enumerable, fun)
   end
 
+  def all?(enumerable, fun) do
+    Enumerable.reduce(enumerable, {:cont, true}, fn entry, _ ->
+      if fun.(entry), do: {:cont, true}, else: {:halt, false}
+    end)
+    |> elem(1)
+  end
+
+  @doc """
+  Returns `true` if `fun.(element)` is truthy for at least one element in `enumerable`.
+
+  Iterates over the `enumerable` and invokes `fun` on each element. When an invocation
+  of `fun` returns a truthy value (neither `false` nor `nil`) iteration stops
+  immediately and `true` is returned. In all other cases `false` is returned.
+
+  ## Examples
+
+      iex> Enum.any?([2, 4, 6], fn x -> rem(x, 2) == 1 end)
+      false
+
+      iex> Enum.any?([2, 3, 4], fn x -> rem(x, 2) == 1 end)
+      true
+
+      iex> Enum.any?([], fn x -> x > 0 end)
+      false
+
+  If no function is given, the truthiness of each element is checked during iteration.
+  When an element has a truthy value (neither `false` nor `nil`) iteration stops
+  immediately and `true` is returned. In all other cases `false` is returned.
+
+      iex> Enum.any?([false, false, false])
+      false
+
+      iex> Enum.any?([false, true, false])
+      true
+
+      iex> Enum.any?([])
+      false
+
+  """
+  @spec any?(t, (element -> as_boolean(term))) :: boolean
+
+  def any?(enumerable, fun \\ fn x -> x end)
+
   def any?(enumerable, fun) when is_list(enumerable) do
     any_list(enumerable, fun)
+  end
+
+  def any?(enumerable, fun) do
+    Enumerable.reduce(enumerable, {:cont, false}, fn entry, _ ->
+      if fun.(entry), do: {:halt, true}, else: {:cont, false}
+    end)
+    |> elem(1)
   end
 
   @doc """
