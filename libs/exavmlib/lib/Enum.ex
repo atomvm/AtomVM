@@ -27,6 +27,8 @@ defmodule Enum do
   @type index :: integer
   @type element :: any
 
+  @type default :: any
+
   require Stream.Reducers, as: R
 
   defmacrop next(_, entry, acc) do
@@ -59,6 +61,38 @@ defmodule Enum do
 
   def any?(enumerable, fun) when is_list(enumerable) do
     any_list(enumerable, fun)
+  end
+
+  @doc """
+  Finds the element at the given `index` (zero-based).
+
+  Returns `default` if `index` is out of bounds.
+
+  A negative `index` can be passed, which means the `enumerable` is
+  enumerated once and the `index` is counted from the end (for example,
+  `-1` finds the last element).
+
+  ## Examples
+
+      iex> Enum.at([2, 4, 6], 0)
+      2
+
+      iex> Enum.at([2, 4, 6], 2)
+      6
+
+      iex> Enum.at([2, 4, 6], 4)
+      nil
+
+      iex> Enum.at([2, 4, 6], 4, :none)
+      :none
+
+  """
+  @spec at(t, index, default) :: element | default
+  def at(enumerable, index, default \\ nil) when is_integer(index) do
+    case slice_any(enumerable, index, 1) do
+      [value] -> value
+      [] -> default
+    end
   end
 
   @doc """

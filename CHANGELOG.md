@@ -13,6 +13,7 @@ Elixir standard library modules
 - ESP32: `--boot` option to mkimage.sh tool
 - Add `erlang:atom_to_binary/1` that is equivalent to `erlang:atom_to_binary(Atom, utf8)`
 - Support for Elixir `String.Chars` protocol
+- Support for Elixir `Enum.at/3`
 
 ### Changed
 
