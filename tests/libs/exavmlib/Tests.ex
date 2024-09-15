@@ -41,6 +41,7 @@ defmodule Tests do
     :atom = Enum.find([1, 2, :atom, 3, 4], -1, fn item -> not is_integer(item) end)
     true = Enum.all?([1, 2, 3], fn n -> n >= 0 end)
     true = Enum.any?([1, -2, 3], fn n -> n < 0 end)
+    [2] = Enum.filter([1, 2, 3], fn n -> rem(n, 2) == 0 end)
 
     # map
     2 = Enum.count(%{a: 1, b: 2})
@@ -63,6 +64,7 @@ defmodule Tests do
     {:d, 3} = Enum.find(%{a: 1, b: 2, c: :atom, d: 3}, fn {k, _v} -> k == :d end)
     true = Enum.all?(%{a: 1, b: 2}, fn {_k, v} -> v >= 0 end)
     true = Enum.any?(%{a: 1, b: -2}, fn {_k, v} -> v < 0 end)
+    [b: 2] = Enum.filter(%{a: 1, b: 2, c: 3}, fn {_k, v} -> rem(v, 2) == 0 end)
 
     # map set
     3 = Enum.count(MapSet.new([0, 1, 2]))
@@ -78,6 +80,7 @@ defmodule Tests do
     :atom = Enum.find(MapSet.new([1, 2, :atom, 3, 4]), fn item -> not is_integer(item) end)
     true = Enum.all?(MapSet.new([1, 2, 3]), fn n -> n >= 0 end)
     true = Enum.any?(MapSet.new([1, -2, 3]), fn n -> n < 0 end)
+    [2] = Enum.filter(MapSet.new([1, 2, 3]), fn n -> rem(n, 2) == 0 end)
 
     # range
     4 = Enum.count(1..4)
@@ -90,6 +93,7 @@ defmodule Tests do
     8 = Enum.find(-10..10, fn item -> item >= 8 end)
     true = Enum.all?(0..10, fn n -> n >= 0 end)
     true = Enum.any?(-1..10, fn n -> n < 0 end)
+    [0, 1, 2] = Enum.filter(-10..2, fn n -> n >= 0 end)
 
     # into
     %{a: 1, b: 2} = Enum.into([a: 1, b: 2], %{})

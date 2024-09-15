@@ -31,6 +31,10 @@ defmodule Enum do
 
   require Stream.Reducers, as: R
 
+  defmacrop skip(acc) do
+    acc
+  end
+
   defmacrop next(_, entry, acc) do
     quote(do: [unquote(entry) | unquote(acc)])
   end
@@ -210,8 +214,43 @@ defmodule Enum do
     :ok
   end
 
+  @doc """
+  Filters the `enumerable`, i.e. returns only those elements
+  for which `fun` returns a truthy value.
+
+  See also `reject/2` which discards all elements where the
+  function returns a truthy value.
+
+  ## Examples
+
+      iex> Enum.filter([1, 2, 3], fn x -> rem(x, 2) == 0 end)
+      [2]
+
+  Keep in mind that `filter` is not capable of filtering and
+  transforming an element at the same time. If you would like
+  to do so, consider using `flat_map/2`. For example, if you
+  want to convert all strings that represent an integer and
+  discard the invalid one in one pass:
+
+      strings = ["1234", "abc", "12ab"]
+
+      Enum.flat_map(strings, fn string ->
+        case Integer.parse(string) do
+          # transform to integer
+          {int, _rest} -> [int]
+          # skip the value
+          :error -> []
+        end
+      end)
+
+  """
+  @spec filter(t, (element -> as_boolean(term))) :: list
   def filter(enumerable, fun) when is_list(enumerable) do
     filter_list(enumerable, fun)
+  end
+
+  def filter(enumerable, fun) do
+    reduce(enumerable, [], R.filter(fun)) |> :lists.reverse()
   end
 
   @doc """
