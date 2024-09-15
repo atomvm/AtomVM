@@ -162,7 +162,13 @@ mkimage(RootDir, BuildDir, BootFile, OutputFile, Segments) ->
                             end
                     end,
                     SegmentPaths = [
-                        replace("BUILD_DIR", BuildDir, replace("BOOT_FILE", BootFile, replace("ROOT_DIR", RootDir, SegmentPath)))
+                        replace(
+                            "BUILD_DIR",
+                            BuildDir,
+                            replace(
+                                "BOOT_FILE", BootFile, replace("ROOT_DIR", RootDir, SegmentPath)
+                            )
+                        )
                      || SegmentPath <- maps:get(path, Segment)
                     ],
                     case try_read(SegmentPaths) of
