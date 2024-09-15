@@ -91,6 +91,8 @@ defmodule Tests do
 
     # Enum.join
     "1, 2, 3" = Enum.join(["1", "2", "3"], ", ")
+    "1, 2, 3" = Enum.join([1, 2, 3], ", ")
+    "123" = Enum.join([1, 2, 3], "")
 
     # Enum.reverse
     [4, 3, 2] = Enum.reverse([2, 3, 4])

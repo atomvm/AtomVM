@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Elixir standard library modules
 - ESP32: `--boot` option to mkimage.sh tool
 - Add `erlang:atom_to_binary/1` that is equivalent to `erlang:atom_to_binary(Atom, utf8)`
-- Support for Elixir `String.Chars` protocol
+- Support for Elixir `String.Chars` protocol, now functions such as `Enum.join` are able to take
+also non string parameters (e.g. `Enum.join([1, 2], ",")`
 - Support for Elixir `Enum.at/3`
 
 ### Changed

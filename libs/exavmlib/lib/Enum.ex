@@ -448,12 +448,12 @@ defmodule Enum do
   end
 
   @doc """
-  Joins the given enumerable into a binary using `joiner` as a
+  Joins the given `enumerable` into a binary using `joiner` as a
   separator.
 
   If `joiner` is not passed at all, it defaults to the empty binary.
 
-  All items in the enumerable must be convertible to a binary,
+  All elements in the `enumerable` must be convertible to a binary,
   otherwise an error is raised.
 
   ## Examples
@@ -467,6 +467,12 @@ defmodule Enum do
   """
   @spec join(t, String.t()) :: String.t()
   def join(enumerable, joiner \\ "")
+
+  def join(enumerable, "") do
+    enumerable
+    |> map(&entry_to_string(&1))
+    |> IO.iodata_to_binary()
+  end
 
   def join(enumerable, joiner) when is_binary(joiner) do
     reduced =
@@ -669,6 +675,7 @@ defmodule Enum do
   @compile {:inline, entry_to_string: 1, reduce: 3}
 
   defp entry_to_string(entry) when is_binary(entry), do: entry
+  defp entry_to_string(entry), do: String.Chars.to_string(entry)
 
   ## drop
 
