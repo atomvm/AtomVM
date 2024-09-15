@@ -38,6 +38,7 @@ defmodule Tests do
     6 = Enum.reduce([1, 2, 3], 0, fn x, acc -> acc + x end)
     [2, 3] = Enum.slice([1, 2, 3], 1, 2)
     :test = Enum.at([0, 1, :test, 3], 2)
+    :atom = Enum.find([1, 2, :atom, 3, 4], -1, fn item -> not is_integer(item) end)
 
     # map
     2 = Enum.count(%{a: 1, b: 2})
@@ -56,6 +57,8 @@ defmodule Tests do
     true = at_0 == {:a, 1} or at_0 == {:b, 2}
     true = at_1 == {:a, 1} or at_1 == {:b, 2}
     true = at_0 != at_1
+    {:c, :atom} = Enum.find(%{a: 1, b: 2, c: :atom, d: 3}, fn {_k, v} -> not is_integer(v) end)
+    {:d, 3} = Enum.find(%{a: 1, b: 2, c: :atom, d: 3}, fn {k, _v} -> k == :d end)
 
     # map set
     3 = Enum.count(MapSet.new([0, 1, 2]))
@@ -68,6 +71,7 @@ defmodule Tests do
     ms_at_1 = Enum.at(MapSet.new([1, 2]), 1)
     true = ms_at_0 == 1 or ms_at_0 == 2
     true = ms_at_1 == 1 or ms_at_1 == 2
+    :atom = Enum.find(MapSet.new([1, 2, :atom, 3, 4]), fn item -> not is_integer(item) end)
 
     # range
     4 = Enum.count(1..4)
@@ -77,6 +81,7 @@ defmodule Tests do
     55 = Enum.reduce(1..10, 0, fn x, acc -> x + acc end)
     [6, 7, 8, 9, 10] = Enum.slice(1..10, 5, 100)
     7 = Enum.at(1..10, 6)
+    8 = Enum.find(-10..10, fn item -> item >= 8 end)
 
     # into
     %{a: 1, b: 2} = Enum.into([a: 1, b: 2], %{})

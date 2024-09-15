@@ -128,8 +128,33 @@ defmodule Enum do
     filter_list(enumerable, fun)
   end
 
+  @doc """
+  Returns the first element for which `fun` returns a truthy value.
+  If no such element is found, returns `default`.
+
+  ## Examples
+
+      iex> Enum.find([2, 3, 4], fn x -> rem(x, 2) == 1 end)
+      3
+
+      iex> Enum.find([2, 4, 6], fn x -> rem(x, 2) == 1 end)
+      nil
+      iex> Enum.find([2, 4, 6], 0, fn x -> rem(x, 2) == 1 end)
+      0
+
+  """
+  @spec find(t, default, (element -> any)) :: element | default
+  def find(enumerable, default \\ nil, fun)
+
   def find(enumerable, default, fun) when is_list(enumerable) do
     find_list(enumerable, default, fun)
+  end
+
+  def find(enumerable, default, fun) do
+    Enumerable.reduce(enumerable, {:cont, default}, fn entry, default ->
+      if fun.(entry), do: {:halt, entry}, else: {:cont, default}
+    end)
+    |> elem(1)
   end
 
   def find_index(enumerable, fun) when is_list(enumerable) do
