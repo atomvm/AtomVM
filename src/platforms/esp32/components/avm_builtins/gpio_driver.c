@@ -422,10 +422,10 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
 
     struct GPIOData *gpio_data = ctx->platform_data;
 
-    term gpio_num_term = term_to_int32(term_get_tuple_element(cmd, 1));
+    term gpio_num_term = term_get_tuple_element(cmd, 1);
     gpio_num_t gpio_num;
     if (LIKELY(term_is_integer(gpio_num_term))) {
-        avm_int_t pin_int = term_to_int32(gpio_num_term);
+        int32_t pin_int = term_to_int32(gpio_num_term);
         if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
             return ERROR_ATOM;
         }
@@ -525,10 +525,10 @@ static term gpiodriver_remove_int(Context *ctx, term cmd)
 {
     struct GPIOData *gpio_data = ctx->platform_data;
 
-    term gpio_num_term = term_to_int32(term_get_tuple_element(cmd, 1));
+    term gpio_num_term = term_get_tuple_element(cmd, 1);
     gpio_num_t gpio_num;
     if (LIKELY(term_is_integer(gpio_num_term))) {
-        avm_int_t pin_int = term_to_int32(gpio_num_term);
+        int32_t pin_int = term_to_int32(gpio_num_term);
         if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
             return ERROR_ATOM;
         }
