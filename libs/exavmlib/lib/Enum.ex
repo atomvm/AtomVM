@@ -508,10 +508,6 @@ defmodule Enum do
     end
   end
 
-  def reject(enumerable, fun) when is_list(enumerable) do
-    reject_list(enumerable, fun)
-  end
-
   ## all?
 
   defp all_list([h | t], fun) do
@@ -741,6 +737,27 @@ defmodule Enum do
 
   defp reject_list([], _fun) do
     []
+  end
+
+  @doc """
+  Returns a list of elements in `enumerable` excluding those for which the function `fun` returns
+  a truthy value.
+
+  See also `filter/2`.
+
+  ## Examples
+
+      iex> Enum.reject([1, 2, 3], fn x -> rem(x, 2) == 0 end)
+      [1, 3]
+
+  """
+  @spec reject(t, (element -> as_boolean(term))) :: list
+  def reject(enumerable, fun) when is_list(enumerable) do
+    reject_list(enumerable, fun)
+  end
+
+  def reject(enumerable, fun) do
+    reduce(enumerable, [], R.reject(fun)) |> :lists.reverse()
   end
 
   @doc """
