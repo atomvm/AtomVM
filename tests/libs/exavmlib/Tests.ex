@@ -113,6 +113,9 @@ defmodule Tests do
     # Enum.reverse
     [4, 3, 2] = Enum.reverse([2, 3, 4])
 
+    # other enum functions
+    test_enum_chunk_while()
+
     undef =
       try do
         Enum.map({1, 2}, fn x -> x end)
@@ -130,6 +133,28 @@ defmodule Tests do
     end
 
     :ok
+  end
+
+  defp test_enum_chunk_while() do
+    initial_col = 4
+    lines_list = '-1234567890\nciao\n12345\nabcdefghijkl\n12'
+    columns = 5
+
+    chunk_fun = fn char, {count, rchars} ->
+      cond do
+        char == ?\n -> {:cont, Enum.reverse(rchars), {0, []}}
+        count == columns -> {:cont, Enum.reverse(rchars), {1, [char]}}
+        true -> {:cont, {count + 1, [char | rchars]}}
+      end
+    end
+
+    after_fun = fn
+      {_count, []} -> {:cont, [], []}
+      {_count, rchars} -> {:cont, Enum.reverse(rchars), []}
+    end
+
+    ['-', '12345', '67890', 'ciao', '12345', 'abcde', 'fghij', 'kl', '12'] =
+      Enum.chunk_while(lines_list, {initial_col, []}, chunk_fun, after_fun)
   end
 
   defp test_exception() do
