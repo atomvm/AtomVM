@@ -145,10 +145,17 @@ typedef dreg_t dreg_gc_safe_t;
                     dest_term = term_from_int(((first_byte & 0xE0) << 3) | *(decode_pc)++); \
                     break;                                                              \
                                                                                         \
-                default:                                                                \
-                    fprintf(stderr, "Operand not literal: %x, or unsupported encoding\n", (first_byte)); \
-                    AVM_ABORT();                                                        \
+                case 3: {                                                               \
+                    uint8_t sz = (first_byte >> 5) + 2;                                 \
+                    avm_int_t val = 0;                                                  \
+                    for (uint8_t vi = 0; vi < sz; vi++) {                               \
+                        val <<= 8;                                                      \
+                        val |= *(decode_pc)++;                                          \
+                    }                                                                   \
+                    dest_term = term_from_int(val);                                     \
                     break;                                                              \
+                }                                                                       \
+                default: UNREACHABLE(); /* help gcc 8.4 */                              \
             }                                                                           \
             break;                                                                      \
                                                                                         \
@@ -549,10 +556,17 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                     dest_term = term_from_int(((first_byte & 0xE0) << 3) | *(decode_pc)++);                             \
                     break;                                                                                              \
                                                                                                                         \
-                default:                                                                                                \
-                    fprintf(stderr, "Operand not a literal: %x, or unsupported encoding\n", (first_byte));              \
-                    AVM_ABORT();                                                                                        \
+                case 3: {                                                                                               \
+                    uint8_t sz = (first_byte >> 5) + 2;                                                                 \
+                    avm_int_t val = 0;                                                                                  \
+                    for (uint8_t vi = 0; vi < sz; vi++) {                                                               \
+                        val <<= 8;                                                                                      \
+                        val |= *(decode_pc)++;                                                                          \
+                    }                                                                                                   \
+                    dest_term = term_from_int(val);                                                                     \
                     break;                                                                                              \
+                }                                                                                                       \
+                default: UNREACHABLE(); /* help gcc 8.4 */                                                              \
             }                                                                                                           \
             break;                                                                                                      \
                                                                                                                         \
