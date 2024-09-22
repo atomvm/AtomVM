@@ -56,6 +56,19 @@ test() ->
     ok = test_foreach(),
     ok = test_map(),
     ok = test_merge(),
+    HasMergeWith =
+        case erlang:system_info(machine) of
+            "BEAM" ->
+                erlang:system_info(version) >= "12.3";
+            "ATOM" ->
+                true
+        end,
+    case HasMergeWith of
+        true ->
+            ok = test_merge_with();
+        false ->
+            ok
+    end,
     ok = test_remove(),
     ok = test_update(),
     ok.
@@ -282,6 +295,43 @@ test_merge() ->
     }),
     ok = check_bad_map(fun() -> maps:merge(maps:new(), id(not_a_map)) end),
     ok = check_bad_map(fun() -> maps:merge(id(not_a_map), maps:new()) end),
+    ok.
+
+test_merge_with() ->
+    ?ASSERT_EQUALS(maps:merge_with(fun(_K, V1, V2) -> V1 + V2 end, maps:new(), maps:new()), #{}),
+    ?ASSERT_EQUALS(
+        maps:merge_with(fun(_K, V1, V2) -> V1 + V2 end, #{a => 1, b => 2, c => 3}, maps:new()), #{
+            a => 1, b => 2, c => 3
+        }
+    ),
+    ?ASSERT_EQUALS(
+        maps:merge_with(fun(_K, V1, V2) -> V1 + V2 end, maps:new(), #{a => 1, b => 2, c => 3}), #{
+            a => 1, b => 2, c => 3
+        }
+    ),
+    ?ASSERT_EQUALS(
+        maps:merge_with(fun(_K, V1, V2) -> V1 + V2 end, #{a => 1, b => 2, d => 4}, #{
+            a => 1, b => 2, c => 3
+        }),
+        #{a => 2, b => 4, c => 3, d => 4}
+    ),
+    ?ASSERT_EQUALS(
+        maps:merge_with(fun(_K, V1, V2) -> {V1, V2} end, #{a => 1, b => 2, c => 3}, #{
+            b => z, d => 4
+        }),
+        #{
+            a => 1,
+            b => {2, z},
+            c => 3,
+            d => 4
+        }
+    ),
+    ok = check_bad_map(fun() ->
+        maps:merge_with(fun(_K, V1, V2) -> V1 + V2 end, maps:new(), id(not_a_map))
+    end),
+    ok = check_bad_map(fun() ->
+        maps:merge_with(fun(_K, V1, V2) -> V1 + V2 end, id(not_a_map), maps:new())
+    end),
     ok.
 
 test_remove() ->
