@@ -26,7 +26,9 @@
 
 start() ->
     Bin = ?EXPORT_TEST_MODULE_DATA,
+    {error, _} = code:ensure_loaded(export_test_module),
     {module, export_test_module} = code:load_binary(
         export_test_module, "export_test_module.beam", Bin
     ),
+    {module, export_test_module} = code:ensure_loaded(export_test_module),
     export_test_module:exported_func(4).

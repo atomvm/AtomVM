@@ -172,6 +172,7 @@ static term nif_base64_encode_to_string(Context *ctx, int argc, term argv[]);
 static term nif_base64_decode_to_string(Context *ctx, int argc, term argv[]);
 static term nif_code_load_abs(Context *ctx, int argc, term argv[]);
 static term nif_code_load_binary(Context *ctx, int argc, term argv[]);
+static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[]);
 static term nif_lists_reverse(Context *ctx, int argc, term argv[]);
 static term nif_maps_from_keys(Context *ctx, int argc, term argv[]);
 static term nif_maps_next(Context *ctx, int argc, term argv[]);
@@ -701,6 +702,11 @@ static const struct Nif code_load_binary_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_load_binary
+};
+static const struct Nif code_ensure_loaded_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_ensure_loaded
 };
 static const struct Nif lists_reverse_nif =
 {
@@ -4347,6 +4353,37 @@ static term nif_code_load_binary(Context *ctx, int argc, term argv[])
     term result = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(result, 0, MODULE_ATOM);
     term_put_tuple_element(result, 1, module_name);
+
+    return result;
+}
+
+static const char *const embedded_atom = "\x8" "embedded";
+
+static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term module_atom = argv[0];
+    if (UNLIKELY(!term_is_atom(module_atom))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    AtomString module_string = globalcontext_atomstring_from_term(ctx->global, module_atom);
+    Module *found_module = globalcontext_get_module(ctx->global, module_string);
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result = term_alloc_tuple(2, &ctx->heap);
+
+    if (UNLIKELY(!found_module)) {
+        term_put_tuple_element(result, 0, ERROR_ATOM);
+        term_put_tuple_element(result, 1, globalcontext_make_atom(ctx->global, embedded_atom));
+    } else {
+        term_put_tuple_element(result, 0, MODULE_ATOM);
+        term_put_tuple_element(result, 1, module_atom);
+    }
 
     return result;
 }

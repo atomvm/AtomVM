@@ -24,6 +24,7 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 - Add support for `handle_continue` callback in `gen_server`
 - Support for Elixir `List.Chars` protocol
 - Support for `gen_server:start_monitor/3,4`
+- Support for `code:ensure_loaded/1`
 
 ### Changed
 
