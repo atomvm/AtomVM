@@ -5363,7 +5363,9 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_bitstr/2, label=%i, arg1=%lx\n", label, arg1);
 
-                    pc = mod->labels[label];
+                    if (!term_is_binary(arg1)) {
+                        pc = mod->labels[label];
+                    }
                 #endif
 
                 #ifdef IMPL_CODE_LOADER

@@ -143,6 +143,7 @@ compile_erlang(test_list_to_integer)
 compile_erlang(test_abs)
 compile_erlang(test_is_process_alive)
 compile_erlang(test_is_not_type)
+compile_erlang(test_is_bitstring_is_binary)
 compile_erlang(test_badarith)
 compile_erlang(test_badarith2)
 compile_erlang(test_badarith3)
@@ -607,6 +608,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_abs.beam
     test_is_process_alive.beam
     test_is_not_type.beam
+    test_is_bitstring_is_binary.beam
     test_badarith.beam
     test_badarith2.beam
     test_badarith3.beam
