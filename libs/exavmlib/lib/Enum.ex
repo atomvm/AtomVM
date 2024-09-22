@@ -398,12 +398,65 @@ defmodule Enum do
     |> elem(1)
   end
 
+  @doc """
+  Similar to `find/3`, but returns the index (zero-based)
+  of the element instead of the element itself.
+
+  ## Examples
+
+      iex> Enum.find_index([2, 4, 6], fn x -> rem(x, 2) == 1 end)
+      nil
+
+      iex> Enum.find_index([2, 3, 4], fn x -> rem(x, 2) == 1 end)
+      1
+
+  """
+  @spec find_index(t, (element -> any)) :: non_neg_integer | nil
   def find_index(enumerable, fun) when is_list(enumerable) do
     find_index_list(enumerable, 0, fun)
   end
 
+  def find_index(enumerable, fun) do
+    result =
+      Enumerable.reduce(enumerable, {:cont, {:not_found, 0}}, fn entry, {_, index} ->
+        if fun.(entry), do: {:halt, {:found, index}}, else: {:cont, {:not_found, index + 1}}
+      end)
+
+    case elem(result, 1) do
+      {:found, index} -> index
+      {:not_found, _} -> nil
+    end
+  end
+
+  @doc """
+  Similar to `find/3`, but returns the value of the function
+  invocation instead of the element itself.
+
+  ## Examples
+
+      iex> Enum.find_value([2, 4, 6], fn x -> rem(x, 2) == 1 end)
+      nil
+
+      iex> Enum.find_value([2, 3, 4], fn x -> rem(x, 2) == 1 end)
+      true
+
+      iex> Enum.find_value([1, 2, 3], "no bools!", &is_boolean/1)
+      "no bools!"
+
+  """
+  @spec find_value(t, any, (element -> any)) :: any | nil
+  def find_value(enumerable, default \\ nil, fun)
+
   def find_value(enumerable, default, fun) when is_list(enumerable) do
     find_value_list(enumerable, default, fun)
+  end
+
+  def find_value(enumerable, default, fun) do
+    Enumerable.reduce(enumerable, {:cont, default}, fn entry, default ->
+      fun_entry = fun.(entry)
+      if fun_entry, do: {:halt, fun_entry}, else: {:cont, default}
+    end)
+    |> elem(1)
   end
 
   @doc """

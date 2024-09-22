@@ -23,6 +23,7 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 
 - ESP32: Elixir library is not shipped anymore with `esp32boot.avm`. Use `elixir_esp32boot.avm`
 instead
+- `Enum.find_index` and `Enum.find_value` support Enumerable and not just lists
 
 ### Fixed
 
