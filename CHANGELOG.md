@@ -22,6 +22,7 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 - Support for `lists:last/1` and `lists:mapfoldl/3`
 - Add support to Elixir for `Process.send/2` `Process.send_after/3/4` and `Process.cancel_timer/1`
 - Add support for `handle_continue` callback in `gen_server`
+- Support for Elixir `List.Chars` protocol
 
 ### Changed
 
