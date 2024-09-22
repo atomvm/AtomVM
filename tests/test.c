@@ -166,6 +166,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_abs, 5),
     TEST_CASE_EXPECTED(test_is_process_alive, 121),
     TEST_CASE_EXPECTED(test_is_not_type, 255),
+    TEST_CASE(test_is_bitstring_is_binary),
     TEST_CASE_EXPECTED(test_badarith, -87381),
     TEST_CASE_EXPECTED(test_badarith2, -87381),
     TEST_CASE_EXPECTED(test_badarith3, -1365),
