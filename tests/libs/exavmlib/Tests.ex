@@ -109,6 +109,11 @@ defmodule Tests do
     expected_mapset = MapSet.new([1, 2, 3])
     ^expected_mapset = Enum.into([1, 2, 3], MapSet.new())
 
+    # Enum.flat_map
+    [:a, :a, :b, :b, :c, :c] = Enum.flat_map([:a, :b, :c], fn x -> [x, x] end)
+    [1, 2, 3, 4, 5, 6] = Enum.flat_map([{1, 3}, {4, 6}], fn {x, y} -> x..y end)
+    [[:a], [:b], [:c]] = Enum.flat_map([:a, :b, :c], fn x -> [[x]] end)
+
     # Enum.join
     "1, 2, 3" = Enum.join(["1", "2", "3"], ", ")
     "1, 2, 3" = Enum.join([1, 2, 3], ", ")

@@ -407,6 +407,40 @@ defmodule Enum do
   end
 
   @doc """
+  Maps the given `fun` over `enumerable` and flattens the result.
+
+  This function returns a new enumerable built by appending the result of invoking `fun`
+  on each element of `enumerable` together; conceptually, this is similar to a
+  combination of `map/2` and `concat/1`.
+
+  ## Examples
+
+      iex> Enum.flat_map([:a, :b, :c], fn x -> [x, x] end)
+      [:a, :a, :b, :b, :c, :c]
+
+      iex> Enum.flat_map([{1, 3}, {4, 6}], fn {x, y} -> x..y end)
+      [1, 2, 3, 4, 5, 6]
+
+      iex> Enum.flat_map([:a, :b, :c], fn x -> [[x]] end)
+      [[:a], [:b], [:c]]
+
+  """
+  @spec flat_map(t, (element -> t)) :: list
+  def flat_map(enumerable, fun) when is_list(enumerable) do
+    flat_map_list(enumerable, fun)
+  end
+
+  def flat_map(enumerable, fun) do
+    reduce(enumerable, [], fn entry, acc ->
+      case fun.(entry) do
+        list when is_list(list) -> :lists.reverse(list, acc)
+        other -> reduce(other, acc, &[&1 | &2])
+      end
+    end)
+    |> :lists.reverse()
+  end
+
+  @doc """
   Returns a list where each element is the result of invoking
   `fun` on each corresponding element of `enumerable`.
 
@@ -586,6 +620,19 @@ defmodule Enum do
 
   defp find_value_list([], default, _) do
     default
+  end
+
+  ## flat_map
+
+  defp flat_map_list([head | tail], fun) do
+    case fun.(head) do
+      list when is_list(list) -> list ++ flat_map_list(tail, fun)
+      other -> to_list(other) ++ flat_map_list(tail, fun)
+    end
+  end
+
+  defp flat_map_list([], _fun) do
+    []
   end
 
   @doc """
