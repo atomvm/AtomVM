@@ -4616,7 +4616,7 @@ static term nif_unicode_characters_to_binary(Context *ctx, int argc, term argv[]
     if (UNLIKELY(conv_result == UnicodeBadArg)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-    size_t needed_terms = term_binary_data_size_in_terms(len);
+    size_t needed_terms = term_binary_heap_size(len);
     if (UNLIKELY(conv_result == UnicodeError || conv_result == UnicodeIncompleteTransform)) {
         needed_terms += TUPLE_SIZE(3) + rest_size;
     }
