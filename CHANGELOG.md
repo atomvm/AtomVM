@@ -28,6 +28,7 @@ instead
 
 - ESP32: content of `boot.avm` partition is not truncated anymore
 - ESP32: Fixed gpio:set_int` to accept any pin, not only pin 2
+- Fix memory corruption in `unicode:characters_to_binary`
 
 ## [0.6.4] - 2024-08-18
 
