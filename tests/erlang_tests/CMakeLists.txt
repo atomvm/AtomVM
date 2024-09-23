@@ -321,6 +321,7 @@ compile_erlang(minuspow63plusoneabs)
 compile_erlang(minuspow63plustwoabs)
 compile_erlang(literal_test0)
 compile_erlang(literal_test1)
+compile_erlang(literal_test2)
 
 compile_erlang(test_list_eq)
 compile_erlang(test_tuple_eq)
@@ -788,6 +789,7 @@ add_custom_target(erlang_test_modules DEPENDS
 
     literal_test0.beam
     literal_test1.beam
+    literal_test2.beam
 
     test_list_eq.beam
     test_tuple_eq.beam
