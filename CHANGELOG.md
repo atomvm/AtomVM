@@ -38,6 +38,7 @@ instead
 - Fix memory corruption in `unicode:characters_to_binary`
 - Fix handling of large literal indexes
 - `unicode:characters_to_list`: fixed bogus out_of_memory error on some platforms such as ESP32
+- Fix crash in Elixir library when doing `inspect(:atom)`
 
 ## [0.6.4] - 2024-08-18
 

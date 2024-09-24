@@ -42,7 +42,7 @@ defmodule Kernel do
   def inspect(term, opts \\ []) when is_list(opts) do
     case term do
       t when is_atom(t) ->
-        [?:, atom_to_string(t)]
+        atom_to_string(t, ":")
 
       t when is_integer(t) ->
         :erlang.integer_to_binary(t)
@@ -118,10 +118,26 @@ defmodule Kernel do
     )
   end
 
-  defp atom_to_string(atom) do
-    # TODO: use unicode rather than plain latin1
-    # handle spaces and special characters
-    :erlang.atom_to_binary(atom, :latin1)
+  defp atom_to_string(atom, prefix \\ "") do
+    case atom do
+      true ->
+        "true"
+
+      false ->
+        "false"
+
+      nil ->
+        "nil"
+
+      any_atom ->
+        case :erlang.atom_to_binary(any_atom) do
+          <<"Elixir.", displayable::binary>> ->
+            displayable
+
+          other ->
+            <<prefix::binary, other::binary>>
+        end
+    end
   end
 
   @doc """

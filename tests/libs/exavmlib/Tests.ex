@@ -26,6 +26,7 @@ defmodule Tests do
     :ok = test_enum()
     :ok = test_exception()
     :ok = test_chars_protocol()
+    :ok = test_inspect()
     :ok = IO.puts("Finished Elixir tests")
   end
 
@@ -231,6 +232,18 @@ defmodule Tests do
     "1.0" = String.Chars.to_string(1.0)
     "abc" = String.Chars.to_string(~c"abc")
     "test" = String.Chars.to_string("test")
+    :ok
+  end
+
+  def test_inspect() do
+    "true" = inspect(true)
+    "false" = inspect(false)
+    "nil" = inspect(nil)
+
+    ":test" = inspect(:test)
+    ":アトム" = inspect(:アトム)
+    "Test" = inspect(Test)
+
     :ok
   end
 
