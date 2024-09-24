@@ -4552,7 +4552,10 @@ static term nif_unicode_characters_to_list(Context *ctx, int argc, term argv[])
     }
     size_t len = size / sizeof(uint32_t);
     uint32_t *chars = malloc(size);
-    if (IS_NULL_PTR(chars)) {
+    // fun fact: malloc(size) when size is 0, on some platforms may return NULL, causing a failure here
+    // so in order to avoid out_of_memory (while having plenty of memory) let's treat size==0 as a
+    // special case
+    if (UNLIKELY((chars == NULL) && (size != 0))) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     size_t needed_terms = CONS_SIZE * len;

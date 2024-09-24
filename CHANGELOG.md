@@ -30,6 +30,7 @@ instead
 - ESP32: `Fixed gpio:set_int` to accept any pin, not only pin 2
 - Fix memory corruption in `unicode:characters_to_binary`
 - Fix handling of large literal indexes
+- `unicode:characters_to_list`: fixed bogus out_of_memory error on some platforms such as ESP32
 
 ## [0.6.4] - 2024-08-18
 

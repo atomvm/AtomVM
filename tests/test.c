@@ -75,6 +75,34 @@ struct Test
 #define SKIP_STACKTRACES false
 #endif
 
+// Enabling this will override malloc and calloc weak symbols,
+// so we can force an alternative version of malloc that returns
+// NULL when size is 0.
+// This is useful to find debugging or finding some kind of issues.
+#ifdef FORCE_MALLOC_ZERO_RETURNS_NULL
+void *malloc(size_t size)
+{
+    if (size == 0) {
+        return NULL;
+    } else {
+        void *memptr = NULL;
+        if (posix_memalign(&memptr, sizeof(void *), size) != 0) {
+            return NULL;
+        }
+        return memptr;
+    }
+}
+
+void *calloc(size_t nmemb, size_t size)
+{
+    void *ptr = malloc(nmemb * size);
+    if (ptr != NULL) {
+        memset(ptr, 0, nmemb * size);
+    }
+    return ptr;
+}
+#endif
+
 struct Test tests[] = {
     TEST_CASE_EXPECTED(add, 17),
     TEST_CASE_EXPECTED(fact, 120),
