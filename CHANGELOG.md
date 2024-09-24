@@ -20,6 +20,7 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 `Enum.filter`, `Enum.flat_map`, `Enum.reject`, `Enum.chunk_by` and `Enum.chunk_while`
 - Support for `maps:merge_with/3`
 - Support for `lists:last/1` and `lists:mapfoldl/3`
+- Add support to Elixir for `Process.send/2` `Process.send_after/3/4` and `Process.cancel_timer/1`
 
 ### Changed
 
