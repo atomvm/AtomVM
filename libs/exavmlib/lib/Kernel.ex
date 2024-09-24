@@ -48,8 +48,13 @@ defmodule Kernel do
         :erlang.integer_to_binary(t)
 
       t when is_list(t) ->
-        # TODO: escape unprintable lists
-        :erlang.list_to_binary(t)
+        if is_printable_list(t) do
+          str = :erlang.list_to_binary(t)
+          <<?'::utf8, str::binary, ?'::utf8>>
+        else
+          [?[ | t |> inspect_join(?])]
+          |> :erlang.list_to_binary()
+        end
 
       t when is_pid(t) ->
         :erlang.pid_to_list(t)
@@ -64,15 +69,19 @@ defmodule Kernel do
         |> :erlang.list_to_binary()
 
       t when is_binary(t) ->
-        # TODO: escape unprintable binaries
-        t
+        if is_printable_binary(t) do
+          <<?"::utf8, t::binary, ?"::utf8>>
+        else
+          ["<<" | t |> :erlang.binary_to_list() |> inspect_join(">>")]
+          |> :erlang.list_to_binary()
+        end
 
       t when is_reference(t) ->
         :erlang.ref_to_list(t)
         |> :erlang.list_to_binary()
 
       t when is_float(t) ->
-        :erlang.float_to_binary(t)
+        :erlang.float_to_binary(term, [{:decimals, 17}, :compact])
 
       t when is_map(t) ->
         [?%, ?{ | t |> inspect_kv() |> join(?})]
@@ -86,6 +95,10 @@ defmodule Kernel do
 
   defp inspect_join([e], last) do
     [inspect(e), last]
+  end
+
+  defp inspect_join([h | e], last) when not is_list(e) do
+    [inspect(h), " | ", inspect(e), last]
   end
 
   defp inspect_join([h | t], last) do
@@ -139,6 +152,34 @@ defmodule Kernel do
         end
     end
   end
+
+  defp is_printable_list([]), do: false
+
+  defp is_printable_list([char]) do
+    is_printable_ascii(char)
+  end
+
+  defp is_printable_list([char | t]) do
+    if is_printable_ascii(char) do
+      is_printable_list(t)
+    else
+      false
+    end
+  end
+
+  defp is_printable_list(_any), do: false
+
+  defp is_printable_ascii(char) do
+    is_integer(char) and char >= 32 and char < 127 and char != ?'
+  end
+
+  defp is_printable_binary(<<>>), do: true
+
+  defp is_printable_binary(<<char::utf8, rest::binary>>) when char >= 32 do
+    is_printable_binary(rest)
+  end
+
+  defp is_printable_binary(_any), do: false
 
   @doc """
   Returns the biggest of the two given terms according to
