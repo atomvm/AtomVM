@@ -68,29 +68,36 @@
 
 -type init_result(StateType) ::
     {ok, State :: StateType}
-    | {ok, State :: StateType, timeout()}
+    | {ok, State :: StateType, timeout() | {continue, term()}}
     | {stop, Reason :: any()}.
+
+-type handle_continue_result(StateType) ::
+    {noreply, NewState :: StateType}
+    | {noreply, NewState :: StateType, timeout() | {continue, term()}}
+    | {stop, Reason :: term(), NewState :: StateType}.
 
 -type handle_call_result(StateType) ::
     {reply, Reply :: any(), NewState :: StateType}
-    | {reply, Reply :: any(), NewState :: StateType, timeout()}
+    | {reply, Reply :: any(), NewState :: StateType, timeout() | {continue, term()}}
     | {noreply, NewState :: StateType}
-    | {noreply, NewState :: StateType, timeout()}
+    | {noreply, NewState :: StateType, timeout() | {continue, term()}}
     | {stop, Reason :: any(), Reply :: any(), NewState :: StateType}
     | {stop, Reason :: any(), NewState :: StateType}.
 
 -type handle_cast_result(StateType) ::
     {noreply, NewState :: StateType}
-    | {noreply, NewState :: StateType, timeout()}
+    | {noreply, NewState :: StateType, timeout() | {continue, term()}}
     | {stop, Reason :: any(), NewState :: StateType}.
 
 -type handle_info(StateType) ::
     {noreply, NewState :: StateType}
-    | {noreply, NewState :: StateType, timeout()}
+    | {noreply, NewState :: StateType, timeout() | {continue, term()}}
     | {stop, Reason :: any(), NewState :: StateType}.
 
 -callback init(Args :: any()) ->
     init_result(any()).
+-callback handle_continue(Continue :: term(), State :: StateType) ->
+    handle_continue_result(StateType).
 -callback handle_call(Request :: any(), From :: {pid(), Tag :: any()}, State :: StateType) ->
     handle_call_result(StateType).
 -callback handle_cast(Request :: any(), State :: StateType) ->
@@ -154,6 +161,16 @@ init_it(Starter, Module, Args, Options) ->
                         },
                         infinity
                     };
+                {ok, ModState, {continue, NewContinue}} ->
+                    init_ack(Starter, ok),
+                    {
+                        #state{
+                            name = proplists:get_value(name, Options),
+                            mod = Module,
+                            mod_state = ModState
+                        },
+                        {continue, NewContinue}
+                    };
                 {ok, ModState, InitTimeout} ->
                     init_ack(Starter, ok),
                     {
@@ -184,6 +201,7 @@ init_it(Starter, Module, Args, Options) ->
         end,
     case StateT of
         undefined -> ok;
+        {State, {continue, Continue}} -> loop(State, {continue, Continue});
         {State, Timeout} -> loop(State, Timeout)
     end.
 
@@ -434,6 +452,15 @@ reply({Pid, Ref}, Reply) ->
 %%
 
 %% @private
+loop(#state{mod = Mod, mod_state = ModState} = State, {continue, Continue}) ->
+    case Mod:handle_continue(Continue, ModState) of
+        {noreply, NewModState} ->
+            loop(State#state{mod_state = NewModState}, infinity);
+        {noreply, NewModState, {continue, NewContinue}} ->
+            loop(State#state{mod_state = NewModState}, {continue, NewContinue});
+        {stop, Reason, NewModState} ->
+            do_terminate(State, Reason, NewModState)
+    end;
 loop(#state{mod = Mod, mod_state = ModState} = State, Timeout) ->
     receive
         {'$call', {_Pid, _Ref} = From, Request} ->
@@ -441,11 +468,16 @@ loop(#state{mod = Mod, mod_state = ModState} = State, Timeout) ->
                 {reply, Reply, NewModState} ->
                     ok = reply(From, Reply),
                     loop(State#state{mod_state = NewModState}, infinity);
+                {reply, Reply, NewModState, {continue, Continue}} ->
+                    ok = reply(From, Reply),
+                    loop(State#state{mod_state = NewModState}, {continue, Continue});
                 {reply, Reply, NewModState, NewTimeout} ->
                     ok = reply(From, Reply),
                     loop(State#state{mod_state = NewModState}, NewTimeout);
                 {noreply, NewModState} ->
                     loop(State#state{mod_state = NewModState}, infinity);
+                {noreply, NewModState, {continue, Continue}} ->
+                    loop(State#state{mod_state = NewModState}, {continue, Continue});
                 {noreply, NewModState, NewTimeout} ->
                     loop(State#state{mod_state = NewModState}, NewTimeout);
                 {stop, Reason, Reply, NewModState} ->
@@ -460,6 +492,8 @@ loop(#state{mod = Mod, mod_state = ModState} = State, Timeout) ->
             case Mod:handle_cast(Request, ModState) of
                 {noreply, NewModState} ->
                     loop(State#state{mod_state = NewModState}, infinity);
+                {noreply, NewModState, {continue, Continue}} ->
+                    loop(State#state{mod_state = NewModState}, {continue, Continue});
                 {noreply, NewModState, NewTimeout} ->
                     loop(State#state{mod_state = NewModState}, NewTimeout);
                 {stop, Reason, NewModState} ->
