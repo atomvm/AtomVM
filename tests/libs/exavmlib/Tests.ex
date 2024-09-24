@@ -39,9 +39,12 @@ defmodule Tests do
     [2, 3] = Enum.slice([1, 2, 3], 1, 2)
     :test = Enum.at([0, 1, :test, 3], 2)
     :atom = Enum.find([1, 2, :atom, 3, 4], -1, fn item -> not is_integer(item) end)
+    1 = Enum.find_index([:a, :b, :c], fn item -> item == :b end)
+    true = Enum.find_value([-2, -3, -1, 0, 1], fn item -> item >= 0 end)
     true = Enum.all?([1, 2, 3], fn n -> n >= 0 end)
     true = Enum.any?([1, -2, 3], fn n -> n < 0 end)
     [2] = Enum.filter([1, 2, 3], fn n -> rem(n, 2) == 0 end)
+    [1, 3] = Enum.reject([1, 2, 3], fn n -> rem(n, 2) == 0 end)
     :ok = Enum.each([1, 2, 3], fn n -> true = is_integer(n) end)
 
     # map
@@ -63,9 +66,11 @@ defmodule Tests do
     true = at_0 != at_1
     {:c, :atom} = Enum.find(%{a: 1, b: 2, c: :atom, d: 3}, fn {_k, v} -> not is_integer(v) end)
     {:d, 3} = Enum.find(%{a: 1, b: 2, c: :atom, d: 3}, fn {k, _v} -> k == :d end)
+    true = Enum.find_value(%{"a" => 1, b: 2}, fn {k, _v} -> is_atom(k) end)
     true = Enum.all?(%{a: 1, b: 2}, fn {_k, v} -> v >= 0 end)
     true = Enum.any?(%{a: 1, b: -2}, fn {_k, v} -> v < 0 end)
     [b: 2] = Enum.filter(%{a: 1, b: 2, c: 3}, fn {_k, v} -> rem(v, 2) == 0 end)
+    [] = Enum.reject(%{a: 1, b: 2, c: 3}, fn {_k, v} -> v > 0 end)
     :ok = Enum.each(%{a: 1, b: 2}, fn {_k, v} -> true = is_integer(v) end)
 
     # map set
@@ -80,9 +85,11 @@ defmodule Tests do
     true = ms_at_0 == 1 or ms_at_0 == 2
     true = ms_at_1 == 1 or ms_at_1 == 2
     :atom = Enum.find(MapSet.new([1, 2, :atom, 3, 4]), fn item -> not is_integer(item) end)
+    nil = Enum.find_value([-2, -3, -1, 0, 1], fn item -> item > 100 end)
     true = Enum.all?(MapSet.new([1, 2, 3]), fn n -> n >= 0 end)
     true = Enum.any?(MapSet.new([1, -2, 3]), fn n -> n < 0 end)
     [2] = Enum.filter(MapSet.new([1, 2, 3]), fn n -> rem(n, 2) == 0 end)
+    [1] = Enum.reject(MapSet.new([1, 2, 3]), fn n -> n > 1 end)
     :ok = Enum.each(MapSet.new([1, 2, 3]), fn n -> true = is_integer(n) end)
 
     # range
@@ -94,9 +101,11 @@ defmodule Tests do
     [6, 7, 8, 9, 10] = Enum.slice(1..10, 5, 100)
     7 = Enum.at(1..10, 6)
     8 = Enum.find(-10..10, fn item -> item >= 8 end)
+    true = Enum.find_value(-10..10, fn item -> item >= 0 end)
     true = Enum.all?(0..10, fn n -> n >= 0 end)
     true = Enum.any?(-1..10, fn n -> n < 0 end)
     [0, 1, 2] = Enum.filter(-10..2, fn n -> n >= 0 end)
+    [-1] = Enum.reject(-1..10, fn n -> n >= 0 end)
     :ok = Enum.each(-5..5, fn n -> true = is_integer(n) end)
 
     # into
@@ -105,6 +114,11 @@ defmodule Tests do
     expected_mapset = MapSet.new([1, 2, 3])
     ^expected_mapset = Enum.into([1, 2, 3], MapSet.new())
 
+    # Enum.flat_map
+    [:a, :a, :b, :b, :c, :c] = Enum.flat_map([:a, :b, :c], fn x -> [x, x] end)
+    [1, 2, 3, 4, 5, 6] = Enum.flat_map([{1, 3}, {4, 6}], fn {x, y} -> x..y end)
+    [[:a], [:b], [:c]] = Enum.flat_map([:a, :b, :c], fn x -> [[x]] end)
+
     # Enum.join
     "1, 2, 3" = Enum.join(["1", "2", "3"], ", ")
     "1, 2, 3" = Enum.join([1, 2, 3], ", ")
@@ -112,6 +126,9 @@ defmodule Tests do
 
     # Enum.reverse
     [4, 3, 2] = Enum.reverse([2, 3, 4])
+
+    # other enum functions
+    test_enum_chunk_while()
 
     undef =
       try do
@@ -130,6 +147,28 @@ defmodule Tests do
     end
 
     :ok
+  end
+
+  defp test_enum_chunk_while() do
+    initial_col = 4
+    lines_list = '-1234567890\nciao\n12345\nabcdefghijkl\n12'
+    columns = 5
+
+    chunk_fun = fn char, {count, rchars} ->
+      cond do
+        char == ?\n -> {:cont, Enum.reverse(rchars), {0, []}}
+        count == columns -> {:cont, Enum.reverse(rchars), {1, [char]}}
+        true -> {:cont, {count + 1, [char | rchars]}}
+      end
+    end
+
+    after_fun = fn
+      {_count, []} -> {:cont, [], []}
+      {_count, rchars} -> {:cont, Enum.reverse(rchars), []}
+    end
+
+    ['-', '12345', '67890', 'ciao', '12345', 'abcde', 'fghij', 'kl', '12'] =
+      Enum.chunk_while(lines_list, {initial_col, []}, chunk_fun, after_fun)
   end
 
   defp test_exception() do
