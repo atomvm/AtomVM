@@ -18,6 +18,7 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 - Add support for `is_bitstring/1` construct which is used in Elixir protocols runtime.
 - Add support to Elixir `Enumerable` protocol also for `Enum.all?`, `Enum.any?`, `Enum.each`,
 `Enum.filter`, `Enum.flat_map`, `Enum.reject`, `Enum.chunk_by` and `Enum.chunk_while`
+- Support for `maps:merge_with/3`
 
 ### Changed
 
