@@ -75,6 +75,13 @@ set(ELIXIR_MODULES
     Collectable.Map
     Collectable.MapSet
 
+    List.Chars
+    List.Chars.Atom
+    List.Chars.BitString
+    List.Chars.Float
+    List.Chars.Integer
+    List.Chars.List
+
     String.Chars
     String.Chars.Atom
     String.Chars.BitString
