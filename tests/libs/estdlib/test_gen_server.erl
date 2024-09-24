@@ -36,6 +36,7 @@ test() ->
     ok = test_cast(),
     ok = test_info(),
     ok = test_start_link(),
+    ok = test_start_monitor(),
     ok = test_continue(),
     ok = test_init_exception(),
     ok = test_late_reply(),
@@ -77,6 +78,24 @@ test_start_link() ->
         end,
     true = erlang:process_flag(trap_exit, false),
     ok.
+
+test_start_monitor() ->
+    case get_otp_version() of
+        Version when Version =:= atomvm orelse (is_integer(Version) andalso Version >= 23) ->
+            {ok, {Pid, Ref}} = gen_server:start_monitor(?MODULE, [], []),
+
+            pong = gen_server:call(Pid, ping),
+            pong = gen_server:call(Pid, reply_ping),
+            ok = gen_server:cast(Pid, crash),
+            ok =
+                receive
+                    {'DOWN', Ref, process, Pid, _Reason} -> ok
+                after 30000 -> timeout
+                end,
+            ok;
+        _ ->
+            ok
+    end.
 
 test_continue() ->
     {ok, Pid} = gen_server:start_link(?MODULE, {continue, self()}, []),
@@ -390,6 +409,14 @@ test_stop_noproc() ->
     catch
         exit:noproc ->
             ok
+    end.
+
+get_otp_version() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            list_to_integer(erlang:system_info(otp_release));
+        _ ->
+            atomvm
     end.
 
 %%
