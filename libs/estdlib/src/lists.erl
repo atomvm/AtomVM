@@ -32,6 +32,7 @@
 -export([
     map/2,
     nth/2,
+    last/1,
     member/2,
     delete/2,
     reverse/1,
@@ -45,6 +46,7 @@
     keytake/3,
     foldl/3,
     foldr/3,
+    mapfoldl/3,
     all/2,
     any/2,
     flatten/1,
@@ -89,6 +91,16 @@ nth(1, [H | _T]) ->
     H;
 nth(Index, [_H | T]) when Index > 1 ->
     nth(Index - 1, T).
+
+%%-----------------------------------------------------------------------------
+%% @param   L the proper list from which to get the last item
+%% @returns the last item of the list.
+%% @doc     Get the last item of a list.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec last(L :: nonempty_list(E)) -> E.
+last([E]) -> E;
+last([_H | T]) -> last(T).
 
 %%-----------------------------------------------------------------------------
 %% @param   E the member to search for
@@ -371,6 +383,24 @@ foldl(_Fun, Acc0, []) ->
 foldl(Fun, Acc0, [H | T]) ->
     Acc1 = Fun(H, Acc0),
     foldl(Fun, Acc1, T).
+
+%%-----------------------------------------------------------------------------
+%% @param   Fun the function to apply
+%% @param   Acc0 the initial accumulator
+%% @param   List the list over which to fold
+%% @returns the result of mapping and folding Fun over L
+%% @doc     Combine `map/2' and `foldl/3' in one pass.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec mapfoldl(fun((A, Acc) -> {B, Acc}), Acc, [A]) -> {[B], Acc}.
+mapfoldl(Fun, Acc0, List1) ->
+    mapfoldl0(Fun, {[], Acc0}, List1).
+
+mapfoldl0(_Fun, {List1, Acc0}, []) ->
+    {?MODULE:reverse(List1), Acc0};
+mapfoldl0(Fun, {List1, Acc0}, [H | T]) ->
+    {B, Acc1} = Fun(H, Acc0),
+    mapfoldl0(Fun, {[B | List1], Acc1}, T).
 
 %%-----------------------------------------------------------------------------
 %% @equiv   foldl(Fun, Acc0, reverse(List))

@@ -46,6 +46,8 @@ test() ->
     ok = test_split(),
     ok = test_usort(),
     ok = test_filtermap(),
+    ok = test_last(),
+    ok = test_mapfoldl(),
     ok.
 
 test_nth() ->
@@ -294,6 +296,19 @@ test_filtermap() ->
         ),
         [1, 2]
     ),
+    ok.
+
+test_last() ->
+    ?ASSERT_ERROR(lists:last([]), function_clause),
+    ?ASSERT_MATCH(a, lists:last([a])),
+    ?ASSERT_MATCH(b, lists:last([a, b])),
+    ?ASSERT_ERROR(lists:last([a | b]), function_clause),
+    ok.
+
+test_mapfoldl() ->
+    ?ASSERT_MATCH({[], 1}, lists:mapfoldl(fun(X, A) -> {X * A, A + 1} end, 1, [])),
+    ?ASSERT_MATCH({[1, 4, 9], 4}, lists:mapfoldl(fun(X, A) -> {X * A, A + 1} end, 1, [1, 2, 3])),
+    ?ASSERT_ERROR(lists:mapfoldl(fun(X, A) -> {X * A, A + 1} end, 1, foo), function_clause),
     ok.
 
 id(X) -> X.
