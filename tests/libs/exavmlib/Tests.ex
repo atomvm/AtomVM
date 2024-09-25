@@ -19,6 +19,11 @@
 #
 
 defmodule Tests do
+  #  defstruct [
+  #    :field1,
+  #    field2: 42
+  #  ]
+
   @compile {:no_warn_undefined, :undef}
 
   def start() do
@@ -26,6 +31,7 @@ defmodule Tests do
     :ok = test_enum()
     :ok = test_exception()
     :ok = test_chars_protocol()
+    :ok = test_inspect()
     :ok = IO.puts("Finished Elixir tests")
   end
 
@@ -234,7 +240,62 @@ defmodule Tests do
     :ok
   end
 
+  def test_inspect() do
+    "true" = inspect(true)
+    "false" = inspect(false)
+    "nil" = inspect(nil)
+
+    ":test" = inspect(:test)
+    ":アトム" = inspect(:アトム)
+    "Test" = inspect(Test)
+
+    "5" = inspect(5)
+    "5.0" = inspect(5.0)
+
+    ~s[""] = inspect("")
+    ~s["hello"] = inspect("hello")
+    ~s["アトム"] = inspect("アトム")
+
+    "<<10>>" = inspect("\n")
+    "<<0, 1, 2, 3>>" = inspect(<<0, 1, 2, 3>>)
+    "<<195, 168, 0>>" = inspect(<<195, 168, 0>>)
+
+    "[]" = inspect([])
+    "[0]" = inspect([0])
+    "[9, 10]" = inspect([9, 10])
+    ~s'["test"]' = inspect(["test"])
+    "'hello'" = inspect('hello')
+    "[127]" = inspect([127])
+    "[104, 101, 108, 108, 248]" = inspect('hellø')
+
+    ~s([5 | "hello"]) = inspect([5 | "hello"])
+
+    "{}" = inspect({})
+    "{1, 2}" = inspect({1, 2})
+    "{:test, 1}" = inspect({:test, 1})
+
+    "%{}" = inspect(%{})
+    either("%{a: 1, b: 2}", "%{b: 2, a: 1}", inspect(%{a: 1, b: 2}))
+    either(~s[%{"a" => 1, "b" => 2}], ~s[%{"b" => 2, "a" => 1}], inspect(%{"a" => 1, "b" => 2}))
+
+    # TODO: structs are not yet supported
+    # either(
+    #   ~s[%#{__MODULE__}{field1: nil, field2: 42}],
+    #   ~s[%#{__MODULE__}{field2: 42, field1: nil}],
+    #   inspect(%__MODULE__{})
+    # )
+
+    :ok
+  end
+
   defp fact(n) when n < 0, do: :test
   defp fact(0), do: 1
   defp fact(n), do: fact(n - 1) * n
+
+  def either(a, b, value) do
+    case value do
+      ^a -> a
+      ^b -> b
+    end
+  end
 end
