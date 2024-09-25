@@ -60,3 +60,24 @@ set(ERLANG_MODULES
 )
 
 pack_archive(estdlib ${ERLANG_MODULES})
+
+include(../../../version.cmake)
+
+set(ESTDLIB_VERSION ${ATOMVM_BASE_VERSION})
+
+install(
+    DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/beams/
+    DESTINATION lib/atomvm/lib/estdlib-${ESTDLIB_VERSION}/ebin
+    FILES_MATCHING PATTERN "*.beam"
+)
+
+install(
+    FILES ${CMAKE_CURRENT_BINARY_DIR}/estdlib.avm
+    DESTINATION lib/atomvm/lib/estdlib-${ESTDLIB_VERSION}/ebin/
+)
+
+install(
+    DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
+    DESTINATION lib/atomvm/lib/estdlib-${ESTDLIB_VERSION}/src
+    FILES_MATCHING PATTERN "*.erl"
+)
