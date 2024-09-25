@@ -49,6 +49,7 @@ set(ELIXIR_MODULES
     Process
     Protocol.UndefinedError
     Range
+    System
     Tuple
 
     ArithmeticError
