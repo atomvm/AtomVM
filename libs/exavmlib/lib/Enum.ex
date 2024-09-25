@@ -24,10 +24,17 @@ defmodule Enum do
   @compile {:autoload, false}
 
   @type t :: Enumerable.t()
+  @type acc :: any
   @type index :: integer
   @type element :: any
 
+  @type default :: any
+
   require Stream.Reducers, as: R
+
+  defmacrop skip(acc) do
+    acc
+  end
 
   defmacrop next(_, entry, acc) do
     quote(do: [unquote(entry) | unquote(acc)])
@@ -53,12 +60,130 @@ defmodule Enum do
     Enumerable.reduce(enumerable, {:cont, acc}, fn x, acc -> {:cont, fun.(x, acc)} end) |> elem(1)
   end
 
+  @doc """
+  Returns `true` if `fun.(element)` is truthy for all elements in `enumerable`.
+
+  Iterates over the `enumerable` and invokes `fun` on each element. When an invocation
+  of `fun` returns a falsy value (`false` or `nil`) iteration stops immediately and
+  `false` is returned. In all other cases `true` is returned.
+
+  ## Examples
+
+      iex> Enum.all?([2, 4, 6], fn x -> rem(x, 2) == 0 end)
+      true
+
+      iex> Enum.all?([2, 3, 4], fn x -> rem(x, 2) == 0 end)
+      false
+
+      iex> Enum.all?([], fn x -> x > 0 end)
+      true
+
+  If no function is given, the truthiness of each element is checked during iteration.
+  When an element has a falsy value (`false` or `nil`) iteration stops immediately and
+  `false` is returned. In all other cases `true` is returned.
+
+      iex> Enum.all?([1, 2, 3])
+      true
+
+      iex> Enum.all?([1, nil, 3])
+      false
+
+      iex> Enum.all?([])
+      true
+
+  """
+  @spec all?(t, (element -> as_boolean(term))) :: boolean
+
+  def all?(enumerable, fun \\ fn x -> x end)
+
   def all?(enumerable, fun) when is_list(enumerable) do
     all_list(enumerable, fun)
   end
 
+  def all?(enumerable, fun) do
+    Enumerable.reduce(enumerable, {:cont, true}, fn entry, _ ->
+      if fun.(entry), do: {:cont, true}, else: {:halt, false}
+    end)
+    |> elem(1)
+  end
+
+  @doc """
+  Returns `true` if `fun.(element)` is truthy for at least one element in `enumerable`.
+
+  Iterates over the `enumerable` and invokes `fun` on each element. When an invocation
+  of `fun` returns a truthy value (neither `false` nor `nil`) iteration stops
+  immediately and `true` is returned. In all other cases `false` is returned.
+
+  ## Examples
+
+      iex> Enum.any?([2, 4, 6], fn x -> rem(x, 2) == 1 end)
+      false
+
+      iex> Enum.any?([2, 3, 4], fn x -> rem(x, 2) == 1 end)
+      true
+
+      iex> Enum.any?([], fn x -> x > 0 end)
+      false
+
+  If no function is given, the truthiness of each element is checked during iteration.
+  When an element has a truthy value (neither `false` nor `nil`) iteration stops
+  immediately and `true` is returned. In all other cases `false` is returned.
+
+      iex> Enum.any?([false, false, false])
+      false
+
+      iex> Enum.any?([false, true, false])
+      true
+
+      iex> Enum.any?([])
+      false
+
+  """
+  @spec any?(t, (element -> as_boolean(term))) :: boolean
+
+  def any?(enumerable, fun \\ fn x -> x end)
+
   def any?(enumerable, fun) when is_list(enumerable) do
     any_list(enumerable, fun)
+  end
+
+  def any?(enumerable, fun) do
+    Enumerable.reduce(enumerable, {:cont, false}, fn entry, _ ->
+      if fun.(entry), do: {:halt, true}, else: {:cont, false}
+    end)
+    |> elem(1)
+  end
+
+  @doc """
+  Finds the element at the given `index` (zero-based).
+
+  Returns `default` if `index` is out of bounds.
+
+  A negative `index` can be passed, which means the `enumerable` is
+  enumerated once and the `index` is counted from the end (for example,
+  `-1` finds the last element).
+
+  ## Examples
+
+      iex> Enum.at([2, 4, 6], 0)
+      2
+
+      iex> Enum.at([2, 4, 6], 2)
+      6
+
+      iex> Enum.at([2, 4, 6], 4)
+      nil
+
+      iex> Enum.at([2, 4, 6], 4, :none)
+      :none
+
+  """
+  @spec at(t, index, default) :: element | default
+  def at(enumerable, index, default \\ nil) when is_integer(index) do
+    case slice_any(enumerable, index, 1) do
+      [value] -> value
+      [] -> default
+    end
   end
 
   @doc """
@@ -85,25 +210,287 @@ defmodule Enum do
     end
   end
 
+  @doc """
+  Chunks the `enumerable` with fine grained control when every chunk is emitted.
+
+  `chunk_fun` receives the current element and the accumulator and
+  must return `{:cont, chunk, acc}` to emit the given chunk and
+  continue with accumulator or `{:cont, acc}` to not emit any chunk
+  and continue with the return accumulator.
+
+  `after_fun` is invoked when iteration is done and must also return
+  `{:cont, chunk, acc}` or `{:cont, acc}`.
+
+  Returns a list of lists.
+
+  ## Examples
+
+      iex> chunk_fun = fn element, acc ->
+      ...>   if rem(element, 2) == 0 do
+      ...>     {:cont, Enum.reverse([element | acc]), []}
+      ...>   else
+      ...>     {:cont, [element | acc]}
+      ...>   end
+      ...> end
+      iex> after_fun = fn
+      ...>   [] -> {:cont, []}
+      ...>   acc -> {:cont, Enum.reverse(acc), []}
+      ...> end
+      iex> Enum.chunk_while(1..10, [], chunk_fun, after_fun)
+      [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10]]
+
+  """
+  @doc since: "1.5.0"
+  @spec chunk_while(
+          t,
+          acc,
+          (element, acc -> {:cont, chunk, acc} | {:cont, acc} | {:halt, acc}),
+          (acc -> {:cont, chunk, acc} | {:cont, acc})
+        ) :: Enumerable.t()
+        when chunk: any
+  def chunk_while(enumerable, acc, chunk_fun, after_fun) do
+    {_, {res, acc}} =
+      Enumerable.reduce(enumerable, {:cont, {[], acc}}, fn entry, {buffer, acc} ->
+        case chunk_fun.(entry, acc) do
+          {:cont, emit, acc} -> {:cont, {[emit | buffer], acc}}
+          {:cont, acc} -> {:cont, {buffer, acc}}
+          {:halt, acc} -> {:halt, {buffer, acc}}
+        end
+      end)
+
+    case after_fun.(acc) do
+      {:cont, _acc} -> :lists.reverse(res)
+      {:cont, elem, _acc} -> :lists.reverse([elem | res])
+    end
+  end
+
+  @doc """
+  Splits enumerable on every element for which `fun` returns a new
+  value.
+
+  Returns a list of lists.
+
+  ## Examples
+
+      iex> Enum.chunk_by([1, 2, 2, 3, 4, 4, 6, 7, 7], &(rem(&1, 2) == 1))
+      [[1], [2, 2], [3], [4, 4, 6], [7, 7]]
+
+  """
+  @spec chunk_by(t, (element -> any)) :: [list]
+  def chunk_by(enumerable, fun) do
+    reducers_chunk_by(&chunk_while/4, enumerable, fun)
+  end
+
+  # Taken from Stream.Reducers
+  defp reducers_chunk_by(chunk_by, enumerable, fun) do
+    chunk_fun = fn
+      entry, nil ->
+        {:cont, {[entry], fun.(entry)}}
+
+      entry, {acc, value} ->
+        case fun.(entry) do
+          ^value -> {:cont, {[entry | acc], value}}
+          new_value -> {:cont, :lists.reverse(acc), {[entry], new_value}}
+        end
+    end
+
+    after_fun = fn
+      nil -> {:cont, :done}
+      {acc, _value} -> {:cont, :lists.reverse(acc), :done}
+    end
+
+    chunk_by.(enumerable, nil, chunk_fun, after_fun)
+  end
+
+  @doc """
+  Invokes the given `fun` for each element in the `enumerable`.
+
+  Returns `:ok`.
+
+  ## Examples
+
+      Enum.each(["some", "example"], fn x -> IO.puts(x) end)
+      "some"
+      "example"
+      #=> :ok
+
+  """
+  @spec each(t, (element -> any)) :: :ok
   def each(enumerable, fun) when is_list(enumerable) do
     :lists.foreach(fun, enumerable)
     :ok
   end
 
+  def each(enumerable, fun) do
+    reduce(enumerable, nil, fn entry, _ ->
+      fun.(entry)
+      nil
+    end)
+
+    :ok
+  end
+
+  @doc """
+  Filters the `enumerable`, i.e. returns only those elements
+  for which `fun` returns a truthy value.
+
+  See also `reject/2` which discards all elements where the
+  function returns a truthy value.
+
+  ## Examples
+
+      iex> Enum.filter([1, 2, 3], fn x -> rem(x, 2) == 0 end)
+      [2]
+
+  Keep in mind that `filter` is not capable of filtering and
+  transforming an element at the same time. If you would like
+  to do so, consider using `flat_map/2`. For example, if you
+  want to convert all strings that represent an integer and
+  discard the invalid one in one pass:
+
+      strings = ["1234", "abc", "12ab"]
+
+      Enum.flat_map(strings, fn string ->
+        case Integer.parse(string) do
+          # transform to integer
+          {int, _rest} -> [int]
+          # skip the value
+          :error -> []
+        end
+      end)
+
+  """
+  @spec filter(t, (element -> as_boolean(term))) :: list
   def filter(enumerable, fun) when is_list(enumerable) do
     filter_list(enumerable, fun)
   end
+
+  def filter(enumerable, fun) do
+    reduce(enumerable, [], R.filter(fun)) |> :lists.reverse()
+  end
+
+  @doc """
+  Returns the first element for which `fun` returns a truthy value.
+  If no such element is found, returns `default`.
+
+  ## Examples
+
+      iex> Enum.find([2, 3, 4], fn x -> rem(x, 2) == 1 end)
+      3
+
+      iex> Enum.find([2, 4, 6], fn x -> rem(x, 2) == 1 end)
+      nil
+      iex> Enum.find([2, 4, 6], 0, fn x -> rem(x, 2) == 1 end)
+      0
+
+  """
+  @spec find(t, default, (element -> any)) :: element | default
+  def find(enumerable, default \\ nil, fun)
 
   def find(enumerable, default, fun) when is_list(enumerable) do
     find_list(enumerable, default, fun)
   end
 
+  def find(enumerable, default, fun) do
+    Enumerable.reduce(enumerable, {:cont, default}, fn entry, default ->
+      if fun.(entry), do: {:halt, entry}, else: {:cont, default}
+    end)
+    |> elem(1)
+  end
+
+  @doc """
+  Similar to `find/3`, but returns the index (zero-based)
+  of the element instead of the element itself.
+
+  ## Examples
+
+      iex> Enum.find_index([2, 4, 6], fn x -> rem(x, 2) == 1 end)
+      nil
+
+      iex> Enum.find_index([2, 3, 4], fn x -> rem(x, 2) == 1 end)
+      1
+
+  """
+  @spec find_index(t, (element -> any)) :: non_neg_integer | nil
   def find_index(enumerable, fun) when is_list(enumerable) do
     find_index_list(enumerable, 0, fun)
   end
 
+  def find_index(enumerable, fun) do
+    result =
+      Enumerable.reduce(enumerable, {:cont, {:not_found, 0}}, fn entry, {_, index} ->
+        if fun.(entry), do: {:halt, {:found, index}}, else: {:cont, {:not_found, index + 1}}
+      end)
+
+    case elem(result, 1) do
+      {:found, index} -> index
+      {:not_found, _} -> nil
+    end
+  end
+
+  @doc """
+  Similar to `find/3`, but returns the value of the function
+  invocation instead of the element itself.
+
+  ## Examples
+
+      iex> Enum.find_value([2, 4, 6], fn x -> rem(x, 2) == 1 end)
+      nil
+
+      iex> Enum.find_value([2, 3, 4], fn x -> rem(x, 2) == 1 end)
+      true
+
+      iex> Enum.find_value([1, 2, 3], "no bools!", &is_boolean/1)
+      "no bools!"
+
+  """
+  @spec find_value(t, any, (element -> any)) :: any | nil
+  def find_value(enumerable, default \\ nil, fun)
+
   def find_value(enumerable, default, fun) when is_list(enumerable) do
     find_value_list(enumerable, default, fun)
+  end
+
+  def find_value(enumerable, default, fun) do
+    Enumerable.reduce(enumerable, {:cont, default}, fn entry, default ->
+      fun_entry = fun.(entry)
+      if fun_entry, do: {:halt, fun_entry}, else: {:cont, default}
+    end)
+    |> elem(1)
+  end
+
+  @doc """
+  Maps the given `fun` over `enumerable` and flattens the result.
+
+  This function returns a new enumerable built by appending the result of invoking `fun`
+  on each element of `enumerable` together; conceptually, this is similar to a
+  combination of `map/2` and `concat/1`.
+
+  ## Examples
+
+      iex> Enum.flat_map([:a, :b, :c], fn x -> [x, x] end)
+      [:a, :a, :b, :b, :c, :c]
+
+      iex> Enum.flat_map([{1, 3}, {4, 6}], fn {x, y} -> x..y end)
+      [1, 2, 3, 4, 5, 6]
+
+      iex> Enum.flat_map([:a, :b, :c], fn x -> [[x]] end)
+      [[:a], [:b], [:c]]
+
+  """
+  @spec flat_map(t, (element -> t)) :: list
+  def flat_map(enumerable, fun) when is_list(enumerable) do
+    flat_map_list(enumerable, fun)
+  end
+
+  def flat_map(enumerable, fun) do
+    reduce(enumerable, [], fn entry, acc ->
+      case fun.(entry) do
+        list when is_list(list) -> :lists.reverse(list, acc)
+        other -> reduce(other, acc, &[&1 | &2])
+      end
+    end)
+    |> :lists.reverse()
   end
 
   @doc """
@@ -208,10 +595,6 @@ defmodule Enum do
     end
   end
 
-  def reject(enumerable, fun) when is_list(enumerable) do
-    reject_list(enumerable, fun)
-  end
-
   ## all?
 
   defp all_list([h | t], fun) do
@@ -290,6 +673,19 @@ defmodule Enum do
 
   defp find_value_list([], default, _) do
     default
+  end
+
+  ## flat_map
+
+  defp flat_map_list([head | tail], fun) do
+    case fun.(head) do
+      list when is_list(list) -> list ++ flat_map_list(tail, fun)
+      other -> to_list(other) ++ flat_map_list(tail, fun)
+    end
+  end
+
+  defp flat_map_list([], _fun) do
+    []
   end
 
   @doc """
@@ -389,12 +785,12 @@ defmodule Enum do
   end
 
   @doc """
-  Joins the given enumerable into a binary using `joiner` as a
+  Joins the given `enumerable` into a binary using `joiner` as a
   separator.
 
   If `joiner` is not passed at all, it defaults to the empty binary.
 
-  All items in the enumerable must be convertible to a binary,
+  All elements in the `enumerable` must be convertible to a binary,
   otherwise an error is raised.
 
   ## Examples
@@ -408,6 +804,12 @@ defmodule Enum do
   """
   @spec join(t, String.t()) :: String.t()
   def join(enumerable, joiner \\ "")
+
+  def join(enumerable, "") do
+    enumerable
+    |> map(&entry_to_string(&1))
+    |> IO.iodata_to_binary()
+  end
 
   def join(enumerable, joiner) when is_binary(joiner) do
     reduced =
@@ -435,6 +837,27 @@ defmodule Enum do
 
   defp reject_list([], _fun) do
     []
+  end
+
+  @doc """
+  Returns a list of elements in `enumerable` excluding those for which the function `fun` returns
+  a truthy value.
+
+  See also `filter/2`.
+
+  ## Examples
+
+      iex> Enum.reject([1, 2, 3], fn x -> rem(x, 2) == 0 end)
+      [1, 3]
+
+  """
+  @spec reject(t, (element -> as_boolean(term))) :: list
+  def reject(enumerable, fun) when is_list(enumerable) do
+    reject_list(enumerable, fun)
+  end
+
+  def reject(enumerable, fun) do
+    reduce(enumerable, [], R.reject(fun)) |> :lists.reverse()
   end
 
   @doc """
@@ -610,6 +1033,7 @@ defmodule Enum do
   @compile {:inline, entry_to_string: 1, reduce: 3}
 
   defp entry_to_string(entry) when is_binary(entry), do: entry
+  defp entry_to_string(entry), do: String.Chars.to_string(entry)
 
   ## drop
 

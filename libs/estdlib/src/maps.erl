@@ -55,6 +55,7 @@
     from_keys/2,
     map/2,
     merge/2,
+    merge_with/3,
     remove/2,
     update/3
 ]).
@@ -440,6 +441,28 @@ merge(_Map1, Map2) when not is_map(Map2) ->
     error({badmap, Map2}).
 
 %%-----------------------------------------------------------------------------
+%% @param   Combiner  a function to merge values from Map1 and Map2 if a key exists in both maps
+%% @param   Map1  a map
+%% @param   Map2  a map
+%% @returns the result of merging entries from `Map1' and `Map2'.
+%% @doc Merge two maps to yield a new map.
+%%
+%% If `Map1' and `Map2' contain the same key, then the value from `Combiner(Key, Value1, Value2)' will be used.
+%%
+%% This function raises a `badmap' error if neither `Map1' nor `Map2' is a map.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec merge_with(
+    Combiner :: fun((Key, Value, Value) -> Value), Map1 :: #{Key => Value}, Map2 :: #{Key => Value}
+) -> #{Key => Value}.
+merge_with(Combiner, Map1, Map2) when is_map(Map1) andalso is_map(Map2) ->
+    iterate_merge_with(Combiner, maps:next(maps:iterator(Map1)), Map2);
+merge_with(_Combiner, Map1, _Map2) when not is_map(Map1) ->
+    error({badmap, Map1});
+merge_with(_Combiner, _Map1, Map2) when not is_map(Map2) ->
+    error({badmap, Map2}).
+
+%%-----------------------------------------------------------------------------
 %% @param   Key     the key to remove
 %% @param   MapOrIterator     the map or map iterator from which to remove the key
 %% @returns a new map without `Key' as an entry.
@@ -544,6 +567,19 @@ iterate_map(_Fun, none, Accum) ->
 iterate_map(Fun, {Key, Value, Iterator}, Accum) ->
     NewAccum = Accum#{Key => Fun(Key, Value)},
     iterate_map(Fun, maps:next(Iterator), NewAccum).
+
+%% @private
+iterate_merge_with(_Combiner, none, Accum) ->
+    Accum;
+iterate_merge_with(Combiner, {Key, Value1, Iterator}, Accum) ->
+    case Accum of
+        #{Key := Value2} ->
+            iterate_merge_with(Combiner, maps:next(Iterator), Accum#{
+                Key := Combiner(Key, Value1, Value2)
+            });
+        #{} ->
+            iterate_merge_with(Combiner, maps:next(Iterator), Accum#{Key => Value1})
+    end.
 
 %% @private
 iterate_merge(none, Accum) ->

@@ -43,6 +43,7 @@
 -export([
     start/3, start/4,
     start_link/3, start_link/4,
+    start_monitor/3, start_monitor/4,
     stop/1, stop/3,
     call/2, call/3,
     cast/2,
@@ -68,29 +69,36 @@
 
 -type init_result(StateType) ::
     {ok, State :: StateType}
-    | {ok, State :: StateType, timeout()}
+    | {ok, State :: StateType, timeout() | {continue, term()}}
     | {stop, Reason :: any()}.
+
+-type handle_continue_result(StateType) ::
+    {noreply, NewState :: StateType}
+    | {noreply, NewState :: StateType, timeout() | {continue, term()}}
+    | {stop, Reason :: term(), NewState :: StateType}.
 
 -type handle_call_result(StateType) ::
     {reply, Reply :: any(), NewState :: StateType}
-    | {reply, Reply :: any(), NewState :: StateType, timeout()}
+    | {reply, Reply :: any(), NewState :: StateType, timeout() | {continue, term()}}
     | {noreply, NewState :: StateType}
-    | {noreply, NewState :: StateType, timeout()}
+    | {noreply, NewState :: StateType, timeout() | {continue, term()}}
     | {stop, Reason :: any(), Reply :: any(), NewState :: StateType}
     | {stop, Reason :: any(), NewState :: StateType}.
 
 -type handle_cast_result(StateType) ::
     {noreply, NewState :: StateType}
-    | {noreply, NewState :: StateType, timeout()}
+    | {noreply, NewState :: StateType, timeout() | {continue, term()}}
     | {stop, Reason :: any(), NewState :: StateType}.
 
 -type handle_info(StateType) ::
     {noreply, NewState :: StateType}
-    | {noreply, NewState :: StateType, timeout()}
+    | {noreply, NewState :: StateType, timeout() | {continue, term()}}
     | {stop, Reason :: any(), NewState :: StateType}.
 
 -callback init(Args :: any()) ->
     init_result(any()).
+-callback handle_continue(Continue :: term(), State :: StateType) ->
+    handle_continue_result(StateType).
 -callback handle_call(Request :: any(), From :: {pid(), Tag :: any()}, State :: StateType) ->
     handle_call_result(StateType).
 -callback handle_cast(Request :: any(), State :: StateType) ->
@@ -102,9 +110,9 @@
 
 %% @private
 do_spawn(Module, Args, Options, SpawnOpts) ->
-    Pid = spawn_opt(?MODULE, init_it, [self(), Module, Args, Options], SpawnOpts),
-    case wait_ack(Pid) of
-        ok -> {ok, Pid};
+    PidOrMonRet = spawn_opt(?MODULE, init_it, [self(), Module, Args, Options], SpawnOpts),
+    case wait_ack(PidOrMonRet) of
+        ok -> {ok, PidOrMonRet};
         {error, Reason} -> {error, Reason}
     end.
 
@@ -114,6 +122,15 @@ do_spawn(Name, Module, Args, Options, SpawnOpts) ->
     case wait_ack(Pid) of
         ok -> {ok, Pid};
         {error, Reason} -> {error, Reason}
+    end.
+
+%% @private
+spawn_if_not_registered(Name, Module, Args, Options, SpawnOpts) ->
+    case erlang:whereis(Name) of
+        undefined ->
+            do_spawn(Name, Module, Args, [{name, Name} | Options], SpawnOpts);
+        Pid ->
+            {error, {already_started, Pid}}
     end.
 
 init_it(Starter, Name, Module, Args, Options) ->
@@ -154,6 +171,16 @@ init_it(Starter, Module, Args, Options) ->
                         },
                         infinity
                     };
+                {ok, ModState, {continue, NewContinue}} ->
+                    init_ack(Starter, ok),
+                    {
+                        #state{
+                            name = proplists:get_value(name, Options),
+                            mod = Module,
+                            mod_state = ModState
+                        },
+                        {continue, NewContinue}
+                    };
                 {ok, ModState, InitTimeout} ->
                     init_ack(Starter, ok),
                     {
@@ -184,6 +211,7 @@ init_it(Starter, Module, Args, Options) ->
         end,
     case StateT of
         undefined -> ok;
+        {State, {continue, Continue}} -> loop(State, {continue, Continue});
         {State, Timeout} -> loop(State, Timeout)
     end.
 
@@ -191,7 +219,11 @@ init_ack(Parent, Return) ->
     Parent ! {ack, self(), Return},
     ok.
 
-wait_ack(Pid) ->
+wait_ack(Pid) when is_pid(Pid) ->
+    receive
+        {ack, Pid, Return} -> Return
+    end;
+wait_ack({Pid, _MonRef}) when is_pid(Pid) ->
     receive
         {ack, Pid, Return} -> Return
     end.
@@ -228,12 +260,7 @@ crash_report(ErrStr, Parent, E, S) ->
     Options :: options()
 ) -> {ok, pid()} | {error, Reason :: term()}.
 start({local, Name}, Module, Args, Options) when is_atom(Name) ->
-    case erlang:whereis(Name) of
-        undefined ->
-            do_spawn(Name, Module, Args, [{name, Name} | Options], []);
-        Pid ->
-            {error, {already_started, Pid}}
-    end.
+    spawn_if_not_registered(Name, Module, Args, Options, []).
 
 %%-----------------------------------------------------------------------------
 %% @param   Module the module in which the gen_server callbacks are defined
@@ -274,12 +301,7 @@ start(Module, Args, Options) ->
     Options :: options()
 ) -> {ok, pid()} | {error, Reason :: term()}.
 start_link({local, Name}, Module, Args, Options) when is_atom(Name) ->
-    case erlang:whereis(Name) of
-        undefined ->
-            do_spawn(Name, Module, Args, [{name, Name} | Options], [link]);
-        Pid ->
-            {error, {already_started, Pid}}
-    end.
+    spawn_if_not_registered(Name, Module, Args, Options, [link]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Module the module in which the gen_server callbacks are defined
@@ -297,6 +319,49 @@ start_link({local, Name}, Module, Args, Options) when is_atom(Name) ->
     {ok, pid()} | {error, Reason :: term()}.
 start_link(Module, Args, Options) ->
     do_spawn(Module, Args, Options, [link]).
+
+%%-----------------------------------------------------------------------------
+%% @param   Module the module in which the gen_server callbacks are defined
+%% @param   Args the arguments to pass to the module's init callback
+%% @param   Options the options used to create the gen_server
+%% @returns the gen_server pid and monitor reference tuple if successful;
+%%          {error, Reason}, otherwise.
+%% @doc     Start and monitor an un-named gen_server.
+%%
+%%          This function will start a gen_server instance.
+%%
+%%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
+%% @end
+%%-----------------------------------------------------------------------------
+-spec start_monitor(Module :: module(), Args :: term(), Options :: options()) ->
+    {ok, {Pid :: pid(), MonRef :: reference()}} | {error, Reason :: term()}.
+start_monitor(Module, Args, Options) ->
+    do_spawn(Module, Args, Options, [monitor]).
+
+%%-----------------------------------------------------------------------------
+%% @param   ServerName the name with which to register the gen_server
+%% @param   Module the module in which the gen_server callbacks are defined
+%% @param   Args the arguments to pass to the module's init callback
+%% @param   Options the options used to create the gen_server
+%% @returns the gen_server pid and monitor reference tuple if successful;
+%%          {error, Reason}, otherwise.
+%% @doc     Start and monitor a named gen_server.
+%%
+%%          This function will start a gen_server instance and register the
+%%          newly created process with the process registry.  Subsequent calls
+%%          may use the gen_server name, in lieu of the process id.
+%%
+%%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
+%% @end
+%%-----------------------------------------------------------------------------
+-spec start_monitor(
+    ServerName :: {local, Name :: atom()},
+    Module :: module(),
+    Args :: term(),
+    Options :: options()
+) -> {ok, {Pid :: pid(), MonRef :: reference()}} | {error, Reason :: term()}.
+start_monitor({local, Name}, Module, Args, Options) when is_atom(Name) ->
+    spawn_if_not_registered(Name, Module, Args, Options, [monitor]).
 
 %%-----------------------------------------------------------------------------
 %% @equiv   stop(ServerRef, normal, infinity)
@@ -434,6 +499,15 @@ reply({Pid, Ref}, Reply) ->
 %%
 
 %% @private
+loop(#state{mod = Mod, mod_state = ModState} = State, {continue, Continue}) ->
+    case Mod:handle_continue(Continue, ModState) of
+        {noreply, NewModState} ->
+            loop(State#state{mod_state = NewModState}, infinity);
+        {noreply, NewModState, {continue, NewContinue}} ->
+            loop(State#state{mod_state = NewModState}, {continue, NewContinue});
+        {stop, Reason, NewModState} ->
+            do_terminate(State, Reason, NewModState)
+    end;
 loop(#state{mod = Mod, mod_state = ModState} = State, Timeout) ->
     receive
         {'$call', {_Pid, _Ref} = From, Request} ->
@@ -441,11 +515,16 @@ loop(#state{mod = Mod, mod_state = ModState} = State, Timeout) ->
                 {reply, Reply, NewModState} ->
                     ok = reply(From, Reply),
                     loop(State#state{mod_state = NewModState}, infinity);
+                {reply, Reply, NewModState, {continue, Continue}} ->
+                    ok = reply(From, Reply),
+                    loop(State#state{mod_state = NewModState}, {continue, Continue});
                 {reply, Reply, NewModState, NewTimeout} ->
                     ok = reply(From, Reply),
                     loop(State#state{mod_state = NewModState}, NewTimeout);
                 {noreply, NewModState} ->
                     loop(State#state{mod_state = NewModState}, infinity);
+                {noreply, NewModState, {continue, Continue}} ->
+                    loop(State#state{mod_state = NewModState}, {continue, Continue});
                 {noreply, NewModState, NewTimeout} ->
                     loop(State#state{mod_state = NewModState}, NewTimeout);
                 {stop, Reason, Reply, NewModState} ->
@@ -460,6 +539,8 @@ loop(#state{mod = Mod, mod_state = ModState} = State, Timeout) ->
             case Mod:handle_cast(Request, ModState) of
                 {noreply, NewModState} ->
                     loop(State#state{mod_state = NewModState}, infinity);
+                {noreply, NewModState, {continue, Continue}} ->
+                    loop(State#state{mod_state = NewModState}, {continue, Continue});
                 {noreply, NewModState, NewTimeout} ->
                     loop(State#state{mod_state = NewModState}, NewTimeout);
                 {stop, Reason, NewModState} ->

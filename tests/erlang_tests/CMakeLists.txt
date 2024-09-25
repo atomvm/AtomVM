@@ -143,6 +143,7 @@ compile_erlang(test_list_to_integer)
 compile_erlang(test_abs)
 compile_erlang(test_is_process_alive)
 compile_erlang(test_is_not_type)
+compile_erlang(test_is_bitstring_is_binary)
 compile_erlang(test_badarith)
 compile_erlang(test_badarith2)
 compile_erlang(test_badarith3)
@@ -320,6 +321,7 @@ compile_erlang(minuspow63plusoneabs)
 compile_erlang(minuspow63plustwoabs)
 compile_erlang(literal_test0)
 compile_erlang(literal_test1)
+compile_erlang(literal_test2)
 
 compile_erlang(test_list_eq)
 compile_erlang(test_tuple_eq)
@@ -610,6 +612,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_abs.beam
     test_is_process_alive.beam
     test_is_not_type.beam
+    test_is_bitstring_is_binary.beam
     test_badarith.beam
     test_badarith2.beam
     test_badarith3.beam
@@ -789,6 +792,7 @@ add_custom_target(erlang_test_modules DEPENDS
 
     literal_test0.beam
     literal_test1.beam
+    literal_test2.beam
 
     test_list_eq.beam
     test_tuple_eq.beam

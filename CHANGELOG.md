@@ -10,6 +10,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a limited implementation of the OTP `ets` interface
 - Added `code:all_loaded/0` and `code:all_available/0`
 
+## [0.6.5] - Unreleased
+
+### Added
+
+- ESP32: add a new Elixir release "flavor" with a bigger boot.avm partition that has room for
+Elixir standard library modules
+- ESP32: `--boot` option to mkimage.sh tool
+- Add `erlang:atom_to_binary/1` that is equivalent to `erlang:atom_to_binary(Atom, utf8)`
+- Support for Elixir `String.Chars` protocol, now functions such as `Enum.join` are able to take
+also non string parameters (e.g. `Enum.join([1, 2], ",")`
+- Support for Elixir `Enum.at/3`
+- Add support for `is_bitstring/1` construct which is used in Elixir protocols runtime.
+- Add support to Elixir `Enumerable` protocol also for `Enum.all?`, `Enum.any?`, `Enum.each`,
+`Enum.filter`, `Enum.flat_map`, `Enum.reject`, `Enum.chunk_by` and `Enum.chunk_while`
+- Support for `maps:merge_with/3`
+- Support for `lists:last/1` and `lists:mapfoldl/3`
+- Add support to Elixir for `Process.send/2` `Process.send_after/3/4` and `Process.cancel_timer/1`
+- Add support for `handle_continue` callback in `gen_server`
+- Support for Elixir `List.Chars` protocol
+- Support for `gen_server:start_monitor/3,4`
+
+### Changed
+
+- ESP32: Elixir library is not shipped anymore with `esp32boot.avm`. Use `elixir_esp32boot.avm`
+instead
+- `Enum.find_index` and `Enum.find_value` support Enumerable and not just lists
+
+### Fixed
+
+- ESP32: content of `boot.avm` partition is not truncated anymore
+- ESP32: `Fixed gpio:set_int` to accept any pin, not only pin 2
+- Fix memory corruption in `unicode:characters_to_binary`
+- Fix handling of large literal indexes
+- `unicode:characters_to_list`: fixed bogus out_of_memory error on some platforms such as ESP32
+- Fix crash in Elixir library when doing `inspect(:atom)`
+- General inspect() compliance with Elixir behavior (but there are still some minor differences)
+
 ## [0.6.4] - 2024-08-18
 
 ### Added

@@ -1,7 +1,8 @@
 #
-# This file is part of AtomVM.
+# This file is part of elixir-lang.
 #
-# Copyright 2023 Davide Bettio <davide@uninstall.it>
+# Copyright 2013-2023 Elixir Contributors
+# https://github.com/elixir-lang/elixir/commits/v1.17.2/lib/elixir/lib/list/chars.ex
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,15 +16,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+# SPDX-License-Identifier: Apache-2.0
 #
 
-project(esp32boot)
-
-include(BuildErlang)
-
-if (Elixir_FOUND)
-    pack_runnable(elixir_esp32boot esp32init esp32devmode eavmlib estdlib alisp exavmlib)
-endif()
-
-pack_runnable(esp32boot esp32init esp32devmode eavmlib estdlib alisp)
+defimpl List.Chars, for: Integer do
+  def to_charlist(term) do
+    Integer.to_charlist(term)
+  end
+end

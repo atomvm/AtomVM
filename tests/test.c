@@ -75,6 +75,34 @@ struct Test
 #define SKIP_STACKTRACES false
 #endif
 
+// Enabling this will override malloc and calloc weak symbols,
+// so we can force an alternative version of malloc that returns
+// NULL when size is 0.
+// This is useful to find debugging or finding some kind of issues.
+#ifdef FORCE_MALLOC_ZERO_RETURNS_NULL
+void *malloc(size_t size)
+{
+    if (size == 0) {
+        return NULL;
+    } else {
+        void *memptr = NULL;
+        if (posix_memalign(&memptr, sizeof(void *), size) != 0) {
+            return NULL;
+        }
+        return memptr;
+    }
+}
+
+void *calloc(size_t nmemb, size_t size)
+{
+    void *ptr = malloc(nmemb * size);
+    if (ptr != NULL) {
+        memset(ptr, 0, nmemb * size);
+    }
+    return ptr;
+}
+#endif
+
 struct Test tests[] = {
     TEST_CASE_EXPECTED(add, 17),
     TEST_CASE_EXPECTED(fact, 120),
@@ -166,6 +194,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_abs, 5),
     TEST_CASE_EXPECTED(test_is_process_alive, 121),
     TEST_CASE_EXPECTED(test_is_not_type, 255),
+    TEST_CASE(test_is_bitstring_is_binary),
     TEST_CASE_EXPECTED(test_badarith, -87381),
     TEST_CASE_EXPECTED(test_badarith2, -87381),
     TEST_CASE_EXPECTED(test_badarith3, -1365),
@@ -335,6 +364,7 @@ struct Test tests[] = {
 
     TEST_CASE_EXPECTED(literal_test0, 333575620),
     TEST_CASE_EXPECTED(literal_test1, 1680),
+    TEST_CASE(literal_test2),
 
     TEST_CASE_EXPECTED(test_list_eq, 1),
     TEST_CASE_EXPECTED(test_tuple_eq, 1),

@@ -21,7 +21,7 @@
 -module(test_gen_server).
 
 -export([test/0]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
+-export([init/1, handle_continue/2, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -record(state, {
     num_casts = 0,
@@ -36,6 +36,8 @@ test() ->
     ok = test_cast(),
     ok = test_info(),
     ok = test_start_link(),
+    ok = test_start_monitor(),
+    ok = test_continue(),
     ok = test_init_exception(),
     ok = test_late_reply(),
     ok = test_concurrent_clients(),
@@ -76,6 +78,68 @@ test_start_link() ->
         end,
     true = erlang:process_flag(trap_exit, false),
     ok.
+
+test_start_monitor() ->
+    case get_otp_version() of
+        Version when Version =:= atomvm orelse (is_integer(Version) andalso Version >= 23) ->
+            {ok, {Pid, Ref}} = gen_server:start_monitor(?MODULE, [], []),
+
+            pong = gen_server:call(Pid, ping),
+            pong = gen_server:call(Pid, reply_ping),
+            ok = gen_server:cast(Pid, crash),
+            ok =
+                receive
+                    {'DOWN', Ref, process, Pid, _Reason} -> ok
+                after 30000 -> timeout
+                end,
+            ok;
+        _ ->
+            ok
+    end.
+
+test_continue() ->
+    {ok, Pid} = gen_server:start_link(?MODULE, {continue, self()}, []),
+    [{Pid, continue}, {Pid, after_continue}] = read_replies(Pid),
+
+    gen_server:call(Pid, {continue_reply, self()}),
+    [{Pid, continue}, {Pid, after_continue}] = read_replies(Pid),
+
+    gen_server:call(Pid, {continue_noreply, self()}),
+    [{Pid, continue}, {Pid, after_continue}] = read_replies(Pid),
+
+    gen_server:cast(Pid, {continue_noreply, self()}),
+    [{Pid, continue}, {Pid, after_continue}] = read_replies(Pid),
+
+    Pid ! {continue_noreply, self()},
+    [{Pid, continue}, {Pid, after_continue}] = read_replies(Pid),
+
+    Pid ! {continue_continue, self()},
+    [{Pid, before_continue}, {Pid, continue}, {Pid, after_continue}] = read_replies(Pid),
+
+    Ref = monitor(process, Pid),
+    Pid ! continue_stop,
+    verify_down_reason(Ref, Pid, normal).
+
+read_replies(Pid) ->
+    receive
+        {Pid, ack} -> read_replies()
+    after 1000 ->
+        error
+    end.
+
+read_replies() ->
+    receive
+        Msg -> [Msg | read_replies()]
+    after 0 -> []
+    end.
+
+verify_down_reason(MRef, Server, Reason) ->
+    receive
+        {'DOWN', MRef, process, Server, Reason} ->
+            ok
+    after 5000 ->
+        error
+    end.
 
 test_cast() ->
     {ok, Pid} = gen_server:start(?MODULE, [], []),
@@ -347,17 +411,49 @@ test_stop_noproc() ->
             ok
     end.
 
+get_otp_version() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            list_to_integer(erlang:system_info(otp_release));
+        _ ->
+            atomvm
+    end.
+
 %%
 %% callbacks
 %%
 
 init(throwme) ->
     throw(throwme);
+init({continue, Pid}) ->
+    io:format("init(continue) -> ~p~n", [Pid]),
+    self() ! {after_continue, Pid},
+    {ok, [], {continue, {message, Pid}}};
 init(_) ->
     {ok, #state{}}.
 
+handle_continue({continue, Pid}, State) ->
+    Pid ! {self(), before_continue},
+    self() ! {after_continue, Pid},
+    {noreply, State, {continue, {message, Pid}}};
+handle_continue(stop, State) ->
+    {stop, normal, State};
+handle_continue({message, Pid}, State) ->
+    Pid ! {self(), continue},
+    {noreply, State};
+handle_continue({message, Pid, From}, State) ->
+    Pid ! {self(), continue},
+    gen_server:reply(From, ok),
+    {noreply, State}.
+
 handle_call(ping, _From, State) ->
     {reply, pong, State};
+handle_call({continue_reply, Pid}, _From, State) ->
+    self() ! {after_continue, Pid},
+    {reply, ok, State, {continue, {message, Pid}}};
+handle_call({continue_noreply, Pid}, From, State) ->
+    self() ! {after_continue, Pid},
+    {noreply, State, {continue, {message, Pid, From}}};
 handle_call(reply_ping, From, State) ->
     gen_server:reply(From, pong),
     {noreply, State};
@@ -392,6 +488,9 @@ handle_call(crash_me, _From, State) ->
 handle_call(crash_in_terminate, _From, State) ->
     {reply, ok, State#state{crash_in_terminate = true}}.
 
+handle_cast({continue_noreply, Pid}, State) ->
+    self() ! {after_continue, Pid},
+    {noreply, State, {continue, {message, Pid}}};
 handle_cast(crash, _State) ->
     throw(test_crash);
 handle_cast(ping, #state{num_casts = NumCasts} = State) ->
@@ -403,6 +502,17 @@ handle_cast({set_info_timeout, Timeout}, State) ->
 handle_cast(_Request, State) ->
     {noreply, State}.
 
+handle_info({after_continue, Pid}, State) ->
+    Pid ! {self(), after_continue},
+    Pid ! {self(), ack},
+    {noreply, State};
+handle_info(continue_stop, State) ->
+    {noreply, State, {continue, stop}};
+handle_info({continue_noreply, Pid}, State) ->
+    self() ! {after_continue, Pid},
+    {noreply, State, {continue, {message, Pid}}};
+handle_info({continue_continue, Pid}, State) ->
+    {noreply, State, {continue, {continue, Pid}}};
 handle_info(ping, #state{num_infos = NumInfos, info_timeout = InfoTimeout} = State) ->
     NewState = State#state{num_infos = NumInfos + 1},
     case InfoTimeout of

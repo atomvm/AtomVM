@@ -1,8 +1,8 @@
 #
 # This file is part of elixir-lang.
 #
-# Copyright 2012-2024 Elixir Contributors
-# https://github.com/elixir-lang/elixir/tree/v1.17.2/lib/elixir/lib/map_set.ex
+# Copyright 2013-2023 Elixir Contributors
+# https://github.com/elixir-lang/elixir/commits/v1.17.2/lib/elixir/lib/list/chars.ex
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,21 +19,18 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-defimpl Enumerable, for: MapSet do
-  def count(map_set) do
-    {:ok, MapSet.size(map_set)}
+defimpl List.Chars, for: BitString do
+  @doc """
+  Returns the given binary `term` converted to a charlist.
+  """
+  def to_charlist(term) when is_binary(term) do
+    String.to_charlist(term)
   end
 
-  def member?(map_set, val) do
-    {:ok, MapSet.member?(map_set, val)}
-  end
-
-  def reduce(map_set, acc, fun) do
-    Enumerable.List.reduce(MapSet.to_list(map_set), acc, fun)
-  end
-
-  def slice(map_set) do
-    size = MapSet.size(map_set)
-    {:ok, size, &Enumerable.List.slice(MapSet.to_list(map_set), &1, &2, size)}
+  def to_charlist(term) do
+    raise Protocol.UndefinedError,
+      protocol: @protocol,
+      value: term,
+      description: "cannot convert a bitstring to a charlist"
   end
 end

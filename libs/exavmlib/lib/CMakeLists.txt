@@ -49,6 +49,7 @@ set(ELIXIR_MODULES
     Process
     Protocol.UndefinedError
     Range
+    System
     Tuple
 
     ArithmeticError
@@ -74,6 +75,20 @@ set(ELIXIR_MODULES
     Collectable.List
     Collectable.Map
     Collectable.MapSet
+
+    List.Chars
+    List.Chars.Atom
+    List.Chars.BitString
+    List.Chars.Float
+    List.Chars.Integer
+    List.Chars.List
+
+    String.Chars
+    String.Chars.Atom
+    String.Chars.BitString
+    String.Chars.Float
+    String.Chars.Integer
+    String.Chars.List
 )
 
 pack_archive(exavmlib ${ELIXIR_MODULES})

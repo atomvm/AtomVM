@@ -96,7 +96,7 @@ static term nif_binary_part_3(Context *ctx, int argc, term argv[]);
 static term nif_binary_split_2(Context *ctx, int argc, term argv[]);
 static term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
-static term nif_erlang_atom_to_binary_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_atom_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_float_1(Context *ctx, int argc, term argv[]);
@@ -252,7 +252,7 @@ static const struct Nif make_ref_nif =
 static const struct Nif atom_to_binary_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_erlang_atom_to_binary_2
+    .nif_ptr = nif_erlang_atom_to_binary
 };
 
 static const struct Nif atom_to_list_nif =
@@ -2121,14 +2121,12 @@ term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
     return term_from_atom_index(global_atom_index);
 }
 
-static term nif_erlang_atom_to_binary_2(Context *ctx, int argc, term argv[])
+static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
-
     term atom_term = argv[0];
     VALIDATE_VALUE(atom_term, term_is_atom);
 
-    term encoding = argv[1];
+    term encoding = (argc == 1) ? UTF8_ATOM : argv[1];
 
     GlobalContext *glb = ctx->global;
 
@@ -4869,7 +4867,10 @@ static term nif_unicode_characters_to_list(Context *ctx, int argc, term argv[])
     }
     size_t len = size / sizeof(uint32_t);
     uint32_t *chars = malloc(size);
-    if (IS_NULL_PTR(chars)) {
+    // fun fact: malloc(size) when size is 0, on some platforms may return NULL, causing a failure here
+    // so in order to avoid out_of_memory (while having plenty of memory) let's treat size==0 as a
+    // special case
+    if (UNLIKELY((chars == NULL) && (size != 0))) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     size_t needed_terms = CONS_SIZE * len;
@@ -4933,7 +4934,7 @@ static term nif_unicode_characters_to_binary(Context *ctx, int argc, term argv[]
     if (UNLIKELY(conv_result == UnicodeBadArg)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-    size_t needed_terms = term_binary_data_size_in_terms(len);
+    size_t needed_terms = term_binary_heap_size(len);
     if (UNLIKELY(conv_result == UnicodeError || conv_result == UnicodeIncompleteTransform)) {
         needed_terms += TUPLE_SIZE(3) + rest_size;
     }

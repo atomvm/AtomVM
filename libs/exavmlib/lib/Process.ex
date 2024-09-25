@@ -146,6 +146,20 @@ defmodule Process do
     receive after: (timeout -> :ok)
   end
 
+  @spec send(dest, msg) :: :ok | :noconnect | :nosuspend
+        when dest: dest(),
+             msg: any
+  defdelegate send(dest, msg), to: :erlang
+
+  @spec send_after(pid | atom, term, non_neg_integer, [option]) :: reference
+        when option: {:abs, boolean}
+  def send_after(dest, msg, time, _opts \\ []) do
+    :erlang.send_after(time, dest, msg)
+  end
+
+  @spec cancel_timer(reference) :: non_neg_integer | false | :ok
+  defdelegate cancel_timer(timer_ref), to: :erlang
+
   @type spawn_opt ::
           :link
           | :monitor

@@ -1,7 +1,8 @@
 #
-# This file is part of AtomVM.
+# This file is part of elixir-lang.
 #
-# Copyright 2023 Davide Bettio <davide@uninstall.it>
+# Copyright 2013-2023 Elixir Contributors
+# https://github.com/elixir-lang/elixir/commits/v1.17.2/lib/elixir/lib/string/chars.ex
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,15 +16,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+# SPDX-License-Identifier: Apache-2.0
 #
 
-project(esp32boot)
+import Kernel, except: [to_string: 1]
 
-include(BuildErlang)
+defimpl String.Chars, for: BitString do
+  def to_string(term) when is_binary(term) do
+    term
+  end
 
-if (Elixir_FOUND)
-    pack_runnable(elixir_esp32boot esp32init esp32devmode eavmlib estdlib alisp exavmlib)
-endif()
-
-pack_runnable(esp32boot esp32init esp32devmode eavmlib estdlib alisp)
+  def to_string(term) do
+    raise Protocol.UndefinedError,
+      protocol: @protocol,
+      value: term,
+      description: "cannot convert a bitstring to a string"
+  end
+end

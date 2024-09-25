@@ -98,6 +98,14 @@ jobs:
           ref: Production
           path: /home/runner/work/AtomVM/AtomVM/www
 
+      - name: Track all branches
+        shell: bash
+        run: |
+          git config --global --add safe.directory /__w/AtomVM/AtomVM
+          for branch in `git branch -a | grep "remotes/origin" | grep -v HEAD | grep -v "${{ github.ref_name }}" `; do
+            git branch --track ${branch#remotes/origin/} $branch
+          done
+
       - name: Build Site
         shell: bash
         run: |

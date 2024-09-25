@@ -42,9 +42,12 @@ do_main(Argv) ->
                 RootDir ->
                     try
                         Config = load_config(maps:get(config, Opts, "mkimage.config")),
+                        BuildDir = get_build_dir(Opts, RootDir),
+                        BootFile = BuildDir ++ "/libs/esp32boot/esp32boot.avm",
                         mkimage(
                             RootDir,
-                            get_build_dir(Opts, RootDir),
+                            BuildDir,
+                            maps:get(boot, Opts, BootFile),
                             maps:get(out, Opts, "atomvm.img"),
                             maps:get(segments, Config)
                         ),
@@ -65,6 +68,8 @@ parse_args(Argv) ->
 %% @private
 parse_args([], {Opts, Args}) ->
     {Opts, lists:reverse(Args)};
+parse_args(["--boot", Path | T], {Opts, Args}) ->
+    parse_args(T, {Opts#{boot => Path}, Args});
 parse_args(["--out", Path | T], {Opts, Args}) ->
     parse_args(T, {Opts#{out => Path}, Args});
 parse_args(["--root_dir", Path | T], {Opts, Args}) ->
@@ -92,6 +97,7 @@ print_help() ->
         "The following options are supported:"
         "~n"
         "    * --root_dir <path>    Path to the root directory of the AtomVM git checkout~n"
+        "    * --boot <path>        Path to a esp32boot.avm file~n"
         "    * --build_dir <path>   Path to the AtomVM build directory (defaults to root_dir/build, if unspecifeid)~n"
         "    * --out <path>         Output path for AtomVM image file~n"
         "    * --config <path>      Path to mkimage configuration file~n"
@@ -124,7 +130,7 @@ get_build_dir(Opts, RootDir) ->
     end.
 
 %% @private
-mkimage(RootDir, BuildDir, OutputFile, Segments) ->
+mkimage(RootDir, BuildDir, BootFile, OutputFile, Segments) ->
     io:format("Writing output to ~s~n", [OutputFile]),
     io:format("=============================================~n"),
     case file:open(OutputFile, [write, binary]) of
@@ -156,7 +162,13 @@ mkimage(RootDir, BuildDir, OutputFile, Segments) ->
                             end
                     end,
                     SegmentPaths = [
-                        replace("BUILD_DIR", BuildDir, replace("ROOT_DIR", RootDir, SegmentPath))
+                        replace(
+                            "BUILD_DIR",
+                            BuildDir,
+                            replace(
+                                "BOOT_FILE", BootFile, replace("ROOT_DIR", RootDir, SegmentPath)
+                            )
+                        )
                      || SegmentPath <- maps:get(path, Segment)
                     ],
                     case try_read(SegmentPaths) of
@@ -200,4 +212,5 @@ from_hex([$0, $x | Bits]) ->
 
 %% @private
 replace(VariableName, Value, String) ->
-    string:replace(String, io_lib:format("${~s}", [VariableName]), Value).
+    string:replace(String, io_lib:format("${~s}", [VariableName]), Value),
+    string:replace(String, io_lib:format("$[~s]", [VariableName]), Value).
