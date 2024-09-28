@@ -180,11 +180,22 @@ typedef dreg_t dreg_gc_safe_t;
         case COMPACT_EXTENDED:                                                          \
             switch (first_byte) {                                                       \
                 case COMPACT_EXTENDED_LITERAL: {                                        \
-                    uint8_t ext = ((*(decode_pc)++) & 0xF);                             \
-                    if (ext == 0x8) {                                                   \
-                        (decode_pc)++;                                                  \
-                    } else if (ext != 0) {                                              \
-                        AVM_ABORT();                                                    \
+                    uint8_t first_extended_byte = *(decode_pc)++;                       \
+                    switch (((first_extended_byte) >> 3) & 0x3) {                       \
+                        case 0:                                                         \
+                        case 2:                                                         \
+                            break;                                                      \
+                                                                                        \
+                        case 1:                                                         \
+                            (decode_pc)++;                                              \
+                            break;                                                      \
+                                                                                        \
+                        case 3: {                                                       \
+                            uint8_t sz = (first_extended_byte >> 5) + 2;                \
+                            decode_pc += sz;                                            \
+                            break;                                                      \
+                        }                                                               \
+                        default: UNREACHABLE(); /* help gcc 8.4 */                      \
                     }                                                                   \
                     break;                                                              \
                 }                                                                       \
@@ -594,14 +605,28 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
             switch (first_byte) {                                                                                       \
                 case COMPACT_EXTENDED_LITERAL: {                                                                        \
                     uint8_t first_extended_byte = *(decode_pc)++;                                                       \
-                    if (!(first_extended_byte & 0xF)) {                                                                 \
-                        dest_term = module_load_literal(mod, first_extended_byte >> 4, ctx);                            \
-                    } else if ((first_extended_byte & 0xF) == 0x8) {                                                    \
-                        uint8_t byte_1 = *(decode_pc)++;                                                                \
-                        uint16_t index = (((uint16_t) first_extended_byte & 0xE0) << 3) | byte_1;                       \
-                        dest_term = module_load_literal(mod, index, ctx);                                               \
-                    } else {                                                                                            \
-                        VM_ABORT();                                                                                     \
+                    switch (((first_extended_byte) >> 3) & 0x3) {                                                       \
+                        case 0:                                                                                         \
+                        case 2:                                                                                         \
+                            dest_term = module_load_literal(mod, first_extended_byte >> 4, ctx);                        \
+                            break;                                                                                      \
+                        case 1: {                                                                                       \
+                            uint8_t byte_1 = *(decode_pc)++;                                                            \
+                            uint16_t index = (((uint16_t) first_extended_byte & 0xE0) << 3) | byte_1;                   \
+                            dest_term = module_load_literal(mod, index, ctx);                                           \
+                            break;                                                                                      \
+                        }                                                                                               \
+                        case 3: {                                                                                       \
+                            uint8_t sz = (first_extended_byte >> 5) + 2;                                                \
+                            avm_int_t val = 0;                                                                          \
+                            for (uint8_t vi = 0; vi < sz; vi++) {                                                       \
+                                val <<= 8;                                                                              \
+                                val |= *(decode_pc)++;                                                                  \
+                            }                                                                                           \
+                            dest_term = module_load_literal(mod, val, ctx);                                             \
+                            break;                                                                                      \
+                        }                                                                                               \
+                        default: UNREACHABLE(); /* help gcc 8.4 */                                                      \
                     }                                                                                                   \
                     if (UNLIKELY(term_is_invalid_term(dest_term))) {                                                    \
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);                                                                \
