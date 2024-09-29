@@ -25,6 +25,42 @@ defmodule IO do
   @compile {:autoload, false}
 
   # Taken from Elixir io.ex
+  @type chardata :: String.t() | maybe_improper_list(char | chardata, String.t() | [])
+
+  # Taken from Elixir io.ex
+  @doc """
+  Converts chardata into a string.
+
+  For more information about chardata, see the ["Chardata"](#module-chardata)
+  section in the module documentation.
+
+  In case the conversion fails, it raises an `UnicodeConversionError`.
+  If a string is given, it returns the string itself.
+
+  ## Examples
+
+      iex> IO.chardata_to_string([0x00E6, 0x00DF])
+      "æß"
+
+      iex> IO.chardata_to_string([0x0061, "bc"])
+      "abc"
+
+      iex> IO.chardata_to_string("string")
+      "string"
+
+  """
+  @spec chardata_to_string(chardata) :: String.t()
+  def chardata_to_string(chardata)
+
+  def chardata_to_string(string) when is_binary(string) do
+    string
+  end
+
+  def chardata_to_string(list) when is_list(list) do
+    List.to_string(list)
+  end
+
+  # Taken from Elixir io.ex
   @doc """
   Converts iodata (a list of integers representing bytes, lists
   and binaries) into a binary.

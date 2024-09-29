@@ -31,6 +31,7 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 - Support for large tuples (more than 255 elements) in external terms.
 - Support for `io:put_chars/2`
 - Support for `lists:nthtail/2`
+- Support for Elixir `IO.chardata_to_string/1`
 
 ### Changed
 
