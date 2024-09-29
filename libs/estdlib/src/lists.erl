@@ -32,6 +32,7 @@
 -export([
     map/2,
     nth/2,
+    nthtail/2,
     last/1,
     member/2,
     delete/2,
@@ -91,6 +92,22 @@ nth(1, [H | _T]) ->
     H;
 nth(Index, [_H | T]) when Index > 1 ->
     nth(Index - 1, T).
+
+%%-----------------------------------------------------------------------------
+%% @param   N the index to start the sublist from
+%% @param   L the list from which to extract a tail
+%% @returns a sublist of list starting from position N.
+%% @doc     Get the sublist of list L starting after the element N.
+%%
+%%          The behavior of this function is undefined if N is outside of the
+%%          {0..length(L)}.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec nthtail(N :: non_neg_integer(), L :: list()) -> list().
+nthtail(0, L) when is_list(L) ->
+    L;
+nthtail(N, [_H | T]) when is_integer(N) andalso N > 0 ->
+    nthtail(N - 1, T).
 
 %%-----------------------------------------------------------------------------
 %% @param   L the proper list from which to get the last item
