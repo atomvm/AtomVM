@@ -31,6 +31,12 @@ set(HAVE_MKFIFO "" CACHE INTERNAL "Have symbol mkfifo" FORCE)
 # in CMAKE_REQUIRED_INCLUDES as lwip includes freetos and many esp system components
 set(HAVE_SOCKET 1 CACHE INTERNAL "Have symbol socket" FORCE)
 
+# opendir, closedir and readdir functions are not detected
+# but they are available
+set(HAVE_OPENDIR 1 CACHE INTERNAL "Have symbol opendir" FORCE)
+set(HAVE_CLOSEDIR 1 CACHE INTERNAL "Have symbol closedir" FORCE)
+set(HAVE_READDIR 1 CACHE INTERNAL "Have symbol readdir" FORCE)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../CMakeModules")
 
 # Disable SMP with esp32 socs that have only one core

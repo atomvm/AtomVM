@@ -141,6 +141,9 @@ atomvm:posix_select_stop/1, IF_HAVE_OPEN_CLOSE(&atomvm_posix_select_stop_nif)
 atomvm:posix_mkfifo/2, IF_HAVE_MKFIFO(&atomvm_posix_mkfifo_nif)
 atomvm:posix_unlink/1, IF_HAVE_UNLINK(&atomvm_posix_unlink_nif)
 atomvm:posix_clock_settime/2, IF_HAVE_CLOCK_SETTIME_OR_SETTIMEOFDAY(&atomvm_posix_clock_settime_nif)
+atomvm:posix_opendir/1, IF_HAVE_OPENDIR_READDIR_CLOSEDIR(&atomvm_posix_opendir_nif)
+atomvm:posix_closedir/1, IF_HAVE_OPENDIR_READDIR_CLOSEDIR(&atomvm_posix_closedir_nif)
+atomvm:posix_readdir/1, IF_HAVE_OPENDIR_READDIR_CLOSEDIR(&atomvm_posix_readdir_nif)
 code:load_abs/1, &code_load_abs_nif
 code:load_binary/3, &code_load_binary_nif
 code:ensure_loaded/1, &code_ensure_loaded_nif
