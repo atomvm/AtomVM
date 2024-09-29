@@ -26,6 +26,7 @@
 
 test() ->
     ok = test_nth(),
+    ok = test_nthtail(),
     ok = test_member(),
     ok = test_delete(),
     ok = test_keyfind(),
@@ -55,6 +56,15 @@ test_nth() ->
     ?ASSERT_MATCH(lists:nth(2, [a, b, c]), b),
     ?ASSERT_MATCH(lists:nth(3, [a, b, c]), c),
     ?ASSERT_ERROR(lists:nth(-1, [a, b, c]), function_clause),
+    ok.
+
+test_nthtail() ->
+    ?ASSERT_MATCH(lists:nthtail(0, [a, b, c]), [a, b, c]),
+    ?ASSERT_MATCH(lists:nthtail(1, [a, b, c]), [b, c]),
+    ?ASSERT_MATCH(lists:nthtail(2, [a, b, c]), [c]),
+    ?ASSERT_MATCH(lists:nthtail(3, [a, b, c]), []),
+    ?ASSERT_ERROR(lists:nthtail(-1, [a, b, c]), function_clause),
+    ?ASSERT_ERROR(lists:nthtail(4, [a, b, c]), function_clause),
     ok.
 
 test_member() ->
