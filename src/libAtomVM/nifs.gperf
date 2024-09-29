@@ -32,6 +32,8 @@ struct NifNameAndNifPtr
 };
 %%
 binary:at/2, &binary_at_nif
+binary:copy/1, &binary_copy_nif
+binary:copy/2, &binary_copy_nif
 binary:first/1, &binary_first_nif
 binary:last/1, &binary_last_nif
 binary:part/3, &binary_part_nif

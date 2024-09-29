@@ -267,6 +267,7 @@ compile_erlang(spawn_fun3)
 compile_erlang(binary_at_test)
 compile_erlang(binary_first_test)
 compile_erlang(binary_last_test)
+compile_erlang(test_binary_copy)
 
 compile_erlang(test_integer_to_binary)
 compile_erlang(test_list_to_binary)
@@ -736,6 +737,7 @@ add_custom_target(erlang_test_modules DEPENDS
     binary_at_test.beam
     binary_first_test.beam
     binary_last_test.beam
+    test_binary_copy.beam
 
     test_integer_to_binary.beam
     test_list_to_binary.beam
