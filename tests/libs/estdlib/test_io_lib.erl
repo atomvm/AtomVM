@@ -27,6 +27,11 @@
 -define(FLT(L), lists:flatten(L)).
 
 test() ->
+    test_format(),
+    test_latin1_char_list(),
+    ok.
+
+test_format() ->
     ?ASSERT_MATCH(?FLT(io_lib:format("", [])), ""),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo", [])), "foo"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo~n", [])), "foo\n"),
@@ -238,6 +243,17 @@ test() ->
     ?ASSERT_MATCH(?FLT(io_lib:format("~.16+", [-31])), "-16#1f"),
     ?ASSERT_MATCH(?FLT(io_lib:format("~i~n", [foo])), "\n"),
 
+    ok.
+
+test_latin1_char_list() ->
+    true = io_lib:latin1_char_list([]),
+    false = io_lib:latin1_char_list(foo),
+    false = io_lib:latin1_char_list(<<>>),
+    false = io_lib:latin1_char_list(<<"hello">>),
+    true = io_lib:latin1_char_list("hello"),
+    true = io_lib:latin1_char_list("été"),
+    false = io_lib:latin1_char_list(["hello"]),
+    false = io_lib:latin1_char_list([$h, $e, $l, $l | $o]),
     ok.
 
 id(X) ->
