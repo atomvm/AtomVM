@@ -88,6 +88,7 @@ static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new);
 static term list_to_atom(Context *ctx, int argc, term argv[], int create_new);
 
 static term nif_binary_at_2(Context *ctx, int argc, term argv[]);
+static term nif_binary_copy(Context *ctx, int argc, term argv[]);
 static term nif_binary_first_1(Context *ctx, int argc, term argv[]);
 static term nif_binary_last_1(Context *ctx, int argc, term argv[]);
 static term nif_binary_part_3(Context *ctx, int argc, term argv[]);
@@ -209,6 +210,12 @@ static const struct Nif binary_at_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_at_2
+};
+
+static const struct Nif binary_copy_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_binary_copy
 };
 
 static const struct Nif binary_first_nif =
@@ -2941,6 +2948,37 @@ static term nif_binary_at_2(Context *ctx, int argc, term argv[])
     }
 
     return term_from_int11(term_binary_data(bin_term)[pos]);
+}
+
+static term nif_binary_copy(Context *ctx, int argc, term argv[])
+{
+    term bin_term = argv[0];
+    VALIDATE_VALUE(bin_term, term_is_binary);
+
+    size_t count = 1;
+
+    if (argc == 2) {
+        term count_term = argv[1];
+        VALIDATE_VALUE(count_term, term_is_integer);
+        count = term_to_int(count_term);
+    }
+
+    size_t size = term_binary_size(bin_term);
+    size_t dest_size = size * count;
+
+    size_t alloc_heap_size = term_binary_heap_size(dest_size);
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, alloc_heap_size, 1, &bin_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result = term_create_uninitialized_binary(dest_size, &ctx->heap, ctx->global);
+    uint8_t *dest = (uint8_t *) term_binary_data(result);
+    const void *src = (const void *) term_binary_data(bin_term);
+    for (size_t i = 0; i < count; i++) {
+        memcpy((void *) dest, src, size);
+        dest += size;
+    }
+    return result;
 }
 
 static term nif_binary_first_1(Context *ctx, int argc, term argv[])
