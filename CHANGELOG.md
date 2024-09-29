@@ -29,6 +29,7 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 - Add support to Elixir for `Keyword.split/2`
 - Support for `binary:split/3` and `string:find/2,3`
 - Support for large tuples (more than 255 elements) in external terms.
+- Support for Elixir `IO.chardata_to_string/1`
 
 ### Changed
 
