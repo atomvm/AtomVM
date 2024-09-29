@@ -365,6 +365,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(literal_test0, 333575620),
     TEST_CASE_EXPECTED(literal_test1, 1680),
     TEST_CASE(literal_test2),
+    TEST_CASE(test_extended_literal_large),
 
     TEST_CASE_EXPECTED(test_list_eq, 1),
     TEST_CASE_EXPECTED(test_tuple_eq, 1),
