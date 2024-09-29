@@ -4,7 +4,7 @@
 # Copyright 2012-2024 Elixir Contributors
 # https://github.com/elixir-lang/elixir/commits/v1.10.1/lib/elixir/lib/keyword.ex
 #
-# merge/2 take/2 pop/2/3 pop!/2 keyword?/1 has_key?/2 from:
+# merge/2 take/2 pop/2/3 pop!/2 keyword?/1 has_key?/2 split/2 from:
 # https://github.com/elixir-lang/elixir/blob/v1.16/lib/elixir/lib/keyword.ex
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -99,6 +99,19 @@ defmodule Keyword do
       true -> delete_key(keywords, key)
       _ -> keywords
     end
+  end
+
+  def split(keywords, keys) when is_list(keywords) and is_list(keys) do
+    fun = fn {k, v}, {take, drop} ->
+      case k in keys do
+        true -> {[{k, v} | take], drop}
+        false -> {take, [{k, v} | drop]}
+      end
+    end
+
+    acc = {[], []}
+    {take, drop} = :lists.foldl(fun, acc, keywords)
+    {:lists.reverse(take), :lists.reverse(drop)}
   end
 
   def take(keywords, keys) when is_list(keywords) and is_list(keys) do

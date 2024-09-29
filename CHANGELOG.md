@@ -26,6 +26,7 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 - Support for `gen_server:start_monitor/3,4`
 - Support for `code:ensure_loaded/1`
 - Support for `io_lib:latin1_char_list/1`
+- Add support to Elixir for `Keyword.split/2`
 
 ### Changed
 
