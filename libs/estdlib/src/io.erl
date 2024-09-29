@@ -27,7 +27,7 @@
 %%-----------------------------------------------------------------------------
 -module(io).
 
--export([format/1, format/2, get_line/1, put_chars/1]).
+-export([format/1, format/2, get_line/1, put_chars/1, put_chars/2]).
 
 %%-----------------------------------------------------------------------------
 %% @doc     Equivalent to format(Format, []).
@@ -96,3 +96,15 @@ put_chars(Chars) ->
                 {io_reply, Ref, Line} -> Line
             end
     end.
+
+%%-----------------------------------------------------------------------------
+%% @param   Chars character(s) to write to console
+%% @returns ok
+%% @doc     Writes the given character(s) to the console.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec put_chars(Device :: any(), Chars :: list() | binary()) -> ok.
+put_chars(standard_error, Chars) ->
+    put_chars(Chars);
+put_chars(standard_output, Chars) ->
+    put_chars(Chars).
