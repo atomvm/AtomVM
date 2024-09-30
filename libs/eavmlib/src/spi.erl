@@ -59,10 +59,14 @@
     | {command_len_bits, 0..16}
 ].
 -type device_name() :: atom().
--type params() :: [
-    {bus_config, bus_config()}
-    | {device_config, [{device_name(), device_config()}]}
-].
+-type params() ::
+    [
+        {bus_config, bus_config()}
+    ]
+    | [
+        {bus_config, bus_config()}
+        | {device_config, [{device_name(), device_config()}]}
+    ].
 
 -type spi() :: pid().
 -type address() :: non_neg_integer().
@@ -294,7 +298,7 @@ write_read(SPI, DeviceName, Transaction) when
 validate_params(Params) when is_map(Params) orelse is_list(Params) ->
     #{
         bus_config => validate_bus_config(get_value(bus_config, Params, undefined)),
-        device_config => validate_device_config(get_value(device_config, Params, undefined))
+        device_config => validate_device_config(get_value(device_config, Params, []))
     };
 validate_params(Params) ->
     throw({error, {not_a_map_or_list, Params}}).
