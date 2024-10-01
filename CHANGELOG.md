@@ -30,19 +30,31 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 - Add support for `handle_continue` callback in `gen_server`
 - Support for Elixir `List.Chars` protocol
 - Support for `gen_server:start_monitor/3,4`
+- Support for `code:ensure_loaded/1`
+- Support for `io_lib:latin1_char_list/1`
+- Add support to Elixir for `Keyword.split/2`
+- Support for `binary:split/3` and `string:find/2,3`
+- Support for large tuples (more than 255 elements) in external terms.
+- Support for `io:put_chars/2`
+- Support for `lists:nthtail/2`
+- Support for Elixir `IO.chardata_to_string/1`
+- Support for Elixir `List.duplicate/2`
+- Support for `binary:copy/1,2`
 
 ### Changed
 
 - ESP32: Elixir library is not shipped anymore with `esp32boot.avm`. Use `elixir_esp32boot.avm`
 instead
 - `Enum.find_index` and `Enum.find_value` support Enumerable and not just lists
+- Install AtomVM libraries source code and binaries for better dialyzer integration
+- Made the `device_config` properties list in `spi:open/1` optional (defaults to `[]`), so you can use the function with only a `bus_config`
 
 ### Fixed
 
 - ESP32: content of `boot.avm` partition is not truncated anymore
 - ESP32: `Fixed gpio:set_int` to accept any pin, not only pin 2
 - Fix memory corruption in `unicode:characters_to_binary`
-- Fix handling of large literal indexes
+- Fix handling of large literal indexes and large extended literal indexes
 - `unicode:characters_to_list`: fixed bogus out_of_memory error on some platforms such as ESP32
 - Fix crash in Elixir library when doing `inspect(:atom)`
 - General inspect() compliance with Elixir behavior (but there are still some minor differences)

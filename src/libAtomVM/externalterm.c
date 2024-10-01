@@ -38,6 +38,7 @@
 #define INTEGER_EXT 98
 #define ATOM_EXT 100
 #define SMALL_TUPLE_EXT 104
+#define LARGE_TUPLE_EXT 105
 #define NIL_EXT 106
 #define STRING_EXT 107
 #define LIST_EXT 108
@@ -281,15 +282,20 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
 
     } else if (term_is_tuple(t)) {
         size_t arity = term_get_tuple_arity(t);
-        if (arity > 255) {
-            fprintf(stderr, "Tuple arity greater than 255: %zu\n", arity);
-            AVM_ABORT();
-        }
+        size_t k;
         if (!IS_NULL_PTR(buf)) {
-            buf[0] = SMALL_TUPLE_EXT;
-            buf[1] = (int8_t) arity;
+            if (arity < 256) {
+                buf[0] = SMALL_TUPLE_EXT;
+                buf[1] = (int8_t) arity;
+                k = 2;
+            } else {
+                buf[0] = LARGE_TUPLE_EXT;
+                WRITE_32_UNALIGNED(buf + 1, (int32_t) arity);
+                k = 5;
+            }
+        } else {
+            k = arity < 256 ? 2 : 5;
         }
-        size_t k = 2;
         for (size_t i = 0; i < arity; ++i) {
             term e = term_get_tuple_element(t, i);
             k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, e, glb);
@@ -479,13 +485,20 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             return term_from_atom_index(global_atom_id);
         }
 
-        case SMALL_TUPLE_EXT: {
-            uint8_t arity = external_term_buf[1];
+        case SMALL_TUPLE_EXT:
+        case LARGE_TUPLE_EXT: {
+            size_t arity;
+            int buf_pos;
+            if (external_term_buf[0] == SMALL_TUPLE_EXT) {
+                arity = external_term_buf[1];
+                buf_pos = 2;
+            } else {
+                arity = READ_32_UNALIGNED(external_term_buf + 1);
+                buf_pos = 5;
+            }
             term tuple = term_alloc_tuple(arity, heap);
 
-            int buf_pos = 2;
-
-            for (int i = 0; i < arity; i++) {
+            for (size_t i = 0; i < arity; i++) {
                 size_t element_size;
                 term put_value = parse_external_terms(external_term_buf + buf_pos, &element_size, copy, heap, glb);
                 if (UNLIKELY(term_is_invalid_term(put_value))) {
@@ -713,20 +726,33 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             return 0;
         }
 
-        case SMALL_TUPLE_EXT: {
-            if (UNLIKELY(remaining < 1)) {
-                return INVALID_TERM_SIZE;
+        case SMALL_TUPLE_EXT:
+        case LARGE_TUPLE_EXT: {
+            size_t arity;
+            size_t buf_pos;
+            if (external_term_buf[0] == SMALL_TUPLE_EXT) {
+                if (UNLIKELY(remaining < 1)) {
+                    return INVALID_TERM_SIZE;
+                }
+                remaining--;
+                arity = external_term_buf[1];
+                buf_pos = 2;
+            } else {
+                if (UNLIKELY(remaining < 5)) {
+                    return INVALID_TERM_SIZE;
+                }
+                remaining -= 5;
+                arity = READ_32_UNALIGNED(external_term_buf + 1);
+                buf_pos = 5;
             }
-            remaining--;
-            uint8_t arity = external_term_buf[1];
+
             if (UNLIKELY(remaining < arity)) {
                 return INVALID_TERM_SIZE;
             }
 
             int heap_usage = 1;
-            size_t buf_pos = 2;
 
-            for (int i = 0; i < arity; i++) {
+            for (size_t i = 0; i < arity; i++) {
                 size_t element_size = 0;
                 int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &element_size, copy);
                 if (UNLIKELY(u == INVALID_TERM_SIZE)) {

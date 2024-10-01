@@ -32,10 +32,13 @@ struct NifNameAndNifPtr
 };
 %%
 binary:at/2, &binary_at_nif
+binary:copy/1, &binary_copy_nif
+binary:copy/2, &binary_copy_nif
 binary:first/1, &binary_first_nif
 binary:last/1, &binary_last_nif
 binary:part/3, &binary_part_nif
 binary:split/2, &binary_split_nif
+binary:split/3, &binary_split_nif
 calendar:system_time_to_universal_time/2, &system_time_to_universal_time_nif
 erlang:atom_to_binary/1, &atom_to_binary_nif
 erlang:atom_to_binary/2, &atom_to_binary_nif
@@ -147,6 +150,7 @@ code:load_abs/1, &code_load_abs_nif
 code:load_binary/3, &code_load_binary_nif
 code:all_available/0, &code_all_available_nif
 code:all_loaded/0, &code_all_loaded_nif
+code:ensure_loaded/1, &code_ensure_loaded_nif
 console:print/1, &console_print_nif
 base64:encode/1, &base64_encode_nif
 base64:decode/1, &base64_decode_nif

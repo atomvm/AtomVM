@@ -1,7 +1,7 @@
 %
 % This file is part of AtomVM.
 %
-% Copyright 2023 Davide Bettio <davide@uninstall.it>
+% Copyright 2024 Paul Guyot <pguyot@kallisys.net>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -18,17 +18,19 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module(test_code_load_binary).
+-module(test_binary).
 
--export([start/0]).
+-export([test/0]).
 
--include("code_load/export_test_module_data.hrl").
+-include("etest.hrl").
 
-start() ->
-    Bin = ?EXPORT_TEST_MODULE_DATA,
-    {error, _} = code:ensure_loaded(export_test_module),
-    {module, export_test_module} = code:load_binary(
-        export_test_module, "export_test_module.beam", Bin
-    ),
-    {module, export_test_module} = code:ensure_loaded(export_test_module),
-    export_test_module:exported_func(4).
+test() ->
+    ok = test_split(),
+    ok.
+
+test_split() ->
+    ?ASSERT_MATCH(binary:split(<<"foobar">>, <<"oo">>), [<<"f">>, <<"bar">>]),
+    ?ASSERT_MATCH(binary:split(<<"foobar">>, <<"ooz">>), [<<"foobar">>]),
+    ?ASSERT_MATCH(binary:split(<<"foobar">>, <<"o">>), [<<"f">>, <<"obar">>]),
+    ?ASSERT_MATCH(binary:split(<<"foobar">>, <<"o">>, [global]), [<<"f">>, <<>>, <<"bar">>]),
+    ok.

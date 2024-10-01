@@ -309,6 +309,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(binary_at_test, 121),
     TEST_CASE_EXPECTED(binary_first_test, 82),
     TEST_CASE_EXPECTED(binary_last_test, 110),
+    TEST_CASE(test_binary_copy),
 
     TEST_CASE(test_integer_to_binary),
     TEST_CASE(test_list_to_binary),
@@ -365,6 +366,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(literal_test0, 333575620),
     TEST_CASE_EXPECTED(literal_test1, 1680),
     TEST_CASE(literal_test2),
+    TEST_CASE(test_extended_literal_large),
 
     TEST_CASE_EXPECTED(test_list_eq, 1),
     TEST_CASE_EXPECTED(test_tuple_eq, 1),
@@ -523,6 +525,7 @@ struct Test tests[] = {
     TEST_CASE(test_code_all_available_loaded),
     TEST_CASE_EXPECTED(test_code_load_binary, 24),
     TEST_CASE_EXPECTED(test_code_load_abs, 24),
+    TEST_CASE(test_code_ensure_loaded),
     TEST_CASE_ATOMVM_ONLY(test_add_avm_pack_binary, 24),
     TEST_CASE_ATOMVM_ONLY(test_add_avm_pack_file, 24),
     TEST_CASE_ATOMVM_ONLY(test_close_avm_pack, 0),

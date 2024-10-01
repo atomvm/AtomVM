@@ -27,7 +27,7 @@
 %%-----------------------------------------------------------------------------
 -module(io_lib).
 
--export([format/2]).
+-export([format/2, latin1_char_list/1]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Format format string
@@ -49,6 +49,20 @@ format(Format, Args) ->
         false ->
             error(badarg)
     end.
+
+%%-----------------------------------------------------------------------------
+%% @param   Term term to test
+%% @returns true if Term is a list of latin1 characters, false otherwise.
+%% @doc     Determine if passed term is a list of ISO-8859-1 characters (0-255).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec latin1_char_list(Term :: any()) -> boolean().
+latin1_char_list([H | T]) when is_integer(H) andalso H >= 0 andalso H =< 255 ->
+    latin1_char_list(T);
+latin1_char_list([]) ->
+    true;
+latin1_char_list(_) ->
+    false.
 
 %%
 %% internal operations

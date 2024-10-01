@@ -1531,10 +1531,10 @@ The [`spi` module](./apidocs/erlang/eavmlib/spi.md) encapsulates functionality a
 Information about the ESP32 SPI leader mode interface can be found in the IDF SDK [SPI Documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/spi_master.html).
 ```
 
-The AtomVM SPI implementation uses the AtomVM Port mechanism and must be initialized using the [`spi:open/1`](./apidocs/erlang/eavmlib/spi.md#open1) function.  The single parameter to this function is a properties list containing two elements:
+The AtomVM SPI implementation uses the AtomVM Port mechanism and must be initialized using the [`spi:open/1`](./apidocs/erlang/eavmlib/spi.md#open1) function.  The single parameter to this function is a properties list containing:
 
 * [`bus_config`](./apidocs/erlang/eavmlib/spi.md#bus_config) -- a properties list containing entries for the SPI bus
-* [`device_config`](./apidocs/erlang/eavmlib/spi.md#device_config) -- a properties list containing entries for each device attached to the SPI Bus
+* [`device_config`](./apidocs/erlang/eavmlib/spi.md#device_config) -- an optional properties list containing entries for each device attached to the SPI Bus
 
 The `bus_config` properties list contains the following entries:
 

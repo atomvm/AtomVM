@@ -90,10 +90,11 @@ static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new);
 static term list_to_atom(Context *ctx, int argc, term argv[], int create_new);
 
 static term nif_binary_at_2(Context *ctx, int argc, term argv[]);
+static term nif_binary_copy(Context *ctx, int argc, term argv[]);
 static term nif_binary_first_1(Context *ctx, int argc, term argv[]);
 static term nif_binary_last_1(Context *ctx, int argc, term argv[]);
 static term nif_binary_part_3(Context *ctx, int argc, term argv[]);
-static term nif_binary_split_2(Context *ctx, int argc, term argv[]);
+static term nif_binary_split(Context *ctx, int argc, term argv[]);
 static term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[]);
@@ -181,6 +182,7 @@ static term nif_code_all_available(Context *ctx, int argc, term argv[]);
 static term nif_code_all_loaded(Context *ctx, int argc, term argv[]);
 static term nif_code_load_abs(Context *ctx, int argc, term argv[]);
 static term nif_code_load_binary(Context *ctx, int argc, term argv[]);
+static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[]);
 static term nif_lists_reverse(Context *ctx, int argc, term argv[]);
 static term nif_maps_from_keys(Context *ctx, int argc, term argv[]);
 static term nif_maps_next(Context *ctx, int argc, term argv[]);
@@ -219,6 +221,12 @@ static const struct Nif binary_at_nif =
     .nif_ptr = nif_binary_at_2
 };
 
+static const struct Nif binary_copy_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_binary_copy
+};
+
 static const struct Nif binary_first_nif =
 {
     .base.type = NIFFunctionType,
@@ -240,7 +248,7 @@ static const struct Nif binary_part_nif =
 static const struct Nif binary_split_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_binary_split_2
+    .nif_ptr = nif_binary_split
 };
 
 static const struct Nif make_ref_nif =
@@ -750,6 +758,11 @@ static const struct Nif code_load_binary_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_load_binary
+};
+static const struct Nif code_ensure_loaded_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_ensure_loaded
 };
 static const struct Nif lists_reverse_nif =
 {
@@ -2986,6 +2999,37 @@ static term nif_binary_at_2(Context *ctx, int argc, term argv[])
     return term_from_int11(term_binary_data(bin_term)[pos]);
 }
 
+static term nif_binary_copy(Context *ctx, int argc, term argv[])
+{
+    term bin_term = argv[0];
+    VALIDATE_VALUE(bin_term, term_is_binary);
+
+    size_t count = 1;
+
+    if (argc == 2) {
+        term count_term = argv[1];
+        VALIDATE_VALUE(count_term, term_is_integer);
+        count = term_to_int(count_term);
+    }
+
+    size_t size = term_binary_size(bin_term);
+    size_t dest_size = size * count;
+
+    size_t alloc_heap_size = term_binary_heap_size(dest_size);
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, alloc_heap_size, 1, &bin_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result = term_create_uninitialized_binary(dest_size, &ctx->heap, ctx->global);
+    uint8_t *dest = (uint8_t *) term_binary_data(result);
+    const void *src = (const void *) term_binary_data(bin_term);
+    for (size_t i = 0; i < count; i++) {
+        memcpy((void *) dest, src, size);
+        dest += size;
+    }
+    return result;
+}
+
 static term nif_binary_first_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -3050,15 +3094,32 @@ static term nif_binary_part_3(Context *ctx, int argc, term argv[])
     return term_maybe_create_sub_binary(bin_term, pos, len, &ctx->heap, ctx->global);
 }
 
-static term nif_binary_split_2(Context *ctx, int argc, term argv[])
+static term nif_binary_split(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
-
     term bin_term = argv[0];
     term pattern_term = argv[1];
 
     VALIDATE_VALUE(bin_term, term_is_binary);
     VALIDATE_VALUE(pattern_term, term_is_binary);
+
+    bool global = false;
+    if (argc == 3) {
+        term options = argv[2];
+        if (UNLIKELY(!term_is_list(options))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        if (term_is_nonempty_list(options)) {
+            term head = term_get_list_head(options);
+            term tail = term_get_list_tail(options);
+            if (UNLIKELY(head != GLOBAL_ATOM)) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            if (UNLIKELY(!term_is_nil(tail))) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            global = true;
+        }
+    }
 
     int bin_size = term_binary_size(bin_term);
     int pattern_size = term_binary_size(pattern_term);
@@ -3070,38 +3131,71 @@ static term nif_binary_split_2(Context *ctx, int argc, term argv[])
     const char *bin_data = term_binary_data(bin_term);
     const char *pattern_data = term_binary_data(pattern_term);
 
-    const char *found = (const char *) memmem(bin_data, bin_size, pattern_data, pattern_size);
+    // Count segments first to allocate memory once.
+    size_t num_segments = 1;
+    const char *temp_bin_data = bin_data;
+    int temp_bin_size = bin_size;
+    do {
+        const char *found = (const char *) memmem(temp_bin_data, temp_bin_size, pattern_data, pattern_size);
+        if (!found) break;
+        num_segments++;
+        int next_search_offset = found - temp_bin_data + pattern_size;
+        temp_bin_data += next_search_offset;
+        temp_bin_size -= next_search_offset;
+    } while (global && temp_bin_size >= pattern_size);
 
-    int offset = found - bin_data;
+    term result_list = term_nil();
 
-    if (found) {
-        int tok_size = offset;
-        size_t tok_size_in_terms = term_sub_binary_heap_size(bin_term, tok_size);
-
-        int rest_size = bin_size - offset - pattern_size;
-        size_t rest_size_in_terms = term_sub_binary_heap_size(bin_term, rest_size);
-
-        // + 4 which is the result cons
-        if (UNLIKELY(memory_ensure_free_with_roots(ctx, tok_size_in_terms + rest_size_in_terms + 4, 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-
-        bin_term = argv[0];
-        term tok = term_maybe_create_sub_binary(bin_term, 0, tok_size, &ctx->heap, ctx->global);
-        term rest = term_maybe_create_sub_binary(bin_term, offset + pattern_size, rest_size, &ctx->heap, ctx->global);
-
-        term result_list = term_list_prepend(rest, term_nil(), &ctx->heap);
-        result_list = term_list_prepend(tok, result_list, &ctx->heap);
-
-        return result_list;
-
-    } else {
+    if (num_segments == 1) {
+        // not found
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, 2, 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 
-        return term_list_prepend(argv[0], term_nil(), &ctx->heap);
+        return term_list_prepend(argv[0], result_list, &ctx->heap);
     }
+
+    // binary:split/2,3 always return sub binaries, except when copied binaries are as small as sub-binaries.
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, LIST_SIZE(num_segments, TERM_BOXED_SUB_BINARY_SIZE), 2, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    // Allocate list first
+    for (size_t index_segments = 0; index_segments < num_segments; index_segments++) {
+        result_list = term_list_prepend(term_nil(), result_list, &ctx->heap);
+    }
+
+    // Reset pointers after allocation
+    bin_data = term_binary_data(argv[0]);
+    pattern_data = term_binary_data(argv[1]);
+
+    term list_cursor = result_list;
+    temp_bin_data = bin_data;
+    temp_bin_size = bin_size;
+    term *list_ptr = term_get_list_ptr(list_cursor);
+    do {
+        const char *found = (const char *) memmem(temp_bin_data, temp_bin_size, pattern_data, pattern_size);
+
+        if (found) {
+            term tok = term_maybe_create_sub_binary(argv[0], temp_bin_data - bin_data, found - temp_bin_data, &ctx->heap, ctx->global);
+            list_ptr[LIST_HEAD_INDEX] = tok;
+
+            list_cursor = list_ptr[LIST_TAIL_INDEX];
+            list_ptr = term_get_list_ptr(list_cursor);
+
+            int next_search_offset = found - temp_bin_data + pattern_size;
+            temp_bin_data += next_search_offset;
+            temp_bin_size -= next_search_offset;
+        }
+
+        if (!found || !global) {
+            term rest = term_maybe_create_sub_binary(argv[0], temp_bin_data - bin_data, temp_bin_size, &ctx->heap, ctx->global);
+            list_ptr[LIST_HEAD_INDEX] = rest;
+            break;
+        }
+    } while (!term_is_nil(list_cursor));
+
+    return result_list;
 }
 
 static term nif_erlang_throw(Context *ctx, int argc, term argv[])
@@ -4662,6 +4756,37 @@ static term nif_code_load_binary(Context *ctx, int argc, term argv[])
     term result = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(result, 0, MODULE_ATOM);
     term_put_tuple_element(result, 1, module_name);
+
+    return result;
+}
+
+static const char *const embedded_atom = "\x8" "embedded";
+
+static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term module_atom = argv[0];
+    if (UNLIKELY(!term_is_atom(module_atom))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    AtomString module_string = globalcontext_atomstring_from_term(ctx->global, module_atom);
+    Module *found_module = globalcontext_get_module(ctx->global, module_string);
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result = term_alloc_tuple(2, &ctx->heap);
+
+    if (UNLIKELY(!found_module)) {
+        term_put_tuple_element(result, 0, ERROR_ATOM);
+        term_put_tuple_element(result, 1, globalcontext_make_atom(ctx->global, embedded_atom));
+    } else {
+        term_put_tuple_element(result, 0, MODULE_ATOM);
+        term_put_tuple_element(result, 1, module_atom);
+    }
 
     return result;
 }

@@ -27,7 +27,7 @@
 %%-----------------------------------------------------------------------------
 -module(string).
 
--export([to_upper/1, to_lower/1, split/2, split/3, trim/1, trim/2]).
+-export([to_upper/1, to_lower/1, split/2, split/3, trim/1, trim/2, find/2, find/3]).
 
 %%-----------------------------------------------------------------------------
 %% @param Input a string or character to convert
@@ -76,7 +76,7 @@ lower_char(C) when is_integer(C) ->
 %% @returns chardata
 %% @end
 %%-----------------------------------------------------------------------------
--spec split(String :: string(), Pattern :: string()) -> string() | char().
+-spec split(String :: unicode:chardata(), Pattern :: unicode:chardata()) -> [unicode:chardata()].
 split(String, Pattern) ->
     split(String, Pattern, leading).
 
@@ -98,25 +98,50 @@ split(String, Pattern) ->
 %% [<<"ab">>,<<"bc">>,<<>>,<<"cd">>]'''
 %% @end
 %%-----------------------------------------------------------------------------
--spec split(String :: string(), Pattern :: string() | char(), Where :: atom()) -> string() | char().
-split(String, Pattern, Where) ->
-    split(String, Pattern, Where, [], []).
+-spec split(
+    String :: unicode:chardata(), Pattern :: unicode:chardata(), Where :: leading | trailing | all
+) -> [unicode:chardata()].
+split(String, Pattern, Where) when is_binary(String) andalso is_list(Pattern) ->
+    split_binary(String, unicode:characters_to_binary(Pattern), Where);
+split(String, Pattern, Where) when is_binary(String) andalso is_binary(Pattern) ->
+    split_binary(String, Pattern, Where);
+split(String, Pattern, Where) when is_list(String) andalso is_binary(Pattern) ->
+    split_list(String, unicode:characters_to_list(Pattern), Where);
+split(String, Pattern, Where) when is_list(String) andalso is_list(Pattern) ->
+    split_list(String, Pattern, Where).
 
 %% @private
-split([], _Pattern, _Where, Token, Accum) ->
+split_binary(String, Pattern, leading) ->
+    binary:split(String, Pattern);
+split_binary(String, Pattern, all) ->
+    binary:split(String, Pattern, [global]);
+split_binary(String, Pattern, trailing) ->
+    case find_binary(String, Pattern, trailing) of
+        nomatch ->
+            [String];
+        Rest ->
+            [binary:part(String, 0, byte_size(String) - byte_size(Rest) - byte_size(Pattern)), Rest]
+    end.
+
+%% @private
+split_list(String, Pattern, Where) ->
+    split_list(String, Pattern, Where, [], []).
+
+%% @private
+split_list([], _Pattern, _Where, Token, Accum) ->
     lists:reverse([lists:reverse(Token) | Accum]);
-split(String, Pattern, Where, Token, Accum) ->
+split_list(String, Pattern, Where, Token, Accum) ->
     case prefix_match(String, Pattern) of
         {ok, Rest} ->
             case Where of
                 leading ->
                     [lists:reverse(Token), Rest];
                 all ->
-                    split(Rest, Pattern, Where, [], [lists:reverse(Token) | Accum])
+                    split_list(Rest, Pattern, Where, [], [lists:reverse(Token) | Accum])
             end;
         no ->
             [Char | Rest] = String,
-            split(Rest, Pattern, Where, [Char | Token], Accum)
+            split_list(Rest, Pattern, Where, [Char | Token], Accum)
     end.
 
 %% @private
@@ -167,3 +192,62 @@ triml([$\s | R]) ->
     triml(R);
 triml(R) ->
     R.
+
+%%-----------------------------------------------------------------------------
+%% @equiv find(String, SearchPattern, leading)
+%% @param String string to search in
+%% @param SearchPattern pattern to search
+%% @returns remainder of String starting from first occurrence of SearchPattern
+%% or `nomatch' if SearchPattern cannot be found in String
+%% @end
+%%-----------------------------------------------------------------------------
+-spec find(String :: unicode:chardata(), SearchPattern :: unicode:chardata()) ->
+    unicode:chardata() | nomatch.
+find(String, SearchPattern) ->
+    find(String, SearchPattern, leading).
+
+%%-----------------------------------------------------------------------------
+%% @param String string to search in
+%% @param SearchPattern pattern to search
+%% @param Direction direction to search, `leading' or `trailing'
+%% @returns remainder of String starting from first or last occurrence of
+%% SearchPattern or `nomatch' if SearchPattern cannot be found in String
+%% @end
+%%-----------------------------------------------------------------------------
+-spec find(
+    String :: unicode:chardata(),
+    SearchPattern :: unicode:chardata(),
+    Direction :: leading | trailing
+) -> unicode:chardata() | nomatch.
+find(String, "", _Direction) ->
+    String;
+find(String, <<>>, _Direction) ->
+    String;
+find(String, SearchPattern, Direction) when is_binary(String) andalso is_list(SearchPattern) ->
+    find_binary(String, unicode:characters_to_binary(SearchPattern), Direction);
+find(String, SearchPattern, Direction) when is_binary(String) andalso is_binary(SearchPattern) ->
+    find_binary(String, SearchPattern, Direction);
+find(String, SearchPattern, Direction) when is_list(String) andalso is_binary(SearchPattern) ->
+    find_list(String, unicode:characters_to_list(SearchPattern), Direction);
+find(String, SearchPattern, Direction) when is_list(String) andalso is_list(SearchPattern) ->
+    find_list(String, SearchPattern, Direction).
+
+%% @private
+find_binary(<<_C, Rest/binary>> = String, SearchPattern, leading) when
+    byte_size(String) >= byte_size(SearchPattern)
+->
+    case binary:part(String, 0, byte_size(SearchPattern)) =:= SearchPattern of
+        true -> String;
+        false -> find_binary(Rest, SearchPattern, leading)
+    end;
+find_binary(_Sring, _SearchPattern, leading) ->
+    nomatch.
+
+%% @private
+find_list([_C | Rest] = String, SearchPattern, leading) ->
+    case prefix_match(String, SearchPattern) of
+        {ok, _Rest} -> String;
+        no -> find_list(Rest, SearchPattern, leading)
+    end;
+find_list([], _SearchPattern, leading) ->
+    nomatch.

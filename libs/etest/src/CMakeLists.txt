@@ -28,3 +28,24 @@ set(ERLANG_MODULES
 )
 
 pack_archive(etest ${ERLANG_MODULES})
+
+include(../../../version.cmake)
+
+set(ETEST_VERSION ${ATOMVM_BASE_VERSION})
+
+install(
+    DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/beams/
+    DESTINATION lib/atomvm/lib/etest-${ETEST_VERSION}/ebin
+    FILES_MATCHING PATTERN "*.beam"
+)
+
+install(
+    FILES ${CMAKE_CURRENT_BINARY_DIR}/etest.avm
+    DESTINATION lib/atomvm/lib/etest-${ETEST_VERSION}/ebin/
+)
+
+install(
+    DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
+    DESTINATION lib/atomvm/lib/etest-${ETEST_VERSION}/src
+    FILES_MATCHING PATTERN "*.erl"
+)

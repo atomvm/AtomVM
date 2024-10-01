@@ -28,6 +28,7 @@ test() ->
     ok = test_to_upper(),
     ok = test_split(),
     ok = test_trim(),
+    ok = test_find(),
     ok.
 
 test_to_upper() ->
@@ -47,6 +48,18 @@ test_split() ->
     ?ASSERT_MATCH(string:split("fooXXXbar", "XXX"), ["foo", "bar"]),
     ?ASSERT_MATCH(string:split("foo barXXXtapas", "XXX"), ["foo bar", "tapas"]),
     ?ASSERT_MATCH(string:split("foo barXXXXXXtapas", "XXX", all), ["foo bar", [], "tapas"]),
+
+    ?ASSERT_MATCH(string:split("ab..bc..cd", ".."), ["ab", "bc..cd"]),
+    ?ASSERT_MATCH(string:split(<<"ab..bc..cd">>, ".."), [<<"ab">>, <<"bc..cd">>]),
+    ?ASSERT_MATCH(string:split(<<"ab..bc..cd">>, "..", leading), [<<"ab">>, <<"bc..cd">>]),
+    %   ?ASSERT_MATCH(string:split(<<"ab..bc..cd">>, "..", trailing), [<<"ab..bc">>, <<"cd">>]),
+    ?ASSERT_MATCH(string:split(<<"ab..bc..cd">>, "..", all), [<<"ab">>, <<"bc">>, <<"cd">>]),
+
+    ?ASSERT_MATCH(string:split("ab..bc..cd", <<"..">>), ["ab", "bc..cd"]),
+    ?ASSERT_MATCH(string:split(<<"ab..bc..cd">>, <<"..">>, leading), [<<"ab">>, <<"bc..cd">>]),
+    %   ?ASSERT_MATCH(string:split(<<"ab..bc..cd">>, <<"..">>, trailing), [<<"ab..bc">>, <<"cd">>]),
+    ?ASSERT_MATCH(string:split(<<"ab..bc..cd">>, <<"..">>, all), [<<"ab">>, <<"bc">>, <<"cd">>]),
+
     ok.
 
 test_trim() ->
@@ -58,6 +71,24 @@ test_trim() ->
     ?ASSERT_MATCH(string:trim(" foo bar      ", trailing), " foo bar"),
     ?ASSERT_MATCH(string:trim(" foo bar ", both), "foo bar"),
     ?ASSERT_MATCH(string:trim("      foo bar      ", both), "foo bar"),
+    ok.
+
+test_find() ->
+    ?ASSERT_MATCH(string:find("", ""), ""),
+    ?ASSERT_MATCH(string:find("foo", ""), "foo"),
+    ?ASSERT_MATCH(string:find("", "foo"), nomatch),
+    ?ASSERT_MATCH(string:find(<<>>, <<>>), <<>>),
+    ?ASSERT_MATCH(string:find(<<>>, ""), <<>>),
+    ?ASSERT_MATCH(string:find(<<"foo">>, <<"">>), <<"foo">>),
+    ?ASSERT_MATCH(string:find(<<"foo">>, ""), <<"foo">>),
+    ?ASSERT_MATCH(string:find(<<"">>, <<"foo">>), nomatch),
+    ?ASSERT_MATCH(string:find(<<"">>, "foo"), nomatch),
+
+    ?ASSERT_MATCH(string:find("foobar", "ba"), "bar"),
+    ?ASSERT_MATCH(string:find(<<"foobar">>, "ba"), <<"bar">>),
+    ?ASSERT_MATCH(string:find("foobar", <<"ba">>), "bar"),
+    ?ASSERT_MATCH(string:find(<<"foobar">>, <<"ba">>), <<"bar">>),
+
     ok.
 
 id(X) -> X.

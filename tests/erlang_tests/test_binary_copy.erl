@@ -1,7 +1,7 @@
 %
 % This file is part of AtomVM.
 %
-% Copyright 2023 Davide Bettio <davide@uninstall.it>
+% Copyright 2024 Paul Guyot <pguyot@kallisys.net>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -18,17 +18,23 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module(test_code_load_binary).
+-module(test_binary_copy).
 
 -export([start/0]).
 
--include("code_load/export_test_module_data.hrl").
-
 start() ->
-    Bin = ?EXPORT_TEST_MODULE_DATA,
-    {error, _} = code:ensure_loaded(export_test_module),
-    {module, export_test_module} = code:load_binary(
-        export_test_module, "export_test_module.beam", Bin
-    ),
-    {module, export_test_module} = code:ensure_loaded(export_test_module),
-    export_test_module:exported_func(4).
+    ok = test_copy1(),
+    ok = test_copy2(),
+    0.
+
+test_copy1() ->
+    <<>> = binary:copy(<<>>),
+    <<"foo">> = binary:copy(<<"foo">>),
+    ok.
+
+test_copy2() ->
+    <<>> = binary:copy(<<>>, 1),
+    <<"foo">> = binary:copy(<<"foo">>, 1),
+    <<>> = binary:copy(<<"foo">>, 0),
+    <<"foofoo">> = binary:copy(<<"foo">>, 2),
+    ok.

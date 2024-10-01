@@ -267,6 +267,7 @@ compile_erlang(spawn_fun3)
 compile_erlang(binary_at_test)
 compile_erlang(binary_first_test)
 compile_erlang(binary_last_test)
+compile_erlang(test_binary_copy)
 
 compile_erlang(test_integer_to_binary)
 compile_erlang(test_list_to_binary)
@@ -322,6 +323,7 @@ compile_erlang(minuspow63plustwoabs)
 compile_erlang(literal_test0)
 compile_erlang(literal_test1)
 compile_erlang(literal_test2)
+compile_erlang(test_extended_literal_large)
 
 compile_erlang(test_list_eq)
 compile_erlang(test_tuple_eq)
@@ -484,6 +486,7 @@ compile_erlang(test_crypto)
 compile_erlang(test_code_all_available_loaded)
 compile_erlang(test_code_load_binary)
 compile_erlang(test_code_load_abs)
+compile_erlang(test_code_ensure_loaded)
 compile_erlang(test_add_avm_pack_binary)
 compile_erlang(test_add_avm_pack_file)
 compile_erlang(test_close_avm_pack)
@@ -737,6 +740,7 @@ add_custom_target(erlang_test_modules DEPENDS
     binary_at_test.beam
     binary_first_test.beam
     binary_last_test.beam
+    test_binary_copy.beam
 
     test_integer_to_binary.beam
     test_list_to_binary.beam
@@ -793,6 +797,7 @@ add_custom_target(erlang_test_modules DEPENDS
     literal_test0.beam
     literal_test1.beam
     literal_test2.beam
+    test_extended_literal_large.beam
 
     test_list_eq.beam
     test_tuple_eq.beam
@@ -957,6 +962,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_code_all_available_loaded.beam
     test_code_load_binary.beam
     test_code_load_abs.beam
+    test_code_ensure_loaded.beam
     test_add_avm_pack_binary.beam
     test_add_avm_pack_file.beam
     test_close_avm_pack.beam

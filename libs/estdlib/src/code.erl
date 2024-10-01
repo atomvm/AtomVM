@@ -28,7 +28,8 @@
     all_available/0,
     all_loaded/0,
     load_abs/1,
-    load_binary/3
+    load_binary/3,
+    ensure_loaded/1
 ]).
 
 %%-----------------------------------------------------------------------------
@@ -81,4 +82,19 @@ load_abs(_Filename) ->
 -spec load_binary(Module :: module(), Filename :: string(), Binary :: binary()) ->
     error | {module, module()}.
 load_binary(_Module, _Filename, _Binary) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Module      module to load
+%% @returns Tuple `{module, Module}' if module is loaded or `{error, embedded}'
+%% @doc     Try to load a module if it's not already loaded. AtomVM works in
+%% an embedded-like mode where modules are loaded at start-up but modules
+%% can be loaded explicitely as well (especially from a binary with `load_binary/3').
+%% So this function can be used to determine if a module is loaded.
+%% It is called by Elixir Code module.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec ensure_loaded(Module) -> {module, Module} | {error, embedded | any()} when
+    Module :: atom().
+ensure_loaded(_Module) ->
     erlang:nif_error(undefined).
