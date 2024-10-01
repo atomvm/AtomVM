@@ -41,6 +41,7 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 instead
 - `Enum.find_index` and `Enum.find_value` support Enumerable and not just lists
 - Install AtomVM libraries source code and binaries for better dialyzer integration
+- Made the `device_config` properties list in `spi:open/1` optional (defaults to `[]`), so you can use the function with only a `bus_config`
 
 ### Fixed
 
