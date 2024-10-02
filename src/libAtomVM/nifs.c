@@ -794,6 +794,11 @@ DEFINE_MATH_NIF(tanh)
 #else
 #define IF_HAVE_CLOCK_SETTIME_OR_SETTIMEOFDAY(expr) NULL
 #endif
+#if HAVE_OPENDIR && HAVE_READDIR && HAVE_CLOSEDIR
+#define IF_HAVE_OPENDIR_READDIR_CLOSEDIR(expr) (expr)
+#else
+#define IF_HAVE_OPENDIR_READDIR_CLOSEDIR(expr) NULL
+#endif
 
 //Ignore warning caused by gperf generated code
 #pragma GCC diagnostic push

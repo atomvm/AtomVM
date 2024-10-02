@@ -23,6 +23,7 @@ project(test_eavmlib)
 include(BuildErlang)
 
 set(ERLANG_MODULES
+    test_dir
     test_file
     test_ahttp_client
     test_port

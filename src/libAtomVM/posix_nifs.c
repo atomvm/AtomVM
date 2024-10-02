@@ -38,8 +38,13 @@
 #include <sys/time.h>
 #endif
 
-#if HAVE_OPEN && HAVE_CLOSE || defined(HAVE_CLOCK_SETTIME) || defined(HAVE_SETTIMEOFDAY)
+#if HAVE_OPEN && HAVE_CLOSE || defined(HAVE_CLOCK_SETTIME) || defined(HAVE_SETTIMEOFDAY) \
+    || HAVE_OPENDIR && HAVE_READDIR && HAVE_CLOSEDIR
 #include <errno.h>
+#endif
+
+#if HAVE_OPENDIR && HAVE_READDIR && HAVE_CLOSEDIR
+#include <dirent.h>
 #endif
 
 #include "defaultatoms.h"
@@ -602,6 +607,172 @@ static term nif_atomvm_posix_clock_settime(Context *ctx, int argc, term argv[])
 }
 #endif
 
+#if HAVE_OPENDIR && HAVE_READDIR && HAVE_CLOSEDIR
+struct PosixDir
+{
+    DIR *dir;
+};
+
+static void posix_dir_dtor(ErlNifEnv *caller_env, void *obj)
+{
+    UNUSED(caller_env);
+
+    struct PosixDir *dir_obj = (struct PosixDir *) obj;
+    if (dir_obj->dir) {
+        closedir(dir_obj->dir);
+        dir_obj->dir = NULL;
+    }
+}
+
+const ErlNifResourceTypeInit posix_dir_resource_type_init = {
+    .members = 1,
+    .dtor = posix_dir_dtor
+};
+
+static term errno_to_error_tuple_maybe_gc(Context *ctx)
+{
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, ERROR_ATOM);
+    term_put_tuple_element(result, 1, posix_errno_to_term(errno, ctx->global));
+
+    return result;
+}
+
+static term nif_atomvm_posix_opendir(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    GlobalContext *glb = ctx->global;
+
+    term path_term = argv[0];
+
+    int ok;
+    char *path = interop_term_to_string(path_term, &ok);
+    if (UNLIKELY(!ok)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    term result;
+    DIR *dir = opendir(path);
+    free(path);
+
+    if (IS_NULL_PTR(dir)) {
+        return errno_to_error_tuple_maybe_gc(ctx);
+    } else {
+        // Return a resource object
+        struct PosixDir *dir_obj
+            = enif_alloc_resource(glb->posix_dir_resource_type, sizeof(struct PosixDir));
+        if (IS_NULL_PTR(dir_obj)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        dir_obj->dir = dir;
+        if (UNLIKELY(memory_ensure_free_opt(
+                         ctx, TUPLE_SIZE(2) + TERM_BOXED_RESOURCE_SIZE, MEMORY_CAN_SHRINK)
+                != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term obj = term_from_resource(dir_obj, &ctx->heap);
+        result = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(result, 0, OK_ATOM);
+        term_put_tuple_element(result, 1, obj);
+    }
+
+    return result;
+}
+
+static term nif_atomvm_posix_closedir(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term result = OK_ATOM;
+
+    void *dir_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0],
+            ctx->global->posix_dir_resource_type, &dir_obj_ptr))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    struct PosixDir *dir_obj = (struct PosixDir *) dir_obj_ptr;
+    if (dir_obj->dir != NULL) {
+        if (UNLIKELY(closedir(dir_obj->dir) < 0)) {
+            dir_obj->dir = NULL; // even if bad things happen, do not close twice.
+            return errno_to_error_tuple_maybe_gc(ctx);
+        }
+        dir_obj->dir = NULL;
+    }
+
+    return result;
+}
+
+// This function main purpose is to avoid warnings, such as:
+// warning: comparison is always true due to limited range of data type [-Wtype-limits]
+static inline term to_boxed_safe(uint64_t value, Context *ctx)
+{
+    if (value <= INT64_MAX) {
+        return term_make_maybe_boxed_int64(value, &ctx->heap);
+    } else {
+        return UNDEFINED_ATOM;
+    }
+}
+
+static term nif_atomvm_posix_readdir(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    GlobalContext *glb = ctx->global;
+
+    void *dir_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(
+            erl_nif_env_from_context(ctx), argv[0], glb->posix_dir_resource_type, &dir_obj_ptr))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    struct PosixDir *dir_obj = (struct PosixDir *) dir_obj_ptr;
+
+    errno = 0;
+    struct dirent *dir_result = readdir(dir_obj->dir);
+    if (dir_result == NULL) {
+        if (UNLIKELY(errno != 0)) {
+            return errno_to_error_tuple_maybe_gc(ctx);
+        }
+
+        return globalcontext_make_atom(glb, ATOM_STR("\x3", "eof"));
+    }
+
+    size_t name_len = strlen(dir_result->d_name);
+    if (UNLIKELY(
+            memory_ensure_free_opt(ctx,
+                BOXED_INT64_SIZE + term_binary_heap_size(name_len) + TUPLE_SIZE(3) + TUPLE_SIZE(2),
+                MEMORY_CAN_SHRINK)
+            != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term ino_no = to_boxed_safe(dir_result->d_ino, ctx);
+
+    term name_term = term_create_uninitialized_binary(name_len, &ctx->heap, glb);
+    memcpy((void *) term_binary_data(name_term), dir_result->d_name, name_len);
+
+    term dirent_atom = globalcontext_make_atom(glb, ATOM_STR("\x6", "dirent"));
+
+    // {dirent, Inode, Name}
+    term dirent_term = term_alloc_tuple(3, &ctx->heap);
+    term_put_tuple_element(dirent_term, 0, dirent_atom);
+    term_put_tuple_element(dirent_term, 1, ino_no);
+    term_put_tuple_element(dirent_term, 2, name_term);
+
+    // {ok, DirentTuple}
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, OK_ATOM);
+    term_put_tuple_element(result, 1, dirent_term);
+
+    return result;
+}
+
+#endif
+
 #if HAVE_OPEN && HAVE_CLOSE
 const struct Nif atomvm_posix_open_nif = {
     .base.type = NIFFunctionType,
@@ -648,5 +819,19 @@ const struct Nif atomvm_posix_unlink_nif = {
 const struct Nif atomvm_posix_clock_settime_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_posix_clock_settime
+};
+#endif
+#if HAVE_OPENDIR && HAVE_READDIR && HAVE_CLOSEDIR
+const struct Nif atomvm_posix_opendir_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_posix_opendir
+};
+const struct Nif atomvm_posix_closedir_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_posix_closedir
+};
+const struct Nif atomvm_posix_readdir_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_posix_readdir
 };
 #endif
