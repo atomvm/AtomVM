@@ -2,6 +2,7 @@
 % This file is part of AtomVM.
 %
 % Copyright 2023 Paul Guyot <pguyot@kallisys.net>
+% Copyright 2024 Yuto Oguchi <oguchiyuto@realglobe.jp>, Realglobe Inc.
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -24,7 +25,7 @@
 %%-----------------------------------------------------------------------------
 -module(binary).
 
--export([at/2, part/3, split/2, split/3]).
+-export([at/2, decode_hex/1, encode_hex/1, encode_hex/2, part/3, split/2, split/3]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Binary binary to get a byte from
@@ -36,6 +37,42 @@
 -spec at(Binary :: binary(), Index :: non_neg_integer()) -> byte().
 at(_Binary, _Index) ->
     erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Data hex encoded binary to decode
+%% @returns decoded binary
+%% @doc     Decodes a hex encoded binary into a binary.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec decode_hex(Data :: <<_:_*16>>) -> binary().
+decode_hex(Data) ->
+    case byte_size(Data) rem 2 of
+        0 -> <<<<(binary_to_integer(B, 16))>> || <<B:2/binary>> <= Data>>;
+        _ -> erlang:error(badarg)
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @param   Data binary data to convert into hex encoded binary
+%% @returns hex encoded binary
+%% @doc     Encodes a binary into a hex encoded binary using the specified case for the hexadecimal digits "a" to "f".
+%% @end
+%%-----------------------------------------------------------------------------
+-spec encode_hex(Data :: binary()) -> binary().
+encode_hex(Data) ->
+    encode_hex(Data, uppercase).
+
+%%-----------------------------------------------------------------------------
+%% @param   Data binary data to convert into hex encoded binary
+%% @param   Case which case to encode into
+%% @returns hex encoded binary
+%% @doc     Encodes a binary into a hex encoded binary using the specified case for the hexadecimal digits "a" to "f".
+%% @end
+%%-----------------------------------------------------------------------------
+-spec encode_hex(Data :: binary(), Case :: lowercase | uppercase) -> binary().
+encode_hex(Data, uppercase) ->
+    <<(integer_to_binary(B, 16)) || <<B:4>> <= Data>>;
+encode_hex(Data, lowercase) ->
+    <<<<(hd(string:to_lower(integer_to_list(B, 16)))):8>> || <<B:4>> <= Data>>.
 
 %%-----------------------------------------------------------------------------
 %% @param   Binary binary to extract a subbinary from
