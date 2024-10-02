@@ -482,6 +482,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(pid_to_list_test, 63),
     TEST_CASE_EXPECTED(ref_to_list_test, 386),
     TEST_CASE_EXPECTED(test_binary_to_integer, 99),
+    TEST_CASE(test_binary_to_integer_2),
 
     TEST_CASE_EXPECTED(count_char_bs, 2),
     TEST_CASE_EXPECTED(count_char2_bs, 1002),

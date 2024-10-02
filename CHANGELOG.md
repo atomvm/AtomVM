@@ -39,6 +39,7 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 - ESP32: add support for `esp_adc` ADC driver, with Erlang and Elixir examples
 - Add handler for ESP32 network driver STA mode `beacon_timeout` (event: 21), see issue
 [#1100](https://github.com/atomvm/AtomVM/issues/1100)
+- Support for `binary_to_integer/2`
 
 ### Changed
 
