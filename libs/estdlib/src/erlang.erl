@@ -57,6 +57,7 @@
     binary_to_atom/1,
     binary_to_atom/2,
     binary_to_integer/1,
+    binary_to_integer/2,
     binary_to_list/1,
     atom_to_binary/1,
     atom_to_binary/2,
@@ -649,6 +650,16 @@ binary_to_atom(_Binary, _Encoding) ->
 %%-----------------------------------------------------------------------------
 -spec binary_to_integer(Binary :: binary()) -> integer().
 binary_to_integer(_Binary) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Binary  Binary to parse for integer
+%% @returns the integer represented by the binary
+%% @doc     Parse the text in a given binary as an integer.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec binary_to_integer(Binary :: binary(), Base :: 2..36) -> integer().
+binary_to_integer(_Binary, Base) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
