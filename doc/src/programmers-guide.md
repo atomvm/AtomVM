@@ -1381,6 +1381,63 @@ Since only one instance of the GPIO driver is allowed, you may also simply use [
 ok = gpio:stop().
 ```
 
+### ESP32 ADC
+
+The [`esp_adc` module](./apidocs/erlang/eavmlib/esp_adc.md) provides the functionality to use the ESP32 family [SAR ADC](https://en.wikipedia.org/wiki/Successive-approximation_ADC) peripheral to measure (analog) voltages from a pin and obtain both raw bit values as well as calibrated voltage values in millivolts.
+
+The module provides two sets of APIs for using the ADC peripheral; there is a set of low level resource based nifs, and a gen_server managed set of convenience functions. The nifs rely on unit and channel handle resources for configuring and taking measurements. The convenience functions use the gen_server to maintain these resources and use pin numbers to interact with the driver. Examples for both APIs can be found the [AtomVM repository atomvm/examples/erlang/esp32](https://github.com/atomvm/AtomVM/tree/main/examples/erlang/esp32) directory. A demonstration of the simple APIs is as follows:
+
+```erlang
+...
+    Pin = 33,
+    ok = esp_adc:start(Pin, [{bitwidth, bit_12}, {atten, db_2_5}]),
+    {ok, {Raw, Mv}} = esp_adc:read(Pin, [raw, voltage, {samples, 48}]),
+    io:format("ADC pin ~p raw value=~p millivolts=~p~n", [Pin, Raw, Mv]),
+    ok = esp_adc:stop(),
+...
+```
+
+#### ESP32 ADC configuration options
+
+Some newer ESP32 family devices only use a single fixed bit width, this is typically 12 bits, but some provide 13 bit resolution. The ESP32 classic supports 9 bit up to 12 bit resolutions. The `bitwidth` option `bit_max` will use the highest supported resolution for the device.
+
+The `attenuation` option determines the range of voltage to be measured, the specific voltage range for each setting varies by chip, so as always consult your devices datasheet before connecting an ADC pin to a voltage supply to be measured. The chart below depicts the approximate safe voltage ranges for each attenuation level:
+
+| Attenuation      | Min Millivolts | Max Millivolts |
+|------------------|----------------|----------------|
+| `db_0`           | 0-100          | 750-950        |
+| `db_2_5`         | 0-100          | 1050-1250      |
+| `db_6`           | 0-150          | 1300-1750      |
+| `db_11 \| db_12` | 0-150          | 2450-2500      |
+
+Consult the datasheet of your device for the exact voltage ranges supported by each attenuation level.
+
+```{warning}
+The option `db_11` has been superseded by `db_12`. The option `db_11` and will be deprecated in a future release, applications should be updated to use `db_12` (except for builds with ESP-IDF versions prior to v5.2). To Continue to support older IDF version builds, the default will remain `db_11`, which is the maximum tolerated voltage on all builds, as `db_12` supported builds will automatically use `db_12` in place of `db_11`. After `db_11` is deprecated in all builds (with the sunset of ESP-IDF v5.1 support) the default will be changed to `db_12`.
+```
+
+```{note}
+For a higher degree of accuracy increase the number of sample taken, the default is 64. If highly stable and accurate ADC measurements are required for an application you may need to connect a bypass capacitor (e.g., a 100 nF ceramic capacitor) to the ADC input pad in use, to minimize noise. This chart from the [Espressif ADC Calibration Driver documentation](https://docs.espressif.com/projects/esp-idf/en/v5.3/esp32/api-reference/peripherals/adc_calibration.html) shows the difference between the use of a capacitor and without, as well as with a capacitor and multisampling of 64 samples.
+
+![ADC Noise Comparison](https://docs.espressif.com/projects/esp-idf/en/v5.3/esp32/_images/adc-noise-graph.jpg)
+
+You can clearly see the noisy results without a capacitor. This is mitigated by the use of multisampling but without a decoupling capacitor results will likely still contain some noise.
+```
+
+When an ADC channel is configured by the use of `esp_adc:acquire/2,4` or `esp_adc:start/1,2` the driver will select the optimal calibration mechanism supported by the device and channel configuration. If neither the line fitting or curve fitting mechanisms are supported by the device using the provided configuration options an estimated result will be used to provide `voltage` values, based on the [formula suggested by Espressif](https://docs.espressif.com/projects/esp-idf/en/v5.3/esp32/api-reference/peripherals/adc_oneshot.html#read-conversion-result). For chips using the line fitting calibration scheme that do not have the default vref efuse set, a default vref of 1100 mV is used, this is not currently settable.
+
+#### ESP32 ADC read options
+
+The read options take the form of a proplist, if the key `raw` is true (`{raw, true}` or simply appears in the list as the atom `raw`), then the raw value will be returned in the first element of the returned tuple.  Otherwise, this element will be the atom `undefined`.
+
+If the key `voltage` is true (or simply appears in the list as an atom), then a calibrated voltage value will be returned in millivolts in the second element of the returned tuple.  Otherwise, this element will be the atom `undefined`.
+
+You may specify the number of samples (1 - 100000) to be taken and averaged over using the tuple `{samples, Samples :: 1..100000}`, the default is `64`. 
+
+```{warning}
+Using a large number of samples can significantly increase the amount of time before a response, up to several seconds.
+```
+
 ### I2C
 
 The [`i2c` module](./apidocs/erlang/eavmlib/i2c.md) encapsulates functionality associated with the 2-wire Inter-Integrated Circuit (I2C) interface.

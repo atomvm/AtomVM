@@ -29,6 +29,7 @@ set(ERLANG_MODULES
     console
     emscripten
     esp
+    esp_adc
     gpio
     i2c
     http_server

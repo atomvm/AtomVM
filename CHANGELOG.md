@@ -36,6 +36,7 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 - Support for `binary:copy/1,2`
 - Support for directory listing using POSIX APIs: (`atomvm:posix_opendir/1`,
 `atomvm:posix_readdir/1`, `atomvm:posix_closedir/1`).
+- ESP32: add support for `esp_adc` ADC driver, with Erlang and Elixir examples
 
 ### Changed
 
