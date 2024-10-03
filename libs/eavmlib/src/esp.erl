@@ -38,6 +38,8 @@
     sleep_enable_ulp_wakeup/0,
     deep_sleep/0,
     deep_sleep/1,
+    mount/4,
+    umount/1,
     nvs_fetch_binary/2,
     nvs_get_binary/1, nvs_get_binary/2, nvs_get_binary/3,
     nvs_set_binary/2, nvs_set_binary/3,
@@ -118,6 +120,8 @@
 }.
 -opaque task_wdt_user_handle() :: binary().
 
+-opaque mounted_fs() :: binary().
+
 -export_type(
     [
         esp_reset_reason/0,
@@ -128,6 +132,7 @@
         esp_partition_address/0,
         esp_partition_size/0,
         esp_partition_props/0,
+        mounted_fs/0,
         task_wdt_config/0,
         task_wdt_user_handle/0
     ]
@@ -277,6 +282,34 @@ deep_sleep() ->
 %%-----------------------------------------------------------------------------
 -spec deep_sleep(SleepMS :: non_neg_integer()) -> no_return().
 deep_sleep(_SleepMS) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Source the device that will be mounted
+%% @param   Target the path where the filesystem will be mounted
+%% @param   FS the filesystem, only fat is supported now
+%% @param   Opts
+%% @returns either a tuple having `ok' and the mounted fs resource, or an error tuple
+%% @doc     Mount a filesystem, and return a resource that can be used later for unmounting it
+%% @end
+%%-----------------------------------------------------------------------------
+-spec mount(
+    Source :: unicode:chardata(),
+    Target :: unicode:chardata(),
+    FS :: fat,
+    Opts :: proplists:proplist() | #{atom() => term()}
+) -> {ok, mounted_fs()} | {error, term()}.
+mount(_Source, _Target, _FS, _Opts) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   The mounted filesystem resource that should be unmounted
+%% @returns either `ok' or an error tuple
+%% @doc     Unmounts filesystem located at given path
+%% @end
+%%-----------------------------------------------------------------------------
+-spec umount(mounted_fs()) -> ok | {error, term()}.
+umount(_Target) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

@@ -72,6 +72,10 @@ config AVM_RTC_SLOW_MAX_SIZE
     # 4KB is a reasonable default
     default 4096
 
+config AVM_ENABLE_STORAGE_NIFS
+    bool "Enable Storage NIFs"
+    default y
+
 config AVM_ENABLE_GPIO_PORT_DRIVER
     bool "Enable GPIO port driver"
     default y
