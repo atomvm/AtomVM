@@ -44,14 +44,20 @@ concurrency:
 jobs:
   # This workflow contains a single job called "build"
   build:
+
+    strategy:
+      fail-fast: false
+      ## don't add more than one OS to matrix, this is only to retrieve the full os-name for keeping cache in sync
+      matrix:
+        os: [ ubuntu-24.04 ]
     # The type of runner that the job will run on
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.os }}
+    # Documentation currently fails to build with OTP-27
     container: erlang:26
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-
       - name: Install Deps
         run: |
           apt update -y
@@ -61,7 +67,7 @@ jobs:
         id: sphinx-cache
         with:
           path: /home/runner/python-env/sphinx
-          key: ${{ runner.os }}-sphinx-install
+          key: ${{ matrix.os }}-${{ job.container.id }}-sphinx-install
 
       - name: Install Sphinx
         if: ${{ steps.sphinx-cache.outputs.cache-hit != 'true' }}
@@ -100,6 +106,7 @@ jobs:
           done
 
       - name: Build Site
+        id: build
         shell: bash
         run: |
           . /home/runner/python-env/sphinx/bin/activate
