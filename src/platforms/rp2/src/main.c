@@ -40,7 +40,7 @@
 #include <iff.h>
 #include <module.h>
 
-#include "rp2040_sys.h"
+#include "rp2_sys.h"
 
 extern char __flash_binary_end;
 

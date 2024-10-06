@@ -30,7 +30,7 @@ To use the [`atomvm_rebar3_plugin`](https://atomvm.github.io/atomvm_rebar3_plugi
 * For flashing to ESP32, the [`esptool`](https://github.com/espressif/esptool) program.
 * For flashing to STM32, `st-flash` via [stlink](https://github.com/stlink-org/stlink)
 * (optional) A serial console program such as [minicom](https://en.wikipedia.org/wiki/Minicom) or [screen](https://en.wikipedia.org/wiki/GNU_Screen), to view console output from a device.
-* (recommended) For rp2040, [`picotool`](https://github.com/raspberrypi/picotool) for software resets on Raspberry Pi Pico. (optionally used if found in PATH to disconnect active `screen` sessions, which normally prevent flashing)
+* (recommended) For rp2040 and rp2350, [`picotool`](https://github.com/raspberrypi/picotool) for software resets on Raspberry Pi Pico. (optionally used if found in PATH to disconnect active `screen` sessions, which normally prevent flashing)
 
 ### Erlang Example Program
 
@@ -210,9 +210,9 @@ You can now use a serial console program such as [minicom](https://en.wikipedia.
     INFO [74] AtomVM: Exited with return: ok
     INFO [78] AtomVM: AtomVM application terminated.  Going to sleep forever ...
 
-#### Raspberry Pico
+#### Raspberry Pi RP2
 
-To generate a Raspberry Pico uf2 file from an AtomVM AVM file and flash it to an rp2040 device, use the `pico_flash` target in the `atomvm` namespace.
+To generate a Raspberry Pi RP2 uf2 file from an AtomVM AVM file and flash it to an RP2 device, use the `pico_flash` target in the `atomvm` namespace.
 
 For example:
 
@@ -226,7 +226,7 @@ $ rebar3 atomvm pico_flash
      /run/media/${USER}/RPI-RP2...
 ```
 
-See the [`atomvm_rebar3_plugin`](https://atomvm.github.io/atomvm_rebar3_plugin) page for more detailed instructions about how to use the `pico_flash` target.
+See the [`atomvm_rebar3_plugin`](https://atomvm.github.io/atomvm_rebar3_plugin) page for more detailed instructions about how to use the `pico_flash` target. By default it will generate a universal UF2 that works on both RP2040 and RP2350 but you can optionally target only one of socs.
 
 You can now use a serial console program such as [minicom](https://en.wikipedia.org/wiki/Minicom) or [screen](https://en.wikipedia.org/wiki/GNU_Screen) to view console output from a device.  The default build will wait 20 seconds for a serial connection to be established before starting the application.
 
@@ -262,7 +262,7 @@ The device was asked to reboot into application mode.
 $
 ```
 
-This will again give you 20 seconds to establish a serial monitor connection.  For information about changing this timeout, or locking down the device so that software resets no longer work (requiring that the device be power cycled and the `BOOTSEL` button help when powering on to flash) consult the [rp2040 section](./build-instructions.md#building-for-raspberry-pi-pico) of the [Build Instructions](./build-instructions.md).
+This will again give you 20 seconds to establish a serial monitor connection.  For information about changing this timeout, or locking down the device so that software resets no longer work (requiring that the device be power cycled and the `BOOTSEL` button help when powering on to flash) consult the [rp2040 section](./build-instructions.md#building-for-raspberry-pi-rp2) of the [Build Instructions](./build-instructions.md).
 
 ## `ExAtomVM`
 

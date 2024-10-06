@@ -11,7 +11,7 @@ on:
     paths-ignore:
       - 'src/platforms/emscripten/**'
       - 'src/platforms/esp32/**'
-      - 'src/platforms/rp2040/**'
+      - 'src/platforms/rp2/**'
       - 'src/platforms/stm32/**'
       - 'doc/**'
       - 'LICENSES/**'
@@ -21,7 +21,7 @@ on:
     paths-ignore:
       - 'src/platforms/emscripten/**'
       - 'src/platforms/esp32/**'
-      - 'src/platforms/rp2040/**'
+      - 'src/platforms/rp2/**'
       - 'src/platforms/stm32/**'
       - 'doc/**'
       - 'LICENSES/**'
@@ -72,15 +72,15 @@ jobs:
 
         # This is ARM64
         - os: "macos-14"
-          otp: "24"
+          otp: "25"
           path_prefix: "/opt/homebrew/opt/erlang@24/bin:"
 
         - os: "macos-14"
-          otp: "25"
+          otp: "26"
           path_prefix: "/opt/homebrew/opt/erlang@25/bin:"
 
         - os: "macos-14"
-          otp: "26"
+          otp: "27"
           path_prefix: "/opt/homebrew/opt/erlang@26/bin:"
     steps:
     # Setup
@@ -97,7 +97,7 @@ jobs:
 
     - name: "Install deps (macOS)"
       if: runner.os == 'macOS'
-      run: brew install gperf erlang@${{ matrix.otp }} ninja mbedtls
+      run: brew install gperf erlang@${{ matrix.otp }} ninja mbedtls rebar3
 
     # Build
     - name: "Build: create build dir"

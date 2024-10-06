@@ -21,7 +21,7 @@
 ExternalProject_Add(HostAtomVM
     SOURCE_DIR ../../../../../../
     INSTALL_COMMAND cmake -E echo "Skipping install step."
-    BUILD_COMMAND cmake --build . --target=atomvmlib --target=PackBEAM
+    BUILD_COMMAND cmake --build . --target=atomvmlib --target=PackBEAM --target=uf2tool
 )
 
 function(compile_erlang module_name module_src_dir)
@@ -41,8 +41,8 @@ compile_erlang(test_smp "")
 compile_erlang(test_crypto ../../../esp32/test/main/test_erl_sources/)
 
 add_custom_command(
-    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/rp2040_test_modules.avm"
-    COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/packbeam/PackBEAM -i rp2040_test_modules.avm
+    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/rp2_test_modules.avm"
+    COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/packbeam/PackBEAM -i rp2_test_modules.avm
         HostAtomVM-prefix/src/HostAtomVM-build/libs/atomvmlib.avm
         test_clocks.beam
         test_smp.beam
@@ -56,21 +56,21 @@ add_custom_command(
     VERBATIM
 )
 
-set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/rp2040_test_modules.avm")
+set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/rp2_test_modules.avm")
 
 add_custom_command(
-    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/rp2040_test_modules.uf2"
+    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/rp2_test_modules.uf2"
     COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/uf2tool/uf2tool
         create
-        -o rp2040_test_modules.uf2
-        -s 0x10100000 "${CMAKE_CURRENT_BINARY_DIR}/rp2040_test_modules.avm"
+        -o rp2_test_modules.uf2
+        -s 0x10100000 "${CMAKE_CURRENT_BINARY_DIR}/rp2_test_modules.avm"
     DEPENDS
         HostAtomVM
-        "${CMAKE_CURRENT_BINARY_DIR}/rp2040_test_modules.avm"
+        "${CMAKE_CURRENT_BINARY_DIR}/rp2_test_modules.avm"
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     VERBATIM
 )
 
-set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/rp2040_test_modules.uf2")
+set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/rp2_test_modules.uf2")
 
-add_custom_target(rp2040_test_modules DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/rp2040_test_modules.uf2")
+add_custom_target(rp2_test_modules DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/rp2_test_modules.uf2")

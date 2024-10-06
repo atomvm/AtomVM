@@ -11,7 +11,7 @@ on:
     paths-ignore:
       - 'src/platforms/emscripten/**'
       - 'src/platforms/esp32/**'
-      - 'src/platforms/rp2040/**'
+      - 'src/platforms/rp2/**'
       - 'src/platforms/stm32/**'
       - 'libs/**'
       - 'doc/**'
@@ -22,7 +22,7 @@ on:
     paths-ignore:
       - 'src/platforms/emscripten/**'
       - 'src/platforms/esp32/**'
-      - 'src/platforms/rp2040/**'
+      - 'src/platforms/rp2/**'
       - 'src/platforms/stm32/**'
       - 'libs/**'
       - 'doc/**'
@@ -55,7 +55,7 @@ jobs:
       run: sudo apt update -y
 
     - name: "Install deps"
-      run: sudo apt install -y cmake gperf zlib1g-dev ninja-build erlang
+      run: sudo apt install -y cmake gperf zlib1g-dev ninja-build erlang rebar3
 
     - name: "Checkout repository"
       uses: actions/checkout@v4

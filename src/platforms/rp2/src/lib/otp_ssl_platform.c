@@ -19,7 +19,7 @@
  */
 
 #include <nifs.h>
-#include <otp_crypto.h>
-#include <rp2040_sys.h>
+#include <otp_ssl.h>
+#include <rp2_sys.h>
 
-REGISTER_NIF_COLLECTION(otp_crypto, NULL, NULL, otp_crypto_nif_get_nif)
+REGISTER_NIF_COLLECTION(otp_ssl, otp_ssl_init, NULL, otp_ssl_nif_get_nif)

@@ -18,8 +18,8 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#ifndef _RP2040_SYS_H_
-#define _RP2040_SYS_H_
+#ifndef _RP2_SYS_H_
+#define _RP2_SYS_H_
 
 #include <time.h>
 
@@ -74,7 +74,7 @@ bool sys_try_post_listener_event_from_isr(GlobalContext *global, listener_event_
  */
 void sys_unregister_listener_from_event(GlobalContext *global, listener_event_t listener_queue);
 
-struct RP2040PlatformData
+struct RP2PlatformData
 {
 #ifndef AVM_NO_SMP
     mutex_t event_poll_mutex;

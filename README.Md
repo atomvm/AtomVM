@@ -18,7 +18,7 @@ Supported Platforms
 * Linux, macOS, FreeBSD, DragonFly ([generic_unix](https://www.atomvm.net/doc/main/getting-started-guide.html#getting-started-on-the-generic-unix-platform))
 * ESP32 SoC (with IDF/FreeRTOS, see [esp32](https://www.atomvm.net/doc/main/getting-started-guide.html#getting-started-on-the-esp32-platform))
 * STM32 MCUs (with LibOpenCM3, see [stm32](https://www.atomvm.net/doc/main/getting-started-guide.html#getting-started-on-the-stm32-platform))
-* Raspberry Pi Pico (see [rp2040](https://www.atomvm.net/doc/main/getting-started-guide.html#getting-started-on-the-raspberry-pi-pico-platform))
+* Raspberry Pi Pico and Pico 2 (see [rp2](https://www.atomvm.net/doc/main/getting-started-guide.html#getting-started-on-the-raspberry-pi-pico-platform))
 * Browsers and NodeJS with WebAssembly (see [emscripten](https://www.atomvm.net/doc/main/getting-started-guide.html#getting-started-with-atomvm-webassembly))
 
 AtomVM aims to be easily portable to new platforms with a minimum effort, so additional platforms
@@ -47,6 +47,7 @@ Required for building:
 * gperf ([GNU Perfect Hash Function Generator](https://www.gnu.org/software/gperf/manual/gperf.html))
 * erlc ([erlang compiler](https://www.erlang.org/))
 * elixirc ([elixir compiler](https://elixir-lang.org))
+* rebar3 ([rebar3 build tool](https://www.rebar3.org/))
 * Mbed TLS ([portable TLS library, optionally required to support SSL](https://www.trustedfirmware.org/projects/mbed-tls/))
 * zlib ([zlib compression and decompression library](https://zlib.net/))
 
@@ -81,8 +82,8 @@ available in the documentation for
 [Generic UNIX](https://www.atomvm.net/doc/main/build-instructions.html) (Linux, MacOS, FreeBSD, DragonFly),
 [ESP32](https://www.atomvm.net/doc/main/build-instructions.html#building-for-esp32),
 [STM32](https://www.atomvm.net/doc/main/build-instructions.html#building-for-stm32),
-[Raspberry Pi Pico](https://www.atomvm.net/doc/main/build-instructions.html#building-for-raspberry-pi-pico)
-(rp2040), and
+[Raspberry Pi Pico and Pico 2](https://www.atomvm.net/doc/main/build-instructions.html#building-for-raspberry-pi-pico)
+(rp2), and
 [WASM](https://www.atomvm.net/doc/main/build-instructions.html#building-for-nodejs-web) (NodeJS/Web).
 
 Project Status
