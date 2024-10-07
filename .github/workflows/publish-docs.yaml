@@ -31,15 +31,19 @@ concurrency:
   group: ${{ github.workflow }}-${{  github.ref_name }}
   cancel-in-progress: true
 
+env:
+  AVM_DOCS_NAME: ${{ github.ref_name }}
+
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   # This workflow contains a single job called "build"
   build:
+    strategy:
+      ## don't add more than one OS to matrix, this is only to retrieve the full os-name for keeping cache in sync
+      matrix:
+        os: [ ubuntu-24.04 ]
     # The type of runner that the job will run on
-    runs-on: ubuntu-24.04
-
-    env:
-      AVM_DOCS_NAME: ${{ github.ref_name }}
+    runs-on: ${{ matrix.os }}
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -54,7 +58,7 @@ jobs:
         id: sphinx-cache
         with:
           path: /home/runner/python-env/sphinx
-          key: ${{ runner.os }}-sphinx-install
+          key: ${{ matrix.os }}-sphinx-install
 
       - name: Install Sphinx
         if: ${{ steps.sphinx-cache.outputs.cache-hit != 'true' }}
