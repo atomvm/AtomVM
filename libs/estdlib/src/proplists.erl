@@ -43,7 +43,10 @@
     to_map/1
 ]).
 
+-export_type([property/0, proplist/0]).
+
 -type property() :: atom() | {term(), term()}.
+-type proplist() :: [property()].
 
 % Taken from `otp/blob/master/lib/stdlib/src/proplists.erl`
 %%-----------------------------------------------------------------------------

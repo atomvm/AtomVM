@@ -114,6 +114,10 @@ struct ESP32PlatformData
 #endif
     mbedtls_ctr_drbg_context random_ctx;
     bool random_is_initialized;
+
+#ifdef CONFIG_AVM_ENABLE_STORAGE_NIFS
+    ErlNifResourceType *mounted_fs_resource_type;
+#endif
 };
 
 typedef void (*port_driver_init_t)(GlobalContext *global);
