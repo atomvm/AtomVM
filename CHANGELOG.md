@@ -63,6 +63,7 @@ instead
 `network:start/1`, that would lead to a hard crash of the VM.
 - Fix a bug in ESP32 network driver where the low level driver was not being stopped and resoureces were not freed
 when `network:stop/0` was used, see issue [#643](https://github.com/atomvm/AtomVM/issues/643)
+- `uart:open/1,2` now works with uppercase peripheral names
 
 ## [0.6.4] - 2024-08-18
 
