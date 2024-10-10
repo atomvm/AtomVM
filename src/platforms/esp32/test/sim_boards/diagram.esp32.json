@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "author": "peter",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-devkit-c-v4",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": { "cpuFrequency": "80" }
+    },
+    {
+      "type": "wokwi-microsd-card",
+      "id": "sd1",
+      "top": 0,
+      "left": 140,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-slide-potentiometer",
+      "id": "pot1",
+      "top": 33.8,
+      "left": 162.2,
+      "attrs": { "travelLength": "30", "value": "512" }
+    }
+  ],
+  "connections": [
+    ["esp:TX", "$serialMonitor:RX", "", []],
+    ["esp:RX", "$serialMonitor:TX", "", []],
+    ["sd1:CS", "esp:5", "blue", ["h38.4", "v48.29", "h-134.37"]],
+    ["sd1:VCC", "esp:3V3", "red", ["h76.8", "v182.77", "h-312.73", "v-201.6"]],
+    ["sd1:GND", "esp:GND.2", "black", ["h67.2", "v-76.46", "h-183.17"]],
+    ["sd1:SCK", "esp:18", "yellow", ["h57.6", "v67.19", "h-120.73", "v0.23"]],
+    ["sd1:DO", "esp:19", "green", ["h9.6", "v-38.29", "h-101.53", "v115.43"]],
+    ["sd1:DI", "esp:23", "magenta", ["h38.4", "v-96.09", "h-139.93", "v77.03"]],
+    ["pot1:VCC", "esp:3V3", "red", ["h-19.2", "v-105.6", "h-139.39"]],
+    ["pot1:GND", "esp:GND.2", "black", ["v0"]],
+    ["pot1:SIG", "esp:4", "green", ["h-38.4", "v47.2"]]
+  ],
+  "dependencies": {}
+}
