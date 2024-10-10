@@ -41,6 +41,8 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 [#1100](https://github.com/atomvm/AtomVM/issues/1100)
 - Support for mounting/unmounting storage on ESP32 (such as SD or internal flash) using
 `esp:mount/4` and `esp:umount/1`
+- Make external term serialize functions available without using `externalterm_to_binary` so terms
+can be written directly to a buffer.
 
 ### Changed
 

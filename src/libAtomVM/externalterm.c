@@ -32,7 +32,6 @@
 #include "unicode.h"
 #include "utils.h"
 
-#define EXTERNAL_TERM_TAG 131
 #define NEW_FLOAT_EXT 70
 #define SMALL_INTEGER_EXT 97
 #define INTEGER_EXT 98
@@ -946,4 +945,19 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
         default:
             return INVALID_TERM_SIZE;
     }
+}
+
+enum ExternalTermResult externalterm_compute_external_size_raw(
+    term t, size_t *size, GlobalContext *glb)
+{
+    *size = compute_external_size(t, glb);
+
+    return EXTERNAL_TERM_OK;
+}
+
+enum ExternalTermResult externalterm_serialize_term_raw(void *buf, term t, GlobalContext *glb)
+{
+    serialize_term(buf, t, glb);
+
+    return EXTERNAL_TERM_OK;
 }
