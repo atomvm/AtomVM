@@ -44,6 +44,7 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 - Support for `binary_to_integer/2`
 - Support for `binary:decode_hex/1` and `binary:encode_hex/1,2`
 - Support for Elixir `Base.decode16/2` and `Base.encode16/2`
+- Support for `erlang:list_to_integer/2`
 
 ### Changed
 

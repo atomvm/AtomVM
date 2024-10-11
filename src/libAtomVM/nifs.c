@@ -118,7 +118,7 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[]);
 static term nif_erlang_float_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_float_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[]);
-static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_list_to_integer(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_float_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_existing_atom_1(Context *ctx, int argc, term argv[]);
@@ -377,7 +377,7 @@ static const struct Nif list_to_binary_nif =
 static const struct Nif list_to_integer_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_erlang_list_to_integer_1
+    .nif_ptr = nif_erlang_list_to_integer
 };
 
 static const struct Nif list_to_float_nif =
@@ -2510,9 +2510,30 @@ static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
     return bin_res;
 }
 
-static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
+static avm_int_t to_digit_index(avm_int_t character)
 {
-    UNUSED(argc);
+    if (character >= '0' && character <= '9') {
+        return character - '0';
+    } else if (character >= 'a' && character <= 'z') {
+        return character - 'a' + 10;
+    } else if (character >= 'A' && character <= 'Z') {
+        return character - 'A' + 10;
+    } else {
+        return -1;
+    }
+}
+
+static term nif_erlang_list_to_integer(Context *ctx, int argc, term argv[])
+{
+    avm_int_t base = 10;
+    if (argc == 2) {
+        term t = argv[1];
+        VALIDATE_VALUE(t, term_is_integer);
+        base = term_to_int(t);
+        if (UNLIKELY(base < 2 || base > 36)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
 
     term t = argv[0];
     int64_t acc = 0;
@@ -2531,22 +2552,21 @@ static term nif_erlang_list_to_integer_1(Context *ctx, int argc, term argv[])
 
     while (term_is_nonempty_list(t)) {
         term head = term_get_list_head(t);
-
         VALIDATE_VALUE(head, term_is_integer);
-
         avm_int_t c = term_to_int(head);
 
-        if (UNLIKELY((c < '0') || (c > '9'))) {
+        avm_int_t digit = to_digit_index(c);
+        if (UNLIKELY(digit == -1 || digit >= base)) {
             RAISE_ERROR(BADARG_ATOM);
         }
 
-        //TODO: fix this
-        if (acc > INT64_MAX / 10) {
+        // TODO: fix this
+        if (acc > INT64_MAX / base) {
             // overflow error is not standard, but we need it since we are running on an embedded device
             RAISE_ERROR(OVERFLOW_ATOM);
         }
 
-        acc = (acc * 10) + (c - '0');
+        acc = (acc * base) + digit;
         digits++;
         t = term_get_list_tail(t);
         if (!term_is_list(t)) {
