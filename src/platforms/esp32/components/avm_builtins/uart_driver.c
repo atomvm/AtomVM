@@ -355,7 +355,6 @@ static void uart_driver_do_write(Context *ctx, GenMessage gen_message)
     term pid = gen_message.pid;
     term ref = gen_message.ref;
 
-    term cmd = term_get_tuple_element(msg, 0);
     term data = term_get_tuple_element(msg, 1);
 
     size_t buffer_size;
@@ -400,7 +399,6 @@ static void uart_driver_do_close(Context *ctx, GenMessage gen_message)
 {
     GlobalContext *glb = ctx->global;
     struct UARTData *uart_data = ctx->platform_data;
-    term msg = gen_message.req;
     term pid = gen_message.pid;
     term ref = gen_message.ref;
 
