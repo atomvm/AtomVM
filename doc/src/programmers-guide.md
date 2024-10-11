@@ -1124,6 +1124,82 @@ NVS entries are currently stored in plaintext and are not encrypted.  Applicatio
 sensitive security information, such as account passwords, are stored in NVS storage.
 ```
 
+### Storage
+
+AtomVM provides support for mounting and unmounting storage on ESP32 devices, such as SD cards or internal flash memory. This functionality is accessible through the [`esp:mount/4`](./apidocs/erlang/eavmlib/esp.md#mount-4) and [`esp:umount/1`](./apidocs/erlang/eavmlib/esp.md#umount-1) functions.
+
+#### Mounting MMC SD card
+
+To mount a MMC SD card, use the `esp:mount/4` function:
+
+```erlang
+case esp:mount("sdmmc", "/sdcard", fat, []) of
+    {ok, MountedRef} ->
+        io:format("SD card mounted successfully~n"),
+        {ok, MountedRef};
+    {error, Reason} ->
+        io:format("Failed to mount SD card: ~p~n", [Reason]),
+        {error, Reason}
+end.
+```
+
+#### Mounting SPI SD card
+
+To mount a SPI SD card, first create a SPI instance configured for your specific board, then use the `esp:mount/4` function:
+
+```erlang
+SPIConfig = [
+    {bus_config, [
+        {miso, 19},
+        {mosi, 23},
+        {sclk, 18},
+        {peripheral, "spi3"}
+    ]}],
+SPI = spi:open(SPIConfig),
+case esp:mount("sdspi", "/sdcard", fat, [{spi_host, SPI}, {cs, 5}]) of
+    {ok, MountedRef} ->
+        io:format("SD card mounted successfully~n"),
+        {ok, MountedRef};
+    {error, Reason} ->
+        io:format("Failed to mount SD card: ~p~n", [Reason]),
+        {error, Reason}
+end.
+```
+
+#### Mounting internal flash
+
+To mount internal flash, use the `esp:mount/4` function:
+
+```erlang
+case esp:mount("/dev/partition/by-name/partition_name", "/test", fat, []) of
+    {ok, MountedRef} ->
+        io:format("Flash mounted successfully~n"),
+        {ok, MountedRef};
+    {error, Reason} ->
+        io:format("Failed to mount partition: ~p~n", [Reason]),
+        {error, Reason}
+end.
+```
+
+#### Unmounting Storage
+
+To unmount a previously mounted storage device, use the `esp:umount/1` function, with the reference returned from `esp:mount/4`:
+
+```erlang
+case esp:umount(MountedRef) of
+    ok ->
+        io:format("Storage unmounted successfully~n");
+    {error, Reason} ->
+        io:format("Failed to unmount storage: ~p~n", [Reason])
+end.
+```
+
+These functions allow you to work with external storage devices or partitions on your ESP32, enabling you to read from and write to files on the mounted filesystem. This can be particularly useful for applications that need to store or access large amounts of data that don't fit in the device's main memory or non-volatile storage.
+
+```{important}
+Remember to properly unmount any mounted filesystems before powering off or resetting the device to prevent data corruption.
+```
+
 ### Restart and Deep Sleep
 
 You can use the [`esp:restart/0`](./apidocs/erlang/eavmlib/esp.md#restart0) function to immediately restart the ESP32 device.  This function does not return a value.
