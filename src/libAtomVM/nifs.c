@@ -99,7 +99,7 @@ static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_atom_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_float_1(Context *ctx, int argc, term argv[]);
-static term nif_erlang_binary_to_integer_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_binary_to_integer(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_existing_atom_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
@@ -275,7 +275,7 @@ static const struct Nif binary_to_float_nif =
 static const struct Nif binary_to_integer_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_erlang_binary_to_integer_1
+    .nif_ptr = nif_erlang_binary_to_integer
 };
 
 static const struct Nif binary_to_list_nif =
@@ -1819,10 +1819,8 @@ static term nif_erlang_binary_to_atom_2(Context *ctx, int argc, term argv[])
     return binary_to_atom(ctx, argc, argv, 1);
 }
 
-static term nif_erlang_binary_to_integer_1(Context *ctx, int argc, term argv[])
+static term nif_erlang_binary_to_integer(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
-
     term bin_term = argv[0];
     VALIDATE_VALUE(bin_term, term_is_binary);
 
@@ -1833,14 +1831,26 @@ static term nif_erlang_binary_to_integer_1(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    char null_terminated_buf[24];
+    uint8_t base = 10;
+
+    if (argc == 2) {
+        term int_term = argv[1];
+        VALIDATE_VALUE(int_term, term_is_uint8);
+        base = term_to_uint8(int_term);
+    }
+
+    if (UNLIKELY((base < 2) || (base > 36))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    char null_terminated_buf[65];
     memcpy(null_terminated_buf, bin_data, bin_data_size);
     null_terminated_buf[bin_data_size] = '\0';
 
-    //TODO: handle 64 bits numbers
     //TODO: handle errors
+    //TODO: do not copy buffer, implement a custom strotoll
     char *endptr;
-    uint64_t value = strtoll(null_terminated_buf, &endptr, 10);
+    uint64_t value = strtoll(null_terminated_buf, &endptr, base);
     if (*endptr != '\0') {
         RAISE_ERROR(BADARG_ATOM);
     }

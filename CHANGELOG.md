@@ -41,6 +41,9 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 [#1100](https://github.com/atomvm/AtomVM/issues/1100)
 - Support for mounting/unmounting storage on ESP32 (such as SD or internal flash) using
 `esp:mount/4` and `esp:umount/1`
+- Support for `binary_to_integer/2`
+- Support for `binary:decode_hex/1` and `binary:encode_hex/1,2`
+- Support for Elixir `Base.decode16/2` and `Base.encode16/2`
 
 ### Changed
 
