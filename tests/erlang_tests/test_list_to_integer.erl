@@ -23,10 +23,16 @@
 -export([start/0, sum_integers/2, append_0/1]).
 
 start() ->
-    sum_integers(append_0("10"), "-1") + safe_list_to_integer("--") - safe_list_to_integer(nan) +
-        safe_list_to_integer("+10") - 10 + safe_list_to_integer("-") - 5 + safe_list_to_integer("+") -
-        5 +
-        safe_list_to_integer("") - 5.
+    sum_integers(append_0("10"), "-1") +
+        safe_list_to_integer("--") - 5 +
+        safe_list_to_integer(nan) - 5 +
+        safe_list_to_integer("+10") - 10 +
+        safe_list_to_integer("-") - 5 +
+        safe_list_to_integer("+") - 5 +
+        safe_list_to_integer("") - 5 +
+        safe_list_to_integer("0a", 16) - 10 +
+        safe_list_to_integer("-0a", 16) + 10 +
+        safe_list_to_integer("1010", 2) - 10.
 
 append_0(L) ->
     L ++ "0".
@@ -35,7 +41,9 @@ sum_integers(A, B) ->
     list_to_integer(A) + list_to_integer(B).
 
 safe_list_to_integer(A) ->
-    try list_to_integer(A) of
+    safe_list_to_integer(A, 10).
+safe_list_to_integer(A, Base) ->
+    try list_to_integer(A, Base) of
         AnyValue -> AnyValue
     catch
         error:badarg ->
