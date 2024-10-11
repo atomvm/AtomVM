@@ -27,7 +27,6 @@ set(ERLANG_MODULES
     atomvm
     avm_pubsub
     console
-    emscripten
     esp
     gpio
     i2c
@@ -37,7 +36,6 @@ set(ERLANG_MODULES
     logger_manager
     network
     network_fsm
-    pico
     port
     spi
     timer_manager
