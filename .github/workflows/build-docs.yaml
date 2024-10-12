@@ -52,8 +52,8 @@ jobs:
         os: [ ubuntu-24.04 ]
     # The type of runner that the job will run on
     runs-on: ${{ matrix.os }}
-    # Documentation currently fails to build with OTP-27
-    container: erlang:26
+    # Documentation currently fails to build with OTP-27 and recent OTP-26.
+    container: erlang:25
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -61,7 +61,7 @@ jobs:
       - name: Install Deps
         run: |
           apt update -y
-          DEBIAN_FRONTEND=noninteractive apt install -y git cmake doxygen graphviz python3-pip python3-virtualenv python3.11-venv python3-setuptools python3-stemmer wget
+          DEBIAN_FRONTEND=noninteractive apt install -y git cmake doxygen graphviz python3-pip python3-virtualenv python3-setuptools python3-stemmer wget
 
       - uses: actions/cache@v4
         id: sphinx-cache
@@ -72,7 +72,7 @@ jobs:
       - name: Install Sphinx
         if: ${{ steps.sphinx-cache.outputs.cache-hit != 'true' }}
         run: |
-          python3 -m venv /home/runner/python-env/sphinx
+         virtualenv /home/runner/python-env/sphinx
           . /home/runner/python-env/sphinx/bin/activate
           python3 -m pip install sphinx
           python3 -m pip install myst-parser
