@@ -31,39 +31,12 @@ defmodule AVMPort do
 
   @spec call(pid(), term()) :: term()
   def call(pid, message) do
-    case :erlang.is_process_alive(pid) do
-      false ->
-        {:error, :noproc}
-
-      true ->
-        ref = :erlang.make_ref()
-        send(pid, {self(), ref, message})
-
-        receive do
-          :out_of_memory -> :out_of_memory
-          {^ref, reply} -> reply
-        end
-    end
+    :port.call(pid, message)
   end
 
   @spec call(pid(), term(), non_neg_integer()) :: term()
   def call(pid, message, timeoutMs) do
-    case :erlang.is_process_alive(pid) do
-      false ->
-        {:error, :noproc}
-
-      true ->
-        ref = :erlang.make_ref()
-        send(pid, {self(), ref, message})
-
-        receive do
-          :out_of_memory -> :out_of_memory
-          {^ref, reply} -> reply
-        after
-          timeoutMs ->
-            {:error, :timeout}
-        end
-    end
+    :port.call(pid, message, timeoutMs)
   end
 
   @spec open(term(), list()) :: pid()
