@@ -25,7 +25,7 @@ defmodule HelloWorld do
   def start() do
     Console.print("Hello World\n")
     Console.puts("Console.puts() and Console.print() work with binary ")
-    Console.puts('or charlist strings.\n')
+    Console.puts(~c"or charlist strings.\n")
     Console.flush()
   end
 end
