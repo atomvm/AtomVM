@@ -302,7 +302,7 @@ handle_req("POST", [], Conn) ->
             "<html>\n"
             "   <body>\n"
             "       <h1>Configuration</h1>\n"
-            "       <p>Configured.</p>\n"
+            "       <p>Configured, restart device to apply wifi configuration.</p>\n"
             "   </body>\n"
             "</html>"
         >>,
