@@ -67,6 +67,22 @@ term externalterm_to_term(
     const void *external_term, size_t size, Context *ctx, ExternalTermOpts opts);
 
 /**
+ * @brief Gets a term from external term data, and makes a copy of all data.
+ *
+ * @details Deserialize an external term from external format and returns a term.
+ * @param external_term the external term that will be deserialized.
+ * @param size to allocate for term.
+ * @param ctx the context that owns the memory that will be allocated.
+ * @param opts if non-zero, use a heap fragment to store the generated
+ * terms.  Otherwise, use the heap in the provided context.  Note that when using the
+ * context heap, this function may call the GC, if there is insufficient space to
+ * store the generated terms.
+ * @returns a term.
+ */
+term externalterm_to_term_copy(
+    const void *external_term, size_t size, Context *ctx, ExternalTermOpts opts);
+
+/**
  * @brief Create a term from a binary.
  *
  * @details Deserialize a binary term that stores term data in Erlang external term format,

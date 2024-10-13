@@ -133,6 +133,12 @@ term externalterm_to_term(const void *external_term, size_t size, Context *ctx, 
     return externalterm_to_term_internal(external_term, size, ctx, opts, &bytes_read, false);
 }
 
+term externalterm_to_term_copy(const void *external_term, size_t size, Context *ctx, ExternalTermOpts opts)
+{
+    size_t bytes_read = 0;
+    return externalterm_to_term_internal(external_term, size, ctx, opts, &bytes_read, true);
+}
+
 enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term binary, size_t *bytes_read)
 {
     if (!term_is_binary(binary)) {
