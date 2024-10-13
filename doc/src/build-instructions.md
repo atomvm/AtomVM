@@ -668,7 +668,7 @@ $ make
 ### Changing the target device
 
 The default build is based on the STM32F4Discovery board chip (`stm32f407vgt6`). If you want to target a different
-chip, pass the `-DDEVICE` flag when invoking cmake. For example, to use the BlackPill V2.0, pass `-DDEVICE=STM32F411CEU6`. At this time any `STM32F4` or `STM32F7` device with 512KB or more of on package flash should work with AtomVM. If an unsupported device is passed with the `DEVICE` parameter the configuration will fail. For devices with either 512KB or 768KB of flash the available application flash space will be limited to 128KB. Devices with only 512KB of flash may also suffer from slightly reduced performance because the compiler must optimize for size rather than performance.
+chip, pass the `-DDEVICE` flag when invoking cmake. For example, to use the BlackPill V2.0, pass `-DDEVICE=stm32f411ceu6`. At this time any `STM32F4` or `STM32F7` device with 512KB or more of on package flash should work with AtomVM. If an unsupported device is passed with the `DEVICE` parameter the configuration will fail. For devices with either 512KB or 768KB of flash the available application flash space will be limited to 128KB. Devices with only 512KB of flash may also suffer from slightly reduced performance because the compiler must optimize for size rather than performance.
 
 ```{attention}
 For devices with only 512KB of flash the application address is different and must be adjusted when flashing your
@@ -678,7 +678,7 @@ devices is `0x8060000`.
 
 ### Configuring the Console
 
-The default build for any `DEVICE` will use `USART2` and output will be on `PA2`. This default will work well for most `Discovery` and generic boards that do not have an on-board TTL to USB-COM support (including the `STM32F411CEU6` A.K.A. `BlackPill V2.0`). For `Nucleo` boards that do have on board UART to USB-COM support you may pass the `cmake` parameter `-DBOARD=nucleo` to have the correct USART and TX pins configured automatically. The `Nucleo-144` series use `USART3` and `PD8`, while the supported `Nucleo-64` boards use `USART2`, but passing the `BOARD` parameter along with `DEVICE` will configure the correct `USART` for your model. If any other boards are discovered to have on board USB UART support pull requests, or opening issues with the details, are more than welcome.
+The default build for any `DEVICE` will use `USART2` and output will be on `PA2`. This default will work well for most `Discovery` and generic boards that do not have an on-board TTL to USB-COM support (including the `stm32f411ceu6` A.K.A. `BlackPill V2.0`). For `Nucleo` boards that do have on board UART to USB-COM support you may pass the `cmake` parameter `-DBOARD=nucleo` to have the correct USART and TX pins configured automatically. The `Nucleo-144` series use `USART3` and `PD8`, while the supported `Nucleo-64` boards use `USART2`, but passing the `BOARD` parameter along with `DEVICE` will configure the correct `USART` for your model. If any other boards are discovered to have on board USB UART support pull requests, or opening issues with the details, are more than welcome.
 
 Example to configure a `NUCLEO-F429ZI`:
 
