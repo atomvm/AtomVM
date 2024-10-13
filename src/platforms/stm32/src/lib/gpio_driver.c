@@ -812,7 +812,7 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
         term pid = term_get_tuple_element(cmd, 3);
         if (UNLIKELY(!term_is_pid(pid) && !term_is_atom(pid))) {
             AVM_LOGE(TAG, "Invalid listener parameter, must be a pid() or registered process!");
-            return create_pair(ctx, ERROR_ATOM, invalid_listener_atom);
+            return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_listener_atom));
         }
         if (term_is_pid(pid)) {
             target_local_pid = term_to_local_process_id(pid);
