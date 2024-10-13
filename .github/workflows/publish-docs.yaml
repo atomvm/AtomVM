@@ -113,6 +113,7 @@ jobs:
           make GitHub_CI_Publish_Docs
 
       - name: Commit files
+        id: commit_files
         if: github.repository == 'atomvm/AtomVM'
         working-directory: /home/runner/work/AtomVM/AtomVM/www
         run: |
@@ -122,17 +123,16 @@ jobs:
           if [ -n "$(git status --porcelain=v1)" ]; then
             git add .
             git commit -m "Update Documentation"
+            echo "PUBLISH=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Push changes
-        if: github.repository == 'atomvm/AtomVM'
+        if: github.repository == 'atomvm/AtomVM' && steps.commit_files.outputs.PUBLISH  == 'true'
         working-directory: /home/runner/work/AtomVM/AtomVM/www
         run: |
-          if [ -n "$(git status --porcelain=v1)" ]; then
-            eval `ssh-agent -t 60 -s`
-            echo "${{ secrets.PUBLISH_ACTION_KEY }}" | ssh-add -
-            mkdir -p ~/.ssh/
-            ssh-keyscan github.com >> ~/.ssh/known_hosts
-            git remote add push_dest "git@github.com:atomvm/atomvm_www.git"
-            git fetch push_dest
-            git push --set-upstream push_dest Production
-          fi
+          eval `ssh-agent -t 60 -s`
+          echo "${{ secrets.PUBLISH_ACTION_KEY }}" | ssh-add -
+          mkdir -p ~/.ssh/
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          git remote add push_dest "git@github.com:atomvm/atomvm_www.git"
+          git fetch push_dest
+          git push --set-upstream push_dest Production
