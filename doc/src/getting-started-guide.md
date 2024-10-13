@@ -353,7 +353,7 @@ total 16
 -rwxrwxrwx  1 joe  staff  241 Sep  5  2008 INDEX.HTM*
 -rwxrwxrwx  1 joe  staff   62 Sep  5  2008 INFO_UF2.TXT*
 
-$ cp ~/Downloads/atomvmlib-v0.6.0.avm /Volumes/RPI-RP2/.
+$ cp ~/Downloads/atomvmlib-v0.6.0.uf2 /Volumes/RPI-RP2/.
 ```
 
 ... and again, at this point, the device will auto-unmount.
