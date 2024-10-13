@@ -47,6 +47,7 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 - Make external term serialize functions available without using `externalterm_to_binary` so terms
 can be written directly to a buffer.
 - Support for `erlang:list_to_integer/2`
+- Add `externalterm_to_term_copy` that can be safely used from NIFs taking temporary buffers
 
 ### Changed
 
