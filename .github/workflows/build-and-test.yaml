@@ -197,12 +197,14 @@ jobs:
           cflags: ""
           elixir_version: "1.14"
 
-        # master/main version of OTP/Elixir
-        - os: "ubuntu-24.04"
-          cc: "cc"
-          cxx: "c++"
-          otp: "master"
-          elixir_version: "main"
+# TODO: enable master again
+# master will not work until we don't adapt to atom table changes
+#        # master/main version of OTP/Elixir
+#        - os: "ubuntu-24.04"
+#          cc: "cc"
+#          cxx: "c++"
+#          otp: "master"
+#          elixir_version: "main"
 
         # Additional default compiler builds
         - os: "ubuntu-20.04"
