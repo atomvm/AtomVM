@@ -29,7 +29,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{  github.ref_name }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   AVM_DOCS_NAME: ${{ github.ref_name }}
@@ -119,17 +119,20 @@ jobs:
           git checkout Production
           git config --local user.email "atomvm-doc-bot@users.noreply.github.com"
           git config --local user.name "AtomVM Doc Bot"
-          git add .
-          git commit -m "Update Documentation"
+          if [ -n "$(git status --porcelain=v1)" ]; then
+            git add .
+            git commit -m "Update Documentation"
+          fi
       - name: Push changes
         if: github.repository == 'atomvm/AtomVM'
         working-directory: /home/runner/work/AtomVM/AtomVM/www
         run: |
-          eval `ssh-agent -t 60 -s`
-          echo "${{ secrets.PUBLISH_ACTION_KEY }}" | ssh-add -
-          mkdir -p ~/.ssh/
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
-          git remote add push_dest "git@github.com:atomvm/atomvm_www.git"
-          git fetch push_dest
-          git push --set-upstream push_dest Production
-
+          if [ -n "$(git status --porcelain=v1)" ]; then
+            eval `ssh-agent -t 60 -s`
+            echo "${{ secrets.PUBLISH_ACTION_KEY }}" | ssh-add -
+            mkdir -p ~/.ssh/
+            ssh-keyscan github.com >> ~/.ssh/known_hosts
+            git remote add push_dest "git@github.com:atomvm/atomvm_www.git"
+            git fetch push_dest
+            git push --set-upstream push_dest Production
+          fi
