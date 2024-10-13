@@ -44,6 +44,7 @@ jobs:
         os: [ ubuntu-24.04 ]
     # The type of runner that the job will run on
     runs-on: ${{ matrix.os }}
+    container: erlang:26.0.2
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -51,14 +52,14 @@ jobs:
 
       - name: Install Deps
         run: |
-          sudo apt update -y
-          DEBIAN_FRONTEND=noninteractive sudo apt install -y git cmake doxygen graphviz python3-pip python3-virtualenv python3-setuptools python3-stemmer wget
+          apt update -y
+          DEBIAN_FRONTEND=noninteractive apt install -y git cmake doxygen graphviz python3-pip python3-virtualenv python3-setuptools python3-stemmer wget
 
       - uses: actions/cache@v4
         id: sphinx-cache
         with:
           path: /home/runner/python-env/sphinx
-          key: ${{ matrix.os }}-sphinx-install
+          key: ${{ matrix.os }}-${{ job.container.id }}-sphinx-install
 
       - name: Install Sphinx
         if: ${{ steps.sphinx-cache.outputs.cache-hit != 'true' }}
@@ -73,15 +74,6 @@ jobs:
           python3 -m pip install gitpython
           python3 -m pip install breathe
           python3 -m pip install pygments
-
-      - uses: erlef/setup-beam@v1
-        with:
-          otp-version: "25"
-          elixir-version: "1.17"
-          hexpm-mirrors: |
-            https://builds.hex.pm
-            https://repo.hex.pm
-            https://cdn.jsdelivr.net/hex
 
       - name: Install rebar3
         working-directory: /tmp

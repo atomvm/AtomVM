@@ -53,7 +53,7 @@ jobs:
     # The type of runner that the job will run on
     runs-on: ${{ matrix.os }}
     # Documentation currently fails to build with OTP-27 and recent OTP-26.
-    container: erlang:25
+    container: erlang:26.0.2
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
