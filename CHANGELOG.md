@@ -50,6 +50,7 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 can be written directly to a buffer.
 - Support for `erlang:list_to_integer/2`
 - Add `externalterm_to_term_copy` that can be safely used from NIFs taking temporary buffers
+- Add stub of `erl_features` and copy `erl_scan`, `erl_anno` modules from OTP
 
 ### Changed
 
