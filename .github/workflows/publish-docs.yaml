@@ -115,7 +115,8 @@ jobs:
           cmake ..
           cd doc
           make GitHub_CI_Publish_Docs
-
+          rm -frv "/__w/AtomVM/AtomVM/www/doc/${{ github.ref_name }}"
+          cp -av html "/__w/AtomVM/AtomVM/www/doc/${{ github.ref_name }}"
       - name: Commit files
         id: commit_files
         if: github.repository == 'atomvm/AtomVM'
@@ -124,6 +125,8 @@ jobs:
           git config --local user.email "atomvm-doc-bot@users.noreply.github.com"
           git config --local user.name "AtomVM Doc Bot"
           ls -la doc/
+          git status "doc/${{ github.ref_name }}"
+          git add "doc/${{ github.ref_name }}"
           git add .
           git diff --exit-code Production || echo "Going to commit"
           git diff --exit-code Production || git commit -m "Update Documentation"
