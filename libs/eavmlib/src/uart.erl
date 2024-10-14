@@ -88,17 +88,15 @@ warn_deprecated(OldKey, NewKey) ->
 validate_peripheral(I) when is_integer(I) ->
     io:format("UART: deprecated integer peripheral is used.~n"),
     I;
-validate_peripheral([$u, $a, $r, $t | N] = Value) ->
+validate_peripheral([$U, $A, $R, $T | N] = Value) ->
     try list_to_integer(N) of
-        % Internally integers are still used
-        % TODO: change this as soon as ESP32 code is reworked
-        I -> I
+        _ -> Value
     catch
         error:_ -> {bardarg, {peripheral, Value}}
     end;
-validate_peripheral(<<"uart", N/binary>> = Value) ->
+validate_peripheral(<<"UART", N/binary>> = Value) ->
     try binary_to_integer(N) of
-        I -> I
+        _ -> Value
     catch
         error:_ -> {bardarg, {peripheral, Value}}
     end;

@@ -137,6 +137,21 @@ GlobalContext *globalcontext_new()
     }
 #endif
 
+#if HAVE_OPENDIR && HAVE_READDIR && HAVE_CLOSEDIR
+    ErlNifEnv dir_env;
+    erl_nif_env_partial_init_from_globalcontext(&dir_env, glb);
+    glb->posix_dir_resource_type = enif_init_resource_type(&env, "posix_dir", &posix_dir_resource_type_init, ERL_NIF_RT_CREATE, NULL);
+    if (IS_NULL_PTR(glb->posix_dir_resource_type)) {
+#ifndef AVM_NO_SMP
+        smp_rwlock_destroy(glb->modules_lock);
+#endif
+        free(glb->modules_table);
+        atom_table_destroy(glb->atom_table);
+        free(glb);
+        return NULL;
+    }
+#endif
+
     sys_init_platform(glb);
 
 #ifndef AVM_NO_SMP

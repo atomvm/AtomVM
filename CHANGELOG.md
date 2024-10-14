@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a limited implementation of the OTP `ets` interface
 - Added `code:all_loaded/0` and `code:all_available/0`
 
-## [0.6.5] - Unreleased
+## [0.6.5] - 2024-10-15
 
 ### Added
 
@@ -40,6 +40,20 @@ also non string parameters (e.g. `Enum.join([1, 2], ",")`
 - Support for Elixir `IO.chardata_to_string/1`
 - Support for Elixir `List.duplicate/2`
 - Support for `binary:copy/1,2`
+- Support for directory listing using POSIX APIs: (`atomvm:posix_opendir/1`,
+`atomvm:posix_readdir/1`, `atomvm:posix_closedir/1`).
+- ESP32: add support for `esp_adc` ADC driver, with Erlang and Elixir examples
+- Add handler for ESP32 network driver STA mode `beacon_timeout` (event: 21), see issue
+[#1100](https://github.com/atomvm/AtomVM/issues/1100)
+- Support for mounting/unmounting storage on ESP32 (such as SD or internal flash) using
+`esp:mount/4` and `esp:umount/1`
+- Support for `binary_to_integer/2`
+- Support for `binary:decode_hex/1` and `binary:encode_hex/1,2`
+- Support for Elixir `Base.decode16/2` and `Base.encode16/2`
+- Make external term serialize functions available without using `externalterm_to_binary` so terms
+can be written directly to a buffer.
+- Support for `erlang:list_to_integer/2`
+- Add `externalterm_to_term_copy` that can be safely used from NIFs taking temporary buffers
 
 ### Changed
 
@@ -58,6 +72,11 @@ instead
 - `unicode:characters_to_list`: fixed bogus out_of_memory error on some platforms such as ESP32
 - Fix crash in Elixir library when doing `inspect(:atom)`
 - General inspect() compliance with Elixir behavior (but there are still some minor differences)
+- Fix several uses of free on prevously released memory on ESP32, under certain error condition using
+`network:start/1`, that would lead to a hard crash of the VM.
+- Fix a bug in ESP32 network driver where the low level driver was not being stopped and resoureces were not freed
+when `network:stop/0` was used, see issue [#643](https://github.com/atomvm/AtomVM/issues/643)
+- `uart:open/1,2` now works with uppercase peripheral names
 
 ## [0.6.4] - 2024-08-18
 

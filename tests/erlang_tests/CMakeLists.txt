@@ -431,6 +431,7 @@ compile_erlang(fail_apply_last)
 compile_erlang(pid_to_list_test)
 compile_erlang(ref_to_list_test)
 compile_erlang(test_binary_to_integer)
+compile_erlang(test_binary_to_integer_2)
 
 compile_erlang(count_char_bs)
 compile_erlang(count_char2_bs)
@@ -905,6 +906,7 @@ add_custom_target(erlang_test_modules DEPENDS
     pid_to_list_test.beam
     ref_to_list_test.beam
     test_binary_to_integer.beam
+    test_binary_to_integer_2.beam
 
     count_char_bs.beam
     count_char2_bs.beam

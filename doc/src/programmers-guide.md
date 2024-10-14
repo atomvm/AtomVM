@@ -1203,6 +1203,82 @@ NVS entries are currently stored in plaintext and are not encrypted.  Applicatio
 sensitive security information, such as account passwords, are stored in NVS storage.
 ```
 
+### Storage
+
+AtomVM provides support for mounting and unmounting storage on ESP32 devices, such as SD cards or internal flash memory. This functionality is accessible through the [`esp:mount/4`](./apidocs/erlang/eavmlib/esp.md#mount-4) and [`esp:umount/1`](./apidocs/erlang/eavmlib/esp.md#umount-1) functions.
+
+#### Mounting MMC SD card
+
+To mount a MMC SD card, use the `esp:mount/4` function:
+
+```erlang
+case esp:mount("sdmmc", "/sdcard", fat, []) of
+    {ok, MountedRef} ->
+        io:format("SD card mounted successfully~n"),
+        {ok, MountedRef};
+    {error, Reason} ->
+        io:format("Failed to mount SD card: ~p~n", [Reason]),
+        {error, Reason}
+end.
+```
+
+#### Mounting SPI SD card
+
+To mount a SPI SD card, first create a SPI instance configured for your specific board, then use the `esp:mount/4` function:
+
+```erlang
+SPIConfig = [
+    {bus_config, [
+        {miso, 19},
+        {mosi, 23},
+        {sclk, 18},
+        {peripheral, "spi3"}
+    ]}],
+SPI = spi:open(SPIConfig),
+case esp:mount("sdspi", "/sdcard", fat, [{spi_host, SPI}, {cs, 5}]) of
+    {ok, MountedRef} ->
+        io:format("SD card mounted successfully~n"),
+        {ok, MountedRef};
+    {error, Reason} ->
+        io:format("Failed to mount SD card: ~p~n", [Reason]),
+        {error, Reason}
+end.
+```
+
+#### Mounting internal flash
+
+To mount internal flash, use the `esp:mount/4` function:
+
+```erlang
+case esp:mount("/dev/partition/by-name/partition_name", "/test", fat, []) of
+    {ok, MountedRef} ->
+        io:format("Flash mounted successfully~n"),
+        {ok, MountedRef};
+    {error, Reason} ->
+        io:format("Failed to mount partition: ~p~n", [Reason]),
+        {error, Reason}
+end.
+```
+
+#### Unmounting Storage
+
+To unmount a previously mounted storage device, use the `esp:umount/1` function, with the reference returned from `esp:mount/4`:
+
+```erlang
+case esp:umount(MountedRef) of
+    ok ->
+        io:format("Storage unmounted successfully~n");
+    {error, Reason} ->
+        io:format("Failed to unmount storage: ~p~n", [Reason])
+end.
+```
+
+These functions allow you to work with external storage devices or partitions on your ESP32, enabling you to read from and write to files on the mounted filesystem. This can be particularly useful for applications that need to store or access large amounts of data that don't fit in the device's main memory or non-volatile storage.
+
+```{important}
+Remember to properly unmount any mounted filesystems before powering off or resetting the device to prevent data corruption.
+```
+
 ### Restart and Deep Sleep
 
 You can use the [`esp:restart/0`](./apidocs/erlang/eavmlib/esp.md#restart0) function to immediately restart the ESP32 device.  This function does not return a value.
@@ -1458,6 +1534,63 @@ Since only one instance of the GPIO driver is allowed, you may also simply use [
 
 ```erlang
 ok = gpio:stop().
+```
+
+### ESP32 ADC
+
+The [`esp_adc` module](./apidocs/erlang/eavmlib/esp_adc.md) provides the functionality to use the ESP32 family [SAR ADC](https://en.wikipedia.org/wiki/Successive-approximation_ADC) peripheral to measure (analog) voltages from a pin and obtain both raw bit values as well as calibrated voltage values in millivolts.
+
+The module provides two sets of APIs for using the ADC peripheral; there is a set of low level resource based nifs, and a gen_server managed set of convenience functions. The nifs rely on unit and channel handle resources for configuring and taking measurements. The convenience functions use the gen_server to maintain these resources and use pin numbers to interact with the driver. Examples for both APIs can be found the [AtomVM repository atomvm/examples/erlang/esp32](https://github.com/atomvm/AtomVM/tree/main/examples/erlang/esp32) directory. A demonstration of the simple APIs is as follows:
+
+```erlang
+...
+    Pin = 33,
+    ok = esp_adc:start(Pin, [{bitwidth, bit_12}, {atten, db_2_5}]),
+    {ok, {Raw, Mv}} = esp_adc:read(Pin, [raw, voltage, {samples, 48}]),
+    io:format("ADC pin ~p raw value=~p millivolts=~p~n", [Pin, Raw, Mv]),
+    ok = esp_adc:stop(),
+...
+```
+
+#### ESP32 ADC configuration options
+
+Some newer ESP32 family devices only use a single fixed bit width, this is typically 12 bits, but some provide 13 bit resolution. The ESP32 classic supports 9 bit up to 12 bit resolutions. The `bitwidth` option `bit_max` will use the highest supported resolution for the device.
+
+The `attenuation` option determines the range of voltage to be measured, the specific voltage range for each setting varies by chip, so as always consult your devices datasheet before connecting an ADC pin to a voltage supply to be measured. The chart below depicts the approximate safe voltage ranges for each attenuation level:
+
+| Attenuation      | Min Millivolts | Max Millivolts |
+|------------------|----------------|----------------|
+| `db_0`           | 0-100          | 750-950        |
+| `db_2_5`         | 0-100          | 1050-1250      |
+| `db_6`           | 0-150          | 1300-1750      |
+| `db_11 \| db_12` | 0-150          | 2450-2500      |
+
+Consult the datasheet of your device for the exact voltage ranges supported by each attenuation level.
+
+```{warning}
+The option `db_11` has been superseded by `db_12`. The option `db_11` and will be deprecated in a future release, applications should be updated to use `db_12` (except for builds with ESP-IDF versions prior to v5.2). To Continue to support older IDF version builds, the default will remain `db_11`, which is the maximum tolerated voltage on all builds, as `db_12` supported builds will automatically use `db_12` in place of `db_11`. After `db_11` is deprecated in all builds (with the sunset of ESP-IDF v5.1 support) the default will be changed to `db_12`.
+```
+
+```{note}
+For a higher degree of accuracy increase the number of sample taken, the default is 64. If highly stable and accurate ADC measurements are required for an application you may need to connect a bypass capacitor (e.g., a 100 nF ceramic capacitor) to the ADC input pad in use, to minimize noise. This chart from the [Espressif ADC Calibration Driver documentation](https://docs.espressif.com/projects/esp-idf/en/v5.3/esp32/api-reference/peripherals/adc_calibration.html) shows the difference between the use of a capacitor and without, as well as with a capacitor and multisampling of 64 samples.
+
+![ADC Noise Comparison](https://docs.espressif.com/projects/esp-idf/en/v5.3/esp32/_images/adc-noise-graph.jpg)
+
+You can clearly see the noisy results without a capacitor. This is mitigated by the use of multisampling but without a decoupling capacitor results will likely still contain some noise.
+```
+
+When an ADC channel is configured by the use of `esp_adc:acquire/2,4` or `esp_adc:start/1,2` the driver will select the optimal calibration mechanism supported by the device and channel configuration. If neither the line fitting or curve fitting mechanisms are supported by the device using the provided configuration options an estimated result will be used to provide `voltage` values, based on the [formula suggested by Espressif](https://docs.espressif.com/projects/esp-idf/en/v5.3/esp32/api-reference/peripherals/adc_oneshot.html#read-conversion-result). For chips using the line fitting calibration scheme that do not have the default vref efuse set, a default vref of 1100 mV is used, this is not currently settable.
+
+#### ESP32 ADC read options
+
+The read options take the form of a proplist, if the key `raw` is true (`{raw, true}` or simply appears in the list as the atom `raw`), then the raw value will be returned in the first element of the returned tuple.  Otherwise, this element will be the atom `undefined`.
+
+If the key `voltage` is true (or simply appears in the list as an atom), then a calibrated voltage value will be returned in millivolts in the second element of the returned tuple.  Otherwise, this element will be the atom `undefined`.
+
+You may specify the number of samples (1 - 100000) to be taken and averaged over using the tuple `{samples, Samples :: 1..100000}`, the default is `64`. 
+
+```{warning}
+Using a large number of samples can significantly increase the amount of time before a response, up to several seconds.
 ```
 
 ### I2C

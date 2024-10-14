@@ -191,10 +191,13 @@ if (NOT ATOMIC_POINTER_LOCK_FREE_IS_TWO AND NOT (HAVE_PLATFORM_ATOMIC_H OR (AVM_
 endif()
 
 include(DefineIfExists)
-# HAVE_OPEN & HAVE_CLOSE are used in globalcontext.h
+# HAVE_OPEN, HAVE_OPENDIR, HAVE_CLOSE HAVE_CLOSEDIR, HAVE_READDIR are used in globalcontext.h
 define_if_function_exists(libAtomVM open "fcntl.h" PUBLIC HAVE_OPEN)
+define_if_function_exists(libAtomVM opendir "dirent.h" PUBLIC HAVE_OPENDIR)
 define_if_function_exists(libAtomVM close "unistd.h" PUBLIC HAVE_CLOSE)
+define_if_function_exists(libAtomVM closedir "dirent.h" PUBLIC HAVE_CLOSEDIR)
 define_if_function_exists(libAtomVM mkfifo "sys/stat.h" PRIVATE HAVE_MKFIFO)
+define_if_function_exists(libAtomVM readdir "dirent.h" PUBLIC HAVE_READDIR)
 define_if_function_exists(libAtomVM unlink "unistd.h" PRIVATE HAVE_UNLINK)
 define_if_symbol_exists(libAtomVM O_CLOEXEC "fcntl.h" PRIVATE HAVE_O_CLOEXEC)
 define_if_symbol_exists(libAtomVM O_DIRECTORY "fcntl.h" PRIVATE HAVE_O_DIRECTORY)

@@ -298,13 +298,12 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
     return ctx;
 }
 
-static void uart_driver_do_read(Context *ctx, term msg)
+static void uart_driver_do_read(Context *ctx, GenMessage gen_message)
 {
     GlobalContext *glb = ctx->global;
     struct UARTData *uart_data = ctx->platform_data;
-
-    term pid = term_get_tuple_element(msg, 0);
-    term ref = term_get_tuple_element(msg, 1);
+    term pid = gen_message.pid;
+    term ref = gen_message.ref;
     uint64_t ref_ticks = term_to_ref_ticks(ref);
 
     int local_pid = term_to_local_process_id(pid);
@@ -313,20 +312,12 @@ static void uart_driver_do_read(Context *ctx, term msg)
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + REF_SIZE) != MEMORY_GC_OK)) {
             ESP_LOGE(TAG, "[uart_driver_do_read] Failed to allocate space for error tuple");
             globalcontext_send_message(glb, local_pid, MEMORY_ATOM);
+            return;
         }
 
         term ealready = globalcontext_make_atom(glb, ealready_atom);
-
-        term error_tuple = term_alloc_tuple(2, &ctx->heap);
-        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
-        term_put_tuple_element(error_tuple, 1, ealready);
-
-        term result_tuple = term_alloc_tuple(2, &ctx->heap);
-        term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, &ctx->heap));
-        term_put_tuple_element(result_tuple, 1, error_tuple);
-
-        globalcontext_send_message(glb, local_pid, result_tuple);
-
+        term error_tuple = port_create_error_tuple(ctx, ealready);
+        port_send_reply(ctx, pid, ref, error_tuple);
         return;
     }
 
@@ -348,11 +339,7 @@ static void uart_driver_do_read(Context *ctx, term msg)
         term_put_tuple_element(ok_tuple, 0, OK_ATOM);
         term_put_tuple_element(ok_tuple, 1, bin);
 
-        term result_tuple = term_alloc_tuple(2, &ctx->heap);
-        term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, &ctx->heap));
-        term_put_tuple_element(result_tuple, 1, ok_tuple);
-
-        globalcontext_send_message(glb, local_pid, result_tuple);
+        port_send_reply(ctx, pid, ref, ok_tuple);
 
     } else {
         uart_data->reader_process_pid = pid;
@@ -360,18 +347,15 @@ static void uart_driver_do_read(Context *ctx, term msg)
     }
 }
 
-static void uart_driver_do_write(Context *ctx, term msg)
+static void uart_driver_do_write(Context *ctx, GenMessage gen_message)
 {
     GlobalContext *glb = ctx->global;
     struct UARTData *uart_data = ctx->platform_data;
+    term msg = gen_message.req;
+    term pid = gen_message.pid;
+    term ref = gen_message.ref;
 
-    term pid = term_get_tuple_element(msg, 0);
-    term ref = term_get_tuple_element(msg, 1);
-    uint64_t ref_ticks = term_to_ref_ticks(ref);
-
-    term cmd = term_get_tuple_element(msg, 2);
-
-    term data = term_get_tuple_element(cmd, 1);
+    term data = term_get_tuple_element(msg, 1);
 
     size_t buffer_size;
     switch (interop_iolist_size(data, &buffer_size)) {
@@ -408,21 +392,15 @@ static void uart_driver_do_write(Context *ctx, term msg)
         globalcontext_send_message(glb, local_pid, MEMORY_ATOM);
     }
 
-    term result_tuple = term_alloc_tuple(2, &ctx->heap);
-    term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, &ctx->heap));
-    term_put_tuple_element(result_tuple, 1, OK_ATOM);
-
-    globalcontext_send_message(glb, local_pid, result_tuple);
+    port_send_reply(ctx, pid, ref, OK_ATOM);
 }
 
-static void uart_driver_do_close(Context *ctx, term msg)
+static void uart_driver_do_close(Context *ctx, GenMessage gen_message)
 {
     GlobalContext *glb = ctx->global;
     struct UARTData *uart_data = ctx->platform_data;
-
-    term pid = term_get_tuple_element(msg, 0);
-    term ref = term_get_tuple_element(msg, 1);
-    uint64_t ref_ticks = term_to_ref_ticks(ref);
+    term pid = gen_message.pid;
+    term ref = gen_message.ref;
 
     int local_pid = term_to_local_process_id(pid);
 
@@ -433,10 +411,7 @@ static void uart_driver_do_close(Context *ctx, term msg)
         globalcontext_send_message(glb, local_pid, MEMORY_ATOM);
     }
 
-    term result_tuple = term_alloc_tuple(2, &ctx->heap);
-    term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, &ctx->heap));
-    term_put_tuple_element(result_tuple, 1, OK_ATOM);
-    globalcontext_send_message(glb, local_pid, result_tuple);
+    port_send_reply(ctx, pid, ref, OK_ATOM);
 
     esp_err_t err = uart_driver_delete(uart_data->uart_num);
     if (UNLIKELY(err != ESP_OK)) {
@@ -492,17 +467,17 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx)
         switch (cmd) {
             case UARTReadCmd:
                 TRACE("read\n");
-                uart_driver_do_read(ctx, msg);
+                uart_driver_do_read(ctx, gen_message);
                 break;
 
             case UARTWriteCmd:
                 TRACE("write\n");
-                uart_driver_do_write(ctx, msg);
+                uart_driver_do_write(ctx, gen_message);
                 break;
 
             case UARTCloseCmd:
                 TRACE("close\n");
-                uart_driver_do_close(ctx, msg);
+                uart_driver_do_close(ctx, gen_message);
                 is_closed = true;
                 break;
 

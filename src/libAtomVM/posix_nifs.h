@@ -53,6 +53,12 @@ extern const struct Nif atomvm_posix_unlink_nif;
 #if defined(HAVE_CLOCK_SETTIME) || defined(HAVE_SETTIMEOFDAY)
 extern const struct Nif atomvm_posix_clock_settime_nif;
 #endif
+#if HAVE_OPENDIR && HAVE_READDIR && HAVE_CLOSEDIR
+extern const ErlNifResourceTypeInit posix_dir_resource_type_init;
+extern const struct Nif atomvm_posix_opendir_nif;
+extern const struct Nif atomvm_posix_readdir_nif;
+extern const struct Nif atomvm_posix_closedir_nif;
+#endif
 
 /**
  * @brief Convenient function to return posix errors as atom.

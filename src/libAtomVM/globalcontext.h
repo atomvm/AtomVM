@@ -155,6 +155,10 @@ struct GlobalContext
     ErlNifResourceType *posix_fd_resource_type;
 #endif
 
+#if HAVE_OPENDIR && HAVE_READDIR && HAVE_CLOSEDIR
+    ErlNifResourceType *posix_dir_resource_type;
+#endif
+
     void *platform_data;
 };
 

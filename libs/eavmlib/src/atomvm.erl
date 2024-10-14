@@ -40,12 +40,16 @@
     posix_close/1,
     posix_read/2,
     posix_write/2,
-    posix_clock_settime/2
+    posix_clock_settime/2,
+    posix_opendir/1,
+    posix_closedir/1,
+    posix_readdir/1
 ]).
 
 -export_type([
     posix_fd/0,
-    posix_open_flag/0
+    posix_open_flag/0,
+    posix_dir/0
 ]).
 
 -deprecated([
@@ -83,6 +87,8 @@
 -type posix_error() ::
     atom()
     | integer().
+
+-opaque posix_dir() :: binary().
 
 %%-----------------------------------------------------------------------------
 %% @returns The platform name.
@@ -294,4 +300,38 @@ posix_write(_File, _Data) ->
 ) ->
     ok | {error, Reason :: posix_error()}.
 posix_clock_settime(_ClockId, _Time) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Path    Path to the directory to open
+%% @returns A tuple with a directory descriptor or an error tuple.
+%% @doc     Open a file (on platforms that have `opendir(3)').
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_opendir(Path :: iodata()) ->
+    {ok, posix_dir()} | {error, posix_error()}.
+posix_opendir(_Path) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Dir    Descriptor to a directory to close
+%% @returns `ok' or an error tuple
+%% @doc     Close a directory that was opened with `posix_opendir/1'
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_closedir(Dir :: posix_dir()) -> ok | {error, posix_error()}.
+posix_closedir(_Dir) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Dir    Descriptor to an open directory
+%% @returns a `{dirent, InodeNo, Name}' tuple, `eof' or an error tuple
+%% @doc     Read a directory entry
+%% `eof' is returned if no more data can be read because the directory cursor
+%% reached the end.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_readdir(Dir :: posix_dir()) ->
+    {ok, {dirent, Inode :: integer(), Name :: binary()}} | eof | {error, posix_error()}.
+posix_readdir(_Dir) ->
     erlang:nif_error(undefined).

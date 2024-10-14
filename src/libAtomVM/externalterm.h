@@ -30,6 +30,8 @@
 
 #include "term.h"
 
+#define EXTERNAL_TERM_TAG 131
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -65,6 +67,22 @@ term externalterm_to_term(
     const void *external_term, size_t size, Context *ctx, ExternalTermOpts opts);
 
 /**
+ * @brief Gets a term from external term data, and makes a copy of all data.
+ *
+ * @details Deserialize an external term from external format and returns a term.
+ * @param external_term the external term that will be deserialized.
+ * @param size to allocate for term.
+ * @param ctx the context that owns the memory that will be allocated.
+ * @param opts if non-zero, use a heap fragment to store the generated
+ * terms.  Otherwise, use the heap in the provided context.  Note that when using the
+ * context heap, this function may call the GC, if there is insufficient space to
+ * store the generated terms.
+ * @returns a term.
+ */
+term externalterm_to_term_copy(
+    const void *external_term, size_t size, Context *ctx, ExternalTermOpts opts);
+
+/**
  * @brief Create a term from a binary.
  *
  * @details Deserialize a binary term that stores term data in Erlang external term format,
@@ -93,6 +111,77 @@ enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term b
  * deserialization fails.
  */
 term externalterm_to_binary(Context *ctx, term t);
+
+/**
+ * @brief Computes the size required for a external term (tag excluded)
+ *
+ * @details This function should be called in order to calculate the required buffer size to store
+ * a serialized term in external term format. This function doesn't prepend the external term 1 byte
+ * tag.
+ *
+ * @param t the term for which size is calculated
+ * @param size the required buffer size (tag excluded)
+ * @param glb the global context
+ * @returns EXTERNAL_TERM_OK in case of success
+ */
+enum ExternalTermResult externalterm_compute_external_size_raw(
+    term t, size_t *size, GlobalContext *glb);
+
+/**
+ * @brief Serialize a term (tag excluded)
+ *
+ * @details This function serializes in external term format given term, and writes it to the given
+ * buffer. This function doesn't prepend the external term 1 byte tag.
+ *
+ * @param buf the buffer where the external term is written
+ * @param t the term that will be serialized
+ * @param glb the global context
+ * @returns EXTERNAL_TERM_OK in case of success
+ */
+enum ExternalTermResult externalterm_serialize_term_raw(void *buf, term t, GlobalContext *glb);
+
+/**
+ * @brief Computes the size required for a external term
+ *
+ * @details This function should be called in order to calculate the required buffer size to store
+ * a serialized term in external term format.
+ *
+ * @param t the term for which size is calculated
+ * @param size the required buffer size (tag excluded)
+ * @param glb the global context
+ * @returns EXTERNAL_TERM_OK in case of success
+ */
+static inline enum ExternalTermResult externalterm_compute_external_size(
+    term t, size_t *size, GlobalContext *glb)
+{
+    size_t raw_size;
+    enum ExternalTermResult result = externalterm_compute_external_size_raw(t, &raw_size, glb);
+    if (LIKELY(result == EXTERNAL_TERM_OK)) {
+        *size = raw_size + 1;
+    }
+    return result;
+}
+
+/**
+ * @brief Serialize a term
+ *
+ * @details This function serializes in external term format given term, and writes it to the given
+ * buffer.
+ *
+ * @param buf the buffer where the external term is written
+ * @param t the term that will be serialized
+ * @param glb the global context
+ * @returns EXTERNAL_TERM_OK in case of success
+ */
+static inline enum ExternalTermResult externalterm_serialize_term(
+    void *buf, term t, GlobalContext *glb)
+{
+    enum ExternalTermResult result = externalterm_serialize_term_raw((uint8_t *) buf + 1, t, glb);
+    if (LIKELY(result == EXTERNAL_TERM_OK)) {
+        ((uint8_t *) buf)[0] = EXTERNAL_TERM_TAG;
+    }
+    return result;
+}
 
 #ifdef __cplusplus
 }

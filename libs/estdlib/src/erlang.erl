@@ -52,11 +52,13 @@
     list_to_existing_atom/1,
     list_to_binary/1,
     list_to_integer/1,
+    list_to_integer/2,
     list_to_tuple/1,
     iolist_to_binary/1,
     binary_to_atom/1,
     binary_to_atom/2,
     binary_to_integer/1,
+    binary_to_integer/2,
     binary_to_list/1,
     atom_to_binary/1,
     atom_to_binary/2,
@@ -601,6 +603,19 @@ list_to_integer(_String) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   String  string to convert to integer
+%% @param   Base  string to convert to integer
+%% @returns an integer value from its string representation
+%% @doc     Convert a string (list of characters) to integer in specified base.
+%% Errors with `badarg' if the string is not a representation of an integer or
+%% the base is out of bounds.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec list_to_integer(String :: string(), Base :: 2..36) -> integer().
+list_to_integer(_String, _Base) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   List    list to convert to tuple
 %% @returns a tuple with elements of the list
 %% @doc     Convert a list to a tuple with the same size.
@@ -649,6 +664,16 @@ binary_to_atom(_Binary, _Encoding) ->
 %%-----------------------------------------------------------------------------
 -spec binary_to_integer(Binary :: binary()) -> integer().
 binary_to_integer(_Binary) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Binary  Binary to parse for integer
+%% @returns the integer represented by the binary
+%% @doc     Parse the text in a given binary as an integer.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec binary_to_integer(Binary :: binary(), Base :: 2..36) -> integer().
+binary_to_integer(_Binary, Base) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

@@ -50,6 +50,7 @@
 
 -type dhcp_hostname_config() :: {dhcp_hostname, string() | binary()}.
 -type sta_connected_config() :: {connected, fun(() -> term())}.
+-type sta_beacon_timeout_config() :: {beacon_timeout, fun(() -> term())}.
 -type sta_disconnected_config() :: {disconnected, fun(() -> term())}.
 -type sta_got_ip_config() :: {got_ip, fun((ip_info()) -> term())}.
 -type sta_config_property() ::
@@ -57,6 +58,7 @@
     | psk_config()
     | dhcp_hostname_config()
     | sta_connected_config()
+    | sta_beacon_timeout_config()
     | sta_disconnected_config()
     | sta_got_ip_config().
 -type sta_config() :: {sta, [sta_config_property()]}.
@@ -357,6 +359,9 @@ handle_cast(_Msg, State) ->
 handle_info({Ref, sta_connected} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_sta_connected_callback(Config),
     {noreply, State};
+handle_info({Ref, sta_beacon_timeout} = _Msg, #state{ref = Ref, config = Config} = State) ->
+    maybe_sta_beacon_timeout_callback(Config),
+    {noreply, State};
 handle_info({Ref, sta_disconnected} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_sta_disconnected_callback(Config),
     {noreply, State};
@@ -386,6 +391,8 @@ handle_info(Msg, State) ->
 
 %% @hidden
 terminate(_Reason, _State) ->
+    Ref = make_ref(),
+    network_port ! {?SERVER, Ref, stop},
     ok.
 
 %%
@@ -395,6 +402,10 @@ terminate(_Reason, _State) ->
 %% @private
 maybe_sta_connected_callback(Config) ->
     maybe_callback0(connected, proplists:get_value(sta, Config)).
+
+%% @private
+maybe_sta_beacon_timeout_callback(Config) ->
+    maybe_callback0(beacon_timeout, proplists:get_value(sta, Config)).
 
 %% @private
 maybe_sta_disconnected_callback(Config) ->

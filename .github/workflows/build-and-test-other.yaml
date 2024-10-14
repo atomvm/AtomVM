@@ -93,7 +93,9 @@ jobs:
         - arch: "arm32v7"
           platform: "arm/v7"
           tag: "bullseye"
-          cflags: "-mcpu=cortex-a7 -mfloat-abi=hard -O2 -mthumb -mthumb-interwork"
+          # -D_FILE_OFFSET_BITS=64 is required for making atomvm:posix_readdir/1 test work
+          # otherwise readdir will fail due to 64 bits inode numbers with 32 bit ino_t
+          cflags: "-mcpu=cortex-a7 -mfloat-abi=hard -O2 -mthumb -mthumb-interwork -D_FILE_OFFSET_BITS=64"
           cmake_opts: "-DAVM_WARNINGS_ARE_ERRORS=ON"
 
         - arch: "arm64v8"

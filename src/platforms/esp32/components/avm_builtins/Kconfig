@@ -20,6 +20,33 @@
 
 menu "AtomVM Built-In Components"
 
+config AVM_ENABLE_ADC_NIFS
+    bool "Enable ADC NIFs"
+    default y
+
+    config AVM_ADC2_ENABLE
+        depends on AVM_ENABLE_ADC_NIFS
+        depends on SOC_ADC_PERIPH_NUM >= 2
+        bool "Enable ADC Unit 2"
+        default "y" if ADC_ONESHOT_FORCE_USE_ADC2_ON_C3 && IDF_TARGET_ESP32C3
+        default "n" if IDF_TARGET_ESP32C3
+        default "n" if IDF_TARGET_ESP32
+        default "y"
+        help
+            This will allow using both ADC units.
+
+            ADC2 is used by the Wi-Fi driver. The ESP32 classic can only use ADC2 when the
+            wifi driver is not in use, all other models have an arbitrator peripheral that
+            allows the simultaneous use of ADC unit 2 with WiFi. With the possibility of occasional
+            timeout errors when taking a measurements during times of heavy network traffic.
+
+            The results from ADC2 on the ESP32C3 are not at all accurate and should not be used.
+            See: https://docs.espressif.com/projects/esp-chip-errata/en/latest/esp32c3/index.html
+
+            For the ESP32C3 if you choose to ignore these warnings and enable unit 2 anyway,
+            "ADC_ONESHOT_FORCE_USE_ADC2_ON_C3" must also be enabled in the "ADC and ADC Calibration"
+            submenu.
+
 config AVM_ENABLE_GPIO_NIFS
     bool "Enable GPIO NIFs"
     default y
@@ -44,6 +71,10 @@ config AVM_RTC_SLOW_MAX_SIZE
     # 8130 works on esp-idf 5.1 with other socs
     # 4KB is a reasonable default
     default 4096
+
+config AVM_ENABLE_STORAGE_NIFS
+    bool "Enable Storage NIFs"
+    default y
 
 config AVM_ENABLE_GPIO_PORT_DRIVER
     bool "Enable GPIO port driver"

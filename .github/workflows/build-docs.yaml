@@ -23,6 +23,10 @@ on:
       - 'doc/**'
       - 'libs/**'
       - 'src/libAtomVM/**'
+      - 'UPDATING.md'
+      - 'CONTRIBUTING.md'
+      - 'CHANGELOG.md'
+      - 'CODE_OF_CONDUCT.md'
   push:
     repositories:
       - '!atomvm/AtomVM'
@@ -32,6 +36,10 @@ on:
       - 'doc/**'
       - 'libs/**'
       - 'src/libAtomVM/**'
+      - 'UPDATING.md'
+      - 'CONTRIBUTING.md'
+      - 'CHANGELOG.md'
+      - 'CODE_OF_CONDUCT.md'
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -44,29 +52,35 @@ concurrency:
 jobs:
   # This workflow contains a single job called "build"
   build:
+
+    strategy:
+      fail-fast: false
+      ## don't add more than one OS to matrix, this is only to retrieve the full os-name for keeping cache in sync
+      matrix:
+        os: [ ubuntu-24.04 ]
     # The type of runner that the job will run on
-    runs-on: ubuntu-latest
-    container: erlang:27
+    runs-on: ${{ matrix.os }}
+    # Documentation currently fails to build with OTP-27 and recent OTP-26.
+    container: erlang:26.0.2
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-
       - name: Install Deps
         run: |
           apt update -y
-          DEBIAN_FRONTEND=noninteractive apt install -y git cmake doxygen graphviz python3-pip python3-virtualenv python3.11-venv python3-setuptools python3-stemmer wget
+          DEBIAN_FRONTEND=noninteractive apt install -y git cmake doxygen graphviz python3-pip python3-virtualenv python3-setuptools python3-stemmer wget
 
       - uses: actions/cache@v4
         id: sphinx-cache
         with:
           path: /home/runner/python-env/sphinx
-          key: ${{ runner.os }}-sphinx-install
+          key: ${{ matrix.os }}-${{ job.container.id }}-sphinx-install
 
       - name: Install Sphinx
         if: ${{ steps.sphinx-cache.outputs.cache-hit != 'true' }}
         run: |
-          python3 -m venv /home/runner/python-env/sphinx
+         virtualenv /home/runner/python-env/sphinx
           . /home/runner/python-env/sphinx/bin/activate
           python3 -m pip install sphinx
           python3 -m pip install myst-parser
@@ -100,6 +114,7 @@ jobs:
           done
 
       - name: Build Site
+        id: build
         shell: bash
         run: |
           . /home/runner/python-env/sphinx/bin/activate

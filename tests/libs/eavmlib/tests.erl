@@ -24,6 +24,7 @@
 
 start() ->
     etest:test([
+        test_dir,
         test_file,
         test_port,
         test_timer_manager,

@@ -132,6 +132,7 @@ get_build_dir(Opts, RootDir) ->
 %% @private
 mkimage(RootDir, BuildDir, BootFile, OutputFile, Segments) ->
     io:format("Writing output to ~s~n", [OutputFile]),
+    io:format("boot file is ~s~n", [BootFile]),
     io:format("=============================================~n"),
     case file:open(OutputFile, [write, binary]) of
         {ok, Fout} ->

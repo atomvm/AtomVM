@@ -242,6 +242,17 @@ TEST_CASE("test_monotonic_time", "[test_run]")
     TEST_ASSERT(ret_value == OK_ATOM);
 }
 
+#if !CONFIG_IDF_TARGET_ESP32C3
+// this test is failing on v5.0.7 due to some kind of problem with atomvm:posix_open
+#if ESP_IDF_VERSION_MAJOR >= 5 && ESP_IDF_VERSION_MINOR >= 1
+TEST_CASE("test_mount", "[test_run]")
+{
+    term ret_value = avm_test_case("test_mount.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+#endif
+#endif
+
 struct pipefs_global_ctx
 {
     int max_fd;

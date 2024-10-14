@@ -28,6 +28,7 @@ set(AVM_BUILTIN_COMPONENT_SRCS
     "rtc_slow_nif.c"
     "socket_driver.c"
     "spi_driver.c"
+    "storage_nif.c"
     "uart_driver.c"
     "otp_crypto_platform.c"
     "otp_net_platform.c"
@@ -36,7 +37,8 @@ set(AVM_BUILTIN_COMPONENT_SRCS
 )
 
 if (IDF_VERSION_MAJOR GREATER_EQUAL 5)
-    set(ADDITIONAL_PRIV_REQUIRES "esp_hw_support" "efuse")
+    set(ADDITIONAL_PRIV_REQUIRES "esp_hw_support" "efuse" "esp_adc")
+    set(AVM_BUILTIN_COMPONENT_SRCS "adc_driver.c" ${AVM_BUILTIN_COMPONENT_SRCS})
 else()
     set(ADDITIONAL_PRIV_REQUIRES "")
 endif()
@@ -56,7 +58,7 @@ endif()
 idf_component_register(
     SRCS ${AVM_BUILTIN_COMPONENT_SRCS}
     INCLUDE_DIRS "include"
-    PRIV_REQUIRES "libatomvm" "avm_sys" "nvs_flash" "driver" "esp_event" "esp_wifi" ${ADDITIONAL_PRIV_REQUIRES}
+    PRIV_REQUIRES "libatomvm" "avm_sys" "nvs_flash" "driver" "esp_event" "esp_wifi" "fatfs" ${ADDITIONAL_PRIV_REQUIRES}
     ${OPTIONAL_WHOLE_ARCHIVE}
 )
 

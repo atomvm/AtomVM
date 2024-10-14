@@ -1,7 +1,7 @@
 %
 % This file is part of AtomVM.
 %
-% Copyright 2023 Davide Bettio <davide@uninstall.it>
+% Copyright 2024 Davide Bettio <davide@uninstall.it>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -18,15 +18,21 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module(test_esp_partition).
--export([start/0]).
+-module(test_dir).
 
-start() ->
-    [
-        {<<"nvs">>, 1, 2, 16#9000, 16#6000, []},
-        {<<"phy_init">>, 1, 1, 16#f000, 16#1000, []},
-        {<<"factory">>, 0, 0, 16#10000, 16#200000, []},
-        {<<"lib.avm">>, 1, 1, 16#210000, 16#40000, []},
-        {<<"main.avm">>, 1, 1, 16#250000, 16#100000, []}
-    ] = esp:partition_list(),
-    0.
+-export([test/0]).
+
+-include("etest.hrl").
+
+test() ->
+    {ok, Dir} = atomvm:posix_opendir("."),
+    [eof | _Entries] = all_dir_entries(Dir, []),
+    ok = atomvm:posix_closedir(Dir).
+
+all_dir_entries(Dir, Acc) ->
+    case atomvm:posix_readdir(Dir) of
+        eof ->
+            [eof | Acc];
+        {ok, {dirent, Inode, Name} = Dirent} when is_integer(Inode) and is_binary(Name) ->
+            all_dir_entries(Dir, [Dirent | Acc])
+    end.
