@@ -13,6 +13,10 @@
 - ESP32: partitioning schema for Elixir flavor is different, so app offset has been changed for
 Elixir images. Make sure to use `0x250000` as offset in your mix.exs or when performing manual
 flashing.
+- ESP32 a bug was discovered in `i2c:write_bytes/2` that has not been fixed yet. Writing bytes
+sequentally using `i2c:write_byte/2` still works as a temporary workaround.
+- STM32 devices with 512k of flash are not supported in this release, due to lack of
+flash space. Support may return in a future release.
 
 ## v0.6.0-beta.1 -> v0.6.0-rc.0
 
