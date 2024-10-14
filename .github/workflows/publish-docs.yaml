@@ -23,6 +23,10 @@ on:
       - 'doc/**'
       - 'libs/**'
       - 'src/libAtomVM/**'
+      - 'UPDATING.md'
+      - 'CONTRIBUTING.md'
+      - 'CHANGELOG.md'
+      - 'CODE_OF_CONDUCT.md'
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
