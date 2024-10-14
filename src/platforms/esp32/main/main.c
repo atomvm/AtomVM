@@ -41,6 +41,7 @@
 // idf.py add-dependency esp_tinyusb
 // and enable CDC in menu config
 #ifdef USE_USB_SERIAL
+void init_usb_serial(void);
 #include "tinyusb.h"
 #include "tusb_cdc_acm.h"
 #include "tusb_console.h"
