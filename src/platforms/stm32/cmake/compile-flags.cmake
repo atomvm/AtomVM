@@ -36,6 +36,7 @@ set(CXX_WARN_FLAGS "${COMMON_WARN_FLAGS}")
 # Use C and C++ compiler optimizatons for size and speed.
 if (${CMAKE_FLASH_SIZE} STREQUAL "ROM_512K")
 set(OPTIMIZE_FLAG "-Os")
+set(LINKER_FLAGS "${LINKER_FLAGS} -specs=nano.specs")
 else()
 set(OPTIMIZE_FLAG "-O2")
 endif()
