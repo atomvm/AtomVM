@@ -72,6 +72,11 @@ instead
 when `network:stop/0` was used, see issue [#643](https://github.com/atomvm/AtomVM/issues/643)
 - `uart:open/1,2` now works with uppercase peripheral names
 
+### Added
+
+- Added support to Pico-W network driver for setting `dhcp_hostname`
+(see issue 1094)[https://github.com/atomvm/AtomVM/issues/1094].
+
 ## [0.6.4] - 2024-08-18
 
 ### Added
