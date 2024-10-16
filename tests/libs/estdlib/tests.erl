@@ -47,6 +47,7 @@ get_tests(_OTPVersion) ->
         test_apply,
         test_lists,
         test_calendar,
+        test_erl_scan,
         test_gen_event,
         test_gen_server,
         test_gen_statem,
