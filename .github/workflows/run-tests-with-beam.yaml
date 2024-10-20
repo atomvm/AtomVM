@@ -71,17 +71,21 @@ jobs:
           container: erlang:27
 
         # This is ARM64
-        - os: "macos-14"
+        - os: "macos-15"
           otp: "24"
           path_prefix: "/opt/homebrew/opt/erlang@24/bin:"
 
-        - os: "macos-14"
+        - os: "macos-15"
           otp: "25"
           path_prefix: "/opt/homebrew/opt/erlang@25/bin:"
 
-        - os: "macos-14"
+        - os: "macos-15"
           otp: "26"
           path_prefix: "/opt/homebrew/opt/erlang@26/bin:"
+
+        - os: "macos-15"
+          otp: "27"
+          path_prefix: "/opt/homebrew/opt/erlang@27/bin:"
     steps:
     # Setup
     - name: "Checkout repo"
@@ -107,7 +111,7 @@ jobs:
       id: cache
       with:
         path: 'build/tests/**/*.beam'
-        key: ${{ matrix.otp }}-${{ hashFiles('**/run-tests-with-beam.yaml', 'tests/**/*.erl') }}
+        key: ${{ matrix.otp }}-${{ hashFiles('**/run-tests-with-beam.yaml', 'tests/**/*.erl', 'tests/**/CMakeLists.txt') }}
 
     - name: "Build: run cmake"
       working-directory: build

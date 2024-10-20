@@ -47,6 +47,19 @@
 #define OP_LOOP_REC_END 24
 #define OP_WAIT 25
 #define OP_WAIT_TIMEOUT 26
+// Unimplemented by BEAM from OTP 21
+// #define OP_M_PLUS 27
+// #define OP_M_MINUS 28
+// #define OP_M_TIMES 29
+// #define OP_M_DIV 30
+// #define OP_INT_DIV 31
+// #define OP_INT_REM 32
+// #define OP_INT_BAND 33
+// #define OP_INT_BOR 34
+// #define OP_INT_BXOR 35
+// #define OP_INT_BSL 36
+// #define OP_INT_BSR 37
+// #define OP_INT_BNOT 38
 #define OP_IS_LT 39
 #define OP_IS_GE 40
 #define OP_IS_EQUAL 41
@@ -62,6 +75,8 @@
 #define OP_IS_PORT 51
 #define OP_IS_NIL 52
 #define OP_IS_BINARY 53
+// Unimplemented by BEAM from OTP 21
+// #define OP_IS_CONSTANT 54
 #define OP_IS_LIST 55
 #define OP_IS_NONEMPTY_LIST 56
 #define OP_IS_TUPLE 57
@@ -75,6 +90,8 @@
 #define OP_GET_LIST 65
 #define OP_GET_TUPLE_ELEMENT 66
 #define OP_SET_TUPLE_ELEMENT 67
+// Unimplemented by BEAM from OTP 21
+// #define OP_PUT_STRING 68
 #define OP_PUT_LIST 69
 #define OP_PUT_TUPLE 70
 #define OP_PUT 71
@@ -82,11 +99,26 @@
 #define OP_IF_END 73
 #define OP_CASE_END 74
 #define OP_CALL_FUN 75
+// Unimplemented by BEAM from OTP 21
+// #define OP_MAKE_FUN 76
 #define OP_IS_FUNCTION 77
 #define OP_CALL_EXT_ONLY 78
+// Unimplemented by BEAM from OTP 21
+// #define OP_BS_START_MATCH 79
+// #define OP_BS_GET_INTEGER 80
+// #define OP_BS_GET_FLOAT 81
+// #define OP_BS_GET_BINARY 82
+// #define OP_BS_SKIP_BITS 83
+// #define OP_BS_TEST_FAIL 84
+// #define OP_BS_SAVE 85
+// #define OP_BS_RESTORE 86
+// #define OP_BS_INIT 87
+// #define OP_BS_FINAL 88
 #define OP_BS_PUT_INTEGER 89
 #define OP_BS_PUT_BINARY 90
 #define OP_BS_PUT_STRING 92
+// Unimplemented by BEAM from OTP 21
+// #define OP_BS_NEED_BUF 93
 #define OP_FCLEARERROR 94
 #define OP_FCHECKERROR 95
 #define OP_FMOVE 96
@@ -103,6 +135,8 @@
 #define OP_TRY_CASE_END 107
 #define OP_RAISE 108
 #define OP_BS_INIT2 109
+// Unimplemented by BEAM from OTP 21
+// #define OP_BS_BITS_TO_BYTES 110
 #define OP_BS_ADD 111
 #define OP_APPLY 112
 #define OP_APPLY_LAST 113
@@ -118,6 +152,10 @@
 #define OP_BS_RESTORE2 123
 #define OP_GC_BIF1 124
 #define OP_GC_BIF2 125
+// Unimplemented by BEAM from OTP 21
+// #define OP_BS_FINAL2 126
+// #define OP_BS_BITS_TO_BYTES2 127
+// #define OP_PUT_LITERAL 128
 #define OP_IS_BITSTR 129
 #define OP_BS_CONTEXT_TO_BINARY 130
 #define OP_BS_TEST_UNIT 131
@@ -152,23 +190,31 @@
 #define OP_RAW_RAISE 161
 #define OP_GET_HD 162
 #define OP_GET_TL 163
+// Introduced in OTP 22
 #define OP_PUT_TUPLE2 164
 #define OP_BS_GET_TAIL 165
 #define OP_BS_START_MATCH3 166
 #define OP_BS_GET_POSITION 167
 #define OP_BS_SET_POSITION 168
+// Introduced in OTP 23
 #define OP_SWAP 169
 #define OP_BS_START_MATCH4 170
+// Introduced in OTP 24
 #define OP_MAKE_FUN3 171
 #define OP_INIT_YREGS 172
 #define OP_RECV_MARKER_BIND 173
 #define OP_RECV_MARKER_CLEAR 174
 #define OP_RECV_MARKER_RESERVE 175
 #define OP_RECV_MARKER_USE 176
+// Introduced in OTP 25
 #define OP_BS_CREATE_BIN 177
 #define OP_CALL_FUN2 178
+#define OP_NIF_START 179
 #define OP_BADRECORD 180
+// Introduced in OTP 26
 #define OP_UPDATE_RECORD 181
 #define OP_BS_MATCH 182
+// Introduced in OTP 27
+#define OP_EXECUTABLE_LINE 183
 
 #endif
