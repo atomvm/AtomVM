@@ -95,9 +95,9 @@ jobs:
         shell: bash
         run: |
             if [[ ${{ github.ref_name }} == *"/merge" ]]; then
-              echo "AVM_DOCS_NAME=${{github.event.pull_request.base.ref}}" >> "$GITHUB_ENV";
+              echo "AVM_DOCS_NAME=${{ github.event.pull_request.base.ref }}" | tr '/' '-' >> "$GITHUB_ENV";
             else
-              echo "AVM_DOCS_NAME=${{ github.ref_name }}" >> "$GITHUB_ENV";
+              echo "AVM_DOCS_NAME=${{ github.ref_name }}" | tr '/' '-' >> "$GITHUB_ENV";
             fi
 
       - uses: actions/checkout@v4
