@@ -184,6 +184,7 @@ static term nif_code_load_abs(Context *ctx, int argc, term argv[]);
 static term nif_code_load_binary(Context *ctx, int argc, term argv[]);
 static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[]);
 static term nif_lists_reverse(Context *ctx, int argc, term argv[]);
+static term nif_lists_member(Context *ctx, int argc, term argv[]);
 static term nif_maps_from_keys(Context *ctx, int argc, term argv[]);
 static term nif_maps_next(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_list(Context *ctx, int argc, term argv[]);
@@ -768,6 +769,11 @@ static const struct Nif lists_reverse_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_lists_reverse
+};
+static const struct Nif lists_member_nif = 
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_lists_member
 };
 static const struct Nif maps_from_keys_nif =
 {
@@ -4850,6 +4856,35 @@ static term nif_lists_reverse(Context *ctx, int argc, term argv[])
         list_crsr = list_ptr[LIST_TAIL_INDEX];
     }
     return result;
+}
+
+static term nif_lists_member(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc)
+    term elem = argv[0];
+    term list = argv[1];
+
+    int proper;
+    term_list_length(list, &proper);
+    if (UNLIKELY(!proper)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    while (!term_is_nil(list)) {
+        term head = term_get_list_head(list);
+
+        TermCompareResult cmp_result = term_compare(head, elem, TermCompareExact, ctx->global);
+
+        if (cmp_result == TermEquals) {
+            return TRUE_ATOM;
+        } else if (UNLIKELY(cmp_result == TermCompareMemoryAllocFail)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+
+        list = term_get_list_tail(list);
+    }
+
+    return FALSE_ATOM;
 }
 
 // assumption: size is at least 1
