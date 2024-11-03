@@ -1795,13 +1795,26 @@ Information about the ESP32 UART interface can be found in the IDF SDK [UART Doc
 
 The AtomVM UART implementation uses the AtomVM Port mechanism and must be initialized using the [`uart:open/2`](./apidocs/erlang/eavmlib/uart.md#open2) function.
 
-The first parameter indicates the ESP32 UART hardware interface.  Legal values are:
+The first parameter indicates the ESP32 UART hardware interface.  Valid values are:
 
 ```erlang
 "UART0" | "UART1" | "UART2"
 ```
 
-The selection of the hardware interface dictates the default RX and TX pins on the ESP32:
+The second parameter is a properties list, containing the following elements:
+
+| Key | Value Type | Required | Default Value | Description |
+|-----|------------|----------|---------------|-------------|
+| `rx` | `integer()` | no | -1 (`UART_PIN_NO_CHANGE`) | RX GPIO Pin |
+| `tx` | `integer()` | no | -1 (`UART_PIN_NO_CHANGE`) | TX GPIO Pin |
+| `speed` | `integer()` | no | 115200 | UART baud rate (bits/sec) |
+| `data_bits` | `5 \| 6 \| 7 \| 8` | no | 8 | UART data bits |
+| `stop_bits` | `1 \| 2` | no | 1 | UART stop bits |
+| `flow_control` | `hardware \| software \| none` | no | `none` | Flow control |
+| `parity` | `even \| odd \| none` | no | `none` | UART parity check |
+
+
+These are the usual RX and TX pins for the various UARTs on the ESP32 (as always check your board specs):
 
 | Port | RX pin | TX pin |
 |-------------|--------|-------|
@@ -1809,20 +1822,10 @@ The selection of the hardware interface dictates the default RX and TX pins on t
 | `UART1` | GPIO_9 | GPIO_10 |
 | `UART2` | GPIO_16 | GPIO_17 |
 
-The second parameter is a properties list, containing the following elements:
-
-| Key | Value Type | Required | Default Value | Description |
-|-----|------------|----------|---------------|-------------|
-| `speed` | `integer()` | no | 115200 | UART baud rate (bits/sec) |
-| `data_bits` | `5 \| 6 \| 7 \| 8` | no | 8 | UART data bits |
-| `stop_bits` | `1 \| 2` | no | 1 | UART stop bits |
-| `flow_control` | `hardware \| software \| none` | no | `none` | Flow control |
-| `parity` | `even \| odd \| none` | no | `none` | UART parity check |
-
 For example,
 
 ```erlang
-UART = uart:open("UART0", [{speed, 9600}])
+UART = uart:open("UART0", [{rx, 3}, {tx, 1}, {speed, 9600}])
 ```
 
 Once the port is opened, you can use the returned `UART` instance to read and write bytes to the attached device.
