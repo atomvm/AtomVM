@@ -54,7 +54,16 @@ test_node_distribution() ->
             {'DOWN', MonitorRef, process, NetKernelPid, normal} -> ok
         after 1000 -> timeout
         end,
-    nonode@nohost = node(),
+    case node() of
+        nonode@nohost ->
+            ok;
+        _Other ->
+            "BEAM" = erlang:system_info(machine),
+            receive
+            after 100 -> ok
+            end,
+            nonode@nohost = node()
+    end,
     ok.
 
 has_setnode_creation() ->
