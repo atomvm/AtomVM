@@ -189,9 +189,16 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
             ret += printed;
             return ret;
         }
-    } else if (term_is_pid(t)) {
+    } else if (term_is_local_pid(t)) {
         int32_t process_id = term_to_local_process_id(t);
         return fun->print(fun, "<0.%" PRIu32 ".0>", process_id);
+
+    } else if (term_is_external_pid(t)) {
+        uint32_t node_atom_index = term_to_atom_index(term_get_external_node(t));
+        uint32_t number = term_get_external_pid_process_id(t);
+        uint32_t serial = term_get_external_pid_serial(t);
+        // creation is not printed
+        return fun->print(fun, "<%" PRIu32 ".%" PRIu32 ".%" PRIu32 ">", node_atom_index, number, serial);
 
     } else if (term_is_function(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
@@ -664,9 +671,43 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
             result = (atom_cmp_result > 0) ? TermGreaterThan : TermLessThan;
             break;
 
-        } else if (term_is_pid(t) && term_is_pid(other)) {
+        } else if (term_is_external_pid(t) && term_is_external_pid(other)) {
+            term node = term_get_external_node(t);
+            term other_node = term_get_external_node(other);
+            if (node == other_node) {
+                uint32_t creation = term_get_external_node_creation(t);
+                uint32_t other_creation = term_get_external_node_creation(other);
+                if (creation == other_creation) {
+                    uint32_t serial = term_get_external_pid_serial(t);
+                    uint32_t other_serial = term_get_external_pid_serial(other);
+                    if (serial == other_serial) {
+                        uint32_t process_id = term_get_external_pid_process_id(t);
+                        uint32_t other_process_id = term_get_external_pid_process_id(other);
+                        if (process_id == other_process_id) {
+                            CMP_POP_AND_CONTINUE();
+                        } else {
+                            result = (process_id > other_process_id) ? TermGreaterThan : TermLessThan;
+                            break;
+                        }
+                    } else {
+                        result = (serial > other_serial) ? TermGreaterThan : TermLessThan;
+                        break;
+                    }
+                } else {
+                    result = (creation > other_creation) ? TermGreaterThan : TermLessThan;
+                    break;
+                }
+            } else {
+                result = (node > other_node) ? TermGreaterThan : TermLessThan;
+                break;
+            }
+        } else if (term_is_local_pid(t) && term_is_local_pid(other)) {
             //TODO: handle ports
             result = (t > other) ? TermGreaterThan : TermLessThan;
+            break;
+
+        } else if (term_is_pid(t) && term_is_pid(other)) {
+            result = term_is_local_pid(other) ? TermGreaterThan : TermLessThan;
             break;
 
         } else {
