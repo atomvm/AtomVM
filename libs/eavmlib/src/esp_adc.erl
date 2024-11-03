@@ -117,7 +117,7 @@
 %%-----------------------------------------------------------------------------
 -spec init() -> {ok, ADCUnit :: adc_rsrc()} | {error, Reason :: term()}.
 init() ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   UnitResource returned from init/0
@@ -134,7 +134,7 @@ init() ->
 %%-----------------------------------------------------------------------------
 -spec deinit(UnitResource :: adc_rsrc()) -> ok | {error, Reason :: term()}.
 deinit(_UnitResource) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin         Pin to configure as ADC
@@ -185,7 +185,7 @@ acquire(Pin, UnitHandle) ->
     Attenuation :: attenuation()
 ) -> {ok, Channel :: adc_rsrc()} | {error, Reason :: term()}.
 acquire(_Pin, _UnitHandle, _BitWidth, _Attenuation) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   ChannelResource of the pin returned from acquire/4
@@ -204,7 +204,7 @@ acquire(_Pin, _UnitHandle, _BitWidth, _Attenuation) ->
 %%-----------------------------------------------------------------------------
 -spec release_channel(ChannelResource :: adc_rsrc()) -> ok | {error, Reason :: term()}.
 release_channel(_ChannelResource) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   ChannelResource of the pin returned from acquire/4
@@ -256,7 +256,7 @@ sample(ChannelResource, UnitResource) ->
     ChannelResource :: adc_rsrc(), UnitResource :: adc_rsrc(), ReadOptions :: read_options()
 ) -> {ok, Result :: reading()} | {error, Reason :: term()}.
 sample(_ChannelResource, _UnitResource, _ReadOptions) ->
-    throw(nif_error).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @returns {ok, Pid}

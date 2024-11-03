@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.6] - Unreleased
 
+### Fixed
+
+- Fixed specifications of nifs from `esp_adc` module
+
 ## [0.6.5] - 2024-10-15
 
 ### Added
