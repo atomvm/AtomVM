@@ -427,7 +427,7 @@ static term nif_atomvm_posix_write(Context *ctx, int argc, term argv[])
 static term nif_atomvm_posix_select(Context *ctx, term argv[], enum ErlNifSelectFlags mode)
 {
     term process_pid_term = argv[1];
-    VALIDATE_VALUE(process_pid_term, term_is_pid);
+    VALIDATE_VALUE(process_pid_term, term_is_local_pid);
     int32_t process_pid = term_to_local_process_id(process_pid_term);
     term select_ref_term = argv[2];
     if (select_ref_term != UNDEFINED_ATOM) {

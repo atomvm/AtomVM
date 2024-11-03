@@ -54,7 +54,15 @@ test_node_distribution() ->
             {'DOWN', MonitorRef, process, NetKernelPid, normal} -> ok
         after 1000 -> timeout
         end,
-    nonode@nohost = node(),
+    case node() of
+        nonode@nohost ->
+            ok;
+        _Other ->
+            % On BEAM, node may not be reset immediatly
+            "BEAM" = erlang:system_info(machine),
+            sleep(100),
+            nonode@nohost = node()
+    end,
     ok.
 
 has_setnode_creation() ->
@@ -64,4 +72,9 @@ has_setnode_creation() ->
         "BEAM" ->
             OTPRelease = erlang:system_info(otp_release),
             OTPRelease >= "23"
+    end.
+
+sleep(Ms) ->
+    receive
+    after Ms -> ok
     end.
