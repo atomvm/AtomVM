@@ -673,7 +673,7 @@ binary_to_integer(_Binary) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec binary_to_integer(Binary :: binary(), Base :: 2..36) -> integer().
-binary_to_integer(_Binary, Base) ->
+binary_to_integer(_Binary, _Base) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
