@@ -628,6 +628,10 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
                     TRACE("- Found external pid.\n");
                     break;
 
+                case TERM_BOXED_EXTERNAL_REF:
+                    TRACE("- Found external ref.\n");
+                    break;
+
                 case TERM_BOXED_FUN: {
                     TRACE("- Found fun, size: %i.\n", (int) arity);
 
@@ -749,6 +753,10 @@ static void memory_scan_and_rewrite(size_t count, term *terms, const term *old_s
 
                 case TERM_BOXED_EXTERNAL_PID:
                     ptr += term_get_size_from_boxed_header(t);
+                    break;
+
+                case TERM_BOXED_EXTERNAL_REF:
+                    ptr += EXTERNAL_REF_SIZE - 1;
                     break;
 
                 case TERM_BOXED_FUN:
