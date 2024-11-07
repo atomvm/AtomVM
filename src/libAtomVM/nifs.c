@@ -3309,7 +3309,7 @@ static term nif_ets_new(Context *ctx, int argc, term argv[])
 
 static inline bool is_ets_table_id(term t)
 {
-    return term_is_reference(t) || term_is_atom(t);
+    return term_is_local_reference(t) || term_is_atom(t);
 }
 
 static term nif_ets_insert(Context *ctx, int argc, term argv[])
@@ -3460,11 +3460,11 @@ static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[])
 
     term t = argv[0];
     VALIDATE_VALUE(t, term_is_reference);
+    size_t max_len = term_is_external(t) ? EXTERNAL_REF_AS_CSTRING_LEN : LOCAL_REF_AS_CSTRING_LEN;
 
-    char buf[REF_AS_CSTRING_LEN];
-    int str_len = term_snprint(buf, REF_AS_CSTRING_LEN, t, ctx->global);
+    char buf[max_len];
+    int str_len = term_snprint(buf, max_len, t, ctx->global);
     if (UNLIKELY(str_len < 0)) {
-        // TODO: change to internal error or something like that
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -3764,7 +3764,7 @@ static term nif_erlang_demonitor(Context *ctx, int argc, term argv[])
         info = interop_proplist_get_value_default(options, INFO_ATOM, FALSE_ATOM) == TRUE_ATOM;
     }
 
-    VALIDATE_VALUE(ref, term_is_reference);
+    VALIDATE_VALUE(ref, term_is_local_reference);
     uint64_t ref_ticks = term_to_ref_ticks(ref);
 
     bool result = globalcontext_demonitor(ctx->global, ref_ticks);
