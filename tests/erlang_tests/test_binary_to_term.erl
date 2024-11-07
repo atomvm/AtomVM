@@ -174,6 +174,7 @@ start() ->
     ok = test_atom_decoding(),
     ok = test_atom_decoding_checks(),
     ok = test_encode_pid(),
+    ok = test_encode_reference(),
     0.
 
 test_reverse(T, Interop) ->
@@ -524,6 +525,79 @@ do_unsetnode({NetKernelPid, MonitorRef}) ->
             after 100 -> ok
             end,
             nonode@nohost = node()
+    end,
+    ok.
+
+test_encode_reference() ->
+    TestRef = make_ref(),
+    Bin = term_to_binary(TestRef),
+    Ref = binary_to_term(Bin),
+    true = is_reference(Ref),
+    Ref123 = binary_to_term(
+        <<131, 90, 0, 2, 119, 13, "nonode@nohost", 0:32, 1:32, 2:32>>
+    ),
+    true = is_reference(Ref123),
+    ExpectedSize =
+        case erlang:system_info(machine) of
+            "ATOM" ->
+                % small utf8 atom & reference with 2 words
+                31;
+            "BEAM" ->
+                OTPRelease = erlang:system_info(otp_release),
+                if
+                    OTPRelease < "23" -> 33;
+                    OTPRelease < "26" -> 36;
+                    % small utf8 atom
+                    true -> 35
+                end
+        end,
+    ExpectedSize = byte_size(Bin),
+    Ref1 = binary_to_term(<<131, 90, 0, 1, 119, 4, "true", 1:32, 43:32>>),
+    Ref2 = binary_to_term(<<131, 90, 0, 1, 119, 4, "true", 2:32, 43:32>>),
+    false = Ref1 =:= Ref2,
+    "#Ref<1.43>" = ref_to_list(Ref1),
+    "#Ref<1.43>" = ref_to_list(Ref2),
+
+    case has_setnode_creation() of
+        true ->
+            % Test distributed pid
+            Ref42 = do_setnode(test@test_node, 42),
+            DistributedRef123_42 = binary_to_term(
+                <<131, 90, 0, 2, 119, 14, "test@test_node", 42:32, 1:32, 2:32>>
+            ),
+            true = is_reference(DistributedRef123_42),
+            true = DistributedRef123_42 =:= Ref123,
+
+            DistributedBin42 = term_to_binary(TestRef),
+            true = DistributedBin42 =/= Bin,
+            TestRef42 = binary_to_term(DistributedBin42),
+            true = TestRef42 =:= TestRef,
+            ExpectedSize = byte_size(DistributedBin42) - 1,
+
+            ok = do_unsetnode(Ref42),
+
+            Ref43 = do_setnode(test@test_node, 43),
+            DistributedRef123_43 = binary_to_term(
+                <<131, 90, 0, 2, 119, 14, "test@test_node", 43:32, 1:32, 2:32>>
+            ),
+            true = is_reference(DistributedRef123_43),
+            true = DistributedRef123_43 =:= Ref123,
+
+            DistributedRef123_42_43 = binary_to_term(
+                <<131, 90, 0, 2, 119, 14, "test@test_node", 42:32, 1:32, 2:32>>
+            ),
+            true = is_reference(DistributedRef123_42_43),
+            false = DistributedRef123_42_43 =:= Ref123,
+
+            DistributedBin43 = term_to_binary(TestRef),
+            true = DistributedBin43 =/= Bin,
+            TestRef43 = binary_to_term(DistributedBin43),
+            true = TestRef43 =:= TestRef,
+
+            ok = do_unsetnode(Ref43),
+            ok;
+        false ->
+            ok
     end,
     ok.
 

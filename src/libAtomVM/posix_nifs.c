@@ -431,7 +431,7 @@ static term nif_atomvm_posix_select(Context *ctx, term argv[], enum ErlNifSelect
     int32_t process_pid = term_to_local_process_id(process_pid_term);
     term select_ref_term = argv[2];
     if (select_ref_term != UNDEFINED_ATOM) {
-        VALIDATE_VALUE(select_ref_term, term_is_reference);
+        VALIDATE_VALUE(select_ref_term, term_is_local_reference);
     }
     void *fd_obj_ptr;
     if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0], ctx->global->posix_fd_resource_type, &fd_obj_ptr))) {
