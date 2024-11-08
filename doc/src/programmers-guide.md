@@ -1290,6 +1290,10 @@ To retrieve data in RTC slow memory, use the [`esp:rtc_slow_get_binary/0`](./api
 Data = esp:rtc_slow_get_binary()
 ```
 
+```{caution}
+Calling [`esp:rtc_slow_get_binary/0`](./apidocs/erlang/eavmlib/esp.md#rtc_slow_get_binary0) without having stored a binary first using [`esp:rtc_slow_set_binary/1`](./apidocs/erlang/eavmlib/esp.md#rtc_slow_set_binary1), will raise with badarg. So make sure to wrap such a call with a try/catch or similar.
+```
+
 By default, RTC slow memory in AtomVM is limited to 4098 (4k) bytes.  This value can be modified at build time using an IDF SDK `KConfig` setting.  For  instructions about how to build AtomVM, see the AtomVM [Build Instructions](./build-instructions.md#building-for-esp32).
 
 ### Miscellaneous ESP32 APIs
