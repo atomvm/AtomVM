@@ -722,7 +722,7 @@ static EventListener *active_recv_callback(GlobalContext *glb, EventListener *ba
         // {tcp_closed, {Moniker :: atom(), Socket :: pid(), Module :: module()}}
         BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(2) + TUPLE_SIZE(3), heap);
         term pid = socket_data->controlling_process;
-        term socket_pid = term_from_local_process_id(ctx->process_id);
+        term socket_pid = term_port_from_local_process_id(ctx->process_id);
         term socket_wrapper = create_tcp_socket_wrapper(socket_pid, &heap, glb);
         term msgs[2] = { TCP_CLOSED_ATOM, socket_wrapper };
         term msg = port_heap_create_tuple_n(&heap, 2, msgs);
@@ -749,7 +749,7 @@ static EventListener *active_recv_callback(GlobalContext *glb, EventListener *ba
         }
         term pid = socket_data->controlling_process;
         term packet = socket_create_packet_term(buf, len, socket_data->binary, &heap, glb);
-        term socket_pid = term_from_local_process_id(ctx->process_id);
+        term socket_pid = term_port_from_local_process_id(ctx->process_id);
         term socket_wrapper = create_tcp_socket_wrapper(socket_pid, &heap, glb);
         term msgs[3] = { TCP_ATOM, socket_wrapper, packet };
         term msg = port_heap_create_tuple_n(&heap, 3, msgs);
@@ -868,7 +868,7 @@ static EventListener *active_recvfrom_callback(GlobalContext *glb, EventListener
         // {udp, {Moniker :: atom(), Socket :: pid(), Module :: module()}, {error, {SysCall, Errno}}}
         BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(3) + TUPLE_SIZE(3) + TUPLE_SIZE(2) + TUPLE_SIZE(2), heap);
         term pid = socket_data->controlling_process;
-        term socket_pid = term_from_local_process_id(ctx->process_id);
+        term socket_pid = term_port_from_local_process_id(ctx->process_id);
         // printf("Sending tcp_closed wrapper to %i\n", ctx->process_id);
         term socket_wrapper = create_udp_socket_wrapper(socket_pid, &heap, glb);
         term msgs[3] = { UDP_ATOM, socket_wrapper, port_heap_create_sys_error_tuple(&heap, RECVFROM_ATOM, errno) };
@@ -894,7 +894,7 @@ static EventListener *active_recvfrom_callback(GlobalContext *glb, EventListener
         term addr = socket_heap_tuple_from_addr(&heap, htonl(clientaddr.sin_addr.s_addr));
         term port = term_from_int32(htons(clientaddr.sin_port));
         term packet = socket_create_packet_term(buf, len, socket_data->binary, &heap, glb);
-        term socket_pid = term_from_local_process_id(ctx->process_id);
+        term socket_pid = term_port_from_local_process_id(ctx->process_id);
         term socket_wrapper = create_udp_socket_wrapper(socket_pid, &heap, glb);
         term msgs[5] = { UDP_ATOM, socket_wrapper, addr, port, packet };
         term msg = port_heap_create_tuple_n(&heap, 5, msgs);
@@ -1072,7 +1072,7 @@ static EventListener *accept_callback(GlobalContext *glb, EventListener *base_li
         }
 
         // {Ref, Socket}
-        term socket_pid = term_from_local_process_id(new_ctx->process_id);
+        term socket_pid = term_port_from_local_process_id(new_ctx->process_id);
         BEGIN_WITH_STACK_HEAP(10, heap);
         term ref = term_from_ref_ticks(listener->ref_ticks, &heap);
         term payload = port_heap_create_ok_tuple(&heap, socket_pid);

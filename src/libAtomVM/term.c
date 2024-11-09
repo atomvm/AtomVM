@@ -200,6 +200,16 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
         // creation is not printed
         return fun->print(fun, "<%" PRIu32 ".%" PRIu32 ".%" PRIu32 ">", node_atom_index, number, serial);
 
+    } else if (term_is_local_port(t)) {
+        int32_t process_id = term_to_local_process_id(t);
+        return fun->print(fun, "#Port<0.%" PRIu32 ".0>", process_id);
+
+    } else if (term_is_external_port(t)) {
+        uint32_t node_atom_index = term_to_atom_index(term_to_external_node(t));
+        uint64_t number = term_to_external_port_number(t);
+        // creation is not printed
+        return fun->print(fun, "#Port<%" PRIu32 ".%" PRIu64 ">", node_atom_index, number);
+
     } else if (term_is_function(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
 
@@ -447,23 +457,26 @@ static int term_type_to_index(term t)
     } else if (term_is_function(t)) {
         return 5;
 
-    } else if (term_is_pid(t)) {
+    } else if (term_is_port(t)) {
         return 6;
 
-    } else if (term_is_tuple(t)) {
+    } else if (term_is_pid(t)) {
         return 7;
 
-    } else if (term_is_nil(t)) {
+    } else if (term_is_tuple(t)) {
         return 8;
 
-    } else if (term_is_nonempty_list(t)) {
+    } else if (term_is_nil(t)) {
         return 9;
 
-    } else if (term_is_binary(t)) {
+    } else if (term_is_nonempty_list(t)) {
         return 10;
 
-    } else if (term_is_map(t)) {
+    } else if (term_is_binary(t)) {
         return 11;
+
+    } else if (term_is_map(t)) {
+        return 12;
 
     } else {
         AVM_ABORT();
