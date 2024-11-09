@@ -51,6 +51,7 @@
 #define EXPORT_EXT 113
 #define MAP_EXT 116
 #define SMALL_ATOM_UTF8_EXT 119
+#define V4_PORT_EXT 120
 #define INVALID_TERM_SIZE -1
 
 #define NEW_FLOAT_EXT_SIZE 9
@@ -422,6 +423,31 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
             WRITE_32_UNALIGNED(buf + k + 8, term_get_external_node_creation(t));
         }
         return k + 12;
+    } else if (term_is_local_port(t)) {
+        if (!IS_NULL_PTR(buf)) {
+            buf[0] = V4_PORT_EXT;
+        }
+        size_t k = 1;
+        term node_name = glb->node_name;
+        uint32_t creation = node_name == NONODE_AT_NOHOST_ATOM ? 0 : glb->creation;
+        k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, node_name, glb);
+        if (!IS_NULL_PTR(buf)) {
+            WRITE_64_UNALIGNED(buf + k, term_to_local_process_id(t));
+            WRITE_32_UNALIGNED(buf + k + 8, creation); // creation
+        }
+        return k + 12;
+    } else if (term_is_external_port(t)) {
+        if (!IS_NULL_PTR(buf)) {
+            buf[0] = V4_PORT_EXT;
+        }
+        size_t k = 1;
+        term node = term_get_external_node(t);
+        k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, node, glb);
+        if (!IS_NULL_PTR(buf)) {
+            WRITE_64_UNALIGNED(buf + k, term_get_external_port_number(t));
+            WRITE_32_UNALIGNED(buf + k + 8, term_get_external_node_creation(t));
+        }
+        return k + 12;
     } else if (term_is_local_reference(t)) {
         if (!IS_NULL_PTR(buf)) {
             buf[0] = NEWER_REFERENCE_EXT;
@@ -759,6 +785,34 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             }
         }
 
+        case V4_PORT_EXT: {
+            size_t node_size;
+            term node = parse_external_terms(external_term_buf + 1, &node_size, copy, heap, glb);
+            if (UNLIKELY(!term_is_atom(node))) {
+                return term_invalid_term();
+            }
+            uint64_t number = READ_64_UNALIGNED(external_term_buf + node_size + 1);
+            uint32_t creation = READ_32_UNALIGNED(external_term_buf + node_size + 9);
+            *eterm_size = node_size + 13;
+            if (node != NONODE_AT_NOHOST_ATOM) {
+                term this_node = glb->node_name;
+                uint32_t this_creation = this_node == NONODE_AT_NOHOST_ATOM ? 0 : glb->creation;
+                if (node == this_node && creation == this_creation) {
+                    if (UNLIKELY(number > TERM_MAX_LOCAL_PROCESS_ID)) {
+                        return term_invalid_term();
+                    }
+                    return term_port_from_local_process_id(number);
+                } else {
+                    return term_make_external_port_number(node, number, creation, heap);
+                }
+            } else {
+                if (UNLIKELY(number > TERM_MAX_LOCAL_PROCESS_ID || creation != 0)) {
+                    return term_invalid_term();
+                }
+                return term_port_from_local_process_id(number);
+            }
+        }
+
         case NEWER_REFERENCE_EXT: {
             uint16_t len = READ_16_UNALIGNED(external_term_buf + 1);
             if (UNLIKELY(len > 5)) {
@@ -1079,7 +1133,8 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             return 0;
         }
 
-        case NEW_PID_EXT: {
+        case NEW_PID_EXT:
+        case V4_PORT_EXT: {
             if (UNLIKELY(remaining < 1)) {
                 return INVALID_TERM_SIZE;
             }
