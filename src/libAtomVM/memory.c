@@ -479,8 +479,7 @@ unsigned long memory_estimate_usage(term t)
         } else if (term_is_local_pid(t)) {
             t = temp_stack_pop(&temp_stack);
 
-        } else if (term_is_external_pid(t)) {
-            acc += EXTERNAL_PID_SIZE;
+        } else if (term_is_local_port(t)) {
             t = temp_stack_pop(&temp_stack);
 
         } else if (term_is_nonempty_list(t)) {
@@ -628,6 +627,10 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
                     TRACE("- Found external pid.\n");
                     break;
 
+                case TERM_BOXED_EXTERNAL_PORT:
+                    TRACE("- Found external port.\n");
+                    break;
+
                 case TERM_BOXED_EXTERNAL_REF:
                     TRACE("- Found external ref.\n");
                     break;
@@ -756,6 +759,10 @@ static void memory_scan_and_rewrite(size_t count, term *terms, const term *old_s
                     ptr += EXTERNAL_PID_SIZE - 1;
                     break;
 
+                case TERM_BOXED_EXTERNAL_PORT:
+                    ptr += EXTERNAL_PORT_SIZE - 1;
+                    break;
+
                 case TERM_BOXED_EXTERNAL_REF:
                     ptr += EXTERNAL_REF_SIZE - 1;
                     break;
@@ -831,6 +838,9 @@ HOT_FUNC static term memory_shallow_copy_term(HeapFragment *old_fragment, term t
         return t;
 
     } else if (term_is_local_pid(t)) {
+        return t;
+
+    } else if (term_is_local_port(t)) {
         return t;
 
     } else if (term_is_cp(t)) {
