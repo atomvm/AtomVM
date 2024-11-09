@@ -440,10 +440,11 @@ static struct ResourceMonitor *context_monitors_handle_terminate(Context *ctx)
                 term_put_tuple_element(info_tuple, 1, ref);
                 if (ctx->native_handler != NULL) {
                     term_put_tuple_element(info_tuple, 2, PORT_ATOM);
+                    term_put_tuple_element(info_tuple, 3, term_port_from_local_process_id(ctx->process_id));
                 } else {
                     term_put_tuple_element(info_tuple, 2, PROCESS_ATOM);
+                    term_put_tuple_element(info_tuple, 3, term_from_local_process_id(ctx->process_id));
                 }
-                term_put_tuple_element(info_tuple, 3, term_from_local_process_id(ctx->process_id));
                 term_put_tuple_element(info_tuple, 4, ctx->exit_reason);
 
                 mailbox_send(target, info_tuple);

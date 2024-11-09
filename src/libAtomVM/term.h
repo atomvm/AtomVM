@@ -45,8 +45,11 @@ extern "C" {
 #endif
 
 #define TERM_BOXED_VALUE_TAG 0x2
+
+#define TERM_IMMED_TAG_MASK 0xF
+#define TERM_PID_TAG 0x3
+#define TERM_PORT_TAG 0x7
 #define TERM_INTEGER_TAG 0xF
-#define TERM_CATCH_TAG 0x1B
 
 #define TERM_BOXED_TAG_MASK 0x3F
 #define TERM_BOXED_TUPLE 0x0
@@ -55,6 +58,7 @@ extern "C" {
 #define TERM_BOXED_REF 0x10
 #define TERM_BOXED_FUN 0x14
 #define TERM_BOXED_FLOAT 0x18
+#define TERM_CATCH_TAG 0x1B
 #define TERM_BOXED_REFC_BINARY 0x20
 #define TERM_BOXED_HEAP_BINARY 0x24
 #define TERM_BOXED_SUB_BINARY 0x28
@@ -80,6 +84,8 @@ extern "C" {
     #error
 #endif
 
+#define TERM_MAX_LOCAL_PROCESS_ID ((1 << 28) - 1)
+
 #define BINARY_HEADER_SIZE 2
 #define FUNCTION_REFERENCE_SIZE 4
 #define BOXED_INT_SIZE (BOXED_TERMS_REQUIRED_FOR_INT + 1)
@@ -94,6 +100,7 @@ extern "C" {
 #else
     #error
 #endif
+#define EXTERNAL_PORT_SIZE EXTERNAL_PID_SIZE
 #if TERM_BYTES == 8
     #define EXTERNAL_REF_SIZE 5
 #elif TERM_BYTES == 4
@@ -136,6 +143,15 @@ extern "C" {
 // 2^32-1 = 4294967295 (10 chars)
 // "#Ref<" "." "." "." "." "." ">\0" (12 chars)
 #define EXTERNAL_REF_AS_CSTRING_LEN 70
+
+// 2^28-1 = 268435455 (9 chars)
+// "#Port<0." ">\0" (10 chars)
+#define LOCAL_PORT_AS_CSTRING_LEN 19
+
+// 2^26-1 = 67108863 (8 chars) (node, atom index)
+// 2^64-1 = 18446744073709551615 (20 chars)
+// "#Port<" "." ">\0" (9 chars)
+#define EXTERNAL_PORT_AS_CSTRING_LEN 37
 
 // 2^28-1 = 268435455 (9 chars)
 // "<0." ".0>\0" (7 chars)
@@ -267,7 +283,7 @@ static inline const term *term_to_const_term_ptr(term t)
 static inline bool term_is_atom(term t)
 {
     /* atom: | atom index | 00 10 11 */
-    return ((t & 0x3F) == 0xB);
+    return ((t & TERM_BOXED_TAG_MASK) == 0xB);
 }
 
 /**
@@ -292,7 +308,7 @@ static inline bool term_is_invalid_term(term t)
 static inline bool term_is_nil(term t)
 {
     /* nil: 11 10 11 */
-    return ((t & 0x3F) == 0x3B);
+    return ((t & TERM_BOXED_TAG_MASK) == 0x3B);
 }
 
 /**
@@ -347,6 +363,8 @@ static inline size_t term_get_size_from_boxed_header(term header)
     switch (masked_value) {
         case TERM_BOXED_EXTERNAL_PID:
             return EXTERNAL_PID_SIZE - 1;
+        case TERM_BOXED_EXTERNAL_PORT:
+            return EXTERNAL_PORT_SIZE - 1;
         case TERM_BOXED_EXTERNAL_REF:
             return EXTERNAL_REF_SIZE - 1;
         default:
@@ -450,7 +468,7 @@ static inline bool term_is_sub_binary(term t)
 static inline bool term_is_integer(term t)
 {
     /* integer: 11 11 */
-    return ((t & 0xF) == 0xF);
+    return ((t & TERM_IMMED_TAG_MASK) == TERM_INTEGER_TAG);
 }
 
 /**
@@ -462,7 +480,7 @@ static inline bool term_is_integer(term t)
  */
 static inline bool term_is_uint8(term t)
 {
-    return ((t & ~((term) 0xFF0)) == 0xF);
+    return ((t & ~((term) 0xFF0)) == TERM_INTEGER_TAG);
 }
 
 static inline bool term_is_boxed_integer(term t)
@@ -484,7 +502,7 @@ static inline bool term_is_any_integer(term t)
 
 static inline bool term_is_catch_label(term t)
 {
-    return (t & 0x3F) == TERM_CATCH_TAG;
+    return (t & TERM_BOXED_TAG_MASK) == TERM_CATCH_TAG;
 }
 
 /**
@@ -497,7 +515,7 @@ static inline bool term_is_catch_label(term t)
 static inline bool term_is_local_pid(term t)
 {
     /* integer: 00 11 */
-    return ((t & 0xF) == 0x3);
+    return ((t & TERM_IMMED_TAG_MASK) == TERM_PID_TAG);
 }
 
 /**
@@ -511,7 +529,7 @@ static inline bool term_is_external_pid(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == TERM_BOXED_EXTERNAL_PID) {
+        if ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_EXTERNAL_PID) {
             return true;
         }
     }
@@ -551,6 +569,19 @@ static inline bool term_is_pid(term t)
 }
 
 /**
+ * @brief Checks if a term is a local port
+ *
+ * @details Returns \c true if a term is a local port, otherwise \c false.
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_local_port(term t)
+{
+    /* integer: 01 11 */
+    return ((t & TERM_IMMED_TAG_MASK) == TERM_PORT_TAG);
+}
+
+/**
  * @brief Checks if a term is an external port
  *
  * @details Returns \c true if a term is an external port, otherwise \c false.
@@ -561,12 +592,36 @@ static inline bool term_is_external_port(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == TERM_BOXED_EXTERNAL_PORT) {
+        if ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_EXTERNAL_PORT) {
             return true;
         }
     }
 
     return false;
+}
+
+/**
+ * @brief Checks if a term is a port
+ *
+ * @details Returns \c true if a term is a port, otherwise \c false.
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_port(term t)
+{
+    return term_is_local_port(t) || term_is_external_port(t);
+}
+
+/**
+ * @brief Checks if a term is a local port or a local pid
+ *
+ * @details Returns \c true if a term is a local port or a local process id, otherwise \c false.
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_local_pid_or_port(term t)
+{
+    return term_is_local_pid(t) || term_is_local_port(t);
 }
 
 /**
@@ -580,7 +635,7 @@ static inline bool term_is_tuple(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == TERM_BOXED_TUPLE) {
+        if ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_TUPLE) {
             return true;
         }
     }
@@ -599,7 +654,7 @@ static inline bool term_is_reference(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        const uint32_t header = boxed_value[0] & 0x3F;
+        const uint32_t header = boxed_value[0] & TERM_BOXED_TAG_MASK;
         if (header == TERM_BOXED_REF || header == TERM_BOXED_EXTERNAL_REF) {
             return true;
         }
@@ -619,7 +674,7 @@ static inline bool term_is_local_reference(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        const uint32_t header = boxed_value[0] & 0x3F;
+        const uint32_t header = boxed_value[0] & TERM_BOXED_TAG_MASK;
         if (header == TERM_BOXED_REF) {
             return true;
         }
@@ -639,7 +694,7 @@ static inline bool term_is_external_reference(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        const uint32_t header = boxed_value[0] & 0x3F;
+        const uint32_t header = boxed_value[0] & TERM_BOXED_TAG_MASK;
         if (header == TERM_BOXED_EXTERNAL_REF) {
             return true;
         }
@@ -660,7 +715,7 @@ static inline bool term_is_function(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == TERM_BOXED_FUN) {
+        if ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_FUN) {
             return true;
         }
     }
@@ -801,7 +856,7 @@ static inline int term_to_catch_label_and_module(term t, int *module_index)
 }
 
 /**
- * @brief Gets process table index
+ * @brief Gets process table index for a local pid or port
  *
  * @details Returns local process table index for given atom term.
  * @param t the term that will be converted to local process table index, term type is checked.
@@ -809,7 +864,7 @@ static inline int term_to_catch_label_and_module(term t, int *module_index)
  */
 static inline int32_t term_to_local_process_id(term t)
 {
-    TERM_DEBUG_ASSERT(term_is_local_pid(t));
+    TERM_DEBUG_ASSERT(term_is_local_pid(t) || term_is_local_port(t));
 
     return t >> 4;
 }
@@ -823,7 +878,7 @@ static inline int32_t term_to_local_process_id(term t)
  */
 static inline term term_from_int4(int8_t value)
 {
-    return (value << 4) | 0xF;
+    return (value << 4) | TERM_INTEGER_TAG;
 }
 
 /**
@@ -835,7 +890,7 @@ static inline term term_from_int4(int8_t value)
  */
 static inline term term_from_int11(int16_t value)
 {
-    return (value << 4) | 0xF;
+    return (value << 4) | TERM_INTEGER_TAG;
 }
 
 /**
@@ -855,11 +910,11 @@ static inline term term_from_int32(int32_t value)
         AVM_ABORT();
 
     } else {
-        return (value << 4) | 0xF;
+        return (value << 4) | TERM_INTEGER_TAG;
     }
 
 #elif TERM_BITS == 64
-    return (value << 4) | 0xF;
+    return (value << 4) | TERM_INTEGER_TAG;
 
 #else
     #error "Wrong TERM_BITS define"
@@ -876,7 +931,7 @@ static inline term term_from_int64(int64_t value)
         AVM_ABORT();
 
     } else {
-        return (value << 4) | 0xF;
+        return (value << 4) | TERM_INTEGER_TAG;
     }
 
 #elif TERM_BITS == 64
@@ -887,7 +942,7 @@ static inline term term_from_int64(int64_t value)
         AVM_ABORT();
 
     } else {
-        return (value << 4) | 0xF;
+        return (value << 4) | TERM_INTEGER_TAG;
     }
 
 #else
@@ -897,7 +952,7 @@ static inline term term_from_int64(int64_t value)
 
 static inline term term_from_int(avm_int_t value)
 {
-    return (value << 4) | 0xF;
+    return (value << 4) | TERM_INTEGER_TAG;
 }
 
 static inline avm_int_t term_unbox_int(term boxed_int)
@@ -1027,7 +1082,19 @@ static inline term term_from_catch_label(unsigned int module_index, unsigned int
  */
 static inline term term_from_local_process_id(uint32_t local_process_id)
 {
-    return (local_process_id << 4) | 0x3;
+    return (local_process_id << 4) | TERM_PID_TAG;
+}
+
+/**
+ * @brief Port term from local process id
+ *
+ * @details Returns a term for a given local process table index.
+ * @param local_process_id the local process table index that will be converted to a term.
+ * @return a term that encapsulates a PID.
+ */
+static inline term term_port_from_local_process_id(uint32_t local_process_id)
+{
+    return (local_process_id << 4) | TERM_PORT_TAG;
 }
 
 /**
@@ -1366,6 +1433,37 @@ static inline term term_from_external_process_id(term node, uint32_t process_id,
 }
 
 /**
+ * @brief Get a port term from node, number and creation
+ *
+ * @param node name of the node (atom)
+ * @param number port number on that node
+ * @param creation creation of that node
+ * @param heap the heap to allocate memory in
+ * @return an external heap term created using given parameters.
+ */
+static inline term term_from_external_port_number(term node, uint64_t number, uint32_t creation, Heap *heap)
+{
+    term *boxed_value = memory_heap_alloc(heap, EXTERNAL_PORT_SIZE);
+    int atom_index = term_to_atom_index(node);
+    boxed_value[0] = (atom_index << 6) | TERM_BOXED_EXTERNAL_PORT;
+
+    #if TERM_BYTES == 8
+        boxed_value[1] = (term) creation;
+        boxed_value[2] = (term) number;
+
+    #elif TERM_BYTES == 4
+        boxed_value[1] = (term) creation;
+        boxed_value[2] = (term) (uint32_t) (number >> 32);
+        boxed_value[3] = (term) (uint32_t) number;
+
+    #else
+        #error "terms must be either 32 or 64 bit wide"
+    #endif
+
+    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+}
+
+/**
  * @brief Get the name of a node for a given external thing
  *
  * @param term external term
@@ -1440,6 +1538,30 @@ static inline uint32_t term_to_external_pid_serial(term t)
         #error "terms must be either 32 or 64 bit wide"
     #endif
 }
+
+/**
+ * @brief Get the port number of an external port
+ *
+ * @param term external port
+ * @return the port number of the external port
+ */
+static inline uint64_t term_to_external_port_number(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_external_port(t));
+
+    const term *boxed_value = term_to_const_term_ptr(t);
+
+    #if TERM_BYTES == 8
+        return (uint64_t) boxed_value[2];
+
+    #elif TERM_BYTES == 4
+        return (((uint64_t) boxed_value[2]) << 32) | (uint64_t) boxed_value[3];
+
+    #else
+        #error "terms must be either 32 or 64 bit wide"
+    #endif
+}
+
 
 /**
  * @brief Get a reference term from node, creation, number of words and words
@@ -1569,7 +1691,7 @@ static inline void term_put_tuple_element(term t, uint32_t elem_index, term put_
 
     term *boxed_value = term_to_term_ptr(t);
 
-    TERM_DEBUG_ASSERT(((boxed_value[0] & 0x3F) == 0) && (elem_index < (boxed_value[0] >> 6)));
+    TERM_DEBUG_ASSERT(((boxed_value[0] & TERM_BOXED_TAG_MASK) == 0) && (elem_index < (boxed_value[0] >> 6)));
 
     boxed_value[elem_index + 1] = put_value;
 }
@@ -1588,7 +1710,7 @@ static inline term term_get_tuple_element(term t, int elem_index)
 
     const term *boxed_value = term_to_const_term_ptr(t);
 
-    TERM_DEBUG_ASSERT(((boxed_value[0] & 0x3F) == 0) && (elem_index < (boxed_value[0] >> 6)));
+    TERM_DEBUG_ASSERT(((boxed_value[0] & TERM_BOXED_TAG_MASK) == 0) && (elem_index < (boxed_value[0] >> 6)));
 
     return boxed_value[elem_index + 1];
 }
@@ -1865,7 +1987,7 @@ static inline bool term_is_match_state(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == TERM_BOXED_BIN_MATCH_STATE) {
+        if ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_BIN_MATCH_STATE) {
             return true;
         }
     }
