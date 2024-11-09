@@ -29,6 +29,7 @@
     get_binary/1,
     test_atom_decoding_checks/0,
     test_encode_pid/0,
+    test_encode_port/0,
     id/1
 ]).
 
@@ -175,6 +176,7 @@ start() ->
     ok = test_atom_decoding_checks(),
     ok = test_encode_pid(),
     ok = test_encode_reference(),
+    ok = test_encode_port(),
     0.
 
 test_reverse(T, Interop) ->
@@ -599,6 +601,109 @@ do_unsetnode({NetKernelPid, MonitorRef}) ->
             "BEAM" = erlang:system_info(machine),
             sleep(100),
             nonode@nohost = node()
+    end,
+    ok.
+
+test_encode_port() ->
+    TestPort = open_port({spawn, "echo"}, []),
+    Bin = term_to_binary(TestPort),
+    TestPort = binary_to_term(Bin),
+    true = is_port(TestPort),
+    {ExpectedSize, SupportsV4PortEncoding} =
+        case erlang:system_info(machine) of
+            "ATOM" ->
+                % small utf8 atom
+                {29, true};
+            "BEAM" ->
+                OTPRelease = erlang:system_info(otp_release),
+                if
+                    OTPRelease < "23" -> {23, false};
+                    OTPRelease < "24" -> {26, false};
+                    % v4 is supported but not the default
+                    OTPRelease < "26" -> {26, true};
+                    % small utf8 atom
+                    true -> {29, true}
+                end
+        end,
+    ExpectedSize = byte_size(Bin),
+    case SupportsV4PortEncoding of
+        true ->
+            true = is_port(
+                binary_to_term(
+                    <<131, 120, 119, 13, "nonode@nohost", 1:64, 0:32>>
+                )
+            ),
+            Port1 = binary_to_term(<<131, 120, 119, 4, "true", 43:64, 0:32>>),
+            Port2 = binary_to_term(<<131, 120, 119, 4, "true", 43:64, 1:32>>),
+            false = Port1 =:= Port2,
+            true = Port1 < Port2,
+            "#Port<1.43>" = port_to_list(Port1),
+            "#Port<1.43>" = port_to_list(Port2),
+
+            % Order
+            FalsePort_42_43 = binary_to_term_idempotent(
+                <<131, 120, 119, 5, "false", 42:64, 43:32>>, "26"
+            ),
+            FalsePort_43_42 = binary_to_term_idempotent(
+                <<131, 120, 119, 5, "false", 43:64, 42:32>>, "26"
+            ),
+            FalsePort_43_43 = binary_to_term_idempotent(
+                <<131, 120, 119, 5, "false", 43:64, 43:32>>, "26"
+            ),
+            FalsfPort_42_41 = binary_to_term_idempotent(
+                <<131, 120, 119, 5, "falsf", 42:64, 41:32>>, "26"
+            ),
+
+            % Node first, creation second, number third
+            true = FalsePort_42_43 > FalsePort_43_42,
+            true = FalsfPort_42_41 > FalsePort_42_43,
+            true = FalsfPort_42_41 > FalsePort_43_42,
+            true = FalsePort_43_42 < FalsePort_43_43,
+
+            % Order is done by node atom, with local pid as nonode@nohost
+            true =
+                TestPort >
+                    binary_to_term_idempotent(<<131, 120, 119, 5, "false", 1:64, 0:32>>, "26"),
+            true =
+                TestPort >
+                    binary_to_term_idempotent(<<131, 120, 119, 6, "nonode", 1:64, 0:32>>, "26"),
+            true =
+                TestPort <
+                    binary_to_term_idempotent(<<131, 120, 119, 6, "nonodf", 1:64, 0:32>>, "26"),
+
+            ok;
+        false ->
+            ok
+    end,
+    case has_setnode_creation() of
+        true ->
+            % Test distributed ports
+            % Test doesn't pass on BEAM if we use 42 and 43 like for refs,
+            % as there probably is a side-effect we don't have
+            Ref42 = do_setnode(test@test_node, 1042),
+            DistributedBin42 = term_to_binary(TestPort),
+            true = DistributedBin42 =/= Bin,
+            TestRef42 = binary_to_term(DistributedBin42),
+            true = TestRef42 =:= TestPort,
+            ExpectedSize = byte_size(DistributedBin42) - 1,
+
+            ok = do_unsetnode(Ref42),
+
+            Ref43 = do_setnode(test@test_node, 1043),
+            DistributedBin43 = term_to_binary(TestPort),
+            true = DistributedBin43 =/= DistributedBin42,
+            TestRef43 = binary_to_term(DistributedBin43),
+            true = TestRef43 =:= TestPort,
+            ExpectedSize = byte_size(DistributedBin43) - 1,
+
+            % If our creation is 1043, encoded binary with creation 1042 is a different port
+            TestRef42_43 = binary_to_term(DistributedBin42),
+            false = TestRef42_43 =:= TestPort,
+
+            ok = do_unsetnode(Ref43),
+            ok;
+        false ->
+            ok
     end,
     ok.
 

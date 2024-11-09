@@ -515,7 +515,7 @@ static void accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, uint
     Context *new_ctx = context_new(glb);
     new_ctx->native_handler = socket_consume_mailbox;
 
-    term socket_pid = term_from_local_process_id(new_ctx->process_id);
+    term socket_pid = term_port_from_local_process_id(new_ctx->process_id);
 
     struct TCPClientSocketData *new_tcp_data = tcp_client_socket_data_new(new_ctx, accepted_conn, sockets, pid);
     socket_data_postinit(platform);
@@ -585,7 +585,7 @@ static void do_send_socket_error(Context *ctx, err_t status)
             term reason_atom = lwip_error_atom(glb, status);
             term result_tuple = term_alloc_tuple(3, &ctx->heap);
             term_put_tuple_element(result_tuple, 0, globalcontext_make_atom(glb, tcp_error_atom));
-            term socket_pid = term_from_local_process_id(ctx->process_id);
+            term socket_pid = term_port_from_local_process_id(ctx->process_id);
             term socket_wrapper = create_tcp_socket_wrapper(socket_pid, &ctx->heap, glb);
             term_put_tuple_element(result_tuple, 1, socket_wrapper);
             term_put_tuple_element(result_tuple, 2, reason_atom);
@@ -609,7 +609,7 @@ static void do_send_tcp_closed(Context *ctx)
         }
         term result_tuple = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(result_tuple, 0, TCP_CLOSED_ATOM);
-        term socket_pid = term_from_local_process_id(ctx->process_id);
+        term socket_pid = term_port_from_local_process_id(ctx->process_id);
         term socket_wrapper = create_tcp_socket_wrapper(socket_pid, &ctx->heap, glb);
         term_put_tuple_element(result_tuple, 1, socket_wrapper);
         globalcontext_send_message(glb, socket_data->controlling_process_pid, result_tuple);
@@ -750,7 +750,7 @@ static NativeHandlerResult do_receive_data(Context *ctx)
     if (socket_data->active) {
         term active_tuple = term_alloc_tuple(socket_data->type == TCPClientSocket ? 3 : 5, &ctx->heap);
         term_put_tuple_element(active_tuple, 0, socket_data->type == TCPClientSocket ? TCP_ATOM : UDP_ATOM);
-        term socket_pid = term_from_local_process_id(ctx->process_id);
+        term socket_pid = term_port_from_local_process_id(ctx->process_id);
         term socket_wrapper =
             socket_data->type == UDPSocket ?
                 create_udp_socket_wrapper(socket_pid, &ctx->heap, ctx->global) :

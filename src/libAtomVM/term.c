@@ -202,6 +202,18 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
         // creation is not printed
         return fun->print(fun, "<%" PRIu32 ".%" PRIu32 ".%" PRIu32 ">", node_atom_index, number, serial);
 
+    } else if (term_is_local_port(t)) {
+        // Update also PORT_AS_CSTRING_LEN when changing this format string
+        int32_t process_id = term_to_local_process_id(t);
+        return fun->print(fun, "#Port<0.%" PRIu32 ".0>", process_id);
+
+    } else if (term_is_external_port(t)) {
+        // Update also PORT_AS_CSTRING_LEN when changing this format string
+        uint32_t node_atom_index = term_to_atom_index(term_get_external_node(t));
+        uint64_t number = term_get_external_port_number(t);
+        // creation is not printed
+        return fun->print(fun, "#Port<%" PRIu32 ".%" PRIu64 ">", node_atom_index, number);
+
     } else if (term_is_function(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
 
@@ -448,23 +460,26 @@ static int term_type_to_index(term t)
     } else if (term_is_function(t)) {
         return 5;
 
-    } else if (term_is_pid(t)) {
+    } else if (term_is_port(t)) {
         return 6;
 
-    } else if (term_is_tuple(t)) {
+    } else if (term_is_pid(t)) {
         return 7;
 
-    } else if (term_is_nil(t)) {
+    } else if (term_is_tuple(t)) {
         return 8;
 
-    } else if (term_is_nonempty_list(t)) {
+    } else if (term_is_nil(t)) {
         return 9;
 
-    } else if (term_is_binary(t)) {
+    } else if (term_is_nonempty_list(t)) {
         return 10;
 
-    } else if (term_is_map(t)) {
+    } else if (term_is_binary(t)) {
         return 11;
+
+    } else if (term_is_map(t)) {
+        return 12;
 
     } else {
         AVM_ABORT();
@@ -769,6 +784,29 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
             } else {
                 result = (process_id > other_process_id) ? TermGreaterThan : TermLessThan;
                 break;
+            }
+        } else if (term_is_port(t) && term_is_port(other)) {
+            term node = term_is_external(t) ? term_get_external_node(t) : NONODE_AT_NOHOST_ATOM;
+            term other_node = term_is_external(other) ? term_get_external_node(other) : NONODE_AT_NOHOST_ATOM;
+            if (node == other_node) {
+                uint32_t creation = term_is_external(t) ? term_get_external_node_creation(t) : 0;
+                uint32_t other_creation = term_is_external(other) ? term_get_external_node_creation(other) : 0;
+                if (creation == other_creation) {
+                    uint64_t port_number = term_is_external(t) ? term_get_external_port_number(t) : (uint64_t) term_to_local_process_id(t);
+                    uint64_t other_port_number = term_is_external(other) ? term_get_external_port_number(other) : (uint64_t) term_to_local_process_id(other);
+                    if (port_number == other_port_number) {
+                        CMP_POP_AND_CONTINUE();
+                    } else {
+                        result = (port_number > other_port_number) ? TermGreaterThan : TermLessThan;
+                        break;
+                    }
+                } else {
+                    result = (creation > other_creation) ? TermGreaterThan : TermLessThan;
+                    break;
+                }
+            } else {
+                t = node;
+                other = other_node;
             }
         } else {
             result = (term_type_to_index(t) > term_type_to_index(other)) ? TermGreaterThan : TermLessThan;

@@ -6,6 +6,12 @@
 
 # AtomVM Update Instructions
 
+## v0.6.6 -> Unreleased
+- Ports now represent the native processes. Port drivers should return a port (instead of a pid),
+by using `term_port_from_local_process_id` instead of `term_from_local_process_id`. Sockets, from
+port socket driver, are also represented by a port and some matching code may need to be updated from
+`is_pid/1` to `is_port/1`.
+
 ## v0.6.4 -> v0.6.5
 
 - ESP32: `esp32boot.avm` doesn't contain anymore Elixir standard library, use instead

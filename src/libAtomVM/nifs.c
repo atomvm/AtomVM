@@ -160,6 +160,7 @@ static term nif_ets_lookup(Context *ctx, int argc, term argv[]);
 static term nif_ets_lookup_element(Context *ctx, int argc, term argv[]);
 static term nif_ets_delete(Context *ctx, int argc, term argv[]);
 static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[]);
+static term nif_erlang_port_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_function_exported(Context *ctx, int argc, term argv[]);
@@ -590,6 +591,12 @@ static const struct Nif pid_to_list_nif =
     .nif_ptr = nif_erlang_pid_to_list
 };
 
+static const struct Nif port_to_list_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_port_to_list
+};
+
 static const struct Nif ref_to_list_nif =
 {
     .base.type = NIFFunctionType,
@@ -992,7 +999,7 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
     if (!new_ctx) {
         RAISE_ERROR(BADARG_ATOM);
     } else {
-        return term_from_local_process_id(new_ctx->process_id);
+        return term_port_from_local_process_id(new_ctx->process_id);
     }
 }
 
@@ -1003,7 +1010,7 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[])
     term reg_name_term = argv[0];
     VALIDATE_VALUE(reg_name_term, term_is_atom);
     term pid_or_port_term = argv[1];
-    VALIDATE_VALUE(pid_or_port_term, term_is_local_pid);
+    VALIDATE_VALUE(pid_or_port_term, term_is_local_pid_or_port);
 
     int atom_index = term_to_atom_index(reg_name_term);
     int32_t pid = term_to_local_process_id(pid_or_port_term);
@@ -1069,7 +1076,7 @@ static NativeHandlerResult process_echo_mailbox(Context *ctx)
         }
         result = NativeTerminate;
         term reply = term_alloc_tuple(2, &ctx->heap);
-        term_put_tuple_element(reply, 0, term_from_local_process_id(ctx->process_id));
+        term_put_tuple_element(reply, 0, term_port_from_local_process_id(ctx->process_id));
         term_put_tuple_element(reply, 1, CLOSED_ATOM);
         port_send_message(ctx->global, pid, reply);
     } else {
@@ -1101,7 +1108,7 @@ static NativeHandlerResult process_console_message(Context *ctx, term msg)
         result = NativeTerminate;
         term pid = term_get_tuple_element(msg, 0);
         term reply = term_alloc_tuple(2, &ctx->heap);
-        term_put_tuple_element(reply, 0, term_from_local_process_id(ctx->process_id));
+        term_put_tuple_element(reply, 0, term_port_from_local_process_id(ctx->process_id));
         term_put_tuple_element(reply, 1, CLOSED_ATOM);
         port_send_message(ctx->global, pid, reply);
     } else if (is_tagged_tuple(msg, IO_REQUEST_ATOM, 4)) {
@@ -1407,7 +1414,7 @@ static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
     term target = argv[0];
     GlobalContext *glb = ctx->global;
 
-    if (term_is_local_pid(target)) {
+    if (term_is_local_pid_or_port(target)) {
         int32_t local_process_id = term_to_local_process_id(target);
 
         globalcontext_send_message(glb, local_process_id, argv[1]);
@@ -3487,6 +3494,22 @@ static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[])
     return make_list_from_ascii_buf((uint8_t *) buf, str_len, ctx);
 }
 
+static term nif_erlang_port_to_list(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term t = argv[0];
+    VALIDATE_VALUE(t, term_is_port);
+
+    char buf[PORT_AS_CSTRING_LEN];
+    int str_len = term_snprint(buf, PORT_AS_CSTRING_LEN, t, ctx->global);
+    if (UNLIKELY(str_len < 0)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return make_list_from_ascii_buf((uint8_t *) buf, str_len, ctx);
+}
+
 static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -3747,7 +3770,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    VALIDATE_VALUE(target_pid, term_is_local_pid);
+    VALIDATE_VALUE(target_pid, term_is_local_pid_or_port);
 
     int local_process_id = term_to_local_process_id(target_pid);
     Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
@@ -3815,7 +3838,7 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
 
     term target_pid = argv[0];
 
-    VALIDATE_VALUE(target_pid, term_is_local_pid);
+    VALIDATE_VALUE(target_pid, term_is_local_pid_or_port);
 
     int local_process_id = term_to_local_process_id(target_pid);
     Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
@@ -3846,7 +3869,7 @@ static term nif_erlang_unlink(Context *ctx, int argc, term argv[])
 
     term target_pid = argv[0];
 
-    VALIDATE_VALUE(target_pid, term_is_local_pid);
+    VALIDATE_VALUE(target_pid, term_is_local_pid_or_port);
 
     int local_process_id = term_to_local_process_id(target_pid);
     Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
