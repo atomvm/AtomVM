@@ -660,7 +660,7 @@ static term nif_gpio_init(Context *ctx, int argc, term argv[])
     }
 
     gpio_config_t config = {};
-    config.pin_bit_mask = 1 << gpio_num;
+    config.pin_bit_mask = 1ULL << gpio_num;
     config.mode = GPIO_MODE_DISABLE;
     config.pull_up_en = GPIO_PULLUP_DISABLE;
     config.pull_down_en = GPIO_PULLDOWN_DISABLE;
