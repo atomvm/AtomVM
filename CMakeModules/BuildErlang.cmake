@@ -87,12 +87,20 @@ macro(pack_lib avm_name)
     endif()
 
     add_custom_target(
-        ${avm_name}.uf2 ALL
-        COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}.uf2 -s 0x10100000 ${avm_name}.avm
+        ${avm_name}-pico.uf2 ALL
+        COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-pico.uf2 -s 0x10100000 ${avm_name}.avm
         COMMENT "Creating UF2 file ${avm_name}.uf2"
         VERBATIM
     )
-    add_dependencies(${avm_name}.uf2 ${avm_name})
+    add_dependencies(${avm_name}-pico.uf2 ${avm_name})
+
+    add_custom_target(
+        ${avm_name}-pico2.uf2 ALL
+        COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-pico2.uf2 -f data -s 0x10100000 ${avm_name}.avm
+        COMMENT "Creating UF2 file ${avm_name}.uf2"
+        VERBATIM
+    )
+    add_dependencies(${avm_name}-pico2.uf2 ${avm_name})
 
 endmacro()
 
@@ -237,7 +245,7 @@ macro(pack_uf2 avm_name main)
 
     add_custom_target(
         ${avm_name}.uf2 ALL
-        COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}.uf2 -s 0x10180000 ${avm_name}.avm
+        COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}.uf2 -f universal -s 0x10180000 ${avm_name}.avm
         COMMENT "Creating UF2 file ${avm_name}.uf2"
         VERBATIM
     )

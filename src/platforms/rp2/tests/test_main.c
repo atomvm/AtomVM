@@ -42,7 +42,7 @@
 #include <sys.h>
 
 #include "platform_defaultatoms.h"
-#include "rp2040_sys.h"
+#include "rp2_sys.h"
 
 #ifndef AVM_NO_SMP
 #include "smp.h"

@@ -28,7 +28,6 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
 
-#include <hardware/rtc.h>
 #include <pico/multicore.h>
 #include <pico/time.h>
 #include <pico/util/queue.h>
@@ -55,8 +54,15 @@
 #include <defaultatoms.h>
 #include <utils.h>
 
+#ifdef HAVE_PLATFORM_ATOMIC_H
 #include "platform_atomic.h"
-#include "rp2040_sys.h"
+#else
+#if defined(HAVE_ATOMIC)
+#include <stdatomic.h>
+#endif
+#endif
+
+#include "rp2_sys.h"
 
 // #define ENABLE_TRACE
 #include "trace.h"
@@ -69,7 +75,7 @@ struct NifCollectionDefListItem *nif_collection_list;
 
 void sys_init_platform(GlobalContext *glb)
 {
-    struct RP2040PlatformData *platform = malloc(sizeof(struct RP2040PlatformData));
+    struct RP2PlatformData *platform = malloc(sizeof(struct RP2PlatformData));
     glb->platform_data = platform;
 #ifndef AVM_NO_SMP
     mutex_init(&platform->event_poll_mutex);
@@ -77,7 +83,9 @@ void sys_init_platform(GlobalContext *glb)
 #endif
     queue_init(&platform->event_queue, sizeof(queue_t *), EVENT_QUEUE_LEN);
 
+#ifdef HAVE_PLATFORM_ATOMIC_H
     atomic_init();
+#endif
 
 #ifdef LIB_PICO_CYW43_ARCH
     cyw43_arch_init();
@@ -105,7 +113,7 @@ void sys_free_platform(GlobalContext *glb)
     cyw43_arch_deinit();
 #endif
 
-    struct RP2040PlatformData *platform = glb->platform_data;
+    struct RP2PlatformData *platform = glb->platform_data;
     queue_free(&platform->event_queue);
 
     if (platform->random_is_initialized) {
@@ -123,12 +131,14 @@ void sys_free_platform(GlobalContext *glb)
 
     free(platform);
 
+#ifdef HAVE_PLATFORM_ATOMIC_H
     atomic_free();
+#endif
 }
 
 bool sys_try_post_listener_event_from_isr(GlobalContext *glb, listener_event_t listener_queue, const void *event)
 {
-    struct RP2040PlatformData *platform = glb->platform_data;
+    struct RP2PlatformData *platform = glb->platform_data;
     if (UNLIKELY(!queue_try_add(listener_queue, event))) {
         fprintf(stderr, "Lost event from ISR as listener queue is full. System is overloaded or EVENT_QUEUE_LEN is too low\n");
         return false;
@@ -175,7 +185,7 @@ bool sys_try_post_listener_event_from_isr(GlobalContext *glb, listener_event_t l
 
 void sys_poll_events(GlobalContext *glb, int timeout_ms)
 {
-    struct RP2040PlatformData *platform = glb->platform_data;
+    struct RP2PlatformData *platform = glb->platform_data;
 #ifndef AVM_NO_SMP
     if (timeout_ms != 0) {
         mutex_enter_blocking(&platform->event_poll_mutex);
@@ -204,7 +214,7 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
 #ifndef AVM_NO_SMP
 void sys_signal(GlobalContext *glb)
 {
-    struct RP2040PlatformData *platform = glb->platform_data;
+    struct RP2PlatformData *platform = glb->platform_data;
     cond_signal(&platform->event_poll_cond);
 }
 #endif
@@ -401,8 +411,8 @@ void sys_unregister_listener_from_event(GlobalContext *global, listener_event_t 
 int sys_mbedtls_entropy_func(void *entropy, unsigned char *buf, size_t size)
 {
 #ifndef MBEDTLS_THREADING_C
-    struct RP2040PlatformData *platform
-        = CONTAINER_OF(entropy, struct RP2040PlatformData, entropy_ctx);
+    struct RP2PlatformData *platform
+        = CONTAINER_OF(entropy, struct RP2PlatformData, entropy_ctx);
     SMP_MUTEX_LOCK(platform->entropy_mutex);
     int result = mbedtls_entropy_func(entropy, buf, size);
     SMP_MUTEX_UNLOCK(platform->entropy_mutex);
@@ -415,7 +425,7 @@ int sys_mbedtls_entropy_func(void *entropy, unsigned char *buf, size_t size)
 
 mbedtls_entropy_context *sys_mbedtls_get_entropy_context_lock(GlobalContext *global)
 {
-    struct RP2040PlatformData *platform = global->platform_data;
+    struct RP2PlatformData *platform = global->platform_data;
 
     SMP_MUTEX_LOCK(platform->entropy_mutex);
 
@@ -429,13 +439,13 @@ mbedtls_entropy_context *sys_mbedtls_get_entropy_context_lock(GlobalContext *glo
 
 void sys_mbedtls_entropy_context_unlock(GlobalContext *global)
 {
-    struct RP2040PlatformData *platform = global->platform_data;
+    struct RP2PlatformData *platform = global->platform_data;
     SMP_MUTEX_UNLOCK(platform->entropy_mutex);
 }
 
 mbedtls_ctr_drbg_context *sys_mbedtls_get_ctr_drbg_context_lock(GlobalContext *global)
 {
-    struct RP2040PlatformData *platform = global->platform_data;
+    struct RP2PlatformData *platform = global->platform_data;
 
     SMP_MUTEX_LOCK(platform->random_mutex);
 
@@ -446,7 +456,7 @@ mbedtls_ctr_drbg_context *sys_mbedtls_get_ctr_drbg_context_lock(GlobalContext *g
         // Safe to unlock it now, sys_mbedtls_entropy_func will lock it again later
         sys_mbedtls_entropy_context_unlock(global);
 
-        const char *seed = "AtomVM RP2040 Mbed-TLS initial seed.";
+        const char *seed = "AtomVM RP2 Mbed-TLS initial seed.";
         int seed_len = strlen(seed);
         int seed_err = mbedtls_ctr_drbg_seed(&platform->random_ctx, sys_mbedtls_entropy_func,
             entropy_ctx, (const unsigned char *) seed, seed_len);
@@ -461,6 +471,6 @@ mbedtls_ctr_drbg_context *sys_mbedtls_get_ctr_drbg_context_lock(GlobalContext *g
 
 void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
 {
-    struct RP2040PlatformData *platform = global->platform_data;
+    struct RP2PlatformData *platform = global->platform_data;
     SMP_MUTEX_UNLOCK(platform->random_mutex);
 }

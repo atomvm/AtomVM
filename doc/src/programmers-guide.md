@@ -109,11 +109,11 @@ In order to deploy AtomVM applications to and test on the ESP32 platform, develo
 * [`packbeam`](https://github.com/atomvm/atomvm_packbeam) the AtomVM for packing and stripping `*.beam` files into the AtomVM `*.avm` format.
 * (Optional, but recommended) A serial console program, such as `minicom` or `screen`, so that you can view console output from your AtomVM application.
 
-#### Raspberry Pi Pico Deployment Requirements
+#### Raspberry Pi RP2 Deployment Requirements
 
 * A computer running MacOS or Linux (Windows support is not currently supported);
-* A Raspberry Pico board with a USB/UART connector (typically part of a development board);
-* A USB cable capable of connecting the Raspberry Pico module or board to your development machine (laptop or PC);
+* A board with a Raspberry Pi RP2 soc such as Raspberry Pi Pico or Pico W or Pico 2, with a USB connector (typically part of a development board);
+* A USB cable capable of connecting the module or board to your development machine (laptop or PC);
 * (Optional, but recommended) A serial console program, such as `minicom` or `screen`, so that you can view console output from your AtomVM application.
 
 ### Development Workflow
@@ -1453,7 +1453,7 @@ case gpio:digital_read(Pin) of
 end.
 ```
 
-The Pico has an additional initialization step [`gpio:init/1`](./apidocs/erlang/eavmlib/gpio.md#init1) before using a pin for gpio:
+The RP2 has an additional initialization step [`gpio:init/1`](./apidocs/erlang/eavmlib/gpio.md#init1) before using a pin for gpio:
 
 ```erlang
 Pin = 2,
@@ -1487,7 +1487,7 @@ gpio:set_pin_mode(Pin, output),
 gpio:digital_write(Pin, low).
 ```
 
-Pico needs the extra `gpio:init/1` before `gpio:read/1` too:
+RP2 needs the extra `gpio:init/1` before `gpio:read/1` too:
 
 ```erlang
 Pin = 2,

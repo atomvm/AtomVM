@@ -30,7 +30,10 @@ endif()
 
 # libAtomVM needs to find Pico's platform_smp.h and platform_atomic.h headers
 set(HAVE_PLATFORM_SMP_H ON)
+# RP2040 needs platform atomic, RP2350 doesn't
+if(PICO_RP2040)
 set(HAVE_PLATFORM_ATOMIC_H ON)
+endif()
 add_subdirectory(../../../libAtomVM libAtomVM)
 target_link_libraries(AtomVM PUBLIC libAtomVM)
 # Also add lib where platform_smp.h and platform_atomic headers are

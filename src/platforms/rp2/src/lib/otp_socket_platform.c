@@ -22,7 +22,7 @@
 
 #include <nifs.h>
 #include <otp_socket.h>
-#include <rp2040_sys.h>
+#include <rp2_sys.h>
 
 struct OTPSocketNIFGlobalData
 {

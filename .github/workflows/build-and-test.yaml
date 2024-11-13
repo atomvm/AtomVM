@@ -11,7 +11,7 @@ on:
     paths-ignore:
       - 'src/platforms/emscripten/**'
       - 'src/platforms/esp32/**'
-      - 'src/platforms/rp2040/**'
+      - 'src/platforms/rp2/**'
       - 'src/platforms/stm32/**'
       - 'doc/**'
       - 'LICENSES/**'
@@ -21,7 +21,7 @@ on:
     paths-ignore:
       - 'src/platforms/emscripten/**'
       - 'src/platforms/esp32/**'
-      - 'src/platforms/rp2040/**'
+      - 'src/platforms/rp2/**'
       - 'src/platforms/stm32/**'
       - 'doc/**'
       - 'LICENSES/**'
@@ -58,11 +58,15 @@ jobs:
           compiler_pkgs: "gcc-7 g++-7"
           os: "ubuntu-20.04"
           otp: "27"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
         - cc: "gcc-8"
           cxx: "g++-8"
           compiler_pkgs: "gcc-8 g++-8"
           os: "ubuntu-20.04"
           otp: "27"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
         - cc: "gcc-9"
           cxx: "g++-9"
           compiler_pkgs: "gcc-9 g++-9"
@@ -75,6 +79,8 @@ jobs:
           cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
           os: "ubuntu-22.04"
           otp: "27"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
         - cc: "gcc-11"
           cxx: "g++-11"
           compiler_pkgs: "gcc-11 g++-11"
@@ -89,6 +95,8 @@ jobs:
           cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
           os: "ubuntu-24.04"
           otp: "27"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
         - cc: "gcc-13"
           cxx: "g++-13"
           compiler_pkgs: "gcc-13 g++-13"
@@ -103,6 +111,8 @@ jobs:
           cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
           os: "ubuntu-24.04"
           otp: "27"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
 
         - cc: "clang-10"
           cxx: "clang++-10"
@@ -116,18 +126,24 @@ jobs:
           cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
           os: "ubuntu-20.04"
           otp: "27"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
         - cc: "clang-12"
           cxx: "clang++-12"
           compiler_pkgs: "clang-12"
           cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
           os: "ubuntu-22.04"
           otp: "27"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
         - cc: "clang-13"
           cxx: "clang++-13"
           compiler_pkgs: "clang-13"
           cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
           os: "ubuntu-22.04"
           otp: "27"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
         - cc: "clang-14"
           cxx: "clang++-14"
           compiler_pkgs: "clang-14"
@@ -140,18 +156,24 @@ jobs:
           cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
           os: "ubuntu-24.04"
           otp: "27"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
         - cc: "clang-16"
           cxx: "clang++-16"
           compiler_pkgs: "clang-16"
           cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
           os: "ubuntu-24.04"
           otp: "27"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
         - cc: "clang-17"
           cxx: "clang++-17"
           compiler_pkgs: "clang-17"
           cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
           os: "ubuntu-24.04"
           otp: "27"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
         - cc: "clang-18"
           cxx: "clang++-18"
           compiler_pkgs: "clang-18"
@@ -161,41 +183,48 @@ jobs:
 
         - otp: "25"
           elixir_version: "1.14"
+          rebar3_version: "3.24.0"
 
         - otp: "26"
           elixir_version: "1.17"
+          rebar3_version: "3.24.0"
 
         - otp: "27"
           elixir_version: "1.17"
+          rebar3_version: "3.24.0"
 
         # Old versions of OTP/Elixir
         - os: "ubuntu-20.04"
           cc: "cc"
           cxx: "c++"
+          cflags: ""
           otp: "21"
-          cflags: ""
           elixir_version: "1.7"
+          rebar3_version: "3.15.2"
 
         - os: "ubuntu-20.04"
           cc: "cc"
           cxx: "c++"
+          cflags: ""
           otp: "22"
-          cflags: ""
           elixir_version: "1.8"
+          rebar3_version: "3.18.0"
 
         - os: "ubuntu-20.04"
           cc: "cc"
           cxx: "c++"
-          otp: "23"
           cflags: ""
+          otp: "23"
           elixir_version: "1.11"
+          rebar3_version: "3.20.0"
 
         - os: "ubuntu-22.04"
           cc: "cc"
           cxx: "c++"
-          otp: "24"
           cflags: ""
+          otp: "24"
           elixir_version: "1.14"
+          rebar3_version: "3.23.0"
 
 # TODO: enable master again
 # master will not work until we don't adapt to atom table changes
@@ -205,37 +234,42 @@ jobs:
 #          cxx: "c++"
 #          otp: "master"
 #          elixir_version: "main"
+#          rebar3_version: "3.24.0"
 
         # Additional default compiler builds
         - os: "ubuntu-20.04"
           cc: "cc"
           cxx: "c++"
-          otp: "27"
           cflags: ""
+          otp: "27"
           elixir_version: "1.17"
+          rebar3_version: "3.24.0"
 
         - os: "ubuntu-22.04"
           cc: "cc"
           cxx: "c++"
-          otp: "27"
           cflags: ""
+          otp: "27"
           elixir_version: "1.17"
+          rebar3_version: "3.24.0"
 
         # Additional latest & -Os compiler builds
         - os: "ubuntu-24.04"
           cc: "gcc-14"
           cxx: "g++-14"
-          otp: "27"
           cflags: "-Os"
+          otp: "27"
           elixir_version: "1.17"
+          rebar3_version: "3.24.0"
           compiler_pkgs: "gcc-14 g++-14"
 
         - os: "ubuntu-24.04"
           cc: "clang-18"
           cxx: "clang++-18"
-          otp: "27"
           cflags: "-Os"
+          otp: "27"
           elixir_version: "1.17"
+          rebar3_version: "3.24.0"
           compiler_pkgs: "clang-18"
 
         # Additional 32 bits build
@@ -245,6 +279,7 @@ jobs:
           cflags: "-m32 -O3"
           otp: "23"
           elixir_version: "1.11"
+          rebar3_version: "3.20.0"
           # Use Werror so we get an error with 32 bit specific warnings
           cmake_opts_other: "-DAVM_CREATE_STACKTRACES=off -DAVM_WARNINGS_ARE_ERRORS=ON"
           arch: "i386"
@@ -268,6 +303,7 @@ jobs:
       with:
         otp-version: ${{ matrix.otp }}
         elixir-version: ${{ matrix.elixir_version }}
+        rebar3-version: ${{ matrix.rebar3_version }}
         hexpm-mirrors: |
           https://builds.hex.pm
           https://repo.hex.pm

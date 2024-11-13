@@ -23,36 +23,36 @@ cmake_minimum_required (VERSION 3.14)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../../CMakeModules")
 include(FetchUnity)
 
-add_executable(rp2040_tests test_main.c)
+add_executable(rp2_tests test_main.c)
 
-target_compile_features(rp2040_tests PUBLIC c_std_11)
+target_compile_features(rp2_tests PUBLIC c_std_11)
 if(CMAKE_COMPILER_IS_GNUCC)
-    target_compile_options(rp2040_tests PUBLIC -ggdb)
-    target_compile_options(rp2040_tests PRIVATE -Wall -pedantic -Wextra)
+    target_compile_options(rp2_tests PUBLIC -ggdb)
+    target_compile_options(rp2_tests PRIVATE -Wall -pedantic -Wextra)
 endif()
 
 # libAtomVM needs to find Pico's platform_smp.h and platform_atomic.h headers
 set(HAVE_PLATFORM_SMP_H ON)
 set(HAVE_PLATFORM_ATOMIC_H ON)
-target_link_libraries(rp2040_tests PUBLIC libAtomVM)
+target_link_libraries(rp2_tests PUBLIC libAtomVM)
 # Also add lib where platform_smp.h and platform_atomic.h headers are
-target_include_directories(rp2040_tests PUBLIC ../src/lib)
+target_include_directories(rp2_tests PUBLIC ../src/lib)
 
-target_link_libraries(rp2040_tests PUBLIC hardware_regs pico_stdlib pico_binary_info unity)
+target_link_libraries(rp2_tests PUBLIC hardware_regs pico_stdlib pico_binary_info unity)
 
 set(
     PLATFORM_LIB_SUFFIX
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
 )
 
-target_link_libraries(rp2040_tests PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX})
+target_link_libraries(rp2_tests PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX})
 
 # could not get rp2040js to work with stdio USB
-pico_enable_stdio_usb(rp2040_tests 0)
-pico_enable_stdio_uart(rp2040_tests 1)
+pico_enable_stdio_usb(rp2_tests 0)
+pico_enable_stdio_uart(rp2_tests 1)
 
 # create map/bin/hex/uf2 file in addition to ELF.
-pico_add_extra_outputs(rp2040_tests)
+pico_add_extra_outputs(rp2_tests)
 
 add_subdirectory(test_erl_sources)
-add_dependencies(rp2040_tests rp2040_test_modules)
+add_dependencies(rp2_tests rp2_test_modules)

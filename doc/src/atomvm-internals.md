@@ -146,17 +146,17 @@ If there already is one thread in `sys_poll_events`, other scheduler threads pic
 
 ## Tasks and synchronization mechanisms
 
-AtomVM SMP builds run on operating or runtime systems implementing tasks (FreeRTOS SMP on ESP32, Unix and WebAssembly) as well as on systems with no task implementation (Raspberry Pi Pico).
+AtomVM SMP builds run on operating or runtime systems implementing tasks (FreeRTOS SMP on ESP32, Unix and WebAssembly) as well as on systems with no task implementation (Raspberry Pi RP2).
 
-On runtime systems with tasks, each scheduler thread is implemented as a task. On Pico, a scheduler thread runs on Core 0 and another one runs on Core 1, and they are effectively pinned to each core.
+On runtime systems with tasks, each scheduler thread is implemented as a task. On RP2, a scheduler thread runs on Core 0 and another one runs on Core 1, and they are effectively pinned to each core.
 
 For synchronization purposes, AtomVM uses mutexes, condition variables, RW locks, spinlocks and Atomics.
 
 Availability of RW Locks and atomics are verified at compile time using detection of symbols for RW Locks and `ATOMIC_*_LOCK_FREE` C11 macros for atomics.
 
-Mutexes and condition variables are provided by the SDK or the runtime system. If RW Locks are not available, AtomVM uses mutexes. Atomics are not available on Pico and are replaced by critical sections. Spinlocks are implemented by AtomVM on top of Atomics, or using mutexes on Pico.
+Mutexes and condition variables are provided by the SDK or the runtime system. If RW Locks are not available, AtomVM uses mutexes. Atomics are not available on RP2 and are replaced by critical sections. Spinlocks are implemented by AtomVM on top of Atomics, or using mutexes on RP2.
 
-Importantly, locking synchronization mechanisms (mutexes, RW locks, spinlocks) are not interrupt-safe. Interrupt service routines must not try to lock as they could fail forever if interrupted code owns the lock. Atomics, including emulation on Pico, are interrupt-safe.
+Importantly, locking synchronization mechanisms (mutexes, RW locks, spinlocks) are not interrupt-safe. Interrupt service routines must not try to lock as they could fail forever if interrupted code owns the lock. Atomics, including emulation on RP2040, are interrupt-safe.
 
 Drivers can send messages from event callbacks typically called from FreeRTOS tasks using `globalcontext_send_message_from_task` or `port_send_message_from_task` functions instead of `globalcontext_send_message` or `port_send_message`. These functions try to acquire required locks and if they fail, enqueue sent message in a queue, so it is later processed when the scheduler performs context switching. The functions are undefined if option `AVM_DISABLE_TASK_DRIVER` is passed. Some platforms do not include support for task drivers. Define `AVM_TASK_DRIVER_ENABLED` can be checked to determine if these functions are available.
 

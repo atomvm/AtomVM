@@ -25,7 +25,7 @@
 #include <mailbox.h>
 #include <port.h>
 
-#include "rp2040_sys.h"
+#include "rp2_sys.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"

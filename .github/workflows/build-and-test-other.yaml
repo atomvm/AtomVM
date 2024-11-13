@@ -11,7 +11,7 @@ on:
     paths-ignore:
       - 'src/platforms/emscripten/**'
       - 'src/platforms/esp32/**'
-      - 'src/platforms/rp2040/**'
+      - 'src/platforms/rp2/**'
       - 'src/platforms/stm32/**'
       - 'doc/**'
       - 'LICENSES/**'
@@ -21,7 +21,7 @@ on:
     paths-ignore:
       - 'src/platforms/emscripten/**'
       - 'src/platforms/esp32/**'
-      - 'src/platforms/rp2040/**'
+      - 'src/platforms/rp2/**'
       - 'src/platforms/stm32/**'
       - 'doc/**'
       - 'LICENSES/**'

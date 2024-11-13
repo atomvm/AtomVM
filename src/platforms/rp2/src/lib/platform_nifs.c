@@ -22,13 +22,15 @@
 
 #include "platform_defaultatoms.h"
 #include "platform_nifs.h"
-#include "rp2040_sys.h"
+#include "rp2_sys.h"
 
 // Pico SDK
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
 
+#if PICO_RP2040
 #include <hardware/rtc.h>
+#endif
 #include <sys/time.h>
 
 #ifdef LIB_PICO_CYW43_ARCH
@@ -58,6 +60,7 @@ static term nif_atomvm_platform(Context *ctx, int argc, term argv[])
     return PICO_ATOM;
 }
 
+#if PICO_RP2040
 static term nif_pico_rtc_set_datetime(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -137,6 +140,7 @@ static term nif_pico_rtc_set_datetime(Context *ctx, int argc, term argv[])
 
     return OK_ATOM;
 }
+#endif
 
 #ifdef LIB_PICO_CYW43_ARCH
 static term nif_pico_cyw43_arch_gpio_get(Context *ctx, int argc, term argv[])
@@ -163,10 +167,12 @@ static const struct Nif atomvm_platform_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_platform
 };
+#if PICO_RP2040
 static const struct Nif pico_rtc_set_datetime_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_pico_rtc_set_datetime
 };
+#endif
 #ifdef LIB_PICO_CYW43_ARCH
 static const struct Nif pico_cyw43_arch_gpio_get_nif = {
     .base.type = NIFFunctionType,
@@ -184,10 +190,12 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &atomvm_platform_nif;
     }
+#if PICO_RP2040
     if (strcmp("pico:rtc_set_datetime/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &pico_rtc_set_datetime_nif;
     }
+#endif
 #ifdef LIB_PICO_CYW43_ARCH
     if (strcmp("pico:cyw43_arch_gpio_get/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);

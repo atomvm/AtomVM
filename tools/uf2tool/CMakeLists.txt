@@ -21,16 +21,12 @@
 cmake_minimum_required (VERSION 3.13)
 project (UF2Tool)
 
-include(${CMAKE_SOURCE_DIR}/CMakeModules/GetVersion.cmake)
-
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/uf2tool.erl ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/uf2tool @ONLY)
-file(COPY ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/uf2tool
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/rebar.config
     DESTINATION ${CMAKE_CURRENT_BINARY_DIR}
-    FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
 )
 
 add_custom_target(
     uf2tool ALL
-    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_BINARY_DIR}/uf2tool
+    COMMAND rebar3 escriptize && cp _build/default/bin/uf2tool .
     VERBATIM
 )

@@ -24,7 +24,7 @@ set(HEADER_FILES
     gpiodriver.h
     platform_defaultatoms.h
     platform_smp.h
-    rp2040_sys.h
+    rp2_sys.h
     ../../../../libAtomVM/otp_crypto.h
     ../../../../libAtomVM/portnifloader.h
 )
@@ -57,7 +57,6 @@ target_link_libraries(
     libAtomVM${PLATFORM_LIB_SUFFIX}
     PUBLIC
         hardware_gpio
-        hardware_rtc
         hardware_sync
         pico_float
         pico_mbedtls
@@ -66,6 +65,10 @@ target_link_libraries(
         pico_runtime
         pico_sync
         pico_time)
+
+if (PICO_RP2040)
+    target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC hardware_rtc)
+endif()
 
 if (NOT AVM_USE_32BIT_FLOAT)
     target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC pico_double)

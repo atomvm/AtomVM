@@ -30,7 +30,7 @@
 
 #include "defaultatoms.h"
 #include "interop.h"
-#include "rp2040_sys.h"
+#include "rp2_sys.h"
 #include "trace.h"
 
 #define WL_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\x2", "wl"))
@@ -45,30 +45,30 @@ static const AtomStringIntPair pin_mode_table[] = {
 
 enum
 {
-    AtomVMRP2040GPIOFloating = 0,
-    AtomVMRP2040GPIOPullUp = 1,
-    AtomVMRP2040GPIOPullDown = 2,
+    AtomVMRP2GPIOFloating = 0,
+    AtomVMRP2GPIOPullUp = 1,
+    AtomVMRP2GPIOPullDown = 2,
 };
 
 static const AtomStringIntPair pull_mode_table[] = {
-    { ATOM_STR("\x2", "up"), AtomVMRP2040GPIOPullUp },
-    { ATOM_STR("\x4", "down"), AtomVMRP2040GPIOPullDown },
-    { ATOM_STR("\x7", "up_down"), AtomVMRP2040GPIOPullUp | AtomVMRP2040GPIOPullDown },
-    { ATOM_STR("\x8", "floating"), AtomVMRP2040GPIOFloating },
+    { ATOM_STR("\x2", "up"), AtomVMRP2GPIOPullUp },
+    { ATOM_STR("\x4", "down"), AtomVMRP2GPIOPullDown },
+    { ATOM_STR("\x7", "up_down"), AtomVMRP2GPIOPullUp | AtomVMRP2GPIOPullDown },
+    { ATOM_STR("\x8", "floating"), AtomVMRP2GPIOFloating },
     SELECT_INT_DEFAULT(-1)
 };
 
 enum gpio_pin_level
 {
-    AtomVMRP2040GPIOInvalid = -1,
-    AtomVMRP2040GPIOLow = 0,
-    AtomVMRP2040GPIOHigh = 1
+    AtomVMRP2GPIOInvalid = -1,
+    AtomVMRP2GPIOLow = 0,
+    AtomVMRP2GPIOHigh = 1
 };
 
 static const AtomStringIntPair pin_level_table[] = {
-    { ATOM_STR("\x3", "low"), AtomVMRP2040GPIOLow },
-    { ATOM_STR("\x4", "high"), AtomVMRP2040GPIOHigh },
-    SELECT_INT_DEFAULT(AtomVMRP2040GPIOInvalid)
+    { ATOM_STR("\x3", "low"), AtomVMRP2GPIOLow },
+    { ATOM_STR("\x4", "high"), AtomVMRP2GPIOHigh },
+    SELECT_INT_DEFAULT(AtomVMRP2GPIOInvalid)
 };
 
 static term nif_gpio_init(Context *ctx, int argc, term argv[])
@@ -129,7 +129,7 @@ static term nif_gpio_set_pin_pull(Context *ctx, int argc, term argv[])
     if (UNLIKELY(pull_mode < 0)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-    gpio_set_pulls(gpio_num, pull_mode & AtomVMRP2040GPIOPullUp, pull_mode & AtomVMRP2040GPIOPullDown);
+    gpio_set_pulls(gpio_num, pull_mode & AtomVMRP2GPIOPullUp, pull_mode & AtomVMRP2GPIOPullDown);
     return OK_ATOM;
 }
 
