@@ -46,7 +46,7 @@ void print_help(const char *program_name)
         "\n"
         "Syntax:\n"
         "\n"
-        "    %s [-h] [-v] <path-to-avm-file>+\n"
+        "    %s [-h] [-v] <path-to-avm-or-beam-file>+\n"
         "\n"
         "Options:\n"
         "\n"
@@ -88,9 +88,7 @@ int main(int argc, char **argv)
 
     GlobalContext *glb = globalcontext_new();
 
-    const void *startup_beam = NULL;
-    uint32_t startup_beam_size;
-    const char *startup_module_name;
+    Module *startup_module = NULL;
 
     for (int i = 1; i < argc; ++i) {
         const char *ext = strrchr(argv[i], '.');
@@ -102,50 +100,56 @@ int main(int argc, char **argv)
             }
             synclist_append(&glb->avmpack_data, &avmpack_data->avmpack_head);
 
-            if (IS_NULL_PTR(startup_beam)) {
+            if (IS_NULL_PTR(startup_module)) {
+                const void *startup_beam = NULL;
+                const char *startup_module_name;
+                uint32_t startup_beam_size;
                 avmpack_find_section_by_flag(avmpack_data->data, 1, &startup_beam, &startup_beam_size, &startup_module_name);
 
                 if (startup_beam) {
                     avmpack_data->in_use = true;
+                    startup_module = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
+                    if (IS_NULL_PTR(startup_module)) {
+                        fprintf(stderr, "Cannot load startup module: %s\n", startup_module_name);
+                        return EXIT_FAILURE;
+                    }
+                    globalcontext_insert_module(glb, startup_module);
+                    startup_module->module_platform_data = NULL;
                 }
             }
 
-        } else if (i == 1 && ext && (strcmp(ext, ".beam") == 0)) {
+        } else if (ext && (strcmp(ext, ".beam") == 0)) {
             MappedFile *mapped_file = mapped_file_open_beam(argv[i]);
             if (!iff_is_valid_beam(mapped_file->mapped)) {
-                fprintf(stderr, "%s has invalid AVM Pack format.\n", argv[i]);
+                fprintf(stderr, "%s has invalid beam format.\n", argv[i]);
                 return EXIT_FAILURE;
             }
-            startup_module_name = basename(argv[1]);
-            startup_beam = mapped_file->mapped;
-            startup_beam_size = mapped_file->size;
-
-        } else if (i == 1) {
-            fprintf(stderr, "%s is not an AVM or a BEAM file.\n", argv[i]);
-            return EXIT_FAILURE;
+            Module *mod = module_new_from_iff_binary(glb, mapped_file->mapped, mapped_file->size);
+            if (IS_NULL_PTR(mod)) {
+                fprintf(stderr, "Cannot load module: %s\n", argv[i]);
+                return EXIT_FAILURE;
+            }
+            globalcontext_insert_module(glb, mod);
+            mod->module_platform_data = NULL;
+            if (IS_NULL_PTR(startup_module) && module_search_exported_function(mod, ATOM_STR("\5", "start"), 0, glb) != 0) {
+                startup_module = mod;
+            }
 
         } else {
-            fprintf(stderr, "%s is not an AVM file.\n", argv[i]);
+            fprintf(stderr, "%s is not an AVM or a BEAM file.\n", argv[i]);
             return EXIT_FAILURE;
         }
     }
 
-    if (IS_NULL_PTR(startup_beam)) {
+    if (IS_NULL_PTR(startup_module)) {
         fprintf(stderr, "Unable to locate entrypoint.\n");
         return EXIT_FAILURE;
     }
 
-    Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
-    if (IS_NULL_PTR(mod)) {
-        fprintf(stderr, "Cannot load startup module: %s\n", startup_module_name);
-        return EXIT_FAILURE;
-    }
-    globalcontext_insert_module(glb, mod);
-    mod->module_platform_data = NULL;
     Context *ctx = context_new(glb);
     ctx->leader = 1;
 
-    context_execute_loop(ctx, mod, "start", 0);
+    context_execute_loop(ctx, startup_module, "start", 0);
 
     term ret_value = ctx->x[0];
     fprintf(stderr, "Return value: ");
@@ -161,7 +165,6 @@ int main(int argc, char **argv)
 
     context_destroy(ctx);
     globalcontext_destroy(glb);
-    module_destroy(mod);
 
     return status;
 }

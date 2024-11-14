@@ -608,7 +608,6 @@ static int test_atom(struct Test *test)
 
     context_destroy(ctx);
     globalcontext_destroy(glb);
-    module_destroy(mod);
     mapped_file_close(beam_file);
     return result;
 }
