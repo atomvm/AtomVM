@@ -124,7 +124,7 @@ transform_options(Options) ->
             undefined -> [{active, true} | Options];
             _OtherValue -> Options
         end,
-    [{binary, true} | WithActive].
+    [binary | WithActive].
 
 take_parse_headers(Options) ->
     case proplists:get_value(parse_headers, Options) of
