@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed specifications of nifs from `esp_adc` module
 - ESP32: fix `gpio:init/1` on GPIO >= 32
+- Adding missing check, passing a non numeric argument to a function expecting a floating point
+might lead to a crash in certain situations.
 
 ## [0.6.5] - 2024-10-15
 

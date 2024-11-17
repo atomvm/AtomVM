@@ -385,6 +385,7 @@ compile_erlang(floatext)
 compile_erlang(boxed_is_not_float)
 compile_erlang(float_is_float)
 compile_erlang(float_is_number)
+compile_erlang(fconv_fail_invalid)
 
 compile_erlang(float2list)
 compile_erlang(float2bin)
@@ -857,6 +858,7 @@ add_custom_target(erlang_test_modules DEPENDS
     boxed_is_not_float.beam
     float_is_float.beam
     float_is_number.beam
+    fconv_fail_invalid.beam
 
     float2list.beam
     float2bin.beam
