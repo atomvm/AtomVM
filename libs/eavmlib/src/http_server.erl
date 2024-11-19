@@ -73,12 +73,16 @@ find_route(Method, Path, [{Target, Mod, _Opts} | T]) ->
     end.
 
 reply(StatusCode, ReplyBody, Conn) ->
-    {ok, Conn} = reply(
+    {ok, NewConn} = reply(
         StatusCode, ReplyBody, [<<"Content-Type: text/html\r\nConnection: close\r\n">>], Conn
     ),
-    Socket = proplists:get_value(socket, Conn),
+    Socket = proplists:get_value(socket, NewConn),
     gen_tcp:close(Socket),
-    ClosedConn = [{closed, true} | Conn],
+    ClosedConn =
+        case proplists:get_value(closed, NewConn) of
+            undefined -> [{closed, true} | NewConn];
+            true -> NewConn
+        end,
     {ok, ClosedConn}.
 
 reply(StatusCode, ReplyBody, ReplyHeaders, Conn) ->
@@ -107,13 +111,15 @@ reply(StatusCode, ReplyBody, ReplyHeaders, Conn) ->
             {ok, ClosedConn}
     end.
 
-send_reply(Socket, [Chunk | Tail]) ->
+send_reply(Socket, [Chunk | Tail]) when is_list(Chunk) orelse is_binary(Chunk) ->
     case gen_tcp:send(Socket, Chunk) of
         ok -> send_reply(Socket, Tail);
         {error, _} = ErrorTuple -> ErrorTuple
     end;
 send_reply(_Socket, []) ->
-    ok.
+    ok;
+send_reply(Socket, IOData) ->
+    gen_tcp:send(Socket, IOData).
 
 code_to_status_string(200) ->
     <<"200 OK">>;

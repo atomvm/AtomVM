@@ -790,7 +790,7 @@ static EventListener *passive_recv_callback(GlobalContext *glb, EventListener *b
         return NULL;
     }
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-    if (len == 0) {
+    if (len == 0 || (len < 0 && errno == ECONNRESET)) {
         // {Ref, {error, closed}}
         BEGIN_WITH_STACK_HEAP(12, heap);
         term pid = listener->pid;
