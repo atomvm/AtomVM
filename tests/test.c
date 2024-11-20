@@ -435,6 +435,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(boxed_is_not_float, 16),
     TEST_CASE_EXPECTED(float_is_float, 32),
     TEST_CASE_EXPECTED(float_is_number, 32),
+    TEST_CASE(fconv_fail_invalid),
 
     TEST_CASE_EXPECTED(float2bin, 31),
     TEST_CASE_EXPECTED(float2list, 31),

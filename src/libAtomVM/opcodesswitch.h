@@ -5912,6 +5912,9 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("fconv/2 %lx, fp%i\n", src_value, freg);
                     context_ensure_fpregs(ctx);
+                    if (UNLIKELY(!term_is_number(src_value))) {
+                        RAISE_ERROR(BADARITH_ATOM);
+                    }
                     ctx->fr[freg] = term_conv_to_float(src_value);
                 #endif
 
