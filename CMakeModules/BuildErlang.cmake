@@ -92,7 +92,7 @@ macro(pack_lib avm_name)
         COMMENT "Creating UF2 file ${avm_name}.uf2"
         VERBATIM
     )
-    add_dependencies(${avm_name}-pico.uf2 ${avm_name})
+    add_dependencies(${avm_name}-pico.uf2 ${avm_name} uf2tool)
 
     add_custom_target(
         ${avm_name}-pico2.uf2 ALL
@@ -100,7 +100,7 @@ macro(pack_lib avm_name)
         COMMENT "Creating UF2 file ${avm_name}.uf2"
         VERBATIM
     )
-    add_dependencies(${avm_name}-pico2.uf2 ${avm_name})
+    add_dependencies(${avm_name}-pico2.uf2 ${avm_name} uf2tool)
 
 endmacro()
 
