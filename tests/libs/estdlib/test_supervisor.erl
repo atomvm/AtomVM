@@ -20,31 +20,115 @@
 
 -module(test_supervisor).
 
--export([test/0, init/1, start_link/1]).
+-export([start/0, test/0, init/1, start_link/1, child_start/1]).
+
+start() ->
+    ok = test().
 
 test() ->
     ok = test_basic_supervisor(),
+    ok = test_map_supervisor(),
+    ok = test_start_child(),
+    ok = test_start_child_ping_pong(),
     ok = test_supervisor_order(),
     ok.
 
 test_basic_supervisor() ->
-    {ok, _SupPid} = start_link(self()),
+    {ok, SupPid} = supervisor:start_link(?MODULE, {test_basic_supervisor, self()}),
+    ok = test_ping_pong(SupPid).
+
+test_map_supervisor() ->
+    {ok, SupPid} = supervisor:start_link(?MODULE, {test_map_supervisor, self()}),
+    ok = test_ping_pong(SupPid).
+
+test_start_child_ping_pong() ->
+    {ok, SupPid} = supervisor:start_link(?MODULE, {test_no_child, self()}),
+    supervisor:start_child(SupPid, #{
+        id => test_child,
+        start => {ping_pong_server, start_link, [self()]},
+        restart => transient,
+        shutdown => brutal_kill,
+        type => worker,
+        modules => [
+            ping_pong_server
+        ]
+    }),
+    ok = test_ping_pong(SupPid).
+
+test_start_child() ->
+    {ok, SupPid} = supervisor:start_link(?MODULE, {test_no_child, self()}),
+    {ok, undefined} = supervisor:start_child(SupPid, #{
+        id => child_ignore, start => {?MODULE, child_start, [ignore]}
+    }),
+    {error, already_present} = supervisor:start_child(SupPid, #{
+        id => child_ignore, start => {?MODULE, child_start, [ignore]}
+    }),
+    {ok, Pid} = supervisor:start_child(SupPid, #{
+        id => child_start, start => {?MODULE, child_start, [start]}
+    }),
+    {error, {already_started, Pid}} = supervisor:start_child(SupPid, #{
+        id => child_start, start => {?MODULE, child_start, [start]}
+    }),
+    {error, {child_error, _ChildRecord1}} = supervisor:start_child(SupPid, #{
+        id => child_error, start => {?MODULE, child_start, [error]}
+    }),
+    {error, {fail, _ChildRecord2}} = supervisor:start_child(SupPid, #{
+        id => child_error, start => {?MODULE, child_start, [fail]}
+    }),
+    {error, {{'EXIT', _Error}, _ChildRecord3}} = supervisor:start_child(SupPid, #{
+        id => child_error, start => {?MODULE, child_start, [raise]}
+    }),
+    {ok, _InfoPid, info} = supervisor:start_child(SupPid, #{
+        id => child_info, start => {?MODULE, child_start, [info]}
+    }),
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    ok.
+
+child_start(ignore) ->
+    ignore;
+child_start(start) ->
+    Pid = spawn_link(fun() ->
+        receive
+            ok -> ok
+        end
+    end),
+    {ok, Pid};
+child_start(info) ->
+    Pid = spawn_link(fun() ->
+        receive
+            ok -> ok
+        end
+    end),
+    {ok, Pid, info};
+child_start(error) ->
+    {error, child_error};
+child_start(fail) ->
+    fail.
+
+test_ping_pong(SupPid) ->
     Pid1 = get_and_test_server(),
     gen_server:cast(Pid1, {crash, test}),
     Pid2 = get_and_test_server(),
-    %   MonitorRef1 = erlang:monitor(process, Pid2),
+    MonitorRef1 = erlang:monitor(process, Pid2),
     ok = gen_server:call(Pid2, {stop, abnormal}),
-    %   receive {'DOWN', MonitorRef1, process, Pid2, abnormal} -> ok end,
+    receive
+        {'DOWN', MonitorRef1, process, Pid2, abnormal} -> ok
+    end,
     Pid3 = get_and_test_server(),
-    %   MonitorRef2 = erlang:monitor(process, Pid3),
+    MonitorRef2 = erlang:monitor(process, Pid3),
     ok = gen_server:call(Pid3, {stop, normal}),
-    %   receive {'DOWN', MonitorRef2, process, Pid3, normal} -> ok end,
+    receive
+        {'DOWN', MonitorRef2, process, Pid3, normal} -> ok
+    end,
     no_restart =
         receive
             {ping_pong_server_ready, Pid3} ->
                 Pid3
         after 100 -> no_restart
         end,
+    unlink(SupPid),
+    exit(SupPid, shutdown),
     ok.
 
 get_and_test_server() ->
@@ -58,7 +142,7 @@ get_and_test_server() ->
     Pid.
 
 start_link(Parent) ->
-    supervisor:start_link({local, testsup}, ?MODULE, {test_basic_supervisor, Parent}).
+    supervisor:start_link(?MODULE, {test_basic_supervisor, Parent}).
 
 init({test_basic_supervisor, Parent}) ->
     ChildSpecs = [
@@ -67,6 +151,20 @@ init({test_basic_supervisor, Parent}) ->
         ]}
     ],
     {ok, {{one_for_one, 10000, 3600}, ChildSpecs}};
+init({test_map_supervisor, Parent}) ->
+    ChildSpecs = [
+        #{
+            id => test_child,
+            start => {ping_pong_server, start_link, [Parent]},
+            restart => transient,
+            shutdown => brutal_kill,
+            type => worker,
+            modules => [
+                ping_pong_server
+            ]
+        }
+    ],
+    {ok, {#{strategy => one_for_one, intensity => 10000, period => 3600}, ChildSpecs}};
 init({test_supervisor_order, Parent}) ->
     ChildSpecs = [
         {ready_1, {notify_init_server, start_link, [{Parent, ready_1}]}, transient, brutal_kill,
@@ -78,10 +176,12 @@ init({test_supervisor_order, Parent}) ->
                 notify_init_server
             ]}
     ],
-    {ok, {{one_for_one, 10000, 3600}, ChildSpecs}}.
+    {ok, {{one_for_one, 10000, 3600}, ChildSpecs}};
+init({test_no_child, _Parent}) ->
+    {ok, {#{strategy => one_for_one, intensity => 10000, period => 3600}, []}}.
 
 test_supervisor_order() ->
-    supervisor:start_link(?MODULE, {test_supervisor_order, self()}),
+    {ok, SupPid} = supervisor:start_link(?MODULE, {test_supervisor_order, self()}),
     ready_1 =
         receive
             Msg1 ->
@@ -96,4 +196,6 @@ test_supervisor_order() ->
         after 1000 ->
             {error, {timeout, ready_2}}
         end,
+    unlink(SupPid),
+    exit(SupPid, shutdown),
     ok.
