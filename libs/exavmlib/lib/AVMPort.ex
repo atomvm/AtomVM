@@ -22,6 +22,8 @@
 defmodule AVMPort do
   # This avoids crashing the compiler at build time
   @compile {:autoload, false}
+  # This avoids compiler warnings
+  @compile {:no_warn_undefined, [:port]}
   @moduledoc """
   This module provides an interface to communicate with AtomVM port processes.
   The functionality of AVMPort.call is identical to the eavmlib :port.call/2 and
