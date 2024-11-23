@@ -43,6 +43,7 @@ jobs:
         cflags: ["-O3"]
         otp: ["27"]
         elixir_version: ["1.17"]
+        rebar3_version: ["3.24.0"]
         compiler_pkgs: ["clang-14"]
         soc: ["esp32", "esp32c2", "esp32c3", "esp32s2", "esp32s3", "esp32c6", "esp32h2"]
         flavor: ["", "-elixir"]
@@ -62,6 +63,7 @@ jobs:
       with:
         otp-version: ${{ matrix.otp }}
         elixir-version: ${{ matrix.elixir_version }}
+        rebar3-version: ${{ matrix.rebar3_version }}
         hexpm-mirrors: |
           https://builds.hex.pm
           https://repo.hex.pm
