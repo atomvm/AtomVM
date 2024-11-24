@@ -182,7 +182,6 @@ int main(int argc, char **argv)
     global = NULL;
 
     if (main_module) {
-        module_destroy(main_module);
         main_module = NULL;
     }
 

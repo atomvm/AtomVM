@@ -435,7 +435,7 @@ term globalcontext_existing_term_from_atom_string(GlobalContext *glb, AtomString
 /**
  * @brief Inserts a module to the modules table.
  *
- * @details Inserts an already loaded module to the modules table and assigns and index to it so it can be retrieved later by name or index.
+ * @details Inserts an already loaded module to the modules table and assigns and index to it so it can be retrieved later by name or index. The module is then owned by the global context that will destroy it when globalcontext_destroy is invoked.
  * @param global the global context.
  * @param module the module that will be added to the modules table.
  * @returns the module index if successful, otherwise -1.
