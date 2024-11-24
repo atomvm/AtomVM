@@ -72,6 +72,11 @@ term bif_erlang_self_0(Context *ctx)
     return term_from_local_process_id(ctx->process_id);
 }
 
+term bif_erlang_node_0(Context *ctx)
+{
+    return ctx->global->node_name;
+}
+
 term bif_erlang_byte_size_1(Context *ctx, uint32_t fail_label, int live, term arg1)
 {
     UNUSED(live);

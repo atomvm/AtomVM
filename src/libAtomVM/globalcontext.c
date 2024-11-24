@@ -122,6 +122,9 @@ GlobalContext *globalcontext_new()
     smp_spinlock_init(&glb->ref_ticks_spinlock);
 #endif
 
+    glb->node_name = NONODE_AT_NOHOST_ATOM;
+    glb->creation = 0;
+
 #if HAVE_OPEN && HAVE_CLOSE
     ErlNifEnv env;
     erl_nif_env_partial_init_from_globalcontext(&env, glb);
