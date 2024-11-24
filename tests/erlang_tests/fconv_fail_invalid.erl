@@ -1,7 +1,7 @@
 %
 % This file is part of AtomVM.
 %
-% Copyright 2019 Fred Dushin <fred@dushin.net>
+% Copyright 2024 Davide Bettio <davide@uninstall.it>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -18,16 +18,23 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module(tests).
+-module(fconv_fail_invalid).
 
--export([start/0]).
+-export([start/0, deg_min_nsew_to_decimal/1]).
 
 start() ->
-    etest:test([
-        test_dir,
-        test_file,
-        test_http_server,
-        test_port,
-        test_timer_manager,
-        test_ahttp_client
-    ]).
+    try ?MODULE:deg_min_nsew_to_decimal({5, nil, e}) of
+        _Any -> -1
+    catch
+        error:badarith -> 0
+    end.
+
+deg_min_nsew_to_decimal(Coord) ->
+    {Deg, Min, Nsew} = Coord,
+    DecimalCoord = Deg + Min / 60,
+    case Nsew of
+        n -> DecimalCoord;
+        s -> -DecimalCoord;
+        e -> DecimalCoord;
+        w -> -DecimalCoord
+    end.

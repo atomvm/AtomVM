@@ -196,6 +196,11 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
     struct ListHead *item;
     struct ListHead *tmp;
 
+    int module_index = glb->loaded_modules_count;
+    for (int i = 0; i < module_index; i++) {
+        module_destroy(glb->modules_by_index[i]);
+    }
+
     struct ListHead *open_avm_packs = synclist_nolock(&glb->avmpack_data);
     MUTABLE_LIST_FOR_EACH (item, tmp, open_avm_packs) {
         struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
@@ -656,6 +661,9 @@ Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_a
         if (UNLIKELY(!loaded_module || (globalcontext_insert_module(global, loaded_module) < 0))) {
             fprintf(stderr, "Failed load module: %s\n", module_name);
             free(module_name);
+            if (loaded_module) {
+                module_destroy(loaded_module);
+            }
             return NULL;
         }
 

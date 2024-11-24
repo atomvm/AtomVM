@@ -12,10 +12,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.6] - Unreleased
 
+### Added
+
+- Added the ability to run beams from the CLI for Generic Unix platform (it was already possible with nodejs and emscripten).
+
 ### Fixed
 
 - Fixed specifications of nifs from `esp_adc` module
 - ESP32: fix `gpio:init/1` on GPIO >= 32
+- Adding missing check, passing a non numeric argument to a function expecting a floating point
+might lead to a crash in certain situations.
+- Fixed several bugs in `http_server` (#1366)
+- Fixed generic\_unix `socket_driver` to return `{gen_tcp, closed}` when socket is closed on Linux instead of `{gen_tcp, {recv, 104}}`
+- Fixed a memory leak where modules were not properly destroyed when the global context is destroyd
 
 ## [0.6.5] - 2024-10-15
 
