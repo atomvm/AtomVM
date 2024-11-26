@@ -29,6 +29,7 @@
 #include "dictionary.h"
 #include "interop.h"
 #include "overflow_helpers.h"
+#include "smp.h"
 #include "term.h"
 #include "trace.h"
 #include "unicode.h"
@@ -341,6 +342,74 @@ term bif_erlang_map_get_2(Context *ctx, uint32_t fail_label, term arg1, term arg
         RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
     }
     return term_get_map_value(arg2, pos);
+}
+
+#ifdef AVM_NO_SMP
+static int64_t get_unique_monotonic_integer(void)
+{
+    static int64_t unique = 0;
+
+    if (UNLIKELY(unique == INT64_MAX)) {
+        AVM_ABORT();
+    }
+    return unique++;
+}
+
+#elif ATOMIC_LLONG_LOCK_FREE == 2
+
+static int64_t get_unique_monotonic_integer(void)
+{
+    static int64_t ATOMIC unique = 0;
+
+    if (UNLIKELY(unique == INT64_MAX)) {
+        AVM_ABORT();
+    }
+    return unique++;
+}
+#else
+
+static int64_t get_unique_monotonic_integer(void)
+{
+    static int64_t unique = 0;
+    static SpinLock unique_spinlock;
+
+    if (UNLIKELY(unique == INT64_MAX)) {
+        AVM_ABORT();
+    }
+
+    smp_spinlock_lock(&unique_spinlock);
+    int64_t value = unique++;
+    smp_spinlock_unlock(&unique_spinlock);
+    return value;
+}
+
+#endif
+
+term bif_erlang_unique_integer_0(Context *ctx)
+{
+    int64_t value = get_unique_monotonic_integer();
+    return term_make_maybe_boxed_int64(value, &ctx->heap);
+}
+
+term bif_erlang_unique_integer_1(Context *ctx, uint32_t fail_label, term arg1)
+{
+    int proper = 0;
+    if (UNLIKELY(!term_is_list(arg1))) {
+        RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+    }
+    size_t _len = term_list_length(arg1, &proper);
+    UNUSED(_len);
+    if (UNLIKELY(!proper)) {
+        RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+    }
+
+    // List is checked only for correctness if in the future
+    // we would like to handle monotonic and positive integers separately.
+    //
+    // Right now the implementation is backed by increasing counter
+    // that always covers both options
+    int64_t value = get_unique_monotonic_integer();
+    return term_make_maybe_boxed_int64(value, &ctx->heap);
 }
 
 static inline term make_boxed_int(Context *ctx, uint32_t fail_label, uint32_t live, avm_int_t value)

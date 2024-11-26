@@ -112,7 +112,9 @@
     term_to_binary/1,
     timestamp/0,
     universaltime/0,
-    localtime/0
+    localtime/0,
+    unique_integer/0,
+    unique_integer/1
 ]).
 
 -export_type([
@@ -1313,4 +1315,25 @@ universaltime() ->
 %%-----------------------------------------------------------------------------
 -spec localtime() -> calendar:datetime().
 localtime() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns A unique integer
+%% @doc     Same as erlang:unique_integer([]).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec unique_integer() -> integer().
+unique_integer() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Options list of options.
+%% @returns a unique integer
+%% @doc     Return a unique integer. If positive is passed, returned integer is
+%%          positive. If monotonic is passed, returned integer is monotonically increasing
+%%          across all processes.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec unique_integer([monotonic | positive]) -> integer().
+unique_integer(_Options) ->
     erlang:nif_error(undefined).
