@@ -107,7 +107,8 @@
     term_to_binary/1,
     timestamp/0,
     universaltime/0,
-    localtime/0
+    localtime/0,
+    setnode/2
 ]).
 
 -export_type([
@@ -1253,4 +1254,9 @@ universaltime() ->
 %%-----------------------------------------------------------------------------
 -spec localtime() -> calendar:datetime().
 localtime() ->
+    erlang:nif_error(undefined).
+
+%% @hidden
+-spec setnode(atom(), pos_integer()) -> true.
+setnode(_NodeName, _Creation) ->
     erlang:nif_error(undefined).

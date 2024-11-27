@@ -55,6 +55,7 @@
 #include "synclist.h"
 #include "sys.h"
 #include "term.h"
+#include "term_typedef.h"
 #include "unicode.h"
 #include "utils.h"
 
@@ -164,6 +165,7 @@ static term nif_erlang_function_exported(Context *ctx, int argc, term argv[]);
 static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[]);
 static term nif_erlang_group_leader(Context *ctx, int argc, term argv[]);
 static term nif_erlang_get_module_info(Context *ctx, int argc, term argv[]);
+static term nif_erlang_setnode(Context *ctx, int argc, term argv[]);
 static term nif_erlang_memory(Context *ctx, int argc, term argv[]);
 static term nif_erlang_monitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[]);
@@ -651,6 +653,12 @@ static const struct Nif get_module_info_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_get_module_info
+};
+
+static const struct Nif setnode_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_setnode
 };
 
 static const struct Nif raise_nif =
@@ -3910,6 +3918,42 @@ static term nif_erlang_get_module_info(Context *ctx, int argc, term argv[])
     result = term_list_prepend(module_tuple, result, &ctx->heap);
 
     return result;
+}
+
+static term nif_erlang_setnode(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    VALIDATE_VALUE(argv[0], term_is_atom);
+    VALIDATE_VALUE(argv[1], term_is_integer);
+
+    avm_int64_t creation = term_maybe_unbox_int64(argv[1]);
+    if (UNLIKELY(creation < 0 || creation > ((avm_int64_t) 1) << 32)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int netkernel_pid = globalcontext_get_registered_process(ctx->global, NET_KERNEL_ATOM_INDEX);
+    if (UNLIKELY(netkernel_pid == 0)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    Context *net_kernel = globalcontext_get_process_lock(ctx->global, netkernel_pid);
+    if (IS_NULL_PTR(net_kernel)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    // Take advantage of the lock on net_kernel process
+    if (UNLIKELY(ctx->global->node_name != NONODE_AT_NOHOST_ATOM)) {
+        globalcontext_get_process_unlock(ctx->global, net_kernel);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    ctx->global->node_name = argv[0];
+    ctx->global->creation = (uint32_t) creation;
+
+    context_update_flags(net_kernel, ~NoFlags, Distribution);
+    globalcontext_get_process_unlock(ctx->global, net_kernel);
+
+    return TRUE_ATOM;
 }
 
 struct RefcBinaryAVMPack

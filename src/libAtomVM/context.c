@@ -52,6 +52,7 @@
 #define BYTES_PER_TERM (TERM_BITS / 8)
 
 static struct ResourceMonitor *context_monitors_handle_terminate(Context *ctx);
+static void context_distribution_handle_terminate(Context *ctx);
 static void destroy_extended_registers(Context *ctx, unsigned int live);
 
 Context *context_new(GlobalContext *glb)
@@ -131,6 +132,11 @@ void context_destroy(Context *ctx)
 
     // Ensure process is not registered
     globalcontext_maybe_unregister_process_id(ctx->global, ctx->process_id);
+
+    // Handle distribution termination
+    if (UNLIKELY(ctx->flags & Distribution)) {
+        context_distribution_handle_terminate(ctx);
+    }
 
     // When monitor message is sent, process is no longer in the table
     // and is no longer registered either.
@@ -446,6 +452,14 @@ static struct ResourceMonitor *context_monitors_handle_terminate(Context *ctx)
         }
     }
     return result;
+}
+
+static void context_distribution_handle_terminate(Context *ctx)
+{
+    // For now, the only process with Distribution flag set is net_kernel.
+    GlobalContext *glb = ctx->global;
+    glb->node_name = NONODE_AT_NOHOST_ATOM;
+    glb->creation = 0;
 }
 
 int context_link(Context *ctx, term link_pid)
