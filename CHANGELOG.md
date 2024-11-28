@@ -19,6 +19,7 @@ might lead to a crash in certain situations.
 - Fixed several bugs in `http_server` (#1366)
 - Fixed generic\_unix `socket_driver` to return `{gen_tcp, closed}` when socket is closed on Linux instead of `{gen_tcp, {recv, 104}}`
 - Fixed a memory leak where modules were not properly destroyed when the global context is destroyd
+- alisp: fix support to variables that are not binaries or integers.
 
 ## [0.6.5] - 2024-10-15
 
