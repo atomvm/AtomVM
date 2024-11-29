@@ -491,6 +491,23 @@ typedef struct
     int index;
 } dreg_gc_safe_t;
 
+#define X_REG_FLAG 1
+
+static inline term *with_x_reg_flag(term *xptr)
+{
+    return (term *) (((uintptr_t) xptr) | X_REG_FLAG);
+}
+
+static inline bool has_x_reg_flag(term *xptr)
+{
+    return ((uintptr_t) xptr) & X_REG_FLAG;
+}
+
+static inline term *to_x_reg_ptr(term *xptr)
+{
+    return (term *) (((uintptr_t) xptr) & ~((uintptr_t) X_REG_FLAG));
+}
+
 static dreg_t extended_register_ptr(Context *ctx, unsigned int index)
 {
     struct ListHead *item;
@@ -549,7 +566,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 
 // TODO: fix register type heuristics, there is a chance that 'y' might be an "extended" x reg
 #define T_DEST_REG_GC_SAFE(dreg_gc_safe) \
-    ((dreg).base == x_regs) ? 'x' : 'y', ((dreg).index)
+    (has_x_reg_flag((dreg).base) ? 'x' : 'y'), ((dreg).index)
 
 #define DECODE_COMPACT_TERM(dest_term, decode_pc)                                                                       \
 {                                                                                                                       \
@@ -737,8 +754,9 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 #define READ_DEST_REGISTER(dreg) *(dreg)
 
 #define READ_DEST_REGISTER_GC_SAFE(dreg_gc_safe) \
-    ((dreg_gc_safe).base == x_regs ? x_regs[(dreg_gc_safe).index] : ctx->e[(dreg_gc_safe).index])
-
+    (has_x_reg_flag((dreg_gc_safe).base) ? \
+            *to_x_reg_ptr((dreg_gc_safe).base) : \
+            ctx->e[(dreg_gc_safe).index])
 
 #define WRITE_REGISTER(dreg, value)                                                     \
 {                                                                                       \
@@ -747,8 +765,8 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 
 #define WRITE_REGISTER_GC_SAFE(dreg_gc_safe, value)                                     \
 {                                                                                       \
-    if ((dreg_gc_safe).base == x_regs) {                                                \
-        x_regs[(dreg_gc_safe).index] = value;                                           \
+    if (has_x_reg_flag((dreg_gc_safe).base)) {                                          \
+        *(to_x_reg_ptr((dreg_gc_safe).base)) = value;                                   \
     } else {                                                                            \
         ctx->e[(dreg_gc_safe).index] = value;                                           \
     }                                                                                   \
@@ -800,6 +818,8 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
     }                                                                                                           \
 }
 
+// NOTE: (dreg_gc_safe).index is initialized for x registers even if not used to avoid compiler
+// warnings about unitialized variables (-maybe-uninitialized)
 #define DECODE_DEST_REGISTER_GC_SAFE(dreg_gc_safe, decode_pc)                                                   \
 {                                                                                                               \
     uint8_t first_byte = *(decode_pc)++;                                                                        \
@@ -807,7 +827,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
     uint8_t reg_index = (first_byte >> 4);                                                                      \
     switch (reg_type) {                                                                                         \
         case COMPACT_XREG:                                                                                      \
-            (dreg_gc_safe).base = x_regs;                                                                       \
+            (dreg_gc_safe).base = with_x_reg_flag(&x_regs[reg_index]);                                          \
             (dreg_gc_safe).index = reg_index;                                                                   \
             break;                                                                                              \
         case COMPACT_YREG:                                                                                      \
@@ -821,8 +841,8 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                 if (IS_NULL_PTR(reg_base)) {                                                                    \
                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);                                                            \
                 }                                                                                               \
-                (dreg_gc_safe).base = reg_base;                                                                 \
-                (dreg_gc_safe).index = 0;                                                                       \
+                (dreg_gc_safe).base = with_x_reg_flag(reg_base);                                                \
+                (dreg_gc_safe).index = reg_index;                                                               \
             } else {                                                                                            \
                 VM_ABORT();                                                                                     \
             }                                                                                                   \
