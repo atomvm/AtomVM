@@ -42,6 +42,7 @@ extern "C" {
 const struct ExportedFunction *bif_registry_get_handler(AtomString module, AtomString function, int arity);
 
 term bif_erlang_self_0(Context *ctx);
+term bif_erlang_node_0(Context *ctx);
 term bif_erlang_byte_size_1(Context *ctx, uint32_t fail_label, int live, term arg1);
 term bif_erlang_bit_size_1(Context *ctx, uint32_t fail_label, int live, term arg1);
 term bif_erlang_length_1(Context *ctx, uint32_t fail_label, int live, term arg1);
@@ -55,6 +56,7 @@ term bif_erlang_is_integer_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_list_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_number_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_pid_1(Context *ctx, uint32_t fail_label, term arg1);
+term bif_erlang_is_port_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_reference_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_tuple_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_map_1(Context *ctx, uint32_t fail_label, term arg1);
