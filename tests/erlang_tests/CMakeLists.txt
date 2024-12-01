@@ -505,6 +505,7 @@ compile_erlang(test_utf8_atoms)
 compile_erlang(twentyone_param_function)
 compile_erlang(complex_list_match_xregs)
 compile_erlang(twentyone_param_fun)
+compile_erlang(gc_safe_x_reg_write)
 
 compile_erlang(test_fun_to_list)
 compile_erlang(maps_nifs)
@@ -981,6 +982,7 @@ add_custom_target(erlang_test_modules DEPENDS
     twentyone_param_function.beam
     complex_list_match_xregs.beam
     twentyone_param_fun.beam
+    gc_safe_x_reg_write.beam
 
     test_fun_to_list.beam
     maps_nifs.beam
