@@ -6230,8 +6230,8 @@ wait_timeout_trap_handler:
 
 #if MAXIMUM_OTP_COMPILER_VERSION >= 22
             case OP_PUT_TUPLE2: {
-                GC_SAFE_DEST_REGISTER(dreg);
-                DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
+                DEST_REGISTER(dreg);
+                DECODE_DEST_REGISTER(dreg, pc);
                 DECODE_EXTENDED_LIST_TAG(pc);
                 uint32_t size;
                 DECODE_LITERAL(size, pc)
@@ -6257,7 +6257,7 @@ wait_timeout_trap_handler:
                 }
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    WRITE_REGISTER_GC_SAFE(dreg, t);
+                    WRITE_REGISTER(dreg, t);
                 #endif
                 break;
             }
