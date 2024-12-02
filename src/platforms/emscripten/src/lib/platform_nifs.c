@@ -41,6 +41,7 @@
 #include <trace.h>
 
 #include "emscripten_sys.h"
+#include "md5.h"
 #include "memory.h"
 #include "platform_defaultatoms.h"
 #include "platform_nifs.h"
@@ -766,6 +767,62 @@ HTML5_REGISTER_CALLBACK(touch, EMSCRIPTEN_EVENT_TOUCHCANCEL, touchcancel);
         return &emscripten_unregister_##callback##_callback_nif;       \
     }
 
+static InteropFunctionResult md5_hash_vendored_fold_fun(term t, void *accum)
+{
+    MD5Context *ctx = (MD5Context *) accum;
+    if (term_is_integer(t)) {
+        avm_int64_t tmp = term_maybe_unbox_int64(t);
+        if (tmp < 0 || tmp > 255) {
+            return InteropBadArg;
+        }
+        uint8_t val = (uint8_t) tmp;
+        md5Update(ctx, &val, 1);
+    } else /* term_is_binary(t) */ {
+        md5Update(ctx, (uint8_t *) term_binary_data(t), term_binary_size(t));
+    }
+    return InteropOk;
+}
+
+static bool do_md5_hash_vendored(term data, unsigned char *dst)
+{
+    MD5Context ctx;
+    md5Init(&ctx);
+
+    InteropFunctionResult result = interop_chardata_fold(data, md5_hash_vendored_fold_fun, NULL, (void *) &ctx);
+    if (UNLIKELY(result != InteropOk)) {
+        return false;
+    }
+
+    md5Finalize(&ctx);
+    memcpy(dst, ctx.digest, 16);
+
+    return true;
+}
+
+#define MAX_MD_SIZE 64
+static term nif_crypto_md5_vendored_hash(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term data = argv[0];
+
+    unsigned char digest[MAX_MD_SIZE];
+    size_t digest_len = 16;
+
+    if (UNLIKELY(!do_md5_hash_vendored(data, digest))) {
+        RAISE_ERROR(BADARG_ATOM)
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(digest_len)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    return term_from_literal_binary(digest, digest_len, &ctx->heap, ctx->global);
+}
+
+static const struct Nif crypto_md5_vendored_hash_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_md5_vendored_hash
+};
+
 const struct Nif *platform_nifs_get_nif(const char *nifname)
 {
     if (memcmp("atomvm:", nifname, strlen("atomvm:")) == 0) {
@@ -776,6 +833,9 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         if (strcmp("random/0", nifname) == 0) {
             return &atomvm_random_nif;
         }
+    }
+    if (strcmp("erlang:md5/1", nifname) == 0) {
+        return &crypto_md5_vendored_hash_nif;
     }
     if (memcmp("crypto:", nifname, strlen("crypto:")) == 0) {
         return otp_crypto_nif_get_nif(nifname);
