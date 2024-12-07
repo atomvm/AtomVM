@@ -57,8 +57,11 @@ extern "C" {
 #define TERM_BOXED_FLOAT 0x18
 #define TERM_BOXED_REFC_BINARY 0x20
 #define TERM_BOXED_HEAP_BINARY 0x24
-#define TERM_BOXED_MAP 0x3C
 #define TERM_BOXED_SUB_BINARY 0x28
+#define TERM_BOXED_MAP 0x2C
+#define TERM_BOXED_EXTERNAL_PID 0x30
+#define TERM_BOXED_EXTERNAL_PORT 0x34
+#define TERM_BOXED_EXTERNAL_REF 0x38
 
 #define TERM_UNUSED 0x2B
 #define TERM_RESERVED_MARKER(x) ((x << 6) | TERM_UNUSED)
@@ -84,6 +87,13 @@ extern "C" {
 #define BOXED_FUN_SIZE 3
 #define FLOAT_SIZE (sizeof(float_term_t) / sizeof(term) + 1)
 #define REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
+#if TERM_BYTES == 8
+    #define EXTERNAL_PID_SIZE 3
+#elif TERM_BYTES == 4
+    #define EXTERNAL_PID_SIZE 4
+#else
+    #error
+#endif
 #define TUPLE_SIZE(elems) ((int) (elems + 1))
 #define CONS_SIZE 2
 #define REFC_BINARY_CONS_OFFSET 4
@@ -115,9 +125,15 @@ extern "C" {
 // "#Ref<0.0.0." ">\0" (13 chars)
 #define REF_AS_CSTRING_LEN 33
 
-// 2^32 = 4294967296 (10 chars)
+// 2^28-1 = 268435455 (9 chars)
 // "<0." ".0>\0" (7 chars)
-#define PID_AS_CSTRING_LEN 17
+#define LOCAL_PID_AS_CSTRING_LEN 16
+
+// 2^26-1 = 67108863 (8 chars) (node, atom index)
+// 2^28-1 = 268435455 (9 chars) (pid number)
+// 2^32-1 = 4294967295 (10 chars) (pid serial)
+// "<" "." "." ">\0" (5 chars)
+#define EXTERNAL_PID_AS_CSTRING_LEN 32
 
 #ifndef TYPEDEF_GLOBALCONTEXT
 #define TYPEDEF_GLOBALCONTEXT
@@ -307,39 +323,21 @@ static inline bool term_is_boxed(term t)
 }
 
 /**
- * @brief Checks if a term is a movable boxed value
- *
- * @details Returns \c true if a term is a boxed value that can be safely copied with memcpy.
- * @param t the term that will checked.
- * @return \c true if check succeeds, \c false otherwise.
- */
-static inline bool term_is_movable_boxed(term t)
-{
-    /* boxed: 10 */
-    if ((t & 0x3) == 0x2) {
-        const term *boxed_value = term_to_const_term_ptr(t);
-        switch (boxed_value[0] & TERM_BOXED_TAG_MASK) {
-            case 0x10:
-                return true;
-
-            default:
-                return false;
-        }
-    } else {
-        return false;
-    }
-}
-
-/**
  * @brief Returns size of a boxed term from its header
  *
- * @details Returns the size that is stored in boxed term header most significant bits.
+ * @details Returns the size that is stored in boxed term header most significant bits for variable size boxed terms.
  * @param header the boxed term header.
  * @return the size of the boxed term that follows the header. 0 is returned if the boxed term is just the header.
  */
 static inline size_t term_get_size_from_boxed_header(term header)
 {
-    return header >> 6;
+    int masked_value = header & TERM_BOXED_TAG_MASK;
+    switch (masked_value) {
+        case TERM_BOXED_EXTERNAL_PID:
+            return EXTERNAL_PID_SIZE - 1;
+        default:
+            return header >> 6;
+    }
 }
 
 /**
@@ -476,6 +474,57 @@ static inline bool term_is_catch_label(term t)
 }
 
 /**
+ * @brief Checks if a term is a local pid
+ *
+ * @details Returns \c true if a term is a process id, otherwise \c false.
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_local_pid(term t)
+{
+    /* integer: 00 11 */
+    return ((t & 0xF) == 0x3);
+}
+
+/**
+ * @brief Checks if a term is an external pid
+ *
+ * @details Returns \c true if a term is an external process id, otherwise \c false.
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_external_pid(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        if ((boxed_value[0] & 0x3F) == TERM_BOXED_EXTERNAL_PID) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * @brief Checks if a term is an external thing
+ *
+ * @details Returns \c true if a term is an thing, otherwise \c false.
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_external(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        if ((boxed_value[0] & 0x33) == TERM_BOXED_EXTERNAL_PID) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * @brief Checks if a term is a pid
  *
  * @details Returns \c true if a term is a process id, otherwise \c false.
@@ -484,8 +533,26 @@ static inline bool term_is_catch_label(term t)
  */
 static inline bool term_is_pid(term t)
 {
-    /* integer: 00 11 */
-    return ((t & 0xF) == 0x3);
+    return term_is_local_pid(t) || term_is_external_pid(t);
+}
+
+/**
+ * @brief Checks if a term is an external port
+ *
+ * @details Returns \c true if a term is an external port, otherwise \c false.
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_external_port(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        if ((boxed_value[0] & 0x3F) == TERM_BOXED_EXTERNAL_PORT) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -499,7 +566,7 @@ static inline bool term_is_tuple(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == 0) {
+        if ((boxed_value[0] & 0x3F) == TERM_BOXED_TUPLE) {
             return true;
         }
     }
@@ -518,7 +585,8 @@ static inline bool term_is_reference(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == TERM_BOXED_REF) {
+        const uint32_t header = boxed_value[0] & 0x3F;
+        if (header == TERM_BOXED_REF || header == TERM_BOXED_EXTERNAL_REF) {
             return true;
         }
     }
@@ -687,7 +755,7 @@ static inline int term_to_catch_label_and_module(term t, int *module_index)
  */
 static inline int32_t term_to_local_process_id(term t)
 {
-    TERM_DEBUG_ASSERT(term_is_pid(t));
+    TERM_DEBUG_ASSERT(term_is_local_pid(t));
 
     return t >> 4;
 }
@@ -1205,6 +1273,114 @@ static inline uint64_t term_to_ref_ticks(term rt)
 
     #elif TERM_BYTES == 4
         return (boxed_value[1] << 4) | boxed_value[2];
+
+    #else
+        #error "terms must be either 32 or 64 bit wide"
+    #endif
+}
+
+/**
+ * @brief Get a pid term from node, process_id, serial and creation
+ *
+ * @param node name of the node (atom)
+ * @param process_id process id on that node
+ * @param serial serial of process id on that node
+ * @param creation creation of that node
+ * @param heap the heap to allocate memory in
+ * @return an external heap term created using given parameters.
+ */
+static inline term term_from_external_process_id(term node, uint32_t process_id, uint32_t serial, uint32_t creation, Heap *heap)
+{
+    term *boxed_value = memory_heap_alloc(heap, EXTERNAL_PID_SIZE);
+    int atom_index = term_to_atom_index(node);
+    boxed_value[0] = (atom_index << 6) | TERM_BOXED_EXTERNAL_PID;
+
+    #if TERM_BYTES == 8
+        boxed_value[1] = (term) (((uint64_t) process_id) << 32 | creation);
+        boxed_value[2] = (term) serial;
+
+    #elif TERM_BYTES == 4
+        boxed_value[1] = (term) creation;
+        boxed_value[2] = (term) process_id;
+        boxed_value[3] = (term) serial;
+
+    #else
+        #error "terms must be either 32 or 64 bit wide"
+    #endif
+
+    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+}
+
+/**
+ * @brief Get the name of a node for a given external thing
+ *
+ * @param term external term
+ * @return the name of the node
+ */
+static inline term term_to_external_node(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_external(t));
+
+    const term *boxed_value = term_to_const_term_ptr(t);
+
+    return TERM_FROM_ATOM_INDEX(boxed_value[0] >> 6);
+}
+
+/**
+ * @brief Get the creation for a given external thing
+ *
+ * @param term external term
+ * @return the serial of the external pid
+ */
+static inline uint32_t term_to_external_node_creation(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_external_pid(t));
+
+    const term *boxed_value = term_to_const_term_ptr(t);
+
+    return (uint32_t) boxed_value[1];
+}
+
+/**
+ * @brief Get the process id of an external pid
+ *
+ * @param term external pid
+ * @return the process id of the external pid
+ */
+static inline uint32_t term_to_external_pid_process_id(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_external_pid(t));
+
+    const term *boxed_value = term_to_const_term_ptr(t);
+
+    #if TERM_BYTES == 8
+        return (uint32_t) (boxed_value[1] >> 32);
+
+    #elif TERM_BYTES == 4
+        return (uint32_t) boxed_value[2];
+
+    #else
+        #error "terms must be either 32 or 64 bit wide"
+    #endif
+}
+
+/**
+ * @brief Get the serial of an external pid
+ *
+ * @param term external term
+ * @return the serial of the external pid
+ */
+static inline uint32_t term_to_external_pid_serial(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_external_pid(t));
+
+    const term *boxed_value = term_to_const_term_ptr(t);
+
+    #if TERM_BYTES == 8
+        return (uint32_t) boxed_value[2];
+
+    #elif TERM_BYTES == 4
+        return (uint32_t) boxed_value[3];
 
     #else
         #error "terms must be either 32 or 64 bit wide"
