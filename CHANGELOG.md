@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for external pids and encoded pids in external terms
 - Added support for external refs and encoded refs in external terms
 - Introduce ports to represent native processes and added support for external ports and encoded ports in external terms
+- Added support for socket asynchronous API for `recv` and `recvfrom`.
 
 ## [0.6.6] - Unreleased
 
