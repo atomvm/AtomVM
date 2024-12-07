@@ -189,9 +189,9 @@ handshake_loop(SSLContext, Socket) ->
             case socket:nif_select_read(Socket, Ref) of
                 ok ->
                     receive
-                        {select, _SocketResource, Ref, ready_input} ->
+                        {'$socket', Socket, select, Ref} ->
                             handshake_loop(SSLContext, Socket);
-                        {closed, Ref} ->
+                        {'$socket', Socket, abort, {Ref, closed}} ->
                             ok = socket:close(Socket),
                             {error, closed}
                     end;
@@ -242,9 +242,9 @@ close_notify_loop(SSLContext, Socket) ->
             case socket:nif_select_read(Socket, Ref) of
                 ok ->
                     receive
-                        {select, _SocketResource, Ref, ready_input} ->
+                        {'$socket', Socket, select, Ref} ->
                             close_notify_loop(SSLContext, Socket);
-                        {closed, Ref} ->
+                        {'$socket', Socket, abort, {Ref, closed}} ->
                             ok = socket:close(Socket),
                             {error, closed}
                     end;
@@ -274,9 +274,9 @@ send({SSLContext, Socket} = SSLSocket, Binary) ->
             case socket:nif_select_read(Socket, Ref) of
                 ok ->
                     receive
-                        {select, _SocketResource, Ref, ready_input} ->
+                        {'$socket', Socket, select, Ref} ->
                             send(SSLSocket, Binary);
-                        {closed, Ref} ->
+                        {'$socket', Socket, abort, {Ref, closed}} ->
                             {error, closed}
                     end;
                 {error, _Reason} = Error ->
@@ -309,9 +309,9 @@ recv0({SSLContext, Socket} = SSLSocket, Length, Remaining, Acc) ->
             case socket:nif_select_read(Socket, Ref) of
                 ok ->
                     receive
-                        {select, _SocketResource, Ref, ready_input} ->
+                        {'$socket', Socket, select, Ref} ->
                             recv0(SSLSocket, Length, Remaining, Acc);
-                        {closed, Ref} ->
+                        {'$socket', Socket, abort, {Ref, closed}} ->
                             {error, closed}
                     end;
                 {error, _Reason} = Error ->
