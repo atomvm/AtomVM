@@ -149,7 +149,8 @@ static void udp_recv_cb(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip
 struct SocketResource
 {
     int fd;
-    uint64_t ref_ticks;
+    uint64_t socket_ref_ticks;
+    uint64_t select_ref_ticks;
     int32_t selecting_process_id;
     ErlNifMonitor selecting_process_monitor;
     size_t buf_size;
@@ -166,7 +167,8 @@ struct SocketResource
         struct tcp_pcb *tcp_pcb;
         struct udp_pcb *udp_pcb;
     };
-    uint64_t ref_ticks;
+    uint64_t socket_ref_ticks;
+    uint64_t select_ref_ticks;
     int32_t selecting_process_id; // trapped or selecting
     ErlNifMonitor selecting_process_monitor;
     bool linger_on;
@@ -234,6 +236,9 @@ static const AtomStringIntPair otp_socket_setopt_level_table[] = {
 #endif
 
 static ErlNifResourceType *socket_resource_type;
+
+#define SOCKET_MAKE_SELECT_NOTIFICATION_SIZE (TUPLE_SIZE(4) + REF_SIZE + TUPLE_SIZE(2) + REF_SIZE + TERM_BOXED_RESOURCE_SIZE)
+static term socket_make_select_notification(struct SocketResource *rsrc_obj, Heap *heap);
 
 //
 // resource operations
@@ -356,12 +361,40 @@ static const ErlNifResourceTypeInit SocketResourceTypeInit = {
     .down = socket_down,
 };
 
+// Make a notification message, using SOCKET_MAKE_SELECT_NOTIFICATION_SIZE on heap
+static term socket_make_select_notification(struct SocketResource *rsrc_obj, Heap *heap)
+{
+    term notification = term_alloc_tuple(4, heap);
+    term_put_tuple_element(notification, 0, DOLLAR_SOCKET_ATOM);
+    term socket_tuple = term_alloc_tuple(2, heap);
+    term_put_tuple_element(socket_tuple, 0, term_from_resource(rsrc_obj, heap));
+    struct RefcBinary *rsrc_refc = refc_binary_from_data(rsrc_obj);
+    refc_binary_increment_refcount(rsrc_refc);
+    term socket_ref;
+    if (rsrc_obj->socket_ref_ticks == 0) {
+        socket_ref = UNDEFINED_ATOM;
+    } else {
+        socket_ref = term_from_ref_ticks(rsrc_obj->socket_ref_ticks, heap);
+    }
+    term_put_tuple_element(socket_tuple, 1, socket_ref);
+    term_put_tuple_element(notification, 1, socket_tuple);
+    term_put_tuple_element(notification, 2, SELECT_ATOM);
+    term select_ref;
+    if (rsrc_obj->select_ref_ticks == 0) {
+        select_ref = UNDEFINED_ATOM;
+    } else {
+        select_ref = term_from_ref_ticks(rsrc_obj->select_ref_ticks, heap);
+    }
+    term_put_tuple_element(notification, 3, select_ref);
+    return notification;
+}
+
 // select emulation for lwIP that doesn't have select.
 #if OTP_SOCKET_LWIP
 static void select_event_send_notification_from_nif(struct SocketResource *rsrc_obj, Context *locked_ctx)
 {
-    BEGIN_WITH_STACK_HEAP(SELECT_EVENT_NOTIFICATION_SIZE, heap)
-    term notification = select_event_make_notification(rsrc_obj, rsrc_obj->ref_ticks, false, &heap);
+    BEGIN_WITH_STACK_HEAP(SOCKET_MAKE_SELECT_NOTIFICATION_SIZE, heap)
+    term notification = socket_make_select_notification(rsrc_obj, &heap);
     mailbox_send(locked_ctx, notification);
     END_WITH_STACK_HEAP(heap, locked_ctx->global)
 }
@@ -370,8 +403,8 @@ static void select_event_send_notification_from_handler(struct SocketResource *r
 {
     struct RefcBinary *rsrc_refc = refc_binary_from_data(rsrc_obj);
     GlobalContext *global = rsrc_refc->resource_type->global;
-    BEGIN_WITH_STACK_HEAP(SELECT_EVENT_NOTIFICATION_SIZE, heap)
-    term notification = select_event_make_notification(rsrc_obj, rsrc_obj->ref_ticks, false, &heap);
+    BEGIN_WITH_STACK_HEAP(SOCKET_MAKE_SELECT_NOTIFICATION_SIZE, heap)
+    term notification = socket_make_select_notification(rsrc_obj, &heap);
     globalcontext_send_message(global, process_id, notification);
     END_WITH_STACK_HEAP(heap, global)
 }
@@ -539,6 +572,14 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
         TRACE("nif_socket_open: Created socket fd=%i\n", rsrc_obj->fd);
         rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
 
+        if (type != SOCK_STREAM) {
+            // TCP sockets are made non-blocking after connect, for now.
+            if (UNLIKELY(fcntl(rsrc_obj->fd, F_SETFL, O_NONBLOCK) != 0)) {
+                AVM_LOGE(TAG, "Unable to configure fd=%d to be non blocking.", rsrc_obj->fd);
+                return make_errno_tuple(ctx);
+            }
+        }
+
 #elif OTP_SOCKET_LWIP
     if (domain == PF_INET && type == SOCK_STREAM && protocol == IPPROTO_TCP) {
         LWIP_BEGIN();
@@ -592,6 +633,7 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
 
         term socket_term = term_alloc_tuple(2, &ctx->heap);
         uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+        rsrc_obj->socket_ref_ticks = ref_ticks;
         term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
         term_put_tuple_element(socket_term, 0, obj);
         term_put_tuple_element(socket_term, 1, ref);
@@ -633,19 +675,25 @@ bool term_is_otp_socket(term socket_term)
 
 static int send_closed_notification(Context *ctx, term socket_term, int32_t selecting_process_id, struct SocketResource *rsrc_obj)
 {
-    // send a {closed, Ref | undefined} message to the pid
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2) + REF_SIZE, 1, &socket_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    // send a {'$socket', Socket, abort, {Ref | undefined, closed}} message to the pid
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(4) + TUPLE_SIZE(2) + REF_SIZE, 1, &socket_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
         return -1;
     }
 
+    term socket_tuple = term_alloc_tuple(4, &ctx->heap);
+    term_put_tuple_element(socket_tuple, 0, DOLLAR_SOCKET_ATOM);
+    term_put_tuple_element(socket_tuple, 1, socket_term);
+    term_put_tuple_element(socket_tuple, 2, ABORT_ATOM);
+
     term error_tuple = term_alloc_tuple(2, &ctx->heap);
-    term_put_tuple_element(error_tuple, 0, CLOSED_ATOM);
-    term ref = (rsrc_obj->ref_ticks == 0) ? UNDEFINED_ATOM : term_from_ref_ticks(rsrc_obj->ref_ticks, &ctx->heap);
-    term_put_tuple_element(error_tuple, 1, ref);
+    term ref = (rsrc_obj->select_ref_ticks == 0) ? UNDEFINED_ATOM : term_from_ref_ticks(rsrc_obj->select_ref_ticks, &ctx->heap);
+    term_put_tuple_element(error_tuple, 0, ref);
+    term_put_tuple_element(error_tuple, 1, CLOSED_ATOM);
+    term_put_tuple_element(socket_tuple, 3, error_tuple);
 
     TRACE("nif_socket_close: Sending msg to process %i, rsrc_obj = %p\n", (int) selecting_process_id, (void *) rsrc_obj);
-    globalcontext_send_message(ctx->global, selecting_process_id, error_tuple);
+    globalcontext_send_message(ctx->global, selecting_process_id, socket_tuple);
 
     return 0;
 }
@@ -698,8 +746,7 @@ static term nif_socket_close(Context *ctx, int argc, term argv[])
             // calling process. In this case we don't send any notification.
             //
             if (selecting_process_id != ctx->process_id) {
-
-                // send a {closed, Ref | undefined} message to the pid
+                // send a {'$socket', Socket, abort, {Ref | undefined, closed}} message to the pid
                 if (UNLIKELY(send_closed_notification(ctx, argv[0], selecting_process_id, rsrc_obj) < 0)) {
                     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -717,11 +764,11 @@ static term nif_socket_close(Context *ctx, int argc, term argv[])
         TRACE("Double close on socket fd %i", rsrc_obj->fd);
     }
 #elif OTP_SOCKET_LWIP
-    // If the socket is being selected by another process, send a closed tuple.
+    // If the socket is being selected by another process, send a closed notification.
     if (rsrc_obj->socket_state & SocketStateSelectingRead
         && rsrc_obj->selecting_process_id != INVALID_PROCESS_ID
         && rsrc_obj->selecting_process_id != ctx->process_id) {
-        // send a {closed, Ref | undefined} message to the pid
+        // send a {'$socket', Socket, abort, {Ref | undefined, closed}} message to the pid
         if (UNLIKELY(send_closed_notification(ctx, argv[0], rsrc_obj->selecting_process_id, rsrc_obj) < 0)) {
             SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -967,7 +1014,7 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
         rsrc_obj->selecting_process_id = ctx->process_id;
     }
 
-    rsrc_obj->ref_ticks = (select_ref_term == UNDEFINED_ATOM) ? 0 : term_to_ref_ticks(select_ref_term);
+    rsrc_obj->select_ref_ticks = (select_ref_term == UNDEFINED_ATOM) ? 0 : term_to_ref_ticks(select_ref_term);
 
 #if OTP_SOCKET_BSD
     TRACE("rsrc_obj->fd=%i\n", (int) rsrc_obj->fd);
@@ -976,7 +1023,13 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
     if (rsrc_obj->fd == CLOSED_FD) {
         send_closed_notification(ctx, argv[0], ctx->process_id, rsrc_obj);
     } else {
-        if (UNLIKELY(enif_select(erl_nif_env_from_context(ctx), rsrc_obj->fd, ERL_NIF_SELECT_READ, rsrc_obj, &ctx->process_id, select_ref_term) < 0)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, SOCKET_MAKE_SELECT_NOTIFICATION_SIZE, 2, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
+            SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term notification = socket_make_select_notification(rsrc_obj, &ctx->heap);
+        if (UNLIKELY(enif_select_read(erl_nif_env_from_context(ctx), rsrc_obj->fd, rsrc_obj, &ctx->process_id, notification, NULL) < 0)) {
             enif_demonitor_process(env, rsrc_obj, &rsrc_obj->selecting_process_monitor);
             rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
             SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
@@ -1635,6 +1688,7 @@ static term make_accepted_socket_term(struct SocketResource *conn_rsrc_obj, Heap
 
     term socket_term = term_alloc_tuple(2, heap);
     uint64_t ref_ticks = globalcontext_get_ref_ticks(global);
+    conn_rsrc_obj->socket_ref_ticks = ref_ticks;
     term ref = term_from_ref_ticks(ref_ticks, heap);
     term_put_tuple_element(socket_term, 0, obj);
     term_put_tuple_element(socket_term, 1, ref);
@@ -1681,6 +1735,11 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
 #if OTP_SOCKET_BSD
     struct sockaddr_in clientaddr;
     socklen_t clientlen = sizeof(clientaddr);
+    if (UNLIKELY(fcntl(rsrc_obj->fd, F_SETFL, O_NONBLOCK) != 0)) {
+        AVM_LOGE(TAG, "Unable to configure fd=%d to be non blocking.", rsrc_obj->fd);
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        return make_errno_tuple(ctx);
+    }
     int fd = accept(rsrc_obj->fd, (struct sockaddr *) &clientaddr, &clientlen);
     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
     if (UNLIKELY(fd == -1 || fd == CLOSED_FD)) {
@@ -1689,7 +1748,11 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
         term reason = (err == ECONNABORTED) ? CLOSED_ATOM : posix_errno_to_term(err, global);
         return make_error_tuple(reason, ctx);
     } else {
-
+        if (UNLIKELY(fcntl(fd, F_SETFL, O_NONBLOCK) != 0)) {
+            AVM_LOGE(TAG, "Unable to configure fd=%d to be non blocking.", fd);
+            close(fd);
+            return make_errno_tuple(ctx);
+        }
         struct SocketResource *conn_rsrc_obj = enif_alloc_resource(socket_resource_type, sizeof(struct SocketResource));
         conn_rsrc_obj->fd = fd;
         conn_rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
@@ -1714,6 +1777,7 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
 
         term socket_term = term_alloc_tuple(2, &ctx->heap);
         uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+        conn_rsrc_obj->socket_ref_ticks = ref_ticks;
         term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
         term_put_tuple_element(socket_term, 0, new_resource);
         term_put_tuple_element(socket_term, 1, ref);
@@ -1806,9 +1870,10 @@ static ssize_t do_socket_recv(struct SocketResource *rsrc_obj, uint8_t *buf, siz
         term address = inet_make_addr4(ntohl(addr.sin_addr.s_addr), heap);
         term port_number = term_from_int(ntohs(addr.sin_port));
 
-        term map = term_alloc_map(2, heap);
+        term map = term_alloc_map(3, heap);
         term_set_map_assoc(map, 0, ADDR_ATOM, address);
-        term_set_map_assoc(map, 1, PORT_ATOM, port_number);
+        term_set_map_assoc(map, 1, FAMILY_ATOM, INET_ATOM);
+        term_set_map_assoc(map, 2, PORT_ATOM, port_number);
         *from = map;
     } else {
         res = recv(rsrc_obj->fd, buf, len, flags);
@@ -1893,7 +1958,7 @@ static ssize_t do_socket_recv(struct SocketResource *rsrc_obj, uint8_t *buf, siz
             term port_number = term_from_int(port_u16);
 
             term map = term_alloc_map(2, heap);
-            term_set_map_assoc(map, 0, globalcontext_make_atom(global, addr_atom), address);
+            term_set_map_assoc(map, 0, ADDR_ATOM, address);
             term_set_map_assoc(map, 1, PORT_ATOM, port_number);
 
             *from = map;
@@ -1925,6 +1990,12 @@ static term nif_socket_recv_with_peek(Context *ctx, term resource_term, struct S
     ssize_t res = recvfrom(rsrc_obj->fd, NULL, rsrc_obj->buf_size, MSG_PEEK | flags, NULL, NULL);
     TRACE("%li bytes available.\n", (long int) res);
     if (res < 0) {
+        if (errno == EAGAIN) {
+            return make_error_tuple(TIMEOUT_ATOM, ctx);
+        } else if (errno == ECONNRESET) {
+            TRACE("Peer closed connection.");
+            return make_error_tuple(CLOSED_ATOM, ctx);
+        }
         AVM_LOGI(TAG, "Unable to receive data on fd %i.  errno=%i", rsrc_obj->fd, errno);
         return make_errno_tuple(ctx);
     } else if (res == 0) {
@@ -2004,15 +2075,16 @@ static term nif_socket_recv_without_peek(Context *ctx, term resource_term, struc
 
         if (res < 0) {
             int err = errno;
-            term reason = (err == ECONNRESET) ? globalcontext_make_atom(global, ATOM_STR("\xA", "econnreset")) : posix_errno_to_term(err, global);
-
             if (err == ECONNRESET) {
-                AVM_LOGI(TAG, "Peer closed connection.");
+                TRACE("Peer closed connection.");
+                return make_error_tuple(CLOSED_ATOM, ctx);
+            } else if (err == EAGAIN) {
+                return make_error_tuple(TIMEOUT_ATOM, ctx);
             } else {
-                AVM_LOGE(TAG, "Unable to read data on socket %i.  errno=%i", rsrc_obj->fd, errno);
+                TRACE("Unable to read data on socket %i.  errno=%i", rsrc_obj->fd, errno);
             }
 
-            return make_error_tuple(reason, ctx);
+            return make_errno_tuple(ctx);
         }
 
         if (res == 0) {
@@ -2533,6 +2605,11 @@ static term nif_socket_connect(Context *ctx, int argc, term argv[])
             return make_error_tuple(CLOSED_ATOM, ctx);
         }
     } else if (res == 0) {
+        if (UNLIKELY(fcntl(rsrc_obj->fd, F_SETFL, O_NONBLOCK) != 0)) {
+            AVM_LOGE(TAG, "Unable to configure fd=%d to be non blocking.", rsrc_obj->fd);
+            SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+            return make_errno_tuple(ctx);
+        }
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
         return OK_ATOM;
     } else {

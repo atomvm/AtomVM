@@ -245,7 +245,7 @@ accept(Socket, Timeout) ->
     case ?MODULE:nif_select_read(Socket, Ref) of
         ok ->
             receive
-                {select, _AcceptedSocket, Ref, ready_input} ->
+                {'$socket', Socket, select, Ref} ->
                     case ?MODULE:nif_accept(Socket) of
                         {error, closed} = E ->
                             ?MODULE:nif_select_stop(Socket),
@@ -253,14 +253,15 @@ accept(Socket, Timeout) ->
                         R ->
                             R
                     end;
-                {closed, Ref} ->
+                {'$socket', Socket, abort, {Ref, closed}} ->
                     % socket was closed by another process
                     % TODO: we need to handle:
                     % (a) SELECT_STOP being scheduled
-                    % (b) flush of messages as we can have both
-                    % {closed, Ref} and {select, _, Ref, _} in the
+                    % (b) flush of messages as we can have both in the
                     % queue
-                    {error, closed}
+                    {error, closed};
+                Other ->
+                    {error, {accept, unexpected, Other, {'$socket', Socket, select, Ref}}}
             after Timeout ->
                 {error, timeout}
             end;
@@ -299,30 +300,131 @@ recv(Socket, Length) ->
 %%          `{ok, Data} = socket:recv(ConnectedSocket)'
 %% @end
 %%-----------------------------------------------------------------------------
--spec recv(Socket :: socket(), Length :: non_neg_integer(), Timeout :: timeout()) ->
-    {ok, Data :: binary()} | {error, Reason :: term()}.
+-spec recv(
+    Socket :: socket(), Length :: non_neg_integer(), Timeout :: timeout() | nowait | reference()
+) ->
+    {ok, Data :: binary()}
+    | {select, {select_info, recvfrom, reference()}}
+    | {select, {{select_info, recvfrom, reference()}, Data :: binary()}}
+    | {error, Reason :: term()}.
+recv(Socket, Length, 0) ->
+    recv0_noselect(Socket, Length);
+recv(Socket, 0, Timeout) when is_integer(Timeout) orelse Timeout =:= infinity ->
+    recv0(Socket, 0, Timeout);
+recv(Socket, Length, nowait) ->
+    recv0_nowait(Socket, Length, erlang:make_ref());
+recv(Socket, Length, Ref) when is_reference(Ref) ->
+    recv0_nowait(Socket, Length, Ref);
 recv(Socket, Length, Timeout) ->
+    case ?MODULE:getopt(Socket, {socket, type}) of
+        {ok, stream} when Timeout =/= infinity ->
+            recv0_r(Socket, Length, Timeout, erlang:system_time(millisecond) + Timeout, []);
+        {ok, stream} when Timeout =:= infinity ->
+            recv0_r(Socket, Length, Timeout, undefined, []);
+        _ ->
+            recv0(Socket, Length, Timeout)
+    end.
+
+recv0_noselect(Socket, Length) ->
+    case ?MODULE:nif_recv(Socket, Length) of
+        {error, _} = E ->
+            E;
+        {ok, Data} when Length =:= 0 orelse byte_size(Data) =:= Length ->
+            {ok, Data};
+        {ok, Data} ->
+            case ?MODULE:getopt(Socket, {socket, type}) of
+                {ok, stream} ->
+                    {error, {timeout, Data}};
+                {ok, dgram} ->
+                    {ok, Data}
+            end
+    end.
+
+recv0(Socket, Length, Timeout) ->
     Ref = erlang:make_ref(),
-    ?TRACE("select read for recv.  self=~p ref=~p~n", [self(), Ref]),
     case ?MODULE:nif_select_read(Socket, Ref) of
         ok ->
             receive
-                {select, _AcceptedSocket, Ref, ready_input} ->
+                {'$socket', Socket, select, Ref} ->
                     case ?MODULE:nif_recv(Socket, Length) of
                         {error, _} = E ->
                             ?MODULE:nif_select_stop(Socket),
                             E;
-                        % TODO: Assemble data to have more if Length > byte_size(Data)
-                        % as long as timeout did not expire
                         {ok, Data} ->
                             {ok, Data}
                     end;
-                {closed, Ref} ->
+                {'$socket', Socket, abort, {Ref, closed}} ->
                     % socket was closed by another process
                     % TODO: see above in accept/2
                     {error, closed}
             after Timeout ->
                 {error, timeout}
+            end;
+        {error, _Reason} = Error ->
+            Error
+    end.
+
+recv0_nowait(Socket, Length, Ref) ->
+    case ?MODULE:nif_recv(Socket, Length) of
+        {error, timeout} ->
+            case ?MODULE:nif_select_read(Socket, Ref) of
+                ok ->
+                    {select, {select_info, recv, Ref}};
+                {error, _} = Error1 ->
+                    Error1
+            end;
+        {error, _} = E ->
+            E;
+        {ok, Data} when byte_size(Data) < Length ->
+            case ?MODULE:getopt(Socket, {socket, type}) of
+                {ok, stream} ->
+                    case ?MODULE:nif_select_read(Socket, Ref) of
+                        ok ->
+                            {select, {{select_info, recv, Ref}, Data}};
+                        {error, _} = Error1 ->
+                            Error1
+                    end;
+                {ok, dgram} ->
+                    {ok, Data}
+            end;
+        {ok, Data} ->
+            {ok, Data}
+    end.
+
+recv0_r(Socket, Length, Timeout, EndQuery, Acc) ->
+    Ref = erlang:make_ref(),
+    case ?MODULE:nif_select_read(Socket, Ref) of
+        ok ->
+            receive
+                {'$socket', Socket, select, Ref} ->
+                    case ?MODULE:nif_recv(Socket, Length) of
+                        {error, _} = E ->
+                            ?MODULE:nif_select_stop(Socket),
+                            E;
+                        {ok, Data} ->
+                            NewAcc = [Data | Acc],
+                            Remaining = Length - byte_size(Data),
+                            case Remaining of
+                                0 ->
+                                    {ok, list_to_binary(lists:reverse(NewAcc))};
+                                _ ->
+                                    NewTimeout =
+                                        case Timeout of
+                                            infinity -> infinity;
+                                            _ -> EndQuery - erlang:system_time(millisecond)
+                                        end,
+                                    recv0_r(Socket, Remaining, NewTimeout, EndQuery, NewAcc)
+                            end
+                    end;
+                {'$socket', Socket, abort, {Ref, closed}} ->
+                    % socket was closed by another process
+                    % TODO: see above in accept/2
+                    {error, closed}
+            after Timeout ->
+                case Acc of
+                    [] -> {error, timeout};
+                    _ -> {error, {timeout, list_to_binary(lists:reverse(Acc))}}
+                end
             end;
         {error, _Reason} = Error ->
             Error
@@ -370,25 +472,43 @@ recvfrom(Socket, Length) ->
 %% bytes are available and return these bytes.
 %% @end
 %%-----------------------------------------------------------------------------
--spec recvfrom(Socket :: socket(), Length :: non_neg_integer(), Timeout :: timeout()) ->
-    {ok, {Address :: sockaddr(), Data :: binary()}} | {error, Reason :: term()}.
+-spec recvfrom(
+    Socket :: socket(), Length :: non_neg_integer(), Timeout :: timeout() | nowait | reference()
+) ->
+    {ok, {Address :: sockaddr(), Data :: binary()}}
+    | {select, {select_info, recvfrom, reference()}}
+    | {error, Reason :: term()}.
+recvfrom(Socket, Length, 0) ->
+    recvfrom0_noselect(Socket, Length);
+recvfrom(Socket, Length, nowait) ->
+    recvfrom0_nowait(Socket, Length, erlang:make_ref());
+recvfrom(Socket, Length, Ref) when is_reference(Ref) ->
+    recvfrom0_nowait(Socket, Length, Ref);
 recvfrom(Socket, Length, Timeout) ->
+    recvfrom0(Socket, Length, Timeout).
+
+recvfrom0_noselect(Socket, Length) ->
+    case ?MODULE:nif_recvfrom(Socket, Length) of
+        {error, _} = E ->
+            E;
+        {ok, {_Address, _Data}} = Reply ->
+            Reply
+    end.
+
+recvfrom0(Socket, Length, Timeout) ->
     Ref = erlang:make_ref(),
-    ?TRACE("select read for recvfrom.  self=~p ref=~p", [self(), Ref]),
     case ?MODULE:nif_select_read(Socket, Ref) of
         ok ->
             receive
-                {select, _AcceptedSocket, Ref, ready_input} ->
+                {'$socket', Socket, select, Ref} ->
                     case ?MODULE:nif_recvfrom(Socket, Length) of
                         {error, _} = E ->
                             ?MODULE:nif_select_stop(Socket),
                             E;
-                        % TODO: Assemble data to have more if Length > byte_size(Data)
-                        % as long as timeout did not expire
-                        {ok, {Address, Data}} ->
-                            {ok, {Address, Data}}
+                        {ok, {_Address, _Data}} = Reply ->
+                            Reply
                     end;
-                {closed, Ref} ->
+                {'$socket', Socket, abort, {Ref, closed}} ->
                     % socket was closed by another process
                     % TODO: see above in accept/2
                     {error, closed}
@@ -397,6 +517,21 @@ recvfrom(Socket, Length, Timeout) ->
             end;
         {error, _Reason} = Error ->
             Error
+    end.
+
+recvfrom0_nowait(Socket, Length, Ref) ->
+    case ?MODULE:nif_recvfrom(Socket, Length) of
+        {error, timeout} ->
+            case ?MODULE:nif_select_read(Socket, Ref) of
+                ok ->
+                    {select, {select_info, recvfrom, Ref}};
+                {error, _} = SelectError ->
+                    SelectError
+            end;
+        {error, _} = RecvError ->
+            RecvError;
+        {ok, {_Address, _Data}} = Reply ->
+            Reply
     end.
 
 %%-----------------------------------------------------------------------------

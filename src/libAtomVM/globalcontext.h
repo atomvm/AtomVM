@@ -71,6 +71,11 @@ typedef struct GlobalContext GlobalContext;
 typedef struct MailboxMessage MailboxMessage;
 #endif
 
+#ifndef TYPEDEF_MESSAGE
+#define TYPEDEF_MESSAGE
+typedef struct Message Message;
+#endif
+
 struct MessageQueueItem
 {
     struct MessageQueueItem *next;
@@ -165,6 +170,12 @@ struct GlobalContext
     void *platform_data;
 };
 
+enum SendMessageResult
+{
+    SEND_MESSAGE_OK = 0,
+    SEND_MESSAGE_PROCESS_NOT_FOUND = 1
+};
+
 /**
  * @brief Creates a new GlobalContext
  *
@@ -250,6 +261,18 @@ void globalcontext_send_message(GlobalContext *glb, int32_t process_id, term t);
  */
 void globalcontext_send_message_nolock(GlobalContext *glb, int32_t process_id, term t);
 
+/**
+ * @brief Post a mailbox message to a process identified by its id.
+ * @details This function is only used by enif_select_read/enif_select_write to
+ * post a message that is built before.
+ *
+ * @param glb the global context (that owns the process table).
+ * @param process_id the local process id.
+ * @param m the mailbox message to send.
+ * @return SEND_MESSAGE_OK if the message was sent (and ownership transfered).
+ */
+enum SendMessageResult globalcontext_post_message(GlobalContext *glb, int32_t process_id, Message *m);
+
 #ifdef AVM_TASK_DRIVER_ENABLED
 /**
  * @brief Send a message to a process identified by its id. This variant is to
@@ -266,6 +289,19 @@ void globalcontext_send_message_nolock(GlobalContext *glb, int32_t process_id, t
  * @param t the message to send.
  */
 void globalcontext_send_message_from_task(GlobalContext *glb, int32_t process_id, enum MessageType type, term t);
+
+/**
+ * @brief Post a mailbox message to a process identified by its id. Variant
+ * to be used from task drivers.
+ * @details This function is only used by enif_select_read/enif_select_write to
+ * post a message that is built before.
+ *
+ * @param glb the global context (that owns the process table).
+ * @param process_id the local process id.
+ * @param m the mailbox message to send.
+ * @return SEND_MESSAGE_OK if the message was sent (and ownership transfered).
+ */
+enum SendMessageResult globalcontext_post_message_from_task(GlobalContext *glb, int32_t process_id, Message *m);
 
 /**
  * @brief Enqueue a refc binary from a task driver, to be refc decremented

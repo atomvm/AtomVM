@@ -170,3 +170,9 @@ X(SHUTDOWN_ATOM, "\x8", "shutdown")
 
 X(NONODE_AT_NOHOST_ATOM, "\xD", "nonode@nohost")
 X(NET_KERNEL_ATOM, "\xA", "net_kernel")
+
+X(DOLLAR_SOCKET_ATOM, "\x7", "$socket")
+X(ABORT_ATOM, "\x5", "abort")
+X(FAMILY_ATOM, "\x6", "family")
+X(INET_ATOM, "\x4", "inet")
+X(TIMEOUT_ATOM, "\x7", "timeout")

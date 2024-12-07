@@ -339,10 +339,7 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 %% @hidden
-handle_info({select, _Socket, Ref, ready_input}, State) ->
-    ?LOG_DEBUG("handle_info [~p], ~p]", [
-        {select, _Socket, Ref, ready_input}, State
-    ]),
+handle_info({'$socket', _Socket, select, Ref}, State) ->
     %% TODO cancel timer
     case maps:get(Ref, State#state.pending_selects, undefined) of
         undefined ->
@@ -363,6 +360,28 @@ handle_info({select, _Socket, Ref, ready_input}, State) ->
             ?LOG_INFO("Select ready for read on passive recv"),
             NewState = handle_passive_recv(State, From, Length, Timeout),
             {noreply, NewState#state{
+                pending_selects = maps:remove(Ref, State#state.pending_selects)
+            }}
+    end;
+handle_info({'$socket', Socket, abort, {Ref, closed}}, State) ->
+    %% TODO cancel timer
+    case maps:get(Ref, State#state.pending_selects, undefined) of
+        undefined ->
+            ?LOG_WARNING("Unable to find select ref ~p in pending selects", [Ref]),
+            socket:nif_select_stop(Socket),
+            {noreply, State};
+        {accept, From, _AcceptingProc, _Timeout} ->
+            socket:nif_select_stop(Socket),
+            gen_server:reply(From, {error, closed}),
+            {noreply, State};
+        active ->
+            WrappedSocket = {?GEN_TCP_MONIKER, self(), ?MODULE},
+            State#state.controlling_process ! {tcp_closed, WrappedSocket},
+            {noreply, State};
+        {passive, From, _Length, _Timeout} ->
+            socket:nif_select_stop(Socket),
+            gen_server:reply(From, {error, closed}),
+            {noreply, State#state{
                 pending_selects = maps:remove(Ref, State#state.pending_selects)
             }}
     end;
