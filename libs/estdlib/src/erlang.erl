@@ -105,6 +105,7 @@
     garbage_collect/1,
     binary_to_term/1,
     term_to_binary/1,
+    split_binary/2,
     timestamp/0,
     universaltime/0,
     localtime/0,
@@ -1221,6 +1222,18 @@ binary_to_term(_Binary) ->
 %%-----------------------------------------------------------------------------
 -spec term_to_binary(Term :: any()) -> binary().
 term_to_binary(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns A tuple with two subbinaries
+%% @param   Bin    binary to split
+%% @param   Pos    position to split the binary, from 0 to `byte_size(Bin)'
+%% @doc Split a binary into two sub-binaries. This operation is not destructive
+%% and will create two new binaries.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec split_binary(Bin :: binary(), Pos :: non_neg_integer()) -> {binary(), binary()}.
+split_binary(_Bin, _Pos) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
