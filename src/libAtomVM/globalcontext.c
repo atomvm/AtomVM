@@ -334,6 +334,18 @@ bool globalcontext_process_exists(GlobalContext *glb, int32_t process_id)
     return p != NULL;
 }
 
+enum SendMessageResult globalcontext_post_message(GlobalContext *glb, int32_t process_id, Message *m)
+{
+    Context *p = globalcontext_get_process_lock(glb, process_id);
+    enum SendMessageResult result = SEND_MESSAGE_PROCESS_NOT_FOUND;
+    if (p) {
+        mailbox_post_message(p, &m->base);
+        globalcontext_get_process_unlock(glb, p);
+        result = SEND_MESSAGE_OK;
+    }
+    return result;
+}
+
 void globalcontext_send_message(GlobalContext *glb, int32_t process_id, term t)
 {
     Context *p = globalcontext_get_process_lock(glb, process_id);
@@ -352,15 +364,17 @@ void globalcontext_send_message_nolock(GlobalContext *glb, int32_t process_id, t
 }
 
 #ifdef AVM_TASK_DRIVER_ENABLED
-void globalcontext_send_message_from_task(GlobalContext *glb, int32_t process_id, enum MessageType type, term t)
+static inline enum SendMessageResult globalcontext_send_message_from_task_common(GlobalContext *glb, int32_t process_id, MailboxMessage *message, enum MessageType type, term t)
 {
-    MailboxMessage *message = NULL;
+    enum SendMessageResult result = SEND_MESSAGE_PROCESS_NOT_FOUND;
     bool postponed = false;
 #ifndef AVM_NO_SMP
     Context *p = NULL;
     if (globalcontext_get_process_trylock(glb, process_id, &p)) {
         if (p) {
-            message = mailbox_message_create_from_term(type, t);
+            if (message == NULL) {
+                message = mailbox_message_create_from_term(type, t);
+            }
             // Ensure we can acquire the spinlock
             if (smp_spinlock_trylock(&glb->processes_spinlock)) {
                 // We can send the message.
@@ -371,6 +385,7 @@ void globalcontext_send_message_from_task(GlobalContext *glb, int32_t process_id
                 postponed = true;
             }
             globalcontext_get_process_unlock(glb, p);
+            result = SEND_MESSAGE_OK;
         }
     } else {
         postponed = true;
@@ -397,7 +412,20 @@ void globalcontext_send_message_from_task(GlobalContext *glb, int32_t process_id
         } while (!ATOMIC_COMPARE_EXCHANGE_WEAK_PTR(&glb->message_queue, &current_first, queued_item));
         // Make sure the scheduler is busy
         sys_signal(glb);
+
+        result = SEND_MESSAGE_OK;
     }
+    return result;
+}
+
+enum SendMessageResult globalcontext_post_message_from_task(GlobalContext *glb, int32_t process_id, Message *message)
+{
+    return globalcontext_send_message_from_task_common(glb, process_id, &message->base, NormalMessage, term_nil());
+}
+
+void globalcontext_send_message_from_task(GlobalContext *glb, int32_t process_id, enum MessageType type, term t)
+{
+    globalcontext_send_message_from_task_common(glb, process_id, NULL, type, t);
 }
 
 static inline void globalcontext_process_message_queue(GlobalContext *glb)

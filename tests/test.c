@@ -319,6 +319,7 @@ struct Test tests[] = {
 
     TEST_CASE_EXPECTED(test_binary_part, 12),
     TEST_CASE_EXPECTED(test_binary_split, 16),
+    TEST_CASE(test_split_binary),
 
     TEST_CASE_COND(plusone, 134217728, LONG_MAX != 9223372036854775807),
 
@@ -481,7 +482,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(fail_apply_last, 17),
 
     TEST_CASE_EXPECTED(pid_to_list_test, 63),
-    TEST_CASE_EXPECTED(ref_to_list_test, 386),
+    TEST_CASE(ref_to_list_test),
     TEST_CASE_EXPECTED(test_binary_to_integer, 99),
     TEST_CASE(test_binary_to_integer_2),
 
