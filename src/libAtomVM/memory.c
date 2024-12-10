@@ -476,7 +476,10 @@ unsigned long memory_estimate_usage(term t)
         } else if (term_is_nil(t)) {
             t = temp_stack_pop(&temp_stack);
 
-        } else if (term_is_pid(t)) {
+        } else if (term_is_local_pid(t)) {
+            t = temp_stack_pop(&temp_stack);
+
+        } else if (term_is_local_port(t)) {
             t = temp_stack_pop(&temp_stack);
 
         } else if (term_is_nonempty_list(t)) {
@@ -587,7 +590,7 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
             TRACE("Found NIL (%" TERM_X_FMT ")\n", t);
             ptr++;
 
-        } else if (term_is_pid(t)) {
+        } else if (term_is_local_pid(t)) {
             TRACE("Found PID (%" TERM_X_FMT ")\n", t);
             ptr++;
 
@@ -618,6 +621,18 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
 
                 case TERM_BOXED_REF:
                     TRACE("- Found ref.\n");
+                    break;
+
+                case TERM_BOXED_EXTERNAL_PID:
+                    TRACE("- Found external pid.\n");
+                    break;
+
+                case TERM_BOXED_EXTERNAL_PORT:
+                    TRACE("- Found external port.\n");
+                    break;
+
+                case TERM_BOXED_EXTERNAL_REF:
+                    TRACE("- Found external ref.\n");
                     break;
 
                 case TERM_BOXED_FUN: {
@@ -740,6 +755,18 @@ static void memory_scan_and_rewrite(size_t count, term *terms, const term *old_s
                     ptr += term_get_size_from_boxed_header(t);
                     break;
 
+                case TERM_BOXED_EXTERNAL_PID:
+                    ptr += EXTERNAL_PID_SIZE - 1;
+                    break;
+
+                case TERM_BOXED_EXTERNAL_PORT:
+                    ptr += EXTERNAL_PORT_SIZE - 1;
+                    break;
+
+                case TERM_BOXED_EXTERNAL_REF:
+                    ptr += EXTERNAL_REF_SIZE - 1;
+                    break;
+
                 case TERM_BOXED_FUN:
                     // Skip header and module and process next terms
                     ptr++;
@@ -810,7 +837,10 @@ HOT_FUNC static term memory_shallow_copy_term(HeapFragment *old_fragment, term t
     } else if (term_is_nil(t)) {
         return t;
 
-    } else if (term_is_pid(t)) {
+    } else if (term_is_local_pid(t)) {
+        return t;
+
+    } else if (term_is_local_port(t)) {
         return t;
 
     } else if (term_is_cp(t)) {

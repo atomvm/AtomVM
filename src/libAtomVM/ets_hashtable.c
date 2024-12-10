@@ -285,9 +285,9 @@ static uint32_t hash_term_incr(term t, int32_t h, GlobalContext *global)
         return hash_integer(t, h, global);
     } else if (term_is_float(t)) {
         return hash_float(t, h, global);
-    } else if (term_is_pid(t)) {
+    } else if (term_is_local_pid(t)) {
         return hash_pid(t, h, global);
-    } else if (term_is_reference(t)) {
+    } else if (term_is_local_reference(t)) {
         return hash_reference(t, h, global);
     } else if (term_is_binary(t)) {
         return hash_binary(t, h, global);
