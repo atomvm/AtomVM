@@ -27,6 +27,7 @@ start() ->
 test() ->
     Res = file:native_name_encoding(),
     ok = is_proper_encoding(Res),
+    ok = test_get_cwd(),
     ok.
 
 is_proper_encoding(utf8) ->
@@ -35,3 +36,13 @@ is_proper_encoding(latin1) ->
     ok;
 is_proper_encoding(_) ->
     error.
+
+test_get_cwd() ->
+    {ok, Path} = file:get_cwd(),
+    CanValidate = erlang:system_info(machine) == "BEAM" orelse atomvm:platform() == generic_unix,
+    if
+        CanValidate -> validate_path(Path);
+        true -> ok
+    end.
+
+validate_path("/" ++ _Rest) -> ok.

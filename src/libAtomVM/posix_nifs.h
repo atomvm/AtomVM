@@ -62,6 +62,9 @@ extern const struct Nif atomvm_posix_opendir_nif;
 extern const struct Nif atomvm_posix_readdir_nif;
 extern const struct Nif atomvm_posix_closedir_nif;
 #endif
+#if defined(HAVE_GETCWD) && defined(HAVE_PATH_MAX)
+extern const struct Nif file_get_cwd_nif;
+#endif
 
 /**
  * @brief Convenient function to return posix errors as atom.

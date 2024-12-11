@@ -56,6 +56,7 @@ set(ERLANG_MODULES
     maps
     math
     net
+    file
     logger
     logger_std_h
     proplists
