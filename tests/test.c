@@ -323,6 +323,8 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_binary_part, 12),
     TEST_CASE(test_binary_split),
 
+    TEST_CASE(test_zlib_compress),
+
     TEST_CASE_COND(plusone, 134217728, LONG_MAX != 9223372036854775807),
 
     TEST_CASE_EXPECTED(plusone2, 1),
