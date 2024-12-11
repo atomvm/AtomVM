@@ -60,6 +60,9 @@
 #include "term_typedef.h"
 #include "unicode.h"
 #include "utils.h"
+#ifdef WITH_ZLIB
+#include "zlib.h"
+#endif
 
 #define MAX_NIF_NAME_LEN 260
 #define FLOAT_BUF_SIZE 64
@@ -198,6 +201,7 @@ static term nif_maps_next(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_list(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_lists_subtract(Context *ctx, int argc, term argv[]);
+static term nif_zlib_compress_1(Context *ctx, int argc, term argv[]);
 
 #define DECLARE_MATH_NIF_FUN(moniker) \
     static term nif_math_##moniker(Context *ctx, int argc, term argv[]);
@@ -858,6 +862,12 @@ static const struct Nif erlang_lists_subtract_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_lists_subtract
 };
+static const struct Nif zlib_compress_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_zlib_compress_1
+};
+
 
 #define DEFINE_MATH_NIF(moniker)                    \
     static const struct Nif math_##moniker##_nif =  \
@@ -2520,6 +2530,47 @@ static term nif_erlang_float_to_list(Context *ctx, int argc, term argv[])
     return make_list_from_ascii_buf((uint8_t *) float_buf, len, ctx);
 }
 
+static term iolist_to_buffer(term list, char **buf, size_t *size)
+{
+    *buf = NULL;
+    *size = 0;
+
+    size_t bin_size;
+    switch (interop_iolist_size(list, &bin_size)) {
+        case InteropOk:
+            break;
+        case InteropMemoryAllocFail:
+            return OUT_OF_MEMORY_ATOM;
+        case InteropBadArg:
+            return BADARG_ATOM;
+    }
+
+    if (bin_size == 0) {
+        return OK_ATOM;
+    }
+
+    char *bin_buf = NULL;
+    bin_buf = malloc(bin_size * sizeof(char));
+    if (IS_NULL_PTR(bin_buf)) {
+        return OUT_OF_MEMORY_ATOM;
+    }
+
+    switch (interop_write_iolist(list, bin_buf)) {
+        case InteropOk:
+            break;
+        case InteropMemoryAllocFail:
+            free(bin_buf);
+            return OUT_OF_MEMORY_ATOM;
+        case InteropBadArg:
+            free(bin_buf);
+            return BADARG_ATOM;
+    }
+
+    *buf = bin_buf;
+    *size = bin_size;
+    return OK_ATOM;
+}
+
 static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -2527,51 +2578,29 @@ static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
     term t = argv[0];
     VALIDATE_VALUE(t, term_is_list);
 
-    size_t bin_size;
-    switch (interop_iolist_size(t, &bin_size)) {
-        case InteropOk:
-            break;
-        case InteropMemoryAllocFail:
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        case InteropBadArg:
-            RAISE_ERROR(BADARG_ATOM);
-    }
-
     char *bin_buf = NULL;
-    bool buf_allocated = true;
-    if (bin_size > 0) {
-        bin_buf = malloc(bin_size);
-        if (IS_NULL_PTR(bin_buf)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
+    char *alloc_ptr = NULL;
+    size_t bin_size = 0;
 
-        switch (interop_write_iolist(t, bin_buf)) {
-            case InteropOk:
-                break;
-            case InteropMemoryAllocFail:
-                free(bin_buf);
-                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-            case InteropBadArg:
-                free(bin_buf);
-                RAISE_ERROR(BADARG_ATOM);
-        }
+    term status = iolist_to_buffer(t, &bin_buf, &bin_size);
+    if (UNLIKELY(status != OK_ATOM)) {
+        RAISE_ERROR(status);
+    }
+    bool allocated = bin_size > 0;
+    if (allocated) {
+        alloc_ptr = bin_buf;
     } else {
         bin_buf = "";
-        buf_allocated = false;
+        bin_size = 0;
     }
 
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, term_binary_heap_size(bin_size), 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        if (buf_allocated) {
-            free(bin_buf);
-        }
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(bin_size)) != MEMORY_GC_OK)) {
+        free(alloc_ptr);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term bin_res = term_from_literal_binary(bin_buf, bin_size, &ctx->heap, ctx->global);
 
-    if (buf_allocated) {
-        free(bin_buf);
-    }
-
+    free(alloc_ptr);
     return bin_res;
 }
 
@@ -5837,6 +5866,85 @@ static term nif_erlang_lists_subtract(Context *ctx, int argc, term argv[])
     free(cons);
     return result;
 }
+
+#ifdef WITH_ZLIB
+static term nif_zlib_compress_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc)
+
+    term error = OK_ATOM;
+
+    Bytef *output_buf = NULL;
+    char *input_buf = NULL;
+    size_t input_size = 0;
+    char *alloc_ptr = NULL;
+
+    term input = argv[0];
+    if (LIKELY(term_is_list(input))) {
+        term status = iolist_to_buffer(input, &input_buf, &input_size);
+        if (UNLIKELY(status != OK_ATOM)) {
+            error = status;
+            goto cleanup;
+        }
+
+        bool allocated = input_size > 0;
+        if (allocated) {
+            alloc_ptr = input_buf;
+        } else {
+            input_buf = "";
+            input_size = 0;
+        }
+    } else if (LIKELY(term_is_binary(input))) {
+        input_buf = (char *) term_binary_data(input);
+        input_size = term_binary_size(input);
+    } else {
+        error = BADARG_ATOM;
+        goto cleanup;
+    }
+
+    // to_allocate is an upper bound for compression size
+    // changes to actual size after calling compress
+    uLong to_allocate = compressBound(input_size);
+    // TODO: use `to_allocate` binary directly instead of allocating a buffer
+    // Currently not possible, there's no way to shrink backing buffer for the binary
+    output_buf = malloc(to_allocate);
+    if (IS_NULL_PTR(output_buf)) {
+        error = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+
+    int z_ret = compress(output_buf, &to_allocate, (const Bytef *) input_buf, input_size);
+    if (UNLIKELY(z_ret != Z_OK)) {
+        error = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(to_allocate)) != MEMORY_GC_OK)) {
+        error = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+    term bin_res = term_from_literal_binary(output_buf, to_allocate, &ctx->heap, ctx->global);
+
+cleanup:
+    free(alloc_ptr);
+    free(output_buf);
+    if (UNLIKELY(error != OK_ATOM)) {
+        RAISE_ERROR(error);
+    }
+    return bin_res;
+}
+#endif
+#ifndef WITH_ZLIB
+static term nif_zlib_compress_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc)
+    UNUSED(argv)
+    UNUSED(ctx)
+    fprintf(stderr, "Error: zlib library needed to use zlib:compress/1\n");
+    RAISE_ERROR(UNDEFINED_ATOM);
+}
+#endif
+
 //
 // MAINTENANCE NOTE: Exception handling for fp operations using math
 // error handling is designed to be thread-safe, as errors are specified
