@@ -151,6 +151,7 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_flag(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[]);
 static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[]);
+static term nif_erlang_split_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_throw(Context *ctx, int argc, term argv[]);
 static term nif_erlang_raise(Context *ctx, int argc, term argv[]);
 static term nif_ets_new(Context *ctx, int argc, term argv[]);
@@ -569,6 +570,12 @@ static const struct Nif term_to_binary_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_term_to_binary
+};
+
+static const struct Nif split_binary_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_split_binary
 };
 
 static const struct Nif throw_nif =
@@ -3020,6 +3027,35 @@ static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
     return ret;
+}
+
+static term nif_erlang_split_binary(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term bin_term = argv[0];
+    term pos_term = argv[1];
+
+    VALIDATE_VALUE(bin_term, term_is_binary);
+    VALIDATE_VALUE(pos_term, term_is_integer);
+
+    int32_t size = term_binary_size(bin_term);
+    avm_int_t pos = term_to_int(pos_term);
+
+    if (UNLIKELY((pos < 0) || (pos > size))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    size_t alloc_heap_size = term_sub_binary_heap_size(bin_term, pos) + term_sub_binary_heap_size(bin_term, size - pos) + TUPLE_SIZE(2);
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, alloc_heap_size, 1, &bin_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term sub_binary_a = term_maybe_create_sub_binary(bin_term, 0, pos, &ctx->heap, ctx->global);
+    term sub_binary_b = term_maybe_create_sub_binary(bin_term, pos, size - pos, &ctx->heap, ctx->global);
+    term tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(tuple, 0, sub_binary_a);
+    term_put_tuple_element(tuple, 1, sub_binary_b);
+    return tuple;
 }
 
 static term nif_binary_at_2(Context *ctx, int argc, term argv[])
