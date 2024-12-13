@@ -107,10 +107,10 @@ static void ctrdrbg_dtor(ErlNifEnv *caller_env, void *obj)
     UNUSED(caller_env);
 
     struct CtrDrbgResource *rsrc_obj = (struct CtrDrbgResource *) obj;
+    mbedtls_entropy_context *entropy_context = rsrc_obj->context.MBEDTLS_PRIVATE(p_entropy);
     // Release the drbg first
     mbedtls_ctr_drbg_free(&rsrc_obj->context);
     // Eventually release the entropy
-    mbedtls_entropy_context *entropy_context = rsrc_obj->context.MBEDTLS_PRIVATE(p_entropy);
     if (entropy_context) {
         struct EntropyContextResource *entropy_obj = CONTAINER_OF(entropy_context, struct EntropyContextResource, context);
         struct RefcBinary *entropy_refc = refc_binary_from_data(entropy_obj);
@@ -124,10 +124,10 @@ static void sslcontext_dtor(ErlNifEnv *caller_env, void *obj)
     UNUSED(caller_env);
 
     struct SSLContextResource *rsrc_obj = (struct SSLContextResource *) obj;
+    const mbedtls_ssl_config *config = rsrc_obj->context.MBEDTLS_PRIVATE(conf);
     // Free the context first
     mbedtls_ssl_free(&rsrc_obj->context);
     // Eventually release the config
-    const mbedtls_ssl_config *config = rsrc_obj->context.MBEDTLS_PRIVATE(conf);
     if (config) {
         struct SSLConfigResource *config_obj = CONTAINER_OF(config, struct SSLConfigResource, config);
         struct RefcBinary *config_refc = refc_binary_from_data(config_obj);
@@ -141,7 +141,15 @@ static void sslconfig_dtor(ErlNifEnv *caller_env, void *obj)
     UNUSED(caller_env);
 
     struct SSLConfigResource *rsrc_obj = (struct SSLConfigResource *) obj;
+    const mbedtls_ctr_drbg_context *ctr_drbg_context = rsrc_obj->config.MBEDTLS_PRIVATE(p_rng);
     mbedtls_ssl_config_free(&rsrc_obj->config);
+
+    // Eventually release the ctrdrbg
+    if (ctr_drbg_context) {
+        struct CtrDrbgResource *rng_obj = CONTAINER_OF(ctr_drbg_context, struct CtrDrbgResource, context);
+        struct RefcBinary *config_refc = refc_binary_from_data(rng_obj);
+        refc_binary_decrement_refcount(config_refc, caller_env->global);
+    }
 }
 
 static const ErlNifResourceTypeInit EntropyContextResourceTypeInit = {
@@ -475,6 +483,9 @@ static term nif_ssl_conf_rng(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
     struct CtrDrbgResource *ctr_drbg_obj = (struct CtrDrbgResource *) rsrc_obj_ptr;
+
+    struct RefcBinary *ctr_drbg_refc = refc_binary_from_data(ctr_drbg_obj);
+    refc_binary_increment_refcount(ctr_drbg_refc);
 
     mbedtls_ssl_conf_rng(&conf_obj->config, mbedtls_ctr_drbg_random, &ctr_drbg_obj->context);
 

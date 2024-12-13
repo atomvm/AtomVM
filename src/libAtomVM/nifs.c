@@ -3018,9 +3018,7 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[])
 {
-    if (argc != 1) {
-        RAISE_ERROR(BADARG_ATOM);
-    }
+    UNUSED(argc);
     term t = argv[0];
     term ret = externalterm_to_binary(ctx, t);
     if (term_is_invalid_term(ret)) {

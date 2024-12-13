@@ -34,10 +34,6 @@ eval(S) when is_atom(S) ->
         undefined -> throw({unbound, S});
         Val -> Val
     end;
-eval(I) when is_integer(I) ->
-    I;
-eval(B) when is_binary(B) ->
-    B;
 eval(['do', Vars, [_TestExpr, _ReturnExpr] | _Exprs] = Do) ->
     Restore = put_do_vars(Vars),
     execute_do(Do, Restore);
@@ -68,7 +64,9 @@ eval([[symbol_pair, Module, Fn] | Args]) when is_atom(Module) andalso is_atom(Fn
     fapply(Module, Fn, EvaluatedArgs);
 eval([Fn | Args]) when is_atom(Fn) ->
     EvaluatedArgs = eval_args(Args),
-    func_eval(Fn, EvaluatedArgs).
+    func_eval(Fn, EvaluatedArgs);
+eval(NotList) when not is_list(NotList) ->
+    NotList.
 
 func_eval('funcall', [Lambda | Args]) ->
     fapply(Lambda, Args);

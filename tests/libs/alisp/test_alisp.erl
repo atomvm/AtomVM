@@ -30,6 +30,7 @@ test() ->
 
 test_snippet0() ->
     ?ASSERT_MATCH(alisp:run(snippet0()), 25),
+    ?ASSERT_MATCH(alisp:run(snippet1()), 1),
     ok.
 
 snippet0() ->
@@ -57,3 +58,11 @@ snippet0() ->
     "            \n"
     "        (length (primes 100))\n"
     "    )\n".
+
+snippet1() ->
+    "\n"
+    "      (progn\n"
+    "          (setq mylambda (lambda (a b) (- a b)))\n"
+    "          (funcall mylambda 1 2)\n"
+    "          (funcall (lambda ()\n"
+    "                       (funcall mylambda 4 3))))\n".
