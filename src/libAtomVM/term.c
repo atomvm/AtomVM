@@ -189,9 +189,26 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
             ret += printed;
             return ret;
         }
-    } else if (term_is_pid(t)) {
+    } else if (term_is_local_pid(t)) {
         int32_t process_id = term_to_local_process_id(t);
         return fun->print(fun, "<0.%" PRIu32 ".0>", process_id);
+
+    } else if (term_is_external_pid(t)) {
+        uint32_t node_atom_index = term_to_atom_index(term_to_external_node(t));
+        uint32_t number = term_to_external_pid_process_id(t);
+        uint32_t serial = term_to_external_pid_serial(t);
+        // creation is not printed
+        return fun->print(fun, "<%" PRIu32 ".%" PRIu32 ".%" PRIu32 ">", node_atom_index, number, serial);
+
+    } else if (term_is_local_port(t)) {
+        int32_t process_id = term_to_local_process_id(t);
+        return fun->print(fun, "#Port<0.%" PRIu32 ".0>", process_id);
+
+    } else if (term_is_external_port(t)) {
+        uint32_t node_atom_index = term_to_atom_index(term_to_external_node(t));
+        uint64_t number = term_to_external_port_number(t);
+        // creation is not printed
+        return fun->print(fun, "#Port<%" PRIu32 ".%" PRIu64 ">", node_atom_index, number);
 
     } else if (term_is_function(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
@@ -377,11 +394,25 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
         ret += printed;
         return ret;
 
-    } else if (term_is_reference(t)) {
+    } else if (term_is_local_reference(t)) {
         uint64_t ref_ticks = term_to_ref_ticks(t);
 
-        // Update also REF_AS_CSTRING_LEN when changing this format string
-        return fun->print(fun, "#Ref<0.0.0.%" PRIu64 ">", ref_ticks);
+        // Update also LOCAL_REF_AS_CSTRING_LEN when changing this format string
+        return fun->print(fun, "#Ref<0.%" PRIu32 ".%" PRIu32 ">", (uint32_t) (ref_ticks >> 32), (uint32_t) ref_ticks);
+
+    } else if (term_is_external_reference(t)) {
+        // Update also EXTERNAL_REF_AS_CSTRING_LEN when changing this format string
+        uint32_t node_atom_index = term_to_atom_index(term_to_external_node(t));
+        uint32_t len = term_to_external_reference_len(t);
+        uint32_t data[len];
+        term_to_external_reference_words(t, data);
+        // creation is not printed
+        int ret = fun->print(fun, "#Ref<%" PRIu32, node_atom_index);
+        for (uint32_t i = 0; i < len; i++) {
+            ret += fun->print(fun, ".%" PRIu32, data[i]);
+        }
+        ret += fun->print(fun, ">");
+        return ret;
 
     } else if (term_is_boxed_integer(t)) {
         int size = term_boxed_size(t);
@@ -426,23 +457,26 @@ static int term_type_to_index(term t)
     } else if (term_is_function(t)) {
         return 5;
 
-    } else if (term_is_pid(t)) {
+    } else if (term_is_port(t)) {
         return 6;
 
-    } else if (term_is_tuple(t)) {
+    } else if (term_is_pid(t)) {
         return 7;
 
-    } else if (term_is_nil(t)) {
+    } else if (term_is_tuple(t)) {
         return 8;
 
-    } else if (term_is_nonempty_list(t)) {
+    } else if (term_is_nil(t)) {
         return 9;
 
-    } else if (term_is_binary(t)) {
+    } else if (term_is_nonempty_list(t)) {
         return 10;
 
-    } else if (term_is_map(t)) {
+    } else if (term_is_binary(t)) {
         return 11;
+
+    } else if (term_is_map(t)) {
+        return 12;
 
     } else {
         AVM_ABORT();
@@ -492,14 +526,52 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
             break;
 
         } else if (term_is_reference(t) && term_is_reference(other)) {
-            int64_t t_ticks = term_to_ref_ticks(t);
-            int64_t other_ticks = term_to_ref_ticks(other);
-            if (t_ticks == other_ticks) {
-                CMP_POP_AND_CONTINUE();
+            if (!term_is_external(t) && !term_is_external(other)) {
+                int64_t t_ticks = term_to_ref_ticks(t);
+                int64_t other_ticks = term_to_ref_ticks(other);
+                if (t_ticks == other_ticks) {
+                    CMP_POP_AND_CONTINUE();
+                } else {
+                    result = (t_ticks > other_ticks) ? TermGreaterThan : TermLessThan;
+                    break;
+                }
+            } else if (term_is_external(t) && term_is_external(other)) {
+                term node = term_to_external_node(t);
+                term other_node = term_to_external_node(other);
+                if (node == other_node) {
+                    uint32_t creation = term_to_external_node_creation(t);
+                    uint32_t other_creation = term_to_external_node_creation(other);
+                    if (creation == other_creation) {
+                        uint32_t len = term_to_external_reference_len(t);
+                        uint32_t other_len = term_to_external_reference_len(other);
+                        if (len == other_len) {
+                            uint32_t data[len];
+                            uint32_t other_data[len];
+                            term_to_external_reference_words(t, data);
+                            term_to_external_reference_words(other, other_data);
+                            int cmp = memcmp(data, other_data, len * sizeof(uint32_t));
+                            if (cmp == 0) {
+                                CMP_POP_AND_CONTINUE();
+                            } else {
+                                result = (cmp > 0) ? TermGreaterThan : TermLessThan;
+                                break;
+                            }
+                        } else {
+                            result = (len > other_len) ? TermGreaterThan : TermLessThan;
+                            break;
+                        }
+                    } else {
+                        result = (creation > other_creation) ? TermGreaterThan : TermLessThan;
+                        break;
+                    }
+                } else {
+                    result = (node > other_node) ? TermGreaterThan : TermLessThan;
+                    break;
+                }
             } else {
-                result = (t_ticks > other_ticks) ? TermGreaterThan : TermLessThan;
-                break;
+                result = term_is_external(t) ? TermGreaterThan : TermLessThan;
             }
+            break;
 
         } else if (term_is_nonempty_list(t) && term_is_nonempty_list(other)) {
             term t_tail = term_get_list_tail(t);
@@ -664,9 +736,43 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
             result = (atom_cmp_result > 0) ? TermGreaterThan : TermLessThan;
             break;
 
-        } else if (term_is_pid(t) && term_is_pid(other)) {
+        } else if (term_is_external_pid(t) && term_is_external_pid(other)) {
+            term node = term_to_external_node(t);
+            term other_node = term_to_external_node(other);
+            if (node == other_node) {
+                uint32_t creation = term_to_external_node_creation(t);
+                uint32_t other_creation = term_to_external_node_creation(other);
+                if (creation == other_creation) {
+                    uint32_t serial = term_to_external_pid_serial(t);
+                    uint32_t other_serial = term_to_external_pid_serial(other);
+                    if (serial == other_serial) {
+                        uint32_t process_id = term_to_external_pid_process_id(t);
+                        uint32_t other_process_id = term_to_external_pid_process_id(other);
+                        if (process_id == other_process_id) {
+                            CMP_POP_AND_CONTINUE();
+                        } else {
+                            result = (process_id > other_process_id) ? TermGreaterThan : TermLessThan;
+                            break;
+                        }
+                    } else {
+                        result = (serial > other_serial) ? TermGreaterThan : TermLessThan;
+                        break;
+                    }
+                } else {
+                    result = (creation > other_creation) ? TermGreaterThan : TermLessThan;
+                    break;
+                }
+            } else {
+                result = (node > other_node) ? TermGreaterThan : TermLessThan;
+                break;
+            }
+        } else if (term_is_local_pid(t) && term_is_local_pid(other)) {
             //TODO: handle ports
             result = (t > other) ? TermGreaterThan : TermLessThan;
+            break;
+
+        } else if (term_is_pid(t) && term_is_pid(other)) {
+            result = term_is_local_pid(other) ? TermGreaterThan : TermLessThan;
             break;
 
         } else {

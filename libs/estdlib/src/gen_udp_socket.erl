@@ -242,7 +242,7 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 %% @hidden
-handle_info({select, _Socket, Ref, ready_input}, State) ->
+handle_info({'$socket', _Socket, select, Ref}, State) ->
     case maps:get(Ref, State#state.pending_selects, undefined) of
         undefined ->
             ?LOG_INFO("Unable to find select ref ~p in pending selects", [Ref]),
