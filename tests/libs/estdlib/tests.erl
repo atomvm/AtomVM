@@ -52,6 +52,7 @@ get_tests(_OTPVersion) ->
         test_gen_statem,
         test_gen_udp,
         test_gen_tcp,
+        test_inet,
         test_io_lib,
         test_logger,
         test_maps,
