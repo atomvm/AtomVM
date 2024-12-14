@@ -575,12 +575,7 @@ loop(#state{mod = Mod, mod_state = ModState} = State, Timeout) ->
     end.
 
 %% @private
-do_terminate(#state{mod = Mod, name = Name} = _State, Reason, ModState) ->
-    case Name of
-        undefined -> ok;
-        %% TODO unregister
-        _Pid -> ok
-    end,
+do_terminate(#state{mod = Mod} = _State, Reason, ModState) ->
     case erlang:function_exported(Mod, terminate, 2) of
         true ->
             Mod:terminate(Reason, ModState);
