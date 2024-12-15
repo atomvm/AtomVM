@@ -284,7 +284,7 @@ jobs:
           cmake_opts_other: "-DAVM_CREATE_STACKTRACES=off -DAVM_WARNINGS_ARE_ERRORS=ON"
           arch: "i386"
           compiler_pkgs: "gcc-10 g++-10 gcc-10-multilib g++-10-multilib libc6-dev-i386
-          libc6-dbg:i386 zlib1g-dev:i386 libmbedtls-dev:i386"
+            libc6-dbg:i386 zlib1g-dev:i386 libmbedtls-dev:i386"
 
     env:
       CC: ${{ matrix.cc }}

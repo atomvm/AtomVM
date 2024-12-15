@@ -73,15 +73,15 @@ jobs:
         # This is ARM64
         - os: "macos-14"
           otp: "25"
-          path_prefix: "/opt/homebrew/opt/erlang@24/bin:"
-
-        - os: "macos-14"
-          otp: "26"
           path_prefix: "/opt/homebrew/opt/erlang@25/bin:"
 
         - os: "macos-14"
-          otp: "27"
+          otp: "26"
           path_prefix: "/opt/homebrew/opt/erlang@26/bin:"
+
+        - os: "macos-14"
+          otp: "27"
+          path_prefix: "/opt/homebrew/opt/erlang@27/bin:"
     steps:
     # Setup
     - name: "Checkout repo"
