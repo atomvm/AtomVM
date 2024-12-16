@@ -415,6 +415,32 @@ static bool gpiodriver_is_gpio_attached(struct GPIOData *gpio_data, int gpio_num
     return false;
 }
 
+static term unregister_interrupt_listener(Context *ctx, gpio_num_t gpio_num)
+{
+    struct GPIOData *gpio_data = ctx->platform_data;
+    struct ListHead *item;
+    struct ListHead *tmp;
+    MUTABLE_LIST_FOR_EACH (item, tmp, &gpio_data->gpio_listeners) {
+        struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
+        if (gpio_listener->gpio == gpio_num) {
+            sys_unregister_listener(ctx->global, &gpio_listener->listener);
+            list_remove(&gpio_listener->gpio_listener_list_head);
+            free(gpio_listener);
+
+            gpio_set_intr_type(gpio_num, GPIO_INTR_DISABLE);
+            gpio_isr_handler_remove(gpio_num);
+
+            if (list_is_empty(&gpio_data->gpio_listeners)) {
+                gpio_uninstall_isr_service();
+            }
+
+            return OK_ATOM;
+        }
+    }
+
+    return ERROR_ATOM;
+}
+
 static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
 {
     GlobalContext *glb = ctx->global;
@@ -456,9 +482,6 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
         target_local_pid = target_pid;
     }
 
-    if (gpiodriver_is_gpio_attached(gpio_data, gpio_num)) {
-        return ERROR_ATOM;
-    }
 
     /* TODO: GPIO specific atoms should be removed from platform_defaultatoms and constructed within this driver */
     gpio_int_type_t interrupt_type;
@@ -491,31 +514,43 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
             return ERROR_ATOM;
     }
 
-    TRACE("going to install interrupt for %i.\n", gpio_num);
+    if (trigger != NONE_ATOM) {
+        if (UNLIKELY(gpiodriver_is_gpio_attached(gpio_data, gpio_num))) {
+            return ERROR_ATOM;
+        }
 
-    if (list_is_empty(&gpio_data->gpio_listeners)) {
-        gpio_install_isr_service(0);
-        TRACE("installed ISR service 0.\n");
-    }
+        TRACE("going to install interrupt for %i.\n", gpio_num);
 
-    struct GPIOListenerData *data = malloc(sizeof(struct GPIOListenerData));
-    if (IS_NULL_PTR(data)) {
-        ESP_LOGE(TAG, "gpiodriver_set_int: Failed to ensure free heap space.");
-        AVM_ABORT();
-    }
-    list_append(&gpio_data->gpio_listeners, &data->gpio_listener_list_head);
-    data->gpio = gpio_num;
-    data->target_local_pid = target_local_pid;
-    sys_register_listener(glb, &data->listener);
-    data->listener.sender = data;
-    data->listener.handler = gpio_interrupt_callback;
+        if (list_is_empty(&gpio_data->gpio_listeners)) {
+            gpio_install_isr_service(0);
+            TRACE("installed ISR service 0.\n");
+        }
 
-    gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
-    gpio_set_intr_type(gpio_num, interrupt_type);
+        struct GPIOListenerData *data = malloc(sizeof(struct GPIOListenerData));
+        if (IS_NULL_PTR(data)) {
+            ESP_LOGE(TAG, "gpiodriver_set_int: Failed to ensure free heap space.");
+            AVM_ABORT();
+        }
+        list_append(&gpio_data->gpio_listeners, &data->gpio_listener_list_head);
+        data->gpio = gpio_num;
+        data->target_local_pid = target_local_pid;
+        sys_register_listener(glb, &data->listener);
+        data->listener.sender = data;
+        data->listener.handler = gpio_interrupt_callback;
 
-    esp_err_t ret = gpio_isr_handler_add(gpio_num, gpio_isr_handler, data);
-    if (UNLIKELY(ret != ESP_OK)) {
-        return ERROR_ATOM;
+        gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
+        gpio_set_intr_type(gpio_num, interrupt_type);
+
+        esp_err_t ret = gpio_isr_handler_add(gpio_num, gpio_isr_handler, data);
+        if (UNLIKELY(ret != ESP_OK)) {
+            return ERROR_ATOM;
+        }
+    } else {
+        if (UNLIKELY(!gpiodriver_is_gpio_attached(gpio_data, gpio_num))) {
+            return ERROR_ATOM;
+        }
+        gpio_set_intr_type(gpio_num, interrupt_type);
+        return unregister_interrupt_listener(ctx, gpio_num);
     }
 
     return OK_ATOM;
@@ -523,8 +558,6 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
 
 static term gpiodriver_remove_int(Context *ctx, term cmd)
 {
-    struct GPIOData *gpio_data = ctx->platform_data;
-
     term gpio_num_term = term_get_tuple_element(cmd, 1);
     gpio_num_t gpio_num;
     if (LIKELY(term_is_integer(gpio_num_term))) {
@@ -537,27 +570,7 @@ static term gpiodriver_remove_int(Context *ctx, term cmd)
         return ERROR_ATOM;
     }
 
-    struct ListHead *item;
-    struct ListHead *tmp;
-    MUTABLE_LIST_FOR_EACH (item, tmp, &gpio_data->gpio_listeners) {
-        struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
-        if (gpio_listener->gpio == gpio_num) {
-            list_remove(&gpio_listener->gpio_listener_list_head);
-            sys_unregister_listener(ctx->global, &gpio_listener->listener);
-            free(gpio_listener);
-
-            gpio_set_intr_type(gpio_num, GPIO_INTR_DISABLE);
-            gpio_isr_handler_remove(gpio_num);
-
-            if (list_is_empty(&gpio_data->gpio_listeners)) {
-                gpio_uninstall_isr_service();
-            }
-
-            return OK_ATOM;
-        }
-    }
-
-    return ERROR_ATOM;
+    return unregister_interrupt_listener(ctx, gpio_num);
 }
 
 static term create_pair(Context *ctx, term term1, term term2)
