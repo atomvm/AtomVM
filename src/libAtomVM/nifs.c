@@ -4863,6 +4863,7 @@ static term nif_lists_member(Context *ctx, int argc, term argv[])
     UNUSED(argc)
     term elem = argv[0];
     term list = argv[1];
+    VALIDATE_VALUE(list, term_is_list);
 
     int proper;
     term_list_length(list, &proper);

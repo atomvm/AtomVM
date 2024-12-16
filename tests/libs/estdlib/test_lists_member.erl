@@ -1,9 +1,6 @@
 -module(test_lists_member).
 
--export([test/0, start/0]).
-
-start() ->
-    test().
+-export([test/0]).
 
 test() ->
     true = test_member_with_existing_element(),
