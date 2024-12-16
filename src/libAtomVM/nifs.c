@@ -4877,7 +4877,8 @@ static term nif_lists_member(Context *ctx, int argc, term argv[])
 
         if (cmp_result == TermEquals) {
             return TRUE_ATOM;
-        } else if (UNLIKELY(cmp_result == TermCompareMemoryAllocFail)) {
+        }
+        if (UNLIKELY(cmp_result == TermCompareMemoryAllocFail)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 
