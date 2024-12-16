@@ -162,6 +162,8 @@ static const char *const unicode_atom = "\x7" "unicode";
 
 static const char *const global_atom = "\x6" "global";
 
+static const char *const registered_name_atom = "\xF" "registered_name";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -307,6 +309,8 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, unicode_atom) == UNICODE_ATOM_INDEX;
 
     ok &= globalcontext_insert_atom(glb, global_atom) == GLOBAL_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, registered_name_atom) == REGISTERED_NAME_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();
