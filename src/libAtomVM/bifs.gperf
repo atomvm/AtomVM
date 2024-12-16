@@ -36,6 +36,7 @@ struct BifNameAndPtr
 };
 %%
 erlang:self/0, {.bif.base.type = BIFFunctionType, .bif.bif0_ptr = bif_erlang_self_0}
+erlang:node/0, {.bif.base.type = BIFFunctionType, .bif.bif0_ptr = bif_erlang_node_0}
 erlang:length/1, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif1_ptr = bif_erlang_length_1}
 erlang:byte_size/1, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif1_ptr = bif_erlang_byte_size_1}
 erlang:bit_size/1, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif1_ptr = bif_erlang_bit_size_1}

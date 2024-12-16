@@ -151,6 +151,9 @@ struct GlobalContext
     SpinLock env_spinlock;
 #endif
 
+    term ATOMIC node_name;
+    uint32_t ATOMIC creation;
+
 #if HAVE_OPEN && HAVE_CLOSE
     ErlNifResourceType *posix_fd_resource_type;
 #endif

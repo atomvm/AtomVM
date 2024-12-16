@@ -65,6 +65,7 @@ enum ContextFlags
     Ready = 8,
     Killed = 16,
     Trap = 32,
+    Distribution = 64,
 };
 
 enum HeapGrowthStrategy

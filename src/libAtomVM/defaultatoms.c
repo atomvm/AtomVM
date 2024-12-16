@@ -162,6 +162,9 @@ static const char *const unicode_atom = "\x7" "unicode";
 
 static const char *const global_atom = "\x6" "global";
 
+static const char *const nonode_at_nohost_atom = "\xD" "nonode@nohost";
+static const char *const net_kernel_atom = "\xA" "net_kernel";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -307,6 +310,9 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, unicode_atom) == UNICODE_ATOM_INDEX;
 
     ok &= globalcontext_insert_atom(glb, global_atom) == GLOBAL_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, nonode_at_nohost_atom) == NONODE_AT_NOHOST_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, net_kernel_atom) == NET_KERNEL_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();
