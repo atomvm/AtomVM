@@ -68,11 +68,6 @@ static void gpio_isr_handler(void *arg);
 static Context *gpio_driver_create_port(GlobalContext *global, term opts);
 #endif
 
-#ifdef CONFIG_AVM_ENABLE_GPIO_PORT_DRIVER
-static const char *const gpio_atom = "\x4" "gpio";
-static const char *const gpio_driver_atom = "\xB" "gpio_driver";
-#endif
-
 static const AtomStringIntPair pin_mode_table[] = {
     { ATOM_STR("\x5", "input"), GPIO_MODE_INPUT },
     { ATOM_STR("\x6", "output"), GPIO_MODE_OUTPUT },
@@ -99,6 +94,16 @@ static const AtomStringIntPair pin_level_table[] = {
     { ATOM_STR("\x3", "low"), GPIOPinLow },
     { ATOM_STR("\x4", "high"), GPIOPinHigh },
     SELECT_INT_DEFAULT(GPIOPinInvalid)
+};
+
+static const AtomStringIntPair int_trigger_table[] = {
+    { ATOM_STR("\x4", "none"), GPIO_INTR_DISABLE },
+    { ATOM_STR("\x6", "rising"), GPIO_INTR_POSEDGE },
+    { ATOM_STR("\x7", "falling"), GPIO_INTR_NEGEDGE },
+    { ATOM_STR("\x4", "both"), GPIO_INTR_ANYEDGE },
+    { ATOM_STR("\x3", "low"), GPIO_INTR_LOW_LEVEL },
+    { ATOM_STR("\x4", "high"), GPIO_INTR_HIGH_LEVEL },
+    SELECT_INT_DEFAULT(GPIO_INTR_MAX)
 };
 
 enum gpio_cmd
@@ -286,15 +291,19 @@ static inline term gpio_digital_read(term gpio_num_term)
 
     avm_int_t level = gpio_get_level(gpio_num);
 
-    return level ? HIGH_ATOM : LOW_ATOM;
+    return level ? globalcontext_make_atom(glb, high_atom) : globalcontext_make_atom(glb, low_atom);
 }
 
 #ifdef CONFIG_AVM_ENABLE_GPIO_PORT_DRIVER
 
 void gpio_driver_init(GlobalContext *global)
 {
-    int index = globalcontext_insert_atom(global, gpio_driver_atom);
-    gpio_driver = term_from_atom_index(index);
+    int index = globalcontext_insert_atom(global, ATOM_STR("\xB", "gpio_driver"));
+    if (UNLIKELY(index < 0 )){
+        ESP_LOGE(TAG, "Failed to initialize gpio_driver");
+    } else {
+        gpio_driver = term_from_atom_index(index);
+    }
 }
 
 Context *gpio_driver_create_port(GlobalContext *global, term opts)
@@ -312,12 +321,18 @@ Context *gpio_driver_create_port(GlobalContext *global, term opts)
     ctx->native_handler = consume_gpio_mailbox;
     ctx->platform_data = gpio_data;
 
-    term reg_name_term = globalcontext_make_atom(global, gpio_atom);
-    int atom_index = term_to_atom_index(reg_name_term);
-
-    if (UNLIKELY(!globalcontext_register_process(ctx->global, atom_index, ctx->process_id))) {
+    int gpio_atom_index = globalcontext_insert_atom(global, ATOM_STR("\x4", "gpio"));
+    if (UNLIKELY(gpio_atom_index < 0)) {
+        ESP_LOGE(TAG, "Failed to create 'gpio' atom to register the driver!");
+        free(gpio_data);
         scheduler_terminate(ctx);
+        return NULL;
+    }
+
+    if (UNLIKELY(!globalcontext_register_process(ctx->global, gpio_atom_index, ctx->process_id))) {
         ESP_LOGE(TAG, "Only a single GPIO driver can be opened.");
+        free(gpio_data);
+        scheduler_terminate(ctx);
         return NULL;
     }
 
@@ -327,7 +342,7 @@ Context *gpio_driver_create_port(GlobalContext *global, term opts)
 static term gpiodriver_close(Context *ctx)
 {
     GlobalContext *glb = ctx->global;
-    int gpio_atom_index = atom_table_ensure_atom(glb->atom_table, gpio_atom, AtomTableNoOpts);
+    int gpio_atom_index = atom_table_ensure_atom(glb->atom_table, ATOM_STR("\x4", "gpio"), AtomTableNoOpts);
     if (UNLIKELY(!globalcontext_get_registered_process(glb, gpio_atom_index))) {
         return ERROR_ATOM;
     }
@@ -482,36 +497,9 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
         target_local_pid = target_pid;
     }
 
-
-    /* TODO: GPIO specific atoms should be removed from platform_defaultatoms and constructed within this driver */
-    gpio_int_type_t interrupt_type;
-    switch (trigger) {
-        case NONE_ATOM:
-            interrupt_type = GPIO_INTR_DISABLE;
-            break;
-
-        case RISING_ATOM:
-            interrupt_type = GPIO_INTR_POSEDGE;
-            break;
-
-        case FALLING_ATOM:
-            interrupt_type = GPIO_INTR_NEGEDGE;
-            break;
-
-        case BOTH_ATOM:
-            interrupt_type = GPIO_INTR_ANYEDGE;
-            break;
-
-        case LOW_ATOM:
-            interrupt_type = GPIO_INTR_LOW_LEVEL;
-            break;
-
-        case HIGH_ATOM:
-            interrupt_type = GPIO_INTR_HIGH_LEVEL;
-            break;
-
-        default:
-            return ERROR_ATOM;
+    gpio_int_type_t interrupt_type = interop_atom_term_select_int(int_trigger_table, trigger, ctx->global);
+    if(UNLIKELY(interrupt_type == GPIO_INTR_MAX)) {
+        return BADARG_ATOM;
     }
 
     if (trigger != NONE_ATOM) {
@@ -569,6 +557,7 @@ static term gpiodriver_remove_int(Context *ctx, term cmd)
     } else {
         return ERROR_ATOM;
     }
+
 
     return unregister_interrupt_listener(ctx, gpio_num);
 }
@@ -749,7 +738,7 @@ static term nif_gpio_digital_write(Context *ctx, int argc, term argv[])
 
 static term nif_gpio_digital_read(Context *ctx, int argc, term argv[])
 {
-    return gpio_digital_read(argv[0]);
+    return gpio_digital_read(ctx, argv[0]);
 }
 
 static const struct Nif gpio_init_nif =

@@ -18,11 +18,7 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-X(READ_ATOM, "\x4", "read")
 X(GPIO_INTERRUPT_ATOM, "\xE", "gpio_interrupt")
-X(RISING_ATOM, "\x6", "rising")
-X(FALLING_ATOM, "\x7", "falling")
-X(BOTH_ATOM, "\x4", "both")
 X(LOW_ATOM, "\x3", "low")
 X(HIGH_ATOM, "\x4", "high")
 
