@@ -3310,10 +3310,6 @@ static term nif_ets_insert(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(ref, is_ets_table_id);
 
     term entry = argv[1];
-    VALIDATE_VALUE(entry, term_is_tuple);
-    if (term_get_tuple_arity(entry) < 1) {
-        RAISE_ERROR(BADARG_ATOM);
-    }
 
     EtsErrorCode result = ets_insert(ref, entry, ctx);
     switch (result) {

@@ -63,7 +63,7 @@ new(_Name, _Options) ->
 %% @doc Insert an entry into an ets table.
 %% @end
 %%-----------------------------------------------------------------------------
--spec insert(Table :: table(), Entry :: tuple()) -> true.
+-spec insert(Table :: table(), Entry :: tuple() | [tuple()]) -> true.
 insert(_Table, _Entry) ->
     erlang:nif_error(undefined).
 
