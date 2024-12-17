@@ -27,6 +27,8 @@ The `<sta-properties>` property list should contain the following entries:
 * `{ssid, string() | binary()}`  The SSID to which the device should connect.
 * `{psk, string() | binary()}` The password required to authenticate to the network, if required.
 
+Optionally on the ESP32 platform, using the `managed` atom in the configuration, the `ssid` and `psk` may be omitted and a connection will not be initiated immediately. This will allow for the use of `network:wifi_scan` to find available access points, and connecting with `network:connect/1`. When starting the driver in this mode all callback functions must be configured when the driver is started, and providing a callback for `disconnected` events is recommended, so the application can also control when, and to which access point, it will make a new connection.
+
 The [`network:start/1`](./apidocs/erlang/eavmlib/network.md#start1) will immediately return `{ok, Pid}`, where `Pid` is the process ID of the network server instance, if the network was properly initialized, or `{error, Reason}`, if there was an error in configuration.  However, the application may want to wait for the device to connect to the target network and obtain an IP address, for example, before starting clients or services that require network access.
 
 Applications can specify callback functions, which get triggered as events emerge from the network layer, including connection to and disconnection from the target network, as well as IP address acquisition.
@@ -34,7 +36,7 @@ Applications can specify callback functions, which get triggered as events emerg
 Callback functions can be specified by the following configuration parameters:
 
 * `{connected, fun(() -> term())}` A callback function which will be called when the device connects to the target network.
-* `{disconnected, fun(() -> term())}` A callback function which will be called when the device disconnects from the target network.
+* `{disconnected, fun(() -> term())}` A callback function which will be called when the device disconnects from the target network. If no callback function is provided the default behavior is to attempt to reconnect immediately. By providing a callback function the application can decide whether to reconnect, or connect to a new access point.
 * `{got_ip, fun((ip_info()) -> term())}` A callback function which will be called when the device obtains an IP address.  In this case, the IPv4 IP address, net mask, and gateway are provided as a parameter to the callback function.
 
 ```{warning}
@@ -75,7 +77,8 @@ gotIp(IpInfo) ->
     io:format("Got IP: ~p~n", [IpInfo]).
 
 disconnected() ->
-    io:format("Disconnected from AP.~n").
+    io:format("Disconnected from AP, attempting to reconnect~n"),
+    network:connect().
 ```
 
 In a typical application, the network should be configured and an IP address should be acquired first, before starting clients or services that have a dependency on the network.
@@ -101,6 +104,20 @@ end
 ```
 
 To obtain the signal strength (in decibels) of the connection to the associated access point use [`network:sta_rssi/0`](./apidocs/erlang/eavmlib/network.md#sta_rssi0).
+
+### STA (or AP+STA) mode functions
+
+#### `disconnect`
+
+The function `network:disconnect/0` will disconnect a station from the associated access point. Note that using this function without providing a custom `disconnected` event callback function will result in the driver immediately attempting to reconnect to the last associated access point.
+
+This function is currently only supported on the ESP32 platform.
+
+#### `connect`
+
+Using the function `network:connect/0` will start a connection to the last configured access point. To connect to a new access point use either a proplist consisting of `[{ssid, "Network Name"} | {psk, "Password"} | {dhcp_hostname, "hostname"}]`, or a complete `network_config()` consisting of `[sta_config() | sntp_config()]`.  If any callback functions or default scan configuration options are defined in the `network_config()` they will be ignored; default scan options and callback functions must be configured when the driver is started.
+
+This function is currently only supported on the ESP32 platform.
 
 ## AP mode
 
