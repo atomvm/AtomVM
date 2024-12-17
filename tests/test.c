@@ -212,6 +212,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_try_case_end, 256),
     TEST_CASE(test_exception_classes),
     TEST_CASE_EXPECTED(test_recursion_and_try_catch, 3628800),
+    TEST_CASE(test_fun_info),
     TEST_CASE_EXPECTED(test_func_info, 89),
     TEST_CASE_EXPECTED(test_func_info2, 1),
     TEST_CASE_EXPECTED(test_func_info3, 120),

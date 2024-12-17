@@ -63,6 +63,7 @@ erlang:float_to_binary/1, &float_to_binary_nif
 erlang:float_to_binary/2, &float_to_binary_nif
 erlang:float_to_list/1, &float_to_list_nif
 erlang:float_to_list/2, &float_to_list_nif
+erlang:fun_info/2, &fun_info_nif
 erlang:insert_element/3, &insert_element_nif
 erlang:list_to_atom/1, &list_to_atom_nif
 erlang:list_to_existing_atom/1, &list_to_existing_atom_nif
