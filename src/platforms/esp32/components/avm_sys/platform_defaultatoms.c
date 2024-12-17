@@ -20,14 +20,6 @@
 
 #include "platform_defaultatoms.h"
 
-static const char *const read_atom = "\x4" "read";
-static const char *const gpio_interrupt_atom = "\xE" "gpio_interrupt";
-static const char *const rising_atom = "\x6" "rising";
-static const char *const falling_atom = "\x7" "falling";
-static const char *const both_atom = "\x4" "both";
-static const char *const low_atom = "\x3" "low";
-static const char *const high_atom = "\x4" "high";
-
 static const char *const esp32_atom = "\x5" "esp32";
 
 static const char *const proto_atom = "\x5" "proto";
@@ -76,14 +68,6 @@ static const char *const event_queue_len_atom = "\xF" "event_queue_len";
 void platform_defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
-
-    ok &= globalcontext_insert_atom(glb, read_atom) == READ_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, gpio_interrupt_atom) == GPIO_INTERRUPT_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, rising_atom) == RISING_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, falling_atom) == FALLING_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, both_atom) == BOTH_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, low_atom) == LOW_ATOM_INDEX;
-    ok &= globalcontext_insert_atom(glb, high_atom) == HIGH_ATOM_INDEX;
 
     ok &= globalcontext_insert_atom(glb, esp32_atom) == ESP32_ATOM_INDEX;
 

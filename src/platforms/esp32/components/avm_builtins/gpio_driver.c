@@ -39,7 +39,6 @@
 #include "mailbox.h"
 #include "module.h"
 #include "nifs.h"
-#include "platform_defaultatoms.h"
 #include "port.h"
 #include "scheduler.h"
 #include "term.h"
@@ -69,9 +68,13 @@ static Context *gpio_driver_create_port(GlobalContext *global, term opts);
 #endif
 
 #ifdef CONFIG_AVM_ENABLE_GPIO_PORT_DRIVER
-static const char *const gpio_atom = "\x4" "gpio";
-static const char *const gpio_driver_atom = "\xB" "gpio_driver";
+static const char *const gpio_atom = ATOM_STR("\x4", "gpio");
+static const char *const gpio_driver_atom = ATOM_STR("\xB", "gpio_driver");
+static const char *const gpio_interrupt_atom = ATOM_STR("\xE", "gpio_interrupt");
 #endif
+
+static const char *const high_atom = ATOM_STR("\x4", "high");
+static const char *const low_atom = ATOM_STR("\x3", "low");
 
 static const AtomStringIntPair pin_mode_table[] = {
     { ATOM_STR("\x5", "input"), GPIO_MODE_INPUT },
@@ -99,6 +102,16 @@ static const AtomStringIntPair pin_level_table[] = {
     { ATOM_STR("\x3", "low"), GPIOPinLow },
     { ATOM_STR("\x4", "high"), GPIOPinHigh },
     SELECT_INT_DEFAULT(GPIOPinInvalid)
+};
+
+static const AtomStringIntPair int_trigger_table[] = {
+    { ATOM_STR("\x4", "none"), GPIO_INTR_DISABLE },
+    { ATOM_STR("\x6", "rising"), GPIO_INTR_POSEDGE },
+    { ATOM_STR("\x7", "falling"), GPIO_INTR_NEGEDGE },
+    { ATOM_STR("\x4", "both"), GPIO_INTR_ANYEDGE },
+    { ATOM_STR("\x3", "low"), GPIO_INTR_LOW_LEVEL },
+    { ATOM_STR("\x4", "high"), GPIO_INTR_HIGH_LEVEL },
+    SELECT_INT_DEFAULT(GPIO_INTR_MAX)
 };
 
 enum gpio_cmd
@@ -286,7 +299,7 @@ static inline term gpio_digital_read(term gpio_num_term)
 
     avm_int_t level = gpio_get_level(gpio_num);
 
-    return level ? HIGH_ATOM : LOW_ATOM;
+    return level ? globalcontext_make_atom(glb, high_atom) : globalcontext_make_atom(glb, low_atom);
 }
 
 #ifdef CONFIG_AVM_ENABLE_GPIO_PORT_DRIVER
@@ -371,7 +384,7 @@ EventListener *gpio_interrupt_callback(GlobalContext *glb, EventListener *listen
     BEGIN_WITH_STACK_HEAP(1 + 2, heap);
 
     term int_msg = term_alloc_tuple(2, &heap);
-    term_put_tuple_element(int_msg, 0, GPIO_INTERRUPT_ATOM);
+    term_put_tuple_element(int_msg, 0, globalcontext_make_atom(glb, gpio_interrupt_atom));
     term_put_tuple_element(int_msg, 1, term_from_int32(gpio_num));
 
     globalcontext_send_message(glb, listening_pid, int_msg);
@@ -484,34 +497,9 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
 
 
     /* TODO: GPIO specific atoms should be removed from platform_defaultatoms and constructed within this driver */
-    gpio_int_type_t interrupt_type;
-    switch (trigger) {
-        case NONE_ATOM:
-            interrupt_type = GPIO_INTR_DISABLE;
-            break;
-
-        case RISING_ATOM:
-            interrupt_type = GPIO_INTR_POSEDGE;
-            break;
-
-        case FALLING_ATOM:
-            interrupt_type = GPIO_INTR_NEGEDGE;
-            break;
-
-        case BOTH_ATOM:
-            interrupt_type = GPIO_INTR_ANYEDGE;
-            break;
-
-        case LOW_ATOM:
-            interrupt_type = GPIO_INTR_LOW_LEVEL;
-            break;
-
-        case HIGH_ATOM:
-            interrupt_type = GPIO_INTR_HIGH_LEVEL;
-            break;
-
-        default:
-            return ERROR_ATOM;
+    gpio_int_type_t interrupt_type = interop_atom_term_select_int(int_trigger_table, trigger, ctx->global);
+    if(UNLIKELY(interrupt_type == GPIO_INTR_MAX)) {
+        return BADARG_ATOM;
     }
 
     if (trigger != NONE_ATOM) {
@@ -569,6 +557,7 @@ static term gpiodriver_remove_int(Context *ctx, term cmd)
     } else {
         return ERROR_ATOM;
     }
+
 
     return unregister_interrupt_listener(ctx, gpio_num);
 }
