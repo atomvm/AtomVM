@@ -128,7 +128,7 @@ last([_H | T]) -> last(T).
 %%-----------------------------------------------------------------------------
 -spec member(E :: term(), L :: list()) -> boolean().
 member(_E, _T) ->
-    erlang:nif_error().
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   E the member to delete
