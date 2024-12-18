@@ -20,26 +20,31 @@
 
 -module(ref_to_list_test).
 
--export([start/0, check/1, g/1]).
+-export([start/0]).
 
 start() ->
-    [A1, A2, A3, A4, A5 | T] = g(h()),
-    A1 + A2 + A3 + A4 + A5 + check(T).
+    ok = test_loop(10),
+    0.
 
-check([$>]) ->
-    3;
-check([$. | T]) ->
-    1 + check(T);
-check([H | T]) when H >= $0 andalso H =< $9 ->
-    check(T).
+test_loop(0) ->
+    ok;
+test_loop(N) when N > 0 ->
+    RefStr = ref_to_list(make_ref()),
+    [0 | T] = parse_ref(RefStr),
+    ok = check_words(T),
+    test_loop(N - 1).
 
-g(X) ->
-    try erlang:ref_to_list(X) of
-        Res -> Res
-    catch
-        error:badarg -> 0;
-        _:_ -> 10
-    end.
+parse_ref("#Ref<" ++ T) ->
+    parse_ref0(T, 0, []).
 
-h() ->
-    erlang:make_ref().
+parse_ref0(">", N, Acc) ->
+    Acc ++ [N];
+parse_ref0([$. | T], N, Acc) ->
+    parse_ref0(T, 0, Acc ++ [N]);
+parse_ref0([H | T], N, Acc) when H >= $0 andalso H =< $9 ->
+    parse_ref0(T, N * 10 + (H - $0), Acc).
+
+check_words([]) ->
+    ok;
+check_words([W | T]) when is_integer(W) andalso W >= 0 andalso W < 1 bsl 32 ->
+    check_words(T).
