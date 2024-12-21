@@ -132,6 +132,8 @@ ets:insert/2, &ets_insert_nif
 ets:lookup/2, &ets_lookup_nif
 ets:lookup_element/3, &ets_lookup_element_nif
 ets:delete/2, &ets_delete_nif
+ets:update_counter/3, &ets_update_counter_nif
+ets:update_counter/4, &ets_update_counter_nif
 atomvm:add_avm_pack_binary/2, &atomvm_add_avm_pack_binary_nif
 atomvm:add_avm_pack_file/2, &atomvm_add_avm_pack_file_nif
 atomvm:close_avm_pack/2, &atomvm_close_avm_pack_nif
