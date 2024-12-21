@@ -244,7 +244,7 @@ static uint32_t hash_float(term t, int32_t h, GlobalContext *global)
     return h * LARGE_PRIME_FLOAT;
 }
 
-static uint32_t hash_pid(term t, int32_t h, GlobalContext *global)
+static uint32_t hash_local_pid(term t, int32_t h, GlobalContext *global)
 {
     UNUSED(global);
     uint32_t n = (uint32_t) term_to_local_process_id(t);
@@ -255,13 +255,40 @@ static uint32_t hash_pid(term t, int32_t h, GlobalContext *global)
     return h * LARGE_PRIME_PID;
 }
 
-static uint32_t hash_reference(term t, int32_t h, GlobalContext *global)
+static uint32_t hash_external_pid(term t, int32_t h, GlobalContext *global)
+{
+    UNUSED(global);
+    uint32_t n = (uint32_t) term_get_external_pid_process_id(t);
+    while (n) {
+        h = h * LARGE_PRIME_PID + (n & 0xFF);
+        n >>= 8;
+    }
+    return h * LARGE_PRIME_PID;
+}
+
+static uint32_t hash_local_reference(term t, int32_t h, GlobalContext *global)
 {
     UNUSED(global);
     uint64_t n = term_to_ref_ticks(t);
     while (n) {
         h = h * LARGE_PRIME_REF + (n & 0xFF);
         n >>= 8;
+    }
+    return h * LARGE_PRIME_REF;
+}
+
+static uint32_t hash_external_reference(term t, int32_t h, GlobalContext *global)
+{
+    UNUSED(global);
+    uint32_t l = term_get_external_reference_len(t);
+    uint32_t words[l];
+    term_get_external_reference_words(t, words);
+    for (uint32_t i = 0; i < l; i++) {
+        uint32_t n = words[i];
+        while (n) {
+            h = h * LARGE_PRIME_REF + (n & 0xFF);
+            n >>= 8;
+        }
     }
     return h * LARGE_PRIME_REF;
 }
@@ -285,10 +312,14 @@ static uint32_t hash_term_incr(term t, int32_t h, GlobalContext *global)
         return hash_integer(t, h, global);
     } else if (term_is_float(t)) {
         return hash_float(t, h, global);
-    } else if (term_is_pid(t)) {
-        return hash_pid(t, h, global);
-    } else if (term_is_reference(t)) {
-        return hash_reference(t, h, global);
+    } else if (term_is_local_pid(t)) {
+        return hash_local_pid(t, h, global);
+    } else if (term_is_external_pid(t)) {
+        return hash_external_pid(t, h, global);
+    } else if (term_is_local_reference(t)) {
+        return hash_local_reference(t, h, global);
+    } else if (term_is_external_reference(t)) {
+        return hash_external_reference(t, h, global);
     } else if (term_is_binary(t)) {
         return hash_binary(t, h, global);
     } else if (term_is_tuple(t)) {

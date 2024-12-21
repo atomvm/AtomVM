@@ -57,8 +57,12 @@ extern "C" {
 #define TERM_BOXED_FLOAT 0x18
 #define TERM_BOXED_REFC_BINARY 0x20
 #define TERM_BOXED_HEAP_BINARY 0x24
-#define TERM_BOXED_MAP 0x3C
 #define TERM_BOXED_SUB_BINARY 0x28
+#define TERM_BOXED_MAP 0x2C
+#define TERM_BOXED_EXTERNAL_THING 0x30
+#define TERM_BOXED_EXTERNAL_PID 0x30
+#define TERM_BOXED_EXTERNAL_PORT 0x34
+#define TERM_BOXED_EXTERNAL_REF 0x38
 
 #define TERM_UNUSED 0x2B
 #define TERM_RESERVED_MARKER(x) ((x << 6) | TERM_UNUSED)
@@ -84,6 +88,20 @@ extern "C" {
 #define BOXED_FUN_SIZE 3
 #define FLOAT_SIZE (sizeof(float_term_t) / sizeof(term) + 1)
 #define REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
+#if TERM_BYTES == 8
+    #define EXTERNAL_PID_SIZE 3
+#elif TERM_BYTES == 4
+    #define EXTERNAL_PID_SIZE 5
+#else
+    #error
+#endif
+#if TERM_BYTES == 8
+    #define EXTERNAL_REF_SIZE(words) (2 + ((words + 1) / 2))
+#elif TERM_BYTES == 4
+    #define EXTERNAL_REF_SIZE(words) (3 + words)
+#else
+    #error
+#endif
 #define TUPLE_SIZE(elems) ((int) (elems + 1))
 #define CONS_SIZE 2
 #define REFC_BINARY_CONS_OFFSET 4
@@ -111,13 +129,24 @@ extern "C" {
 
 #define TERM_FROM_ATOM_INDEX(atom_index) ((atom_index << 6) | 0xB)
 
-// 2^64 = 18446744073709551616 (20 chars)
-// "#Ref<0.0.0." ">\0" (13 chars)
-#define REF_AS_CSTRING_LEN 33
+// 2^32-1 = 4294967295 (10 chars)
+// "#Ref<0." "." ">\0" (10 chars)
+#define LOCAL_REF_AS_CSTRING_LEN 30
 
-// 2^32 = 4294967296 (10 chars)
+// 2^26-1 = 67108863 (8 chars) (node, atom index)
+// 2^32-1 = 4294967295 (10 chars)
+// "#Ref<" "." "." "." "." "." ">\0" (12 chars)
+#define EXTERNAL_REF_AS_CSTRING_LEN 70
+
+// 2^28-1 = 268435455 (9 chars)
 // "<0." ".0>\0" (7 chars)
-#define PID_AS_CSTRING_LEN 17
+#define LOCAL_PID_AS_CSTRING_LEN 16
+
+// 2^26-1 = 67108863 (8 chars) (node, atom index)
+// 2^28-1 = 268435455 (9 chars) (pid number)
+// 2^32-1 = 4294967295 (10 chars) (pid serial)
+// "<" "." "." ">\0" (5 chars)
+#define EXTERNAL_PID_AS_CSTRING_LEN 32
 
 #ifndef TYPEDEF_GLOBALCONTEXT
 #define TYPEDEF_GLOBALCONTEXT
@@ -333,7 +362,7 @@ static inline bool term_is_movable_boxed(term t)
 /**
  * @brief Returns size of a boxed term from its header
  *
- * @details Returns the size that is stored in boxed term header most significant bits.
+ * @details Returns the size that is stored in boxed term header most significant bits for variable size boxed terms.
  * @param header the boxed term header.
  * @return the size of the boxed term that follows the header. 0 is returned if the boxed term is just the header.
  */
@@ -476,6 +505,57 @@ static inline bool term_is_catch_label(term t)
 }
 
 /**
+ * @brief Checks if a term is a local pid
+ *
+ * @details Returns \c true if a term is a process id, otherwise \c false.
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_local_pid(term t)
+{
+    /* integer: 00 11 */
+    return ((t & 0xF) == 0x3);
+}
+
+/**
+ * @brief Checks if a term is an external pid
+ *
+ * @details Returns \c true if a term is an external process id, otherwise \c false.
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_external_pid(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        if ((boxed_value[0] & 0x3F) == TERM_BOXED_EXTERNAL_PID) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * @brief Checks if a term is an external thing
+ *
+ * @details Returns \c true if a term is an external thing, otherwise \c false.
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_external(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        if ((boxed_value[0] & 0x33) == TERM_BOXED_EXTERNAL_THING) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * @brief Checks if a term is a pid
  *
  * @details Returns \c true if a term is a process id, otherwise \c false.
@@ -484,8 +564,26 @@ static inline bool term_is_catch_label(term t)
  */
 static inline bool term_is_pid(term t)
 {
-    /* integer: 00 11 */
-    return ((t & 0xF) == 0x3);
+    return term_is_local_pid(t) || term_is_external_pid(t);
+}
+
+/**
+ * @brief Checks if a term is an external port
+ *
+ * @details Returns \c true if a term is an external port, otherwise \c false.
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_external_port(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        if ((boxed_value[0] & 0x3F) == TERM_BOXED_EXTERNAL_PORT) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -499,7 +597,7 @@ static inline bool term_is_tuple(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == 0) {
+        if ((boxed_value[0] & 0x3F) == TERM_BOXED_TUPLE) {
             return true;
         }
     }
@@ -518,7 +616,46 @@ static inline bool term_is_reference(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & 0x3F) == TERM_BOXED_REF) {
+        unsigned int boxed_type = boxed_value[0] & 0x3F;
+        return (boxed_type == TERM_BOXED_REF) || (boxed_type == TERM_BOXED_EXTERNAL_REF);
+    }
+
+    return false;
+}
+
+/**
+ * @brief Checks if a term is a local reference
+ *
+ * @details Returns \c true if a term is a local reference, otherwise \c false.
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_local_reference(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        const uint32_t header = boxed_value[0] & 0x3F;
+        if (header == TERM_BOXED_REF) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * @brief Checks if a term is an external reference
+ *
+ * @details Returns \c true if a term is a local reference, otherwise \c false.
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_external_reference(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        const uint32_t header = boxed_value[0] & 0x3F;
+        if (header == TERM_BOXED_EXTERNAL_REF) {
             return true;
         }
     }
@@ -687,7 +824,7 @@ static inline int term_to_catch_label_and_module(term t, int *module_index)
  */
 static inline int32_t term_to_local_process_id(term t)
 {
-    TERM_DEBUG_ASSERT(term_is_pid(t));
+    TERM_DEBUG_ASSERT(term_is_local_pid(t));
 
     return t >> 4;
 }
@@ -1196,7 +1333,7 @@ static inline term term_from_ref_ticks(uint64_t ref_ticks, Heap *heap)
 
 static inline uint64_t term_to_ref_ticks(term rt)
 {
-    TERM_DEBUG_ASSERT(term_is_reference(rt));
+    TERM_DEBUG_ASSERT(term_is_local_reference(rt));
 
     const term *boxed_value = term_to_const_term_ptr(rt);
 
@@ -1205,6 +1342,224 @@ static inline uint64_t term_to_ref_ticks(term rt)
 
     #elif TERM_BYTES == 4
         return (boxed_value[1] << 4) | boxed_value[2];
+
+    #else
+        #error "terms must be either 32 or 64 bit wide"
+    #endif
+}
+
+/**
+ * @brief Make an external pid term from node, process_id, serial and creation
+ *
+ * @param node name of the node (atom)
+ * @param process_id process id on that node
+ * @param serial serial of process id on that node
+ * @param creation creation of that node
+ * @param heap the heap to allocate memory in
+ * @return an external heap term created using given parameters.
+ */
+static inline term term_make_external_process_id(term node, uint32_t process_id, uint32_t serial, uint32_t creation, Heap *heap)
+{
+    TERM_DEBUG_ASSERT(term_is_atom(node));
+
+    term *boxed_value = memory_heap_alloc(heap, EXTERNAL_PID_SIZE);
+    int atom_index = term_to_atom_index(node);
+    boxed_value[0] = ((EXTERNAL_PID_SIZE - 1) << 6) | TERM_BOXED_EXTERNAL_PID;
+
+    #if TERM_BYTES == 8
+        boxed_value[1] = (term) (((uint64_t) creation) << 32 | atom_index);
+        boxed_value[2] = (term) (((uint64_t) serial) << 32 | process_id);
+
+    #elif TERM_BYTES == 4
+        boxed_value[1] = (term) atom_index;
+        boxed_value[2] = (term) creation;
+        boxed_value[3] = (term) process_id;
+        boxed_value[4] = (term) serial;
+
+    #else
+        #error "terms must be either 32 or 64 bit wide"
+    #endif
+
+    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+}
+
+/**
+ * @brief Get the name of a node for a given external thing
+ *
+ * @param term external term
+ * @return the name of the node
+ */
+static inline term term_get_external_node(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_external(t));
+
+    const term *boxed_value = term_to_const_term_ptr(t);
+
+    return term_from_atom_index((uint32_t) boxed_value[1]);
+}
+
+/**
+ * @brief Get the creation for a given external thing
+ *
+ * @param term external term
+ * @return the serial of the external pid
+ */
+static inline uint32_t term_get_external_node_creation(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_external_pid(t));
+
+    const term *boxed_value = term_to_const_term_ptr(t);
+
+    #if TERM_BYTES == 8
+        return (uint32_t) (boxed_value[1] >> 32);
+
+    #elif TERM_BYTES == 4
+        return (uint32_t) boxed_value[2];
+
+    #else
+        #error "terms must be either 32 or 64 bit wide"
+    #endif
+}
+
+/**
+ * @brief Get the process id of an external pid
+ *
+ * @param term external pid
+ * @return the process id of the external pid
+ */
+static inline uint32_t term_get_external_pid_process_id(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_external_pid(t));
+
+    const term *boxed_value = term_to_const_term_ptr(t);
+
+    #if TERM_BYTES == 8
+        return (uint32_t) boxed_value[2];
+
+    #elif TERM_BYTES == 4
+        return (uint32_t) boxed_value[3];
+
+    #else
+        #error "terms must be either 32 or 64 bit wide"
+    #endif
+}
+
+/**
+ * @brief Get the serial of an external pid
+ *
+ * @param term external term
+ * @return the serial of the external pid
+ */
+static inline uint32_t term_get_external_pid_serial(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_external_pid(t));
+
+    const term *boxed_value = term_to_const_term_ptr(t);
+
+    #if TERM_BYTES == 8
+        return (uint32_t) (boxed_value[2] >> 32);
+
+    #elif TERM_BYTES == 4
+        return (uint32_t) boxed_value[4];
+    #else
+        #error "terms must be either 32 or 64 bit wide"
+    #endif
+}
+
+/*
+ * @brief Make an external reference term from node, creation, number of words and words
+ *
+ * @param node name of the node (atom)
+ * @param len number of words (1..5)
+ * @param data words
+ * @param creation creation of that node
+ * @param heap the heap to allocate memory in
+ * @return an external heap term created using given parameters.
+ */
+static inline term term_make_external_reference(term node, uint16_t len, uint32_t *data, uint32_t creation, Heap *heap)
+{
+    TERM_DEBUG_ASSERT(term_is_atom(node));
+
+    term *boxed_value = memory_heap_alloc(heap, EXTERNAL_REF_SIZE(len));
+    int atom_index = term_to_atom_index(node);
+    boxed_value[0] = ((EXTERNAL_REF_SIZE(len) - 1) << 6) | TERM_BOXED_EXTERNAL_REF;
+
+    #if TERM_BYTES == 8
+        boxed_value[1] = (term) (((uint64_t) creation) << 32 | atom_index);
+        boxed_value[2] = (term) (((uint64_t) len) << 32 | data[0]);
+        for (int i = 1; i < len; i += 2) {
+            uint64_t word = ((uint64_t) data[i]) << 32;
+            if (i + 1 < len) {
+                word |= data[i + 1];
+            }
+            boxed_value[3 + ((i - 1) / 2)] = word;
+        }
+
+    #elif TERM_BYTES == 4
+        boxed_value[1] = (term) atom_index;
+        boxed_value[2] = (term) creation;
+        for (int i = 0; i < len; i++) {
+            boxed_value[3 + i] = data[i];
+        }
+
+    #else
+        #error "terms must be either 32 or 64 bit wide"
+    #endif
+
+    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+}
+
+/**
+ * @brief Get the number of words of an external reference
+ *
+ * @param term external term
+ * @return the number of external nodes
+ */
+static inline uint32_t term_get_external_reference_len(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_external_reference(t));
+
+    const term *boxed_value = term_to_const_term_ptr(t);
+
+    #if TERM_BYTES == 8
+        return (uint32_t) (boxed_value[2] >> 32);
+
+    #elif TERM_BYTES == 4
+        return (uint32_t) (boxed_value[0] >> 6) - 2;
+
+    #else
+        #error "terms must be either 32 or 64 bit wide"
+    #endif
+}
+
+/**
+ * @brief Get the words of an external reference
+ *
+ * @param term external term
+ * @param data the words to read, must be at least len long (maximum: 5)
+ */
+static inline void term_get_external_reference_words(term t, uint32_t *data)
+{
+    TERM_DEBUG_ASSERT(term_is_external_reference(t));
+
+    const term *boxed_value = term_to_const_term_ptr(t);
+
+    #if TERM_BYTES == 8
+        size_t len = (uint32_t) (boxed_value[2] >> 32);
+        data[0] = (uint32_t) boxed_value[2];
+        for (size_t i = 1; i < len; i += 2) {
+            uint64_t word = boxed_value[3 + ((i - 1) / 2)];
+            data[i] = (uint32_t) (word >> 32);
+            if (i + 1 < len) {
+                data[i + 1] = (uint32_t) word;
+            }
+        }
+
+    #elif TERM_BYTES == 4
+        size_t len = (uint32_t) (boxed_value[0] >> 6) - 2;
+        for (size_t i = 0; i < len; i++) {
+            data[i] = boxed_value[3 + i];
+        }
 
     #else
         #error "terms must be either 32 or 64 bit wide"

@@ -1003,7 +1003,7 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[])
     term reg_name_term = argv[0];
     VALIDATE_VALUE(reg_name_term, term_is_atom);
     term pid_or_port_term = argv[1];
-    VALIDATE_VALUE(pid_or_port_term, term_is_pid);
+    VALIDATE_VALUE(pid_or_port_term, term_is_local_pid);
 
     int atom_index = term_to_atom_index(reg_name_term);
     int32_t pid = term_to_local_process_id(pid_or_port_term);
@@ -1407,7 +1407,7 @@ static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
     term target = argv[0];
     GlobalContext *glb = ctx->global;
 
-    if (term_is_pid(target)) {
+    if (term_is_local_pid(target)) {
         int32_t local_process_id = term_to_local_process_id(target);
 
         globalcontext_send_message(glb, local_process_id, argv[1]);
@@ -2748,7 +2748,7 @@ static term nif_erlang_process_flag(Context *ctx, int argc, term argv[])
         flag = argv[1];
         value = argv[2];
 
-        VALIDATE_VALUE(pid, term_is_pid);
+        VALIDATE_VALUE(pid, term_is_local_pid);
         int local_process_id = term_to_local_process_id(pid);
         Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
         if (IS_NULL_PTR(target)) {
@@ -3225,7 +3225,7 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
 
     if (num_segments == 1) {
         // not found
-        if (UNLIKELY(memory_ensure_free_with_roots(ctx, 2, 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, LIST_SIZE(1, 0), 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 
@@ -3343,7 +3343,7 @@ static term nif_ets_new(Context *ctx, int argc, term argv[])
 
 static inline bool is_ets_table_id(term t)
 {
-    return term_is_reference(t) || term_is_atom(t);
+    return term_is_local_reference(t) || term_is_atom(t);
 }
 
 static term nif_ets_insert(Context *ctx, int argc, term argv[])
@@ -3477,11 +3477,11 @@ static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[])
 
     term t = argv[0];
     VALIDATE_VALUE(t, term_is_pid);
+    size_t max_len = term_is_external(t) ? EXTERNAL_PID_AS_CSTRING_LEN : LOCAL_PID_AS_CSTRING_LEN;
 
-    char buf[PID_AS_CSTRING_LEN];
-    int str_len = term_snprint(buf, PID_AS_CSTRING_LEN, t, ctx->global);
+    char buf[max_len];
+    int str_len = term_snprint(buf, max_len, t, ctx->global);
     if (UNLIKELY(str_len < 0)) {
-        // TODO: change to internal error or something like that
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -3494,11 +3494,11 @@ static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[])
 
     term t = argv[0];
     VALIDATE_VALUE(t, term_is_reference);
+    size_t max_len = term_is_external(t) ? EXTERNAL_REF_AS_CSTRING_LEN : LOCAL_REF_AS_CSTRING_LEN;
 
-    char buf[REF_AS_CSTRING_LEN];
-    int str_len = term_snprint(buf, REF_AS_CSTRING_LEN, t, ctx->global);
+    char buf[max_len];
+    int str_len = term_snprint(buf, max_len, t, ctx->global);
     if (UNLIKELY(str_len < 0)) {
-        // TODO: change to internal error or something like that
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -3593,7 +3593,7 @@ static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[])
     } else {
         // argc == 1
         term t = argv[0];
-        VALIDATE_VALUE(t, term_is_pid);
+        VALIDATE_VALUE(t, term_is_local_pid);
 
         int local_id = term_to_local_process_id(t);
         Context *target = globalcontext_get_process_lock(ctx->global, local_id);
@@ -3636,7 +3636,7 @@ static term nif_erlang_exit(Context *ctx, int argc, term argv[])
         RAISE(LOWERCASE_EXIT_ATOM, reason);
     } else {
         term target_process = argv[0];
-        VALIDATE_VALUE(target_process, term_is_pid);
+        VALIDATE_VALUE(target_process, term_is_local_pid);
         term reason = argv[1];
         GlobalContext *glb = ctx->global;
         Context *target = globalcontext_get_process_lock(glb, term_to_local_process_id(target_process));
@@ -3749,7 +3749,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    VALIDATE_VALUE(target_pid, term_is_pid);
+    VALIDATE_VALUE(target_pid, term_is_local_pid);
 
     int local_process_id = term_to_local_process_id(target_pid);
     Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
@@ -3798,7 +3798,7 @@ static term nif_erlang_demonitor(Context *ctx, int argc, term argv[])
         info = interop_proplist_get_value_default(options, INFO_ATOM, FALSE_ATOM) == TRUE_ATOM;
     }
 
-    VALIDATE_VALUE(ref, term_is_reference);
+    VALIDATE_VALUE(ref, term_is_local_reference);
     uint64_t ref_ticks = term_to_ref_ticks(ref);
 
     bool result = globalcontext_demonitor(ctx->global, ref_ticks);
@@ -3817,7 +3817,7 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
 
     term target_pid = argv[0];
 
-    VALIDATE_VALUE(target_pid, term_is_pid);
+    VALIDATE_VALUE(target_pid, term_is_local_pid);
 
     int local_process_id = term_to_local_process_id(target_pid);
     Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
@@ -3848,7 +3848,7 @@ static term nif_erlang_unlink(Context *ctx, int argc, term argv[])
 
     term target_pid = argv[0];
 
-    VALIDATE_VALUE(target_pid, term_is_pid);
+    VALIDATE_VALUE(target_pid, term_is_local_pid);
 
     int local_process_id = term_to_local_process_id(target_pid);
     Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
@@ -3879,8 +3879,8 @@ static term nif_erlang_group_leader(Context *ctx, int argc, term argv[])
     } else {
         term leader = argv[0];
         term pid = argv[1];
-        VALIDATE_VALUE(pid, term_is_pid);
-        VALIDATE_VALUE(leader, term_is_pid);
+        VALIDATE_VALUE(pid, term_is_local_pid);
+        VALIDATE_VALUE(leader, term_is_local_pid);
 
         int local_process_id = term_to_local_process_id(pid);
         Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);

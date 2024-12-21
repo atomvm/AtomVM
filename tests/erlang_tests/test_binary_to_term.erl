@@ -28,6 +28,7 @@
     get_atom/1,
     get_binary/1,
     test_atom_decoding_checks/0,
+    test_encode_pid/0,
     id/1
 ]).
 
@@ -172,6 +173,8 @@ start() ->
     ok = test_mutate_encodings(),
     ok = test_atom_decoding(),
     ok = test_atom_decoding_checks(),
+    ok = test_encode_pid(),
+    ok = test_encode_reference(),
     0.
 
 test_reverse(T, Interop) ->
@@ -399,6 +402,204 @@ test_atom_decoding_checks() ->
     ok = expect_badarg(make_binterm_fun(invalid_utf8_seq_3)),
     ok.
 
+test_encode_pid() ->
+    Bin = term_to_binary(self()),
+    Pid = binary_to_term(Bin),
+    Pid ! hello,
+    Pid1 = binary_to_term(
+        <<131, 88, 119, 13, "nonode@nohost", 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0>>
+    ),
+    true = is_pid(Pid1),
+    true = is_process_alive(Pid1),
+    ok =
+        receive
+            hello -> ok
+        after 500 -> error
+        end,
+    ExpectedSize =
+        case erlang:system_info(machine) of
+            "ATOM" ->
+                29;
+            "BEAM" ->
+                OTPRelease = erlang:system_info(otp_release),
+                if
+                    OTPRelease < "23" -> 27;
+                    OTPRelease < "26" -> 30;
+                    % small utf8 atom
+                    true -> 29
+                end
+        end,
+    ExpectedSize = byte_size(Bin),
+    FalsePid1 = binary_to_term(
+        <<131, 88, 119, 5, "false", 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0>>
+    ),
+    true = is_pid(FalsePid1),
+    "<0.1.0>" = pid_to_list(FalsePid1),
+    FalsePid1Cr = binary_to_term(
+        <<131, 88, 119, 5, "false", 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1>>
+    ),
+    "<0.1.0>" = pid_to_list(FalsePid1Cr),
+    false = FalsePid1 =:= FalsePid1Cr,
+    FalsePid2 = binary_to_term(
+        <<131, 88, 119, 5, "false", 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0>>
+    ),
+    "<0.2.0>" = pid_to_list(FalsePid2),
+    false = FalsePid1 =:= FalsePid2,
+    TruePid1 = binary_to_term(
+        <<131, 88, 119, 4, "true", 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0>>
+    ),
+    true = is_pid(TruePid1),
+    "<1.1.0>" = pid_to_list(TruePid1),
+    TruePid1Again = binary_to_term(term_to_binary(TruePid1)),
+    true = TruePid1Again =:= TruePid1,
+
+    case has_setnode_creation() of
+        true ->
+            % Test distributed pid
+            Ref42 = do_setnode(test@test_node, 42),
+            DistributedPid1 = binary_to_term(
+                <<131, 88, 119, 14, "test@test_node", 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 42>>
+            ),
+            true = is_pid(DistributedPid1),
+            true = is_process_alive(DistributedPid1),
+
+            DistributedBin42 = term_to_binary(self()),
+            true = DistributedBin42 =/= Bin,
+            DistributedPid42 = binary_to_term(DistributedBin42),
+            true = DistributedPid42 =:= Pid,
+            ExpectedSize = byte_size(DistributedBin42) - 1,
+
+            ok = do_unsetnode(Ref42),
+            Bin = term_to_binary(self()),
+
+            Ref43 = do_setnode(test@test_node, 43),
+            DistributedBin43 = term_to_binary(self()),
+            true = DistributedBin43 =/= DistributedBin42,
+            DistributedPid43 = binary_to_term(DistributedBin43),
+            true = DistributedPid43 =:= Pid,
+
+            ok = do_unsetnode(Ref43),
+            Bin = term_to_binary(self()),
+            ok;
+        false ->
+            ok
+    end,
+    ok.
+
+has_setnode_creation() ->
+    case erlang:system_info(machine) of
+        "ATOM" ->
+            true;
+        "BEAM" ->
+            OTPRelease = erlang:system_info(otp_release),
+            OTPRelease >= "23"
+    end.
+
+do_setnode(Node, Creation) ->
+    {NetKernelPid, MonitorRef} = spawn_opt(
+        fun() ->
+            receive
+                quit -> ok
+            end
+        end,
+        [monitor]
+    ),
+    register(net_kernel, NetKernelPid),
+    true = erlang:setnode(Node, Creation),
+    Node = node(),
+    {NetKernelPid, MonitorRef}.
+
+do_unsetnode({NetKernelPid, MonitorRef}) ->
+    NetKernelPid ! quit,
+    ok =
+        receive
+            {'DOWN', MonitorRef, process, NetKernelPid, normal} -> ok
+        after 1000 -> timeout
+        end,
+    case node() of
+        nonode@nohost ->
+            ok;
+        _Other ->
+            % On BEAM, node may not be reset immediately
+            "BEAM" = erlang:system_info(machine),
+            sleep(100),
+            nonode@nohost = node()
+    end,
+    ok.
+
+test_encode_reference() ->
+    TestRef = make_ref(),
+    Bin = term_to_binary(TestRef),
+    Ref = binary_to_term(Bin),
+    true = is_reference(Ref),
+    Ref123 = binary_to_term(
+        <<131, 90, 0, 2, 119, 13, "nonode@nohost", 0:32, 1:32, 2:32>>
+    ),
+    true = is_reference(Ref123),
+    ExpectedSize =
+        case erlang:system_info(machine) of
+            "ATOM" ->
+                % small utf8 atom & reference with 2 words
+                31;
+            "BEAM" ->
+                OTPRelease = erlang:system_info(otp_release),
+                if
+                    OTPRelease < "23" -> 33;
+                    OTPRelease < "26" -> 36;
+                    % small utf8 atom
+                    true -> 35
+                end
+        end,
+    ExpectedSize = byte_size(Bin),
+    Ref1 = binary_to_term(<<131, 90, 0, 1, 119, 4, "true", 1:32, 43:32>>),
+    Ref2 = binary_to_term(<<131, 90, 0, 1, 119, 4, "true", 2:32, 43:32>>),
+    false = Ref1 =:= Ref2,
+    "#Ref<1.43>" = ref_to_list(Ref1),
+    "#Ref<1.43>" = ref_to_list(Ref2),
+
+    case has_setnode_creation() of
+        true ->
+            % Test distributed pid
+            Ref42 = do_setnode(test@test_node, 42),
+            DistributedRef123_42 = binary_to_term(
+                <<131, 90, 0, 2, 119, 14, "test@test_node", 42:32, 1:32, 2:32>>
+            ),
+            true = is_reference(DistributedRef123_42),
+            true = DistributedRef123_42 =:= Ref123,
+
+            DistributedBin42 = term_to_binary(TestRef),
+            true = DistributedBin42 =/= Bin,
+            TestRef42 = binary_to_term(DistributedBin42),
+            true = TestRef42 =:= TestRef,
+            ExpectedSize = byte_size(DistributedBin42) - 1,
+
+            ok = do_unsetnode(Ref42),
+
+            Ref43 = do_setnode(test@test_node, 43),
+            DistributedRef123_43 = binary_to_term(
+                <<131, 90, 0, 2, 119, 14, "test@test_node", 43:32, 1:32, 2:32>>
+            ),
+            true = is_reference(DistributedRef123_43),
+            true = DistributedRef123_43 =:= Ref123,
+
+            DistributedRef123_42_43 = binary_to_term(
+                <<131, 90, 0, 2, 119, 14, "test@test_node", 42:32, 1:32, 2:32>>
+            ),
+            true = is_reference(DistributedRef123_42_43),
+            false = DistributedRef123_42_43 =:= Ref123,
+
+            DistributedBin43 = term_to_binary(TestRef),
+            true = DistributedBin43 =/= Bin,
+            TestRef43 = binary_to_term(DistributedBin43),
+            true = TestRef43 =:= TestRef,
+
+            ok = do_unsetnode(Ref43),
+            ok;
+        false ->
+            ok
+    end,
+    ok.
+
 make_binterm_fun(Id) ->
     fun() ->
         Bin = ?MODULE:get_binary(Id),
@@ -440,6 +641,11 @@ get_otp_version() ->
             list_to_integer(erlang:system_info(otp_release));
         _ ->
             atomvm
+    end.
+
+sleep(Ms) ->
+    receive
+    after Ms -> ok
     end.
 
 id(X) ->
