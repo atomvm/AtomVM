@@ -476,7 +476,7 @@ unsigned long memory_estimate_usage(term t)
         } else if (term_is_nil(t)) {
             t = temp_stack_pop(&temp_stack);
 
-        } else if (term_is_pid(t)) {
+        } else if (term_is_local_pid(t)) {
             t = temp_stack_pop(&temp_stack);
 
         } else if (term_is_nonempty_list(t)) {
@@ -587,19 +587,19 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
             TRACE("Found NIL (%" TERM_X_FMT ")\n", t);
             ptr++;
 
-        } else if (term_is_pid(t)) {
+        } else if (term_is_local_pid(t)) {
             TRACE("Found PID (%" TERM_X_FMT ")\n", t);
             ptr++;
 
         } else if ((t & 0x3) == 0x0) {
             TRACE("Found boxed header (%" TERM_X_FMT ")\n", t);
 
+            size_t arity = term_get_size_from_boxed_header(t);
             switch (t & TERM_BOXED_TAG_MASK) {
                 case TERM_BOXED_TUPLE: {
-                    int arity = term_get_size_from_boxed_header(t);
-                    TRACE("- Boxed is tuple (%" TERM_X_FMT "), arity: %i\n", t, arity);
+                    TRACE("- Boxed is tuple (%" TERM_X_FMT "), arity: %i\n", t, (int) arity);
 
-                    for (int i = 1; i <= arity; i++) {
+                    for (size_t i = 1; i <= arity; i++) {
                         TRACE("-- Elem: %" TERM_X_FMT "\n", ptr[i]);
                         ptr[i] = memory_shallow_copy_term(old_fragment, ptr[i], &new_heap, move);
                     }
@@ -620,13 +620,16 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
                     TRACE("- Found ref.\n");
                     break;
 
+                case TERM_BOXED_EXTERNAL_PID:
+                    TRACE("- Found external pid.\n");
+                    break;
+
                 case TERM_BOXED_FUN: {
-                    int fun_size = term_get_size_from_boxed_header(t);
-                    TRACE("- Found fun, size: %i.\n", fun_size);
+                    TRACE("- Found fun, size: %i.\n", (int) arity);
 
                     // first term is the boxed header, followed by module and fun index.
 
-                    for (int i = 3; i <= fun_size; i++) {
+                    for (size_t i = 3; i <= arity; i++) {
                         TRACE("-- Frozen: %" TERM_X_FMT "\n", ptr[i]);
                         ptr[i] = memory_shallow_copy_term(old_fragment, ptr[i], &new_heap, move);
                     }
@@ -658,7 +661,7 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
 
                 case TERM_BOXED_MAP: {
                     TRACE("- Found map.\n");
-                    size_t map_size = term_get_size_from_boxed_header(t) - 1;
+                    size_t map_size = arity - 1;
                     size_t keys_offset = term_get_map_keys_offset();
                     size_t value_offset = term_get_map_value_offset();
                     TRACE("-- Map keys: %" TERM_X_FMT "\n", ptr[keys_offset]);
@@ -674,7 +677,7 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
                     AVM_ABORT();
             }
 
-            ptr += term_get_size_from_boxed_header(t) + 1;
+            ptr += arity + 1;
 
         } else if (term_is_nonempty_list(t)) {
             TRACE("Found nonempty list (%p)\n", (void *) t);
@@ -737,6 +740,10 @@ static void memory_scan_and_rewrite(size_t count, term *terms, const term *old_s
                     break;
 
                 case TERM_BOXED_REF:
+                    ptr += term_get_size_from_boxed_header(t);
+                    break;
+
+                case TERM_BOXED_EXTERNAL_PID:
                     ptr += term_get_size_from_boxed_header(t);
                     break;
 
@@ -810,7 +817,7 @@ HOT_FUNC static term memory_shallow_copy_term(HeapFragment *old_fragment, term t
     } else if (term_is_nil(t)) {
         return t;
 
-    } else if (term_is_pid(t)) {
+    } else if (term_is_local_pid(t)) {
         return t;
 
     } else if (term_is_cp(t)) {
