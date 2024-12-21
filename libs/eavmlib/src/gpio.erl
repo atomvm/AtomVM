@@ -82,7 +82,7 @@
 %% Event type that will trigger a `gpio_interrupt'. STM32 only supports `rising', `falling', or `both'.
 
 %%-----------------------------------------------------------------------------
-%% @returns Pid | error | {error, Reason}
+%% @returns Pid | {error, Reason}
 %% @doc     Start the GPIO driver port
 %%
 %%          Returns the pid of the active GPIO port driver, otherwise the GPIO
@@ -103,7 +103,7 @@ start() ->
     end.
 
 %%-----------------------------------------------------------------------------
-%% @returns Pid | error | {error, Reason}
+%% @returns Pid | {error, Reason}
 %% @doc     Start the GPIO driver port
 %%
 %%          The GPIO port driver will be stared and registered as `gpio'. If the
@@ -121,7 +121,7 @@ open() ->
 
 %%-----------------------------------------------------------------------------
 %% @param   GPIO pid that was returned from gpio:start/0
-%% @returns ok | error | {error, Reason}
+%% @returns ok | {error, Reason}
 %% @doc     Stop the GPIO interrupt port
 %%
 %%          This function disables any interrupts that are set, stops
@@ -135,7 +135,7 @@ close(GPIO) ->
     port:call(GPIO, {close}).
 
 %%-----------------------------------------------------------------------------
-%% @returns ok | error | {error, Reason}
+%% @returns ok | {error, Reason}
 %% @doc     Stop the GPIO interrupt port
 %%
 %%          This function disables any interrupts that are set, stops
@@ -151,7 +151,7 @@ stop() ->
 %%-----------------------------------------------------------------------------
 %% @param   GPIO pid that was returned from gpio:start/0
 %% @param   Pin number of the pin to read
-%% @returns high | low | error | {error, Reason}
+%% @returns high | low | {error, Reason}
 %% @doc     Read the digital state of a GPIO pin
 %%
 %%          Read if an input pin state is `high' or `low'.
@@ -169,7 +169,7 @@ read(GPIO, Pin) ->
 %% @param   GPIO pid that was returned from `gpio:start/0'
 %% @param   Pin number of the pin to configure
 %% @param   Direction is `input', `output', or `output_od'
-%% @returns ok | error | {error, Reason}
+%% @returns ok | {error, Reason}
 %% @doc     Set the operational mode of a pin
 %%
 %%          Pins can be used for input, output, or output with open drain.
@@ -199,7 +199,7 @@ set_direction(GPIO, Pin, Direction) ->
 %% @param   GPIO pid that was returned from `gpio:start/0'
 %% @param   Pin number of the pin to write
 %% @param   Level the desired output level to set
-%% @returns ok | error | {error, Reason}
+%% @returns ok | {error, Reason}
 %% @doc     Set GPIO digital output level
 %%
 %%          Set a pin to `high' (1) or `low' (0).
@@ -233,7 +233,7 @@ set_level(GPIO, Pin, Level) ->
 %% @param   GPIO pid that was returned from `gpio:start/0'
 %% @param   Pin number of the pin to set the interrupt on
 %% @param   Trigger is the state that will trigger an interrupt
-%% @returns ok | error | {error, Reason}
+%% @returns ok | {error, Reason}
 %% @doc     Set a GPIO interrupt
 %%
 %%          Available triggers are `none' (which is the same as disabling an
@@ -257,7 +257,7 @@ set_int(GPIO, Pin, Trigger) ->
 %% @param   Pin number of the pin to set the interrupt on
 %% @param   Trigger is the state that will trigger an interrupt
 %% @param   Pid is the process that will receive the interrupt message
-%% @returns ok | error | {error, Reason}
+%% @returns ok | {error, Reason}
 %% @doc     Set a GPIO interrupt
 %%
 %%          Available triggers are `none' (which is the same as disabling an
@@ -280,7 +280,7 @@ set_int(GPIO, Pin, Trigger, Pid) ->
 %%-----------------------------------------------------------------------------
 %% @param   GPIO pid that was returned from `gpio:start/0'
 %% @param   Pin number of the pin to remove the interrupt
-%% @returns ok | error | {error, Reason}
+%% @returns ok | {error, Reason}
 %% @doc     Remove a GPIO interrupt
 %%
 %%          Removes an interrupt from the specified pin.
@@ -288,13 +288,13 @@ set_int(GPIO, Pin, Trigger, Pid) ->
 %%          The rp2040 (Pico) port does not support gpio interrupts at this time.
 %% @end
 %%-----------------------------------------------------------------------------
--spec remove_int(GPIO :: gpio(), Pin :: pin()) -> ok | {error, Reason :: atom()} | error.
+-spec remove_int(GPIO :: gpio(), Pin :: pin()) -> ok | {error, Reason :: atom()}.
 remove_int(GPIO, Pin) ->
     port:call(GPIO, {remove_int, Pin}).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number to initialize
-%% @returns ok
+%% @returns ok | raise(Error)
 %% @doc     Initialize a pin to be used as GPIO.
 %%          This is required on RP2040 and for some pins on ESP32.
 %% @end
@@ -305,7 +305,7 @@ init(_Pin) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number to deinitialize
-%% @returns ok
+%% @returns ok | raise(Error)
 %% @doc     Reset a pin back to the NULL function.
 %%          Currently only implemented for RP2040 (Pico).
 %% @end
@@ -317,7 +317,7 @@ deinit(_Pin) ->
 %%-----------------------------------------------------------------------------
 %% @param   Pin number to set operational mode
 %% @param   Direction is `input', `output', or `output_od'
-%% @returns ok | error | {error, Reason}
+%% @returns ok | raise(Error)
 %% @doc     Set the operational mode of a pin
 %%
 %%          Pins can be used for input, output, or output with open drain.
@@ -336,14 +336,14 @@ deinit(_Pin) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec set_pin_mode(Pin :: pin(), Direction :: direction()) ->
-    ok | {error, Reason :: atom()} | error.
+    ok.
 set_pin_mode(_Pin, _Mode) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number to set internal resistor direction
 %% @param   Pull is the internal resistor state
-%% @returns ok | error
+%% @returns ok | raise(Error)
 %% @doc     Set the internal resistor of a pin
 %%
 %%          Pins can be internally pulled `up', `down', `up_down' (pulled in
@@ -354,13 +354,13 @@ set_pin_mode(_Pin, _Mode) ->
 %%          or `set_pin_mode/2'.
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_pin_pull(Pin :: pin(), Pull :: pull()) -> ok | error.
+-spec set_pin_pull(Pin :: pin(), Pull :: pull()) -> ok.
 set_pin_pull(_Pin, _Pull) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number of the pin to be held
-%% @returns ok | error
+%% @returns ok | raise(Error)
 %% @doc     Hold the state of a pin
 %%
 %%          The gpio pad hold function works in both input and output modes,
@@ -380,13 +380,13 @@ set_pin_pull(_Pin, _Pull) ->
 %%          This function is only supported on ESP32.
 %% @end
 %%-----------------------------------------------------------------------------
--spec hold_en(Pin :: pin()) -> ok | error.
+-spec hold_en(Pin :: pin()) -> ok.
 hold_en(_Pin) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number of the pin to be released
-%% @returns ok | error
+%% @returns ok | raise(Error)
 %% @doc     Release a pin from a hold state.
 %%
 %%          When the chip is woken up from Deep-sleep, the gpio will be set to
@@ -402,7 +402,7 @@ hold_en(_Pin) ->
 %%          This function is only supported on ESP32.
 %% @end
 %%-----------------------------------------------------------------------------
--spec hold_dis(Pin :: pin()) -> ok | error.
+-spec hold_dis(Pin :: pin()) -> ok.
 hold_dis(_Pin) ->
     erlang:nif_error(undefined).
 
@@ -445,7 +445,7 @@ deep_sleep_hold_dis() ->
 %%-----------------------------------------------------------------------------
 %% @param   Pin number of the pin to write
 %% @param   Level the desired output level to set
-%% @returns ok | error | {error, Reason}
+%% @returns ok | raise(Error)
 %% @doc     Set GPIO digital output level
 %%
 %%          Set a pin to `high' (1) or `low' (0).
@@ -469,13 +469,13 @@ deep_sleep_hold_dis() ->
 %%          require or accept `set_pin_mode' or `set_pin_pull' before use.
 %% @end
 %%-----------------------------------------------------------------------------
--spec digital_write(Pin :: pin(), Level :: level()) -> ok | {error, Reason :: atom()} | error.
+-spec digital_write(Pin :: pin(), Level :: level()) -> ok.
 digital_write(_Pin, _Level) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number of the pin to read
-%% @returns high | low | error | {error, Reason}
+%% @returns high | low | raise(Error)
 %% @doc     Read the digital state of a GPIO pin
 %%
 %%          Read if an input pin state is high or low.
@@ -486,14 +486,14 @@ digital_write(_Pin, _Level) ->
 %%          and does not require or accept `set_pin_mode' or `set_pin_pull' before use.
 %% @end
 %%-----------------------------------------------------------------------------
--spec digital_read(Pin :: pin()) -> high | low | {error, Reason :: atom()} | error.
+-spec digital_read(Pin :: pin()) -> high | low.
 digital_read(_Pin) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number of the pin to set the interrupt on
 %% @param   Trigger is the state that will trigger an interrupt
-%% @returns ok | error | {error, Reason}
+%% @returns ok | {error, Reason}
 %% @doc     Convenience function for `gpio:set_int/3'
 %%
 %%          This is a convenience function for `gpio:set_int/3' that allows an
@@ -509,13 +509,13 @@ digital_read(_Pin) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec attach_interrupt(Pin :: pin(), Trigger :: trigger()) ->
-    ok | {error, Reason :: atom()} | error.
+    ok | {error, Reason :: atom()}.
 attach_interrupt(Pin, Trigger) ->
     set_int(start(), Pin, Trigger).
 
 %-----------------------------------------------------------------------------
 %% @param   Pin number of the pin to remove the interrupt
-%% @returns ok | error | {error, Reason}
+%% @returns ok | {error, Reason}
 %% @doc     Convenience function for `gpio:remove_int/2'
 %%
 %%          This is a convenience function for `gpio:remove_int/2' that allows an
@@ -527,6 +527,6 @@ attach_interrupt(Pin, Trigger) ->
 %%          The rp2040 (Pico) port does not support gpio interrupts at this time.
 %% @end
 %%-----------------------------------------------------------------------------
--spec detach_interrupt(Pin :: pin()) -> ok | {error, Reason :: atom()} | error.
+-spec detach_interrupt(Pin :: pin()) -> ok | {error, Reason :: atom()}.
 detach_interrupt(Pin) ->
     remove_int(whereis(gpio), Pin).

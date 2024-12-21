@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ESP32: improved sntp sync speed from a cold boot.
 - Utilize reserved `phy_init` partition on ESP32 to store wifi calibration for faster connections.
 
+### Changed
+- ESP32 GPIO driver now matches spec for error returns, nifs raise `Error`, port functions return `{error, Reason}`
+
 ## [0.6.6] - Unreleased
 
 ### Added
