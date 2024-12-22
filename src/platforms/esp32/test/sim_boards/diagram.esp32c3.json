@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "author": "Uri Shaked",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-c3-devkitm-1", "id": "esp", "top": -0.3, "left": -3.78, "attrs": {} },
+    {
+      "type": "wokwi-slide-potentiometer",
+      "id": "pot1",
+      "top": 9.8,
+      "left": -235.8,
+      "rotate": 180,
+      "attrs": { "travelLength": "30", "value": "512" }
+    }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "esp:3", "pot1:SIG", "green", [ "h0" ] ],
+    [ "esp:3V3.2", "pot1:VCC", "red", [ "h-22.98", "v38.1" ] ],
+    [ "esp:GND.1", "pot1:GND", "black", [ "v0", "h-211.2" ] ]
+  ],
+  "dependencies": {}
+}

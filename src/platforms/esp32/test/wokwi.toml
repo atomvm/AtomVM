@@ -1,0 +1,5 @@
+[wokwi]
+version = 1
+generatedBy = "pytest-embedded-wokwi 1.8.1"
+firmware = "build/flasher_args.json"
+elf = "build/atomvm-esp32-test.elf"
