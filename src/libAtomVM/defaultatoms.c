@@ -161,6 +161,11 @@ static const char *const cast_atom = "\x5" "$cast";
 static const char *const unicode_atom = "\x7" "unicode";
 
 static const char *const global_atom = "\x6" "global";
+static const char *const type_atom = "\x4" "type";
+static const char *const name_atom = "\x4" "name";
+static const char *const arity_atom = "\x5" "arity";
+static const char *const external_atom = "\x8" "external";
+static const char *const local_atom = "\x5" "local";
 
 void defaultatoms_init(GlobalContext *glb)
 {
@@ -307,6 +312,12 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, unicode_atom) == UNICODE_ATOM_INDEX;
 
     ok &= globalcontext_insert_atom(glb, global_atom) == GLOBAL_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, type_atom) == TYPE_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, name_atom) == NAME_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, arity_atom) == ARITY_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, external_atom) == EXTERNAL_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, local_atom) == LOCAL_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();
