@@ -189,6 +189,7 @@ static term nif_maps_from_keys(Context *ctx, int argc, term argv[]);
 static term nif_maps_next(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_list(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_binary(Context *ctx, int argc, term argv[]);
+static term nif_erlang_lists_subtract(Context *ctx, int argc, term argv[]);
 
 #define DECLARE_MATH_NIF_FUN(moniker) \
     static term nif_math_##moniker(Context *ctx, int argc, term argv[]);
@@ -795,6 +796,11 @@ static const struct Nif unicode_characters_to_binary_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_unicode_characters_to_binary
+};
+static const struct Nif erlang_lists_subtract_nif = 
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_lists_subtract
 };
 
 #define DEFINE_MATH_NIF(moniker)                    \
@@ -5174,6 +5180,101 @@ static term nif_unicode_characters_to_binary(Context *ctx, int argc, term argv[]
     return result_tuple;
 }
 
+static term nif_erlang_lists_subtract(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc)
+
+    term list1 = argv[0];
+    term list2 = argv[1];
+
+    VALIDATE_VALUE(list1, term_is_list);
+    VALIDATE_VALUE(list2, term_is_list);
+
+    int proper;
+    int len = term_list_length(list1, &proper);
+    if (UNLIKELY(!proper)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int proper2;
+    term_list_length(list2, &proper2);
+    if (UNLIKELY(!proper2)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (term_is_nil(list1)) {
+        return term_nil();
+    }
+
+    if (term_is_nil(list2)) {
+        return list1;
+    }
+
+    term *cons = malloc(len * sizeof(term));
+    if (IS_NULL_PTR(cons)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    int i = 0;
+    term list = list1;
+
+    while (!term_is_nil(list)) {
+        cons[i] = list;
+        list = term_get_list_tail(list);
+        i++;
+    }
+
+    int last_filtered_idx = -1;
+
+    while (!term_is_nil(list2)) {
+        term to_nullify = term_get_list_head(list2);
+
+        for (int i = 0; i < len; i++) {
+            if (term_is_invalid_term(cons[i])) {
+                continue;
+            }
+            term item = term_get_list_head(cons[i]);
+            TermCompareResult cmp_result = term_compare(to_nullify, item, TermCompareExact, ctx->global);
+
+            if (UNLIKELY(cmp_result == TermCompareMemoryAllocFail)) {
+                free(cons);
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            if (cmp_result == TermEquals) {
+                if (last_filtered_idx < i) {
+                    last_filtered_idx = i;
+                }
+                cons[i] = term_invalid_term();
+                break;
+            }
+        }
+        list2 = term_get_list_tail(list2);
+    }
+
+    if (last_filtered_idx == -1) {
+        free(cons);
+        return list1;
+    }
+
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, (last_filtered_idx + 1) * CONS_SIZE, last_filtered_idx + 1, cons, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        free(cons);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result = term_nil();
+    if (last_filtered_idx < len - 1) {
+        result = cons[last_filtered_idx + 1];
+    }
+
+    for (int i = last_filtered_idx - 1; i >= 0; i--) {
+        if (!term_is_invalid_term(cons[i])) {
+            term item = term_get_list_head(cons[i]);
+            result = term_list_prepend(item, result, &ctx->heap);
+        }
+    }
+
+    free(cons);
+    return result;
+}
 //
 // MAINTENANCE NOTE: Exception handling for fp operations using math
 // error handling is designed to be thread-safe, as errors are specified
