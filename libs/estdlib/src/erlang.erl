@@ -222,6 +222,7 @@ send_after(Time, Dest, Msg) ->
 %% <ul>
 %%      <li><b>heap_size</b> the number of words used in the heap (integer), including the stack but excluding fragments</li>
 %%      <li><b>total_heap_size</b> the number of words used in the heap (integer) including fragments</li>
+%%      <li><b>registered_name</b> - returns `{registered_name, RegisteredName}' where `RegisteredName' is the registered name of the port or process. If the port/process has no registered name, `[]' is returned</li>
 %%      <li><b>stack_size</b> the number of words used in the stack (integer)</li>
 %%      <li><b>message_queue_len</b> the number of messages enqueued for the process (integer)</li>
 %%      <li><b>memory</b> the estimated total number of bytes in use by the process (integer)</li>
@@ -234,6 +235,7 @@ send_after(Time, Dest, Msg) ->
 -spec process_info
     (Pid :: pid(), heap_size) -> {heap_size, non_neg_integer()};
     (Pid :: pid(), total_heap_size) -> {total_heap_size, non_neg_integer()};
+    (Pid :: pid(), registered_name) -> {registered_name, term()} | [];
     (Pid :: pid(), stack_size) -> {stack_size, non_neg_integer()};
     (Pid :: pid(), message_queue_len) -> {message_queue_len, non_neg_integer()};
     (Pid :: pid(), memory) -> {memory, non_neg_integer()};

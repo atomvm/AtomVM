@@ -167,6 +167,8 @@ static const char *const arity_atom = "\x5" "arity";
 static const char *const external_atom = "\x8" "external";
 static const char *const local_atom = "\x5" "local";
 
+static const char *const registered_name_atom = "\xF" "registered_name";
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -318,6 +320,8 @@ void defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, arity_atom) == ARITY_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, external_atom) == EXTERNAL_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, local_atom) == LOCAL_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, registered_name_atom) == REGISTERED_NAME_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();

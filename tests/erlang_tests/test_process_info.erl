@@ -28,6 +28,12 @@ start() ->
     receive
         ok -> ok
     end,
+    [] = erlang:process_info(Self, registered_name),
+    erlang:register(has_name, Self),
+    {registered_name, Name} = erlang:process_info(Self, registered_name),
+    assert(Name =:= has_name),
+    erlang:unregister(has_name),
+    [] = erlang:process_info(Self, registered_name),
     test_message_queue_len(Pid, Self),
     {links, []} = process_info(Pid, links),
     link(Pid),
