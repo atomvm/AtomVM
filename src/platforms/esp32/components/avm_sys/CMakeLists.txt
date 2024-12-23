@@ -70,6 +70,10 @@ set(CMAKE_REQUIRED_INCLUDES ${CMAKE_REQUIRED_INCLUDES} ${soc_target_include_dir}
 include(CheckSymbolExists)
 include(CheckCSourceCompiles)
 
+# Both don't exist in ESP32 at the moment
+define_if_function_exists(libAtomVM${PLATFORM_LIB_SUFFIX} getservbyname "netdb.h" PRIVATE HAVE_SERVBYNAME)
+define_if_function_exists(libAtomVM${PLATFORM_LIB_SUFFIX} gethostname "unistd.h" PRIVATE HAVE_GETHOSTNAME)
+
 if ("${pthread_srcs}" MATCHES pthread_rwlock.c)
 set(HAVE_PTHREAD_RWLOCK YES)
 message(STATUS "pthread component includes pthread_rwlock.c, assuming it is available")
