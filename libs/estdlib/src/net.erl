@@ -20,7 +20,7 @@
 
 -module(net).
 
--export([getaddrinfo/1, getaddrinfo/2]).
+-export([getaddrinfo/1, getaddrinfo/2, gethostname/0]).
 
 %% nif call (so we can use guards at the API)
 -export([getaddrinfo_nif/2]).
@@ -77,4 +77,13 @@ getaddrinfo(Host, Service) when
 
 %% @hidden
 getaddrinfo_nif(_Host, _Service) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns The (usually short) name of the host.
+%% @doc     Get the hostname
+%% @end
+%%-----------------------------------------------------------------------------
+-spec gethostname() -> {ok, string()} | {error, any()}.
+gethostname() ->
     erlang:nif_error(undefined).
