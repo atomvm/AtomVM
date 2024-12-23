@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added menuconfig option for enabling USE_USB_SERIAL, eg. serial over USB for certain ESP32-S2 boards etc.
 - Partial support for `erlang:fun_info/2`
 - Added support for `registered_name` in `erlang:process_info/2` and `Process.info/2`
+- Added support to Pico-W network driver for setting `dhcp_hostname`
+(see issue 1094)[https://github.com/atomvm/AtomVM/issues/1094].
 
 ### Fixed
 - ESP32: improved sntp sync speed from a cold boot.
