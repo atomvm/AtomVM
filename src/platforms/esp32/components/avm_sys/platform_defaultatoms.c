@@ -59,7 +59,6 @@ static const char *const peername_atom = "\x8" "peername";
 static const char *const not_owner_atom = "\x9" "not_owner";
 
 //uart
-static const char *const name_atom = "\x4" "name";
 static const char *const speed_atom = "\x5" "speed";
 static const char *const write_atom = "\x5" "write";
 static const char *const data_bits_atom = "\x9" "data_bits";
@@ -116,7 +115,6 @@ void platform_defaultatoms_init(GlobalContext *glb)
     ok &= globalcontext_insert_atom(glb, not_owner_atom) == NOT_OWNER_ATOM_INDEX;
 
     //uart
-    ok &= globalcontext_insert_atom(glb, name_atom) == NAME_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, speed_atom) == SPEED_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, write_atom) == WRITE_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, data_bits_atom) == DATA_BITS_ATOM_INDEX;
