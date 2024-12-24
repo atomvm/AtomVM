@@ -216,6 +216,32 @@ ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj);
 int enif_select(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSelectFlags mode, void *obj, const ErlNifPid *pid, ERL_NIF_TERM ref);
 
 /**
+ * @brief Variant of `enif_select` where sent message is `msg` instead of default.
+ *
+ * @param env current environment
+ * @param event event object (typically a file descriptor)
+ * @param obj resource object working as a container of the event object.
+ * @param pid process id to send a message to or NULL to use the current process (from `env`)
+ * @param msg message to send (copied).
+ * @param msg_env must be NULL.
+ * @return a negative value on failure, 0 or flags on success.
+ */
+int enif_select_read(ErlNifEnv *env, ErlNifEvent event, void *obj, const ErlNifPid *pid, ERL_NIF_TERM msg, ErlNifEnv *msg_env);
+
+/**
+ * @brief Variant of `enif_select` where sent message is `msg` instead of default.
+ *
+ * @param env current environment
+ * @param event event object (typically a file descriptor)
+ * @param obj resource object working as a container of the event object.
+ * @param pid process id to send a message to or NULL to use the current process (from `env`)
+ * @param msg message to send (copied).
+ * @param msg_env must be NULL.
+ * @return a negative value on failure, 0 or flags on success.
+ */
+int enif_select_write(ErlNifEnv *env, ErlNifEvent event, void *obj, const ErlNifPid *pid, ERL_NIF_TERM msg, ErlNifEnv *msg_env);
+
+/**
  * @brief Monitor a process by using a resource object.
  * @details The monitor is automatically removed after being triggered or if the
  * associated resource is deallocated.
