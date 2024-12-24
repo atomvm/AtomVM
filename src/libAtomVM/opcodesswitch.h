@@ -2404,7 +2404,7 @@ schedule_in:
                 #ifdef IMPL_EXECUTE_LOOP
                     term recipient_term = x_regs[0];
                     int local_process_id;
-                    if (term_is_local_pid(recipient_term)) {
+                    if (term_is_local_pid_or_port(recipient_term)) {
                         local_process_id = term_to_local_process_id(recipient_term);
                     } else if (term_is_atom(recipient_term)) {
                         local_process_id = globalcontext_get_registered_process(ctx->global, term_to_atom_index(recipient_term));
@@ -3004,18 +3004,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_port/2, label=%i, arg1=%lx\n", label, arg1);
 
-                    if (term_is_local_pid(arg1)) {
-                        int local_process_id = term_to_local_process_id(arg1);
-                        Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
-                        bool is_port_driver = false;
-                        if (target) {
-                            is_port_driver = context_is_port_driver(target);
-                            globalcontext_get_process_unlock(ctx->global, target);
-                        }
-                        if (!is_port_driver) {
-                            pc = mod->labels[label];
-                        }
-                    } else {
+                    if (!term_is_port(arg1)) {
                         pc = mod->labels[label];
                     }
                 #endif

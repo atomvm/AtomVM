@@ -51,6 +51,7 @@ erlang:is_integer/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erla
 erlang:is_list/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_list_1}
 erlang:is_number/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_number_1}
 erlang:is_pid/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_pid_1}
+erlang:is_port/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_port_1}
 erlang:is_reference/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_reference_1}
 erlang:is_tuple/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_tuple_1}
 erlang:is_map/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_map_1}

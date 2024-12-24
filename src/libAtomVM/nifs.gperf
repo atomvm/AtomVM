@@ -117,6 +117,7 @@ erlang:throw/1, &throw_nif
 erlang:raise/3, &raise_nif
 erlang:unlink/1, &unlink_nif
 erlang:pid_to_list/1, &pid_to_list_nif
+erlang:port_to_list/1, &port_to_list_nif
 erlang:ref_to_list/1, &ref_to_list_nif
 erlang:fun_to_list/1, &fun_to_list_nif
 erlang:function_exported/3, &function_exported_nif

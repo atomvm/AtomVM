@@ -56,6 +56,7 @@ term bif_erlang_is_integer_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_list_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_number_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_pid_1(Context *ctx, uint32_t fail_label, term arg1);
+term bif_erlang_is_port_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_reference_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_tuple_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_map_1(Context *ctx, uint32_t fail_label, term arg1);
