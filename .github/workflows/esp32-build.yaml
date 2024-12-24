@@ -141,6 +141,7 @@ jobs:
       working-directory: ./src/platforms/esp32/test/
       run: |
         set -e
+        export PATH=${PATH}:${HOME}/.cache/rebar3/bin
         cp sdkconfig.defaults sdkconfig.defaults.backup
         echo "CONFIG_COMPILER_STACK_CHECK_MODE_ALL=y" >> sdkconfig.defaults
         echo "CONFIG_COMPILER_STACK_CHECK=y" >> sdkconfig.defaults
