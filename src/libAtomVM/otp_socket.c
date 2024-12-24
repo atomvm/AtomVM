@@ -593,7 +593,7 @@ bool term_is_otp_socket(term socket_term)
     bool ret = term_is_tuple(socket_term)
         && term_get_tuple_arity(socket_term) == 2
         && term_is_binary(term_get_tuple_element(socket_term, 0))
-        && term_is_reference(term_get_tuple_element(socket_term, 1));
+        && term_is_local_reference(term_get_tuple_element(socket_term, 1));
 
     TRACE("term is a socket: %i\n", ret);
 
@@ -898,7 +898,7 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
 
     term select_ref_term = argv[1];
     if (select_ref_term != UNDEFINED_ATOM) {
-        VALIDATE_VALUE(select_ref_term, term_is_reference);
+        VALIDATE_VALUE(select_ref_term, term_is_local_reference);
     }
     struct SocketResource *rsrc_obj;
     if (UNLIKELY(!term_to_otp_socket(argv[0], &rsrc_obj, ctx))) {

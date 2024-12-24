@@ -36,6 +36,7 @@
 
 #define NEW_FLOAT_EXT 70
 #define NEW_PID_EXT 88
+#define NEWER_REFERENCE_EXT 90
 #define SMALL_INTEGER_EXT 97
 #define INTEGER_EXT 98
 #define ATOM_EXT 100
@@ -421,6 +422,48 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
             WRITE_32_UNALIGNED(buf + k + 8, term_get_external_node_creation(t));
         }
         return k + 12;
+    } else if (term_is_local_reference(t)) {
+        if (!IS_NULL_PTR(buf)) {
+            buf[0] = NEWER_REFERENCE_EXT;
+        }
+        size_t k = 1;
+        uint32_t len = 2;
+        if (!IS_NULL_PTR(buf)) {
+            WRITE_16_UNALIGNED(buf + k, len);
+        }
+        k += 2;
+        term node_name = glb->node_name;
+        uint32_t creation = node_name == NONODE_AT_NOHOST_ATOM ? 0 : glb->creation;
+        k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, node_name, glb);
+        if (!IS_NULL_PTR(buf)) {
+            uint64_t ticks = term_to_ref_ticks(t);
+            WRITE_32_UNALIGNED(buf + k, creation);
+            WRITE_64_UNALIGNED(buf + k + 4, ticks);
+        }
+        return k + 12;
+    } else if (term_is_external_reference(t)) {
+        if (!IS_NULL_PTR(buf)) {
+            buf[0] = NEWER_REFERENCE_EXT;
+        }
+        size_t k = 1;
+        uint32_t len = term_get_external_reference_len(t);
+        if (!IS_NULL_PTR(buf)) {
+            WRITE_16_UNALIGNED(buf + k, len);
+        }
+        k += 2;
+        term node = term_get_external_node(t);
+        k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, node, glb);
+        if (!IS_NULL_PTR(buf)) {
+            WRITE_32_UNALIGNED(buf + k, term_get_external_node_creation(t));
+        }
+        k += 4;
+        if (!IS_NULL_PTR(buf)) {
+            const uint32_t *data = term_get_external_reference_words(t);
+            for (uint32_t i = 0; i < len; i++) {
+                WRITE_32_UNALIGNED(buf + k + (i * 4), data[i]);
+            }
+        }
+        return k + (4 * len);
     } else {
         fprintf(stderr, "Unknown external term type: %" TERM_U_FMT "\n", t);
         AVM_ABORT();
@@ -713,6 +756,37 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
                     return term_invalid_term();
                 }
                 return term_from_local_process_id(number);
+            }
+        }
+
+        case NEWER_REFERENCE_EXT: {
+            uint16_t len = READ_16_UNALIGNED(external_term_buf + 1);
+            if (UNLIKELY(len > 5)) {
+                return term_invalid_term();
+            }
+            size_t node_size;
+            term node = parse_external_terms(external_term_buf + 3, &node_size, copy, heap, glb);
+            if (UNLIKELY(!term_is_atom(node))) {
+                return term_invalid_term();
+            }
+            uint32_t creation = READ_32_UNALIGNED(external_term_buf + node_size + 3);
+            uint32_t data[5];
+            for (uint16_t i = 0; i < len; i++) {
+                data[i] = READ_32_UNALIGNED(external_term_buf + node_size + 7 + (i * 4));
+            }
+            *eterm_size = node_size + 7 + (len * 4);
+            if (node != NONODE_AT_NOHOST_ATOM || len != 2 || creation != 0) {
+                term this_node = glb->node_name;
+                uint32_t this_creation = this_node == NONODE_AT_NOHOST_ATOM ? 0 : glb->creation;
+                if (len == 2 && node == this_node && creation == this_creation) {
+                    uint64_t ticks = ((uint64_t) data[0]) << 32 | data[1];
+                    return term_from_ref_ticks(ticks, heap);
+                } else {
+                    return term_make_external_reference(node, len, data, creation, heap);
+                }
+            } else {
+                uint64_t ticks = ((uint64_t) data[0]) << 32 | data[1];
+                return term_from_ref_ticks(ticks, heap);
             }
         }
 
@@ -1028,7 +1102,42 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
                 return INVALID_TERM_SIZE;
             }
             buf_pos += node_size;
+            remaining -= node_size;
+            if (UNLIKELY(remaining < 3 * 4)) {
+                return INVALID_TERM_SIZE;
+            }
             *eterm_size = buf_pos + 12;
+            return heap_size + u;
+        }
+
+        case NEWER_REFERENCE_EXT: {
+            if (UNLIKELY(remaining < 3)) {
+                return INVALID_TERM_SIZE;
+            }
+            remaining -= 3;
+            int buf_pos = 3;
+            uint16_t len = READ_16_UNALIGNED(external_term_buf + 1);
+            size_t heap_size = EXTERNAL_REF_SIZE(len);
+            size_t node_size = 0;
+            int u = calculate_heap_usage(external_term_buf + buf_pos, remaining, &node_size, copy);
+            if (UNLIKELY(u == INVALID_TERM_SIZE)) {
+                return INVALID_TERM_SIZE;
+            }
+            if (external_term_buf[3] == SMALL_ATOM_UTF8_EXT) {
+                // Check if it's non-distributed node, in which case it's always a local ref
+                if (len == 2 && external_term_buf[4] == strlen("nonode@nohost") && memcmp(external_term_buf + 5, "nonode@nohost", strlen("nonode@nohost")) == 0) {
+                    heap_size = REF_SIZE;
+                }
+                // See above for pids
+            } else if (UNLIKELY(external_term_buf[3] != ATOM_EXT)) {
+                return INVALID_TERM_SIZE;
+            }
+            buf_pos += node_size;
+            remaining -= node_size;
+            if (UNLIKELY(remaining < (size_t) ((len + 1) * 4))) {
+                return INVALID_TERM_SIZE;
+            }
+            *eterm_size = buf_pos + 4 + (len * 4);
             return heap_size + u;
         }
 
