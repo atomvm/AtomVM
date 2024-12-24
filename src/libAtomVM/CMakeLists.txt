@@ -30,6 +30,7 @@ set(HEADER_FILES
     bitstring.h
     context.h
     debug.h
+    defaultatoms.def
     defaultatoms.h
     dictionary.h
     erl_nif.h
