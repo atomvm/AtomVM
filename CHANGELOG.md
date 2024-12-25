@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `net:gethostname/0` on platforms with gethostname(3).
 - Added `externalterm_to_term_with_roots` to efficiently preserve roots when allocating memory for external terms.
 - Added `atomvm:get_creation/0`, equivalent to `erts_internal:get_creation/0`
+- Added `erl_epmd` client implementation to epmd using `socket` module
 
 ### Changed
 
