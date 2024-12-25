@@ -167,7 +167,7 @@ static term nif_erlang_function_exported(Context *ctx, int argc, term argv[]);
 static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[]);
 static term nif_erlang_group_leader(Context *ctx, int argc, term argv[]);
 static term nif_erlang_get_module_info(Context *ctx, int argc, term argv[]);
-static term nif_erlang_setnode(Context *ctx, int argc, term argv[]);
+static term nif_erlang_setnode_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_memory(Context *ctx, int argc, term argv[]);
 static term nif_erlang_monitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[]);
@@ -177,6 +177,7 @@ static term nif_atomvm_add_avm_pack_file(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_close_avm_pack(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_get_start_beam(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[]);
+static term nif_atomvm_get_creation(Context *ctx, int argc, term argv[]);
 static term nif_console_print(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode(Context *ctx, int argc, term argv[]);
 static term nif_base64_decode(Context *ctx, int argc, term argv[]);
@@ -669,10 +670,10 @@ static const struct Nif get_module_info_nif =
     .nif_ptr = nif_erlang_get_module_info
 };
 
-static const struct Nif setnode_nif =
+static const struct Nif setnode_2_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_erlang_setnode
+    .nif_ptr = nif_erlang_setnode_2
 };
 
 static const struct Nif raise_nif =
@@ -735,6 +736,11 @@ static const struct Nif atomvm_read_priv_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_read_priv
+};
+static const struct Nif atomvm_get_creation_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_get_creation
 };
 static const struct Nif console_print_nif =
 {
@@ -3975,7 +3981,7 @@ static term nif_erlang_get_module_info(Context *ctx, int argc, term argv[])
     return result;
 }
 
-static term nif_erlang_setnode(Context *ctx, int argc, term argv[])
+static term nif_erlang_setnode_2(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
@@ -4341,6 +4347,19 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
 
     free(complete_path);
     return result;
+}
+
+// AtomVM extension, equivalent to erts_internal:get_creation/0
+static term nif_atomvm_get_creation(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    if (UNLIKELY(memory_ensure_free_opt(ctx, term_boxed_integer_size(ctx->global->creation), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return term_make_maybe_boxed_int64(ctx->global->creation, &ctx->heap);
 }
 
 static term nif_console_print(Context *ctx, int argc, term argv[])

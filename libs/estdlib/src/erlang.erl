@@ -1270,6 +1270,6 @@ localtime() ->
     erlang:nif_error(undefined).
 
 %% @hidden
--spec setnode(atom(), pos_integer()) -> true.
+-spec setnode(atom(), non_neg_integer()) -> true.
 setnode(_NodeName, _Creation) ->
     erlang:nif_error(undefined).

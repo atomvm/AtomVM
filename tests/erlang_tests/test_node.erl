@@ -47,6 +47,7 @@ test_node_distribution() ->
     ),
     register(net_kernel, NetKernelPid),
     true = erlang:setnode(test@test_node, 42),
+    42 = get_creation(),
     test@test_node = node(),
     NetKernelPid ! quit,
     ok =
@@ -72,6 +73,14 @@ has_setnode_creation() ->
         "BEAM" ->
             OTPRelease = erlang:system_info(otp_release),
             OTPRelease >= "23"
+    end.
+
+get_creation() ->
+    case erlang:system_info(machine) of
+        "ATOM" ->
+            atomvm:get_creation();
+        "BEAM" ->
+            erts_internal:get_creation()
     end.
 
 sleep(Ms) ->

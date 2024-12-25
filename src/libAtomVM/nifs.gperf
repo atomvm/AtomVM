@@ -128,7 +128,7 @@ erlang:group_leader/0, &group_leader_nif
 erlang:group_leader/2, &group_leader_nif
 erlang:get_module_info/1, &get_module_info_nif
 erlang:get_module_info/2, &get_module_info_nif
-erlang:setnode/2, &setnode_nif
+erlang:setnode/2, &setnode_2_nif
 erts_debug:flat_size/1, &flat_size_nif
 ets:new/2, &ets_new_nif
 ets:insert/2, &ets_insert_nif
@@ -154,6 +154,7 @@ atomvm:posix_clock_settime/2, IF_HAVE_CLOCK_SETTIME_OR_SETTIMEOFDAY(&atomvm_posi
 atomvm:posix_opendir/1, IF_HAVE_OPENDIR_READDIR_CLOSEDIR(&atomvm_posix_opendir_nif)
 atomvm:posix_closedir/1, IF_HAVE_OPENDIR_READDIR_CLOSEDIR(&atomvm_posix_closedir_nif)
 atomvm:posix_readdir/1, IF_HAVE_OPENDIR_READDIR_CLOSEDIR(&atomvm_posix_readdir_nif)
+atomvm:get_creation/0, &atomvm_get_creation_nif
 code:load_abs/1, &code_load_abs_nif
 code:load_binary/3, &code_load_binary_nif
 code:all_available/0, &code_all_available_nif
