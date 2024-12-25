@@ -37,6 +37,7 @@ might lead to a crash in certain situations.
 - Fix corruption when dealing with specific situations that involve more than 16 x registers when
 certain VM instructions are used.
 - Fixed ESP32 GPIO interrupt trigger `none`
+- Fixed an issue where a timeout would occur immediately in a race condition
 
 ## [0.6.5] - 2024-10-15
 

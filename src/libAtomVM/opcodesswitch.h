@@ -2551,14 +2551,13 @@ schedule_in:
                     }
 
                     if (needs_to_wait) {
-                        ctx->saved_ip = saved_pc;
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
                         ctx->restore_trap_handler = &&wait_timeout_trap_handler;
 #pragma GCC diagnostic pop
-                        ctx->saved_module = mod;
-                        ctx = scheduler_wait(ctx);
-                        goto schedule_in;
+                        SCHEDULE_WAIT(mod, saved_pc);
+                    } else {
+                        JUMP_TO_ADDRESS(mod->labels[label]);
                     }
                 #endif
 
@@ -3193,10 +3192,7 @@ wait_timeout_trap_handler:
                     if (LIKELY(remaining_reductions)) {
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
-                        ctx->saved_ip = mod->labels[label];
-                        ctx->saved_module = mod;
-                        ctx = scheduler_next(ctx->global, ctx);
-                        goto schedule_in;
+                        SCHEDULE_NEXT(mod, mod->labels[label]);
                     }
                 #endif
                 break;
@@ -6394,7 +6390,7 @@ wait_timeout_trap_handler:
             case OP_RECV_MARKER_CLEAR: {
                 DEST_REGISTER(reg_a);
                 DECODE_DEST_REGISTER(reg_a, pc);
-                TRACE("recv_marker_clean/1: reg1=%c%i\n", T_DEST_REG(reg_a));
+                TRACE("recv_marker_clear/1: reg1=%c%i\n", T_DEST_REG(reg_a));
                 break;
             }
 
