@@ -30,6 +30,7 @@
 
 #include "bitstring.h"
 #include "defaultatoms.h"
+#include "memory.h"
 #include "term.h"
 #include "unicode.h"
 #include "utils.h"
@@ -81,20 +82,8 @@ static size_t compute_external_size(term t, GlobalContext *glb);
 static int externalterm_from_term(uint8_t **buf, size_t *len, term t, GlobalContext *glb);
 static int serialize_term(uint8_t *buf, term t, GlobalContext *glb);
 
-/**
- * @brief
- * @param   external_term   buffer containing external term
- * @param   size            size of the external_term
- * @param   ctx             current context in which terms may be stored
- * @param   opts            additional opts, such as ExternalTermToHeapFragment for storing parsed
- * terms in a heap fragment.
- *                          are stored in the context heap.
- * @param   bytes_read      the number of bytes read off external_term in order to yield a term
- * @param   copy            whether to copy binary data and atom strings (pass `true', unless `external_term' is a const binary and will not be deallocated)
- * @return  the parsed term
- */
-static term externalterm_to_term_internal(const void *external_term, size_t size, Context *ctx,
-    ExternalTermOpts opts, size_t *bytes_read, bool copy)
+term externalterm_to_term_with_roots(const void *external_term, size_t size, Context *ctx,
+    ExternalTermFlags flags, size_t *bytes_read, size_t num_roots, term *roots)
 {
     const uint8_t *external_term_buf = (const uint8_t *) external_term;
 
@@ -107,42 +96,36 @@ static term externalterm_to_term_internal(const void *external_term, size_t size
     }
 
     size_t eterm_size;
-    int heap_usage = calculate_heap_usage(external_term_buf + 1, size - 1, &eterm_size, copy);
+    int heap_usage = calculate_heap_usage(external_term_buf + 1, size - 1, &eterm_size, flags & ExternalTermCopy);
     if (heap_usage == INVALID_TERM_SIZE) {
         return term_invalid_term();
     }
 
     term result;
-    if (opts & ExternalTermToHeapFragment) {
+    if (flags & ExternalTermToHeapFragment) {
         // We need to allocate fragments as reading external terms from modules
         // is not accounted for by the compiler when it emits test_heap opcodes
         Heap heap;
         if (UNLIKELY(memory_init_heap(&heap, heap_usage) != MEMORY_GC_OK)) {
             return term_invalid_term();
         }
-        result = parse_external_terms(external_term_buf + 1, &eterm_size, copy, &heap, ctx->global);
+        result = parse_external_terms(external_term_buf + 1, &eterm_size, flags & ExternalTermCopy, &heap, ctx->global);
         memory_heap_append_heap(&ctx->heap, &heap);
     } else {
-        if (UNLIKELY(memory_ensure_free(ctx, heap_usage) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_usage, num_roots, roots, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             fprintf(stderr, "Unable to ensure %zu free words in heap\n", eterm_size);
             return term_invalid_term();
         }
-        result = parse_external_terms(external_term_buf + 1, &eterm_size, copy, &ctx->heap, ctx->global);
+        result = parse_external_terms(external_term_buf + 1, &eterm_size, flags & ExternalTermCopy, &ctx->heap, ctx->global);
     }
     *bytes_read = eterm_size + 1;
     return result;
 }
 
-term externalterm_to_term(const void *external_term, size_t size, Context *ctx, ExternalTermOpts opts)
+term externalterm_to_term(const void *external_term, size_t size, Context *ctx, ExternalTermFlags flags)
 {
     size_t bytes_read = 0;
-    return externalterm_to_term_internal(external_term, size, ctx, opts, &bytes_read, false);
-}
-
-term externalterm_to_term_copy(const void *external_term, size_t size, Context *ctx, ExternalTermOpts opts)
-{
-    size_t bytes_read = 0;
-    return externalterm_to_term_internal(external_term, size, ctx, opts, &bytes_read, true);
+    return externalterm_to_term_with_roots(external_term, size, ctx, flags, &bytes_read, 0, NULL);
 }
 
 enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term binary, size_t *bytes_read)
@@ -150,22 +133,26 @@ enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term b
     if (!term_is_binary(binary)) {
         return EXTERNAL_TERM_BAD_ARG;
     }
-    //
-    // Copy the binary data to a buffer (in case of GC)
-    //
     size_t len = term_binary_size(binary);
     const uint8_t *data = (const uint8_t *) term_binary_data(binary);
-    uint8_t *buf = malloc(len);
-    if (IS_NULL_PTR(buf)) {
-        fprintf(stderr, "Unable to allocate %zu bytes for binary buffer.\n", len);
-        return EXTERNAL_TERM_MALLOC;
+    term t;
+    if (term_is_heap_binary(binary)) {
+        // If the binary is a heap binary, we will copy its buffer. We cannot simply add it
+        // to roots because it may be moved and pointer will change between computation of size
+        // and decoding.
+        uint8_t *buf = malloc(len);
+        if (IS_NULL_PTR(buf)) {
+            fprintf(stderr, "Unable to allocate %zu bytes for binary buffer.\n", len);
+            return EXTERNAL_TERM_MALLOC;
+        }
+        memcpy(buf, data, len);
+        t = externalterm_to_term_with_roots(buf, len, ctx, ExternalTermCopy, bytes_read, 0, NULL);
+        free(buf);
+    } else {
+        // If the binary is not a heap binary, the pointer will not move during GC. So we don't
+        // need to copy data.
+        t = externalterm_to_term_with_roots(data, len, ctx, ExternalTermCopy, bytes_read, 1, &binary);
     }
-    memcpy(buf, data, len);
-    //
-    // convert
-    //
-    term t = externalterm_to_term_internal(buf, len, ctx, false, bytes_read, true);
-    free(buf);
     if (term_is_invalid_term(t)) {
         return EXTERNAL_TERM_BAD_ARG;
     } else {
