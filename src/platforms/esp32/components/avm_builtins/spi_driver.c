@@ -672,7 +672,7 @@ static NativeHandlerResult spidriver_consume_mailbox(Context *ctx)
     globalcontext_get_process_unlock(ctx->global, target);
     mailbox_remove_message(&ctx->mailbox, &ctx->heap);
 
-    return cmd == CLOSE_ATOM ? NativeTerminate : NativeContinue;
+    return cmd == SPICloseCmd ? NativeTerminate : NativeContinue;
 }
 
 bool spi_driver_get_peripheral(term spi_port, spi_host_device_t *host_dev, GlobalContext *global)
