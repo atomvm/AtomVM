@@ -25,6 +25,7 @@
 test() ->
     ok = test_getaddrinfo(),
     ok = test_getaddrinfo2(),
+    ok = test_gethostname(),
     ok.
 
 test_getaddrinfo() ->
@@ -141,3 +142,7 @@ get_addr(AddrInfo) ->
         _ ->
             maps:get(addr, maps:get(address, AddrInfo))
     end.
+
+test_gethostname() ->
+    {ok, [_ | _]} = net:gethostname(),
+    ok.

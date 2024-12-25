@@ -102,6 +102,11 @@ if (PICO_CYW43_SUPPORTED)
             otp_net_lwip_raw.h)
     target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC pico_cyw43_arch_lwip_threadsafe_background pico_lwip_sntp INTERFACE pan_lwip_dhserver)
     target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,networkregister_port_driver -Wl,-u -Wl,otp_socket_nif -Wl,-u -Wl,otp_net_nif -Wl,-u -Wl,otp_ssl_nif")
+
+    include(CheckSymbolExists)
+
+    define_if_function_exists(libAtomVM${PLATFORM_LIB_SUFFIX} getservbyname "netdb.h" PRIVATE HAVE_SERVBYNAME)
+    define_if_function_exists(libAtomVM${PLATFORM_LIB_SUFFIX} gethostname "unistd.h" PRIVATE HAVE_GETHOSTNAME)
 endif()
 
 target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,gpio_nif -Wl,-u -Wl,otp_crypto_nif")

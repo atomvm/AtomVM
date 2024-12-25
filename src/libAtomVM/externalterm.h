@@ -47,8 +47,9 @@ enum ExternalTermResult
 typedef enum
 {
     ExternalTermNoOpts = 0,
-    ExternalTermToHeapFragment = 1
-} ExternalTermOpts;
+    ExternalTermToHeapFragment = 1,
+    ExternalTermCopy = 2,
+} ExternalTermFlags;
 
 /**
  * @brief Gets a term from external term data.
@@ -57,30 +58,34 @@ typedef enum
  * @param external_term the external term that will be deserialized.
  * @param size to allocate for term.
  * @param ctx the context that owns the memory that will be allocated.
- * @param opts if non-zero, use a heap fragment to store the generated
- * terms.  Otherwise, use the heap in the provided context.  Note that when using the
- * context heap, this function may call the GC, if there is insufficient space to
- * store the generated terms.
+ * @param flags options to deserialize data.
+ * The following flags are supported:
+ * - `ExternalTermToHeapFragment' : use a heap fragment to store the generated
+ * terms (default is to use the heap in the provided context). Note that when
+ * using the context heap, this function may call the GC, if there is
+ * insufficient space to store the generated terms.
+ * - `ExternalTermCopy' : copy (binary and atom) data. Suitable when
+ * `external_term' pointer is not a const literal.
  * @returns a term.
  */
 term externalterm_to_term(
-    const void *external_term, size_t size, Context *ctx, ExternalTermOpts opts);
+    const void *external_term, size_t size, Context *ctx, ExternalTermFlags flags);
 
 /**
- * @brief Gets a term from external term data, and makes a copy of all data.
+ * @brief Create a term from external term data. This variant is meant to be used
+ * for distribution or in cases where the number of bytes read is important.
  *
- * @details Deserialize an external term from external format and returns a term.
- * @param external_term the external term that will be deserialized.
- * @param size to allocate for term.
- * @param ctx the context that owns the memory that will be allocated.
- * @param opts if non-zero, use a heap fragment to store the generated
- * terms.  Otherwise, use the heap in the provided context.  Note that when using the
- * context heap, this function may call the GC, if there is insufficient space to
- * store the generated terms.
- * @returns a term.
+ * @param   external_term   buffer containing external term
+ * @param   size            size of the external_term
+ * @param   ctx             current context in which terms may be stored
+ * @param   flags           additional flags (see above)
+ * @param   bytes_read      the number of bytes read off external_term in order to yield a term
+ * @param   num_roots       number of roots when invoking GC
+ * @param   roots           roots to preserve when invoking GC
+ * @return  the parsed term
  */
-term externalterm_to_term_copy(
-    const void *external_term, size_t size, Context *ctx, ExternalTermOpts opts);
+term externalterm_to_term_with_roots(const void *external_term, size_t size, Context *ctx,
+    ExternalTermFlags flags, size_t *bytes_read, size_t num_roots, term *roots);
 
 /**
  * @brief Create a term from a binary.

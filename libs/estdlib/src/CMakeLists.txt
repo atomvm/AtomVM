@@ -28,6 +28,7 @@ set(ERLANG_MODULES
     calendar
     code
     crypto
+    erl_epmd
     erts_debug
     ets
     gen_event

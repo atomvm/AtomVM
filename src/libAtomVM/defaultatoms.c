@@ -165,6 +165,13 @@ static const char *const global_atom = "\x6" "global";
 static const char *const nonode_at_nohost_atom = "\xD" "nonode@nohost";
 static const char *const net_kernel_atom = "\xA" "net_kernel";
 
+static const char *const dollar_socket_atom = "\x7" "$socket";
+static const char *const abort_atom = "\x5" "abort";
+static const char *const family_atom = "\x6" "family";
+static const char *const inet_atom = "\x4" "inet";
+static const char *const timeout_atom = "\x7" "timeout";
+
+
 void defaultatoms_init(GlobalContext *glb)
 {
     int ok = 1;
@@ -313,6 +320,12 @@ void defaultatoms_init(GlobalContext *glb)
 
     ok &= globalcontext_insert_atom(glb, nonode_at_nohost_atom) == NONODE_AT_NOHOST_ATOM_INDEX;
     ok &= globalcontext_insert_atom(glb, net_kernel_atom) == NET_KERNEL_ATOM_INDEX;
+
+    ok &= globalcontext_insert_atom(glb, dollar_socket_atom) == DOLLAR_SOCKET_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, abort_atom) == ABORT_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, family_atom) == FAMILY_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, inet_atom) == INET_ATOM_INDEX;
+    ok &= globalcontext_insert_atom(glb, timeout_atom) == TIMEOUT_ATOM_INDEX;
 
     if (!ok) {
         AVM_ABORT();
