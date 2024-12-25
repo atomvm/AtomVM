@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Introduce ports to represent native processes and added support for external ports and encoded ports in external terms
 - Added support for socket asynchronous API for `recv` and `recvfrom`.
 - Added `net:gethostname/0` on platforms with gethostname(3).
+- Added `externalterm_to_term_with_roots` to efficiently preserve roots when allocating memory for external terms.
+
+### Changed
+
+- Removed `externalterm_to_term_copy` added in [0.6.5] and introduced flags to `externalterm_to_term` to perform copy.
+
 
 ### Fixed
 
