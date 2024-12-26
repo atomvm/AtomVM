@@ -25,6 +25,7 @@ set(HEADER_FILES
     otp_socket_platform.h
     generic_unix_sys.h
     mapped_file.h
+    platform_defaultatoms.def
     platform_defaultatoms.h
     ../../../libAtomVM/otp_net.h
     ../../../libAtomVM/otp_socket.h
