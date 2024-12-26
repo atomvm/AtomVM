@@ -19,30 +19,33 @@
  */
 
 #include "defaultatoms.h"
-#include <stdio.h>
 
-// About X macro: https://en.wikipedia.org/wiki/X_macro
-
-#define X(name, lenstr, str) \
-    static const char *const name##_str = lenstr str;
-
-#include "defaultatoms.def"
-
-#undef X
+#include <stdlib.h>
+#include <string.h>
 
 void defaultatoms_init(GlobalContext *glb)
 {
-    int ok = 1;
 
+// About X macro: https://en.wikipedia.org/wiki/X_macro
 #define X(name, lenstr, str) \
-    ok &= globalcontext_insert_atom(glb, name##_str) == name##_INDEX;
+    lenstr str,
 
+    static const char *const atoms[] = {
 #include "defaultatoms.def"
 
+        // dummy value
+        NULL
+    };
 #undef X
 
-    if (!ok) {
-        AVM_ABORT();
+    for (int i = 0; i < PLATFORM_ATOMS_BASE_INDEX; i++) {
+        if (UNLIKELY((size_t) atoms[i][0] != strlen(atoms[i] + 1))) {
+            AVM_ABORT();
+        }
+
+        if (UNLIKELY(globalcontext_insert_atom(glb, atoms[i]) != i)) {
+            AVM_ABORT();
+        }
     }
 
     platform_defaultatoms_init(glb);
