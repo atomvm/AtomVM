@@ -79,9 +79,9 @@ jobs:
               doxygen erlang-base erlang-dev erlang-dialyzer erlang-eunit \
               libglib2.0-0 libpixman-1-0 \
               gcc g++ zlib1g-dev libsdl2-2.0-0 libslirp0 libmbedtls-dev
-        wget --no-verbose https://github.com/erlang/rebar3/releases/download/3.18.0/rebar3
-        chmod +x rebar3
-        ./rebar3 local install
+          wget --no-verbose https://github.com/erlang/rebar3/releases/download/3.18.0/rebar3
+          chmod +x rebar3
+          ./rebar3 local install
 
       - name: Install the Wokwi CLI
         run: curl -L https://wokwi.com/ci/install.sh | sh
