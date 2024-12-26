@@ -56,21 +56,33 @@ static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const c
 static int do_pack(int argc, char **argv, int is_archive, bool include_lines);
 static int do_list(int argc, char **argv);
 
-static void usage3(FILE *out, const char *program, const char *msg)
+#define program_error(...) error_with_usage(argv[0], __VA_ARGS__)
+#define packbeam_error(...) error_with_usage("PackBeam", __VA_ARGS__)
+#define packbeam_internal_error(...) internal_error("PackBeam", __VA_ARGS__)
+
+static void internal_error(const char *program, const char *format, ...)
 {
-    if (!IS_NULL_PTR(msg)) {
-        fprintf(out, "%s\n", msg);
-    }
-    fprintf(out, "Usage: %s [-h] [-l] <avm-file> [<options>]\n", program);
-    fprintf(out, "    -h                                                Print this help menu.\n");
-    fprintf(out, "    -i                                                Include file and line information.\n");
-    fprintf(out, "    -l <input-avm-file>                               List the contents of an AVM file.\n");
-    fprintf(out, "    [-a] <output-avm-file> <input-beam-or-avm-file>+  Create an AVM file (archive if -a specified).\n");
+    va_list format_args;
+    va_start(format_args, format);
+    fprintf(stderr, "%s: ", program);
+    fprintf(stderr, format, format_args);
+    fprintf(stderr, "\n");
+    va_end(format_args);
 }
 
-static void usage(const char *program)
+static void error_with_usage(const char *program, const char *format, ...)
 {
-    usage3(stdout, program, NULL);
+    if (format != NULL) {
+        va_list format_args;
+        va_start(format_args, format);
+        internal_error(program, format, format_args);
+        va_end(format_args);
+    }
+    fprintf(stderr, "\nUsage: %s [-h] [-l] <avm-file> [<options>]\n", program);
+    fprintf(stderr, "    -h                                                Print this help menu.\n");
+    fprintf(stderr, "    -i                                                Include file and line information.\n");
+    fprintf(stderr, "    -l <input-avm-file>                               List the contents of an AVM file.\n");
+    fprintf(stderr, "    [-a] <output-avm-file> <input-beam-or-avm-file>+  Create an AVM file (archive if -a specified).\n");
 }
 
 int main(int argc, char **argv)
@@ -83,7 +95,7 @@ int main(int argc, char **argv)
     while ((opt = getopt(argc, argv, "hail")) != -1) {
         switch (opt) {
             case 'h':
-                usage(argv[0]);
+                program_error(NULL);
                 return EXIT_SUCCESS;
             case 'a':
                 is_archive = 1;
@@ -95,9 +107,7 @@ int main(int argc, char **argv)
                 action = "list";
                 break;
             case '?': {
-                char buf[BUF_SIZE];
-                snprintf(buf, BUF_SIZE, "Unknown option: %c", optopt);
-                usage3(stderr, argv[0], buf);
+                program_error("Unknown option: %c", optopt);
                 return EXIT_FAILURE;
             }
         }
@@ -107,13 +117,13 @@ int main(int argc, char **argv)
     char **new_argv = argv + optind;
 
     if (new_argc < 1) {
-        usage3(stderr, argv[0], "Missing avm file.\n");
+        program_error("Missing avm file.");
         return EXIT_FAILURE;
     }
 
     if (!strcmp(action, "pack")) {
         if (new_argc < 2) {
-            usage3(stderr, argv[0], "Missing options for pack\n");
+            program_error("Missing options for pack.");
             return EXIT_FAILURE;
         }
         return do_pack(new_argc, new_argv, is_archive, include_lines);
@@ -126,7 +136,7 @@ static void assert_fread(void *buffer, size_t size, FILE *file)
 {
     size_t r = fread(buffer, sizeof(uint8_t), size, file);
     if (r != size) {
-        fprintf(stderr, "Unable to read, wanted to read %zu bytes, read %zu bytes\n", size, r);
+        packbeam_internal_error("Unable to read, wanted to read %zu bytes, read %zu bytes.", size, r);
         exit(EXIT_FAILURE);
     }
 }
@@ -135,7 +145,7 @@ static void assert_fwrite(const void *buffer, size_t size, FILE *file)
 {
     size_t r = fwrite(buffer, 1, size, file);
     if (r != size) {
-        fprintf(stderr, "Unable to write, wanted to write %zu bytes, wrote %zu bytes\n", size, r);
+        packbeam_internal_error("Unable to write, wanted to write %zu bytes, wrote %zu bytes.", size, r);
         exit(EXIT_FAILURE);
     }
 }
@@ -164,7 +174,7 @@ FileData read_file_data(FILE *file)
     fseek(file, 0, SEEK_SET);
     uint8_t *data = malloc(size);
     if (!data) {
-        fprintf(stderr, "Unable to allocate %zu bytes\n", size);
+        packbeam_internal_error("Unable to allocate %zu bytes.", size);
         exit(EXIT_FAILURE);
     }
     assert_fread(data, size, file);
@@ -199,21 +209,15 @@ static void validate_pack_options(int argc, char **argv)
         FILE *file = fopen(filename, "r");
         if (i == 0) {
             if (file && !is_avm_file(file)) {
-                char buf[BUF_SIZE];
-                snprintf(buf, BUF_SIZE, "Invalid AVM file: %s", filename);
-                usage3(stderr, "PackBeam", buf);
+                packbeam_error("Invalid AVM file: %s.", filename);
                 exit(EXIT_FAILURE);
             }
         } else {
             if (!file) {
-                char buf[BUF_SIZE];
-                snprintf(buf, BUF_SIZE, "%s does not exist", filename);
-                usage3(stderr, "PackBeam", buf);
+                packbeam_error("%s does not exist.", filename);
                 exit(EXIT_FAILURE);
             } else if (!is_avm_file(file) && !is_beam_file(file)) {
-                char buf[BUF_SIZE];
-                snprintf(buf, BUF_SIZE, "Invalid AVM or BEAM file: %s", filename);
-                usage3(stderr, "PackBeam", buf);
+                packbeam_error("Invalid AVM or BEAM file: %s.", filename);
                 exit(EXIT_FAILURE);
             }
         }
@@ -226,9 +230,7 @@ static int do_pack(int argc, char **argv, int is_archive, bool include_lines)
 
     FILE *pack = fopen(argv[0], "w");
     if (!pack) {
-        char buf[BUF_SIZE];
-        snprintf(buf, BUF_SIZE, "Cannot open output file for writing %s", argv[0]);
-        perror(buf);
+        packbeam_internal_error("Cannot open output file for writing %s.", argv[0]);
         return EXIT_FAILURE;
     }
 
@@ -245,9 +247,7 @@ static int do_pack(int argc, char **argv, int is_archive, bool include_lines)
     for (int i = 1; i < argc; i++) {
         FILE *file = fopen(argv[i], "r");
         if (!file) {
-            char buf[BUF_SIZE];
-            snprintf(buf, BUF_SIZE, "Cannot open file %s", argv[i]);
-            perror(buf);
+            packbeam_internal_error("Cannot open file %s.", argv[i]);
             return EXIT_FAILURE;
         }
 
@@ -257,7 +257,7 @@ static int do_pack(int argc, char **argv, int is_archive, bool include_lines)
 
         uint8_t *file_data = malloc(file_size);
         if (!file_data) {
-            fprintf(stderr, "Unable to allocate %zu bytes\n", file_size);
+            packbeam_internal_error("Unable to allocate %zu bytes\n", file_size);
             return EXIT_FAILURE;
         }
         assert_fread(file_data, file_size, file);
@@ -377,14 +377,10 @@ static void validate_list_options(const char *filename)
 {
     FILE *file = fopen(filename, "r");
     if (!file) {
-        char buf[BUF_SIZE];
-        snprintf(buf, BUF_SIZE, "%s does not exist", filename);
-        usage3(stderr, "PackBeam", buf);
+        packbeam_error("%s does not exist.", filename);
         exit(EXIT_FAILURE);
     } else if (!is_avm_file(file)) {
-        char buf[BUF_SIZE];
-        snprintf(buf, BUF_SIZE, "Invalid AVM file: %s", filename);
-        usage3(stderr, "PackBeam", buf);
+        packbeam_error("Invalid AVM file: %s.", filename);
         exit(EXIT_FAILURE);
     }
 }
@@ -396,9 +392,7 @@ static int do_list(int argc, char **argv)
 
     MappedFile *mapped_file = mapped_file_open_beam(argv[0]);
     if (IS_NULL_PTR(mapped_file)) {
-        char buf[BUF_SIZE];
-        snprintf(buf, BUF_SIZE, "Cannot open AVM file %s", argv[0]);
-        perror(buf);
+        packbeam_internal_error("Cannot open AVM file %s.", argv[0]);
         return EXIT_FAILURE;
     }
 
@@ -406,9 +400,7 @@ static int do_list(int argc, char **argv)
     if (avmpack_is_valid(mapped_file->mapped, mapped_file->size)) {
         avmpack_fold(NULL, mapped_file->mapped, print_section);
     } else {
-        char buf[BUF_SIZE];
-        snprintf(buf, BUF_SIZE, "%s is not an AVM file.\n", argv[1]);
-        usage3(stderr, "PackBeam", buf);
+        packbeam_error("%s is not an AVM file.", argv[1]);
         ret = EXIT_FAILURE;
     }
     mapped_file_close(mapped_file);
@@ -422,7 +414,7 @@ static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompre
 
     uint8_t *outBuf = malloc(required_buf_size);
     if (!outBuf) {
-        fprintf(stderr, "Cannot allocate temporary buffer (size = %u)", required_buf_size);
+        packbeam_internal_error("Cannot allocate temporary buffer of size %u.", required_buf_size);
         AVM_ABORT();
     }
 
@@ -437,12 +429,12 @@ static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompre
 
     int ret = inflateInit(&infstream);
     if (ret != Z_OK) {
-        fprintf(stderr, "Failed inflateInit\n");
+        packbeam_internal_error("Failed inflateInit.");
         AVM_ABORT();
     }
     ret = inflate(&infstream, Z_NO_FLUSH);
     if (ret != Z_OK) {
-        fprintf(stderr, "Failed inflate\n");
+        packbeam_internal_error("Failed inflate.");
         AVM_ABORT();
     }
     inflateEnd(&infstream);
