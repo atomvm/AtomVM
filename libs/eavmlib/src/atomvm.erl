@@ -43,7 +43,8 @@
     posix_clock_settime/2,
     posix_opendir/1,
     posix_closedir/1,
-    posix_readdir/1
+    posix_readdir/1,
+    get_creation/0
 ]).
 
 -export_type([
@@ -334,4 +335,9 @@ posix_closedir(_Dir) ->
 -spec posix_readdir(Dir :: posix_dir()) ->
     {ok, {dirent, Inode :: integer(), Name :: binary()}} | eof | {error, posix_error()}.
 posix_readdir(_Dir) ->
+    erlang:nif_error(undefined).
+
+%% @hidden
+-spec get_creation() -> non_neg_integer().
+get_creation() ->
     erlang:nif_error(undefined).
