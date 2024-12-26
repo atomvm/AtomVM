@@ -29,8 +29,8 @@
 #include <zlib.h>
 #endif
 
-#include "iff.c"
 #include "avmpack.h"
+#include "iff.c"
 #include "mapped_file.h"
 
 #define LITT_UNCOMPRESSED_SIZE_OFFSET 8
@@ -41,9 +41,10 @@
 #define BEAM_CODE_FLAG 2
 #define BUF_SIZE 1024
 
-typedef struct FileData {
+typedef struct FileData
+{
     uint8_t *data;
-    size_t   size;
+    size_t size;
 } FileData;
 
 static void pad_and_align(FILE *f);
@@ -54,7 +55,8 @@ static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const c
 static int do_pack(int argc, char **argv, int is_archive, bool include_lines);
 static int do_list(int argc, char **argv);
 
-static void usage3(FILE *out, const char *program, const char *msg) {
+static void usage3(FILE *out, const char *program, const char *msg)
+{
     if (!IS_NULL_PTR(msg)) {
         fprintf(out, "%s\n", msg);
     }
@@ -62,15 +64,13 @@ static void usage3(FILE *out, const char *program, const char *msg) {
     fprintf(out, "    -h                                                Print this help menu.\n");
     fprintf(out, "    -i                                                Include file and line information.\n");
     fprintf(out, "    -l <input-avm-file>                               List the contents of an AVM file.\n");
-    fprintf(out, "    [-a] <output-avm-file> <input-beam-or-avm-file>+  Create an AVM file (archive if -a specified).\n"
-    );
+    fprintf(out, "    [-a] <output-avm-file> <input-beam-or-avm-file>+  Create an AVM file (archive if -a specified).\n");
 }
 
 static void usage(const char *program)
 {
     usage3(stdout, program, NULL);
 }
-
 
 int main(int argc, char **argv)
 {
@@ -80,7 +80,7 @@ int main(int argc, char **argv)
     int is_archive = 0;
     bool include_lines = false;
     while ((opt = getopt(argc, argv, "hail")) != -1) {
-        switch(opt) {
+        switch (opt) {
             case 'h':
                 usage(argv[0]);
                 return EXIT_SUCCESS;
@@ -102,7 +102,7 @@ int main(int argc, char **argv)
         }
     }
 
-    int new_argc    = argc - optind;
+    int new_argc = argc - optind;
     char **new_argv = argv + optind;
 
     if (new_argc < 1) {
@@ -121,7 +121,7 @@ int main(int argc, char **argv)
     }
 }
 
-static void assert_fread(void *buffer, size_t size, FILE* file)
+static void assert_fread(void *buffer, size_t size, FILE *file)
 {
     size_t r = fread(buffer, sizeof(uint8_t), size, file);
     if (r != size) {
@@ -130,7 +130,7 @@ static void assert_fread(void *buffer, size_t size, FILE* file)
     }
 }
 
-static void assert_fwrite(const void *buffer, size_t size, FILE* file)
+static void assert_fwrite(const void *buffer, size_t size, FILE *file)
 {
     size_t r = fwrite(buffer, 1, size, file);
     if (r != size) {
@@ -148,7 +148,7 @@ static void *pack_beam_fun(void *accum, const void *section_ptr, uint32_t sectio
         return NULL;
     }
 
-    FILE *pack = (FILE *)accum;
+    FILE *pack = (FILE *) accum;
     size_t r = fwrite(section_ptr, sizeof(unsigned char), section_size, pack);
     if (r != section_size) {
         return NULL;
@@ -191,9 +191,9 @@ static bool is_beam_file(FILE *file)
     return ret;
 }
 
-static void validate_pack_options(int argc, char ** argv)
+static void validate_pack_options(int argc, char **argv)
 {
-    for (int i = 0;  i < argc;  ++i) {
+    for (int i = 0; i < argc; ++i) {
         const char *filename = argv[i];
         FILE *file = fopen(filename, "r");
         if (i == 0) {
@@ -231,8 +231,7 @@ static int do_pack(int argc, char **argv, int is_archive, bool include_lines)
         return EXIT_FAILURE;
     }
 
-    const unsigned char pack_header[24] =
-    {
+    const unsigned char pack_header[24] = {
         0x23, 0x21, 0x2f, 0x75,
         0x73, 0x72, 0x2f, 0x62,
         0x69, 0x6e, 0x2f, 0x65,
@@ -254,7 +253,6 @@ static int do_pack(int argc, char **argv, int is_archive, bool include_lines)
         fseek(file, 0, SEEK_END);
         size_t file_size = ftell(file);
         fseek(file, 0, SEEK_SET);
-
 
         uint8_t *file_data = malloc(file_size);
         if (!file_data) {
@@ -290,8 +288,7 @@ static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const c
     }
 
     int written_beam_header_pos = ftell(pack);
-    const unsigned char beam_header[12] =
-    {
+    const unsigned char beam_header[12] = {
         0x46, 0x4f, 0x52, 0x31,
         0x00, 0x00, 0x00, 0x00,
         0x42, 0x45, 0x41, 0x4d
@@ -362,10 +359,9 @@ static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const c
     int beam_written_size = end_of_module_pos - written_beam_header_pos;
     uint32_t beam_written_size_field = ENDIAN_SWAP_32(beam_written_size);
     fseek(pack, written_beam_header_pos + 4, SEEK_SET);
-    assert_fwrite(&beam_written_size_field , sizeof(uint32_t), pack);
+    assert_fwrite(&beam_written_size_field, sizeof(uint32_t), pack);
     fseek(pack, end_of_module_pos, SEEK_SET);
 }
-
 
 static void *print_section(void *accum, const void *section_ptr, uint32_t section_size, const void *beam_ptr, uint32_t flags, const char *section_name)
 {
