@@ -851,8 +851,14 @@ DEFINE_MATH_NIF(tanh)
 //Handle optional nifs
 #if HAVE_OPEN && HAVE_CLOSE
 #define IF_HAVE_OPEN_CLOSE(expr) (expr)
+#if HAVE_EXECVE
+#define IF_HAVE_EXECVE(expr) (expr)
+#else
+#define IF_HAVE_EXECVE(expr) NULL
+#endif
 #else
 #define IF_HAVE_OPEN_CLOSE(expr) NULL
+#define IF_HAVE_EXECVE(expr) NULL
 #endif
 #if HAVE_MKFIFO
 #define IF_HAVE_MKFIFO(expr) (expr)

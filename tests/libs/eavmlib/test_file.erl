@@ -26,12 +26,14 @@
 
 test() ->
     HasSelect = atomvm:platform() =/= emscripten,
+    HasExecve = atomvm:platform() =/= emscripten,
     ok = test_basic_file(),
     ok = test_fifo_select(HasSelect),
     ok = test_gc(HasSelect),
     ok = test_crash_no_leak(HasSelect),
     ok = test_select_with_gone_process(HasSelect),
     ok = test_select_with_listeners(HasSelect),
+    ok = test_subprocess(HasExecve),
     ok.
 
 test_basic_file() ->
@@ -310,4 +312,27 @@ test_select_with_listeners(_HasSelect) ->
             M2 -> {unexpected, M2}
         after 200 -> fail
         end,
+    ok.
+
+test_subprocess(false) ->
+    ok;
+test_subprocess(true) ->
+    ok = test_subprocess_echo(),
+    ok = test_subprocess_env(),
+    ok.
+
+test_subprocess_echo() ->
+    {ok, _Pid, StdoutFd} = atomvm:subprocess("/bin/echo", ["echo"], [], [stdout]),
+    {ok, <<"\n">>} = atomvm:posix_read(StdoutFd, 10),
+    eof = atomvm:posix_read(StdoutFd, 10),
+    ok = atomvm:posix_close(StdoutFd),
+    ok.
+
+test_subprocess_env() ->
+    {ok, _Pid, StdoutFd} = atomvm:subprocess("/bin/sh", ["sh", "-c", "echo $FOO"], ["FOO=bar"], [
+        stdout
+    ]),
+    {ok, <<"bar\n">>} = atomvm:posix_read(StdoutFd, 10),
+    eof = atomvm:posix_read(StdoutFd, 10),
+    ok = atomvm:posix_close(StdoutFd),
     ok.

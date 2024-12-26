@@ -44,7 +44,8 @@
     posix_opendir/1,
     posix_closedir/1,
     posix_readdir/1,
-    get_creation/0
+    get_creation/0,
+    subprocess/4
 ]).
 
 -export_type([
@@ -340,4 +341,20 @@ posix_readdir(_Dir) ->
 %% @hidden
 -spec get_creation() -> non_neg_integer().
 get_creation() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Path    path to the command to execute
+%% @param   Args    arguments to pass to the command. First item is the name
+%%                  of the command
+%% @param   Envp    environment variables to pass to the command.
+%% @param   Options options to run execve. Should be `[stdout]'
+%% @returns a tuple with the process id and a fd to the stdout of the process.
+%% @doc     Fork and execute a program using fork(2) and execve(2). Pipe stdout
+%%          so output of the program can be read with `atomvm:posix_read/2'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec subprocess(Path :: iodata(), Args :: [iodata()], Env :: [iodata()], Options :: [stdout]) ->
+    {ok, non_neg_integer(), posix_fd()} | {error, posix_error()}.
+subprocess(_Path, _Args, _Env, _Options) ->
     erlang:nif_error(undefined).

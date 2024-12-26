@@ -95,6 +95,13 @@ if (NOT DEVICE)
     set(DEVICE stm32f407vgt6)
 endif ()
 
+# mkfifo may be defined in some newlib header but not implemented
+set(HAVE_MKFIFO "" CACHE INTERNAL "Have symbol mkfifo" FORCE)
+# we don't want unlink either
+set(HAVE_UNLINK "" CACHE INTERNAL "Have symbol unlink" FORCE)
+# nor EXECVE
+set(HAVE_EXECVE "" CACHE INTERNAL "Have symbol execve" FORCE)
+
 # Include auto-device configuration
 include(cmake/atomvm_dev_config.cmake)
 
