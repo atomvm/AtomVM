@@ -25,9 +25,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#ifdef WITH_ZLIB
+// TODO: Remove this when the code is refactored
+// #ifdef WITH_ZLIB
 #include <zlib.h>
-#endif
+// #endif
 
 #include "avmpack.h"
 #include "iff.c"
