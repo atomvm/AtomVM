@@ -53,6 +53,8 @@ static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompre
 static void add_module_header(FILE *f, const char *module_name, uint32_t flags);
 static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *filename, int is_entrypoint, bool include_lines);
 
+static void validate_list_options(const char *filename);
+
 static int do_pack(char *output_avm_file, char **input_files, size_t files_n, int is_archive, bool include_lines);
 static int do_list(const char *avm_path);
 
@@ -133,6 +135,40 @@ int main(int argc, char **argv)
     char **input_files = &new_argv[1];
     size_t n = new_argc - 1;
     return do_pack(output_avm_file, input_files, n, is_archive, include_lines);
+}
+
+static void validate_list_options(const char *filename)
+{
+    FILE *file = fopen(filename, "r");
+    if (!file) {
+        packbeam_error("%s does not exist.", filename);
+        exit(EXIT_FAILURE);
+    } else if (!is_avm_file(file)) {
+        packbeam_error("Invalid AVM file: %s.", filename);
+        exit(EXIT_FAILURE);
+    }
+}
+
+static int do_list(const char *avm_path)
+{
+    validate_list_options(avm_path);
+
+    MappedFile *mapped_file = mapped_file_open_beam(avm_path);
+    if (IS_NULL_PTR(mapped_file)) {
+        packbeam_internal_error("Cannot open AVM file %s.", avm_path);
+        return EXIT_FAILURE;
+    }
+
+    int ret = EXIT_SUCCESS;
+    if (avmpack_is_valid(mapped_file->mapped, mapped_file->size)) {
+        avmpack_fold(NULL, mapped_file->mapped, print_section);
+    } else {
+        packbeam_error("%s is not an AVM file.", avm_path);
+        ret = EXIT_FAILURE;
+    }
+    mapped_file_close(mapped_file);
+
+    return ret;
 }
 
 static void assert_fread(void *buffer, size_t size, FILE *file)
@@ -376,40 +412,6 @@ static void *print_section(void *accum, const void *section_ptr, uint32_t sectio
     UNUSED(beam_ptr);
     printf("%s %s\n", section_name, flags & BEAM_START_FLAG ? "*" : "");
     return accum;
-}
-
-static void validate_list_options(const char *filename)
-{
-    FILE *file = fopen(filename, "r");
-    if (!file) {
-        packbeam_error("%s does not exist.", filename);
-        exit(EXIT_FAILURE);
-    } else if (!is_avm_file(file)) {
-        packbeam_error("Invalid AVM file: %s.", filename);
-        exit(EXIT_FAILURE);
-    }
-}
-
-static int do_list(const char *avm_path)
-{
-    validate_list_options(avm_path);
-
-    MappedFile *mapped_file = mapped_file_open_beam(avm_path);
-    if (IS_NULL_PTR(mapped_file)) {
-        packbeam_internal_error("Cannot open AVM file %s.", avm_path);
-        return EXIT_FAILURE;
-    }
-
-    int ret = EXIT_SUCCESS;
-    if (avmpack_is_valid(mapped_file->mapped, mapped_file->size)) {
-        avmpack_fold(NULL, mapped_file->mapped, print_section);
-    } else {
-        packbeam_error("%s is not an AVM file.", avm_path);
-        ret = EXIT_FAILURE;
-    }
-    mapped_file_close(mapped_file);
-
-    return ret;
 }
 
 static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize)
